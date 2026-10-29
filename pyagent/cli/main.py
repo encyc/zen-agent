@@ -25,6 +25,7 @@ from pathlib import Path
 from pyagent.agent import Agent
 from pyagent.agent.session import Session, latest_session, list_sessions, session_path
 from pyagent.cli.compact import maybe_auto_compact
+from pyagent.cli.doctor import run_doctor
 from pyagent.cli.permissions import PermissionGate
 from pyagent.config import ContextGuard, apply_user_config, load_user_config
 from pyagent.context_files import (
@@ -289,6 +290,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="pyagent", description="A minimal coding agent (streaming, tool-using)."
     )
+    parser.add_argument(
+        "command",
+        nargs="?",
+        help="optional subcommand: doctor",
+    )
     parser.add_argument("-p", "--prompt", help="run one prompt headlessly and exit")
     parser.add_argument("-m", "--model", help="model id from the catalog")
     parser.add_argument(
@@ -339,6 +345,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "doctor":
+        return asyncio.run(run_doctor())
+    if args.command is not None:
+        print(f"pyagent: unknown command: {args.command} (try: doctor)", file=sys.stderr)
+        return 1
     if args.list_sessions:
         infos = list_sessions()
         if not infos:

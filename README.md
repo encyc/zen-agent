@@ -47,6 +47,12 @@ Read-only tools (`read_file`, `list_dir`, `glob`, `grep`) run without asking.
 Write/execute tools (`write_file`, `edit_file`, `bash`) need `--yes`, an
 interactive "yes", or an "always" answer for that tool in the session.
 
+### Diagnostics
+
+```bash
+uv run pyagent doctor      # keys, catalog, config, session dir, terminal
+```
+
 ### REPL commands
 
 | command | effect |
