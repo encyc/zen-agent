@@ -21,6 +21,7 @@ from rich.console import Console
 from pyagent.agent import Agent
 from pyagent.agent.session import Session, latest_session, session_path
 from pyagent.cli.compact import compact
+from pyagent.cli.completion import ReplCompleter, help_text
 from pyagent.cli.main import (
     _api_key_for,
     _system_prompt,
@@ -53,14 +54,7 @@ PrintFn = Callable[..., None]
 
 THINKING_LEVELS = ("off", "low", "medium", "high", "max")
 
-HELP_TEXT = """commands:
-  /help                 show this help
-  /exit                 leave the REPL (Ctrl+D also works)
-  /clear                start over with an empty transcript
-  /model [id]           show or switch the model (takes effect next turn)
-  /thinking [level]     reasoning: off|low|medium|high|max
-  /compact              summarize the conversation into a fresh session
-while the agent is working, any line you type is queued as steering input."""
+HELP_TEXT = help_text()
 
 
 def split_input(line: str) -> tuple[str, str]:
@@ -178,14 +172,17 @@ def _session_for(resume: str | Path | None) -> Session:
     return Session(path)
 
 
-def _make_default_reader() -> InputFn:
-    """prompt_toolkit reader with persistent history."""
+def _make_default_reader(completion: bool = True) -> InputFn:
+    """prompt_toolkit reader with persistent history and completion."""
     from prompt_toolkit import PromptSession
     from prompt_toolkit.history import FileHistory
 
     history = Path.home() / ".pyagent" / "history"
     history.parent.mkdir(parents=True, exist_ok=True)
-    session = PromptSession(history=FileHistory(str(history)))
+    session = PromptSession(
+        history=FileHistory(str(history)),
+        completer=ReplCompleter() if completion else None,
+    )
 
     async def read() -> str:
         return await asyncio.to_thread(session.prompt, "pyagent> ")
@@ -206,6 +203,7 @@ async def repl(
     max_turns: int | None = None,
     max_cost: float | None = None,
     context_files: bool = True,
+    completion: bool = True,
 ) -> int:
     """Run the interactive loop; returns the process exit code."""
     user_config = load_user_config()
@@ -264,7 +262,7 @@ async def repl(
     if console is not None:
         console.print(f"[grey50]{session.path.name}[/grey50] · /help for commands")
 
-    read = input_fn or _make_default_reader()
+    read = input_fn or _make_default_reader(completion=completion)
     run_task: asyncio.Task | None = None
 
     async def reap() -> None:

@@ -306,6 +306,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-turns", type=int, help="stop after this many provider requests"
     )
     parser.add_argument(
+        "--no-completion",
+        action="store_true",
+        help="disable slash-command and @path completion in the repl",
+    )
+    parser.add_argument(
         "--no-context-files",
         action="store_true",
         help="do not load AGENTS.md / CLAUDE.md into the system prompt",
@@ -329,6 +334,7 @@ def main(argv: list[str] | None = None) -> int:
                     resume=args.resume,
                     allow_dangerous=args.allow_dangerous,
                     context_files=not args.no_context_files,
+                    completion=not args.no_completion,
                 )
             )
         except KeyboardInterrupt:
