@@ -116,12 +116,12 @@ start → (text|thinking|toolcall)_(start|delta|end)* → done | error
 
 ### Agent loop（agent/loop.py，抄 pi-agent-core 的骨架）
 
-`async def agent_loop(prompt, state, config, signal) -> AsyncIterator[AgentEvent]`，loop 是函数不是类。核心循环：
+`async def agent_loop(prompt, state, config, signal) -> AsyncIterator[AgentEvent]`，**核心是函数**（纯、可离线测试）。有状态封装另做 `Agent` 类（`agent/agent.py`：持有 transcript、`subscribe` 订阅事件、steering 队列、`abort`、`wait_for_idle`、`reset`），对标 pi-agent-core 的 `agentLoop()` 与 `Agent` 并存两层；CLI 消费 `Agent`，不直接驱动 loop。核心循环：
 
 ```
 append prompt →
 loop:
-  prepare_request 钩子（换 model/thinking level/context）
+  （无请求级钩子；model/thinking 从 config 读取）
   stream = stream_fn(model, to_llm_messages(state), options)
   async for event in stream: 转发为 message_* 事件，累积 AssistantMessage
   append assistant 消息
@@ -132,7 +132,7 @@ loop:
   get_steering_messages 钩子注入中途用户输入
 ```
 
-v1 保留的钩子（都是 config 上的可选 callable）：`before_tool_call`、`after_tool_call`、`prepare_request`、`get_steering_messages`、`transform_context`（上下文管理的挂点，v1 只装一个朴素策略：超窗时丢最老的成对消息 + 警告）。pi 的 `finish_turn/prepare_next_turn/get_follow_up_messages/convertToLlm/自定义 AgentMessage` v1 不做——transcript 里只有标准四类消息，扩展点等真实需求出现再开。
+v1 保留的钩子（都是 config 上的可选 callable）：`before_tool_call`、`after_tool_call`、`get_steering_messages`、`transform_context`（上下文管理的挂点，v1 只装一个朴素策略：超窗时丢最老的成对消息 + 警告）。`prepare_request` 不做：换 model / thinking 档位由 `Agent` 在每次 run 开始时读取实例属性实现（`/model`、`/thinking` 命令改属性、下一轮生效），不需要请求级钩子。pi 的 `finish_turn/prepare_next_turn/get_follow_up_messages/convertToLlm/自定义 AgentMessage` v1 不做——transcript 里只有标准四类消息，扩展点等真实需求出现再开。
 
 工具执行契约：`AgentTool.execute(tool_call_id, params, signal, on_update) -> ToolResult(content, details, is_error, terminate)`。抛异常 = 捕获转 is_error 结果。未知工具、参数校验失败同理。abort 通过 `signal` 传入每个 execute，工具自行检查。
 
