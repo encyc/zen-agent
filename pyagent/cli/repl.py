@@ -28,7 +28,7 @@ from pyagent.cli.main import (
     session_id_for,
 )
 from pyagent.cli.permissions import PermissionGate
-from pyagent.cli.render import tool_result_line
+from pyagent.cli.render import render_diff, tool_result_line
 from pyagent.config import ContextGuard, apply_user_config, load_user_config
 from pyagent.context_files import (
     discover_context_files,
@@ -151,6 +151,9 @@ class _EventPrinter:
             )
             if self.console is not None:
                 self.console.print(line, highlight=False)
+                diff = getattr(event.result, "details", {}).get("diff")
+                if diff:
+                    self.console.print(render_diff(diff), highlight=False)
             else:
                 self.print(line)
             return

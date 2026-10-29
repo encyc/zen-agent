@@ -14,6 +14,7 @@ returns ``is_error=True`` with an explanatory message instead of raising.
 
 from __future__ import annotations
 
+import difflib
 from pathlib import Path
 
 from pyagent.agent.loop import AgentTool, ToolResultAgent
@@ -22,6 +23,7 @@ from pyagent.types import TextContent
 __all__ = [
     "EDIT_FILE",
     "LIST_DIR",
+    "MAX_DIFF_LINES",
     "READ_FILE",
     "WRITE_FILE",
 ]
@@ -34,6 +36,40 @@ MAX_LIST_ENTRIES = 500
 
 #: How much of a binary file to sniff for NUL bytes.
 _BINARY_SNIFF_BYTES = 8192
+
+#: Lines of unified diff kept in a tool result (enough for a review, bounded).
+MAX_DIFF_LINES = 200
+
+
+def unified_diff(
+    path: str, old: str, new: str, *, context: int = 3, max_lines: int = MAX_DIFF_LINES
+) -> str:
+    """Render ``old`` -> ``new`` as a bounded unified diff (no colours)."""
+    lines = list(
+        difflib.unified_diff(
+            old.splitlines(),
+            new.splitlines(),
+            fromfile=f"a/{path}",
+            tofile=f"b/{path}",
+            n=context,
+            lineterm="",
+        )
+    )
+    if len(lines) > max_lines:
+        dropped = len(lines) - max_lines
+        lines = lines[:max_lines] + [f"... [{dropped} more diff lines] ..."]
+    return "\n".join(lines)
+
+
+def _read_text_or_empty(path: Path) -> str:
+    """Existing content for diffing; unreadable/binary files count as empty."""
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return ""
+    if b"\x00" in raw[:_BINARY_SNIFF_BYTES]:
+        return ""
+    return raw.decode("utf-8", errors="replace")
 
 
 def _text(text: str, *, is_error: bool = False, **details) -> ToolResultAgent:
@@ -107,12 +143,16 @@ async def _write_file(
 ) -> ToolResultAgent:
     path = Path(args["path"])
     content = args["content"]
+    previous = _read_text_or_empty(path)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
     except OSError as exc:
         return _text(f"cannot write {path}: {exc}", is_error=True)
-    return _text(f"wrote {len(content)} characters to {path}", path=str(path))
+    diff = unified_diff(str(path), previous, content)
+    return _text(
+        f"wrote {len(content)} characters to {path}", path=str(path), diff=diff
+    )
 
 
 async def _edit_file(
@@ -152,7 +192,10 @@ async def _edit_file(
         path.write_text(updated, encoding="utf-8")
     except OSError as exc:
         return _text(f"cannot write {path}: {exc}", is_error=True)
-    return _text(f"edited {path}: replaced 1 occurrence", path=str(path))
+    diff = unified_diff(str(path), text, updated)
+    return _text(
+        f"edited {path}: replaced 1 occurrence", path=str(path), diff=diff
+    )
 
 
 def _format_size(size: int) -> str:

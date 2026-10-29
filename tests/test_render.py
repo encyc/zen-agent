@@ -137,3 +137,25 @@ def test_session_header_reports_name_and_count(tmp_path):
     assert "20260101-000000-x.jsonl" in header
     assert "1 messages" in header
     assert "session" in header
+
+
+def test_render_diff_colours_added_and_removed_lines():
+    from pyagent.cli.render import render_diff
+
+    diff = "--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old\n+new\n context\n"
+    rendered = render_diff(diff)
+    assert isinstance(rendered, Text)
+    plain = rendered.plain
+    by_style: dict[str, str] = {}
+    for span in rendered.spans:
+        by_style.setdefault(str(span.style), "")
+        by_style[str(span.style)] += plain[span.start : span.end]
+    assert "+new\n" in by_style.get("green", "")
+    assert "-old\n" in by_style.get("red", "")
+    assert any(span.style == "cyan" for span in rendered.spans)
+
+
+def test_render_diff_handles_empty_input():
+    from pyagent.cli.render import render_diff
+
+    assert isinstance(render_diff(""), Text)

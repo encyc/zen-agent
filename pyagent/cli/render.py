@@ -23,6 +23,7 @@ from pyagent.types import AssistantMessage, TextContent, ThinkingContent, ToolCa
 __all__ = [
     "AssistantLiveRenderer",
     "LiveUpdate",
+    "render_diff",
     "session_header",
     "tool_progress_line",
     "tool_result_line",
@@ -127,6 +128,24 @@ def tool_progress_line(tool_name: str, partial: ToolResultAgent) -> str:
     if len(last) > _PREVIEW_CHARS:
         last = last[: _PREVIEW_CHARS - 1] + "…"
     return f"⚙ {tool_name} ({len(text)} bytes) {last}".rstrip()
+
+
+def render_diff(diff: str) -> RenderableType:
+    """Colour a unified diff for the terminal (+ green, - red, @@ cyan)."""
+    text = Text()
+    for line in diff.splitlines():
+        if line.startswith(("+++", "---")):
+            style = "bold"
+        elif line.startswith("+"):
+            style = "green"
+        elif line.startswith("-"):
+            style = "red"
+        elif line.startswith("@@"):
+            style = "cyan"
+        else:
+            style = "grey62"
+        text.append(line + "\n", style=style)
+    return text
 
 
 def session_header(session: Session) -> str:

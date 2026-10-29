@@ -191,3 +191,42 @@ async def test_tools_are_validated_by_the_loop_before_execution():
 
     assert validate_arguments(WRITE_FILE.parameters, {"path": "a"}) is not None
     assert validate_arguments(WRITE_FILE.parameters, {"path": "a", "content": "b"}) is None
+
+
+# ---------------------------------------------------------------------------
+# S1-T5: unified diff in tool details
+# ---------------------------------------------------------------------------
+
+
+async def test_edit_result_carries_a_unified_diff():
+    from pathlib import Path
+
+    Path("d.py").write_text("a = 1\nb = 2\n")
+    result = await call(EDIT_FILE, path="d.py", old_string="b = 2", new_string="b = 99")
+    diff = result.details["diff"]
+    assert "-b = 2" in diff and "+b = 99" in diff
+    assert diff.startswith("--- a/d.py") and "+++ b/d.py" in diff
+
+
+async def test_write_result_diff_for_new_file_is_all_additions():
+    result = await call(WRITE_FILE, path="new.txt", content="line1\nline2\n")
+    diff = result.details["diff"]
+    assert "+line1" in diff and "+line2" in diff
+    assert "-line1" not in diff
+
+
+async def test_write_result_diff_for_overwrite_shows_removals():
+    from pathlib import Path
+
+    Path("f.txt").write_text("old\n")
+    result = await call(WRITE_FILE, path="f.txt", content="brand new\n")
+    diff = result.details["diff"]
+    assert "-old" in diff and "+brand new" in diff
+
+
+async def test_huge_diff_is_truncated():
+    from pyagent.tools.fs import MAX_DIFF_LINES, unified_diff
+
+    diff = unified_diff("big.txt", "", "\n".join(f"line{i}" for i in range(500)))
+    assert "more diff lines" in diff
+    assert len(diff.splitlines()) <= MAX_DIFF_LINES + 1
