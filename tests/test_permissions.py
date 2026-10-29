@@ -2,8 +2,8 @@
 
 import pytest
 
-from pyagent.cli.permissions import PermissionGate, dangerous_command_reason
-from pyagent.types import ToolCall
+from zenagent.cli.permissions import PermissionGate, dangerous_command_reason
+from zenagent.types import ToolCall
 
 
 @pytest.mark.parametrize(
@@ -122,7 +122,7 @@ async def test_allowlist_cannot_rescue_a_catastrophic_command():
 
 
 def test_matches_any_returns_the_pattern():
-    from pyagent.cli.permissions import matches_any
+    from zenagent.cli.permissions import matches_any
 
     assert matches_any(["read_*", "grep"], "read_file") == "read_*"
     assert matches_any(["write_*"], "read_file") is None

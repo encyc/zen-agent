@@ -2,13 +2,13 @@
 
 import asyncio
 
-from pyagent.agent import Agent
-from pyagent.cli.repl import handle_slash
-from pyagent.extensions import load_extensions
+from zenagent.agent import Agent
+from zenagent.cli.repl import handle_slash
+from zenagent.extensions import load_extensions
 
 GOOD = '''
-from pyagent.agent.loop import AgentTool, ToolResultAgent
-from pyagent.types import TextContent
+from zenagent.agent.loop import AgentTool, ToolResultAgent
+from zenagent.types import TextContent
 
 
 async def echo(call_id, args, abort, on_update=None):
@@ -104,7 +104,7 @@ async def test_extension_command_runs_via_repl(tmp_path):
 
 
 def test_config_extensions_are_resolved_relative_to_the_file(tmp_path):
-    from pyagent.config import load_user_config
+    from zenagent.config import load_user_config
 
     config = tmp_path / "config.toml"
     config.write_text('extensions = ["ext.py", "/abs/other.py"]\n')
@@ -114,18 +114,18 @@ def test_config_extensions_are_resolved_relative_to_the_file(tmp_path):
 
 
 def test_cli_loads_extension_tools_prompt_and_hooks(monkeypatch, tmp_path):
-    import pyagent.cli.main as cli_main
-    from pyagent.config import UserConfig
-    from pyagent.events import AssistantEvent
-    from pyagent.types import AssistantMessage, Usage
+    import zenagent.cli.main as cli_main
+    from zenagent.config import UserConfig
+    from zenagent.events import AssistantEvent
+    from zenagent.types import AssistantMessage, Usage
 
     sentinel = tmp_path / "hook-fired"
     extension = write(
         tmp_path,
         "hook.py",
         f'''
-from pyagent.agent.loop import AgentTool
-from pyagent.types import TextContent
+from zenagent.agent.loop import AgentTool
+from zenagent.types import TextContent
 
 
 async def ext_tool(call_id, args, abort, on_update=None):

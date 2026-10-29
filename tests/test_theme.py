@@ -4,13 +4,13 @@ import json
 
 import pytest
 
-from pyagent.cli.keybindings import (
+from zenagent.cli.keybindings import (
     DEFAULT_KEYBINDINGS,
     build_key_bindings,
     load_keybindings,
 )
-from pyagent.cli.render import render_diff
-from pyagent.cli.theme import DEFAULT_THEME, THEMES, Theme, load_theme
+from zenagent.cli.render import render_diff
+from zenagent.cli.theme import DEFAULT_THEME, THEMES, Theme, load_theme
 
 # ---------------------------------------------------------------------------
 # themes

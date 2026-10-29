@@ -4,8 +4,8 @@ import shutil
 
 import pytest
 
-from pyagent.tools import search as search_module
-from pyagent.tools.search import GLOB, GREP
+from zenagent.tools import search as search_module
+from zenagent.tools.search import GLOB, GREP
 
 
 async def call(tool, **args):

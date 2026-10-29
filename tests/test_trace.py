@@ -2,8 +2,8 @@
 
 import json
 
-from pyagent.events import AgentEvent
-from pyagent.trace import TraceRecorder
+from zenagent.events import AgentEvent
+from zenagent.trace import TraceRecorder
 
 
 def tool_event(kind: str, call_id: str, name: str, **kwargs) -> AgentEvent:

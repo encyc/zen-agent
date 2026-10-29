@@ -2,9 +2,9 @@
 
 import asyncio
 
-from pyagent.agent.loop import ToolResultAgent
-from pyagent.events import Aborted, AbortToken, AgentEvent, AssistantEvent
-from pyagent.types import AssistantMessage, TextContent, ToolCall, Usage
+from zenagent.agent.loop import ToolResultAgent
+from zenagent.events import Aborted, AbortToken, AgentEvent, AssistantEvent
+from zenagent.types import AssistantMessage, TextContent, ToolCall, Usage
 
 ASSISTANT_EVENT_TYPES = [
     "start",

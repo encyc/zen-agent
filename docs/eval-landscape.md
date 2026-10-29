@@ -1,16 +1,16 @@
 # Agent / harness 任务测试集调研
 
-> 目的：给 pyagent 找"能真正验证 harness 好不好用"的任务集，并给出接入与成本估算。
+> 目的：给 zenagent 找"能真正验证 harness 好不好用"的任务集，并给出接入与成本估算。
 > 调研日期：2026-10-29。所有数字来自下列来源，接入前需以官方当期版本为准。
 
 ## 0. 先分清两类东西
 
-| 类型 | 测什么 | 代表 | 对 pyagent 的意义 |
+| 类型 | 测什么 | 代表 | 对 zenagent 的意义 |
 |---|---|---|---|
 | **行为评测（behavioral evals）** | 自己的 harness 在特定行为上是否退化：能不能调用工具、上下文/文档是否被用上、UI/命令是否工作 | pi 自带 `packages/evals`；HAL | 便宜、可进 CI、没有 Docker 依赖；适合回归 |
 | **公开基准（benchmarks）** | 完成任务的能力（修 bug、终端操作、客服对话） | Terminal-Bench、SWE-bench、τ-bench、Aider Polyglot | 贵、重、需要容器；适合阶段性对外可比 |
 
-pyagent 两个都需要，但顺序相反：先把行为评测做起来（每天跑），公开基准只在里程碑节点跑。
+zenagent 两个都需要，但顺序相反：先把行为评测做起来（每天跑），公开基准只在里程碑节点跑。
 
 ## 1. 公开基准清单
 
@@ -41,13 +41,13 @@ kbench harness list            # kode-agent-sdk / codex / claude-code / gemini-c
 kbench run --benchmark tb2 --harness custom-adapter --adapter <dir> --instruction "..."
 ```
 
-**关键点：它有一个 `custom-adapter` 协议**，天然适合 pyagent 这种 CLI agent：
+**关键点：它有一个 `custom-adapter` 协议**，天然适合 zenagent 这种 CLI agent：
 
 - 运行时从 `$KBENCH_ADAPTER_INPUT`（或 stdin）读**一个 JSON payload**，向 stdout 写**一个 JSON output payload**；
 - `adapter generate --hint cli-harness` 能生成脚手架，用 `KBENCH_CLI_COMMAND` / `KBENCH_CLI_PROMPT_FLAG` / `KBENCH_CLI_OUTPUT_FLAG` 等环境变量桥接任意 CLI；
 - 产物标准化：`instances/<id>/result.json`、`trace/normalized/trajectory.json`、`artifacts/`。
 
-对 pyagent 来说，这意味着**不用自己写 benchmark runner**，只需要新增一个 `pyagent adapter` 子命令（读 payload → 跑一次 headless → 输出 JSON）。
+对 zenagent 来说，这意味着**不用自己写 benchmark runner**，只需要新增一个 `zenagent adapter` 子命令（读 payload → 跑一次 headless → 输出 JSON）。
 
 ## 3. 行为评测：pi 的做法（可直接抄）
 
@@ -58,7 +58,7 @@ pi 的 `packages/evals` 只有 **10 个 eval 文件 / ~2400 行 runner**，跑�
 - 容器化：`docker.ts` 构建镜像、`plan.ts` 展开 `(case, variant, repetition)`、`report.ts` 配对两次运行算 lift；
 - 用 `vitest-evals` 组织，配一个假 provider 服务器（`acme-server.ts`）做确定性回归。
 
-**对 pyagent 的直接启发**：S1 加的 `AGENTS.md` 注入，正好可以用同样的 A/B 方式验证——同一 repo 任务，带/不带 `AGENTS.md` 各跑 N 次，比较通过率与 token 成本。
+**对 zenagent 的直接启发**：S1 加的 `AGENTS.md` 注入，正好可以用同样的 A/B 方式验证——同一 repo 任务，带/不带 `AGENTS.md` 各跑 N 次，比较通过率与 token 成本。
 
 ## 4. HAL：报告什么（指标清单）
 
@@ -70,7 +70,7 @@ Princeton 的 HAL（ICLR 2026）把评测基础设施化，核心结论值得抄
 - 自动日志审查能抓到"作弊"（去 HuggingFace 搜答案）与灾难性动作；
 - 反直觉结论：**提高 reasoning effort 在 21/36 的对比里没有提升准确率**。
 
-对 pyagent 的落地：`--json` 已经在报 usage/cost/termination，再补一个 `trace` 落盘就能对齐 HAL 的最小要求。
+对 zenagent 的落地：`--json` 已经在报 usage/cost/termination，再补一个 `trace` 落盘就能对齐 HAL 的最小要求。
 
 ## 5. 推荐路线（按性价比排序）
 
@@ -92,7 +92,7 @@ Princeton 的 HAL（ICLR 2026）把评测基础设施化，核心结论值得抄
 
 ### E1：Terminal-Bench 2.0 子集（2–3 天，harness 层的真实验证）
 
-- 通过 kbench `custom-adapter` 接 pyagent；
+- 通过 kbench `custom-adapter` 接 zenagent；
 - 先跑 10–20 个任务（`task_limit`）验证适配器，再跑全量 89；
 - 需要 Docker；每任务默认 30 分钟超时；
 - 成本：89 任务 × ~150k tokens ≈ 13M tokens ≈ **$5–20/次**（DeepSeek 峰时价，含输出）。
@@ -106,11 +106,11 @@ Princeton 的 HAL（ICLR 2026）把评测基础设施化，核心结论值得抄
 ### E3：τ-bench（可选，测"工具+用户模拟"）
 
 - 走 kbench 的 **session 模式**：需要 adapter 支持 `--messages-file` / `--tools-file`；
-- pyagent 目前的 headless 是 task 模式，接 session 模式需要额外适配（工作量最大的一项）。
+- zenagent 目前的 headless 是 task 模式，接 session 模式需要额外适配（工作量最大的一项）。
 
-## 6. pyagent 需要补的接口（E1 前置）
+## 6. zenagent 需要补的接口（E1 前置）
 
-1. `pyagent adapter`：读 `$KBENCH_ADAPTER_INPUT`/stdin 的 JSON → 调 `run_headless` → 输出 `{output, usage, termination, trace?}`；
+1. `zenagent adapter`：读 `$KBENCH_ADAPTER_INPUT`/stdin 的 JSON → 调 `run_headless` → 输出 `{output, usage, termination, trace?}`；
 2. `--json` 增加 `termination`、`cache` 字段（已有），补 `trace` 落盘（工具序列）；
 3. 一个 `--cwd` 参数（benchmark 会把 agent 放进任务目录）；
 4. 非交互的权限策略：benchmark 环境需要 `--yes`，但要保留危险命令拦截（否则任务可能被拒绝执行）。

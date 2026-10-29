@@ -3,9 +3,9 @@
 
 import pytest
 
-import pyagent.agent.session as session_module
-from pyagent.export import export_html, export_markdown, export_session
-from pyagent.types import (
+import zenagent.agent.session as session_module
+from zenagent.export import export_html, export_markdown, export_session
+from zenagent.types import (
     AssistantMessage,
     ImageContent,
     SystemMessage,
@@ -85,8 +85,8 @@ def test_html_marks_errors_and_images():
 
 
 def test_empty_transcript_still_renders():
-    assert export_markdown([]).strip() == "# pyagent session"
-    assert "<h1>pyagent session</h1>" in export_html([])
+    assert export_markdown([]).strip() == "# zenagent session"
+    assert "<h1>zenagent session</h1>" in export_html([])
 
 
 def test_export_session_writes_beside_the_session_and_keeps_it_unchanged(tmp_path):
@@ -131,7 +131,7 @@ def write_session(sessions, name: str):
 
 
 def test_cli_exports_the_latest_session(capsys, isolated):
-    import pyagent.cli.main as cli_main
+    import zenagent.cli.main as cli_main
 
     path = write_session(isolated, "20260101-000000.jsonl")
     assert cli_main.main(["export", "latest", "--format", "html"]) == 0
@@ -141,7 +141,7 @@ def test_cli_exports_the_latest_session(capsys, isolated):
 
 
 def test_cli_exports_an_explicit_session_and_output_path(capsys, tmp_path, isolated):
-    import pyagent.cli.main as cli_main
+    import zenagent.cli.main as cli_main
 
     path = write_session(isolated, "20260101-000000.jsonl")
     out = tmp_path / "share.md"
@@ -151,7 +151,7 @@ def test_cli_exports_an_explicit_session_and_output_path(capsys, tmp_path, isola
 
 
 def test_cli_rejects_a_missing_session(capsys):
-    import pyagent.cli.main as cli_main
+    import zenagent.cli.main as cli_main
 
     assert cli_main.main(["export", "/nope/session.jsonl"]) == 1
     assert "no such session" in capsys.readouterr().err

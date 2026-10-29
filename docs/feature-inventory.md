@@ -1,13 +1,13 @@
-# pi 功能清单 × pyagent 现状对照
+# pi 功能清单 × zenagent 现状对照
 
-> 快照：pi `v1.4.0-198` (`babe30a7e`)，2026-10-29 盘点；pyagent 同期（305 tests）。
+> 快照：pi `v1.4.0-198` (`babe30a7e`)，2026-10-29 盘点；zenagent 同期（305 tests）。
 > 图例：✅ 已具备 / 🟡 部分具备 / ❌ 未做
 
 ## 0. 规模基线
 
-| 指标 | pi | pyagent | 倍数 |
+| 指标 | pi | zenagent | 倍数 |
 |---|---|---|---|
-| 发行包 | 11 个（ai / agent / coding-agent / tui / mcp / codemode / durable / env / chord / telemetry / evals） | 1 个 `pyagent` | 11× |
+| 发行包 | 11 个（ai / agent / coding-agent / tui / mcp / codemode / durable / env / chord / telemetry / evals） | 1 个 `zenagent` | 11× |
 | src 文件（.ts / .py） | 844 | 34 | 25× |
 | 测试文件 | 839 | 22 | 38× |
 | 文档 | 44 篇 / 10,600 行 | README + 2 篇设计文档 | — |
@@ -35,7 +35,7 @@
 
 ## A. LLM 接入层（20）
 
-| # | 功能 | pyagent |
+| # | 功能 | zenagent |
 |---|---|---|
 | A1 | 统一消息/内容块模型（text/thinking/tool_use/image） | ✅ |
 | A2 | openai-completions 适配器（含 zai / deepseek 方言） | ✅ |
@@ -60,7 +60,7 @@
 
 ## B. Agent 运行时（15）
 
-| # | 功能 | pyagent |
+| # | 功能 | zenagent |
 |---|---|---|
 | B1 | loop 函数（prompt / continue 两个入口） | ✅ |
 | B2 | Agent 有状态类（subscribe/steer/abort/idle/reset） | ✅ |
@@ -80,7 +80,7 @@
 
 ## C. Coding agent 内核（22）
 
-| # | 功能 | pyagent |
+| # | 功能 | zenagent |
 |---|---|---|
 | C1–C7 | read / write / edit / bash / find(glob) / grep / ls | ✅ 7 个 |
 | C8 | powershell（Windows） | ❌ |
@@ -101,7 +101,7 @@
 
 ## D. Harness / UX（19）
 
-| # | 功能 | pyagent |
+| # | 功能 | zenagent |
 |---|---|---|
 | D1 | 差分渲染 TUI 库 | ❌ |
 | D2 | 18 个 TUI 组件（editor/markdown/layout/scroll/image…） | ❌ |
@@ -125,7 +125,7 @@
 
 ## E. 可扩展性与生态（14）
 
-| # | 功能 | pyagent |
+| # | 功能 | zenagent |
 |---|---|---|
 | E1 | 扩展系统（事件/API/自定义工具/UI/命令/状态） | ❌ |
 | E2 | 热重载 `/reload` | ❌ |
@@ -144,7 +144,7 @@
 
 ## F. 工程与平台（12）
 
-| # | 功能 | pyagent |
+| # | 功能 | zenagent |
 |---|---|---|
 | F1 | monorepo 多包构建 | ❌ 单包 |
 | F2 | 静态检查（biome/tsc/import/pinned-deps/runtime-deps） | 🟡 ruff |
@@ -165,9 +165,9 @@
 
 - sub-agents、plan mode —— README 明说「skips features like sub-agents and plan mode」
 - 内置权限系统 / 沙箱 —— 「does not include a built-in permission system」；靠容器化文档 + 用户自行隔离
-- 所以 pyagent 现有的「权限门 + 不做 sub-agent」与 pi 的取舍一致。
+- 所以 zenagent 现有的「权限门 + 不做 sub-agent」与 pi 的取舍一致。
 
-## 3. 分期建议（按 pyagent 的实际情况）
+## 3. 分期建议（按 zenagent 的实际情况）
 
 | 期 | 目标 | 新增簇 | 累计覆盖 |
 |---|---|---|---|
@@ -176,6 +176,6 @@
 | S3 | 生态与集成（+10）：RPC、SDK 文档、会话导出/分享、telemetry、evals、HTML 导出、crash log、openai-responses/google 适配器、分类器/图片模型 | 10 | ~62/102（61%） |
 | S4 | 平台运维（+8）：安装器、原生构建、Nix、拆包、模型目录生成、install-lock、CI 矩阵、容器化 | 8 | ~70/102（69%） |
 
-剩余约 30 簇属于「pi 特有生态」（chord/durable/env/codemode/codemode-TUI 等），对 pyagent 的定位（轻量可复用内核）不构成目标。
+剩余约 30 簇属于「pi 特有生态」（chord/durable/env/codemode/codemode-TUI 等），对 zenagent 的定位（轻量可复用内核）不构成目标。
 
-**一句话结论：pi ≈ 100 个功能簇、~850 个源文件；pyagent 现有 ~20 完整 + ~25 半成品。要做到"日常能用的 coding agent"大约再 12–15 个簇，做到"可扩展的 harness"再 +10，其余是生态与平台层，可按需取舍。**
+**一句话结论：pi ≈ 100 个功能簇、~850 个源文件；zenagent 现有 ~20 完整 + ~25 半成品。要做到"日常能用的 coding agent"大约再 12–15 个簇，做到"可扩展的 harness"再 +10，其余是生态与平台层，可按需取舍。**

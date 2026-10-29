@@ -4,13 +4,13 @@ import time
 
 import pytest
 
-import pyagent.agent.session as session_module
-from pyagent.agent import Agent
-from pyagent.cli.compact import compact
-from pyagent.events import AssistantEvent
-from pyagent.providers.catalog import Model
-from pyagent.providers.compat import CompatFlags
-from pyagent.types import AssistantMessage, Cost, TextContent, Usage, UserMessage
+import zenagent.agent.session as session_module
+from zenagent.agent import Agent
+from zenagent.cli.compact import compact
+from zenagent.events import AssistantEvent
+from zenagent.providers.catalog import Model
+from zenagent.providers.compat import CompatFlags
+from zenagent.types import AssistantMessage, Cost, TextContent, Usage, UserMessage
 
 
 def model() -> Model:
@@ -96,7 +96,7 @@ async def test_compact_replaces_transcript_and_writes_a_new_session(isolated_ses
     assert only.content.startswith("# 此前会话摘要")
     assert "改文件" in only.content
     # the new session file contains exactly that message
-    from pyagent.agent.session import Session
+    from zenagent.agent.session import Session
 
     assert Session(path).load() == [only]
 
@@ -151,7 +151,7 @@ async def test_compact_uses_the_agent_stream_fn_by_default():
 # S1-T10: automatic compaction
 # ---------------------------------------------------------------------------
 
-from pyagent.cli.compact import maybe_auto_compact, should_auto_compact
+from zenagent.cli.compact import maybe_auto_compact, should_auto_compact
 
 
 def test_should_auto_compact_threshold():

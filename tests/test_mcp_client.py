@@ -7,14 +7,14 @@ from pathlib import Path
 import httpx
 import pytest
 
-from pyagent.mcp.client import (
+from zenagent.mcp.client import (
     HttpTransport,
     McpClient,
     McpError,
     McpTimeout,
     StdioTransport,
 )
-from pyagent.mcp.config import (
+from zenagent.mcp.config import (
     McpServerConfig,
     load_mcp_config,
     make_transport,

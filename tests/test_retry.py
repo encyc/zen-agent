@@ -1,12 +1,12 @@
 """Message-level retry: classification, buffering, limits, and abort."""
 
 
-from pyagent.events import AbortToken, AssistantEvent
-from pyagent.providers.catalog import Model
-from pyagent.providers.compat import CompatFlags
-from pyagent.providers.openai_completions import StreamOptions
-from pyagent.retry import is_retryable, stream_with_retry
-from pyagent.types import AssistantMessage, Cost, Usage
+from zenagent.events import AbortToken, AssistantEvent
+from zenagent.providers.catalog import Model
+from zenagent.providers.compat import CompatFlags
+from zenagent.providers.openai_completions import StreamOptions
+from zenagent.retry import is_retryable, stream_with_retry
+from zenagent.types import AssistantMessage, Cost, Usage
 
 
 def model() -> Model:
@@ -123,7 +123,7 @@ async def test_backoff_grows_between_attempts():
 
 
 async def test_loop_uses_retries_from_config():
-    from pyagent.agent.loop import AgentConfig, AgentState, agent_loop
+    from zenagent.agent.loop import AgentConfig, AgentState, agent_loop
 
     stream = Scripted(["connection reset", "done"])
     config = AgentConfig(model=model(), system_prompt="s", api_key="k", stream_fn=stream, retries=1)

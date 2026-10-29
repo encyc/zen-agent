@@ -4,7 +4,7 @@ import time
 
 import pytest
 
-from pyagent.config import (
+from zenagent.config import (
     ContextGuard,
     UserConfig,
     apply_user_config,
@@ -12,9 +12,9 @@ from pyagent.config import (
     naive_overflow_prune,
     token_estimate,
 )
-from pyagent.events import AgentEvent
-from pyagent.providers.catalog import find_model, load_catalog
-from pyagent.types import (
+from zenagent.events import AgentEvent
+from zenagent.providers.catalog import find_model, load_catalog
+from zenagent.types import (
     AssistantMessage,
     SystemMessage,
     TextContent,
@@ -293,7 +293,7 @@ def test_bad_custom_provider_entries_are_rejected(tmp_path, snippet, message):
 
 
 def test_doctor_reports_custom_provider_keys(tmp_path, monkeypatch):
-    from pyagent.cli import doctor as doctor_module
+    from zenagent.cli import doctor as doctor_module
 
     config = load_user_config(write_config(tmp_path, CUSTOM_CONFIG))
     monkeypatch.setattr(doctor_module, "load_user_config", lambda *a, **k: config)

@@ -7,7 +7,7 @@ is explicit that captured traffic beats source-code inference).
 
 It deliberately does **not** parse: the only job is to build the same request
 the adapter would send, POST it, and write the response lines verbatim into
-``pyagent/providers/fixtures/<model>-live-<scenario>.txt`` (same shape as the
+``zenagent/providers/fixtures/<model>-live-<scenario>.txt`` (same shape as the
 hand-written fixtures: ``data: {...}`` lines separated by blank lines).
 
 Usage::
@@ -31,16 +31,16 @@ from pathlib import Path
 
 import httpx
 
-from pyagent.providers.catalog import Model, find_model, load_catalog
-from pyagent.providers.openai_completions import (
+from zenagent.providers.catalog import Model, find_model, load_catalog
+from zenagent.providers.openai_completions import (
     StreamOptions,
     build_params,
     to_request_messages,
 )
-from pyagent.types import ToolDef, UserMessage
+from zenagent.types import ToolDef, UserMessage
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-FIXTURE_DIR = REPO_ROOT / "pyagent" / "providers" / "fixtures"
+FIXTURE_DIR = REPO_ROOT / "zenagent" / "providers" / "fixtures"
 
 WEATHER_TOOL = ToolDef(
     name="get_weather",

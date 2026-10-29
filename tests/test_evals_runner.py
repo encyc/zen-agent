@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from pyagent.evals_runner import (
+from zenagent.evals_runner import (
     compare_reports,
     load_report,
     render_comparison,
@@ -63,7 +63,7 @@ def test_load_report_rejects_bad_files(tmp_path):
 
 
 def test_cli_evals_list_delegates(capsys):
-    import pyagent.cli.main as cli_main
+    import zenagent.cli.main as cli_main
 
     assert cli_main.main(["evals", "--list"]) == 0
     out = capsys.readouterr().out

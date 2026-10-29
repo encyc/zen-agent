@@ -3,18 +3,18 @@
 import httpx
 import pytest
 
-from pyagent.events import Aborted, AssistantEvent
-from pyagent.providers import openai_completions, registry, transport
-from pyagent.providers.catalog import Model
-from pyagent.providers.compat import CompatFlags
-from pyagent.providers.openai_completions import StreamOptions
-from pyagent.providers.registry import (
+from zenagent.events import Aborted, AssistantEvent
+from zenagent.providers import openai_completions, registry, transport
+from zenagent.providers.catalog import Model
+from zenagent.providers.compat import CompatFlags
+from zenagent.providers.openai_completions import StreamOptions
+from zenagent.providers.registry import (
     default_client,
     register_stream_fn,
     safe_stream,
     stream_fn_for,
 )
-from pyagent.types import AssistantMessage, Cost, Message, TextContent, ToolDef, Usage
+from zenagent.types import AssistantMessage, Cost, Message, TextContent, ToolDef, Usage
 
 TERMINAL_TYPES = {"done", "error"}
 

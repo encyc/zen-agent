@@ -1,5 +1,5 @@
 [project]
-name = "pyagent"
+name = "zenagent"
 version = "0.1.0"
 authors = [
     { name = "Justin Gao", email = "atomyuangao@gmail.com" }
@@ -10,7 +10,8 @@ dependencies = [
 ]
 
 [project.scripts]
-pyagent = "pyagent.cli.main:main"
+zen = "zenagent.cli.main:main"
+zenagent = "zenagent.cli.main:main"
 
 [project.optional-dependencies]
 cli = [

@@ -1,6 +1,6 @@
 """Tests for the stream side of the OpenAI-compatible adapter.
 
-SSE fixture files under ``pyagent/providers/fixtures`` (one complete
+SSE fixture files under ``zenagent/providers/fixtures`` (one complete
 ``data:`` JSON chunk per line, exactly what the wire carries, terminated by
 ``data: [DONE]``) are replayed through ``iter_sse_data`` into an async
 generator of parsed chunk dicts and fed to ``_events_from_chunks`` — the
@@ -14,17 +14,17 @@ from pathlib import Path
 import httpx
 import pytest
 
-import pyagent.providers.openai_completions as oc
-from pyagent.events import AbortToken
-from pyagent.providers.catalog import Model
-from pyagent.providers.compat import CompatFlags
-from pyagent.providers.openai_completions import (
+import zenagent.providers.openai_completions as oc
+from zenagent.events import AbortToken
+from zenagent.providers.catalog import Model
+from zenagent.providers.compat import CompatFlags
+from zenagent.providers.openai_completions import (
     StreamOptions,
     _events_from_chunks,
     stream,
 )
-from pyagent.providers.transport import iter_sse_data
-from pyagent.types import (
+from zenagent.providers.transport import iter_sse_data
+from zenagent.types import (
     Cost,
     SystemMessage,
     TextContent,
@@ -32,9 +32,9 @@ from pyagent.types import (
     UserMessage,
 )
 
-FIXTURES = Path(__file__).resolve().parent.parent / "pyagent" / "providers" / "fixtures"
+FIXTURES = Path(__file__).resolve().parent.parent / "zenagent" / "providers" / "fixtures"
 
-# Mirrors the catalog's zai dialect (see pyagent/catalog.yaml: zai-coding-cn).
+# Mirrors the catalog's zai dialect (see zenagent/catalog.yaml: zai-coding-cn).
 ZAI = CompatFlags(
     thinking_format="zai",
     zai_tool_stream=True,
@@ -517,7 +517,7 @@ async def test_live_deepseek_toolcall_capture_assembles_arguments():
     types = [event.type for event in events]
     assert "toolcall_start" in types and "toolcall_end" in types
 
-    from pyagent.types import ToolCall
+    from zenagent.types import ToolCall
 
     calls = [block for block in events[-1].partial.content if isinstance(block, ToolCall)]
     assert len(calls) == 1

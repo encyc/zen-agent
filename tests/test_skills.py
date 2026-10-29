@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from pyagent.skills import (
+from zenagent.skills import (
     MAX_INDEX_BYTES,
     Skill,
     build_skill_tool,
@@ -106,5 +106,5 @@ def test_empty_skills_produce_no_index():
 
 def test_default_roots_put_the_project_first(tmp_path):
     roots = default_skill_roots(tmp_path)
-    assert roots[0] == tmp_path / ".pyagent" / "skills"
+    assert roots[0] == tmp_path / ".zenagent" / "skills"
     assert roots[1].name == "skills"

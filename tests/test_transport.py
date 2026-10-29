@@ -10,16 +10,16 @@ import json
 import httpx
 import pytest
 
-from pyagent.events import Aborted, AbortToken
-from pyagent.providers import transport
-from pyagent.providers.transport import (
+from zenagent.events import Aborted, AbortToken
+from zenagent.providers import transport
+from zenagent.providers.transport import (
     default_client,
     iter_sse_data,
     parse_usage,
     post_stream,
     should_retry,
 )
-from pyagent.types import Cost, Usage
+from zenagent.types import Cost, Usage
 
 URL = "https://api.test/v1/chat"
 

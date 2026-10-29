@@ -1,8 +1,12 @@
-# pyagent
+# ZenAgent
 
-A minimal coding agent written from scratch in pure Python — a unified LLM
-client, an agent loop runtime, and a line-based terminal harness. No vendor
-SDKs, no agent framework: `httpx` is the only runtime dependency of the kernel.
+A minimal coding agent written from scratch in pure Python: one interface for
+streaming LLM calls, an agent loop that is an async generator, and a terminal
+harness. No vendor SDKs, no agent framework — `httpx` is the only runtime
+dependency of the kernel.
+
+Named after the Zen of Python: explicit contracts, flat layers, and one obvious
+way to do things. (Renamed from `pyagent`; there is no compatibility shim.)
 
 Built as a learning project and as the small, hackable Python kernel that the
 ecosystem is missing (in the spirit of `pi-ai` + `pi-agent-core`).
@@ -19,7 +23,7 @@ Requires Python 3.15+ (the project targets the current `uv` toolchain; any
 ## API keys
 
 Read from the environment variable named by each provider in
-`pyagent/catalog.yaml`:
+`zenagent/catalog.yaml`:
 
 | provider | env var |
 |---|---|
@@ -31,23 +35,23 @@ Read from the environment variable named by each provider in
 
 ```bash
 # one-shot, exits 0 on success and 1 when the provider failed
-uv run pyagent -p "explain what this repo does"
+uv run zen -p "explain what this repo does"
 
 # pick a model / reasoning level; allow write + execute tools
-uv run pyagent -p "create /tmp/x/hello.txt, then read it back" -m deepseek-flash --yes --thinking high
+uv run zen -p "create /tmp/x/hello.txt, then read it back" -m deepseek-flash --yes --thinking high
 
 # attach images (needs a vision model; deepseek-flash is one)
-uv run pyagent -p "what is in this picture?" --image shot.png
+uv run zen -p "what is in this picture?" --image shot.png
 
 # guardrails and reproducibility
-uv run pyagent -p "..." --max-turns 20 --max-cost 0.05 --no-context-files
-uv run pyagent -p "analyze this" --read-only --trace run.jsonl --cwd /path/to/project
+uv run zen -p "..." --max-turns 20 --max-cost 0.05 --no-context-files
+uv run zen -p "analyze this" --read-only --trace run.jsonl --cwd /path/to/project
 
 # structured output (a single JSON object; no streamed text)
-uv run pyagent -p "say hi" --json
+uv run zen -p "say hi" --json
 
 # interactive REPL
-uv run pyagent
+uv run zen
 ```
 
 Read-only tools (`read_file`, `list_dir`, `glob`, `grep`) run without asking.
@@ -57,17 +61,17 @@ interactive "yes", or an "always" answer for that tool in the session.
 ### Diagnostics
 
 ```bash
-uv run pyagent doctor      # keys, catalog, config, session dir, terminal
+uv run zen doctor      # keys, catalog, config, session dir, terminal
 ```
 
 ### Extending the agent (file-based, no restart needed)
 
 | What | Where | How it shows up |
 |---|---|---|
-| **Skills** | `.pyagent/skills/<name>/SKILL.md` (project) or `~/.pyagent/skills/` | listed in the prompt; the model loads one with `read_skill` |
-| **Prompt templates** | `.pyagent/commands/<name>.md` | `/name args` expands and sends it |
+| **Skills** | `.zenagent/skills/<name>/SKILL.md` (project) or `~/.zenagent/skills/` | listed in the prompt; the model loads one with `read_skill` |
+| **Prompt templates** | `.zenagent/commands/<name>.md` | `/name args` expands and sends it |
 | **Extensions** | `extensions = ["path.py"]` in config or `--extension` | registers tools, slash commands, prompt text, event hooks |
-| **MCP servers** | `~/.pyagent/mcp.json` | tools exposed as `mcp__<server>__<tool>` |
+| **MCP servers** | `~/.zenagent/mcp.json` | tools exposed as `mcp__<server>__<tool>` |
 | **Custom providers/models** | `[providers.custom.<id>]` in config.toml | usable with `-m <model>` |
 
 Servers that are down at start are retried before each prompt (`/mcp` shows
@@ -77,11 +81,11 @@ extensions mid-session.
 ### Library / SDK
 
 ```python
-from pyagent.agent import Agent
-from pyagent.tools import ALL_TOOLS
+from zenagent.agent import Agent
+from zenagent.tools import ALL_TOOLS
 
 agent = Agent(
-    model=model,                 # a pyagent.providers.catalog.Model
+    model=model,                 # a zenagent.providers.catalog.Model
     system_prompt="be brief",
     tools=list(ALL_TOOLS),       # or your own AgentTool objects
     api_key="...",
@@ -90,7 +94,7 @@ await agent.prompt("explain this repo")   # events via agent.subscribe(fn)
 ```
 
 See `examples/` for a headless run, a custom tool with a fake stream (offline),
-a direct MCP call, and a `pyagent rpc` client.
+a direct MCP call, and a `zen rpc` client.
 
 ### REPL commands
 
@@ -118,7 +122,7 @@ rather than starting a second run. Ctrl+C aborts the current run cooperatively.
 
 ## Configuration
 
-Optional `~/.pyagent/config.toml` (themes, keybindings and MCP live in their own files):
+Optional `~/.zenagent/config.toml` (themes, keybindings and MCP live in their own files):
 
 ```toml
 default_model = "deepseek-flash"
@@ -145,8 +149,8 @@ allow = ["read_*", "grep"]     # never ask for these
 deny = ["write_file"]          # always refuse
 ```
 
-Themes: `~/.pyagent/keybindings.json` (`{"newline": "escape,enter"}`) and
-`--theme mono`. MCP servers: `~/.pyagent/mcp.json` with
+Themes: `~/.zenagent/keybindings.json` (`{"newline": "escape,enter"}`) and
+`--theme mono`. MCP servers: `~/.zenagent/mcp.json` with
 `{"servers": {"name": {"command": [...]} | {"url": "...", "headers": {...}}}}`.
 
 Costs are estimated from the catalog's unit prices (input, output, and cache
@@ -154,7 +158,7 @@ read/write separately). DeepSeek bills peak/off-peak; the catalog has no time
 dimension, so peak rates are used — treat `usage.cost` as a conservative upper
 bound. Providers with subscription pricing (zai, opencode-go) carry 0.
 
-Sessions are append-only JSONL under `~/.pyagent/sessions/`; `--resume` continues
+Sessions are append-only JSONL under `~/.zenagent/sessions/`; `--resume` continues
 the most recent one. Destructive-looking operations never rewrite a file: `/undo`,
 `/fork` and `/compact` all write a new session and leave the old one intact. The file format is exactly the public message model, so it
 can be inspected with `jq` or replayed elsewhere.
@@ -214,7 +218,7 @@ code; they are separate from the offline gate:
 ```
 
 `scripts/capture_sse.py` records real provider traffic into
-`pyagent/providers/fixtures/` so the parser can be checked against the wire; the
+`zenagent/providers/fixtures/` so the parser can be checked against the wire; the
 replay tests skip when a capture is absent.
 
 ## Status

@@ -11,18 +11,18 @@ import asyncio
 import time
 from collections.abc import Callable
 
-from pyagent.agent import (
+from zenagent.agent import (
     AgentConfig,
     AgentState,
     AgentTool,
     ToolResultAgent,
     agent_loop,
 )
-from pyagent.events import AbortToken, AgentEvent, AssistantEvent
-from pyagent.providers.catalog import Model
-from pyagent.providers.compat import CompatFlags
-from pyagent.providers.openai_completions import StreamOptions
-from pyagent.types import (
+from zenagent.events import AbortToken, AgentEvent, AssistantEvent
+from zenagent.providers.catalog import Model
+from zenagent.providers.compat import CompatFlags
+from zenagent.providers.openai_completions import StreamOptions
+from zenagent.types import (
     AssistantMessage,
     Cost,
     Message,

@@ -8,19 +8,19 @@ import time
 
 import pytest
 
-import pyagent.cli.main as cli_main
-from pyagent.config import UserConfig
+import zenagent.cli.main as cli_main
+from zenagent.config import UserConfig
 
 
 @pytest.fixture(autouse=True)
 def isolate_user_config(monkeypatch):
-    """Tests must not read the developer's real ~/.pyagent/config.toml."""
+    """Tests must not read the developer's real ~/.zenagent/config.toml."""
     monkeypatch.setattr(cli_main, "load_user_config", lambda: UserConfig())
-from pyagent.agent import Agent
-from pyagent.cli.permissions import READ_ONLY_TOOLS, PermissionGate
-from pyagent.events import AssistantEvent
-from pyagent.providers.catalog import load_catalog
-from pyagent.types import AssistantMessage, TextContent, ToolCall, Usage
+from zenagent.agent import Agent
+from zenagent.cli.permissions import READ_ONLY_TOOLS, PermissionGate
+from zenagent.events import AssistantEvent
+from zenagent.providers.catalog import load_catalog
+from zenagent.types import AssistantMessage, TextContent, ToolCall, Usage
 
 
 def fake_stream(text: str = "Hello from fake"):
@@ -186,7 +186,7 @@ def test_json_output_has_documented_fields(monkeypatch, capsys):
 
 def test_no_prompt_enters_the_interactive_repl(monkeypatch):
     """Without -p the CLI hands control to the REPL (behavior of Task 17)."""
-    import pyagent.cli.repl as repl_module
+    import zenagent.cli.repl as repl_module
 
     async def fake_repl(**kwargs):
         return 0
@@ -256,7 +256,7 @@ def test_keyboard_interrupt_returns_one_without_traceback(monkeypatch, capsys):
 
 def test_config_default_model_is_used(monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
-    from pyagent.config import UserConfig
+    from zenagent.config import UserConfig
 
     monkeypatch.setattr(
         cli_main, "load_user_config", lambda: UserConfig(default_model="deepseek-flash")
@@ -269,9 +269,9 @@ def test_config_default_model_is_used(monkeypatch):
 
 
 def test_headless_resume_loads_the_previous_transcript(monkeypatch, tmp_path):
-    import pyagent.agent.session as session_module
-    from pyagent.agent.session import Session
-    from pyagent.types import UserMessage
+    import zenagent.agent.session as session_module
+    from zenagent.agent.session import Session
+    from zenagent.types import UserMessage
 
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
     monkeypatch.setattr(session_module, "sessions_dir", lambda: tmp_path)
@@ -311,8 +311,8 @@ def test_headless_resume_loads_the_previous_transcript(monkeypatch, tmp_path):
 
 
 def test_headless_run_persists_a_session(monkeypatch, tmp_path):
-    import pyagent.agent.session as session_module
-    from pyagent.agent.session import Session
+    import zenagent.agent.session as session_module
+    from zenagent.agent.session import Session
 
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
     monkeypatch.setattr(session_module, "sessions_dir", lambda: tmp_path)
@@ -623,7 +623,7 @@ def test_mcp_server_filter_selects_only_named_servers(monkeypatch, tmp_path):
 
 def test_skills_are_injected_into_tools_and_prompt(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    skill_dir = tmp_path / ".pyagent" / "skills" / "demo"
+    skill_dir = tmp_path / ".zenagent" / "skills" / "demo"
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text(
         "---\nname: demo\ndescription: demo skill for tests\n---\nBody here.\n"
@@ -646,7 +646,7 @@ def test_skills_are_injected_into_tools_and_prompt(monkeypatch, tmp_path):
 
 def test_no_skills_flag_disables_discovery(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    skill_dir = tmp_path / ".pyagent" / "skills" / "demo"
+    skill_dir = tmp_path / ".zenagent" / "skills" / "demo"
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text("---\nname: demo\ndescription: d\n---\n")
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
@@ -666,8 +666,8 @@ def test_no_skills_flag_disables_discovery(monkeypatch, tmp_path):
 
 
 def test_custom_provider_from_config_is_used(monkeypatch, tmp_path):
-    from pyagent.config import UserConfig
-    from pyagent.providers.catalog import ProviderConfig, model_from_mapping
+    from zenagent.config import UserConfig
+    from zenagent.providers.catalog import ProviderConfig, model_from_mapping
 
     model = model_from_mapping(
         "local",
@@ -704,7 +704,7 @@ def test_custom_provider_from_config_is_used(monkeypatch, tmp_path):
 
 
 def test_policy_flags_reach_the_permission_gate(monkeypatch):
-    from pyagent.config import UserConfig
+    from zenagent.config import UserConfig
 
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
     monkeypatch.setattr(
@@ -729,7 +729,7 @@ def test_policy_flags_reach_the_permission_gate(monkeypatch):
 
 
 def test_theme_flag_is_forwarded_to_the_repl(monkeypatch):
-    import pyagent.cli.repl as repl_module
+    import zenagent.cli.repl as repl_module
 
     captured: dict = {}
 

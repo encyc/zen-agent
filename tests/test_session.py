@@ -3,9 +3,9 @@
 
 import pytest
 
-import pyagent.agent.session as session_module
-from pyagent.agent.session import Session, latest_session, session_path
-from pyagent.types import AssistantMessage, TextContent, Usage, UserMessage
+import zenagent.agent.session as session_module
+from zenagent.agent.session import Session, latest_session, session_path
+from zenagent.types import AssistantMessage, TextContent, Usage, UserMessage
 
 
 def user(text: str, timestamp: int = 1) -> UserMessage:
@@ -115,7 +115,7 @@ def test_list_sessions_is_newest_first_and_skips_broken(isolated_sessions):
     _write_session(isolated_sessions, "new.jsonl", ["two", "three"], mtime=2_000)
     (isolated_sessions / "broken.jsonl").write_text("{not json\n")
 
-    from pyagent.agent.session import list_sessions
+    from zenagent.agent.session import list_sessions
 
     infos = list_sessions()
     assert [info.path.name for info in infos] == ["new.jsonl", "old.jsonl"]
@@ -129,7 +129,7 @@ def test_list_sessions_honours_the_limit(isolated_sessions):
     for index in range(5):
         _write_session(isolated_sessions, f"s{index}.jsonl", [f"t{index}"], mtime=index + 1)
 
-    from pyagent.agent.session import list_sessions
+    from zenagent.agent.session import list_sessions
 
     assert len(list_sessions(limit=2)) == 2
 
@@ -183,7 +183,7 @@ def test_rewrite_writes_a_new_file(isolated_sessions):
 
 
 def test_truncate_last_turn_drops_the_final_exchange():
-    from pyagent.agent.session import truncate_last_turn
+    from zenagent.agent.session import truncate_last_turn
 
     messages = [user("q1"), assistant("a1"), user("q2"), assistant("a2")]
     truncated = truncate_last_turn(messages)
@@ -192,8 +192,8 @@ def test_truncate_last_turn_drops_the_final_exchange():
 
 
 def test_truncate_last_turn_drops_tool_results_with_their_turn():
-    from pyagent.agent.session import truncate_last_turn
-    from pyagent.types import (
+    from zenagent.agent.session import truncate_last_turn
+    from zenagent.types import (
         AssistantMessage,
         TextContent,
         ToolCall,
@@ -223,7 +223,7 @@ def test_truncate_last_turn_drops_tool_results_with_their_turn():
 
 
 def test_truncate_last_turn_with_nothing_to_drop():
-    from pyagent.agent.session import truncate_last_turn
+    from zenagent.agent.session import truncate_last_turn
 
     assert truncate_last_turn([]) == []
     only_assistant = [assistant("hi")]

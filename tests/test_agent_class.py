@@ -8,12 +8,12 @@ import time
 
 import pytest
 
-from pyagent.agent import Agent
-from pyagent.agent.loop import AgentTool, ToolResultAgent
-from pyagent.events import Aborted, AgentEvent, AssistantEvent
-from pyagent.providers.catalog import Model
-from pyagent.providers.compat import CompatFlags
-from pyagent.types import (
+from zenagent.agent import Agent
+from zenagent.agent.loop import AgentTool, ToolResultAgent
+from zenagent.events import Aborted, AgentEvent, AssistantEvent
+from zenagent.providers.catalog import Model
+from zenagent.providers.compat import CompatFlags
+from zenagent.types import (
     AssistantMessage,
     Cost,
     TextContent,

@@ -2,9 +2,9 @@
 
 import json
 
-from pyagent.events import AgentEvent
-from pyagent.telemetry import MetricsRecorder, append_metrics
-from pyagent.types import AssistantMessage, Cost, TextContent, Usage
+from zenagent.events import AgentEvent
+from zenagent.telemetry import MetricsRecorder, append_metrics
+from zenagent.types import AssistantMessage, Cost, TextContent, Usage
 
 
 def assistant(model="m", cost=0.01) -> AssistantMessage:

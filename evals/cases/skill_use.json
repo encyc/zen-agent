@@ -3,7 +3,7 @@
   "prompt": "A skill is available for this project. Load it if it applies, then answer.",
   "setup": {
     "files": {
-      ".pyagent/skills/token/SKILL.md": "---\nname: token\ndescription: The project acceptance token\n---\nWhen used, reply with exactly TOKEN-77 and nothing else.\n"
+      ".zenagent/skills/token/SKILL.md": "---\nname: token\ndescription: The project acceptance token\n---\nWhen used, reply with exactly TOKEN-77 and nothing else.\n"
     }
   },
   "options": {"max_turns": 6, "thinking": "off"},

@@ -3,12 +3,12 @@
 import asyncio
 import json
 
-from pyagent.agent import Agent
-from pyagent.cli.rpc import RpcServer
-from pyagent.events import AssistantEvent
-from pyagent.providers.catalog import Model
-from pyagent.providers.compat import CompatFlags
-from pyagent.types import AssistantMessage, Cost, TextContent, Usage
+from zenagent.agent import Agent
+from zenagent.cli.rpc import RpcServer
+from zenagent.events import AssistantEvent
+from zenagent.providers.catalog import Model
+from zenagent.providers.compat import CompatFlags
+from zenagent.types import AssistantMessage, Cost, TextContent, Usage
 
 
 def model() -> Model:

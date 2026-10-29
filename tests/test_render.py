@@ -4,16 +4,16 @@
 from rich.console import RenderableType
 from rich.text import Text
 
-from pyagent.agent.loop import ToolResultAgent
-from pyagent.agent.session import Session
-from pyagent.cli.render import (
+from zenagent.agent.loop import ToolResultAgent
+from zenagent.agent.session import Session
+from zenagent.cli.render import (
     AssistantLiveRenderer,
     session_header,
     tool_progress_line,
     tool_result_line,
 )
-from pyagent.events import AssistantEvent
-from pyagent.types import (
+from zenagent.events import AssistantEvent
+from zenagent.types import (
     AssistantMessage,
     Cost,
     TextContent,
@@ -141,7 +141,7 @@ def test_session_header_reports_name_and_count(tmp_path):
 
 
 def test_render_diff_colours_added_and_removed_lines():
-    from pyagent.cli.render import render_diff
+    from zenagent.cli.render import render_diff
 
     diff = "--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old\n+new\n context\n"
     rendered = render_diff(diff)
@@ -157,7 +157,7 @@ def test_render_diff_colours_added_and_removed_lines():
 
 
 def test_render_diff_handles_empty_input():
-    from pyagent.cli.render import render_diff
+    from zenagent.cli.render import render_diff
 
     assert isinstance(render_diff(""), Text)
 
@@ -168,7 +168,7 @@ def test_render_diff_handles_empty_input():
 
 
 def test_status_line_contains_every_field():
-    from pyagent.cli.render import status_line
+    from zenagent.cli.render import status_line
 
     usage = Usage(input=8000, output=500, cache_read=400, cost=Cost(total=0.00042))
     line = status_line(
@@ -188,7 +188,7 @@ def test_status_line_contains_every_field():
 
 
 def test_status_line_without_a_context_window_omits_percent():
-    from pyagent.cli.render import status_line
+    from zenagent.cli.render import status_line
 
     line = status_line(
         model_id="m", thinking=None, messages=1, usage=Usage(), context_window=0
@@ -199,7 +199,7 @@ def test_status_line_without_a_context_window_omits_percent():
 
 
 def test_context_percent_uses_real_prompt_tokens():
-    from pyagent.cli.render import context_percent
+    from zenagent.cli.render import context_percent
 
     assert context_percent(Usage(input=500, cache_read=500), 10_000) == 10
     assert context_percent(Usage(), 0) is None

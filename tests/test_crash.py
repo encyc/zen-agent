@@ -2,7 +2,7 @@
 
 import sys
 
-from pyagent import crash
+from zenagent import crash
 
 
 def test_write_crash_log_captures_the_traceback(tmp_path):
@@ -13,7 +13,7 @@ def test_write_crash_log_captures_the_traceback(tmp_path):
         path = crash.write_crash_log(exc_type, exc_value, exc_tb, tmp_path)
 
     text = path.read_text(encoding="utf-8")
-    assert "pyagent crash report" in text
+    assert "zenagent crash report" in text
     assert "RuntimeError" in text and "boom-123" in text
     assert "Traceback" in text
 
@@ -34,7 +34,7 @@ def test_install_excepthook_is_idempotent(tmp_path):
 def test_report_never_leaks_credential_values(tmp_path, monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-super-secret")
     monkeypatch.setattr(
-        "pyagent.cli.doctor.collect_checks",
+        "zenagent.cli.doctor.collect_checks",
         lambda env=None: [
             type("C", (), {"name": "key:deepseek", "ok": True, "detail": "DEEPSEEK_API_KEY is set"})()
         ],
@@ -42,4 +42,4 @@ def test_report_never_leaks_credential_values(tmp_path, monkeypatch):
     report = crash.collect_report()
     assert "sk-super-secret" not in report
     assert "DEEPSEEK_API_KEY is set" in report
-    assert "pyagent diagnostics" in report
+    assert "zenagent diagnostics" in report

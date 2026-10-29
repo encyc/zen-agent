@@ -1,6 +1,6 @@
 """Minimal tool-argument validator tests (Task 9A)."""
 
-from pyagent.agent.validate import validate_arguments
+from zenagent.agent.validate import validate_arguments
 
 SCHEMA = {
     "type": "object",

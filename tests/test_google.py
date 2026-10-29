@@ -3,12 +3,12 @@
 import json
 from pathlib import Path
 
-import pyagent.providers.google_generative_ai as g
-from pyagent.providers.catalog import Model
-from pyagent.providers.compat import CompatFlags
-from pyagent.providers.openai_completions import StreamOptions
-from pyagent.providers.transport import iter_sse_data
-from pyagent.types import (
+import zenagent.providers.google_generative_ai as g
+from zenagent.providers.catalog import Model
+from zenagent.providers.compat import CompatFlags
+from zenagent.providers.openai_completions import StreamOptions
+from zenagent.providers.transport import iter_sse_data
+from zenagent.types import (
     AssistantMessage,
     Cost,
     SystemMessage,
@@ -20,7 +20,7 @@ from pyagent.types import (
     UserMessage,
 )
 
-FIXTURES = Path(__file__).resolve().parent.parent / "pyagent" / "providers" / "fixtures"
+FIXTURES = Path(__file__).resolve().parent.parent / "zenagent" / "providers" / "fixtures"
 WEATHER = ToolDef(
     name="get_weather", description="weather",
     parameters={"type": "object", "properties": {"city": {"type": "string"}}},

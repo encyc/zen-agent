@@ -8,8 +8,8 @@ from __future__ import annotations
 import asyncio
 import sys
 
-from pyagent.mcp.config import McpServerConfig
-from pyagent.mcp.manager import McpManager
+from zenagent.mcp.config import McpServerConfig
+from zenagent.mcp.manager import McpManager
 
 
 async def main() -> int:

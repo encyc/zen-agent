@@ -25,7 +25,7 @@ A case can exercise the harness extensions too:
 
 | Option | Effect |
 |---|---|
-| `skills` | discover `.pyagent/skills` in the workspace (default: auto when present) |
+| `skills` | discover `.zenagent/skills` in the workspace (default: auto when present) |
 | `extensions` | load extension modules (`["{{workspace}}/ext.py"]`) |
 | `mcp` | start MCP servers (`{"echo": {"command": [...]}}`), tools appear as `mcp__echo__*` |
 | `tool_deny` | fnmatch patterns the permission gate refuses |

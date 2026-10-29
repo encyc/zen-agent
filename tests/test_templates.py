@@ -3,7 +3,7 @@
 import asyncio
 from pathlib import Path
 
-from pyagent.templates import (
+from zenagent.templates import (
     PromptTemplate,
     default_template_roots,
     discover_templates,
@@ -65,7 +65,7 @@ def test_broken_frontmatter_is_skipped(tmp_path):
 
 def test_default_roots_put_the_project_first(tmp_path):
     roots = default_template_roots(tmp_path)
-    assert roots[0] == tmp_path / ".pyagent" / "commands"
+    assert roots[0] == tmp_path / ".zenagent" / "commands"
     assert roots[1].name == "commands"
 
 
@@ -75,21 +75,21 @@ def test_default_roots_put_the_project_first(tmp_path):
 
 
 def test_repl_slash_command_expands_a_template(tmp_path, monkeypatch):
-    import pyagent.agent.session as session_module
-    import pyagent.cli.repl as repl_module
-    from pyagent.cli.repl import repl
-    from pyagent.config import UserConfig
+    import zenagent.agent.session as session_module
+    import zenagent.cli.repl as repl_module
+    from zenagent.cli.repl import repl
+    from zenagent.config import UserConfig
 
     monkeypatch.setattr(session_module, "sessions_dir", lambda: tmp_path / "sessions")
     monkeypatch.setattr(repl_module, "load_user_config", lambda: UserConfig())
     monkeypatch.chdir(tmp_path)
-    write(tmp_path / ".pyagent" / "commands", "review", "Review {{args}} with care.")
+    write(tmp_path / ".zenagent" / "commands", "review", "Review {{args}} with care.")
 
     requests: list[list] = []
 
     async def stream(model, messages, tools, options):
-        from pyagent.events import AssistantEvent
-        from pyagent.types import AssistantMessage, TextContent, Usage
+        from zenagent.events import AssistantEvent
+        from zenagent.types import AssistantMessage, TextContent, Usage
 
         requests.append(list(messages))
         partial = AssistantMessage(
@@ -121,8 +121,8 @@ def test_repl_slash_command_expands_a_template(tmp_path, monkeypatch):
 
 
 def test_repl_help_lists_templates():
-    from pyagent.agent import Agent
-    from pyagent.cli.repl import handle_slash
+    from zenagent.agent import Agent
+    from zenagent.cli.repl import handle_slash
 
     agent = Agent.__new__(Agent)  # handle_slash only needs attributes for /help
     lines: list[str] = []

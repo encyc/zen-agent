@@ -9,20 +9,20 @@ import time
 
 import pytest
 
-import pyagent.agent.session as session_module
-import pyagent.cli.repl as repl_module
-from pyagent.agent import Agent
-from pyagent.cli.repl import handle_slash, repl, split_input
-from pyagent.config import UserConfig
-from pyagent.events import AssistantEvent
-from pyagent.providers.catalog import Model
-from pyagent.providers.compat import CompatFlags
-from pyagent.types import AssistantMessage, Cost, TextContent, Usage
+import zenagent.agent.session as session_module
+import zenagent.cli.repl as repl_module
+from zenagent.agent import Agent
+from zenagent.cli.repl import handle_slash, repl, split_input
+from zenagent.config import UserConfig
+from zenagent.events import AssistantEvent
+from zenagent.providers.catalog import Model
+from zenagent.providers.compat import CompatFlags
+from zenagent.types import AssistantMessage, Cost, TextContent, Usage
 
 
 @pytest.fixture(autouse=True)
 def isolate_user_config(monkeypatch):
-    """Tests must not read the developer's real ~/.pyagent/config.toml."""
+    """Tests must not read the developer's real ~/.zenagent/config.toml."""
     monkeypatch.setattr(repl_module, "load_user_config", lambda: UserConfig())
 
 
@@ -139,7 +139,7 @@ async def test_slash_thinking_validates_levels(capsys):
 
 async def test_slash_clear_resets_the_transcript(capsys):
     agent = Agent(model(), "s", api_key="k")
-    agent.replace_messages([__import__("pyagent.types", fromlist=["UserMessage"]).UserMessage(content="x", timestamp=1)])
+    agent.replace_messages([__import__("zenagent.types", fromlist=["UserMessage"]).UserMessage(content="x", timestamp=1)])
     await handle_slash(agent, "clear", "")
     assert agent.messages == []
 
@@ -169,7 +169,7 @@ async def test_repl_smoke_two_turns_then_exit(isolated_sessions):
     # the session file received the four messages of both turns
     files = list(isolated_sessions.glob("*.jsonl"))
     assert len(files) == 1
-    from pyagent.agent.session import Session
+    from zenagent.agent.session import Session
 
     assert len(Session(files[0]).load()) == 4
 
@@ -223,8 +223,8 @@ async def test_missing_key_returns_one(monkeypatch):
 
 
 async def test_slash_sessions_lists_and_marks_the_current(isolated_sessions, capsys):
-    from pyagent.agent.session import Session
-    from pyagent.types import UserMessage
+    from zenagent.agent.session import Session
+    from zenagent.types import UserMessage
 
     isolated_sessions.mkdir(parents=True)
     current = Session(isolated_sessions / "current.jsonl")
@@ -239,8 +239,8 @@ async def test_slash_sessions_lists_and_marks_the_current(isolated_sessions, cap
 
 
 async def test_slash_fork_switches_the_transcript(isolated_sessions, capsys):
-    from pyagent.agent.session import Session
-    from pyagent.types import AssistantMessage, TextContent, Usage, UserMessage
+    from zenagent.agent.session import Session
+    from zenagent.types import AssistantMessage, TextContent, Usage, UserMessage
 
     isolated_sessions.mkdir(parents=True)
     session = Session(isolated_sessions / "s.jsonl")
@@ -259,7 +259,7 @@ async def test_slash_fork_switches_the_transcript(isolated_sessions, capsys):
 
 
 async def test_slash_fork_rejects_bad_arguments(isolated_sessions, capsys):
-    from pyagent.agent.session import Session
+    from zenagent.agent.session import Session
 
     isolated_sessions.mkdir(parents=True)
     session = Session(isolated_sessions / "s.jsonl")
@@ -269,8 +269,8 @@ async def test_slash_fork_rejects_bad_arguments(isolated_sessions, capsys):
 
 
 async def test_slash_import_loads_a_session(isolated_sessions, capsys):
-    from pyagent.agent.session import Session
-    from pyagent.types import UserMessage
+    from zenagent.agent.session import Session
+    from zenagent.types import UserMessage
 
     isolated_sessions.mkdir(parents=True)
     path = isolated_sessions / "imported.jsonl"
@@ -286,8 +286,8 @@ async def test_slash_import_loads_a_session(isolated_sessions, capsys):
 
 
 async def test_slash_undo_drops_the_last_turn_into_a_new_file(isolated_sessions, capsys):
-    from pyagent.agent.session import Session
-    from pyagent.types import AssistantMessage, TextContent, Usage, UserMessage
+    from zenagent.agent.session import Session
+    from zenagent.types import AssistantMessage, TextContent, Usage, UserMessage
 
     isolated_sessions.mkdir(parents=True)
     session = Session(isolated_sessions / "s.jsonl")
@@ -311,7 +311,7 @@ async def test_slash_undo_drops_the_last_turn_into_a_new_file(isolated_sessions,
 
 
 async def test_slash_undo_with_nothing_to_drop(isolated_sessions, capsys):
-    from pyagent.agent.session import Session
+    from zenagent.agent.session import Session
 
     isolated_sessions.mkdir(parents=True)
     agent = Agent(model(), "s", api_key="k")
@@ -361,7 +361,7 @@ async def test_slash_image_attaches_only_for_vision_models(tmp_path, capsys):
 
 
 async def test_slash_images_lists_and_clears(tmp_path, capsys):
-    from pyagent.cli.images import read_image_argument
+    from zenagent.cli.images import read_image_argument
 
     image = tmp_path / "pic.png"
     image.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8)
@@ -431,7 +431,7 @@ async def test_repl_reconnects_a_late_mcp_server(tmp_path, isolated_sessions):
 async def test_slash_skills_lists_them(capsys):
     from pathlib import Path
 
-    from pyagent.skills import Skill
+    from zenagent.skills import Skill
 
     agent = Agent(model(), "s", api_key="k")
     await handle_slash(
@@ -456,8 +456,8 @@ async def test_slash_skills_with_none_configured(capsys):
 
 
 async def test_reload_discovers_skills_added_mid_session(tmp_path, monkeypatch):
-    import pyagent.cli.repl as repl_module
-    from pyagent.config import UserConfig
+    import zenagent.cli.repl as repl_module
+    from zenagent.config import UserConfig
 
     monkeypatch.setattr(repl_module, "load_user_config", lambda: UserConfig())
     monkeypatch.chdir(tmp_path)
@@ -470,7 +470,7 @@ async def test_reload_discovers_skills_added_mid_session(tmp_path, monkeypatch):
         if calls["n"] == 1:
             return "hi"
         if calls["n"] == 2:
-            skill_dir = tmp_path / ".pyagent" / "skills" / "late"
+            skill_dir = tmp_path / ".zenagent" / "skills" / "late"
             skill_dir.mkdir(parents=True)
             (skill_dir / "SKILL.md").write_text(
                 "---\nname: late\ndescription: added mid-session\n---\nbody\n"
@@ -519,8 +519,8 @@ async def test_slash_theme_switches_and_reports(isolated_sessions):
 
 
 async def test_slash_theme_rejects_unknown_names():
-    from pyagent.agent import Agent
-    from pyagent.cli.repl import handle_slash
+    from zenagent.agent import Agent
+    from zenagent.cli.repl import handle_slash
 
     agent = Agent.__new__(Agent)
     lines: list[str] = []
@@ -538,9 +538,9 @@ async def test_slash_theme_rejects_unknown_names():
 
 
 async def test_slash_hotkeys_lists_bindings(capsys):
-    from pyagent.agent import Agent
-    from pyagent.cli.keybindings import DEFAULT_KEYBINDINGS
-    from pyagent.cli.repl import handle_slash
+    from zenagent.agent import Agent
+    from zenagent.cli.keybindings import DEFAULT_KEYBINDINGS
+    from zenagent.cli.repl import handle_slash
 
     agent = Agent.__new__(Agent)
     await handle_slash(agent, "hotkeys", "", keybindings=DEFAULT_KEYBINDINGS)

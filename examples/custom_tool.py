@@ -7,12 +7,12 @@ from __future__ import annotations
 
 import asyncio
 
-from pyagent.agent import Agent
-from pyagent.agent.loop import AgentTool, ToolResultAgent
-from pyagent.events import AssistantEvent
-from pyagent.providers.catalog import Model
-from pyagent.providers.compat import CompatFlags
-from pyagent.types import AssistantMessage, Cost, TextContent, Usage
+from zenagent.agent import Agent
+from zenagent.agent.loop import AgentTool, ToolResultAgent
+from zenagent.events import AssistantEvent
+from zenagent.providers.catalog import Model
+from zenagent.providers.compat import CompatFlags
+from zenagent.types import AssistantMessage, Cost, TextContent, Usage
 
 
 async def add(call_id, args, abort, on_update=None) -> ToolResultAgent:

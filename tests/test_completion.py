@@ -4,7 +4,7 @@ from pathlib import Path
 
 from prompt_toolkit.document import Document
 
-from pyagent.cli.completion import SLASH_COMMANDS, ReplCompleter, help_text
+from zenagent.cli.completion import SLASH_COMMANDS, ReplCompleter, help_text
 
 
 def complete(completer: ReplCompleter, text: str) -> list[str]:

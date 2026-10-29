@@ -10,20 +10,20 @@ from pathlib import Path
 import httpx
 import pytest
 
-import pyagent.providers.anthropic_messages as am
-from pyagent.events import AbortToken
-from pyagent.providers.anthropic_messages import (
+import zenagent.providers.anthropic_messages as am
+from zenagent.events import AbortToken
+from zenagent.providers.anthropic_messages import (
     ANTHROPIC_VERSION,
     build_request,
     thinking_budget,
     to_anthropic_messages,
 )
-from pyagent.providers.catalog import Model
-from pyagent.providers.compat import CompatFlags
-from pyagent.providers.openai_completions import StreamOptions
-from pyagent.providers.registry import stream_fn_for
-from pyagent.providers.transport import iter_sse_data
-from pyagent.types import (
+from zenagent.providers.catalog import Model
+from zenagent.providers.compat import CompatFlags
+from zenagent.providers.openai_completions import StreamOptions
+from zenagent.providers.registry import stream_fn_for
+from zenagent.providers.transport import iter_sse_data
+from zenagent.types import (
     AssistantMessage,
     Cost,
     ImageContent,
@@ -37,7 +37,7 @@ from pyagent.types import (
     UserMessage,
 )
 
-FIXTURES = Path(__file__).resolve().parent.parent / "pyagent" / "providers" / "fixtures"
+FIXTURES = Path(__file__).resolve().parent.parent / "zenagent" / "providers" / "fixtures"
 
 
 def model(max_tokens: int = 8192, reasoning: bool = True) -> Model:

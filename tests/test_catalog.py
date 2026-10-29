@@ -2,9 +2,9 @@
 
 import pytest
 
-from pyagent.providers.catalog import _build_catalog, find_model, load_catalog
-from pyagent.providers.compat import CompatFlags, sniff_compat
-from pyagent.types import Cost
+from zenagent.providers.catalog import _build_catalog, find_model, load_catalog
+from zenagent.providers.compat import CompatFlags, sniff_compat
+from zenagent.types import Cost
 
 
 def _models_by_id(catalog, provider_id):
@@ -347,7 +347,7 @@ def test_parser_rejects_null_tilde_nan_inf_scalars():
 
 def test_cost_flow_map_accepts_cache_prices(tmp_path):
     """Cache pricing is part of the catalog grammar now."""
-    from pyagent.providers import catalog as catalog_module
+    from zenagent.providers import catalog as catalog_module
 
     text = """
 providers:
@@ -371,7 +371,7 @@ providers:
 
 
 def test_cost_flow_map_rejects_unknown_keys(tmp_path):
-    from pyagent.providers import catalog as catalog_module
+    from zenagent.providers import catalog as catalog_module
 
     text = """
 providers:
@@ -394,7 +394,7 @@ providers:
 
 
 def test_supports_vision_is_parsed_and_defaults_to_false():
-    from pyagent.providers.catalog import find_model
+    from zenagent.providers.catalog import find_model
 
     catalog = load_catalog()
     assert find_model(catalog, "deepseek-flash").supports_vision is True

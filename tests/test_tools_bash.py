@@ -6,8 +6,8 @@ Commands are POSIX shell one-liners (macOS/Linux); nothing touches the network.
 import asyncio
 import time
 
-from pyagent.events import AbortToken
-from pyagent.tools.bash import BASH, MAX_OUTPUT_BYTES
+from zenagent.events import AbortToken
+from zenagent.tools.bash import BASH, MAX_OUTPUT_BYTES
 
 
 async def call(**args):
@@ -116,7 +116,7 @@ async def test_empty_output_reports_only_exit_code():
 
 
 async def test_missing_command_argument_is_rejected_by_the_schema():
-    from pyagent.agent.validate import validate_arguments
+    from zenagent.agent.validate import validate_arguments
 
     assert validate_arguments(BASH.parameters, {}) is not None
     assert validate_arguments(BASH.parameters, {"command": "echo hi"}) is None

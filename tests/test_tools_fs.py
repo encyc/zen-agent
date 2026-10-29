@@ -6,7 +6,7 @@ through the loop; the loop integration is covered by ``test_loop.py``.
 
 import pytest
 
-from pyagent.tools.fs import (
+from zenagent.tools.fs import (
     EDIT_FILE,
     LIST_DIR,
     MAX_READ_LINES,
@@ -187,7 +187,7 @@ async def test_schemas_declare_required_arguments():
 
 async def test_tools_are_validated_by_the_loop_before_execution():
     """A missing required argument never reaches the tool body."""
-    from pyagent.agent.validate import validate_arguments
+    from zenagent.agent.validate import validate_arguments
 
     assert validate_arguments(WRITE_FILE.parameters, {"path": "a"}) is not None
     assert validate_arguments(WRITE_FILE.parameters, {"path": "a", "content": "b"}) is None
@@ -225,7 +225,7 @@ async def test_write_result_diff_for_overwrite_shows_removals():
 
 
 async def test_huge_diff_is_truncated():
-    from pyagent.tools.fs import MAX_DIFF_LINES, unified_diff
+    from zenagent.tools.fs import MAX_DIFF_LINES, unified_diff
 
     diff = unified_diff("big.txt", "", "\n".join(f"line{i}" for i in range(500)))
     assert "more diff lines" in diff

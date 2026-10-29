@@ -1,7 +1,7 @@
 """doctor: local checks only, exit code reflects failures."""
 
-import pyagent.cli.main as cli_main
-from pyagent.cli.doctor import Check, collect_checks, run_doctor
+import zenagent.cli.main as cli_main
+from zenagent.cli.doctor import Check, collect_checks, run_doctor
 
 
 def test_missing_keys_are_reported():
@@ -29,7 +29,7 @@ def test_broken_config_is_reported(monkeypatch):
     def broken():
         raise ValueError("config is broken")
 
-    monkeypatch.setattr("pyagent.cli.doctor.load_user_config", broken)
+    monkeypatch.setattr("zenagent.cli.doctor.load_user_config", broken)
     checks = collect_checks(env={})
     config_row = next(check for check in checks if check.name == "config")
     assert config_row.ok is False
@@ -38,7 +38,7 @@ def test_broken_config_is_reported(monkeypatch):
 
 async def test_run_doctor_exit_code_follows_failures(monkeypatch):
     monkeypatch.setattr(
-        "pyagent.cli.doctor.collect_checks",
+        "zenagent.cli.doctor.collect_checks",
         lambda env=None: [Check("a", True, "fine"), Check("b", False, "bad")],
     )
     printed: list[str] = []
@@ -48,7 +48,7 @@ async def test_run_doctor_exit_code_follows_failures(monkeypatch):
 
 async def test_run_doctor_success(monkeypatch):
     monkeypatch.setattr(
-        "pyagent.cli.doctor.collect_checks",
+        "zenagent.cli.doctor.collect_checks",
         lambda env=None: [Check("a", True, "fine")],
     )
     assert await run_doctor(print_fn=lambda *_: None) == 0

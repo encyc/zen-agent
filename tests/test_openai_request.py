@@ -6,14 +6,14 @@ JSON, incl. the deepseek ``reasoning_content`` backfill) and
 ``stream_options``, tool schema, and the zai ``tool_stream`` quirk).
 """
 
-from pyagent.providers.catalog import Model, find_model, load_catalog
-from pyagent.providers.compat import CompatFlags
-from pyagent.providers.openai_completions import (
+from zenagent.providers.catalog import Model, find_model, load_catalog
+from zenagent.providers.compat import CompatFlags
+from zenagent.providers.openai_completions import (
     StreamOptions,
     build_params,
     to_request_messages,
 )
-from pyagent.types import (
+from zenagent.types import (
     AssistantMessage,
     Cost,
     ImageContent,
@@ -28,7 +28,7 @@ from pyagent.types import (
 )
 
 # Compat blocks mirroring the catalog's zai / deepseek dialect entries
-# (see pyagent/catalog.yaml: zai-coding-cn/glm-5.3, deepseek/deepseek-flash).
+# (see zenagent/catalog.yaml: zai-coding-cn/glm-5.3, deepseek/deepseek-flash).
 ZAI = CompatFlags(
     thinking_format="zai",
     zai_tool_stream=True,

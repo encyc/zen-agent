@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Behavioral evals for pyagent: run YAML-free JSON cases against a real model.
+"""Behavioral evals for zenagent: run YAML-free JSON cases against a real model.
 
 Each case gets an isolated temp workspace, a real headless run, and a set of
 assertions over the output, the tool sequence, the termination reason, the cost
@@ -48,28 +48,28 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
-from pyagent.agent import Agent
-from pyagent.cli.main import _api_key_for, resolve_model, session_id_for
-from pyagent.cli.permissions import PermissionGate
-from pyagent.config import ContextGuard, apply_user_config, load_user_config
-from pyagent.context_files import (
+from zenagent.agent import Agent
+from zenagent.cli.main import _api_key_for, resolve_model, session_id_for
+from zenagent.cli.permissions import PermissionGate
+from zenagent.config import ContextGuard, apply_user_config, load_user_config
+from zenagent.context_files import (
     discover_context_files,
     load_context_files,
     system_prompt_with_context,
 )
-from pyagent.events import AgentEvent
-from pyagent.extensions import load_extensions
-from pyagent.mcp.config import load_mcp_config
-from pyagent.mcp.manager import McpManager
-from pyagent.providers.catalog import load_catalog
-from pyagent.skills import (
+from zenagent.events import AgentEvent
+from zenagent.extensions import load_extensions
+from zenagent.mcp.config import load_mcp_config
+from zenagent.mcp.manager import McpManager
+from zenagent.providers.catalog import load_catalog
+from zenagent.skills import (
     build_skill_tool,
     default_skill_roots,
     discover_skills,
     skills_prompt_index,
 )
-from pyagent.tools import ALL_TOOLS
-from pyagent.types import AssistantMessage
+from zenagent.tools import ALL_TOOLS
+from zenagent.types import AssistantMessage
 
 CASES_DIR = Path(__file__).resolve().parent.parent / "evals" / "cases"
 FIXTURES_DIR = REPO_ROOT / "tests" / "fixtures"
@@ -194,11 +194,11 @@ async def run_case(
 ) -> list[tuple[RunResult, list[str]]]:
     results: list[tuple[RunResult, list[str]]] = []
     for _ in range(repeats):
-        with tempfile.TemporaryDirectory(prefix=f"pyagent-eval-{case.id}-") as tmp:
+        with tempfile.TemporaryDirectory(prefix=f"zenagent-eval-{case.id}-") as tmp:
             root = Path(tmp)
             images = prepare_workspace(case, root)
 
-            from pyagent.cli.images import read_image_argument
+            from zenagent.cli.images import read_image_argument
 
             image_blocks = [read_image_argument(path) for path in images]
             options = _resolve(
@@ -212,7 +212,7 @@ async def run_case(
 
             prompt = (
                 options.get("system_prompt_override")
-                or "You are pyagent, a coding agent. Be concise."
+                or "You are zenagent, a coding agent. Be concise."
             )
             if options.get("context_files"):
                 prompt = system_prompt_with_context(
@@ -223,7 +223,7 @@ async def run_case(
             prompt_parts: list[str] = []
 
             skills_wanted = options.get(
-                "skills", (root / ".pyagent" / "skills").is_dir()
+                "skills", (root / ".zenagent" / "skills").is_dir()
             )
             if skills_wanted:
                 discovered, _warnings = discover_skills(default_skill_roots(root))
@@ -530,18 +530,22 @@ async def run_cases(args) -> int:
     if args.json:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     if args.report:
-        from pyagent.evals_runner import write_report
+        from zenagent.evals_runner import write_report
 
         write_report(args.report, payload)
         print(f"report: {args.report}")
 
     if args.baseline:
-        from pyagent.evals_runner import compare_reports, load_report, render_comparison
+        from zenagent.evals_runner import (
+            compare_reports,
+            load_report,
+            render_comparison,
+        )
 
         try:
             baseline_payload = load_report(args.baseline)
         except ValueError as exc:
-            print(f"pyagent: {exc}", file=sys.stderr)
+            print(f"zenagent: {exc}", file=sys.stderr)
             return 1
         comparison = compare_reports(baseline_payload, payload)
         print(render_comparison(comparison))

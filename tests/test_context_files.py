@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from pyagent.context_files import (
+from zenagent.context_files import (
     MAX_CONTEXT_BYTES,
     discover_context_files,
     load_context_files,
@@ -79,9 +79,9 @@ def test_system_prompt_appends_context_only_when_present():
 
 
 def test_build_agent_injects_agents_md(tmp_path, monkeypatch):
-    import pyagent.cli.main as cli_main
-    from pyagent.cli.permissions import PermissionGate
-    from pyagent.providers.catalog import find_model, load_catalog
+    import zenagent.cli.main as cli_main
+    from zenagent.cli.permissions import PermissionGate
+    from zenagent.providers.catalog import find_model, load_catalog
 
     make_repo(tmp_path)
     monkeypatch.chdir(tmp_path / "pkg")

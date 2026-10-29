@@ -4,9 +4,9 @@ import json
 
 import pytest
 
-import pyagent.agent.session as session_module
-from pyagent.types import AssistantMessage, Cost, TextContent, Usage, UserMessage
-from pyagent.usage import collect_usage, render_report, session_paths
+import zenagent.agent.session as session_module
+from zenagent.types import AssistantMessage, Cost, TextContent, Usage, UserMessage
+from zenagent.usage import collect_usage, render_report, session_paths
 
 
 def assistant(model: str, *, input_tokens=10, output=5, cache_read=0, cost=0.01):
@@ -108,7 +108,7 @@ def test_bad_since_raises():
 
 
 def test_cli_usage_table_and_json(isolated, capsys):
-    import pyagent.cli.main as cli_main
+    import zenagent.cli.main as cli_main
 
     write_session(isolated, "a.jsonl", [assistant("m1")])
     assert cli_main.main(["usage"]) == 0
@@ -122,7 +122,7 @@ def test_cli_usage_table_and_json(isolated, capsys):
 
 
 def test_cli_usage_rejects_bad_since(isolated, capsys):
-    import pyagent.cli.main as cli_main
+    import zenagent.cli.main as cli_main
 
     assert cli_main.main(["usage", "--since", "yesterday"]) == 1
     assert "bad --since" in capsys.readouterr().err

@@ -2,7 +2,7 @@
 
 import pytest
 
-from pyagent.types import (
+from zenagent.types import (
     AssistantMessage,
     Cost,
     ImageContent,

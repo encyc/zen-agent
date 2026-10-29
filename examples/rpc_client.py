@@ -1,4 +1,4 @@
-"""Talk to ``pyagent rpc`` over stdin/stdout.
+"""Talk to ``zenagent rpc`` over stdin/stdout.
 
     uv run python examples/rpc_client.py "say hi"
 """
@@ -12,7 +12,7 @@ import sys
 
 def main(prompt: str) -> int:
     process = subprocess.Popen(
-        [sys.executable, "-m", "pyagent.cli.main", "rpc"],
+        [sys.executable, "-m", "zenagent.cli.main", "rpc"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         text=True,

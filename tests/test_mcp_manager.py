@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from pyagent.mcp.config import McpServerConfig
-from pyagent.mcp.manager import McpManager, tool_name_for
-from pyagent.types import ImageContent, TextContent
+from zenagent.mcp.config import McpServerConfig
+from zenagent.mcp.manager import McpManager, tool_name_for
+from zenagent.types import ImageContent, TextContent
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 ECHO = FIXTURES / "mcp_echo_server.py"
@@ -86,7 +86,7 @@ async def test_tool_execution_maps_content_and_errors():
 
 async def test_calling_a_disconnected_server_is_an_error():
     manager = McpManager({"echo": stdio("echo", ECHO)})
-    from pyagent.mcp.client import McpError
+    from zenagent.mcp.client import McpError
 
     with pytest.raises(McpError, match="not connected"):
         await manager.call("echo", "echo", {"text": "x"})
@@ -123,12 +123,12 @@ async def test_image_content_from_mcp_is_preserved():
     manager = McpManager({"echo": stdio("echo", ECHO)})
     await manager.start()
     try:
-        from pyagent.mcp.client import McpCallResult
+        from zenagent.mcp.client import McpCallResult
 
         result = manager._make_tool("echo", type("T", (), {
             "name": "img", "description": "", "input_schema": {}
         })())
-        mapped = __import__("pyagent.mcp.manager", fromlist=["_to_result"])._to_result(
+        mapped = __import__("zenagent.mcp.manager", fromlist=["_to_result"])._to_result(
             McpCallResult(content=[{"type": "image", "data": "AAA", "mimeType": "image/png"}])
         )
         assert isinstance(mapped.content[0], ImageContent)

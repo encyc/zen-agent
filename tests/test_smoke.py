@@ -1,4 +1,4 @@
 # tests/test_smoke.py
 def test_import():
-    import pyagent
-    assert pyagent.__version__
+    import zenagent
+    assert zenagent.__version__
