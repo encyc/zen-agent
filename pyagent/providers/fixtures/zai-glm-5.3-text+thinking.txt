@@ -1,0 +1,14 @@
+data: {"id":"chatcmpl-zai-0001","created":1770172800,"model":"glm-5.3","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":""},"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-zai-0001","created":1770172800,"model":"glm-5.3","choices":[{"index":0,"delta":{"reasoning_content":"The user asks about the "},"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-zai-0001","created":1770172800,"model":"glm-5.3","choices":[{"index":0,"delta":{"reasoning_content":"weather in Tokyo."},"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-zai-0001","created":1770172800,"model":"glm-5.3","choices":[{"index":0,"delta":{"content":"Tokyo in March is "},"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-zai-0001","created":1770172800,"model":"glm-5.3","choices":[{"index":0,"delta":{"content":"mild, around 8-15C."},"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-zai-0001","created":1770172800,"model":"glm-5.3","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":24,"completion_tokens":18,"total_tokens":42,"prompt_tokens_details":{"cached_tokens":0},"completion_tokens_details":{"reasoning_tokens":6}}}
+
+data: [DONE]
+

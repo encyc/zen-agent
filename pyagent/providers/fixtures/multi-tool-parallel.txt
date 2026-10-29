@@ -1,0 +1,12 @@
+data: {"id":"chatcmpl-par-0004","created":1770172803,"model":"glm-5.3","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_par_004a","type":"function","function":{"name":"read_file","arguments":"{\"pa"}}]},"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-par-0004","created":1770172803,"model":"glm-5.3","choices":[{"index":0,"delta":{"tool_calls":[{"index":1,"id":"call_par_004b","type":"function","function":{"name":"bash","arguments":"{\"cm"}}]},"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-par-0004","created":1770172803,"model":"glm-5.3","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"th\": \"a.txt\"}"}}]},"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-par-0004","created":1770172803,"model":"glm-5.3","choices":[{"index":0,"delta":{"tool_calls":[{"index":1,"function":{"arguments":"d\": \"ls\"}"}}]},"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-par-0004","created":1770172803,"model":"glm-5.3","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":40,"completion_tokens":22,"total_tokens":62}}
+
+data: [DONE]
+

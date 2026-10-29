@@ -1,0 +1,12 @@
+data: {"id":"chatcmpl-zai-0002","created":1770172801,"model":"glm-5.3","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-zai-0002","created":1770172801,"model":"glm-5.3","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_zai_001","type":"function","function":{"name":"get_weather","arguments":""}}]},"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-zai-0002","created":1770172801,"model":"glm-5.3","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"city\": "}}]},"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-zai-0002","created":1770172801,"model":"glm-5.3","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"Tokyo\", \"unit\": \"celsius\"}"}}]},"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-zai-0002","created":1770172801,"model":"glm-5.3","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":31,"completion_tokens":15,"total_tokens":46}}
+
+data: [DONE]
+

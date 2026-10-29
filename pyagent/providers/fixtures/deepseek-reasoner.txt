@@ -1,0 +1,12 @@
+data: {"id":"chatcmpl-ds-0005","created":1770172805,"model":"deepseek-reasoner","choices":[{"index":0,"delta":{"role":"assistant","reasoning":"Let me think about "},"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ds-0005","created":1770172805,"model":"deepseek-reasoner","choices":[{"index":0,"delta":{"reasoning":"the prime factorization of 84."},"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ds-0005","created":1770172805,"model":"deepseek-reasoner","choices":[{"index":0,"delta":{"content":"84 = 2^2 * 3 * 7"},"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ds-0005","created":1770172805,"model":"deepseek-reasoner","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":null}
+
+data: {"id":"chatcmpl-ds-0005","created":1770172805,"model":"deepseek-reasoner","choices":[],"usage":{"prompt_tokens":12,"completion_tokens":24,"total_tokens":36,"prompt_tokens_details":{"cached_tokens":4},"completion_tokens_details":{"reasoning_tokens":14}}}
+
+data: [DONE]
+
