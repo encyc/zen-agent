@@ -30,6 +30,7 @@ SLASH_COMMANDS: dict[str, str] = {
     "/images": "list attached images, or /images clear",
     "/mcp": "show MCP servers, or /mcp retry to reconnect",
     "/skills": "list available skills",
+    "/reload": "re-discover skills, templates and extensions",
     "/sessions": "list saved sessions",
     "/fork": "branch a new session at a user message (/fork <n>)",
     "/import": "load a session file and continue it (/import <path>)",

@@ -107,6 +107,7 @@ async def handle_slash(
     skill_list=None,
     template_list=None,
     extension_commands=None,
+    reload_runtime=None,
 ) -> str | None:
     """Run one slash command; returns ``"exit"`` when the REPL should stop."""
     if command in ("exit", "quit"):
@@ -251,6 +252,12 @@ async def handle_slash(
             return None
         for position, block in enumerate(images, start=1):
             print_fn(f"{position}. {block.mime_type} ({len(block.data)} base64 chars)")
+        return None
+    if command == "reload":
+        if reload_runtime is None:
+            print_fn("reload is unavailable here")
+            return None
+        await reload_runtime()
         return None
     if command == "skills":
         if not skill_list:
@@ -412,18 +419,19 @@ async def repl(
     session = _session_for(resume)
     guard = ContextGuard(model.context_window)
     base_tools = list(tool_list)
-    skills_index = ""
-    extension_prompt = ""
+    extension_files = [*user_config.extensions, *(extension_paths or [])]
 
-    def build_prompt(current_tools) -> str:
+    def warn(message: str) -> None:
+        print(f"pyagent: {message}", file=sys.stderr)
+
+    def build_prompt(current_tools, extra_text: str = "") -> str:
         text = _system_prompt([tool.name for tool in current_tools])
         if context_files:
             text = system_prompt_with_context(
                 text, load_context_files(discover_context_files(Path.cwd()))
             )
-        extra = "\n\n".join(part for part in (skills_index, extension_prompt) if part)
-        if extra:
-            text = f"{text}\n\n{extra}"
+        if extra_text:
+            text = f"{text}\n\n{extra_text}"
         return text
 
     mcp_manager: McpManager | None = None
@@ -436,43 +444,67 @@ async def repl(
         if configs:
             mcp_manager = McpManager(configs, retry_interval_s=mcp_retry_interval_s)
             for warning in await mcp_manager.start():
-                print(f"pyagent: mcp {warning}", file=sys.stderr)
-            tool_list = [*tool_list, *mcp_manager.tool_defs()]
+                warn(f"mcp {warning}")
 
-    skill_list = []
-    if skills and tools is None:
-        skill_list, skill_warnings = discover_skills(default_skill_roots(Path.cwd()))
-        for warning in skill_warnings:
-            print(f"pyagent: skills {warning}", file=sys.stderr)
-        if skill_list:
-            tool_list = [*tool_list, build_skill_tool(skill_list)]
-            skills_index = skills_prompt_index(skill_list)
-
-    template_list = []
-    if templates:
-        template_list, template_warnings = discover_templates(
-            default_template_roots(Path.cwd())
+    def discover_runtime():
+        """(tools, extra prompt, skills, templates, commands, hooks)"""
+        found_tools = list(base_tools)
+        if mcp_manager is not None:
+            found_tools.extend(mcp_manager.tool_defs())
+        prompt_parts: list[str] = []
+        found_skills: list = []
+        if skills and tools is None:
+            found_skills, skill_warnings = discover_skills(
+                default_skill_roots(Path.cwd())
+            )
+            for warning in skill_warnings:
+                warn(f"skills {warning}")
+            if found_skills:
+                found_tools.append(build_skill_tool(found_skills))
+                prompt_parts.append(skills_prompt_index(found_skills))
+        found_templates: list = []
+        if templates:
+            found_templates, template_warnings = discover_templates(
+                default_template_roots(Path.cwd())
+            )
+            for warning in template_warnings:
+                warn(f"templates {warning}")
+        found_commands: dict = {}
+        found_hooks: dict = {}
+        if extension_files:
+            loaded = load_extensions(extension_files)
+            for warning in loaded.warnings:
+                warn(f"extension {warning}")
+            found_tools.extend(loaded.tools)
+            if loaded.prompt_text:
+                prompt_parts.append(loaded.prompt_text)
+            found_commands = loaded.commands
+            found_hooks = loaded.hooks
+        return (
+            found_tools,
+            "\n\n".join(prompt_parts),
+            found_skills,
+            found_templates,
+            found_commands,
+            found_hooks,
         )
-        for warning in template_warnings:
-            print(f"pyagent: templates {warning}", file=sys.stderr)
+
+    (
+        tool_list,
+        extra_text,
+        skill_list,
+        template_list,
+        extension_commands,
+        extension_hooks,
+    ) = discover_runtime()
     template_by_name = {template.name: template for template in template_list}
     extra_commands = {
         f"/{template.name}": template.description for template in template_list
     }
+    for command in extension_commands.values():
+        extra_commands.setdefault(f"/{command.name}", command.description)
 
-    extension_files = [*user_config.extensions, *(extension_paths or [])]
-    loaded_extensions = load_extensions(extension_files) if extension_files else None
-    extension_commands = {}
-    if loaded_extensions is not None:
-        for warning in loaded_extensions.warnings:
-            print(f"pyagent: extension {warning}", file=sys.stderr)
-        tool_list = [*tool_list, *loaded_extensions.tools]
-        extension_prompt = loaded_extensions.prompt_text
-        extension_commands = loaded_extensions.commands
-        for command in extension_commands.values():
-            extra_commands[f"/{command.name}"] = command.description
-
-    prompt = build_prompt(tool_list)
+    prompt = build_prompt(tool_list, extra_text)
     agent = Agent(
         model=model,
         system_prompt=prompt,
@@ -505,6 +537,37 @@ async def repl(
             agent.system_prompt = build_prompt(refreshed)
             print_fn(f"mcp: tools updated ({len(refreshed)} available)")
 
+    async def reload_runtime() -> None:
+        """Re-discover skills, templates and extensions without restarting."""
+        nonlocal tool_list, skill_list, template_list, template_by_name
+        nonlocal extra_commands, extension_commands
+        nonlocal extension_hooks
+        if agent.is_streaming:
+            print_fn("cannot reload while the agent is working")
+            return
+        (
+            tools_now,
+            extra_now,
+            skills_now,
+            templates_now,
+            commands_now,
+            hooks_now,
+        ) = discover_runtime()
+        tool_list, skill_list, template_list = tools_now, skills_now, templates_now
+        template_by_name = {template.name: template for template in templates_now}
+        extra_commands = {
+            f"/{template.name}": template.description for template in templates_now
+        }
+        for command in commands_now.values():
+            extra_commands.setdefault(f"/{command.name}", command.description)
+        extension_commands, extension_hooks = commands_now, hooks_now
+        agent.tools = tools_now
+        agent.system_prompt = build_prompt(tools_now, extra_now)
+        print_fn(
+            f"reloaded: {len(tools_now)} tools · {len(skills_now)} skills · "
+            f"{len(templates_now)} templates"
+        )
+
     console = Console() if sys.stdout.isatty() else None
     printer = _EventPrinter(console=console, print_fn=print_fn)
 
@@ -523,8 +586,8 @@ async def repl(
     tracer = TraceRecorder(trace) if trace else None
     if tracer is not None:
         agent.subscribe(tracer)
-    if loaded_extensions is not None:
-        for event_type, callbacks in loaded_extensions.hooks.items():
+    if extension_hooks:
+        for event_type, callbacks in extension_hooks.items():
             def hook(event: AgentEvent, _type=event_type, _callbacks=callbacks) -> None:
                 if event.type != _type:
                     return
@@ -604,6 +667,7 @@ async def repl(
                         skill_list=skill_list,
                         template_list=template_list,
                         extension_commands=extension_commands,
+                        reload_runtime=reload_runtime,
                     )
                     == "exit"
                 ):

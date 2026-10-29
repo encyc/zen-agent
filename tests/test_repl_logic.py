@@ -448,3 +448,48 @@ async def test_slash_skills_with_none_configured(capsys):
     agent = Agent(model(), "s", api_key="k")
     await handle_slash(agent, "skills", "", skill_list=[])
     assert "no skills found" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# S2-T8: /reload
+# ---------------------------------------------------------------------------
+
+
+async def test_reload_discovers_skills_added_mid_session(tmp_path, monkeypatch):
+    import pyagent.cli.repl as repl_module
+    from pyagent.config import UserConfig
+
+    monkeypatch.setattr(repl_module, "load_user_config", lambda: UserConfig())
+    monkeypatch.chdir(tmp_path)
+
+    calls = {"n": 0}
+
+    async def input_fn() -> str:
+        await asyncio.sleep(0.02)
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return "hi"
+        if calls["n"] == 2:
+            skill_dir = tmp_path / ".pyagent" / "skills" / "late"
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(
+                "---\nname: late\ndescription: added mid-session\n---\nbody\n"
+            )
+            return "/reload"
+        return "/exit"
+
+    lines: list[str] = []
+    code = await repl(
+        "glm-5.3",
+        stream_fn=scripted_stream(0.0, "hello"),
+        input_fn=input_fn,
+        print_fn=lambda *a, **k: lines.append("".join(str(x) for x in a)),
+        api_key="k",
+    )
+    assert code == 0
+    joined = "\n".join(lines)
+    assert "reloaded:" in joined
+    assert "1 skills" in joined
+    # the newly discovered skill also shows up in /skills
+    lines.clear()
+    calls["n"] = 0
