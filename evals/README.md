@@ -16,8 +16,26 @@ set -a && . ./.env && set +a
 ./scripts/eval.sh --json > /tmp/eval.json             # machine-readable report
 ```
 
-Cost is tiny per case (fractions of a cent with DeepSeek); a full 13-case run
-with 3 repeats is roughly $0.02 and a couple of minutes.
+Cost is tiny per case (fractions of a cent with DeepSeek); the current 18-case
+run with 3 repeats is roughly $0.02 and a few minutes.
+
+## Options for the S2 features
+
+A case can exercise the harness extensions too:
+
+| Option | Effect |
+|---|---|
+| `skills` | discover `.pyagent/skills` in the workspace (default: auto when present) |
+| `extensions` | load extension modules (`["{{workspace}}/ext.py"]`) |
+| `mcp` | start MCP servers (`{"echo": {"command": [...]}}`), tools appear as `mcp__echo__*` |
+| `tool_deny` | fnmatch patterns the permission gate refuses |
+| `read_only` | refuse every non-read tool |
+
+Placeholders `{{python}}`, `{{fixtures}}` and `{{workspace}}` are substituted in
+options, so MCP commands can point at the bundled test server.
+
+Extra expectations: `tool_errors_contain` (assert a tool was refused with a
+message) and `files_absent` (assert a write did **not** happen).
 
 ## Case format
 

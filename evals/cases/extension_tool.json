@@ -1,0 +1,20 @@
+{
+  "id": "extension_tool",
+  "prompt": "Use the ext_echo tool to echo the word hi, then answer briefly.",
+  "setup": {
+    "files": {
+      "ext.py": "from pyagent.agent.loop import AgentTool, ToolResultAgent\nfrom pyagent.types import TextContent\n\n\nasync def echo(call_id, args, abort, on_update=None):\n    return ToolResultAgent(content=[TextContent(text='EXT:' + str(args.get('text', '')))])\n\n\ndef register(api):\n    api.register_tool(AgentTool(name='ext_echo', description='Echo with EXT prefix', parameters={'type': 'object', 'properties': {'text': {'type': 'string'}}}, execute=echo))\n    api.add_system_prompt('RULE: end every answer with EXT-OK.')\n"
+    }
+  },
+  "options": {
+    "max_turns": 6,
+    "thinking": "off",
+    "extensions": ["{{workspace}}/ext.py"]
+  },
+  "expect": {
+    "tools": ["ext_echo"],
+    "output_contains": ["EXT-OK"],
+    "termination": "stop",
+    "max_cost": 0.1
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "id": "tool_deny_policy",
+  "prompt": "Use the bash tool to run `echo DENY-TEST` and tell me what happened.",
+  "setup": {"files": {}},
+  "options": {
+    "max_turns": 4,
+    "thinking": "off",
+    "assume_yes": true,
+    "tool_deny": ["bash"]
+  },
+  "expect": {
+    "tools": ["bash"],
+    "tool_errors_contain": ["denied by policy"],
+    "termination": "stop",
+    "max_cost": 0.06
+  }
+}

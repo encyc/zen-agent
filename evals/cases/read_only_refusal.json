@@ -1,0 +1,11 @@
+{
+  "id": "read_only_refusal",
+  "prompt": "Create a file named out.txt containing hi.",
+  "setup": {"files": {}},
+  "options": {"max_turns": 4, "thinking": "off", "read_only": true, "assume_yes": true},
+  "expect": {
+    "files_absent": ["out.txt"],
+    "termination": "stop",
+    "max_cost": 0.06
+  }
+}

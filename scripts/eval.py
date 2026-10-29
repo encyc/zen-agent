@@ -58,11 +58,21 @@ from pyagent.context_files import (
     system_prompt_with_context,
 )
 from pyagent.events import AgentEvent
+from pyagent.extensions import load_extensions
+from pyagent.mcp.config import load_mcp_config
+from pyagent.mcp.manager import McpManager
 from pyagent.providers.catalog import load_catalog
+from pyagent.skills import (
+    build_skill_tool,
+    default_skill_roots,
+    discover_skills,
+    skills_prompt_index,
+)
 from pyagent.tools import ALL_TOOLS
 from pyagent.types import AssistantMessage
 
 CASES_DIR = Path(__file__).resolve().parent.parent / "evals" / "cases"
+FIXTURES_DIR = REPO_ROOT / "tests" / "fixtures"
 
 
 # ---------------------------------------------------------------------------
@@ -166,11 +176,23 @@ class RunResult:
     duration_ms: int
 
 
+def _resolve(value, mapping: dict[str, str]):
+    """Substitute ``{{python}}``/``{{fixtures}}``/``{{workspace}}`` in case options."""
+    if isinstance(value, str):
+        for key, replacement in mapping.items():
+            value = value.replace("{{" + key + "}}", replacement)
+        return value
+    if isinstance(value, list):
+        return [_resolve(item, mapping) for item in value]
+    if isinstance(value, dict):
+        return {key: _resolve(item, mapping) for key, item in value.items()}
+    return value
+
+
 async def run_case(
     case: Case, model, api_key: str, repeats: int = 1
 ) -> list[tuple[RunResult, list[str]]]:
     results: list[tuple[RunResult, list[str]]] = []
-    options = case.options or {}
     for _ in range(repeats):
         with tempfile.TemporaryDirectory(prefix=f"pyagent-eval-{case.id}-") as tmp:
             root = Path(tmp)
@@ -179,6 +201,14 @@ async def run_case(
             from pyagent.cli.images import read_image_argument
 
             image_blocks = [read_image_argument(path) for path in images]
+            options = _resolve(
+                case.options or {},
+                {
+                    "python": sys.executable,
+                    "fixtures": str(FIXTURES_DIR),
+                    "workspace": str(root),
+                },
+            )
 
             prompt = (
                 options.get("system_prompt_override")
@@ -188,16 +218,54 @@ async def run_case(
                 prompt = system_prompt_with_context(
                     prompt, load_context_files(discover_context_files(root))
                 )
+
+            tool_list = list(ALL_TOOLS)
+            prompt_parts: list[str] = []
+
+            skills_wanted = options.get(
+                "skills", (root / ".pyagent" / "skills").is_dir()
+            )
+            if skills_wanted:
+                discovered, _warnings = discover_skills(default_skill_roots(root))
+                if discovered:
+                    tool_list.append(build_skill_tool(discovered))
+                    prompt_parts.append(skills_prompt_index(discovered))
+
+            extension_hooks: dict = {}
+            extension_paths = options.get("extensions") or []
+            if extension_paths:
+                loaded = load_extensions(extension_paths)
+                tool_list.extend(loaded.tools)
+                if loaded.prompt_text:
+                    prompt_parts.append(loaded.prompt_text)
+                extension_hooks = loaded.hooks
+
+            mcp_manager: McpManager | None = None
+            mcp_spec = options.get("mcp")
+            if mcp_spec:
+                mcp_file = root / "mcp.json"
+                mcp_file.write_text(
+                    json.dumps({"servers": mcp_spec}), encoding="utf-8"
+                )
+                mcp_manager = McpManager(load_mcp_config(mcp_file))
+                await mcp_manager.start()
+                tool_list.extend(mcp_manager.tool_defs())
+
+            if prompt_parts:
+                prompt = f"{prompt}\n\n" + "\n\n".join(prompt_parts)
+
             gate = PermissionGate(
                 assume_yes=options.get("assume_yes", True),
                 interactive=False,
                 allow_dangerous=options.get("allow_dangerous", False),
+                deny=options.get("tool_deny") or [],
+                read_only=bool(options.get("read_only", False)),
             )
             guard = ContextGuard(model.context_window)
             agent = Agent(
                 model=model,
                 system_prompt=prompt,
-                tools=list(ALL_TOOLS),
+                tools=tool_list,
                 api_key=api_key,
                 thinking=options.get("thinking", "off"),
                 session_id=session_id_for(model),
@@ -232,43 +300,51 @@ async def run_case(
                     if _collected["calls"]:
                         _collected["calls"][-1]["ok"] = not event.is_error
                     content = getattr(event.result, "content", None) or []
-                    text = ""
-                    if content:
-                        text = getattr(content[0], "text", "") or ""
-                    _collected["results"].append(text)
+                    text = getattr(content[0], "text", "") if content else ""
+                    _collected["results"].append(text or "")
                     if event.is_error:
-                        _collected["errors"].append(text)
+                        _collected["errors"].append(text or "")
 
             agent.subscribe(on_event)
             agent.subscribe(guard.on_event)
+            for event_type, callbacks in extension_hooks.items():
+                def hook(event: AgentEvent, _type=event_type, _callbacks=callbacks) -> None:
+                    if event.type != _type:
+                        return
+                    for callback in _callbacks:
+                        try:
+                            callback(event)
+                        except Exception:  # noqa: BLE001,S112 - hook failures are isolated
+                            continue
+
+                agent.subscribe(hook)
 
             started = time.monotonic()
-            # Run inside the workspace so relative tool paths resolve there.
             cwd = Path.cwd()
             try:
                 os.chdir(root)
                 await agent.prompt(case.prompt, images=image_blocks or None)
             finally:
                 os.chdir(cwd)
+                if mcp_manager is not None:
+                    await mcp_manager.close()
             duration_ms = round((time.monotonic() - started) * 1000)
 
             usage = _total_usage(agent.messages)
             result = RunResult(
-                    output="".join(collected["text"]).strip(),
-                    tools=collected["tools"],
-                    calls=collected["calls"],
-                    tool_results=collected["results"],
-                    tool_errors=collected["errors"],
-                    termination=agent.termination,
-                    error_message=agent.error_message,
-                    cost=usage[2],
-                    tokens_in=usage[0],
-                    tokens_out=usage[1],
-                    turns=collected["turns"],
+                output="".join(collected["text"]).strip(),
+                tools=collected["tools"],
+                calls=collected["calls"],
+                tool_results=collected["results"],
+                tool_errors=collected["errors"],
+                termination=agent.termination,
+                error_message=agent.error_message,
+                cost=usage[2],
+                tokens_in=usage[0],
+                tokens_out=usage[1],
+                turns=collected["turns"],
                 duration_ms=duration_ms,
             )
-            # Assertions (including file contents) must run before the
-            # temporary workspace is removed.
             results.append((result, check_result(case, result, root)))
     return results
 
@@ -315,6 +391,9 @@ def check_result(case: Case, result: RunResult, root: Path) -> list[str]:
     for needle in expect.get("tool_results_contain", []) or []:
         if not any(_contains(text, needle) for text in result.tool_results):
             problems.append(f"no tool result contains {needle!r}")
+    for needle in expect.get("tool_errors_contain", []) or []:
+        if not any(_contains(text, needle) for text in result.tool_errors):
+            problems.append(f"no tool error contains {needle!r}")
     for needle in expect.get("forbid_successful_commands", []) or []:
         for call in result.calls:
             if call["name"] != "bash" or not call["ok"]:
@@ -332,6 +411,9 @@ def check_result(case: Case, result: RunResult, root: Path) -> list[str]:
         problems.append(f"cost ${result.cost:.4f} over budget ${expect['max_cost']}")
     if "max_turns" in expect and result.turns > int(expect["max_turns"]):
         problems.append(f"took {result.turns} turns, limit {expect['max_turns']}")
+    for file_name in expect.get("files_absent", []) or []:
+        if (root / file_name).exists():
+            problems.append(f"file {file_name!r} should not exist")
     for file_name, rule in (expect.get("files") or {}).items():
         target = root / file_name
         if not target.exists():

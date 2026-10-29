@@ -1,0 +1,18 @@
+{
+  "id": "mcp_tool",
+  "prompt": "Use the mcp__echo__echo tool to echo the word hello, then tell me exactly what it returned.",
+  "setup": {"files": {}},
+  "options": {
+    "max_turns": 6,
+    "thinking": "off",
+    "mcp": {
+      "echo": {"command": ["{{python}}", "{{fixtures}}/mcp_echo_server.py"]}
+    }
+  },
+  "expect": {
+    "tools": ["mcp__echo__echo"],
+    "output_contains": ["echo:hello"],
+    "termination": "stop",
+    "max_cost": 0.12
+  }
+}
