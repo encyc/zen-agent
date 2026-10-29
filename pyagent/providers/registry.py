@@ -23,7 +23,12 @@ import time
 from collections.abc import AsyncIterator, Callable
 
 from pyagent.events import Aborted, AssistantEvent
-from pyagent.providers import anthropic_messages, openai_completions, openai_responses
+from pyagent.providers import (
+    anthropic_messages,
+    google_generative_ai,
+    openai_completions,
+    openai_responses,
+)
 from pyagent.providers.catalog import Model
 from pyagent.providers.openai_completions import StreamOptions
 from pyagent.providers.transport import default_client
@@ -48,6 +53,7 @@ _REGISTRY: dict[str, StreamFn] = {
     "openai-completions": openai_completions.stream,
     "anthropic-messages": anthropic_messages.stream,
     "openai-responses": openai_responses.stream,
+    "google-generative-ai": google_generative_ai.stream,
 }
 
 #: Exception-message cap for error partials.
