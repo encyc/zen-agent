@@ -1,16 +1,22 @@
 {
   "id": "multi_step_investigation",
-  "prompt": "In this project, find the bug: `pytest` fails because a function returns the wrong value. Inspect the files, fix it, and verify with pytest.",
+  "prompt": "In this project, `pytest` fails because a function returns the wrong value. Find it, fix it, and verify with pytest. You may use any tools.",
   "setup": {
     "files": {
       "calc.py": "def add(a, b):\n    return a - b\n",
       "test_calc.py": "from calc import add\n\n\ndef test_add():\n    assert add(2, 3) == 5\n"
     }
   },
-  "options": {"max_turns": 10, "thinking": "off"},
+  "options": {
+    "max_turns": 10,
+    "thinking": "off"
+  },
   "expect": {
-    "tools": ["read_file"],
-    "files": {"calc.py": {"contains": "a + b"}},
+    "files": {
+      "calc.py": {
+        "contains": "a + b"
+      }
+    },
     "termination": "stop",
     "max_cost": 0.15
   }

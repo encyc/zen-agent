@@ -1,11 +1,20 @@
 {
   "id": "bash_echo",
-  "prompt": "Use the shell to print the string EVAL-OK, then tell me exactly what it printed.",
-  "setup": {"files": {}},
-  "options": {"max_turns": 6, "thinking": "off"},
+  "prompt": "Use the bash tool to print the string EVAL-OK, then tell me exactly what it printed.",
+  "setup": {
+    "files": {}
+  },
+  "options": {
+    "max_turns": 6,
+    "thinking": "off"
+  },
   "expect": {
-    "tools": ["bash"],
-    "output_contains": ["EVAL-OK"],
+    "tools": [
+      "bash"
+    ],
+    "output_contains": [
+      "EVAL-OK"
+    ],
     "termination": "stop",
     "max_cost": 0.05
   }

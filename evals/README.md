@@ -70,6 +70,23 @@ The report labels each failure so regressions are diagnosable at a glance:
 - `max_turns` / `max_cost` — hit the configured guardrail
 - `provider_error` — the run ended with a provider error
 
+## Rule: assert the outcome, not the route
+
+A model may solve a task with any tool, and that is fine. Two kinds of cases,
+and they must not be mixed:
+
+- **Outcome cases** — assert only what the user can observe (files, output,
+  termination, cost). Never assert a tool sequence: a correct bash-only solution
+  is still correct.
+- **Tool-routing cases** — when the tool *is* the behaviour under test, say so in
+  the prompt ("Use the grep tool to ...") and then assert `expect.tools`. An
+  implicit tool expectation punishes a valid alternative path and shows up as a
+  flaky eval.
+
+`multi_step_investigation` was flaky for exactly this reason: it asserted
+`read_file` while the model sometimes fixed the bug with `bash`, `sed`, or
+`list_dir` + `bash`.
+
 ## Adding a case
 
 1. Pick a behaviour a real user would notice (not an implementation detail).

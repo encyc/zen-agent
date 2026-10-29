@@ -1,6 +1,6 @@
 {
   "id": "glob_python_files",
-  "prompt": "List every Python file under the current directory. Answer with the file paths, one per line.",
+  "prompt": "Use the glob tool to list every Python file under the current directory. Answer with the file paths, one per line.",
   "setup": {
     "files": {
       "pkg/a.py": "a = 1\n",
@@ -9,11 +9,21 @@
       "notes.md": "hi\n"
     }
   },
-  "options": {"max_turns": 6, "thinking": "off"},
+  "options": {
+    "max_turns": 6,
+    "thinking": "off"
+  },
   "expect": {
-    "tools": ["glob"],
-    "output_contains": ["pkg/a.py", "pkg/b.py"],
-    "output_not_contains": ["pkg/data.json"],
+    "tools": [
+      "glob"
+    ],
+    "output_contains": [
+      "pkg/a.py",
+      "pkg/b.py"
+    ],
+    "output_not_contains": [
+      "pkg/data.json"
+    ],
     "termination": "stop",
     "max_cost": 0.08
   }
