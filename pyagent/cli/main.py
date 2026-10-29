@@ -554,6 +554,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    raw = sys.argv[1:] if argv is None else list(argv)
+    if raw and raw[0] == "rpc":
+        from pyagent.cli.rpc import main as rpc_main
+
+        return rpc_main(raw[1:])
     args = build_parser().parse_args(argv)
     if args.cwd:
         target = Path(args.cwd).expanduser()
