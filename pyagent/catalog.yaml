@@ -1,0 +1,95 @@
+# Packaged model catalog for pyagent.
+#
+# Grammar is a strict, anchor-free subset of YAML, parsed by the
+# purpose-built loader in pyagent/providers/catalog.py (the kernel keeps
+# httpx as its only dependency, so no PyYAML):
+#   - nested mappings via space indentation (tabs rejected)
+#   - scalar strings / ints / floats / true / false
+#   - inline {key: value, ...} flow maps (used for cost)
+#   - full-line and trailing # comments
+#   - NO anchors (&), aliases (*), tags, lists, or quoted strings
+#
+# Compat rule: entries here never sniff their base_url — explicit compat
+# always wins, and a missing compat block means pure dataclass defaults
+# (see pyagent/providers/compat.py).
+
+providers:
+  zai-coding-cn:
+    name: Z.AI Coding CN
+    base_url: https://open.bigmodel.cn/api/coding/paas/v4
+    api_key_env: ZAI_CODING_CN_API_KEY
+    adapter: openai-completions
+    models:
+      glm-5.3:
+        default: true
+        context_window: 1000000
+        max_tokens: 131072
+        reasoning: true
+        cost: {input: 0, output: 0}   # 包月 token plan，按量计 0
+        compat:
+          thinking_format: zai
+          zai_tool_stream: true
+          max_tokens_field: max_tokens
+          supports_developer_role: false
+          supports_reasoning_effort: true
+      glm-5.3-flash:
+        # same compat as glm-5.3, written out in full (anchors forbidden)
+        context_window: 1000000
+        max_tokens: 131072
+        reasoning: true
+        cost: {input: 0, output: 0}
+        compat:
+          thinking_format: zai
+          zai_tool_stream: true
+          max_tokens_field: max_tokens
+          supports_developer_role: false
+          supports_reasoning_effort: true
+  deepseek:
+    name: DeepSeek
+    base_url: https://api.deepseek.com
+    api_key_env: DEEPSEEK_API_KEY
+    adapter: openai-completions
+    models:
+      deepseek-chat:
+        context_window: 128000
+        max_tokens: 8192
+        reasoning: false
+        cost: {input: 0.27, output: 1.10}   # USD per 1M tokens, official list price
+        compat:
+          max_tokens_field: max_tokens
+          supports_developer_role: false
+      deepseek-reasoner:
+        context_window: 128000
+        max_tokens: 65536
+        reasoning: true
+        cost: {input: 0.55, output: 2.19}
+        compat:
+          thinking_format: deepseek
+          requires_reasoning_content_on_assistant: true
+          max_tokens_field: max_tokens
+          supports_developer_role: false
+  opencode-go:
+    name: OpenCode Go
+    base_url: https://opencode.ai/inference/go/v1
+    api_key_env: OPENCODE_API_KEY
+    # multi-protocol gateway: adapter lives on each model, not the provider
+    models:
+      claude-haiku-5-5:
+        adapter: anthropic-messages
+        context_window: 1000000
+        max_tokens: 128000
+        reasoning: true
+        cost: {input: 0, output: 0}
+      glm-5.3:
+        adapter: openai-completions
+        context_window: 1000000
+        max_tokens: 131072
+        reasoning: true
+        cost: {input: 0, output: 0}
+        # gateway normalizes away the zai dialect — compat intentionally empty
+      deepseek-v4-pro:
+        adapter: openai-completions
+        context_window: 1000000
+        max_tokens: 384000
+        reasoning: true
+        cost: {input: 0, output: 0}
