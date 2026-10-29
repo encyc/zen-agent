@@ -12,6 +12,7 @@ driven without a terminal.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -49,6 +50,7 @@ from pyagent.context_files import (
     system_prompt_with_context,
 )
 from pyagent.events import AgentEvent
+from pyagent.extensions import load_extensions
 from pyagent.mcp.config import load_mcp_config
 from pyagent.mcp.manager import McpManager
 from pyagent.providers.catalog import find_model, load_catalog
@@ -104,6 +106,7 @@ async def handle_slash(
     refresh_mcp=None,
     skill_list=None,
     template_list=None,
+    extension_commands=None,
 ) -> str | None:
     """Run one slash command; returns ``"exit"`` when the REPL should stop."""
     if command in ("exit", "quit"):
@@ -276,6 +279,14 @@ async def handle_slash(
         else:
             print_fn(f"compacted into {path.name}")
         return None
+    if extension_commands and command in extension_commands:
+        handler = extension_commands[command].handler
+        result = handler(agent, argument)
+        if inspect.isawaitable(result):
+            result = await result
+        if result:
+            print_fn(str(result))
+        return None
     print_fn(f"unknown command: /{command} (try /help)")
     return None
 
@@ -377,6 +388,7 @@ async def repl(
     mcp_retry_interval_s: float = 10.0,
     skills: bool = True,
     templates: bool = True,
+    extension_paths: list[str] | None = None,
 ) -> int:
     """Run the interactive loop; returns the process exit code."""
     user_config = load_user_config()
@@ -401,6 +413,7 @@ async def repl(
     guard = ContextGuard(model.context_window)
     base_tools = list(tool_list)
     skills_index = ""
+    extension_prompt = ""
 
     def build_prompt(current_tools) -> str:
         text = _system_prompt([tool.name for tool in current_tools])
@@ -408,8 +421,9 @@ async def repl(
             text = system_prompt_with_context(
                 text, load_context_files(discover_context_files(Path.cwd()))
             )
-        if skills_index:
-            text = f"{text}\n\n{skills_index}"
+        extra = "\n\n".join(part for part in (skills_index, extension_prompt) if part)
+        if extra:
+            text = f"{text}\n\n{extra}"
         return text
 
     mcp_manager: McpManager | None = None
@@ -445,6 +459,18 @@ async def repl(
     extra_commands = {
         f"/{template.name}": template.description for template in template_list
     }
+
+    extension_files = [*user_config.extensions, *(extension_paths or [])]
+    loaded_extensions = load_extensions(extension_files) if extension_files else None
+    extension_commands = {}
+    if loaded_extensions is not None:
+        for warning in loaded_extensions.warnings:
+            print(f"pyagent: extension {warning}", file=sys.stderr)
+        tool_list = [*tool_list, *loaded_extensions.tools]
+        extension_prompt = loaded_extensions.prompt_text
+        extension_commands = loaded_extensions.commands
+        for command in extension_commands.values():
+            extra_commands[f"/{command.name}"] = command.description
 
     prompt = build_prompt(tool_list)
     agent = Agent(
@@ -497,6 +523,18 @@ async def repl(
     tracer = TraceRecorder(trace) if trace else None
     if tracer is not None:
         agent.subscribe(tracer)
+    if loaded_extensions is not None:
+        for event_type, callbacks in loaded_extensions.hooks.items():
+            def hook(event: AgentEvent, _type=event_type, _callbacks=callbacks) -> None:
+                if event.type != _type:
+                    return
+                for callback in _callbacks:
+                    try:
+                        callback(event)
+                    except Exception as exc:  # noqa: BLE001 - a hook must not kill the run
+                        print(f"pyagent: extension hook failed: {exc}", file=sys.stderr)
+
+            agent.subscribe(hook)
     agent.subscribe(guard.on_event)
     agent.subscribe(on_event)
     if console is not None:
@@ -565,6 +603,7 @@ async def repl(
                         refresh_mcp=refresh_mcp,
                         skill_list=skill_list,
                         template_list=template_list,
+                        extension_commands=extension_commands,
                     )
                     == "exit"
                 ):

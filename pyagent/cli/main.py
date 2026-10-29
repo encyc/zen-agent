@@ -35,6 +35,7 @@ from pyagent.context_files import (
     system_prompt_with_context,
 )
 from pyagent.events import AgentEvent
+from pyagent.extensions import load_extensions
 from pyagent.mcp.config import load_mcp_config
 from pyagent.mcp.manager import McpManager
 from pyagent.providers.catalog import Model, ProviderConfig, find_model, load_catalog
@@ -215,6 +216,7 @@ async def run_headless(
     mcp_servers: list[str] | None = None,
     mcp_file: Path | str | None = None,
     skills: bool = True,
+    extension_paths: list[str] | None = None,
 ) -> int:
     """Run one prompt to completion; returns the process exit code."""
     user_config = load_user_config()
@@ -277,6 +279,20 @@ async def run_headless(
             tool_list = [*tool_list, build_skill_tool(discovered)]
             skills_index = skills_prompt_index(discovered)
 
+    extension_prompt = ""
+    loaded_extensions = None
+    extension_files = [*user_config.extensions, *(extension_paths or [])]
+    if extension_files:
+        loaded_extensions = load_extensions(extension_files)
+        for warning in loaded_extensions.warnings:
+            print(f"pyagent: extension {warning}", file=sys.stderr)
+        if loaded_extensions.tools:
+            tool_list = [*tool_list, *loaded_extensions.tools]
+        extension_prompt = loaded_extensions.prompt_text
+
+    extra_prompt = "\n\n".join(
+        part for part in (skills_index, extension_prompt) if part
+    )
     guard = ContextGuard(model.context_window)
     agent = _build_agent(
         model,
@@ -289,7 +305,7 @@ async def run_headless(
         max_turns=max_turns,
         max_cost=max_cost,
         context_files=context_files,
-        extra_prompt=skills_index,
+        extra_prompt=extra_prompt,
     )
 
     if resume is not None:
@@ -312,6 +328,19 @@ async def run_headless(
 
     # --json must not stream plain text; collect it into a buffer instead.
     printer = _PlainOutput(out=io.StringIO() if json_output else None)
+    if loaded_extensions is not None:
+        for event_type, callbacks in loaded_extensions.hooks.items():
+            def hook(event: AgentEvent, _type=event_type, _callbacks=callbacks) -> None:
+                if event.type != _type:
+                    return
+                for callback in _callbacks:
+                    try:
+                        callback(event)
+                    except Exception as exc:  # noqa: BLE001 - a hook must not kill the run
+                        print(f"pyagent: extension hook failed: {exc}", file=sys.stderr)
+
+            agent.subscribe(hook)
+
     tracer = TraceRecorder(trace) if trace else None
     if tracer is not None:
         agent.subscribe(tracer)
@@ -393,6 +422,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--max-turns", type=int, help="stop after this many provider requests"
+    )
+    parser.add_argument(
+        "--extension",
+        action="append",
+        dest="extension_paths",
+        metavar="PATH",
+        help="load an extension module (repeatable)",
     )
     parser.add_argument(
         "--no-templates",
@@ -496,6 +532,7 @@ def main(argv: list[str] | None = None) -> int:
                     mcp_servers=args.mcp_servers,
                     mcp_file=args.mcp_file,
                     skills=not args.no_skills,
+                    extension_paths=args.extension_paths,
                     templates=not args.no_templates,
                 )
             )
@@ -522,6 +559,7 @@ def main(argv: list[str] | None = None) -> int:
                 mcp_servers=args.mcp_servers,
                 mcp_file=args.mcp_file,
                 skills=not args.no_skills,
+                extension_paths=args.extension_paths,
             )
         )
     except KeyboardInterrupt:

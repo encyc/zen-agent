@@ -107,6 +107,8 @@ class UserConfig:
     provider_overrides: dict[str, dict] = field(default_factory=dict)
     #: providers defined entirely in config.toml (merged into the catalog)
     custom_providers: dict[str, ProviderConfig] = field(default_factory=dict)
+    #: extension module paths to load (relative paths resolve from the config file)
+    extensions: list[str] = field(default_factory=list)
 
 
 def load_user_config(path: Path | None = None) -> UserConfig:
@@ -130,6 +132,20 @@ def load_user_config(path: Path | None = None) -> UserConfig:
         raise ValueError(  # noqa: TRY004 - config errors are ValueError by contract
             f"config {target}: [providers] must be a table"
         )
+    extensions_raw = data.get("extensions") or []
+    if not isinstance(extensions_raw, list) or not all(
+        isinstance(item, str) for item in extensions_raw
+    ):
+        raise ValueError(
+            f"config {target}: extensions must be an array of strings"
+        )
+    extensions: list[str] = []
+    for item in extensions_raw:
+        candidate = Path(item).expanduser()
+        if not candidate.is_absolute():
+            candidate = (target.parent / candidate).resolve()
+        extensions.append(str(candidate))
+
     if "custom" in providers:
         custom_providers = _parse_custom_providers(providers["custom"], target)
     for provider_id, values in providers.items():
@@ -153,6 +169,7 @@ def load_user_config(path: Path | None = None) -> UserConfig:
         default_model=default_model,
         provider_overrides=overrides,
         custom_providers=custom_providers,
+        extensions=extensions,
     )
 
 
