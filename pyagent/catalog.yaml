@@ -76,6 +76,8 @@ providers:
     models:
       claude-haiku-5-5:
         adapter: anthropic-messages
+        # Messages API lives at the gateway root, not under /v1
+        base_url: https://opencode.ai/inference/go
         context_window: 1000000
         max_tokens: 128000
         reasoning: true

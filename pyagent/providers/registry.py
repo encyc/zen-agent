@@ -23,7 +23,7 @@ import time
 from collections.abc import AsyncIterator, Callable
 
 from pyagent.events import Aborted, AssistantEvent
-from pyagent.providers import openai_completions
+from pyagent.providers import anthropic_messages, openai_completions
 from pyagent.providers.catalog import Model
 from pyagent.providers.openai_completions import StreamOptions
 from pyagent.providers.transport import default_client
@@ -46,6 +46,7 @@ StreamFn = Callable[
 #: api name → stream fn. Mutable on purpose: ``register_stream_fn`` extends it.
 _REGISTRY: dict[str, StreamFn] = {
     "openai-completions": openai_completions.stream,
+    "anthropic-messages": anthropic_messages.stream,
 }
 
 #: Exception-message cap for error partials.

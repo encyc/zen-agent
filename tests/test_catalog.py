@@ -155,7 +155,11 @@ def test_opencode_go_multi_protocol_gateway():
     assert models["glm-5.3"].api == "openai-completions"
     assert models["deepseek-v4-pro"].api == "openai-completions"
     assert models["deepseek-v4-pro"].max_tokens == 384000
-    assert all(m.base_url == provider.base_url for m in models.values())
+    # The Anthropic-protocol model overrides base_url: the Messages API lives
+    # at the gateway root, not under /v1 (verified against pi-ai's model data).
+    assert models["claude-haiku-5-5"].base_url == "https://opencode.ai/inference/go"
+    assert models["glm-5.3"].base_url == provider.base_url
+    assert models["deepseek-v4-pro"].base_url == provider.base_url
     assert all(m.cost == Cost() for m in models.values())
     assert all(m.compat == CompatFlags() for m in models.values())
 

@@ -13,7 +13,27 @@ sniffed.
 
 from dataclasses import dataclass
 
-__all__ = ["CompatFlags", "sniff_compat"]
+#: User-level thinking settings that mean "reasoning on" (``"off"`` means off).
+THINKING_LEVELS = frozenset({"low", "medium", "high"})
+
+
+def normalize_thinking(thinking: str | None) -> str | None:
+    """Map a user-level thinking setting onto an enabled level or ``None``.
+
+    ``None`` and ``"off"`` both mean "no thinking" and must produce identical
+    request bodies; any other string is a programming error, not something to
+    ship upstream, so it raises ``ValueError``.
+    """
+    if thinking is None or thinking == "off":
+        return None
+    if thinking not in THINKING_LEVELS:
+        raise ValueError(
+            f"invalid thinking level {thinking!r}; expected one of "
+            "None, 'off', 'low', 'medium', 'high'"
+        )
+    return thinking
+
+__all__ = ["THINKING_LEVELS", "CompatFlags", "normalize_thinking", "sniff_compat"]
 
 
 @dataclass

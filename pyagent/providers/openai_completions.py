@@ -28,7 +28,7 @@ import httpx
 
 from pyagent.events import AbortToken, AssistantEvent
 from pyagent.providers.catalog import Model
-from pyagent.providers.compat import CompatFlags
+from pyagent.providers.compat import CompatFlags, normalize_thinking
 from pyagent.providers.transport import (
     default_client,
     iter_sse_data,
@@ -157,31 +157,11 @@ def to_request_messages(messages: list[Message], compat: CompatFlags) -> list[di
     return request
 
 
-#: User-level thinking levels this adapter accepts. ``None`` and ``"off"``
-#: both mean "no thinking" and must produce identical request bodies; any
-#: other string is a programming error, not something to send upstream.
-_THINKING_LEVELS = frozenset({"low", "medium", "high"})
-
-
-def _normalize_thinking(thinking: str | None) -> str | None:
-    """Map a user-level thinking setting onto an enabled level or ``None``.
-
-    Raises ValueError for values outside the accepted set — silently shipping
-    a bogus ``reasoning_effort`` upstream is worse than failing fast.
-    """
-    if thinking is None or thinking == "off":
-        return None
-    if thinking not in _THINKING_LEVELS:
-        expected = "None, 'off', 'low', 'medium', 'high'"
-        raise ValueError(f"invalid thinking level {thinking!r}; expected one of {expected}")
-    return thinking
-
-
 def _apply_thinking_dialect(
     params: dict, model: Model, options: StreamOptions, compat: CompatFlags
 ) -> None:
     """Emit the dialect's thinking controls into ``params`` in place."""
-    level = _normalize_thinking(options.thinking)
+    level = normalize_thinking(options.thinking)
     if compat.thinking_format == "zai" and model.reasoning:
         params["thinking"] = (
             {"type": "enabled", "clear_thinking": False}
