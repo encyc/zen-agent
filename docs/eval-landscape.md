@@ -74,7 +74,14 @@ Princeton 的 HAL（ICLR 2026）把评测基础设施化，核心结论值得抄
 
 ## 5. 推荐路线（按性价比排序）
 
-### E0：仓库内行为评测（1–2 天，强烈建议先做）
+### E0：仓库内行为评测 ✅ 已完成（2026-10-29）
+
+已落地：`evals/cases/*.json`（13 个用例）+ `scripts/eval.py` + `scripts/eval.sh`，
+覆盖 S1 的全部新面：问答、读/写/改文件、grep/glob、bash 成功与失败、
+危险命令拒绝、多步修 bug、图片识别、AGENTS.md A/B。3 次重复 13/13 通过，
+成本约 $0.012/轮、9.6 万 tokens。用法见 `evals/README.md`。
+
+下面是原始规划（保留作对照）：
 
 - 位置：`evals/` 目录 + `scripts/eval.sh`；
 - 形态：YAML/JSON 任务文件 `{id, prompt, setup, assert}`，断言输出子串/正则、工具调用序列、`termination`、`usage.cost` 上限；
