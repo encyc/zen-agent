@@ -95,7 +95,7 @@ def test_zai_flash_shares_full_glm_53_compat_block():
 def test_default_flag_true_only_on_zai_glm_53():
     catalog = load_catalog()
     assert _models_by_id(catalog, "zai-coding-cn")["glm-5.3"].default is True
-    assert find_model(catalog, "deepseek-chat").default is False
+    assert find_model(catalog, "deepseek-flash").default is False
     assert all(m.default is False for m in catalog["opencode-go"].models)
 
 
@@ -116,22 +116,24 @@ def test_deepseek_provider_pricing_and_compat():
     assert provider.api_key_env == "DEEPSEEK_API_KEY"
     assert provider.adapter == "openai-completions"
 
-    chat = find_model(catalog, "deepseek-chat")
-    assert chat.context_window == 128000
-    assert chat.max_tokens == 8192
-    assert chat.reasoning is False
-    assert chat.cost == Cost(input=0.27, output=1.10, total=0.0)
-    assert chat.compat.thinking_format is None
-    assert chat.compat.max_tokens_field == "max_tokens"
-    assert chat.compat.supports_developer_role is False
+    # ids verified against the live /models endpoint
+    flash = find_model(catalog, "deepseek-flash")
+    assert flash.context_window == 1048576
+    assert flash.max_tokens == 393216
+    assert flash.reasoning is True
+    assert flash.compat.thinking_format == "deepseek"
+    assert flash.compat.requires_reasoning_content_on_assistant is True
+    assert flash.compat.max_tokens_field == "max_tokens"
+    assert flash.compat.supports_developer_role is False
 
-    reasoner = find_model(catalog, "deepseek-reasoner")
-    assert reasoner.max_tokens == 65536
-    assert reasoner.reasoning is True
-    assert reasoner.cost == Cost(input=0.55, output=2.19, total=0.0)
-    assert reasoner.compat.thinking_format == "deepseek"
-    assert reasoner.compat.requires_reasoning_content_on_assistant is True
-    assert reasoner.compat.supports_developer_role is False
+    pro = find_model(catalog, "deepseek-v4-pro")
+    assert pro.max_tokens == 393216
+    assert pro.reasoning is True
+    assert pro.compat.thinking_format == "deepseek"
+    # legacy aliases are no longer shipped
+    for legacy in ("deepseek-chat", "deepseek-reasoner"):
+        with pytest.raises(KeyError):
+            find_model(catalog, legacy)
 
 
 # ------------------------------------------------------------- opencode-go
@@ -150,7 +152,12 @@ def test_opencode_go_multi_protocol_gateway():
     assert provider.api_key_env == "OPENCODE_API_KEY"
     assert provider.adapter == ""  # adapter lives on each model, not the provider
     models = _models_by_id(load_catalog(), "opencode-go")
-    assert list(models) == ["claude-haiku-5-5", "glm-5.3", "deepseek-v4-pro"]
+    assert list(models) == [
+        "claude-haiku-5-5",
+        "glm-5.3",
+        "deepseek-v4-pro",
+        "deepseek-v4.1-flash",
+    ]
     assert models["claude-haiku-5-5"].api == "anthropic-messages"
     assert models["glm-5.3"].api == "openai-completions"
     assert models["deepseek-v4-pro"].api == "openai-completions"
@@ -163,7 +170,7 @@ def test_opencode_go_multi_protocol_gateway():
     assert all(m.cost == Cost() for m in models.values())
     # gateway claude rejects thinking.type.enabled, so it opts into adaptive
     assert models["claude-haiku-5-5"].compat.anthropic_adaptive_thinking is True
-    for model_id in ("glm-5.3", "deepseek-v4-pro"):
+    for model_id in ("glm-5.3", "deepseek-v4-pro", "deepseek-v4.1-flash"):
         assert models[model_id].compat == CompatFlags()
 
 

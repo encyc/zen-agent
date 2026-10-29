@@ -50,19 +50,23 @@ providers:
     api_key_env: DEEPSEEK_API_KEY
     adapter: openai-completions
     models:
-      deepseek-chat:
-        context_window: 128000
-        max_tokens: 8192
-        reasoning: false
-        cost: {input: 0.27, output: 1.10}   # USD per 1M tokens, official list price
+      # ids and limits verified against GET https://api.deepseek.com/models
+      # (deepseek-chat / deepseek-reasoner are legacy aliases for these)
+      deepseek-flash:
+        context_window: 1048576
+        max_tokens: 393216
+        reasoning: true
+        cost: {input: 0, output: 0}   # /models does not publish prices; fill in when known
         compat:
+          thinking_format: deepseek
+          requires_reasoning_content_on_assistant: true
           max_tokens_field: max_tokens
           supports_developer_role: false
-      deepseek-reasoner:
-        context_window: 128000
-        max_tokens: 65536
+      deepseek-v4-pro:
+        context_window: 1048576
+        max_tokens: 393216
         reasoning: true
-        cost: {input: 0.55, output: 2.19}
+        cost: {input: 0, output: 0}
         compat:
           thinking_format: deepseek
           requires_reasoning_content_on_assistant: true
@@ -98,3 +102,10 @@ providers:
         max_tokens: 384000
         reasoning: true
         cost: {input: 0, output: 0}
+      deepseek-v4.1-flash:
+        adapter: openai-completions
+        context_window: 1048576
+        max_tokens: 393216
+        reasoning: true
+        cost: {input: 0, output: 0}
+        # gateway normalizes the upstream dialect — compat intentionally empty

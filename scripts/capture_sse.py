@@ -13,7 +13,7 @@ hand-written fixtures: ``data: {...}`` lines separated by blank lines).
 Usage::
 
     uv run python scripts/capture_sse.py \
-        --model deepseek-reasoner --scenario text --thinking high --env-file .env
+        --model deepseek-flash --scenario text --thinking high --env-file .env
 
 The API key is read from the environment variable named by the model's provider
 (``DEEPSEEK_API_KEY``, ``ZAI_CODING_CN_API_KEY``, ``OPENCODE_API_KEY``).

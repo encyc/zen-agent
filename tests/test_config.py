@@ -57,11 +57,11 @@ def test_missing_file_gives_defaults(tmp_path):
 def test_parses_default_model_and_provider_overrides(tmp_path):
     path = write_config(
         tmp_path,
-        'default_model = "deepseek-chat"\n\n[providers.deepseek]\n'
+        'default_model = "deepseek-flash"\n\n[providers.deepseek]\n'
         'base_url = "https://mirror.example/v1"\napi_key_env = "MY_KEY"\n',
     )
     config = load_user_config(path)
-    assert config.default_model == "deepseek-chat"
+    assert config.default_model == "deepseek-flash"
     assert config.provider_overrides["deepseek"] == {
         "base_url": "https://mirror.example/v1",
         "api_key_env": "MY_KEY",
@@ -82,7 +82,7 @@ def test_broken_toml_raises_a_clear_error(tmp_path):
 
 def test_apply_overrides_rewrites_models_and_key_env():
     catalog = load_catalog()
-    before = find_model(catalog, "deepseek-chat")
+    before = find_model(catalog, "deepseek-flash")
     assert before.base_url == "https://api.deepseek.com"
 
     apply_user_config(
@@ -93,7 +93,7 @@ def test_apply_overrides_rewrites_models_and_key_env():
             }
         ),
     )
-    model = find_model(catalog, "deepseek-chat")
+    model = find_model(catalog, "deepseek-flash")
     assert model.base_url == "https://mirror.example/v1"
     assert catalog["deepseek"].api_key_env == "K"
 
@@ -101,7 +101,7 @@ def test_apply_overrides_rewrites_models_and_key_env():
 def test_unknown_provider_override_is_ignored():
     catalog = load_catalog()
     apply_user_config(catalog, UserConfig(provider_overrides={"ghost": {"base_url": "x"}}))
-    assert find_model(catalog, "deepseek-chat").base_url == "https://api.deepseek.com"
+    assert find_model(catalog, "deepseek-flash").base_url == "https://api.deepseek.com"
 
 
 # ---------------------------------------------------------------------------

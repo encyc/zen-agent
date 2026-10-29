@@ -34,7 +34,7 @@ Read from the environment variable named by each provider in
 uv run pyagent -p "explain what this repo does"
 
 # pick a model / reasoning level; allow write + execute tools
-uv run pyagent -p "create /tmp/x/hello.txt, then read it back" -m deepseek-chat --yes --thinking high
+uv run pyagent -p "create /tmp/x/hello.txt, then read it back" -m deepseek-flash --yes --thinking high
 
 # structured output (a single JSON object; no streamed text)
 uv run pyagent -p "say hi" --json
@@ -66,7 +66,7 @@ rather than starting a second run. Ctrl+C aborts the current run cooperatively.
 Optional `~/.pyagent/config.toml`:
 
 ```toml
-default_model = "deepseek-chat"
+default_model = "deepseek-flash"
 
 [providers.deepseek]
 base_url = "https://mirror.example/v1"   # optional

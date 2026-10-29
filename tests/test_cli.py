@@ -64,7 +64,7 @@ def failing_stream(message: str = "boom"):
 
 def test_resolve_model_by_id_and_default():
     catalog = load_catalog()
-    assert cli_main.resolve_model(catalog, "deepseek-chat").id == "deepseek-chat"
+    assert cli_main.resolve_model(catalog, "deepseek-flash").id == "deepseek-flash"
     default = cli_main.resolve_model(catalog, None)
     assert default.default is True
     assert default.id == "glm-5.3"
@@ -231,13 +231,13 @@ def test_config_default_model_is_used(monkeypatch):
     from pyagent.config import UserConfig
 
     monkeypatch.setattr(
-        cli_main, "load_user_config", lambda: UserConfig(default_model="deepseek-chat")
+        cli_main, "load_user_config", lambda: UserConfig(default_model="deepseek-flash")
     )
     captured: dict = {}
     _patch_agent(monkeypatch, fake_stream(), captured)
 
     assert cli_main.main(["-p", "hi"]) == 0
-    assert captured["model"].id == "deepseek-chat"
+    assert captured["model"].id == "deepseek-flash"
 
 
 def test_headless_resume_loads_the_previous_transcript(monkeypatch, tmp_path):

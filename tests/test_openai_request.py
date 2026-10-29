@@ -28,7 +28,7 @@ from pyagent.types import (
 )
 
 # Compat blocks mirroring the catalog's zai / deepseek dialect entries
-# (see pyagent/catalog.yaml: zai-coding-cn/glm-5.3, deepseek/deepseek-reasoner).
+# (see pyagent/catalog.yaml: zai-coding-cn/glm-5.3, deepseek/deepseek-flash).
 ZAI = CompatFlags(
     thinking_format="zai",
     zai_tool_stream=True,
@@ -356,7 +356,7 @@ def test_packaged_catalog_models_build_expected_params():
     assert params["reasoning_effort"] == "high"
     assert params["tool_stream"] is True
 
-    reasoner = find_model(catalog, "deepseek-reasoner")
+    reasoner = find_model(catalog, "deepseek-flash")
     params = build_params(
         reasoner, [], StreamOptions(api_key="k", thinking="high"), reasoner.compat
     )
@@ -364,9 +364,11 @@ def test_packaged_catalog_models_build_expected_params():
     assert "tool_stream" not in params
     assert "reasoning_effort" not in params
 
-    chat = find_model(catalog, "deepseek-chat")
+    # gateway GLM has no thinking dialect: nothing thinking-related is sent
+    # (two providers ship a "glm-5.3"; the gateway one is the plain dialect)
+    plain = next(m for m in catalog["opencode-go"].models if m.id == "glm-5.3")
     params = build_params(
-        chat, [], StreamOptions(api_key="k", thinking="high"), chat.compat
+        plain, [], StreamOptions(api_key="k", thinking="high"), plain.compat
     )
     assert "thinking" not in params
     assert "reasoning_effort" not in params

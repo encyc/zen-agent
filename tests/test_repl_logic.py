@@ -88,7 +88,7 @@ def isolated_sessions(tmp_path, monkeypatch):
 def test_split_input_prompt_and_commands():
     assert split_input("  hello world ") == ("", "hello world")
     assert split_input("/help") == ("help", "")
-    assert split_input("/model deepseek-chat") == ("model", "deepseek-chat")
+    assert split_input("/model deepseek-flash") == ("model", "deepseek-flash")
     assert split_input("  /THINKING   high ") == ("thinking", "high")
 
 
@@ -107,9 +107,9 @@ async def test_slash_model_switches_and_reports(capsys):
     await handle_slash(agent, "model", "")
     assert "glm-5.3" in capsys.readouterr().out
 
-    await handle_slash(agent, "model", "deepseek-chat")
-    assert agent.model.id == "deepseek-chat"
-    assert "deepseek-chat" in capsys.readouterr().out
+    await handle_slash(agent, "model", "deepseek-flash")
+    assert agent.model.id == "deepseek-flash"
+    assert "deepseek-flash" in capsys.readouterr().out
 
 
 async def test_slash_model_rejects_unknown_id(capsys):
