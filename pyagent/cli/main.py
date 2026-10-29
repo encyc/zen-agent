@@ -29,6 +29,7 @@ from pyagent.cli.doctor import run_doctor
 from pyagent.cli.exportcmd import run_export
 from pyagent.cli.images import read_image_argument
 from pyagent.cli.permissions import PermissionGate
+from pyagent.cli.usagecmd import run_usage
 from pyagent.config import ContextGuard, apply_user_config, load_user_config
 from pyagent.context_files import (
     discover_context_files,
@@ -407,6 +408,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--format", choices=("md", "html"), default="md", help="export format (default md)"
     )
     parser.add_argument(
+        "--since", metavar="YYYY-MM-DD", help="usage: only newer sessions"
+    )
+    parser.add_argument(
         "-o", "--output", type=Path, help="export output path (default: next to the session)"
     )
     parser.add_argument("-m", "--model", help="model id from the catalog")
@@ -525,6 +529,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"pyagent: --cwd is not a directory: {target}", file=sys.stderr)
             return 1
         os.chdir(target.resolve())
+    if args.command == "usage":
+        return run_usage(args.since, args.json)
     if args.command == "export":
         return run_export(args.session, args.format, args.output)
     if args.command == "doctor":
