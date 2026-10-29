@@ -93,27 +93,39 @@ class _PlainOutput:
 
     out: object = None  # type: ignore[assignment]
     collected: list[str] = field(default_factory=list)
+    _wrote_text: bool = False
 
     def __post_init__(self) -> None:
         if self.out is None:  # resolved at construction, not import time
             self.out = sys.stdout
 
     def __call__(self, event: AgentEvent) -> None:
+        if event.type == "message_start":
+            self._wrote_text = False
+            return
         if event.type == "message_update" and event.assistant_event is not None:
             assistant_event = event.assistant_event
             if assistant_event.type == "text_delta" and assistant_event.delta:
                 self.collected.append(assistant_event.delta)
                 self.out.write(assistant_event.delta)
                 self.out.flush()
+                self._wrote_text = True
             return
         if event.type == "tool_execution_end":
             status = "error" if event.is_error else "ok"
-            self.out.write(f"\n[{event.tool_name}: {status}]\n")
+            self._newline_if_needed()
+            self.out.write(f"[{event.tool_name}: {status}]\n")
             self.out.flush()
             return
         if event.type == "message_end" and isinstance(event.message, AssistantMessage):
-            self.out.write("\n")
+            self._newline_if_needed()
             self.out.flush()
+
+    def _newline_if_needed(self) -> None:
+        """Terminate a streamed line, but never emit blank spacer lines."""
+        if self._wrote_text:
+            self.out.write("\n")
+            self._wrote_text = False
 
     @property
     def text(self) -> str:
