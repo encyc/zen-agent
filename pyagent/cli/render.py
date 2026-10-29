@@ -17,6 +17,7 @@ from rich.text import Text
 
 from pyagent.agent.loop import ToolResultAgent
 from pyagent.agent.session import Session
+from pyagent.cli.theme import DEFAULT_THEME, Theme
 from pyagent.events import AssistantEvent
 from pyagent.types import (
     AssistantMessage,
@@ -199,20 +200,21 @@ def status_line(
     return " · ".join(parts)
 
 
-def render_diff(diff: str) -> RenderableType:
-    """Colour a unified diff for the terminal (+ green, - red, @@ cyan)."""
+def render_diff(diff: str, theme: Theme | None = None) -> RenderableType:
+    """Colour a unified diff for the terminal using a theme."""
+    palette = theme or DEFAULT_THEME
     text = Text()
     for line in diff.splitlines():
         if line.startswith(("+++", "---")):
-            style = "bold"
+            style = palette.diff_meta
         elif line.startswith("+"):
-            style = "green"
+            style = palette.diff_add
         elif line.startswith("-"):
-            style = "red"
+            style = palette.diff_del
         elif line.startswith("@@"):
-            style = "cyan"
+            style = palette.diff_hunk
         else:
-            style = "grey62"
+            style = palette.dim
         text.append(line + "\n", style=style)
     return text
 

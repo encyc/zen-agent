@@ -30,6 +30,7 @@ from pyagent.agent.session import (
 from pyagent.cli.compact import compact, maybe_auto_compact
 from pyagent.cli.completion import SLASH_COMMANDS, ReplCompleter, help_text
 from pyagent.cli.images import read_image_argument
+from pyagent.cli.keybindings import build_key_bindings, load_keybindings
 from pyagent.cli.main import (
     _api_key_for,
     _system_prompt,
@@ -43,6 +44,7 @@ from pyagent.cli.render import (
     status_line,
     tool_result_line,
 )
+from pyagent.cli.theme import DEFAULT_THEME, Theme, load_theme
 from pyagent.config import ContextGuard, apply_user_config, load_user_config
 from pyagent.context_files import (
     discover_context_files,
@@ -108,6 +110,8 @@ async def handle_slash(
     template_list=None,
     extension_commands=None,
     reload_runtime=None,
+    set_theme=None,
+    keybindings=None,
 ) -> str | None:
     """Run one slash command; returns ``"exit"`` when the REPL should stop."""
     if command in ("exit", "quit"):
@@ -253,6 +257,22 @@ async def handle_slash(
         for position, block in enumerate(images, start=1):
             print_fn(f"{position}. {block.mime_type} ({len(block.data)} base64 chars)")
         return None
+    if command == "theme":
+        if set_theme is None:
+            print_fn("themes are unavailable here")
+            return None
+        if not argument:
+            print_fn("usage: /theme default|mono|solarized|<path.json>")
+            return None
+        set_theme(argument)
+        return None
+    if command == "hotkeys":
+        if not keybindings:
+            print_fn("no keybindings loaded")
+            return None
+        for action, key in sorted(keybindings.items()):
+            print_fn(f"{action}: {key}")
+        return None
     if command == "reload":
         if reload_runtime is None:
             print_fn("reload is unavailable here")
@@ -301,9 +321,15 @@ async def handle_slash(
 class _EventPrinter:
     """Streams assistant text and prints one line per tool result."""
 
-    def __init__(self, console: Console | None = None, print_fn: PrintFn = print) -> None:
+    def __init__(
+        self,
+        console: Console | None = None,
+        print_fn: PrintFn = print,
+        theme: Theme | None = None,
+    ) -> None:
         self.console = console
         self.print = print_fn
+        self.theme = theme or DEFAULT_THEME
         self._line_open = False
 
     def __call__(self, event: AgentEvent) -> None:
@@ -328,7 +354,7 @@ class _EventPrinter:
                 self.console.print(line, highlight=False)
                 diff = getattr(event.result, "details", {}).get("diff")
                 if diff:
-                    self.console.print(render_diff(diff), highlight=False)
+                    self.console.print(render_diff(diff, self.theme), highlight=False)
             else:
                 self.print(line)
             return
@@ -353,7 +379,9 @@ def _session_for(resume: str | Path | None) -> Session:
 
 
 def _make_default_reader(
-    completion: bool = True, extra_commands: dict[str, str] | None = None
+    completion: bool = True,
+    extra_commands: dict[str, str] | None = None,
+    keybindings: dict[str, str] | None = None,
 ) -> InputFn:
     """prompt_toolkit reader with persistent history and completion."""
     from prompt_toolkit import PromptSession
@@ -365,6 +393,7 @@ def _make_default_reader(
     session = PromptSession(
         history=FileHistory(str(history)),
         completer=ReplCompleter(slash_commands=commands) if completion else None,
+        key_bindings=build_key_bindings(keybindings),
     )
 
     async def read() -> str:
@@ -397,6 +426,7 @@ async def repl(
     templates: bool = True,
     extension_paths: list[str] | None = None,
     read_only: bool = False,
+    theme: str | None = None,
 ) -> int:
     """Run the interactive loop; returns the process exit code."""
     user_config = load_user_config()
@@ -574,7 +604,29 @@ async def repl(
         )
 
     console = Console() if sys.stdout.isatty() else None
-    printer = _EventPrinter(console=console, print_fn=print_fn)
+    theme_warnings: list[str] = []
+    try:
+        active_theme = load_theme(theme, theme_warnings)
+    except ValueError as exc:
+        theme_warnings.append(str(exc))
+        active_theme = DEFAULT_THEME
+    for warning in theme_warnings:
+        print(f"pyagent: theme {warning}", file=sys.stderr)
+    keybinding_warnings: list[str] = []
+    active_keybindings = load_keybindings(warnings=keybinding_warnings)
+    for warning in keybinding_warnings:
+        print(f"pyagent: {warning}", file=sys.stderr)
+    printer = _EventPrinter(console=console, print_fn=print_fn, theme=active_theme)
+
+    def set_theme(spec: str) -> None:
+        nonlocal active_theme
+        try:
+            active_theme = load_theme(spec)
+        except ValueError as exc:
+            print_fn(str(exc))
+            return
+        printer.theme = active_theme
+        print_fn(f"theme -> {active_theme.name}")
 
     session_box: list[Session] = [session]
     pending_images: list[ImageContent] = []
@@ -609,7 +661,9 @@ async def repl(
         console.print(f"[grey50]{session.path.name}[/grey50] · /help for commands")
 
     read = input_fn or _make_default_reader(
-        completion=completion, extra_commands=extra_commands
+        completion=completion,
+        extra_commands=extra_commands,
+        keybindings=active_keybindings,
     )
     run_task: asyncio.Task | None = None
 
@@ -673,6 +727,8 @@ async def repl(
                         template_list=template_list,
                         extension_commands=extension_commands,
                         reload_runtime=reload_runtime,
+                        set_theme=set_theme,
+                        keybindings=active_keybindings,
                     )
                     == "exit"
                 ):

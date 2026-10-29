@@ -493,3 +493,56 @@ async def test_reload_discovers_skills_added_mid_session(tmp_path, monkeypatch):
     # the newly discovered skill also shows up in /skills
     lines.clear()
     calls["n"] = 0
+
+
+# ---------------------------------------------------------------------------
+# S2-T10: themes and hotkeys
+# ---------------------------------------------------------------------------
+
+
+async def test_slash_theme_switches_and_reports(isolated_sessions):
+    lines: list[str] = []
+
+    async def input_fn() -> str:
+        await asyncio.sleep(0.01)
+        return "/theme mono" if len(lines) == 0 else "/exit"
+
+    code = await repl(
+        "glm-5.3",
+        stream_fn=scripted_stream(0.0, "hi"),
+        input_fn=input_fn,
+        print_fn=lambda *a, **k: lines.append("".join(str(x) for x in a)),
+        api_key="k",
+    )
+    assert code == 0
+    assert any("theme -> mono" in line for line in lines)
+
+
+async def test_slash_theme_rejects_unknown_names():
+    from pyagent.agent import Agent
+    from pyagent.cli.repl import handle_slash
+
+    agent = Agent.__new__(Agent)
+    lines: list[str] = []
+
+    def set_theme(spec: str) -> None:
+        lines.append(f"switch:{spec}")
+
+    await handle_slash(
+        agent, "theme", "mono", print_fn=lambda *a, **k: lines.append("x"), set_theme=set_theme
+    )
+    assert "switch:mono" in lines
+    lines.clear()
+    await handle_slash(agent, "theme", "", print_fn=lambda *a, **k: lines.append("".join(str(x) for x in a)), set_theme=set_theme)
+    assert any("usage: /theme" in line for line in lines)
+
+
+async def test_slash_hotkeys_lists_bindings(capsys):
+    from pyagent.agent import Agent
+    from pyagent.cli.keybindings import DEFAULT_KEYBINDINGS
+    from pyagent.cli.repl import handle_slash
+
+    agent = Agent.__new__(Agent)
+    await handle_slash(agent, "hotkeys", "", keybindings=DEFAULT_KEYBINDINGS)
+    out = capsys.readouterr().out
+    assert "newline" in out and "escape,enter" in out

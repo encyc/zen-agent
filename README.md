@@ -41,6 +41,7 @@ uv run pyagent -p "what is in this picture?" --image shot.png
 
 # guardrails and reproducibility
 uv run pyagent -p "..." --max-turns 20 --max-cost 0.05 --no-context-files
+uv run pyagent -p "analyze this" --read-only --trace run.jsonl --cwd /path/to/project
 
 # structured output (a single JSON object; no streamed text)
 uv run pyagent -p "say hi" --json
@@ -59,6 +60,20 @@ interactive "yes", or an "always" answer for that tool in the session.
 uv run pyagent doctor      # keys, catalog, config, session dir, terminal
 ```
 
+### Extending the agent (file-based, no restart needed)
+
+| What | Where | How it shows up |
+|---|---|---|
+| **Skills** | `.pyagent/skills/<name>/SKILL.md` (project) or `~/.pyagent/skills/` | listed in the prompt; the model loads one with `read_skill` |
+| **Prompt templates** | `.pyagent/commands/<name>.md` | `/name args` expands and sends it |
+| **Extensions** | `extensions = ["path.py"]` in config or `--extension` | registers tools, slash commands, prompt text, event hooks |
+| **MCP servers** | `~/.pyagent/mcp.json` | tools exposed as `mcp__<server>__<tool>` |
+| **Custom providers/models** | `[providers.custom.<id>]` in config.toml | usable with `-m <model>` |
+
+Servers that are down at start are retried before each prompt (`/mcp` shows
+state, `/mcp retry` forces it), and `/reload` re-discovers skills, templates and
+extensions mid-session.
+
 ### REPL commands
 
 | command | effect |
@@ -74,13 +89,18 @@ uv run pyagent doctor      # keys, catalog, config, session dir, terminal
 | `/fork <n>` | branch a new session at user message n |
 | `/import <path>` | load a session file and continue it |
 | `/image <path>` | attach an image for the next prompt |
+| `/skills` | list available skills |
+| `/mcp` | MCP server status; `/mcp retry` reconnects |
+| `/reload` | re-discover skills, templates, extensions |
+| `/theme <name>` | `default` / `mono` / `solarized` / a JSON file |
+| `/hotkeys` | show active keybindings |
 
 While the agent is working, anything you type is queued as steering input
 rather than starting a second run. Ctrl+C aborts the current run cooperatively.
 
 ## Configuration
 
-Optional `~/.pyagent/config.toml`:
+Optional `~/.pyagent/config.toml` (themes, keybindings and MCP live in their own files):
 
 ```toml
 default_model = "deepseek-flash"
@@ -88,7 +108,28 @@ default_model = "deepseek-flash"
 [providers.deepseek]
 base_url = "https://mirror.example/v1"   # optional
 api_key_env = "MY_DEEPSEEK_KEY"          # optional
+
+# define a provider from scratch
+[providers.custom.local]
+base_url = "http://127.0.0.1:8080/v1"
+api_key_env = "LOCAL_API_KEY"
+adapter = "openai-completions"
+[[providers.custom.local.models]]
+id = "my-model"
+context_window = 32768
+max_tokens = 4096
+reasoning = false
+
+extensions = ["~/work/my-extension.py"]
+
+[tools]
+allow = ["read_*", "grep"]     # never ask for these
+deny = ["write_file"]          # always refuse
 ```
+
+Themes: `~/.pyagent/keybindings.json` (`{"newline": "escape,enter"}`) and
+`--theme mono`. MCP servers: `~/.pyagent/mcp.json` with
+`{"servers": {"name": {"command": [...]} | {"url": "...", "headers": {...}}}}`.
 
 Costs are estimated from the catalog's unit prices (input, output, and cache
 read/write separately). DeepSeek bills peak/off-peak; the catalog has no time

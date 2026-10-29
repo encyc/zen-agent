@@ -435,6 +435,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-turns", type=int, help="stop after this many provider requests"
     )
     parser.add_argument(
+        "--theme",
+        metavar="NAME",
+        help="repl colour theme: default|mono|solarized|<path.json>",
+    )
+    parser.add_argument(
         "--extension",
         action="append",
         dest="extension_paths",
@@ -545,6 +550,7 @@ def main(argv: list[str] | None = None) -> int:
                     skills=not args.no_skills,
                     extension_paths=args.extension_paths,
                     read_only=args.read_only,
+                    theme=args.theme,
                     templates=not args.no_templates,
                 )
             )

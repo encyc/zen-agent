@@ -726,3 +726,17 @@ def test_policy_flags_reach_the_permission_gate(monkeypatch):
     assert gate.read_only is True
     assert gate.allow == ["read_*"]
     assert gate.deny == ["bash"]
+
+
+def test_theme_flag_is_forwarded_to_the_repl(monkeypatch):
+    import pyagent.cli.repl as repl_module
+
+    captured: dict = {}
+
+    async def fake_repl(**kwargs):
+        captured.update(kwargs)
+        return 0
+
+    monkeypatch.setattr(repl_module, "repl", fake_repl)
+    assert cli_main.main(["--theme", "mono"]) == 0
+    assert captured["theme"] == "mono"
