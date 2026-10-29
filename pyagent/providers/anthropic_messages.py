@@ -56,7 +56,7 @@ __all__ = [
 ANTHROPIC_VERSION = "2023-06-01"
 
 #: Token budgets per user-level thinking setting.
-_THINKING_BUDGETS = {"low": 4096, "medium": 16384, "high": 32768}
+_THINKING_BUDGETS = {"low": 4096, "medium": 16384, "high": 32768, "max": 65536}
 
 #: Anthropic stop_reason -> unified StopReason.
 _STOP_MAP = {
@@ -76,7 +76,7 @@ def thinking_budget(level: str | None, max_tokens: int) -> int | None:
     if level not in _THINKING_BUDGETS:
         raise ValueError(
             f"invalid thinking level {level!r}; expected one of "
-            "None, 'off', 'low', 'medium', 'high'"
+            "None, 'off', 'low', 'medium', 'high', 'max'"
         )
     cap = max(1024, max_tokens // 2)
     return min(_THINKING_BUDGETS[level], cap)
@@ -283,10 +283,23 @@ def _finalize_tool_arguments(entry: _Block) -> None:
 
 
 def _with_cost(partial: AssistantMessage, model: Model) -> None:
+    """Price one call; Anthropic reports cache tokens *outside* ``input_tokens``."""
     usage = partial.usage
-    cost_in = usage.input * model.cost.input / 1_000_000
-    cost_out = usage.output * model.cost.output / 1_000_000
-    usage.cost = Cost(input=cost_in, output=cost_out, total=cost_in + cost_out)
+    prices = model.cost
+    cache_read_price = prices.cache_read or prices.input
+    cache_write_price = prices.cache_write or prices.input
+    usage.cost = Cost(
+        input=usage.input * prices.input / 1_000_000,
+        output=usage.output * prices.output / 1_000_000,
+        cache_read=usage.cache_read * cache_read_price / 1_000_000,
+        cache_write=usage.cache_write * cache_write_price / 1_000_000,
+    )
+    usage.cost.total = (
+        usage.cost.input
+        + usage.cost.output
+        + usage.cost.cache_read
+        + usage.cost.cache_write
+    )
 
 
 async def _events_from_chunks(

@@ -376,3 +376,46 @@ async def test_post_stream_backoff_abort_does_not_wait_out_the_delay():
         elapsed = asyncio.get_running_loop().time() - started
         await task
     assert elapsed < 1.0, f"backoff was not interrupted (waited {elapsed:.2f}s)"
+
+
+# --------------------------------------------------------------------------
+# cache-aware pricing
+# --------------------------------------------------------------------------
+
+
+def test_parse_usage_prices_cached_tokens_at_the_cache_rate():
+    """OpenAI-style prompt_tokens includes cached tokens; they bill differently."""
+    usage = parse_usage(
+        {
+            "prompt_tokens": 1000,
+            "completion_tokens": 500,
+            "prompt_tokens_details": {"cached_tokens": 400},
+        },
+        Cost(input=1.0, output=2.0, cache_read=0.1),
+    )
+    # 600 uncached * $1/M, 400 cached * $0.1/M, 500 out * $2/M
+    assert usage.cache_read == 400
+    assert usage.cost.input == pytest.approx(0.0006)
+    assert usage.cost.cache_read == pytest.approx(0.00004)
+    assert usage.cost.output == pytest.approx(0.001)
+    assert usage.cost.total == pytest.approx(0.00164)
+
+
+def test_parse_usage_never_makes_cached_tokens_free():
+    """No cache price configured -> fall back to the input rate, do not undercount."""
+    usage = parse_usage(
+        {"prompt_tokens": 1000, "completion_tokens": 0,
+         "prompt_tokens_details": {"cached_tokens": 400}},
+        Cost(input=1.0, output=2.0),
+    )
+    assert usage.cost.cache_read == pytest.approx(0.0004)
+    assert usage.cost.input == pytest.approx(0.0006)
+    assert usage.cost.total == pytest.approx(0.001)
+
+
+def test_parse_usage_without_prices_keeps_cost_zero():
+    usage = parse_usage(
+        {"prompt_tokens": 10, "completion_tokens": 5,
+         "prompt_tokens_details": {"cached_tokens": 4}}
+    )
+    assert usage.cost == Cost()

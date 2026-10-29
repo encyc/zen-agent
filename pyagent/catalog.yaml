@@ -52,26 +52,33 @@ providers:
     models:
       # ids and limits verified against GET https://api.deepseek.com/models
       # (deepseek-chat / deepseek-reasoner are legacy aliases for these)
+      # Prices: https://api-docs.deepseek.com/quick_start/pricing/ (2026-10-29),
+      # USD per 1M tokens. DeepSeek bills peak/off-peak (off-peak = half); the
+      # catalog has no time dimension, so PEAK rates are used as a conservative
+      # upper bound. cache_read = "cache hit" input rate; cache writes are not
+      # billed separately (a write is just a cache miss).
       deepseek-flash:
         context_window: 1048576
         max_tokens: 393216
         reasoning: true
-        cost: {input: 0, output: 0}   # /models does not publish prices; fill in when known
+        cost: {input: 0.3, output: 1.2, cache_read: 0.006}
         compat:
           thinking_format: deepseek
           requires_reasoning_content_on_assistant: true
           max_tokens_field: max_tokens
           supports_developer_role: false
+          supports_reasoning_effort: true   # low|high|max (medium accepted too)
       deepseek-v4-pro:
         context_window: 1048576
         max_tokens: 393216
         reasoning: true
-        cost: {input: 0, output: 0}
+        cost: {input: 1.32, output: 3.96, cache_read: 0.044}
         compat:
           thinking_format: deepseek
           requires_reasoning_content_on_assistant: true
           max_tokens_field: max_tokens
           supports_developer_role: false
+          supports_reasoning_effort: true
   opencode-go:
     name: OpenCode Go
     base_url: https://opencode.ai/inference/go/v1

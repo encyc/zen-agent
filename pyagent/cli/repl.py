@@ -41,14 +41,14 @@ __all__ = [
 InputFn = Callable[[], Awaitable[str]]
 PrintFn = Callable[..., None]
 
-THINKING_LEVELS = ("off", "low", "medium", "high")
+THINKING_LEVELS = ("off", "low", "medium", "high", "max")
 
 HELP_TEXT = """commands:
   /help                 show this help
   /exit                 leave the REPL (Ctrl+D also works)
   /clear                start over with an empty transcript
   /model [id]           show or switch the model (takes effect next turn)
-  /thinking [level]     show or set reasoning level: off|low|medium|high
+  /thinking [level]     reasoning: off|low|medium|high|max
   /compact              summarize the conversation into a fresh session
 while the agent is working, any line you type is queued as steering input."""
 
@@ -96,7 +96,7 @@ async def handle_slash(
     if command == "thinking":
         level = argument or "off"
         if level not in THINKING_LEVELS:
-            print_fn("usage: /thinking off|low|medium|high")
+            print_fn("usage: /thinking off|low|medium|high|max")
             return None
         agent.thinking = level
         print_fn(f"thinking -> {level}")

@@ -34,7 +34,7 @@ from pyagent.types import AssistantMessage, Message
 
 __all__ = ["build_parser", "main", "resolve_model", "run_headless"]
 
-THINKING_CHOICES = ("off", "low", "medium", "high")
+THINKING_CHOICES = ("off", "low", "medium", "high", "max")
 
 
 def _system_prompt(tool_names: list[str]) -> str:
@@ -147,11 +147,19 @@ class _PlainOutput:
 
 
 def _usage_and_counts(messages: list[Message]) -> tuple[dict, int]:
-    usage: dict = {"input": 0, "output": 0, "cost": 0.0}
+    usage: dict = {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_write": 0,
+        "cost": 0.0,
+    }
     for message in messages:
         if isinstance(message, AssistantMessage):
             usage["input"] += message.usage.input
             usage["output"] += message.usage.output
+            usage["cache_read"] += message.usage.cache_read
+            usage["cache_write"] += message.usage.cache_write
             usage["cost"] += message.usage.cost.total
     return usage, len(messages)
 
@@ -249,7 +257,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--thinking",
         choices=THINKING_CHOICES,
-        help="reasoning level (default: high for reasoning models, off otherwise)",
+        help="reasoning level (default: high for reasoning models, off otherwise; max when supported)",
     )
     parser.add_argument(
         "--yes", action="store_true", help="allow write/execute tools without asking"

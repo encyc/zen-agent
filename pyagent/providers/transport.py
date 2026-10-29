@@ -229,18 +229,28 @@ def parse_usage(chunk_usage: dict, prices: Cost | None = None) -> Usage:
     completion_details = chunk_usage.get("completion_tokens_details") or {}
     input_tokens = chunk_usage.get("prompt_tokens", 0)
     output_tokens = chunk_usage.get("completion_tokens", 0)
+    cache_read_tokens = prompt_details.get("cached_tokens", 0) or 0
     reasoning = chunk_usage.get("reasoning_tokens")
     if reasoning is None:
         reasoning = completion_details.get("reasoning_tokens")
     cost = Cost()
     if prices is not None:
-        cost_input = input_tokens * prices.input / 1_000_000
-        cost_output = output_tokens * prices.output / 1_000_000
-        cost = Cost(input=cost_input, output=cost_output, total=cost_input + cost_output)
+        # OpenAI-style ``prompt_tokens`` INCLUDES cached tokens, so the
+        # uncached remainder is what costs the full input rate.
+        uncached_input = max(input_tokens - cache_read_tokens, 0)
+        # A missing cache price must not make cached tokens free: fall back to
+        # the input rate rather than silently under-reporting the bill.
+        cache_read_price = prices.cache_read or prices.input
+        cost = Cost(
+            input=uncached_input * prices.input / 1_000_000,
+            output=output_tokens * prices.output / 1_000_000,
+            cache_read=cache_read_tokens * cache_read_price / 1_000_000,
+        )
+        cost.total = cost.input + cost.output + cost.cache_read
     return Usage(
         input=input_tokens,
         output=output_tokens,
-        cache_read=prompt_details.get("cached_tokens", 0),
+        cache_read=cache_read_tokens,
         cache_write=0,
         reasoning=reasoning,
         cost=cost,

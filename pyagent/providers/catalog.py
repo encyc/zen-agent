@@ -54,7 +54,7 @@ _COMPAT_KEYS = frozenset(
         "anthropic_adaptive_thinking",
     }
 )
-_COST_KEYS = frozenset({"input", "output"})
+_COST_KEYS = frozenset({"input", "output", "cache_read", "cache_write"})
 _INT_PATTERN = re.compile(r"-?\d+\Z")
 #: Tokens that YAML/float() would accept but the catalog grammar forbids:
 #: no nulls, no NaN/Infinity — a cost or string slot must never hold them.
@@ -274,6 +274,8 @@ def _cost_from(raw: object, ctx: str) -> Cost:
     return Cost(
         input=_expect_float(raw.get("input", 0.0), f"{ctx} cost.input"),
         output=_expect_float(raw.get("output", 0.0), f"{ctx} cost.output"),
+        cache_read=_expect_float(raw.get("cache_read", 0.0), f"{ctx} cost.cache_read"),
+        cache_write=_expect_float(raw.get("cache_write", 0.0), f"{ctx} cost.cache_write"),
     )
 
 

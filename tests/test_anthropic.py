@@ -332,3 +332,30 @@ def test_adaptive_thinking_shape_for_gateway_models():
     assert body["thinking"] == {"type": "adaptive"}
     assert body["output_config"] == {"effort": "high"}
     assert "budget_tokens" not in body["thinking"]
+
+
+def test_thinking_budget_supports_max():
+    assert thinking_budget("max", 200_000) == 65536
+    assert thinking_budget("max", 4096) == 2048  # clamped below max_tokens
+
+
+def test_adaptive_thinking_passes_max_effort_through():
+    adaptive = model()
+    adaptive.compat = CompatFlags(anthropic_adaptive_thinking=True)
+    _, _, body = build_request(
+        adaptive, [UserMessage(content="hi", timestamp=1)], [],
+        StreamOptions(api_key="k", thinking="max"),
+    )
+    assert body["output_config"] == {"effort": "max"}
+
+
+async def test_anthropic_cost_includes_cache_components():
+    """Anthropic reports cache tokens outside input_tokens; price them too."""
+    priced = model()
+    priced.cost = Cost(input=1.0, output=5.0, cache_read=0.1, cache_write=1.25)
+    events = await _fixture_events("anthropic-text.txt", mdl=priced)
+    usage = events[-1].partial.usage
+    # fixture: input 12, output 5, no cache tokens
+    assert usage.cost.input == pytest.approx(12 / 1_000_000)
+    assert usage.cost.output == pytest.approx(25 / 1_000_000)
+    assert usage.cost.total == pytest.approx(37 / 1_000_000)

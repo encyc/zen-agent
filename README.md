@@ -55,7 +55,7 @@ interactive "yes", or an "always" answer for that tool in the session.
 | `/exit` | leave (Ctrl+D also works) |
 | `/clear` | forget the conversation |
 | `/model [id]` | show / switch model (next turn) |
-| `/thinking [level]` | `off` / `low` / `medium` / `high` |
+| `/thinking [level]` | `off` / `low` / `medium` / `high` / `max` |
 | `/compact` | summarize the session into a new session file |
 
 While the agent is working, anything you type is queued as steering input
@@ -72,6 +72,11 @@ default_model = "deepseek-flash"
 base_url = "https://mirror.example/v1"   # optional
 api_key_env = "MY_DEEPSEEK_KEY"          # optional
 ```
+
+Costs are estimated from the catalog's unit prices (input, output, and cache
+read/write separately). DeepSeek bills peak/off-peak; the catalog has no time
+dimension, so peak rates are used — treat `usage.cost` as a conservative upper
+bound. Providers with subscription pricing (zai, opencode-go) carry 0.
 
 Sessions are append-only JSONL under `~/.pyagent/sessions/`; `--resume` continues
 the most recent one. The file format is exactly the public message model, so it

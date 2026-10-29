@@ -362,7 +362,8 @@ def test_packaged_catalog_models_build_expected_params():
     )
     assert params["thinking"] == {"type": "enabled"}
     assert "tool_stream" not in params
-    assert "reasoning_effort" not in params
+    # DeepSeek advertises effort levels, so the level goes on the wire now
+    assert params["reasoning_effort"] == "high"
 
     # gateway GLM has no thinking dialect: nothing thinking-related is sent
     # (two providers ship a "glm-5.3"; the gateway one is the plain dialect)

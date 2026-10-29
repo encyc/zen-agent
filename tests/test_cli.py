@@ -9,6 +9,13 @@ import time
 import pytest
 
 import pyagent.cli.main as cli_main
+from pyagent.config import UserConfig
+
+
+@pytest.fixture(autouse=True)
+def isolate_user_config(monkeypatch):
+    """Tests must not read the developer's real ~/.pyagent/config.toml."""
+    monkeypatch.setattr(cli_main, "load_user_config", lambda: UserConfig())
 from pyagent.agent import Agent
 from pyagent.cli.permissions import READ_ONLY_TOOLS, PermissionGate
 from pyagent.events import AssistantEvent
@@ -153,7 +160,13 @@ def test_json_output_has_documented_fields(monkeypatch, capsys):
     assert payload["ok"] is True
     assert payload["text"] == "json text"
     assert payload["messages"] == 2
-    assert set(payload["usage"]) == {"input", "output", "cost"}
+    assert set(payload["usage"]) == {
+        "input",
+        "output",
+        "cache_read",
+        "cache_write",
+        "cost",
+    }
 
 
 def test_no_prompt_enters_the_interactive_repl(monkeypatch):

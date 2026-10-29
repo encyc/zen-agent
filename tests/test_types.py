@@ -89,7 +89,13 @@ def test_assistant_message_round_trip_full():
         "cache_read": 3,
         "cache_write": 2,
         "reasoning": 7,
-        "cost": {"input": 0.001, "output": 0.002, "total": 0.003},
+        "cost": {
+            "input": 0.001,
+            "output": 0.002,
+            "cache_read": 0.0,
+            "cache_write": 0.0,
+            "total": 0.003,
+        },
     }
     round_tripped = message_from_json(data)
     assert round_tripped == msg
@@ -233,3 +239,34 @@ def test_message_from_json_unknown_block_type_raises():
     }
     with pytest.raises(ValueError, match="unknown content block type"):
         message_from_json(data)
+
+
+def test_cost_round_trips_cache_components():
+    """Cached input is priced separately and must survive serialization."""
+    usage = Usage(
+        input=100,
+        output=50,
+        cache_read=900,
+        cache_write=20,
+        cost=Cost(input=0.1, output=0.2, cache_read=0.03, cache_write=0.025, total=0.355),
+    )
+    message = _assistant([TextContent(text="x")], usage=usage)
+    data = message.to_json()
+    assert data["usage"]["cost"] == {
+        "input": 0.1,
+        "output": 0.2,
+        "cache_read": 0.03,
+        "cache_write": 0.025,
+        "total": 0.355,
+    }
+    assert message_from_json(data) == message
+
+
+def test_cost_defaults_to_zero_cache_components():
+    assert Cost().to_json() == {
+        "input": 0.0,
+        "output": 0.0,
+        "cache_read": 0.0,
+        "cache_write": 0.0,
+        "total": 0.0,
+    }

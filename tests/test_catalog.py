@@ -343,3 +343,51 @@ def test_parser_rejects_null_tilde_nan_inf_scalars():
     )
     with pytest.raises(ValueError, match="inf"):
         _build_catalog(inf_cost)
+
+
+def test_cost_flow_map_accepts_cache_prices(tmp_path):
+    """Cache pricing is part of the catalog grammar now."""
+    from pyagent.providers import catalog as catalog_module
+
+    text = """
+providers:
+  p:
+    name: P
+    base_url: https://api.test/v1
+    api_key_env: P_KEY
+    adapter: openai-completions
+    models:
+      m:
+        context_window: 1000
+        max_tokens: 100
+        reasoning: false
+        cost: {input: 1.0, output: 2.0, cache_read: 0.1, cache_write: 1.25}
+"""
+    path = tmp_path / "c.yaml"
+    path.write_text(text)
+    loaded = catalog_module._build_catalog(path.read_text())
+    cost = loaded["p"].models[0].cost
+    assert (cost.input, cost.output, cost.cache_read, cost.cache_write) == (1.0, 2.0, 0.1, 1.25)
+
+
+def test_cost_flow_map_rejects_unknown_keys(tmp_path):
+    from pyagent.providers import catalog as catalog_module
+
+    text = """
+providers:
+  p:
+    name: P
+    base_url: https://api.test/v1
+    api_key_env: P_KEY
+    adapter: openai-completions
+    models:
+      m:
+        context_window: 1000
+        max_tokens: 100
+        reasoning: false
+        cost: {input: 1.0, output: 2.0, mystery: 3.0}
+"""
+    path = tmp_path / "c.yaml"
+    path.write_text(text)
+    with pytest.raises(ValueError, match="cost"):
+        catalog_module._build_catalog(path.read_text())

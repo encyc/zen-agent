@@ -13,14 +13,28 @@ StopReason = Literal["pending", "stop", "length", "tool_use", "error", "aborted"
 
 @dataclass
 class Cost:
-    """Monetary cost of one model call, computed from catalog unit prices."""
+    """Monetary cost of one model call, computed from catalog unit prices.
+
+    Cached input is priced separately: providers bill cache *reads* at a
+    discount and cache *writes* at a premium (or not at all), so folding them
+    into ``input`` would misreport the bill. All four fields are already in
+    currency units; ``total`` is their sum.
+    """
 
     input: float = 0.0
     output: float = 0.0
+    cache_read: float = 0.0
+    cache_write: float = 0.0
     total: float = 0.0
 
     def to_json(self) -> dict:
-        return {"input": self.input, "output": self.output, "total": self.total}
+        return {
+            "input": self.input,
+            "output": self.output,
+            "cache_read": self.cache_read,
+            "cache_write": self.cache_write,
+            "total": self.total,
+        }
 
 
 @dataclass
@@ -261,6 +275,8 @@ def _usage_from_json(d: Any) -> Usage:
         cost=Cost(
             input=cost.get("input", 0.0),
             output=cost.get("output", 0.0),
+            cache_read=cost.get("cache_read", 0.0),
+            cache_write=cost.get("cache_write", 0.0),
             total=cost.get("total", 0.0),
         ),
     )

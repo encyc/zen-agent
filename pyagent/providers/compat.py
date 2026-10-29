@@ -14,7 +14,7 @@ sniffed.
 from dataclasses import dataclass
 
 #: User-level thinking settings that mean "reasoning on" (``"off"`` means off).
-THINKING_LEVELS = frozenset({"low", "medium", "high"})
+THINKING_LEVELS = frozenset({"low", "medium", "high", "max"})
 
 
 def normalize_thinking(thinking: str | None) -> str | None:
@@ -29,7 +29,7 @@ def normalize_thinking(thinking: str | None) -> str | None:
     if thinking not in THINKING_LEVELS:
         raise ValueError(
             f"invalid thinking level {thinking!r}; expected one of "
-            "None, 'off', 'low', 'medium', 'high'"
+            "None, 'off', 'low', 'medium', 'high', 'max'"
         )
     return thinking
 

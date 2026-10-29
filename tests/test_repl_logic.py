@@ -10,12 +10,20 @@ import time
 import pytest
 
 import pyagent.agent.session as session_module
+import pyagent.cli.repl as repl_module
 from pyagent.agent import Agent
 from pyagent.cli.repl import handle_slash, repl, split_input
+from pyagent.config import UserConfig
 from pyagent.events import AssistantEvent
 from pyagent.providers.catalog import Model
 from pyagent.providers.compat import CompatFlags
 from pyagent.types import AssistantMessage, Cost, TextContent, Usage
+
+
+@pytest.fixture(autouse=True)
+def isolate_user_config(monkeypatch):
+    """Tests must not read the developer's real ~/.pyagent/config.toml."""
+    monkeypatch.setattr(repl_module, "load_user_config", lambda: UserConfig())
 
 
 def model() -> Model:
