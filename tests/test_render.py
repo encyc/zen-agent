@@ -15,6 +15,7 @@ from pyagent.cli.render import (
 from pyagent.events import AssistantEvent
 from pyagent.types import (
     AssistantMessage,
+    Cost,
     TextContent,
     ThinkingContent,
     ToolCall,
@@ -159,3 +160,46 @@ def test_render_diff_handles_empty_input():
     from pyagent.cli.render import render_diff
 
     assert isinstance(render_diff(""), Text)
+
+
+# ---------------------------------------------------------------------------
+# S1-T6: status line
+# ---------------------------------------------------------------------------
+
+
+def test_status_line_contains_every_field():
+    from pyagent.cli.render import status_line
+
+    usage = Usage(input=8000, output=500, cache_read=400, cost=Cost(total=0.00042))
+    line = status_line(
+        model_id="deepseek-flash",
+        thinking="high",
+        messages=12,
+        usage=usage,
+        context_window=1_048_576,
+        session_name="20260101-000000.jsonl",
+    )
+    assert "deepseek-flash" in line
+    assert "thinking high" in line
+    assert "12 msgs" in line
+    assert "ctx 8.4k/1.0M (1%)" in line
+    assert "$0.0004" in line
+    assert "20260101-000000.jsonl" in line
+
+
+def test_status_line_without_a_context_window_omits_percent():
+    from pyagent.cli.render import status_line
+
+    line = status_line(
+        model_id="m", thinking=None, messages=1, usage=Usage(), context_window=0
+    )
+    assert "thinking off" in line
+    assert "%" not in line
+    assert "$0.0000" in line
+
+
+def test_context_percent_uses_real_prompt_tokens():
+    from pyagent.cli.render import context_percent
+
+    assert context_percent(Usage(input=500, cache_read=500), 10_000) == 10
+    assert context_percent(Usage(), 0) is None

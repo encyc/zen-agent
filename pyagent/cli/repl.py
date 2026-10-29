@@ -79,6 +79,7 @@ async def handle_slash(
     *,
     print_fn: PrintFn = print,
     guard: ContextGuard | None = None,
+    session_path: Path | None = None,
 ) -> str | None:
     """Run one slash command; returns ``"exit"`` when the REPL should stop."""
     if command in ("exit", "quit"):
@@ -291,7 +292,17 @@ async def repl(
 
             command, argument = split_input(line)
             if command:
-                if await handle_slash(agent, command, argument, print_fn=print_fn, guard=guard) == "exit":
+                if (
+                    await handle_slash(
+                        agent,
+                        command,
+                        argument,
+                        print_fn=print_fn,
+                        guard=guard,
+                        session_path=session.path,
+                    )
+                    == "exit"
+                ):
                     if run_task is not None:
                         agent.abort()
                         await asyncio.gather(run_task, return_exceptions=True)

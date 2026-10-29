@@ -18,13 +18,22 @@ from rich.text import Text
 from pyagent.agent.loop import ToolResultAgent
 from pyagent.agent.session import Session
 from pyagent.events import AssistantEvent
-from pyagent.types import AssistantMessage, TextContent, ThinkingContent, ToolCall
+from pyagent.types import (
+    AssistantMessage,
+    TextContent,
+    ThinkingContent,
+    ToolCall,
+    Usage,
+)
 
 __all__ = [
     "AssistantLiveRenderer",
     "LiveUpdate",
+    "aggregate_usage",
+    "context_percent",
     "render_diff",
     "session_header",
+    "status_line",
     "tool_progress_line",
     "tool_result_line",
 ]
@@ -128,6 +137,66 @@ def tool_progress_line(tool_name: str, partial: ToolResultAgent) -> str:
     if len(last) > _PREVIEW_CHARS:
         last = last[: _PREVIEW_CHARS - 1] + "…"
     return f"⚙ {tool_name} ({len(text)} bytes) {last}".rstrip()
+
+
+def aggregate_usage(messages: list) -> Usage:
+    """Sum the usage of every assistant message (the run's bill)."""
+    total = Usage()
+    for message in messages:
+        if isinstance(message, AssistantMessage):
+            total.input += message.usage.input
+            total.output += message.usage.output
+            total.cache_read += message.usage.cache_read
+            total.cache_write += message.usage.cache_write
+            total.cost.input += message.usage.cost.input
+            total.cost.output += message.usage.cost.output
+            total.cost.cache_read += message.usage.cost.cache_read
+            total.cost.cache_write += message.usage.cost.cache_write
+            total.cost.total += message.usage.cost.total
+    return total
+
+
+def _human_tokens(count: int) -> str:
+    if count >= 1_000_000:
+        return f"{count / 1_000_000:.1f}M"
+    if count >= 1_000:
+        return f"{count / 1_000:.1f}k"
+    return str(count)
+
+
+def context_percent(usage: Usage, context_window: int) -> int | None:
+    """How full the context is, as a rounded percentage (None without a window)."""
+    if context_window <= 0:
+        return None
+    used = usage.input + usage.cache_read
+    return round(100 * used / context_window)
+
+
+def status_line(
+    *,
+    model_id: str,
+    thinking: str | None,
+    messages: int,
+    usage: Usage,
+    context_window: int,
+    session_name: str | None = None,
+) -> str:
+    """One line of run state: model, level, size, context fill, spend."""
+    used = usage.input + usage.cache_read
+    context = f"ctx {_human_tokens(used)}/{_human_tokens(context_window)}"
+    percent = context_percent(usage, context_window)
+    if percent is not None:
+        context += f" ({percent}%)"
+    parts = [
+        model_id,
+        f"thinking {thinking or 'off'}",
+        f"{messages} msgs",
+        context,
+        f"${usage.cost.total:.4f}",
+    ]
+    if session_name:
+        parts.append(session_name)
+    return " · ".join(parts)
 
 
 def render_diff(diff: str) -> RenderableType:
