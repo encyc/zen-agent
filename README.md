@@ -1,5 +1,9 @@
 # ZenAgent
 
+[![PyPI](https://img.shields.io/pypi/v/zenagent-py.svg)](https://pypi.org/project/zenagent-py/)
+[![CI](https://github.com/encyc/zen-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/encyc/zen-agent/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.15%2B-blue)](https://www.python.org/downloads/)
+
 A minimal coding agent written from scratch in pure Python: one interface for
 streaming LLM calls, an agent loop that is an async generator, and a terminal
 harness. No vendor SDKs, no agent framework — `httpx` is the only runtime
@@ -16,7 +20,12 @@ Repo: <https://github.com/encyc/zen-agent> · PyPI package: `zenagent-py` (impor
 ## Install
 
 ```bash
-uv sync --extra cli        # kernel + interactive extras (prompt_toolkit, rich)
+# install the published CLI
+uv tool install "zenagent-py[cli]"   # or: pip install "zenagent-py[cli]"
+zen --help                          # imports as `zenagent`
+
+# work on the project itself
+uv sync --extra cli                 # kernel + interactive extras (prompt_toolkit, rich)
 ```
 
 Requires Python 3.15+ (the project targets the current `uv` toolchain; any
