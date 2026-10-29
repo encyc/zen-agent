@@ -35,6 +35,8 @@ from pyagent.context_files import (
     system_prompt_with_context,
 )
 from pyagent.events import AgentEvent
+from pyagent.mcp.config import load_mcp_config
+from pyagent.mcp.manager import McpManager
 from pyagent.providers.catalog import Model, ProviderConfig, find_model, load_catalog
 from pyagent.providers.registry import StreamFn
 from pyagent.tools import ALL_TOOLS
@@ -200,6 +202,9 @@ async def run_headless(
     auto_compact: bool = True,
     images: list[Path] | None = None,
     trace: Path | str | None = None,
+    mcp: bool = True,
+    mcp_servers: list[str] | None = None,
+    mcp_file: Path | str | None = None,
 ) -> int:
     """Run one prompt to completion; returns the process exit code."""
     user_config = load_user_config()
@@ -236,6 +241,19 @@ async def run_headless(
     gate = PermissionGate(
         assume_yes=assume_yes, interactive=False, allow_dangerous=allow_dangerous
     )
+    tool_list = list(ALL_TOOLS if tools is None else tools)
+    mcp_manager: McpManager | None = None
+    if mcp and tools is None:
+        configs = load_mcp_config(Path(mcp_file) if mcp_file else None)
+        if mcp_servers:
+            configs = {
+                name: config for name, config in configs.items() if name in mcp_servers
+            }
+        if configs:
+            mcp_manager = McpManager(configs)
+            for warning in await mcp_manager.start():
+                print(f"pyagent: mcp {warning}", file=sys.stderr)
+            tool_list = [*tool_list, *mcp_manager.tool_defs()]
     guard = ContextGuard(model.context_window)
     agent = _build_agent(
         model,
@@ -243,7 +261,7 @@ async def run_headless(
         thinking,
         gate,
         stream_fn=stream_fn,
-        tools=tools,
+        tools=tool_list,
         transform_context=guard.transform,
         max_turns=max_turns,
         max_cost=max_cost,
@@ -276,11 +294,15 @@ async def run_headless(
     agent.subscribe(guard.on_event)
     agent.subscribe(persist)
     agent.subscribe(printer)
-    await agent.prompt(prompt, images=image_blocks or None)
-    if auto_compact:
-        await maybe_auto_compact(
-            agent, print_fn=lambda message: print(message, file=sys.stderr)
-        )
+    try:
+        await agent.prompt(prompt, images=image_blocks or None)
+        if auto_compact:
+            await maybe_auto_compact(
+                agent, print_fn=lambda message: print(message, file=sys.stderr)
+            )
+    finally:
+        if mcp_manager is not None:
+            await mcp_manager.close()
 
     ok = agent.error_message is None and agent.termination in ("stop", "tool_terminate")
     if json_output:
@@ -347,6 +369,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--max-turns", type=int, help="stop after this many provider requests"
+    )
+    parser.add_argument(
+        "--no-mcp",
+        action="store_true",
+        help="do not connect any MCP servers",
+    )
+    parser.add_argument(
+        "--mcp-server",
+        action="append",
+        dest="mcp_servers",
+        metavar="NAME",
+        help="only connect this MCP server (repeatable)",
+    )
+    parser.add_argument(
+        "--mcp-file",
+        metavar="PATH",
+        help="MCP config file (default: ~/.pyagent/mcp.json)",
     )
     parser.add_argument(
         "--cwd",
@@ -419,6 +458,9 @@ def main(argv: list[str] | None = None) -> int:
                     completion=not args.no_completion,
                     auto_compact=not args.no_auto_compact,
                     trace=args.trace,
+                    mcp=not args.no_mcp,
+                    mcp_servers=args.mcp_servers,
+                    mcp_file=args.mcp_file,
                 )
             )
         except KeyboardInterrupt:
@@ -440,6 +482,9 @@ def main(argv: list[str] | None = None) -> int:
                 auto_compact=not args.no_auto_compact,
                 images=args.images,
                 trace=args.trace,
+                mcp=not args.no_mcp,
+                mcp_servers=args.mcp_servers,
+                mcp_file=args.mcp_file,
             )
         )
     except KeyboardInterrupt:

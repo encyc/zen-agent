@@ -49,6 +49,8 @@ from pyagent.context_files import (
     system_prompt_with_context,
 )
 from pyagent.events import AgentEvent
+from pyagent.mcp.config import load_mcp_config
+from pyagent.mcp.manager import McpManager
 from pyagent.providers.catalog import find_model, load_catalog
 from pyagent.providers.registry import StreamFn
 from pyagent.tools import ALL_TOOLS
@@ -91,6 +93,8 @@ async def handle_slash(
     session: Session | None = None,
     switch_session=None,
     images: list[ImageContent] | None = None,
+    mcp_manager: McpManager | None = None,
+    refresh_mcp=None,
 ) -> str | None:
     """Run one slash command; returns ``"exit"`` when the REPL should stop."""
     if command in ("exit", "quit"):
@@ -232,6 +236,18 @@ async def handle_slash(
         for position, block in enumerate(images, start=1):
             print_fn(f"{position}. {block.mime_type} ({len(block.data)} base64 chars)")
         return None
+    if command == "mcp":
+        if mcp_manager is None:
+            print_fn("no MCP servers configured")
+            return None
+        if argument.startswith("retry") and refresh_mcp is not None:
+            await refresh_mcp(force=True)
+        for status in mcp_manager.status():
+            if status.state == "connected":
+                print_fn(f"{status.name}: connected · {len(status.tools)} tools")
+            else:
+                print_fn(f"{status.name}: failed · {status.error or 'unknown error'}")
+        return None
     if command == "compact":
         try:
             path = await compact(agent)
@@ -332,6 +348,10 @@ async def repl(
     completion: bool = True,
     auto_compact: bool = True,
     trace: Path | str | None = None,
+    mcp: bool = True,
+    mcp_servers: list[str] | None = None,
+    mcp_file: Path | str | None = None,
+    mcp_retry_interval_s: float = 10.0,
 ) -> int:
     """Run the interactive loop; returns the process exit code."""
     user_config = load_user_config()
@@ -351,11 +371,30 @@ async def repl(
     tool_list = list(ALL_TOOLS if tools is None else tools)
     session = _session_for(resume)
     guard = ContextGuard(model.context_window)
-    prompt = _system_prompt([tool.name for tool in tool_list])
-    if context_files:
-        prompt = system_prompt_with_context(
-            prompt, load_context_files(discover_context_files(Path.cwd()))
-        )
+    base_tools = list(tool_list)
+
+    def build_prompt(current_tools) -> str:
+        text = _system_prompt([tool.name for tool in current_tools])
+        if context_files:
+            text = system_prompt_with_context(
+                text, load_context_files(discover_context_files(Path.cwd()))
+            )
+        return text
+
+    mcp_manager: McpManager | None = None
+    if mcp and tools is None:
+        configs = load_mcp_config(Path(mcp_file) if mcp_file else None)
+        if mcp_servers:
+            configs = {
+                name: config for name, config in configs.items() if name in mcp_servers
+            }
+        if configs:
+            mcp_manager = McpManager(configs, retry_interval_s=mcp_retry_interval_s)
+            for warning in await mcp_manager.start():
+                print(f"pyagent: mcp {warning}", file=sys.stderr)
+            tool_list = [*tool_list, *mcp_manager.tool_defs()]
+
+    prompt = build_prompt(tool_list)
     agent = Agent(
         model=model,
         system_prompt=prompt,
@@ -375,6 +414,18 @@ async def repl(
         agent.replace_messages(session.load())
         for warning in session.warnings:
             print(f"pyagent: {warning}", file=sys.stderr)
+
+    async def refresh_mcp(force: bool = False) -> None:
+        """Reconnect failed servers and swap refreshed tools into the agent."""
+        if mcp_manager is None:
+            return
+        for warning in await mcp_manager.retry_failed(force=force):
+            print_fn(f"mcp: {warning}")
+        refreshed = [*base_tools, *mcp_manager.tool_defs()]
+        if [tool.name for tool in refreshed] != [tool.name for tool in agent.tools]:
+            agent.tools = refreshed
+            agent.system_prompt = build_prompt(refreshed)
+            print_fn(f"mcp: tools updated ({len(refreshed)} available)")
 
     console = Console() if sys.stdout.isatty() else None
     printer = _EventPrinter(console=console, print_fn=print_fn)
@@ -452,6 +503,8 @@ async def repl(
                         session=session_box[0],
                         switch_session=switch_session,
                         images=pending_images,
+                        mcp_manager=mcp_manager,
+                        refresh_mcp=refresh_mcp,
                     )
                     == "exit"
                 ):
@@ -466,6 +519,7 @@ async def repl(
                 agent.steer(line.strip())
                 continue
 
+            await refresh_mcp()
             if pending_images:
                 if not agent.model.supports_vision:
                     print_fn(
@@ -484,3 +538,5 @@ async def repl(
             await asyncio.gather(run_task, return_exceptions=True)
         if tracer is not None:
             tracer.close()
+        if mcp_manager is not None:
+            await mcp_manager.close()

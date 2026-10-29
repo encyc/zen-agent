@@ -525,3 +525,90 @@ def test_trace_flag_writes_jsonl(monkeypatch, tmp_path):
         "tool_start",
         "tool_end",
     ]
+
+
+# ---------------------------------------------------------------------------
+# S2-T3: MCP wiring
+# ---------------------------------------------------------------------------
+
+
+def _mcp_config(tmp_path, script: str, env: dict[str, str], name: str = "flaky"):
+    import json as _json
+
+    path = tmp_path / "mcp.json"
+    path.write_text(
+        _json.dumps(
+            {
+                "servers": {
+                    name: {
+                        "command": [__import__("sys").executable, script],
+                        "env": env,
+                    }
+                }
+            }
+        )
+    )
+    return path
+
+
+def test_headless_survives_a_down_mcp_server(monkeypatch, tmp_path, capsys):
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
+    flaky = str(_Path(__file__).resolve().parent / "fixtures" / "mcp_flaky_server.py")
+    config = _mcp_config(tmp_path, flaky, {"MCP_READY_FILE": str(tmp_path / "never")})
+    _patch_agent(monkeypatch, fake_stream("ok"), {})
+
+    assert cli_main.main(["-p", "hi", "--mcp-file", str(config)]) == 0
+    assert "mcp flaky" in capsys.readouterr().err
+    assert _sys.version  # silence unused-import style complaints in some linters
+
+
+def test_no_mcp_flag_never_constructs_a_manager(monkeypatch):
+    monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
+
+    def explode(*args, **kwargs):
+        raise AssertionError("McpManager must not be constructed with --no-mcp")
+
+    monkeypatch.setattr(cli_main, "McpManager", explode)
+    _patch_agent(monkeypatch, fake_stream("ok"), {})
+    assert cli_main.main(["-p", "hi", "--no-mcp"]) == 0
+
+
+def test_mcp_server_filter_selects_only_named_servers(monkeypatch, tmp_path):
+    import json
+
+    monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
+    config = tmp_path / "mcp.json"
+    config.write_text(
+        json.dumps(
+            {
+                "servers": {
+                    "alpha": {"command": ["echo", "a"]},
+                    "beta": {"command": ["echo", "b"]},
+                }
+            }
+        )
+    )
+    captured: dict = {}
+
+    class FakeManager:
+        def __init__(self, configs, **kwargs):
+            captured["configs"] = list(configs)
+
+        async def start(self):
+            return []
+
+        def tool_defs(self):
+            return []
+
+        async def close(self):
+            return None
+
+    monkeypatch.setattr(cli_main, "McpManager", FakeManager)
+    _patch_agent(monkeypatch, fake_stream("ok"), {})
+
+    assert cli_main.main(["-p", "hi", "--mcp-file", str(config),
+                          "--mcp-server", "beta"]) == 0
+    assert captured["configs"] == ["beta"]
