@@ -1,0 +1,7 @@
+{
+  "id": "image_red_square",
+  "prompt": "What colour is this image? Answer with only the colour name.",
+  "setup": {"files": {}, "images": [{"path": "square.png", "color": "red", "width": 64, "height": 64}]},
+  "options": {"max_turns": 2, "thinking": "off"},
+  "expect": {"output_contains": ["red"], "termination": "stop", "max_cost": 0.08}
+}

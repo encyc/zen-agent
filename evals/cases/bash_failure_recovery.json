@@ -1,0 +1,21 @@
+{
+  "id": "bash_failure_recovery",
+  "prompt": "Run the command `ls /definitely-not-a-real-dir` and tell me the exit code it returned. Do not retry more than twice.",
+  "setup": {
+    "files": {}
+  },
+  "options": {
+    "max_turns": 6,
+    "thinking": "off"
+  },
+  "expect": {
+    "tools": [
+      "bash"
+    ],
+    "tool_results_contain": [
+      "exit code:"
+    ],
+    "termination": "stop",
+    "max_cost": 0.06
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "id": "grep_find",
+  "prompt": "Which file under src/ contains the word TODO? Answer with the file name only.",
+  "setup": {
+    "files": {
+      "src/a.py": "def a():\n    return 1\n",
+      "src/b.py": "# TODO: rename this\nx = 2\n",
+      "src/c.py": "y = 3\n",
+      "README.md": "nothing here\n"
+    }
+  },
+  "options": {"max_turns": 6, "thinking": "off"},
+  "expect": {
+    "tools": ["grep"],
+    "output_contains": ["b.py"],
+    "termination": "stop",
+    "max_cost": 0.08
+  }
+}

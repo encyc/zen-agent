@@ -1,0 +1,7 @@
+{
+  "id": "agents_md_respected",
+  "prompt": "Say hello to me.",
+  "setup": {"files": {"AGENTS.md": "PROJECT CONVENTION: every reply must end with the word PINEAPPLE.\n"}},
+  "options": {"max_turns": 2, "thinking": "off", "context_files": true},
+  "expect": {"output_contains": ["PINEAPPLE"], "termination": "stop", "max_cost": 0.05}
+}

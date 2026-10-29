@@ -1,0 +1,12 @@
+{
+  "id": "write_new_file",
+  "prompt": "Create a file named hello.txt containing exactly: hello world",
+  "setup": {"files": {}},
+  "options": {"max_turns": 6, "thinking": "off"},
+  "expect": {
+    "tools": ["write_file"],
+    "files": {"hello.txt": {"contains": "hello world"}},
+    "termination": "stop",
+    "max_cost": 0.05
+  }
+}

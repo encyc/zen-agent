@@ -1,0 +1,6 @@
+{
+  "id": "qa_smoke",
+  "prompt": "What is the capital of France? Answer with only the city name.",
+  "options": {"max_turns": 1, "thinking": "off"},
+  "expect": {"output_contains": ["Paris"], "termination": "stop", "max_cost": 0.02}
+}

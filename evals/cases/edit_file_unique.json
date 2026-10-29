@@ -1,0 +1,12 @@
+{
+  "id": "edit_file_unique",
+  "prompt": "In config.txt, change the retry count from 3 to 7. Do not change anything else.",
+  "setup": {"files": {"config.txt": "host=localhost\nretries=3\ntimeout=30\n"}},
+  "options": {"max_turns": 6, "thinking": "off"},
+  "expect": {
+    "tools": ["edit_file"],
+    "files": {"config.txt": {"contains": "retries=7", "not_contains": "retries=3"}},
+    "termination": "stop",
+    "max_cost": 0.05
+  }
+}

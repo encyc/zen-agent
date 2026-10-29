@@ -141,8 +141,17 @@ kill on timeout/abort), `glob`, `grep` (ripgrep when available, Python fallback)
 
 ```bash
 bash scripts/check.sh     # the gate: sync + ruff + pytest (CI runs exactly this)
+bash scripts/check.sh     # the gate: sync + ruff + pytest (CI runs exactly this)
 uv run pytest -q          # fully offline: fake stream fns + replayed SSE fixtures
-uv run ruff check .
+./scripts/eval.sh         # behavioral evals against a real model (opt-in, costs money)
+```
+
+Behavioral evals (real model, small cost) check the agent rather than the
+code; they are separate from the offline gate:
+
+```bash
+./scripts/eval.sh --list                      # case ids
+./scripts/eval.sh --model deepseek-flash --repeats 3
 ```
 
 `scripts/capture_sse.py` records real provider traffic into
