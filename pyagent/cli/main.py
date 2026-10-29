@@ -26,6 +26,11 @@ from pyagent.agent import Agent
 from pyagent.agent.session import Session, latest_session, session_path
 from pyagent.cli.permissions import PermissionGate
 from pyagent.config import ContextGuard, apply_user_config, load_user_config
+from pyagent.context_files import (
+    discover_context_files,
+    load_context_files,
+    system_prompt_with_context,
+)
 from pyagent.events import AgentEvent
 from pyagent.providers.catalog import Model, ProviderConfig, find_model, load_catalog
 from pyagent.providers.registry import StreamFn
@@ -87,12 +92,18 @@ def _build_agent(
     transform_context=None,
     max_turns: int | None = None,
     max_cost: float | None = None,
+    context_files: bool = True,
 ) -> Agent:
     """Construct the run's Agent (a seam for tests to inject a fake stream)."""
     tool_list = list(ALL_TOOLS if tools is None else tools)
+    prompt = _system_prompt([tool.name for tool in tool_list])
+    if context_files:
+        prompt = system_prompt_with_context(
+            prompt, load_context_files(discover_context_files(Path.cwd()))
+        )
     return Agent(
         model=model,
-        system_prompt=_system_prompt([tool.name for tool in tool_list]),
+        system_prompt=prompt,
         tools=tool_list,
         api_key=api_key,
         thinking=thinking,
@@ -178,6 +189,7 @@ async def run_headless(
     json_output: bool = False,
     max_turns: int | None = None,
     max_cost: float | None = None,
+    context_files: bool = True,
     stream_fn: StreamFn | None = None,
     tools: list | None = None,
     resume: str | Path | None = None,
@@ -213,6 +225,7 @@ async def run_headless(
         transform_context=guard.transform,
         max_turns=max_turns,
         max_cost=max_cost,
+        context_files=context_files,
     )
 
     if resume is not None:
@@ -293,6 +306,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-turns", type=int, help="stop after this many provider requests"
     )
     parser.add_argument(
+        "--no-context-files",
+        action="store_true",
+        help="do not load AGENTS.md / CLAUDE.md into the system prompt",
+    )
+    parser.add_argument(
         "--max-cost", type=float, help="stop when the run has spent this many USD"
     )
     return parser
@@ -310,6 +328,7 @@ def main(argv: list[str] | None = None) -> int:
                     model_id=args.model,
                     resume=args.resume,
                     allow_dangerous=args.allow_dangerous,
+                    context_files=not args.no_context_files,
                 )
             )
         except KeyboardInterrupt:
@@ -327,6 +346,7 @@ def main(argv: list[str] | None = None) -> int:
                 resume=args.resume,
                 max_turns=args.max_turns,
                 max_cost=args.max_cost,
+                context_files=not args.no_context_files,
             )
         )
     except KeyboardInterrupt:

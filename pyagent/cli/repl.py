@@ -21,10 +21,20 @@ from rich.console import Console
 from pyagent.agent import Agent
 from pyagent.agent.session import Session, latest_session, session_path
 from pyagent.cli.compact import compact
-from pyagent.cli.main import _api_key_for, _system_prompt, resolve_model, session_id_for
+from pyagent.cli.main import (
+    _api_key_for,
+    _system_prompt,
+    resolve_model,
+    session_id_for,
+)
 from pyagent.cli.permissions import PermissionGate
 from pyagent.cli.render import tool_result_line
 from pyagent.config import ContextGuard, apply_user_config, load_user_config
+from pyagent.context_files import (
+    discover_context_files,
+    load_context_files,
+    system_prompt_with_context,
+)
 from pyagent.events import AgentEvent
 from pyagent.providers.catalog import find_model, load_catalog
 from pyagent.providers.registry import StreamFn
@@ -191,6 +201,7 @@ async def repl(
     allow_dangerous: bool = False,
     max_turns: int | None = None,
     max_cost: float | None = None,
+    context_files: bool = True,
 ) -> int:
     """Run the interactive loop; returns the process exit code."""
     user_config = load_user_config()
@@ -210,9 +221,14 @@ async def repl(
     tool_list = list(ALL_TOOLS if tools is None else tools)
     session = _session_for(resume)
     guard = ContextGuard(model.context_window)
+    prompt = _system_prompt([tool.name for tool in tool_list])
+    if context_files:
+        prompt = system_prompt_with_context(
+            prompt, load_context_files(discover_context_files(Path.cwd()))
+        )
     agent = Agent(
         model=model,
-        system_prompt=_system_prompt([tool.name for tool in tool_list]),
+        system_prompt=prompt,
         tools=tool_list,
         api_key=key,
         thinking="high" if model.reasoning else "off",

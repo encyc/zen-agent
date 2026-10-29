@@ -101,6 +101,7 @@ def _patch_agent(monkeypatch, stream, captured: dict):
         transform_context=None,
         max_turns=None,
         max_cost=None,
+        context_files=True,
     ):
         captured.update(model=model, thinking=thinking, gate=gate, tools=tools)
         return Agent(
@@ -287,6 +288,7 @@ def test_headless_resume_loads_the_previous_transcript(monkeypatch, tmp_path):
         transform_context=None,
         max_turns=None,
         max_cost=None,
+        context_files=True,
     ):
         agent = Agent(
             model=model,
@@ -350,7 +352,8 @@ def test_guardrail_flags_reach_the_agent(monkeypatch):
     captured: dict = {}
 
     def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
-              session_id=None, transform_context=None, max_turns=None, max_cost=None):
+              session_id=None, transform_context=None, max_turns=None, max_cost=None,
+              context_files=True):
         captured.update(max_turns=max_turns, max_cost=max_cost)
         return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=fake_stream())
 
@@ -363,7 +366,8 @@ def test_max_turns_exhaustion_exits_one(monkeypatch, capsys):
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
 
     def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
-              session_id=None, transform_context=None, max_turns=None, max_cost=None):
+              session_id=None, transform_context=None, max_turns=None, max_cost=None,
+              context_files=True):
         return Agent(
             model=model,
             system_prompt="s",
