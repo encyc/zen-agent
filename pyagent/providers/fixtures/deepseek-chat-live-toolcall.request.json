@@ -1,0 +1,39 @@
+{
+  "url": "https://api.deepseek.com/chat/completions",
+  "scenario": "toolcall",
+  "thinking": null,
+  "params": {
+    "model": "deepseek-chat",
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "max_tokens": 8192,
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "get_weather",
+          "description": "Get the current weather for a city",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "city": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "city"
+            ]
+          }
+        }
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": "北京今天天气怎么样？必须调用 get_weather 工具。"
+      }
+    ]
+  }
+}

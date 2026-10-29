@@ -206,3 +206,15 @@ async def test_before_tool_call_shapes_block_reason_for_the_loop():
                        "this is a non-interactive run without --yes"}
     read = ToolCall(id="c2", name="read_file", arguments={"path": "a"})
     assert await gate.before_tool_call(read, {"path": "a"}) is None
+
+
+def test_keyboard_interrupt_returns_one_without_traceback(monkeypatch, capsys):
+    monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
+
+    async def interrupted(*_args, **_kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli_main, "run_headless", interrupted)
+    assert cli_main.main(["-p", "hi"]) == 1
+    err = capsys.readouterr().err
+    assert "interrupted" in err

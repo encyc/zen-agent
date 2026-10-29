@@ -1,0 +1,19 @@
+{
+  "url": "https://api.deepseek.com/chat/completions",
+  "scenario": "text",
+  "thinking": null,
+  "params": {
+    "model": "deepseek-chat",
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "max_tokens": 8192,
+    "messages": [
+      {
+        "role": "user",
+        "content": "用一句话介绍你自己。"
+      }
+    ]
+  }
+}

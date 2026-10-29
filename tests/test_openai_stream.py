@@ -444,3 +444,96 @@ async def test_stream_wiring_via_mock_transport(monkeypatch):
     assert events[-1].type == "done"
     assert events[-1].partial.usage.output == 18
     assert events[-1].partial.stop_reason == "stop"
+
+
+# ---------------------------------------------------------------------------
+# Live captures (scripts/capture_sse.py): real wire data beats hand-written
+# fixtures. Skipped when the capture is absent (offline checkout).
+# ---------------------------------------------------------------------------
+
+DEEPSEEK = CompatFlags(
+    thinking_format="deepseek",
+    requires_reasoning_content_on_assistant=True,
+    supports_developer_role=False,
+)
+
+
+def _deepseek_model(model_id: str = "deepseek-reasoner") -> Model:
+    return Model(
+        id=model_id,
+        provider="deepseek",
+        api="openai-completions",
+        base_url="https://api.deepseek.com",
+        context_window=128000,
+        max_tokens=8192,
+        reasoning=True,
+        cost=Cost(input=0.55, output=2.19),
+        compat=DEEPSEEK,
+    )
+
+
+async def _replay_live(name: str, model: Model | None = None) -> list:
+    chunks = _fixture_chunks(name)
+    return [
+        event
+        async for event in _events_from_chunks(model or _deepseek_model(), chunks)
+    ]
+
+
+async def test_live_deepseek_reasoning_capture_assembles_thinking_then_text():
+    name = "deepseek-reasoner-live-thinking.txt"
+    if not (FIXTURES / name).is_file():
+        pytest.skip(f"live capture missing: {name}")
+    events = await _replay_live(name, _deepseek_model())
+
+    types = [event.type for event in events]
+    assert types[0] == "start"
+    assert types[-1] == "done"
+    assert "thinking_start" in types and "thinking_delta" in types and "thinking_end" in types
+    assert "text_start" in types and "text_delta" in types
+    # thinking must precede text in the assembled content
+    thinking_at = types.index("thinking_start")
+    text_at = types.index("text_start")
+    assert thinking_at < text_at
+
+    final = events[-1].partial
+    assert final.stop_reason == "stop"
+    assert final.response_id  # captured from the wire
+    assert final.usage.input > 0 and final.usage.output > 0
+    assert final.usage.reasoning is not None
+    thinking = final.content[0]
+    assert isinstance(thinking, ThinkingContent) and thinking.thinking
+    assert any(isinstance(block, TextContent) and block.text for block in final.content)
+
+
+async def test_live_deepseek_toolcall_capture_assembles_arguments():
+    name = "deepseek-chat-live-toolcall.txt"
+    if not (FIXTURES / name).is_file():
+        pytest.skip(f"live capture missing: {name}")
+    events = await _replay_live(name, _deepseek_model("deepseek-chat"))
+
+    assert events[-1].type == "done"
+    assert events[-1].reason == "tool_use"
+    types = [event.type for event in events]
+    assert "toolcall_start" in types and "toolcall_end" in types
+
+    from pyagent.types import ToolCall
+
+    calls = [block for block in events[-1].partial.content if isinstance(block, ToolCall)]
+    assert len(calls) == 1
+    assert calls[0].name == "get_weather"
+    assert calls[0].arguments.get("city")
+    assert calls[0].arguments_error is None
+
+
+async def test_live_deepseek_text_capture_is_a_clean_text_turn():
+    name = "deepseek-chat-live-text.txt"
+    if not (FIXTURES / name).is_file():
+        pytest.skip(f"live capture missing: {name}")
+    events = await _replay_live(name, _deepseek_model("deepseek-chat"))
+
+    assert events[-1].type == "done"
+    assert events[-1].reason == "stop"
+    final = events[-1].partial
+    assert any(isinstance(block, TextContent) and block.text for block in final.content)
+    assert not any(isinstance(block, ThinkingContent) for block in final.content)

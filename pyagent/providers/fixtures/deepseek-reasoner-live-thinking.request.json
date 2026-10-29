@@ -1,0 +1,22 @@
+{
+  "url": "https://api.deepseek.com/chat/completions",
+  "scenario": "thinking",
+  "thinking": "high",
+  "params": {
+    "model": "deepseek-reasoner",
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "max_tokens": 65536,
+    "thinking": {
+      "type": "enabled"
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": "9.11 和 9.9 哪个大？简要说明推理过程，然后给出结论。"
+      }
+    ]
+  }
+}

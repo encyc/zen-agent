@@ -339,3 +339,33 @@ async def test_continue_requires_a_transcript():
     agent = make_agent(scripted([("text", "x"), end()]))
     with pytest.raises(ValueError, match="empty"):
         await agent.continue_()
+
+
+# ---------------------------------------------------------------------------
+# Task cancellation (what asyncio.run does on Ctrl+C)
+# ---------------------------------------------------------------------------
+
+
+async def test_task_cancellation_mid_stream_leaves_agent_idle_without_noise():
+    """Cancelling the run must not raise RuntimeError from generator cleanup."""
+
+    async def endless(model, messages, tools, options):
+        snap = partial()
+        yield AssistantEvent(type="start", partial=snap)
+        while True:  # streaming forever, like a long generation
+            await asyncio.sleep(0.005)
+
+    agent = make_agent(endless)
+    task = asyncio.create_task(agent.prompt("write a long essay"))
+    await asyncio.sleep(0.02)
+    assert agent.is_streaming
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert agent.is_idle
+    assert not agent.is_streaming
+    # No partial assistant message is committed; the prompt stays in the
+    # transcript so the harness can retry or continue from it.
+    assert isinstance(agent.messages[-1], UserMessage)
