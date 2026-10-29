@@ -24,6 +24,7 @@ from pyagent.cli.compact import compact
 from pyagent.cli.main import _api_key_for, _system_prompt, resolve_model, session_id_for
 from pyagent.cli.permissions import PermissionGate
 from pyagent.cli.render import tool_result_line
+from pyagent.config import ContextGuard, apply_user_config, load_user_config
 from pyagent.events import AgentEvent
 from pyagent.providers.catalog import find_model, load_catalog
 from pyagent.providers.registry import StreamFn
@@ -62,7 +63,12 @@ def split_input(line: str) -> tuple[str, str]:
 
 
 async def handle_slash(
-    agent: Agent, command: str, argument: str, *, print_fn: PrintFn = print
+    agent: Agent,
+    command: str,
+    argument: str,
+    *,
+    print_fn: PrintFn = print,
+    guard: ContextGuard | None = None,
 ) -> str | None:
     """Run one slash command; returns ``"exit"`` when the REPL should stop."""
     if command in ("exit", "quit"):
@@ -83,6 +89,8 @@ async def handle_slash(
         except KeyError:
             print_fn(f"unknown model: {argument}")
         else:
+            if guard is not None:
+                guard.context_window = agent.model.context_window
             print_fn(f"model -> {agent.model.id} (next turn)")
         return None
     if command == "thinking":
@@ -182,9 +190,10 @@ async def repl(
     tools: list | None = None,
 ) -> int:
     """Run the interactive loop; returns the process exit code."""
-    catalog = load_catalog()
+    user_config = load_user_config()
+    catalog = apply_user_config(load_catalog(), user_config)
     try:
-        model = resolve_model(catalog, model_id)
+        model = resolve_model(catalog, model_id or user_config.default_model)
     except KeyError as exc:
         print(f"pyagent: unknown model: {exc}", file=sys.stderr)
         return 1
@@ -197,6 +206,7 @@ async def repl(
 
     tool_list = list(ALL_TOOLS if tools is None else tools)
     session = _session_for(resume)
+    guard = ContextGuard(model.context_window)
     agent = Agent(
         model=model,
         system_prompt=_system_prompt([tool.name for tool in tool_list]),
@@ -205,6 +215,7 @@ async def repl(
         thinking="high" if model.reasoning else "off",
         session_id=session_id_for(model, session.path.stem),
         stream_fn=stream_fn,
+        transform_context=guard.transform,
         before_tool_call=PermissionGate(interactive=True).before_tool_call,
     )
     if resume is not None:
@@ -221,6 +232,7 @@ async def repl(
                 session.append(message)
         printer(event)
 
+    agent.subscribe(guard.on_event)
     agent.subscribe(on_event)
     if console is not None:
         console.print(f"[grey50]{session.path.name}[/grey50] · /help for commands")
@@ -253,7 +265,7 @@ async def repl(
 
             command, argument = split_input(line)
             if command:
-                if await handle_slash(agent, command, argument, print_fn=print_fn) == "exit":
+                if await handle_slash(agent, command, argument, print_fn=print_fn, guard=guard) == "exit":
                     if run_task is not None:
                         agent.abort()
                         await asyncio.gather(run_task, return_exceptions=True)

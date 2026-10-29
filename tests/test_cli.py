@@ -83,7 +83,7 @@ def test_resolve_model_rejects_unknown_id():
 def _patch_agent(monkeypatch, stream, captured: dict):
     """Replace _build_agent with one that injects ``stream``, recording args."""
 
-    def build(model, api_key, thinking, gate, stream_fn=None, tools=None, session_id=None):
+    def build(model, api_key, thinking, gate, stream_fn=None, tools=None, session_id=None, transform_context=None):
         captured.update(model=model, thinking=thinking, gate=gate, tools=tools)
         return Agent(
             model=model,
@@ -224,3 +224,60 @@ def test_keyboard_interrupt_returns_one_without_traceback(monkeypatch, capsys):
     assert cli_main.main(["-p", "hi"]) == 1
     err = capsys.readouterr().err
     assert "interrupted" in err
+
+
+def test_config_default_model_is_used(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    from pyagent.config import UserConfig
+
+    monkeypatch.setattr(
+        cli_main, "load_user_config", lambda: UserConfig(default_model="deepseek-chat")
+    )
+    captured: dict = {}
+    _patch_agent(monkeypatch, fake_stream(), captured)
+
+    assert cli_main.main(["-p", "hi"]) == 0
+    assert captured["model"].id == "deepseek-chat"
+
+
+def test_headless_resume_loads_the_previous_transcript(monkeypatch, tmp_path):
+    import pyagent.agent.session as session_module
+    from pyagent.agent.session import Session
+    from pyagent.types import UserMessage
+
+    monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
+    monkeypatch.setattr(session_module, "sessions_dir", lambda: tmp_path)
+    path = tmp_path / "s.jsonl"
+    Session(path).append(UserMessage(content="earlier question", timestamp=1))
+
+    built: dict = {}
+
+    def build(model, api_key, thinking, gate, stream_fn=None, tools=None, session_id=None, transform_context=None):
+        agent = Agent(
+            model=model,
+            system_prompt="s",
+            api_key=api_key,
+            stream_fn=fake_stream("resumed ok"),
+        )
+        built["agent"] = agent
+        return agent
+
+    monkeypatch.setattr(cli_main, "_build_agent", build)
+
+    assert cli_main.main(["-p", "next question", "--resume", str(path)]) == 0
+    texts = [m.content for m in built["agent"].messages if isinstance(m, UserMessage)]
+    assert "earlier question" in texts
+
+
+def test_headless_run_persists_a_session(monkeypatch, tmp_path):
+    import pyagent.agent.session as session_module
+    from pyagent.agent.session import Session
+
+    monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
+    monkeypatch.setattr(session_module, "sessions_dir", lambda: tmp_path)
+    _patch_agent(monkeypatch, fake_stream("persisted"), {})
+
+    assert cli_main.main(["-p", "hi"]) == 0
+    files = list(tmp_path.glob("*.jsonl"))
+    assert len(files) == 1
+    assert len(Session(files[0]).load()) == 2  # user + assistant

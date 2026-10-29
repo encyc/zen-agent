@@ -23,7 +23,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from pyagent.agent import Agent
+from pyagent.agent.session import Session, latest_session, session_path
 from pyagent.cli.permissions import PermissionGate
+from pyagent.config import ContextGuard, apply_user_config, load_user_config
 from pyagent.events import AgentEvent
 from pyagent.providers.catalog import Model, ProviderConfig, find_model, load_catalog
 from pyagent.providers.registry import StreamFn
@@ -82,6 +84,7 @@ def _build_agent(
     stream_fn: StreamFn | None = None,
     tools: list | None = None,
     session_id: str | None = None,
+    transform_context=None,
 ) -> Agent:
     """Construct the run's Agent (a seam for tests to inject a fake stream)."""
     tool_list = list(ALL_TOOLS if tools is None else tools)
@@ -94,6 +97,7 @@ def _build_agent(
         session_id=session_id_for(model, session_id),
         stream_fn=stream_fn,
         before_tool_call=gate.before_tool_call,
+        transform_context=transform_context,
     )
 
 
@@ -161,11 +165,13 @@ async def run_headless(
     json_output: bool = False,
     stream_fn: StreamFn | None = None,
     tools: list | None = None,
+    resume: str | Path | None = None,
 ) -> int:
     """Run one prompt to completion; returns the process exit code."""
-    catalog = load_catalog()
+    user_config = load_user_config()
+    catalog = apply_user_config(load_catalog(), user_config)
     try:
-        model = resolve_model(catalog, model_id)
+        model = resolve_model(catalog, model_id or user_config.default_model)
     except KeyError as exc:
         print(f"pyagent: unknown model: {exc}", file=sys.stderr)
         return 1
@@ -179,10 +185,39 @@ async def run_headless(
     if thinking is None:
         thinking = "high" if model.reasoning else "off"
     gate = PermissionGate(assume_yes=assume_yes, interactive=False)
-    agent = _build_agent(model, api_key, thinking, gate, stream_fn=stream_fn, tools=tools)
+    guard = ContextGuard(model.context_window)
+    agent = _build_agent(
+        model,
+        api_key,
+        thinking,
+        gate,
+        stream_fn=stream_fn,
+        tools=tools,
+        transform_context=guard.transform,
+    )
+
+    if resume is not None:
+        path = latest_session() if resume == "latest" else Path(resume)
+        if path is not None and path.is_file():
+            session = Session(path)
+            agent.replace_messages(session.load())
+            for warning in session.warnings:
+                print(f"pyagent: {warning}", file=sys.stderr)
+        else:
+            print(f"pyagent: no session to resume ({resume})", file=sys.stderr)
+            session = Session(session_path())
+    else:
+        session = Session(session_path())
+
+    def persist(event: AgentEvent) -> None:
+        if event.type == "agent_end" and event.new_messages:
+            for message in event.new_messages:
+                session.append(message)
 
     # --json must not stream plain text; collect it into a buffer instead.
     printer = _PlainOutput(out=io.StringIO() if json_output else None)
+    agent.subscribe(guard.on_event)
+    agent.subscribe(persist)
     agent.subscribe(printer)
     await agent.prompt(prompt)
 
@@ -245,6 +280,7 @@ def main(argv: list[str] | None = None) -> int:
                 assume_yes=args.yes,
                 thinking=args.thinking,
                 json_output=args.json,
+                resume=args.resume,
             )
         )
     except KeyboardInterrupt:
