@@ -25,6 +25,9 @@ SLASH_COMMANDS: dict[str, str] = {
     "/thinking": "show or set reasoning level: off|low|medium|high|max",
     "/session": "show model, context and spend for this session",
     "/compact": "summarize the conversation into a fresh session",
+    "/sessions": "list saved sessions",
+    "/fork": "branch a new session at a user message (/fork <n>)",
+    "/import": "load a session file and continue it (/import <path>)",
 }
 
 #: Text matched when the cursor sits in an ``@path`` token.

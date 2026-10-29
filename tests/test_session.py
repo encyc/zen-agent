@@ -89,3 +89,89 @@ def test_latest_session_picks_the_newest_name(isolated_sessions):
 
 def test_latest_session_none_when_empty(isolated_sessions):
     assert latest_session() is None
+
+
+# ---------------------------------------------------------------------------
+# S1-T8: listing, fork, rewrite
+# ---------------------------------------------------------------------------
+
+
+def _write_session(directory, name: str, texts: list[str], mtime: float | None = None):
+    path = directory / name
+    session = Session(path)
+    for index, text in enumerate(texts):
+        session.append(user(text, timestamp=index))
+        session.append(assistant(f"re: {text}", timestamp=index))
+    if mtime is not None:
+        import os
+
+        os.utime(path, (mtime, mtime))
+    return path
+
+
+def test_list_sessions_is_newest_first_and_skips_broken(isolated_sessions):
+    isolated_sessions.mkdir(parents=True)
+    _write_session(isolated_sessions, "old.jsonl", ["one"], mtime=1_000)
+    _write_session(isolated_sessions, "new.jsonl", ["two", "three"], mtime=2_000)
+    (isolated_sessions / "broken.jsonl").write_text("{not json\n")
+
+    from pyagent.agent.session import list_sessions
+
+    infos = list_sessions()
+    assert [info.path.name for info in infos] == ["new.jsonl", "old.jsonl"]
+    assert infos[0].messages == 4
+    assert infos[0].title == "two"
+    assert infos[1].title == "one"
+
+
+def test_list_sessions_honours_the_limit(isolated_sessions):
+    isolated_sessions.mkdir(parents=True)
+    for index in range(5):
+        _write_session(isolated_sessions, f"s{index}.jsonl", [f"t{index}"], mtime=index + 1)
+
+    from pyagent.agent.session import list_sessions
+
+    assert len(list_sessions(limit=2)) == 2
+
+
+def test_fork_at_copies_the_prefix_without_touching_the_source(isolated_sessions):
+    isolated_sessions.mkdir(parents=True)
+    original = isolated_sessions / "orig.jsonl"
+    session = Session(original)
+    messages = [user("first"), assistant("a1"), user("second"), assistant("a2")]
+    for message in messages:
+        session.append(message)
+    before = original.read_bytes()
+
+    forked_path = session.fork_at(2)  # include the 2nd user message
+
+    assert original.read_bytes() == before  # immutable source
+    forked = Session(forked_path).load()
+    assert [type(m).__name__ for m in forked] == ["UserMessage", "AssistantMessage", "UserMessage"]
+    assert forked[2].content == "second"
+    assert forked_path.name.endswith("-fork2.jsonl")
+
+
+def test_fork_at_rejects_an_out_of_range_index(isolated_sessions):
+    isolated_sessions.mkdir(parents=True)
+    session = Session(isolated_sessions / "s.jsonl")
+    session.append(user("only"))
+    for bad in (0, -1, 2):
+        try:
+            session.fork_at(bad)
+        except ValueError as exc:
+            assert "out of range" in str(exc)
+        else:  # pragma: no cover
+            raise AssertionError(f"expected ValueError for {bad}")
+
+
+def test_rewrite_writes_a_new_file(isolated_sessions):
+    isolated_sessions.mkdir(parents=True)
+    session = Session(isolated_sessions / "s.jsonl")
+    for message in [user("keep"), assistant("kept")]:
+        session.append(message)
+
+    new_path = session.rewrite([user("only")])
+    assert new_path != session.path
+    assert Session(new_path).load()[0].content == "only"
+    assert len(session.load()) == 2  # source untouched

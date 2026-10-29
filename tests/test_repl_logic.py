@@ -215,3 +215,71 @@ async def test_missing_key_returns_one(monkeypatch):
         monkeypatch.delenv(name, raising=False)
     code = await repl("glm-5.3", stream_fn=scripted_stream(), input_fn=scripted_input())
     assert code == 1
+
+
+# ---------------------------------------------------------------------------
+# S1-T8: session commands
+# ---------------------------------------------------------------------------
+
+
+async def test_slash_sessions_lists_and_marks_the_current(isolated_sessions, capsys):
+    from pyagent.agent.session import Session
+    from pyagent.types import UserMessage
+
+    isolated_sessions.mkdir(parents=True)
+    current = Session(isolated_sessions / "current.jsonl")
+    current.append(UserMessage(content="hello", timestamp=1))
+    Session(isolated_sessions / "other.jsonl").append(UserMessage(content="x", timestamp=1))
+
+    agent = Agent(model(), "s", api_key="k")
+    await handle_slash(agent, "sessions", "", session=current)
+    out = capsys.readouterr().out
+    assert "current.jsonl" in out and "other.jsonl" in out
+    assert "*" in out
+
+
+async def test_slash_fork_switches_the_transcript(isolated_sessions, capsys):
+    from pyagent.agent.session import Session
+    from pyagent.types import AssistantMessage, TextContent, Usage, UserMessage
+
+    isolated_sessions.mkdir(parents=True)
+    session = Session(isolated_sessions / "s.jsonl")
+    session.append(UserMessage(content="first", timestamp=1))
+    session.append(AssistantMessage(content=[TextContent(text="a1")], provider="p",
+                                    model="m", usage=Usage(), stop_reason="stop", timestamp=2))
+    session.append(UserMessage(content="second", timestamp=3))
+
+    switched: list[Session] = []
+    agent = Agent(model(), "s", api_key="k")
+    await handle_slash(
+        agent, "fork", "2", session=session, switch_session=switched.append
+    )
+    assert switched, "fork must switch the active session"
+    assert [m.content for m in agent.messages if isinstance(m, UserMessage)] == ["first", "second"]
+
+
+async def test_slash_fork_rejects_bad_arguments(isolated_sessions, capsys):
+    from pyagent.agent.session import Session
+
+    isolated_sessions.mkdir(parents=True)
+    session = Session(isolated_sessions / "s.jsonl")
+    agent = Agent(model(), "s", api_key="k")
+    await handle_slash(agent, "fork", "x", session=session)
+    assert "usage: /fork" in capsys.readouterr().out
+
+
+async def test_slash_import_loads_a_session(isolated_sessions, capsys):
+    from pyagent.agent.session import Session
+    from pyagent.types import UserMessage
+
+    isolated_sessions.mkdir(parents=True)
+    path = isolated_sessions / "imported.jsonl"
+    Session(path).append(UserMessage(content="from disk", timestamp=1))
+
+    switched: list[Session] = []
+    agent = Agent(model(), "s", api_key="k")
+    await handle_slash(
+        agent, "import", str(path), switch_session=switched.append
+    )
+    assert [m.content for m in agent.messages] == ["from disk"]
+    assert switched and switched[0].path == path

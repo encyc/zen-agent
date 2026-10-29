@@ -19,7 +19,7 @@ from pathlib import Path
 from rich.console import Console
 
 from pyagent.agent import Agent
-from pyagent.agent.session import Session, latest_session, session_path
+from pyagent.agent.session import Session, latest_session, list_sessions, session_path
 from pyagent.cli.compact import compact
 from pyagent.cli.completion import ReplCompleter, help_text
 from pyagent.cli.main import (
@@ -74,6 +74,8 @@ async def handle_slash(
     print_fn: PrintFn = print,
     guard: ContextGuard | None = None,
     session_path: Path | None = None,
+    session: Session | None = None,
+    switch_session=None,
 ) -> str | None:
     """Run one slash command; returns ``"exit"`` when the REPL should stop."""
     if command in ("exit", "quit"):
@@ -105,6 +107,54 @@ async def handle_slash(
             return None
         agent.thinking = level
         print_fn(f"thinking -> {level}")
+        return None
+    if command == "sessions":
+        infos = list_sessions()
+        if not infos:
+            print_fn("no saved sessions")
+            return None
+        current = session.path if session is not None else None
+        for position, info in enumerate(infos, start=1):
+            mark = "*" if info.path == current else " "
+            title = info.title or "(empty)"
+            print_fn(f"{mark} {position:2d}. {info.path.name} · {info.messages} msgs · {title}")
+        return None
+    if command == "fork":
+        if session is None:
+            print_fn("fork is unavailable in this session")
+            return None
+        try:
+            index = int(argument)
+        except ValueError:
+            print_fn("usage: /fork <n>   (n = 1-based user message to branch after)")
+            return None
+        try:
+            forked_path = session.fork_at(index)
+        except ValueError as exc:
+            print_fn(str(exc))
+            return None
+        forked = Session(forked_path)
+        agent.replace_messages(forked.load())
+        if switch_session is not None:
+            switch_session(forked)
+        print_fn(f"forked at message {index} -> {forked_path.name}")
+        return None
+    if command == "import":
+        if not argument:
+            print_fn("usage: /import <path>")
+            return None
+        imported_path = Path(argument).expanduser()
+        if not imported_path.is_file():
+            print_fn(f"no such session: {imported_path}")
+            return None
+        imported = Session(imported_path)
+        messages = imported.load()
+        for warning in imported.warnings:
+            print_fn(warning)
+        agent.replace_messages(messages)
+        if switch_session is not None:
+            switch_session(imported)
+        print_fn(f"imported {len(messages)} messages from {imported_path.name}")
         return None
     if command == "compact":
         try:
@@ -251,10 +301,15 @@ async def repl(
     console = Console() if sys.stdout.isatty() else None
     printer = _EventPrinter(console=console, print_fn=print_fn)
 
+    session_box: list[Session] = [session]
+
+    def switch_session(new_session: Session) -> None:
+        session_box[0] = new_session
+
     def on_event(event: AgentEvent) -> None:
         if event.type == "agent_end" and event.new_messages:
             for message in event.new_messages:
-                session.append(message)
+                session_box[0].append(message)
         printer(event)
 
     agent.subscribe(guard.on_event)
@@ -297,7 +352,9 @@ async def repl(
                         argument,
                         print_fn=print_fn,
                         guard=guard,
-                        session_path=session.path,
+                        session_path=session_box[0].path,
+                        session=session_box[0],
+                        switch_session=switch_session,
                     )
                     == "exit"
                 ):

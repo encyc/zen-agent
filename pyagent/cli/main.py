@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from pyagent.agent import Agent
-from pyagent.agent.session import Session, latest_session, session_path
+from pyagent.agent.session import Session, latest_session, list_sessions, session_path
 from pyagent.cli.permissions import PermissionGate
 from pyagent.config import ContextGuard, apply_user_config, load_user_config
 from pyagent.context_files import (
@@ -306,6 +306,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-turns", type=int, help="stop after this many provider requests"
     )
     parser.add_argument(
+        "--list-sessions",
+        action="store_true",
+        help="list saved sessions and exit",
+    )
+    parser.add_argument(
         "--no-completion",
         action="store_true",
         help="disable slash-command and @path completion in the repl",
@@ -323,6 +328,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.list_sessions:
+        infos = list_sessions()
+        if not infos:
+            print("no saved sessions")
+            return 0
+        for position, info in enumerate(infos, start=1):
+            print(f"{position:2d}. {info.path.name} · {info.messages} msgs · {info.title or '(empty)'}")
+        return 0
     if not args.prompt:
         # Interactive mode lives in repl.py; imported lazily to avoid a cycle.
         from pyagent.cli.repl import repl

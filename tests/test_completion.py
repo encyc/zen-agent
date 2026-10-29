@@ -15,7 +15,7 @@ def complete(completer: ReplCompleter, text: str) -> list[str]:
 def test_slash_prefix_completes_commands():
     completer = ReplCompleter(base_dir=Path("/tmp"))
     assert complete(completer, "/mo") == ["/model"]
-    assert complete(completer, "/se") == ["/session"]
+    assert set(complete(completer, "/se")) == {"/session", "/sessions"}
 
 
 def test_bare_slash_lists_every_command():

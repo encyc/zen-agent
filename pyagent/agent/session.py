@@ -16,9 +16,16 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from pyagent.types import Message, message_from_json
+from pyagent.types import Message, UserMessage, message_from_json
 
-__all__ = ["Session", "latest_session", "session_path", "sessions_dir"]
+__all__ = [
+    "Session",
+    "SessionInfo",
+    "latest_session",
+    "list_sessions",
+    "session_path",
+    "sessions_dir",
+]
 
 
 def sessions_dir() -> Path:
@@ -31,6 +38,16 @@ def session_path(prefix: str = "") -> Path:
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     suffix = f"-{prefix}" if prefix else ""
     return sessions_dir() / f"{stamp}{suffix}.jsonl"
+
+
+@dataclass
+class SessionInfo:
+    """Cheap description of a saved session for listings."""
+
+    path: Path
+    mtime: float
+    messages: int
+    title: str
 
 
 @dataclass
@@ -80,6 +97,52 @@ class Session:
         self._messages = messages
         return messages
 
+    def read_info(self) -> SessionInfo:
+        """Summarize this session; raises ValueError when nothing is readable."""
+        messages = self.load()
+        if not messages and self.warnings:
+            raise ValueError(f"{self.path.name} is unreadable")
+        title = ""
+        for message in messages:
+            if isinstance(message, UserMessage) and isinstance(message.content, str):
+                title = " ".join(message.content.split())[:60]
+                break
+        return SessionInfo(
+            path=self.path,
+            mtime=self.path.stat().st_mtime,
+            messages=len(messages),
+            title=title,
+        )
+
+    def fork_at(self, index: int) -> Path:
+        """Copy the transcript up to (and including) user message ``index``.
+
+        ``index`` is 1-based over user messages. The new file is written; this
+        session's file is never modified.
+        """
+        messages = self.load()
+        user_positions = [
+            position
+            for position, message in enumerate(messages)
+            if isinstance(message, UserMessage)
+        ]
+        if index < 1 or index > len(user_positions):
+            raise ValueError(
+                f"fork index {index} out of range (1..{len(user_positions)})"
+            )
+        prefix = messages[: user_positions[index - 1] + 1]
+        forked = Session(session_path(f"fork{index}"))
+        for message in prefix:
+            forked.append(message)
+        return forked.path
+
+    def rewrite(self, messages: list[Message]) -> Path:
+        """Write ``messages`` to a *new* session file and return its path."""
+        rewritten = Session(session_path("rewrite"))
+        for message in messages:
+            rewritten.append(message)
+        return rewritten.path
+
     @property
     def messages(self) -> list[Message]:
         """The cached transcript (loaded on first access)."""
@@ -87,6 +150,21 @@ class Session:
             self.load()
         assert self._messages is not None
         return self._messages
+
+
+def list_sessions(limit: int = 20) -> list[SessionInfo]:
+    """Saved sessions, newest first, skipping files that cannot be read."""
+    directory = sessions_dir()
+    if not directory.is_dir():
+        return []
+    infos: list[SessionInfo] = []
+    for path in directory.glob("*.jsonl"):
+        try:
+            infos.append(Session(path).read_info())
+        except (ValueError, OSError):
+            continue
+    infos.sort(key=lambda info: info.mtime, reverse=True)
+    return infos[:limit]
 
 
 def latest_session() -> Path | None:
