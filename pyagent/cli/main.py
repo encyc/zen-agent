@@ -24,6 +24,7 @@ from pathlib import Path
 
 from pyagent.agent import Agent
 from pyagent.agent.session import Session, latest_session, list_sessions, session_path
+from pyagent.cli.compact import maybe_auto_compact
 from pyagent.cli.permissions import PermissionGate
 from pyagent.config import ContextGuard, apply_user_config, load_user_config
 from pyagent.context_files import (
@@ -193,6 +194,7 @@ async def run_headless(
     stream_fn: StreamFn | None = None,
     tools: list | None = None,
     resume: str | Path | None = None,
+    auto_compact: bool = True,
 ) -> int:
     """Run one prompt to completion; returns the process exit code."""
     user_config = load_user_config()
@@ -252,6 +254,10 @@ async def run_headless(
     agent.subscribe(persist)
     agent.subscribe(printer)
     await agent.prompt(prompt)
+    if auto_compact:
+        await maybe_auto_compact(
+            agent, print_fn=lambda message: print(message, file=sys.stderr)
+        )
 
     ok = agent.error_message is None and agent.termination in ("stop", "tool_terminate")
     if json_output:
@@ -311,6 +317,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="list saved sessions and exit",
     )
     parser.add_argument(
+        "--no-auto-compact",
+        action="store_true",
+        help="never compact automatically when the context gets full",
+    )
+    parser.add_argument(
         "--no-completion",
         action="store_true",
         help="disable slash-command and @path completion in the repl",
@@ -348,6 +359,7 @@ def main(argv: list[str] | None = None) -> int:
                     allow_dangerous=args.allow_dangerous,
                     context_files=not args.no_context_files,
                     completion=not args.no_completion,
+                    auto_compact=not args.no_auto_compact,
                 )
             )
         except KeyboardInterrupt:
@@ -366,6 +378,7 @@ def main(argv: list[str] | None = None) -> int:
                 max_turns=args.max_turns,
                 max_cost=args.max_cost,
                 context_files=not args.no_context_files,
+                auto_compact=not args.no_auto_compact,
             )
         )
     except KeyboardInterrupt:

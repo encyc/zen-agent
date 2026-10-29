@@ -145,3 +145,73 @@ async def test_compact_uses_the_agent_stream_fn_by_default():
     assert seen, "the agent's stream fn must be used when none is passed"
     # the summarization request carries the transcript inside the user message
     assert "把文件改一下" in seen[0][-1].content
+
+
+# ---------------------------------------------------------------------------
+# S1-T10: automatic compaction
+# ---------------------------------------------------------------------------
+
+from pyagent.cli.compact import maybe_auto_compact, should_auto_compact
+
+
+def test_should_auto_compact_threshold():
+    assert should_auto_compact(Usage(input=84), 100) is False
+    assert should_auto_compact(Usage(input=85), 100) is True
+    assert should_auto_compact(Usage(input=40, cache_read=45), 100) is True
+    assert should_auto_compact(Usage(input=999), 0) is False
+    assert should_auto_compact(None, 100) is False
+
+
+def _big_agent(stream, context_window=100, prompt_tokens=90):
+    agent = Agent(model(), "system", api_key="k", stream_fn=stream)
+    agent.model.context_window = context_window
+    agent.replace_messages(
+        [
+            UserMessage(content="do the thing", timestamp=1),
+            AssistantMessage(
+                content=[TextContent(text="done")],
+                provider="test",
+                model="m",
+                usage=Usage(input=prompt_tokens),
+                stop_reason="stop",
+                timestamp=2,
+            ),
+        ]
+    )
+    return agent
+
+
+async def test_maybe_auto_compact_triggers_above_the_threshold(isolated_sessions):
+    agent = _big_agent(summary_stream("summary text"))
+
+    path = await maybe_auto_compact(agent, print_fn=lambda *_: None)
+
+    assert path is not None and path.parent == isolated_sessions
+    assert len(agent.messages) == 1
+    assert agent.messages[0].content.startswith("# 此前会话摘要")
+
+
+async def test_maybe_auto_compact_does_nothing_below_the_threshold(isolated_sessions):
+    agent = _big_agent(summary_stream(), prompt_tokens=10)
+    assert await maybe_auto_compact(agent, print_fn=lambda *_: None) is None
+    assert len(agent.messages) == 2
+
+
+async def test_maybe_auto_compact_failure_keeps_the_transcript(isolated_sessions):
+    agent = _big_agent(failing_stream("nope"))
+    before = agent.messages
+    path = await maybe_auto_compact(agent, print_fn=lambda *_: None)
+    assert path is None
+    assert agent.messages == before
+
+
+async def test_maybe_auto_compact_skips_while_streaming(isolated_sessions):
+    agent = _big_agent(summary_stream())
+    agent._run = object()  # pretend a run is in flight
+    assert await maybe_auto_compact(agent, print_fn=lambda *_: None) is None
+    agent._run = None
+
+
+async def test_maybe_auto_compact_skips_an_empty_transcript():
+    agent = Agent(model(), "system", api_key="k", stream_fn=summary_stream())
+    assert await maybe_auto_compact(agent, print_fn=lambda *_: None) is None

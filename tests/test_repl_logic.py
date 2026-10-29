@@ -317,3 +317,23 @@ async def test_slash_undo_with_nothing_to_drop(isolated_sessions, capsys):
     agent = Agent(model(), "s", api_key="k")
     await handle_slash(agent, "undo", "", session=Session(isolated_sessions / "s.jsonl"))
     assert "nothing to undo" in capsys.readouterr().out
+
+
+async def test_repl_prints_a_status_line_after_each_run(isolated_sessions):
+    lines: list[str] = []
+    code = await repl(
+        "glm-5.3",
+        stream_fn=scripted_stream(0.0, "hello"),
+        input_fn=scripted_input("hi", "/exit", settle=0.02),
+        print_fn=lambda *a, **k: lines.append("".join(str(x) for x in a)),
+        api_key="k",
+    )
+    assert code == 0
+    assert any("msgs" in line and "ctx" in line for line in lines), lines
+
+
+async def test_slash_session_prints_state(isolated_sessions, capsys):
+    agent = Agent(model(), "s", api_key="k")
+    await handle_slash(agent, "session", "")
+    out = capsys.readouterr().out
+    assert "glm-5.3" in out and "msgs" in out

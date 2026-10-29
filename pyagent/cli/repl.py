@@ -26,7 +26,7 @@ from pyagent.agent.session import (
     session_path,
     truncate_last_turn,
 )
-from pyagent.cli.compact import compact
+from pyagent.cli.compact import compact, maybe_auto_compact
 from pyagent.cli.completion import ReplCompleter, help_text
 from pyagent.cli.main import (
     _api_key_for,
@@ -35,7 +35,12 @@ from pyagent.cli.main import (
     session_id_for,
 )
 from pyagent.cli.permissions import PermissionGate
-from pyagent.cli.render import render_diff, tool_result_line
+from pyagent.cli.render import (
+    aggregate_usage,
+    render_diff,
+    status_line,
+    tool_result_line,
+)
 from pyagent.config import ContextGuard, apply_user_config, load_user_config
 from pyagent.context_files import (
     discover_context_files,
@@ -180,6 +185,19 @@ async def handle_slash(
         else:
             print_fn(f"undid the last turn ({dropped} messages)")
         return None
+    if command == "session":
+        print_fn(
+            status_line(
+                model_id=agent.model.id,
+                thinking=agent.thinking,
+                messages=len(agent.messages),
+                usage=aggregate_usage(agent.messages),
+                context_window=agent.model.context_window,
+            )
+        )
+        if session_path is not None:
+            print_fn(f"session: {session_path}")
+        return None
     if command == "compact":
         try:
             path = await compact(agent)
@@ -278,6 +296,7 @@ async def repl(
     max_cost: float | None = None,
     context_files: bool = True,
     completion: bool = True,
+    auto_compact: bool = True,
 ) -> int:
     """Run the interactive loop; returns the process exit code."""
     user_config = load_user_config()
@@ -350,6 +369,20 @@ async def repl(
         if run_task is not None and run_task.done():
             await asyncio.gather(run_task, return_exceptions=True)
             run_task = None
+            if auto_compact:
+                compacted = await maybe_auto_compact(agent, print_fn=print_fn)
+                if compacted is not None:
+                    switch_session(Session(compacted))
+            print_fn(
+                status_line(
+                    model_id=agent.model.id,
+                    thinking=agent.thinking,
+                    messages=len(agent.messages),
+                    usage=aggregate_usage(agent.messages),
+                    context_window=agent.model.context_window,
+                    session_name=session_box[0].path.name,
+                )
+            )
 
     try:
         while True:

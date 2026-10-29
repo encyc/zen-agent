@@ -14,9 +14,24 @@ from pyagent.agent import Agent
 from pyagent.agent.session import Session, session_path
 from pyagent.providers.openai_completions import StreamOptions
 from pyagent.providers.registry import StreamFn, safe_stream, stream_fn_for
-from pyagent.types import SystemMessage, TextContent, UserMessage
+from pyagent.types import (
+    AssistantMessage,
+    SystemMessage,
+    TextContent,
+    Usage,
+    UserMessage,
+)
 
-__all__ = ["SUMMARIZE_PROMPT", "compact"]
+__all__ = [
+    "AUTO_COMPACT_THRESHOLD",
+    "SUMMARIZE_PROMPT",
+    "compact",
+    "maybe_auto_compact",
+    "should_auto_compact",
+]
+
+#: Fraction of the context window that triggers an automatic compaction.
+AUTO_COMPACT_THRESHOLD = 0.85
 
 SUMMARIZE_PROMPT = """请把下面这段编码会话压缩成一份可继续工作的摘要。
 
@@ -60,6 +75,50 @@ def _render_transcript(messages) -> str:
             continue  # tool output is summarized by the assistant's own text
         lines.append(f"## {role}\n{text}")
     return "\n\n".join(lines)
+
+
+def _last_usage(agent: Agent) -> Usage | None:
+    for message in reversed(agent.messages):
+        if isinstance(message, AssistantMessage):
+            return message.usage
+    return None
+
+
+def should_auto_compact(
+    usage: Usage | None,
+    context_window: int,
+    threshold: float = AUTO_COMPACT_THRESHOLD,
+) -> bool:
+    """True when the last turn's prompt tokens crossed the compaction threshold."""
+    if usage is None or context_window <= 0:
+        return False
+    used = usage.input + usage.cache_read
+    return used >= context_window * threshold
+
+
+async def maybe_auto_compact(
+    agent: Agent,
+    *,
+    threshold: float = AUTO_COMPACT_THRESHOLD,
+    stream_fn: StreamFn | None = None,
+    print_fn=print,
+) -> Path | None:
+    """Compact between runs when the context is nearly full.
+
+    Never runs mid-run (nested model calls would complicate the transcript), and
+    a failed summarization leaves the conversation untouched.
+    """
+    if agent.is_streaming or not agent.messages:
+        return None
+    if not should_auto_compact(_last_usage(agent), agent.model.context_window, threshold):
+        return None
+    try:
+        path = await compact(agent, stream_fn)
+    except Exception as exc:  # noqa: BLE001 - automatic path must never break the session
+        print_fn(f"auto-compaction failed: {exc}")
+        return None
+    print_fn(f"auto-compacted into {path.name}")
+    return path
 
 
 async def compact(agent: Agent, stream_fn: StreamFn | None = None) -> Path:
