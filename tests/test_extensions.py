@@ -146,7 +146,7 @@ def register(api):
 
     def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
               session_id=None, transform_context=None, max_turns=None,
-              max_cost=None, context_files=True, extra_prompt=""):
+              max_cost=None, retries=0, context_files=True, extra_prompt=""):
         captured["tools"] = [tool.name for tool in (tools or [])]
         captured["extra"] = extra_prompt
         return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=fake)

@@ -414,6 +414,7 @@ async def repl(
     allow_dangerous: bool = False,
     max_turns: int | None = None,
     max_cost: float | None = None,
+    retries: int = 0,
     context_files: bool = True,
     completion: bool = True,
     auto_compact: bool = True,
@@ -547,6 +548,7 @@ async def repl(
         transform_context=guard.transform,
         max_turns=max_turns,
         max_cost=max_cost,
+        retries=retries,
         before_tool_call=PermissionGate(
             interactive=True,
             allow_dangerous=allow_dangerous,

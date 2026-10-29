@@ -84,6 +84,7 @@ class Agent:
         transform_context: Callable | None = None,
         max_turns: int | None = None,
         max_cost: float | None = None,
+        retries: int = 0,
     ) -> None:
         self.model = model
         self.system_prompt = system_prompt
@@ -97,6 +98,7 @@ class Agent:
         self.transform_context = transform_context
         self.max_turns = max_turns
         self.max_cost = max_cost
+        self.retries = retries
 
         self._state = AgentState(messages=list(messages or []))
         self._listeners: list[AgentListener] = []
@@ -204,6 +206,7 @@ class Agent:
             stream_fn=self.stream_fn,
             max_turns=self.max_turns,
             max_cost=self.max_cost,
+            retries=self.retries,
         )
 
     async def _drain_steering(self) -> list[Message]:

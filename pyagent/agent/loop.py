@@ -37,7 +37,8 @@ from pyagent.agent.validate import validate_arguments
 from pyagent.events import AbortToken, AgentEvent
 from pyagent.providers.catalog import Model
 from pyagent.providers.openai_completions import StreamOptions
-from pyagent.providers.registry import StreamFn, safe_stream, stream_fn_for
+from pyagent.providers.registry import StreamFn, stream_fn_for
+from pyagent.retry import stream_with_retry
 from pyagent.types import (
     AssistantMessage,
     ImageContent,
@@ -136,6 +137,8 @@ class AgentConfig:
     max_turns: int | None = None
     #: Hard cap on accumulated spend in USD for one run (None -> unlimited).
     max_cost: float | None = None
+    #: Extra attempts for transient assistant-call failures (0 -> no retry).
+    retries: int = 0
 
 
 @dataclass
@@ -404,7 +407,14 @@ async def agent_loop(
             yield AgentEvent(type="turn_start")
             final: AssistantMessage | None = None
             saw_message_start = False
-            async for event in safe_stream(stream_fn, config.model, request_messages, tool_defs, options):
+            async for event in stream_with_retry(
+                stream_fn,
+                config.model,
+                request_messages,
+                tool_defs,
+                options,
+                retries=config.retries,
+            ):
                 if not saw_message_start:
                     saw_message_start = True
                     yield AgentEvent(type="message_start", message=event.partial)

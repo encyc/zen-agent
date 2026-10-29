@@ -101,7 +101,7 @@ def _patch_agent(monkeypatch, stream, captured: dict):
         transform_context=None,
         max_turns=None,
         max_cost=None,
-        context_files=True,
+        retries=0, context_files=True,
         extra_prompt="",
     ):
         captured.update(model=model, thinking=thinking, gate=gate, tools=tools)
@@ -291,7 +291,7 @@ def test_headless_resume_loads_the_previous_transcript(monkeypatch, tmp_path):
         transform_context=None,
         max_turns=None,
         max_cost=None,
-        context_files=True,
+        retries=0, context_files=True,
         extra_prompt="",
     ):
         agent = Agent(
@@ -357,7 +357,7 @@ def test_guardrail_flags_reach_the_agent(monkeypatch):
 
     def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
               session_id=None, transform_context=None, max_turns=None, max_cost=None,
-              context_files=True, extra_prompt=""):
+              retries=0, context_files=True, extra_prompt=""):
         captured.update(max_turns=max_turns, max_cost=max_cost)
         return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=fake_stream())
 
@@ -371,7 +371,7 @@ def test_max_turns_exhaustion_exits_one(monkeypatch, capsys):
 
     def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
               session_id=None, transform_context=None, max_turns=None, max_cost=None,
-              context_files=True, extra_prompt=""):
+              retries=0, context_files=True, extra_prompt=""):
         return Agent(
             model=model,
             system_prompt="s",
@@ -437,7 +437,7 @@ def test_image_flag_attaches_blocks_to_the_user_message(monkeypatch, tmp_path):
 
     def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
               session_id=None, transform_context=None, max_turns=None,
-              max_cost=None, context_files=True, extra_prompt=""):
+              max_cost=None, retries=0, context_files=True, extra_prompt=""):
         captured["model"] = model
         return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=stream)
 
@@ -458,7 +458,7 @@ def test_image_on_a_non_vision_model_fails_before_any_request(monkeypatch, tmp_p
 
     def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
               session_id=None, transform_context=None, max_turns=None,
-              max_cost=None, context_files=True, extra_prompt=""):
+              max_cost=None, retries=0, context_files=True, extra_prompt=""):
         return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=stream)
 
     monkeypatch.setattr(cli_main, "_build_agent", build)
@@ -490,7 +490,7 @@ def test_cwd_flag_changes_the_working_directory(monkeypatch, tmp_path):
 
     def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
               session_id=None, transform_context=None, max_turns=None,
-              max_cost=None, context_files=True, extra_prompt=""):
+              max_cost=None, retries=0, context_files=True, extra_prompt=""):
         seen["cwd"] = os.getcwd()
         return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=fake_stream())
 
@@ -633,7 +633,7 @@ def test_skills_are_injected_into_tools_and_prompt(monkeypatch, tmp_path):
 
     def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
               session_id=None, transform_context=None, max_turns=None,
-              max_cost=None, context_files=True, extra_prompt=""):
+              max_cost=None, retries=0, context_files=True, extra_prompt=""):
         captured["tools"] = [tool.name for tool in (tools or [])]
         captured["extra"] = extra_prompt
         return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=fake_stream())
@@ -654,7 +654,7 @@ def test_no_skills_flag_disables_discovery(monkeypatch, tmp_path):
 
     def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
               session_id=None, transform_context=None, max_turns=None,
-              max_cost=None, context_files=True, extra_prompt=""):
+              max_cost=None, retries=0, context_files=True, extra_prompt=""):
         captured["tools"] = [tool.name for tool in (tools or [])]
         captured["extra"] = extra_prompt
         return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=fake_stream())
@@ -693,7 +693,7 @@ def test_custom_provider_from_config_is_used(monkeypatch, tmp_path):
 
     def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
               session_id=None, transform_context=None, max_turns=None,
-              max_cost=None, context_files=True, extra_prompt=""):
+              max_cost=None, retries=0, context_files=True, extra_prompt=""):
         captured["model"] = model
         return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=fake_stream())
 
@@ -716,7 +716,7 @@ def test_policy_flags_reach_the_permission_gate(monkeypatch):
 
     def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
               session_id=None, transform_context=None, max_turns=None,
-              max_cost=None, context_files=True, extra_prompt=""):
+              max_cost=None, retries=0, context_files=True, extra_prompt=""):
         captured["gate"] = gate
         return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=fake_stream())
 

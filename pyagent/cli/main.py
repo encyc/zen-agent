@@ -107,6 +107,7 @@ def _build_agent(
     transform_context=None,
     max_turns: int | None = None,
     max_cost: float | None = None,
+    retries: int = 0,
     context_files: bool = True,
     extra_prompt: str = "",
 ) -> Agent:
@@ -131,6 +132,7 @@ def _build_agent(
         transform_context=transform_context,
         max_turns=max_turns,
         max_cost=max_cost,
+        retries=retries,
     )
 
 
@@ -207,6 +209,7 @@ async def run_headless(
     json_output: bool = False,
     max_turns: int | None = None,
     max_cost: float | None = None,
+    retries: int = 0,
     context_files: bool = True,
     stream_fn: StreamFn | None = None,
     tools: list | None = None,
@@ -312,6 +315,7 @@ async def run_headless(
         transform_context=guard.transform,
         max_turns=max_turns,
         max_cost=max_cost,
+        retries=retries,
         context_files=context_files,
         extra_prompt=extra_prompt,
     )
@@ -442,6 +446,12 @@ def build_parser() -> argparse.ArgumentParser:
         dest="images",
         metavar="PATH",
         help="attach an image (repeatable; needs a vision-capable model)",
+    )
+    parser.add_argument(
+        "--retries",
+        type=int,
+        default=0,
+        help="extra attempts for transient provider failures (default 0)",
     )
     parser.add_argument(
         "--max-turns", type=int, help="stop after this many provider requests"
@@ -585,6 +595,7 @@ def main(argv: list[str] | None = None) -> int:
                 resume=args.resume,
                 max_turns=args.max_turns,
                 max_cost=args.max_cost,
+                retries=args.retries,
                 context_files=not args.no_context_files,
                 auto_compact=not args.no_auto_compact,
                 images=args.images,
