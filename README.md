@@ -122,6 +122,7 @@ kill on timeout/abort), `glob`, `grep` (ripgrep when available, Python fallback)
 ## Tests
 
 ```bash
+bash scripts/check.sh     # the gate: sync + ruff + pytest (CI runs exactly this)
 uv run pytest -q          # fully offline: fake stream fns + replayed SSE fixtures
 uv run ruff check .
 ```
