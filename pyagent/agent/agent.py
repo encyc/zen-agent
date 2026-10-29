@@ -36,7 +36,13 @@ from pyagent.agent.loop import (
 from pyagent.events import AbortToken, AgentEvent
 from pyagent.providers.catalog import Model
 from pyagent.providers.registry import StreamFn
-from pyagent.types import AssistantMessage, Message, UserMessage
+from pyagent.types import (
+    AssistantMessage,
+    ImageContent,
+    Message,
+    TextContent,
+    UserMessage,
+)
 
 __all__ = ["Agent"]
 
@@ -152,9 +158,14 @@ class Agent:
         if run is not None:
             await run.done.wait()
 
-    async def prompt(self, text: str) -> None:
+    async def prompt(
+        self, text: str, images: list[ImageContent] | None = None
+    ) -> None:
         """Start a run with a new user message and return when it settles."""
-        await self._drive(text)
+        if images:
+            await self._drive([*images, TextContent(text=text)])
+        else:
+            await self._drive(text)
 
     async def continue_(self) -> None:
         """Start a run without adding a message (retry/replay), e.g. after a resume."""
@@ -217,7 +228,9 @@ class Agent:
                     file=sys.stderr,
                 )
 
-    async def _drive(self, prompt: str | None) -> None:
+    async def _drive(
+        self, prompt: str | list[TextContent | ImageContent] | None
+    ) -> None:
         if self._run is not None:
             raise RuntimeError("Agent is already running; await wait_for_idle() first")
         run = _Run(abort=AbortToken())

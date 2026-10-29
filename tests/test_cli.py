@@ -391,3 +391,83 @@ def test_json_reports_termination(monkeypatch, capsys):
     payload = json.loads(capsys.readouterr().out.strip())
     assert payload["termination"] == "stop"
     assert payload["ok"] is True
+
+
+# ---------------------------------------------------------------------------
+# S1-T12: image attachments
+# ---------------------------------------------------------------------------
+
+
+def recording_stream(text: str = "seen"):
+    """Fake stream that records the messages it was handed."""
+
+    class Stream:
+        def __init__(self) -> None:
+            self.requests: list[list] = []
+
+        async def __call__(self, model, messages, tools, options):
+            self.requests.append(list(messages))
+            partial = AssistantMessage(
+                content=[TextContent(text=text)],
+                provider=model.provider,
+                model=model.id,
+                usage=Usage(),
+                stop_reason="stop",
+                timestamp=int(time.time()),
+            )
+            yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    return Stream()
+
+
+def _png(tmp_path):
+    path = tmp_path / "shot.png"
+    path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8)
+    return path
+
+
+def test_image_flag_attaches_blocks_to_the_user_message(monkeypatch, tmp_path):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    stream = recording_stream()
+    captured: dict = {}
+
+    def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
+              session_id=None, transform_context=None, max_turns=None,
+              max_cost=None, context_files=True):
+        captured["model"] = model
+        return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=stream)
+
+    monkeypatch.setattr(cli_main, "_build_agent", build)
+    assert cli_main.main(["-p", "what is this?", "-m", "deepseek-flash",
+                          "--image", str(_png(tmp_path))]) == 0
+
+    assert captured["model"].id == "deepseek-flash"
+    user_message = stream.requests[0][1]
+    assert isinstance(user_message.content, list)
+    kinds = [type(block).__name__ for block in user_message.content]
+    assert kinds == ["ImageContent", "TextContent"]  # image first, prompt last
+
+
+def test_image_on_a_non_vision_model_fails_before_any_request(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    stream = recording_stream()
+
+    def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
+              session_id=None, transform_context=None, max_turns=None,
+              max_cost=None, context_files=True):
+        return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=stream)
+
+    monkeypatch.setattr(cli_main, "_build_agent", build)
+    assert cli_main.main(["-p", "hi", "-m", "deepseek-v4-pro",
+                          "--image", str(_png(tmp_path))]) == 1
+    assert stream.requests == []  # no round trip wasted
+    assert "does not accept images" in capsys.readouterr().err
+
+
+def test_invalid_image_file_is_reported(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    bad = tmp_path / "not-an-image.png"
+    bad.write_text("hello")
+    _patch_agent(monkeypatch, fake_stream(), {})
+    assert cli_main.main(["-p", "hi", "-m", "deepseek-flash", "--image", str(bad)]) == 1
+    assert "does not look like" in capsys.readouterr().err

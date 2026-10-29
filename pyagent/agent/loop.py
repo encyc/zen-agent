@@ -328,7 +328,7 @@ async def _run_tool_batch(
 
 
 async def agent_loop(
-    prompt: str | None,
+    prompt: str | list[TextContent | ImageContent] | None,
     state: AgentState,
     config: AgentConfig,
     abort: AbortToken | None = None,

@@ -61,6 +61,7 @@ providers:
         context_window: 1048576
         max_tokens: 393216
         reasoning: true
+        supports_vision: true   # /models reports text+image input
         cost: {input: 0.3, output: 1.2, cache_read: 0.006}
         compat:
           thinking_format: deepseek

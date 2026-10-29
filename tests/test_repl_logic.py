@@ -337,3 +337,38 @@ async def test_slash_session_prints_state(isolated_sessions, capsys):
     await handle_slash(agent, "session", "")
     out = capsys.readouterr().out
     assert "glm-5.3" in out and "msgs" in out
+
+
+def vision_model() -> Model:
+    m = model()
+    m.supports_vision = True
+    return m
+
+
+async def test_slash_image_attaches_only_for_vision_models(tmp_path, capsys):
+    image = tmp_path / "pic.png"
+    image.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8)
+
+    non_vision = Agent(model(), "s", api_key="k")
+    await handle_slash(non_vision, "image", str(image), images=[])
+    assert "does not accept images" in capsys.readouterr().out
+
+    pending: list = []
+    vision = Agent(vision_model(), "s", api_key="k")
+    await handle_slash(vision, "image", str(image), images=pending)
+    assert len(pending) == 1 and pending[0].mime_type == "image/png"
+    assert "attached" in capsys.readouterr().out
+
+
+async def test_slash_images_lists_and_clears(tmp_path, capsys):
+    from pyagent.cli.images import read_image_argument
+
+    image = tmp_path / "pic.png"
+    image.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8)
+    pending = [read_image_argument(image)]
+    agent = Agent(vision_model(), "s", api_key="k")
+
+    await handle_slash(agent, "images", "", images=pending)
+    assert "image/png" in capsys.readouterr().out
+    await handle_slash(agent, "images", "clear", images=pending)
+    assert pending == []

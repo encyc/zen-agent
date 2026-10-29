@@ -26,6 +26,7 @@ from pyagent.agent import Agent
 from pyagent.agent.session import Session, latest_session, list_sessions, session_path
 from pyagent.cli.compact import maybe_auto_compact
 from pyagent.cli.doctor import run_doctor
+from pyagent.cli.images import read_image_argument
 from pyagent.cli.permissions import PermissionGate
 from pyagent.config import ContextGuard, apply_user_config, load_user_config
 from pyagent.context_files import (
@@ -37,7 +38,7 @@ from pyagent.events import AgentEvent
 from pyagent.providers.catalog import Model, ProviderConfig, find_model, load_catalog
 from pyagent.providers.registry import StreamFn
 from pyagent.tools import ALL_TOOLS
-from pyagent.types import AssistantMessage, Message
+from pyagent.types import AssistantMessage, ImageContent, Message
 
 __all__ = ["build_parser", "main", "resolve_model", "run_headless"]
 
@@ -196,6 +197,7 @@ async def run_headless(
     tools: list | None = None,
     resume: str | Path | None = None,
     auto_compact: bool = True,
+    images: list[Path] | None = None,
 ) -> int:
     """Run one prompt to completion; returns the process exit code."""
     user_config = load_user_config()
@@ -211,6 +213,21 @@ async def run_headless(
         env_name = provider.api_key_env if provider else "the provider's API key"
         print(f"pyagent: missing API key for {model.id} (set {env_name})", file=sys.stderr)
         return 1
+
+    image_blocks: list[ImageContent] = []
+    for image_path in images or []:
+        if not model.supports_vision:
+            print(
+                f"pyagent: {model.id} does not accept images "
+                "(pick a vision-capable model)",
+                file=sys.stderr,
+            )
+            return 1
+        try:
+            image_blocks.append(read_image_argument(image_path))
+        except ValueError as exc:
+            print(f"pyagent: {exc}", file=sys.stderr)
+            return 1
 
     if thinking is None:
         thinking = "high" if model.reasoning else "off"
@@ -254,7 +271,7 @@ async def run_headless(
     agent.subscribe(guard.on_event)
     agent.subscribe(persist)
     agent.subscribe(printer)
-    await agent.prompt(prompt)
+    await agent.prompt(prompt, images=image_blocks or None)
     if auto_compact:
         await maybe_auto_compact(
             agent, print_fn=lambda message: print(message, file=sys.stderr)
@@ -314,6 +331,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--resume", nargs="?", const="latest", help="resume a session (Task 15)"
     )
     parser.add_argument("--json", action="store_true", help="emit a JSON result")
+    parser.add_argument(
+        "--image",
+        action="append",
+        dest="images",
+        metavar="PATH",
+        help="attach an image (repeatable; needs a vision-capable model)",
+    )
     parser.add_argument(
         "--max-turns", type=int, help="stop after this many provider requests"
     )
@@ -390,6 +414,7 @@ def main(argv: list[str] | None = None) -> int:
                 max_cost=args.max_cost,
                 context_files=not args.no_context_files,
                 auto_compact=not args.no_auto_compact,
+                images=args.images,
             )
         )
     except KeyboardInterrupt:

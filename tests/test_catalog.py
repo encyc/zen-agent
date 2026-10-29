@@ -391,3 +391,12 @@ providers:
     path.write_text(text)
     with pytest.raises(ValueError, match="cost"):
         catalog_module._build_catalog(path.read_text())
+
+
+def test_supports_vision_is_parsed_and_defaults_to_false():
+    from pyagent.providers.catalog import find_model
+
+    catalog = load_catalog()
+    assert find_model(catalog, "deepseek-flash").supports_vision is True
+    assert find_model(catalog, "deepseek-v4-pro").supports_vision is False
+    assert find_model(catalog, "glm-5.3").supports_vision is False

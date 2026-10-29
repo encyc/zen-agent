@@ -40,6 +40,7 @@ _MODEL_KEYS = frozenset(
         "cost",
         "compat",
         "default",
+        "supports_vision",
     }
 )
 _COMPAT_KEYS = frozenset(
@@ -92,6 +93,8 @@ class Model:
     cost: Cost
     compat: CompatFlags
     default: bool = False
+    #: Whether the model accepts image content blocks.
+    supports_vision: bool = False
 
 
 # --------------------------------------------------------------------------
@@ -307,6 +310,9 @@ def _model_from(
         cost=_cost_from(raw.get("cost", {}), ctx),
         compat=_compat_from(raw.get("compat", {}), ctx),
         default=_expect_bool(raw.get("default", False), f"{ctx} default"),
+        supports_vision=_expect_bool(
+            raw.get("supports_vision", False), f"{ctx} supports_vision"
+        ),
     )
 
 

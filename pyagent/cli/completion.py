@@ -26,6 +26,8 @@ SLASH_COMMANDS: dict[str, str] = {
     "/session": "show model, context and spend for this session",
     "/compact": "summarize the conversation into a fresh session",
     "/undo": "drop the last turn into a fresh session file",
+    "/image": "attach an image for the next prompt (/image <path>)",
+    "/images": "list attached images, or /images clear",
     "/sessions": "list saved sessions",
     "/fork": "branch a new session at a user message (/fork <n>)",
     "/import": "load a session file and continue it (/import <path>)",

@@ -28,6 +28,7 @@ from pyagent.agent.session import (
 )
 from pyagent.cli.compact import compact, maybe_auto_compact
 from pyagent.cli.completion import ReplCompleter, help_text
+from pyagent.cli.images import read_image_argument
 from pyagent.cli.main import (
     _api_key_for,
     _system_prompt,
@@ -51,6 +52,7 @@ from pyagent.events import AgentEvent
 from pyagent.providers.catalog import find_model, load_catalog
 from pyagent.providers.registry import StreamFn
 from pyagent.tools import ALL_TOOLS
+from pyagent.types import ImageContent
 
 __all__ = [
     "HELP_TEXT",
@@ -87,6 +89,7 @@ async def handle_slash(
     session_path: Path | None = None,
     session: Session | None = None,
     switch_session=None,
+    images: list[ImageContent] | None = None,
 ) -> str | None:
     """Run one slash command; returns ``"exit"`` when the REPL should stop."""
     if command in ("exit", "quit"):
@@ -197,6 +200,36 @@ async def handle_slash(
         )
         if session_path is not None:
             print_fn(f"session: {session_path}")
+        return None
+    if command == "image":
+        if images is None:
+            print_fn("image attachments are unavailable here")
+            return None
+        if not agent.model.supports_vision:
+            print_fn(f"{agent.model.id} does not accept images")
+            return None
+        if not argument:
+            print_fn("usage: /image <path>")
+            return None
+        try:
+            block = read_image_argument(Path(argument).expanduser())
+        except ValueError as exc:
+            print_fn(str(exc))
+            return None
+        images.append(block)
+        print_fn(f"attached {argument} ({block.mime_type}); /images to review")
+        return None
+    if command == "images":
+        if argument == "clear":
+            if images is not None:
+                images.clear()
+            print_fn("cleared attached images")
+            return None
+        if not images:
+            print_fn("no attached images")
+            return None
+        for position, block in enumerate(images, start=1):
+            print_fn(f"{position}. {block.mime_type} ({len(block.data)} base64 chars)")
         return None
     if command == "compact":
         try:
@@ -345,6 +378,7 @@ async def repl(
     printer = _EventPrinter(console=console, print_fn=print_fn)
 
     session_box: list[Session] = [session]
+    pending_images: list[ImageContent] = []
 
     def switch_session(new_session: Session) -> None:
         session_box[0] = new_session
@@ -412,6 +446,7 @@ async def repl(
                         session_path=session_box[0].path,
                         session=session_box[0],
                         switch_session=switch_session,
+                        images=pending_images,
                     )
                     == "exit"
                 ):
@@ -426,7 +461,18 @@ async def repl(
                 agent.steer(line.strip())
                 continue
 
-            run_task = asyncio.create_task(agent.prompt(line.strip()))
+            if pending_images:
+                if not agent.model.supports_vision:
+                    print_fn(
+                        f"{agent.model.id} does not accept images; /images clear to drop them"
+                    )
+                    continue
+                run_task = asyncio.create_task(
+                    agent.prompt(line.strip(), images=list(pending_images))
+                )
+                pending_images.clear()
+            else:
+                run_task = asyncio.create_task(agent.prompt(line.strip()))
     finally:
         if run_task is not None:
             agent.abort()
