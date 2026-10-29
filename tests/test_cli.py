@@ -90,7 +90,18 @@ def test_resolve_model_rejects_unknown_id():
 def _patch_agent(monkeypatch, stream, captured: dict):
     """Replace _build_agent with one that injects ``stream``, recording args."""
 
-    def build(model, api_key, thinking, gate, stream_fn=None, tools=None, session_id=None, transform_context=None):
+    def build(
+        model,
+        api_key,
+        thinking,
+        gate,
+        stream_fn=None,
+        tools=None,
+        session_id=None,
+        transform_context=None,
+        max_turns=None,
+        max_cost=None,
+    ):
         captured.update(model=model, thinking=thinking, gate=gate, tools=tools)
         return Agent(
             model=model,
@@ -265,7 +276,18 @@ def test_headless_resume_loads_the_previous_transcript(monkeypatch, tmp_path):
 
     built: dict = {}
 
-    def build(model, api_key, thinking, gate, stream_fn=None, tools=None, session_id=None, transform_context=None):
+    def build(
+        model,
+        api_key,
+        thinking,
+        gate,
+        stream_fn=None,
+        tools=None,
+        session_id=None,
+        transform_context=None,
+        max_turns=None,
+        max_cost=None,
+    ):
         agent = Agent(
             model=model,
             system_prompt="s",
@@ -294,3 +316,74 @@ def test_headless_run_persists_a_session(monkeypatch, tmp_path):
     files = list(tmp_path.glob("*.jsonl"))
     assert len(files) == 1
     assert len(Session(files[0]).load()) == 2  # user + assistant
+
+
+# ---------------------------------------------------------------------------
+# S1-T3: guardrails
+# ---------------------------------------------------------------------------
+
+
+def looping_tool_stream(tool_name: str = "ghost"):
+    """Always asks for one more tool round, so the loop only a guardrail stops it."""
+
+    async def stream(model, messages, tools, options):
+        partial = AssistantMessage(
+            content=[],
+            provider=model.provider,
+            model=model.id,
+            usage=Usage(),
+            stop_reason="pending",
+            timestamp=int(time.time()),
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        call = ToolCall(id="c1", name=tool_name, arguments={})
+        partial.content.append(call)
+        yield AssistantEvent(type="toolcall_end", partial=partial, tool_call=call)
+        partial.stop_reason = "tool_use"
+        yield AssistantEvent(type="done", partial=partial, reason="tool_use")
+
+    return stream
+
+
+def test_guardrail_flags_reach_the_agent(monkeypatch):
+    monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
+    captured: dict = {}
+
+    def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
+              session_id=None, transform_context=None, max_turns=None, max_cost=None):
+        captured.update(max_turns=max_turns, max_cost=max_cost)
+        return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=fake_stream())
+
+    monkeypatch.setattr(cli_main, "_build_agent", build)
+    assert cli_main.main(["-p", "hi", "--max-turns", "3", "--max-cost", "0.25"]) == 0
+    assert captured == {"max_turns": 3, "max_cost": 0.25}
+
+
+def test_max_turns_exhaustion_exits_one(monkeypatch, capsys):
+    monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
+
+    def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
+              session_id=None, transform_context=None, max_turns=None, max_cost=None):
+        return Agent(
+            model=model,
+            system_prompt="s",
+            api_key=api_key,
+            stream_fn=looping_tool_stream(),
+            max_turns=max_turns,
+        )
+
+    monkeypatch.setattr(cli_main, "_build_agent", build)
+    assert cli_main.main(["-p", "hi", "--max-turns", "1"]) == 1
+    err = capsys.readouterr().err
+    assert "stopped early (max_turns)" in err
+
+
+def test_json_reports_termination(monkeypatch, capsys):
+    import json
+
+    monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
+    _patch_agent(monkeypatch, fake_stream("ok"), {})
+    assert cli_main.main(["-p", "hi", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out.strip())
+    assert payload["termination"] == "stop"
+    assert payload["ok"] is True

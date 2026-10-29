@@ -900,3 +900,94 @@ async def test_steering_queued_before_the_run_is_injected_at_start():
         and event.message.content == "earlier note"
         for event in events
     )
+
+
+# ---------------------------------------------------------------------------
+# S1-T3: turn and cost guardrails
+# ---------------------------------------------------------------------------
+
+
+class LoopingToolStream:
+    """Always asks for another tool call; records request count and spend."""
+
+    def __init__(self, cost_per_turn: float = 0.0) -> None:
+        self.cost_per_turn = cost_per_turn
+        self.calls = 0
+
+    async def __call__(self, model, messages, tools, options):
+        self.calls += 1
+        partial = AssistantMessage(
+            content=[],
+            provider=model.provider,
+            model=model.id,
+            usage=Usage(cost=Cost(total=self.cost_per_turn)),
+            stop_reason="pending",
+            timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        call = ToolCall(id=f"c{self.calls}", name="echo", arguments={})
+        partial.content.append(call)
+        yield AssistantEvent(type="toolcall_end", partial=partial, tool_call=call)
+        partial.stop_reason = "tool_use"
+        yield AssistantEvent(type="done", partial=partial, reason="tool_use")
+
+
+async def test_max_turns_stops_before_the_next_request():
+    stream = LoopingToolStream()
+
+    async def echo(name, args, abort, on_update=None):
+        return ToolResultAgent(content=[TextContent(text="ok")])
+
+    state = AgentState()
+    await run(
+        "go",
+        state,
+        make_config(
+            stream,
+            tools=[make_tool("echo", echo)],
+            max_turns=2,
+        ),
+    )
+    assert stream.calls == 2
+    assert state.termination == "max_turns"
+    calls = [b.id for m in state.messages if isinstance(m, AssistantMessage) for b in m.content if isinstance(b, ToolCall)]
+    results = [m.tool_call_id for m in state.messages if isinstance(m, ToolResultMessage)]
+    assert calls == results == ["c1", "c2"]
+
+
+async def test_max_cost_stops_after_the_turn_that_crosses_it():
+    stream = LoopingToolStream(cost_per_turn=0.01)
+
+    async def echo(name, args, abort, on_update=None):
+        return ToolResultAgent(content=[TextContent(text="ok")])
+
+    state = AgentState()
+    await run(
+        "go",
+        state,
+        make_config(stream, tools=[make_tool("echo", echo)], max_cost=0.005),
+    )
+    assert stream.calls == 1  # budget check happens before the next request
+    assert state.termination == "max_cost"
+    calls = [b.id for m in state.messages if isinstance(m, AssistantMessage) for b in m.content if isinstance(b, ToolCall)]
+    results = [m.tool_call_id for m in state.messages if isinstance(m, ToolResultMessage)]
+    assert calls == results == ["c1"]  # transcript still paired
+
+
+async def test_default_guardrails_do_not_change_normal_runs():
+    stream = ScriptedStream([[say("done"), finish("stop")]])
+    state = AgentState()
+    await run("go", state, make_config(stream))
+    assert state.termination == "stop"
+
+
+async def test_termination_records_abort_and_error():
+    aborted = ScriptedStream([[say("x"), finish("aborted")]])
+    state = AgentState()
+    await run("go", state, make_config(aborted))
+    assert state.termination == "aborted"
+
+    failed = ScriptedStream([[say("x"), finish("error")]])
+    state = AgentState()
+    await run("go", state, make_config(failed))
+    assert state.termination == "error"

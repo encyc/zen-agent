@@ -132,13 +132,24 @@ class AgentConfig:
     get_steering_messages: Callable[[], Awaitable[list[Message]]] | None = None
     transform_context: Callable[[list[Message]], Awaitable[list[Message]]] | None = None
     stream_fn: StreamFn | None = None  # None -> stream_fn_for(model)
+    #: Hard cap on provider requests in one run (None -> module default).
+    max_turns: int | None = None
+    #: Hard cap on accumulated spend in USD for one run (None -> unlimited).
+    max_cost: float | None = None
 
 
 @dataclass
 class AgentState:
-    """The durable conversation; the loop appends every new message here."""
+    """The durable conversation; the loop appends every new message here.
+
+    ``termination`` records *why* the last run ended. It is deliberately not a
+    ``StopReason``: that type describes one provider response, while this
+    describes the run (e.g. ``"max_turns"``), and the session JSON stays
+    unchanged.
+    """
 
     messages: list[Message] = field(default_factory=list)
+    termination: str | None = None
 
 
 @dataclass
@@ -162,6 +173,15 @@ _MAX_TURNS = 100
 
 #: How many consecutive length-truncated turns we re-issue before giving up.
 _MAX_LENGTH_FAILURES = 2
+
+
+def _run_cost(messages: list[Message]) -> float:
+    """Total spend of the assistant turns produced by this run so far."""
+    return sum(
+        message.usage.cost.total
+        for message in messages
+        if isinstance(message, AssistantMessage)
+    )
 
 
 def _error_result(text: str) -> ToolResultAgent:
@@ -332,6 +352,7 @@ async def agent_loop(
 
     turns = 0
     length_failures = 0
+    termination = "stop"
     try:
         # Input typed while the previous run was finishing is still queued: pick
         # it up before the first request instead of waiting for a tool round.
@@ -344,10 +365,19 @@ async def agent_loop(
 
         while True:
             if abort is not None and abort.aborted:
+                termination = "aborted"
+                break
+            turn_limit = config.max_turns if config.max_turns is not None else _MAX_TURNS
+            if turns >= turn_limit:
+                # A pathological model loop, or the caller's explicit cap.
+                termination = "max_turns"
+                break
+            if config.max_cost is not None and _run_cost(new_messages) > config.max_cost:
+                # Budget already spent: finish here rather than open a new turn,
+                # so the transcript keeps every tool call paired with a result.
+                termination = "max_cost"
                 break
             turns += 1
-            if turns > _MAX_TURNS:  # pathological model loop: stop, always emit agent_end
-                break
 
             # Request context: system prompt prepended to a COPY — the state
             # never sees it. transform_context may rewrite the whole list,
@@ -384,6 +414,7 @@ async def agent_loop(
                     break
 
             if final is None:  # stream produced no terminal event: stop safely
+                termination = "no_stream"
                 break
 
             state.messages.append(final)
@@ -392,7 +423,8 @@ async def agent_loop(
             yield AgentEvent(type="turn_end")
 
             if final.stop_reason in ("error", "aborted"):
-                break  # provider-level failure or cancellation: no tool round
+                termination = final.stop_reason  # provider failure or cancellation
+                break
 
             calls = [
                 block
@@ -475,6 +507,7 @@ async def agent_loop(
                 yield AgentEvent(type="message_end", message=message)
 
             if all(outcome.result.terminate for outcome in outcomes):
+                termination = "tool_terminate"
                 break
             if length_failures >= _MAX_LENGTH_FAILURES:
                 break  # truncation is not resolving: stop instead of re-asking forever
@@ -487,4 +520,5 @@ async def agent_loop(
                     yield AgentEvent(type="message_end", message=message)
             # else / loop continues: another round with the tool results in context
     finally:
+        state.termination = termination
         yield AgentEvent(type="agent_end", new_messages=new_messages)

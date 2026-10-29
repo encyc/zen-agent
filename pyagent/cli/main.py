@@ -85,6 +85,8 @@ def _build_agent(
     tools: list | None = None,
     session_id: str | None = None,
     transform_context=None,
+    max_turns: int | None = None,
+    max_cost: float | None = None,
 ) -> Agent:
     """Construct the run's Agent (a seam for tests to inject a fake stream)."""
     tool_list = list(ALL_TOOLS if tools is None else tools)
@@ -98,6 +100,8 @@ def _build_agent(
         stream_fn=stream_fn,
         before_tool_call=gate.before_tool_call,
         transform_context=transform_context,
+        max_turns=max_turns,
+        max_cost=max_cost,
     )
 
 
@@ -172,6 +176,8 @@ async def run_headless(
     *,
     allow_dangerous: bool = False,
     json_output: bool = False,
+    max_turns: int | None = None,
+    max_cost: float | None = None,
     stream_fn: StreamFn | None = None,
     tools: list | None = None,
     resume: str | Path | None = None,
@@ -205,6 +211,8 @@ async def run_headless(
         stream_fn=stream_fn,
         tools=tools,
         transform_context=guard.transform,
+        max_turns=max_turns,
+        max_cost=max_cost,
     )
 
     if resume is not None:
@@ -232,23 +240,30 @@ async def run_headless(
     agent.subscribe(printer)
     await agent.prompt(prompt)
 
+    ok = agent.error_message is None and agent.termination in ("stop", "tool_terminate")
     if json_output:
         usage, count = _usage_and_counts(agent.messages)
         print(
             json.dumps(
                 {
-                    "ok": agent.error_message is None,
+                    "ok": ok,
                     "text": printer.text,
                     "usage": usage,
                     "messages": count,
                     "error": agent.error_message,
+                    "termination": agent.termination,
                 },
                 ensure_ascii=False,
             )
         )
     elif agent.error_message is not None:
         print(f"pyagent: {agent.error_message}", file=sys.stderr)
-    return 0 if agent.error_message is None else 1
+    elif not ok:
+        print(
+            f"pyagent: run stopped early ({agent.termination})",
+            file=sys.stderr,
+        )
+    return 0 if ok else 1
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -274,6 +289,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--resume", nargs="?", const="latest", help="resume a session (Task 15)"
     )
     parser.add_argument("--json", action="store_true", help="emit a JSON result")
+    parser.add_argument(
+        "--max-turns", type=int, help="stop after this many provider requests"
+    )
+    parser.add_argument(
+        "--max-cost", type=float, help="stop when the run has spent this many USD"
+    )
     return parser
 
 
@@ -304,6 +325,8 @@ def main(argv: list[str] | None = None) -> int:
                 allow_dangerous=args.allow_dangerous,
                 json_output=args.json,
                 resume=args.resume,
+                max_turns=args.max_turns,
+                max_cost=args.max_cost,
             )
         )
     except KeyboardInterrupt:

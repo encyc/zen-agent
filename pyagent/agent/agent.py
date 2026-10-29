@@ -76,6 +76,8 @@ class Agent:
         before_tool_call: Callable | None = None,
         after_tool_call: Callable | None = None,
         transform_context: Callable | None = None,
+        max_turns: int | None = None,
+        max_cost: float | None = None,
     ) -> None:
         self.model = model
         self.system_prompt = system_prompt
@@ -87,6 +89,8 @@ class Agent:
         self.before_tool_call = before_tool_call
         self.after_tool_call = after_tool_call
         self.transform_context = transform_context
+        self.max_turns = max_turns
+        self.max_cost = max_cost
 
         self._state = AgentState(messages=list(messages or []))
         self._listeners: list[AgentListener] = []
@@ -108,6 +112,11 @@ class Agent:
     @property
     def is_idle(self) -> bool:
         return self._run is None
+
+    @property
+    def termination(self) -> str | None:
+        """Why the most recent run ended (``"stop"``, ``"max_cost"``, ...)."""
+        return self._state.termination
 
     @property
     def error_message(self) -> str | None:
@@ -182,6 +191,8 @@ class Agent:
             get_steering_messages=self._drain_steering,
             transform_context=self.transform_context,
             stream_fn=self.stream_fn,
+            max_turns=self.max_turns,
+            max_cost=self.max_cost,
         )
 
     async def _drain_steering(self) -> list[Message]:

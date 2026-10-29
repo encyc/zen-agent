@@ -189,6 +189,8 @@ async def repl(
     api_key: str | None = None,
     tools: list | None = None,
     allow_dangerous: bool = False,
+    max_turns: int | None = None,
+    max_cost: float | None = None,
 ) -> int:
     """Run the interactive loop; returns the process exit code."""
     user_config = load_user_config()
@@ -217,6 +219,8 @@ async def repl(
         session_id=session_id_for(model, session.path.stem),
         stream_fn=stream_fn,
         transform_context=guard.transform,
+        max_turns=max_turns,
+        max_cost=max_cost,
         before_tool_call=PermissionGate(
             interactive=True, allow_dangerous=allow_dangerous
         ).before_tool_call,
