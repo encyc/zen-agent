@@ -1,6 +1,17 @@
 [project]
 name = "zenagent"
 version = "0.1.0"
+description = "A minimal, Pythonic coding agent: streaming LLM client, async-generator agent loop, and terminal harness."
+readme = "README.md"
+keywords = ["agent", "llm", "ai", "cli", "async", "coding-agent"]
+classifiers = [
+    "Intended Audience :: Developers",
+    "Environment :: Console",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Software Development :: Libraries",
+    "Typing :: Typed",
+]
 authors = [
     { name = "Justin Gao", email = "atomyuangao@gmail.com" }
 ]
@@ -18,6 +29,11 @@ cli = [
     "prompt-toolkit>=3.0.53",
     "rich>=15.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/encyc/zen-agent"
+Repository = "https://github.com/encyc/zen-agent"
+Changelog = "https://github.com/encyc/zen-agent/commits/main"
 
 [build-system]
 requires = ["uv_build>=0.11.24,<0.12.0"]
