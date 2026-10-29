@@ -396,6 +396,7 @@ async def repl(
     skills: bool = True,
     templates: bool = True,
     extension_paths: list[str] | None = None,
+    read_only: bool = False,
 ) -> int:
     """Run the interactive loop; returns the process exit code."""
     user_config = load_user_config()
@@ -517,7 +518,11 @@ async def repl(
         max_turns=max_turns,
         max_cost=max_cost,
         before_tool_call=PermissionGate(
-            interactive=True, allow_dangerous=allow_dangerous
+            interactive=True,
+            allow_dangerous=allow_dangerous,
+            allow=user_config.tool_allow,
+            deny=user_config.tool_deny,
+            read_only=read_only,
         ).before_tool_call,
     )
     if resume is not None:

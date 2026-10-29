@@ -217,6 +217,7 @@ async def run_headless(
     mcp_file: Path | str | None = None,
     skills: bool = True,
     extension_paths: list[str] | None = None,
+    read_only: bool = False,
 ) -> int:
     """Run one prompt to completion; returns the process exit code."""
     user_config = load_user_config()
@@ -254,7 +255,12 @@ async def run_headless(
     if thinking is None:
         thinking = "high" if model.reasoning else "off"
     gate = PermissionGate(
-        assume_yes=assume_yes, interactive=False, allow_dangerous=allow_dangerous
+        assume_yes=assume_yes,
+        interactive=False,
+        allow_dangerous=allow_dangerous,
+        allow=user_config.tool_allow,
+        deny=user_config.tool_deny,
+        read_only=read_only,
     )
     tool_list = list(ALL_TOOLS if tools is None else tools)
     mcp_manager: McpManager | None = None
@@ -405,6 +411,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--yes", action="store_true", help="allow write/execute tools without asking"
     )
     parser.add_argument(
+        "--read-only",
+        action="store_true",
+        help="refuse every tool that can modify the filesystem or run commands",
+    )
+    parser.add_argument(
         "--allow-dangerous",
         action="store_true",
         help="also allow catastrophic shell commands (rm -rf /, mkfs, ...)",
@@ -533,6 +544,7 @@ def main(argv: list[str] | None = None) -> int:
                     mcp_file=args.mcp_file,
                     skills=not args.no_skills,
                     extension_paths=args.extension_paths,
+                    read_only=args.read_only,
                     templates=not args.no_templates,
                 )
             )
@@ -560,6 +572,7 @@ def main(argv: list[str] | None = None) -> int:
                 mcp_file=args.mcp_file,
                 skills=not args.no_skills,
                 extension_paths=args.extension_paths,
+                read_only=args.read_only,
             )
         )
     except KeyboardInterrupt:

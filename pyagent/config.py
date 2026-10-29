@@ -109,6 +109,10 @@ class UserConfig:
     custom_providers: dict[str, ProviderConfig] = field(default_factory=dict)
     #: extension module paths to load (relative paths resolve from the config file)
     extensions: list[str] = field(default_factory=list)
+    #: fnmatch patterns: tools that never need confirmation
+    tool_allow: list[str] = field(default_factory=list)
+    #: fnmatch patterns: tools that are always refused
+    tool_deny: list[str] = field(default_factory=list)
 
 
 def load_user_config(path: Path | None = None) -> UserConfig:
@@ -146,6 +150,26 @@ def load_user_config(path: Path | None = None) -> UserConfig:
             candidate = (target.parent / candidate).resolve()
         extensions.append(str(candidate))
 
+    tools_table = data.get("tools") or {}
+    if not isinstance(tools_table, dict):
+        raise ValueError(  # noqa: TRY004 - config errors are ValueError by contract
+            f"config {target}: [tools] must be a table"
+        )
+    unknown_tool_keys = set(tools_table) - {"allow", "deny"}
+    if unknown_tool_keys:
+        raise ValueError(
+            f"config {target}: [tools] has unknown keys {sorted(unknown_tool_keys)}"
+        )
+    tool_allow: list[str] = []
+    tool_deny: list[str] = []
+    for label, destination in (("allow", tool_allow), ("deny", tool_deny)):
+        value = tools_table.get(label) or []
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            raise ValueError(
+                f"config {target}: tools.{label} must be an array of strings"
+            )
+        destination.extend(value)
+
     if "custom" in providers:
         custom_providers = _parse_custom_providers(providers["custom"], target)
     for provider_id, values in providers.items():
@@ -170,6 +194,8 @@ def load_user_config(path: Path | None = None) -> UserConfig:
         provider_overrides=overrides,
         custom_providers=custom_providers,
         extensions=extensions,
+        tool_allow=tool_allow,
+        tool_deny=tool_deny,
     )
 
 

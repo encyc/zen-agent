@@ -701,3 +701,28 @@ def test_custom_provider_from_config_is_used(monkeypatch, tmp_path):
     assert cli_main.main(["-p", "hi"]) == 0
     assert captured["model"].id == "my-model"
     assert captured["model"].provider == "local"
+
+
+def test_policy_flags_reach_the_permission_gate(monkeypatch):
+    from pyagent.config import UserConfig
+
+    monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
+    monkeypatch.setattr(
+        cli_main,
+        "load_user_config",
+        lambda: UserConfig(tool_allow=["read_*"], tool_deny=["bash"]),
+    )
+    captured: dict = {}
+
+    def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
+              session_id=None, transform_context=None, max_turns=None,
+              max_cost=None, context_files=True, extra_prompt=""):
+        captured["gate"] = gate
+        return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=fake_stream())
+
+    monkeypatch.setattr(cli_main, "_build_agent", build)
+    assert cli_main.main(["-p", "hi", "--read-only"]) == 0
+    gate = captured["gate"]
+    assert gate.read_only is True
+    assert gate.allow == ["read_*"]
+    assert gate.deny == ["bash"]

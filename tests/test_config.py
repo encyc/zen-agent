@@ -301,3 +301,30 @@ def test_doctor_reports_custom_provider_keys(tmp_path, monkeypatch):
     custom = [check for check in checks if check.name == "key:local"]
     assert custom and custom[0].ok is False
     assert "LOCAL_API_KEY" in custom[0].detail
+
+
+# ---------------------------------------------------------------------------
+# S2-T9: tool policy config
+# ---------------------------------------------------------------------------
+
+
+def test_parses_tool_allow_and_deny(tmp_path):
+    path = write_config(
+        tmp_path,
+        '[tools]\nallow = ["read_*", "grep"]\ndeny = ["write_file", "bash"]\n',
+    )
+    config = load_user_config(path)
+    assert config.tool_allow == ["read_*", "grep"]
+    assert config.tool_deny == ["write_file", "bash"]
+
+
+def test_unknown_tool_policy_key_is_rejected(tmp_path):
+    path = write_config(tmp_path, '[tools]\nallowed = ["read_file"]\n')
+    with pytest.raises(ValueError, match="unknown keys"):
+        load_user_config(path)
+
+
+def test_tool_policy_values_must_be_strings(tmp_path):
+    path = write_config(tmp_path, "[tools]\nallow = [1, 2]\n")
+    with pytest.raises(ValueError, match="array of strings"):
+        load_user_config(path)

@@ -12,11 +12,17 @@ denied with an explanatory reason, which the model sees as an is_error result.
 
 from __future__ import annotations
 
+import fnmatch
 import re
 
 from pyagent.types import ToolCall
 
-__all__ = ["READ_ONLY_TOOLS", "PermissionGate", "dangerous_command_reason"]
+__all__ = [
+    "READ_ONLY_TOOLS",
+    "PermissionGate",
+    "dangerous_command_reason",
+    "matches_any",
+]
 
 #: Tools that only read state; they never need confirmation. ``read_skill``
 #: reads a local markdown file, so it belongs here even though it is not a
@@ -31,6 +37,14 @@ _CATASTROPHIC_TARGETS = frozenset({"/", "/*", "~", "~/", "$home", "*", "/.*", "/
 
 #: Commands that take the machine down regardless of arguments.
 _DISRUPTIVE_COMMANDS = frozenset({"shutdown", "reboot", "halt", "poweroff"})
+
+
+def matches_any(patterns: list[str], name: str) -> str | None:
+    """Return the first fnmatch pattern matching ``name`` (or None)."""
+    for pattern in patterns:
+        if fnmatch.fnmatchcase(name, pattern):
+            return pattern
+    return None
 
 
 def _dangerous_rm(command: str) -> str | None:
@@ -98,10 +112,16 @@ class PermissionGate:
         assume_yes: bool = False,
         interactive: bool = False,
         allow_dangerous: bool = False,
+        allow: list[str] | None = None,
+        deny: list[str] | None = None,
+        read_only: bool = False,
     ) -> None:
         self.assume_yes = assume_yes
         self.interactive = interactive
         self.allow_dangerous = allow_dangerous
+        self.allow = list(allow or [])
+        self.deny = list(deny or [])
+        self.read_only = read_only
         #: Tools the user answered "a" for during this session.
         self._always_allowed: set[str] = set()
 
@@ -116,6 +136,13 @@ class PermissionGate:
                     False,
                     f"refused {danger}; this needs --allow-dangerous",
                 )
+        denied_by = matches_any(self.deny, tool_name)
+        if denied_by is not None:
+            return False, f"tool {tool_name!r} is denied by policy ({denied_by})"
+        if self.read_only and tool_name not in READ_ONLY_TOOLS:
+            return False, f"tool {tool_name!r} is blocked by --read-only"
+        if matches_any(self.allow, tool_name) is not None:
+            return True, ""
         if tool_name in READ_ONLY_TOOLS:
             return True, ""
         if self.assume_yes or tool_name in self._always_allowed:

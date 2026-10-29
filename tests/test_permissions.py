@@ -84,3 +84,45 @@ async def test_loading_a_skill_is_read_only():
     gate = PermissionGate(assume_yes=False, interactive=False)
     allowed, reason = await gate.check("read_skill", {"name": "demo"})
     assert allowed is True, reason
+
+
+# ---------------------------------------------------------------------------
+# S2-T9: tool policy
+# ---------------------------------------------------------------------------
+
+
+async def test_deny_patterns_are_matched_with_fnmatch():
+    gate = PermissionGate(assume_yes=True, deny=["write_*", "bash"])
+    assert (await gate.check("write_file", {}))[0] is False
+    assert (await gate.check("bash", {}))[0] is False
+    assert (await gate.check("read_file", {}))[0] is True
+
+
+async def test_allow_patterns_skip_confirmation():
+    gate = PermissionGate(assume_yes=False, interactive=False, allow=["write_*"])
+    allowed, reason = await gate.check("write_file", {"path": "x"})
+    assert allowed is True, reason
+    # tools outside the allowlist keep the normal non-interactive rule
+    assert (await gate.check("bash", {"command": "ls"}))[0] is False
+
+
+async def test_read_only_allows_reads_and_denies_everything_else():
+    gate = PermissionGate(assume_yes=True, read_only=True)
+    for name in ("read_file", "list_dir", "glob", "grep", "read_skill"):
+        assert (await gate.check(name, {}))[0] is True, name
+    for name in ("write_file", "edit_file", "bash", "mcp__files__write_file"):
+        allowed, reason = await gate.check(name, {"command": "ls"})
+        assert allowed is False and "read-only" in reason
+
+
+async def test_allowlist_cannot_rescue_a_catastrophic_command():
+    gate = PermissionGate(assume_yes=True, allow=["*"])
+    allowed, reason = await gate.check("bash", {"command": "rm -rf /"})
+    assert allowed is False and "--allow-dangerous" in reason
+
+
+def test_matches_any_returns_the_pattern():
+    from pyagent.cli.permissions import matches_any
+
+    assert matches_any(["read_*", "grep"], "read_file") == "read_*"
+    assert matches_any(["write_*"], "read_file") is None
