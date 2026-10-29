@@ -519,16 +519,34 @@ async def run_cases(args) -> int:
         f"\n{passed}/{len(records)} cases passed · pass rate {rate:.0%} · "
         f"${total_cost:.4f} · {sum(r['tokens_in'] + r['tokens_out'] for r in records)} tokens"
     )
+    payload = {
+        "model": model.id,
+        "pass_rate": rate,
+        "passed": passed,
+        "total": len(records),
+        "cost": total_cost,
+        "records": records,
+    }
     if args.json:
-        payload = {
-            "model": model.id,
-            "pass_rate": rate,
-            "passed": passed,
-            "total": len(records),
-            "cost": total_cost,
-            "records": records,
-        }
         print(json.dumps(payload, ensure_ascii=False, indent=2))
+    if args.report:
+        from pyagent.evals_runner import write_report
+
+        write_report(args.report, payload)
+        print(f"report: {args.report}")
+
+    if args.baseline:
+        from pyagent.evals_runner import compare_reports, load_report, render_comparison
+
+        try:
+            baseline_payload = load_report(args.baseline)
+        except ValueError as exc:
+            print(f"pyagent: {exc}", file=sys.stderr)
+            return 1
+        comparison = compare_reports(baseline_payload, payload)
+        print(render_comparison(comparison))
+        if comparison["regressions"]:
+            return 1
     if args.min_pass_rate is not None and rate < args.min_pass_rate:
         print(f"below required pass rate {args.min_pass_rate:.0%}", file=sys.stderr)
         return 1
@@ -549,6 +567,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--max-total-cost", type=float, help="stop the run after this many USD"
+    )
+    parser.add_argument("--report", type=Path, help="write the JSON report here")
+    parser.add_argument(
+        "--baseline",
+        type=Path,
+        help="compare against a previous report; exit 1 on regressions",
     )
     args = parser.parse_args(argv)
     return asyncio.run(run_cases(args))

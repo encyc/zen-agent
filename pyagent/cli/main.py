@@ -559,6 +559,17 @@ def main(argv: list[str] | None = None) -> int:
         from pyagent.cli.rpc import main as rpc_main
 
         return rpc_main(raw[1:])
+    if raw and raw[0] == "evals":
+        import importlib.util
+
+        script = Path(__file__).resolve().parents[2] / "scripts" / "eval.py"
+        spec = importlib.util.spec_from_file_location("pyagent_eval_script", script)
+        if spec is None or spec.loader is None:
+            print("pyagent: cannot load the eval runner", file=sys.stderr)
+            return 2
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.main(raw[1:])
     args = build_parser().parse_args(argv)
     if args.cwd:
         target = Path(args.cwd).expanduser()
