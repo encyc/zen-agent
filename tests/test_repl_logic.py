@@ -426,3 +426,25 @@ async def test_repl_reconnects_a_late_mcp_server(tmp_path, isolated_sessions):
     joined = "\n".join(lines)
     assert "mcp: tools updated" in joined
     assert "flaky: connected" in joined
+
+
+async def test_slash_skills_lists_them(capsys):
+    from pathlib import Path
+
+    from pyagent.skills import Skill
+
+    agent = Agent(model(), "s", api_key="k")
+    await handle_slash(
+        agent,
+        "skills",
+        "",
+        skill_list=[Skill(name="deploy", description="ship it", path=Path("/x"), body="")],
+    )
+    out = capsys.readouterr().out
+    assert "deploy" in out and "ship it" in out
+
+
+async def test_slash_skills_with_none_configured(capsys):
+    agent = Agent(model(), "s", api_key="k")
+    await handle_slash(agent, "skills", "", skill_list=[])
+    assert "no skills found" in capsys.readouterr().out

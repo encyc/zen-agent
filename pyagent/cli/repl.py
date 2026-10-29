@@ -53,6 +53,12 @@ from pyagent.mcp.config import load_mcp_config
 from pyagent.mcp.manager import McpManager
 from pyagent.providers.catalog import find_model, load_catalog
 from pyagent.providers.registry import StreamFn
+from pyagent.skills import (
+    build_skill_tool,
+    default_skill_roots,
+    discover_skills,
+    skills_prompt_index,
+)
 from pyagent.tools import ALL_TOOLS
 from pyagent.trace import TraceRecorder
 from pyagent.types import ImageContent
@@ -95,6 +101,7 @@ async def handle_slash(
     images: list[ImageContent] | None = None,
     mcp_manager: McpManager | None = None,
     refresh_mcp=None,
+    skill_list=None,
 ) -> str | None:
     """Run one slash command; returns ``"exit"`` when the REPL should stop."""
     if command in ("exit", "quit"):
@@ -236,6 +243,13 @@ async def handle_slash(
         for position, block in enumerate(images, start=1):
             print_fn(f"{position}. {block.mime_type} ({len(block.data)} base64 chars)")
         return None
+    if command == "skills":
+        if not skill_list:
+            print_fn("no skills found (put SKILL.md files under .pyagent/skills)")
+            return None
+        for skill in skill_list:
+            print_fn(f"- {skill.name}: {skill.description}")
+        return None
     if command == "mcp":
         if mcp_manager is None:
             print_fn("no MCP servers configured")
@@ -352,6 +366,7 @@ async def repl(
     mcp_servers: list[str] | None = None,
     mcp_file: Path | str | None = None,
     mcp_retry_interval_s: float = 10.0,
+    skills: bool = True,
 ) -> int:
     """Run the interactive loop; returns the process exit code."""
     user_config = load_user_config()
@@ -372,6 +387,7 @@ async def repl(
     session = _session_for(resume)
     guard = ContextGuard(model.context_window)
     base_tools = list(tool_list)
+    skills_index = ""
 
     def build_prompt(current_tools) -> str:
         text = _system_prompt([tool.name for tool in current_tools])
@@ -379,6 +395,8 @@ async def repl(
             text = system_prompt_with_context(
                 text, load_context_files(discover_context_files(Path.cwd()))
             )
+        if skills_index:
+            text = f"{text}\n\n{skills_index}"
         return text
 
     mcp_manager: McpManager | None = None
@@ -393,6 +411,15 @@ async def repl(
             for warning in await mcp_manager.start():
                 print(f"pyagent: mcp {warning}", file=sys.stderr)
             tool_list = [*tool_list, *mcp_manager.tool_defs()]
+
+    skill_list = []
+    if skills and tools is None:
+        skill_list, skill_warnings = discover_skills(default_skill_roots(Path.cwd()))
+        for warning in skill_warnings:
+            print(f"pyagent: skills {warning}", file=sys.stderr)
+        if skill_list:
+            tool_list = [*tool_list, build_skill_tool(skill_list)]
+            skills_index = skills_prompt_index(skill_list)
 
     prompt = build_prompt(tool_list)
     agent = Agent(
@@ -505,6 +532,7 @@ async def repl(
                         images=pending_images,
                         mcp_manager=mcp_manager,
                         refresh_mcp=refresh_mcp,
+                        skill_list=skill_list,
                     )
                     == "exit"
                 ):

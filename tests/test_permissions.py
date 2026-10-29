@@ -77,3 +77,10 @@ async def test_hook_reports_the_refusal_to_the_model():
 async def test_non_bash_tools_are_unaffected():
     gate = PermissionGate(assume_yes=True, interactive=False)
     assert (await gate.check("write_file", {"path": "/tmp/x"}))[0] is True
+
+
+async def test_loading_a_skill_is_read_only():
+    """Reading a local SKILL.md must not require --yes."""
+    gate = PermissionGate(assume_yes=False, interactive=False)
+    allowed, reason = await gate.check("read_skill", {"name": "demo"})
+    assert allowed is True, reason

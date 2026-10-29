@@ -102,6 +102,7 @@ def _patch_agent(monkeypatch, stream, captured: dict):
         max_turns=None,
         max_cost=None,
         context_files=True,
+        extra_prompt="",
     ):
         captured.update(model=model, thinking=thinking, gate=gate, tools=tools)
         return Agent(
@@ -291,6 +292,7 @@ def test_headless_resume_loads_the_previous_transcript(monkeypatch, tmp_path):
         max_turns=None,
         max_cost=None,
         context_files=True,
+        extra_prompt="",
     ):
         agent = Agent(
             model=model,
@@ -355,7 +357,7 @@ def test_guardrail_flags_reach_the_agent(monkeypatch):
 
     def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
               session_id=None, transform_context=None, max_turns=None, max_cost=None,
-              context_files=True):
+              context_files=True, extra_prompt=""):
         captured.update(max_turns=max_turns, max_cost=max_cost)
         return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=fake_stream())
 
@@ -369,7 +371,7 @@ def test_max_turns_exhaustion_exits_one(monkeypatch, capsys):
 
     def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
               session_id=None, transform_context=None, max_turns=None, max_cost=None,
-              context_files=True):
+              context_files=True, extra_prompt=""):
         return Agent(
             model=model,
             system_prompt="s",
@@ -435,7 +437,7 @@ def test_image_flag_attaches_blocks_to_the_user_message(monkeypatch, tmp_path):
 
     def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
               session_id=None, transform_context=None, max_turns=None,
-              max_cost=None, context_files=True):
+              max_cost=None, context_files=True, extra_prompt=""):
         captured["model"] = model
         return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=stream)
 
@@ -456,7 +458,7 @@ def test_image_on_a_non_vision_model_fails_before_any_request(monkeypatch, tmp_p
 
     def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
               session_id=None, transform_context=None, max_turns=None,
-              max_cost=None, context_files=True):
+              max_cost=None, context_files=True, extra_prompt=""):
         return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=stream)
 
     monkeypatch.setattr(cli_main, "_build_agent", build)
@@ -488,7 +490,7 @@ def test_cwd_flag_changes_the_working_directory(monkeypatch, tmp_path):
 
     def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
               session_id=None, transform_context=None, max_turns=None,
-              max_cost=None, context_files=True):
+              max_cost=None, context_files=True, extra_prompt=""):
         seen["cwd"] = os.getcwd()
         return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=fake_stream())
 
@@ -612,3 +614,52 @@ def test_mcp_server_filter_selects_only_named_servers(monkeypatch, tmp_path):
     assert cli_main.main(["-p", "hi", "--mcp-file", str(config),
                           "--mcp-server", "beta"]) == 0
     assert captured["configs"] == ["beta"]
+
+
+# ---------------------------------------------------------------------------
+# S2-T4: skills
+# ---------------------------------------------------------------------------
+
+
+def test_skills_are_injected_into_tools_and_prompt(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    skill_dir = tmp_path / ".pyagent" / "skills" / "demo"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: demo\ndescription: demo skill for tests\n---\nBody here.\n"
+    )
+    monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
+    captured: dict = {}
+
+    def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
+              session_id=None, transform_context=None, max_turns=None,
+              max_cost=None, context_files=True, extra_prompt=""):
+        captured["tools"] = [tool.name for tool in (tools or [])]
+        captured["extra"] = extra_prompt
+        return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=fake_stream())
+
+    monkeypatch.setattr(cli_main, "_build_agent", build)
+    assert cli_main.main(["-p", "hi"]) == 0
+    assert "read_skill" in captured["tools"]
+    assert "demo" in captured["extra"]
+
+
+def test_no_skills_flag_disables_discovery(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    skill_dir = tmp_path / ".pyagent" / "skills" / "demo"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("---\nname: demo\ndescription: d\n---\n")
+    monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
+    captured: dict = {}
+
+    def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
+              session_id=None, transform_context=None, max_turns=None,
+              max_cost=None, context_files=True, extra_prompt=""):
+        captured["tools"] = [tool.name for tool in (tools or [])]
+        captured["extra"] = extra_prompt
+        return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=fake_stream())
+
+    monkeypatch.setattr(cli_main, "_build_agent", build)
+    assert cli_main.main(["-p", "hi", "--no-skills"]) == 0
+    assert "read_skill" not in captured["tools"]
+    assert captured["extra"] == ""

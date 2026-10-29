@@ -39,6 +39,12 @@ from pyagent.mcp.config import load_mcp_config
 from pyagent.mcp.manager import McpManager
 from pyagent.providers.catalog import Model, ProviderConfig, find_model, load_catalog
 from pyagent.providers.registry import StreamFn
+from pyagent.skills import (
+    build_skill_tool,
+    default_skill_roots,
+    discover_skills,
+    skills_prompt_index,
+)
 from pyagent.tools import ALL_TOOLS
 from pyagent.trace import TraceRecorder
 from pyagent.types import AssistantMessage, ImageContent, Message
@@ -99,6 +105,7 @@ def _build_agent(
     max_turns: int | None = None,
     max_cost: float | None = None,
     context_files: bool = True,
+    extra_prompt: str = "",
 ) -> Agent:
     """Construct the run's Agent (a seam for tests to inject a fake stream)."""
     tool_list = list(ALL_TOOLS if tools is None else tools)
@@ -107,6 +114,8 @@ def _build_agent(
         prompt = system_prompt_with_context(
             prompt, load_context_files(discover_context_files(Path.cwd()))
         )
+    if extra_prompt:
+        prompt = f"{prompt}\n\n{extra_prompt}"
     return Agent(
         model=model,
         system_prompt=prompt,
@@ -205,6 +214,7 @@ async def run_headless(
     mcp: bool = True,
     mcp_servers: list[str] | None = None,
     mcp_file: Path | str | None = None,
+    skills: bool = True,
 ) -> int:
     """Run one prompt to completion; returns the process exit code."""
     user_config = load_user_config()
@@ -254,6 +264,16 @@ async def run_headless(
             for warning in await mcp_manager.start():
                 print(f"pyagent: mcp {warning}", file=sys.stderr)
             tool_list = [*tool_list, *mcp_manager.tool_defs()]
+
+    skills_index = ""
+    if skills and tools is None:
+        discovered, skill_warnings = discover_skills(default_skill_roots(Path.cwd()))
+        for warning in skill_warnings:
+            print(f"pyagent: skills {warning}", file=sys.stderr)
+        if discovered:
+            tool_list = [*tool_list, build_skill_tool(discovered)]
+            skills_index = skills_prompt_index(discovered)
+
     guard = ContextGuard(model.context_window)
     agent = _build_agent(
         model,
@@ -266,6 +286,7 @@ async def run_headless(
         max_turns=max_turns,
         max_cost=max_cost,
         context_files=context_files,
+        extra_prompt=skills_index,
     )
 
     if resume is not None:
@@ -371,6 +392,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-turns", type=int, help="stop after this many provider requests"
     )
     parser.add_argument(
+        "--no-skills",
+        action="store_true",
+        help="do not load skills from .pyagent/skills",
+    )
+    parser.add_argument(
         "--no-mcp",
         action="store_true",
         help="do not connect any MCP servers",
@@ -461,6 +487,7 @@ def main(argv: list[str] | None = None) -> int:
                     mcp=not args.no_mcp,
                     mcp_servers=args.mcp_servers,
                     mcp_file=args.mcp_file,
+                    skills=not args.no_skills,
                 )
             )
         except KeyboardInterrupt:
@@ -485,6 +512,7 @@ def main(argv: list[str] | None = None) -> int:
                 mcp=not args.no_mcp,
                 mcp_servers=args.mcp_servers,
                 mcp_file=args.mcp_file,
+                skills=not args.no_skills,
             )
         )
     except KeyboardInterrupt:

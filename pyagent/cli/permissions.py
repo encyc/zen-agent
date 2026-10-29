@@ -18,8 +18,10 @@ from pyagent.types import ToolCall
 
 __all__ = ["READ_ONLY_TOOLS", "PermissionGate", "dangerous_command_reason"]
 
-#: Tools that only read state; they never need confirmation.
-READ_ONLY_TOOLS = frozenset({"read_file", "list_dir", "glob", "grep"})
+#: Tools that only read state; they never need confirmation. ``read_skill``
+#: reads a local markdown file, so it belongs here even though it is not a
+#: filesystem tool.
+READ_ONLY_TOOLS = frozenset({"read_file", "list_dir", "glob", "grep", "read_skill"})
 
 #: Cap for argument text echoed in a prompt.
 _MAX_ARGS_PREVIEW = 120
