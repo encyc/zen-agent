@@ -1,0 +1,12 @@
+event: response.created
+data: {"type":"response.created","response":{"id":"resp_text_1","status":"in_progress"}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","item_id":"msg_1","delta":"Hello"}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","item_id":"msg_1","delta":" from Responses"}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_text_1","status":"completed","usage":{"input_tokens":20,"output_tokens":5,"input_tokens_details":{"cached_tokens":8}}}}
+
