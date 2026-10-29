@@ -3,10 +3,12 @@
 ``ALL_TOOLS`` is what the CLI exposes to the model; add new tools there.
 """
 
+from pyagent.tools.bash import BASH
 from pyagent.tools.fs import EDIT_FILE, LIST_DIR, READ_FILE, WRITE_FILE
 
 __all__ = [
     "ALL_TOOLS",
+    "BASH",
     "EDIT_FILE",
     "LIST_DIR",
     "READ_FILE",
@@ -14,4 +16,4 @@ __all__ = [
 ]
 
 #: Every tool the coding agent offers, in prompt order.
-ALL_TOOLS = [READ_FILE, WRITE_FILE, EDIT_FILE, LIST_DIR]
+ALL_TOOLS = [READ_FILE, WRITE_FILE, EDIT_FILE, LIST_DIR, BASH]
