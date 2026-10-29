@@ -392,6 +392,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-turns", type=int, help="stop after this many provider requests"
     )
     parser.add_argument(
+        "--no-templates",
+        action="store_true",
+        help="do not load prompt templates from .pyagent/commands",
+    )
+    parser.add_argument(
         "--no-skills",
         action="store_true",
         help="do not load skills from .pyagent/skills",
@@ -488,6 +493,7 @@ def main(argv: list[str] | None = None) -> int:
                     mcp_servers=args.mcp_servers,
                     mcp_file=args.mcp_file,
                     skills=not args.no_skills,
+                    templates=not args.no_templates,
                 )
             )
         except KeyboardInterrupt:

@@ -27,7 +27,7 @@ from pyagent.agent.session import (
     truncate_last_turn,
 )
 from pyagent.cli.compact import compact, maybe_auto_compact
-from pyagent.cli.completion import ReplCompleter, help_text
+from pyagent.cli.completion import SLASH_COMMANDS, ReplCompleter, help_text
 from pyagent.cli.images import read_image_argument
 from pyagent.cli.main import (
     _api_key_for,
@@ -59,6 +59,7 @@ from pyagent.skills import (
     discover_skills,
     skills_prompt_index,
 )
+from pyagent.templates import default_template_roots, discover_templates, expand
 from pyagent.tools import ALL_TOOLS
 from pyagent.trace import TraceRecorder
 from pyagent.types import ImageContent
@@ -102,12 +103,17 @@ async def handle_slash(
     mcp_manager: McpManager | None = None,
     refresh_mcp=None,
     skill_list=None,
+    template_list=None,
 ) -> str | None:
     """Run one slash command; returns ``"exit"`` when the REPL should stop."""
     if command in ("exit", "quit"):
         return "exit"
     if command in ("help", "?"):
         print_fn(HELP_TEXT)
+        if template_list:
+            print_fn("\nprompt templates:")
+            for template in template_list:
+                print_fn(f"  /{template.name}  {template.description}")
         return None
     if command == "clear":
         agent.reset()
@@ -328,16 +334,19 @@ def _session_for(resume: str | Path | None) -> Session:
     return Session(path)
 
 
-def _make_default_reader(completion: bool = True) -> InputFn:
+def _make_default_reader(
+    completion: bool = True, extra_commands: dict[str, str] | None = None
+) -> InputFn:
     """prompt_toolkit reader with persistent history and completion."""
     from prompt_toolkit import PromptSession
     from prompt_toolkit.history import FileHistory
 
     history = Path.home() / ".pyagent" / "history"
     history.parent.mkdir(parents=True, exist_ok=True)
+    commands = {**SLASH_COMMANDS, **(extra_commands or {})}
     session = PromptSession(
         history=FileHistory(str(history)),
-        completer=ReplCompleter() if completion else None,
+        completer=ReplCompleter(slash_commands=commands) if completion else None,
     )
 
     async def read() -> str:
@@ -367,6 +376,7 @@ async def repl(
     mcp_file: Path | str | None = None,
     mcp_retry_interval_s: float = 10.0,
     skills: bool = True,
+    templates: bool = True,
 ) -> int:
     """Run the interactive loop; returns the process exit code."""
     user_config = load_user_config()
@@ -420,6 +430,18 @@ async def repl(
         if skill_list:
             tool_list = [*tool_list, build_skill_tool(skill_list)]
             skills_index = skills_prompt_index(skill_list)
+
+    template_list = []
+    if templates:
+        template_list, template_warnings = discover_templates(
+            default_template_roots(Path.cwd())
+        )
+        for warning in template_warnings:
+            print(f"pyagent: templates {warning}", file=sys.stderr)
+    template_by_name = {template.name: template for template in template_list}
+    extra_commands = {
+        f"/{template.name}": template.description for template in template_list
+    }
 
     prompt = build_prompt(tool_list)
     agent = Agent(
@@ -477,7 +499,9 @@ async def repl(
     if console is not None:
         console.print(f"[grey50]{session.path.name}[/grey50] · /help for commands")
 
-    read = input_fn or _make_default_reader(completion=completion)
+    read = input_fn or _make_default_reader(
+        completion=completion, extra_commands=extra_commands
+    )
     run_task: asyncio.Task | None = None
 
     async def reap() -> None:
@@ -518,6 +542,10 @@ async def repl(
                 continue
 
             command, argument = split_input(line)
+            prompt_text = line.strip()
+            if command and command in template_by_name:
+                prompt_text = expand(template_by_name[command].body, argument)
+                command = ""
             if command:
                 if (
                     await handle_slash(
@@ -533,6 +561,7 @@ async def repl(
                         mcp_manager=mcp_manager,
                         refresh_mcp=refresh_mcp,
                         skill_list=skill_list,
+                        template_list=template_list,
                     )
                     == "exit"
                 ):
@@ -555,11 +584,11 @@ async def repl(
                     )
                     continue
                 run_task = asyncio.create_task(
-                    agent.prompt(line.strip(), images=list(pending_images))
+                    agent.prompt(prompt_text, images=list(pending_images))
                 )
                 pending_images.clear()
             else:
-                run_task = asyncio.create_task(agent.prompt(line.strip()))
+                run_task = asyncio.create_task(agent.prompt(prompt_text))
     finally:
         if run_task is not None:
             agent.abort()

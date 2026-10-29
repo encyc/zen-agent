@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from pyagent.agent.loop import AgentTool, ToolResultAgent
+from pyagent.frontmatter import parse_frontmatter
 from pyagent.types import TextContent
 
 __all__ = [
@@ -61,34 +62,6 @@ def _first_line(text: str) -> str:
     return ""
 
 
-def _parse_frontmatter(text: str) -> tuple[dict[str, str], str, str | None]:
-    """Split ``---`` frontmatter from the body.
-
-    Returns ``(meta, body, problem)``; ``problem`` is set when a frontmatter
-    block is opened but never closed, or contains a line without a colon.
-    """
-    lines = text.splitlines()
-    if not lines or lines[0].strip() != "---":
-        return {}, text, None
-    end: int | None = None
-    for index in range(1, len(lines)):
-        if lines[index].strip() == "---":
-            end = index
-            break
-    if end is None:
-        return {}, text, "frontmatter is not closed with ---"
-    meta: dict[str, str] = {}
-    for line in lines[1:end]:
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        key, separator, value = line.partition(":")
-        if not separator or not key.strip():
-            return {}, text, f"bad frontmatter line: {stripped!r}"
-        meta[key.strip()] = value.strip().strip('"').strip("'")
-    return meta, "\n".join(lines[end + 1 :]).lstrip("\n"), None
-
-
 def discover_skills(roots: list[Path]) -> tuple[list[Skill], list[str]]:
     """Find ``<root>/<dir>/SKILL.md`` skills; returns ``(skills, warnings)``.
 
@@ -111,7 +84,7 @@ def discover_skills(roots: list[Path]) -> tuple[list[Skill], list[str]]:
             except (OSError, UnicodeDecodeError) as exc:
                 warnings.append(f"{path}: cannot read ({exc})")
                 continue
-            meta, body, problem = _parse_frontmatter(text)
+            meta, body, problem = parse_frontmatter(text)
             if problem is not None:
                 warnings.append(f"{path}: {problem}")
                 continue
