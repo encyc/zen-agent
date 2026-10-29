@@ -26,6 +26,7 @@ from pyagent.agent import Agent
 from pyagent.agent.session import Session, latest_session, list_sessions, session_path
 from pyagent.cli.compact import maybe_auto_compact
 from pyagent.cli.doctor import run_doctor
+from pyagent.cli.exportcmd import run_export
 from pyagent.cli.images import read_image_argument
 from pyagent.cli.permissions import PermissionGate
 from pyagent.config import ContextGuard, apply_user_config, load_user_config
@@ -401,6 +402,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="optional subcommand: doctor",
     )
     parser.add_argument("-p", "--prompt", help="run one prompt headlessly and exit")
+    parser.add_argument("session", nargs="?", help="session path for: export")
+    parser.add_argument(
+        "--format", choices=("md", "html"), default="md", help="export format (default md)"
+    )
+    parser.add_argument(
+        "-o", "--output", type=Path, help="export output path (default: next to the session)"
+    )
     parser.add_argument("-m", "--model", help="model id from the catalog")
     parser.add_argument(
         "--thinking",
@@ -517,6 +525,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"pyagent: --cwd is not a directory: {target}", file=sys.stderr)
             return 1
         os.chdir(target.resolve())
+    if args.command == "export":
+        return run_export(args.session, args.format, args.output)
     if args.command == "doctor":
         return asyncio.run(run_doctor())
     if args.command is not None:
