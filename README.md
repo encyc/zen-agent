@@ -36,6 +36,12 @@ uv run pyagent -p "explain what this repo does"
 # pick a model / reasoning level; allow write + execute tools
 uv run pyagent -p "create /tmp/x/hello.txt, then read it back" -m deepseek-flash --yes --thinking high
 
+# attach images (needs a vision model; deepseek-flash is one)
+uv run pyagent -p "what is in this picture?" --image shot.png
+
+# guardrails and reproducibility
+uv run pyagent -p "..." --max-turns 20 --max-cost 0.05 --no-context-files
+
 # structured output (a single JSON object; no streamed text)
 uv run pyagent -p "say hi" --json
 
@@ -63,6 +69,11 @@ uv run pyagent doctor      # keys, catalog, config, session dir, terminal
 | `/model [id]` | show / switch model (next turn) |
 | `/thinking [level]` | `off` / `low` / `medium` / `high` / `max` |
 | `/compact` | summarize the session into a new session file |
+| `/undo` | drop the last turn (writes a new session file) |
+| `/sessions` | list saved sessions |
+| `/fork <n>` | branch a new session at user message n |
+| `/import <path>` | load a session file and continue it |
+| `/image <path>` | attach an image for the next prompt |
 
 While the agent is working, anything you type is queued as steering input
 rather than starting a second run. Ctrl+C aborts the current run cooperatively.
@@ -85,7 +96,8 @@ dimension, so peak rates are used — treat `usage.cost` as a conservative upper
 bound. Providers with subscription pricing (zai, opencode-go) carry 0.
 
 Sessions are append-only JSONL under `~/.pyagent/sessions/`; `--resume` continues
-the most recent one. The file format is exactly the public message model, so it
+the most recent one. Destructive-looking operations never rewrite a file: `/undo`,
+`/fork` and `/compact` all write a new session and leave the old one intact. The file format is exactly the public message model, so it
 can be inspected with `jq` or replayed elsewhere.
 
 ## Architecture
