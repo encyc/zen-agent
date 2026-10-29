@@ -63,6 +63,7 @@ from pyagent.skills import (
     discover_skills,
     skills_prompt_index,
 )
+from pyagent.telemetry import MetricsRecorder, append_metrics
 from pyagent.templates import default_template_roots, discover_templates, expand
 from pyagent.tools import ALL_TOOLS
 from pyagent.trace import TraceRecorder
@@ -428,6 +429,7 @@ async def repl(
     extension_paths: list[str] | None = None,
     read_only: bool = False,
     theme: str | None = None,
+    metrics: Path | None = None,
 ) -> int:
     """Run the interactive loop; returns the process exit code."""
     user_config = load_user_config()
@@ -642,6 +644,9 @@ async def repl(
                 session_box[0].append(message)
         printer(event)
 
+    metrics_recorder = MetricsRecorder(model.id) if metrics else None
+    if metrics_recorder is not None:
+        agent.subscribe(metrics_recorder)
     tracer = TraceRecorder(trace) if trace else None
     if tracer is not None:
         agent.subscribe(tracer)
@@ -671,7 +676,7 @@ async def repl(
 
     async def reap() -> None:
         """Clear a finished run so the next line is treated as a new prompt."""
-        nonlocal run_task
+        nonlocal run_task, metrics_recorder
         if run_task is not None and run_task.done():
             await asyncio.gather(run_task, return_exceptions=True)
             run_task = None
@@ -679,6 +684,10 @@ async def repl(
                 compacted = await maybe_auto_compact(agent, print_fn=print_fn)
                 if compacted is not None:
                     switch_session(Session(compacted))
+            if metrics_recorder is not None:
+                append_metrics(metrics, metrics_recorder.build(agent.termination))
+                metrics_recorder = MetricsRecorder(model.id)
+                agent.subscribe(metrics_recorder)
             print_fn(
                 status_line(
                     model_id=agent.model.id,

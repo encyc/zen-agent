@@ -48,6 +48,7 @@ from pyagent.skills import (
     discover_skills,
     skills_prompt_index,
 )
+from pyagent.telemetry import MetricsRecorder, append_metrics
 from pyagent.tools import ALL_TOOLS
 from pyagent.trace import TraceRecorder
 from pyagent.types import AssistantMessage, ImageContent, Message
@@ -211,6 +212,7 @@ async def run_headless(
     max_cost: float | None = None,
     retries: int = 0,
     context_files: bool = True,
+    metrics: Path | None = None,
     stream_fn: StreamFn | None = None,
     tools: list | None = None,
     resume: str | Path | None = None,
@@ -353,6 +355,9 @@ async def run_headless(
 
             agent.subscribe(hook)
 
+    metrics_recorder = MetricsRecorder(model.id) if metrics else None
+    if metrics_recorder is not None:
+        agent.subscribe(metrics_recorder)
     tracer = TraceRecorder(trace) if trace else None
     if tracer is not None:
         agent.subscribe(tracer)
@@ -368,6 +373,8 @@ async def run_headless(
     finally:
         if mcp_manager is not None:
             await mcp_manager.close()
+        if metrics_recorder is not None:
+            append_metrics(metrics, metrics_recorder.build(agent.termination))
 
     ok = agent.error_message is None and agent.termination in ("stop", "tool_terminate")
     if json_output:
@@ -446,6 +453,21 @@ def build_parser() -> argparse.ArgumentParser:
         dest="images",
         metavar="PATH",
         help="attach an image (repeatable; needs a vision-capable model)",
+    )
+    parser.add_argument(
+        "--metrics",
+        metavar="PATH",
+        help="append one JSON metrics line per run",
+    )
+    parser.add_argument(
+        "--report",
+        action="store_true",
+        help="with doctor: print a redacted diagnostics report",
+    )
+    parser.add_argument(
+        "--report-out",
+        type=Path,
+        help="with doctor --report: write the report to this file",
     )
     parser.add_argument(
         "--retries",
@@ -544,6 +566,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "export":
         return run_export(args.session, args.format, args.output)
     if args.command == "doctor":
+        if args.report:
+            from pyagent.crash import collect_report
+
+            report = collect_report()
+            if args.report_out:
+                args.report_out.write_text(report, encoding="utf-8")
+                print(f"pyagent: report written to {args.report_out}")
+            else:
+                print(report, end="")
+            return 0
         return asyncio.run(run_doctor())
     if args.command is not None:
         print(f"pyagent: unknown command: {args.command} (try: doctor)", file=sys.stderr)
@@ -596,6 +628,7 @@ def main(argv: list[str] | None = None) -> int:
                 max_turns=args.max_turns,
                 max_cost=args.max_cost,
                 retries=args.retries,
+                metrics=args.metrics,
                 context_files=not args.no_context_files,
                 auto_compact=not args.no_auto_compact,
                 images=args.images,
