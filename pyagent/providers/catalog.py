@@ -7,8 +7,8 @@ the small purpose-built reader below — the kernel keeps ``httpx`` as its
 only dependency, so PyYAML is deliberately out. The accepted grammar is
 exactly: nested space-indented mappings, scalar strings/ints/floats/
 bools, inline ``{key: value}`` flow maps for ``cost``, and ``#``
-comments; anchors, aliases, tags, lists, tabs, and quoted strings are
-rejected with line-numbered errors.
+comments; anchors, aliases, tags, lists, tabs, quoted strings, and
+null/nan/inf tokens are rejected with line-numbered errors.
 
 Compat rule: catalog entries never sniff their base_url. A model's
 explicit ``compat`` block — or its absence — is final; ``sniff_compat``
@@ -55,6 +55,10 @@ _COMPAT_KEYS = frozenset(
 )
 _COST_KEYS = frozenset({"input", "output"})
 _INT_PATTERN = re.compile(r"-?\d+\Z")
+#: Tokens that YAML/float() would accept but the catalog grammar forbids:
+#: no nulls, no NaN/Infinity — a cost or string slot must never hold them.
+_FORBIDDEN_SCALARS = frozenset({"null", "~"})
+_NAN_INF = frozenset({"nan", "inf", "infinity"})
 
 
 @dataclass
@@ -128,6 +132,12 @@ def _tokenize(text: str) -> list[tuple[int, str, str | None, int]]:
 
 
 def _parse_scalar(token: str, lineno: int) -> bool | int | float | str:
+    lowered = token.lower()
+    if lowered in _FORBIDDEN_SCALARS or lowered.lstrip("+-") in _NAN_INF:
+        raise ValueError(
+            f"catalog line {lineno}: {token!r} is not a valid catalog scalar "
+            f"(null/nan/inf are rejected)"
+        )
     if token == "true":
         return True
     if token == "false":
@@ -161,10 +171,10 @@ def _parse_flow_map(token: str, lineno: int) -> dict:
 
 
 def _parse_value(token: str, lineno: int):
-    if token[0] in "&*!|>":
+    if token[0] in "&*!|>[\"'":
         raise ValueError(
-            f"catalog line {lineno}: anchors, aliases, tags, and block scalars "
-            f"are not supported ({token!r})"
+            f"catalog line {lineno}: anchors, aliases, tags, block scalars, "
+            f"quoted strings, and flow sequences are not supported ({token!r})"
         )
     if token.startswith("{"):
         return _parse_flow_map(token, lineno)

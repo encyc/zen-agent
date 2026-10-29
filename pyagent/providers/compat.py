@@ -45,11 +45,14 @@ def sniff_compat(base_url: str) -> CompatFlags:
     """
     lowered = base_url.lower()
     if "bigmodel.cn" in lowered:
+        # Aligned with the catalog's zai compat blocks (see zai-coding-cn in
+        # catalog.yaml) — one source of truth for the zai dialect.
         return CompatFlags(
             thinking_format="zai",
             zai_tool_stream=True,
             max_tokens_field="max_tokens",
             supports_developer_role=False,
+            supports_reasoning_effort=True,
         )
     if "deepseek.com" in lowered:
         return CompatFlags(

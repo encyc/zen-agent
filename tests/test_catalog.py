@@ -36,9 +36,16 @@ def test_sniff_compat_bigmodel_host_returns_zai_dialect():
     assert flags.zai_tool_stream is True
     assert flags.max_tokens_field == "max_tokens"
     assert flags.supports_developer_role is False
-    # unlisted flags keep their dataclass defaults
-    assert flags.supports_reasoning_effort is False
+    # aligned with the catalog's zai compat blocks, not silently diverged
+    assert flags.supports_reasoning_effort is True
     assert flags.supports_usage_in_streaming is True
+
+
+def test_sniffed_zai_dialect_equals_catalog_compat():
+    # The sniffed bigmodel.cn dialect must equal the catalog's explicit zai
+    # compat — the catalog is the source of truth for the dialect.
+    glm_compat = _models_by_id(load_catalog(), "zai-coding-cn")["glm-5.3"].compat
+    assert sniff_compat("https://open.bigmodel.cn/api/coding/paas/v4") == glm_compat
 
 
 def test_sniff_compat_deepseek_host_returns_deepseek_dialect():
@@ -286,3 +293,39 @@ def test_parser_rejects_missing_required_model_keys():
     missing = SYNTHETIC_CATALOG.replace("        max_tokens: 512\n", "")
     with pytest.raises(ValueError, match="missing required key 'max_tokens'"):
         _build_catalog(missing)
+
+
+def test_parser_rejects_quoted_strings_with_line_numbers():
+    # 'name: Acme API' sits on line 4 of SYNTHETIC_CATALOG; a quoted edit
+    # must fail loudly (with the line number) instead of storing '"Acme API"'.
+    double_quoted = SYNTHETIC_CATALOG.replace("name: Acme API", 'name: "Acme API"')
+    with pytest.raises(ValueError, match=r"catalog line 4.*quoted"):
+        _build_catalog(double_quoted)
+    single_quoted = SYNTHETIC_CATALOG.replace("name: Acme API", "name: 'Acme API'")
+    with pytest.raises(ValueError, match=r"catalog line 4"):
+        _build_catalog(single_quoted)
+    # flow sequences too: 'api_key_env' is line 6
+    flow_seq = SYNTHETIC_CATALOG.replace(
+        "api_key_env: ACME_API_KEY", "api_key_env: [ACME_API_KEY]"
+    )
+    with pytest.raises(ValueError, match=r"catalog line 6"):
+        _build_catalog(flow_seq)
+
+
+def test_parser_rejects_null_tilde_nan_inf_scalars():
+    nulled = SYNTHETIC_CATALOG.replace("thinking_format: zai", "thinking_format: null")
+    with pytest.raises(ValueError, match="null"):
+        _build_catalog(nulled)
+    tilded = SYNTHETIC_CATALOG.replace("thinking_format: zai", "thinking_format: ~")
+    with pytest.raises(ValueError, match="not a valid catalog scalar"):
+        _build_catalog(tilded)
+    nan_cost = SYNTHETIC_CATALOG.replace(
+        "cost: {input: 1.5, output: 2}", "cost: {input: nan, output: 2}"
+    )
+    with pytest.raises(ValueError, match="nan"):
+        _build_catalog(nan_cost)
+    inf_cost = SYNTHETIC_CATALOG.replace(
+        "cost: {input: 1.5, output: 2}", "cost: {input: 1.5, output: -inf}"
+    )
+    with pytest.raises(ValueError, match="inf"):
+        _build_catalog(inf_cost)
