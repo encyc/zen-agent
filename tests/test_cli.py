@@ -156,9 +156,15 @@ def test_json_output_has_documented_fields(monkeypatch, capsys):
     assert set(payload["usage"]) == {"input", "output", "cost"}
 
 
-def test_missing_prompt_is_a_usage_error(capsys):
-    assert cli_main.main([]) == 1
-    assert "no prompt given" in capsys.readouterr().err
+def test_no_prompt_enters_the_interactive_repl(monkeypatch):
+    """Without -p the CLI hands control to the REPL (behavior of Task 17)."""
+    import pyagent.cli.repl as repl_module
+
+    async def fake_repl(**kwargs):
+        return 0
+
+    monkeypatch.setattr(repl_module, "repl", fake_repl)
+    assert cli_main.main([]) == 0
 
 
 # ---------------------------------------------------------------------------

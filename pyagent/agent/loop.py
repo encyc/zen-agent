@@ -333,6 +333,15 @@ async def agent_loop(
     turns = 0
     length_failures = 0
     try:
+        # Input typed while the previous run was finishing is still queued: pick
+        # it up before the first request instead of waiting for a tool round.
+        if config.get_steering_messages is not None:
+            for message in await config.get_steering_messages():
+                state.messages.append(message)
+                new_messages.append(message)
+                yield AgentEvent(type="message_start", message=message)
+                yield AgentEvent(type="message_end", message=message)
+
         while True:
             if abort is not None and abort.aborted:
                 break

@@ -407,7 +407,8 @@ async def test_steering_messages_appended_after_tool_round():
 
     async def steer() -> list[Message]:
         steering_calls.append(time.monotonic())
-        if len(steering_calls) == 1:
+        # first poll happens at run start, the second one after the tool round
+        if len(steering_calls) == 2:
             return [UserMessage(content="new info", timestamp=int(time.time()))]
         return []
 
@@ -430,9 +431,9 @@ async def test_steering_messages_appended_after_tool_round():
     assert len(stream.calls) == 2
     assert stream.calls[1]["messages"][4] is state.messages[3]
 
-    # Steering is only consulted after tool rounds: once here (the final text
-    # round consults nothing because the loop breaks on stop).
-    assert len(steering_calls) == 1
+    # Steering is consulted at run start and after each tool round (twice
+    # here); the final text round breaks on stop without a third poll.
+    assert len(steering_calls) == 2
     assert types.count("message_start") == 5  # user, a1, result, steer, a2
     assert events[-1].new_messages == state.messages
 
@@ -877,3 +878,25 @@ async def test_repeated_truncation_stops_instead_of_reasking_forever():
         m.tool_call_id for m in state.messages if isinstance(m, ToolResultMessage)
     ]
     assert calls == results == ["c1", "c1"]
+
+
+async def test_steering_queued_before_the_run_is_injected_at_start():
+    """Typed-while-waiting input must reach the very first request."""
+    stream = ScriptedStream([[say("ok"), finish("stop")]])
+    queued = [UserMessage(content="earlier note", timestamp=1)]
+
+    async def steering():
+        found, queued[:] = list(queued), []
+        return found
+
+    state = AgentState()
+    events = await run("go", state, make_config(stream, get_steering_messages=steering))
+
+    first_request = stream.calls[0]["messages"]
+    assert [type(m).__name__ for m in first_request] == ["SystemMessage", "UserMessage", "UserMessage"]
+    assert first_request[2].content == "earlier note"
+    assert any(
+        event.type == "message_end" and isinstance(event.message, UserMessage)
+        and event.message.content == "earlier note"
+        for event in events
+    )

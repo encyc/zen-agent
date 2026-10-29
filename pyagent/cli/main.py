@@ -219,14 +219,14 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if not args.prompt:
-        print(
-            "pyagent: no prompt given; use -p/--prompt (the interactive REPL "
-            "arrives in a later milestone)",
-            file=sys.stderr,
-        )
-        return 1
-    if args.resume:
-        print("pyagent: --resume is not available yet (Task 15)", file=sys.stderr)
+        # Interactive mode lives in repl.py; imported lazily to avoid a cycle.
+        from pyagent.cli.repl import repl
+
+        try:
+            return asyncio.run(repl(model_id=args.model, resume=args.resume))
+        except KeyboardInterrupt:
+            print(file=sys.stderr)
+            return 1
     try:
         return asyncio.run(
             run_headless(
