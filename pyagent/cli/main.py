@@ -18,6 +18,7 @@ import io
 import json
 import os
 import sys
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -66,6 +67,13 @@ def _api_key_for(catalog: dict[str, ProviderConfig], model: Model) -> str | None
     return os.environ.get(provider.api_key_env) or None
 
 
+def session_id_for(model: Model, provided: str | None = None) -> str | None:
+    """OpenCode's gateway routes on a session id; other providers do not care."""
+    if provided:
+        return provided
+    return uuid.uuid4().hex if model.provider == "opencode-go" else None
+
+
 def _build_agent(
     model: Model,
     api_key: str,
@@ -73,6 +81,7 @@ def _build_agent(
     gate: PermissionGate,
     stream_fn: StreamFn | None = None,
     tools: list | None = None,
+    session_id: str | None = None,
 ) -> Agent:
     """Construct the run's Agent (a seam for tests to inject a fake stream)."""
     tool_list = list(ALL_TOOLS if tools is None else tools)
@@ -82,6 +91,7 @@ def _build_agent(
         tools=tool_list,
         api_key=api_key,
         thinking=thinking,
+        session_id=session_id_for(model, session_id),
         stream_fn=stream_fn,
         before_tool_call=gate.before_tool_call,
     )

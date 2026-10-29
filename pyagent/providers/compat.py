@@ -54,6 +54,10 @@ class CompatFlags:
     requires_reasoning_content_on_assistant: bool = False
     #: Whether streamed responses include usage (OpenAI ``stream_options``).
     supports_usage_in_streaming: bool = True
+    #: Anthropic: use the newer ``thinking: {type: adaptive}`` + ``output_config.effort``
+    #: shape instead of ``thinking: {type: enabled, budget_tokens}``. Some gateway
+    #: models reject the classic shape ("thinking.type.enabled is not supported").
+    anthropic_adaptive_thinking: bool = False
 
 
 def sniff_compat(base_url: str) -> CompatFlags:

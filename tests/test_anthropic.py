@@ -160,7 +160,7 @@ def test_request_body_has_required_anthropic_fields():
         [WEATHER],
         StreamOptions(api_key="k", max_tokens=512),
     )
-    assert url == "https://opencode.ai/inference/go/messages"
+    assert url == "https://opencode.ai/inference/go/v1/messages"
     assert headers["x-api-key"] == "k"
     assert headers["anthropic-version"] == ANTHROPIC_VERSION
     assert body["model"] == "claude-test"
@@ -314,9 +314,21 @@ async def test_stream_posts_to_the_messages_endpoint(monkeypatch):
         )
     ]
 
-    assert captured["url"] == "https://opencode.ai/inference/go/messages"
+    assert captured["url"] == "https://opencode.ai/inference/go/v1/messages"
     assert captured["headers"]["x-api-key"] == "key-123"
     assert captured["body"]["max_tokens"] == 256
     assert events[-1].type == "done"
     assert events[-1].partial.content[0].text == "Hello from Claude"
     assert real_client is not am.default_client  # sanity: patch scoped
+
+
+def test_adaptive_thinking_shape_for_gateway_models():
+    adaptive = model()
+    adaptive.compat = CompatFlags(anthropic_adaptive_thinking=True)
+    _, _, body = build_request(
+        adaptive, [UserMessage(content="hi", timestamp=1)], [],
+        StreamOptions(api_key="k", thinking="high"),
+    )
+    assert body["thinking"] == {"type": "adaptive"}
+    assert body["output_config"] == {"effort": "high"}
+    assert "budget_tokens" not in body["thinking"]

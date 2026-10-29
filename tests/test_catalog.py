@@ -161,7 +161,10 @@ def test_opencode_go_multi_protocol_gateway():
     assert models["glm-5.3"].base_url == provider.base_url
     assert models["deepseek-v4-pro"].base_url == provider.base_url
     assert all(m.cost == Cost() for m in models.values())
-    assert all(m.compat == CompatFlags() for m in models.values())
+    # gateway claude rejects thinking.type.enabled, so it opts into adaptive
+    assert models["claude-haiku-5-5"].compat.anthropic_adaptive_thinking is True
+    for model_id in ("glm-5.3", "deepseek-v4-pro"):
+        assert models[model_id].compat == CompatFlags()
 
 
 # ------------------------------------------------- parser (on synthetic input)

@@ -51,6 +51,7 @@ _COMPAT_KEYS = frozenset(
         "zai_tool_stream",
         "requires_reasoning_content_on_assistant",
         "supports_usage_in_streaming",
+        "anthropic_adaptive_thinking",
     }
 )
 _COST_KEYS = frozenset({"input", "output"})

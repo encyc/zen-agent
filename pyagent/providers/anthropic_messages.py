@@ -219,7 +219,13 @@ def build_request(
         ]
     budget = thinking_budget(level, max_tokens)
     if budget is not None:
-        body["thinking"] = {"type": "enabled", "budget_tokens": budget}
+        if model.compat.anthropic_adaptive_thinking:
+            # Newer Anthropic shape: the model decides how much to think, the
+            # caller only picks an effort level.
+            body["thinking"] = {"type": "adaptive"}
+            body["output_config"] = {"effort": level}
+        else:
+            body["thinking"] = {"type": "enabled", "budget_tokens": budget}
     elif options.temperature is not None:
         # Anthropic rejects temperature together with extended thinking.
         body["temperature"] = options.temperature
@@ -234,7 +240,10 @@ def build_request(
         headers.update(options.extra_headers)
     if options.session_id:
         headers["x-opencode-session"] = options.session_id
-    url = f"{model.base_url.rstrip('/')}/messages"
+    base = model.base_url.rstrip("/")
+    # Anthropic SDK convention: the caller's base URL does not include /v1, so
+    # the version prefix is ours to add (pi-ai derives its base the same way).
+    url = f"{base}/messages" if base.endswith("/v1") else f"{base}/v1/messages"
     return url, headers, body
 
 

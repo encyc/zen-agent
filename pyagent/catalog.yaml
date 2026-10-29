@@ -82,6 +82,9 @@ providers:
         max_tokens: 128000
         reasoning: true
         cost: {input: 0, output: 0}
+        compat:
+          # gateway rejects thinking.type.enabled; wants adaptive + effort
+          anthropic_adaptive_thinking: true
       glm-5.3:
         adapter: openai-completions
         context_window: 1000000

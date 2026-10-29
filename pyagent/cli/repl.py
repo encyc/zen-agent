@@ -21,7 +21,7 @@ from rich.console import Console
 from pyagent.agent import Agent
 from pyagent.agent.session import Session, latest_session, session_path
 from pyagent.cli.compact import compact
-from pyagent.cli.main import _api_key_for, _system_prompt, resolve_model
+from pyagent.cli.main import _api_key_for, _system_prompt, resolve_model, session_id_for
 from pyagent.cli.permissions import PermissionGate
 from pyagent.cli.render import tool_result_line
 from pyagent.events import AgentEvent
@@ -203,6 +203,7 @@ async def repl(
         tools=tool_list,
         api_key=key,
         thinking="high" if model.reasoning else "off",
+        session_id=session_id_for(model, session.path.stem),
         stream_fn=stream_fn,
         before_tool_call=PermissionGate(interactive=True).before_tool_call,
     )

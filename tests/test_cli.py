@@ -83,7 +83,7 @@ def test_resolve_model_rejects_unknown_id():
 def _patch_agent(monkeypatch, stream, captured: dict):
     """Replace _build_agent with one that injects ``stream``, recording args."""
 
-    def build(model, api_key, thinking, gate, stream_fn=None, tools=None):
+    def build(model, api_key, thinking, gate, stream_fn=None, tools=None, session_id=None):
         captured.update(model=model, thinking=thinking, gate=gate, tools=tools)
         return Agent(
             model=model,
