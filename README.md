@@ -74,6 +74,24 @@ Servers that are down at start are retried before each prompt (`/mcp` shows
 state, `/mcp retry` forces it), and `/reload` re-discovers skills, templates and
 extensions mid-session.
 
+### Library / SDK
+
+```python
+from pyagent.agent import Agent
+from pyagent.tools import ALL_TOOLS
+
+agent = Agent(
+    model=model,                 # a pyagent.providers.catalog.Model
+    system_prompt="be brief",
+    tools=list(ALL_TOOLS),       # or your own AgentTool objects
+    api_key="...",
+)
+await agent.prompt("explain this repo")   # events via agent.subscribe(fn)
+```
+
+See `examples/` for a headless run, a custom tool with a fake stream (offline),
+a direct MCP call, and a `pyagent rpc` client.
+
 ### REPL commands
 
 | command | effect |
