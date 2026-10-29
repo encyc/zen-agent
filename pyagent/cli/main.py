@@ -38,6 +38,7 @@ from pyagent.events import AgentEvent
 from pyagent.providers.catalog import Model, ProviderConfig, find_model, load_catalog
 from pyagent.providers.registry import StreamFn
 from pyagent.tools import ALL_TOOLS
+from pyagent.trace import TraceRecorder
 from pyagent.types import AssistantMessage, ImageContent, Message
 
 __all__ = ["build_parser", "main", "resolve_model", "run_headless"]
@@ -198,6 +199,7 @@ async def run_headless(
     resume: str | Path | None = None,
     auto_compact: bool = True,
     images: list[Path] | None = None,
+    trace: Path | str | None = None,
 ) -> int:
     """Run one prompt to completion; returns the process exit code."""
     user_config = load_user_config()
@@ -268,6 +270,9 @@ async def run_headless(
 
     # --json must not stream plain text; collect it into a buffer instead.
     printer = _PlainOutput(out=io.StringIO() if json_output else None)
+    tracer = TraceRecorder(trace) if trace else None
+    if tracer is not None:
+        agent.subscribe(tracer)
     agent.subscribe(guard.on_event)
     agent.subscribe(persist)
     agent.subscribe(printer)
@@ -300,6 +305,8 @@ async def run_headless(
             f"pyagent: run stopped early ({agent.termination})",
             file=sys.stderr,
         )
+    if tracer is not None:
+        tracer.close()
     return 0 if ok else 1
 
 
@@ -342,6 +349,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-turns", type=int, help="stop after this many provider requests"
     )
     parser.add_argument(
+        "--cwd",
+        metavar="PATH",
+        help="working directory to run in (default: current directory)",
+    )
+    parser.add_argument(
+        "--trace",
+        metavar="PATH",
+        help="append a JSONL trace of turns and tool calls",
+    )
+    parser.add_argument(
         "--list-sessions",
         action="store_true",
         help="list saved sessions and exit",
@@ -369,6 +386,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.cwd:
+        target = Path(args.cwd).expanduser()
+        if not target.is_dir():
+            print(f"pyagent: --cwd is not a directory: {target}", file=sys.stderr)
+            return 1
+        os.chdir(target.resolve())
     if args.command == "doctor":
         return asyncio.run(run_doctor())
     if args.command is not None:
@@ -395,6 +418,7 @@ def main(argv: list[str] | None = None) -> int:
                     context_files=not args.no_context_files,
                     completion=not args.no_completion,
                     auto_compact=not args.no_auto_compact,
+                    trace=args.trace,
                 )
             )
         except KeyboardInterrupt:
@@ -415,6 +439,7 @@ def main(argv: list[str] | None = None) -> int:
                 context_files=not args.no_context_files,
                 auto_compact=not args.no_auto_compact,
                 images=args.images,
+                trace=args.trace,
             )
         )
     except KeyboardInterrupt:

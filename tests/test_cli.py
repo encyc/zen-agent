@@ -111,6 +111,8 @@ def _patch_agent(monkeypatch, stream, captured: dict):
             thinking=thinking,
             stream_fn=stream,
             before_tool_call=gate.before_tool_call,
+            max_turns=max_turns,
+            max_cost=max_cost,
         )
 
     monkeypatch.setattr(cli_main, "_build_agent", build)
@@ -471,3 +473,55 @@ def test_invalid_image_file_is_reported(monkeypatch, tmp_path, capsys):
     _patch_agent(monkeypatch, fake_stream(), {})
     assert cli_main.main(["-p", "hi", "-m", "deepseek-flash", "--image", str(bad)]) == 1
     assert "does not look like" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# S2-T1: --cwd and --trace
+# ---------------------------------------------------------------------------
+
+
+def test_cwd_flag_changes_the_working_directory(monkeypatch, tmp_path):
+    monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
+    import os
+
+    seen: dict = {}
+
+    def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
+              session_id=None, transform_context=None, max_turns=None,
+              max_cost=None, context_files=True):
+        seen["cwd"] = os.getcwd()
+        return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=fake_stream())
+
+    monkeypatch.setattr(cli_main, "_build_agent", build)
+    original = os.getcwd()
+    try:
+        assert cli_main.main(["-p", "hi", "--cwd", str(tmp_path)]) == 0
+    finally:
+        os.chdir(original)
+    assert seen["cwd"] == str(tmp_path)
+
+
+def test_bad_cwd_is_rejected(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
+    _patch_agent(monkeypatch, fake_stream(), {})
+    assert cli_main.main(["-p", "hi", "--cwd", str(tmp_path / "missing")]) == 1
+    assert "not a directory" in capsys.readouterr().err
+
+
+def test_trace_flag_writes_jsonl(monkeypatch, tmp_path):
+    import json
+
+    monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
+    _patch_agent(monkeypatch, looping_tool_stream(), {})
+    trace_path = tmp_path / "run.jsonl"
+
+    assert cli_main.main(["-p", "hi", "--max-turns", "1", "--trace", str(trace_path),
+                          "--cwd", str(tmp_path)]) == 1
+    lines = trace_path.read_text(encoding="utf-8").splitlines()
+    assert lines
+    payloads = [json.loads(line) for line in lines]
+    assert any(p["type"] == "turn_start" for p in payloads)
+    assert [p["type"] for p in payloads if p["type"].startswith("tool_")] == [
+        "tool_start",
+        "tool_end",
+    ]

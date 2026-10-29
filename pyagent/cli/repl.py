@@ -52,6 +52,7 @@ from pyagent.events import AgentEvent
 from pyagent.providers.catalog import find_model, load_catalog
 from pyagent.providers.registry import StreamFn
 from pyagent.tools import ALL_TOOLS
+from pyagent.trace import TraceRecorder
 from pyagent.types import ImageContent
 
 __all__ = [
@@ -330,6 +331,7 @@ async def repl(
     context_files: bool = True,
     completion: bool = True,
     auto_compact: bool = True,
+    trace: Path | str | None = None,
 ) -> int:
     """Run the interactive loop; returns the process exit code."""
     user_config = load_user_config()
@@ -389,6 +391,9 @@ async def repl(
                 session_box[0].append(message)
         printer(event)
 
+    tracer = TraceRecorder(trace) if trace else None
+    if tracer is not None:
+        agent.subscribe(tracer)
     agent.subscribe(guard.on_event)
     agent.subscribe(on_event)
     if console is not None:
@@ -477,3 +482,5 @@ async def repl(
         if run_task is not None:
             agent.abort()
             await asyncio.gather(run_task, return_exceptions=True)
+        if tracer is not None:
+            tracer.close()
