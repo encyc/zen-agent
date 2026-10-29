@@ -157,35 +157,54 @@ def to_request_messages(messages: list[Message], compat: CompatFlags) -> list[di
     return request
 
 
+#: User-level thinking levels this adapter accepts. ``None`` and ``"off"``
+#: both mean "no thinking" and must produce identical request bodies; any
+#: other string is a programming error, not something to send upstream.
+_THINKING_LEVELS = frozenset({"low", "medium", "high"})
+
+
+def _normalize_thinking(thinking: str | None) -> str | None:
+    """Map a user-level thinking setting onto an enabled level or ``None``.
+
+    Raises ValueError for values outside the accepted set — silently shipping
+    a bogus ``reasoning_effort`` upstream is worse than failing fast.
+    """
+    if thinking is None or thinking == "off":
+        return None
+    if thinking not in _THINKING_LEVELS:
+        expected = "None, 'off', 'low', 'medium', 'high'"
+        raise ValueError(f"invalid thinking level {thinking!r}; expected one of {expected}")
+    return thinking
+
+
 def _apply_thinking_dialect(
     params: dict, model: Model, options: StreamOptions, compat: CompatFlags
 ) -> None:
     """Emit the dialect's thinking controls into ``params`` in place."""
+    level = _normalize_thinking(options.thinking)
     if compat.thinking_format == "zai" and model.reasoning:
         params["thinking"] = (
             {"type": "enabled", "clear_thinking": False}
-            if options.thinking is not None
+            if level is not None
             else {"type": "disabled"}
         )
-        if compat.supports_reasoning_effort and options.thinking is not None:
-            params["reasoning_effort"] = options.thinking
+        if compat.supports_reasoning_effort and level is not None:
+            params["reasoning_effort"] = level
         return
     if compat.thinking_format == "deepseek" and model.reasoning:
         params["thinking"] = (
-            {"type": "enabled"}
-            if options.thinking is not None
-            else {"type": "disabled"}
+            {"type": "enabled"} if level is not None else {"type": "disabled"}
         )
-        if compat.supports_reasoning_effort and options.thinking is not None:
-            params["reasoning_effort"] = options.thinking
+        if compat.supports_reasoning_effort and level is not None:
+            params["reasoning_effort"] = level
         return
     if (
         compat.thinking_format is None
         and compat.supports_reasoning_effort
-        and options.thinking is not None
+        and level is not None
     ):
         # No thinking dialect: reasoning effort is the only control.
-        params["reasoning_effort"] = options.thinking
+        params["reasoning_effort"] = level
 
 
 def build_params(

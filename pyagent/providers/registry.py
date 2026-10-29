@@ -9,9 +9,10 @@ Two small pieces that every model API meets at the boundary:
 * ``safe_stream``: wrap any stream fn so the consumer's ``async for`` never
   sees an exception. If the fn raises — before the first event or mid-stream,
   e.g. a connection reset after deltas already flowed — exactly one terminal
-  ``error(reason="error")`` event is produced instead, carrying whatever was
-  known: the last live ``partial`` snapshot, or a minimal shell message when
-  not even that exists. A fn that raises *after* its terminal event yields no
+  event is produced instead, carrying whatever was known: the last live
+  ``partial`` snapshot, or a minimal shell message when not even that exists.
+  ``Aborted`` (cooperative cancellation) maps to ``reason="aborted"``; any
+  other ``Exception`` maps to ``reason="error"``. A fn that raises *after* its terminal event yields no
   second terminal (defensive; a well-formed fn never does this).
 
 ``default_client`` is re-exported from ``transport`` so callers need only
@@ -21,7 +22,7 @@ import this module.
 import time
 from collections.abc import AsyncIterator, Callable
 
-from pyagent.events import AssistantEvent
+from pyagent.events import Aborted, AssistantEvent
 from pyagent.providers import openai_completions
 from pyagent.providers.catalog import Model
 from pyagent.providers.openai_completions import StreamOptions
@@ -80,6 +81,24 @@ def _error_partial(model: Model, error_message: str) -> AssistantMessage:
     )
 
 
+def _terminal_error(
+    model: Model,
+    last_partial: AssistantMessage | None,
+    *,
+    reason: str,
+    error_message: str,
+) -> AssistantEvent:
+    """Build the single terminal error event, preserving accumulated content."""
+    partial = (
+        last_partial
+        if last_partial is not None
+        else _error_partial(model, error_message)
+    )
+    partial.stop_reason = "aborted" if reason == "aborted" else "error"
+    partial.error_message = error_message
+    return AssistantEvent(type="error", partial=partial, reason=partial.stop_reason)
+
+
 async def safe_stream(
     fn: StreamFn,
     model: Model,
@@ -106,15 +125,16 @@ async def safe_stream(
             if event.type in ("done", "error"):
                 saw_terminal = True
             yield event
+    except Aborted as exc:
+        if saw_terminal:
+            return
+        yield _terminal_error(
+            model, last_partial, reason="aborted", error_message=str(exc) or "aborted"
+        )
     except Exception as exc:  # noqa: BLE001 - converting ANY fn exception is the contract
         if saw_terminal:
             return
         error_message = f"{type(exc).__name__}: {exc}"[:_MAX_ERROR_MESSAGE]
-        partial = (
-            last_partial
-            if last_partial is not None
-            else _error_partial(model, error_message)
+        yield _terminal_error(
+            model, last_partial, reason="error", error_message=error_message
         )
-        partial.stop_reason = "error"
-        partial.error_message = error_message
-        yield AssistantEvent(type="error", partial=partial, reason="error")

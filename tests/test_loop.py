@@ -224,7 +224,7 @@ async def test_pure_text_event_sequence_and_state():
 
 
 async def test_tool_round_trip_calls_stream_again():
-    async def echo(name: str, args: dict, abort) -> ToolResultAgent:
+    async def echo(name: str, args: dict, abort, on_update=None) -> ToolResultAgent:
         return ToolResultAgent(content=[TextContent(text=args["text"])])
 
     stream = ScriptedStream(
@@ -277,7 +277,7 @@ async def test_tool_round_trip_calls_stream_again():
 
 
 async def test_tool_exception_becomes_error_result_and_loop_continues():
-    async def boom(name: str, args: dict, abort) -> ToolResultAgent:
+    async def boom(name: str, args: dict, abort, on_update=None) -> ToolResultAgent:
         raise RuntimeError("kaput")
 
     stream = ScriptedStream(
@@ -313,7 +313,7 @@ async def test_tool_exception_becomes_error_result_and_loop_continues():
 async def test_before_tool_call_blocks_execution():
     executed = []
 
-    async def echo(name: str, args: dict, abort) -> ToolResultAgent:
+    async def echo(name: str, args: dict, abort, on_update=None) -> ToolResultAgent:
         executed.append(name)
         return ToolResultAgent(content=[TextContent(text="never")])
 
@@ -350,7 +350,7 @@ async def test_before_tool_call_blocks_execution():
 
 
 async def test_abort_mid_stream_terminates_without_tools():
-    async def echo(name: str, args: dict, abort) -> ToolResultAgent:
+    async def echo(name: str, args: dict, abort, on_update=None) -> ToolResultAgent:
         return ToolResultAgent(content=[TextContent(text="late")])
 
     stream = ScriptedStream(
@@ -400,7 +400,7 @@ async def test_abort_before_loop_runs_no_stream_call():
 
 
 async def test_steering_messages_appended_after_tool_round():
-    async def echo(name: str, args: dict, abort) -> ToolResultAgent:
+    async def echo(name: str, args: dict, abort, on_update=None) -> ToolResultAgent:
         return ToolResultAgent(content=[TextContent(text="ok")])
 
     steering_calls = []
@@ -468,7 +468,7 @@ async def test_stream_options_carry_api_key_session_and_abort():
 
 
 async def test_transform_context_applies_to_request_only():
-    async def identity(name, args, abort):
+    async def identity(name, args, abort, on_update=None):
         return ToolResultAgent(content=[])
 
     captured = []
@@ -494,13 +494,13 @@ async def test_transform_context_applies_to_request_only():
 async def test_parallel_tools_results_in_source_order_despite_completion():
     log = []
 
-    async def slow(name: str, args: dict, abort) -> ToolResultAgent:
+    async def slow(name: str, args: dict, abort, on_update=None) -> ToolResultAgent:
         log.append("slow:start")
         await asyncio.sleep(0.05)
         log.append("slow:end")
         return ToolResultAgent(content=[TextContent(text="slow-done")])
 
-    async def fast(name: str, args: dict, abort) -> ToolResultAgent:
+    async def fast(name: str, args: dict, abort, on_update=None) -> ToolResultAgent:
         log.append("fast:start")
         await asyncio.sleep(0.001)
         log.append("fast:end")
@@ -541,7 +541,7 @@ async def test_sequential_tools_serialize_in_call_order():
     log = []
 
     def make(name):
-        async def run_it(n, args, abort):
+        async def run_it(n, args, abort, on_update=None):
             log.append(f"{name}:start")
             await asyncio.sleep(0.001)
             log.append(f"{name}:end")
@@ -587,7 +587,7 @@ async def test_unknown_tool_is_error_result_and_loop_continues():
 
 
 async def test_arguments_error_and_non_dict_arguments_become_error_results():
-    async def noop(name, args, abort):
+    async def noop(name, args, abort, on_update=None):
         return ToolResultAgent(content=[TextContent(text="ran")])
 
     stream = ScriptedStream(
@@ -622,7 +622,7 @@ async def test_arguments_error_and_non_dict_arguments_become_error_results():
 
 
 async def test_after_tool_call_can_replace_or_patch_result():
-    async def echo(name, args, abort):
+    async def echo(name, args, abort, on_update=None):
         return ToolResultAgent(content=[TextContent(text="raw")])
 
     # Replacement with terminate=True ends the run after this round.
@@ -663,7 +663,7 @@ async def test_after_tool_call_can_replace_or_patch_result():
 
 
 async def test_async_before_tool_call_hook_is_awaited():
-    async def echo(name, args, abort):
+    async def echo(name, args, abort, on_update=None):
         return ToolResultAgent(content=[TextContent(text="ran")])
 
     async def guard(call, args):
@@ -686,7 +686,7 @@ async def test_async_before_tool_call_hook_is_awaited():
 
 
 async def test_degenerate_tool_call_skipped_and_terminate_all_breaks():
-    async def echo(name, args, abort):
+    async def echo(name, args, abort, on_update=None):
         return ToolResultAgent(content=[TextContent(text="ok")], terminate=True)
 
     # A call with empty id AND empty name is skipped entirely.
@@ -725,3 +725,155 @@ async def test_prompt_none_resumes_existing_state():
     assert len(state.messages) == 2
     assert state.messages[0] is prior_user
     assert events[-1].new_messages == [state.messages[1]]
+
+
+# ---------------------------------------------------------------------------
+# Task 9A: truncated responses, progress updates, schema validation
+# ---------------------------------------------------------------------------
+
+
+def tool_call_ids(message: AssistantMessage) -> list[str]:
+    return [b.id for b in message.content if isinstance(b, ToolCall)]
+
+
+async def test_length_stop_with_tool_calls_fails_batch_without_executing():
+    """Truncated tool calls must not run, and must still be paired with results."""
+    executed: list[dict] = []
+
+    async def echo(name, args, abort, on_update=None):
+        executed.append(args)
+        return ToolResultAgent(content=[TextContent(text="ran")])
+
+    stream = ScriptedStream(
+        [
+            [
+                call_tool("c1", "echo", {"text": "a"}),
+                call_tool("c2", "echo", {"text": "b"}),
+                finish("length"),
+            ],
+            [say("re-issued"), finish("stop")],
+        ]
+    )
+    state = AgentState()
+    events = await run("go", state, make_config(stream, tools=[make_tool("echo", echo)]))
+
+    assert executed == []  # nothing truncated ever reached the tool
+    ends = [e for e in events if e.type == "tool_execution_end"]
+    assert len(ends) == 2
+    assert all(e.is_error for e in ends)
+    assert all("output token limit" in e.result.content[0].text for e in ends)
+
+    # The transcript keeps every tool_call paired with a tool result.
+    assistant = next(m for m in state.messages if isinstance(m, AssistantMessage))
+    calls = tool_call_ids(assistant)
+    results = [
+        m.tool_call_id for m in state.messages if isinstance(m, ToolResultMessage)
+    ]
+    assert calls == ["c1", "c2"]
+    assert results == ["c1", "c2"]
+    # The model got a chance to re-issue: a second request was made and finished.
+    assert len(stream.calls) == 2
+    assert state.messages[-1].stop_reason == "stop"
+
+
+async def test_tool_progress_updates_are_forwarded_and_late_ones_dropped():
+    def part(text: str) -> ToolResultAgent:
+        return ToolResultAgent(content=[TextContent(text=text)])
+
+    async def slow(name, args, abort, on_update=None):
+        for i in range(4):
+            on_update(part(f"slow-{i}"))
+            await asyncio.sleep(0.03)
+        return ToolResultAgent(content=[TextContent(text="slow-done")])
+
+    async def fast(name, args, abort, on_update=None):
+        async def late() -> None:
+            await asyncio.sleep(0.05)  # fast has already settled by now
+            on_update(part("late-from-fast"))
+
+        asyncio.create_task(late())
+        on_update(part("fast-now"))
+        return ToolResultAgent(content=[TextContent(text="fast-done")])
+
+    stream = ScriptedStream(
+        [
+            [call_tool("c1", "fast", {}), call_tool("c2", "slow", {}), finish("tool_use")],
+            [say("ok"), finish("stop")],
+        ]
+    )
+    state = AgentState()
+    events = await run(
+        "go", state, make_config(stream, tools=[make_tool("fast", fast), make_tool("slow", slow)])
+    )
+
+    updates = [e for e in events if e.type == "tool_execution_update"]
+    texts = [u.partial_result.content[0].text for u in updates]
+    assert "fast-now" in texts
+    assert texts.count("slow-0") == 1
+    assert "late-from-fast" not in texts  # settled tools cannot stream anymore
+    assert all(u.tool_call_id in {"c1", "c2"} for u in updates)
+    assert {u.tool_name for u in updates} == {"fast", "slow"}
+
+
+async def test_schema_invalid_arguments_are_not_executed():
+    executed: list[dict] = []
+
+    async def typed(name, args, abort, on_update=None):
+        executed.append(args)
+        return ToolResultAgent(content=[TextContent(text="ran")])
+
+    tool = AgentTool(
+        name="typed",
+        description="typed tool",
+        parameters={
+            "type": "object",
+            "properties": {"n": {"type": "integer"}},
+            "required": ["n"],
+        },
+        execute=typed,
+    )
+    stream = ScriptedStream(
+        [
+            [call_tool("c1", "typed", {"n": "not-an-int"}), finish("tool_use")],
+            [call_tool("c2", "typed", {}), finish("tool_use")],
+            [say("ok"), finish("stop")],
+        ]
+    )
+    state = AgentState()
+    events = await run("go", state, make_config(stream, tools=[tool]))
+
+    assert executed == []
+    ends = [e for e in events if e.type == "tool_execution_end"]
+    assert len(ends) == 2 and all(e.is_error for e in ends)
+    assert "must be a integer" in ends[0].result.content[0].text
+    assert "missing required argument" in ends[1].result.content[0].text
+
+
+async def test_repeated_truncation_stops_instead_of_reasking_forever():
+    """A model stuck on length truncation gets a bounded number of re-issues."""
+
+    async def echo(name, args, abort, on_update=None):  # pragma: no cover - never runs
+        raise AssertionError("truncated tool calls must never execute")
+
+    # Script enough truncating turns to exceed the cap; the loop must stop early.
+    script = [
+        [call_tool("c1", "echo", {}), finish("length")]
+        for _ in range(10)
+    ]
+    stream = ScriptedStream(script)
+    state = AgentState()
+    await run("go", state, make_config(stream, tools=[make_tool("echo", echo)]))
+
+    assert len(stream.calls) == 2, "expected exactly two truncation re-issues"
+    # Every attempt still left a properly paired transcript.
+    calls = [
+        b.id
+        for m in state.messages
+        if isinstance(m, AssistantMessage)
+        for b in m.content
+        if isinstance(b, ToolCall)
+    ]
+    results = [
+        m.tool_call_id for m in state.messages if isinstance(m, ToolResultMessage)
+    ]
+    assert calls == results == ["c1", "c1"]

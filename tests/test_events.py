@@ -2,7 +2,8 @@
 
 import asyncio
 
-from pyagent.events import AbortToken, AgentEvent, AssistantEvent
+from pyagent.agent.loop import ToolResultAgent
+from pyagent.events import Aborted, AbortToken, AgentEvent, AssistantEvent
 from pyagent.types import AssistantMessage, TextContent, ToolCall, Usage
 
 ASSISTANT_EVENT_TYPES = [
@@ -29,6 +30,7 @@ AGENT_EVENT_TYPES = [
     "message_update",
     "message_end",
     "tool_execution_start",
+    "tool_execution_update",
     "tool_execution_end",
 ]
 
@@ -118,3 +120,28 @@ async def test_abort_token_lifecycle():
     assert token.aborted is True
     # wait() on an already-aborted token must return immediately, not hang.
     await asyncio.wait_for(token.wait(), timeout=0.1)
+
+
+# ---------------------------------------------------------------------------
+# Task 9A: cooperative cancellation is an ordinary Exception
+# ---------------------------------------------------------------------------
+
+
+def test_aborted_is_an_exception_not_base_exception():
+    """Aborted must be catchable as Exception and distinct from task cancellation."""
+    assert issubclass(Aborted, Exception)
+    assert not issubclass(Aborted, asyncio.CancelledError)
+
+
+def test_tool_execution_update_event_carries_partial_result():
+    partial = ToolResultAgent(content=[TextContent(text="50%")])
+    event = AgentEvent(
+        type="tool_execution_update",
+        tool_call_id="call_1",
+        tool_name="bash",
+        args={"command": "make"},
+        partial_result=partial,
+    )
+    assert event.type in AGENT_EVENT_TYPES
+    assert event.partial_result is partial
+    assert event.result is None

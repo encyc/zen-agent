@@ -61,6 +61,7 @@ class AgentEvent:
         "message_update",
         "message_end",
         "tool_execution_start",
+        "tool_execution_update",
         "tool_execution_end",
     ]
     message: Message | None = None
@@ -69,9 +70,21 @@ class AgentEvent:
     tool_name: str | None = None
     args: Any | None = None
     result: Any | None = None
+    partial_result: Any | None = None
     is_error: bool = False
     duration_ms: int | None = None
     new_messages: list[Message] | None = None
+
+
+class Aborted(Exception):
+    """Cooperative cancellation, raised inside the transport layer.
+
+    Deliberately NOT ``asyncio.CancelledError``: that is a ``BaseException``
+    and means "this task is being cancelled", so fabricating it would break
+    task supervision. Cancellation is an in-protocol state here, so the
+    transport raises this ordinary exception and ``safe_stream`` turns it
+    into a terminal ``error(reason="aborted")`` event.
+    """
 
 
 class AbortToken:

@@ -14,10 +14,17 @@ Runtime contract highlights:
   lands in ``state.messages``.
 * ``agent_end`` is always emitted (try/finally), carrying ``new_messages``,
   every message this run appended, prompt user message included.
-* Degraded tool calls (unknown tool, broken arguments, tool exceptions, hooks
-  blocking) become ``is_error`` tool results; the loop keeps running. Only an
-  assistant ``error``/``aborted`` stop reason, a non-``tool_use`` stop, or every
-  result asking to ``terminate`` ends the run.
+* Degraded tool calls (unknown tool, broken arguments, schema-invalid
+  arguments, tool exceptions, hooks blocking) become ``is_error`` tool results;
+  the loop keeps running. Only an assistant ``error``/``aborted`` stop reason, a
+  non-``tool_use`` stop, or every result asking to ``terminate`` ends the run.
+* A ``length`` stop with tool calls never executes anything: truncated
+  arguments are unsafe, and leaving the assistant turn's ``tool_calls``
+  unresolved would poison the *next* request, so every call fails as is_error
+  and the model gets one chance to re-issue.
+* ``on_update`` progress from a running tool is forwarded as
+  ``tool_execution_update`` events; updates arriving after the tool settled are
+  dropped.
 """
 
 import asyncio
@@ -26,6 +33,7 @@ import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 
+from pyagent.agent.validate import validate_arguments
 from pyagent.events import AbortToken, AgentEvent
 from pyagent.providers.catalog import Model
 from pyagent.providers.openai_completions import StreamOptions
@@ -56,9 +64,14 @@ _MAX_ERROR_TEXT = 500
 
 @dataclass
 class ToolResultAgent:
-    """What an agent tool returns; ``terminate`` asks the loop to stop."""
+    """What an agent tool returns; ``terminate`` asks the loop to stop.
+
+    ``details`` is structured data for logs and UI rendering only — it is never
+    sent to the model (``content`` is the model-facing payload).
+    """
 
     content: list[TextContent | ImageContent]
+    details: dict = field(default_factory=dict)
     is_error: bool = False
     terminate: bool = False
 
@@ -67,10 +80,11 @@ class ToolResultAgent:
 class AgentTool:
     """A tool the loop may execute on the model's behalf.
 
-    ``execute(tool_name, args, abort)`` receives the abort token so it can
-    stop early when the user cancels. ``execution_mode="sequential"`` opts the
-    tool out of the concurrent batch: such tools run one at a time, in the
-    order the assistant requested them.
+    ``execute(tool_call_id, args, abort, on_update)`` receives the abort token
+    so it can stop early when the user cancels, and an ``on_update`` callback
+    for streaming partial results (ignored by most tools). ``execution_mode=
+    "sequential"`` opts the tool out of the concurrent batch: such tools run one
+    at a time, in the order the assistant requested them.
     """
 
     name: str
@@ -79,7 +93,13 @@ class AgentTool:
     execution_mode: str = "parallel"
     #: Required in practice; None only survives dataclass field ordering and
     #: executing such a tool yields an is_error result.
-    execute: Callable[[str, dict, AbortToken | None], Awaitable[ToolResultAgent]] | None = None
+    execute: (
+        Callable[
+            [str, dict, AbortToken | None, Callable[[ToolResultAgent], None]],
+            Awaitable[ToolResultAgent],
+        ]
+        | None
+    ) = None
 
 
 @dataclass
@@ -137,20 +157,43 @@ async def _maybe_await(value):
     return value
 
 
+#: Safety net: a model that keeps requesting tools can never spin forever.
+_MAX_TURNS = 100
+
+#: How many consecutive length-truncated turns we re-issue before giving up.
+_MAX_LENGTH_FAILURES = 2
+
+
 def _error_result(text: str) -> ToolResultAgent:
     return ToolResultAgent(content=[TextContent(text=text)], is_error=True)
+
+
+def _truncated_call_outcome(call: ToolCall) -> _ToolOutcome:
+    """is_error outcome for a call whose response hit the output token limit."""
+    return _ToolOutcome(
+        call=call,
+        result=_error_result(
+            f"tool call {call.name!r} was not executed: the response hit the "
+            "output token limit, so its arguments may be truncated. "
+            "Re-issue the call with complete arguments."
+        ),
+        duration_ms=0,
+    )
 
 
 async def _execute_tool(
     call: ToolCall,
     config: AgentConfig,
     abort: AbortToken | None,
+    on_update: Callable[[ToolResultAgent], None] | None = None,
 ) -> _ToolOutcome:
     """Run one tool call through validation, hooks, and execution.
 
-    Never raises: every failure mode (unknown tool, broken arguments, blocked
-    by ``before_tool_call``, exception from ``execute``) degrades to an
-    is_error ``ToolResultAgent`` so the loop keeps going.
+    Never raises: every failure mode (unknown tool, broken arguments,
+    schema-invalid arguments, blocked by ``before_tool_call``, exception from
+    ``execute``) degrades to an is_error ``ToolResultAgent`` so the loop keeps
+    going. ``execute`` is only ever called with arguments that passed
+    :func:`~pyagent.agent.validate.validate_arguments`.
     """
     started = time.monotonic()
     tool = next((t for t in config.tools if t.name == call.name), None)
@@ -165,6 +208,8 @@ async def _execute_tool(
             f"invalid arguments for tool {call.name}: expected a JSON object, "
             f"got {type(call.arguments).__name__}"
         )
+    elif (problem := validate_arguments(tool.parameters, call.arguments)) is not None:
+        result = _error_result(f"invalid arguments for tool {call.name}: {problem}")
     else:
         verdict = None
         if config.before_tool_call is not None:
@@ -174,10 +219,19 @@ async def _execute_tool(
         elif tool.execute is None:
             result = _error_result(f"tool {call.name} has no execute callable")
         else:
+            accepting = True
+
+            def forward(partial: ToolResultAgent) -> None:
+                """Deliver progress only while the tool is still running."""
+                if accepting and on_update is not None:
+                    on_update(partial)
+
             try:
-                result = await tool.execute(call.name, call.arguments, abort)
+                result = await tool.execute(call.id, call.arguments, abort, forward)
             except Exception as exc:  # noqa: BLE001 - degrade, never crash the loop
                 result = _error_result(f"{type(exc).__name__}: {exc}"[:_MAX_ERROR_TEXT])
+            finally:
+                accepting = False
 
     assert result is not None  # every branch above assigns
     if config.after_tool_call is not None:
@@ -200,10 +254,13 @@ async def _run_tool_batch(
     calls: list[ToolCall],
     config: AgentConfig,
     abort: AbortToken | None,
+    emit_update: Callable[[AgentEvent], None] | None = None,
 ) -> list[_ToolOutcome]:
     """Execute a tool batch: parallel tools concurrently, sequential in order.
 
     Returns outcomes in assistant source order regardless of completion order.
+    ``emit_update`` receives one ``tool_execution_update`` event per streamed
+    partial result, tagged with the call it belongs to.
     """
     tools_by_name = {t.name: t for t in config.tools}
     outcomes: list[_ToolOutcome | None] = [None] * len(calls)
@@ -221,7 +278,21 @@ async def _run_tool_batch(
     ]
 
     async def run_one(index: int) -> None:
-        outcomes[index] = await _execute_tool(calls[index], config, abort)
+        call = calls[index]
+
+        def forward(partial: ToolResultAgent) -> None:
+            if emit_update is not None:
+                emit_update(
+                    AgentEvent(
+                        type="tool_execution_update",
+                        tool_call_id=call.id,
+                        tool_name=call.name,
+                        args=call.arguments,
+                        partial_result=partial,
+                    )
+                )
+
+        outcomes[index] = await _execute_tool(call, config, abort, forward)
 
     async def run_parallel() -> None:
         await asyncio.gather(*(run_one(i) for i in parallel))
@@ -259,9 +330,14 @@ async def agent_loop(
         yield AgentEvent(type="message_start", message=user)
         yield AgentEvent(type="message_end", message=user)
 
+    turns = 0
+    length_failures = 0
     try:
         while True:
             if abort is not None and abort.aborted:
+                break
+            turns += 1
+            if turns > _MAX_TURNS:  # pathological model loop: stop, always emit agent_end
                 break
 
             # Request context: system prompt prepended to a COPY — the state
@@ -308,26 +384,62 @@ async def agent_loop(
 
             if final.stop_reason in ("error", "aborted"):
                 break  # provider-level failure or cancellation: no tool round
-            if final.stop_reason != "tool_use":
-                break  # plain end of turn
 
             calls = [
                 block
                 for block in final.content
                 if isinstance(block, ToolCall) and not (block.id == "" and block.name == "")
             ]
-            if not calls:
-                break  # nothing actionable; another identical round would loop forever
 
-            for call in calls:
-                yield AgentEvent(
-                    type="tool_execution_start",
-                    tool_call_id=call.id,
-                    tool_name=call.name,
-                    args=call.arguments,
-                )
+            if final.stop_reason == "length" and calls:
+                # Output hit the token limit: argument fragments may be
+                # truncated, and an assistant turn whose tool_calls never get
+                # results poisons the next request. Fail every call instead of
+                # executing, then let the model re-issue.
+                length_failures += 1
+                for call in calls:
+                    yield AgentEvent(
+                        type="tool_execution_start",
+                        tool_call_id=call.id,
+                        tool_name=call.name,
+                        args=call.arguments,
+                    )
+                outcomes = [_truncated_call_outcome(call) for call in calls]
+            elif final.stop_reason == "tool_use" and calls:
+                length_failures = 0
+                for call in calls:
+                    yield AgentEvent(
+                        type="tool_execution_start",
+                        tool_call_id=call.id,
+                        tool_name=call.name,
+                        args=call.arguments,
+                    )
+                update_queue: asyncio.Queue[AgentEvent | None] = asyncio.Queue()
 
-            outcomes = await _run_tool_batch(calls, config, abort)
+                def emit_update(event: AgentEvent, _queue=update_queue) -> None:
+                    # loop vars are bound as defaults so the closure cannot
+                    # observe a later iteration's queue (B023)
+                    _queue.put_nowait(event)
+
+                async def run_batch(
+                    _calls=calls, _queue=update_queue, _emit=emit_update
+                ) -> list[_ToolOutcome]:
+                    try:
+                        return await _run_tool_batch(_calls, config, abort, _emit)
+                    finally:
+                        _queue.put_nowait(None)  # sentinel: batch settled
+
+                batch_task = asyncio.create_task(run_batch())
+                try:
+                    while (update := await update_queue.get()) is not None:
+                        yield update
+                    outcomes = await batch_task
+                finally:
+                    if not batch_task.done():  # consumer went away mid-batch
+                        batch_task.cancel()
+                        await asyncio.gather(batch_task, return_exceptions=True)
+            else:
+                break  # plain end of turn (or a tool_use turn with nothing actionable)
 
             # Append and announce in assistant source order, not completion
             # order — the transcript must read as a coherent round.
@@ -355,6 +467,8 @@ async def agent_loop(
 
             if all(outcome.result.terminate for outcome in outcomes):
                 break
+            if length_failures >= _MAX_LENGTH_FAILURES:
+                break  # truncation is not resolving: stop instead of re-asking forever
 
             if config.get_steering_messages is not None:
                 for message in await config.get_steering_messages():

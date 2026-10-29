@@ -10,7 +10,7 @@ import json
 import httpx
 import pytest
 
-from pyagent.events import AbortToken
+from pyagent.events import Aborted, AbortToken
 from pyagent.providers import transport
 from pyagent.providers.transport import (
     default_client,
@@ -142,7 +142,7 @@ def _record_sleep(monkeypatch) -> list[float]:
     """Replace transport backoff sleep with a recorder; returns the delays."""
     delays: list[float] = []
 
-    async def fake_sleep(delay: float) -> None:
+    async def fake_sleep(delay: float, abort=None) -> None:
         delays.append(delay)
 
     monkeypatch.setattr(transport, "_sleep", fake_sleep)
@@ -256,7 +256,7 @@ async def test_post_stream_aborted_before_first_attempt():
     token = AbortToken()
     token.abort()
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        with pytest.raises(asyncio.CancelledError):
+        with pytest.raises(Aborted):
             await post_stream(client, URL, headers={}, body={}, abort=token)
     assert calls == []  # aborted before any attempt: no request was sent
 
@@ -271,7 +271,7 @@ async def test_post_stream_abort_between_attempts_cancels():
         return httpx.Response(503)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        with pytest.raises(asyncio.CancelledError):
+        with pytest.raises(Aborted):
             await post_stream(
                 client, URL, headers={}, body={}, abort=token, max_attempts=3, backoff_base_s=0.0
             )
@@ -341,3 +341,38 @@ async def test_default_client_streaming_timeouts():
     assert client.timeout.connect == 10.0
     assert client.timeout.read == 300.0
     await client.aclose()
+
+
+# --------------------------------------------------------------------------
+# Abort: cooperative cancellation is an ordinary exception (Task 9A)
+# --------------------------------------------------------------------------
+
+
+async def test_post_stream_backoff_abort_does_not_wait_out_the_delay():
+    """Abort during a backoff wait must return promptly with Aborted."""
+    token = AbortToken()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        async def abort_soon() -> None:
+            await asyncio.sleep(0.02)
+            token.abort()
+
+        task = asyncio.create_task(abort_soon())
+        started = asyncio.get_running_loop().time()
+        with pytest.raises(Aborted):
+            await post_stream(
+                client,
+                URL,
+                headers={},
+                body={},
+                abort=token,
+                max_attempts=3,
+                backoff_base_s=30.0,  # would stall for 30s if abort were not observed
+                backoff_cap_s=30.0,
+            )
+        elapsed = asyncio.get_running_loop().time() - started
+        await task
+    assert elapsed < 1.0, f"backoff was not interrupted (waited {elapsed:.2f}s)"

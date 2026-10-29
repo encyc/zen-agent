@@ -3,7 +3,7 @@
 import httpx
 import pytest
 
-from pyagent.events import AssistantEvent
+from pyagent.events import Aborted, AssistantEvent
 from pyagent.providers import openai_completions, registry, transport
 from pyagent.providers.catalog import Model
 from pyagent.providers.compat import CompatFlags
@@ -225,3 +225,41 @@ async def test_default_client_timeouts() -> None:
         assert client.timeout.read == 300.0
     finally:
         await client.aclose()
+
+
+# ---------------------------------------------------------------------------
+# Task 9A: Aborted maps to reason="aborted", other errors stay "error"
+# ---------------------------------------------------------------------------
+
+
+async def test_safe_stream_maps_aborted_to_aborted_terminal_event():
+    model = _model()
+    fired: list[AssistantEvent] = []
+
+    async def aborted_stream(*_args, **_kwargs):
+        partial = _partial(model)
+        fired.append(partial)
+        yield AssistantEvent(type="start", partial=partial)
+        raise Aborted("abort requested before request attempt")
+
+    events = [event async for event in safe_stream(aborted_stream, model, [], [], StreamOptions())]
+    assert [event.type for event in events] == ["start", "error"]
+    terminal = events[-1]
+    assert terminal.reason == "aborted"
+    assert terminal.partial.stop_reason == "aborted"
+    assert terminal.partial.error_message == "abort requested before request attempt"
+    # Accumulated content is preserved, not replaced by a shell message.
+    assert terminal.partial.content is fired[0].content
+
+
+async def test_safe_stream_keeps_error_reason_for_other_exceptions():
+    model = _model()
+
+    async def boom(*_args, **_kwargs):
+        raise httpx.ReadError("connection reset")
+        yield  # pragma: no cover
+
+    events = [event async for event in safe_stream(boom, model, [], [], StreamOptions())]
+    assert events[-1].type == "error"
+    assert events[-1].reason == "error"
+    assert events[-1].partial.stop_reason == "error"

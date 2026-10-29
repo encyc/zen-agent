@@ -19,7 +19,7 @@ from collections.abc import AsyncIterable, AsyncIterator
 
 import httpx
 
-from pyagent.events import AbortToken
+from pyagent.events import Aborted, AbortToken
 from pyagent.types import Cost, Usage
 
 __all__ = [
@@ -115,9 +115,28 @@ def default_client() -> httpx.AsyncClient:
     )
 
 
-async def _sleep(delay: float) -> None:
-    """Backoff sleep; module-level so tests can observe or short-circuit it."""
-    await asyncio.sleep(delay)
+async def _sleep(delay: float, abort: AbortToken | None = None) -> None:
+    """Backoff sleep, interruptible by ``abort``; module-level so tests can patch it.
+
+    Raises :class:`~pyagent.events.Aborted` when the token fires while waiting,
+    so a cancelled run does not sit out the full backoff.
+    """
+    if abort is None:
+        await asyncio.sleep(delay)
+        return
+    if abort.aborted:
+        raise Aborted("abort requested during backoff")
+    sleep_task = asyncio.ensure_future(asyncio.sleep(delay))
+    abort_task = asyncio.ensure_future(abort.wait())
+    try:
+        await asyncio.wait({sleep_task, abort_task}, return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        for task in (sleep_task, abort_task):
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(sleep_task, abort_task, return_exceptions=True)
+    if abort.aborted:
+        raise Aborted("abort requested during backoff")
 
 
 def _retry_after_seconds(headers: httpx.Headers) -> float | None:
@@ -162,26 +181,31 @@ async def post_stream(
     (seconds form) overrides the exponential backoff when present, capped at
     ``backoff_cap_s``. Non-retryable HTTP error statuses raise
     ``httpx.HTTPStatusError`` immediately; exhausted retries raise the last
-    error. An aborted ``abort`` token raises ``asyncio.CancelledError``
-    before any attempt (and before each subsequent attempt).
+    error. An aborted ``abort`` token raises :class:`~pyagent.events.Aborted`
+    before any attempt, and interrupts a backoff wait.
     """
     for attempt in range(1, max_attempts + 1):
         if abort is not None and abort.aborted:
-            raise asyncio.CancelledError("abort requested before request attempt")
+            raise Aborted("abort requested before request attempt")
         request = client.build_request("POST", url, headers=headers, json=body)
         try:
             response = await client.send(request, stream=True)
         except Exception as exc:
             if attempt >= max_attempts or not should_retry(None, exc):
                 raise
-            await _sleep(_backoff_delay(attempt, None, backoff_base_s, backoff_cap_s))
+            await _sleep(
+                _backoff_delay(attempt, None, backoff_base_s, backoff_cap_s), abort
+            )
             continue
         if should_retry(response.status_code, None):
             retry_after = _retry_after_seconds(response.headers)
             await response.aclose()
             if attempt >= max_attempts:
                 response.raise_for_status()  # exhausted: surface the last status error
-            await _sleep(_backoff_delay(attempt, retry_after, backoff_base_s, backoff_cap_s))
+            await _sleep(
+                _backoff_delay(attempt, retry_after, backoff_base_s, backoff_cap_s),
+                abort,
+            )
             continue
         if not response.is_success:
             await response.aclose()

@@ -370,3 +370,36 @@ def test_packaged_catalog_models_build_expected_params():
     )
     assert "thinking" not in params
     assert "reasoning_effort" not in params
+
+
+# ---------------------------------------------------------------------------
+# Task 9A: thinking level normalization guard
+# ---------------------------------------------------------------------------
+
+
+def test_thinking_off_is_identical_to_none():
+    """'off' is a user-level setting: the wire body must not differ from None."""
+    for compat in (ZAI, DEEPSEEK):
+        body_off = build_params(
+            _model(compat), [], StreamOptions(api_key="k", thinking="off"), compat
+        )
+        body_none = build_params(
+            _model(compat), [], StreamOptions(api_key="k", thinking=None), compat
+        )
+        assert body_off == body_none
+        assert body_off["thinking"] == {"type": "disabled"}
+        assert "reasoning_effort" not in body_off
+
+
+def test_invalid_thinking_level_raises_value_error():
+    """A bogus level must fail fast rather than ship a dirty reasoning_effort."""
+    import pytest
+
+    with pytest.raises(ValueError, match="invalid thinking level"):
+        build_params(
+            _model(ZAI), [], StreamOptions(api_key="k", thinking="bogus"), ZAI
+        )
+    with pytest.raises(ValueError):
+        build_params(
+            _model(ZAI), [], StreamOptions(api_key="k", thinking="high "), ZAI
+        )
