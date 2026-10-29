@@ -27,6 +27,7 @@ __all__ = [
     "ProviderConfig",
     "find_model",
     "load_catalog",
+    "model_from_mapping",
 ]
 
 _PROVIDER_KEYS = frozenset({"name", "base_url", "api_key_env", "adapter", "models"})
@@ -314,6 +315,30 @@ def _model_from(
             raw.get("supports_vision", False), f"{ctx} supports_vision"
         ),
     )
+
+
+def model_from_mapping(
+    provider_id: str,
+    provider_base_url: str,
+    provider_adapter: str,
+    raw: dict,
+) -> Model:
+    """Build a Model from a mapping (used by config.toml custom providers).
+
+    Applies the same validation as catalog entries: unknown keys, missing
+    required fields and wrong types all raise ``ValueError``.
+    """
+    if not isinstance(raw, dict):
+        raise ValueError(  # noqa: TRY004 - config errors are ValueError by contract
+            f"model entry for provider {provider_id!r} must be a table"
+        )
+    mapping = dict(raw)
+    model_id = mapping.pop("id", None)
+    if not isinstance(model_id, str) or not model_id:
+        raise ValueError(
+            f"model entry for provider {provider_id!r} needs a string 'id'"
+        )
+    return _model_from(provider_id, provider_base_url, provider_adapter, model_id, mapping)
 
 
 def _provider_from(provider_id: str, raw: object) -> ProviderConfig:

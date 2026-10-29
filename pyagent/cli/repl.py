@@ -380,7 +380,10 @@ async def repl(
 ) -> int:
     """Run the interactive loop; returns the process exit code."""
     user_config = load_user_config()
-    catalog = apply_user_config(load_catalog(), user_config)
+    config_warnings: list[str] = []
+    catalog = apply_user_config(load_catalog(), user_config, config_warnings)
+    for warning in config_warnings:
+        print(f"pyagent: {warning}", file=sys.stderr)
     try:
         model = resolve_model(catalog, model_id or user_config.default_model)
     except KeyError as exc:

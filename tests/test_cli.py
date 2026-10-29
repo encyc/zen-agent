@@ -663,3 +663,41 @@ def test_no_skills_flag_disables_discovery(monkeypatch, tmp_path):
     assert cli_main.main(["-p", "hi", "--no-skills"]) == 0
     assert "read_skill" not in captured["tools"]
     assert captured["extra"] == ""
+
+
+def test_custom_provider_from_config_is_used(monkeypatch, tmp_path):
+    from pyagent.config import UserConfig
+    from pyagent.providers.catalog import ProviderConfig, model_from_mapping
+
+    model = model_from_mapping(
+        "local",
+        "http://127.0.0.1:8080/v1",
+        "openai-completions",
+        {"id": "my-model", "context_window": 1000, "max_tokens": 100, "reasoning": False},
+    )
+    provider = ProviderConfig(
+        id="local",
+        name="Local",
+        base_url=model.base_url,
+        api_key_env="LOCAL_API_KEY",
+        adapter="openai-completions",
+        models=[model],
+    )
+    monkeypatch.setenv("LOCAL_API_KEY", "test-key")
+    monkeypatch.setattr(
+        cli_main,
+        "load_user_config",
+        lambda *a, **k: UserConfig(default_model="my-model", custom_providers={"local": provider}),
+    )
+    captured: dict = {}
+
+    def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
+              session_id=None, transform_context=None, max_turns=None,
+              max_cost=None, context_files=True, extra_prompt=""):
+        captured["model"] = model
+        return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=fake_stream())
+
+    monkeypatch.setattr(cli_main, "_build_agent", build)
+    assert cli_main.main(["-p", "hi"]) == 0
+    assert captured["model"].id == "my-model"
+    assert captured["model"].provider == "local"

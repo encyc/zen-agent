@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from pyagent import __version__
 from pyagent.agent.session import sessions_dir
-from pyagent.config import config_path, load_user_config
+from pyagent.config import UserConfig, apply_user_config, config_path, load_user_config
 from pyagent.providers.catalog import load_catalog
 
 __all__ = ["Check", "collect_checks", "run_doctor"]
@@ -50,19 +50,23 @@ def collect_checks(env: Mapping[str, str] | None = None) -> list[Check]:
     ]
 
     try:
-        catalog = load_catalog()
-        providers = ", ".join(catalog)
-        checks.append(Check("catalog", True, f"{len(catalog)} providers: {providers}"))
-    except Exception as exc:  # noqa: BLE001 - the point is to report, not raise
-        catalog = {}
-        checks.append(Check("catalog", False, f"cannot load: {exc}"))
-
-    try:
         user_config = load_user_config()
         detail = user_config.default_model or "(no default_model)"
         checks.append(Check("config", True, f"{config_path()} · {detail}"))
     except ValueError as exc:
+        user_config = UserConfig()
         checks.append(Check("config", False, str(exc)))
+
+    warnings: list[str] = []
+    try:
+        catalog = apply_user_config(load_catalog(), user_config, warnings)
+        providers = ", ".join(catalog)
+        checks.append(Check("catalog", True, f"{len(catalog)} providers: {providers}"))
+        for warning in warnings:
+            checks.append(Check("catalog", True, warning))
+    except Exception as exc:  # noqa: BLE001 - the point is to report, not raise
+        catalog = {}
+        checks.append(Check("catalog", False, f"cannot load: {exc}"))
 
     checks.append(_check_sessions_writable())
 

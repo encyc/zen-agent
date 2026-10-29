@@ -185,3 +185,119 @@ async def test_context_guard_tracks_usage_and_prunes():
     assert guard.last_usage is not None
     messages = [UserMessage(content="x" * 2000, timestamp=1), assistant()]
     assert len(await guard.transform(messages)) <= len(messages)
+
+
+# ---------------------------------------------------------------------------
+# S2-T6: custom providers declared in config.toml
+# ---------------------------------------------------------------------------
+
+CUSTOM_CONFIG = '''
+default_model = "my-model"
+
+[providers.custom.local]
+name = "Local Gateway"
+base_url = "http://127.0.0.1:8080/v1"
+api_key_env = "LOCAL_API_KEY"
+adapter = "openai-completions"
+
+[[providers.custom.local.models]]
+id = "my-model"
+context_window = 32768
+max_tokens = 4096
+reasoning = false
+supports_vision = true
+cost = { input = 0.1, output = 0.2, cache_read = 0.01 }
+compat = { thinking_format = "deepseek", supports_reasoning_effort = true }
+
+[[providers.custom.local.models]]
+id = "tiny"
+context_window = 8192
+max_tokens = 1024
+reasoning = false
+'''
+
+
+def test_parses_custom_providers_and_models(tmp_path):
+    path = write_config(tmp_path, CUSTOM_CONFIG)
+    config = load_user_config(path)
+    assert config.default_model == "my-model"
+    provider = config.custom_providers["local"]
+    assert provider.name == "Local Gateway"
+    assert provider.api_key_env == "LOCAL_API_KEY"
+    assert [model.id for model in provider.models] == ["my-model", "tiny"]
+
+    model = provider.models[0]
+    assert model.context_window == 32768
+    assert model.supports_vision is True
+    assert model.cost.input == 0.1
+    assert model.cost.cache_read == 0.01
+    assert model.compat.thinking_format == "deepseek"
+
+
+def test_custom_providers_join_the_catalog_and_are_findable(tmp_path):
+    config = load_user_config(write_config(tmp_path, CUSTOM_CONFIG))
+    warnings: list[str] = []
+    catalog = apply_user_config(load_catalog(), config, warnings)
+    assert "local" in catalog
+    assert find_model(catalog, "my-model").base_url == "http://127.0.0.1:8080/v1"
+    assert warnings == []
+
+
+def test_custom_provider_can_override_a_packaged_one_with_a_warning(tmp_path):
+    config = load_user_config(
+        write_config(
+            tmp_path,
+            '''
+[providers.custom.deepseek]
+base_url = "https://mirror.example/v1"
+api_key_env = "DEEPSEEK_API_KEY"
+adapter = "openai-completions"
+
+[[providers.custom.deepseek.models]]
+id = "mirror-model"
+context_window = 1000
+max_tokens = 100
+reasoning = false
+''',
+        )
+    )
+    warnings: list[str] = []
+    catalog = apply_user_config(load_catalog(), config, warnings)
+    assert warnings and "overrides packaged provider" in warnings[0]
+    assert find_model(catalog, "mirror-model").id == "mirror-model"
+
+
+@pytest.mark.parametrize(
+    "snippet, message",
+    [
+        ("[providers.custom.x]\nname = 'x'\n", "base_url"),
+        (
+            ("[providers.custom.x]\nbase_url='u'\napi_key_env='k'\nadapter='a'\n"
+            "[[providers.custom.x.models]]\ncontext_window=1\nmax_tokens=1\nreasoning=false\n"),
+            "needs a string 'id'",
+        ),
+        (
+            ("[providers.custom.x]\nbase_url='u'\napi_key_env='k'\nadapter='a'\n"
+            "[[providers.custom.x.models]]\nid='m'\ncontext_window=1\nmax_tokens=1\n"
+            "reasoning=false\nunknown_key=1\n"),
+            "unknown",
+        ),
+        ("[providers.custom.x]\nbase_url='u'\napi_key_env='k'\nadapter='a'\nmodels=[]\n",
+         "non-empty array"),
+    ],
+)
+def test_bad_custom_provider_entries_are_rejected(tmp_path, snippet, message):
+    path = write_config(tmp_path, snippet)
+    with pytest.raises(ValueError, match=message):
+        load_user_config(path)
+
+
+def test_doctor_reports_custom_provider_keys(tmp_path, monkeypatch):
+    from pyagent.cli import doctor as doctor_module
+
+    config = load_user_config(write_config(tmp_path, CUSTOM_CONFIG))
+    monkeypatch.setattr(doctor_module, "load_user_config", lambda *a, **k: config)
+    checks = doctor_module.collect_checks(env={})
+    custom = [check for check in checks if check.name == "key:local"]
+    assert custom and custom[0].ok is False
+    assert "LOCAL_API_KEY" in custom[0].detail

@@ -18,7 +18,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from pyagent.providers.catalog import ProviderConfig
+from pyagent.providers.catalog import ProviderConfig, model_from_mapping
 from pyagent.types import AssistantMessage, Message, Usage
 
 __all__ = [
@@ -42,6 +42,62 @@ def config_path() -> Path:
     return Path.home() / ".pyagent" / "config.toml"
 
 
+#: Provider keys accepted inside ``[providers.custom.<id>]``.
+_CUSTOM_PROVIDER_KEYS = frozenset({"name", "base_url", "api_key_env", "adapter", "models"})
+
+
+def _parse_custom_providers(raw: object, target: Path) -> dict[str, ProviderConfig]:
+    """Parse ``[providers.custom.<id>]`` tables into ProviderConfig objects."""
+    if not isinstance(raw, dict):
+        raise ValueError(  # noqa: TRY004 - config errors are ValueError by contract
+            f"config {target}: providers.custom must be a table"
+        )
+    providers: dict[str, ProviderConfig] = {}
+    for provider_id, table in raw.items():
+        if not isinstance(table, dict):
+            raise ValueError(  # noqa: TRY004 - config errors are ValueError by contract
+                f"config {target}: providers.custom.{provider_id} must be a table"
+            )
+        unknown = set(table) - _CUSTOM_PROVIDER_KEYS
+        if unknown:
+            raise ValueError(
+                f"config {target}: providers.custom.{provider_id} has unknown keys "
+                f"{sorted(unknown)} (allowed: {sorted(_CUSTOM_PROVIDER_KEYS)})"
+            )
+        base_url = table.get("base_url")
+        api_key_env = table.get("api_key_env")
+        adapter = table.get("adapter")
+        for label, value in (
+            ("base_url", base_url),
+            ("api_key_env", api_key_env),
+            ("adapter", adapter),
+        ):
+            if not isinstance(value, str) or not value:
+                raise ValueError(
+                    f"config {target}: providers.custom.{provider_id}.{label} "
+                    "must be a non-empty string"
+                )
+        models_raw = table.get("models")
+        if not isinstance(models_raw, list) or not models_raw:
+            raise ValueError(
+                f"config {target}: providers.custom.{provider_id}.models "
+                "must be a non-empty array of tables"
+            )
+        models = [
+            model_from_mapping(provider_id, base_url, adapter, entry)
+            for entry in models_raw
+        ]
+        providers[provider_id] = ProviderConfig(
+            id=provider_id,
+            name=str(table.get("name") or provider_id),
+            base_url=base_url,
+            api_key_env=api_key_env,
+            adapter=adapter,
+            models=models,
+        )
+    return providers
+
+
 @dataclass
 class UserConfig:
     """Parsed user configuration."""
@@ -49,6 +105,8 @@ class UserConfig:
     default_model: str | None = None
     #: provider id -> {"base_url": ..., "api_key_env": ...}
     provider_overrides: dict[str, dict] = field(default_factory=dict)
+    #: providers defined entirely in config.toml (merged into the catalog)
+    custom_providers: dict[str, ProviderConfig] = field(default_factory=dict)
 
 
 def load_user_config(path: Path | None = None) -> UserConfig:
@@ -66,12 +124,17 @@ def load_user_config(path: Path | None = None) -> UserConfig:
         raise ValueError(f"config {target}: default_model must be a string")
 
     overrides: dict[str, dict] = {}
+    custom_providers: dict[str, ProviderConfig] = {}
     providers = data.get("providers") or {}
     if not isinstance(providers, dict):
         raise ValueError(  # noqa: TRY004 - config errors are ValueError by contract
             f"config {target}: [providers] must be a table"
         )
+    if "custom" in providers:
+        custom_providers = _parse_custom_providers(providers["custom"], target)
     for provider_id, values in providers.items():
+        if provider_id == "custom":
+            continue  # reserved for full provider definitions
         if not isinstance(values, dict):
             raise ValueError(  # noqa: TRY004 - config errors are ValueError by contract
                 f"config {target}: providers.{provider_id} must be a table"
@@ -86,13 +149,19 @@ def load_user_config(path: Path | None = None) -> UserConfig:
         overrides[provider_id] = {
             key: str(value) for key, value in values.items() if value is not None
         }
-    return UserConfig(default_model=default_model, provider_overrides=overrides)
+    return UserConfig(
+        default_model=default_model,
+        provider_overrides=overrides,
+        custom_providers=custom_providers,
+    )
 
 
 def apply_user_config(
-    catalog: dict[str, ProviderConfig], config: UserConfig
+    catalog: dict[str, ProviderConfig],
+    config: UserConfig,
+    warnings: list[str] | None = None,
 ) -> dict[str, ProviderConfig]:
-    """Return the catalog with the user's provider overrides applied."""
+    """Return the catalog with the user's overrides and custom providers applied."""
     for provider_id, override in config.provider_overrides.items():
         provider = catalog.get(provider_id)
         if provider is None:
@@ -104,6 +173,10 @@ def apply_user_config(
                 if model.base_url == provider.base_url:
                     model.base_url = override["base_url"]
             provider.base_url = override["base_url"]
+    for provider_id, provider in config.custom_providers.items():
+        if provider_id in catalog and warnings is not None:
+            warnings.append(f"config overrides packaged provider {provider_id!r}")
+        catalog[provider_id] = provider
     return catalog
 
 
