@@ -26,6 +26,7 @@ from pyagent.cli.permissions import PermissionGate
 from pyagent.events import AgentEvent
 from pyagent.providers.catalog import Model, ProviderConfig, find_model, load_catalog
 from pyagent.providers.registry import StreamFn
+from pyagent.tools import ALL_TOOLS
 from pyagent.types import AssistantMessage, Message
 
 __all__ = ["build_parser", "main", "resolve_model", "run_headless"]
@@ -74,7 +75,7 @@ def _build_agent(
     tools: list | None = None,
 ) -> Agent:
     """Construct the run's Agent (a seam for tests to inject a fake stream)."""
-    tool_list = list(tools or [])
+    tool_list = list(ALL_TOOLS if tools is None else tools)
     return Agent(
         model=model,
         system_prompt=_system_prompt([tool.name for tool in tool_list]),
