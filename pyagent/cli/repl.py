@@ -188,6 +188,7 @@ async def repl(
     print_fn: PrintFn = print,
     api_key: str | None = None,
     tools: list | None = None,
+    allow_dangerous: bool = False,
 ) -> int:
     """Run the interactive loop; returns the process exit code."""
     user_config = load_user_config()
@@ -216,7 +217,9 @@ async def repl(
         session_id=session_id_for(model, session.path.stem),
         stream_fn=stream_fn,
         transform_context=guard.transform,
-        before_tool_call=PermissionGate(interactive=True).before_tool_call,
+        before_tool_call=PermissionGate(
+            interactive=True, allow_dangerous=allow_dangerous
+        ).before_tool_call,
     )
     if resume is not None:
         agent.replace_messages(session.load())

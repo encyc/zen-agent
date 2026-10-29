@@ -170,6 +170,7 @@ async def run_headless(
     assume_yes: bool = False,
     thinking: str | None = None,
     *,
+    allow_dangerous: bool = False,
     json_output: bool = False,
     stream_fn: StreamFn | None = None,
     tools: list | None = None,
@@ -192,7 +193,9 @@ async def run_headless(
 
     if thinking is None:
         thinking = "high" if model.reasoning else "off"
-    gate = PermissionGate(assume_yes=assume_yes, interactive=False)
+    gate = PermissionGate(
+        assume_yes=assume_yes, interactive=False, allow_dangerous=allow_dangerous
+    )
     guard = ContextGuard(model.context_window)
     agent = _build_agent(
         model,
@@ -263,6 +266,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--yes", action="store_true", help="allow write/execute tools without asking"
     )
     parser.add_argument(
+        "--allow-dangerous",
+        action="store_true",
+        help="also allow catastrophic shell commands (rm -rf /, mkfs, ...)",
+    )
+    parser.add_argument(
         "--resume", nargs="?", const="latest", help="resume a session (Task 15)"
     )
     parser.add_argument("--json", action="store_true", help="emit a JSON result")
@@ -276,7 +284,13 @@ def main(argv: list[str] | None = None) -> int:
         from pyagent.cli.repl import repl
 
         try:
-            return asyncio.run(repl(model_id=args.model, resume=args.resume))
+            return asyncio.run(
+                repl(
+                    model_id=args.model,
+                    resume=args.resume,
+                    allow_dangerous=args.allow_dangerous,
+                )
+            )
         except KeyboardInterrupt:
             print(file=sys.stderr)
             return 1
@@ -287,6 +301,7 @@ def main(argv: list[str] | None = None) -> int:
                 model_id=args.model,
                 assume_yes=args.yes,
                 thinking=args.thinking,
+                allow_dangerous=args.allow_dangerous,
                 json_output=args.json,
                 resume=args.resume,
             )
