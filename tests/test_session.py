@@ -175,3 +175,56 @@ def test_rewrite_writes_a_new_file(isolated_sessions):
     assert new_path != session.path
     assert Session(new_path).load()[0].content == "only"
     assert len(session.load()) == 2  # source untouched
+
+
+# ---------------------------------------------------------------------------
+# S1-T9: undo
+# ---------------------------------------------------------------------------
+
+
+def test_truncate_last_turn_drops_the_final_exchange():
+    from pyagent.agent.session import truncate_last_turn
+
+    messages = [user("q1"), assistant("a1"), user("q2"), assistant("a2")]
+    truncated = truncate_last_turn(messages)
+    assert [type(m).__name__ for m in truncated] == ["UserMessage", "AssistantMessage"]
+    assert truncated[0].content == "q1"
+
+
+def test_truncate_last_turn_drops_tool_results_with_their_turn():
+    from pyagent.agent.session import truncate_last_turn
+    from pyagent.types import (
+        AssistantMessage,
+        TextContent,
+        ToolCall,
+        ToolResultMessage,
+        Usage,
+    )
+
+    messages = [
+        user("q1"),
+        assistant("a1"),
+        user("run it"),
+        AssistantMessage(
+            content=[ToolCall(id="c1", name="bash", arguments={})],
+            provider="p", model="m", usage=Usage(), stop_reason="tool_use", timestamp=3,
+        ),
+        ToolResultMessage(
+            tool_call_id="c1",
+            tool_name="bash",
+            content=[TextContent(text="out")],
+            is_error=False,
+            timestamp=4,
+        ),
+    ]
+    truncated = truncate_last_turn(messages)
+    assert [m.content for m in truncated if isinstance(m, UserMessage)] == ["q1"]
+    assert len(truncated) == 2
+
+
+def test_truncate_last_turn_with_nothing_to_drop():
+    from pyagent.agent.session import truncate_last_turn
+
+    assert truncate_last_turn([]) == []
+    only_assistant = [assistant("hi")]
+    assert truncate_last_turn(only_assistant) == only_assistant

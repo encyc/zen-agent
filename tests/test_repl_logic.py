@@ -283,3 +283,37 @@ async def test_slash_import_loads_a_session(isolated_sessions, capsys):
     )
     assert [m.content for m in agent.messages] == ["from disk"]
     assert switched and switched[0].path == path
+
+
+async def test_slash_undo_drops_the_last_turn_into_a_new_file(isolated_sessions, capsys):
+    from pyagent.agent.session import Session
+    from pyagent.types import AssistantMessage, TextContent, Usage, UserMessage
+
+    isolated_sessions.mkdir(parents=True)
+    session = Session(isolated_sessions / "s.jsonl")
+    session.append(UserMessage(content="q1", timestamp=1))
+    session.append(AssistantMessage(content=[TextContent(text="a1")], provider="p",
+                                    model="m", usage=Usage(), stop_reason="stop", timestamp=2))
+    session.append(UserMessage(content="q2", timestamp=3))
+    session.append(AssistantMessage(content=[TextContent(text="a2")], provider="p",
+                                    model="m", usage=Usage(), stop_reason="stop", timestamp=4))
+    before = session.path.read_bytes()
+
+    switched: list[Session] = []
+    agent = Agent(model(), "s", api_key="k")
+    agent.replace_messages(session.load())
+    await handle_slash(agent, "undo", "", session=session, switch_session=switched.append)
+
+    assert [m.content for m in agent.messages if isinstance(m, UserMessage)] == ["q1"]
+    assert switched and switched[0].path != session.path
+    assert session.path.read_bytes() == before  # original untouched
+    assert "undid" in capsys.readouterr().out
+
+
+async def test_slash_undo_with_nothing_to_drop(isolated_sessions, capsys):
+    from pyagent.agent.session import Session
+
+    isolated_sessions.mkdir(parents=True)
+    agent = Agent(model(), "s", api_key="k")
+    await handle_slash(agent, "undo", "", session=Session(isolated_sessions / "s.jsonl"))
+    assert "nothing to undo" in capsys.readouterr().out

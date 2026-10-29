@@ -25,6 +25,7 @@ __all__ = [
     "list_sessions",
     "session_path",
     "sessions_dir",
+    "truncate_last_turn",
 ]
 
 
@@ -150,6 +151,14 @@ class Session:
             self.load()
         assert self._messages is not None
         return self._messages
+
+
+def truncate_last_turn(messages: list[Message]) -> list[Message]:
+    """Drop the last user turn: that user message and everything after it."""
+    for position in range(len(messages) - 1, -1, -1):
+        if isinstance(messages[position], UserMessage):
+            return list(messages[:position])
+    return list(messages)
 
 
 def list_sessions(limit: int = 20) -> list[SessionInfo]:

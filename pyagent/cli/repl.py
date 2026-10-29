@@ -19,7 +19,13 @@ from pathlib import Path
 from rich.console import Console
 
 from pyagent.agent import Agent
-from pyagent.agent.session import Session, latest_session, list_sessions, session_path
+from pyagent.agent.session import (
+    Session,
+    latest_session,
+    list_sessions,
+    session_path,
+    truncate_last_turn,
+)
 from pyagent.cli.compact import compact
 from pyagent.cli.completion import ReplCompleter, help_text
 from pyagent.cli.main import (
@@ -155,6 +161,24 @@ async def handle_slash(
         if switch_session is not None:
             switch_session(imported)
         print_fn(f"imported {len(messages)} messages from {imported_path.name}")
+        return None
+    if command == "undo":
+        if agent.is_streaming:
+            print_fn("cannot undo while the agent is working")
+            return None
+        truncated = truncate_last_turn(agent.messages)
+        dropped = len(agent.messages) - len(truncated)
+        if dropped == 0:
+            print_fn("nothing to undo")
+            return None
+        agent.replace_messages(truncated)
+        if session is not None:
+            new_path = session.rewrite(truncated)
+            if switch_session is not None:
+                switch_session(Session(new_path))
+            print_fn(f"undid the last turn ({dropped} messages) -> {new_path.name}")
+        else:
+            print_fn(f"undid the last turn ({dropped} messages)")
         return None
     if command == "compact":
         try:
