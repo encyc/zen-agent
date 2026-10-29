@@ -11,7 +11,7 @@ way to do things. (Renamed from `pyagent`; there is no compatibility shim.)
 Built as a learning project and as the small, hackable Python kernel that the
 ecosystem is missing (in the spirit of `pi-ai` + `pi-agent-core`).
 
-Repo: <https://github.com/encyc/zen-agent> · PyPI name `zenagent` (unpublished).
+Repo: <https://github.com/encyc/zen-agent> · PyPI package: `zenagent-py` (imports as `zenagent`).
 
 ## Install
 

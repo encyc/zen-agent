@@ -1,5 +1,5 @@
 [project]
-name = "zenagent"
+name = "zenagent-py"
 version = "0.1.0"
 description = "A minimal, Pythonic coding agent: streaming LLM client, async-generator agent loop, and terminal harness."
 readme = "README.md"
@@ -41,6 +41,7 @@ build-backend = "uv_build"
 
 [tool.uv.build-backend]
 module-root = ""
+module-name = "zenagent"
 
 [dependency-groups]
 dev = [
