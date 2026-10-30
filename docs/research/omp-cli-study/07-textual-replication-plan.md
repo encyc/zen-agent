@@ -182,18 +182,27 @@ omp 的 token 是**语义化**的，我们照抄语义、保留 harbor 的色相
 - 工具专用渲染器 → **只做 5 个**：bash、read、edit/write、grep、通用兜底
 - 不做：插件市场、技能市场、安全扫描、语音、录屏、collab、worktree、Git UI、ps-top、debug 面板、Agent Hub、goal/vibe/ratchet 模式、sixel/图片、鼠标
 
-## 7. 总验收清单
+## 7. 总验收清单（P0-P4 已实施）
 
-- [ ] 默认打开：无侧栏，转录全宽，底部 = 状态带 + `╰─ ` 输入行
-- [ ] 状态带 5 档宽度都不溢出、不出现双分隔符
-- [ ] 工具卡单行 + 状态点 + 底色，`Ctrl+O` 全局展开/收起
-- [ ] `Esc` 不毁草稿；`Ctrl+C` 清草稿；`Ctrl+D` 退出
-- [ ] 连按同一快捷键不会叠出两个浮层
-- [ ] 浮层关闭后焦点回到输入区，且转录仍贴在最新一行
-- [ ] `app.exit_summary` 仍能给出 model/tokens/cost
-- [ ] `bash scripts/check.sh` 全绿；新增几何与状态带测试
+- [x] 默认打开：无侧栏，转录全宽，底部 = 状态带 + `╰─ ` 输入行
+- [x] 状态带 8 档宽度都不溢出、不出现双分隔符
+- [x] 工具卡单行 + 状态点 + 底色，`Ctrl+O` 批量展开/收起（单卡仍 `enter`）
+- [x] `Esc` 不毁草稿；`Ctrl+C` 清草稿；`Ctrl+D` 退出；`Ctrl+Q` 排队
+- [x] 连按同一快捷键不会叠出两个浮层
+- [x] `app.exit_summary` 仍能给出 model/tokens/cost
+- [x] `bash scripts/check.sh` 全绿（630 tests）；新增几何、状态带、行类型、工具卡、浮层测试
+- [x] 转录贴底策略：上滚锁定 + `↓ new output`，`end`/`scroll_to_bottom()` 回到底部
+
+**实施记录**（commit 顺序即阶段）：
+`P0` 单列 dock + band + `╰─ ` gutter → `P1` segment 状态带 → `P2` 行类型 + tinted 工具卡 +
+stick-to-bottom → `P3` palette 骨架 + 单实例菜单 → `P4` omp 键位与 Esc 语义。
+
+**仍未做**（有意为之，见 §6）：composer 其余 7 种形状、Settings/Context 两个全屏界面、
+内联审批槽（A1）、历史搜索、外部编辑器、git 段数据源。
 
 ## 源码对照
 
-- 现状：`zenagent/cli/tui/app.py`、`widgets/{status_bar,chat_log,tool_card,prompt_input,sidebar}.py`、`screens/modals.py`、`theme.tcss`
+- 落地代码：`zenagent/cli/tui/app.py`、`status/{segments,presets}.py`、
+  `widgets/{transcript,welcome,status_band,prompt_gutter,prompt_input,rows,tool_card,new_content}.py`、
+  `screens/{palette,modals}.py`、`theme.tcss`、`tests/test_tui_*.py`
 - 对照目标：`02-layout.md`（dock 顺序、shape 矩阵）、`03-status-line-and-composer.md`（段表与降级）、`04-transcript-and-tools.md`（行类型）、`05-overlays-and-surfaces.md`（浮层骨架与菜单栈）

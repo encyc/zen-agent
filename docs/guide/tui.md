@@ -5,36 +5,49 @@
 
 ## 布局
 
+单列结构，抄自 omp 的主屏：**转录区在上，底部一条 dock（状态带 + 输入行）**。
+没有底部状态栏，状态信息就是输入框上方那条填色带；屏幕最后一行就是输入行。
+
 ```
-┌────────────────────────────┬──────────────────────────────────────────────────┐
-│ Session                    │  › 用 bash 运行 echo LOOK-OK                     │
-│   20261030-122605.jsonl    │    ▸ bash {"command": "echo LOOK-OK"} · ok · 35ms│
-│   4 messages               │    命令执行成功（exit code 0）。                 │
-│                            │                                                  │
-│ Model                      │  done · in 1762 / out 33 · cache 1664 · $0.0000  │
-│   glm-5.3                  │                                                  │
-│   context  914/1000000     │                                                  │
-│   spend    $0.0000         │                                                  │
-│                            │                                                  │
-│ Runtime                    │                                                  │
-│   idle                     │                                                  │
-│   queued 0   steering 0    │                                                  │
-│   8 models                 │                                                  │
-│                            │                                                  │
-│ ctrl+b  hide sidebar       │                                                  │
-│ ctrl+p  commands           │                                                  │
-├────────────────────────────┴──────────────────────────────────────────────────┤
-│ glm-5.3   thinking high   1762 in / 33 out   $0.0000   context 0%             │
-├───────────────────────────────────────────────────────────────────────────────┤
-│ > type a message…                                                             │
-└───────────────────────────────────────────────────────────────────────────────┘
+                             zen
+                   v0.1.3 · python agent loop
+
+           / commands  ·  ctrl+b info  ·  ctrl+d quit
+
+  用 bash 运行 echo hi
+
+  ● bash  {"command": "echo hi"}  ·  ok · 19ms  (enter: expand)
+    命令执行成功（exit code 0）。
+
+  done · in 1762 · out 33 · cache 1664 · $0.0000
+
+ deepseek-flash · high · ~/py-agent        1762 in / 33 out · $0.0000 · context 0.1%
+╰─ 输入你的消息…
 ```
 
-- 左侧栏：`ctrl+b` 开关；窄于 100 列时自动隐藏。
-- 底部状态栏：模型、thinking、tokens、花费、上下文占用、队列数。
-- 对话区：用户消息用 `›` 起首；工具调用默认折叠成一行（`▸ name args · status · ms`），
-  聚焦后 `enter`/`space` 展开结果与 diff。
-- 配色：冷灰底 + 单一暖色强调（用户消息、焦点、运行中），其余信息靠字重与明度分层。
+- **转录区**：填满剩余高度，自动贴底；往上滚会锁定视图并出现 `↓ new output`
+  提示，不再把你拽回底部（Textual 没有终端原生 scrollback，只能自己实现）。
+- **状态带**：一行填色，在 `╰─` 上方。它是**有序列的 segment**，窄屏按固定顺序丢信息：
+  先丢右侧事实（tokens/花费/上下文/session）→ 再缩路径 → 最后才丢左侧身份
+  （model/thinking），**路径永远最后走**。
+- **输入行**：无边框，`╰─ ` 是唯一的装饰；草稿超过一行时输入框自动长高（最多 8 行），
+  `╰─` 只在第一行。
+- **侧栏**：默认隐藏，`ctrl+b` 打开（宽 <100 列时自动不显示）。
+- **欢迎块**：`zen` + 版本 + 一行提示，随对话增长被顶出屏幕。
+
+## 转录区的行类型
+
+| 行 | 外观 |
+|---|---|
+| 用户消息 | 整行填色块，**没有 `›` 前缀** |
+| assistant 正文 | Markdown，无装饰 |
+| thinking | 折叠成一行 `✻ thinking · 1.2k chars`，`enter` 展开 |
+| 工具调用 | 一行 `● name args · ok · 19ms`，状态点+底色区分运行/成功/失败，`enter` 展开 |
+| 工具输出 | 展开后只留**尾部** 12 行，头部显示 `… N earlier lines` |
+| 错误 | 红色点 + 红底卡片；失败的工具自动展开 |
+| 用量 | 每轮结束一行 `done · in … · out … · $…`（暗色） |
+
+成功态刻意**不用绿色**（omp 的规则：运行中=accent、成功=暗、只有错误才着色）。
 
 ## 键位
 
@@ -42,24 +55,37 @@
 |---|---|
 | `enter` | 发送；run 进行中则进入 follow-up 队列 |
 | `shift+enter` | 输入换行 |
-| `ctrl+s` | steer：把输入插入当前 run |
-| `ctrl+c` | 中断当前 run（应用不退出） |
+| `esc` | 中断当前 run；**有草稿时不删字** |
+| `ctrl+c` | 清空草稿（不退出） |
+| `ctrl+d` | 退出，打印一行会话摘要 |
+| `ctrl+q` | 排队 follow-up：run 中入队，空闲时直接发送 |
+| `ctrl+p` | 循环切换模型 |
+| `alt+p` | 打开模型选择器 |
+| `shift+tab` | 循环 thinking 档位（off/low/medium/high） |
+| `ctrl+t` | 隐藏/显示所有 thinking 行 |
+| `ctrl+o` | 展开/收起所有工具卡（单卡仍用 `enter`） |
 | `ctrl+x` | 清空 follow-up 队列 |
-| `ctrl+b` | 开关侧边栏 |
-| `ctrl+p` | 命令面板（模型/会话/帮助/退出） |
-| `ctrl+q` | 退出，打印一行会话摘要 |
+| `ctrl+s` | steer：把输入插入当前 run |
+| `ctrl+k` | 命令面板（模型/会话/退出） |
+| `ctrl+b` | 开关信息侧栏 |
+
+> 与 v0.1 的差异：`ctrl+c` 从"中断"改为"清草稿"，中断改为 `esc`；退出从 `ctrl+q`
+> 改为 `ctrl+d`；命令面板从 `ctrl+p` 改为 `ctrl+k`（`ctrl+p` 让给模型循环，跟 omp 一致）。
 
 ## 模型管理
 
-`ctrl+p` → `model`（或 `/model`）打开选择器：
+`alt+p`（或 `ctrl+k` → `model`，或 `/model`）打开选择器：
 
-- `●` 标记当前模型；未配置 API key 的模型置灰并显示原因，不能选择。
-- `enter` 切换，下一轮生效；上下文窗口、thinking 默认值、session id 同步更新。
-- 编辑 provider/密钥请改 `~/.zenagent/config.toml`，TUI 不做内联编辑。
+- 底部贴底的浮层，带搜索框；`↑↓` 移动、`enter` 选择、`esc` 取消，输入即过滤。
+- `●` 标记当前模型并默认选中；未配置 API key 的模型置灰并显示原因，不能选择。
+- 下一轮生效；上下文窗口、thinking 默认值、session id 同步更新。
+- 重复按同一个快捷键只会聚焦已经打开的浮层，不会叠出第二个。
+
+编辑 provider/密钥请改 `~/.zenagent/config.toml`，TUI 不做内联编辑。
 
 ## 会话管理
 
-`ctrl+p` → `sessions`（或 `/sessions`）打开选择器：
+`ctrl+k` → `sessions`（或 `/sessions`）打开选择器：同一套浮层骨架，带搜索。
 
 - `enter` 恢复会话（运行中会先中断当前 run 再切换）。
 - 删除走「移到 `sessions/.trash/`」，不做不可逆 unlink；当前会话删除后自动新建空会话。
@@ -70,3 +96,10 @@
 - 界面异常/无法启动：`TERM=dumb`、极老 conhost、非 TTY 环境会自动回落到 REPL。
 - 想看纯文本输出：`zen --no-tui`。
 - 只想跑一次：`zen -p "..."`（headless，不涉及 TUI）。
+- 缺 textual：`uv sync --extra cli`（缺依赖时 `zen` 会直接给出这句提示并以退出码 2 结束）。
+- 状态带少了某项：那是窄屏降级，不是 bug —— 拉宽终端，或按 `ctrl+b` 看侧栏明细。
+
+## 设计出处
+
+这一版的布局/状态带/工具卡/浮层是对 [omp](https://github.com/can1357/oh-my-pi)
+的复刻，调研记录在 `docs/research/omp-cli-study/`（7 篇，含逐项源码对照）。
