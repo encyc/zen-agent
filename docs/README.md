@@ -14,7 +14,7 @@
 3. 内核导读（重点，按执行顺序）：
    - [类型与事件](internals/types-events.md) → [Provider 层](internals/providers.md)
    - [Agent Loop](internals/agent-loop.md) → [Agent 类](internals/agent-class.md)
-   - [工具内核](internals/tools-internals.md) → [上下文与压缩](internals/context-compaction.md)
+   - [工具内核](internals/tools-internals.md) → [Web 搜索链](internals/web-search.md) → [上下文与压缩](internals/context-compaction.md)
    - [护栏与校验](internals/guardrails.md) → [持久化/重试/崩溃](internals/persistence.md)
    - [MCP 内核](internals/mcp-internals.md) · [扩展内核](internals/extensions-internals.md)
 4. 速查：[核心契约](reference/contracts.md) · [事件全表](reference/events.md) · [文件地图](reference/file-map.md)

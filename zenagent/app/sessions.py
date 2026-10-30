@@ -6,7 +6,12 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from zenagent.agent.session import Session, list_sessions, session_path
+from zenagent.agent.session import (
+    Session,
+    list_sessions,
+    session_path,
+    truncate_last_turn,
+)
 from zenagent.app.runtime import Runtime
 from zenagent.export import export_session
 
@@ -79,6 +84,23 @@ class SessionManager:
             target.append(message)
         await self.runtime.switch_session(target.path)
         return target.path
+
+    def undo(self) -> tuple[int, Path] | None:
+        """Drop the last user turn (message + everything after it), on disk too.
+
+        Mirrors what the REPL has always done: the truncated transcript is
+        written to a *new* session file rather than editing the old one, so an
+        undo stays recoverable.
+        """
+        messages = list(self.runtime.agent.messages)
+        truncated = truncate_last_turn(messages)
+        dropped = len(messages) - len(truncated)
+        if dropped == 0:
+            return None
+        self.runtime.agent.replace_messages(truncated)
+        new_path = Session(self.current()).rewrite(truncated)
+        self.runtime.session = Session(new_path)
+        return dropped, new_path
 
     def delete(self, path: Path) -> Path:
         """Move a session file to the trash; never unlink a transcript."""

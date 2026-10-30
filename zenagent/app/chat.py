@@ -6,12 +6,14 @@ import asyncio
 from collections.abc import Callable
 from pathlib import Path
 
+from zenagent.agent.session import Session
 from zenagent.app.runtime import Runtime
 from zenagent.app.views import (
     MessageView,
     RunStatus,
     ToolCallView,
     args_preview,
+    messages_to_views,
     usage_total,
 )
 from zenagent.events import AgentEvent
@@ -114,6 +116,39 @@ class ChatController:
         self._cards.clear()
         self._current = None
         self._notify()
+
+    def retry(self) -> str | None:
+        """Drop everything after the last user message and run that turn again.
+
+        The user message is dropped too and re-sent, so the transcript never
+        ends up with two copies of the same prompt.
+        """
+        if self._running:
+            return None
+        messages = list(self.runtime.agent.messages)
+        index = next(
+            (
+                position
+                for position in range(len(messages) - 1, -1, -1)
+                if isinstance(messages[position], UserMessage)
+            ),
+            None,
+        )
+        if index is None or index == len(messages) - 1:
+            return None  # nothing answered yet
+        text = _user_text(messages[index])
+        if not text.strip():
+            return None
+        truncated = messages[:index]
+        self.runtime.agent.replace_messages(truncated)
+        new_path = Session(Path(self.runtime.session.path)).rewrite(truncated)
+        self.runtime.session = Session(new_path)
+        self._transcript = messages_to_views(truncated)
+        self._cards.clear()
+        self._current = None
+        self._task = asyncio.create_task(self._run(text))
+        self._notify()
+        return text
 
     async def wait_for_idle(self) -> None:
         while self._task is not None:

@@ -215,9 +215,51 @@ async def _context(services: AppServices, argument: str) -> CommandResult:
     )
 
 
+@_command("search", "run a web search, or /search alone for provider status")
+async def _search(services: AppServices, argument: str) -> CommandResult:
+    from zenagent.tools.web import LABELS, format_results, provider_status, run_search
+
+    query = argument.strip()
+    if not query:
+        lines = ["search providers (in chain order):"]
+        for name, available, reason in provider_status():
+            mark = "✓" if available else "✗"
+            lines.append(f"  {mark} {LABELS.get(name, name):10s} {reason}")
+        lines.append("override order with ZENAGENT_SEARCH_PROVIDERS=deepseek,bing")
+        return CommandResult(message="\n".join(lines))
+    result = await run_search(query, limit=5)
+    return CommandResult(message=format_results(result))
+
+
 @_command("hotkeys", "show the active keybindings")
 async def _hotkeys(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(message=HOTKEYS_TEXT)
+
+
+@_command("undo", "drop the last turn (recoverable: new session file)")
+async def _undo(services: AppServices, argument: str) -> CommandResult:
+    if services.chat.status.running:
+        return CommandResult(message="cannot undo while the agent is working")
+    result = services.sessions.undo()
+    if result is None:
+        return CommandResult(message="nothing to undo")
+    dropped, path = result
+    services.chat.reload_transcript()
+    return CommandResult(
+        message=f"undid the last turn ({dropped} messages) → {path.name}",
+        reset_transcript=True,
+    )
+
+
+@_command("retry", "re-run the last turn")
+async def _retry(services: AppServices, argument: str) -> CommandResult:
+    if services.chat.status.running:
+        return CommandResult(message="already working")
+    text = services.chat.retry()
+    if text is None:
+        return CommandResult(message="nothing to retry")
+    preview = text if len(text) <= 60 else text[:59] + "…"
+    return CommandResult(message=f"retrying: {preview}", reset_transcript=True)
 
 
 @_command("new", "start a new session")
@@ -263,6 +305,9 @@ def build_default_commands(services: AppServices) -> CommandRegistry:
         _new,
         _fork,
         _settings,
+        _undo,
+        _retry,
+        _search,
     ):
         registry.register(factory(services))
     return registry

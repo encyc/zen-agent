@@ -11,7 +11,7 @@
 | `bash` | 执行命令，禁止危险模式 | 需确认 |
 | `glob` | 按模式找文件 | 只读 |
 | `grep` | 正则搜内容（忽略二进制/大文件） | 只读 |
-| `web_search` | 联网搜索，返回标题/URL/摘要（Brave → Bing → DuckDuckGo） | 只读，免确认 |
+| `web_search` | 联网搜索，返回标题/URL/摘要（DeepSeek → Tavily → Brave → Bing → DuckDuckGo） | 只读，免确认 |
 | `fetch` | 抓取 URL 并转成可读文本（剥 HTML，12k 字符上限） | 只读，免确认 |
 | `read_skill` | 读本地 SKILL.md 正文 | 只读 |
 
@@ -87,4 +87,5 @@ ToolResultAgent(
 - 校验：`zenagent/agent/validate.py::validate_arguments`
 - 执行与错误隔离：`zenagent/agent/loop.py`（工具 round）
 - 对应测试：`tests/test_tools_fs.py`、`test_tools_bash.py`、`test_tools_search.py`、`test_tools_web.py`、`test_permissions.py`、`test_validate.py`
-- `web_search` 的 `BRAVE_API_KEY` 存在时优先 Brave；否则依次试 Bing、DuckDuckGo（受限网络里通常只有 Bing 可用）。
+- `web_search` 的 provider 链与配置见 [`docs/internals/web-search.md`](../internals/web-search.md)：有 `DEEPSEEK_API_KEY` 时默认走 DeepSeek，无 key 时退到 Bing/DuckDuckGo；顺序可用 `ZENAGENT_SEARCH_PROVIDERS` 覆盖。
+- `/search` 查看 provider 状态，`/search <query>` 手动跑一次。
