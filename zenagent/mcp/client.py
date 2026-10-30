@@ -157,6 +157,11 @@ class StdioTransport:
                 )
             else:
                 future.set_result(message.get("result") or {})
+        # stdout can hit EOF before the child is reaped, so returncode may still
+        # be None here; wait briefly so crash errors carry the exit code.
+        if self._process is not None and self._process.returncode is None:
+            with contextlib.suppress(Exception, asyncio.CancelledError):
+                await asyncio.wait_for(self._process.wait(), timeout=2.0)
         self._read_error = self._describe_exit()
         self._fail_pending(self._read_error)
 

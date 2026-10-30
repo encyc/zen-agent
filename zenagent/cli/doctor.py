@@ -45,7 +45,7 @@ def collect_checks(env: Mapping[str, str] | None = None) -> list[Check]:
     """Run every local check and return the rows in display order."""
     values = os.environ if env is None else env
     checks: list[Check] = [
-        Check("python", sys.version_info >= (3, 10), sys.version.split()[0]),
+        Check("python", sys.version_info >= (3, 11), sys.version.split()[0]),
         Check("zenagent", True, __version__),
     ]
 
