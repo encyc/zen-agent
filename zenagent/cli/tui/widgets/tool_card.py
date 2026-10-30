@@ -15,7 +15,7 @@ class ToolCard(Collapsible):
     """Shows tool name + argument preview; expanding reveals output/diff."""
 
     can_focus = True
-    BINDINGS = [("enter,space", "toggle_card", "Toggle")]
+    BINDINGS = [("enter,space", "toggle_card", "Toggle")]  # noqa: RUF012 - Textual class API
 
     def __init__(self, view: ToolCallView) -> None:
         self.view = view
@@ -37,10 +37,8 @@ class ToolCard(Collapsible):
 
     def refresh_view(self) -> None:
         view = self.view
-        try:
+        if hasattr(self, "title"):
             self.title = self._title(view)  # Collapsible exposes a title reactive
-        except Exception:  # noqa: BLE001 - older Textual without writable title
-            pass
         body = view.result_text or "(no output yet)"
         if view.diff:
             body = f"{body}\n\n{view.diff}"
