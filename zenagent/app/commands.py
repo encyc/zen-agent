@@ -126,6 +126,28 @@ async def _rename(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(message=f"renamed: {stored}")
 
 
+@_command("pin", "pin or unpin the current session")
+async def _pin(services: AppServices, argument: str) -> CommandResult:
+    from zenagent.agent.session import session_title
+
+    requested = argument.strip().lower()
+    current = services.sessions.current()
+    try:
+        if requested in ("on", "off"):
+            state = services.sessions.set_pin(current, requested == "on")
+        elif requested:
+            return CommandResult(
+                message=f"unknown pin argument: {requested} (use on|off)"
+            )
+        else:
+            state = services.sessions.toggle_pin(current)
+    except ValueError as exc:
+        return CommandResult(message=str(exc))
+    return CommandResult(
+        message=f"{'pinned' if state else 'unpinned'} {session_title(current)}"
+    )
+
+
 @_command("clear", "clear the visible conversation")
 async def _clear(services: AppServices, argument: str) -> CommandResult:
     services.chat.clear()
@@ -328,6 +350,7 @@ def build_default_commands(services: AppServices) -> CommandRegistry:
         _mode,
         _sessions,
         _rename,
+        _pin,
         _clear,
         _compact,
         _mcp,

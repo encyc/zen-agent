@@ -75,3 +75,18 @@ async def test_tools_lists_names_and_descriptions(services):
     names = [tool.name for tool in services.runtime.agent.tools]
     assert result.message and "read_file" in result.message and "bash" in result.message
     assert f"tools ({len(names)})" in result.message
+
+
+async def test_pin_command_toggles_the_current_session(services):
+    from zenagent.agent.session import read_session_pins
+    from zenagent.app.commands import build_default_commands
+
+    registry = build_default_commands(services)
+    current = services.sessions.current()
+    result = await registry.dispatch("pin", "")
+    assert result.message and "pinned" in result.message
+    assert current.name in read_session_pins(current.parent)
+
+    result = await registry.dispatch("pin", "off")
+    assert result.message and "unpinned" in result.message
+    assert current.name not in read_session_pins(current.parent)

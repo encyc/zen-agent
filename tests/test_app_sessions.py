@@ -250,3 +250,19 @@ async def test_entries_all_view_labels_each_project(
     assert labels[other_session.name] == "beta"
     assert labels[legacy_session.name] == ""
     assert labels[current.name] == "alpha"
+
+
+async def test_pinned_sessions_sort_first(session_runtime):
+    runtime = session_runtime
+    manager = SessionManager(runtime)
+    first = manager.current()
+    await runtime.agent.prompt("first")
+    await manager.new()
+    second = manager.current()
+    await runtime.agent.prompt("second")
+    assert first != second
+
+    manager.toggle_pin(first)
+    entries = manager.entries()
+    assert entries[0].path == first and entries[0].pinned is True
+    assert entries[1].pinned is False

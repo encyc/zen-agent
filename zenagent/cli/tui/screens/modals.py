@@ -78,7 +78,7 @@ class SessionPicker(PaletteScreen[SessionAction]):
         self.scope = scope
         items = []
         for entry in entries:
-            marker = "●" if entry.current else " "
+            marker = f"{'★' if entry.pinned else ' '}{'●' if entry.current else ' '}"
             if scope == "all":
                 project_label = entry.project or "legacy"
                 label = f"{marker} [{project_label}] {entry.title or entry.path.name}"

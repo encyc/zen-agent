@@ -588,3 +588,26 @@ def test_listing_rejects_an_unknown_scope(tmp_path, monkeypatch):
         list_sessions(scope="everywhere")
     with pytest.raises(ValueError):
         latest_session(scope="everywhere")
+
+
+def test_pins_sidecar_roundtrip_and_corruption(tmp_path):
+    from zenagent.agent.session import read_session_pins, set_session_pin
+
+    session = tmp_path / "s.jsonl"
+    session.touch()
+    assert read_session_pins(tmp_path) == set()
+
+    assert set_session_pin(session, True) is True
+    assert read_session_pins(tmp_path) == {"s.jsonl"}
+    assert set_session_pin(session, False) is False
+    assert read_session_pins(tmp_path) == set()
+
+    (tmp_path / ".pins.json").write_text("{broken", encoding="utf-8")
+    assert read_session_pins(tmp_path) == set()
+
+
+def test_set_session_pin_rejects_missing_file(tmp_path):
+    from zenagent.agent.session import set_session_pin
+
+    with pytest.raises(ValueError):
+        set_session_pin(tmp_path / "nope.jsonl", True)

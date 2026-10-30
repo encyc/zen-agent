@@ -10,7 +10,14 @@
 - 旧文件不会被重写：压缩、`/undo`、`/fork` 都**写新文件**，保证历史可审计。
 
 REPL 里：`/session` 看当前、`/sessions` 列出、`/fork` 复制、`/import PATH` 载入、`/undo` 撤销最后一轮、
-`/compact` 手动压缩。
+`/compact` 手动压缩、`/pin [on|off]` 置顶/取消置顶当前会话。
+
+## 会话置顶（pin）
+
+- `/pin` 切换当前会话的置顶状态，`/pin on`、`/pin off` 显式指定；TUI 会话选择器里置顶行显示 `★`。
+- 置顶只影响列表/选择器排序（置顶组在前，组内仍按时间倒序），不改变会话内容。
+- 状态存在与 `.titles.json` 同目录的 `.pins.json`（JSON 数组，风险同标题 sidecar：缺失/损坏回退空集，
+  原子写入）；会话 JSONL 仍保持不变。
 
 ## 会话名称
 

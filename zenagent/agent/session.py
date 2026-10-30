@@ -28,10 +28,12 @@ __all__ = [
     "brief",
     "latest_session",
     "list_sessions",
+    "read_session_pins",
     "read_session_titles",
     "session_path",
     "session_title",
     "sessions_dir",
+    "set_session_pin",
     "set_session_title",
     "truncate_last_turn",
     "unique_session_path",
@@ -40,6 +42,10 @@ __all__ = [
 #: Display names live in a sidecar keyed by session filename: the JSONL stays
 #: append-only ``Message.to_json()`` and can still be replayed by other tools.
 TITLES_FILENAME = ".titles.json"
+
+#: Pinned sessions live in a sibling sidecar (a JSON array of filenames), for
+#: the same reason: the transcript format never changes for UI metadata.
+PINS_FILENAME = ".pins.json"
 
 #: Stored display names are capped after whitespace normalization.
 TITLE_LIMIT = 80
@@ -207,6 +213,64 @@ def set_session_title(path: Path, title: str) -> str:
     titles[session_file.name] = normalized
     _write_session_titles(session_file.parent, titles)
     return normalized
+
+
+def _pins_path(directory: Path) -> Path:
+    return Path(directory) / PINS_FILENAME
+
+
+def read_session_pins(directory: Path | None = None) -> set[str]:
+    """Pinned session filenames for one sessions directory.
+
+    Like the titles sidecar, a missing/corrupt/non-list file is an empty set:
+    pinning is a convenience and must never break session listing.
+    """
+    base = sessions_dir() if directory is None else Path(directory)
+    try:
+        data = json.loads(_pins_path(base).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    if not isinstance(data, list):
+        return set()
+    return {name for name in data if isinstance(name, str) and name}
+
+
+def _write_session_pins(directory: Path, pins: set[str]) -> None:
+    """Replace one directory's pins sidecar atomically."""
+    sidecar = _pins_path(directory)
+    sidecar.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temp_name = tempfile.mkstemp(
+        dir=sidecar.parent, prefix=f"{sidecar.name}.", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(sorted(pins), handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_name, sidecar)
+    except BaseException:
+        Path(temp_name).unlink(missing_ok=True)
+        raise
+
+
+def set_session_pin(session_file: Path, pinned: bool) -> bool:
+    """Pin or unpin one saved session; returns the resulting state.
+
+    Raises ``ValueError`` for anything that is not a saved ``*.jsonl`` session
+    (pinning a nonexistent file would silently pollute the sidecar). The
+    transcript is never read or modified.
+    """
+    target = Path(session_file)
+    if target.suffix != ".jsonl" or not target.is_file():
+        raise ValueError(f"not a saved session file: {target}")
+    pins = read_session_pins(target.parent)
+    if pinned:
+        pins.add(target.name)
+    else:
+        pins.discard(target.name)
+    _write_session_pins(target.parent, pins)
+    return pinned
 
 
 def _title_from_messages(messages: list[Message]) -> str:

@@ -18,7 +18,9 @@ from zenagent import project
 from zenagent.agent.session import (
     Session,
     list_sessions,
+    read_session_pins,
     read_session_titles,
+    set_session_pin,
     set_session_title,
     truncate_last_turn,
     unique_session_path,
@@ -98,6 +100,7 @@ class SessionEntry:
     current: bool = False
     title: str = ""
     project: str = ""
+    pinned: bool = False
 
 
 class SessionManager:
@@ -125,11 +128,15 @@ class SessionManager:
     def entries(self, *, scope: str = "project") -> list[SessionEntry]:
         current = self.current()
         entries: list[SessionEntry] = []
+        pins_by_dir: dict[Path, set[str]] = {}
         for info in list_sessions(limit=100, scope=scope):
             try:
                 size = info.path.stat().st_size
             except OSError:
                 size = 0
+            directory = info.path.parent
+            if directory not in pins_by_dir:
+                pins_by_dir[directory] = read_session_pins(directory)
             entries.append(
                 SessionEntry(
                     path=info.path,
@@ -139,9 +146,25 @@ class SessionManager:
                     current=info.path == current,
                     title=info.title,
                     project=info.project,
+                    pinned=info.path.name in pins_by_dir[directory],
                 )
             )
+        # Pinned first, otherwise newest-first exactly as list_sessions returned
+        # (sorted() is stable, so no time order is lost inside each group).
+        entries.sort(key=lambda entry: not entry.pinned)
         return entries
+
+    def set_pin(self, path: Path, pinned: bool) -> bool:
+        """Pin/unpin one saved session; ``ValueError`` for a non-session path."""
+        return set_session_pin(Path(path), pinned)
+
+    def toggle_pin(self, path: Path) -> bool:
+        """Flip the pinned flag of one saved session; returns the new state."""
+        target = Path(path)
+        if not target.is_file():
+            raise ValueError(f"session not found: {target}")
+        currently = target.name in read_session_pins(target.parent)
+        return set_session_pin(target, not currently)
 
     async def resume(self, path: Path) -> None:
         await self.runtime.switch_session(path)
