@@ -84,7 +84,9 @@
   `/thinking ` 列出档位，`/model ` 列出模型；`↑↓` 移动、`tab` 接受、`esc` 收起。输入会过滤候选。
 - **选择器**：裸 `/mode` 或 `/thinking` 按 `enter` 直接打开选择器（当前值预选中），`enter` 应用、
   `esc` 取消；这对应 omp 的 thinking-selector/theme-selector 交互。
-- **Enter 提交、Tab 接受**：提示列表开着时 Enter 仍是提交（不会把补全吞掉），与 omp 一致。
+- **Enter 接受并提交、Tab 只补全**：值提示打开时，Enter 直接对高亮值执行（`/mode ` 选 full 再
+  Enter 就是 `/mode full`，不再多绕一层选择器）；命令名提示打开时，Enter 补成 `/mode ` 再提交
+  （裸命令因此会打开选择器）；`Tab` 只补全、不提交，适合继续输入。
 - `/mode plan|ask|full` 显式给值、或 `zen --mode ...` 启动模式也照常可用（默认 ask）。
 - **plan**：写/执行工具被拒，模型改为只读调研并给出计划。
 - **ask**：写/执行工具弹审批框：`y` 允许一次、`a` 本会话总是允许、`n`/`esc` 拒绝；

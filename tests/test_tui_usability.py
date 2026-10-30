@@ -283,8 +283,31 @@ async def test_bare_thinking_command_opens_the_selector(fake_runtime):
         assert app.runtime.agent.thinking == "max"
 
 
-async def test_enter_submits_and_tab_accepts_the_hint(fake_runtime):
-    """omp contract: Tab accepts autocomplete, Enter submits the draft."""
+async def test_enter_on_a_value_hint_accepts_and_submits(fake_runtime):
+    """Enter on a highlighted value applies it, without a detour through the picker."""
+    from zenagent.cli.tui.app import ZenAgentApp
+    from zenagent.cli.tui.screens.modals import ChoicePicker
+
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        prompt = app.query_one(PromptInput)
+        prompt.focus()
+        for char in "/mode":
+            await pilot.press(char)
+        await pilot.press("space")
+        await pilot.pause()
+        await pilot.press("down", "down")  # plan -> ask -> full
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.pause()
+        assert not isinstance(app.screen, ChoicePicker), "no redundant submenu"
+        assert app.runtime.mode == "full"
+        assert prompt.text == ""
+
+
+async def test_enter_on_a_command_hint_reaches_the_command_picker(fake_runtime):
+    """A bare command (no value yet) still opens its selector after Enter."""
     from zenagent.cli.tui.app import ZenAgentApp
     from zenagent.cli.tui.screens.modals import ChoicePicker
 
@@ -299,6 +322,5 @@ async def test_enter_submits_and_tab_accepts_the_hint(fake_runtime):
         await pilot.press("enter")
         await pilot.pause()
         await pilot.pause()
-        # Submitting the bare command opens its selector, not "/mode " text.
         assert isinstance(app.screen, ChoicePicker)
         assert prompt.text == ""

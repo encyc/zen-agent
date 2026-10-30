@@ -105,11 +105,14 @@ class PromptInput(TextArea):
         await super()._on_key(event)
 
     async def _handle_hint_key(self, event: events.Key) -> bool:
-        """Arrows/tab/esc belong to the suggestion list while it is open.
+        """Arrows/tab/enter/esc belong to the suggestion list while it is open.
 
-        Enter is deliberately *not* captured: omp's contract is Tab accepts an
-        autocomplete candidate and Enter submits the draft (so ``/mode`` +
-        Enter opens the mode selector rather than completing it to ``/mode ``).
+        ``Tab`` completes the highlighted candidate into the draft and stays
+        there; ``Enter`` completes it *and* submits -- so a value hint executes
+        immediately (``/mode `` + Enter applies the highlighted mode), while a
+        command-name hint still reaches the command's own picker (``/mode`` +
+        Enter opens the mode selector). This avoids the old three-Enter detour
+        through the picker just to choose a value that was already highlighted.
         """
         if event.key in ("up", "down"):
             event.stop()
@@ -120,6 +123,16 @@ class PromptInput(TextArea):
             event.stop()
             event.prevent_default()
             await self.app.run_action("hint_accept")
+            return True
+        if event.key == "enter":
+            event.stop()
+            event.prevent_default()
+            await self.app.run_action("hint_accept")
+            text = self.text.strip()
+            if text:
+                self.clear()
+                self._set_rows(1)
+                self.post_message(self.Submitted(text))
             return True
         if event.key == "escape":
             event.stop()
