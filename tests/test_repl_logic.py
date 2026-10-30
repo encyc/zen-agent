@@ -187,11 +187,24 @@ async def test_repl_eof_exits_cleanly(isolated_sessions):
 
 async def test_typing_while_running_steers_instead_of_stacking(isolated_sessions):
     """A line typed during a run is queued; the next run sees it as history."""
-    stream = scripted_stream(0.06, "slow answer", "second answer")
+    stream = scripted_stream(0.15, "slow answer", "second answer")
+    schedule = [
+        (0.0, "first"),
+        (0.02, "please also check logs"),  # typed while the first run streams
+        (0.30, "second"),  # typed after it settled → a real second prompt
+        (0.0, "/exit"),
+    ]
+
+    async def input_fn() -> str:
+        delay, line = schedule.pop(0)
+        if delay:
+            await asyncio.sleep(delay)
+        return line
+
     code = await repl(
         "glm-5.3",
         stream_fn=stream,
-        input_fn=scripted_input("first", "please also check logs", "second", "/exit", settle=0.03),
+        input_fn=input_fn,
         print_fn=lambda *a, **k: None,
         api_key="k",
     )
