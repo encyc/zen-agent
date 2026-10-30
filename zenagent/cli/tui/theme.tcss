@@ -29,7 +29,7 @@ Screen {
 
 #command-hints {
     height: auto;
-    max-height: 6;
+    max-height: 8;
     background: #141c24;
     padding: 0 1;
 }

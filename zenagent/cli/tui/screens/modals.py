@@ -73,3 +73,23 @@ class Confirm(ModalScreen[bool]):
 
     def action_no(self) -> None:
         self.dismiss(False)
+
+
+class SettingsPicker(PaletteScreen[str]):
+    """A small settings surface: only the knobs this build can actually change."""
+
+    def __init__(self, thinking: str | None, model: str) -> None:
+        from zenagent.cli.tui.screens.palette import PaletteItem
+
+        items = [
+            PaletteItem(label="Switch model…", value="model", note=model),
+            PaletteItem(
+                label="Thinking level…",
+                value="thinking",
+                note=thinking or "off",
+            ),
+            PaletteItem(label="Toggle info sidebar", value="sidebar", note="ctrl+b"),
+            PaletteItem(label="Clear conversation", value="clear"),
+            PaletteItem(label="Export session as markdown", value="export"),
+        ]
+        super().__init__(title="Settings", items=items, placeholder="Search settings")

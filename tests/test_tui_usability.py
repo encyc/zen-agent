@@ -18,7 +18,8 @@ async def test_typing_slash_lists_commands(fake_runtime):
         hints = app.query_one(CommandHints)
         assert hints.display is True
         assert "/clear" in hints.plain, "the list opens on the first match"
-        assert len(hints.matches) == 6, "bounded list"
+        assert len(hints.matches) >= 15, "every command is matchable"
+        assert "more" in hints.plain, "the window says what it is holding back"
 
 
 async def test_slash_hints_filter_and_complete(fake_runtime):
@@ -103,3 +104,32 @@ async def test_transcript_scrolls_with_page_keys_while_prompt_is_focused(runtime
         for _ in range(3):
             await pilot.pause()
         assert transcript.scroll_offset.y >= transcript.max_scroll_y - 1
+
+
+async def test_every_registered_command_is_reachable_from_the_hint_list(fake_runtime):
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        names = {command.name for command in app.commands.names()}
+        expected = {"model", "sessions", "thinking", "settings", "help", "new", "quit"}
+        assert expected <= names, f"missing commands: {expected - names}"
+
+        # The list is searchable, so even commands past the window are reachable.
+        prompt = app.query_one(PromptInput)
+        prompt.focus()
+        for char in "/sett":
+            await pilot.press(char)
+        await pilot.pause()
+        hints = app.query_one(CommandHints)
+        assert "settings" in [name for name, _ in hints.matches]
+
+
+async def test_settings_palette_opens(fake_runtime):
+    from zenagent.cli.tui.screens.modals import SettingsPicker
+
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await app._dispatch_command("settings", "")
+        await pilot.pause()
+        assert isinstance(app.screen, SettingsPicker)

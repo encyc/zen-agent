@@ -36,6 +36,8 @@ class CommandResult:
     message: str | None = None
     screen: str | None = None
     quit: bool = False
+    show_help: bool = False
+    reset_transcript: bool = False
 
 
 @dataclass
@@ -79,9 +81,9 @@ def _command(name: str, description: str):
     return decorate
 
 
-@_command("help", "show commands and keybindings")
+@_command("help", "list every command")
 async def _help(services: AppServices, argument: str) -> CommandResult:
-    return CommandResult(message="help")
+    return CommandResult(show_help=True)
 
 
 @_command("model", "browse and switch models")
@@ -145,6 +147,98 @@ async def _quit(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(quit=True)
 
 
+@_command("exit", "leave the app (alias of quit)")
+async def _exit(services: AppServices, argument: str) -> CommandResult:
+    return CommandResult(quit=True)
+
+
+THINKING_LEVELS = ("off", "low", "medium", "high", "max")
+
+HOTKEYS_TEXT = """\
+enter send · shift+enter newline
+esc interrupt · ctrl+c clear draft · ctrl+d quit
+ctrl+q queue follow-up · ctrl+s steer · ctrl+x clear queue
+ctrl+p next model · alt+p pick model · shift+tab thinking
+ctrl+o expand tools · ctrl+t hide thinking
+ctrl+k commands · ctrl+b info · pageup/pagedown scroll"""
+
+
+@_command("thinking", "show or set reasoning: off|low|medium|high|max")
+async def _thinking(services: AppServices, argument: str) -> CommandResult:
+    agent = services.runtime.agent
+    level = argument.strip().lower()
+    if not level:
+        return CommandResult(message=f"thinking: {agent.thinking or 'off'}")
+    if level not in THINKING_LEVELS:
+        return CommandResult(
+            message=f"unknown thinking level: {level} (use {'|'.join(THINKING_LEVELS)})"
+        )
+    agent.thinking = None if level == "off" else level
+    return CommandResult(message=f"thinking: {level}")
+
+
+@_command("session", "show this session's model, context and spend")
+async def _session(services: AppServices, argument: str) -> CommandResult:
+    status = services.chat.status
+    window = status.context_window or 1
+    return CommandResult(
+        message=(
+            f"session: {status.session_name}\n"
+            f"model: {status.model_id} · thinking {status.thinking or 'off'}\n"
+            f"context: {status.context_used}/{status.context_window} "
+            f"({status.context_used * 100 / window:.1f}%)\n"
+            f"spend: ${status.cost:.4f} · {status.input_tokens} in / {status.output_tokens} out"
+        )
+    )
+
+
+@_command("usage", "token and cost totals for this session")
+async def _usage(services: AppServices, argument: str) -> CommandResult:
+    status = services.chat.status
+    return CommandResult(
+        message=(
+            f"in {status.input_tokens} · out {status.output_tokens} · "
+            f"cache read {status.cache_read} · ${status.cost:.4f}"
+        )
+    )
+
+
+@_command("context", "how full the context window is")
+async def _context(services: AppServices, argument: str) -> CommandResult:
+    status = services.chat.status
+    window = status.context_window or 1
+    percent = status.context_used * 100 / window
+    remaining = max(0, status.context_window - status.context_used)
+    return CommandResult(
+        message=f"context: {status.context_used}/{status.context_window} "
+        f"({percent:.1f}% used, {remaining} left)"
+    )
+
+
+@_command("hotkeys", "show the active keybindings")
+async def _hotkeys(services: AppServices, argument: str) -> CommandResult:
+    return CommandResult(message=HOTKEYS_TEXT)
+
+
+@_command("new", "start a new session")
+async def _new(services: AppServices, argument: str) -> CommandResult:
+    path = await services.sessions.new()
+    services.chat.reload_transcript()
+    return CommandResult(message=f"new session: {path.name}", reset_transcript=True)
+
+
+@_command("fork", "copy this session into a branch and switch to it")
+async def _fork(services: AppServices, argument: str) -> CommandResult:
+    path = await services.sessions.fork()
+    services.chat.reload_transcript()
+    return CommandResult(message=f"forked to {path.name}", reset_transcript=True)
+
+
+@_command("settings", "open settings")
+async def _settings(services: AppServices, argument: str) -> CommandResult:
+    return CommandResult(screen="settings")
+
+
 def build_default_commands(services: AppServices) -> CommandRegistry:
     """Build the built-in registry for one app instance."""
     registry = CommandRegistry(services)
@@ -160,6 +254,15 @@ def build_default_commands(services: AppServices) -> CommandRegistry:
         _export,
         _doctor,
         _quit,
+        _exit,
+        _thinking,
+        _session,
+        _usage,
+        _context,
+        _hotkeys,
+        _new,
+        _fork,
+        _settings,
     ):
         registry.register(factory(services))
     return registry

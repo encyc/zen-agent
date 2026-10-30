@@ -243,6 +243,32 @@ class ZenAgentApp(App):
 
         self.push_screen(screen, finished)
 
+    def _show_help(self) -> None:
+        for log in self.query(TranscriptView):
+            log.append_notice("commands (type / to complete):")
+            for command in self.commands.names():
+                log.append_notice(f"  /{command.name}  {command.description}")
+
+    def open_settings(self) -> None:
+        from zenagent.cli.tui.screens.modals import SettingsPicker
+
+        async def selected(choice: str | None) -> None:
+            if not choice:
+                return
+            if choice == "sidebar":
+                self.action_toggle_sidebar()
+            elif choice == "thinking":
+                self.action_cycle_thinking()
+            else:
+                await self._dispatch_command(choice, "")
+
+        status = self.chat.status
+        self.open_menu(
+            "settings",
+            lambda: SettingsPicker(status.thinking, status.model_id),
+            selected,
+        )
+
     def action_pick_model(self) -> None:
         self.open_model_picker()
 
@@ -289,6 +315,14 @@ class ZenAgentApp(App):
             self.open_model_picker()
         elif result.screen == "session-picker":
             self.open_session_picker()
+        elif result.screen == "settings":
+            self.open_settings()
+        elif result.show_help:
+            self._show_help()
+        elif result.reset_transcript:
+            for log in self.query(TranscriptView):
+                log.reset()
+            self._refresh_status()
         elif result.quit:
             self.action_quit_app()
         elif result.message:

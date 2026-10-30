@@ -50,7 +50,9 @@ class CommandHints(Static):
         return bool(self._matches) and self.display
 
     def show(self, matches: list[tuple[str, str]]) -> None:
-        self._matches = matches[:MAX_ROWS]
+        # Keep every match; only the *window* is bounded so nothing is hidden
+        # behind a silent truncation.
+        self._matches = list(matches)
         self._index = 0
         if not self._matches:
             self.hide()
@@ -69,13 +71,22 @@ class CommandHints(Static):
         self._index = (self._index + delta) % len(self._matches)
         self.update(self._renderable())
 
+    def _window(self) -> tuple[int, int]:
+        total = len(self._matches)
+        if total <= MAX_ROWS:
+            return 0, total
+        start = max(0, min(self._index - MAX_ROWS + 2, total - MAX_ROWS))
+        return start, start + MAX_ROWS
+
     # -- rendering ----------------------------------------------------------
 
     def _renderable(self) -> Text:
         width = max(24, (self.size.width or 80) - 2)
         text = Text()
-        for index, (name, description) in enumerate(self._matches):
-            if index:
+        start, end = self._window()
+        for index in range(start, end):
+            name, description = self._matches[index]
+            if index > start:
                 text.append("\n")
             selected = index == self._index
             text.append("▸ " if selected else "  ", style=_ACCENT if selected else _DIM)
@@ -86,4 +97,7 @@ class CommandHints(Static):
                 note = description if len(description) <= budget else description[: budget - 1] + "…"
                 text.append("  ")
                 text.append(note, style=_MUTED)
+        hidden = len(self._matches) - (end - start)
+        if hidden > 0:
+            text.append(f"\n  … {hidden} more", style=_DIM)
         return text
