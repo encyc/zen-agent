@@ -8,7 +8,6 @@ tool usable on a fresh machine. Every provider normalises into
 from __future__ import annotations
 
 import html
-import os
 import re
 from datetime import date, timedelta
 from urllib.parse import unquote, urlsplit, urlunsplit
@@ -86,8 +85,10 @@ def _after_date(recency: str | None) -> str | None:
 
 
 def _key(name: str) -> str | None:
-    value = os.environ.get(name)
-    return value.strip() if value and value.strip() else None
+    """Stored key first, environment second (same rule as model providers)."""
+    from zenagent import settings
+
+    return settings.get_api_key(name)
 
 
 def _limited(request: SearchRequest) -> int:

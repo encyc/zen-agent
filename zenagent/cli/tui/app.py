@@ -266,6 +266,12 @@ class ZenAgentApp(App):
                 self.action_toggle_sidebar()
             elif choice == "thinking":
                 self.action_cycle_thinking()
+            elif choice == "model-keys":
+                self.open_model_keys()
+            elif choice == "search-keys":
+                self.open_search_keys()
+            elif choice == "search-provider":
+                self.open_search_provider()
             else:
                 await self._dispatch_command(choice, "")
 
@@ -274,6 +280,90 @@ class ZenAgentApp(App):
             "settings",
             lambda: SettingsPicker(status.thinking, status.model_id),
             selected,
+        )
+
+    # -- runtime settings: API keys and the search provider -----------------
+
+    def _model_providers(self) -> list[tuple[str, str, bool]]:
+        from zenagent import settings
+
+        rows = []
+        for provider_id, provider in self.runtime.catalog.items():
+            configured = settings.get_api_key(provider.api_key_env) is not None
+            rows.append((f"{provider_id}", provider.api_key_env, configured))
+        return rows
+
+    def _search_providers(self) -> list[tuple[str, str, bool]]:
+        from zenagent import settings
+        from zenagent.tools.web import LABELS
+        from zenagent.tools.web.providers import PROVIDERS
+
+        rows = []
+        for name in PROVIDERS:
+            env_name = f"{name.upper()}_API_KEY"
+            if name in ("bing", "duckduckgo"):
+                continue  # keyless
+            configured = settings.get_api_key(env_name) is not None
+            rows.append((LABELS.get(name, name), env_name, configured))
+        return rows
+
+    def open_model_keys(self) -> None:
+        from zenagent.cli.tui.screens.secrets import ProviderKeyPicker
+
+        async def selected(env_name: str | None) -> None:
+            if env_name:
+                self._prompt_secret(env_name, "model provider key")
+
+        self.open_menu(
+            "model-keys",
+            lambda: ProviderKeyPicker(self._model_providers(), scope="model"),
+            selected,
+        )
+
+    def open_search_keys(self) -> None:
+        from zenagent.cli.tui.screens.secrets import ProviderKeyPicker
+
+        async def selected(env_name: str | None) -> None:
+            if env_name:
+                self._prompt_secret(env_name, "search provider key")
+
+        self.open_menu(
+            "search-keys",
+            lambda: ProviderKeyPicker(self._search_providers(), scope="search"),
+            selected,
+        )
+
+    def open_search_provider(self) -> None:
+        from zenagent.cli.tui.screens.secrets import SearchProviderPicker
+
+        async def selected(name: str | None) -> None:
+            if not name:
+                return
+            from zenagent import settings
+
+            settings.set_pref("search_provider", None if name == "auto" else name)
+            self.notify(f"search provider: {name}", timeout=3)
+            self._refresh_status()
+
+        self.open_menu("search-provider", SearchProviderPicker, selected)
+
+    def _prompt_secret(self, env_name: str, scope: str) -> None:
+        from zenagent import settings
+        from zenagent.cli.tui.screens.secrets import SecretInput
+
+        async def entered(value: str | None) -> None:
+            if not value:
+                return
+            settings.set_api_key(env_name, value)
+            self.notify(f"saved {env_name}", timeout=3)
+            self._refresh_status()
+
+        self.push_screen(
+            SecretInput(
+                title=env_name,
+                hint=f"{scope} · enter saves · esc cancels · stored in ~/.zenagent/settings.json",
+            ),
+            entered,
         )
 
     def action_pick_model(self) -> None:
@@ -324,6 +414,8 @@ class ZenAgentApp(App):
             self.open_session_picker()
         elif result.screen == "settings":
             self.open_settings()
+        elif result.screen == "search-settings":
+            self.open_search_provider()
         elif result.show_help:
             self._show_help()
         elif result.reset_transcript:

@@ -22,6 +22,18 @@ def app_env(tmp_path, monkeypatch):
     return tmp_path
 
 
+@pytest.fixture(autouse=True)
+def isolated_settings(tmp_path, monkeypatch):
+    """Never read or write the developer's real ~/.zenagent/settings.json."""
+    from zenagent import settings
+
+    monkeypatch.setenv("ZENAGENT_SETTINGS_PATH", str(tmp_path / "settings.json"))
+    monkeypatch.setattr(settings, "config_path", lambda: tmp_path / "no-config.toml")
+    settings.clear_cache()
+    yield
+    settings.clear_cache()
+
+
 @pytest.fixture
 async def runtime_factory(app_env):
     """Build Runtime instances for tests; closes them all on teardown."""

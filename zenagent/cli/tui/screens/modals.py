@@ -79,10 +79,19 @@ class SettingsPicker(PaletteScreen[str]):
     """A small settings surface: only the knobs this build can actually change."""
 
     def __init__(self, thinking: str | None, model: str) -> None:
+        from zenagent import settings as settings_module
         from zenagent.cli.tui.screens.palette import PaletteItem
 
+        described = settings_module.describe()
+        status = f"{len(described['keys'])} keys · {described['path']}"
+        if described["problem"]:
+            status = f"⚠ {described['problem']}"
         items = [
             PaletteItem(label="Switch model…", value="model", note=model),
+            PaletteItem(label="Settings file", value="noop", note=status, enabled=False),
+            PaletteItem(label="Model API keys…", value="model-keys", note="paste a key"),
+            PaletteItem(label="Search provider…", value="search-provider", note="default engine"),
+            PaletteItem(label="Search API keys…", value="search-keys", note="tavily / brave"),
             PaletteItem(
                 label="Thinking level…",
                 value="thinking",

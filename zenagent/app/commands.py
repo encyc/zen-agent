@@ -215,18 +215,18 @@ async def _context(services: AppServices, argument: str) -> CommandResult:
     )
 
 
-@_command("search", "run a web search, or /search alone for provider status")
+@_command("search", "search the web, or open search settings")
 async def _search(services: AppServices, argument: str) -> CommandResult:
-    from zenagent.tools.web import LABELS, format_results, provider_status, run_search
+    from zenagent.tools.web import format_results, run_search
+    from zenagent.tools.web.registry import default_provider
 
     query = argument.strip()
-    if not query:
-        lines = ["search providers (in chain order):"]
-        for name, available, reason in provider_status():
-            mark = "✓" if available else "✗"
-            lines.append(f"  {mark} {LABELS.get(name, name):10s} {reason}")
-        lines.append("override order with ZENAGENT_SEARCH_PROVIDERS=deepseek,bing")
-        return CommandResult(message="\n".join(lines))
+    if not query or query in ("settings", "provider", "status"):
+        chosen = default_provider() or "auto"
+        return CommandResult(
+            message=f"search provider: {chosen}",
+            screen="search-settings",
+        )
     result = await run_search(query, limit=5)
     return CommandResult(message=format_results(result))
 

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import os
 import uuid
 from pathlib import Path
 
+from zenagent import settings
 from zenagent.providers.catalog import Model, ProviderConfig, find_model
 
 __all__ = ["api_key_for", "resolve_model", "session_id_for", "system_prompt"]
@@ -40,7 +40,8 @@ def api_key_for(catalog: dict[str, ProviderConfig], model: Model) -> str | None:
     provider = catalog.get(model.provider)
     if provider is None:
         return None
-    return os.environ.get(provider.api_key_env) or None
+    # Settings (set inside the app) win over the environment; see zenagent.settings.
+    return settings.get_api_key(provider.api_key_env)
 
 
 def session_id_for(model: Model, provided: str | None = None) -> str | None:

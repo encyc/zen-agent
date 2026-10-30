@@ -33,9 +33,28 @@ _CACHE_TTL = 60.0
 _CACHE_MAX = 32
 
 
+def default_provider() -> str | None:
+    """The provider chosen in /settings, if any (``auto`` means the chain)."""
+    from zenagent import settings
+
+    value = settings.get_pref("search_provider")
+    if value in (None, "", "auto"):
+        return None
+    return value if value in PROVIDERS else None
+
+
 def configured_order() -> list[str]:
-    """``ZENAGENT_SEARCH_PROVIDERS=deepseek,bing`` overrides the order."""
+    """Chosen provider first, then the env override, then the built-in order."""
+    chosen = default_provider()
     raw = os.environ.get("ZENAGENT_SEARCH_PROVIDERS", "").strip()
+    if chosen:
+        rest = [name for name in (raw.split(",") if raw else DEFAULT_ORDER) if name.strip()]
+        order = [chosen] + [
+            name.strip().lower()
+            for name in rest
+            if name.strip().lower() and name.strip().lower() != chosen
+        ]
+        return [name for name in order if name in PROVIDERS]
     if not raw:
         return list(DEFAULT_ORDER)
     names = [name.strip().lower() for name in raw.split(",") if name.strip()]

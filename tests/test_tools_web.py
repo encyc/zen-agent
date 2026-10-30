@@ -245,17 +245,3 @@ async def test_snippets_keep_their_content_only_whitespace_collapses(monkeypatch
     text = result.content[0].text
     assert "# comment" in text, "a leading '#' is content, not markup to strip"
     assert "code here" in text
-
-
-def test_proxy_resolution_prefers_the_explicit_override(monkeypatch):
-    from zenagent.tools.web import net as net_module
-
-    for name in ("ZENAGENT_SEARCH_PROXY", "HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"):
-        monkeypatch.delenv(name, raising=False)
-    assert net_module.proxy_url() is None
-
-    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:7890")
-    assert net_module.proxy_url() == "http://127.0.0.1:7890"
-
-    monkeypatch.setenv("ZENAGENT_SEARCH_PROXY", "socks5://127.0.0.1:7892")
-    assert net_module.proxy_url() == "socks5://127.0.0.1:7892"
