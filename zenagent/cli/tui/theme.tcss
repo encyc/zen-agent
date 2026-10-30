@@ -156,3 +156,17 @@ Screen {
     color: #e08787;
     padding: 0 1;
 }
+
+/* Pending image attachments (one chip per image; hidden while empty). */
+#attachment-chips {
+    height: 1;
+    background: #141c24;
+    padding: 0 1;
+}
+
+.attachment-chip {
+    width: auto;
+    height: 1;
+    color: #8296a6;
+    margin: 0 1 0 0;
+}

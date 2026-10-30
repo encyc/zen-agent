@@ -126,6 +126,7 @@ provider 错误不会进转录区，而是停在 dock 顶部的错误横幅里�
 - 删除前弹 Confirm 二次确认，删除走「移到 `sessions/.trash/`」，不做不可逆 unlink；
   当前会话删除后自动新建空会话。
 - 也可以直接输入 `/rename <name>` 改当前会话名；名称存在 `sessions/.titles.json`，不写进 JSONL。
+- `/pin`（或 `/pin on|off`）把当前会话置顶：选择器里置顶行显示 `★`，置顶组排最前，组内仍按时间倒序。
 
 ## 排障
 
@@ -144,3 +145,11 @@ provider 错误不会进转录区，而是停在 dock 顶部的错误横幅里�
 
 provider/流式失败会停在 dock 顶部的一行红色横幅（`✘ <原因>`）里，不再被后续输出刷走；
 **点击横幅**关闭，或开始下一轮时自动清掉。工具失败仍然落在各自的工具卡上，不进横幅。
+
+## 图片附件
+
+- `/image <path>` 把本地图片挂到**下一条** prompt（png/jpeg/gif/webp，单张 ≤5MB，按 magic byte 校验，
+  不看扩展名）；非 vision 模型会被明确拒绝，图片不会发出去。
+- 挂上后输入框上方出现 attachment chip 带（`[image/png]`），**点击 chip** 移除该图；
+  `/images` 列出当前挂着的图，`/images clear` 清空。
+- 发送后 chip 自动清空；REPL 的 `/image` 语义相同。

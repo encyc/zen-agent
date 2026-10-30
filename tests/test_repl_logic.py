@@ -361,7 +361,7 @@ async def test_slash_image_attaches_only_for_vision_models(tmp_path, capsys):
 
 
 async def test_slash_images_lists_and_clears(tmp_path, capsys):
-    from zenagent.cli.images import read_image_argument
+    from zenagent.attachments import read_image_argument
 
     image = tmp_path / "pic.png"
     image.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8)

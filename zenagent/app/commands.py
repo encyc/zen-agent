@@ -163,6 +163,43 @@ async def _compact(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(message=message or "nothing to compact", reset_transcript=True)
 
 
+@_command("image", "attach an image for the next prompt (/image <path>)")
+async def _image(services: AppServices, argument: str) -> CommandResult:
+    from pathlib import Path
+
+    from zenagent.attachments import read_image_argument
+
+    path = argument.strip()
+    if not path:
+        return CommandResult(message="usage: /image <path>")
+    model = services.runtime.agent.model
+    if not model.supports_vision:
+        return CommandResult(message=f"{model.id} does not accept images")
+    try:
+        block = read_image_argument(Path(path).expanduser())
+    except ValueError as exc:
+        return CommandResult(message=str(exc))
+    services.chat.attach_image(block)
+    return CommandResult(
+        message=f"attached {block.mime_type} ({len(services.chat.attachments)} pending)"
+    )
+
+
+@_command("images", "list attached images, or /images clear")
+async def _images(services: AppServices, argument: str) -> CommandResult:
+    if argument.strip() == "clear":
+        services.chat.clear_attachments()
+        return CommandResult(message="cleared attached images")
+    blocks = services.chat.attachments
+    if not blocks:
+        return CommandResult(message="no attached images")
+    rows = [
+        f"{position}. {block.mime_type} ({len(block.data)} base64 chars)"
+        for position, block in enumerate(blocks, start=1)
+    ]
+    return CommandResult(message="\n".join(rows))
+
+
 @_command("mcp", "reconnect MCP servers and refresh tools")
 async def _mcp(services: AppServices, argument: str) -> CommandResult:
     await services.runtime.refresh_mcp()
@@ -357,6 +394,8 @@ def build_default_commands(services: AppServices) -> CommandRegistry:
         _pin,
         _clear,
         _compact,
+        _image,
+        _images,
         _mcp,
         _skills,
         _reload,

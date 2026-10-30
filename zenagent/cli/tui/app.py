@@ -26,6 +26,7 @@ from zenagent.app.models import ModelManager
 from zenagent.app.runtime import Runtime
 from zenagent.app.sessions import SessionManager
 from zenagent.cli.tui.history import PromptHistory
+from zenagent.cli.tui.widgets.attachments import AttachmentChips
 from zenagent.cli.tui.widgets.command_hints import CommandHints
 from zenagent.cli.tui.widgets.error_banner import ErrorBanner
 from zenagent.cli.tui.widgets.new_content import NewContentBar
@@ -165,6 +166,7 @@ class ZenAgentApp(App):
                 with Vertical(id="dock"):
                     yield ErrorBanner()
                     yield CommandHints()
+                    yield AttachmentChips()
                     yield StatusBand()
                     with Horizontal(id="prompt-row"):
                         yield PromptGutter()
@@ -206,10 +208,17 @@ class ZenAgentApp(App):
             indicator.set_running(status.running)
         for banner in self.query(ErrorBanner):
             banner.set_error(status.last_error)
+        for chips in self.query(AttachmentChips):
+            chips.set_attachments(self.chat.attachments)
 
     def dismiss_error(self) -> None:
         """Click on the error banner: drop it and repaint the dock."""
         self.chat.clear_last_error()
+        self._refresh_status()
+
+    def remove_attachment(self, index: int) -> None:
+        """Click on a chip: drop that pending image."""
+        self.chat.remove_attachment(index)
         self._refresh_status()
 
     def on_resize(self, event) -> None:

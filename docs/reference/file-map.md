@@ -47,7 +47,7 @@
 | 上下文压缩 | `zenagent/app/compact.py`（+ `zenagent/config.py::ContextGuard`） |
 | 自动补全 | `zenagent/cli/completion.py` |
 | `doctor` | `zenagent/cli/doctor.py` |
-| 图片输入 | `zenagent/cli/images.py` |
+| 图片输入 | `zenagent/attachments.py` |
 | RPC | `zenagent/cli/rpc.py` |
 | 导出/用量/主题/键位 | `zenagent/cli/{exportcmd,usagecmd,theme,keybindings}.py` |
 

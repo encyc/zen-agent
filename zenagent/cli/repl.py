@@ -33,8 +33,8 @@ from zenagent.app.compact import compact, maybe_auto_compact
 from zenagent.app.modes import describe_modes, mode_prompt_note
 from zenagent.app.retry import prepare_retry
 from zenagent.app.support import describe_tools
+from zenagent.attachments import read_image_argument
 from zenagent.cli.completion import SLASH_COMMANDS, ReplCompleter, help_text
-from zenagent.cli.images import read_image_argument
 from zenagent.cli.keybindings import build_key_bindings, load_keybindings
 from zenagent.cli.main import (
     _api_key_for,

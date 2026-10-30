@@ -4,7 +4,7 @@ import base64
 
 import pytest
 
-from zenagent.cli.images import MAX_IMAGE_BYTES, read_image_argument
+from zenagent.attachments import MAX_IMAGE_BYTES, read_image_argument
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
 JPEG = b"\xff\xd8\xff" + b"\x00" * 16

@@ -90,3 +90,33 @@ async def test_pin_command_toggles_the_current_session(services):
     result = await registry.dispatch("pin", "off")
     assert result.message and "unpinned" in result.message
     assert current.name not in read_session_pins(current.parent)
+
+
+async def test_image_command_attaches_and_images_lists(services, tmp_path):
+    from zenagent.app.commands import build_default_commands
+
+    png = tmp_path / "pic.png"
+    png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8)
+    registry = build_default_commands(services)
+
+    result = await registry.dispatch("image", str(png))
+    assert result.message and "attached image/png" in result.message
+    assert len(services.chat.attachments) == 1
+
+    listed = await registry.dispatch("images", "")
+    assert listed.message and "image/png" in listed.message
+
+    cleared = await registry.dispatch("images", "clear")
+    assert cleared.message and services.chat.attachments == []
+
+
+async def test_image_command_rejects_non_vision_models(services, monkeypatch, tmp_path):
+    from zenagent.app.commands import build_default_commands
+
+    png = tmp_path / "pic.png"
+    png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8)
+    monkeypatch.setattr(services.runtime.agent.model, "supports_vision", False)
+
+    result = await build_default_commands(services).dispatch("image", str(png))
+    assert "does not accept images" in (result.message or "")
+    assert services.chat.attachments == []

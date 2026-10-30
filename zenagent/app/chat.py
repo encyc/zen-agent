@@ -52,6 +52,8 @@ class ChatController:
         #: Out-of-band lines (compaction dividers, auto-compaction failures) the
         #: frontend drains on refresh.
         self._notices: list[TranscriptNotice] = []
+        #: Images attached with /image that will ride along with the next prompt.
+        self._attachments: list[ImageContent] = []
         runtime.agent.subscribe(self._on_event)
 
     # -- snapshots ----------------------------------------------------------
@@ -91,12 +93,39 @@ class ChatController:
 
     # -- commands -----------------------------------------------------------
 
-    async def submit(self, text: str) -> None:
-        """Start a run, or queue the text when one is already running."""
+    async def submit(
+        self, text: str, *, images: list[ImageContent] | None = None
+    ) -> None:
+        """Start a run, or queue the text when one is already running.
+
+        ``images`` overrides the pending attachment list; otherwise whatever was
+        attached with ``/image`` rides along and is cleared once the run starts.
+        """
         if self._running:
             self.queue_follow_up(text)
             return
-        self._task = asyncio.create_task(self._run(text))
+        pending = list(images if images is not None else self._attachments)
+        self._attachments.clear()
+        self._task = asyncio.create_task(self._run(text, pending))
+
+    @property
+    def attachments(self) -> list[ImageContent]:
+        """Pending images attached but not yet sent."""
+        return list(self._attachments)
+
+    def attach_image(self, block: ImageContent) -> None:
+        self._attachments.append(block)
+        self._notify()
+
+    def remove_attachment(self, index: int) -> None:
+        if 0 <= index < len(self._attachments):
+            del self._attachments[index]
+            self._notify()
+
+    def clear_attachments(self) -> None:
+        if self._attachments:
+            self._attachments.clear()
+            self._notify()
 
     def queue_follow_up(self, text: str) -> None:
         if not text.strip():
@@ -212,14 +241,14 @@ class ChatController:
 
     # -- run loop -----------------------------------------------------------
 
-    async def _run(self, text: str) -> None:
+    async def _run(self, text: str, images: list[ImageContent] | None = None) -> None:
         self._running = True
         self._last_error = ""
         self._notify()
         started = time.monotonic()
         before_output = usage_total(self.runtime.agent.messages).output
         try:
-            await self.runtime.agent.prompt(text)
+            await self.runtime.agent.prompt(text, images=images or None)
         finally:
             self._running = False
             self._current = None

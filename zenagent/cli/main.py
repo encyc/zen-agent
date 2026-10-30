@@ -41,9 +41,9 @@ from zenagent.app.support import (
 from zenagent.app.support import (
     system_prompt as _system_prompt,
 )
+from zenagent.attachments import read_image_argument
 from zenagent.cli.doctor import run_doctor
 from zenagent.cli.exportcmd import run_export
-from zenagent.cli.images import read_image_argument
 from zenagent.cli.permissions import PermissionGate
 from zenagent.cli.usagecmd import run_usage
 from zenagent.config import ContextGuard, apply_user_config, load_user_config

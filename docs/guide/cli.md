@@ -104,7 +104,7 @@ zen evals [--model ...] [--filter ...] [--report ...] [--baseline ...]
 
 会话内的斜杠命令由前端各自实现但共享登记表：`/help` 列出全部；`/tools` 打印模型当前可调用的
 工具清单（含 MCP、skill 与扩展注册的工具）；`/retry` 重跑上一轮（截断结果写入新会话文件）。
-`/tools` 与 `/retry` 在 TUI 与 REPL 里都可用。
+`/tools`、`/retry`、`/image` 在 TUI 与 REPL 里都可用。
 
 ## 环境变量
 
