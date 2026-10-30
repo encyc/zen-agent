@@ -39,3 +39,17 @@ async def test_screen_widgets_have_real_geometry(fake_runtime):
         await pilot.pause()
         log = app.query_one(ChatLog)
         assert log.region.width > 0 and log.region.height > 0
+
+
+def test_missing_textual_gives_actionable_error(monkeypatch, capsys):
+    import zenagent.cli.main as cli_main
+
+    monkeypatch.setattr(
+        cli_main,
+        "_tui_app_class",
+        lambda: (_ for _ in ()).throw(ImportError("no textual")),
+    )
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+    assert cli_main.main([]) == 2
+    err = capsys.readouterr().err
+    assert "extra cli" in err and "textual" in err

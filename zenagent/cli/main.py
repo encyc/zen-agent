@@ -528,6 +528,13 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _tui_app_class():
+    """Import the Textual app lazily so a missing extra is a clear error."""
+    from zenagent.cli.tui.app import ZenAgentApp
+
+    return ZenAgentApp
+
+
 def main(argv: list[str] | None = None) -> int:
     raw = sys.argv[1:] if argv is None else list(argv)
     if raw and raw[0] == "rpc":
@@ -590,7 +597,17 @@ def main(argv: list[str] | None = None) -> int:
         if sys.stdout.isatty() and not args.no_tui:
             from zenagent.app.permissions import PermissionGate
             from zenagent.app.runtime import Runtime, RuntimeOptions
-            from zenagent.cli.tui.app import ZenAgentApp
+
+            try:
+                ZenAgentApp = _tui_app_class()
+            except ImportError:
+                print(
+                    "zenagent: the TUI needs the CLI extras (textual is missing).\n"
+                    "  in the repo:  uv sync --extra cli\n"
+                    "  from PyPI:    uv tool install --force \"zenagent-py[cli]\"",
+                    file=sys.stderr,
+                )
+                return 2
 
             options = RuntimeOptions(
                 model_id=args.model,
