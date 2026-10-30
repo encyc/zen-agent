@@ -70,6 +70,10 @@ class RunStatus:
     context_window: int = 0
     follow_ups: int = 0
     steering: int = 0
+    session_name: str = ""
+    cwd: str = ""
+    mode: str = ""
+    git_branch: str = ""
 
 
 def args_preview(arguments: dict) -> str:

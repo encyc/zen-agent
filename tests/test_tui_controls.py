@@ -1,6 +1,6 @@
 """Run controls: follow-up queue, interrupt and queue clearing."""
 
-from zenagent.cli.tui.widgets.status_bar import StatusBar
+from zenagent.cli.tui.widgets.status_band import StatusBand
 
 
 async def test_queue_is_visible_and_ctrl_c_aborts(gated_app):
@@ -13,12 +13,12 @@ async def test_queue_is_visible_and_ctrl_c_aborts(gated_app):
 
         app.chat.queue_follow_up("queued message")
         await pilot.pause()
-        assert "queued 1" in app.query_one(StatusBar).plain
+        assert "1 queued" in app.query_one(StatusBand).plain
 
         await pilot.press("ctrl+c")
         gate.set()
         await pilot.pause()
         await app.chat.wait_for_idle()
         await pilot.pause()
-        assert app.query_one(StatusBar) is not None  # app survived
+        assert app.query_one(StatusBand) is not None  # app survived
         assert app.chat.status.running is False

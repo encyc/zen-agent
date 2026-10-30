@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from pathlib import Path
 
 from zenagent.app.runtime import Runtime
 from zenagent.app.views import (
@@ -66,6 +67,8 @@ class ChatController:
             context_window=agent.model.context_window,
             follow_ups=len(self._follow_ups),
             steering=agent.pending_steering,
+            session_name=Path(self.runtime.session.path).stem,
+            cwd=str(Path.cwd()),
         )
 
     # -- commands -----------------------------------------------------------

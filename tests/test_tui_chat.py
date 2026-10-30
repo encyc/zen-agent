@@ -1,8 +1,8 @@
 """Rich chat rendering: assistant markdown and collapsible tool cards."""
 
 from zenagent.cli.tui.app import ZenAgentApp
-from zenagent.cli.tui.widgets.chat_log import ChatLog
 from zenagent.cli.tui.widgets.tool_card import ToolCard
+from zenagent.cli.tui.widgets.transcript import TranscriptView
 
 
 async def test_streamed_answer_and_tool_card_render(chat_app_with_one_tool):
@@ -14,7 +14,7 @@ async def test_streamed_answer_and_tool_card_render(chat_app_with_one_tool):
         await pilot.pause()
         await pilot.pause()
 
-        assert app.query_one(ChatLog)
+        assert app.query_one(TranscriptView)
         cards = list(app.query(ToolCard))
         assert cards, "tool execution must produce a card"
         assert cards[0].collapsed is True
@@ -51,7 +51,7 @@ async def test_chat_log_reset_clears_widgets(runtime_factory):
         await app.chat.submit("one")
         await app.chat.wait_for_idle()
         await pilot.pause()
-        log = app.query_one(ChatLog)
+        log = app.query_one(TranscriptView)
         assert len(app.query("Markdown")) == 1
         log.reset()
         await pilot.pause()
