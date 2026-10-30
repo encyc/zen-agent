@@ -18,7 +18,7 @@ __all__ = ["Confirm", "ModelPicker", "SessionPicker"]
 class ModelPicker(ModalScreen[str | None]):
     """Pick a model; unavailable entries are shown but not selectable."""
 
-    BINDINGS = [("escape", "dismiss", "Cancel")]
+    BINDINGS = [("escape", "dismiss", "Cancel")]  # noqa: RUF012 - Textual class API
 
     def __init__(self, entries: list[ModelEntry]) -> None:
         super().__init__()
@@ -47,7 +47,7 @@ class ModelPicker(ModalScreen[str | None]):
 class SessionPicker(ModalScreen[Path | None]):
     """Pick a saved session to resume."""
 
-    BINDINGS = [("escape", "dismiss", "Cancel")]
+    BINDINGS = [("escape", "dismiss", "Cancel")]  # noqa: RUF012 - Textual class API
 
     def __init__(self, entries: list[SessionEntry]) -> None:
         super().__init__()
@@ -77,7 +77,7 @@ class SessionPicker(ModalScreen[Path | None]):
 class Confirm(ModalScreen[bool]):
     """Yes/no confirmation for destructive actions."""
 
-    BINDINGS = [("y", "yes", "Yes"), ("n,escape", "no", "No")]
+    BINDINGS = [("y", "yes", "Yes"), ("n,escape", "no", "No")]  # noqa: RUF012
 
     def __init__(self, prompt: str) -> None:
         super().__init__()
