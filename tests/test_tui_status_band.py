@@ -117,13 +117,13 @@ def test_line_never_exceeds_width():
         assert len(plain) <= width, f"{plain!r} is {len(plain)} > {width}"
 
 
-def test_cache_hit_is_a_ratio_of_prompt_tokens():
-    _, plain = render_status_line(status(input_tokens=250, cache_read=750), 200)
+def test_cache_hit_renders_the_provider_normalized_ratio():
+    _, plain = render_status_line(status(cache_hit_ratio=0.75), 200)
     assert "cache 75%" in plain
 
 
-def test_cache_hit_hidden_without_cache_read():
-    _, plain = render_status_line(status(cache_read=0), 200)
+def test_cache_hit_hidden_without_a_ratio():
+    _, plain = render_status_line(status(cache_hit_ratio=None), 200)
     assert "cache " not in plain
 
 

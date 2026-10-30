@@ -10,6 +10,7 @@ from pathlib import Path
 from zenagent.app.compact import compact, should_auto_compact
 from zenagent.app.retry import prepare_retry
 from zenagent.app.runtime import Runtime
+from zenagent.app.support import cache_hit_ratio
 from zenagent.app.views import (
     MessageView,
     RunStatus,
@@ -41,9 +42,13 @@ class ChatController:
         self._transcript: list[MessageView | ToolCallView] = []
         self._current: MessageView | None = None
         self._cards: dict[str, ToolCallView] = {}
-        self._follow_ups: list[str] = []
+        #: (text, images) pairs; images are captured when the turn is queued.
+        self._follow_ups: list[tuple[str, list[ImageContent]]] = []
         self._task: asyncio.Task | None = None
         self._running = False
+        #: True while an automatic compaction runs: the controller stays busy
+        #: so a submit queues instead of racing the summarizer (C2).
+        self._compacting = False
         #: Last finished turn: wall time and output tokens (status segments).
         self._turn_ms = 0
         self._turn_output = 0
@@ -73,11 +78,12 @@ class ChatController:
         return RunStatus(
             model_id=agent.model.id,
             thinking=agent.thinking,
-            running=self._running,
+            running=self._running or self._compacting,
             input_tokens=usage.input,
             output_tokens=usage.output,
             cache_read=usage.cache_read,
             cache_write=usage.cache_write,
+            cache_hit_ratio=cache_hit_ratio(usage, agent.model.api),
             turn_ms=self._turn_ms,
             turn_output_tokens=self._turn_output,
             last_error=self._last_error,
@@ -101,11 +107,15 @@ class ChatController:
         ``images`` overrides the pending attachment list; otherwise whatever was
         attached with ``/image`` rides along and is cleared once the run starts.
         """
-        if self._running:
-            self.queue_follow_up(text)
+        if self._running or self._compacting:
+            pending = list(images if images is not None else self._attachments)
+            if images is None:
+                self._attachments.clear()
+            self.queue_follow_up(text, pending)
             return
         pending = list(images if images is not None else self._attachments)
-        self._attachments.clear()
+        if images is None:
+            self._attachments.clear()
         self._task = asyncio.create_task(self._run(text, pending))
 
     @property
@@ -127,10 +137,16 @@ class ChatController:
             self._attachments.clear()
             self._notify()
 
-    def queue_follow_up(self, text: str) -> None:
+    def queue_follow_up(
+        self, text: str, images: list[ImageContent] | None = None
+    ) -> None:
+        """Queue a follow-up; ``images=None`` takes the pending attachments."""
         if not text.strip():
             return
-        self._follow_ups.append(text)
+        pending = list(images if images is not None else self._attachments)
+        if images is None:
+            self._attachments.clear()
+        self._follow_ups.append((text, pending))
         self._notify()
 
     def clear_follow_ups(self) -> None:
@@ -145,7 +161,9 @@ class ChatController:
         """
         if not self._follow_ups:
             return None
-        text = self._follow_ups.pop()
+        text, images = self._follow_ups.pop()
+        if images:
+            self._attachments[:0] = images  # put the images back in the composer
         self._notify()
         return text
 
@@ -177,14 +195,16 @@ class ChatController:
         usage = usage_total(self.runtime.agent.messages)
         return usage.input + usage.output
 
-    async def compact_now(self) -> str | None:
+    async def compact_now(self, *, force: bool = False) -> str | None:
         """Summarize the transcript into a new session file; returns the notice.
 
         Refuses mid-run (nested model calls would corrupt the transcript) and on
-        an empty transcript. ``compact()`` leaves the agent untouched on failure,
-        so a raising call changes nothing.
+        an empty transcript. ``force`` is the auto path: the controller already
+        owns the busy flag, so only the agent streaming check applies.
         """
-        if self._running or self.runtime.agent.is_streaming:
+        if not force and (self._running or self._compacting):
+            return None
+        if self.runtime.agent.is_streaming:
             return None
         if not self.runtime.agent.messages:
             return None
@@ -211,6 +231,7 @@ class ChatController:
         self._transcript.clear()
         self._cards.clear()
         self._current = None
+        self._attachments.clear()
         self._notify()
 
     def retry(self) -> str | None:
@@ -250,9 +271,7 @@ class ChatController:
         try:
             await self.runtime.agent.prompt(text, images=images or None)
         finally:
-            self._running = False
             self._current = None
-            self._task = None
             self._turn_ms = int((time.monotonic() - started) * 1000)
             self._turn_output = (
                 usage_total(self.runtime.agent.messages).output - before_output
@@ -263,22 +282,38 @@ class ChatController:
                     detail if detail and detail != "error" else "the run failed"
                 )
             self._notify()
-            if self.runtime.agent.termination != "aborted":
-                try:
-                    if should_auto_compact(
-                        self.runtime.guard.last_usage,
-                        self.runtime.agent.model.context_window,
-                    ):
-                        await self.compact_now()
-                except Exception as exc:  # noqa: BLE001 - never break the session
-                    self._notices.append(
-                        TranscriptNotice("info", f"auto-compaction failed: {exc}")
-                    )
-                    self._notify()
+            # Stay busy (running=True, task set) through the summarizer call so
+            # a submit during compaction queues instead of racing it. Queued
+            # turns go first: compress only between bursts (Review Focus #1).
+            if self.runtime.agent.termination != "aborted" and not self._follow_ups:
+                await self._maybe_auto_compact()
+            self._running = False
+            self._task = None
+            self._notify()
             if self._follow_ups and self.runtime.agent.termination != "aborted":
-                self._task = asyncio.create_task(self._run(self._follow_ups.pop(0)))
+                text, images = self._follow_ups.pop(0)
+                self._task = asyncio.create_task(self._run(text, images))
             elif self._follow_ups:
                 self._notify()
+
+    async def _maybe_auto_compact(self) -> None:
+        """One automatic compaction; failures become a transcript notice."""
+        if not should_auto_compact(
+            self.runtime.guard.last_usage,
+            self.runtime.agent.model.context_window,
+        ):
+            return
+        self._compacting = True
+        self._notify()
+        try:
+            await self.compact_now(force=True)
+        except Exception as exc:  # noqa: BLE001 - never break the session
+            self._notices.append(
+                TranscriptNotice("info", f"auto-compaction failed: {exc}")
+            )
+        finally:
+            self._compacting = False
+            self._notify()
 
     # -- event → view models ------------------------------------------------
 

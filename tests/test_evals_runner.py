@@ -68,3 +68,17 @@ def test_cli_evals_list_delegates(capsys):
     assert cli_main.main(["evals", "--list"]) == 0
     out = capsys.readouterr().out
     assert "skill_use" in out and "mcp_tool" in out
+
+
+def test_eval_runner_imports_the_canonical_attachment_helper():
+    """`zen evals` imports read_image_argument inside run_case; the module move
+    must be reflected there or every case crashes before running."""
+    import importlib.util
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parents[1] / "scripts" / "eval.py"
+    spec = importlib.util.spec_from_file_location("zenagent_eval_script", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert module.read_image_argument.__module__ == "zenagent.attachments"

@@ -168,6 +168,10 @@ class TranscriptView(VerticalScroll):
         changed, not to the transcript length: append new views, repaint the
         live assistant tail and only the tool cards whose status moved.
         """
+        if len(views) < self._count:
+            # The controller transcript shrank (auto-compaction, session switch):
+            # append-only diffing cannot remove stale widgets, so rebuild.
+            self.reset()
         grew = len(views) > self._count
         for index in range(self._count, len(views)):
             view = views[index]

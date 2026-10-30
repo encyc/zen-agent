@@ -62,3 +62,30 @@ def test_usage_total_sums_input_output_and_cache():
         ]
     )
     assert (usage.input, usage.output, usage.cache_read) == (10, 5, 3)
+
+
+def test_cache_hit_ratio_uses_openai_semantics():
+    from zenagent.app.support import cache_hit_ratio
+    from zenagent.types import Usage
+
+    # OpenAI-style: prompt_tokens already includes cached tokens.
+    ratio = cache_hit_ratio(Usage(input=1000, cache_read=750), "openai-completions")
+    assert ratio == 0.75
+
+
+def test_cache_hit_ratio_uses_anthropic_semantics():
+    from zenagent.app.support import cache_hit_ratio
+    from zenagent.types import Usage
+
+    # Anthropic-style: input_tokens excludes cache reads/writes.
+    ratio = cache_hit_ratio(
+        Usage(input=250, cache_read=750, cache_write=0), "anthropic-messages"
+    )
+    assert ratio == 0.75
+
+
+def test_cache_hit_ratio_is_none_without_cache_reads():
+    from zenagent.app.support import cache_hit_ratio
+    from zenagent.types import Usage
+
+    assert cache_hit_ratio(Usage(input=1000), "openai-completions") is None

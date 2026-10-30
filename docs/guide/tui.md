@@ -33,8 +33,8 @@
   最新的排在最前；多行 prompt 也能完整回填。斜杠命令不入历史。
 - **状态带**：一行填色，在 `╰─` 上方。它是**有序列的 segment**，窄屏按固定顺序丢信息：
   先丢右侧事实（tokens/cache 命中率/花费/上下文/上一轮耗时/生成速率/session）→ 再缩路径 →
-  最后才丢左侧身份（model/thinking），**路径永远最后走**。`cache_hit` 用
-  `cache_read / (input + cache_read)` 算命中率；`time_spent`/`token_rate` 只在上一轮已结束时出现。
+  最后才丢左侧身份（model/thinking），**路径永远最后走**。`cache_hit` 由 app 层按 provider 方言归一化
+  （OpenAI/Gemini 的 `input` 已含缓存，Anthropic 的 `input` 不含缓存）；`time_spent`/`token_rate` 只在上一轮已结束时出现。
 - **输入行**：无边框，`╰─ ` 是唯一的装饰；草稿超过一行时输入框自动长高（最多 8 行），
   `╰─` 只在第一行。
 - **侧栏**：默认隐藏，`ctrl+b` 打开（宽 <100 列时自动不显示）。

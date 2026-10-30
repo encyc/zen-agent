@@ -101,14 +101,14 @@ def _render_cost(ctx: SegmentContext) -> Text | None:
 def _render_cache_hit(ctx: SegmentContext) -> Text | None:
     """Share of prompt tokens served from the provider cache.
 
-    omp reports ``cache_read / (input + cache_read)``; ``input`` here is the
-    uncached prompt count the provider bills, so the two add up to the prompt.
+    The ratio is computed in the app layer (``support.cache_hit_ratio``) because
+    ``Usage.input`` includes cached tokens on OpenAI/Gemini and excludes them on
+    Anthropic; a segment-local formula would report half the real hit rate.
     """
-    status = ctx.status
-    total = status.input_tokens + status.cache_read
-    if not status.cache_read or not total:
+    ratio = ctx.status.cache_hit_ratio
+    if ratio is None:
         return None
-    return _muted(f"cache {status.cache_read * 100 / total:.0f}%")
+    return _muted(f"cache {ratio * 100:.0f}%")
 
 
 def _render_time_spent(ctx: SegmentContext) -> Text | None:

@@ -70,6 +70,9 @@ class RunStatus:
     output_tokens: int = 0
     cache_read: int = 0
     cache_write: int = 0
+    #: Cache-read share of prompt tokens, normalized per provider dialect by
+    #: ``app.support.cache_hit_ratio``; None when nothing was cached.
+    cache_hit_ratio: float | None = None
     cost: float = 0.0
     context_used: int = 0
     context_window: int = 0

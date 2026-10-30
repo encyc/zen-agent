@@ -49,6 +49,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
 from zenagent.agent import Agent
+from zenagent.attachments import read_image_argument
 from zenagent.cli.main import _api_key_for, resolve_model, session_id_for
 from zenagent.cli.permissions import PermissionGate
 from zenagent.config import ContextGuard, apply_user_config, load_user_config
@@ -197,8 +198,6 @@ async def run_case(
         with tempfile.TemporaryDirectory(prefix=f"zenagent-eval-{case.id}-") as tmp:
             root = Path(tmp)
             images = prepare_workspace(case, root)
-
-            from zenagent.cli.images import read_image_argument
 
             image_blocks = [read_image_argument(path) for path in images]
             options = _resolve(

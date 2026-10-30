@@ -7,9 +7,11 @@ from pathlib import Path
 
 from zenagent import settings
 from zenagent.providers.catalog import Model, ProviderConfig, find_model
+from zenagent.types import Usage
 
 __all__ = [
     "api_key_for",
+    "cache_hit_ratio",
     "describe_tools",
     "resolve_model",
     "session_id_for",
@@ -70,3 +72,24 @@ def session_id_for(model: Model, provided: str | None = None) -> str | None:
     if provided:
         return provided
     return uuid.uuid4().hex if model.provider == "opencode-go" else None
+
+
+def cache_hit_ratio(usage: Usage, api: str) -> float | None:
+    """Share of prompt tokens served from the provider cache, per wire dialect.
+
+    ``Usage.input`` means different things per adapter: Anthropic reports the
+    uncached input only (cache reads/writes are separate fields), while the
+    OpenAI-style and Gemini adapters report a prompt total that already includes
+    cached tokens. Mixing the two yields the classic half-rate bug (1000 prompt
+    tokens with 750 cached must read 75%, not 43%), so the dialect decides the
+    denominator. Returns ``None`` when nothing was cached (the segment hides).
+    """
+    if not usage.cache_read:
+        return None
+    if api == "anthropic-messages":
+        prompt = usage.input + usage.cache_read + usage.cache_write
+    else:
+        prompt = usage.input
+    if prompt <= 0:
+        return None
+    return usage.cache_read / prompt
