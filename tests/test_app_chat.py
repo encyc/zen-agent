@@ -172,3 +172,52 @@ async def test_dequeue_follow_up_takes_the_last_queued_message(runtime_factory):
 
     gate.set()
     await task
+
+
+async def test_compact_now_switches_to_the_summary_session(runtime_factory, capsys):
+    from conftest import sequenced_stream
+
+    runtime = await runtime_factory(stream_fn=sequenced_stream(["hi", "summary text"]))
+    chat = ChatController(runtime)
+    await chat.submit("hello")
+    await chat.wait_for_idle()
+    old_path = runtime.session.path
+
+    message = await chat.compact_now()
+
+    assert message and "compacted" in message
+    assert runtime.session.path != old_path and runtime.session.path.exists()
+    assert len(runtime.agent.messages) == 1  # only the summary UserMessage
+    notices = chat.take_notices()
+    assert notices and notices[0].kind == "divider" and "compacted" in notices[0].text
+    assert capsys.readouterr().out == "", "the TUI controller must never print"
+
+
+async def test_compact_now_refuses_while_streaming(runtime_factory):
+    gate = asyncio.Event()
+    runtime = await runtime_factory(stream_fn=gated_stream(gate))
+    chat = ChatController(runtime)
+    task = asyncio.create_task(chat.submit("hi"))
+    await asyncio.sleep(0.05)
+
+    assert await chat.compact_now() is None
+
+    gate.set()
+    await task
+    await chat.wait_for_idle()
+
+
+async def test_auto_compaction_runs_after_a_turn(runtime_factory, monkeypatch):
+    from conftest import sequenced_stream
+
+    import zenagent.app.chat as chat_module
+
+    monkeypatch.setattr(chat_module, "should_auto_compact", lambda *a, **k: True)
+    runtime = await runtime_factory(stream_fn=sequenced_stream(["hi", "summary text"]))
+    chat = ChatController(runtime)
+
+    await chat.submit("hello")
+    await chat.wait_for_idle()
+
+    notices = chat.take_notices()
+    assert notices and notices[0].kind == "divider"

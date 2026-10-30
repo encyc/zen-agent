@@ -44,7 +44,7 @@
 | REPL 主循环、斜杠命令 | `zenagent/cli/repl.py` |
 | 流式渲染、状态行、diff | `zenagent/cli/render.py` |
 | 权限门 | `zenagent/cli/permissions.py` |
-| 上下文压缩 | `zenagent/cli/compact.py`（+ `zenagent/config.py::ContextGuard`） |
+| 上下文压缩 | `zenagent/app/compact.py`（+ `zenagent/config.py::ContextGuard`） |
 | 自动补全 | `zenagent/cli/completion.py` |
 | `doctor` | `zenagent/cli/doctor.py` |
 | 图片输入 | `zenagent/cli/images.py` |

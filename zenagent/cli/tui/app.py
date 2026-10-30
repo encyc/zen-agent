@@ -196,6 +196,12 @@ class ZenAgentApp(App):
             band.update_status(status, width)
         for log in self.query(TranscriptView):
             log.sync(self.chat.transcript, status)
+        for notice in self.chat.take_notices():
+            for log in self.query(TranscriptView):
+                if notice.kind == "divider":
+                    log.append_divider(notice.text)
+                else:
+                    log.append_notice(notice.text)
         for indicator in self.query(WorkIndicator):
             indicator.set_running(status.running)
         for banner in self.query(ErrorBanner):

@@ -6,7 +6,7 @@ import pytest
 
 import zenagent.agent.session as session_module
 from zenagent.agent import Agent
-from zenagent.cli.compact import compact
+from zenagent.app.compact import compact
 from zenagent.events import AssistantEvent
 from zenagent.providers.catalog import Model
 from zenagent.providers.compat import CompatFlags
@@ -151,7 +151,7 @@ async def test_compact_uses_the_agent_stream_fn_by_default():
 # S1-T10: automatic compaction
 # ---------------------------------------------------------------------------
 
-from zenagent.cli.compact import maybe_auto_compact, should_auto_compact
+from zenagent.app.compact import maybe_auto_compact, should_auto_compact
 
 
 def test_should_auto_compact_threshold():

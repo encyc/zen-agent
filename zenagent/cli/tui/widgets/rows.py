@@ -103,6 +103,18 @@ def _usage_text(status: RunStatus) -> Text:
     return Text("done · " + " · ".join(parts), style=_DIM)
 
 
+class DividerRow(Static):
+    """A dim one-line divider: context was compacted at this point."""
+
+    def __init__(self, text: str) -> None:
+        self._text = f"── {text} ──"
+        super().__init__(Text(self._text, style=_DIM), classes="divider-row")
+
+    @property
+    def plain(self) -> str:
+        return self._text
+
+
 class NoticeRow(Static):
     """A quiet one-off line: command output, unknown command, warnings."""
 

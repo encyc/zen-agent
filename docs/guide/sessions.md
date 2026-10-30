@@ -82,7 +82,7 @@ zen -p "..." --metrics ~/.zenagent/metrics.jsonl
 ## 源码对照
 
 - 会话：`zenagent/agent/session.py`（`Session`、`latest_session`、`truncate_last_turn`）
-- 压缩：`zenagent/cli/compact.py`、`zenagent/config.py::ContextGuard`
+- 压缩：`zenagent/app/compact.py`、`zenagent/config.py::ContextGuard`
 - 导出：`zenagent/export.py`、`zenagent/cli/exportcmd.py`
 - 用量：`zenagent/usage.py`、`zenagent/cli/usagecmd.py`
 - trace/metrics/crash：`zenagent/{trace,telemetry,crash}.py`

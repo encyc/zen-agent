@@ -156,7 +156,11 @@ async def _clear(services: AppServices, argument: str) -> CommandResult:
 
 @_command("compact", "summarize the conversation now")
 async def _compact(services: AppServices, argument: str) -> CommandResult:
-    return CommandResult(message="compaction runs after the current turn")
+    try:
+        message = await services.chat.compact_now()
+    except (ValueError, RuntimeError) as exc:
+        return CommandResult(message=f"compaction failed: {exc}")
+    return CommandResult(message=message or "nothing to compact", reset_transcript=True)
 
 
 @_command("mcp", "reconnect MCP servers and refresh tools")

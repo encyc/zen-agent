@@ -23,6 +23,7 @@ __all__ = [
     "MessageView",
     "RunStatus",
     "ToolCallView",
+    "TranscriptNotice",
     "args_preview",
     "messages_to_views",
     "usage_total",
@@ -85,6 +86,14 @@ class RunStatus:
     cwd: str = ""
     mode: str = ""
     git_branch: str = ""
+
+
+@dataclass(frozen=True)
+class TranscriptNotice:
+    """An out-of-band line a controller wants rendered (divider, info notice)."""
+
+    kind: Literal["divider", "info"]
+    text: str
 
 
 def args_preview(arguments: dict) -> str:

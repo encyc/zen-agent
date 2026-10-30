@@ -42,7 +42,7 @@
 | 功能 | 源码 | 测试 | 文档 |
 |---|---|---|---|
 | 请求前整轮裁剪 | `config.py::naive_overflow_prune` + `ContextGuard` | `test_compact.py` | [上下文管理](internals/context-compaction.md) |
-| 轮末总结压缩 | `cli/compact.py` | `test_compact.py` | 同上 |
+| 轮末总结压缩 | `app/compact.py` | `test_compact.py` | 同上 |
 | AGENTS.md 上下文文件 | `context_files.py` | `test_context_files.py` | 同上 |
 
 ## 5. 持久化与可观测性

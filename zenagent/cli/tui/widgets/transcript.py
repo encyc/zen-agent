@@ -11,7 +11,13 @@ from textual.message import Message
 from textual.widgets import Markdown
 
 from zenagent.app.views import MessageView, RunStatus, ToolCallView
-from zenagent.cli.tui.widgets.rows import NoticeRow, ThinkingRow, UsageRow, UserBlock
+from zenagent.cli.tui.widgets.rows import (
+    DividerRow,
+    NoticeRow,
+    ThinkingRow,
+    UsageRow,
+    UserBlock,
+)
 from zenagent.cli.tui.widgets.tool_card import ToolCard
 from zenagent.cli.tui.widgets.welcome import WelcomeBlock
 
@@ -264,4 +270,9 @@ class TranscriptView(VerticalScroll):
 
     def append_notice(self, text: str, *, error: bool = False) -> None:
         self.mount(NoticeRow(text, error=error))
+        self.scroll_end(animate=False)
+
+    def append_divider(self, text: str) -> None:
+        """Mark a point the conversation was compacted at."""
+        self.mount(DividerRow(text))
         self.scroll_end(animate=False)

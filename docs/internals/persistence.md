@@ -78,7 +78,7 @@ class Session:
 ## 源码对照
 
 - 会话：`zenagent/agent/session.py`（`Session`、`truncate_last_turn`、`latest_session`、`list_sessions`）
-- 压缩：`zenagent/cli/compact.py::compact`
+- 压缩：`zenagent/app/compact.py::compact`
 - 传输重试：`zenagent/providers/transport.py::post_stream`
 - 消息重试：`zenagent/retry.py`
 - 崩溃/诊断：`zenagent/crash.py`

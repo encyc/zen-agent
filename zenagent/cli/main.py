@@ -29,6 +29,7 @@ from zenagent.agent.session import (
     list_sessions,
     unique_session_path,
 )
+from zenagent.app.compact import maybe_auto_compact
 from zenagent.app.modes import MODES, mode_prompt_note, resolve_mode
 from zenagent.app.support import (
     api_key_for as _api_key_for,
@@ -40,7 +41,6 @@ from zenagent.app.support import (
 from zenagent.app.support import (
     system_prompt as _system_prompt,
 )
-from zenagent.cli.compact import maybe_auto_compact
 from zenagent.cli.doctor import run_doctor
 from zenagent.cli.exportcmd import run_export
 from zenagent.cli.images import read_image_argument

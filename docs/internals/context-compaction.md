@@ -32,14 +32,16 @@ async def transform(self, messages):
 
 ## 第二层：总结压缩（改变会话，写新文件）
 
-`zenagent/cli/compact.py`：
+`zenagent/app/compact.py`：
 
 - 触发：每轮结束后，若**上一轮真实 usage** ≥ 窗口 × `AUTO_COMPACT_THRESHOLD`（0.85）。
 - 动作：把当前 transcript 渲染成文本，用一次独立 LLM 调用生成「交接摘要」，
   然后**新建 session 文件**：system 提示 + 一条「# 此前会话摘要」消息。
-- 返回新 session 路径，REPL 切换过去（`switch_session`）。
+- 返回新 session 路径，REPL/headless 切换过去（`switch_session`）。TUI 走 `ChatController.compact_now`：
+  切到新会话、重建 transcript，并在转录区挂一条 dim 分隔线
+  `── compacted · N prompt tokens → summary session ──`（`TranscriptNotice`）作为可解释性提示。
 - 旧 session 文件字节不变——可审计、可回退。
-- 失败（空摘要/请求错误）→ 抛 `RuntimeError`，自动压缩只打印警告，不中断会话。
+- 失败（空摘要/请求错误）→ 抛 `RuntimeError`；自动压缩只打印警告（TUI 是一条 notice），不中断会话。
 - `--no-auto-compact` 关闭自动；`/compact` 手动触发。
 
 为什么压缩恢复成新消息而不是改写旧文件：JSONL 只追加的语义最简单，且「压缩前」是排障时
@@ -61,5 +63,7 @@ async def transform(self, messages):
 
 - 裁剪：`zenagent/config.py::naive_overflow_prune`、`token_estimate`、`_split_turns`、`PRUNE_TRIGGER/PRUNE_TARGET`
 - 钩子：`zenagent/config.py::ContextGuard.transform` + `Agent` 的 `transform_context`
-- 压缩：`zenagent/cli/compact.py::compact`、`should_auto_compact`、`maybe_auto_compact`
-- 测试：`tests/test_compact.py`、`tests/test_session.py`、`tests/test_loop.py`（超大上下文场景）
+- 压缩：`zenagent/app/compact.py::compact`、`should_auto_compact`、`maybe_auto_compact`；
+  TUI 入口 `zenagent/app/chat.py::ChatController.compact_now` + `take_notices`
+- 测试：`tests/test_compact.py`、`tests/test_session.py`、`tests/test_loop.py`（超大上下文场景）、
+  `tests/test_app_chat.py`、`tests/test_tui_compact.py`

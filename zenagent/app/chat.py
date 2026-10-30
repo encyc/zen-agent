@@ -7,12 +7,14 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from zenagent.app.compact import compact, should_auto_compact
 from zenagent.app.retry import prepare_retry
 from zenagent.app.runtime import Runtime
 from zenagent.app.views import (
     MessageView,
     RunStatus,
     ToolCallView,
+    TranscriptNotice,
     args_preview,
     messages_to_views,
     usage_total,
@@ -47,6 +49,9 @@ class ChatController:
         self._turn_output = 0
         #: Provider failure from the last run, shown by the TUI's error banner.
         self._last_error = ""
+        #: Out-of-band lines (compaction dividers, auto-compaction failures) the
+        #: frontend drains on refresh.
+        self._notices: list[TranscriptNotice] = []
         runtime.agent.subscribe(self._on_event)
 
     # -- snapshots ----------------------------------------------------------
@@ -130,6 +135,39 @@ class ChatController:
             self._last_error = ""
             self._notify()
 
+    def take_notices(self) -> list[TranscriptNotice]:
+        """Drain out-of-band lines the frontend should render (dividers, info)."""
+        notices = self._notices
+        self._notices = []
+        return notices
+
+    def _before_tokens(self) -> int:
+        last = self.runtime.guard.last_usage
+        if last is not None:
+            return last.input + last.cache_read
+        usage = usage_total(self.runtime.agent.messages)
+        return usage.input + usage.output
+
+    async def compact_now(self) -> str | None:
+        """Summarize the transcript into a new session file; returns the notice.
+
+        Refuses mid-run (nested model calls would corrupt the transcript) and on
+        an empty transcript. ``compact()`` leaves the agent untouched on failure,
+        so a raising call changes nothing.
+        """
+        if self._running or self.runtime.agent.is_streaming:
+            return None
+        if not self.runtime.agent.messages:
+            return None
+        before = self._before_tokens()
+        path = await compact(self.runtime.agent)
+        await self.runtime.switch_session(path)
+        self.reload_transcript()
+        text = f"compacted · {before:,} prompt tokens → summary session"
+        self._notices.append(TranscriptNotice("divider", text))
+        self._notify()
+        return text
+
     def reload_transcript(self) -> None:
         """Rebuild views from the current agent messages (after a session switch)."""
         from zenagent.app.views import messages_to_views
@@ -196,6 +234,18 @@ class ChatController:
                     detail if detail and detail != "error" else "the run failed"
                 )
             self._notify()
+            if self.runtime.agent.termination != "aborted":
+                try:
+                    if should_auto_compact(
+                        self.runtime.guard.last_usage,
+                        self.runtime.agent.model.context_window,
+                    ):
+                        await self.compact_now()
+                except Exception as exc:  # noqa: BLE001 - never break the session
+                    self._notices.append(
+                        TranscriptNotice("info", f"auto-compaction failed: {exc}")
+                    )
+                    self._notify()
             if self._follow_ups and self.runtime.agent.termination != "aborted":
                 self._task = asyncio.create_task(self._run(self._follow_ups.pop(0)))
             elif self._follow_ups:
