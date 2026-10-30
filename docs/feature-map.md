@@ -32,7 +32,9 @@
 | 功能 | 源码 | 测试 | 文档 |
 |---|---|---|---|
 | 7 个内置工具 | `tools/{fs,bash,search}.py` | `test_tools_*.py` | [工具与权限](guide/tools-permissions.md) |
-| 权限门（deny/allow/read-only/危险命令） | `cli/permissions.py` | `test_permissions.py` | 同上 |
+| 权限门（deny/allow/read-only/危险命令） | `app/permissions.py` | `test_permissions.py` | 同上 |
+| 运行模式 plan/ask/full | `app/modes.py`、`app/permissions.py` | `test_modes.py` | 同上 |
+| 交互审批（TUI 弹窗/超时/会话授权） | `app/permissions.py::PermissionBroker`、`cli/tui/screens/modals.py::ToolApproval` | `test_app_permissions.py`、`test_tui_approval.py` | 同上 |
 | 参数校验 | `agent/validate.py` | `test_validate.py` | [工具内核](internals/tools-internals.md) |
 
 ## 4. 上下文
@@ -48,6 +50,7 @@
 | 功能 | 源码 | 测试 | 文档 |
 |---|---|---|---|
 | 会话、恢复、fork/import/undo | `agent/session.py`、`cli/repl.py` | `test_session.py` | [会话](guide/sessions.md) |
+| 会话显示名（brief/rename sidecar） | `agent/session.py`、`app/sessions.py` | `test_session.py`、`test_app_sessions.py` | 同上 |
 | trace | `trace.py` | `test_trace.py` | 同上 |
 | run 指标 | `telemetry.py` | `test_telemetry.py` | 同上 |
 | 崩溃日志/诊断 | `crash.py`、`cli/doctor.py` | `test_crash.py`、`test_doctor.py` | 同上 |
@@ -62,6 +65,7 @@
 | 富渲染（markdown/工具卡/usage） | `widgets/{chat_log,tool_card}.py` | `test_tui_chat.py` | 同上 |
 | 队列/steer/中断 | `app.py`、`app/chat.py` | `test_tui_controls.py` | 同上 |
 | 模型/会话选择器、侧边栏、命令面板 | `screens/modals.py`、`widgets/sidebar.py` | `test_tui_pickers.py` | 同上 |
+| 会话操作（new/fork/delete/export/rename） | `screens/modals.py::SessionPicker`、`cli/tui/app.py` | `test_tui_sessions.py` | 同上 |
 | 收尾（窄屏/退出摘要） | `widgets/status_bar.py`、`app.py` | `test_tui_polish.py` | 同上 |
 
 ## 6. CLI / REPL
@@ -75,7 +79,7 @@
 | 图片输入 | `cli/images.py` | `test_images.py` | — |
 | 主题 / 键位 | `cli/theme.py`、`cli/keybindings.py` | `test_theme.py` | — |
 
-REPL 命令：`/help /exit /clear /model /thinking /session /sessions /fork /import /undo /compact /image /images /skills /mcp /reload /theme /hotkeys`。
+REPL 命令：`/help /exit /clear /model /thinking /mode /session /sessions /rename /fork /import /undo /compact /image /images /skills /mcp /reload /theme /hotkeys`。
 
 ## 7. MCP
 
@@ -117,6 +121,7 @@ REPL 命令：`/help /exit /clear /model /thinking /session /sessions /fork /imp
 - **MCP 进阶**：OAuth、resources、prompts、sampling、调用级 abort。
 - **telemetry 远端上报**：当前只写本地 JSONL。
 - **沙箱**：没有容器/权限隔离；安全性依赖部署方式（CI 容器、只读挂载）。
+- **plan mode 进阶**：当前是「只读 + 计划提示」，没有独立的计划产物/审阅（omp 的 `/plan-review` 未做）。
 - **扩展 UI**：扩展只能贡献工具/命令/prompt/hooks，不能改 REPL 界面。
 - **多模态输出**：能读图片，但不能生成图片/音频。
 - **Python 版本**：`requires-python >=3.11`（3.11–3.14 已验证）。

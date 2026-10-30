@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 
 from zenagent.agent import Agent
-from zenagent.agent.session import Session, session_path
+from zenagent.agent.session import Session, unique_session_path
 from zenagent.providers.openai_completions import StreamOptions
 from zenagent.providers.registry import StreamFn, safe_stream, stream_fn_for
 from zenagent.types import (
@@ -159,7 +159,7 @@ async def compact(agent: Agent, stream_fn: StreamFn | None = None) -> Path:
     message = UserMessage(
         content=f"# 此前会话摘要\n{summary.strip()}", timestamp=int(time.time())
     )
-    session = Session(session_path("compact"))
+    session = Session(unique_session_path("compact"))
     session.append(message)
     agent.replace_messages([message])
     return session.path

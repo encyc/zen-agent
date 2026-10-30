@@ -11,6 +11,7 @@ the prompt. The sidebar is opt-in (ctrl+b) and hidden by default.
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 
 from textual.app import App
@@ -81,6 +82,33 @@ class ZenAgentApp(App):
                 runtime=runtime, chat=self.chat, models=self.models, sessions=self.sessions
             )
         )
+
+    #: Seconds an ask-mode tool approval may stay open before it counts as Deny.
+    approval_timeout_s: float = 120.0
+
+    async def request_tool_approval(self, tool_name: str, arguments: dict) -> str:
+        """Show the ask-mode modal; returns ``allow`` / ``always`` / ``deny``.
+
+        The agent tool round is awaited on this future, so the modal blocks that
+        tool (not the UI). A timeout resolves to ``deny`` and closes the modal.
+        """
+        from zenagent.cli.tui.screens.modals import ToolApproval
+
+        screen = ToolApproval(tool_name, arguments)
+        future: asyncio.Future[str] = asyncio.get_running_loop().create_future()
+
+        def done(choice: str | None) -> None:
+            if not future.done():
+                future.set_result(choice or "deny")
+
+        self.push_screen(screen, done)
+        try:
+            return await asyncio.wait_for(future, self.approval_timeout_s)
+        except TimeoutError:
+            if self.screen is screen:
+                self.pop_screen()
+            self.notify("approval timed out; denied", timeout=3)
+            return "deny"
 
     def action_quit_app(self) -> None:
         status = self.chat.status
@@ -408,15 +436,79 @@ class ZenAgentApp(App):
     def open_session_picker(self) -> None:
         from zenagent.cli.tui.screens.modals import SessionPicker
 
-        async def selected(path) -> None:
-            if path is not None:
-                await self.sessions.resume(path)
-                for log in self.query(TranscriptView):
-                    log.reset()
-                self.chat.reload_transcript()
-                self._refresh_status()
+        async def selected(action) -> None:
+            if action is None:
+                return
+            # Never await a new modal from inside the dismiss callback: Textual
+            # runs it in the message pump and the modal would deadlock.
+            self.run_worker(self._apply_session_action(action), exclusive=False)
 
         self.open_menu("sessions", lambda: SessionPicker(self.sessions.entries()), selected)
+
+    async def _apply_session_action(self, action) -> None:
+        from zenagent.agent.session import session_title
+
+        if action.kind == "resume" and action.path is not None:
+            await self.sessions.resume(action.path)
+            self._reset_after_switch()
+            return
+        if action.kind in ("new", "fork"):
+            if action.kind == "new":
+                await self.sessions.new()
+            else:
+                await self.sessions.fork()
+            self._reset_after_switch()
+            return
+        target = action.path or self.sessions.current()
+        if action.kind == "delete":
+            if not await self._confirm(f"delete {target.name}? (moved to .trash)"):
+                return
+            was_current = target == self.sessions.current()
+            self.sessions.delete(target)
+            if was_current:
+                self._reset_after_switch()
+            self._refresh_status()
+            self.notify("session moved to trash")
+        elif action.kind == "export":
+            exported = self.sessions.export(target)
+            self.notify(f"exported: {exported}")
+        elif action.kind == "rename":
+            name = await self._prompt_rename(session_title(target))
+            if name is None:
+                return
+            try:
+                stored = self.sessions.rename(target, name)
+            except ValueError as exc:
+                self.notify(str(exc))
+                return
+            self.notify(f"renamed: {stored}")
+
+    def _reset_after_switch(self) -> None:
+        for log in self.query(TranscriptView):
+            log.reset()
+        self.chat.reload_transcript()
+        self._refresh_status()
+
+    async def _modal_result(self, screen):
+        """Push a modal and await its dismissed value."""
+        future: asyncio.Future = asyncio.get_running_loop().create_future()
+
+        def done(result=None) -> None:
+            if not future.done():
+                future.set_result(result)
+
+        self.push_screen(screen, done)
+        return await future
+
+    async def _confirm(self, prompt: str) -> bool:
+        from zenagent.cli.tui.screens.modals import Confirm
+
+        return bool(await self._modal_result(Confirm(prompt)))
+
+    async def _prompt_rename(self, value: str) -> str | None:
+        from zenagent.cli.tui.screens.modals import RenamePrompt
+
+        return await self._modal_result(RenamePrompt(value))
 
     async def on_prompt_input_submitted(self, message: PromptInput.Submitted) -> None:
         text = message.text
@@ -451,6 +543,9 @@ class ZenAgentApp(App):
         elif result.message:
             for log in self.query(TranscriptView):
                 log.append_notice(result.message)
+        # `/mode` and friends change state the band renders; refresh after every
+        # dispatch so the change is visible without waiting for the next event.
+        self._refresh_status()
 
     def action_interrupt(self) -> None:
         """Esc: abort the run; never touch an in-progress draft."""

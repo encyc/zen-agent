@@ -12,7 +12,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from zenagent.agent import Agent
-from zenagent.agent.session import Session, latest_session, session_path
+from zenagent.agent.session import Session, latest_session, unique_session_path
+from zenagent.app.modes import (
+    DEFAULT_MODE,
+    mode_prompt_note,
+    normalize_mode,
+    resolve_mode,
+)
 from zenagent.app.permissions import PermissionGate
 from zenagent.app.support import (
     api_key_for,
@@ -70,6 +76,7 @@ class RuntimeOptions:
     context_files: bool = True
     read_only: bool = False
     allow_dangerous: bool = False
+    mode: str | None = None
     retries: int = 0
     max_turns: int | None = None
     max_cost: float | None = None
@@ -92,9 +99,35 @@ class Runtime:
         self.hooks: dict[str, list] = {}
         self.extension_files: list[str] = []
         self.before_switch: SwitchHook | None = None
+        self.gate: PermissionGate | None = None
+        self._mode: str = DEFAULT_MODE
+        self._base_prompt: str = ""
         self._base_tools: list = []
         self._extra_prompt = ""
         self._context_files = True
+
+    @property
+    def mode(self) -> str:
+        """The active plan/ask/full mode."""
+        return self._mode
+
+    def set_mode(self, mode: str) -> str:
+        """Switch mode; takes effect for the next tool call without a restart."""
+        normalized = normalize_mode(mode)
+        if normalized is None:
+            raise ValueError(f"unknown mode: {mode!r} (choose plan|ask|full)")
+        self._mode = normalized
+        if self.gate is not None and hasattr(self.gate, "set_mode"):
+            self.gate.set_mode(normalized)
+        if hasattr(self, "agent") and self._base_prompt:
+            self.agent.system_prompt = self._prompt_with_mode()
+        return normalized
+
+    def _prompt_with_mode(self) -> str:
+        note = mode_prompt_note(self._mode)
+        if not note:
+            return self._base_prompt
+        return f"{self._base_prompt}\n\n{note}"
 
     # -- construction -------------------------------------------------------
 
@@ -122,6 +155,13 @@ class Runtime:
             raise RuntimeError(f"missing API key for {model.id} (set {env_name})")
         runtime.model = model
 
+        mode = resolve_mode(
+            explicit=options.mode,
+            assume_yes=assume_yes,
+            read_only=options.read_only,
+        )
+        runtime._mode = mode
+
         if gate is None:
             gate = PermissionGate(
                 assume_yes=assume_yes,
@@ -129,8 +169,11 @@ class Runtime:
                 allow_dangerous=options.allow_dangerous,
                 allow=runtime.user_config.tool_allow,
                 deny=runtime.user_config.tool_deny,
-                read_only=options.read_only,
+                mode=mode,
             )
+        elif hasattr(gate, "set_mode"):
+            gate.set_mode(mode)
+        runtime.gate = gate
 
         tools = list(ALL_TOOLS)
         if options.mcp:
@@ -172,7 +215,8 @@ class Runtime:
             part for part in (skills_index, extension_prompt) if part
         )
         runtime.guard = ContextGuard(model.context_window)
-        prompt = runtime._build_prompt(tools)
+        runtime._base_prompt = runtime._build_prompt(tools)
+        prompt = runtime._prompt_with_mode()
         thinking = options.thinking
         if thinking is None:
             thinking = "high" if model.reasoning else "off"
@@ -240,7 +284,7 @@ class Runtime:
             if path is not None and Path(path).is_file():
                 return Session(Path(path))
             self.warnings.append(f"no session to resume ({resume})")
-        return Session(session_path())
+        return Session(unique_session_path())
 
     def _build_prompt(self, tools: list) -> str:
         text = system_prompt([tool.name for tool in tools])
@@ -267,7 +311,8 @@ class Runtime:
         tools = [*self._base_tools, *self.mcp.tool_defs()]
         if [tool.name for tool in tools] != [tool.name for tool in self.agent.tools]:
             self.agent.tools = tools
-            self.agent.system_prompt = self._build_prompt(tools)
+            self._base_prompt = self._build_prompt(tools)
+            self.agent.system_prompt = self._prompt_with_mode()
 
     async def switch_session(self, path: Path | None) -> None:
         """Abort any run, then load `path` (or a fresh session) into the agent."""
@@ -275,7 +320,7 @@ class Runtime:
             return
         self.agent.abort()
         await self.agent.wait_for_idle()
-        session = Session(path) if path is not None else Session(session_path())
+        session = Session(path) if path is not None else Session(unique_session_path())
         self.agent.replace_messages(session.load())
         self.session = session
         self.guard.last_usage = None

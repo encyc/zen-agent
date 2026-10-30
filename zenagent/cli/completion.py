@@ -23,6 +23,7 @@ SLASH_COMMANDS: dict[str, str] = {
     "/clear": "start over with an empty transcript",
     "/model": "show or switch the model (takes effect next turn)",
     "/thinking": "show or set reasoning level: off|low|medium|high|max",
+    "/mode": "set runtime mode: plan|ask|full (plan = read-only)",
     "/session": "show model, context and spend for this session",
     "/compact": "summarize the conversation into a fresh session",
     "/undo": "drop the last turn into a fresh session file",
@@ -34,6 +35,7 @@ SLASH_COMMANDS: dict[str, str] = {
     "/theme": "switch theme: default|mono|solarized|<path.json>",
     "/hotkeys": "show the active keybindings",
     "/sessions": "list saved sessions",
+    "/rename": "rename the current session (/rename <name>)",
     "/fork": "branch a new session at a user message (/fork <n>)",
     "/import": "load a session file and continue it (/import <path>)",
 }

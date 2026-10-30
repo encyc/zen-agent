@@ -25,6 +25,20 @@ async def execute(tool_call_id, args, abort, on_update=None) -> ToolResultAgent
 - `on_update`：流式部分结果（目前没有内置工具用它，留给扩展）。
 - 返回值里 `content` 给模型，`details` 给 UI/日志。
 
+## 运行模式（plan / ask / full）
+
+启动由 `--mode` 决定（`--yes`→full、`--read-only`→plan 只是兼容映射，显式 `--mode` 优先）；
+会话中 `/mode` 切换，下一次工具调用立即生效；TUI 状态带显示当前模式。
+
+| 模式 | 写/执行工具 | 说明 |
+|---|---|---|
+| `plan` | 拒绝 | 只读调研；system prompt 要求先调研并给出计划 |
+| `ask` | 需确认 | REPL 终端 `[y/n/a]`；TUI 审批框（y/a/n，120s 超时=拒绝）；headless 默认拒绝 |
+| `full` | 自动放行 | 危险命令仍需 `--allow-dangerous`；`[tools] deny` 永远优先 |
+
+优先级：危险命令、`[tools] deny`、plan、`--read-only` 属于**策略层**，优先于 full 和会话内
+"always allow"。`PermissionBroker` 先跑 `PermissionGate.policy_refusal`，只有 ask 才弹确认。
+
 ## 权限判定顺序
 
 `PermissionGate.check(tool_name, args)`（`zenagent/cli/permissions.py`）：
@@ -83,10 +97,12 @@ ToolResultAgent(
 ## 源码对照
 
 - 工具实现：`zenagent/tools/{fs,bash,search,web}.py`，清单 `zenagent/tools/__init__.py::ALL_TOOLS`
-- 权限：`zenagent/cli/permissions.py::PermissionGate`、`READ_ONLY_TOOLS`、`dangerous_command_reason`
+- 权限：`zenagent/app/permissions.py::PermissionGate`（`policy_refusal`/`check`）、`PermissionBroker`、
+  `zenagent/app/modes.py`（`resolve_mode`/`mode_prompt_note`）、`READ_ONLY_TOOLS`、`dangerous_command_reason`
 - 校验：`zenagent/agent/validate.py::validate_arguments`
 - 执行与错误隔离：`zenagent/agent/loop.py`（工具 round）
-- 对应测试：`tests/test_tools_fs.py`、`test_tools_bash.py`、`test_tools_search.py`、`test_tools_web.py`、`test_permissions.py`、`test_validate.py`
+- 对应测试：`tests/test_tools_fs.py`、`test_tools_bash.py`、`test_tools_search.py`、`test_tools_web.py`、
+  `test_permissions.py`、`test_modes.py`、`test_app_permissions.py`、`test_tui_approval.py`、`test_validate.py`
 - `web_search` 的 provider 链与配置见 [`docs/internals/web-search.md`](../internals/web-search.md)：有 `DEEPSEEK_API_KEY` 时默认走 DeepSeek，无 key 时退到 Bing/DuckDuckGo；顺序可用 `ZENAGENT_SEARCH_PROVIDERS` 覆盖。
 - `/search` 查看 provider 状态，`/search <query>` 手动跑一次。
 - 搜索走的是"压空白 + 长度上限"，**不改写原文**（与 omp 一致）；剥 markdown 会吃掉代码里的 `# comment`。

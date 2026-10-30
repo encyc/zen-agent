@@ -4,7 +4,15 @@
 import pytest
 
 import zenagent.agent.session as session_module
-from zenagent.agent.session import Session, latest_session, session_path
+from zenagent.agent.session import (
+    Session,
+    brief,
+    latest_session,
+    read_session_titles,
+    session_path,
+    session_title,
+    set_session_title,
+)
 from zenagent.types import AssistantMessage, TextContent, Usage, UserMessage
 
 
@@ -228,3 +236,167 @@ def test_truncate_last_turn_with_nothing_to_drop():
     assert truncate_last_turn([]) == []
     only_assistant = [assistant("hi")]
     assert truncate_last_turn(only_assistant) == only_assistant
+
+
+# ---------------------------------------------------------------------------
+# Session naming: derived brief + titles sidecar
+# ---------------------------------------------------------------------------
+
+
+def test_brief_takes_the_first_meaningful_line():
+    assert brief("first line\nsecond line") == "first line"
+    assert brief("\n\n  ##   Fix   the bug\nthen more") == "Fix the bug"
+
+
+def test_brief_strips_markdown_prefixes():
+    assert brief("# Heading") == "Heading"
+    assert brief("> quoted question") == "quoted question"
+    assert brief("- bullet item") == "bullet item"
+    assert brief("* starred item") == "starred item"
+    assert brief("```python") == "python"
+    assert brief("  >  > nested quote") == "nested quote"
+
+
+def test_brief_collapses_whitespace():
+    assert brief("  hello\t\tworld   ") == "hello world"
+
+
+def test_brief_truncates_long_text_with_an_ellipsis():
+    shortened = brief("abcdefghijklmnopqrstuvwxyz", limit=10)
+    assert shortened == "abcdefghi…"
+    assert len(shortened) == 10
+
+
+def test_brief_uses_a_placeholder_for_empty_text():
+    assert brief("") == "(empty)"
+    assert brief("   \n\t ") == "(empty)"
+    assert brief("\n#\n>") == "(empty)"
+
+
+def test_read_session_titles_tolerates_missing_and_broken_files(isolated_sessions):
+    assert read_session_titles() == {}  # sessions dir does not exist yet
+    isolated_sessions.mkdir(parents=True)
+    assert read_session_titles() == {}  # sidecar does not exist yet
+
+    sidecar = isolated_sessions / ".titles.json"
+    sidecar.write_text("{oops", encoding="utf-8")
+    assert read_session_titles() == {}
+    sidecar.write_text('["not", "a", "dict"]', encoding="utf-8")
+    assert read_session_titles() == {}
+
+
+def test_read_session_titles_ignores_non_string_entries(isolated_sessions):
+    isolated_sessions.mkdir(parents=True)
+    (isolated_sessions / ".titles.json").write_text(
+        '{"a.jsonl": "ok", "b.jsonl": 42, "c.jsonl": ""}', encoding="utf-8"
+    )
+
+    assert read_session_titles() == {"a.jsonl": "ok"}
+
+
+def test_session_title_derives_a_brief_from_the_first_user_message(isolated_sessions):
+    isolated_sessions.mkdir(parents=True)
+    path = _write_session(
+        isolated_sessions, "chat.jsonl", ["first question", "second question"]
+    )
+
+    assert session_title(path) == "first question"
+
+
+def test_stored_title_overrides_the_derived_brief(isolated_sessions):
+    isolated_sessions.mkdir(parents=True)
+    path = _write_session(isolated_sessions, "chat.jsonl", ["hello there"])
+
+    stored = set_session_title(path, "  Renamed   chat ")
+
+    assert stored == "Renamed chat"
+    assert read_session_titles() == {"chat.jsonl": "Renamed chat"}
+    assert session_title(path) == "Renamed chat"
+    assert Session(path).read_info().title == "Renamed chat"
+
+    from zenagent.agent.session import list_sessions
+
+    assert list_sessions()[0].title == "Renamed chat"
+
+
+def test_set_session_title_caps_long_titles(isolated_sessions):
+    isolated_sessions.mkdir(parents=True)
+    path = _write_session(isolated_sessions, "chat.jsonl", ["hello"])
+
+    stored = set_session_title(path, "x" * 200)
+
+    assert stored == "x" * 80
+    assert len(stored) == 80
+    assert set_session_title(path, "line one\nline two") == "line one line two"
+
+
+def test_set_session_title_rejects_blank_titles(isolated_sessions):
+    isolated_sessions.mkdir(parents=True)
+    path = _write_session(isolated_sessions, "chat.jsonl", ["hello"])
+
+    for blank in ("", "   ", "\n\t "):
+        with pytest.raises(ValueError):
+            set_session_title(path, blank)
+    assert read_session_titles() == {}
+
+
+def test_corrupt_sidecar_falls_back_to_the_derived_title(isolated_sessions):
+    isolated_sessions.mkdir(parents=True)
+    path = _write_session(isolated_sessions, "chat.jsonl", ["derived name"])
+    (isolated_sessions / ".titles.json").write_text(
+        "{ this is not json", encoding="utf-8"
+    )
+
+    assert session_title(path) == "derived name"
+    assert Session(path).read_info().title == "derived name"
+
+
+def test_empty_session_gets_a_readable_placeholder_title(isolated_sessions):
+    isolated_sessions.mkdir(parents=True)
+    path = isolated_sessions / "empty.jsonl"
+    path.write_text("", encoding="utf-8")
+
+    assert session_title(path) == "(empty)"
+    assert Session(path).read_info().title == "(empty)"
+
+
+def test_titles_live_in_a_sidecar_not_in_the_jsonl(isolated_sessions):
+    isolated_sessions.mkdir(parents=True)
+    path = _write_session(isolated_sessions, "chat.jsonl", ["hello"])
+    before = path.read_bytes()
+
+    set_session_title(path, "Renamed")
+
+    assert path.read_bytes() == before  # append-only JSONL is untouched
+    assert [type(m) for m in Session(path).load()] == [UserMessage, AssistantMessage]
+    assert (isolated_sessions / ".titles.json").is_file()
+
+
+def test_fork_at_does_not_inherit_the_source_title(isolated_sessions):
+    isolated_sessions.mkdir(parents=True)
+    source = _write_session(isolated_sessions, "chat.jsonl", ["hello"])
+    set_session_title(source, "Source name")
+
+    forked = Session(source).fork_at(1)
+
+    assert forked.name != source.name
+    assert session_title(forked) == "hello"
+
+
+def test_rewrite_does_not_inherit_the_source_title(isolated_sessions):
+    isolated_sessions.mkdir(parents=True)
+    source = _write_session(isolated_sessions, "chat.jsonl", ["hello"])
+    set_session_title(source, "Source name")
+
+    rewritten = Session(source).rewrite([user("fresh start")])
+
+    assert session_title(rewritten) == "fresh start"
+
+
+def test_unique_session_path_never_reuses_an_existing_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(session_module, "sessions_dir", lambda: tmp_path)
+    first = session_module.unique_session_path()
+    first.touch()
+    second = session_module.unique_session_path()
+    assert second != first
+    assert not second.exists()

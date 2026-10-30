@@ -29,8 +29,8 @@ zen -p "analyze" --read-only --trace run.jsonl --cwd /path/to/project
 
 行为要点：
 
-- 默认拒绝需要确认的工具（写文件、bash）。headless 下没有交互，所以要么 `--yes`，要么用
-  `[tools] allow` 放行，要么 `--read-only` 只读。
+- 默认是 `ask` 模式：写文件/bash 需要确认；headless 下没有交互，所以要么 `--mode full`/`--yes`，
+  要么用 `[tools] allow` 放行，要么 `--read-only`/`--mode plan` 只读。
 - `--json` 时 stdout 只有一段 JSON（文本、工具调用、用量、termination），适合被脚本消费。
 - 会话仍然会写盘（`~/.zenagent/sessions/`），除非你另有 HOME。
 - 退出码：0 成功；1 用法/参数错误；2 缺少 key 或模型未知；130 Ctrl+C。
@@ -42,8 +42,9 @@ zen -p "analyze" --read-only --trace run.jsonl --cwd /path/to/project
 | `-p/--prompt` | headless 单次运行 |
 | `-m/--model` | 模型 id（catalog 或配置里的自定义模型） |
 | `--thinking` | `off/low/medium/high/max` |
-| `--yes` | 自动批准需要确认的工具 |
-| `--read-only` | 拒绝所有非只读工具（含 MCP） |
+| `--mode` | `plan` / `ask` / `full`（默认 ask；`--yes`≈full，`--read-only`≈plan） |
+| `--yes` | 自动批准需要确认的工具（等价 `--mode full`） |
+| `--read-only` | 拒绝所有非只读工具（含 MCP；等价 `--mode plan`） |
 | `--allow-dangerous` | 允许 `rm -rf` 等危险命令（`--yes` 也不够） |
 | `--max-turns` / `--max-cost` | 硬上限；超限终止并记录在 termination |
 | `--retries` | provider 瞬时错误的额外重试次数（默认 0） |
@@ -62,6 +63,19 @@ zen -p "analyze" --read-only --trace run.jsonl --cwd /path/to/project
 | `--extension PATH` | 加载扩展（可重复） |
 | `--theme NAME` | REPL 主题 |
 | `--json` | headless 输出 JSON |
+
+## 运行模式（plan / ask / full）
+
+`--mode plan|ask|full` 选择启动模式；显式 `--mode` 优先于 `--yes` / `--read-only`，
+后两者只是兼容映射（`--yes` → full，`--read-only` → plan），都不传则 `ask`。
+
+- **plan**：只读。写/执行工具（含 MCP 工具）被拒绝，system prompt 要求模型先调研并给出计划。
+- **ask**：写/执行需要确认。REPL 在终端问 `[y/n/a]`；TUI 弹审批框（Allow / Allow for
+  session / Deny，120 秒无响应视为 Deny）；headless 无交互，默认拒绝，需显式放行。
+- **full**：写/执行直接放行。危险命令（`rm -rf /` 等）仍需 `--allow-dangerous`；
+  `[tools] deny` 规则与危险命令策略**永远优先**于 full 和会话内 "always allow"。
+
+会话中可随时用 `/mode` 切换，下一次工具调用立即生效；TUI 状态带会显示当前模式。
 
 ## 子命令
 

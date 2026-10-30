@@ -5,8 +5,10 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
+from zenagent.agent.session import session_title
 from zenagent.app.chat import ChatController
 from zenagent.app.models import ModelManager
+from zenagent.app.modes import describe_modes
 from zenagent.app.runtime import Runtime
 from zenagent.app.sessions import SessionManager
 
@@ -91,9 +93,36 @@ async def _model(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(screen="model-picker")
 
 
+@_command("mode", "set runtime mode: plan|ask|full")
+async def _mode(services: AppServices, argument: str) -> CommandResult:
+    requested = argument.strip()
+    if not requested:
+        return CommandResult(
+            message=f"mode: {services.runtime.mode} · {describe_modes()}"
+        )
+    try:
+        mode = services.runtime.set_mode(requested)
+    except ValueError as exc:
+        return CommandResult(message=str(exc))
+    return CommandResult(message=f"mode: {mode} · {describe_modes()}")
+
+
 @_command("sessions", "browse, resume or fork sessions")
 async def _sessions(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(screen="session-picker")
+
+
+@_command("rename", "rename the current session")
+async def _rename(services: AppServices, argument: str) -> CommandResult:
+    current = services.sessions.current()
+    requested = argument.strip()
+    if not requested:
+        return CommandResult(message=f"session name: {session_title(current)}")
+    try:
+        stored = services.sessions.rename(current, requested)
+    except ValueError as exc:
+        return CommandResult(message=str(exc))
+    return CommandResult(message=f"renamed: {stored}")
 
 
 @_command("clear", "clear the visible conversation")
@@ -287,7 +316,9 @@ def build_default_commands(services: AppServices) -> CommandRegistry:
     for factory in (
         _help,
         _model,
+        _mode,
         _sessions,
+        _rename,
         _clear,
         _compact,
         _mcp,

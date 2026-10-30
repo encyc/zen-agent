@@ -9,8 +9,9 @@ from pathlib import Path
 from zenagent.agent.session import (
     Session,
     list_sessions,
-    session_path,
+    set_session_title,
     truncate_last_turn,
+    unique_session_path,
 )
 from zenagent.app.runtime import Runtime
 from zenagent.export import export_session
@@ -65,6 +66,18 @@ class SessionManager:
     async def resume(self, path: Path) -> None:
         await self.runtime.switch_session(path)
 
+    def rename(self, path: Path, title: str) -> str:
+        """Give a saved session a display name without rewriting its JSONL.
+
+        Raises ``ValueError`` for a path that is not a saved session (renaming
+        nothing would silently pollute the titles sidecar) or for a blank title.
+        Returns the normalized title that was stored.
+        """
+        target = Path(path)
+        if not target.is_file():
+            raise ValueError(f"session not found: {target}")
+        return set_session_title(target, title)
+
     async def new(self) -> Path:
         await self.runtime.switch_session(None)
         return self.current()
@@ -72,14 +85,7 @@ class SessionManager:
     async def fork(self) -> Path:
         """Copy the current transcript into a new session and switch to it."""
         messages = Session(self.current()).load()
-        target_path = session_path("fork")
-        counter = 0
-        while target_path.exists():
-            counter += 1
-            target_path = target_path.with_name(
-                f"{target_path.stem}-{counter}{target_path.suffix}"
-            )
-        target = Session(target_path)
+        target = Session(unique_session_path("fork"))
         for message in messages:
             target.append(message)
         await self.runtime.switch_session(target.path)
@@ -112,7 +118,7 @@ class SessionManager:
             destination = trash / f"{target.stem}-{time.strftime('%H%M%S')}.jsonl"
         target.replace(destination)
         if self.runtime.session.path == target:
-            self.runtime.session = Session(session_path())
+            self.runtime.session = Session(unique_session_path())
             self.runtime.agent.replace_messages([])
         return destination
 

@@ -546,3 +546,64 @@ async def test_slash_hotkeys_lists_bindings(capsys):
     await handle_slash(agent, "hotkeys", "", keybindings=DEFAULT_KEYBINDINGS)
     out = capsys.readouterr().out
     assert "newline" in out and "escape,enter" in out
+
+
+async def test_mode_slash_calls_the_mode_setter():
+    printed: list[str] = []
+
+    def set_mode(argument: str) -> str:
+        assert argument == "plan"
+        return "mode: plan (read-only planning)"
+
+    result = await handle_slash(
+        None, "mode", "plan", print_fn=printed.append, set_mode=set_mode
+    )
+    assert result is None
+    assert printed == ["mode: plan (read-only planning)"]
+
+
+async def test_mode_slash_prints_validation_errors():
+    printed: list[str] = []
+
+    def set_mode(argument: str) -> str:
+        raise ValueError(f"unknown mode: {argument!r} (choose plan|ask|full)")
+
+    await handle_slash(
+        None, "mode", "yolo", print_fn=printed.append, set_mode=set_mode
+    )
+    assert printed and "unknown mode" in printed[0]
+
+
+async def test_rename_slash_sets_the_current_session_title(tmp_path, monkeypatch):
+    import zenagent.agent.session as session_module
+    from zenagent.agent.session import Session
+
+    monkeypatch.setattr(session_module, "sessions_dir", lambda: tmp_path)
+    session = Session(tmp_path / "s.jsonl")
+    printed: list[str] = []
+
+    await handle_slash(
+        None, "rename", "fix the login bug", print_fn=printed.append, session=session
+    )
+
+    assert printed and "fix the login bug" in printed[0]
+    assert session_module.session_title(session.path) == "fix the login bug"
+
+
+async def test_sessions_slash_shows_titles_before_filenames(tmp_path, monkeypatch):
+    import zenagent.cli.repl as repl_module
+    from zenagent.agent.session import SessionInfo
+
+    info = SessionInfo(
+        path=tmp_path / "20260101-000000.jsonl",
+        mtime=1.0,
+        messages=3,
+        title="fix the login bug",
+    )
+    monkeypatch.setattr(repl_module, "list_sessions", lambda: [info])
+    printed: list[str] = []
+
+    await handle_slash(None, "sessions", "", print_fn=printed.append)
+
+    line = printed[0]
+    assert line.index("fix the login bug") < line.index("20260101-000000")

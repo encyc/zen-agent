@@ -23,7 +23,13 @@ from pathlib import Path
 
 from zenagent import __version__
 from zenagent.agent import Agent
-from zenagent.agent.session import Session, latest_session, list_sessions, session_path
+from zenagent.agent.session import (
+    Session,
+    latest_session,
+    list_sessions,
+    unique_session_path,
+)
+from zenagent.app.modes import MODES, mode_prompt_note, resolve_mode
 from zenagent.app.support import (
     api_key_for as _api_key_for,
 )
@@ -196,6 +202,7 @@ async def run_headless(
     skills: bool = True,
     extension_paths: list[str] | None = None,
     read_only: bool = False,
+    mode: str | None = None,
 ) -> int:
     """Run one prompt to completion; returns the process exit code."""
     user_config = load_user_config()
@@ -232,13 +239,16 @@ async def run_headless(
 
     if thinking is None:
         thinking = "high" if model.reasoning else "off"
+    resolved_mode = resolve_mode(
+        explicit=mode, assume_yes=assume_yes, read_only=read_only
+    )
     gate = PermissionGate(
         assume_yes=assume_yes,
         interactive=False,
         allow_dangerous=allow_dangerous,
         allow=user_config.tool_allow,
         deny=user_config.tool_deny,
-        read_only=read_only,
+        mode=resolved_mode,
     )
     tool_list = list(ALL_TOOLS if tools is None else tools)
     mcp_manager: McpManager | None = None
@@ -275,7 +285,9 @@ async def run_headless(
         extension_prompt = loaded_extensions.prompt_text
 
     extra_prompt = "\n\n".join(
-        part for part in (skills_index, extension_prompt) if part
+        part
+        for part in (skills_index, extension_prompt, mode_prompt_note(resolved_mode))
+        if part
     )
     guard = ContextGuard(model.context_window)
     agent = _build_agent(
@@ -302,9 +314,9 @@ async def run_headless(
                 print(f"zenagent: {warning}", file=sys.stderr)
         else:
             print(f"zenagent: no session to resume ({resume})", file=sys.stderr)
-            session = Session(session_path())
+            session = Session(unique_session_path())
     else:
-        session = Session(session_path())
+        session = Session(unique_session_path())
 
     def persist(event: AgentEvent) -> None:
         if event.type == "agent_end" and event.new_messages:
@@ -415,6 +427,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--read-only",
         action="store_true",
         help="refuse every tool that can modify the filesystem or run commands",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=MODES,
+        default=None,
+        help="runtime permission mode: plan (read-only) | ask (confirm) | full (automatic)",
     )
     parser.add_argument(
         "--allow-dangerous",
@@ -594,6 +612,9 @@ def main(argv: list[str] | None = None) -> int:
             raise
         return module.main(raw[1:])
     args = build_parser().parse_args(argv)
+    mode = resolve_mode(
+        explicit=args.mode, assume_yes=args.yes, read_only=args.read_only
+    )
     if args.cwd:
         target = Path(args.cwd).expanduser()
         if not target.is_dir():
@@ -629,7 +650,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if not args.prompt:
         if sys.stdout.isatty() and not args.no_tui:
-            from zenagent.app.permissions import PermissionGate
+            from zenagent.app.permissions import PermissionBroker, PermissionGate
             from zenagent.app.runtime import Runtime, RuntimeOptions
 
             missing = _missing_extra("textual", "rich")
@@ -648,26 +669,32 @@ def main(argv: list[str] | None = None) -> int:
                 context_files=not args.no_context_files,
                 read_only=args.read_only,
                 allow_dangerous=args.allow_dangerous,
+                mode=mode,
                 retries=args.retries,
                 max_turns=args.max_turns,
                 max_cost=args.max_cost,
+            )
+
+            tui_config = load_user_config()
+            broker = PermissionBroker.wrap(
+                PermissionGate(
+                    assume_yes=False,
+                    interactive=False,
+                    allow_dangerous=args.allow_dangerous,
+                    allow=tui_config.tool_allow,
+                    deny=tui_config.tool_deny,
+                    mode=mode,
+                )
             )
 
             async def run_tui_session() -> int:
                 # Imported here so a broken install is reported by the except
                 # below instead of escaping as a traceback.
                 ZenAgentApp = _tui_app_class()
-                runtime = await Runtime.bootstrap(
-                    options,
-                    assume_yes=args.yes,
-                    gate=PermissionGate(
-                        assume_yes=args.yes,
-                        interactive=False,
-                        allow_dangerous=args.allow_dangerous,
-                    ),
-                )
+                runtime = await Runtime.bootstrap(options, gate=broker)
                 try:
                     app = ZenAgentApp(runtime)
+                    broker.set_confirm(app.request_tool_approval)
                     await app.run_async()
                     if app.exit_summary:
                         print(app.exit_summary)
@@ -704,6 +731,7 @@ def main(argv: list[str] | None = None) -> int:
                     skills=not args.no_skills,
                     extension_paths=args.extension_paths,
                     read_only=args.read_only,
+                    mode=mode,
                     theme=args.theme,
                     templates=not args.no_templates,
                 )
@@ -735,6 +763,7 @@ def main(argv: list[str] | None = None) -> int:
                 skills=not args.no_skills,
                 extension_paths=args.extension_paths,
                 read_only=args.read_only,
+                mode=mode,
             )
         )
     except KeyboardInterrupt:

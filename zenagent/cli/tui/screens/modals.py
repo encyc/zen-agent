@@ -2,18 +2,27 @@
 
 from __future__ import annotations
 
+import time
+from dataclasses import dataclass
 from pathlib import Path
 
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Label
+from textual.widgets import Input, Label, OptionList
 
 from zenagent.app.models import ModelEntry
 from zenagent.app.sessions import SessionEntry
 from zenagent.cli.tui.screens.palette import PaletteItem, PaletteScreen
 
-__all__ = ["Confirm", "ModelPicker", "SessionPicker"]
+__all__ = [
+    "Confirm",
+    "ModelPicker",
+    "RenamePrompt",
+    "SessionAction",
+    "SessionPicker",
+    "ToolApproval",
+]
 
 
 class ModelPicker(PaletteScreen[str]):
@@ -37,21 +46,70 @@ class ModelPicker(PaletteScreen[str]):
         super().__init__(title="Models", items=items, placeholder="Search models")
 
 
-class SessionPicker(PaletteScreen[Path]):
-    """Pick a saved session to resume."""
+@dataclass(frozen=True)
+class SessionAction:
+    """What the session picker wants the app to do with the highlighted row."""
+
+    kind: str
+    path: Path | None = None
+
+
+class SessionPicker(PaletteScreen[SessionAction]):
+    """Pick a saved session; letter keys act on the highlighted one."""
+
+    ACTION_KEYS = {  # noqa: RUF012 - read by PaletteSearch
+        "n": "new",
+        "f": "fork",
+        "d": "delete",
+        "e": "export",
+        "r": "rename",
+    }
 
     def __init__(self, entries: list[SessionEntry]) -> None:
         self.entries = entries
         items = [
             PaletteItem(
-                label=f"{'●' if entry.current else ' '} {entry.path.name}",
-                value=entry.path,
-                note=f"{entry.messages} msgs · {entry.size // 1024}k",
+                label=f"{'●' if entry.current else ' '} {entry.title or entry.path.name}",
+                value=SessionAction("resume", entry.path),
+                note=(
+                    f"{entry.messages} msgs · "
+                    f"{time.strftime('%m-%d %H:%M', time.localtime(entry.created))}"
+                ),
                 selected=entry.current,
             )
             for entry in entries
         ]
-        super().__init__(title="Sessions", items=items, placeholder="Search sessions")
+        super().__init__(
+            title="Sessions",
+            items=items,
+            placeholder="Search sessions",
+            footer=(
+                "↑↓ move   enter resume   n new   f fork   "
+                "d delete   e export   r rename"
+            ),
+        )
+
+    def _highlighted_path(self) -> Path | None:
+        option_list = self.query_one("#palette-list", OptionList)
+        index = option_list.highlighted
+        if index is None or not 0 <= index < len(self._filtered):
+            return None
+        return self._filtered[index].value.path
+
+    def action_new(self) -> None:
+        self.dismiss(SessionAction("new"))
+
+    def action_fork(self) -> None:
+        self.dismiss(SessionAction("fork"))
+
+    def action_delete(self) -> None:
+        self.dismiss(SessionAction("delete", self._highlighted_path()))
+
+    def action_export(self) -> None:
+        self.dismiss(SessionAction("export", self._highlighted_path()))
+
+    def action_rename(self) -> None:
+        self.dismiss(SessionAction("rename", self._highlighted_path()))
 
 
 class Confirm(ModalScreen[bool]):
@@ -73,6 +131,68 @@ class Confirm(ModalScreen[bool]):
 
     def action_no(self) -> None:
         self.dismiss(False)
+
+
+class RenamePrompt(ModalScreen[str]):
+    """A one-line rename dialog for a saved session."""
+
+    BINDINGS = [("escape", "cancel", "Cancel")]  # noqa: RUF012 - Textual class API
+
+    def __init__(self, value: str = "") -> None:
+        super().__init__()
+        self.initial = value
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="modal"):
+            yield Label("rename session")
+            yield Input(value=self.initial, id="rename-input", placeholder="session name")
+            yield Label("[enter] save   [esc] cancel")
+
+    def on_mount(self) -> None:
+        field = self.query_one("#rename-input", Input)
+        field.focus()
+        field.cursor_position = len(field.value)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        self.dismiss(event.value.strip() or None)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+class ToolApproval(ModalScreen[str]):
+    """Ask-mode approval for one tool call: allow / always / deny."""
+
+    BINDINGS = [  # noqa: RUF012 - Textual class API
+        ("y", "allow", "Allow"),
+        ("a", "always", "Always"),
+        ("n,escape", "deny", "Deny"),
+        ("enter", "allow", "Allow"),
+    ]
+
+    def __init__(self, tool_name: str, arguments: dict) -> None:
+        super().__init__()
+        self.tool_name = tool_name
+        self.arguments = arguments
+
+    def compose(self) -> ComposeResult:
+        preview = ", ".join(f"{key}={value!r}" for key, value in self.arguments.items())
+        if len(preview) > 200:
+            preview = preview[:199] + "…"
+        with Vertical(classes="modal"):
+            yield Label(f"allow {self.tool_name}?")
+            if preview:
+                yield Label(preview)
+            yield Label("[y] allow   [a] allow for this session   [n] deny")
+
+    def action_allow(self) -> None:
+        self.dismiss("allow")
+
+    def action_always(self) -> None:
+        self.dismiss("always")
+
+    def action_deny(self) -> None:
+        self.dismiss("deny")
 
 
 class SettingsPicker(PaletteScreen[str]):

@@ -63,6 +63,10 @@ uv run zen -p "what is in this picture?" --image shot.png
 uv run zen -p "..." --max-turns 20 --max-cost 0.05 --no-context-files
 uv run zen -p "analyze this" --read-only --trace run.jsonl --cwd /path/to/project
 
+# runtime modes: plan = read-only, ask = confirm (default), full = automatic
+uv run zen -p "investigate and propose a plan" --mode plan
+uv run zen -p "apply the fix" --mode full
+
 # structured output (a single JSON object; no streamed text)
 uv run zen -p "say hi" --json
 
@@ -70,9 +74,12 @@ uv run zen -p "say hi" --json
 uv run zen
 ```
 
-Read-only tools (`read_file`, `list_dir`, `glob`, `grep`) run without asking.
-Write/execute tools (`write_file`, `edit_file`, `bash`) need `--yes`, an
-interactive "yes", or an "always" answer for that tool in the session.
+Runtime modes: `plan` (read-only; the agent investigates and proposes a plan),
+`ask` (default: write/execute tools need confirmation), `full` (run write/execute
+tools without asking; catastrophic commands still need `--allow-dangerous`).
+`--yes` means `full`, `--read-only` means `plan`, and `/mode plan|ask|full`
+switches mid-session. Session display names come from the first question; rename
+with `/rename <name>` (or `r` in the TUI session picker).
 
 ### Diagnostics
 
@@ -122,9 +129,11 @@ a direct MCP call, and a `zen rpc` client. For embedding with the full app layer
 | `/clear` | forget the conversation |
 | `/model [id]` | show / switch model (next turn) |
 | `/thinking [level]` | `off` / `low` / `medium` / `high` / `max` |
+| `/mode [plan\|ask\|full]` | show or switch the runtime permission mode |
 | `/compact` | summarize the session into a new session file |
 | `/undo` | drop the last turn (writes a new session file) |
-| `/sessions` | list saved sessions |
+| `/sessions` | list saved sessions (display name + filename) |
+| `/rename <name>` | rename the current session |
 | `/fork <n>` | branch a new session at user message n |
 | `/import <path>` | load a session file and continue it |
 | `/image <path>` | attach an image for the next prompt |
@@ -267,7 +276,10 @@ gh workflow run publish.yml     # optional dry run on CI (build + verify only)
 
 ## Status
 
-Milestones 1–2 are complete and verified against a live provider. Implemented:
-the interactive harness and the Textual TUI, MCP, extensions, and the protocol
-adapters (OpenAI chat/completions and responses, Anthropic messages, Google
-generative AI). Not yet: subagents and OS-level sandboxing.
+v1 (milestones 1–4), S1–S3 and the Textual TUI are complete; the offline suite
+and recorded live captures are the gate (`docs/testing.md`). Implemented:
+interactive REPL + TUI, MCP, skills/templates/extensions, RPC/SDK,
+export/usage/telemetry, four protocol adapters, runtime modes
+(`plan`/`ask`/`full`), session display names + rename, and TUI session
+management (new/fork/delete/export/rename). Not yet: subagents and OS-level
+sandboxing.

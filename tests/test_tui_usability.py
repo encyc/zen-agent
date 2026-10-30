@@ -33,9 +33,10 @@ async def test_slash_hints_filter_and_complete(fake_runtime):
             await pilot.press(char)
         await pilot.pause()
         hints = app.query_one(CommandHints)
-        assert "model" in hints.plain and "sessions" not in hints.plain
+        assert "mode" in hints.plain and "model" in hints.plain
+        assert "sessions" not in hints.plain
 
-        await pilot.press("tab")
+        await pilot.press("down", "tab")
         await pilot.pause()
         assert prompt.text == "/model "
         assert hints.display is False
@@ -196,3 +197,13 @@ async def test_work_indicator_switches_with_the_run(gated_app):
         await app.chat.wait_for_idle()
         await pilot.pause()
         assert indicator.running is False
+
+
+async def test_mode_command_updates_runtime_and_status(picker_app):
+    app = picker_app
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await app._dispatch_command("mode", "plan")
+        await pilot.pause()
+        assert app.runtime.mode == "plan"
+        assert app.chat.status.mode == "plan"

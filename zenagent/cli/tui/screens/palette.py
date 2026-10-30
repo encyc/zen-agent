@@ -10,7 +10,7 @@ sizing rules (<100 columns -> full width) live in one place.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Generic, TypeVar
+from typing import ClassVar, Generic, TypeVar
 
 from textual import events
 from textual.app import ComposeResult
@@ -28,12 +28,22 @@ _NAV_KEYS = {"up", "down", "pageup", "pagedown", "home", "end", "enter"}
 
 
 class PaletteSearch(Input):
-    """Search box that hands navigation keys to the list beneath it."""
+    """Search box that hands navigation keys to the list beneath it.
+
+    When the box is empty, a screen's :attr:`PaletteScreen.ACTION_KEYS` also get
+    a chance first: that is how a picker offers single-letter actions without
+    swallowing letters the user needs for searching.
+    """
 
     async def _on_key(self, event: events.Key) -> None:
         if event.key in _NAV_KEYS:
             event.stop()
             self.screen.navigate_list(event.key)
+            return
+        shortcuts = getattr(self.screen, "ACTION_KEYS", {})
+        if shortcuts and not self.value and event.key in shortcuts:
+            event.stop()
+            getattr(self.screen, f"action_{shortcuts[event.key]}")()
             return
         await super()._on_key(event)
 
@@ -53,6 +63,10 @@ class PaletteScreen(ModalScreen[T | None], Generic[T]):
     """A bottom-anchored list panel with search and a footer hint."""
 
     BINDINGS = [("escape", "cancel", "Cancel")]  # noqa: RUF012 - Textual class API
+
+    #: Empty-search single-key actions, e.g. ``{"n": "new"}``; a subclass that
+    #: declares these must provide the matching ``action_<name>`` methods.
+    ACTION_KEYS: ClassVar[dict[str, str]] = {}
 
     DEFAULT_CSS = """
     PaletteScreen {

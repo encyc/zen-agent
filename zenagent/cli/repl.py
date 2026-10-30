@@ -24,9 +24,12 @@ from zenagent.agent.session import (
     Session,
     latest_session,
     list_sessions,
-    session_path,
+    session_title,
+    set_session_title,
     truncate_last_turn,
+    unique_session_path,
 )
+from zenagent.app.modes import describe_modes, mode_prompt_note
 from zenagent.cli.compact import compact, maybe_auto_compact
 from zenagent.cli.completion import SLASH_COMMANDS, ReplCompleter, help_text
 from zenagent.cli.images import read_image_argument
@@ -113,6 +116,7 @@ async def handle_slash(
     reload_runtime=None,
     set_theme=None,
     keybindings=None,
+    set_mode=None,
 ) -> str | None:
     """Run one slash command; returns ``"exit"`` when the REPL should stop."""
     if command in ("exit", "quit"):
@@ -123,6 +127,30 @@ async def handle_slash(
             print_fn("\nprompt templates:")
             for template in template_list:
                 print_fn(f"  /{template.name}  {template.description}")
+        return None
+    if command == "mode":
+        if set_mode is None:
+            print_fn("mode switching is unavailable in this session")
+            return None
+        try:
+            print_fn(set_mode(argument))
+        except ValueError as exc:
+            print_fn(f"mode: {exc}")
+        return None
+    if command == "rename":
+        if session is None:
+            print_fn("rename is unavailable in this session")
+            return None
+        requested = argument.strip()
+        if not requested:
+            print_fn(f"session name: {session_title(session.path)}")
+            return None
+        try:
+            stored = set_session_title(session.path, requested)
+        except ValueError as exc:
+            print_fn(f"rename: {exc}")
+        else:
+            print_fn(f"renamed: {stored}")
         return None
     if command == "clear":
         agent.reset()
@@ -158,7 +186,7 @@ async def handle_slash(
         for position, info in enumerate(infos, start=1):
             mark = "*" if info.path == current else " "
             title = info.title or "(empty)"
-            print_fn(f"{mark} {position:2d}. {info.path.name} · {info.messages} msgs · {title}")
+            print_fn(f"{mark} {position:2d}. {title} · {info.messages} msgs · {info.path.name}")
         return None
     if command == "fork":
         if session is None:
@@ -373,7 +401,7 @@ def _session_for(resume: str | Path | None) -> Session:
     if resume in (None, "", "latest"):
         path = latest_session() if resume == "latest" else None
         if path is None:
-            path = session_path()
+            path = unique_session_path()
     else:
         path = Path(resume)
     return Session(path)
@@ -428,6 +456,7 @@ async def repl(
     templates: bool = True,
     extension_paths: list[str] | None = None,
     read_only: bool = False,
+    mode: str = "ask",
     theme: str | None = None,
     metrics: Path | None = None,
 ) -> int:
@@ -538,7 +567,20 @@ async def repl(
     for command in extension_commands.values():
         extra_commands.setdefault(f"/{command.name}", command.description)
 
-    prompt = build_prompt(tool_list, extra_text)
+    gate = PermissionGate(
+        interactive=True,
+        allow_dangerous=allow_dangerous,
+        allow=user_config.tool_allow,
+        deny=user_config.tool_deny,
+        mode=mode,
+    )
+
+    def system_prompt_for(base: str) -> str:
+        note = mode_prompt_note(gate.mode)
+        return f"{base}\n\n{note}" if note else base
+
+    base_prompt = build_prompt(tool_list, extra_text)
+    prompt = system_prompt_for(base_prompt)
     agent = Agent(
         model=model,
         system_prompt=prompt,
@@ -551,14 +593,16 @@ async def repl(
         max_turns=max_turns,
         max_cost=max_cost,
         retries=retries,
-        before_tool_call=PermissionGate(
-            interactive=True,
-            allow_dangerous=allow_dangerous,
-            allow=user_config.tool_allow,
-            deny=user_config.tool_deny,
-            read_only=read_only,
-        ).before_tool_call,
+        before_tool_call=gate.before_tool_call,
     )
+
+    def set_mode(argument: str) -> str:
+        requested = argument.strip()
+        if not requested:
+            return f"mode: {gate.mode} · {describe_modes()}"
+        gate.set_mode(requested)  # ValueError drives the user-facing message
+        agent.system_prompt = system_prompt_for(base_prompt)
+        return f"mode: {gate.mode} · {describe_modes()}"
     if resume is not None:
         agent.replace_messages(session.load())
         for warning in session.warnings:
@@ -566,6 +610,7 @@ async def repl(
 
     async def refresh_mcp(force: bool = False) -> None:
         """Reconnect failed servers and swap refreshed tools into the agent."""
+        nonlocal base_prompt
         if mcp_manager is None:
             return
         for warning in await mcp_manager.retry_failed(force=force):
@@ -573,14 +618,15 @@ async def repl(
         refreshed = [*base_tools, *mcp_manager.tool_defs()]
         if [tool.name for tool in refreshed] != [tool.name for tool in agent.tools]:
             agent.tools = refreshed
-            agent.system_prompt = build_prompt(refreshed)
+            base_prompt = build_prompt(refreshed)
+            agent.system_prompt = system_prompt_for(base_prompt)
             print_fn(f"mcp: tools updated ({len(refreshed)} available)")
 
     async def reload_runtime() -> None:
         """Re-discover skills, templates and extensions without restarting."""
         nonlocal tool_list, skill_list, template_list, template_by_name
         nonlocal extra_commands, extension_commands
-        nonlocal extension_hooks
+        nonlocal extension_hooks, base_prompt
         if agent.is_streaming:
             print_fn("cannot reload while the agent is working")
             return
@@ -601,7 +647,8 @@ async def repl(
             extra_commands.setdefault(f"/{command.name}", command.description)
         extension_commands, extension_hooks = commands_now, hooks_now
         agent.tools = tools_now
-        agent.system_prompt = build_prompt(tools_now, extra_now)
+        base_prompt = build_prompt(tools_now, extra_now)
+        agent.system_prompt = system_prompt_for(base_prompt)
         print_fn(
             f"reloaded: {len(tools_now)} tools · {len(skills_now)} skills · "
             f"{len(templates_now)} templates"
@@ -740,6 +787,7 @@ async def repl(
                         reload_runtime=reload_runtime,
                         set_theme=set_theme,
                         keybindings=active_keybindings,
+                        set_mode=set_mode,
                     )
                     == "exit"
                 ):

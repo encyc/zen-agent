@@ -10,6 +10,20 @@
 REPL 里：`/session` 看当前、`/sessions` 列出、`/fork` 复制、`/import PATH` 载入、`/undo` 撤销最后一轮、
 `/compact` 手动压缩。
 
+## 会话名称
+
+- 默认显示名是首个用户消息的 brief：压空白、去 Markdown 前缀（`#`、`>`、`-`、`*`、`+`、反引号）、
+  取首行，超过 40 字符截断并加 `…`；没有可读内容（空会话、只有 assistant 消息）时显示 `(empty)`。
+- 改名：REPL `/rename <name>`（TUI 会话选择器里按 `r`）。标题会压空白、去首尾空白，上限 80 字符；
+  空标题报错。`SessionManager.rename(path, title)` 是同一操作的 app 层入口。
+- 标题存在 sidecar `~/.zenagent/sessions/.titles.json`，内容是 `{会话文件名: 标题}`，**不写进 JSONL**：
+  会话文件仍是 append-only 的 `Message.to_json()`，`zen export` 和任何其他消费方照旧解析。
+- sidecar 缺失、损坏或不是 dict 时读取回退到派生 brief，绝不报错；写入先写临时文件再 `os.replace`，
+  不会留下半截 JSON，也不影响会话文件本身。
+- `fork` / `/undo`（rewrite）产生的是**新文件**，按自己的首个用户消息重新派生名称，不继承旧标题。
+- TUI 会话选择器（`/sessions` 或 `ctrl+k` → sessions）按 `n` 新建、`f` fork、`d` 删除（二次确认）、
+  `e` 导出、`r` 改名；列表显示会话名，文件名只作副信息。
+
 ## 上下文压缩
 
 - 自动：每个 run 结束后如果上下文超过阈值，会压缩（`--no-auto-compact` 关闭）。

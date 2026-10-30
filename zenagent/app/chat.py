@@ -71,6 +71,7 @@ class ChatController:
             steering=agent.pending_steering,
             session_name=Path(self.runtime.session.path).stem,
             cwd=str(Path.cwd()),
+            mode=self.runtime.mode,
         )
 
     # -- commands -----------------------------------------------------------

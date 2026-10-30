@@ -75,6 +75,17 @@
 > 与 v0.1 的差异：`ctrl+c` 从"中断"改为"清草稿"，中断改为 `esc`；退出从 `ctrl+q`
 > 改为 `ctrl+d`；命令面板从 `ctrl+p` 改为 `ctrl+k`（`ctrl+p` 让给模型循环，跟 omp 一致）。
 
+## 运行模式与工具审批
+
+状态带左侧显示当前模式（`plan` / `ask` / `full`）。
+
+- `/mode plan|ask|full` 或输入框里的 `/mode` 命令切换，下一次工具调用立即生效；
+  `zen --mode ...` 决定启动模式（默认 ask）。
+- **plan**：写/执行工具被拒，模型改为只读调研并给出计划。
+- **ask**：写/执行工具弹审批框：`y` 允许一次、`a` 本会话总是允许、`n`/`esc` 拒绝；
+  120 秒无响应按拒绝处理。审批框一次只弹一个（并发工具调用会排队）。
+- **full**：直接放行；危险命令仍被拦截（除非 `--allow-dangerous`），`[tools] deny` 永远优先。
+
 ## 模型管理
 
 `alt+p`（或 `ctrl+k` → `model`，或 `/model`）打开选择器：
@@ -89,10 +100,13 @@
 ## 会话管理
 
 `ctrl+k` → `sessions`（或 `/sessions`）打开选择器：同一套浮层骨架，带搜索。
+列表显示的是**会话名**（首个用户问题的 brief，或 `/rename` 设置的名字），文件名作为副信息。
 
 - `enter` 恢复会话（运行中会先中断当前 run 再切换）。
-- 删除走「移到 `sessions/.trash/`」，不做不可逆 unlink；当前会话删除后自动新建空会话。
-- fork/导出在 REPL 里仍可用（`/fork`、`/export`）；TUI v1 未提供对应按键。
+- `n` 新建、`f` fork 当前会话、`d` 删除、`e` 导出 Markdown、`r` 改名（都属于当前高亮行）。
+- 删除前弹 Confirm 二次确认，删除走「移到 `sessions/.trash/`」，不做不可逆 unlink；
+  当前会话删除后自动新建空会话。
+- 也可以直接输入 `/rename <name>` 改当前会话名；名称存在 `sessions/.titles.json`，不写进 JSONL。
 
 ## 排障
 

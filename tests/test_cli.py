@@ -745,7 +745,7 @@ def test_policy_flags_reach_the_permission_gate(monkeypatch):
     monkeypatch.setattr(cli_main, "_build_agent", build)
     assert cli_main.main(["-p", "hi", "--read-only"]) == 0
     gate = captured["gate"]
-    assert gate.read_only is True
+    assert gate.mode == "plan"
     assert gate.allow == ["read_*"]
     assert gate.deny == ["bash"]
 
@@ -776,3 +776,44 @@ def test_version_flag_prints_the_version(capsys):
     assert excinfo.value.code == 0
     out = capsys.readouterr().out + capsys.readouterr().err
     assert __version__ in out
+
+
+def _capture_gate_for(monkeypatch, argv):
+    from zenagent.config import UserConfig
+
+    monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
+    monkeypatch.setattr(cli_main, "load_user_config", lambda: UserConfig())
+    captured: dict = {}
+
+    def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
+              session_id=None, transform_context=None, max_turns=None,
+              max_cost=None, retries=0, context_files=True, extra_prompt=""):
+        captured["gate"] = gate
+        return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=fake_stream())
+
+    monkeypatch.setattr(cli_main, "_build_agent", build)
+    assert cli_main.main(argv) == 0
+    return captured["gate"]
+
+
+def test_mode_flag_reaches_the_permission_gate(monkeypatch):
+    gate = _capture_gate_for(monkeypatch, ["-p", "hi", "--mode", "full"])
+    assert gate.mode == "full"
+
+
+def test_yes_maps_to_full_mode(monkeypatch):
+    gate = _capture_gate_for(monkeypatch, ["-p", "hi", "--yes"])
+    assert gate.mode == "full"
+
+
+def test_default_mode_is_ask(monkeypatch):
+    gate = _capture_gate_for(monkeypatch, ["-p", "hi"])
+    assert gate.mode == "ask"
+
+
+def test_unknown_mode_is_rejected(monkeypatch):
+    import pytest
+
+    monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
+    with pytest.raises(SystemExit):
+        cli_main.main(["-p", "hi", "--mode", "yolo"])

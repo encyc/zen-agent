@@ -12,9 +12,11 @@ denied with an explanatory reason, which the model sees as an is_error result.
 
 from __future__ import annotations
 
+import asyncio
 import fnmatch
 import re
 
+from zenagent.app.modes import DEFAULT_MODE, MODES, normalize_mode
 from zenagent.types import ToolCall
 
 __all__ = [
@@ -115,6 +117,7 @@ class PermissionGate:
         allow: list[str] | None = None,
         deny: list[str] | None = None,
         read_only: bool = False,
+        mode: str = DEFAULT_MODE,
     ) -> None:
         self.assume_yes = assume_yes
         self.interactive = interactive
@@ -122,30 +125,59 @@ class PermissionGate:
         self.allow = list(allow or [])
         self.deny = list(deny or [])
         self.read_only = read_only
+        self.mode = self._validated_mode(mode)
         #: Tools the user answered "a" for during this session.
         self._always_allowed: set[str] = set()
 
-    async def check(self, tool_name: str, args: dict) -> tuple[bool, str]:
-        """Return ``(allowed, reason)``; reason is empty when allowed."""
+    @staticmethod
+    def _validated_mode(mode: str) -> str:
+        normalized = normalize_mode(mode)
+        if normalized is None:
+            raise ValueError(f"unknown mode: {mode!r} (choose {'|'.join(MODES)})")
+        return normalized
+
+    def set_mode(self, mode: str) -> None:
+        """Switch the runtime mode; the next tool call sees it immediately."""
+        self.mode = self._validated_mode(mode)
+
+    def policy_refusal(self, tool_name: str, args: dict) -> str | None:
+        """Why a call is refused *before any confirmation*, or ``None``.
+
+        Danger, explicit deny patterns, plan mode and ``--read-only`` are
+        policy: they beat both ``--yes`` and a session-wide "always allow".
+        """
         if tool_name == "bash" and not self.allow_dangerous:
             # --yes means "don't ask me", not "run anything": catastrophic
             # commands need the explicit --allow-dangerous escape hatch.
             danger = dangerous_command_reason(str(args.get("command", "")))
             if danger is not None:
-                return (
-                    False,
-                    f"refused {danger}; this needs --allow-dangerous",
-                )
+                return f"refused {danger}; this needs --allow-dangerous"
         denied_by = matches_any(self.deny, tool_name)
         if denied_by is not None:
-            return False, f"tool {tool_name!r} is denied by policy ({denied_by})"
+            return f"tool {tool_name!r} is denied by policy ({denied_by})"
+        if self.mode == "plan" and tool_name not in READ_ONLY_TOOLS:
+            return (
+                f"tool {tool_name!r} is blocked by plan mode (read-only); "
+                "switch to /mode ask or /mode full to execute"
+            )
         if self.read_only and tool_name not in READ_ONLY_TOOLS:
-            return False, f"tool {tool_name!r} is blocked by --read-only"
+            return f"tool {tool_name!r} is blocked by --read-only"
+        return None
+
+    async def check(self, tool_name: str, args: dict) -> tuple[bool, str]:
+        """Return ``(allowed, reason)``; reason is empty when allowed."""
+        refusal = self.policy_refusal(tool_name, args)
+        if refusal is not None:
+            return False, refusal
         if matches_any(self.allow, tool_name) is not None:
             return True, ""
         if tool_name in READ_ONLY_TOOLS:
             return True, ""
-        if self.assume_yes or tool_name in self._always_allowed:
+        if (
+            self.mode == "full"
+            or self.assume_yes
+            or tool_name in self._always_allowed
+        ):
             return True, ""
         if not self.interactive:
             reason = (
@@ -196,6 +228,8 @@ class PermissionBroker:
         self._gate = gate or _Gate(assume_yes=False, interactive=False)
         self._confirm = None
         self._allowed: set[str] = set()
+        # Tool calls run concurrently; approval modals must not stack.
+        self._confirm_lock = asyncio.Lock()
 
     @classmethod
     def deny_all(cls) -> PermissionBroker:
@@ -204,6 +238,13 @@ class PermissionBroker:
     @classmethod
     def wrap(cls, gate) -> PermissionBroker:
         return cls(gate)
+
+    @property
+    def mode(self) -> str:
+        return self._gate.mode
+
+    def set_mode(self, mode: str) -> None:
+        self._gate.set_mode(mode)
 
     def set_confirm(self, callback) -> None:
         self._confirm = callback
@@ -215,13 +256,25 @@ class PermissionBroker:
         name = getattr(tool_call, "name", "")
         from zenagent.app.permissions import READ_ONLY_TOOLS
 
+        # Policy first: plan mode, deny patterns and catastrophic commands win
+        # over a session-wide "always allow" grant.
+        refusal = self._gate.policy_refusal(name, arguments)
+        if refusal is not None:
+            return {"block": True, "reason": refusal}
         if name in READ_ONLY_TOOLS or name in self._allowed:
             return None
-        allowed, reason = await self._gate.check(name, arguments)
-        if not allowed:
-            return {"block": True, "reason": reason or f"tool {name!r} denied"}
-        if self._confirm is not None:
-            if await self._confirm(name, arguments):
-                return None
-            return {"block": True, "reason": f"denied by user: {name}"}
-        return {"block": True, "reason": f"tool {name!r} requires approval"}
+        if matches_any(self._gate.allow, name) is not None:
+            return None
+        if self._gate.mode == "full":
+            # full mode is the explicit "don't ask me" branch.
+            return None
+        if self._confirm is None:
+            return {"block": True, "reason": f"tool {name!r} requires approval"}
+        async with self._confirm_lock:
+            answer = await self._confirm(name, arguments)
+        if answer is True or answer == "allow":
+            return None
+        if answer == "always":
+            self.allow_for_session(name)
+            return None
+        return {"block": True, "reason": f"denied by user: {name}"}
