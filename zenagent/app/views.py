@@ -48,6 +48,9 @@ class ToolCallView:
     name: str
     args_preview: str
     args: dict = field(default_factory=dict)
+    #: Structured tool-result data for UI rendering only (never persisted or sent
+    #: to the model); empty on history replay, which keeps cards generic.
+    details: dict = field(default_factory=dict)
     status: Literal["running", "ok", "error"] = "running"
     result_text: str = ""
     is_error: bool = False

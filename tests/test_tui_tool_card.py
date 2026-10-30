@@ -88,3 +88,41 @@ async def test_ctrl_o_expands_every_card_at_once(chat_app_with_one_tool):
         await pilot.press("ctrl+o")
         await pilot.pause()
         assert all(card.collapsed for card in cards)
+
+
+def test_bash_card_shows_the_command_and_exit_code():
+    card = ToolCard(view(name="bash", args={"command": "pytest -q"},
+                        details={"exit_code": 1, "duration_ms": 120}))
+    assert "$" not in card.plain  # 只加信息，不改变卡形状
+    assert "pytest -q" in card.plain and "exit 1" in card.plain
+
+
+def test_edit_card_shows_diff_stats():
+    diff = "--- a/x.py\n+++ b/x.py\n@@\n-old\n+new\n+more\n"
+    card = ToolCard(view(name="edit_file", args={"path": "x.py"},
+                        details={"path": "x.py", "diff": diff}))
+    assert "x.py" in card.plain and "+2/-1" in card.plain
+
+
+def test_read_card_shows_line_count_and_truncation():
+    card = ToolCard(view(name="read_file", args={"path": "a.py"},
+                        details={"total_lines": 400, "truncated": True}))
+    assert "a.py" in card.plain and "400 lines" in card.plain and "truncated" in card.plain
+
+
+def test_grep_card_shows_match_count():
+    card = ToolCard(view(name="grep", args={"pattern": "TODO"},
+                        details={"matches": 7}))
+    assert "TODO" in card.plain and "7 matches" in card.plain
+
+
+def test_cards_degrade_without_details_and_for_unknown_tools():
+    # 历史回放没有 details，新工具名也可能出现：都必须回退到通用标题。
+    assert "mystery" in ToolCard(view(name="mystery", details={})).plain
+    assert "read_file" in ToolCard(view(name="read_file", details={})).plain
+
+
+def test_long_bash_command_never_wraps_the_collapsed_row():
+    card = ToolCard(view(name="bash", args={"command": "x" * 500},
+                        details={"exit_code": 0}))
+    assert card.size.height in (0, 1)

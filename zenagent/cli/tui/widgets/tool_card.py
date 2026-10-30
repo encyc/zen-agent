@@ -28,6 +28,22 @@ _STATUS_LABEL = {"running": "running", "ok": "ok", "error": "failed"}
 _STATUS_DOT = {"running": ("◐", _ACCENT), "ok": ("●", _MUTED), "error": ("●", _ERROR)}
 
 
+def _first_line(value: object) -> str:
+    text = str(value or "")
+    return text.splitlines()[0] if text.splitlines() else ""
+
+
+def _diff_stats(diff: str) -> tuple[int, int]:
+    """``(added, removed)`` for a unified diff, ignoring the ``+++``/``---`` heads."""
+    added = removed = 0
+    for line in diff.splitlines():
+        if line.startswith("+") and not line.startswith("+++"):
+            added += 1
+        elif line.startswith("-") and not line.startswith("---"):
+            removed += 1
+    return added, removed
+
+
 class ToolCard(Static):
     """One row while collapsed; the tail of the output when opened."""
 
@@ -84,18 +100,69 @@ class ToolCard(Static):
         text = Text()
         text.append(f"{dot} ", style=dot_style)
         text.append(view.name, style=_TEXT)
-        args = view.args_preview
-        if args:
-            budget = max(8, self._width() - len(view.name) - 24)
-            if len(args) > budget:
-                args = args[: max(1, budget - 1)] + "…"
+        detail = self._family_detail()
+        if detail:
+            budget = max(8, self._width() - len(text.plain) - 24)
+            if len(detail) > budget:
+                detail = detail[: max(1, budget - 1)] + "…"
             text.append("  ")
-            text.append(args, style=_DIM)
+            text.append(detail, style=_DIM)
         text.append("  ·  ", style=_DIM)
         text.append(_STATUS_LABEL.get(view.status, view.status), style=_DIM)
         if view.duration_ms is not None:
             text.append(f" · {view.duration_ms}ms", style=_DIM)
         return text
+
+    def _family_detail(self) -> str:
+        """The one-line body after the tool name: omp's per-family head grammar.
+
+        Falls back to the JSON argument preview for unknown tools and for
+        history replay (which carries no ``details``).
+        """
+        view = self.view
+        args = view.args or {}
+        details = view.details or {}
+        name = view.name
+
+        if name == "bash":
+            command = _first_line(args.get("command"))
+            exit_code = details.get("exit_code")
+            if exit_code is None:
+                return command
+            return f"{command}  ·  exit {exit_code}" if command else f"exit {exit_code}"
+
+        path = details.get("path") or args.get("path")
+        if name == "read_file":
+            total = details.get("total_lines")
+            parts = [value for value in (path, f"{total} lines" if total else "") if value]
+            if details.get("truncated"):
+                parts.append("truncated")
+            return "  ·  ".join(parts)
+
+        if name == "edit_file":
+            added, removed = _diff_stats(str(details.get("diff") or ""))
+            parts = [value for value in (path, f"⟨+{added}/-{removed}⟩" if details.get("diff") else "") if value]
+            return "  ·  ".join(parts)
+
+        if name == "write_file":
+            content = args.get("content")
+            lines = len(content.splitlines()) if isinstance(content, str) else 0
+            parts = [value for value in (path, f"{lines} lines" if lines else "") if value]
+            return "  ·  ".join(parts)
+
+        if name == "grep":
+            pattern = args.get("pattern")
+            matches = details.get("matches")
+            parts = [f"'{pattern}'" if pattern is not None else ""]
+            if matches is not None:
+                parts.append(f"{matches} matches")
+            return "  ·  ".join(part for part in parts if part)
+
+        if name == "glob":
+            pattern = args.get("pattern")
+            return f"'{pattern}'" if pattern is not None else ""
+
+        return view.args_preview
 
     def _renderable(self) -> Text:
         text = self._head()

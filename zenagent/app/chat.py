@@ -205,6 +205,7 @@ class ChatController:
                 card.is_error = bool(event.is_error)
                 card.status = "error" if event.is_error else "ok"
                 card.result_text = _result_text(event.result)
+                card.details = dict(getattr(event.result, "details", None) or {})
                 card.duration_ms = event.duration_ms
         else:
             return
