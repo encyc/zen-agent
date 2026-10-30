@@ -181,3 +181,47 @@ class PermissionGate:
         if allowed:
             return None
         return {"block": True, "reason": reason}
+
+
+class PermissionBroker:
+    """Interactive approval on top of PermissionGate.
+
+    ``deny_all()`` is the headless/TUI fallback: reads pass, everything else is
+    refused with a reason the model can see.
+    """
+
+    def __init__(self, gate=None) -> None:
+        from zenagent.app.permissions import PermissionGate as _Gate
+
+        self._gate = gate or _Gate(assume_yes=False, interactive=False)
+        self._confirm = None
+        self._allowed: set[str] = set()
+
+    @classmethod
+    def deny_all(cls) -> PermissionBroker:
+        return cls()
+
+    @classmethod
+    def wrap(cls, gate) -> PermissionBroker:
+        return cls(gate)
+
+    def set_confirm(self, callback) -> None:
+        self._confirm = callback
+
+    def allow_for_session(self, tool_name: str) -> None:
+        self._allowed.add(tool_name)
+
+    async def before_tool_call(self, tool_call, arguments: dict):
+        name = getattr(tool_call, "name", "")
+        from zenagent.app.permissions import READ_ONLY_TOOLS
+
+        if name in READ_ONLY_TOOLS or name in self._allowed:
+            return None
+        allowed, reason = await self._gate.check(name, arguments)
+        if not allowed:
+            return {"block": True, "reason": reason or f"tool {name!r} denied"}
+        if self._confirm is not None:
+            if await self._confirm(name, arguments):
+                return None
+            return {"block": True, "reason": f"denied by user: {name}"}
+        return {"block": True, "reason": f"tool {name!r} requires approval"}

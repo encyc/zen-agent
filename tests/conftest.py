@@ -74,3 +74,20 @@ def text_stream(text: str = "ok"):
 async def session_runtime(runtime_factory, app_env):
     """Runtime whose sessions live in the temp dir and whose runs are offline."""
     return await runtime_factory(stream_fn=text_stream())
+
+
+@pytest.fixture
+async def services(session_runtime):
+    """The container build_default_commands expects."""
+    from zenagent.app.chat import ChatController
+    from zenagent.app.commands import AppServices
+    from zenagent.app.models import ModelManager
+    from zenagent.app.sessions import SessionManager
+
+    runtime = session_runtime
+    return AppServices(
+        runtime=runtime,
+        chat=ChatController(runtime),
+        models=ModelManager(runtime),
+        sessions=SessionManager(runtime),
+    )
