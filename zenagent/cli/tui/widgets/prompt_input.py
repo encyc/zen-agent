@@ -15,6 +15,25 @@ __all__ = ["PromptInput"]
 
 MAX_ROWS = 8
 
+# Application chords the focused TextArea would otherwise swallow (ctrl+d is
+# delete-forward, ctrl+k kills the line, ...). omp solves this with an input
+# listener chain that keeps app actions authoritative; here the prompt hands
+# these keys straight to the app action of the same name.
+APP_CHORDS = {
+    "escape": "interrupt",
+    "ctrl+c": "clear_draft",
+    "ctrl+d": "quit_app",
+    "ctrl+q": "follow_up",
+    "ctrl+p": "cycle_model",
+    "alt+p": "pick_model",
+    "ctrl+o": "toggle_tools",
+    "ctrl+t": "toggle_thinking",
+    "ctrl+k": "command_palette",
+    "ctrl+b": "toggle_sidebar",
+    "ctrl+s": "steer",
+    "ctrl+x": "clear_queue",
+}
+
 
 class PromptInput(TextArea):
     """TextArea with chat-style submit semantics and auto growth."""
@@ -49,6 +68,11 @@ class PromptInput(TextArea):
             self.post_message(self.Resized(rows))
 
     async def _on_key(self, event: events.Key) -> None:
+        action = APP_CHORDS.get(event.key)
+        if action is not None:
+            event.stop()
+            await self.app.run_action(action)
+            return
         if event.key == "enter":
             event.stop()
             text = self.text.strip()

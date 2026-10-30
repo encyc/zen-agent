@@ -97,3 +97,43 @@ async def test_prompt_grows_and_gutter_follows(fake_runtime):
 
         assert prompt.size.height == base + 3
         assert gutter.size.height == prompt.size.height
+
+
+async def test_escape_keeps_the_draft_and_ctrl_c_clears_it(fake_runtime):
+    """omp: Esc never destroys a draft; ctrl+c clears it; ctrl+d exits."""
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        prompt = app.query_one(PromptInput)
+        prompt.focus()
+        for char in "hello":
+            await pilot.press(char)
+        await pilot.pause()
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert prompt.text == "hello", "Esc must not touch the draft"
+
+        await pilot.press("ctrl+c")
+        await pilot.pause()
+        assert prompt.text == ""
+        assert app.is_running, "ctrl+c is not exit"
+
+
+async def test_ctrl_q_queues_while_running(gated_app):
+    app, gate = gated_app
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await app.chat.submit("hi")
+        await pilot.pause()
+        prompt = app.query_one(PromptInput)
+        prompt.focus()
+        for char in "later":
+            await pilot.press(char)
+        await pilot.press("ctrl+q")
+        await pilot.pause()
+        assert app.chat.status.follow_ups == 1
+        assert prompt.text == ""
+
+        gate.set()
+        await app.chat.wait_for_idle()

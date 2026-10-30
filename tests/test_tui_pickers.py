@@ -44,6 +44,49 @@ async def test_command_palette_opens(picker_app):
     app = picker_app
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
-        await pilot.press("ctrl+p")
+        await pilot.press("ctrl+k")
         await pilot.pause()
         assert isinstance(app.screen, CommandPalette)
+
+
+async def test_repeat_shortcut_focuses_instead_of_stacking(picker_app):
+    """omp's single-instance menus: ctrl+p twice must not open two pickers."""
+    app = picker_app
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await pilot.press("alt+p")
+        await pilot.pause()
+        first = app.screen
+        assert isinstance(first, ModelPicker)
+
+        await pilot.press("alt+p")
+        await pilot.pause()
+        assert app.screen is first
+        assert len([s for s in app.screen_stack if isinstance(s, ModelPicker)]) == 1
+
+
+async def test_picker_is_bottom_anchored_and_full_width(picker_app):
+    app = picker_app
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        app.open_session_picker()
+        await pilot.pause()
+        panel = app.screen.query_one("#palette")
+        assert panel.region.width == 120, "the palette spans the terminal"
+        assert panel.region.y + panel.region.height == 40, "and sits on the bottom"
+
+
+async def test_picker_search_filters_the_list(picker_app):
+    app = picker_app
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        app.open_model_picker()
+        await pilot.pause()
+        screen = app.screen
+        before = len(screen._filtered)
+
+        for char in "deepseek":
+            await pilot.press(char)
+        await pilot.pause()
+        assert len(screen._filtered) < before
+        assert all("deepseek" in item.label for item in screen._filtered)

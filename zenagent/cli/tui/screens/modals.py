@@ -1,4 +1,4 @@
-"""Modal screens: model picker, session picker, confirmation."""
+"""Concrete pickers built on the shared palette skeleton."""
 
 from __future__ import annotations
 
@@ -7,71 +7,51 @@ from pathlib import Path
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Label, ListItem, ListView
+from textual.widgets import Label
 
 from zenagent.app.models import ModelEntry
 from zenagent.app.sessions import SessionEntry
+from zenagent.cli.tui.screens.palette import PaletteItem, PaletteScreen
 
 __all__ = ["Confirm", "ModelPicker", "SessionPicker"]
 
 
-class ModelPicker(ModalScreen[str | None]):
+class ModelPicker(PaletteScreen[str]):
     """Pick a model; unavailable entries are shown but not selectable."""
 
-    BINDINGS = [("escape", "dismiss", "Cancel")]  # noqa: RUF012 - Textual class API
-
     def __init__(self, entries: list[ModelEntry]) -> None:
-        super().__init__()
         self.entries = entries
-
-    def compose(self) -> ComposeResult:
-        with Vertical(classes="modal"):
-            yield Label("Models (enter selects, esc cancels)")
-            items = []
-            for entry in self.entries:
-                mark = "● " if entry.current else "  "
-                label = (
-                    f"{mark}{entry.provider}/{entry.id} · "
+        items = [
+            PaletteItem(
+                label=f"{'●' if entry.current else ' '} {entry.provider}/{entry.id}",
+                value=entry.id,
+                note=(
                     f"{entry.context_window // 1000}k · "
                     f"{'ready' if entry.available else entry.reason}"
-                )
-                items.append(ListItem(Label(label), disabled=not entry.available))
-            yield ListView(*items, id="model-list")
+                ),
+                enabled=entry.available,
+                selected=entry.current,
+            )
+            for entry in entries
+        ]
+        super().__init__(title="Models", items=items, placeholder="Search models")
 
-    def on_list_view_selected(self, event: ListView.Selected) -> None:
-        index = event.list_view.index or 0
-        entry = self.entries[index]
-        self.dismiss(entry.id if entry.available else None)
 
-
-class SessionPicker(ModalScreen[Path | None]):
+class SessionPicker(PaletteScreen[Path]):
     """Pick a saved session to resume."""
 
-    BINDINGS = [("escape", "dismiss", "Cancel")]  # noqa: RUF012 - Textual class API
-
     def __init__(self, entries: list[SessionEntry]) -> None:
-        super().__init__()
         self.entries = entries
-
-    def compose(self) -> ComposeResult:
-        with Vertical(classes="modal"):
-            yield Label("Sessions (enter resumes, esc cancels)")
-            items = []
-            for entry in self.entries:
-                mark = "● " if entry.current else "  "
-                items.append(
-                    ListItem(
-                        Label(
-                            f"{mark}{entry.path.name} · {entry.messages} msgs · "
-                            f"{entry.size // 1024}k"
-                        )
-                    )
-                )
-            yield ListView(*items, id="session-list")
-
-    def on_list_view_selected(self, event: ListView.Selected) -> None:
-        index = event.list_view.index or 0
-        self.dismiss(self.entries[index].path)
+        items = [
+            PaletteItem(
+                label=f"{'●' if entry.current else ' '} {entry.path.name}",
+                value=entry.path,
+                note=f"{entry.messages} msgs · {entry.size // 1024}k",
+                selected=entry.current,
+            )
+            for entry in entries
+        ]
+        super().__init__(title="Sessions", items=items, placeholder="Search sessions")
 
 
 class Confirm(ModalScreen[bool]):

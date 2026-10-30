@@ -11,6 +11,8 @@ the prompt. The sidebar is opt-in (ctrl+b) and hidden by default.
 
 from __future__ import annotations
 
+import inspect
+
 from textual.app import App
 from textual.containers import Horizontal, Vertical
 from textual.events import MouseEvent
@@ -35,14 +37,22 @@ class ZenAgentApp(App):
 
     CSS_PATH = "theme.tcss"
     TITLE = "ZenAgent"
+    # omp's chord set (``docs/research/omp-cli-study/01-interaction-hierarchy.md``):
+    # Esc interrupts, ctrl+c clears the draft, ctrl+d exits, ctrl+q queues.
     BINDINGS = [  # noqa: RUF012 - Textual class API
-        ("ctrl+b", "toggle_sidebar", "Info"),
-        ("ctrl+c", "interrupt", "Interrupt"),
-        ("ctrl+s", "steer", "Steer"),
-        ("ctrl+q", "quit_app", "Quit"),
-        ("ctrl+x", "clear_queue", "Clear queue"),
+        ("escape", "interrupt", "Interrupt"),
+        ("ctrl+c", "clear_draft", "Clear draft"),
+        ("ctrl+d", "quit_app", "Quit"),
+        ("ctrl+q", "follow_up", "Follow-up"),
+        ("ctrl+p", "cycle_model", "Next model"),
+        ("alt+p", "pick_model", "Pick model"),
+        ("shift+tab", "cycle_thinking", "Thinking"),
+        ("ctrl+t", "toggle_thinking", "Hide thinking"),
         ("ctrl+o", "toggle_tools", "Expand tools"),
-        ("end", "jump_to_bottom", "Latest"),
+        ("ctrl+k", "command_palette", "Commands"),
+        ("ctrl+b", "toggle_sidebar", "Info"),
+        ("ctrl+s", "steer", "Steer"),
+        ("ctrl+x", "clear_queue", "Clear queue"),
     ]
 
     def __init__(
@@ -55,6 +65,7 @@ class ZenAgentApp(App):
         self.runtime = runtime
         self.chat = chat or ChatController(runtime, on_change=self._on_change)
         self.exit_summary: str | None = None
+        self._menus: dict[str, object] = {}
         self.models = ModelManager(runtime)
         self.sessions = SessionManager(runtime)
         self.commands = build_default_commands(
@@ -154,6 +165,29 @@ class ZenAgentApp(App):
             for log in self.query(TranscriptView):
                 log.append_notice(f"/{name} is not available in the TUI yet")
 
+    def open_menu(self, kind: str, factory, callback) -> None:
+        """Single-instance menus: a repeat request focuses, never stacks.
+
+        omp models this with ``#openMenus`` and deliberately has no raise API
+        (``05-overlays-and-surfaces.md`` §4); one entry per kind is enough here
+        because our palettes are all rooted at the same screen.
+        """
+        if kind in self._menus:
+            return
+        screen = factory()
+        self._menus[kind] = screen
+
+        async def finished(result=None) -> None:
+            self._menus.pop(kind, None)
+            outcome = callback(result)
+            if inspect.isawaitable(outcome):
+                await outcome
+
+        self.push_screen(screen, finished)
+
+    def action_pick_model(self) -> None:
+        self.open_model_picker()
+
     def open_model_picker(self) -> None:
         from zenagent.cli.tui.screens.modals import ModelPicker
 
@@ -164,7 +198,7 @@ class ZenAgentApp(App):
                     self.notify(result.reason or "switch failed")
                 self._refresh_status()
 
-        self.push_screen(ModelPicker(self.models.entries()), selected)
+        self.open_menu("model", lambda: ModelPicker(self.models.entries()), selected)
 
     def open_session_picker(self) -> None:
         from zenagent.cli.tui.screens.modals import SessionPicker
@@ -177,7 +211,7 @@ class ZenAgentApp(App):
                 self.chat.reload_transcript()
                 self._refresh_status()
 
-        self.push_screen(SessionPicker(self.sessions.entries()), selected)
+        self.open_menu("sessions", lambda: SessionPicker(self.sessions.entries()), selected)
 
     async def on_prompt_input_submitted(self, message: PromptInput.Submitted) -> None:
         text = message.text
@@ -204,9 +238,63 @@ class ZenAgentApp(App):
                 log.append_notice(result.message)
 
     def action_interrupt(self) -> None:
+        """Esc: abort the run; never touch an in-progress draft."""
         if self.chat.status.running:
             self.chat.abort()
             self.notify("interrupted", timeout=2)
+
+    def action_clear_draft(self) -> None:
+        """ctrl+c clears the draft (omp keeps a draft through Esc)."""
+        prompt = self.query_one(PromptInput)
+        if prompt.text:
+            prompt.clear()
+
+    def action_follow_up(self) -> None:
+        """ctrl+q: queue while running, otherwise submit normally."""
+        prompt = self.query_one(PromptInput)
+        text = prompt.text.strip()
+        if not text:
+            return
+        prompt.clear()
+        if self.chat.status.running:
+            self.chat.queue_follow_up(text)
+        else:
+            self.run_worker(self.chat.submit(text))
+
+    def action_cycle_model(self) -> None:
+        entries = [entry for entry in self.models.entries() if entry.available]
+        if not entries:
+            return
+        ids = [entry.id for entry in entries]
+        current = self.chat.status.model_id
+        try:
+            index = (ids.index(current) + 1) % len(ids)
+        except ValueError:
+            index = 0
+        result = self.models.switch(ids[index])
+        if not result.ok:
+            self.notify(result.reason or "switch failed", timeout=3)
+        self._refresh_status()
+
+    def action_cycle_thinking(self) -> None:
+        levels = ["off", "low", "medium", "high"]
+        agent = self.runtime.agent
+        current = agent.thinking or "off"
+        try:
+            agent.thinking = levels[(levels.index(current) + 1) % len(levels)]
+        except ValueError:
+            agent.thinking = "medium"
+        self._refresh_status()
+
+    def action_toggle_thinking(self) -> None:
+        from zenagent.cli.tui.widgets.rows import ThinkingRow
+
+        rows = list(self.query(ThinkingRow))
+        if not rows:
+            return
+        hide = any(row.display for row in rows)
+        for row in rows:
+            row.display = not hide
 
     def action_steer(self) -> None:
         prompt = self.query_one(PromptInput)
