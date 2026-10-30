@@ -18,12 +18,21 @@ import io
 import json
 import os
 import sys
-import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from zenagent.agent import Agent
 from zenagent.agent.session import Session, latest_session, list_sessions, session_path
+from zenagent.app.support import (
+    api_key_for as _api_key_for,
+)
+from zenagent.app.support import (
+    resolve_model,
+    session_id_for,
+)
+from zenagent.app.support import (
+    system_prompt as _system_prompt,
+)
 from zenagent.cli.compact import maybe_auto_compact
 from zenagent.cli.doctor import run_doctor
 from zenagent.cli.exportcmd import run_export
@@ -40,7 +49,7 @@ from zenagent.events import AgentEvent
 from zenagent.extensions import load_extensions
 from zenagent.mcp.config import load_mcp_config
 from zenagent.mcp.manager import McpManager
-from zenagent.providers.catalog import Model, ProviderConfig, find_model, load_catalog
+from zenagent.providers.catalog import Model, load_catalog
 from zenagent.providers.registry import StreamFn
 from zenagent.skills import (
     build_skill_tool,
@@ -56,45 +65,6 @@ from zenagent.types import AssistantMessage, ImageContent, Message
 __all__ = ["build_parser", "main", "resolve_model", "run_headless"]
 
 THINKING_CHOICES = ("off", "low", "medium", "high", "max")
-
-
-def _system_prompt(tool_names: list[str]) -> str:
-    tools = ", ".join(tool_names) if tool_names else "(none available yet)"
-    return (
-        "You are zenagent, a coding agent working in the user's repository.\n"
-        f"Working directory: {Path.cwd()}\n"
-        f"Available tools: {tools}\n"
-        "Answer concisely. Prefer using tools to inspect the code instead of "
-        "guessing. Explain what you did when you finish."
-    )
-
-
-def resolve_model(catalog: dict[str, ProviderConfig], model_id: str | None) -> Model:
-    """Pick the model to run: explicit id, else the catalog's ``default: true``."""
-    if model_id:
-        return find_model(catalog, model_id)
-    for provider in catalog.values():
-        for model in provider.models:
-            if model.default:
-                return model
-    for provider in catalog.values():
-        if provider.models:
-            return provider.models[0]
-    raise LookupError("the model catalog is empty")
-
-
-def _api_key_for(catalog: dict[str, ProviderConfig], model: Model) -> str | None:
-    provider = catalog.get(model.provider)
-    if provider is None:
-        return None
-    return os.environ.get(provider.api_key_env) or None
-
-
-def session_id_for(model: Model, provided: str | None = None) -> str | None:
-    """OpenCode's gateway routes on a session id; other providers do not care."""
-    if provided:
-        return provided
-    return uuid.uuid4().hex if model.provider == "opencode-go" else None
 
 
 def _build_agent(
