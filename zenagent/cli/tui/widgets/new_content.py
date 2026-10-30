@@ -27,7 +27,7 @@ class NewContentBar(Static):
         text = Text()
         text.append("↓ ", style=_ACCENT)
         text.append("new output", style=_MUTED)
-        text.append("  ·  end", style="#5d6f7e")
+        text.append("  ·  pagedown", style="#5d6f7e")
         self.update(text)
         self.display = True
 

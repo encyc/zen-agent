@@ -22,6 +22,7 @@ from zenagent.app.commands import AppServices, build_default_commands
 from zenagent.app.models import ModelManager
 from zenagent.app.runtime import Runtime
 from zenagent.app.sessions import SessionManager
+from zenagent.cli.tui.widgets.command_hints import CommandHints
 from zenagent.cli.tui.widgets.new_content import NewContentBar
 from zenagent.cli.tui.widgets.prompt_gutter import PromptGutter
 from zenagent.cli.tui.widgets.prompt_input import PromptInput
@@ -66,6 +67,7 @@ class ZenAgentApp(App):
         self.chat = chat or ChatController(runtime, on_change=self._on_change)
         self.exit_summary: str | None = None
         self._menus: dict[str, object] = {}
+        self.command_hints: CommandHints | None = None
         self.models = ModelManager(runtime)
         self.sessions = SessionManager(runtime)
         self.commands = build_default_commands(
@@ -97,6 +99,7 @@ class ZenAgentApp(App):
                 yield TranscriptView()
                 yield NewContentBar()
                 with Vertical(id="dock"):
+                    yield CommandHints()
                     yield StatusBand()
                     with Horizontal(id="prompt-row"):
                         yield PromptGutter()
@@ -104,6 +107,7 @@ class ZenAgentApp(App):
             yield Sidebar()
 
     def on_mount(self) -> None:
+        self.command_hints = self.query_one(CommandHints)
         self.query_one(Sidebar).display = False
         self._refresh_status()
         self.query_one(PromptInput).focus()
@@ -121,6 +125,60 @@ class ZenAgentApp(App):
 
     def on_resize(self, event) -> None:
         self._refresh_status()
+
+    def on_text_area_changed(self, event) -> None:
+        """Keep the slash-command list in sync with what is being typed."""
+        hints = self.command_hints
+        if hints is None:
+            return
+        text = self.query_one(PromptInput).text
+        matches = self._command_matches(text)
+        if matches:
+            hints.show(matches)
+        else:
+            hints.hide()
+
+    def _command_matches(self, text: str) -> list[tuple[str, str]]:
+        if not text.startswith("/") or " " in text or "\n" in text:
+            return []
+        needle = text[1:].lower()
+        return [
+            (command.name, command.description)
+            for command in self.commands.names()
+            if command.name.startswith(needle)
+        ]
+
+    def action_hint_next(self) -> None:
+        if self.command_hints:
+            self.command_hints.move(1)
+
+    def action_hint_prev(self) -> None:
+        if self.command_hints:
+            self.command_hints.move(-1)
+
+    def action_hint_dismiss(self) -> None:
+        if self.command_hints:
+            self.command_hints.hide()
+
+    def action_hint_accept(self) -> None:
+        hints = self.command_hints
+        if hints is None or not hints.active:
+            return
+        name = hints.selected
+        if name:
+            prompt = self.query_one(PromptInput)
+            prompt.clear()
+            prompt.insert(f"/{name} ")
+            prompt.focus()
+        hints.hide()
+
+    def action_scroll_up(self) -> None:
+        for transcript in self.query(TranscriptView):
+            transcript.scroll_pages(-1)
+
+    def action_scroll_down(self) -> None:
+        for transcript in self.query(TranscriptView):
+            transcript.scroll_pages(1)
 
     def on_transcript_view_pending_changed(
         self, message: TranscriptView.PendingChanged

@@ -32,6 +32,8 @@ APP_CHORDS = {
     "ctrl+b": "toggle_sidebar",
     "ctrl+s": "steer",
     "ctrl+x": "clear_queue",
+    "pageup": "scroll_up",
+    "pagedown": "scroll_down",
 }
 
 
@@ -56,32 +58,67 @@ class PromptInput(TextArea):
         super().__init__(text="", placeholder=placeholder, id="prompt-input")
         self._rows = 1
 
+    def _set_rows(self, rows: int) -> None:
+        if rows == self._rows:
+            return
+        self._rows = rows
+        self.styles.height = rows
+        self.post_message(self.Resized(rows))
+
     @property
     def rows(self) -> int:
         return self._rows
 
     def on_text_area_changed(self, event: TextArea.Changed) -> None:
-        rows = max(1, min(self.document.line_count, self.MAX_ROWS))
-        if rows != self._rows:
-            self._rows = rows
-            self.styles.height = rows
-            self.post_message(self.Resized(rows))
+        self._set_rows(max(1, min(self.document.line_count, self.MAX_ROWS)))
+
+    def _hints_active(self) -> bool:
+        hints = getattr(self.app, "command_hints", None)
+        return bool(hints is not None and hints.active)
 
     async def _on_key(self, event: events.Key) -> None:
+        # `prevent_default` is load-bearing: `stop()` alone still lets Textual run
+        # TextArea's default insert, which is how a submitted prompt came back as
+        # a stray "\n" on a second row.
+        if self._hints_active() and await self._handle_hint_key(event):
+            return
         action = APP_CHORDS.get(event.key)
         if action is not None:
             event.stop()
+            event.prevent_default()
             await self.app.run_action(action)
             return
         if event.key == "enter":
             event.stop()
+            event.prevent_default()
             text = self.text.strip()
             if text:
                 self.clear()
+                self._set_rows(1)
                 self.post_message(self.Submitted(text))
             return
         if event.key == "shift+enter":
             event.stop()
+            event.prevent_default()
             self.insert("\n")
             return
         await super()._on_key(event)
+
+    async def _handle_hint_key(self, event: events.Key) -> bool:
+        """Arrows/tab/enter/esc belong to the suggestion list while it is open."""
+        if event.key in ("up", "down"):
+            event.stop()
+            event.prevent_default()
+            await self.app.run_action("hint_prev" if event.key == "up" else "hint_next")
+            return True
+        if event.key in ("tab", "enter"):
+            event.stop()
+            event.prevent_default()
+            await self.app.run_action("hint_accept")
+            return True
+        if event.key == "escape":
+            event.stop()
+            event.prevent_default()
+            await self.app.run_action("hint_dismiss")
+            return True
+        return False
