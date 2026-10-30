@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from textual.app import App
 from textual.containers import Horizontal
+from textual.events import MouseEvent
 
 from zenagent.app.chat import ChatController
 from zenagent.app.commands import AppServices, build_default_commands
@@ -57,6 +58,14 @@ class ZenAgentApp(App):
             f"{status.output_tokens} out · ${status.cost:.4f}"
         )
         self.exit()
+
+    async def on_event(self, event) -> None:
+        # Keyboard-only UI: dropping mouse events avoids Textual 8.2's crashing
+        # text-selection path (screen._forward_event with a null container) and
+        # matches the spec's explicit "no mouse" requirement.
+        if isinstance(event, MouseEvent):
+            return
+        await super().on_event(event)
 
     def compose(self):
         with Horizontal(id="body"):

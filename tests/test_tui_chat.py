@@ -56,3 +56,19 @@ async def test_chat_log_reset_clears_widgets(runtime_factory):
         log.reset()
         await pilot.pause()
         assert len(app.query("Markdown")) == 0
+
+
+async def test_mouse_click_on_markdown_does_not_crash(runtime_factory):
+    """Textual 8.2's selection path crashes when clicking a Markdown paragraph."""
+    from conftest import sequenced_stream
+
+    runtime = await runtime_factory(stream_fn=sequenced_stream(["hello **world**"]))
+    app = ZenAgentApp(runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await app.chat.submit("hi")
+        await app.chat.wait_for_idle()
+        await pilot.pause()
+        await pilot.click(app.query_one("Markdown"))
+        await pilot.pause()
+        assert app.is_running
