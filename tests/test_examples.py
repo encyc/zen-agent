@@ -26,3 +26,8 @@ def test_examples_import_without_side_effects(name):
 async def test_custom_tool_example_runs_offline():
     module = load("custom_tool")
     assert await module.main() == 0
+
+
+def test_embed_example_imports_without_side_effects():
+    module = load("embed")
+    assert hasattr(module, "main")
