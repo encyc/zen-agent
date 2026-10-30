@@ -109,4 +109,4 @@ REPL 命令：`/help /exit /clear /model /thinking /session /sessions /fork /imp
 - **沙箱**：没有容器/权限隔离；安全性依赖部署方式（CI 容器、只读挂载）。
 - **扩展 UI**：扩展只能贡献工具/命令/prompt/hooks，不能改 REPL 界面。
 - **多模态输出**：能读图片，但不能生成图片/音频。
-- **Python 版本**：`requires-python >=3.10`（3.10–3.14 均已实测）。
+- **Python 版本**：`requires-python >=3.13`（3.13 / 3.14 已验证）。
