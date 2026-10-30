@@ -49,6 +49,9 @@ def test_segment_ids_cover_the_documented_set():
         "context_pct",
         "queued",
         "session_name",
+        "cache_hit",
+        "time_spent",
+        "token_rate",
     }
 
 
@@ -112,3 +115,20 @@ def test_line_never_exceeds_width():
     for width in (200, 120, 100, 80, 64, 50, 40, 30):
         _, plain = render_status_line(status(follow_ups=3), width, preset="default")
         assert len(plain) <= width, f"{plain!r} is {len(plain)} > {width}"
+
+
+def test_cache_hit_is_a_ratio_of_prompt_tokens():
+    _, plain = render_status_line(status(input_tokens=250, cache_read=750), 200)
+    assert "cache 75%" in plain
+
+
+def test_cache_hit_hidden_without_cache_read():
+    _, plain = render_status_line(status(cache_read=0), 200)
+    assert "cache " not in plain
+
+
+def test_turn_time_and_rate_need_a_finished_turn():
+    _, plain = render_status_line(status(turn_ms=2000, turn_output_tokens=50), 200)
+    assert "2.0s" in plain and "25.0 tok/s" in plain
+    _, idle = render_status_line(status(turn_ms=0, turn_output_tokens=0), 200)
+    assert "tok/s" not in idle and "2.0s" not in idle

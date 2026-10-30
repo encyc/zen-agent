@@ -98,6 +98,32 @@ def _render_cost(ctx: SegmentContext) -> Text | None:
     return _muted(f"${ctx.status.cost:.4f}")
 
 
+def _render_cache_hit(ctx: SegmentContext) -> Text | None:
+    """Share of prompt tokens served from the provider cache.
+
+    omp reports ``cache_read / (input + cache_read)``; ``input`` here is the
+    uncached prompt count the provider bills, so the two add up to the prompt.
+    """
+    status = ctx.status
+    total = status.input_tokens + status.cache_read
+    if not status.cache_read or not total:
+        return None
+    return _muted(f"cache {status.cache_read * 100 / total:.0f}%")
+
+
+def _render_time_spent(ctx: SegmentContext) -> Text | None:
+    if not ctx.status.turn_ms:
+        return None
+    return _muted(f"{ctx.status.turn_ms / 1000:.1f}s")
+
+
+def _render_token_rate(ctx: SegmentContext) -> Text | None:
+    status = ctx.status
+    if not status.turn_ms or not status.turn_output_tokens:
+        return None
+    return _muted(f"{status.turn_output_tokens / (status.turn_ms / 1000):.1f} tok/s")
+
+
 def _render_context(ctx: SegmentContext) -> Text | None:
     status = ctx.status
     window = status.context_window or 0
@@ -135,7 +161,10 @@ SEGMENTS: dict[str, Renderer] = {
     "git": _render_git,
     "tokens": _render_tokens,
     "cost": _render_cost,
+    "cache_hit": _render_cache_hit,
     "context_pct": _render_context,
+    "time_spent": _render_time_spent,
+    "token_rate": _render_token_rate,
     "queued": _render_queued,
     "session_name": _render_session,
 }

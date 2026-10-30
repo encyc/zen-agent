@@ -68,11 +68,16 @@ class RunStatus:
     input_tokens: int = 0
     output_tokens: int = 0
     cache_read: int = 0
+    cache_write: int = 0
     cost: float = 0.0
     context_used: int = 0
     context_window: int = 0
     follow_ups: int = 0
     steering: int = 0
+    #: Wall-clock time of the most recent turn and the output tokens it produced;
+    #: both 0 before the first finished turn (the segments hide themselves).
+    turn_ms: int = 0
+    turn_output_tokens: int = 0
     session_name: str = ""
     cwd: str = ""
     mode: str = ""

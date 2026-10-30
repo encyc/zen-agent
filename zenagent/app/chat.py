@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -41,6 +42,9 @@ class ChatController:
         self._follow_ups: list[str] = []
         self._task: asyncio.Task | None = None
         self._running = False
+        #: Last finished turn: wall time and output tokens (status segments).
+        self._turn_ms = 0
+        self._turn_output = 0
         runtime.agent.subscribe(self._on_event)
 
     # -- snapshots ----------------------------------------------------------
@@ -64,6 +68,9 @@ class ChatController:
             input_tokens=usage.input,
             output_tokens=usage.output,
             cache_read=usage.cache_read,
+            cache_write=usage.cache_write,
+            turn_ms=self._turn_ms,
+            turn_output_tokens=self._turn_output,
             cost=usage.cost.total,
             context_used=context_used,
             context_window=agent.model.context_window,
@@ -161,12 +168,18 @@ class ChatController:
     async def _run(self, text: str) -> None:
         self._running = True
         self._notify()
+        started = time.monotonic()
+        before_output = usage_total(self.runtime.agent.messages).output
         try:
             await self.runtime.agent.prompt(text)
         finally:
             self._running = False
             self._current = None
             self._task = None
+            self._turn_ms = int((time.monotonic() - started) * 1000)
+            self._turn_output = (
+                usage_total(self.runtime.agent.messages).output - before_output
+            )
             self._notify()
             if self._follow_ups and self.runtime.agent.termination != "aborted":
                 self._task = asyncio.create_task(self._run(self._follow_ups.pop(0)))

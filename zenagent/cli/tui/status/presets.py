@@ -24,7 +24,16 @@ PRESETS: dict[str, Preset] = {
     # branch, then facts on the right.
     "default": Preset(
         left=("pi", "model", "thinking", "mode", "path", "git"),
-        right=("tokens", "cost", "context_pct", "queued", "session_name"),
+        right=(
+            "tokens",
+            "cache_hit",
+            "cost",
+            "context_pct",
+            "time_spent",
+            "token_rate",
+            "queued",
+            "session_name",
+        ),
     ),
     "compact": Preset(
         left=("model", "mode", "path"),

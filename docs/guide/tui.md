@@ -21,7 +21,7 @@
 
   done · in 1762 · out 33 · cache 1664 · $0.0000
 
- deepseek-flash · high · ~/py-agent        1762 in / 33 out · $0.0000 · context 0.1%
+ deepseek-flash · high · ~/py-agent        1762 in / 33 out · cache 49% · $0.0000 · context 0.1% · 4.2s · 7.9 tok/s
 ╰─ 输入你的消息…
 ```
 
@@ -30,8 +30,9 @@
 - **命令补全**：输入 `/` 会在输入框上方列出命令（最多 6 条），`↑↓` 选择、`tab`/`enter` 补全、
   `esc` 收起；继续打字会实时过滤。
 - **状态带**：一行填色，在 `╰─` 上方。它是**有序列的 segment**，窄屏按固定顺序丢信息：
-  先丢右侧事实（tokens/花费/上下文/session）→ 再缩路径 → 最后才丢左侧身份
-  （model/thinking），**路径永远最后走**。
+  先丢右侧事实（tokens/cache 命中率/花费/上下文/上一轮耗时/生成速率/session）→ 再缩路径 →
+  最后才丢左侧身份（model/thinking），**路径永远最后走**。`cache_hit` 用
+  `cache_read / (input + cache_read)` 算命中率；`time_spent`/`token_rate` 只在上一轮已结束时出现。
 - **输入行**：无边框，`╰─ ` 是唯一的装饰；草稿超过一行时输入框自动长高（最多 8 行），
   `╰─` 只在第一行。
 - **侧栏**：默认隐藏，`ctrl+b` 打开（宽 <100 列时自动不显示）。
