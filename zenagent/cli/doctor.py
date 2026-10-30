@@ -8,12 +8,14 @@ sessions writable, terminal interactive.
 from __future__ import annotations
 
 import os
+import re
+import stat
 import sys
 import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from zenagent import __version__
+from zenagent import __version__, settings
 from zenagent.agent.session import sessions_dir
 from zenagent.config import UserConfig, apply_user_config, config_path, load_user_config
 from zenagent.providers.catalog import load_catalog
@@ -28,6 +30,37 @@ class Check:
     name: str
     ok: bool
     detail: str
+
+
+_PLAINTEXT_KEY = re.compile(r'^\s*[A-Z][A-Z0-9_]*_API_KEY\s*=\s*".+"\s*$', re.MULTILINE)
+
+
+def _check_secrets() -> Check:
+    """Secrets belong in the app's store, not in a hand-edited config file."""
+    problems: list[str] = []
+    try:
+        text = config_path().read_text(encoding="utf-8")
+    except OSError:
+        text = ""
+    if _PLAINTEXT_KEY.search(text):
+        problems.append(
+            f"{config_path()} contains plaintext API keys (nothing reads them; "
+            "set them in /settings instead)"
+        )
+
+    store = settings.settings_path()
+    if store.is_file():
+        mode = stat.S_IMODE(store.stat().st_mode)
+        if mode & 0o077:
+            problems.append(f"{store} is {oct(mode)}; run chmod 600")
+        detail = f"{store} · {len(settings.describe()['keys'])} keys"
+    else:
+        detail = f"{store} · not created yet (set keys in /settings)"
+    if settings.describe()["problem"]:
+        problems.append(str(settings.describe()["problem"]))
+    if problems:
+        return Check("secrets", False, "; ".join(problems))
+    return Check("secrets", True, detail)
 
 
 def _check_sessions_writable() -> Check:
@@ -68,10 +101,13 @@ def collect_checks(env: Mapping[str, str] | None = None) -> list[Check]:
         catalog = {}
         checks.append(Check("catalog", False, f"cannot load: {exc}"))
 
+    checks.append(_check_secrets())
     checks.append(_check_sessions_writable())
 
     for provider in catalog.values():
-        present = bool(values.get(provider.api_key_env))
+        # Settings (set in /settings) win; the environment is the fallback.
+        stored = settings.get_api_key(provider.api_key_env) or values.get(provider.api_key_env)
+        present = bool(stored)
         detail = provider.api_key_env + (" is set" if present else " is missing")
         checks.append(Check(f"key:{provider.id}", present, detail))
 

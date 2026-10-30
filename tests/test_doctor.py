@@ -65,3 +65,70 @@ def test_main_routes_the_doctor_subcommand(monkeypatch):
 def test_unknown_subcommand_is_rejected(capsys):
     assert cli_main.main(["nonsense"]) == 1
     assert "unknown command" in capsys.readouterr().err
+
+
+def test_secrets_check_passes_on_a_clean_config(tmp_path, monkeypatch):
+    from zenagent import settings
+    from zenagent.cli import doctor
+
+    config = tmp_path / "config.toml"
+    config.write_text('default_model = "deepseek-flash"\n')
+    store = tmp_path / "settings.json"
+    monkeypatch.setenv("ZENAGENT_SETTINGS_PATH", str(store))
+    monkeypatch.setattr(doctor, "config_path", lambda: config)
+    settings.clear_cache()
+    settings.set_api_key("DEEPSEEK_API_KEY", "sk-test")
+
+    check = doctor._check_secrets()
+    assert check.ok, check.detail
+    assert "settings.json" in check.detail
+
+
+def test_secrets_check_flags_plaintext_keys_in_config(tmp_path, monkeypatch):
+    from zenagent import settings
+    from zenagent.cli import doctor
+
+    config = tmp_path / "config.toml"
+    config.write_text('default_model = "x"\n\nDEEPSEEK_API_KEY="sk-leftover"\n')
+    monkeypatch.setenv("ZENAGENT_SETTINGS_PATH", str(tmp_path / "settings.json"))
+    monkeypatch.setattr(doctor, "config_path", lambda: config)
+    settings.clear_cache()
+
+    check = doctor._check_secrets()
+    assert not check.ok
+    assert "plaintext API keys" in check.detail
+    assert "/settings" in check.detail
+
+
+def test_secrets_check_flags_a_world_readable_store(tmp_path, monkeypatch):
+    import os
+
+    from zenagent import settings
+    from zenagent.cli import doctor
+
+    config = tmp_path / "config.toml"
+    config.write_text('default_model = "x"\n')
+    store = tmp_path / "settings.json"
+    monkeypatch.setenv("ZENAGENT_SETTINGS_PATH", str(store))
+    monkeypatch.setattr(doctor, "config_path", lambda: config)
+    settings.clear_cache()
+    settings.set_api_key("DEEPSEEK_API_KEY", "sk-test")
+    os.chmod(store, 0o644)
+
+    check = doctor._check_secrets()
+    assert not check.ok
+    assert "chmod 600" in check.detail
+
+
+def test_provider_key_checks_read_the_settings_store(tmp_path, monkeypatch):
+    from zenagent import settings
+    from zenagent.cli import doctor
+
+    monkeypatch.setenv("ZENAGENT_SETTINGS_PATH", str(tmp_path / "settings.json"))
+    monkeypatch.setattr(doctor, "config_path", lambda: tmp_path / "config.toml")
+    (tmp_path / "config.toml").write_text('default_model = "deepseek-flash"\n')
+    settings.clear_cache()
+    settings.set_api_key("DEEPSEEK_API_KEY", "sk-test")
+
+    checks = {check.name: check for check in doctor.collect_checks(env={})}
+    assert checks["key:deepseek"].ok, "a key stored by /settings counts"

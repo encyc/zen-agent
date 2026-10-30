@@ -4,7 +4,8 @@
 
 ```
 ~/.zenagent/
-├── config.toml          # 模型/默认值/自定义 provider/扩展/工具策略
+├── config.toml          # 模型/默认值/自定义 provider/扩展/工具策略（手写）
+├── settings.json         # API key 与 UI 偏好（应用写，0600）
 ├── mcp.json             # MCP servers
 ├── keybindings.json     # 键位（可选）
 ├── skills/<name>/SKILL.md        # 用户级 skills
@@ -16,6 +17,24 @@
 ```
 
 项目级覆盖：`<repo>/.zenagent/{skills,commands}/`，项目优先于用户级（同名时项目赢）。
+
+## settings.json（API key 与偏好）
+
+由应用写入，**不要手改**：`/settings` → `Model API keys…` / `Search API keys…` / `Search provider…`。
+模型和 web 搜索共用这一个 store，设一次两边都生效。
+
+```json
+{
+  "version": 1,
+  "api_keys": {"DEEPSEEK_API_KEY": "…", "TAVILY_API_KEY": "…"},
+  "prefs": {"search_provider": "deepseek"}
+}
+```
+
+- 权限 `0600`、目录 `0700`；写入是"临时文件 + rename"，断电不会留下半截文件；
+- **设置里的 key 优先于环境变量**（应用里显式设的赢），env 仅作兜底（CI/headless）；
+- 文件损坏不会被静默重置：`zen doctor` 的 `secrets` 行会报出来，key 仍从 env 兜底；
+- 老版本误写在 `config.toml` 里的 `*_API_KEY="…"` 会在启动时自动迁进来（原文件不删）。
 
 ## config.toml
 
