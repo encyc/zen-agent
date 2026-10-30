@@ -172,3 +172,17 @@ async def gated_app(runtime_factory):
 
     runtime = await runtime_factory(stream_fn=stream)
     return ZenAgentApp(runtime), gate
+
+
+@pytest.fixture
+async def picker_app(fake_runtime):
+    from zenagent.cli.tui.app import ZenAgentApp
+
+    return ZenAgentApp(fake_runtime)
+
+
+@pytest.fixture
+async def narrow_app(fake_runtime):
+    from zenagent.cli.tui.app import ZenAgentApp
+
+    return ZenAgentApp(fake_runtime)

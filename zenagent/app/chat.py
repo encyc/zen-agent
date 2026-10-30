@@ -96,6 +96,15 @@ class ChatController:
         self.runtime.agent.abort()
         self._notify()
 
+    def reload_transcript(self) -> None:
+        """Rebuild views from the current agent messages (after a session switch)."""
+        from zenagent.app.views import messages_to_views
+
+        self._transcript = messages_to_views(self.runtime.agent.messages)
+        self._cards.clear()
+        self._current = None
+        self._notify()
+
     def clear(self) -> None:
         self.runtime.agent.reset()
         self._transcript.clear()

@@ -2,13 +2,27 @@ Screen {
     layout: vertical;
 }
 
-#chat {
+#body {
     height: 1fr;
+}
+
+#sidebar {
+    width: 30;
     border: round $accent;
     padding: 0 1;
 }
 
-#welcome {
+#chat {
+    width: 1fr;
+    border: round $accent;
+    padding: 0 1;
+}
+
+.user-message {
+    color: $text-muted;
+}
+
+.usage-row {
     color: $text-muted;
 }
 
@@ -22,4 +36,12 @@ StatusBar {
 #prompt-input {
     height: 5;
     border: round $accent;
+}
+
+.modal {
+    width: 70%;
+    height: 60%;
+    border: thick $accent;
+    background: $panel;
+    padding: 1 2;
 }
