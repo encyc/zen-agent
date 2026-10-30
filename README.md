@@ -258,8 +258,12 @@ interpreter, or `--skip-build` to verify the existing `dist/`. It never uploads
 and writes only under a temp dir.
 
 `.github/workflows/publish.yml` runs the same gate before uploading. A manual run
-(`workflow_dispatch`) is always a dry run — it builds and verifies but cannot
-publish; only a `v*` tag push reaches PyPI.
+is always a dry run — it builds and verifies but cannot publish; only a `v*` tag
+push reaches PyPI:
+
+```bash
+gh workflow run publish.yml     # optional dry run on CI (build + verify only)
+```
 
 ## Status
 
