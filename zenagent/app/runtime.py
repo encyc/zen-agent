@@ -26,6 +26,11 @@ from zenagent.config import (
     apply_user_config,
     load_user_config,
 )
+from zenagent.context_files import (
+    discover_context_files,
+    load_context_files,
+    system_prompt_with_context,
+)
 from zenagent.extensions import load_extensions
 from zenagent.mcp.config import load_mcp_config
 from zenagent.mcp.manager import McpManager
@@ -63,6 +68,7 @@ class RuntimeOptions:
     templates: bool = True
     extension_paths: list[str] = field(default_factory=list)
     context_files: bool = True
+    read_only: bool = False
     allow_dangerous: bool = False
     retries: int = 0
     max_turns: int | None = None
@@ -88,6 +94,7 @@ class Runtime:
         self.before_switch: SwitchHook | None = None
         self._base_tools: list = []
         self._extra_prompt = ""
+        self._context_files = True
 
     # -- construction -------------------------------------------------------
 
@@ -122,6 +129,7 @@ class Runtime:
                 allow_dangerous=options.allow_dangerous,
                 allow=runtime.user_config.tool_allow,
                 deny=runtime.user_config.tool_deny,
+                read_only=options.read_only,
             )
 
         tools = list(ALL_TOOLS)
@@ -158,6 +166,7 @@ class Runtime:
             runtime.hooks = loaded.hooks
             extension_prompt = loaded.prompt_text
 
+        runtime._context_files = options.context_files
         runtime._base_tools = list(tools)
         runtime._extra_prompt = "\n\n".join(
             part for part in (skills_index, extension_prompt) if part
@@ -235,6 +244,10 @@ class Runtime:
 
     def _build_prompt(self, tools: list) -> str:
         text = system_prompt([tool.name for tool in tools])
+        if self._context_files:
+            text = system_prompt_with_context(
+                text, load_context_files(discover_context_files(Path.cwd()))
+            )
         if self._extra_prompt:
             text = f"{text}\n\n{self._extra_prompt}"
         return text

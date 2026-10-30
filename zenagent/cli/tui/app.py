@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from textual.app import App
+from textual.containers import Horizontal
 
 from zenagent.app.chat import ChatController
 from zenagent.app.commands import AppServices, build_default_commands
 from zenagent.app.models import ModelManager
 from zenagent.app.runtime import Runtime
 from zenagent.app.sessions import SessionManager
-from zenagent.cli.tui.screens.main import MainScreen
 from zenagent.cli.tui.widgets.chat_log import ChatLog
 from zenagent.cli.tui.widgets.prompt_input import PromptInput
 from zenagent.cli.tui.widgets.sidebar import Sidebar
@@ -49,9 +49,6 @@ class ZenAgentApp(App):
             )
         )
 
-    def compose(self):
-        yield MainScreen()
-
     def action_quit_app(self) -> None:
         status = self.chat.status
         session = getattr(self.runtime.session, "path", None)
@@ -60,6 +57,13 @@ class ZenAgentApp(App):
             f"{status.output_tokens} out · ${status.cost:.4f}"
         )
         self.exit()
+
+    def compose(self):
+        with Horizontal(id="body"):
+            yield Sidebar()
+            yield ChatLog()
+        yield StatusBar()
+        yield PromptInput()
 
     def on_mount(self) -> None:
         self._refresh_status()
@@ -127,13 +131,36 @@ class ZenAgentApp(App):
         async def selected(path) -> None:
             if path is not None:
                 await self.sessions.resume(path)
+                for log in self.query(ChatLog):
+                    log.reset()
                 self.chat.reload_transcript()
                 self._refresh_status()
 
         self.push_screen(SessionPicker(self.sessions.entries()), selected)
 
     async def on_prompt_input_submitted(self, message: PromptInput.Submitted) -> None:
-        await self.chat.submit(message.text)
+        text = message.text
+        if text.startswith("/"):
+            name, _, argument = text[1:].partition(" ")
+            if self.commands.get(name) is not None:
+                await self._dispatch_command(name, argument)
+                return
+            for log in self.query(ChatLog):
+                log.append_notice(f"unknown command: /{name}")
+            return
+        await self.chat.submit(text)
+
+    async def _dispatch_command(self, name: str, argument: str) -> None:
+        result = await self.commands.dispatch(name, argument)
+        if result.screen == "model-picker":
+            self.open_model_picker()
+        elif result.screen == "session-picker":
+            self.open_session_picker()
+        elif result.quit:
+            self.action_quit_app()
+        elif result.message:
+            for log in self.query(ChatLog):
+                log.append_notice(result.message)
 
     def action_interrupt(self) -> None:
         if self.chat.status.running:

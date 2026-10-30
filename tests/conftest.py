@@ -193,3 +193,23 @@ async def polish_app(fake_runtime):
     from zenagent.cli.tui.app import ZenAgentApp
 
     return ZenAgentApp(fake_runtime)
+
+
+def sequenced_stream(texts: list[str]):
+    """One fixed answer per call, in order."""
+    remaining = list(texts)
+
+    async def stream(model, messages, tools, options):
+        from zenagent.events import AssistantEvent
+        from zenagent.types import AssistantMessage, TextContent, Usage
+
+        text = remaining.pop(0) if remaining else "done"
+        partial = AssistantMessage(
+            content=[TextContent(text=text)], provider="p", model="m",
+            usage=Usage(), stop_reason="pending", timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        partial.stop_reason = "stop"
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    return stream

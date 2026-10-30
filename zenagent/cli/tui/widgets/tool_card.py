@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
-
 from textual.widgets import Collapsible, Static
 
 from zenagent.app.views import ToolCallView
@@ -39,9 +37,8 @@ class ToolCard(Collapsible):
 
     def refresh_view(self) -> None:
         view = self.view
-        with contextlib.suppress(Exception):  # title is read-only on some Textual versions
-            self.title = self._title(view)
-        body = view.result_text or "(no output yet)"
+        status = _STATUS_MARK.get(view.status, view.status)
+        body = f"[{status}] {view.result_text or '(no output yet)'}"
         if view.diff:
             body = f"{body}\n\n{view.diff}"
         for child in self.query(Static):

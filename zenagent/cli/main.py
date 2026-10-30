@@ -602,6 +602,7 @@ def main(argv: list[str] | None = None) -> int:
                 templates=not args.no_templates,
                 extension_paths=args.extension_paths or [],
                 context_files=not args.no_context_files,
+                read_only=args.read_only,
                 allow_dangerous=args.allow_dangerous,
                 retries=args.retries,
                 max_turns=args.max_turns,
@@ -629,9 +630,9 @@ def main(argv: list[str] | None = None) -> int:
 
             try:
                 return asyncio.run(run_tui_session())
-            except RuntimeError as exc:
-                print(f"zenagent: {exc}", file=sys.stderr)
-                return 1
+            except (RuntimeError, KeyError, ImportError) as exc:
+                print(f"zenagent: cannot start the TUI: {exc}", file=sys.stderr)
+                return 2
 
         # Line-based REPL, imported lazily to avoid a cycle.
         from zenagent.cli.repl import repl

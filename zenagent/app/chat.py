@@ -143,7 +143,12 @@ class ChatController:
             self._on_assistant_event(event)
         elif event.type == "message_end" and isinstance(event.message, AssistantMessage):
             if self._current is not None:
-                self._current.thinking = self._current.thinking or None
+                # Canonicalize from the final message: some providers (and fake
+                # streams) deliver the whole text in the terminal message only.
+                self._current.text = _assistant_text(event.message)
+                self._current.thinking = (
+                    _assistant_thinking(event.message) or self._current.thinking
+                )
                 self._current = None
         elif event.type == "tool_execution_start":
             card = ToolCallView(
@@ -194,6 +199,23 @@ class ChatController:
 
     def _notify(self) -> None:
         self._on_change()
+
+
+def _assistant_text(message: AssistantMessage) -> str:
+    return "\n".join(
+        block.text for block in message.content if isinstance(block, TextContent) and block.text
+    )
+
+
+def _assistant_thinking(message: AssistantMessage) -> str | None:
+    from zenagent.types import ThinkingContent
+
+    text = "\n".join(
+        block.thinking
+        for block in message.content
+        if isinstance(block, ThinkingContent) and block.thinking
+    )
+    return text or None
 
 
 def _user_text(message: UserMessage) -> str:

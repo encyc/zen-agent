@@ -17,6 +17,7 @@ class ChatLog(VerticalScroll):
     def __init__(self) -> None:
         super().__init__(id="chat")
         self._count = 0
+        self._assistant_widgets: list[Markdown] = []
         self._usage_shown = 0
 
     def sync(self, views: list[MessageView | ToolCallView], status: RunStatus) -> None:
@@ -27,11 +28,14 @@ class ChatLog(VerticalScroll):
             else:
                 self._append_tool(view)
             self._count += 1
-        for index, view in enumerate(views):
+        assistant_index = 0
+        for view in views:
             if isinstance(view, ToolCallView) and view.status != "running":
                 self._update_tool(view)
             elif isinstance(view, MessageView) and view.kind == "assistant":
-                self._update_message(index, view)
+                if assistant_index < len(self._assistant_widgets):
+                    self._assistant_widgets[assistant_index].update(view.text)
+                assistant_index += 1
         self._maybe_usage(status)
         self.scroll_end(animate=False)
 
@@ -50,7 +54,9 @@ class ChatLog(VerticalScroll):
                     classes="thinking",
                 )
             )
-        self.mount(Markdown(view.text, classes="assistant-message"))
+        widget = Markdown(view.text, classes="assistant-message")
+        self._assistant_widgets.append(widget)
+        self.mount(widget)
 
     def _append_tool(self, view: ToolCallView) -> None:
         self.mount(ToolCard(view))
@@ -80,6 +86,14 @@ class ChatLog(VerticalScroll):
                 classes="usage-row",
             )
         )
+
+    def reset(self) -> None:
+        """Drop every rendered widget (used when a session is resumed)."""
+        for child in list(self.children):
+            child.remove()
+        self._count = 0
+        self._assistant_widgets.clear()
+        self._usage_shown = 0
 
     def append_notice(self, text: str) -> None:
         self.mount(Static(text, classes="notice"))

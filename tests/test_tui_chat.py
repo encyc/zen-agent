@@ -1,5 +1,6 @@
 """Rich chat rendering: assistant markdown and collapsible tool cards."""
 
+from zenagent.cli.tui.app import ZenAgentApp
 from zenagent.cli.tui.widgets.chat_log import ChatLog
 from zenagent.cli.tui.widgets.tool_card import ToolCard
 
@@ -22,3 +23,36 @@ async def test_streamed_answer_and_tool_card_render(chat_app_with_one_tool):
         await pilot.press("enter")
         await pilot.pause()
         assert cards[0].collapsed is False
+
+
+async def test_two_turns_render_into_separate_bubbles(runtime_factory):
+    from conftest import sequenced_stream
+
+    runtime = await runtime_factory(stream_fn=sequenced_stream(["first", "second"]))
+    app = ZenAgentApp(runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await app.chat.submit("one")
+        await app.chat.wait_for_idle()
+        await app.chat.submit("two")
+        await app.chat.wait_for_idle()
+        await pilot.pause()
+        texts = [w.source for w in app.query("Markdown")]
+        assert "first" in " ".join(texts) and "second" in " ".join(texts)
+
+
+async def test_chat_log_reset_clears_widgets(runtime_factory):
+    from conftest import sequenced_stream
+
+    runtime = await runtime_factory(stream_fn=sequenced_stream(["first"]))
+    app = ZenAgentApp(runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await app.chat.submit("one")
+        await app.chat.wait_for_idle()
+        await pilot.pause()
+        log = app.query_one(ChatLog)
+        assert len(app.query("Markdown")) == 1
+        log.reset()
+        await pilot.pause()
+        assert len(app.query("Markdown")) == 0

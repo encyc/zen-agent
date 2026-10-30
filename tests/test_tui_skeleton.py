@@ -28,3 +28,14 @@ def test_non_tty_falls_back_to_repl(monkeypatch):
 
     assert cli_main.main([]) == 0
     assert called, "repl must run when stdout is not a tty"
+
+
+async def test_screen_widgets_have_real_geometry(fake_runtime):
+    """The app must paint widgets on the default screen, not inside a nested Screen."""
+    from zenagent.cli.tui.widgets.chat_log import ChatLog
+
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        log = app.query_one(ChatLog)
+        assert log.region.width > 0 and log.region.height > 0
