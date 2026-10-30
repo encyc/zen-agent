@@ -635,7 +635,6 @@ def main(argv: list[str] | None = None) -> int:
             missing = _missing_extra("textual", "rich")
             if missing:
                 return _missing_extras("TUI", missing)
-            ZenAgentApp = _tui_app_class()
 
             options = RuntimeOptions(
                 model_id=args.model,
@@ -655,6 +654,9 @@ def main(argv: list[str] | None = None) -> int:
             )
 
             async def run_tui_session() -> int:
+                # Imported here so a broken install is reported by the except
+                # below instead of escaping as a traceback.
+                ZenAgentApp = _tui_app_class()
                 runtime = await Runtime.bootstrap(
                     options,
                     assume_yes=args.yes,

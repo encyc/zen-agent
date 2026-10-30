@@ -44,11 +44,7 @@ async def test_screen_widgets_have_real_geometry(fake_runtime):
 def test_missing_textual_gives_actionable_error(monkeypatch, capsys):
     import zenagent.cli.main as cli_main
 
-    monkeypatch.setattr(
-        cli_main,
-        "_tui_app_class",
-        lambda: (_ for _ in ()).throw(ImportError("no textual")),
-    )
+    monkeypatch.setattr(cli_main, "_missing_extra", lambda *modules: "textual")
     monkeypatch.setattr("sys.stdout.isatty", lambda: True)
     assert cli_main.main([]) == 2
     err = capsys.readouterr().err
