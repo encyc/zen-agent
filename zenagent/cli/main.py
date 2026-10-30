@@ -619,7 +619,10 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                 )
                 try:
-                    await ZenAgentApp(runtime).run_async()
+                    app = ZenAgentApp(runtime)
+                    await app.run_async()
+                    if app.exit_summary:
+                        print(app.exit_summary)
                     return 0
                 finally:
                     await runtime.close()

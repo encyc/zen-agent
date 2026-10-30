@@ -10,6 +10,7 @@
    - [CLI](guide/cli.md) · [配置与目录](guide/config.md) · [工具与权限](guide/tools-permissions.md)
    - [MCP](guide/mcp.md) · [Skills 与模板](guide/skills-templates.md) · [扩展](guide/extensions.md)
    - [会话/导出/用量](guide/sessions.md) · [RPC 与 Python SDK](guide/rpc-sdk.md)
+   - [TUI](guide/tui.md)
 3. 内核导读（重点，按执行顺序）：
    - [类型与事件](internals/types-events.md) → [Provider 层](internals/providers.md)
    - [Agent Loop](internals/agent-loop.md) → [Agent 类](internals/agent-class.md)

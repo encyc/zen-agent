@@ -54,6 +54,16 @@
 | 导出 MD/HTML | `export.py`、`cli/exportcmd.py` | `test_export.py` | 同上 |
 | 跨会话用量 | `usage.py`、`cli/usagecmd.py` | `test_usage.py` | 同上 |
 
+## 5.5 TUI（Textual）
+
+| 功能 | 源码 | 测试 | 文档 |
+|---|---|---|---|
+| Textual 外壳、状态栏、输入 | `cli/tui/{app,run}.py`、`widgets/{status_bar,prompt_input}.py` | `test_tui_skeleton.py` | [TUI](guide/tui.md) |
+| 富渲染（markdown/工具卡/usage） | `widgets/{chat_log,tool_card}.py` | `test_tui_chat.py` | 同上 |
+| 队列/steer/中断 | `app.py`、`app/chat.py` | `test_tui_controls.py` | 同上 |
+| 模型/会话选择器、侧边栏、命令面板 | `screens/modals.py`、`widgets/sidebar.py` | `test_tui_pickers.py` | 同上 |
+| 收尾（窄屏/退出摘要） | `widgets/status_bar.py`、`app.py` | `test_tui_polish.py` | 同上 |
+
 ## 6. CLI / REPL
 
 | 功能 | 源码 | 测试 | 文档 |

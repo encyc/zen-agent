@@ -27,7 +27,8 @@ class ZenAgentApp(App):
         ("ctrl+b", "toggle_sidebar", "Sidebar"),
         ("ctrl+c", "interrupt", "Interrupt"),
         ("ctrl+s", "steer", "Steer"),
-        ("ctrl+q", "clear_queue", "Clear queue"),
+        ("ctrl+q", "quit_app", "Quit"),
+        ("ctrl+x", "clear_queue", "Clear queue"),
     ]
 
     def __init__(
@@ -39,6 +40,7 @@ class ZenAgentApp(App):
         super().__init__()
         self.runtime = runtime
         self.chat = chat or ChatController(runtime, on_change=self._on_change)
+        self.exit_summary: str | None = None
         self.models = ModelManager(runtime)
         self.sessions = SessionManager(runtime)
         self.commands = build_default_commands(
@@ -50,6 +52,15 @@ class ZenAgentApp(App):
     def compose(self):
         yield MainScreen()
 
+    def action_quit_app(self) -> None:
+        status = self.chat.status
+        session = getattr(self.runtime.session, "path", None)
+        self.exit_summary = (
+            f"session: {session} · {status.input_tokens} in / "
+            f"{status.output_tokens} out · ${status.cost:.4f}"
+        )
+        self.exit()
+
     def on_mount(self) -> None:
         self._refresh_status()
         self.query_one(PromptInput).focus()
@@ -59,8 +70,9 @@ class ZenAgentApp(App):
 
     def _refresh_status(self) -> None:
         status = self.chat.status
+        width = self.size.width
         for bar in self.query(StatusBar):
-            bar.update_status(status)
+            bar.update_status(status, width)
         for log in self.query(ChatLog):
             log.sync(self.chat.transcript, status)
         for sidebar in self.query(Sidebar):

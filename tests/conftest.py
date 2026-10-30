@@ -186,3 +186,10 @@ async def narrow_app(fake_runtime):
     from zenagent.cli.tui.app import ZenAgentApp
 
     return ZenAgentApp(fake_runtime)
+
+
+@pytest.fixture
+async def polish_app(fake_runtime):
+    from zenagent.cli.tui.app import ZenAgentApp
+
+    return ZenAgentApp(fake_runtime)

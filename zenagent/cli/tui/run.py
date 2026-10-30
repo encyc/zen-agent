@@ -11,5 +11,8 @@ __all__ = ["run_tui"]
 
 def run_tui(runtime: Runtime, *, chat: ChatController | None = None) -> int:
     """Run the TUI (blocking) and return its exit code."""
-    ZenAgentApp(runtime, chat=chat).run()
+    app = ZenAgentApp(runtime, chat=chat)
+    app.run()
+    if app.exit_summary:
+        print(app.exit_summary)
     return 0
