@@ -10,6 +10,7 @@ import httpx
 from zenagent.agent.loop import AgentTool, ToolResultAgent
 from zenagent.tools.web import net
 from zenagent.tools.web.providers import LABELS
+from zenagent.tools.web.query import parse_query
 from zenagent.tools.web.registry import default_chain
 from zenagent.tools.web.types import SearchRequest
 from zenagent.types import TextContent
@@ -55,7 +56,9 @@ def format_results(result) -> str:
 
 async def run_search(query: str, *, limit: int = MAX_RESULTS, recency: str | None = None):
     """Chain search with the configured providers (used by tool and /search)."""
-    request = SearchRequest(query=query, limit=limit, recency=recency)
+    request = SearchRequest(
+        query=query, limit=limit, recency=recency, parsed=parse_query(query)
+    )
     return await default_chain().search(request)
 
 
@@ -110,9 +113,15 @@ WEB_SEARCH = AgentTool(
     description=(
         "Search the web: returns titles, URLs and snippets. Use it when the "
         "answer depends on information outside this repository (current library "
-        "APIs, release notes, error messages). Chain: "
-        "DeepSeek -> Tavily -> Brave -> Bing -> DuckDuckGo, first usable wins. "
-        f"Returns at most {MAX_RESULTS} results; follow up with `fetch` to read a page."
+        "APIs, release notes, error messages).\n"
+        "The query accepts Google-style operators: \"exact phrase\", -exclude, "
+        "site:domain, -site:domain, filetype:pdf, intitle:word, inurl:word, "
+        "lang:en, after:2025-01-01, before:2026-01-01, and `a OR b`. Each engine "
+        "gets only the operators it understands; constraints that would return "
+        "nothing are relaxed and reported.\n"
+        "Chain: DeepSeek -> Tavily -> Brave -> Bing -> DuckDuckGo, first usable "
+        f"wins. Returns at most {MAX_RESULTS} results; follow up with `fetch` to "
+        "read a page."
     ),
     parameters={
         "type": "object",

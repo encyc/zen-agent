@@ -27,6 +27,9 @@ class SearchRequest:
     query: str
     limit: int = 8
     recency: str | None = None  # day | week | month | year
+    #: Parsed form of ``query``; filled by the caller so every provider and the
+    #: constraint filter agree on the same interpretation.
+    parsed: object | None = None
 
 
 class ProviderError(RuntimeError):

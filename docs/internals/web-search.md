@@ -49,6 +49,32 @@ zenagent/tools/web/
 4. **缓存 60 秒 / 32 条**（key = 顺序 + query + limit + recency）。同一轮里模型重复搜同一句不会重复打 API；
 5. `recency` 只对支持的 provider 生效（deepseek/tavily/brave），其它忽略而不是报错。
 
+## 4.5 查询语法（Google 式操作符）
+
+模型习惯在 query 里写 `site:`、`after:`、引号短语，不管后端引擎认不认。所以链在**调用前解析一次**，再按引擎能力重排：
+
+| 操作符 | 含义 | DeepSeek | Tavily | Brave | Bing / DDG |
+|---|---|---|---|---|---|
+| `"exact phrase"` | 精确短语 | ✅ | ✅ | ✅ | ✅ |
+| `-term` / `NOT term` | 排除词 | ✅ | 丢弃 | ✅ | ✅ |
+| `site:a.com` | 限定站点 | ✅ | → `include_domains` | ✅ | ✅（仅裸域名，带路径会被降级成关键词） |
+| `-site:a.com` | 排除站点 | ✅ | → `exclude_domains` | ✅ | ✅ |
+| `filetype:pdf` | 文件类型 | ✅ | 丢弃 | ✅ | ✅ |
+| `intitle:word` | 标题包含 | 丢弃 | 丢弃 | 丢弃 | ✅ |
+| `inurl:word` | URL 包含 | 丢弃 | 丢弃 | 丢弃 | 降级成关键词（DDG 忽略 `inurl:`） |
+| `lang:en` | 语言 | ✅ | 丢弃 | 丢弃 | 丢弃 |
+| `after:2025-01-01` | 起始日期 | ✅ | → `days`（若同时给了 recency） | 丢弃 | 丢弃 |
+| `before:2026-01-01` | 截止日期 | ✅ | 丢弃 | 丢弃 | 丢弃 |
+| `a OR b` | 任一匹配 | ✅ | 丢弃 | ✅ | ✅ |
+
+三条规则：
+
+1. **能映射到 API 参数的就不用语法**：Tavily 的 `include_domains`/`exclude_domains` 由 `site:`/`-site:` 直接填充，query 文本里不再出现 `site:`。
+2. **不认识的指令当普通关键词**：`issn:1234` 不是我们的指令，原样进 query；`after:yesterday` 日期解析失败也原样进 query。宁可搜不到也不吞掉用户输入。
+3. **过严的约束自动放宽**：返回结果按 `site` / `filetype` / `intitle` / 日期做一次宽松过滤；**某个维度会清空整个结果集时，该维度被丢弃并在 `attempts` 里记一条 `relaxed site:x`**，而不是返回空。这条是 omp 的原设计，避免"加了一个过滤词就什么都搜不到"。
+
+解析器在 `zenagent/tools/web/query.py`：`parse_query` → `StructuredQuery`，`format_query(query, syntax)` 按 `QuerySyntax` 重新拼，`format_scraper_query` 额外把"抓取式引擎不支持的 `site:` 带路径 / `inurl:`"降级成关键词，`apply_constraints` 做宽松过滤。
+
 ## 5. 结果规范化
 
 不同引擎回来的东西差别很大，统一在 provider 里做三件事：
@@ -92,6 +118,7 @@ zenagent/tools/web/
 
 ## 源码对照
 
+- `zenagent/tools/web/query.py` — `parse_query` / `format_query` / `format_scraper_query` / `apply_constraints`
 - `zenagent/tools/web/registry.py` — `SearchChain.search` / `dedupe` / `configured_order`
 - `zenagent/tools/web/providers.py` — `deepseek` / `tavily` / `brave` / `bing` / `duckduckgo`，`parse_bing` / `parse_duckduckgo`
 - `zenagent/tools/web/tools.py` — `WEB_SEARCH` / `FETCH` / `format_results` / `run_search`

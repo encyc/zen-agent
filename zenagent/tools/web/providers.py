@@ -14,6 +14,16 @@ from datetime import date, timedelta
 from urllib.parse import unquote, urlsplit, urlunsplit
 
 from zenagent.tools.web import net
+from zenagent.tools.web.query import (
+    BRAVE_SYNTAX,
+    DEEPSEEK_SYNTAX,
+    NATURAL_SYNTAX,
+    QuerySyntax,
+    StructuredQuery,
+    format_query,
+    format_scraper_query,
+    parse_query,
+)
 from zenagent.tools.web.types import ProviderError, SearchRequest, SearchResult
 
 __all__ = [
@@ -31,6 +41,11 @@ _LIMIT_MAX = 20
 _TAG = re.compile(r"<[^>]+>")
 _SCRIPT_STYLE = re.compile(r"<(script|style|noscript)[^>]*>.*?</\1>", re.DOTALL)
 _WS = re.compile(r"[ \t\r\f\v]+")
+
+#: Keyless HTML engines: no date operators, and ``inurl:`` is demoted upstream.
+SCRAPER_SYNTAX = QuerySyntax(
+    phrases=True, negation=True, or_groups=True, site=True, in_title=True, filetype=True
+)
 
 _RECENCY_DAYS = {"day": 1, "week": 7, "month": 30, "year": 365}
 _BRAVE_FRESHNESS = {"day": "pd", "week": "pw", "month": "pm", "year": "py"}
@@ -79,6 +94,11 @@ def _limited(request: SearchRequest) -> int:
     return max(1, min(request.limit, _LIMIT_MAX))
 
 
+def _parsed(request: SearchRequest) -> StructuredQuery:
+    parsed = request.parsed
+    return parsed if isinstance(parsed, StructuredQuery) else parse_query(request.query)
+
+
 # -- DeepSeek (in-house search, same key as the model API) -------------------
 
 
@@ -86,9 +106,10 @@ async def deepseek(request: SearchRequest) -> list[SearchResult]:
     key = _key("DEEPSEEK_API_KEY")
     if not key:
         raise ProviderError("DEEPSEEK_API_KEY is not set")
-    query = request.query
-    after = _after_date(request.recency)
-    if after:
+    parsed = _parsed(request)
+    query = format_query(parsed, DEEPSEEK_SYNTAX)
+    after = parsed.after or _after_date(request.recency)
+    if after and not parsed.after:
         query = f"{query} after:{after}"
     response = await net.post(
         "https://api.deepseek.com/v1/tools/search",
@@ -123,13 +144,19 @@ async def tavily(request: SearchRequest) -> list[SearchResult]:
     key = _key("TAVILY_API_KEY")
     if not key:
         raise ProviderError("TAVILY_API_KEY is not set")
+    parsed = _parsed(request)
     payload: dict = {
         "api_key": key,
-        "query": request.query,
+        "query": format_query(parsed, NATURAL_SYNTAX),
         "max_results": _limited(request),
         "search_depth": "basic",
         "include_answer": False,
     }
+    # Tavily takes domains as API parameters, so they never reach the query text.
+    if parsed.sites:
+        payload["include_domains"] = list(parsed.sites)
+    if parsed.excluded_sites:
+        payload["exclude_domains"] = list(parsed.excluded_sites)
     days = _RECENCY_DAYS.get(request.recency or "")
     if days:
         payload["days"] = days
@@ -161,7 +188,8 @@ async def brave(request: SearchRequest) -> list[SearchResult]:
     key = _key("BRAVE_API_KEY")
     if not key:
         raise ProviderError("BRAVE_API_KEY is not set")
-    params = {"q": request.query, "count": _limited(request)}
+    parsed = _parsed(request)
+    params = {"q": format_query(parsed, BRAVE_SYNTAX), "count": _limited(request)}
     freshness = _BRAVE_FRESHNESS.get(request.recency or "")
     if freshness:
         params["freshness"] = freshness
@@ -225,9 +253,14 @@ def parse_bing(body: str, limit: int) -> list[SearchResult]:
 
 
 async def bing(request: SearchRequest) -> list[SearchResult]:
+    parsed = _parsed(request)
     response = await net.get(
         "https://cn.bing.com/search",
-        params={"q": request.query, "count": str(_limited(request)), "setlang": "en"},
+        params={
+            "q": format_scraper_query(parsed, SCRAPER_SYNTAX),
+            "count": str(_limited(request)),
+            "setlang": "en",
+        },
         headers={"Accept-Language": "en-US,en;q=0.9"},
     )
     if response.status_code >= 400:
@@ -266,8 +299,10 @@ def parse_duckduckgo(body: str, limit: int) -> list[SearchResult]:
 
 
 async def duckduckgo(request: SearchRequest) -> list[SearchResult]:
+    parsed = _parsed(request)
     response = await net.post(
-        "https://html.duckduckgo.com/html/", data={"q": request.query, "kl": "wt-wt"}
+        "https://html.duckduckgo.com/html/",
+        data={"q": format_scraper_query(parsed, SCRAPER_SYNTAX), "kl": "wt-wt"},
     )
     if response.status_code >= 400:
         raise ProviderError(f"DuckDuckGo HTTP {response.status_code}")

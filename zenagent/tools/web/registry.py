@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 import httpx
 
 from zenagent.tools.web.providers import LABELS, PROVIDERS, available_providers
+from zenagent.tools.web.query import StructuredQuery, apply_constraints, parse_query
 from zenagent.tools.web.types import (
     Provider,
     ProviderError,
@@ -98,6 +99,10 @@ class SearchChain:
         if cached is not None:
             return cached
 
+        parsed = request.parsed
+        if not isinstance(parsed, StructuredQuery):
+            parsed = parse_query(request.query)
+
         result = ChainResult()
         for name in order:
             provider = self.providers[name]
@@ -107,10 +112,16 @@ class SearchChain:
                 result.attempts.append(f"{LABELS.get(name, name)}: {exc}")
                 continue
             if found:
-                result.results = dedupe(found)[: request.limit]
-                result.provider = name
-                result.attempts.append(f"{LABELS.get(name, name)}: {len(result.results)} results")
-                break
+                kept, relaxed = apply_constraints(dedupe(found), parsed)
+                for label in relaxed:
+                    result.attempts.append(f"{LABELS.get(name, name)}: relaxed {label}")
+                if kept:
+                    result.results = kept[: request.limit]
+                    result.provider = name
+                    result.attempts.append(
+                        f"{LABELS.get(name, name)}: {len(result.results)} results"
+                    )
+                    break
             result.attempts.append(f"{LABELS.get(name, name)}: no results")
         self._store(key, result)
         return result
