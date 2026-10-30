@@ -10,7 +10,7 @@
 
 ```
                              zen
-                   v0.2.0 · python agent loop
+                   v0.2.1 · python agent loop
 
            / commands  ·  ctrl+b info  ·  ctrl+d quit
 

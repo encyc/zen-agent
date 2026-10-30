@@ -21,6 +21,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from zenagent import __version__
 from zenagent.agent import Agent
 from zenagent.agent.session import Session, latest_session, list_sessions, session_path
 from zenagent.app.support import (
@@ -382,6 +383,13 @@ def build_parser() -> argparse.ArgumentParser:
         "command",
         nargs="?",
         help="optional subcommand: doctor",
+    )
+    parser.add_argument(
+        "-V",
+        "--version",
+        action="version",
+        version=f"zenagent {__version__}",
+        help="print the version and exit",
     )
     parser.add_argument("-p", "--prompt", help="run one prompt headlessly and exit")
     parser.add_argument("session", nargs="?", help="session path for: export")

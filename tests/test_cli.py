@@ -740,3 +740,17 @@ def test_theme_flag_is_forwarded_to_the_repl(monkeypatch):
     monkeypatch.setattr(repl_module, "repl", fake_repl)
     assert cli_main.main(["--theme", "mono"]) == 0
     assert captured["theme"] == "mono"
+
+
+def test_version_flag_prints_the_version(capsys):
+    import pytest
+
+    from zenagent import __version__
+    from zenagent.cli.main import build_parser
+
+    parser = build_parser()
+    with pytest.raises(SystemExit) as excinfo:
+        parser.parse_args(["--version"])
+    assert excinfo.value.code == 0
+    out = capsys.readouterr().out + capsys.readouterr().err
+    assert __version__ in out
