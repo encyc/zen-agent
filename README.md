@@ -221,7 +221,6 @@ kill on timeout/abort), `glob`, `grep` (ripgrep when available, Python fallback)
 
 ```bash
 bash scripts/check.sh     # the gate: sync + ruff + pytest (CI runs exactly this)
-bash scripts/check.sh     # the gate: sync + ruff + pytest (CI runs exactly this)
 uv run pytest -q          # fully offline: fake stream fns + replayed SSE fixtures
 ./scripts/eval.sh         # behavioral evals against a real model (opt-in, costs money)
 ```
@@ -238,8 +237,33 @@ code; they are separate from the offline gate:
 `zenagent/providers/fixtures/` so the parser can be checked against the wire; the
 replay tests skip when a capture is absent.
 
+## Releasing
+
+`zenagent-py` ships from a tag. Everything before the tag runs offline:
+
+```bash
+bash scripts/check.sh            # lint + tests
+bash scripts/release-check.sh    # build sdist/wheel, install both ways, run the CLI
+git tag vX.Y.Z
+git push origin main vX.Y.Z      # the publish workflow re-runs the gate, then uploads
+```
+
+`release-check.sh` is the packaging gate: it asserts the version is consistent
+(`pyproject.toml`, `__version__`, and the tag on HEAD), that the sdist and wheel
+carry no dev or stray files, that a kernel-only install works (`pip install
+zenagent-py`), and that a `[cli]` install starts (`zen --version`, TUI imports,
+search providers, a settings round-trip in an isolated `$HOME`). It tests the
+`requires-python` floor by default; pass `--python 3.13` for another
+interpreter, or `--skip-build` to verify the existing `dist/`. It never uploads
+and writes only under a temp dir.
+
+`.github/workflows/publish.yml` runs the same gate before uploading. A manual run
+(`workflow_dispatch`) is always a dry run — it builds and verifies but cannot
+publish; only a `v*` tag push reaches PyPI.
+
 ## Status
 
-Milestones 1–2 are complete and verified against a live provider; the
-interactive harness and the second protocol adapter are implemented. Not in
-scope (v1): MCP, subagents, sandboxing, a full-screen TUI, custom providers.
+Milestones 1–2 are complete and verified against a live provider. Implemented:
+the interactive harness and the Textual TUI, MCP, extensions, and the protocol
+adapters (OpenAI chat/completions and responses, Anthropic messages, Google
+generative AI). Not yet: subagents and OS-level sandboxing.

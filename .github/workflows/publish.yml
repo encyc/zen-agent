@@ -3,25 +3,47 @@ name: publish
 on:
   push:
     tags: ["v*"]
+  # Manual runs are dry runs: they build and verify the artifacts but never
+  # upload. Publishing requires a tag push (see the `if:` on the publish job).
   workflow_dispatch:
+
+# Never let two runs race for the same PyPI project.
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the release gate compares the version against the tag
       - uses: astral-sh/setup-uv@v6
         with:
           version: "latest"
       - name: Build sdist and wheel
-        run: uv build
+        run: uv build --clear
+      - name: Verify the artifacts (release gate)
+        run: bash scripts/release-check.sh --skip-build
       - uses: actions/upload-artifact@v4
         with:
           name: dist
           path: dist/
+      - name: Dry-run summary
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "### Dry run — nothing was uploaded to PyPI" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          ls -l dist/ >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
 
   publish:
     needs: build
+    # A tag push is the only path to PyPI: a manual run, or a tag pushed from a
+    # branch dispatch, stays a dry run.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: read

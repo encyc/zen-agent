@@ -1,15 +1,21 @@
 # 测试策略
 
-## 两个闸门
+## 三个闸门
 
 | 闸门 | 命令 | 内容 | 何时跑 |
 |---|---|---|---|
 | 单元/集成测试 | `bash scripts/check.sh` | `uv sync` + `ruff check` + `pytest` | 每次改动（唯一 CI 闸门） |
+| 打包发布 | `bash scripts/release-check.sh` | 构建 sdist/wheel、校验版本与包内容、两种安装各跑一遍 CLI | 打 tag 前（publish workflow 再跑一次） |
 | 行为评测 | `./scripts/eval.sh` | 18 条真实模型用例 | 改 prompt/工具/接线后，按需 |
 
 评测**不进** `check.sh`：它需要 key、会花钱、结果受模型随机性影响。
 
-## 测试布局（约 565 条）
+`release-check.sh` 也不进 `check.sh`：它要构建并由 wheel 安装，约 3 秒（缓存热时）。
+默认用 `requires-python` 下限建临时 venv；`--skip-build` 复用刚构建的 `dist/`，
+`--python 3.13` 换解释器。手动触发 publish workflow 只做 dry run，只有推 `v*`
+tag 才会真的上传。
+
+## 测试布局（约 697 条）
 
 | 文件 | 覆盖 |
 |---|---|
@@ -73,7 +79,7 @@ fake stream 的最小形态见 `examples/custom_tool.py`。
 
 ## 当前结果
 
-- 单元/集成：565 passed（3.11 / 3.12 / 3.13 / 3.14），ruff clean。
+- 单元/集成：697 passed（3.11 / 3.14；CI 跑 ubuntu + macos），ruff clean。
 - 行为评测：18/18（3 repeats，$0.014，120k tokens）。
 
 ## 已知未覆盖
