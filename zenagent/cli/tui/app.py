@@ -19,7 +19,7 @@ class ZenAgentApp(App):
 
     CSS_PATH = "theme.tcss"
     TITLE = "ZenAgent"
-    BINDINGS = [
+    BINDINGS = [  # noqa: RUF012 - Textual class API
         ("ctrl+c", "interrupt", "Interrupt"),
         ("ctrl+s", "steer", "Steer"),
         ("ctrl+q", "clear_queue", "Clear queue"),
