@@ -328,3 +328,192 @@ def test_tool_policy_values_must_be_strings(tmp_path):
     path = write_config(tmp_path, "[tools]\nallow = [1, 2]\n")
     with pytest.raises(ValueError, match="array of strings"):
         load_user_config(path)
+
+
+# ---------------------------------------------------------------------------
+# Project-layer config stacking (global ~/.zenagent/config.toml -> <repo>/.zenagent/config.toml)
+# ---------------------------------------------------------------------------
+
+
+def custom_provider_toml(provider_id: str, base_url: str) -> str:
+    return f'''
+[providers.custom.{provider_id}]
+base_url = "{base_url}"
+api_key_env = "KEY_{provider_id}"
+adapter = "openai-completions"
+
+[[providers.custom.{provider_id}.models]]
+id = "{provider_id}-model"
+context_window = 1024
+max_tokens = 128
+reasoning = false
+'''
+
+
+def stacked_config(tmp_path, monkeypatch, *, global_text=None, project_text=None):
+    """Isolated global config plus a git repo carrying a project config layer."""
+    home = tmp_path / "home"
+    home.mkdir()
+    global_config = home / "config.toml"
+    if global_text is not None:
+        global_config.write_text(global_text, encoding="utf-8")
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    project_config = repo / ".zenagent" / "config.toml"
+    if project_text is not None:
+        project_config.parent.mkdir(parents=True)
+        project_config.write_text(project_text, encoding="utf-8")
+    monkeypatch.setattr("zenagent.config.config_path", lambda: global_config)
+    return repo, project_config
+
+
+GLOBAL_LAYER = """
+default_model = "global-model"
+extensions = ["ext-global.py"]
+
+[providers.deepseek]
+base_url = "https://global.example/v1"
+api_key_env = "GLOBAL_KEY"
+
+[providers.shadow]
+base_url = "https://shadow.example/v1"
+
+[tools]
+allow = ["read_*", "grep"]
+deny = ["bash", "write_file"]
+"""
+
+PROJECT_LAYER = """
+default_model = "project-model"
+extensions = ["ext-project.py"]
+
+[providers.deepseek]
+base_url = "https://project.example/v1"
+
+[providers.projectonly]
+base_url = "https://projectonly.example/v1"
+
+[tools]
+allow = ["read_*", "apply_patch"]
+deny = ["bash"]
+"""
+
+
+def test_project_config_overrides_scalars_and_merges_tables(tmp_path, monkeypatch):
+    repo, project_config = stacked_config(
+        tmp_path, monkeypatch, global_text=GLOBAL_LAYER, project_text=PROJECT_LAYER
+    )
+    monkeypatch.chdir(repo)
+
+    config = load_user_config()
+
+    # scalar: the project layer wins
+    assert config.default_model == "project-model"
+    # provider overrides merge by id: same id replaced, other ids kept
+    assert config.provider_overrides == {
+        "deepseek": {"base_url": "https://project.example/v1"},
+        "shadow": {"base_url": "https://shadow.example/v1"},
+        "projectonly": {"base_url": "https://projectonly.example/v1"},
+    }
+    # extensions append, each resolved against its own config file's directory
+    assert config.extensions == [
+        str((tmp_path / "home" / "ext-global.py").resolve()),
+        str((project_config.parent / "ext-project.py").resolve()),
+    ]
+    # allow appends (deduped, order kept); deny is a union the project cannot relax
+    assert config.tool_allow == ["read_*", "grep", "apply_patch"]
+    assert config.tool_deny == ["bash", "write_file"]
+
+
+def test_project_config_merges_custom_providers_by_id(tmp_path, monkeypatch):
+    repo, _ = stacked_config(
+        tmp_path,
+        monkeypatch,
+        global_text=custom_provider_toml("alpha", "https://global-alpha.example/v1"),
+        project_text=(
+            custom_provider_toml("alpha", "https://project-alpha.example/v1")
+            + custom_provider_toml("beta", "https://beta.example/v1")
+        ),
+    )
+    monkeypatch.chdir(repo)
+
+    config = load_user_config()
+
+    assert set(config.custom_providers) == {"alpha", "beta"}
+    assert config.custom_providers["alpha"].base_url == (
+        "https://project-alpha.example/v1"
+    )
+    assert config.custom_providers["beta"].models[0].id == "beta-model"
+
+
+def test_project_layer_keeps_global_default_model_when_it_has_none(tmp_path, monkeypatch):
+    repo, _ = stacked_config(
+        tmp_path,
+        monkeypatch,
+        global_text='default_model = "global-model"\n',
+        project_text='[tools]\ndeny = ["bash"]\n',
+    )
+    monkeypatch.chdir(repo)
+
+    config = load_user_config()
+
+    assert config.default_model == "global-model"
+    assert config.tool_deny == ["bash"]
+
+
+def test_project_config_is_used_when_the_global_file_is_missing(tmp_path, monkeypatch):
+    repo, _ = stacked_config(
+        tmp_path, monkeypatch, project_text='default_model = "only-project"\n'
+    )
+    monkeypatch.chdir(repo)
+
+    assert load_user_config().default_model == "only-project"
+
+
+def test_no_config_files_means_defaults(tmp_path, monkeypatch):
+    repo, _ = stacked_config(tmp_path, monkeypatch)
+    monkeypatch.chdir(repo)
+
+    assert load_user_config() == UserConfig()
+
+
+def test_broken_project_config_raises_with_its_path(tmp_path, monkeypatch):
+    repo, project_config = stacked_config(
+        tmp_path, monkeypatch, project_text="default_model = [unclosed\n"
+    )
+    monkeypatch.chdir(repo)
+
+    with pytest.raises(ValueError) as excinfo:
+        load_user_config()
+    assert "cannot read config" in str(excinfo.value)
+    assert str(project_config) in str(excinfo.value)
+
+
+def test_project_layer_follows_an_explicit_cwd(tmp_path, monkeypatch):
+    repo, _ = stacked_config(
+        tmp_path, monkeypatch, project_text='default_model = "project-model"\n'
+    )
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+
+    assert load_user_config().default_model is None
+    assert load_user_config(cwd=repo).default_model == "project-model"
+
+
+def test_explicit_path_ignores_the_project_layer(tmp_path, monkeypatch):
+    repo, _ = stacked_config(
+        tmp_path,
+        monkeypatch,
+        global_text='default_model = "global-model"\n',
+        project_text='default_model = "project-model"\n[tools]\ndeny = ["bash"]\n',
+    )
+    monkeypatch.chdir(repo)
+    explicit = tmp_path / "explicit.toml"
+    explicit.write_text('default_model = "explicit-model"\n', encoding="utf-8")
+
+    config = load_user_config(explicit)
+
+    assert config.default_model == "explicit-model"
+    assert config.tool_deny == []  # the project layer is not consulted
+    assert load_user_config(tmp_path / "absent.toml") == UserConfig()

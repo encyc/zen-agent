@@ -101,20 +101,23 @@ def collect_usage(paths: list[Path]) -> UsageReport:
 
 
 def session_paths(since: str | None = None) -> list[Path]:
-    """Session files, optionally filtered by mtime >= ``YYYY-MM-DD``."""
-    from zenagent.agent.session import sessions_dir
+    """Session files across every project (plus legacy), newest names last."""
+    from zenagent.agent.session import all_session_dirs, sessions_dir
 
     cutoff = None
     if since:
         cutoff = datetime.strptime(since, "%Y-%m-%d").timestamp()  # raises on bad input
-    directory = sessions_dir()
-    if not directory.is_dir():
-        return []
-    paths = []
-    for path in sorted(directory.glob("*.jsonl")):
-        if cutoff is not None and path.stat().st_mtime < cutoff:
+    directories = [sessions_dir(), *all_session_dirs()]
+    seen: set[Path] = set()
+    paths: list[Path] = []
+    for directory in directories:
+        if directory in seen or not directory.is_dir():
             continue
-        paths.append(path)
+        seen.add(directory)
+        for path in sorted(directory.glob("*.jsonl")):
+            if cutoff is not None and path.stat().st_mtime < cutoff:
+                continue
+            paths.append(path)
     return paths
 
 

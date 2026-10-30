@@ -600,7 +600,7 @@ async def test_sessions_slash_shows_titles_before_filenames(tmp_path, monkeypatc
         messages=3,
         title="fix the login bug",
     )
-    monkeypatch.setattr(repl_module, "list_sessions", lambda: [info])
+    monkeypatch.setattr(repl_module, "list_sessions", lambda **kwargs: [info])
     printed: list[str] = []
 
     await handle_slash(None, "sessions", "", print_fn=printed.append)

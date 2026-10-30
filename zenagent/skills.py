@@ -166,5 +166,12 @@ def skills_prompt_index(skills: list[Skill], max_bytes: int = MAX_INDEX_BYTES) -
 
 
 def default_skill_roots(cwd: Path) -> list[Path]:
-    """Project skills first (they override global ones), then the user's."""
-    return [Path(cwd) / ".zenagent" / "skills", Path.home() / ".zenagent" / "skills"]
+    """Project skills first (they override global ones), then the user's.
+
+    The project directory is the nearest ancestor with a ``.git`` marker, so
+    opening the agent in a subdirectory still finds the repository's skills.
+    """
+    from zenagent.project import find_project_root
+
+    root = find_project_root(cwd)
+    return [root / ".zenagent" / "skills", Path.home() / ".zenagent" / "skills"]

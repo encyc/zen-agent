@@ -394,7 +394,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "command",
         nargs="?",
-        help="optional subcommand: doctor",
+        help="optional subcommand: doctor, sessions",
     )
     parser.add_argument(
         "-V",
@@ -526,7 +526,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--list-sessions",
         action="store_true",
-        help="list saved sessions and exit",
+        help="list this project's saved sessions and exit",
+    )
+    parser.add_argument(
+        "--all-projects",
+        action="store_true",
+        help="with --list-sessions: include every project and legacy sessions",
     )
     parser.add_argument(
         "--no-auto-compact",
@@ -593,6 +598,10 @@ def main(argv: list[str] | None = None) -> int:
         from zenagent.cli.rpc import main as rpc_main
 
         return rpc_main(raw[1:])
+    if raw and raw[0] == "sessions":
+        from zenagent.cli.sessionscmd import main as sessions_main
+
+        return sessions_main(raw[1:])
     if raw and raw[0] == "evals":
         import importlib.util
 
@@ -641,12 +650,21 @@ def main(argv: list[str] | None = None) -> int:
         print(f"zenagent: unknown command: {args.command} (try: doctor)", file=sys.stderr)
         return 1
     if args.list_sessions:
-        infos = list_sessions()
+        scope = "all" if args.all_projects else "project"
+        infos = list_sessions(scope=scope)
         if not infos:
             print("no saved sessions")
+            if scope == "project":
+                print("hint: --all-projects lists every project")
             return 0
         for position, info in enumerate(infos, start=1):
-            print(f"{position:2d}. {info.path.name} · {info.messages} msgs · {info.title or '(empty)'}")
+            label = ""
+            if scope == "all":
+                label = f"[{info.project or 'legacy'}] "
+            print(
+                f"{position:2d}. {label}{info.title or '(empty)'} · "
+                f"{info.messages} msgs · {info.path.name}"
+            )
         return 0
     if not args.prompt:
         if sys.stdout.isatty() and not args.no_tui:

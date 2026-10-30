@@ -1,8 +1,15 @@
-"""User configuration (``~/.zenagent/config.toml``) and context-window prudence.
+"""User configuration and context-window prudence.
 
 Config is deliberately small: a default model and per-provider overrides for the
 base URL / API-key environment variable. Custom providers are out of scope (v1
 ships a packaged catalog), but pointing a known provider at a mirror is easy.
+
+Two layers are read by default: the machine-wide ``~/.zenagent/config.toml``
+and a committable project layer at ``<root>/.zenagent/config.toml`` (root = the
+nearest directory with ``.git``). Scalars and per-provider tables merge with the
+project layer winning; list-shaped keys append (``tools.allow``) or union
+(``tools.deny``, so a project can never widen permissions). Relative
+``extensions`` paths resolve against the directory of the file that names them.
 
 :func:`naive_overflow_prune` is the automatic last resort before a request goes
 out: it estimates the context level (real ``usage`` when we have it, a char/4
@@ -18,6 +25,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from zenagent import project
 from zenagent.providers.catalog import ProviderConfig, model_from_mapping
 from zenagent.types import AssistantMessage, Message, Usage
 
@@ -115,9 +123,8 @@ class UserConfig:
     tool_deny: list[str] = field(default_factory=list)
 
 
-def load_user_config(path: Path | None = None) -> UserConfig:
-    """Read the config file; missing file means "use the defaults"."""
-    target = Path(path) if path is not None else config_path()
+def _load_config_file(target: Path) -> UserConfig:
+    """Read one config file; a missing file means "use the defaults"."""
     if not target.is_file():
         return UserConfig()
     try:
@@ -196,6 +203,53 @@ def load_user_config(path: Path | None = None) -> UserConfig:
         extensions=extensions,
         tool_allow=tool_allow,
         tool_deny=tool_deny,
+    )
+
+
+def _dedupe(values: list[str]) -> list[str]:
+    """Stable de-duplication (first occurrence wins)."""
+    seen: set[str] = set()
+    merged: list[str] = []
+    for value in values:
+        if value not in seen:
+            seen.add(value)
+            merged.append(value)
+    return merged
+
+
+def _merge_user_configs(base: UserConfig, override: UserConfig) -> UserConfig:
+    """Layer ``override`` (project config) on top of ``base`` (global config)."""
+    provider_overrides = dict(base.provider_overrides)
+    provider_overrides.update(override.provider_overrides)
+    custom_providers = dict(base.custom_providers)
+    custom_providers.update(override.custom_providers)
+    return UserConfig(
+        default_model=(
+            override.default_model
+            if override.default_model is not None
+            else base.default_model
+        ),
+        provider_overrides=provider_overrides,
+        custom_providers=custom_providers,
+        extensions=[*base.extensions, *override.extensions],
+        tool_allow=_dedupe([*base.tool_allow, *override.tool_allow]),
+        tool_deny=_dedupe([*base.tool_deny, *override.tool_deny]),
+    )
+
+
+def load_user_config(path: Path | None = None, *, cwd: Path | None = None) -> UserConfig:
+    """Read config, layering the project file over the global one.
+
+    An explicit ``path`` disables layering: only that file is read, preserving
+    the old behaviour for callers that choose a file themselves. Otherwise the
+    global ``~/.zenagent/config.toml`` is read first and ``<root>/.zenagent/
+    config.toml`` second; ``cwd`` selects the project root (default: cwd).
+    """
+    if path is not None:
+        return _load_config_file(Path(path))
+    return _merge_user_configs(
+        _load_config_file(config_path()),
+        _load_config_file(project.project_config_path(cwd)),
     )
 
 

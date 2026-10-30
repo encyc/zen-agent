@@ -132,7 +132,7 @@ a direct MCP call, and a `zen rpc` client. For embedding with the full app layer
 | `/mode [plan\|ask\|full]` | show or switch the runtime permission mode |
 | `/compact` | summarize the session into a new session file |
 | `/undo` | drop the last turn (writes a new session file) |
-| `/sessions` | list saved sessions (display name + filename) |
+| `/sessions [all]` | list this project's sessions (or all projects) |
 | `/rename <name>` | rename the current session |
 | `/fork <n>` | branch a new session at user message n |
 | `/import <path>` | load a session file and continue it |
@@ -152,7 +152,8 @@ rather than starting a second run. Ctrl+C aborts the current run cooperatively.
 
 ## Configuration
 
-Optional `~/.zenagent/config.toml` (themes, keybindings and MCP live in their own files):
+Optional `~/.zenagent/config.toml`, plus a committable `<project>/.zenagent/config.toml`
+that layers on top (themes, keybindings and MCP live in their own files):
 
 ```toml
 default_model = "deepseek-flash"
@@ -188,8 +189,12 @@ read/write separately). DeepSeek bills peak/off-peak; the catalog has no time
 dimension, so peak rates are used — treat `usage.cost` as a conservative upper
 bound. Providers with subscription pricing (zai, opencode-go) carry 0.
 
-Sessions are append-only JSONL under `~/.zenagent/sessions/`; `--resume` continues
-the most recent one. Destructive-looking operations never rewrite a file: `/undo`,
+Sessions are append-only JSONL scoped to the project they were started in:
+`~/.zenagent/projects/<project-key>/sessions/`. `/sessions`, `--resume latest`,
+`--list-sessions` and `zen export latest` default to the current project; add
+`all`/`--all-projects` for a cross-project view. Sessions from before project
+scoping stay in `~/.zenagent/sessions/` as read-only `legacy` entries and can be
+moved with `zen sessions adopt PATH`. `--resume` continues the most recent one. Destructive-looking operations never rewrite a file: `/undo`,
 `/fork` and `/compact` all write a new session and leave the old one intact. The file format is exactly the public message model, so it
 can be inspected with `jq` or replayed elsewhere.
 

@@ -2,9 +2,11 @@
 
 ## 会话文件
 
-- 位置：`~/.zenagent/sessions/<时间戳>.jsonl`
+- 位置：`~/.zenagent/projects/<项目key>/sessions/<时间戳>.jsonl`（按项目隔离；项目根=最近 `.git`）。
 - 一行一个消息（user/assistant/tool result），**只追加**，不做原地修改。
-- 每次启动新会话都会建新文件；`--resume latest` 或 `--resume PATH` 继续。
+- 每次启动新会话都会建新文件；`--resume latest` 只续**当前项目**最新会话，`--resume PATH` 可显式续任意会话。
+- 默认视图只含当前项目；`/sessions all`、TUI picker 的 `tab`、`zen sessions list --all` 才列出全部项目。
+- 升级前的扁平 `~/.zenagent/sessions/*.jsonl` 保留为 legacy，只在 all 视图出现；`zen sessions adopt PATH` 可归入当前项目。
 - 旧文件不会被重写：压缩、`/undo`、`/fork` 都**写新文件**，保证历史可审计。
 
 REPL 里：`/session` 看当前、`/sessions` 列出、`/fork` 复制、`/import PATH` 载入、`/undo` 撤销最后一轮、
@@ -16,7 +18,7 @@ REPL 里：`/session` 看当前、`/sessions` 列出、`/fork` 复制、`/import
   取首行，超过 40 字符截断并加 `…`；没有可读内容（空会话、只有 assistant 消息）时显示 `(empty)`。
 - 改名：REPL `/rename <name>`（TUI 会话选择器里按 `r`）。标题会压空白、去首尾空白，上限 80 字符；
   空标题报错。`SessionManager.rename(path, title)` 是同一操作的 app 层入口。
-- 标题存在 sidecar `~/.zenagent/sessions/.titles.json`，内容是 `{会话文件名: 标题}`，**不写进 JSONL**：
+- 标题存在 sidecar `<项目 sessions 目录>/.titles.json`，内容是 `{会话文件名: 标题}`，**不写进 JSONL**：
   会话文件仍是 append-only 的 `Message.to_json()`，`zen export` 和任何其他消费方照旧解析。
 - sidecar 缺失、损坏或不是 dict 时读取回退到派生 brief，绝不报错；写入先写临时文件再 `os.replace`，
   不会留下半截 JSON，也不影响会话文件本身。

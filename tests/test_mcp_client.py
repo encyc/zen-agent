@@ -247,3 +247,119 @@ def test_make_transport_picks_the_right_kind():
     assert isinstance(
         make_transport(McpServerConfig(name="b", url="https://x/mcp")), HttpTransport
     )
+
+
+# ---------------------------------------------------------------------------
+# project-layer config stacking (global ~/.zenagent/mcp.json -> <repo>/.zenagent/mcp.json)
+# ---------------------------------------------------------------------------
+
+
+def stacked_mcp_config(
+    tmp_path, monkeypatch, *, global_servers=None, project_servers=None
+):
+    """Isolated global mcp.json plus a git repo carrying a project mcp.json."""
+    home = tmp_path / "home"
+    home.mkdir()
+    global_path = home / "mcp.json"
+    if global_servers is not None:
+        global_path.write_text(
+            json.dumps({"servers": global_servers}), encoding="utf-8"
+        )
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    project_path = repo / ".zenagent" / "mcp.json"
+    if project_servers is not None:
+        project_path.parent.mkdir(parents=True)
+        project_path.write_text(
+            json.dumps({"servers": project_servers}), encoding="utf-8"
+        )
+    monkeypatch.setattr("zenagent.mcp.config.config_path", lambda: global_path)
+    return repo, project_path
+
+
+def test_project_mcp_servers_override_same_name_and_keep_the_rest(tmp_path, monkeypatch):
+    repo, _ = stacked_mcp_config(
+        tmp_path,
+        monkeypatch,
+        global_servers={
+            "shared": {"url": "https://global.example/mcp"},
+            "global-only": {"command": ["global-server"]},
+        },
+        project_servers={
+            "shared": {"url": "https://project.example/mcp"},
+            "project-only": {"command": ["project-server"]},
+        },
+    )
+    monkeypatch.chdir(repo)
+
+    servers = load_mcp_config()
+
+    assert set(servers) == {"shared", "global-only", "project-only"}
+    assert servers["shared"].url == "https://project.example/mcp"
+    assert servers["global-only"].command == ["global-server"]
+    assert servers["project-only"].command == ["project-server"]
+
+
+def test_project_mcp_config_works_without_the_global_file(tmp_path, monkeypatch):
+    repo, _ = stacked_mcp_config(
+        tmp_path,
+        monkeypatch,
+        project_servers={"files": {"command": ["npx", "server-filesystem", "/tmp"]}},
+    )
+    monkeypatch.chdir(repo)
+
+    servers = load_mcp_config()
+
+    assert list(servers) == ["files"]
+    assert servers["files"].command == ["npx", "server-filesystem", "/tmp"]
+
+
+def test_missing_mcp_configs_mean_no_servers(tmp_path, monkeypatch):
+    repo, _ = stacked_mcp_config(tmp_path, monkeypatch)
+    monkeypatch.chdir(repo)
+
+    assert load_mcp_config() == {}
+
+
+def test_explicit_mcp_path_ignores_the_project_layer(tmp_path, monkeypatch):
+    repo, _ = stacked_mcp_config(
+        tmp_path,
+        monkeypatch,
+        global_servers={"global": {"url": "https://global.example/mcp"}},
+        project_servers={"project": {"url": "https://project.example/mcp"}},
+    )
+    monkeypatch.chdir(repo)
+    explicit = tmp_path / "explicit.json"
+    explicit.write_text(
+        json.dumps({"servers": {"explicit": {"url": "https://explicit.example/mcp"}}})
+    )
+
+    servers = load_mcp_config(explicit)
+
+    assert set(servers) == {"explicit"}
+
+
+def test_project_mcp_layer_follows_an_explicit_cwd(tmp_path, monkeypatch):
+    repo, _ = stacked_mcp_config(
+        tmp_path,
+        monkeypatch,
+        project_servers={"files": {"command": ["server-filesystem"]}},
+    )
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+
+    assert load_mcp_config() == {}
+    assert list(load_mcp_config(cwd=repo)) == ["files"]
+
+
+def test_broken_project_mcp_config_raises_with_its_path(tmp_path, monkeypatch):
+    repo, project_path = stacked_mcp_config(tmp_path, monkeypatch)
+    project_path.parent.mkdir(parents=True, exist_ok=True)
+    project_path.write_text("{not json", encoding="utf-8")
+    monkeypatch.chdir(repo)
+
+    with pytest.raises(ValueError) as excinfo:
+        load_mcp_config()
+    assert "cannot read mcp config" in str(excinfo.value)
+    assert str(project_path) in str(excinfo.value)

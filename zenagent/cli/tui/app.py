@@ -76,6 +76,7 @@ class ZenAgentApp(App):
         self._refresh_pending = False
         self._hint_start = 0
         self._hint_prefix = "/"
+        self._session_scope = "project"
         self.command_hints: CommandHints | None = None
         self.models = ModelManager(runtime)
         self.sessions = SessionManager(runtime)
@@ -516,24 +517,45 @@ class ZenAgentApp(App):
             selected,
         )
 
-    def open_session_picker(self) -> None:
+    def open_session_picker(self, scope: str | None = None) -> None:
         from zenagent.cli.tui.screens.modals import SessionPicker
+
+        self._session_scope = scope or self._session_scope
+        current_scope = self._session_scope
 
         async def selected(action) -> None:
             if action is None:
+                return
+            if action.kind == "toggle-scope":
+                other = "project" if current_scope == "all" else "all"
+                self.call_later(self.open_session_picker, other)
                 return
             # Never await a new modal from inside the dismiss callback: Textual
             # runs it in the message pump and the modal would deadlock.
             self.run_worker(self._apply_session_action(action), exclusive=False)
 
-        self.open_menu("sessions", lambda: SessionPicker(self.sessions.entries()), selected)
+        self.open_menu(
+            "sessions",
+            lambda: SessionPicker(
+                self.sessions.entries(scope=current_scope), scope=current_scope
+            ),
+            selected,
+        )
 
     async def _apply_session_action(self, action) -> None:
         from zenagent.agent.session import session_title
 
         if action.kind == "resume" and action.path is not None:
+            from zenagent import project
+
+            owner = project.project_key_for_session(action.path)
+            current = project.project_key(project.find_project_root())
             await self.sessions.resume(action.path)
             self._reset_after_switch()
+            if owner is not None and owner != current:
+                self.notify("cross-project session: tools still run in this cwd")
+            elif owner is None:
+                self.notify("legacy session: tools run in this cwd")
             return
         if action.kind in ("new", "fork"):
             if action.kind == "new":
@@ -610,7 +632,9 @@ class ZenAgentApp(App):
         if result.screen == "model-picker":
             self.open_model_picker()
         elif result.screen == "session-picker":
-            self.open_session_picker()
+            self.open_session_picker("project")
+        elif result.screen == "session-picker-all":
+            self.open_session_picker("all")
         elif result.screen == "mode-picker":
             self.open_mode_picker()
         elif result.screen == "thinking-picker":

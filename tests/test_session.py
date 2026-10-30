@@ -1,13 +1,18 @@
 """Session persistence tests: round trip, torn tail, latest-session ordering."""
 
 
+from pathlib import Path
+
 import pytest
 
 import zenagent.agent.session as session_module
+from zenagent import project
 from zenagent.agent.session import (
     Session,
+    all_session_dirs,
     brief,
     latest_session,
+    list_sessions,
     read_session_titles,
     session_path,
     session_title,
@@ -31,7 +36,7 @@ def assistant(text: str, timestamp: int = 2) -> AssistantMessage:
     )
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def isolated_sessions(tmp_path, monkeypatch):
     root = tmp_path / "sessions"
     monkeypatch.setattr(session_module, "sessions_dir", lambda: root)
@@ -400,3 +405,186 @@ def test_unique_session_path_never_reuses_an_existing_file(tmp_path, monkeypatch
     second = session_module.unique_session_path()
     assert second != first
     assert not second.exists()
+
+
+# ---------------------------------------------------------------------------
+# Project scoping: default view, explicit all view, per-directory sidecars
+# ---------------------------------------------------------------------------
+
+
+def _enter_project(base: Path, monkeypatch, name: str) -> Path:
+    """Turn ``base/name`` into a git repo and make it the current project."""
+    root = base / name
+    (root / ".git").mkdir(parents=True)
+    monkeypatch.chdir(root)
+    project.write_project_meta()
+    return root
+
+
+def test_list_sessions_defaults_to_the_current_project(tmp_path, monkeypatch):
+    legacy = project.legacy_sessions_dir()
+    legacy.mkdir(parents=True)
+    _write_session(legacy, "legacy.jsonl", ["legacy chat"], mtime=500)
+
+    alpha = _enter_project(tmp_path, monkeypatch, "alpha")
+    _write_session(project.project_sessions_dir(), "alpha.jsonl", ["alpha chat"], mtime=1_000)
+    beta = _enter_project(tmp_path, monkeypatch, "beta")
+    _write_session(project.project_sessions_dir(), "beta.jsonl", ["beta chat"], mtime=2_000)
+
+    monkeypatch.chdir(alpha)
+    infos = list_sessions()
+    assert [info.path.name for info in infos] == ["alpha.jsonl"]
+    assert infos[0].project == "alpha"
+
+    monkeypatch.chdir(beta)
+    infos = list_sessions()
+    assert [info.path.name for info in infos] == ["beta.jsonl"]
+    assert infos[0].project == "beta"
+
+
+def test_all_scope_merges_projects_and_legacy_with_labels(tmp_path, monkeypatch):
+    legacy = project.legacy_sessions_dir()
+    legacy.mkdir(parents=True)
+    _write_session(legacy, "legacy.jsonl", ["legacy chat"], mtime=900)
+
+    alpha = _enter_project(tmp_path, monkeypatch, "alpha")
+    _write_session(project.project_sessions_dir(), "alpha.jsonl", ["alpha chat"], mtime=1_000)
+    _enter_project(tmp_path, monkeypatch, "beta")
+    _write_session(project.project_sessions_dir(), "beta.jsonl", ["beta chat"], mtime=3_000)
+
+    monkeypatch.chdir(alpha)
+    infos = list_sessions(scope="all")
+
+    assert [info.path.name for info in infos] == [
+        "beta.jsonl",
+        "alpha.jsonl",
+        "legacy.jsonl",
+    ]
+    labels = {info.path.name: info.project for info in infos}
+    assert labels["alpha.jsonl"] == "alpha"
+    assert labels["beta.jsonl"] == "beta"
+    assert labels["legacy.jsonl"] == ""
+
+
+def test_all_session_dirs_lists_legacy_and_known_projects(tmp_path, monkeypatch):
+    _enter_project(tmp_path, monkeypatch, "alpha")
+    alpha_dir = project.project_sessions_dir()
+    alpha_dir.mkdir(parents=True)
+    _enter_project(tmp_path, monkeypatch, "beta")
+    beta_dir = project.project_sessions_dir()
+    beta_dir.mkdir(parents=True)
+
+    directories = all_session_dirs()
+
+    assert directories == [project.legacy_sessions_dir(), *sorted([alpha_dir, beta_dir])]
+
+
+def test_same_named_sessions_in_two_projects_do_not_collide(tmp_path, monkeypatch):
+    alpha = _enter_project(tmp_path, monkeypatch, "alpha")
+    alpha_dir = project.project_sessions_dir()
+    _write_session(alpha_dir, "chat.jsonl", ["alpha topic"], mtime=1_000)
+
+    beta = _enter_project(tmp_path, monkeypatch, "beta")
+    beta_dir = project.project_sessions_dir()
+    _write_session(beta_dir, "chat.jsonl", ["beta topic"], mtime=2_000)
+
+    assert alpha_dir != beta_dir
+    monkeypatch.chdir(alpha)
+    assert [info.title for info in list_sessions()] == ["alpha topic"]
+    monkeypatch.chdir(beta)
+    assert [info.title for info in list_sessions()] == ["beta topic"]
+
+
+def test_session_titles_are_scoped_to_the_session_directory(tmp_path, monkeypatch):
+    _enter_project(tmp_path, monkeypatch, "alpha")
+    alpha_dir = project.project_sessions_dir()
+    alpha_session = _write_session(alpha_dir, "chat.jsonl", ["alpha chat"])
+
+    _enter_project(tmp_path, monkeypatch, "beta")
+    beta_dir = project.project_sessions_dir()
+    beta_session = _write_session(beta_dir, "chat.jsonl", ["beta chat"])
+
+    set_session_title(alpha_session, "Alpha name")
+    set_session_title(beta_session, "Beta name")
+
+    # The default sidecar is the current project's (beta); alpha's stays its own.
+    assert read_session_titles() == {"chat.jsonl": "Beta name"}
+    assert read_session_titles(alpha_dir) == {"chat.jsonl": "Alpha name"}
+    assert session_title(alpha_session) == "Alpha name"
+    assert session_title(beta_session) == "Beta name"
+    assert Session(beta_session).read_info().title == "Beta name"
+
+
+def test_latest_session_respects_scope(tmp_path, monkeypatch):
+    alpha = _enter_project(tmp_path, monkeypatch, "alpha")
+    _write_session(
+        project.project_sessions_dir(),
+        "20260101-000000-alpha.jsonl",
+        ["alpha"],
+        mtime=1_000,
+    )
+
+    legacy = project.legacy_sessions_dir()
+    legacy.mkdir(parents=True)
+    _write_session(legacy, "19990101-000000-old.jsonl", ["legacy"], mtime=9_000)
+
+    beta = _enter_project(tmp_path, monkeypatch, "beta")
+    _write_session(
+        project.project_sessions_dir(),
+        "20260102-000000-beta.jsonl",
+        ["beta"],
+        mtime=5_000,
+    )
+
+    monkeypatch.chdir(alpha)
+    assert latest_session().name == "20260101-000000-alpha.jsonl"
+    assert latest_session(scope="all").name == "19990101-000000-old.jsonl"
+
+    monkeypatch.chdir(beta)
+    assert latest_session().name == "20260102-000000-beta.jsonl"
+
+
+def test_legacy_titles_stay_readable(tmp_path, monkeypatch):
+    legacy = project.legacy_sessions_dir()
+    legacy.mkdir(parents=True)
+    legacy_session = _write_session(legacy, "old.jsonl", ["old legacy chat"])
+    set_session_title(legacy_session, "Old saved name")
+
+    _enter_project(tmp_path, monkeypatch, "alpha")
+    _write_session(project.project_sessions_dir(), "new.jsonl", ["new chat"])
+
+    assert session_title(legacy_session) == "Old saved name"
+
+    infos = {info.path.name: info for info in list_sessions(scope="all")}
+    assert infos["old.jsonl"].title == "Old saved name"
+    assert infos["old.jsonl"].project == ""
+    assert infos["new.jsonl"].title == "new chat"
+    assert [info.path.name for info in list_sessions()] == ["new.jsonl"]
+
+
+def test_corrupt_sidecar_is_tolerated_in_each_directory(tmp_path, monkeypatch):
+    alpha = _enter_project(tmp_path, monkeypatch, "alpha")
+    alpha_dir = project.project_sessions_dir()
+    alpha_session = _write_session(alpha_dir, "chat.jsonl", ["alpha derived"])
+    set_session_title(alpha_session, "Alpha stored")
+
+    beta = _enter_project(tmp_path, monkeypatch, "beta")
+    beta_dir = project.project_sessions_dir()
+    _write_session(beta_dir, "chat.jsonl", ["beta derived"])
+    (beta_dir / ".titles.json").write_text("{ this is not json", encoding="utf-8")
+
+    monkeypatch.chdir(beta)
+    assert list_sessions()[0].title == "beta derived"
+    assert session_title(beta_dir / "chat.jsonl") == "beta derived"
+
+    monkeypatch.chdir(alpha)
+    assert list_sessions()[0].title == "Alpha stored"
+
+
+def test_listing_rejects_an_unknown_scope(tmp_path, monkeypatch):
+    _enter_project(tmp_path, monkeypatch, "alpha")
+
+    with pytest.raises(ValueError):
+        list_sessions(scope="everywhere")
+    with pytest.raises(ValueError):
+        latest_session(scope="everywhere")

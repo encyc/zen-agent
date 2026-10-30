@@ -11,6 +11,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from zenagent import project
 from zenagent.agent import Agent
 from zenagent.agent.session import Session, latest_session, unique_session_path
 from zenagent.app.modes import (
@@ -282,9 +283,36 @@ class Runtime:
         if resume is not None:
             path = latest_session() if resume == "latest" else Path(resume)
             if path is not None and Path(path).is_file():
+                self._note_session_scope(Path(path))
                 return Session(Path(path))
             self.warnings.append(f"no session to resume ({resume})")
+        self._touch_project()
         return Session(unique_session_path())
+
+    def _touch_project(self) -> None:
+        """Record the project root/last_used; never fail a run over metadata."""
+        try:
+            project.write_project_meta()
+        except OSError:
+            pass
+
+    def _note_session_scope(self, path: Path) -> None:
+        """Warn when a resumed session belongs to another project (or legacy).
+
+        This slice deliberately keeps the tools' cwd unchanged; omp switches
+        project directories on cross-project resume, which we will layer on with
+        config/context re-discovery rather than chdir'ing mid-run.
+        """
+        owner = project.project_key_for_session(path)
+        current = project.project_key(project.find_project_root())
+        if owner is not None and owner != current:
+            self.warnings.append(
+                f"session belongs to project {owner}; tools still run in {Path.cwd()}"
+            )
+        elif owner is None:
+            self.warnings.append(
+                f"legacy (unscoped) session; tools run in {Path.cwd()}"
+            )
 
     def _build_prompt(self, tools: list) -> str:
         text = system_prompt([tool.name for tool in tools])
@@ -320,7 +348,12 @@ class Runtime:
             return
         self.agent.abort()
         await self.agent.wait_for_idle()
-        session = Session(path) if path is not None else Session(unique_session_path())
+        if path is not None:
+            self._note_session_scope(Path(path))
+            session = Session(path)
+        else:
+            self._touch_project()
+            session = Session(unique_session_path())
         self.agent.replace_messages(session.load())
         self.session = session
         self.guard.last_usage = None

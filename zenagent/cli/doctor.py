@@ -15,7 +15,7 @@ import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from zenagent import __version__, settings
+from zenagent import __version__, project, settings
 from zenagent.agent.session import sessions_dir
 from zenagent.config import UserConfig, apply_user_config, config_path, load_user_config
 from zenagent.providers.catalog import load_catalog
@@ -71,7 +71,11 @@ def _check_sessions_writable() -> Check:
             pass
     except OSError as exc:
         return Check("sessions", False, f"{directory} is not writable ({exc})")
-    return Check("sessions", True, str(directory))
+    detail = str(directory)
+    legacy = project.legacy_sessions_dir()
+    if legacy.is_dir():
+        detail += f" · legacy {len(list(legacy.glob('*.jsonl')))}"
+    return Check("sessions", True, detail)
 
 
 def collect_checks(env: Mapping[str, str] | None = None) -> list[Check]:
@@ -85,7 +89,9 @@ def collect_checks(env: Mapping[str, str] | None = None) -> list[Check]:
     try:
         user_config = load_user_config()
         detail = user_config.default_model or "(no default_model)"
-        checks.append(Check("config", True, f"{config_path()} · {detail}"))
+        project_config = project.project_config_path()
+        suffix = f" + {project_config}" if project_config.is_file() else ""
+        checks.append(Check("config", True, f"{config_path()}{suffix} · {detail}"))
     except ValueError as exc:
         user_config = UserConfig()
         checks.append(Check("config", False, str(exc)))

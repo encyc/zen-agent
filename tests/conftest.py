@@ -23,6 +23,14 @@ def app_env(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def isolated_project_home(tmp_path, monkeypatch):
+    """Never read or write the developer's real ~/.zenagent/projects."""
+    from zenagent import project
+
+    monkeypatch.setattr(project, "zenagent_home", lambda: tmp_path / "zenagent-home")
+
+
+@pytest.fixture(autouse=True)
 def isolated_settings(tmp_path, monkeypatch):
     """Never read or write the developer's real ~/.zenagent/settings.json."""
     from zenagent import settings

@@ -108,6 +108,8 @@ async def _mode(services: AppServices, argument: str) -> CommandResult:
 
 @_command("sessions", "browse, resume or fork sessions")
 async def _sessions(services: AppServices, argument: str) -> CommandResult:
+    if argument.strip().lower() == "all":
+        return CommandResult(screen="session-picker-all")
     return CommandResult(screen="session-picker")
 
 

@@ -183,15 +183,22 @@ async def handle_slash(
         print_fn(f"thinking -> {level}")
         return None
     if command == "sessions":
-        infos = list_sessions()
+        scope = "all" if argument.strip().lower() == "all" else "project"
+        infos = list_sessions(scope=scope)
         if not infos:
             print_fn("no saved sessions")
+            if scope == "project":
+                print_fn("hint: /sessions all lists every project")
             return None
         current = session.path if session is not None else None
         for position, info in enumerate(infos, start=1):
             mark = "*" if info.path == current else " "
+            label = f"[{info.project or 'legacy'}] " if scope == "all" else ""
             title = info.title or "(empty)"
-            print_fn(f"{mark} {position:2d}. {title} · {info.messages} msgs · {info.path.name}")
+            print_fn(
+                f"{mark} {position:2d}. {label}{title} · "
+                f"{info.messages} msgs · {info.path.name}"
+            )
         return None
     if command == "fork":
         if session is None:
@@ -374,6 +381,11 @@ class _EventPrinter:
             assistant_event = event.assistant_event
             if assistant_event.type == "text_delta" and assistant_event.delta:
                 self.print(assistant_event.delta, end="")
+                if self.print is print:
+                    # stdout is line-buffered on a TTY (block-buffered on a
+                    # pipe), so an unflushed delta would only surface when the
+                    # closing newline arrives — the whole answer at once.
+                    sys.stdout.flush()
                 self._line_open = True
             elif assistant_event.type == "thinking_end" and self.console is not None:
                 self._close_line()

@@ -4,7 +4,13 @@ ZenAgent 手写实现 MCP 客户端（不依赖官方 SDK），支持 **stdio** 
 
 ## 配置
 
-`~/.zenagent/mcp.json`：
+两层 JSON，按 server 名合并：
+
+1. `~/.zenagent/mcp.json`（全局层，机器本机，不进 git）
+2. `<项目根>/.zenagent/mcp.json`（项目层，可提交；项目根 = 最近的含 `.git` 的目录）
+
+同名 server 由**项目层整条覆盖**，不同名的全局 server 保留；两层都不存在就是没有 server。
+显式 `--mcp-file PATH` 只读该文件，不叠加项目层。
 
 ```json
 {
@@ -21,7 +27,10 @@ ZenAgent 手写实现 MCP 客户端（不依赖官方 SDK），支持 **stdio** 
 }
 ```
 
-- `command` 与 `url` 二选一，类型必须正确，否则启动即报错。
+- `command` 与 `url` 二选一，类型必须正确，否则启动即报错（错误信息带文件路径）。
+- 项目层随仓库提交：**不要放 token/密钥**。需要 header 凭据的 server 把整条定义放全局
+  `~/.zenagent/mcp.json`（不提交），或用 stdio server 的环境变量读取；项目层只覆盖 command/url
+  等可共享部分。
 - CLI 过滤：`--mcp-server files`（可重复）、`--mcp-file PATH`、`--no-mcp`。
 
 ## 工具怎么出现
@@ -68,7 +77,8 @@ status: [('files', 'connected', 14)]    tools after: mcp__files__read_file, ...
 ## 源码对照
 
 - 传输与协议：`zenagent/mcp/client.py`（`StdioTransport`、`HttpTransport`、`McpClient`）
-- 配置：`zenagent/mcp/config.py`（`load_mcp_config`、`make_transport`）
+- 配置：`zenagent/mcp/config.py`（`load_mcp_config`、`make_transport`）、
+  `zenagent/project.py::find_project_root`/`project_mcp_path`
 - 生命周期/重试/热替换：`zenagent/mcp/manager.py`（`McpManager.retry_failed`、`refresh_tools`、`tool_defs`）
 - CLI 接线：`zenagent/cli/main.py`（headless）、`zenagent/cli/repl.py`（`refresh_mcp`、`/mcp`）
 - 对应测试：`tests/test_mcp_client.py`、`tests/test_mcp_manager.py`、`tests/fixtures/mcp_echo_server.py`

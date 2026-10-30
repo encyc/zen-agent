@@ -7,7 +7,7 @@
 
 1. [架构总览](architecture.md) — 五层依赖、一次请求的完整数据流、为什么这样分层
 2. 使用指南（先知道它怎么工作）：
-   - [CLI](guide/cli.md) · [配置与目录](guide/config.md) · [工具与权限](guide/tools-permissions.md)
+   - [CLI](guide/cli.md) · [项目与全局作用域](guide/projects.md) · [配置与目录](guide/config.md) · [工具与权限](guide/tools-permissions.md)
    - [MCP](guide/mcp.md) · [Skills 与模板](guide/skills-templates.md) · [扩展](guide/extensions.md)
    - [会话/导出/用量](guide/sessions.md) · [RPC 与 Python SDK](guide/rpc-sdk.md)
    - [TUI](guide/tui.md)

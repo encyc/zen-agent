@@ -1,4 +1,4 @@
-"""MCP server configuration (``~/.zenagent/mcp.json``).
+"""MCP server configuration (``~/.zenagent/mcp.json`` plus a project layer).
 
 JSON on purpose: the kernel keeps zero dependencies and the shape is small.
 
@@ -8,6 +8,11 @@ JSON on purpose: the kernel keeps zero dependencies and the shape is small.
         "remote": {"url": "https://example/mcp", "headers": {"authorization": "Bearer x"}}
       }
     }
+
+By default the global file is layered with ``<root>/.zenagent/mcp.json`` (root =
+nearest directory with ``.git``): servers are merged by name and the project
+definition of a same-named server wins. The project file is meant to be
+committed, so credentials belong in the global file or in the environment.
 """
 
 from __future__ import annotations
@@ -16,6 +21,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from zenagent import project
 from zenagent.mcp.client import HttpTransport, StdioTransport, Transport
 
 __all__ = ["McpServerConfig", "config_path", "load_mcp_config", "make_transport"]
@@ -75,9 +81,8 @@ def _parse_server(name: str, raw: object) -> McpServerConfig:
     )
 
 
-def load_mcp_config(path: Path | None = None) -> dict[str, McpServerConfig]:
-    """Load configured servers; a missing file simply means "none"."""
-    target = Path(path) if path is not None else config_path()
+def _load_mcp_file(target: Path) -> dict[str, McpServerConfig]:
+    """Load one mcp.json; a missing file simply means "no servers"."""
     if not target.is_file():
         return {}
     try:
@@ -92,6 +97,22 @@ def load_mcp_config(path: Path | None = None) -> dict[str, McpServerConfig]:
             f"mcp config {target}: 'servers' must be an object"
         )
     return {name: _parse_server(name, raw) for name, raw in servers.items()}
+
+
+def load_mcp_config(
+    path: Path | None = None, *, cwd: Path | None = None
+) -> dict[str, McpServerConfig]:
+    """Load configured servers, global layer first, then the project layer.
+
+    An explicit ``path`` disables layering and reads just that file. Otherwise
+    the project file's same-named server replaces the global definition and any
+    other global servers remain.
+    """
+    if path is not None:
+        return _load_mcp_file(Path(path))
+    servers = _load_mcp_file(config_path())
+    servers.update(_load_mcp_file(project.project_mcp_path(cwd)))
+    return servers
 
 
 def make_transport(config: McpServerConfig) -> Transport:

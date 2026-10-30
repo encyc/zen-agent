@@ -50,6 +50,7 @@
 | 功能 | 源码 | 测试 | 文档 |
 |---|---|---|---|
 | 会话、恢复、fork/import/undo | `agent/session.py`、`cli/repl.py` | `test_session.py` | [会话](guide/sessions.md) |
+| 项目作用域（根/key/布局/legacy/adopt） | `project.py`、`agent/session.py`、`app/sessions.py` | `test_project.py`、`test_project_scoping.py` | [项目作用域](guide/projects.md) |
 | 会话显示名（brief/rename sidecar） | `agent/session.py`、`app/sessions.py` | `test_session.py`、`test_app_sessions.py` | 同上 |
 | trace | `trace.py` | `test_trace.py` | 同上 |
 | run 指标 | `telemetry.py` | `test_telemetry.py` | 同上 |

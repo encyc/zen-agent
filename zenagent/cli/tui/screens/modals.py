@@ -58,35 +58,50 @@ class SessionAction:
 class SessionPicker(PaletteScreen[SessionAction]):
     """Pick a saved session; letter keys act on the highlighted one."""
 
+    BINDINGS = [  # noqa: RUF012 - Textual class API
+        ("escape", "cancel", "Cancel"),
+        ("tab", "toggle_scope", "All projects"),
+    ]
+
     ACTION_KEYS = {  # noqa: RUF012 - read by PaletteSearch
         "n": "new",
         "f": "fork",
         "d": "delete",
         "e": "export",
         "r": "rename",
+        "t": "toggle_scope",
     }
 
-    def __init__(self, entries: list[SessionEntry]) -> None:
+    def __init__(self, entries: list[SessionEntry], *, scope: str = "project") -> None:
         self.entries = entries
-        items = [
-            PaletteItem(
-                label=f"{'●' if entry.current else ' '} {entry.title or entry.path.name}",
-                value=SessionAction("resume", entry.path),
-                note=(
-                    f"{entry.messages} msgs · "
-                    f"{time.strftime('%m-%d %H:%M', time.localtime(entry.created))}"
-                ),
-                selected=entry.current,
+        self.scope = scope
+        items = []
+        for entry in entries:
+            marker = "●" if entry.current else " "
+            if scope == "all":
+                project_label = entry.project or "legacy"
+                label = f"{marker} [{project_label}] {entry.title or entry.path.name}"
+            else:
+                label = f"{marker} {entry.title or entry.path.name}"
+            items.append(
+                PaletteItem(
+                    label=label,
+                    value=SessionAction("resume", entry.path),
+                    note=(
+                        f"{entry.messages} msgs · "
+                        f"{time.strftime('%m-%d %H:%M', time.localtime(entry.created))}"
+                    ),
+                    selected=entry.current,
+                )
             )
-            for entry in entries
-        ]
+        scope_hint = "tab: project sessions" if scope == "all" else "tab: all projects"
         super().__init__(
             title="Sessions",
             items=items,
             placeholder="Search sessions",
             footer=(
-                "↑↓ move   enter resume   n new   f fork   "
-                "d delete   e export   r rename"
+                f"↑↓ move   enter resume   n new   f fork   "
+                f"d delete   e export   r rename   {scope_hint}"
             ),
         )
 
@@ -111,6 +126,9 @@ class SessionPicker(PaletteScreen[SessionAction]):
 
     def action_rename(self) -> None:
         self.dismiss(SessionAction("rename", self._highlighted_path()))
+
+    def action_toggle_scope(self) -> None:
+        self.dismiss(SessionAction("toggle-scope"))
 
 
 class Confirm(ModalScreen[bool]):

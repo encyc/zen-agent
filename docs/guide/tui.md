@@ -106,10 +106,12 @@
 
 ## 会话管理
 
-`ctrl+k` → `sessions`（或 `/sessions`）打开选择器：同一套浮层骨架，带搜索。
+`ctrl+k` → `sessions`（或 `/sessions`，`/sessions all` 直接进全项目视图）打开选择器：同一套浮层骨架，带搜索。
 列表显示的是**会话名**（首个用户问题的 brief，或 `/rename` 设置的名字），文件名作为副信息。
 
-- `enter` 恢复会话（运行中会先中断当前 run 再切换）。
+- 默认只显示**当前项目**的会话；`tab`（或搜索框为空时按 `t`）在 project / all-projects 之间切换，
+  all 视图每行标注 `[项目名]` / `[legacy]`。
+- `enter` 恢复会话（运行中会先中断当前 run 再切换；跨项目会话会提示工具仍在当前 cwd）。
 - `n` 新建、`f` fork 当前会话、`d` 删除、`e` 导出 Markdown、`r` 改名（都属于当前高亮行）。
 - 删除前弹 Confirm 二次确认，删除走「移到 `sessions/.trash/`」，不做不可逆 unlink；
   当前会话删除后自动新建空会话。

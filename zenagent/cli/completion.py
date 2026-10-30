@@ -36,7 +36,7 @@ SLASH_COMMANDS: dict[str, str] = {
     "/reload": "re-discover skills, templates and extensions",
     "/theme": "switch theme: default|mono|solarized|<path.json>",
     "/hotkeys": "show the active keybindings",
-    "/sessions": "list saved sessions",
+    "/sessions": "list saved sessions (/sessions all for every project)",
     "/rename": "rename the current session (/rename <name>)",
     "/fork": "branch a new session at a user message (/fork <n>)",
     "/import": "load a session file and continue it (/import <path>)",

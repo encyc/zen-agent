@@ -91,5 +91,12 @@ def _first_line(text: str) -> str:
 
 
 def default_template_roots(cwd: Path) -> list[Path]:
-    """Project templates first (they override global ones), then the user's."""
-    return [Path(cwd) / ".zenagent" / "commands", Path.home() / ".zenagent" / "commands"]
+    """Project templates first (they override global ones), then the user's.
+
+    Like skills, the project directory is the nearest ``.git`` ancestor, so
+    subdirectory launches still see the repository's templates.
+    """
+    from zenagent.project import find_project_root
+
+    root = find_project_root(cwd)
+    return [root / ".zenagent" / "commands", Path.home() / ".zenagent" / "commands"]

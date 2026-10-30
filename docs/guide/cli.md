@@ -48,8 +48,9 @@ zen -p "analyze" --read-only --trace run.jsonl --cwd /path/to/project
 | `--allow-dangerous` | 允许 `rm -rf` 等危险命令（`--yes` 也不够） |
 | `--max-turns` / `--max-cost` | 硬上限；超限终止并记录在 termination |
 | `--retries` | provider 瞬时错误的额外重试次数（默认 0） |
-| `--resume [SESSION]` | 继续会话（缺省 `latest`） |
-| `--list-sessions` | 列出会话 |
+| `--resume [SESSION]` | 继续会话（缺省 `latest`，只续当前项目） |
+| `--list-sessions` | 列出当前项目的会话 |
+| `--all-projects` | 配合 `--list-sessions` 列出所有项目与 legacy |
 | `--session`? | 无此参数；用 `--resume` 或 REPL 的 `/session` |
 | `--cwd` | 运行前切换工作目录（工具相对路径基于它） |
 | `--image` | 附加图片（可重复；5MB、magic-byte 判断、非 vision 模型提前报错） |
@@ -86,6 +87,8 @@ REPL 里命令参数也能补全（`Tab`）：`/mode ` → `plan` / `ask` / `ful
 ## 子命令
 
 ```bash
+zen sessions list [--all]   # 列出当前项目会话（--all 含所有项目与 legacy）
+zen sessions adopt PATH     # 把 legacy 会话归入当前项目
 zen doctor                  # 环境自检：python、key、catalog、config、sessions、终端
 zen doctor --report         # 脱敏诊断报告（--report-out PATH 写文件）
 zen export [SESSION] --format md|html [-o PATH]

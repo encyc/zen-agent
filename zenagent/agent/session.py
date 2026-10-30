@@ -18,11 +18,13 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from zenagent import project
 from zenagent.types import Message, UserMessage, message_from_json
 
 __all__ = [
     "Session",
     "SessionInfo",
+    "all_session_dirs",
     "brief",
     "latest_session",
     "list_sessions",
@@ -45,10 +47,18 @@ TITLE_LIMIT = 80
 #: Characters that commonly start a Markdown line and carry no title meaning.
 _MARKDOWN_PREFIX_CHARS = "#>-*+`"
 
+#: The two listing scopes: the current project, or every project plus legacy.
+_SCOPES = ("project", "all")
+
 
 def sessions_dir() -> Path:
-    """Root directory for session files (created on first write)."""
-    return Path.home() / ".zenagent" / "sessions"
+    """Session files for the current project (never created here)."""
+    return project.project_sessions_dir()
+
+
+def all_session_dirs() -> list[Path]:
+    """Legacy directory plus every known project's session directory."""
+    return project.all_session_dirs()
 
 
 def session_path(prefix: str = "") -> Path:
@@ -101,18 +111,51 @@ def brief(text: str, *, limit: int = 40) -> str:
     return cleaned[: limit - 1].rstrip() + "…"
 
 
-def _titles_path() -> Path:
-    return sessions_dir() / TITLES_FILENAME
+def _titles_path(directory: Path) -> Path:
+    return Path(directory) / TITLES_FILENAME
 
 
-def read_session_titles() -> dict[str, str]:
-    """Stored display names by session filename.
+def _project_key_for_directory(directory: Path) -> str | None:
+    """Project key owning ``directory``, or ``None`` for anything else."""
+    return project.project_key_for_session(Path(directory) / "session.jsonl")
 
-    A missing, unreadable, corrupt, or non-dict sidecar yields ``{}``: naming is
+
+def _project_label(directory: Path) -> str:
+    """Display label for a sessions directory; empty for the legacy directory.
+
+    Uses the project's recorded name (``meta.json``) when available and falls
+    back to the key, so a listing never shows a blank project for a real one.
+    """
+    base = Path(directory)
+    try:
+        if base.resolve() == project.legacy_sessions_dir().resolve():
+            return ""
+    except OSError:
+        pass
+    key = _project_key_for_directory(base)
+    if key is None:
+        return ""
+    try:
+        data = json.loads(
+            (project.projects_root() / key / "meta.json").read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError):
+        return key
+    name = data.get("name") if isinstance(data, dict) else None
+    return name if isinstance(name, str) and name else key
+
+
+def read_session_titles(directory: Path | None = None) -> dict[str, str]:
+    """Stored display names by session filename, for one sessions directory.
+
+    ``directory`` defaults to the current project's sessions directory: each
+    directory owns its own sidecar, so names cannot leak between projects. A
+    missing, unreadable, corrupt, or non-dict sidecar yields ``{}``: naming is
     a convenience, so it must never be able to break session listing or resume.
     """
+    base = sessions_dir() if directory is None else Path(directory)
     try:
-        data = json.loads(_titles_path().read_text(encoding="utf-8"))
+        data = json.loads(_titles_path(base).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
     if not isinstance(data, dict):
@@ -128,9 +171,9 @@ def _normalize_title(title: str) -> str:
     return " ".join(title.split())[:TITLE_LIMIT]
 
 
-def _write_session_titles(titles: dict[str, str]) -> None:
-    """Replace the sidecar atomically: readers never see a half-written file."""
-    sidecar = _titles_path()
+def _write_session_titles(directory: Path, titles: dict[str, str]) -> None:
+    """Replace one directory's sidecar atomically: readers never see a half file."""
+    sidecar = _titles_path(directory)
     sidecar.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temp_name = tempfile.mkstemp(
         dir=sidecar.parent, prefix=f"{sidecar.name}.", suffix=".tmp"
@@ -150,17 +193,19 @@ def _write_session_titles(titles: dict[str, str]) -> None:
 def set_session_title(path: Path, title: str) -> str:
     """Persist ``title`` as the display name of the session file at ``path``.
 
-    The title is whitespace-flattened and capped at :data:`TITLE_LIMIT`; a blank
-    title is a caller error (there would be nothing to display), so it raises
-    ``ValueError`` and leaves the sidecar untouched. The transcript is not read
-    or modified.
+    The sidecar is the one next to the session file (each sessions directory,
+    and therefore each project, has its own). The title is whitespace-flattened
+    and capped at :data:`TITLE_LIMIT`; a blank title is a caller error (there
+    would be nothing to display), so it raises ``ValueError`` and leaves the
+    sidecar untouched. The transcript is not read or modified.
     """
+    session_file = Path(path)
     normalized = _normalize_title(title)
     if not normalized:
         raise ValueError("session title must not be empty")
-    titles = read_session_titles()
-    titles[Path(path).name] = normalized
-    _write_session_titles(titles)
+    titles = read_session_titles(session_file.parent)
+    titles[session_file.name] = normalized
+    _write_session_titles(session_file.parent, titles)
     return normalized
 
 
@@ -184,7 +229,7 @@ def _derive_title(path: Path) -> str:
 def session_title(path: Path) -> str:
     """Display name for ``path``: a stored override, else the derived brief."""
     session_file = Path(path)
-    override = read_session_titles().get(session_file.name)
+    override = read_session_titles(session_file.parent).get(session_file.name)
     if override:
         return override
     return _derive_title(session_file)
@@ -198,6 +243,7 @@ class SessionInfo:
     mtime: float
     messages: int
     title: str
+    project: str = ""
 
 
 @dataclass
@@ -252,12 +298,16 @@ class Session:
 
         ``title`` is the stored rename when there is one, otherwise the brief
         derived from the first user message (``"(empty)"`` for a blank session).
-        Callers listing many sessions pass the sidecar once via ``titles``.
+        The rename is read from the sidecar next to this session file; callers
+        listing many sessions pass that directory's sidecar once via ``titles``.
+        ``project`` is left empty here — :func:`list_sessions` fills it in.
         """
         messages = self.load()
         if not messages and self.warnings:
             raise ValueError(f"{self.path.name} is unreadable")
-        overrides = read_session_titles() if titles is None else titles
+        overrides = (
+            read_session_titles(self.path.parent) if titles is None else titles
+        )
         return SessionInfo(
             path=self.path,
             mtime=self.path.stat().st_mtime,
@@ -311,26 +361,64 @@ def truncate_last_turn(messages: list[Message]) -> list[Message]:
     return list(messages)
 
 
-def list_sessions(limit: int = 20) -> list[SessionInfo]:
-    """Saved sessions, newest first, skipping files that cannot be read."""
-    directory = sessions_dir()
-    if not directory.is_dir():
-        return []
+def _session_mtime(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return float("-inf")
+
+
+def list_sessions(limit: int = 20, *, scope: str = "project") -> list[SessionInfo]:
+    """Saved sessions, newest first, skipping files that cannot be read.
+
+    ``scope="project"`` lists only the current project's sessions (the default,
+    so another project or the read-only legacy directory never leaks in).
+    ``scope="all"`` merges every known project plus legacy, newest first, and
+    labels each entry with its project's display name (empty for legacy).
+    Each directory's title sidecar is read once and shared by its sessions.
+    """
+    if scope not in _SCOPES:
+        raise ValueError(f"unknown session scope: {scope!r} (choose project|all)")
+    directories = [sessions_dir()] if scope == "project" else all_session_dirs()
     infos: list[SessionInfo] = []
-    titles = read_session_titles()
-    for path in directory.glob("*.jsonl"):
-        try:
-            infos.append(Session(path).read_info(titles=titles))
-        except (ValueError, OSError):
+    for directory in directories:
+        if not directory.is_dir():
             continue
+        titles = read_session_titles(directory)
+        label = _project_label(directory)
+        for path in directory.glob("*.jsonl"):
+            try:
+                info = Session(path).read_info(titles=titles)
+            except (ValueError, OSError):
+                continue
+            info.project = label
+            infos.append(info)
     infos.sort(key=lambda info: info.mtime, reverse=True)
     return infos[:limit]
 
 
-def latest_session() -> Path | None:
-    """Most recent session file (names sort chronologically), if any."""
-    directory = sessions_dir()
-    if not directory.is_dir():
+def latest_session(*, scope: str = "project") -> Path | None:
+    """Most recent session file for ``scope``, if any.
+
+    ``scope="project"`` keeps the historical name ordering (session filenames
+    sort chronologically) inside the current project's directory.
+    ``scope="all"`` looks across every known project and the legacy directory
+    and returns the newest by modification time.
+    """
+    if scope not in _SCOPES:
+        raise ValueError(f"unknown session scope: {scope!r} (choose project|all)")
+    if scope == "project":
+        directory = sessions_dir()
+        if not directory.is_dir():
+            return None
+        files = sorted(directory.glob("*.jsonl"))
+        return files[-1] if files else None
+    candidates = [
+        path
+        for directory in all_session_dirs()
+        if directory.is_dir()
+        for path in directory.glob("*.jsonl")
+    ]
+    if not candidates:
         return None
-    files = sorted(directory.glob("*.jsonl"))
-    return files[-1] if files else None
+    return max(candidates, key=_session_mtime)
