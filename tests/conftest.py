@@ -42,6 +42,16 @@ def isolated_settings(tmp_path, monkeypatch):
     settings.clear_cache()
 
 
+@pytest.fixture(autouse=True)
+def isolated_tui_history(tmp_path, monkeypatch):
+    """Never write the developer's real ~/.zenagent/tui-history.jsonl."""
+    from zenagent.cli.tui import history as history_module
+
+    monkeypatch.setattr(
+        history_module, "default_history_path", lambda: tmp_path / "tui-history.jsonl"
+    )
+
+
 @pytest.fixture
 async def runtime_factory(app_env):
     """Build Runtime instances for tests; closes them all on teardown."""

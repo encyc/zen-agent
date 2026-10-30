@@ -29,6 +29,8 @@
   `↓ new output · pagedown` 提示，不再把你拽回底部（Textual 没有终端原生 scrollback，只能自己实现）。
 - **命令补全**：输入 `/` 会在输入框上方列出命令（最多 6 条），`↑↓` 选择、`tab`/`enter` 补全、
   `esc` 收起；继续打字会实时过滤。
+- **输入历史**：普通 prompt 记在 `~/.zenagent/tui-history.jsonl`（最多 500 条），`ctrl+r` 打开搜索面板，
+  最新的排在最前；多行 prompt 也能完整回填。斜杠命令不入历史。
 - **状态带**：一行填色，在 `╰─` 上方。它是**有序列的 segment**，窄屏按固定顺序丢信息：
   先丢右侧事实（tokens/cache 命中率/花费/上下文/上一轮耗时/生成速率/session）→ 再缩路径 →
   最后才丢左侧身份（model/thinking），**路径永远最后走**。`cache_hit` 用
@@ -71,6 +73,7 @@
 | `ctrl+x` | 清空 follow-up 队列 |
 | `ctrl+s` | steer：把输入插入当前 run |
 | `ctrl+k` | 命令面板（模型/会话/退出） |
+| `ctrl+r` | 历史搜索：列出本次会话和以往提交过的 prompt，输入过滤、`enter` 回填（最新的在前） |
 | `ctrl+b` | 开关信息侧栏 |
 | `tab` | 提示/补全列表打开时接受当前候选 |
 | `pageup` / `pagedown` | 转录区上翻/下翻；下翻到底部即恢复自动跟随 |

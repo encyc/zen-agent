@@ -18,6 +18,7 @@ from zenagent.cli.tui.screens.palette import PaletteItem, PaletteScreen
 __all__ = [
     "ChoicePicker",
     "Confirm",
+    "HistorySearch",
     "ModelPicker",
     "RenamePrompt",
     "SessionAction",
@@ -268,3 +269,25 @@ class ChoicePicker(PaletteScreen[str]):
             for value, description in choices
         ]
         super().__init__(title=title, items=items, placeholder=placeholder)
+
+
+class HistorySearch(PaletteScreen[str]):
+    """Ctrl+R: search submitted prompts, newest first; Enter recalls the text."""
+
+    def __init__(self, entries: list[str]) -> None:
+        items = [
+            PaletteItem(label=_history_preview(text), value=text)
+            for text in entries
+        ]
+        super().__init__(
+            title="History",
+            items=items,
+            placeholder="Search history",
+            footer="↑↓ move   enter recall   esc cancel",
+        )
+
+
+def _history_preview(text: str, limit: int = 100) -> str:
+    """One palette row for a possibly multi-line prompt."""
+    line = " ⏎ ".join(part.strip() for part in text.splitlines() if part.strip())
+    return line if len(line) <= limit else line[: limit - 1] + "…"

@@ -29,6 +29,7 @@ APP_CHORDS = {
     "ctrl+o": "toggle_tools",
     "ctrl+t": "toggle_thinking",
     "ctrl+k": "command_palette",
+    "ctrl+r": "history_search",
     "ctrl+b": "toggle_sidebar",
     "ctrl+s": "steer",
     "ctrl+x": "clear_queue",

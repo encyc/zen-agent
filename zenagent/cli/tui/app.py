@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import time
+from pathlib import Path
 
 from textual.app import App
 from textual.containers import Horizontal, Vertical
@@ -24,6 +25,7 @@ from zenagent.app.commands import AppServices, build_default_commands
 from zenagent.app.models import ModelManager
 from zenagent.app.runtime import Runtime
 from zenagent.app.sessions import SessionManager
+from zenagent.cli.tui.history import PromptHistory
 from zenagent.cli.tui.widgets.command_hints import CommandHints
 from zenagent.cli.tui.widgets.error_banner import ErrorBanner
 from zenagent.cli.tui.widgets.new_content import NewContentBar
@@ -63,6 +65,7 @@ class ZenAgentApp(App):
         ("ctrl+t", "toggle_thinking", "Expand thinking"),
         ("ctrl+o", "toggle_tools", "Expand tools"),
         ("ctrl+k", "command_palette", "Commands"),
+        ("ctrl+r", "history_search", "History"),
         ("ctrl+b", "toggle_sidebar", "Info"),
         ("ctrl+s", "steer", "Steer"),
         ("ctrl+x", "clear_queue", "Clear queue"),
@@ -74,10 +77,12 @@ class ZenAgentApp(App):
         runtime: Runtime,
         *,
         chat: ChatController | None = None,
+        history_path: Path | None = None,
     ) -> None:
         super().__init__()
         self.runtime = runtime
         self.chat = chat or ChatController(runtime, on_change=self._on_change)
+        self.history = PromptHistory(history_path)
         self.exit_summary: str | None = None
         self._menus: dict[str, object] = {}
         self._refresh_pending = False
@@ -641,6 +646,7 @@ class ZenAgentApp(App):
             for log in self.query(TranscriptView):
                 log.append_notice(f"unknown command: /{name}")
             return
+        self.history.add(text)
         await self.chat.submit(text)
 
     async def _dispatch_command(self, name: str, argument: str) -> None:
@@ -712,6 +718,27 @@ class ZenAgentApp(App):
         prompt = self.query_one(PromptInput)
         prompt.insert(text)
         prompt.focus()
+
+    def action_history_search(self) -> None:
+        """Ctrl+R: search submitted prompts and recall one into the composer."""
+        entries = self.history.entries()
+        if not entries:
+            self.notify("no prompt history yet", timeout=2)
+            return
+
+        from zenagent.cli.tui.screens.modals import HistorySearch
+
+        async def selected(text: str | None) -> None:
+            if not text:
+                return
+            prompt = self.query_one(PromptInput)
+            prompt.clear()
+            prompt.insert(text)
+            prompt.focus()
+
+        self.open_menu(
+            "history", lambda: HistorySearch(list(reversed(entries))), selected
+        )
 
     def action_clear_draft(self) -> None:
         """ctrl+c clears the draft (omp keeps a draft through Esc)."""
