@@ -46,3 +46,31 @@ async def runtime_factory(app_env):
 async def runtime_without_glm_key(runtime_factory):
     """A runtime whose zai provider has no API key configured."""
     return await runtime_factory()
+
+
+def text_stream(text: str = "ok"):
+    """A fake StreamFn that answers with fixed text."""
+
+    async def stream(model, messages, tools, options):
+        from zenagent.events import AssistantEvent
+        from zenagent.types import AssistantMessage, TextContent, Usage
+
+        partial = AssistantMessage(
+            content=[TextContent(text=text)],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="pending",
+            timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        partial.stop_reason = "stop"
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    return stream
+
+
+@pytest.fixture
+async def session_runtime(runtime_factory, app_env):
+    """Runtime whose sessions live in the temp dir and whose runs are offline."""
+    return await runtime_factory(stream_fn=text_stream())

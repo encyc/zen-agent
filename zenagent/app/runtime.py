@@ -197,6 +197,13 @@ class Runtime:
 
         runtime.agent = agent
         runtime.session = runtime._open_session(options.resume)
+
+        def persist(event) -> None:
+            if event.type == "agent_end" and event.new_messages:
+                for message in event.new_messages:
+                    runtime.session.append(message)
+
+        agent.subscribe(persist)
         if runtime.session.messages:
             agent.replace_messages(runtime.session.messages)
         runtime.warnings.extend(
@@ -253,7 +260,7 @@ class Runtime:
         """Abort any run, then load `path` (or a fresh session) into the agent."""
         if self.before_switch is not None and not await self.before_switch(path):
             return
-        await self.agent.abort()
+        self.agent.abort()
         await self.agent.wait_for_idle()
         session = Session(path) if path is not None else Session(session_path())
         self.agent.replace_messages(session.load())
