@@ -91,3 +91,9 @@ async def services(session_runtime):
         models=ModelManager(runtime),
         sessions=SessionManager(runtime),
     )
+
+
+@pytest.fixture
+async def fake_runtime(runtime_factory):
+    """Runtime with an offline stream, for TUI pilot tests."""
+    return await runtime_factory(stream_fn=text_stream())

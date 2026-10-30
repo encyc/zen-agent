@@ -1,0 +1,25 @@
+Screen {
+    layout: vertical;
+}
+
+#chat {
+    height: 1fr;
+    border: round $accent;
+    padding: 0 1;
+}
+
+#welcome {
+    color: $text-muted;
+}
+
+StatusBar {
+    height: 1;
+    background: $panel;
+    color: $text;
+    padding: 0 1;
+}
+
+#prompt-input {
+    height: 5;
+    border: round $accent;
+}

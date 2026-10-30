@@ -508,6 +508,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="never compact automatically when the context gets full",
     )
     parser.add_argument(
+        "--no-tui",
+        action="store_true",
+        help="use the line-based REPL even in a terminal",
+    )
+    parser.add_argument(
         "--no-completion",
         action="store_true",
         help="disable slash-command and @path completion in the repl",
@@ -582,7 +587,50 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{position:2d}. {info.path.name} · {info.messages} msgs · {info.title or '(empty)'}")
         return 0
     if not args.prompt:
-        # Interactive mode lives in repl.py; imported lazily to avoid a cycle.
+        if sys.stdout.isatty() and not args.no_tui:
+            from zenagent.app.permissions import PermissionGate
+            from zenagent.app.runtime import Runtime, RuntimeOptions
+            from zenagent.cli.tui.app import ZenAgentApp
+
+            options = RuntimeOptions(
+                model_id=args.model,
+                resume=args.resume,
+                mcp=not args.no_mcp,
+                mcp_servers=args.mcp_servers,
+                mcp_file=args.mcp_file,
+                skills=not args.no_skills,
+                templates=not args.no_templates,
+                extension_paths=args.extension_paths or [],
+                context_files=not args.no_context_files,
+                allow_dangerous=args.allow_dangerous,
+                retries=args.retries,
+                max_turns=args.max_turns,
+                max_cost=args.max_cost,
+            )
+
+            async def run_tui_session() -> int:
+                runtime = await Runtime.bootstrap(
+                    options,
+                    assume_yes=args.yes,
+                    gate=PermissionGate(
+                        assume_yes=args.yes,
+                        interactive=False,
+                        allow_dangerous=args.allow_dangerous,
+                    ),
+                )
+                try:
+                    await ZenAgentApp(runtime).run_async()
+                    return 0
+                finally:
+                    await runtime.close()
+
+            try:
+                return asyncio.run(run_tui_session())
+            except RuntimeError as exc:
+                print(f"zenagent: {exc}", file=sys.stderr)
+                return 1
+
+        # Line-based REPL, imported lazily to avoid a cycle.
         from zenagent.cli.repl import repl
 
         try:
