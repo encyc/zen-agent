@@ -25,7 +25,9 @@ tag 才会真的上传。
 | `test_validate.py` | schema 子集校验 |
 | `test_registry.py` / `test_transport.py` | `safe_stream`、SSE 解析、重试、用量解析 |
 | `test_openai_stream.py` / `test_openai_request.py` / `test_anthropic.py` / `test_openai_responses.py` / `test_google.py` | 四协议 fixture 回放 + 请求体断言 |
-| `test_retry.py` | 可重试分类、缓冲、退避、abort 早停 |
+| `test_retry.py` | 可重试分类、默认透传（保流式）、重试缓冲、退避、abort 早停 |
+| `test_streaming_behavior.py` | 流式回归：delta 必须在 run 结束前到达 ChatController |
+| `test_repl_streaming.py` | REPL 每个 delta 必须 flush（不被 stdout 行缓冲吞掉） |
 | `test_catalog.py` | 目录/定价/兼容开关 |
 | `test_tools_fs.py` / `test_tools_bash.py` / `test_tools_search.py` | 工具行为与边界（二进制、截断、超时、进程组） |
 | `test_permissions.py` | 权限优先级、危险命令、read-only |

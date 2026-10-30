@@ -82,7 +82,19 @@ async def stream_with_retry(
     base_delay: float = 0.5,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
 ) -> AsyncIterator[AssistantEvent]:
-    """Drive ``safe_stream`` and retry transient terminal failures."""
+    """Drive ``safe_stream`` and retry transient terminal failures.
+
+    With ``retries <= 0`` events pass straight through as they arrive, so a
+    streamed answer stays streamed. Buffering is only needed when a retry is
+    possible: a failed attempt's events must not leak duplicate partial output
+    to the UI, which is why enabling retries defers the text to the end of the
+    attempt.
+    """
+    if retries <= 0:
+        async for event in safe_stream(stream_fn, model, messages, tools, options):
+            yield event
+        return
+
     attempt = 0
     while True:
         buffered: list[AssistantEvent] = []

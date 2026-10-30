@@ -47,7 +47,7 @@ zen -p "analyze" --read-only --trace run.jsonl --cwd /path/to/project
 | `--read-only` | 拒绝所有非只读工具（含 MCP；等价 `--mode plan`） |
 | `--allow-dangerous` | 允许 `rm -rf` 等危险命令（`--yes` 也不够） |
 | `--max-turns` / `--max-cost` | 硬上限；超限终止并记录在 termination |
-| `--retries` | provider 瞬时错误的额外重试次数（默认 0） |
+| `--retries` | provider 瞬时错误的额外重试次数（默认 0）。启用后每次尝试先缓冲，**关闭 token 流式**（文本在调用结束时出现） |
 | `--resume [SESSION]` | 继续会话（缺省 `latest`，只续当前项目） |
 | `--list-sessions` | 列出当前项目的会话 |
 | `--all-projects` | 配合 `--list-sessions` 列出所有项目与 legacy |

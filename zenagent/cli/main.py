@@ -469,7 +469,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--retries",
         type=int,
         default=0,
-        help="extra attempts for transient provider failures (default 0)",
+        help=(
+            "extra attempts for transient provider failures; each attempt is "
+            "buffered, so enabling retries disables token streaming (default 0)"
+        ),
     )
     parser.add_argument(
         "--max-turns", type=int, help="stop after this many provider requests"

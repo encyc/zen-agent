@@ -45,9 +45,10 @@ class Session:
 - `is_retryable(message)` 只看 `stop_reason="error"` 且错误文本命中瞬时特征
   （timeout、connection reset、5xx、overloaded、rate limit…）；
 - 确定性错误（quota、401/403、400、context length）**永不重试**；
-- 每次尝试的事件先缓冲，失败丢弃 → 不产生重复文本；
+- `retries=0`（默认）直接透传事件、保持流式；启用重试时每次尝试的事件先缓冲，
+  失败丢弃 → 不产生重复文本（代价：该轮文本在调用结束才出现）；
 - 退避 0.5s、1s；退避期间 abort 立即停止；
-- 由 `AgentConfig.retries` / `--retries` 控制，默认 0（保持旧行为）。
+- 由 `AgentConfig.retries` / `--retries` 控制，默认 0（保持流式）。
 
 为什么重试不会重放工具副作用：失败发生在 assistant 消息完成之前，此时**没有任何工具被执行**；
 重试只是重新请求模型。工具只在成功的 assistant 消息之后才运行。

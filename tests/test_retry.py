@@ -1,6 +1,8 @@
 """Message-level retry: classification, buffering, limits, and abort."""
 
 
+import asyncio
+
 from zenagent.events import AbortToken, AssistantEvent
 from zenagent.providers.catalog import Model
 from zenagent.providers.compat import CompatFlags
@@ -132,3 +134,41 @@ async def test_loop_uses_retries_from_config():
     assert stream.calls == 2
     assert state.messages[-1].stop_reason == "stop"
     assert events[-1].type == "agent_end"
+
+
+async def test_zero_retries_passes_events_through_while_streaming():
+    """retries=0 must not buffer: a delta has to arrive before the stream ends."""
+    released = asyncio.Event()
+
+    async def stream(model_, messages, tools, options):
+        partial = assistant(stop="pending")
+        yield AssistantEvent(type="start", partial=partial)
+        await released.wait()
+        yield AssistantEvent(type="done", partial=assistant(stop="stop"), reason="stop")
+
+    events = stream_with_retry(stream, model(), [], [], StreamOptions(), retries=0)
+    first = await asyncio.wait_for(anext(events), timeout=1.0)
+    assert first.type == "start"  # arrived while the provider was still streaming
+    released.set()
+    rest = [event async for event in events]
+    assert [event.type for event in rest] == ["done"]
+
+
+async def test_enabled_retries_still_buffer_an_attempt():
+    """With retries>0 an attempt is buffered so a retry cannot leak events."""
+    released = asyncio.Event()
+
+    async def stream(model_, messages, tools, options):
+        partial = assistant(stop="pending")
+        yield AssistantEvent(type="start", partial=partial)
+        await released.wait()
+        yield AssistantEvent(type="done", partial=assistant(stop="stop"), reason="stop")
+
+    events = stream_with_retry(stream, model(), [], [], StreamOptions(), retries=1)
+    pending = asyncio.create_task(anext(events))
+    await asyncio.sleep(0.1)
+    assert not pending.done(), "an attempt with retry budget must be buffered"
+    released.set()
+    assert (await pending).type == "start"
+    rest = [event async for event in events]
+    assert [event.type for event in rest] == ["done"]

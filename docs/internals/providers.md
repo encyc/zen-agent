@@ -19,8 +19,10 @@ async def stream(model, messages, tools, options) -> AsyncIterator[AssistantEven
 | `stream_fn_for(model)` | 按 `model.api` 取适配器，未知 api 抛 `ValueError` |
 | `safe_stream(stream_fn, …)` | 捕获所有 `Exception`，转成终局 `error` 事件；`CancelledError` 继续传播 |
 
-`stream_with_retry`（`providers/retry.py`）再包一层：只对「可重试的终局错误」重试，
-每次尝试的事件先缓冲，失败则丢弃，避免 UI 收到重复的半截消息。
+`stream_with_retry`（`providers/retry.py`）再包一层：只对「可重试的终局错误」重试。
+`retries=0`（默认）时事件**直接透传**，保持流式；开启重试（`retries>0`）后，
+每次尝试的事件先缓冲、失败则丢弃，避免 UI 收到重复的半截消息——代价是这一轮文本
+在调用结束才出现。
 
 ## 目录与兼容开关（`providers/catalog.py` + `catalog.yaml`）
 
