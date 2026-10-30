@@ -59,6 +59,14 @@ class TranscriptView(VerticalScroll):
             if self._pending:
                 self._set_pending(False)
 
+    def _on_mouse_scroll_up(self, event) -> None:
+        super()._on_mouse_scroll_up(event)
+        self._stick = False
+
+    def _on_mouse_scroll_down(self, event) -> None:
+        super()._on_mouse_scroll_down(event)
+        self._stick = self._at_bottom()
+
     def watch_virtual_size(self, old, new) -> None:
         """Content grew (a block mounted): follow it if we are pinned."""
         if self._stick:

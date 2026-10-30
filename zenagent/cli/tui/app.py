@@ -15,7 +15,7 @@ import inspect
 
 from textual.app import App
 from textual.containers import Horizontal, Vertical
-from textual.events import MouseEvent
+from textual.events import MouseEvent, MouseScrollDown, MouseScrollUp
 
 from zenagent.app.chat import ChatController
 from zenagent.app.commands import AppServices, build_default_commands
@@ -29,6 +29,7 @@ from zenagent.cli.tui.widgets.prompt_input import PromptInput
 from zenagent.cli.tui.widgets.sidebar import Sidebar
 from zenagent.cli.tui.widgets.status_band import StatusBand
 from zenagent.cli.tui.widgets.transcript import TranscriptView
+from zenagent.cli.tui.widgets.work_indicator import WorkIndicator
 
 __all__ = ["ZenAgentApp"]
 
@@ -48,7 +49,7 @@ class ZenAgentApp(App):
         ("ctrl+p", "cycle_model", "Next model"),
         ("alt+p", "pick_model", "Pick model"),
         ("shift+tab", "cycle_thinking", "Thinking"),
-        ("ctrl+t", "toggle_thinking", "Hide thinking"),
+        ("ctrl+t", "toggle_thinking", "Expand thinking"),
         ("ctrl+o", "toggle_tools", "Expand tools"),
         ("ctrl+k", "command_palette", "Commands"),
         ("ctrl+b", "toggle_sidebar", "Info"),
@@ -86,10 +87,13 @@ class ZenAgentApp(App):
         self.exit()
 
     async def on_event(self, event) -> None:
-        # Keyboard-only UI: dropping mouse events avoids Textual 8.2's crashing
-        # text-selection path (screen._forward_event with a null container) and
-        # matches the spec's explicit "no mouse" requirement.
-        if isinstance(event, MouseEvent):
+        # Clicks stay dropped: Textual 8.2's selection path crashes when a click
+        # reaches a Markdown block. The wheel is safe and is the only pointer
+        # input this UI accepts, because scrolling the transcript by hand beats
+        # hunting for pagedown.
+        if isinstance(event, MouseEvent) and not isinstance(
+            event, (MouseScrollUp, MouseScrollDown)
+        ):
             return
         await super().on_event(event)
 
@@ -104,6 +108,7 @@ class ZenAgentApp(App):
                     with Horizontal(id="prompt-row"):
                         yield PromptGutter()
                         yield PromptInput()
+                        yield WorkIndicator()
             yield Sidebar()
 
     def on_mount(self) -> None:
@@ -122,6 +127,8 @@ class ZenAgentApp(App):
             band.update_status(status, width)
         for log in self.query(TranscriptView):
             log.sync(self.chat.transcript, status)
+        for indicator in self.query(WorkIndicator):
+            indicator.set_running(status.running)
 
     def on_resize(self, event) -> None:
         self._refresh_status()
@@ -379,14 +386,15 @@ class ZenAgentApp(App):
         self._refresh_status()
 
     def action_toggle_thinking(self) -> None:
+        """ctrl+t expands/collapses every thinking row (omp toggles the block)."""
         from zenagent.cli.tui.widgets.rows import ThinkingRow
 
         rows = list(self.query(ThinkingRow))
         if not rows:
             return
-        hide = any(row.display for row in rows)
+        expand = any(row.collapsed for row in rows)
         for row in rows:
-            row.display = not hide
+            row.set_expanded(expand)
 
     def action_steer(self) -> None:
         prompt = self.query_one(PromptInput)

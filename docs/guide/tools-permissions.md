@@ -11,6 +11,8 @@
 | `bash` | 执行命令，禁止危险模式 | 需确认 |
 | `glob` | 按模式找文件 | 只读 |
 | `grep` | 正则搜内容（忽略二进制/大文件） | 只读 |
+| `web_search` | 联网搜索，返回标题/URL/摘要（Brave → Bing → DuckDuckGo） | 只读，免确认 |
+| `fetch` | 抓取 URL 并转成可读文本（剥 HTML，12k 字符上限） | 只读，免确认 |
 | `read_skill` | 读本地 SKILL.md 正文 | 只读 |
 
 每个工具的签名都是：
@@ -46,7 +48,7 @@ allow 模式命中？   ── 是 ──> 允许（不再询问）
 关键点：
 
 1. **allowlist 救不了危险命令**：`allow = ["*"]` 也不能放行 `rm -rf /`。
-2. `--read-only` 下，`write_file`、`bash`、MCP 工具全拒；`read_file/grep/glob/list_dir/read_skill` 放行。
+2. `--read-only` 下，`write_file`、`bash`、MCP 工具全拒；`read_file/grep/glob/list_dir/web_search/fetch/read_skill` 放行。
 3. 拒绝不是异常：工具调用收到 `is_error=True` 的结果，模型能看到原因并调整。
 4. 交互模式下 REPL 会问 `allow? [y/N]`；headless 没有交互，默认拒绝。
 
@@ -80,8 +82,9 @@ ToolResultAgent(
 
 ## 源码对照
 
-- 工具实现：`zenagent/tools/{fs,bash,search}.py`，清单 `zenagent/tools/__init__.py::ALL_TOOLS`
+- 工具实现：`zenagent/tools/{fs,bash,search,web}.py`，清单 `zenagent/tools/__init__.py::ALL_TOOLS`
 - 权限：`zenagent/cli/permissions.py::PermissionGate`、`READ_ONLY_TOOLS`、`dangerous_command_reason`
 - 校验：`zenagent/agent/validate.py::validate_arguments`
 - 执行与错误隔离：`zenagent/agent/loop.py`（工具 round）
-- 对应测试：`tests/test_tools_fs.py`、`test_tools_bash.py`、`test_tools_search.py`、`test_permissions.py`、`test_validate.py`
+- 对应测试：`tests/test_tools_fs.py`、`test_tools_bash.py`、`test_tools_search.py`、`test_tools_web.py`、`test_permissions.py`、`test_validate.py`
+- `web_search` 的 `BRAVE_API_KEY` 存在时优先 Brave；否则依次试 Bing、DuckDuckGo（受限网络里通常只有 Bing 可用）。

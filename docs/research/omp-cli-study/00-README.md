@@ -14,6 +14,7 @@
 | [`05-overlays-and-surfaces.md`](05-overlays-and-surfaces.md) | 三层弹层体系（内联/锚定浮层/全屏）、共用骨架、尺寸档位、栈叠与 Esc | 做选择器与全屏界面时读 |
 | [`06-feature-inventory.md`](06-feature-inventory.md) | 功能总账：87 个命令、45 个键位、25 个全屏界面、61 个工具渲染器 + 取舍建议 | 决定"做什么/不做什么"时读 |
 | [`07-textual-replication-plan.md`](07-textual-replication-plan.md) | **落地计划**：差距表、目标组件树、模块清单、P0-P4 分阶段、键位迁移表、视觉 token 映射 | 开始改代码时读 |
+| [`08-omp-command-reference.md`](08-omp-command-reference.md) | **omp 87 个顶层命令全表**（7 个域）+ 我们的对齐状态 | 想查"omp 有什么功能"时读 |
 
 ## 五条最反直觉的结论
 

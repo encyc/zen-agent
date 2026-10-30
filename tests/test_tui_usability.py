@@ -133,3 +133,66 @@ async def test_settings_palette_opens(fake_runtime):
         await app._dispatch_command("settings", "")
         await pilot.pause()
         assert isinstance(app.screen, SettingsPicker)
+
+
+async def test_ctrl_t_expands_and_collapses_thinking(runtime_factory):
+    from zenagent.cli.tui.widgets.rows import ThinkingRow
+    from zenagent.events import AssistantEvent
+    from zenagent.types import AssistantMessage, TextContent, ThinkingContent, Usage
+
+    async def stream(model, messages, tools, options):
+        partial = AssistantMessage(
+            content=[], provider="p", model="m", usage=Usage(),
+            stop_reason="pending", timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        partial.content.append(ThinkingContent(thinking="step one, step two"))
+        yield AssistantEvent(type="thinking_start", partial=partial, content_index=0)
+        partial.content.append(TextContent(text="done"))
+        yield AssistantEvent(type="text_delta", partial=partial, content_index=1, delta="done")
+        partial.stop_reason = "stop"
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    runtime = await runtime_factory(stream_fn=stream)
+    app = ZenAgentApp(runtime)
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        prompt = app.query_one(PromptInput)
+        prompt.focus()
+        await app.chat.submit("go")
+        await app.chat.wait_for_idle()
+        await pilot.pause()
+
+        row = app.query_one(ThinkingRow)
+        assert row.collapsed is True
+        assert row.size.height == 1
+
+        await pilot.press("ctrl+t")
+        await pilot.pause()
+        assert row.collapsed is False
+        assert "step one, step two" in row.plain
+
+        await pilot.press("ctrl+t")
+        await pilot.pause()
+        assert row.collapsed is True
+
+
+async def test_work_indicator_switches_with_the_run(gated_app):
+    from zenagent.cli.tui.widgets.work_indicator import WorkIndicator
+
+    app, gate = gated_app
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        indicator = app.query_one(WorkIndicator)
+        assert indicator.display is False, "idle shows nothing"
+
+        await app.chat.submit("hi")
+        await pilot.pause()
+        assert indicator.display is True and indicator.running is True
+        assert "working" in indicator.plain
+
+        await pilot.press("escape")
+        gate.set()
+        await app.chat.wait_for_idle()
+        await pilot.pause()
+        assert indicator.running is False

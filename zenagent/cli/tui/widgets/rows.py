@@ -65,6 +65,13 @@ class ThinkingRow(Static):
             text.append("\n")
         return text
 
+    def set_expanded(self, expanded: bool) -> None:
+        if expanded == (not self.collapsed):
+            return
+        self.collapsed = not expanded
+        if self.is_mounted:
+            self.update(self._renderable())
+
     def set_thinking(self, thinking: str) -> None:
         """Update the reasoning text (streaming keeps growing it)."""
         if thinking == self.thinking:
