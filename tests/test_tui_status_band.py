@@ -5,7 +5,13 @@ a segment that renders nothing disappears *entirely* -- including its
 separator -- and the line degrades in a fixed order as the terminal narrows.
 """
 
+from pathlib import Path
+
 from zenagent.app.views import RunStatus
+
+#: Hermetic home-relative path: the abbreviation logic is what is under test,
+#: not the machine's actual /Users/<name>.
+HOME_CWD = str(Path.home() / "work" / "repo")
 from zenagent.cli.tui.status.presets import PRESETS
 from zenagent.cli.tui.status.segments import SEGMENT_IDS, render_status_line
 
@@ -24,7 +30,7 @@ def status(**overrides) -> RunStatus:
         "follow_ups": 0,
         "steering": 0,
         "session_name": "20261030-122605",
-        "cwd": "/Users/mac/py-agent",
+        "cwd": HOME_CWD,
     }
     base.update(overrides)
     return RunStatus(**base)
@@ -88,7 +94,7 @@ def test_path_is_the_last_left_segment_to_go():
 def test_path_is_abbreviated_when_space_is_tight():
     _, wide = render_status_line(status(), 200, preset="default")
     _, tight = render_status_line(status(), 64, preset="default")
-    assert "~/py-agent" in wide, "home-relative abbreviation is always on"
+    assert "~/work/repo" in wide, "home-relative abbreviation is always on"
     assert "…" in tight or len(tight) <= 64
 
 
