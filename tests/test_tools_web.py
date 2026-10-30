@@ -196,3 +196,66 @@ async def test_deepseek_adds_the_recency_boundary_to_the_query(monkeypatch):
 async def test_deepseek_without_a_key_is_a_provider_error():
     with pytest.raises(providers.ProviderError):
         await providers.deepseek(web_request("x"))
+
+
+async def test_tavily_maps_sites_and_cleans_content(monkeypatch):
+    monkeypatch.setenv("TAVILY_API_KEY", "k")
+    seen: dict = {}
+
+    async def fake_post(url, **kwargs):
+        seen.update(kwargs["json"])
+        payload = {
+            "results": [
+                {
+                    "title": "Docs",
+                    "url": "https://docs.example/1#frag",
+                    "content": "### Navigation\n\nindex | modules | next\n\nReal body text.",
+                }
+            ]
+        }
+        return httpx.Response(200, json=payload, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(net, "post", fake_post)
+    monkeypatch.setenv("ZENAGENT_SEARCH_PROVIDERS", "tavily")
+    registry._default_chain = None
+    result = await call(WEB_SEARCH, query="x site:docs.example", recency="week")
+    assert seen["include_domains"] == ["docs.example"]
+    assert seen["topic"] == "news" and seen["days"] == 7
+    text = result.content[0].text
+    assert "Real body text." in text
+    assert "#frag" not in text, "fragments are stripped from urls"
+    snippet_line = text.splitlines()[-1]
+    assert "Navigation" in snippet_line and "Real body text." in snippet_line, (
+        "the multi-line excerpt is collapsed into the single snippet row"
+    )
+
+
+async def test_snippets_keep_their_content_only_whitespace_collapses(monkeypatch):
+    """omp's normalizeSearchText collapses whitespace; it never rewrites text."""
+    monkeypatch.setenv("TAVILY_API_KEY", "k")
+
+    async def fake_post(url, **kwargs):
+        payload = {"results": [{"title": "t", "url": "https://a/1", "content": "# comment\n\ncode  here"}]}
+        return httpx.Response(200, json=payload, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(net, "post", fake_post)
+    monkeypatch.setenv("ZENAGENT_SEARCH_PROVIDERS", "tavily")
+    registry._default_chain = None
+    result = await call(WEB_SEARCH, query="x")
+    text = result.content[0].text
+    assert "# comment" in text, "a leading '#' is content, not markup to strip"
+    assert "code here" in text
+
+
+def test_proxy_resolution_prefers_the_explicit_override(monkeypatch):
+    from zenagent.tools.web import net as net_module
+
+    for name in ("ZENAGENT_SEARCH_PROXY", "HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"):
+        monkeypatch.delenv(name, raising=False)
+    assert net_module.proxy_url() is None
+
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:7890")
+    assert net_module.proxy_url() == "http://127.0.0.1:7890"
+
+    monkeypatch.setenv("ZENAGENT_SEARCH_PROXY", "socks5://127.0.0.1:7892")
+    assert net_module.proxy_url() == "socks5://127.0.0.1:7892"

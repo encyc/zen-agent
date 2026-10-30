@@ -75,13 +75,22 @@ zenagent/tools/web/
 
 解析器在 `zenagent/tools/web/query.py`：`parse_query` → `StructuredQuery`，`format_query(query, syntax)` 按 `QuerySyntax` 重新拼，`format_scraper_query` 额外把"抓取式引擎不支持的 `site:` 带路径 / `inurl:`"降级成关键词，`apply_constraints` 做宽松过滤。
 
-## 5. 结果规范化
+## 5. 结果规范化（只做压空白，不清洗内容）
 
 不同引擎回来的东西差别很大，统一在 provider 里做三件事：
 
 - **URL 去 fragment**：DeepSeek 会带 `#1`、`#:~:text=` 之类的锚点；`normalize_url` 再去掉追踪参数；
-- **摘要压成一行**：DeepSeek 的 `summary` 是多行 markdown（`# 标题`、代码、`...`），先剥 markdown 标记再按行拼接，上限 260 字符——工具卡是单行，多行会把列表撑乱；
+- **空白折叠 + 长度上限**：多行摘要折成一行（`\\s+` → 空格、trim），上限 400 字符；
 - **空字段丢弃**：没有 title 或没有 url 的条目直接跳过（Bing 的导航块就会这样）。
+
+**刻意不做的清洗**：不剥 markdown 标记（`###`、`>`）、不删"导航"类文字、不重写正文。
+
+理由有两条：
+
+1. **omp 就是这么做的**：`providers/utils.ts::normalizeSearchText` 只有 `replace(/\\s+/g, " ").trim()`，没有内容改写；截断发生在 TUI 渲染层（`clipCollapsed(..., 110)`），是"显示裁剪"而不是"数据清洗"。我们照抄这个分层：provider 只保证"一行、有上限"，展示层负责好看。
+2. **剥标记会吃掉内容**：`^[#>]` 这类规则会把代码片段里的 `# comment` 一起删掉——早期版本这么干过，实测会把 Python 注释吞掉。搜索摘要是给模型读的，改写得越多，模型看到的越不是原文。
+
+UI 上的单行效果由工具卡自己保证（卡片按行缩进渲染，超长自动折行/截断），不需要 provider 预先"美化"。
 
 ## 6. `fetch`
 

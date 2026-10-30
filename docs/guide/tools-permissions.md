@@ -89,3 +89,4 @@ ToolResultAgent(
 - 对应测试：`tests/test_tools_fs.py`、`test_tools_bash.py`、`test_tools_search.py`、`test_tools_web.py`、`test_permissions.py`、`test_validate.py`
 - `web_search` 的 provider 链与配置见 [`docs/internals/web-search.md`](../internals/web-search.md)：有 `DEEPSEEK_API_KEY` 时默认走 DeepSeek，无 key 时退到 Bing/DuckDuckGo；顺序可用 `ZENAGENT_SEARCH_PROVIDERS` 覆盖。
 - `/search` 查看 provider 状态，`/search <query>` 手动跑一次。
+- 搜索走的是"压空白 + 长度上限"，**不改写原文**（与 omp 一致）；剥 markdown 会吃掉代码里的 `# comment`。

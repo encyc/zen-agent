@@ -36,7 +36,9 @@ __all__ = [
     "tavily",
 ]
 
-_SNIPPET_CHARS = 260
+#: Size ceiling only (omp keeps the full excerpt and clips at render); one line
+#: per result keeps the tool output readable without mutating the text.
+_SNIPPET_CHARS = 400
 _LIMIT_MAX = 20
 _TAG = re.compile(r"<[^>]+>")
 _SCRIPT_STYLE = re.compile(r"<(script|style|noscript)[^>]*>.*?</\1>", re.DOTALL)
@@ -55,17 +57,15 @@ def _clean(fragment: str) -> str:
     return _WS.sub(" ", html.unescape(_TAG.sub(" ", fragment))).strip()
 
 
-_MD_MARKER = re.compile(r"^[#>*\-\s]+")
-
-
 def _one_line(text: str) -> str:
-    """DeepSeek returns markdown-ish multi-line excerpts; the card is one line."""
-    lines = []
-    for raw in str(text).splitlines():
-        line = _MD_MARKER.sub("", " ".join(raw.split()))
-        if line:
-            lines.append(line)
-    return " ".join(lines)[:_SNIPPET_CHARS]
+    """Collapse whitespace and cap the length — never rewrite the content.
+
+    omp's providers do exactly this (`normalizeSearchText`: ``\\s+`` -> space,
+    trim) and leave display truncation to the renderer. Stripping markdown
+    markers here would eat legitimate content such as a leading ``# comment``
+    in a code excerpt, so we do not.
+    """
+    return " ".join(str(text).split())[:_SNIPPET_CHARS]
 
 
 def _strip_fragment(url: str) -> str:
@@ -160,6 +160,7 @@ async def tavily(request: SearchRequest) -> list[SearchResult]:
     days = _RECENCY_DAYS.get(request.recency or "")
     if days:
         payload["days"] = days
+        payload["topic"] = "news"
     response = await net.post("https://api.tavily.com/search", json=payload)
     if response.status_code >= 400:
         raise ProviderError(f"Tavily HTTP {response.status_code}")
@@ -172,8 +173,8 @@ async def tavily(request: SearchRequest) -> list[SearchResult]:
         results.append(
             SearchResult(
                 title=title,
-                url=url,
-                snippet=_clean(str(item.get("content", "")))[:_SNIPPET_CHARS],
+                url=_strip_fragment(url),
+                snippet=_one_line(str(item.get("content", ""))),
                 provider="tavily",
                 published=str(item.get("published_date", "")),
             )
@@ -209,7 +210,7 @@ async def brave(request: SearchRequest) -> list[SearchResult]:
         results.append(
             SearchResult(
                 title=title,
-                url=url,
+                url=_strip_fragment(url),
                 snippet=_clean(str(item.get("description", "")))[:_SNIPPET_CHARS],
                 provider="brave",
                 published=str(item.get("age", "")),
@@ -244,7 +245,7 @@ def parse_bing(body: str, limit: int) -> list[SearchResult]:
         results.append(
             SearchResult(
                 title=title,
-                url=html.unescape(link.group(1)),
+                url=_strip_fragment(html.unescape(link.group(1))),
                 snippet=_clean(paragraph.group(1) if paragraph else "")[:_SNIPPET_CHARS],
                 provider="bing",
             )
@@ -290,7 +291,7 @@ def parse_duckduckgo(body: str, limit: int) -> list[SearchResult]:
         results.append(
             SearchResult(
                 title=title,
-                url=url,
+                url=_strip_fragment(url),
                 snippet=snippets[index][:_SNIPPET_CHARS] if index < len(snippets) else "",
                 provider="duckduckgo",
             )
