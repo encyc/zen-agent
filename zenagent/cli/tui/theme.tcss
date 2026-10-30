@@ -1,5 +1,10 @@
+/* ZenAgent TUI — "harbor": cold slate with a single warm accent.
+   Tokens: ink #0d1319 · surface #141c24 · line #263441
+           text #d7e0e8 · muted #8296a6 · accent #d9a86c · error #e08787 */
+
 Screen {
-    layout: vertical;
+    background: #0d1319;
+    color: #d7e0e8;
 }
 
 #body {
@@ -7,41 +12,71 @@ Screen {
 }
 
 #sidebar {
-    width: 30;
-    border: round $accent;
-    padding: 0 1;
+    width: 28;
+    background: #141c24;
+    border-right: solid #263441;
+    padding: 1 2;
 }
 
 #chat {
-    width: 1fr;
-    border: round $accent;
-    padding: 0 1;
+    background: #0d1319;
+    padding: 1 2;
+    scrollbar-size-vertical: 1;
 }
 
 .user-message {
-    color: $text-muted;
+    margin: 1 0 0 0;
+}
+
+.assistant-message {
+    margin: 0 0 1 0;
+}
+
+.thinking {
+    background: #0d1319;
+    border: none;
+    margin: 0 0 1 1;
+}
+
+.thinking > CollapsibleTitle {
+    color: #8296a6;
+}
+
+.tool-card {
+    background: #0d1319;
+    height: auto;
+    margin: 0 0 1 1;
+    color: #8296a6;
+}
+
+.tool-card:focus {
+    color: #d9a86c;
 }
 
 .usage-row {
-    color: $text-muted;
+    color: #5d6f7e;
+    margin: 0 0 1 0;
+}
+
+.notice {
+    color: #8296a6;
+    margin: 0 0 1 0;
 }
 
 StatusBar {
-    height: 1;
-    background: $panel;
-    color: $text;
-    padding: 0 1;
+    height: 2;
+    background: #141c24;
+    border-top: solid #263441;
+    padding: 0 2;
 }
 
 #prompt-input {
-    height: 5;
-    border: round $accent;
+    height: 3;
+    background: #141c24;
+    border: round #263441;
+    padding: 0 1;
 }
 
-.modal {
-    width: 70%;
-    height: 60%;
-    border: thick $accent;
-    background: $panel;
-    padding: 1 2;
+#prompt-input:focus {
+    border: round #d9a86c;
 }

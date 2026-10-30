@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from rich.text import Text
 from textual.containers import VerticalScroll
 from textual.widgets import Collapsible, Markdown, Static
 
@@ -43,7 +44,10 @@ class ChatLog(VerticalScroll):
 
     def _append_message(self, view: MessageView) -> None:
         if view.kind == "user":
-            self.mount(Static(f"› {view.text}", classes="user-message"))
+            text = Text()
+            text.append("› ", style="#d9a86c")
+            text.append(view.text, style="#d7e0e8")
+            self.mount(Static(text, classes="user-message"))
             return
         if view.thinking:
             self.mount(

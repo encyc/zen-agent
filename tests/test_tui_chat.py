@@ -72,3 +72,18 @@ async def test_mouse_click_on_markdown_does_not_crash(runtime_factory):
         await pilot.click(app.query_one("Markdown"))
         await pilot.pause()
         assert app.is_running
+
+
+async def test_collapsed_tool_card_is_one_line(chat_app_with_one_tool):
+    from zenagent.cli.tui.widgets.tool_card import ToolCard
+
+    app = chat_app_with_one_tool
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await app.chat.submit("go")
+        await app.chat.wait_for_idle()
+        await pilot.pause()
+        await pilot.pause()
+        card = app.query(ToolCard).first()
+        assert card.collapsed is True
+        assert card.region.height <= 2, f"collapsed card took {card.region.height} rows"
