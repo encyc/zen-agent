@@ -208,6 +208,13 @@ async def _thinking(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(message=f"thinking: {level}")
 
 
+@_command("tools", "list the tools the model can call")
+async def _tools(services: AppServices, argument: str) -> CommandResult:
+    from zenagent.app.support import describe_tools
+
+    return CommandResult(message=describe_tools(services.runtime.agent.tools))
+
+
 @_command("session", "show this session's model, context and spend")
 async def _session(services: AppServices, argument: str) -> CommandResult:
     status = services.chat.status
@@ -331,6 +338,7 @@ def build_default_commands(services: AppServices) -> CommandRegistry:
         _quit,
         _exit,
         _thinking,
+        _tools,
         _session,
         _usage,
         _context,

@@ -65,3 +65,13 @@ async def test_thinking_command_without_argument_opens_the_selector(services):
     registry = build_default_commands(services)
     result = await registry.dispatch("thinking", "")
     assert result.screen == "thinking-picker"
+
+
+async def test_tools_lists_names_and_descriptions(services):
+    from zenagent.app.commands import build_default_commands
+
+    registry = build_default_commands(services)
+    result = await registry.dispatch("tools", "")
+    names = [tool.name for tool in services.runtime.agent.tools]
+    assert result.message and "read_file" in result.message and "bash" in result.message
+    assert f"tools ({len(names)})" in result.message

@@ -27,6 +27,7 @@ SLASH_COMMANDS: dict[str, str] = {
     "/thinking": "show or set reasoning level: off|low|medium|high|max",
     "/mode": "set runtime mode: plan|ask|full (plan = read-only)",
     "/session": "show model, context and spend for this session",
+    "/tools": "list the tools the model can call",
     "/compact": "summarize the conversation into a fresh session",
     "/undo": "drop the last turn into a fresh session file",
     "/image": "attach an image for the next prompt (/image <path>)",

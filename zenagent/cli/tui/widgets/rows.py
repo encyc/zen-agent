@@ -107,11 +107,12 @@ class NoticeRow(Static):
     """A quiet one-off line: command output, unknown command, warnings."""
 
     def __init__(self, text: str, *, error: bool = False) -> None:
+        self._text = text
         super().__init__(Text(text, style=_ERROR if error else _MUTED), classes="notice")
 
     @property
     def plain(self) -> str:
-        return self.renderable.plain if isinstance(self.renderable, Text) else str(self.renderable)
+        return self._text
 
 
 def assistant_text(view: MessageView) -> Text:

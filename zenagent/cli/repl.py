@@ -30,6 +30,7 @@ from zenagent.agent.session import (
     unique_session_path,
 )
 from zenagent.app.modes import describe_modes, mode_prompt_note
+from zenagent.app.support import describe_tools
 from zenagent.cli.compact import compact, maybe_auto_compact
 from zenagent.cli.completion import SLASH_COMMANDS, ReplCompleter, help_text
 from zenagent.cli.images import read_image_argument
@@ -338,6 +339,9 @@ async def handle_slash(
                 print_fn(f"{status.name}: connected · {len(status.tools)} tools")
             else:
                 print_fn(f"{status.name}: failed · {status.error or 'unknown error'}")
+        return None
+    if command == "tools":
+        print_fn(describe_tools(agent.tools))
         return None
     if command == "compact":
         try:

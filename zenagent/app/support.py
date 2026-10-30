@@ -8,7 +8,28 @@ from pathlib import Path
 from zenagent import settings
 from zenagent.providers.catalog import Model, ProviderConfig, find_model
 
-__all__ = ["api_key_for", "resolve_model", "session_id_for", "system_prompt"]
+__all__ = [
+    "api_key_for",
+    "describe_tools",
+    "resolve_model",
+    "session_id_for",
+    "system_prompt",
+]
+
+
+def describe_tools(tools: list) -> str:
+    """One-line-per-tool listing shared by the TUI and REPL ``/tools`` commands.
+
+    Reads ``agent.tools``, so MCP servers, the skills tool and extension tools
+    are included exactly as the model sees them (the point of the command).
+    """
+    if not tools:
+        return "tools (0): none registered"
+    rows = [f"tools ({len(tools)}):"]
+    for tool in tools:
+        description = " ".join((getattr(tool, "description", "") or "").split())
+        rows.append(f"  {tool.name}: {description}" if description else f"  {tool.name}")
+    return "\n".join(rows)
 
 
 def system_prompt(tool_names: list[str]) -> str:

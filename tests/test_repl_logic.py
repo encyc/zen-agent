@@ -626,3 +626,15 @@ async def test_thinking_slash_without_argument_shows_levels_without_changing_sta
     assert printed and "high" in printed[0]
     for level in ("off", "low", "medium", "high", "max"):
         assert level in printed[0]
+
+
+async def test_slash_tools_lists_the_tool_set(isolated_sessions, capsys):
+    code = await repl(
+        "glm-5.3",
+        stream_fn=scripted_stream(),
+        api_key="k",
+        input_fn=scripted_input("/tools", "/exit"),
+    )
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "tools (" in out and "read_file" in out

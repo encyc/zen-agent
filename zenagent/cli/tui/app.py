@@ -339,15 +339,8 @@ class ZenAgentApp(App):
             )
 
     def _run_command(self, name: str) -> None:
-        if name == "model":
-            self.open_model_picker()
-        elif name == "sessions":
-            self.open_session_picker()
-        elif name == "quit":
-            self.exit()
-        else:
-            for log in self.query(TranscriptView):
-                log.append_notice(f"/{name} is not available in the TUI yet")
+        """Palette entries run the same path as typing the command."""
+        self.run_worker(self._dispatch_command(name, ""))
 
     def open_menu(self, kind: str, factory, callback) -> None:
         """Single-instance menus: a repeat request focuses, never stacks.

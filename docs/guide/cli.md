@@ -102,6 +102,9 @@ zen evals [--model ...] [--filter ...] [--report ...] [--baseline ...]
 - `evals` 转发给 `scripts/eval.py`，支持 `--baseline` 回归对比（有回归 exit 1）。
 - `rpc` 的 stdout 只有协议 JSON；日志去 stderr。
 
+会话内的斜杠命令由前端各自实现但共享登记表：`/help` 列出全部；`/tools` 打印模型当前可调用的
+工具清单（含 MCP、skill 与扩展注册的工具），TUI 与 REPL 都有。
+
 ## 环境变量
 
 | 变量 | 作用 |

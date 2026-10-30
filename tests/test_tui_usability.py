@@ -324,3 +324,16 @@ async def test_enter_on_a_command_hint_reaches_the_command_picker(fake_runtime):
         await pilot.pause()
         assert isinstance(app.screen, ChoicePicker)
         assert prompt.text == ""
+
+
+async def test_palette_commands_dispatch_through_the_registry(fake_runtime):
+    from zenagent.cli.tui.app import ZenAgentApp
+    from zenagent.cli.tui.widgets.rows import NoticeRow
+
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        app._run_command("tools")
+        await pilot.pause()
+        await pilot.pause()
+        assert any("read_file" in row.plain for row in app.query(NoticeRow))
