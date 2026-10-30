@@ -40,3 +40,9 @@ async def runtime_factory(app_env):
     yield make
     for runtime in created:
         await runtime.close()
+
+
+@pytest.fixture
+async def runtime_without_glm_key(runtime_factory):
+    """A runtime whose zai provider has no API key configured."""
+    return await runtime_factory()
