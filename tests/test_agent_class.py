@@ -369,3 +369,12 @@ async def test_task_cancellation_mid_stream_leaves_agent_idle_without_noise():
     # No partial assistant message is committed; the prompt stays in the
     # transcript so the harness can retry or continue from it.
     assert isinstance(agent.messages[-1], UserMessage)
+
+
+async def test_pending_steering_counts_and_drains():
+    agent = make_agent(scripted([("text", "ok"), end()]))
+    assert agent.pending_steering == 0
+    agent.steer("one")
+    assert agent.pending_steering == 1
+    await agent.prompt("hi")
+    assert agent.pending_steering == 0   # consumed when the run starts

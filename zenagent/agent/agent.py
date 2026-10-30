@@ -145,6 +145,11 @@ class Agent:
 
     # -- queueing -----------------------------------------------------------
 
+    @property
+    def pending_steering(self) -> int:
+        """Steering messages queued but not yet consumed by the loop."""
+        return len(self._steering)
+
     def steer(self, text: str) -> None:
         """Queue input to be injected after the current tool round."""
         self._steering.append(text)
