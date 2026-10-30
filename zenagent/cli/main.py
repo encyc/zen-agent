@@ -568,7 +568,14 @@ def main(argv: list[str] | None = None) -> int:
             print("zenagent: cannot load the eval runner", file=sys.stderr)
             return 2
         module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        # dataclasses resolves string annotations through sys.modules, so the
+        # module must be registered before exec_module runs.
+        sys.modules[spec.name] = module
+        try:
+            spec.loader.exec_module(module)
+        except BaseException:
+            sys.modules.pop(spec.name, None)
+            raise
         return module.main(raw[1:])
     args = build_parser().parse_args(argv)
     if args.cwd:

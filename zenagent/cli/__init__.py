@@ -2,3 +2,5 @@
 
 Nothing here is imported by the kernel; the dependency arrow points one way.
 """
+
+from __future__ import annotations

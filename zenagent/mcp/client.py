@@ -20,7 +20,7 @@ import contextlib
 import json
 import os
 from dataclasses import dataclass, field
-from typing import Any, Protocol, Self
+from typing import Any, Protocol
 
 import httpx
 
@@ -157,6 +157,9 @@ class StdioTransport:
                 )
             else:
                 future.set_result(message.get("result") or {})
+        if self._process is not None and self._process.returncode is None:
+            with contextlib.suppress(Exception, asyncio.CancelledError):
+                await asyncio.wait_for(self._process.wait(), timeout=2.0)
         self._read_error = self._describe_exit()
         self._fail_pending(self._read_error)
 
@@ -192,7 +195,7 @@ class StdioTransport:
             raise McpError(f"cannot write to MCP server: {exc}") from exc
         try:
             return await asyncio.wait_for(future, timeout_s)
-        except TimeoutError as exc:
+        except (TimeoutError, asyncio.TimeoutError) as exc:
             self._pending.pop(request_id, None)
             raise McpTimeout(f"{method} timed out after {timeout_s}s") from exc
 
@@ -224,12 +227,12 @@ class StdioTransport:
         if process.returncode is None:
             try:
                 await asyncio.wait_for(process.wait(), timeout=3.0)
-            except TimeoutError:
+            except (TimeoutError, asyncio.TimeoutError):
                 with contextlib.suppress(ProcessLookupError):
                     process.terminate()
                 try:
                     await asyncio.wait_for(process.wait(), timeout=3.0)
-                except TimeoutError:
+                except (TimeoutError, asyncio.TimeoutError):
                     with contextlib.suppress(ProcessLookupError):
                         process.kill()
                     await process.wait()
@@ -413,7 +416,7 @@ class McpClient:
     async def close(self) -> None:
         await self.transport.close()
 
-    async def __aenter__(self) -> Self:
+    async def __aenter__(self) -> "McpClient":  # noqa: PYI034, UP037
         await self.start()
         return self
 

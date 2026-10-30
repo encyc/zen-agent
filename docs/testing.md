@@ -73,7 +73,7 @@ fake stream 的最小形态见 `examples/custom_tool.py`。
 
 ## 当前结果
 
-- 单元/集成：565 passed，ruff clean。
+- 单元/集成：565 passed（3.10 / 3.11 / 3.12 / 3.13 / 3.14），ruff clean。
 - 行为评测：18/18（3 repeats，$0.014，120k tokens）。
 
 ## 已知未覆盖

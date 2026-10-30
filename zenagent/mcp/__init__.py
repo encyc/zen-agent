@@ -4,6 +4,8 @@ Only the subset zenagent needs: JSON-RPC 2.0 over stdio subprocesses or the
 Streamable HTTP transport, plus ``tools/list`` and ``tools/call``.
 """
 
+from __future__ import annotations
+
 from zenagent.mcp.client import (
     HttpTransport,
     McpCallResult,

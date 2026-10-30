@@ -5,6 +5,8 @@ types; the JSON shapes produced by ``to_json`` are the on-disk session format
 (one message per JSONL line), so serialization is lossless by contract.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import Any, Literal
 

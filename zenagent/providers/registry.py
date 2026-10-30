@@ -1,3 +1,6 @@
+
+from __future__ import annotations
+
 r"""Provider registry: api → stream-fn dispatch and the never-raise wrapper.
 
 Two small pieces that every model API meets at the boundary:

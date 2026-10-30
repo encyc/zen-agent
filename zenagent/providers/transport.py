@@ -1,3 +1,6 @@
+
+from __future__ import annotations
+
 r"""Shared HTTP/SSE transport for provider adapters.
 
 Three concerns live here so no adapter reinvents them:

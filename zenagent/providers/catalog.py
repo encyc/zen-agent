@@ -1,3 +1,6 @@
+
+from __future__ import annotations
+
 r"""Packaged model catalog: providers, models, pricing, and compat flags.
 
 ``catalog.yaml`` ships inside the package and is read via

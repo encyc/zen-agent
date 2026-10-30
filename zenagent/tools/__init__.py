@@ -3,6 +3,8 @@
 ``ALL_TOOLS`` is what the CLI exposes to the model; add new tools there.
 """
 
+from __future__ import annotations
+
 from zenagent.tools.bash import BASH
 from zenagent.tools.fs import EDIT_FILE, LIST_DIR, READ_FILE, WRITE_FILE
 from zenagent.tools.search import GLOB, GREP

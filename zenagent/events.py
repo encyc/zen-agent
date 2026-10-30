@@ -12,6 +12,8 @@ AbortToken implements cooperative cancellation: aborting is an in-protocol
 state, not an exception.
 """
 
+from __future__ import annotations
+
 import asyncio
 from dataclasses import dataclass
 from typing import Any, Literal

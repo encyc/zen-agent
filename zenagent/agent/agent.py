@@ -20,6 +20,8 @@ on top of its ``agentLoop()`` function:
 Only one run may be active at a time.
 """
 
+from __future__ import annotations
+
 import asyncio
 import inspect
 import sys

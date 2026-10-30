@@ -19,6 +19,8 @@ in ``transport.py`` does the I/O:
   fixture tests drive directly, without HTTP.
 """
 
+from __future__ import annotations
+
 import json
 import time
 from collections.abc import AsyncIterable, AsyncIterator

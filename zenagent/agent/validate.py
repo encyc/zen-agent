@@ -18,6 +18,8 @@ default filling, no extra-property rejection: tools defend their own internals.
 Python, which would otherwise silently pass).
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 __all__ = ["validate_arguments"]

@@ -11,6 +11,8 @@ the block entirely and get these same dataclass defaults) and are never
 sniffed.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 #: User-level thinking settings that mean "reasoning on" (``"off"`` means off).

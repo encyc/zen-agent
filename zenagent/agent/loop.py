@@ -27,6 +27,8 @@ Runtime contract highlights:
   dropped.
 """
 
+from __future__ import annotations
+
 import asyncio
 import inspect
 import time
