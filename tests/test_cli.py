@@ -4,6 +4,7 @@ The network is replaced by a fake ``stream_fn`` injected through the
 ``_build_agent`` seam, so ``main()`` itself is exercised end to end.
 """
 
+import io
 import time
 
 import pytest
@@ -193,6 +194,27 @@ def test_no_prompt_enters_the_interactive_repl(monkeypatch):
 
     monkeypatch.setattr(repl_module, "repl", fake_repl)
     assert cli_main.main([]) == 0
+
+
+def test_repl_without_the_cli_extras_explains_instead_of_crashing(monkeypatch, capsys):
+    """A kernel-only install (`pip install zenagent-py`) must not traceback."""
+    monkeypatch.setattr(cli_main, "_missing_extra", lambda *modules: "rich")
+    assert cli_main.main([]) == 2
+    err = capsys.readouterr().err
+    assert "the REPL needs the CLI extras (rich is missing)" in err
+    assert "uv tool install" in err
+
+
+def test_tui_without_the_cli_extras_explains_instead_of_crashing(monkeypatch, capsys):
+    class FakeStdout(io.StringIO):
+        def isatty(self):
+            return True
+
+    monkeypatch.setattr(cli_main.sys, "stdout", FakeStdout())
+    monkeypatch.setattr(cli_main, "_missing_extra", lambda *modules: "textual")
+    assert cli_main.main([]) == 2
+    err = capsys.readouterr().err
+    assert "the TUI needs the CLI extras (textual is missing)" in err
 
 
 # ---------------------------------------------------------------------------

@@ -241,6 +241,16 @@ if [[ "$EXTRA_ERROR" != *"No module named 'textual'"* ]]; then
 fi
 ok "no extras needed by the kernel (textual stays behind [cli])"
 
+# A bare `zen` on a kernel-only install must explain the missing extras, not
+# traceback (stdout is not a TTY here, so this takes the REPL path).
+REPL_CODE=0
+REPL_OUT="$(printf '' | "$ZEN" 2>&1)" || REPL_CODE=$?
+[[ "$REPL_OUT" != *Traceback* ]] || die "a bare zen without extras crashed: $REPL_OUT"
+[[ "$REPL_CODE" == 2 ]] || die "a bare zen without extras exited $REPL_CODE, expected 2"
+[[ "$REPL_OUT" == *"needs the CLI extras"* ]] ||
+  die "a bare zen without extras did not name the missing extras: $REPL_OUT"
+ok "kernel-only zen points at the CLI extras instead of crashing"
+
 # ------------------------------------------------------- 5. [cli] install
 step "[cli] install"
 

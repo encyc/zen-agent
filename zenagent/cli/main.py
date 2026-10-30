@@ -543,6 +543,32 @@ def _tui_app_class():
     return ZenAgentApp
 
 
+_CLI_EXTRAS_HINT = (
+    "zenagent: the {frontend} needs the CLI extras ({missing} is missing).\n"
+    "  in the repo:  uv sync --extra cli\n"
+    '  from PyPI:    uv tool install --force "zenagent-py[cli]"'
+)
+
+
+def _missing_extra(*modules: str) -> str | None:
+    """The first CLI-extra dependency that is not installed, if any.
+
+    Checked before importing a frontend so a kernel-only install
+    (``pip install zenagent-py``) gets a hint instead of a traceback.
+    """
+    import importlib.util
+
+    for module in modules:
+        if importlib.util.find_spec(module) is None:
+            return module
+    return None
+
+
+def _missing_extras(frontend: str, missing: str) -> int:
+    print(_CLI_EXTRAS_HINT.format(frontend=frontend, missing=missing), file=sys.stderr)
+    return 2
+
+
 def main(argv: list[str] | None = None) -> int:
     raw = sys.argv[1:] if argv is None else list(argv)
     if raw and raw[0] == "rpc":
@@ -606,16 +632,10 @@ def main(argv: list[str] | None = None) -> int:
             from zenagent.app.permissions import PermissionGate
             from zenagent.app.runtime import Runtime, RuntimeOptions
 
-            try:
-                ZenAgentApp = _tui_app_class()
-            except ImportError:
-                print(
-                    "zenagent: the TUI needs the CLI extras (textual is missing).\n"
-                    "  in the repo:  uv sync --extra cli\n"
-                    "  from PyPI:    uv tool install --force \"zenagent-py[cli]\"",
-                    file=sys.stderr,
-                )
-                return 2
+            missing = _missing_extra("textual", "rich")
+            if missing:
+                return _missing_extras("TUI", missing)
+            ZenAgentApp = _tui_app_class()
 
             options = RuntimeOptions(
                 model_id=args.model,
@@ -658,6 +678,10 @@ def main(argv: list[str] | None = None) -> int:
             except (RuntimeError, KeyError, ImportError) as exc:
                 print(f"zenagent: cannot start the TUI: {exc}", file=sys.stderr)
                 return 2
+
+        missing = _missing_extra("rich", "prompt_toolkit")
+        if missing:
+            return _missing_extras("REPL", missing)
 
         # Line-based REPL, imported lazily to avoid a cycle.
         from zenagent.cli.repl import repl
