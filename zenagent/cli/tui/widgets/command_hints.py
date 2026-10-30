@@ -28,6 +28,8 @@ class CommandHints(Static):
         self.display = False
         self._matches: list[tuple[str, str]] = []
         self._index = 0
+        #: "/" when listing command names, "" when listing an argument's values.
+        self._prefix = "/"
 
     # -- state --------------------------------------------------------------
 
@@ -49,11 +51,12 @@ class CommandHints(Static):
     def active(self) -> bool:
         return bool(self._matches) and self.display
 
-    def show(self, matches: list[tuple[str, str]]) -> None:
+    def show(self, matches: list[tuple[str, str]], *, prefix: str = "/") -> None:
         # Keep every match; only the *window* is bounded so nothing is hidden
         # behind a silent truncation.
         self._matches = list(matches)
         self._index = 0
+        self._prefix = prefix
         if not self._matches:
             self.hide()
             return
@@ -90,7 +93,7 @@ class CommandHints(Static):
                 text.append("\n")
             selected = index == self._index
             text.append("▸ " if selected else "  ", style=_ACCENT if selected else _DIM)
-            label = f"/{name}"
+            label = f"{self._prefix}{name}"
             text.append(label, style=f"bold {_ACCENT}" if selected else _TEXT)
             budget = width - len(label) - 4
             if description and budget > 8:

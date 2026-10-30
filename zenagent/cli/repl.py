@@ -170,7 +170,12 @@ async def handle_slash(
             print_fn(f"model -> {agent.model.id} (next turn)")
         return None
     if command == "thinking":
-        level = argument or "off"
+        if not argument:
+            print_fn(
+                f"thinking: {agent.thinking or 'off'} · off|low|medium|high|max"
+            )
+            return None
+        level = argument
         if level not in THINKING_LEVELS:
             print_fn("usage: /thinking off|low|medium|high|max")
             return None
@@ -411,6 +416,7 @@ def _make_default_reader(
     completion: bool = True,
     extra_commands: dict[str, str] | None = None,
     keybindings: dict[str, str] | None = None,
+    extra_values: dict[str, list[tuple[str, str]]] | None = None,
 ) -> InputFn:
     """prompt_toolkit reader with persistent history and completion."""
     from prompt_toolkit import PromptSession
@@ -421,7 +427,11 @@ def _make_default_reader(
     commands = {**SLASH_COMMANDS, **(extra_commands or {})}
     session = PromptSession(
         history=FileHistory(str(history)),
-        completer=ReplCompleter(slash_commands=commands) if completion else None,
+        completer=(
+            ReplCompleter(slash_commands=commands, extra_values=extra_values)
+            if completion
+            else None
+        ),
         key_bindings=build_key_bindings(keybindings),
     )
 
@@ -477,6 +487,16 @@ async def repl(
         env_name = provider.api_key_env if provider else "the provider's API key"
         print(f"zenagent: missing API key for {model.id} (set {env_name})", file=sys.stderr)
         return 1
+
+    model_values = [
+        (
+            candidate.id,
+            f"{provider_id} · "
+            + ("ready" if _api_key_for(catalog, candidate) else "no API key"),
+        )
+        for provider_id, provider in catalog.items()
+        for candidate in provider.models
+    ]
 
     tool_list = list(ALL_TOOLS if tools is None else tools)
     session = _session_for(resume)
@@ -718,6 +738,7 @@ async def repl(
         completion=completion,
         extra_commands=extra_commands,
         keybindings=active_keybindings,
+        extra_values={"/model": model_values},
     )
     run_task: asyncio.Task | None = None
 

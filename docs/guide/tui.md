@@ -70,6 +70,7 @@
 | `ctrl+s` | steer：把输入插入当前 run |
 | `ctrl+k` | 命令面板（模型/会话/退出） |
 | `ctrl+b` | 开关信息侧栏 |
+| `tab` | 提示/补全列表打开时接受当前候选 |
 | `pageup` / `pagedown` | 转录区上翻/下翻；下翻到底部即恢复自动跟随 |
 
 > 与 v0.1 的差异：`ctrl+c` 从"中断"改为"清草稿"，中断改为 `esc`；退出从 `ctrl+q`
@@ -79,8 +80,12 @@
 
 状态带左侧显示当前模式（`plan` / `ask` / `full`）。
 
-- `/mode plan|ask|full` 或输入框里的 `/mode` 命令切换，下一次工具调用立即生效；
-  `zen --mode ...` 决定启动模式（默认 ask）。
+- **输入即提示**：输入 `/mode ` 会在输入框上方列出 `plan` / `ask` / `full`（带说明），
+  `/thinking ` 列出档位，`/model ` 列出模型；`↑↓` 移动、`tab` 接受、`esc` 收起。输入会过滤候选。
+- **选择器**：裸 `/mode` 或 `/thinking` 按 `enter` 直接打开选择器（当前值预选中），`enter` 应用、
+  `esc` 取消；这对应 omp 的 thinking-selector/theme-selector 交互。
+- **Enter 提交、Tab 接受**：提示列表开着时 Enter 仍是提交（不会把补全吞掉），与 omp 一致。
+- `/mode plan|ask|full` 显式给值、或 `zen --mode ...` 启动模式也照常可用（默认 ask）。
 - **plan**：写/执行工具被拒，模型改为只读调研并给出计划。
 - **ask**：写/执行工具弹审批框：`y` 允许一次、`a` 本会话总是允许、`n`/`esc` 拒绝；
   120 秒无响应按拒绝处理。审批框一次只弹一个（并发工具调用会排队）。

@@ -16,6 +16,7 @@ from zenagent.app.sessions import SessionEntry
 from zenagent.cli.tui.screens.palette import PaletteItem, PaletteScreen
 
 __all__ = [
+    "ChoicePicker",
     "Confirm",
     "ModelPicker",
     "RenamePrompt",
@@ -222,3 +223,30 @@ class SettingsPicker(PaletteScreen[str]):
             PaletteItem(label="Export session as markdown", value="export"),
         ]
         super().__init__(title="Settings", items=items, placeholder="Search settings")
+
+
+class ChoicePicker(PaletteScreen[str]):
+    """Pick one value from a small fixed vocabulary (mode, thinking, ...).
+
+    This is the TUI-side counterpart of argument completion: omp opens a
+    selector for stateful enums, and the shared ``app.slash_args`` table feeds
+    both paths so they cannot drift.
+    """
+
+    def __init__(
+        self,
+        title: str,
+        choices: list[tuple[str, str]],
+        selected: str = "",
+        placeholder: str = "Search",
+    ) -> None:
+        items = [
+            PaletteItem(
+                label=value,
+                value=value,
+                note=description,
+                selected=value == selected,
+            )
+            for value, description in choices
+        ]
+        super().__init__(title=title, items=items, placeholder=placeholder)

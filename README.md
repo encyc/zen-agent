@@ -143,6 +143,10 @@ a direct MCP call, and a `zen rpc` client. For embedding with the full app layer
 | `/theme <name>` | `default` / `mono` / `solarized` / a JSON file |
 | `/hotkeys` | show active keybindings |
 
+Command arguments complete too (Tab): `/mode ` → plan/ask/full, `/thinking ` → levels,
+`/model ` → catalog ids. In the TUI the same values appear as you type, and a bare
+`/mode` or `/thinking` opens a selector.
+
 While the agent is working, anything you type is queued as steering input
 rather than starting a second run. Ctrl+C aborts the current run cooperatively.
 

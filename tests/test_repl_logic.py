@@ -607,3 +607,22 @@ async def test_sessions_slash_shows_titles_before_filenames(tmp_path, monkeypatc
 
     line = printed[0]
     assert line.index("fix the login bug") < line.index("20260101-000000")
+
+
+async def test_thinking_slash_without_argument_shows_levels_without_changing_state():
+    from zenagent.providers.catalog import find_model, load_catalog
+
+    agent = Agent(
+        model=find_model(load_catalog(), "glm-5.3"),
+        system_prompt="s",
+        api_key="test-key",
+    )
+    agent.thinking = "high"
+    printed: list[str] = []
+
+    await handle_slash(agent, "thinking", "", print_fn=printed.append)
+
+    assert agent.thinking == "high"
+    assert printed and "high" in printed[0]
+    for level in ("off", "low", "medium", "high", "max"):
+        assert level in printed[0]

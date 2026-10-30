@@ -66,3 +66,41 @@ def test_help_text_is_generated_from_the_command_table():
     for name in SLASH_COMMANDS:
         assert name in text
     assert "steering" in text
+
+
+def test_mode_arguments_are_completed():
+    completer = ReplCompleter(base_dir=Path("/tmp"))
+    assert complete(completer, "/mode ") == ["plan", "ask", "full"]
+    assert complete(completer, "/mode p") == ["plan"]
+    assert complete(completer, "/mode f") == ["full"]
+
+
+def test_thinking_arguments_are_completed():
+    completer = ReplCompleter(base_dir=Path("/tmp"))
+    assert complete(completer, "/thinking ") == [
+        "off",
+        "low",
+        "medium",
+        "high",
+        "max",
+    ]
+    assert complete(completer, "/thinking h") == ["high"]
+
+
+def test_theme_arguments_are_completed():
+    completer = ReplCompleter(base_dir=Path("/tmp"))
+    assert complete(completer, "/theme ") == ["default", "mono", "solarized"]
+
+
+def test_commands_without_argument_values_complete_nothing():
+    completer = ReplCompleter(base_dir=Path("/tmp"))
+    assert complete(completer, "/help ") == []
+    assert complete(completer, "/nope p") == []
+
+
+def test_extra_values_supply_dynamic_model_ids():
+    completer = ReplCompleter(
+        base_dir=Path("/tmp"),
+        extra_values={"/model": [("deepseek-flash", "ready")]},
+    )
+    assert complete(completer, "/model ") == ["deepseek-flash"]

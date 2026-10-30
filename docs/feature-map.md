@@ -75,7 +75,8 @@
 | 参数解析 / headless / 子命令 | `cli/main.py` | `test_cli.py` | [CLI](guide/cli.md) |
 | REPL 与斜杠命令 | `cli/repl.py` | `test_repl_logic.py` | [CLI](guide/cli.md) |
 | 流式渲染 / diff / 状态行 | `cli/render.py` | `test_render.py` | — |
-| 补全 | `cli/completion.py` | `test_completion.py` | — |
+| 补全（命令 + 参数值） | `cli/completion.py`、`app/slash_args.py` | `test_completion.py`、`test_slash_args.py` | [CLI](guide/cli.md) |
+| TUI 提示/选择器（值补全 + mode/thinking picker） | `cli/tui/app.py`、`widgets/command_hints.py`、`screens/modals.py::ChoicePicker` | `test_tui_usability.py` | [TUI](guide/tui.md) |
 | 图片输入 | `cli/images.py` | `test_images.py` | — |
 | 主题 / 键位 | `cli/theme.py`、`cli/keybindings.py` | `test_theme.py` | — |
 

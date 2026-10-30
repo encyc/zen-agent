@@ -24,12 +24,12 @@ async def test_mode_command_switches_the_runtime(services):
     assert result.message and "plan" in result.message
 
 
-async def test_mode_command_without_argument_reports_the_current_mode(services):
+async def test_mode_command_without_argument_opens_the_selector(services):
     from zenagent.app.commands import build_default_commands
 
     registry = build_default_commands(services)
     result = await registry.dispatch("mode", "")
-    assert result.message and "ask" in result.message
+    assert result.screen == "mode-picker"
 
 
 async def test_mode_command_rejects_an_unknown_mode(services):
@@ -57,3 +57,11 @@ async def test_rename_command_without_argument_reports_the_current_name(services
     registry = build_default_commands(services)
     result = await registry.dispatch("rename", "")
     assert result.message and "(empty)" in result.message
+
+
+async def test_thinking_command_without_argument_opens_the_selector(services):
+    from zenagent.app.commands import build_default_commands
+
+    registry = build_default_commands(services)
+    result = await registry.dispatch("thinking", "")
+    assert result.screen == "thinking-picker"

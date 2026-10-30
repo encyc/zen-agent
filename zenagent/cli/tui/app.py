@@ -74,6 +74,8 @@ class ZenAgentApp(App):
         self.exit_summary: str | None = None
         self._menus: dict[str, object] = {}
         self._refresh_pending = False
+        self._hint_start = 0
+        self._hint_prefix = "/"
         self.command_hints: CommandHints | None = None
         self.models = ModelManager(runtime)
         self.sessions = SessionManager(runtime)
@@ -186,26 +188,63 @@ class ZenAgentApp(App):
         self._refresh_status()
 
     def on_text_area_changed(self, event) -> None:
-        """Keep the slash-command list in sync with what is being typed."""
+        """Keep the suggestion list in sync: command names, then argument values."""
         hints = self.command_hints
         if hints is None:
             return
         text = self.query_one(PromptInput).text
-        matches = self._command_matches(text)
+        matches, prefix, start = self._hint_context(text)
+        self._hint_prefix = prefix
+        self._hint_start = start
         if matches:
-            hints.show(matches)
+            hints.show(matches, prefix=prefix)
         else:
             hints.hide()
 
-    def _command_matches(self, text: str) -> list[tuple[str, str]]:
-        if not text.startswith("/") or " " in text or "\n" in text:
-            return []
-        needle = text[1:].lower()
-        return [
-            (command.name, command.description)
-            for command in self.commands.names()
-            if command.name.startswith(needle)
+    def _hint_context(
+        self, text: str
+    ) -> tuple[list[tuple[str, str]], str, int]:
+        """``(matches, render prefix, replace start)`` for the current draft.
+
+        Before the space we list commands (``/mod`` → mode/model); after it we
+        list that command's argument values (``/mode `` → plan/ask/full).
+        """
+        if "\n" in text or not text.startswith("/"):
+            return [], "/", 0
+        head, separator, rest = text.partition(" ")
+        if not separator:
+            needle = text[1:].lower()
+            matches = [
+                (command.name, command.description)
+                for command in self.commands.names()
+                if command.name.startswith(needle)
+            ]
+            return matches, "/", 0
+        name = head[1:].lower()
+        if " " in rest or self.commands.get(name) is None:
+            return [], "/", 0
+        needle = rest.strip().lower()
+        matches = [
+            (value, description)
+            for value, description in self._argument_values(name)
+            if value.lower().startswith(needle)
         ]
+        return matches, "", len(head) + 1
+
+    def _argument_values(self, name: str) -> list[tuple[str, str]]:
+        """Fixed vocabulary from the shared table; model ids come from the catalog."""
+        from zenagent.app.slash_args import argument_values
+
+        if name == "model":
+            return [
+                (
+                    entry.id,
+                    f"{entry.provider} · "
+                    + ("ready" if entry.available else entry.reason or "unavailable"),
+                )
+                for entry in self.models.entries()
+            ]
+        return argument_values("/" + name)
 
     def action_hint_next(self) -> None:
         if self.command_hints:
@@ -223,12 +262,18 @@ class ZenAgentApp(App):
         hints = self.command_hints
         if hints is None or not hints.active:
             return
-        name = hints.selected
-        if name:
-            prompt = self.query_one(PromptInput)
+        selected = hints.selected
+        if not selected:
+            return
+        prompt = self.query_one(PromptInput)
+        if self._hint_prefix == "/":
             prompt.clear()
-            prompt.insert(f"/{name} ")
-            prompt.focus()
+            prompt.insert(f"/{selected} ")
+        else:
+            draft = prompt.text
+            prompt.clear()
+            prompt.insert(draft[: self._hint_start] + selected + " ")
+        prompt.focus()
         hints.hide()
 
     def action_scroll_up(self) -> None:
@@ -433,6 +478,44 @@ class ZenAgentApp(App):
 
         self.open_menu("model", lambda: ModelPicker(self.models.entries()), selected)
 
+    def open_mode_picker(self) -> None:
+        from zenagent.app.slash_args import argument_values
+        from zenagent.cli.tui.screens.modals import ChoicePicker
+
+        async def selected(mode: str | None) -> None:
+            if mode:
+                self.runtime.set_mode(mode)
+                self.notify(f"mode: {mode}")
+                self._refresh_status()
+
+        self.open_menu(
+            "mode",
+            lambda: ChoicePicker("Mode", argument_values("/mode"), self.runtime.mode),
+            selected,
+        )
+
+    def open_thinking_picker(self) -> None:
+        from zenagent.app.slash_args import argument_values
+        from zenagent.cli.tui.screens.modals import ChoicePicker
+
+        agent = self.runtime.agent
+
+        async def selected(level: str | None) -> None:
+            if level:
+                agent.thinking = None if level == "off" else level
+                self.notify(f"thinking: {level}")
+                self._refresh_status()
+
+        self.open_menu(
+            "thinking",
+            lambda: ChoicePicker(
+                "Thinking",
+                argument_values("/thinking"),
+                agent.thinking or "off",
+            ),
+            selected,
+        )
+
     def open_session_picker(self) -> None:
         from zenagent.cli.tui.screens.modals import SessionPicker
 
@@ -528,6 +611,10 @@ class ZenAgentApp(App):
             self.open_model_picker()
         elif result.screen == "session-picker":
             self.open_session_picker()
+        elif result.screen == "mode-picker":
+            self.open_mode_picker()
+        elif result.screen == "thinking-picker":
+            self.open_thinking_picker()
         elif result.screen == "settings":
             self.open_settings()
         elif result.screen == "search-settings":

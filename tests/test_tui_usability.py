@@ -39,7 +39,8 @@ async def test_slash_hints_filter_and_complete(fake_runtime):
         await pilot.press("down", "tab")
         await pilot.pause()
         assert prompt.text == "/model "
-        assert hints.display is False
+        # Completing the command reveals that command's argument values.
+        assert "deepseek-flash" in hints.plain
 
 
 async def test_hints_hide_when_not_a_command(fake_runtime):
@@ -207,3 +208,97 @@ async def test_mode_command_updates_runtime_and_status(picker_app):
         await pilot.pause()
         assert app.runtime.mode == "plan"
         assert app.chat.status.mode == "plan"
+
+
+async def test_mode_argument_hints_list_the_values(fake_runtime):
+    from zenagent.cli.tui.app import ZenAgentApp
+
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        prompt = app.query_one(PromptInput)
+        prompt.focus()
+        for char in "/mode":
+            await pilot.press(char)
+        await pilot.press("space")
+        await pilot.pause()
+        hints = app.query_one(CommandHints)
+        assert "plan" in hints.plain and "ask" in hints.plain and "full" in hints.plain
+        assert "/mode" not in hints.plain  # value hints, not command names
+
+        await pilot.press("tab")
+        await pilot.pause()
+        assert prompt.text == "/mode plan "
+
+
+async def test_argument_hint_filters_then_completes(fake_runtime):
+    from zenagent.cli.tui.app import ZenAgentApp
+
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        prompt = app.query_one(PromptInput)
+        prompt.focus()
+        for char in "/thinking":
+            await pilot.press(char)
+        await pilot.press("space", "h")
+        await pilot.pause()
+        hints = app.query_one(CommandHints)
+        assert "high" in hints.plain and "medium" not in hints.plain
+
+        await pilot.press("tab")
+        await pilot.pause()
+        assert prompt.text == "/thinking high "
+
+
+async def test_bare_mode_command_opens_the_selector(fake_runtime):
+    from zenagent.cli.tui.app import ZenAgentApp
+    from zenagent.cli.tui.screens.modals import ChoicePicker
+
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await app._dispatch_command("mode", "")
+        await pilot.pause()
+        assert isinstance(app.screen, ChoicePicker)
+        await pilot.press("down", "enter")
+        await pilot.pause()
+        await pilot.pause()
+        assert app.runtime.mode == "full"
+
+
+async def test_bare_thinking_command_opens_the_selector(fake_runtime):
+    from zenagent.cli.tui.app import ZenAgentApp
+    from zenagent.cli.tui.screens.modals import ChoicePicker
+
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await app._dispatch_command("thinking", "")
+        await pilot.pause()
+        assert isinstance(app.screen, ChoicePicker)
+        await pilot.press("down", "enter")
+        await pilot.pause()
+        await pilot.pause()
+        assert app.runtime.agent.thinking == "max"
+
+
+async def test_enter_submits_and_tab_accepts_the_hint(fake_runtime):
+    """omp contract: Tab accepts autocomplete, Enter submits the draft."""
+    from zenagent.cli.tui.app import ZenAgentApp
+    from zenagent.cli.tui.screens.modals import ChoicePicker
+
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        prompt = app.query_one(PromptInput)
+        prompt.focus()
+        for char in "/mode":
+            await pilot.press(char)
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.pause()
+        # Submitting the bare command opens its selector, not "/mode " text.
+        assert isinstance(app.screen, ChoicePicker)
+        assert prompt.text == ""

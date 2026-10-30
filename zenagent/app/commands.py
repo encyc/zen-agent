@@ -97,9 +97,8 @@ async def _model(services: AppServices, argument: str) -> CommandResult:
 async def _mode(services: AppServices, argument: str) -> CommandResult:
     requested = argument.strip()
     if not requested:
-        return CommandResult(
-            message=f"mode: {services.runtime.mode} · {describe_modes()}"
-        )
+        # TUI opens a selector; REPL prints the current mode plus the vocabulary.
+        return CommandResult(screen="mode-picker")
     try:
         mode = services.runtime.set_mode(requested)
     except ValueError as exc:
@@ -197,7 +196,8 @@ async def _thinking(services: AppServices, argument: str) -> CommandResult:
     agent = services.runtime.agent
     level = argument.strip().lower()
     if not level:
-        return CommandResult(message=f"thinking: {agent.thinking or 'off'}")
+        # TUI opens a selector; the levels are the shared command vocabulary.
+        return CommandResult(screen="thinking-picker")
     if level not in THINKING_LEVELS:
         return CommandResult(
             message=f"unknown thinking level: {level} (use {'|'.join(THINKING_LEVELS)})"

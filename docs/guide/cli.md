@@ -64,6 +64,12 @@ zen -p "analyze" --read-only --trace run.jsonl --cwd /path/to/project
 | `--theme NAME` | REPL 主题 |
 | `--json` | headless 输出 JSON |
 
+## 参数值补全
+
+REPL 里命令参数也能补全（`Tab`）：`/mode ` → `plan` / `ask` / `full`，`/thinking ` →
+`off` / `low` / `medium` / `high` / `max`，`/theme ` → 内置主题，`/model ` → 当前 catalog
+里的模型 id（带 ready / no key 标记）。值表在 `zenagent/app/slash_args.py`，TUI 与 REPL 共用。
+
 ## 运行模式（plan / ask / full）
 
 `--mode plan|ask|full` 选择启动模式；显式 `--mode` 优先于 `--yes` / `--read-only`，

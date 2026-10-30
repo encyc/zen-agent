@@ -105,13 +105,18 @@ class PromptInput(TextArea):
         await super()._on_key(event)
 
     async def _handle_hint_key(self, event: events.Key) -> bool:
-        """Arrows/tab/enter/esc belong to the suggestion list while it is open."""
+        """Arrows/tab/esc belong to the suggestion list while it is open.
+
+        Enter is deliberately *not* captured: omp's contract is Tab accepts an
+        autocomplete candidate and Enter submits the draft (so ``/mode`` +
+        Enter opens the mode selector rather than completing it to ``/mode ``).
+        """
         if event.key in ("up", "down"):
             event.stop()
             event.prevent_default()
             await self.app.run_action("hint_prev" if event.key == "up" else "hint_next")
             return True
-        if event.key in ("tab", "enter"):
+        if event.key == "tab":
             event.stop()
             event.prevent_default()
             await self.app.run_action("hint_accept")

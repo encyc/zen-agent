@@ -14,6 +14,8 @@ from pathlib import Path
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.document import Document
 
+from zenagent.app.slash_args import argument_values
+
 __all__ = ["SLASH_COMMANDS", "ReplCompleter", "help_text"]
 
 #: Command → one-line description (drives both completion and ``/help``).
@@ -62,9 +64,12 @@ class ReplCompleter(Completer):
         self,
         slash_commands: dict[str, str] | None = None,
         base_dir: Path | None = None,
+        extra_values: dict[str, list[tuple[str, str]]] | None = None,
     ) -> None:
         self.slash_commands = dict(slash_commands or SLASH_COMMANDS)
         self.base_dir = Path(base_dir) if base_dir is not None else Path.cwd()
+        #: Frontend-supplied value sets (e.g. model ids), keyed with the slash.
+        self.extra_values = dict(extra_values or {})
 
     def get_completions(
         self, document: Document, complete_event
@@ -81,6 +86,28 @@ class ReplCompleter(Completer):
                         display_meta=description,
                     )
             return
+
+        if text.startswith("/") and " " in text:
+            head, _, rest = text.partition(" ")
+            if " " not in rest:
+                values = self.extra_values.get(head.lower())
+                if values is None:
+                    values = argument_values(head, rest)
+                else:
+                    values = [
+                        (value, description)
+                        for value, description in values
+                        if value.lower().startswith(rest.strip().lower())
+                    ]
+                if values:
+                    for value, description in values:
+                        yield Completion(
+                            value,
+                            start_position=-len(rest),
+                            display=value,
+                            display_meta=description,
+                        )
+                    return
 
         match = _AT_TOKEN.search(text)
         if match is not None:
