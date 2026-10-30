@@ -58,10 +58,11 @@
 |---|---|
 | `enter` | 发送；run 进行中则进入 follow-up 队列 |
 | `shift+enter` | 输入换行 |
-| `esc` | 中断当前 run；**有草稿时不删字** |
+| `esc` | 中断当前 run；**有草稿时不删字**；空闲且草稿为空时，0.6s 内**连按两次**撤销上一轮（等价 `/undo`） |
 | `ctrl+c` | 清空草稿（不退出） |
 | `ctrl+d` | 退出，打印一行会话摘要 |
 | `ctrl+q` | 排队 follow-up：run 中入队，空闲时直接发送 |
+| `alt+up` | 把**最后一条**排队消息取回输入框（dequeue，比清空更常用） |
 | `ctrl+p` | 循环切换模型 |
 | `alt+p` | 打开模型选择器 |
 | `shift+tab` | 循环 thinking 档位（off/low/medium/high） |

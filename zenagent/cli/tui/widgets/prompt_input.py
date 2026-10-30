@@ -32,6 +32,7 @@ APP_CHORDS = {
     "ctrl+b": "toggle_sidebar",
     "ctrl+s": "steer",
     "ctrl+x": "clear_queue",
+    "alt+up": "dequeue",
     "pageup": "scroll_up",
     "pagedown": "scroll_down",
 }

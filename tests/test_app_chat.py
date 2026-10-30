@@ -154,3 +154,21 @@ async def test_submit_clears_the_previous_error(runtime_factory):
     await chat.submit("second")
     await chat.wait_for_idle()
     assert chat.status.last_error == ""
+
+
+async def test_dequeue_follow_up_takes_the_last_queued_message(runtime_factory):
+    gate = asyncio.Event()
+    runtime = await runtime_factory(stream_fn=gated_stream(gate))
+    chat = ChatController(runtime)
+    task = asyncio.create_task(chat.submit("first"))
+    await asyncio.sleep(0.05)
+
+    chat.queue_follow_up("one")
+    chat.queue_follow_up("two")
+    assert chat.dequeue_follow_up() == "two"
+    assert chat.status.follow_ups == 1
+    assert chat.dequeue_follow_up() == "one"
+    assert chat.dequeue_follow_up() is None
+
+    gate.set()
+    await task

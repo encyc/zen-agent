@@ -186,8 +186,8 @@ THINKING_LEVELS = ("off", "low", "medium", "high", "max")
 
 HOTKEYS_TEXT = """\
 enter send · shift+enter newline
-esc interrupt · ctrl+c clear draft · ctrl+d quit
-ctrl+q queue follow-up · ctrl+s steer · ctrl+x clear queue
+esc interrupt · empty-draft double esc rewind · ctrl+c clear draft · ctrl+d quit
+ctrl+q queue follow-up · alt+up dequeue · ctrl+s steer · ctrl+x clear queue
 ctrl+p next model · alt+p pick model · shift+tab thinking
 ctrl+o expand tools · ctrl+t hide thinking
 ctrl+k commands · ctrl+b info · pageup/pagedown scroll"""

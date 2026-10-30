@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import time
 
 from textual.app import App
 from textual.containers import Horizontal, Vertical
@@ -33,7 +34,11 @@ from zenagent.cli.tui.widgets.status_band import StatusBand
 from zenagent.cli.tui.widgets.transcript import TranscriptView
 from zenagent.cli.tui.widgets.work_indicator import WorkIndicator
 
-__all__ = ["ZenAgentApp"]
+__all__ = ["DOUBLE_ESCAPE_SECONDS", "ZenAgentApp"]
+
+#: Two empty-draft Escapes this close together mean "rewind the last turn"
+#: (omp's Esc chain level 13); a slower second press just interrupts nothing.
+DOUBLE_ESCAPE_SECONDS = 0.6
 
 
 class ZenAgentApp(App):
@@ -61,6 +66,7 @@ class ZenAgentApp(App):
         ("ctrl+b", "toggle_sidebar", "Info"),
         ("ctrl+s", "steer", "Steer"),
         ("ctrl+x", "clear_queue", "Clear queue"),
+        ("alt+up", "dequeue", "Dequeue"),
     ]
 
     def __init__(
@@ -78,6 +84,7 @@ class ZenAgentApp(App):
         self._hint_start = 0
         self._hint_prefix = "/"
         self._session_scope = "project"
+        self._last_escape_at: float | None = None
         self.command_hints: CommandHints | None = None
         self.models = ModelManager(runtime)
         self.sessions = SessionManager(runtime)
@@ -668,10 +675,43 @@ class ZenAgentApp(App):
         self._refresh_status()
 
     def action_interrupt(self) -> None:
-        """Esc: abort the run; never touch an in-progress draft."""
+        """Esc: abort a run; on an empty idle draft, a double press rewinds.
+
+        omp's chain: ``Esc`` always protects the draft, and two quick presses
+        with nothing in the composer mean "undo the last turn". Anything else
+        (a slower second press, a non-empty draft) is a no-op.
+        """
         if self.chat.status.running:
+            self._last_escape_at = None
             self.chat.abort()
             self.notify("interrupted", timeout=2)
+            return
+        prompt = self.query_one(PromptInput)
+        if prompt.text:
+            self._last_escape_at = None
+            return
+        now = time.monotonic()
+        if (
+            self._last_escape_at is not None
+            and now - self._last_escape_at <= DOUBLE_ESCAPE_SECONDS
+        ):
+            self._last_escape_at = None
+            self.run_worker(self._undo_last_turn())
+        else:
+            self._last_escape_at = now
+
+    async def _undo_last_turn(self) -> None:
+        """Double-Esc rewind: same path as ``/undo`` (new session file, recoverable)."""
+        await self._dispatch_command("undo", "")
+
+    def action_dequeue(self) -> None:
+        """Alt+Up: take the last queued follow-up back into the prompt."""
+        text = self.chat.dequeue_follow_up()
+        if text is None:
+            return
+        prompt = self.query_one(PromptInput)
+        prompt.insert(text)
+        prompt.focus()
 
     def action_clear_draft(self) -> None:
         """ctrl+c clears the draft (omp keeps a draft through Esc)."""

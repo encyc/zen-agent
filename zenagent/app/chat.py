@@ -103,6 +103,18 @@ class ChatController:
         self._follow_ups.clear()
         self._notify()
 
+    def dequeue_follow_up(self) -> str | None:
+        """Take the most recently queued follow-up back out of the queue.
+
+        omp's dequeue semantics: the last thing you queued is the one you most
+        likely want to edit, so pop from the end. Returns ``None`` when empty.
+        """
+        if not self._follow_ups:
+            return None
+        text = self._follow_ups.pop()
+        self._notify()
+        return text
+
     def steer(self, text: str) -> None:
         if text.strip():
             self.runtime.agent.steer(text)
