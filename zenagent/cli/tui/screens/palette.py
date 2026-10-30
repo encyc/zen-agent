@@ -88,7 +88,14 @@ class PaletteScreen(ModalScreen[T | None], Generic[T]):
         height: auto;
         max-height: 20;
         background: #141c24;
+        border: none;
+        padding: 0;
         scrollbar-size-vertical: 1;
+    }
+
+    PaletteScreen #palette-list > .option-list--option-highlighted {
+        background: #263441;
+        color: #d7e0e8;
     }
 
     PaletteScreen #palette-footer {
