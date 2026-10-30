@@ -17,6 +17,11 @@ ecosystem is missing (in the spirit of `pi-ai` + `pi-agent-core`).
 
 Repo: <https://github.com/encyc/zen-agent> · PyPI package: `zenagent-py` (imports as `zenagent`).
 
+## Docs
+
+Full documentation — architecture, usage guides, internals (source tour), contracts and the
+feature map — lives in [`docs/`](docs/README.md). Start with [`docs/architecture.md`](docs/architecture.md).
+
 ## Install
 
 ```bash
