@@ -78,6 +78,9 @@ class RunStatus:
     #: both 0 before the first finished turn (the segments hide themselves).
     turn_ms: int = 0
     turn_output_tokens: int = 0
+    #: Provider failure from the most recent run; the TUI keeps this on screen
+    #: until it is dismissed or the next run starts.
+    last_error: str = ""
     session_name: str = ""
     cwd: str = ""
     mode: str = ""

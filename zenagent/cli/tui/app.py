@@ -24,6 +24,7 @@ from zenagent.app.models import ModelManager
 from zenagent.app.runtime import Runtime
 from zenagent.app.sessions import SessionManager
 from zenagent.cli.tui.widgets.command_hints import CommandHints
+from zenagent.cli.tui.widgets.error_banner import ErrorBanner
 from zenagent.cli.tui.widgets.new_content import NewContentBar
 from zenagent.cli.tui.widgets.prompt_gutter import PromptGutter
 from zenagent.cli.tui.widgets.prompt_input import PromptInput
@@ -150,6 +151,7 @@ class ZenAgentApp(App):
                 yield TranscriptView()
                 yield NewContentBar()
                 with Vertical(id="dock"):
+                    yield ErrorBanner()
                     yield CommandHints()
                     yield StatusBand()
                     with Horizontal(id="prompt-row"):
@@ -184,6 +186,13 @@ class ZenAgentApp(App):
             log.sync(self.chat.transcript, status)
         for indicator in self.query(WorkIndicator):
             indicator.set_running(status.running)
+        for banner in self.query(ErrorBanner):
+            banner.set_error(status.last_error)
+
+    def dismiss_error(self) -> None:
+        """Click on the error banner: drop it and repaint the dock."""
+        self.chat.clear_last_error()
+        self._refresh_status()
 
     def on_resize(self, event) -> None:
         self._refresh_status()

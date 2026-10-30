@@ -45,6 +45,8 @@ class ChatController:
         #: Last finished turn: wall time and output tokens (status segments).
         self._turn_ms = 0
         self._turn_output = 0
+        #: Provider failure from the last run, shown by the TUI's error banner.
+        self._last_error = ""
         runtime.agent.subscribe(self._on_event)
 
     # -- snapshots ----------------------------------------------------------
@@ -71,6 +73,7 @@ class ChatController:
             cache_write=usage.cache_write,
             turn_ms=self._turn_ms,
             turn_output_tokens=self._turn_output,
+            last_error=self._last_error,
             cost=usage.cost.total,
             context_used=context_used,
             context_window=agent.model.context_window,
@@ -108,6 +111,12 @@ class ChatController:
     def abort(self) -> None:
         self.runtime.agent.abort()
         self._notify()
+
+    def clear_last_error(self) -> None:
+        """Dismiss the provider-error banner (click on the dock row)."""
+        if self._last_error:
+            self._last_error = ""
+            self._notify()
 
     def reload_transcript(self) -> None:
         """Rebuild views from the current agent messages (after a session switch)."""
@@ -167,6 +176,7 @@ class ChatController:
 
     async def _run(self, text: str) -> None:
         self._running = True
+        self._last_error = ""
         self._notify()
         started = time.monotonic()
         before_output = usage_total(self.runtime.agent.messages).output
@@ -180,6 +190,11 @@ class ChatController:
             self._turn_output = (
                 usage_total(self.runtime.agent.messages).output - before_output
             )
+            if self.runtime.agent.termination == "error":
+                detail = self.runtime.agent.error_message
+                self._last_error = (
+                    detail if detail and detail != "error" else "the run failed"
+                )
             self._notify()
             if self._follow_ups and self.runtime.agent.termination != "aborted":
                 self._task = asyncio.create_task(self._run(self._follow_ups.pop(0)))

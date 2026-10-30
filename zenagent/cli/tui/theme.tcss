@@ -148,3 +148,11 @@ Screen {
     color: #8296a6;
     margin: 0 0 1 0;
 }
+
+/* Sticky provider-error banner (dock row, hidden while there is no error). */
+#error-banner {
+    height: 1;
+    background: #3a1d1f;
+    color: #e08787;
+    padding: 0 1;
+}

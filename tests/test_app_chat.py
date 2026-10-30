@@ -79,3 +79,78 @@ async def test_status_reports_cache_write_and_last_turn_timing(runtime_factory):
     status = chat.status
     assert status.cache_write == 40
     assert status.turn_ms >= 15 and status.turn_output_tokens == 20
+
+
+def failing_stream(message: str | None = "provider exploded"):
+    async def stream(model, messages, tools, options):
+        partial = AssistantMessage(
+            content=[],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="error",
+            timestamp=0,
+            error_message=message,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        yield AssistantEvent(type="error", partial=partial, reason="error")
+
+    return stream
+
+
+def error_then_text_stream():
+    calls = 0
+
+    async def stream(model, messages, tools, options):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            partial = AssistantMessage(
+                content=[],
+                provider="p",
+                model="m",
+                usage=Usage(),
+                stop_reason="error",
+                timestamp=0,
+                error_message="boom",
+            )
+            yield AssistantEvent(type="start", partial=partial)
+            yield AssistantEvent(type="error", partial=partial, reason="error")
+            return
+        partial = AssistantMessage(
+            content=[TextContent(text="ok")],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="pending",
+            timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        partial.stop_reason = "stop"
+        yield AssistantEvent(
+            type="text_delta", partial=partial, content_index=0, delta="ok"
+        )
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    return stream
+
+
+async def test_status_reports_a_provider_error_after_a_failed_run(runtime_factory):
+    runtime = await runtime_factory(stream_fn=failing_stream())
+    chat = ChatController(runtime)
+    await chat.submit("hi")
+    await chat.wait_for_idle()
+
+    assert chat.status.last_error == "provider exploded"
+
+
+async def test_submit_clears_the_previous_error(runtime_factory):
+    runtime = await runtime_factory(stream_fn=error_then_text_stream())
+    chat = ChatController(runtime)
+    await chat.submit("first")
+    await chat.wait_for_idle()
+    assert chat.status.last_error == "boom"
+
+    await chat.submit("second")
+    await chat.wait_for_idle()
+    assert chat.status.last_error == ""
