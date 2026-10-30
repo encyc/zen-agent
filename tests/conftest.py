@@ -145,3 +145,30 @@ async def chat_app_with_one_tool(runtime_factory):
 
     runtime = await runtime_factory(stream_fn=tool_then_text_stream())
     return ZenAgentApp(runtime)
+
+
+@pytest.fixture
+async def gated_app(runtime_factory):
+    """App with a stream that stays running until the returned gate is set."""
+    import asyncio
+
+    from zenagent.cli.tui.app import ZenAgentApp
+    from zenagent.events import AssistantEvent
+    from zenagent.types import AssistantMessage, TextContent, Usage
+
+    gate = asyncio.Event()
+
+    async def stream(model, messages, tools, options):
+        partial = AssistantMessage(
+            content=[TextContent(text="")], provider="p", model="m",
+            usage=Usage(), stop_reason="pending", timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        await gate.wait()
+        partial.content[0].text = "done"
+        partial.stop_reason = "stop"
+        yield AssistantEvent(type="text_delta", partial=partial, content_index=0, delta="done")
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    runtime = await runtime_factory(stream_fn=stream)
+    return ZenAgentApp(runtime), gate

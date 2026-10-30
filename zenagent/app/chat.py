@@ -83,6 +83,10 @@ class ChatController:
         self._follow_ups.append(text)
         self._notify()
 
+    def clear_follow_ups(self) -> None:
+        self._follow_ups.clear()
+        self._notify()
+
     def steer(self, text: str) -> None:
         if text.strip():
             self.runtime.agent.steer(text)

@@ -19,6 +19,11 @@ class ZenAgentApp(App):
 
     CSS_PATH = "theme.tcss"
     TITLE = "ZenAgent"
+    BINDINGS = [
+        ("ctrl+c", "interrupt", "Interrupt"),
+        ("ctrl+s", "steer", "Steer"),
+        ("ctrl+q", "clear_queue", "Clear queue"),
+    ]
 
     def __init__(
         self,
@@ -49,3 +54,18 @@ class ZenAgentApp(App):
 
     async def on_prompt_input_submitted(self, message: PromptInput.Submitted) -> None:
         await self.chat.submit(message.text)
+
+    def action_interrupt(self) -> None:
+        if self.chat.status.running:
+            self.chat.abort()
+            self.notify("interrupted", timeout=2)
+
+    def action_steer(self) -> None:
+        prompt = self.query_one(PromptInput)
+        text = prompt.text.strip()
+        if text and self.chat.status.running:
+            prompt.clear()
+            self.chat.steer(text)
+
+    def action_clear_queue(self) -> None:
+        self.chat.clear_follow_ups()
