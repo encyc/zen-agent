@@ -97,3 +97,51 @@ async def services(session_runtime):
 async def fake_runtime(runtime_factory):
     """Runtime with an offline stream, for TUI pilot tests."""
     return await runtime_factory(stream_fn=text_stream())
+
+
+def tool_then_text_stream():
+    """First turn asks for read_file, second answers — exercises tool cards."""
+    from zenagent.events import AssistantEvent
+    from zenagent.types import (
+        AssistantMessage,
+        TextContent,
+        ToolCall,
+        ToolResultMessage,
+        Usage,
+    )
+
+    async def stream(model, messages, tools, options):
+        partial = AssistantMessage(
+            content=[], provider="p", model="m", usage=Usage(),
+            stop_reason="pending", timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        last = messages[-1]
+        if isinstance(last, ToolResultMessage):
+            partial.content = [TextContent(text="all done")]
+            partial.stop_reason = "stop"
+            yield AssistantEvent(
+                type="text_delta", partial=partial, content_index=0, delta="all done"
+            )
+            yield AssistantEvent(type="done", partial=partial, reason="stop")
+            return
+        call = ToolCall(id="c1", name="read_file", arguments={"path": "README.md"})
+        partial.content = [call]
+        yield AssistantEvent(
+            type="toolcall_start", partial=partial, content_index=0, tool_call=call
+        )
+        yield AssistantEvent(
+            type="toolcall_end", partial=partial, content_index=0, tool_call=call
+        )
+        partial.stop_reason = "tool_use"
+        yield AssistantEvent(type="done", partial=partial, reason="tool_use")
+
+    return stream
+
+
+@pytest.fixture
+async def chat_app_with_one_tool(runtime_factory):
+    from zenagent.cli.tui.app import ZenAgentApp
+
+    runtime = await runtime_factory(stream_fn=tool_then_text_stream())
+    return ZenAgentApp(runtime)

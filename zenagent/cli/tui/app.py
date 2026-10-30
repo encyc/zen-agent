@@ -7,6 +7,7 @@ from textual.app import App
 from zenagent.app.chat import ChatController
 from zenagent.app.runtime import Runtime
 from zenagent.cli.tui.screens.main import MainScreen
+from zenagent.cli.tui.widgets.chat_log import ChatLog
 from zenagent.cli.tui.widgets.prompt_input import PromptInput
 from zenagent.cli.tui.widgets.status_bar import StatusBar
 
@@ -40,8 +41,11 @@ class ZenAgentApp(App):
         self.call_after_refresh(self._refresh_status)
 
     def _refresh_status(self) -> None:
+        status = self.chat.status
         for bar in self.query(StatusBar):
-            bar.update_status(self.chat.status)
+            bar.update_status(status)
+        for log in self.query(ChatLog):
+            log.sync(self.chat.transcript, status)
 
     async def on_prompt_input_submitted(self, message: PromptInput.Submitted) -> None:
         await self.chat.submit(message.text)

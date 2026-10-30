@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from textual.app import ComposeResult
-from textual.containers import VerticalScroll
 from textual.screen import Screen
-from textual.widgets import Static
 
+from zenagent.cli.tui.widgets.chat_log import ChatLog
 from zenagent.cli.tui.widgets.prompt_input import PromptInput
 from zenagent.cli.tui.widgets.status_bar import StatusBar
 
@@ -17,7 +16,6 @@ class MainScreen(Screen):
     """The single chat screen."""
 
     def compose(self) -> ComposeResult:
-        with VerticalScroll(id="chat"):
-            yield Static("ZenAgent — /help for commands, Enter to send", id="welcome")
+        yield ChatLog()
         yield StatusBar()
         yield PromptInput()
