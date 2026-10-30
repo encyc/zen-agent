@@ -59,6 +59,10 @@ class ToolCard(Static):
     def refresh_view(self) -> None:
         self._refresh()
 
+    def on_click(self) -> None:
+        """Click the row to open it, like omp's tool cards."""
+        self.action_toggle_card()
+
     def _refresh(self) -> None:
         if not self.is_mounted:
             return

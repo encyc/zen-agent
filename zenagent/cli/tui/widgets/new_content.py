@@ -33,3 +33,8 @@ class NewContentBar(Static):
 
     def hide_marker(self) -> None:
         self.display = False
+
+    def on_click(self) -> None:
+        app = self.app
+        for transcript in app.query("TranscriptView"):
+            transcript.scroll_to_bottom()

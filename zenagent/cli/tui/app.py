@@ -15,7 +15,7 @@ import inspect
 
 from textual.app import App
 from textual.containers import Horizontal, Vertical
-from textual.events import MouseEvent, MouseScrollDown, MouseScrollUp
+from textual.events import MouseScrollDown, MouseScrollUp
 
 from zenagent.app.chat import ChatController
 from zenagent.app.commands import AppServices, build_default_commands
@@ -39,6 +39,10 @@ class ZenAgentApp(App):
 
     CSS_PATH = "theme.tcss"
     TITLE = "ZenAgent"
+    # Textual's text selection is the one mouse path that crashed with Markdown
+    # blocks (a Screen._forward_event bug); we never select text, so switch it
+    # off and keep every other mouse event.
+    ALLOW_SELECT = False
     # omp's chord set (``docs/research/omp-cli-study/01-interaction-hierarchy.md``):
     # Esc interrupts, ctrl+c clears the draft, ctrl+d exits, ctrl+q queues.
     BINDINGS = [  # noqa: RUF012 - Textual class API
@@ -68,6 +72,7 @@ class ZenAgentApp(App):
         self.chat = chat or ChatController(runtime, on_change=self._on_change)
         self.exit_summary: str | None = None
         self._menus: dict[str, object] = {}
+        self._refresh_pending = False
         self.command_hints: CommandHints | None = None
         self.models = ModelManager(runtime)
         self.sessions = SessionManager(runtime)
@@ -87,15 +92,26 @@ class ZenAgentApp(App):
         self.exit()
 
     async def on_event(self, event) -> None:
-        # Clicks stay dropped: Textual 8.2's selection path crashes when a click
-        # reaches a Markdown block. The wheel is safe and is the only pointer
-        # input this UI accepts, because scrolling the transcript by hand beats
-        # hunting for pagedown.
-        if isinstance(event, MouseEvent) and not isinstance(
-            event, (MouseScrollUp, MouseScrollDown)
-        ):
-            return
         await super().on_event(event)
+
+    # -- pointer ------------------------------------------------------------
+    #
+    # Mouse is supported the way omp supports it: the wheel scrolls the
+    # transcript, clicks activate the things that are clickable (tool cards,
+    # the "new output" bar). Text selection stays off (ALLOW_SELECT), which is
+    # what used to crash the Markdown path.
+
+    WHEEL_ROWS = 3
+
+    def _on_mouse_scroll_up(self, event: MouseScrollUp) -> None:
+        self._scroll_chat(-self.WHEEL_ROWS)
+
+    def _on_mouse_scroll_down(self, event: MouseScrollDown) -> None:
+        self._scroll_chat(self.WHEEL_ROWS)
+
+    def _scroll_chat(self, rows: int) -> None:
+        for transcript in self.query(TranscriptView):
+            transcript.scroll_lines(rows)
 
     def compose(self):
         with Horizontal(id="root"):
@@ -118,7 +134,15 @@ class ZenAgentApp(App):
         self.query_one(PromptInput).focus()
 
     def _on_change(self) -> None:
-        self.call_after_refresh(self._refresh_status)
+        # Streaming fires this per delta; coalesce bursts into one repaint.
+        if self._refresh_pending:
+            return
+        self._refresh_pending = True
+        self.call_later(self._run_refresh)
+
+    def _run_refresh(self) -> None:
+        self._refresh_pending = False
+        self._refresh_status()
 
     def _refresh_status(self) -> None:
         status = self.chat.status
