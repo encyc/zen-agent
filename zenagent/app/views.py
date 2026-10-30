@@ -23,6 +23,7 @@ __all__ = [
     "MessageView",
     "RunStatus",
     "ToolCallView",
+    "args_preview",
     "messages_to_views",
     "usage_total",
 ]
@@ -71,7 +72,8 @@ class RunStatus:
     steering: int = 0
 
 
-def _preview(arguments: dict) -> str:
+def args_preview(arguments: dict) -> str:
+    """Compact one-line argument summary for tool cards."""
     text = json.dumps(arguments, ensure_ascii=False)
     if len(text) > _PREVIEW_LIMIT:
         return text[: _PREVIEW_LIMIT - 3] + "..."
@@ -124,7 +126,7 @@ def messages_to_views(messages: list[Message]) -> list[MessageView | ToolCallVie
                 card = ToolCallView(
                     call_id=block.id,
                     name=block.name,
-                    args_preview=_preview(block.arguments),
+                    args_preview=args_preview(block.arguments),
                     args=block.arguments,
                 )
                 cards[block.id] = card
