@@ -27,6 +27,12 @@ Screen {
     scrollbar-size-vertical: 1;
 }
 
+#new-content {
+    height: 1;
+    background: #141c24;
+    padding: 0 1;
+}
+
 #dock {
     height: auto;
     background: #0d1319;
@@ -69,29 +75,49 @@ Screen {
     padding: 1 2;
 }
 
+/* omp: the user turn is a filled full-width bar, no prefix. */
 .user-message {
+    background: #1b222a;
+    color: #d7e0e8;
+    padding: 0 1;
     margin: 1 0 0 0;
+    width: 100%;
 }
 
 .assistant-message {
     margin: 0 0 1 0;
 }
 
-.thinking {
+.thinking-row {
     background: #0d1319;
     border: none;
-    margin: 0 0 1 0;
-}
-
-.thinking > CollapsibleTitle {
+    height: auto;
+    margin: 0 0 0 1;
     color: #8296a6;
 }
 
+.thinking-row:focus {
+    color: #d9a86c;
+}
+
+/* omp's plain-tinted cards: body tint by state, success stays quiet. */
 .tool-card {
     background: #0d1319;
     height: auto;
-    margin: 0 0 1 0;
+    margin: 0 0 0 0;
     color: #8296a6;
+}
+
+.tool-card.-running {
+    background: #121a22;
+}
+
+.tool-card.-ok {
+    background: #10171e;
+}
+
+.tool-card.-error {
+    background: #241a1a;
 }
 
 .tool-card:focus {

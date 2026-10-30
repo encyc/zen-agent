@@ -6,11 +6,12 @@ and the terminal's bottom row is always the prompt.
 
 from __future__ import annotations
 
-from rich.text import Text
 from textual.containers import VerticalScroll
-from textual.widgets import Collapsible, Markdown, Static
+from textual.message import Message
+from textual.widgets import Markdown
 
 from zenagent.app.views import MessageView, RunStatus, ToolCallView
+from zenagent.cli.tui.widgets.rows import NoticeRow, ThinkingRow, UsageRow, UserBlock
 from zenagent.cli.tui.widgets.tool_card import ToolCard
 from zenagent.cli.tui.widgets.welcome import WelcomeBlock
 
@@ -18,18 +19,59 @@ __all__ = ["TranscriptView"]
 
 
 class TranscriptView(VerticalScroll):
-    """Renders the ChatController transcript, appending incrementally."""
+    """Renders the ChatController transcript, appending incrementally.
+
+    omp renders straight into the terminal's scrollback; Textual cannot, so the
+    transcript has to re-implement the one behaviour that mattered: follow new
+    output only while the user is at the bottom. Scrolling up pins the view and
+    raises a "new output" marker instead of yanking it back down.
+    """
+
+    class PendingChanged(Message):
+        """Posted when new output is waiting below a pinned viewport."""
+
+        def __init__(self, pending: bool) -> None:
+            super().__init__()
+            self.pending = pending
 
     def __init__(self) -> None:
         super().__init__(id="transcript")
         self._count = 0
         self._assistant_widgets: list[Markdown] = []
+        self._thinking_rows: dict[int, ThinkingRow] = {}
         self._usage_shown = 0
+        self._stick = True
+        self._pending = False
 
     def on_mount(self) -> None:
         self.mount(WelcomeBlock())
 
+    @property
+    def pending(self) -> bool:
+        return self._pending
+
+    def watch_scroll_y(self, old: float, new: float) -> None:
+        self._stick = self._at_bottom()
+        if self._stick and self._pending:
+            self._set_pending(False)
+
+    def _at_bottom(self) -> bool:
+        return self.scroll_offset.y >= self.max_scroll_y - 1
+
+    def _set_pending(self, pending: bool) -> None:
+        if pending == self._pending:
+            return
+        self._pending = pending
+        self.post_message(self.PendingChanged(pending))
+
+    def scroll_to_bottom(self) -> None:
+        """Return to the live tail and resume following new output."""
+        self._stick = True
+        self.scroll_end(animate=False)
+        self._set_pending(False)
+
     def sync(self, views: list[MessageView | ToolCallView], status: RunStatus) -> None:
+        before = self._count
         for index in range(self._count, len(views)):
             view = views[index]
             if isinstance(view, MessageView):
@@ -44,31 +86,42 @@ class TranscriptView(VerticalScroll):
             elif isinstance(view, MessageView) and view.kind == "assistant":
                 if assistant_index < len(self._assistant_widgets):
                     self._assistant_widgets[assistant_index].update(view.text)
+                    self._sync_thinking(assistant_index, view.thinking)
                 assistant_index += 1
+        grew = len(views) > before or self.query(UsageRow) and self._usage_shown
         self._maybe_usage(status)
-        self.scroll_end(animate=False)
+        if self._stick:
+            self.scroll_end(animate=False)
+        elif grew:
+            self._set_pending(True)
 
     # -- appends ------------------------------------------------------------
 
     def _append_message(self, view: MessageView) -> None:
         if view.kind == "user":
-            text = Text()
-            text.append("› ", style="#d9a86c")
-            text.append(view.text, style="#d7e0e8")
-            self.mount(Static(text, classes="user-message"))
+            self.mount(UserBlock(view.text))
             return
         if view.thinking:
-            self.mount(
-                Collapsible(
-                    Static(view.thinking),
-                    title="thinking",
-                    collapsed=True,
-                    classes="thinking",
-                )
-            )
+            # Register the row now so _sync_thinking updates it instead of
+            # mounting a second copy when thinking streams in later.
+            row = ThinkingRow(view.thinking)
+            self._thinking_rows[len(self._assistant_widgets)] = row
+            self.mount(row)
         widget = Markdown(view.text, classes="assistant-message")
         self._assistant_widgets.append(widget)
         self.mount(widget)
+
+    def _sync_thinking(self, index: int, thinking: str | None) -> None:
+        """Thinking often arrives after the bubble, so mount the row lazily."""
+        if not thinking:
+            return
+        row = self._thinking_rows.get(index)
+        if row is None:
+            row = ThinkingRow(thinking)
+            self._thinking_rows[index] = row
+            self.mount(row, before=self._assistant_widgets[index])
+            return
+        row.set_thinking(thinking)
 
     def _append_tool(self, view: ToolCallView) -> None:
         self.mount(ToolCard(view))
@@ -86,23 +139,20 @@ class TranscriptView(VerticalScroll):
         if status.input_tokens == self._usage_shown:
             return
         self._usage_shown = status.input_tokens
-        self.mount(
-            Static(
-                f"done · in {status.input_tokens} / out {status.output_tokens} · "
-                f"cache {status.cache_read} · ${status.cost:.4f}",
-                classes="usage-row",
-            )
-        )
+        self.mount(UsageRow(status))
 
     def reset(self) -> None:
         """Drop every rendered widget (used when a session is resumed)."""
+        self._stick = True
+        self._set_pending(False)
         for child in list(self.children):
             child.remove()
         self._count = 0
         self._assistant_widgets.clear()
+        self._thinking_rows.clear()
         self._usage_shown = 0
         self.mount(WelcomeBlock())
 
-    def append_notice(self, text: str) -> None:
-        self.mount(Static(text, classes="notice"))
+    def append_notice(self, text: str, *, error: bool = False) -> None:
+        self.mount(NoticeRow(text, error=error))
         self.scroll_end(animate=False)

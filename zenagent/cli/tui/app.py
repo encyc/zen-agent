@@ -20,6 +20,7 @@ from zenagent.app.commands import AppServices, build_default_commands
 from zenagent.app.models import ModelManager
 from zenagent.app.runtime import Runtime
 from zenagent.app.sessions import SessionManager
+from zenagent.cli.tui.widgets.new_content import NewContentBar
 from zenagent.cli.tui.widgets.prompt_gutter import PromptGutter
 from zenagent.cli.tui.widgets.prompt_input import PromptInput
 from zenagent.cli.tui.widgets.sidebar import Sidebar
@@ -40,6 +41,8 @@ class ZenAgentApp(App):
         ("ctrl+s", "steer", "Steer"),
         ("ctrl+q", "quit_app", "Quit"),
         ("ctrl+x", "clear_queue", "Clear queue"),
+        ("ctrl+o", "toggle_tools", "Expand tools"),
+        ("end", "jump_to_bottom", "Latest"),
     ]
 
     def __init__(
@@ -81,6 +84,7 @@ class ZenAgentApp(App):
         with Horizontal(id="root"):
             with Vertical(id="main-column"):
                 yield TranscriptView()
+                yield NewContentBar()
                 with Vertical(id="dock"):
                     yield StatusBand()
                     with Horizontal(id="prompt-row"):
@@ -106,6 +110,19 @@ class ZenAgentApp(App):
 
     def on_resize(self, event) -> None:
         self._refresh_status()
+
+    def on_transcript_view_pending_changed(
+        self, message: TranscriptView.PendingChanged
+    ) -> None:
+        bar = self.query_one(NewContentBar)
+        if message.pending:
+            bar.show_marker()
+        else:
+            bar.hide_marker()
+
+    def action_jump_to_bottom(self) -> None:
+        for transcript in self.query(TranscriptView):
+            transcript.scroll_to_bottom()
 
     def on_prompt_input_resized(self, message: PromptInput.Resized) -> None:
         for gutter in self.query(PromptGutter):
@@ -200,3 +217,14 @@ class ZenAgentApp(App):
 
     def action_clear_queue(self) -> None:
         self.chat.clear_follow_ups()
+
+    def action_toggle_tools(self) -> None:
+        """Batch expand/collapse; single cards keep Enter/space (omp parity)."""
+        from zenagent.cli.tui.widgets.tool_card import ToolCard
+
+        cards = list(self.query(ToolCard))
+        if not cards:
+            return
+        expand = any(card.collapsed for card in cards)
+        for card in cards:
+            card.set_collapsed(not expand)
