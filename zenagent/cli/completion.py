@@ -30,6 +30,7 @@ SLASH_COMMANDS: dict[str, str] = {
     "/tools": "list the tools the model can call",
     "/compact": "summarize the conversation into a fresh session",
     "/undo": "drop the last turn into a fresh session file",
+    "/retry": "re-run the last turn (new session file)",
     "/image": "attach an image for the next prompt (/image <path>)",
     "/images": "list attached images, or /images clear",
     "/mcp": "show MCP servers, or /mcp retry to reconnect",

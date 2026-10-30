@@ -30,6 +30,7 @@ from zenagent.agent.session import (
     unique_session_path,
 )
 from zenagent.app.modes import describe_modes, mode_prompt_note
+from zenagent.app.retry import prepare_retry
 from zenagent.app.support import describe_tools
 from zenagent.cli.compact import compact, maybe_auto_compact
 from zenagent.cli.completion import SLASH_COMMANDS, ReplCompleter, help_text
@@ -803,6 +804,20 @@ async def repl(
             prompt_text = line.strip()
             if command and command in template_by_name:
                 prompt_text = expand(template_by_name[command].body, argument)
+                command = ""
+            if command == "retry":
+                # Retry is a loop-level command: it truncates the session and
+                # turns the recovered prompt into this iteration's input.
+                prepared = (
+                    None
+                    if run_task is not None
+                    else prepare_retry(agent, session_box[0])
+                )
+                if prepared is None:
+                    print_fn("nothing to retry")
+                    continue
+                prompt_text, new_session = prepared
+                switch_session(new_session)
                 command = ""
             if command:
                 if (

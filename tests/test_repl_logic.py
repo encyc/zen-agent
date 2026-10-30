@@ -638,3 +638,20 @@ async def test_slash_tools_lists_the_tool_set(isolated_sessions, capsys):
     assert code == 0
     out = capsys.readouterr().out
     assert "tools (" in out and "read_file" in out
+
+
+async def test_slash_retry_reruns_the_last_prompt(isolated_sessions, capsys):
+    stream = scripted_stream(0, "first answer", "retry answer")
+    code = await repl(
+        "glm-5.3",
+        stream_fn=stream,
+        api_key="k",
+        input_fn=scripted_input("hello", "/retry", "/exit", settle=0.05),
+        print_fn=lambda *a, **k: None,
+    )
+    assert code == 0
+    assert len(stream.requests) == 2
+    # retry re-sends the same prompt; the transcript never gains a second copy.
+    for request in stream.requests:
+        users = [m for m in request if m.to_json()["role"] == "user"]
+        assert len(users) == 1 and users[0].content == "hello"
