@@ -177,10 +177,13 @@ required = {"pyproject.toml", "README.md", "zenagent/__init__.py", "zenagent/cli
 missing = sorted(required - set(sdist_names))
 if missing:
     problems.append(f"sdist is missing {missing}")
+# The build backend rewrites pyproject.toml and keeps the original beside it;
+# that one is expected, unlike an editing leftover (`*.orig`, `*.append`, ...).
 shipped_dev = [
     name
     for name in sdist_names
-    if name.startswith(dev_dirs) or "__pycache__" in name or name.endswith(junk_suffixes)
+    if (name.startswith(dev_dirs) or "__pycache__" in name or name.endswith(junk_suffixes))
+    and name != "pyproject.toml.orig"
 ]
 if shipped_dev:
     problems.append(f"sdist ships dev or junk files: {shipped_dev[:5]}")
