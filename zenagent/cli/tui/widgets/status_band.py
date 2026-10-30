@@ -1,4 +1,9 @@
-"""Bottom status bar: model, thinking, tokens, cost and context."""
+"""Status band: the filled one-row strip that sits above the prompt.
+
+omp's default ``band`` composer shape puts the whole status line flush against
+the left edge as a filled band above an unboxed prompt -- there is no bottom
+bar. This widget keeps the ``plain`` contract the exit summary reads.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +12,7 @@ from textual.widgets import Static
 
 from zenagent.app.views import RunStatus
 
-__all__ = ["StatusBar"]
+__all__ = ["StatusBand"]
 
 _TEXT = "#d7e0e8"
 _MUTED = "#8296a6"
@@ -15,12 +20,12 @@ _ACCENT = "#d9a86c"
 _ERROR = "#e08787"
 
 
-class StatusBar(Static):
-    """A one-line, always-visible snapshot of the run."""
+class StatusBand(Static):
+    """One filled row; degrades by dropping segments as the terminal narrows."""
 
-    def __init__(self, status: RunStatus | None = None) -> None:
-        super().__init__("")
-        self._status = status
+    def __init__(self) -> None:
+        super().__init__("", id="status-band")
+        self._status: RunStatus | None = None
         self._plain = ""
 
     @property
@@ -39,7 +44,9 @@ class StatusBar(Static):
         percent = round(used * 100 / window)
 
         text = Text()
+        text.append(" ")
         text.append(status.model_id, style=f"bold {_ACCENT}")
+
         items: list[str] = []
         if width >= 100:
             items.append(f"thinking {status.thinking or 'off'}")
@@ -52,11 +59,11 @@ class StatusBar(Static):
             items.append(f"steering {status.steering}")
 
         for item in items:
-            text.append("   ")
+            text.append("  ")
             text.append(item, style=_MUTED)
 
         if status.running:
-            text.append("   ")
+            text.append("  ")
             text.append("running", style=_ACCENT)
 
         plain = " · ".join([status.model_id, *items])

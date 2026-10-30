@@ -1,27 +1,72 @@
 /* ZenAgent TUI — "harbor": cold slate with a single warm accent.
    Tokens: ink #0d1319 · surface #141c24 · line #263441
-           text #d7e0e8 · muted #8296a6 · accent #d9a86c · error #e08787 */
+           text #d7e0e8 · muted #8296a6 · accent #d9a86c · error #e08787
+
+   Layout follows omp's single-column dock:
+     #transcript (1fr)  →  #status-band (1 row)  →  #prompt-row (╰─ + input)
+   No bottom status bar, no frame around the prompt. */
 
 Screen {
     background: #0d1319;
     color: #d7e0e8;
 }
 
-#body {
+#root {
     height: 1fr;
 }
 
-#sidebar {
-    width: 28;
-    background: #141c24;
-    border-right: solid #263441;
-    padding: 1 2;
+#main-column {
+    width: 1fr;
+    height: 1fr;
 }
 
-#chat {
+#transcript {
+    height: 1fr;
     background: #0d1319;
     padding: 1 2;
     scrollbar-size-vertical: 1;
+}
+
+#dock {
+    height: auto;
+    background: #0d1319;
+}
+
+/* The band is a filled strip flush with the left edge, omp's default shape. */
+#status-band {
+    height: 1;
+    background: #141c24;
+    padding: 0 0;
+}
+
+#prompt-row {
+    height: auto;
+    background: #0d1319;
+}
+
+#prompt-input {
+    width: 1fr;
+    height: 1;
+    background: #0d1319;
+    border: none;
+    padding: 0 1 0 0;
+}
+
+#prompt-input:focus {
+    background: #0d1319;
+}
+
+.welcome {
+    color: #d7e0e8;
+    text-align: center;
+    margin: 1 0 1 0;
+}
+
+#sidebar {
+    width: 26;
+    background: #141c24;
+    border-left: solid #263441;
+    padding: 1 2;
 }
 
 .user-message {
@@ -35,7 +80,7 @@ Screen {
 .thinking {
     background: #0d1319;
     border: none;
-    margin: 0 0 1 1;
+    margin: 0 0 1 0;
 }
 
 .thinking > CollapsibleTitle {
@@ -45,7 +90,7 @@ Screen {
 .tool-card {
     background: #0d1319;
     height: auto;
-    margin: 0 0 1 1;
+    margin: 0 0 1 0;
     color: #8296a6;
 }
 
@@ -61,22 +106,4 @@ Screen {
 .notice {
     color: #8296a6;
     margin: 0 0 1 0;
-}
-
-StatusBar {
-    height: 2;
-    background: #141c24;
-    border-top: solid #263441;
-    padding: 0 2;
-}
-
-#prompt-input {
-    height: 3;
-    background: #141c24;
-    border: round #263441;
-    padding: 0 1;
-}
-
-#prompt-input:focus {
-    border: round #d9a86c;
 }

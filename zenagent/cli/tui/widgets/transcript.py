@@ -1,4 +1,8 @@
-"""Transcript area: user/assistant messages, tool cards and usage rows."""
+"""Transcript area: user/assistant messages, tool cards and usage rows.
+
+The transcript is the only flexible region: the dock below it keeps its height
+and the terminal's bottom row is always the prompt.
+"""
 
 from __future__ import annotations
 
@@ -8,18 +12,22 @@ from textual.widgets import Collapsible, Markdown, Static
 
 from zenagent.app.views import MessageView, RunStatus, ToolCallView
 from zenagent.cli.tui.widgets.tool_card import ToolCard
+from zenagent.cli.tui.widgets.welcome import WelcomeBlock
 
-__all__ = ["ChatLog"]
+__all__ = ["TranscriptView"]
 
 
-class ChatLog(VerticalScroll):
+class TranscriptView(VerticalScroll):
     """Renders the ChatController transcript, appending incrementally."""
 
     def __init__(self) -> None:
-        super().__init__(id="chat")
+        super().__init__(id="transcript")
         self._count = 0
         self._assistant_widgets: list[Markdown] = []
         self._usage_shown = 0
+
+    def on_mount(self) -> None:
+        self.mount(WelcomeBlock())
 
     def sync(self, views: list[MessageView | ToolCallView], status: RunStatus) -> None:
         for index in range(self._count, len(views)):
@@ -72,11 +80,6 @@ class ChatLog(VerticalScroll):
                 card.refresh_view()
                 return
 
-    def _update_message(self, index: int, view: MessageView) -> None:
-        messages = list(self.query(Markdown))
-        if index < len(messages):
-            messages[index].update(view.text)
-
     def _maybe_usage(self, status: RunStatus) -> None:
         if status.running or not status.input_tokens:
             return
@@ -98,6 +101,7 @@ class ChatLog(VerticalScroll):
         self._count = 0
         self._assistant_widgets.clear()
         self._usage_shown = 0
+        self.mount(WelcomeBlock())
 
     def append_notice(self, text: str) -> None:
         self.mount(Static(text, classes="notice"))

@@ -1,9 +1,18 @@
-"""Textual application wiring the app layer to widgets."""
+"""Textual application wiring the app layer to widgets.
+
+Layout follows omp's single-column dock (see
+``docs/research/omp-cli-study/02-layout.md``):
+
+    transcript (1fr)  →  status band (1 row)  →  prompt row
+
+There is no bottom status bar: the band *is* the status line, and it sits above
+the prompt. The sidebar is opt-in (ctrl+b) and hidden by default.
+"""
 
 from __future__ import annotations
 
 from textual.app import App
-from textual.containers import Horizontal
+from textual.containers import Horizontal, Vertical
 from textual.events import MouseEvent
 
 from zenagent.app.chat import ChatController
@@ -11,21 +20,22 @@ from zenagent.app.commands import AppServices, build_default_commands
 from zenagent.app.models import ModelManager
 from zenagent.app.runtime import Runtime
 from zenagent.app.sessions import SessionManager
-from zenagent.cli.tui.widgets.chat_log import ChatLog
+from zenagent.cli.tui.widgets.prompt_gutter import PromptGutter
 from zenagent.cli.tui.widgets.prompt_input import PromptInput
 from zenagent.cli.tui.widgets.sidebar import Sidebar
-from zenagent.cli.tui.widgets.status_bar import StatusBar
+from zenagent.cli.tui.widgets.status_band import StatusBand
+from zenagent.cli.tui.widgets.transcript import TranscriptView
 
 __all__ = ["ZenAgentApp"]
 
 
 class ZenAgentApp(App):
-    """A single-screen chat app; no mouse, no animations."""
+    """A single-column chat app; no mouse, no animations."""
 
     CSS_PATH = "theme.tcss"
     TITLE = "ZenAgent"
     BINDINGS = [  # noqa: RUF012 - Textual class API
-        ("ctrl+b", "toggle_sidebar", "Sidebar"),
+        ("ctrl+b", "toggle_sidebar", "Info"),
         ("ctrl+c", "interrupt", "Interrupt"),
         ("ctrl+s", "steer", "Steer"),
         ("ctrl+q", "quit_app", "Quit"),
@@ -68,13 +78,18 @@ class ZenAgentApp(App):
         await super().on_event(event)
 
     def compose(self):
-        with Horizontal(id="body"):
+        with Horizontal(id="root"):
+            with Vertical(id="main-column"):
+                yield TranscriptView()
+                with Vertical(id="dock"):
+                    yield StatusBand()
+                    with Horizontal(id="prompt-row"):
+                        yield PromptGutter()
+                        yield PromptInput()
             yield Sidebar()
-            yield ChatLog()
-        yield StatusBar()
-        yield PromptInput()
 
     def on_mount(self) -> None:
+        self.query_one(Sidebar).display = False
         self._refresh_status()
         self.query_one(PromptInput).focus()
 
@@ -84,17 +99,17 @@ class ZenAgentApp(App):
     def _refresh_status(self) -> None:
         status = self.chat.status
         width = self.size.width
-        for bar in self.query(StatusBar):
-            bar.update_status(status, width)
-        for log in self.query(ChatLog):
+        for band in self.query(StatusBand):
+            band.update_status(status, width)
+        for log in self.query(TranscriptView):
             log.sync(self.chat.transcript, status)
-        for sidebar in self.query(Sidebar):
-            sidebar.refresh_contents(self.chat, self.models, self.sessions)
-            sidebar.apply_width(self.size.width)
 
     def on_resize(self, event) -> None:
-        for sidebar in self.query(Sidebar):
-            sidebar.apply_width(event.size.width)
+        self._refresh_status()
+
+    def on_prompt_input_resized(self, message: PromptInput.Resized) -> None:
+        for gutter in self.query(PromptGutter):
+            gutter.styles.height = message.rows
 
     def action_toggle_sidebar(self) -> None:
         for sidebar in self.query(Sidebar):
@@ -119,7 +134,7 @@ class ZenAgentApp(App):
         elif name == "quit":
             self.exit()
         else:
-            for log in self.query(ChatLog):
+            for log in self.query(TranscriptView):
                 log.append_notice(f"/{name} is not available in the TUI yet")
 
     def open_model_picker(self) -> None:
@@ -140,7 +155,7 @@ class ZenAgentApp(App):
         async def selected(path) -> None:
             if path is not None:
                 await self.sessions.resume(path)
-                for log in self.query(ChatLog):
+                for log in self.query(TranscriptView):
                     log.reset()
                 self.chat.reload_transcript()
                 self._refresh_status()
@@ -154,7 +169,7 @@ class ZenAgentApp(App):
             if self.commands.get(name) is not None:
                 await self._dispatch_command(name, argument)
                 return
-            for log in self.query(ChatLog):
+            for log in self.query(TranscriptView):
                 log.append_notice(f"unknown command: /{name}")
             return
         await self.chat.submit(text)
@@ -168,7 +183,7 @@ class ZenAgentApp(App):
         elif result.quit:
             self.action_quit_app()
         elif result.message:
-            for log in self.query(ChatLog):
+            for log in self.query(TranscriptView):
                 log.append_notice(result.message)
 
     def action_interrupt(self) -> None:
