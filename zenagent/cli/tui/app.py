@@ -35,6 +35,7 @@ from zenagent.cli.tui.widgets.prompt_gutter import PromptGutter
 from zenagent.cli.tui.widgets.prompt_input import PromptInput
 from zenagent.cli.tui.widgets.sidebar import Sidebar
 from zenagent.cli.tui.widgets.status_band import StatusBand
+from zenagent.cli.tui.widgets.todo_hud import TodoHud
 from zenagent.cli.tui.widgets.transcript import TranscriptView
 from zenagent.cli.tui.widgets.work_indicator import WorkIndicator
 
@@ -175,6 +176,7 @@ class ZenAgentApp(App):
                     yield ErrorBanner()
                     yield CommandHints()
                     yield AttachmentChips()
+                    yield TodoHud()
                     yield StatusBand()
                     with Horizontal(id="prompt-row"):
                         yield PromptGutter()
@@ -259,6 +261,10 @@ class ZenAgentApp(App):
         width = self.size.width
         for band in self.query(StatusBand):
             band.update_status(status, width)
+        # Todo state rides the same snapshot as everything else in the dock;
+        # the row hides itself while the session has no list.
+        for hud in self.query(TodoHud):
+            hud.set_todos(status.todos)
         for log in self.query(TranscriptView):
             log.sync(self.chat.transcript, status)
         for notice in self.chat.take_notices():
