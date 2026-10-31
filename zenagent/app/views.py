@@ -53,6 +53,9 @@ class ToolCallView:
     #: to the model); empty on history replay, which keeps cards generic.
     details: dict = field(default_factory=dict)
     status: Literal["running", "ok", "error"] = "running"
+    #: Last non-empty streamed output line while the tool is running
+    #: (``tool_execution_update``); empty when the tool emits no progress.
+    progress: str = ""
     result_text: str = ""
     is_error: bool = False
     duration_ms: int | None = None

@@ -95,6 +95,15 @@ loop 里对每个 call：
 
 结果顺序与请求顺序一致，id 一一对应；并行只是执行顺序，不影响写回顺序。
 
+### 流式进度（partial result）
+
+- 工具的 `execute(..., on_update)` 可以推送 `ToolResultAgent` 快照；loop 把它包成
+  `tool_execution_update` 事件（带 `tool_call_id` / `partial_result`）。
+- 目前只有 `bash` 发射（4 KB / 0.5s 节流）；TUI 把最后一行显示在运行中的工具卡头部
+  （`ToolCallView.progress`），REPL/headless 安全忽略该事件（结束行仍由
+  `tool_execution_end` 打印）。
+- 工具返回后到达的迟到 update 被丢弃，不会覆盖已结算的卡片。
+
 ## 写一个新工具
 
 ```python

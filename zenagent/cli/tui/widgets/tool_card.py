@@ -167,8 +167,14 @@ class ToolCard(Static):
     def _renderable(self) -> Text:
         text = self._head()
         if self.collapsed:
-            hint = "  (enter: expand)"
-            if len(text.plain) + len(hint) <= self._width():
+            if self.view.status == "running" and self.view.progress:
+                hint = f"  ⚙ {self.view.progress}"
+            else:
+                hint = "  (enter: expand)"
+            budget = self._width() - len(text.plain)
+            if budget > 8:
+                if len(hint) > budget:
+                    hint = hint[: budget - 1] + "…"
                 text.append(hint, style=_DIM)
             return text
 
@@ -181,7 +187,10 @@ class ToolCard(Static):
             text.append("\n   ")
             text.append(line, style=_MUTED)
         if not lines and not self.view.diff:
-            text.append("\n   (no output)", style=_DIM)
+            if self.view.status == "running" and self.view.progress:
+                text.append(f"\n   ⚙ {self.view.progress}", style=_DIM)
+            else:
+                text.append("\n   (no output)", style=_DIM)
         if self.view.diff:
             for line in self.view.diff.splitlines():
                 text.append("\n   ")

@@ -87,3 +87,43 @@ async def test_collapsed_tool_card_is_one_line(chat_app_with_one_tool):
         card = app.query(ToolCard).first()
         assert card.collapsed is True
         assert card.region.height <= 2, f"collapsed card took {card.region.height} rows"
+
+
+async def test_tool_card_repaints_on_streamed_progress(runtime_factory):
+    """A progress update (status still running) must refresh the live card."""
+    from conftest import text_stream
+
+    from zenagent.agent.loop import ToolResultAgent
+    from zenagent.cli.tui.widgets.tool_card import ToolCard
+    from zenagent.events import AgentEvent
+    from zenagent.types import TextContent
+
+    runtime = await runtime_factory(stream_fn=text_stream())
+    app = ZenAgentApp(runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        app.chat._on_event(
+            AgentEvent(
+                type="tool_execution_start",
+                tool_call_id="t1",
+                tool_name="bash",
+                args={"command": "make"},
+            )
+        )
+        await pilot.pause()
+        app.chat._on_event(
+            AgentEvent(
+                type="tool_execution_update",
+                tool_call_id="t1",
+                tool_name="bash",
+                args={"command": "make"},
+                partial_result=ToolResultAgent(
+                    content=[TextContent(text="compiling\nlinking 2 files")]
+                ),
+            )
+        )
+        await pilot.pause()
+        await pilot.pause()
+        cards = list(app.query(ToolCard))
+        assert cards, "tool_execution_start should mount a card"
+        assert "linking 2 files" in cards[0].plain
