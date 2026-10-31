@@ -5,11 +5,13 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Generic, TypeVar
 
+from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Input, Label, OptionList
+from textual.widgets import Input, OptionList, Static
 
 from zenagent.app.models import ModelEntry
 from zenagent.app.sessions import SessionEntry
@@ -18,6 +20,8 @@ from zenagent.cli.tui.screens.palette import PaletteItem, PaletteScreen
 __all__ = [
     "ChoicePicker",
     "Confirm",
+    "DialogChoice",
+    "DialogScreen",
     "HistorySearch",
     "ModelPicker",
     "RenamePrompt",
@@ -25,6 +29,8 @@ __all__ = [
     "SessionPicker",
     "ToolApproval",
 ]
+
+_T = TypeVar("_T")
 
 
 class ModelPicker(PaletteScreen[str]):
@@ -132,7 +138,170 @@ class SessionPicker(PaletteScreen[SessionAction]):
         self.dismiss(SessionAction("toggle-scope"))
 
 
-class Confirm(ModalScreen[bool]):
+class DialogScreen(ModalScreen[_T], Generic[_T]):
+    """A centered, framed modal dialog.
+
+    A bare ``ModalScreen`` only dims the screen underneath; the approval,
+    confirmation and rename flows also need a panel, spacing, and the same
+    title/detail/choice rhythm, so that chrome lives here once.
+    """
+
+    DEFAULT_CSS = """
+    DialogScreen {
+        align: center middle;
+        background: #0d1319 65%;
+    }
+
+    DialogScreen #dialog {
+        width: 90%;
+        max-width: 88;
+        height: auto;
+        padding: 1 2;
+        background: #141c24;
+        border: round #263441;
+    }
+
+    DialogScreen #dialog-title {
+        height: auto;
+        padding: 0 0 1 0;
+        color: #d9a86c;
+        text-style: bold;
+    }
+
+    DialogScreen #dialog-body {
+        height: auto;
+        margin: 0 0 1 0;
+    }
+
+    DialogScreen .dialog-detail {
+        height: auto;
+        color: #8296a6;
+    }
+
+    DialogScreen .dialog-command,
+    DialogScreen .dialog-target {
+        height: auto;
+        color: #d7e0e8;
+    }
+
+    DialogScreen .dialog-note {
+        height: auto;
+        color: #5d6f7e;
+    }
+
+    DialogScreen .dialog-add {
+        height: auto;
+        color: #8fbf8f;
+    }
+
+    DialogScreen .dialog-remove {
+        height: auto;
+        color: #e08787;
+    }
+
+    DialogScreen #dialog-choices {
+        height: auto;
+    }
+
+    DialogScreen .dialog-choice {
+        height: 1;
+        color: #8296a6;
+    }
+
+    DialogScreen .dialog-choice:hover {
+        background: #1b222a;
+        color: #d7e0e8;
+    }
+
+    DialogScreen .dialog-choice.-primary {
+        color: #d9a86c;
+    }
+
+    DialogScreen #dialog-hint {
+        height: auto;
+        margin: 1 0 0 0;
+        color: #5d6f7e;
+    }
+
+    DialogScreen #rename-input {
+        height: 1;
+        padding: 0;
+        border: none;
+        background: #0d1319;
+        color: #d7e0e8;
+    }
+    """
+
+
+class DialogChoice(Static):
+    """One clickable option row; the screen's ``action_<name>`` handles it."""
+
+    def __init__(self, text: Text, action: str, *, primary: bool = False) -> None:
+        self.action_name = action
+        self._text = text
+        classes = "dialog-choice" + (" -primary" if primary else "")
+        super().__init__(text, classes=classes)
+
+    @property
+    def plain(self) -> str:
+        return self._text.plain
+
+    def on_click(self) -> None:
+        handler = getattr(self.screen, f"action_{self.action_name}", None)
+        if handler is not None:
+            handler()
+
+
+def _choice(key: str, label: str) -> Text:
+    """``[y] allow`` -- Text, so the square brackets stay literal markup."""
+    return Text(f"[{key}] {label}")
+
+
+def _clip(text: str, limit: int) -> str:
+    flat = " ".join(text.split())
+    return flat if len(flat) <= limit else flat[: limit - 1] + "…"
+
+
+def _approval_body(tool_name: str, arguments: dict) -> list[tuple[str, str]]:
+    """``(text, css_class)`` rows: what the model wants to run, at a glance."""
+    rows: list[tuple[str, str]] = []
+
+    command = arguments.get("command")
+    if isinstance(command, str) and command.strip():
+        lines = command.rstrip().splitlines()
+        rows.append((f"$ {lines[0]}", "dialog-command"))
+        rows.extend((f"  {line}", "dialog-command") for line in lines[1:8])
+        if len(lines) > 8:
+            rows.append((f"  … {len(lines) - 8} more lines", "dialog-note"))
+
+    path = arguments.get("path")
+    if isinstance(path, str) and path:
+        rows.append((path, "dialog-target"))
+
+    content = arguments.get("content")
+    if isinstance(content, str) and content:
+        rows.append((f"{len(content.splitlines())} lines to write", "dialog-note"))
+
+    old = arguments.get("old_string")
+    new = arguments.get("new_string")
+    if isinstance(old, str) and old:
+        rows.append((f"- {_clip(old, 100)}", "dialog-remove"))
+    if isinstance(new, str) and new:
+        rows.append((f"+ {_clip(new, 100)}", "dialog-add"))
+
+    pattern = arguments.get("pattern")
+    if isinstance(pattern, str) and pattern:
+        rows.append((f"pattern  {pattern}", "dialog-detail"))
+
+    if not rows:
+        for key, value in list(arguments.items())[:5]:
+            rows.append((f"{key} = {_clip(str(value), 100)}", "dialog-detail"))
+        if len(arguments) > 5:
+            rows.append((f"… {len(arguments) - 5} more arguments", "dialog-note"))
+    return rows
+
+
+class Confirm(DialogScreen[bool]):
     """Yes/no confirmation for destructive actions."""
 
     BINDINGS = [("y", "yes", "Yes"), ("n,escape", "no", "No")]  # noqa: RUF012
@@ -142,9 +311,13 @@ class Confirm(ModalScreen[bool]):
         self.prompt = prompt
 
     def compose(self) -> ComposeResult:
-        with Vertical(classes="modal"):
-            yield Label(self.prompt)
-            yield Label("[y] yes    [n] no")
+        with Vertical(id="dialog"):
+            yield Static(Text("confirm"), id="dialog-title")
+            with Vertical(id="dialog-body"):
+                yield Static(Text(self.prompt), classes="dialog-detail")
+            with Vertical(id="dialog-choices"):
+                yield DialogChoice(_choice("y", "yes"), "yes", primary=True)
+                yield DialogChoice(_choice("n", "no"), "no")
 
     def action_yes(self) -> None:
         self.dismiss(True)
@@ -153,7 +326,7 @@ class Confirm(ModalScreen[bool]):
         self.dismiss(False)
 
 
-class RenamePrompt(ModalScreen[str]):
+class RenamePrompt(DialogScreen[str]):
     """A one-line rename dialog for a saved session."""
 
     BINDINGS = [("escape", "cancel", "Cancel")]  # noqa: RUF012 - Textual class API
@@ -163,10 +336,15 @@ class RenamePrompt(ModalScreen[str]):
         self.initial = value
 
     def compose(self) -> ComposeResult:
-        with Vertical(classes="modal"):
-            yield Label("rename session")
-            yield Input(value=self.initial, id="rename-input", placeholder="session name")
-            yield Label("[enter] save   [esc] cancel")
+        with Vertical(id="dialog"):
+            yield Static(Text("rename session"), id="dialog-title")
+            with Vertical(id="dialog-body"):
+                yield Input(
+                    value=self.initial,
+                    id="rename-input",
+                    placeholder="session name",
+                )
+            yield Static(Text("[enter] save   [esc] cancel"), id="dialog-hint")
 
     def on_mount(self) -> None:
         field = self.query_one("#rename-input", Input)
@@ -180,30 +358,48 @@ class RenamePrompt(ModalScreen[str]):
         self.dismiss(None)
 
 
-class ToolApproval(ModalScreen[str]):
-    """Ask-mode approval for one tool call: allow / always / deny."""
+class ToolApproval(DialogScreen[str]):
+    """Ask-mode approval for one tool call: allow / always / deny.
+
+    Enter deliberately does nothing: approving a mutating tool is an explicit
+    act (``y``/``a`` or a click), so a stray Enter cannot grant permission.
+    """
 
     BINDINGS = [  # noqa: RUF012 - Textual class API
         ("y", "allow", "Allow"),
         ("a", "always", "Always"),
         ("n,escape", "deny", "Deny"),
-        ("enter", "allow", "Allow"),
     ]
 
-    def __init__(self, tool_name: str, arguments: dict) -> None:
+    def __init__(
+        self,
+        tool_name: str,
+        arguments: dict,
+        *,
+        timeout: float | None = None,
+    ) -> None:
         super().__init__()
         self.tool_name = tool_name
         self.arguments = arguments
+        self.timeout = timeout
 
     def compose(self) -> ComposeResult:
-        preview = ", ".join(f"{key}={value!r}" for key, value in self.arguments.items())
-        if len(preview) > 200:
-            preview = preview[:199] + "…"
-        with Vertical(classes="modal"):
-            yield Label(f"allow {self.tool_name}?")
-            if preview:
-                yield Label(preview)
-            yield Label("[y] allow   [a] allow for this session   [n] deny")
+        with Vertical(id="dialog"):
+            yield Static(Text(f"allow {self.tool_name}?"), id="dialog-title")
+            body = _approval_body(self.tool_name, self.arguments)
+            if body:
+                with Vertical(id="dialog-body"):
+                    for line, css_class in body:
+                        yield Static(Text(line), classes=css_class)
+            with Vertical(id="dialog-choices"):
+                yield DialogChoice(_choice("y", "allow"), "allow", primary=True)
+                yield DialogChoice(_choice("a", "allow for this session"), "always")
+                yield DialogChoice(_choice("n", "deny"), "deny")
+            if self.timeout:
+                yield Static(
+                    Text(f"no answer in {self.timeout:g}s = deny"),
+                    id="dialog-hint",
+                )
 
     def action_allow(self) -> None:
         self.dismiss("allow")

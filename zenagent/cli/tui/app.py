@@ -113,7 +113,9 @@ class ZenAgentApp(App):
         """
         from zenagent.cli.tui.screens.modals import ToolApproval
 
-        screen = ToolApproval(tool_name, arguments)
+        screen = ToolApproval(
+            tool_name, arguments, timeout=self.approval_timeout_s
+        )
         future: asyncio.Future[str] = asyncio.get_running_loop().create_future()
 
         def done(choice: str | None) -> None:
