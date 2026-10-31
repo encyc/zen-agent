@@ -1,6 +1,6 @@
 [project]
 name = "zenagent-py"
-version = "0.4.0"
+version = "0.4.1"
 description = "A minimal, Pythonic coding agent: streaming LLM client, async-generator agent loop, and terminal harness."
 readme = "README.md"
 keywords = ["agent", "llm", "ai", "cli", "async", "coding-agent"]

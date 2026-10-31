@@ -3,6 +3,48 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## v0.4.1 — 2026-10-31
+
+**Autonomy slice: delegate, ask, keep the big artifacts.** Pulls three v0.5-plan
+items forward (see `docs/research/omp-cli-study/12-v0.5-plan.md`).
+
+### Added
+
+- **`task` (read-only subagent)**: delegates a self-contained research job to a
+  child `Agent` (same model/stream, read-only tools, own context guard, no
+  session, depth 1); the parent gets a `<task-result status cost tokens>` envelope
+  instead of the child transcript. The child follows live model/key/thinking
+  (so `/model` affects subagents), shares the session artifact sink, and its
+  spend counts toward the parent's `--max-cost` guard.
+- **`ask` (structured questions)**: read-tier tool asking the user 1–5 questions
+  with 2–6 options. The TUI shows framed dialogs (number keys/clicks, multi-select,
+  Esc cancels), the REPL prompts in the terminal (input is serialized with
+  steering), and headless/RPC runs degrade to a non-error "continue conservatively"
+  note. Answers are validated against the offered options.
+- **Artifact spill**: results over the kernel budget are written to
+  `<session>/artifacts/<session stem>/` (atomic, 64 files / 8 MiB per session,
+  0600), the truncation notice points at the path, `details.artifact` lets the UI
+  surface it, and `read_file` can read it back. Spilling failures degrade to the
+  old plain truncation.
+- **Subagent accounting**: `RunStatus.subagent_cost/tokens` and
+  `RunMetrics.subagent_cost/tokens` (per-run metrics keep subagent spend apart
+  from the parent's own usage).
+
+### Changed
+
+- `task`/`ask` are read-tier: plan mode allows read-only delegation and user
+  questions; the plan-mode prompt lists both.
+- The `Runtime.session` setter now retargets both the artifact sink and the todo
+  sidecar, covering retry/compaction paths that assign sessions directly.
+
+### Fixed
+
+- Subagents kept the bootstrap model after a `/model` switch.
+- `--max-cost` did not bound subagent spend.
+- The REPL ask handler could race the steering reader for stdin lines.
+- Child output could spoof the enclosing `</task-result>` tag; answer labels are
+  now validated; `ask` is abort-aware.
+
 ## v0.4.0 — 2026-10-31
 
 **Tool kernel hardening, orchestration and background jobs.** This release is
