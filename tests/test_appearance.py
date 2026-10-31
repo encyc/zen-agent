@@ -2,7 +2,7 @@
 
 import pytest
 
-from zenagent.cli.appearance import (
+from zenagent.app.appearance import (
     APPEARANCES,
     THEME_CHOICES,
     detect_dark,

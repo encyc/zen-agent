@@ -1,6 +1,6 @@
 """Semantic colour tokens for the TUI, bound to the active appearance.
 
-The values live in :mod:`zenagent.cli.appearance` (the single colour source);
+The values live in :mod:`zenagent.app.appearance` (the single colour source);
 this module is the ergonomic accessor the widgets use. ``bind()`` swaps the
 active appearance and every later read sees the new colours — which is why
 widgets must read ``palette.TEXT`` at render time instead of snapshotting it
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Mapping
 
-from zenagent.cli.appearance import APPEARANCES, Appearance
+from zenagent.app.appearance import APPEARANCES, Appearance
 
 __all__ = [
     "CONTEXT_COLORS",

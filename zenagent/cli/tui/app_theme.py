@@ -1,7 +1,7 @@
 """Textual themes built from the appearance tokens.
 
 Textual needs one ``Theme`` object per appearance; the colours themselves stay
-in :mod:`zenagent.cli.appearance`. Both themes are registered on the app before
+in :mod:`zenagent.app.appearance`. Both themes are registered on the app before
 its first paint, then ``App.theme`` selects the active one — Textual recomputes
 every CSS variable from the theme, so the stylesheet follows for free.
 """
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from textual.theme import Theme
 
-from zenagent.cli.appearance import Appearance
+from zenagent.app.appearance import Appearance
 
 __all__ = [
     "DARK_THEME_NAME",

@@ -5,7 +5,7 @@ the same tokens live once here — but values come from the active appearance an
 must be read at render time, never snapshotted at import.
 """
 
-from zenagent.cli.appearance import APPEARANCES
+from zenagent.app.appearance import APPEARANCES
 from zenagent.cli.tui import palette
 
 SECTIONS = ["Session", "Model", "Runtime", "Context", "Todo", "Subagent", "Jobs"]

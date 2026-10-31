@@ -21,6 +21,7 @@ from textual.containers import Horizontal, Vertical
 from textual.events import MouseScrollDown, MouseScrollUp
 
 from zenagent import update_check
+from zenagent.app.appearance import APPEARANCES, resolve_theme
 from zenagent.app.chat import ChatController
 from zenagent.app.commands import AppServices, build_default_commands
 from zenagent.app.models import ModelManager
@@ -28,7 +29,6 @@ from zenagent.app.runtime import Runtime
 from zenagent.app.sessions import SessionManager
 from zenagent.app.skill_commands import build_skill_submission, slash_token_at
 from zenagent.app.views import RunStatus
-from zenagent.cli.appearance import APPEARANCES, resolve_theme
 from zenagent.cli.tui import palette
 from zenagent.cli.tui.app_theme import textual_theme, theme_name
 from zenagent.cli.tui.history import PromptHistory

@@ -38,7 +38,7 @@ def test_rich_styles_do_not_use_css_variables():
 
 
 async def test_theme_variables_resolve_to_tokens(fake_runtime):
-    from zenagent.cli.appearance import APPEARANCES
+    from zenagent.app.appearance import APPEARANCES
     from zenagent.cli.tui.app import ZenAgentApp
 
     app = ZenAgentApp(fake_runtime, theme="light")
@@ -63,7 +63,7 @@ async def test_stylesheet_renders_in_both_appearances(fake_runtime):
                 assert app.theme == name
                 assert app.screen.styles.background is not None
         finally:
-            from zenagent.cli.appearance import APPEARANCES
+            from zenagent.app.appearance import APPEARANCES
             from zenagent.cli.tui import palette
 
             palette.bind(APPEARANCES["dark"])

@@ -1,6 +1,6 @@
 """TUI appearance wiring: two Textual themes, palette bound at startup."""
 
-from zenagent.cli.appearance import APPEARANCES
+from zenagent.app.appearance import APPEARANCES
 from zenagent.cli.tui import palette
 
 
