@@ -37,7 +37,16 @@ __all__ = [
 #: only read remote state, so they belong here even though they are not
 #: filesystem tools.
 READ_ONLY_TOOLS = frozenset(
-    {"read_file", "list_dir", "glob", "grep", "web_search", "fetch", "read_skill"}
+    {
+        "read_file",
+        "list_dir",
+        "glob",
+        "grep",
+        "web_search",
+        "fetch",
+        "read_skill",
+        "wait",
+    }
 )
 
 #: Cap for argument text echoed in a prompt.

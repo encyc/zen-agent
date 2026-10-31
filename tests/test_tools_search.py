@@ -248,3 +248,53 @@ async def test_grep_ripgrep_and_python_page_identically(tmp_path, monkeypatch):
     assert hit_files(from_rg.content[0].text) == hit_files(
         from_python.content[0].text
     )
+
+
+# ---------------------------------------------------------------------------
+# P2-B: glob limit + hidden-file opt-in
+# ---------------------------------------------------------------------------
+
+
+async def test_glob_limit_is_clamped_and_reported(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    for index in range(5):
+        (tmp_path / f"file{index}.txt").write_text("x")
+
+    result = await call(GLOB, pattern="**/*.txt", limit=2)
+    assert not result.is_error
+    assert result.details["matches"] == 5
+    assert result.details["shown"] == 2
+    assert "more matches not shown" in result.content[0].text
+
+
+async def test_glob_hides_dotfiles_unless_opted_in(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "visible.txt").write_text("x")
+    (tmp_path / ".hidden.txt").write_text("x")
+    (tmp_path / ".git").mkdir()
+    (tmp_path / ".git" / "config").write_text("x")
+
+    default = await call(GLOB, pattern="**/*")
+    text = default.content[0].text
+    assert "visible.txt" in text
+    assert ".hidden.txt" not in text
+    assert ".git" not in text
+
+    opted_in = await call(GLOB, pattern="**/*", include_hidden=True)
+    text = opted_in.content[0].text
+    assert "visible.txt" in text and ".hidden.txt" in text
+    assert ".git" not in text, ".git is always skipped"
+
+
+async def test_glob_patterns_that_name_dot_paths_are_not_hidden(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    workflows = tmp_path / ".github" / "workflows"
+    workflows.mkdir(parents=True)
+    (workflows / "ci.yml").write_text("on: push\n")
+    (tmp_path / ".env.local").write_text("SECRET=1\n")
+
+    explicit_dir = await call(GLOB, pattern=".github/**/*.yml")
+    assert ".github/workflows/ci.yml" in explicit_dir.content[0].text
+
+    explicit_file = await call(GLOB, pattern="**/.env*")
+    assert ".env.local" in explicit_file.content[0].text

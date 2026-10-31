@@ -249,8 +249,9 @@ page), `write_file` (refuses writing back a truncated read page),
 `edit_file` (exactly-one-match replacement), `list_dir`, `bash` (merged output,
 30 KB head+tail truncation, process-group kill on timeout/abort, non-interactive
 environment, optional `cwd`), `glob`, `grep` (ripgrep when available, Python
-fallback), `web_search` (provider chain), `fetch` (URL → readable text) and `todo`
-(session-scoped checklist with a TUI HUD).
+fallback), `web_search` (provider chain), `fetch` (URL → readable text), `wait`
+(background-job results) and `todo` (session-scoped checklist with a TUI HUD).
+`bash` supports `async` background jobs; job results are collected with `wait`.
 
 ## Tests
 

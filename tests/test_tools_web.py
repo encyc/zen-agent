@@ -290,3 +290,94 @@ async def test_fetch_defaults_to_the_network_timeout(monkeypatch):
     assert not result.is_error
     assert "timeout" not in seen
     assert result.details["timeout_s"] is None
+
+
+# ---------------------------------------------------------------------------
+# P2-B: fetch readability heuristic (article/main first, noise removed)
+# ---------------------------------------------------------------------------
+
+
+def _html_response(url: str, body: str):
+    return httpx.Response(
+        200,
+        text=body,
+        headers={"content-type": "text/html"},
+        request=httpx.Request("GET", url),
+    )
+
+
+async def test_fetch_prefers_the_article_and_drops_page_chrome(monkeypatch):
+    body = (
+        "<html><body>"
+        "<nav>NAVIGATION HOME LOGIN</nav>"
+        "<article><h1>Title</h1><p>Useful body text.</p><p>Second para.</p></article>"
+        "<footer>FOOTER COPYRIGHT</footer>"
+        "</body></html>"
+    )
+
+    async def fake_get(url, **kwargs):
+        return _html_response(url, body)
+
+    monkeypatch.setattr(net, "get", fake_get)
+    result = await call(FETCH, url="https://example.com/post")
+    text = result.content[0].text
+
+    assert "Useful body text." in text and "Second para." in text
+    assert "NAVIGATION" not in text and "FOOTER COPYRIGHT" not in text
+    assert result.details["method"] == "article"
+    assert "\n" in text, "block elements become lines, not one giant line"
+
+
+async def test_fetch_uses_main_when_there_is_no_article(monkeypatch):
+    body = "<html><body><nav>menu</nav><main><p>Main content.</p></main></body></html>"
+
+    async def fake_get(url, **kwargs):
+        return _html_response(url, body)
+
+    monkeypatch.setattr(net, "get", fake_get)
+    result = await call(FETCH, url="https://example.com/main")
+    assert "Main content." in result.content[0].text
+    assert "menu" not in result.content[0].text
+    assert result.details["method"] == "main"
+
+
+async def test_fetch_falls_back_to_the_whole_body(monkeypatch):
+    body = "<html><body><p>Just the body.</p></body></html>"
+
+    async def fake_get(url, **kwargs):
+        return _html_response(url, body)
+
+    monkeypatch.setattr(net, "get", fake_get)
+    result = await call(FETCH, url="https://example.com/plain")
+    assert "Just the body." in result.content[0].text
+    assert result.details["method"] == "body"
+
+
+async def test_fetch_falls_back_when_the_article_is_empty(monkeypatch):
+    body = "<html><body><article></article><main><p>Main content.</p></main></body></html>"
+
+    async def fake_get(url, **kwargs):
+        return _html_response(url, body)
+
+    monkeypatch.setattr(net, "get", fake_get)
+    result = await call(FETCH, url="https://example.com/empty-article")
+    assert "Main content." in result.content[0].text
+    assert result.details["method"] == "main"
+
+
+async def test_fetch_prefers_the_real_content_over_a_teaser_card(monkeypatch):
+    body = (
+        "<html><body>"
+        "<article>Read more</article>"
+        "<main><p>This is the real body of the page, with enough text to win.</p></main>"
+        "</body></html>"
+    )
+
+    async def fake_get(url, **kwargs):
+        return _html_response(url, body)
+
+    monkeypatch.setattr(net, "get", fake_get)
+    result = await call(FETCH, url="https://example.com/teaser")
+    text = result.content[0].text
+    assert "real body of the page" in text
+    assert "Read more" not in text

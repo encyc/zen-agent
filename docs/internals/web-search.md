@@ -97,7 +97,9 @@ UI 上的单行效果由工具卡自己保证（卡片按行缩进渲染，超�
 搜索只给摘要，读全文要 `fetch`：
 
 - 只允许 `http(s)`；
-- HTML 走 `strip_html`（剥 `<script>/<style>/<noscript>` 再剥标签）；
+- HTML 走 `readable_text()`：优先 `<article>`/`<main>`（按抽取文本长度打分，空占位/teaser 不会赢），
+  去 `<script>/<style>/<nav>/<aside>/<footer>` 等页面 chrome，块级标签转行后折叠空白；
+  `details.method` 报告 `article`/`main`/`body`/`text`；
 - 上限 12k 字符，截断时在文末标 `… (truncated)`，`details.truncated=true`；
 - 返回头一行带状态码与字节数，方便判断是不是被反爬挡了。
 

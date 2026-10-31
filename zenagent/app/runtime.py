@@ -111,6 +111,8 @@ class Runtime:
         self.gate: PermissionGate | None = None
         #: The per-session todo tool; ``switch_session`` re-points its sidecar.
         self.todo_tool: TodoTool | None = None
+        #: Whether bootstrap acquired a background-job-manager reference.
+        self._jobs_acquired = False
         self._mode: str = DEFAULT_MODE
         self._base_prompt: str = ""
         self._base_tools: list = []
@@ -218,6 +220,13 @@ class Runtime:
         # per-session state bound to the sidecar next to the JSONL.
         runtime.session = runtime._open_session(options.resume)
         runtime.todo_tool = build_todo_tool(runtime.session.path)
+        # Refcount the process-wide background-job manager: closing one Runtime
+        # must not kill another live Runtime's jobs (last close wins). The todo
+        # tool is added by _recompose, which now owns the tool list.
+        from zenagent.tools.jobs import acquire_job_manager
+
+        runtime._jobs_acquired = True
+        acquire_job_manager()
         if options.mcp:
             runtime.mcp = await runtime._start_mcp(options)
 
@@ -514,6 +523,13 @@ class Runtime:
         if self.mcp is not None:
             manager, self.mcp = self.mcp, None
             await manager.close()
+        # Background bash jobs belong to this app/session: do not leave orphan
+        # process groups behind when the last runtime shuts down.
+        if self._jobs_acquired:
+            self._jobs_acquired = False
+            from zenagent.tools.jobs import release_job_manager
+
+            await release_job_manager()
 
     async def refresh_mcp(self) -> None:
         """Reconnect failed MCP servers and swap refreshed tools into the agent.

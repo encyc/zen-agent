@@ -50,7 +50,7 @@ turn_end
 | 本批工具结果全部 `terminate=True` | `stop` | 工具主动要求结束 |
 | 流没有 terminal 事件 | `no_stream` | 防御性分支 |
 
-`agent_end.new_messages` 是本 run 追加的所有消息（便于持久化/回放）。
+`agent_end.new_messages` 是本 run 追加的所有消息（便于持久化/回放）；`agent_end.tool_stats` 是按工具名聚合的 `{calls, errors, ms}`（仅本 run，无工具调用时为 None），供 telemetry/evals 使用。
 
 ## 工具轮的关键细节
 

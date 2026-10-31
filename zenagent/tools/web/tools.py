@@ -34,8 +34,26 @@ MAX_FETCH_TIMEOUT_S = 45.0
 RECENCY_VALUES = ("day", "week", "month", "year")
 
 _TAG = re.compile(r"<[^>]+>")
-_SCRIPT_STYLE = re.compile(r"<(script|style|noscript)[^>]*>.*?</\1>", re.DOTALL)
-_WS = re.compile(r"[ \t\r\f\v]+")
+
+#: Elements that are never readable content.
+_DROP_ELEMENTS = re.compile(
+    r"<(script|style|noscript|template|svg|iframe)[^>]*>.*?</\1>",
+    re.DOTALL | re.IGNORECASE,
+)
+#: Preferred content containers, in priority order.
+_CONTENT_BLOCKS = (
+    (re.compile(r"<article[^>]*>(.*?)</article>", re.DOTALL | re.IGNORECASE), "article"),
+    (re.compile(r"<main[^>]*>(.*?)</main>", re.DOTALL | re.IGNORECASE), "main"),
+)
+#: Page chrome removed even inside the chosen content container.
+_CHROME = re.compile(
+    r"<(nav|aside|footer|header)[^>]*>.*?</\1>", re.DOTALL | re.IGNORECASE
+)
+#: Block-level boundaries become line breaks so the text stays paragraph-shaped.
+_BLOCK_BOUNDARY = re.compile(
+    r"</?(?:p|div|section|article|main|li|ul|ol|tr|table|h[1-6]|br|pre|blockquote)\b[^>]*>",
+    re.IGNORECASE,
+)
 
 
 def _text(body: str, *, is_error: bool = False, **details) -> ToolResultAgent:
@@ -88,8 +106,38 @@ async def _web_search(tool_call_id: str, args: dict, abort, on_update=None) -> T
     )
 
 
-def strip_html(body: str) -> str:
-    return _WS.sub(" ", html.unescape(_TAG.sub(" ", _SCRIPT_STYLE.sub(" ", body)))).strip()
+def _clean_fragment(fragment: str) -> str:
+    """Strip chrome/tags from one content fragment, paragraph-shaped."""
+    text = _CHROME.sub(" ", fragment)
+    text = _BLOCK_BOUNDARY.sub("\n", text)
+    text = html.unescape(_TAG.sub(" ", text))
+    lines = [" ".join(line.split()) for line in text.splitlines()]
+    return "\n".join(line for line in lines if line)
+
+
+def readable_text(body: str) -> tuple[str, str]:
+    """Extract readable text from an HTML page; returns ``(text, method)``.
+
+    Every ``<article>``/``<main>`` block is scored by extracted length, because
+    real pages often render empty placeholders or small teaser cards before the
+    actual content; the longest candidate wins (on a tie ``main`` beats a
+    teaser ``article``), and an empty page falls back to the whole body.
+    ``method`` is reported in the result details (``article``/``main``/``body``).
+    """
+    cleaned = _DROP_ELEMENTS.sub(" ", body)
+    candidates: list[tuple[int, int, str, str]] = []
+    for pattern, name in _CONTENT_BLOCKS:
+        for match in pattern.finditer(cleaned):
+            text = _clean_fragment(match.group(1))
+            # Tie-break: prefer <main> (usually the real container) over a
+            # teaser <article> of the same size.
+            tie_break = 1 if name == "main" else 0
+            candidates.append((len(text), tie_break, name, text))
+    if candidates:
+        length, _tie_break, name, text = max(candidates, key=lambda item: (item[0], item[1]))
+        if length > 0:
+            return text, name
+    return _clean_fragment(cleaned), "body"
 
 
 def _clamp_fetch_timeout(raw) -> float | None:
@@ -117,7 +165,10 @@ async def _fetch(tool_call_id: str, args: dict, abort, on_update=None) -> ToolRe
 
     content_type = response.headers.get("content-type", "")
     body = response.text
-    text = strip_html(body) if "html" in content_type or body.lstrip().startswith("<") else body
+    if "html" in content_type or body.lstrip().startswith("<"):
+        text, method = readable_text(body)
+    else:
+        text, method = body, "text"
     truncated = len(text) > MAX_FETCH_CHARS
     if truncated:
         text = text[:MAX_FETCH_CHARS] + "\n… (truncated)"
@@ -127,6 +178,7 @@ async def _fetch(tool_call_id: str, args: dict, abort, on_update=None) -> ToolRe
         url=url,
         truncated=truncated,
         timeout_s=timeout_s,
+        method=method,
     )
 
 

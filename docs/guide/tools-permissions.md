@@ -8,11 +8,12 @@
 | `write_file` | 覆盖写文件；拒绝用"截断的 read 页"回写（防数据丢失） | 需确认 |
 | `edit_file` | 唯一匹配替换（old→new） | 需确认 |
 | `list_dir` | 列目录（标记目录/文件） | 只读 |
-| `bash` | 执行命令（非交互环境，支持 `cwd`），禁止危险模式 | 需确认 |
-| `glob` | 按模式找文件 | 只读 |
+| `bash` | 执行命令（非交互环境、`cwd`、`async` 后台作业），禁止危险模式 | 需确认 |
+| `wait` | 等待 `bash async` 启动的后台作业并取回结果（只读、串行） | 只读 |
+| `glob` | 按模式找文件；`limit`（默认 500）、`include_hidden`（.git 永远跳过） | 只读 |
 | `grep` | 正则搜内容（忽略二进制/大文件）；按文件分页：每页 20 个文件 × 每文件 20 条，`skip` 续页 | 只读 |
 | `web_search` | 联网搜索，返回标题/URL/摘要（DeepSeek → Tavily → Brave → Bing → DuckDuckGo） | 只读，免确认 |
-| `fetch` | 抓取 URL 并转成可读文本（剥 HTML，12k 字符上限；可选 `timeout_s` 1–45s） | 只读，免确认 |
+| `fetch` | 抓取 URL 并转成可读文本（优先 article/main、去页面 chrome，12k 字符上限；可选 `timeout_s` 1–45s；`details.method` 报告抽取方式） | 只读，免确认 |
 | `read_skill` | 读本地 SKILL.md 正文 | 只读 |
 | `todo` | 会话级任务清单（phases / 按内容寻址 / 9 个 op）；状态写 `<session>.todo.json`，不碰工作区（plan/`--read-only` 下也会写这个会话 sidecar） | 只读 |
 

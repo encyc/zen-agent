@@ -33,8 +33,9 @@ __all__ = [
     "MAX_GREP_RESULTS",
 ]
 
-#: Cap on paths returned by ``glob``.
+#: Default/maximum paths returned by ``glob``.
 MAX_GLOB_RESULTS = 500
+MAX_GLOB_LIMIT = 2_000
 #: Internal cap on hits collected by one ``grep`` call. This bounds the scan
 #: (memory and time); it is *not* the flat output cap anymore — results are
 #: paged by file. A capped scan says so and asks for a narrower pattern.
@@ -92,21 +93,43 @@ async def _glob(tool_call_id: str, args: dict, abort, on_update=None) -> ToolRes
     if not root.is_dir():
         return _text(f"not a directory: {root}", is_error=True)
     try:
-        matches = sorted(
-            str(path.relative_to(root) if path != root else path)
-            for path in root.rglob(pattern)
-            if path.is_file()
-        )
+        limit = MAX_GLOB_RESULTS if args.get("limit") is None else int(args["limit"])
+    except (TypeError, ValueError):
+        return _text("limit must be an integer", is_error=True)
+    if limit <= 0:
+        return _text(f"limit must be >= 1 (got {limit})", is_error=True)
+    limit = min(limit, MAX_GLOB_LIMIT)
+    # A pattern that names a dot segment (".github/**", "**/.env*") asks for
+    # hidden paths explicitly; filtering them would report "no matches" for a
+    # file the model already named.
+    pattern_names_hidden = any(
+        part.startswith(".") for part in Path(pattern).parts
+    )
+    include_hidden = bool(args.get("include_hidden", False)) or pattern_names_hidden
+
+    try:
+        found: list[str] = []
+        for path in root.rglob(pattern):
+            if not path.is_file():
+                continue
+            rel = path.relative_to(root) if path != root else path
+            parts = rel.parts
+            if ".git" in parts:  # never useful, potentially enormous
+                continue
+            if not include_hidden and any(part.startswith(".") for part in parts):
+                continue
+            found.append(str(rel) if path != root else str(path))
+        matches = sorted(found)
     except (ValueError, NotImplementedError, OSError) as exc:
         return _text(f"invalid glob pattern {pattern!r}: {exc}", is_error=True)
 
     total = len(matches)
-    shown = matches[:MAX_GLOB_RESULTS]
+    shown = matches[:limit]
     lines = list(shown)
     if total > len(shown):
         lines.append(f"... {total - len(shown)} more matches not shown")
     body = "\n".join(lines) if lines else f"no files match {pattern!r} under {root}"
-    return _text(body, matches=total)
+    return _text(body, matches=total, shown=len(shown), limit=limit)
 
 
 def _python_grep(pattern: re.Pattern, root: Path, file_glob: str) -> _GrepHits:
@@ -287,14 +310,26 @@ async def _grep(tool_call_id: str, args: dict, abort, on_update=None) -> ToolRes
 GLOB = AgentTool(
     name="glob",
     description=(
-        "Find files by glob pattern (e.g. '**/*.py') under a directory. "
-        f"Returns at most {MAX_GLOB_RESULTS} paths."
+        "Find files by glob pattern (e.g. '**/*.py') under a directory. Hidden "
+        f"files are skipped unless include_hidden; returns at most limit paths "
+        f"(default {MAX_GLOB_RESULTS})."
     ),
     parameters={
         "type": "object",
         "properties": {
             "pattern": {"type": "string", "description": "Glob pattern, e.g. **/*.py"},
             "path": {"type": "string", "description": "Directory to search (default .)."},
+            "limit": {
+                "type": "integer",
+                "description": (
+                    f"Maximum paths to return (default {MAX_GLOB_RESULTS}, "
+                    f"cap {MAX_GLOB_LIMIT})."
+                ),
+            },
+            "include_hidden": {
+                "type": "boolean",
+                "description": "Include dotfiles/dot-directories (.git is always skipped).",
+            },
         },
         "required": ["pattern"],
     },

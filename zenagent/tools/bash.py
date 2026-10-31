@@ -11,77 +11,51 @@ Behaviour decisions (all from the plan):
   included) and returns whatever output had arrived.
 * while the command runs, partial output is pushed through ``on_update``
   (throttled by size and time) so the UI can show progress.
+* ``async: true`` starts the command as a background job (:mod:`zenagent.tools.
+  jobs`) and returns immediately with its id; the wait tool collects the
+  result. Background jobs use the same shell, environment, cwd and output cap.
+
+The shell itself is resolved by :mod:`zenagent.tools.shell`, so foreground and
+background commands spawn through exactly the same ``(executable, argv)`` path.
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
-import os
-import signal
 import time
 from pathlib import Path
 
 from zenagent.agent.loop import AgentTool, ToolResultAgent
 from zenagent.events import AbortToken
+from zenagent.tools.jobs import (
+    DEFAULT_JOB_TIMEOUT_S,
+    MAX_JOB_TIMEOUT_S,
+    MIN_JOB_TIMEOUT_S,
+    JobStartError,
+    get_job_manager,
+)
+from zenagent.tools.shell import (
+    DRAIN_TIMEOUT_S,
+    MAX_OUTPUT_BYTES,
+    NON_INTERACTIVE_ENV,
+    READ_CHUNK,
+    OutputBuffer,
+    ShellError,
+    command_env,
+    decode_output,
+    kill_process_group,
+    resolve_cwd,
+    spawn_shell_process,
+)
 from zenagent.types import TextContent
 
 __all__ = ["BASH", "MAX_OUTPUT_BYTES", "NON_INTERACTIVE_ENV"]
 
-#: Total output kept before head/tail truncation kicks in.
-MAX_OUTPUT_BYTES = 30_000
-#: Split of the kept bytes between the head and the tail.
-_HEAD_BYTES = MAX_OUTPUT_BYTES // 2
-_TAIL_BYTES = MAX_OUTPUT_BYTES - _HEAD_BYTES
-#: Read size from the pipe.
-_READ_CHUNK = 8192
 #: Minimum accumulated bytes between two progress updates.
 _UPDATE_BYTES = 4096
 #: Minimum seconds between two progress updates.
 _UPDATE_INTERVAL_S = 0.5
-#: Grace period for the read loop to drain after a kill.
-_DRAIN_TIMEOUT_S = 5.0
-
-#: Environment defaults that keep commands from waiting on a human/TTY.
-#: The caller's real environment always wins (``setdefault``): these are only
-#: filled in when the process does not already define them.
-NON_INTERACTIVE_ENV: dict[str, str] = {
-    "PAGER": "cat",
-    "GIT_PAGER": "cat",
-    "MANPAGER": "cat",
-    "SYSTEMD_PAGER": "cat",
-    "TERM": "dumb",
-    "CI": "true",
-    "GIT_TERMINAL_PROMPT": "0",
-    "GIT_ASKPASS": "echo",
-    "GCM_INTERACTIVE": "never",
-    "PIP_NO_INPUT": "1",
-    "DEBIAN_FRONTEND": "noninteractive",
-    "npm_config_yes": "true",
-}
-
-
-def _command_env() -> dict[str, str]:
-    """Process environment with non-interactive defaults for unset keys."""
-    env = dict(os.environ)
-    for key, value in NON_INTERACTIVE_ENV.items():
-        env.setdefault(key, value)
-    return env
-
-
-def _resolve_cwd(raw: object) -> Path | str:
-    """Resolve the optional ``cwd`` argument; returns an error string if bad."""
-    if raw is None or raw == "":
-        return Path(os.getcwd())
-    try:
-        path = Path(str(raw)).expanduser()
-    except (TypeError, ValueError):
-        return f"invalid cwd: {raw!r}"
-    if not path.is_absolute():
-        path = Path(os.getcwd()) / path
-    if not path.is_dir():
-        return f"cwd does not exist or is not a directory: {path}"
-    return path
 
 
 def _text(text: str, *, is_error: bool = False, **details) -> ToolResultAgent:
@@ -90,83 +64,60 @@ def _text(text: str, *, is_error: bool = False, **details) -> ToolResultAgent:
     )
 
 
-def _decode(data: bytes) -> str:
-    """Decode process output leniently: agents must not crash on odd bytes."""
-    return data.decode("utf-8", errors="replace")
-
-
-class _OutputBuffer:
-    """Bounded head+tail buffer for process output."""
-
-    def __init__(self) -> None:
-        self.head = bytearray()
-        self.tail = bytearray()
-        self.total = 0
-
-    def add(self, chunk: bytes) -> None:
-        self.total += len(chunk)
-        if len(self.head) < _HEAD_BYTES:
-            take = min(len(chunk), _HEAD_BYTES - len(self.head))
-            self.head.extend(chunk[:take])
-            chunk = chunk[take:]
-        if chunk:
-            self.tail.extend(chunk)
-            if len(self.tail) > _TAIL_BYTES:
-                del self.tail[: len(self.tail) - _TAIL_BYTES]
-
-    @property
-    def truncated(self) -> bool:
-        return self.total > MAX_OUTPUT_BYTES
-
-    def text(self) -> str:
-        if not self.truncated:
-            return _decode(bytes(self.head) + bytes(self.tail))
-        dropped = self.total - len(self.head) - len(self.tail)
-        return (
-            _decode(bytes(self.head))
-            + f"\n... [truncated {dropped} bytes of output] ...\n"
-            + _decode(bytes(self.tail))
-        )
-
-
-async def _kill_process_group(proc: asyncio.subprocess.Process) -> None:
-    """Kill the command *and its children* (start_new_session gave us a pgid)."""
-    if proc.returncode is not None:
-        return
+async def _background(
+    command: str, args: dict, cwd: Path
+) -> ToolResultAgent:
+    """Start ``command`` as a background job and report its id immediately."""
+    raw_timeout = args.get("timeout_s")
     try:
-        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-    except (ProcessLookupError, PermissionError):  # already gone / not group leader
-        with contextlib.suppress(ProcessLookupError):
-            proc.kill()
-    with contextlib.suppress(asyncio.TimeoutError, ProcessLookupError):
-        await asyncio.wait_for(proc.wait(), timeout=5.0)
+        timeout_s = (
+            DEFAULT_JOB_TIMEOUT_S if raw_timeout is None else float(raw_timeout)
+        )
+    except (TypeError, ValueError):
+        return _text(
+            f"timeout_s must be a number (got {raw_timeout!r})", is_error=True
+        )
+    timeout_s = min(max(timeout_s, MIN_JOB_TIMEOUT_S), MAX_JOB_TIMEOUT_S)
+    try:
+        job = await get_job_manager().start(
+            command, cwd=cwd, timeout_s=timeout_s
+        )
+    except (ShellError, JobStartError) as exc:
+        return _text(str(exc), is_error=True)
+    return _text(
+        f"started background job {job.id} (running): {command}",
+        job_id=job.id,
+        status="running",
+        **{"async": True},
+    )
 
 
 async def _bash(
     tool_call_id: str, args: dict, abort: AbortToken | None, on_update=None
 ) -> ToolResultAgent:
     command = args["command"]
-    timeout_s = float(args.get("timeout_s") or 120.0)
-    cwd = _resolve_cwd(args.get("cwd"))
+    is_async = args.get("async", False)
+    if is_async is None:
+        is_async = False
+    if not isinstance(is_async, bool):
+        return _text("async must be a boolean", is_error=True)
+    cwd = resolve_cwd(args.get("cwd"))
     if isinstance(cwd, str):
         return _text(cwd, is_error=True)
+    if is_async:
+        return await _background(command, args, cwd)
+    timeout_s = float(args.get("timeout_s") or 120.0)
     started = time.monotonic()
 
     try:
-        proc = await asyncio.create_subprocess_shell(
-            command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-            stdin=asyncio.subprocess.DEVNULL,
-            cwd=str(cwd),
-            env=_command_env(),
-            start_new_session=True,  # own process group, so we can kill children
-        )
+        proc = await spawn_shell_process(command, cwd=cwd, env=command_env())
+    except ShellError as exc:
+        return _text(str(exc), is_error=True)
     except OSError as exc:
         return _text(f"cannot start command: {exc}", is_error=True)
 
     assert proc.stdout is not None
-    buffer = _OutputBuffer()
+    buffer = OutputBuffer()
     last_update_at = 0.0
     last_update_bytes = 0
 
@@ -181,14 +132,18 @@ async def _bash(
         last_update_at, last_update_bytes = now, buffer.total
         on_update(
             ToolResultAgent(
-                content=[TextContent(text=_decode(bytes(buffer.head) + bytes(buffer.tail)))],
+                content=[
+                    TextContent(
+                        text=decode_output(bytes(buffer.head) + bytes(buffer.tail))
+                    )
+                ],
                 details={"streaming": True, "bytes": buffer.total},
             )
         )
 
     async def pump() -> None:
         while True:
-            chunk = await proc.stdout.read(_READ_CHUNK)
+            chunk = await proc.stdout.read(READ_CHUNK)
             if not chunk:
                 return
             buffer.add(chunk)
@@ -205,13 +160,13 @@ async def _bash(
         )
         if not done:
             timed_out = True
-            await _kill_process_group(proc)
+            await kill_process_group(proc)
         elif abort_task is not None and abort_task in done and not read_task.done():
             aborted = True
-            await _kill_process_group(proc)
+            await kill_process_group(proc)
         # Drain whatever the process managed to write.
         with contextlib.suppress(asyncio.TimeoutError):
-            await asyncio.wait_for(read_task, timeout=_DRAIN_TIMEOUT_S)
+            await asyncio.wait_for(read_task, timeout=DRAIN_TIMEOUT_S)
     finally:
         if abort_task is not None:
             abort_task.cancel()
@@ -222,7 +177,7 @@ async def _bash(
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await read_task
         if proc.returncode is None:
-            await _kill_process_group(proc)
+            await kill_process_group(proc)
 
     emit_progress(force=True)
     duration_ms = round((time.monotonic() - started) * 1000)
@@ -256,7 +211,8 @@ BASH = AgentTool(
         "Run a shell command. stdout and stderr are merged; output is truncated "
         "to head+tail if very large. Runs non-interactively (pagers/prompts are "
         "disabled) and in an optional cwd. Report the exit code yourself when it "
-        "matters."
+        "matters. With async=true the command runs in the background and the "
+        "wait tool collects its result."
     ),
     parameters={
         "type": "object",
@@ -264,13 +220,24 @@ BASH = AgentTool(
             "command": {"type": "string", "description": "Shell command to run."},
             "timeout_s": {
                 "type": "number",
-                "description": "Kill the command after this many seconds (default 120).",
+                "description": (
+                    "Kill the command after this many seconds (default 120; "
+                    "background jobs default to 600, clamped to 1-3600)."
+                ),
             },
             "cwd": {
                 "type": "string",
                 "description": (
                     "Directory to run in (absolute, or relative to the current "
                     "working directory; default: the agent's cwd)."
+                ),
+            },
+            "async": {
+                "type": "boolean",
+                "default": False,
+                "description": (
+                    "Start the command in the background and return a job id "
+                    "immediately; use the wait tool to collect its output."
                 ),
             },
         },

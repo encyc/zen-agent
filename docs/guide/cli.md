@@ -60,6 +60,10 @@ zen -p "analyze" --read-only --trace run.jsonl --cwd /path/to/project
 | `--no-context-files` | 不读 AGENTS.md |
 | `--no-completion` | 关掉 REPL 补全 |
 | `--no-mcp` / `--mcp-server NAME` / `--mcp-file PATH` | MCP 开关与过滤 |
+
+环境变量补充：`ZENAGENT_SHELL=posix|powershell|pwsh|cmd|<绝对路径>` 选择 bash 工具的
+执行 shell（默认 POSIX `/bin/sh -c`；Windows 下默认探测 pwsh→powershell→cmd，
+旧行为是 cmd.exe，可用 `ZENAGENT_SHELL=cmd` 保持）。
 | `--no-skills` / `--no-templates` | 不加载 skills / 模板 |
 | `--extension PATH` | 加载扩展（可重复） |
 | `--theme NAME` | REPL 主题 |
