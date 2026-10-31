@@ -1,0 +1,1 @@
+Wait for a background bash job started with bash async: true and return its status, exit code and output. Without job_id it waits for any running job. On timeout it returns a still-running snapshot, so call wait again for the result.

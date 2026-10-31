@@ -1,0 +1,1 @@
+Run a shell command. stdout and stderr are merged; output is truncated to head+tail if very large. Runs non-interactively (pagers/prompts are disabled) and in an optional cwd. Report the exit code yourself when it matters. With async=true the command runs in the background and the wait tool collects its result.

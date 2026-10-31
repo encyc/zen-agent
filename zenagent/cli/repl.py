@@ -39,7 +39,6 @@ from zenagent.cli.completion import SLASH_COMMANDS, ReplCompleter, help_text
 from zenagent.cli.keybindings import build_key_bindings, load_keybindings
 from zenagent.cli.main import (
     _api_key_for,
-    _system_prompt,
     resolve_model,
     session_id_for,
 )
@@ -55,12 +54,12 @@ from zenagent.config import ContextGuard, apply_user_config, load_user_config
 from zenagent.context_files import (
     discover_context_files,
     load_context_files,
-    system_prompt_with_context,
 )
 from zenagent.events import AgentEvent
 from zenagent.extensions import load_extensions
 from zenagent.mcp.config import load_mcp_config
 from zenagent.mcp.manager import McpManager
+from zenagent.prompts import PromptContext, compose_system
 from zenagent.providers.catalog import find_model, load_catalog
 from zenagent.providers.registry import StreamFn
 from zenagent.skills import (
@@ -489,6 +488,27 @@ def _make_default_reader(
     return read
 
 
+def _compose_prompt(
+    current_tools, *, context_files: bool, extra_text: str = ""
+) -> str:
+    """Compose the REPL system prompt through the single compose contract."""
+    context_text = (
+        load_context_files(discover_context_files(Path.cwd()))
+        if context_files
+        else ""
+    )
+    context = PromptContext(
+        cwd=Path.cwd(),
+        tool_names=tuple(tool.name for tool in current_tools),
+        context_text=context_text,
+        extension_fragments=(extra_text,) if extra_text else (),
+        include_context=context_files,
+        include_skills=False,
+        include_mode=False,
+    )
+    return compose_system(context).text
+
+
 async def repl(
     model_id: str | None = None,
     resume: str | Path | None = None,
@@ -577,14 +597,9 @@ async def repl(
         print(f"zenagent: {message}", file=sys.stderr)
 
     def build_prompt(current_tools, extra_text: str = "") -> str:
-        text = _system_prompt([tool.name for tool in current_tools])
-        if context_files:
-            text = system_prompt_with_context(
-                text, load_context_files(discover_context_files(Path.cwd()))
-            )
-        if extra_text:
-            text = f"{text}\n\n{extra_text}"
-        return text
+        return _compose_prompt(
+            current_tools, context_files=context_files, extra_text=extra_text
+        )
 
     mcp_manager: McpManager | None = None
     if mcp and tools is None:

@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from zenagent.agent.loop import AgentTool, ToolResultAgent
+from zenagent.prompts import tool_description
 from zenagent.types import TextContent
 
 __all__ = [
@@ -719,19 +720,6 @@ def _noop_bind(session_path: Path | None) -> None:
     """Default ``bind_session`` for the dataclass field (never called)."""
 
 
-_DESCRIPTION = (
-    "Track progress on a multi-step task with a phased checklist. Use it when "
-    "the work has 3+ steps, call it in the same response as your plan, and keep "
-    "it current: start a task before working on it, mark it done when it is (or "
-    "drop it), and block it with a one-line reason when you cannot proceed. "
-    "Tasks are addressed by their exact content, never by generated IDs. Phases "
-    "run in order and the in-progress pointer advances automatically. One op per "
-    "call: init replaces the list; start/done/drop/block/unblock take a task "
-    "(done/drop/block/unblock also accept a phase, and default to every task); "
-    "rm removes a task or clears a phase; append adds tasks to a phase; view is "
-    "a read-only checklist. A failed call changes nothing."
-)
-
 _PARAMETERS = {
     "type": "object",
     "properties": {
@@ -786,7 +774,7 @@ def build_todo_tool(session_path: Path | None) -> TodoTool:
     state = _TodoState(session_path)
     return TodoTool(
         name="todo",
-        description=_DESCRIPTION,
+        description=tool_description("todo"),
         parameters=_PARAMETERS,
         execution_mode="sequential",
         execute=state.execute,

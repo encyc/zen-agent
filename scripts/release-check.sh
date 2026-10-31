@@ -197,6 +197,36 @@ print(f"  ok    wheel: {len(wheel_files)} files, no dev/junk/empty files")
 print(f"  ok    sdist: {len(sdist_names)} entries, pyproject.toml + README.md + the package only")
 PY
 
+# ------------------------------------------------------ 3b. prompt blocks
+step "prompt blocks"
+
+expected_blocks="$(find zenagent/prompts/blocks -name '*.md' -type f | wc -l | tr -d ' ')"
+python3 - "$WHEEL" "$expected_blocks" <<'PY' || die "prompt blocks are not packaged"
+import sys
+import zipfile
+
+wheel_path, expected = sys.argv[1], int(sys.argv[2])
+problems = []
+with zipfile.ZipFile(wheel_path) as zf:
+    names = zf.namelist()
+    blocks = [
+        name
+        for name in names
+        if name.startswith("zenagent/prompts/blocks/") and not name.endswith("/")
+    ]
+    if len(blocks) != expected:
+        problems.append(
+            f"wheel ships {len(blocks)} prompt block files, expected {expected}"
+        )
+    if "zenagent/prompts/CHANGELOG.md" not in names:
+        problems.append("wheel is missing zenagent/prompts/CHANGELOG.md")
+if problems:
+    for problem in problems:
+        print(f"  problem: {problem}", file=sys.stderr)
+    sys.exit(1)
+print(f"  ok    prompt blocks: {len(blocks)} files")
+PY
+
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 

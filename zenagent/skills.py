@@ -19,6 +19,9 @@ from pathlib import Path
 
 from zenagent.agent.loop import AgentTool, ToolResultAgent
 from zenagent.frontmatter import parse_frontmatter
+from zenagent.prompts import tool_description
+from zenagent.prompts.registry import read_block
+from zenagent.prompts.render import render
 from zenagent.types import TextContent
 
 __all__ = [
@@ -28,6 +31,7 @@ __all__ = [
     "build_skill_tool",
     "default_skill_roots",
     "discover_skills",
+    "format_skill_entries",
     "skills_prompt_index",
 ]
 
@@ -132,10 +136,7 @@ def build_skill_tool(skills: list[Skill]) -> AgentTool:
 
     return AgentTool(
         name="read_skill",
-        description=(
-            "Load a skill's instructions by name before following it. "
-            f"Available skills: {names or '(none)'}"
-        ),
+        description=tool_description("read_skill", skill_names=names or "(none)"),
         parameters={
             "type": "object",
             "properties": {
@@ -148,22 +149,33 @@ def build_skill_tool(skills: list[Skill]) -> AgentTool:
     )
 
 
-def skills_prompt_index(skills: list[Skill], max_bytes: int = MAX_INDEX_BYTES) -> str:
-    """A bounded index of available skills for the system prompt."""
+def format_skill_entries(
+    skills: list[Skill], max_bytes: int = MAX_INDEX_BYTES
+) -> str:
+    """Format the bounded ``- name: description`` entries for the skills block.
+
+    The header lives in ``zenagent/prompts/blocks/skills.md``; its rendered
+    length is included in the byte cap so the visible index stays bounded.
+    """
     if not skills:
         return ""
-    lines = [
-        "## Skills",
-        "Load a skill with the read_skill tool before following its instructions:",
-        "",
-    ]
+    header = render(read_block("skills"), {"entries": ""})
+    entries: list[str] = []
     for skill in skills:
         entry = f"- {skill.name}: {skill.description}"
-        if len("\n".join([*lines, entry]).encode("utf-8")) > max_bytes:
-            lines.append("- ... more skills omitted")
+        if len((header + "\n".join([*entries, entry])).encode("utf-8")) > max_bytes:
+            entries.append("- ... more skills omitted")
             break
-        lines.append(entry)
-    return "\n".join(lines)
+        entries.append(entry)
+    return "\n".join(entries)
+
+
+def skills_prompt_index(skills: list[Skill], max_bytes: int = MAX_INDEX_BYTES) -> str:
+    """A bounded index of available skills for the system prompt."""
+    entries = format_skill_entries(skills, max_bytes)
+    if not entries:
+        return ""
+    return render(read_block("skills"), {"entries": entries})
 
 
 def default_skill_roots(cwd: Path) -> list[Path]:

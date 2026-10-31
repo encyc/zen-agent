@@ -20,6 +20,7 @@ from pathlib import Path
 
 from zenagent.agent.loop import AgentTool, ToolResultAgent
 from zenagent.agent.result_budget import LINE_TRUNCATION_MARKER
+from zenagent.prompts import tool_description
 from zenagent.types import TextContent
 
 __all__ = [
@@ -431,10 +432,11 @@ async def _list_dir(
 
 READ_FILE = _tool(
     "read_file",
-    "Read a UTF-8 text file. Binary files are refused. Returns whole small "
-    f"files; at most {DEFAULT_READ_LIMIT} lines per call by default (hard cap "
-    f"{MAX_READ_LIMIT}). A truncated result reports the exact offset for the "
-    "next page.",
+    tool_description(
+        "read_file",
+        default_read_limit=str(DEFAULT_READ_LIMIT),
+        max_read_limit=str(MAX_READ_LIMIT),
+    ),
     {
         "path": {"type": "string", "description": "File path to read."},
         "offset": {
@@ -456,9 +458,7 @@ READ_FILE = _tool(
 
 WRITE_FILE = _tool(
     "write_file",
-    "Write UTF-8 text to a file, creating parent directories as needed. "
-    "Overwrites the whole file. An existing file's CRLF line endings and "
-    "UTF-8 BOM are kept; a new file is written with LF line endings.",
+    tool_description("write_file"),
     {
         "path": {"type": "string", "description": "File path to write."},
         "content": {"type": "string", "description": "Full file content."},
@@ -470,10 +470,7 @@ WRITE_FILE = _tool(
 
 EDIT_FILE = _tool(
     "edit_file",
-    "Replace an exact string in a file. By default old_string must match "
-    "exactly once; set replace_all to replace every occurrence. On zero "
-    "matches (or multiple matches without replace_all) the file is left "
-    "unchanged. The file's CRLF line endings and BOM are kept.",
+    tool_description("edit_file"),
     {
         "path": {"type": "string", "description": "File to edit."},
         "old_string": {
@@ -498,7 +495,7 @@ EDIT_FILE = _tool(
 
 LIST_DIR = _tool(
     "list_dir",
-    "List one directory level, marking directories and file sizes.",
+    tool_description("list_dir"),
     {"path": {"type": "string", "description": "Directory to list."}},
     ["path"],
     _list_dir,

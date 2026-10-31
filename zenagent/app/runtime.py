@@ -26,7 +26,6 @@ from zenagent.app.support import (
     api_key_for,
     resolve_model,
     session_id_for,
-    system_prompt,
 )
 from zenagent.config import (
     ContextGuard,
@@ -37,18 +36,18 @@ from zenagent.config import (
 from zenagent.context_files import (
     discover_context_files,
     load_context_files,
-    system_prompt_with_context,
 )
 from zenagent.extensions import load_extensions
 from zenagent.mcp.config import load_mcp_config
 from zenagent.mcp.manager import McpManager
+from zenagent.prompts import PromptContext, compose_system
 from zenagent.providers.catalog import ProviderConfig, load_catalog
 from zenagent.providers.registry import StreamFn
 from zenagent.skills import (
     build_skill_tool,
     default_skill_roots,
     discover_skills,
-    skills_prompt_index,
+    format_skill_entries,
 )
 from zenagent.templates import (
     PromptTemplate,
@@ -122,8 +121,7 @@ class Runtime:
         self._mode: str = DEFAULT_MODE
         self._base_prompt: str = ""
         self._base_tools: list = []
-        self._extra_prompt = ""
-        self._skills_index = ""
+        self._skill_entries = ""
         self._extension_prompt = ""
         self._extension_tools: list = []
         self._hook_unsubscribes: list = []
@@ -384,14 +382,23 @@ class Runtime:
             )
 
     def _build_prompt(self, tools: list) -> str:
-        text = system_prompt([tool.name for tool in tools])
-        if self._context_files:
-            text = system_prompt_with_context(
-                text, load_context_files(discover_context_files(Path.cwd()))
-            )
-        if self._extra_prompt:
-            text = f"{text}\n\n{self._extra_prompt}"
-        return text
+        context_text = (
+            load_context_files(discover_context_files(Path.cwd()))
+            if self._context_files
+            else ""
+        )
+        context = PromptContext(
+            cwd=Path.cwd(),
+            tool_names=tuple(tool.name for tool in tools),
+            context_text=context_text,
+            skill_entries=self._skill_entries,
+            extension_fragments=(
+                (self._extension_prompt,) if self._extension_prompt else ()
+            ),
+            include_context=self._context_files,
+            include_mode=False,
+        )
+        return compose_system(context).text
 
     def _recompose(self) -> None:
         """Rebuild the tool list and prompt from the current discovery results.
@@ -411,10 +418,7 @@ class Runtime:
         if self.skills:
             tools.append(build_skill_tool(self.skills))
         tools.extend(self._extension_tools)
-        self._skills_index = skills_prompt_index(self.skills)
-        self._extra_prompt = "\n\n".join(
-            part for part in (self._skills_index, self._extension_prompt) if part
-        )
+        self._skill_entries = format_skill_entries(self.skills)
         self._base_tools = list(tools)
         self._base_prompt = self._build_prompt(tools)
         if hasattr(self, "agent"):

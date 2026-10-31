@@ -1,0 +1,1 @@
+List one directory level, marking directories and file sizes.

@@ -1,0 +1,1 @@
+Read a UTF-8 text file. Binary files are refused. Returns whole small files; at most {{default_read_limit}} lines per call by default (hard cap {{max_read_limit}}). A truncated result reports the exact offset for the next page.

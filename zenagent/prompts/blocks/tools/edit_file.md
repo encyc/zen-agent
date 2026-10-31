@@ -1,0 +1,1 @@
+Replace an exact string in a file. By default old_string must match exactly once; set replace_all to replace every occurrence. On zero matches (or multiple matches without replace_all) the file is left unchanged. The file's CRLF line endings and BOM are kept.

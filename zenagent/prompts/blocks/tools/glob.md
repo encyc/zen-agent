@@ -1,0 +1,1 @@
+Find files by glob pattern (e.g. '**/*.py') under a directory. Hidden files are skipped unless include_hidden; returns at most limit paths (default {{max_glob_results}}).

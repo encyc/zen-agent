@@ -21,6 +21,7 @@ import inspect
 from collections.abc import Awaitable, Callable
 
 from zenagent.agent.loop import AgentTool, ToolResultAgent
+from zenagent.prompts import tool_description
 from zenagent.types import TextContent
 
 __all__ = [
@@ -296,16 +297,7 @@ async def _ask(tool_call_id: str, args: dict, abort=None, on_update=None) -> Too
 
 ASK = AgentTool(
     name="ask",
-    description=(
-        "Ask the user a structured question and wait for the answer. Use it "
-        "only when the decision genuinely belongs to the user (an irreversible "
-        "choice, a preference with no defensible default) or when you are "
-        "blocked on information only they have; do not ask things you can find "
-        "out with the other tools. Send 1-5 questions, each with 2-6 options; "
-        "mark the obvious default as recommended. Without an interactive UI the "
-        "call returns a note telling you to proceed with the most conservative "
-        "option instead of blocking."
-    ),
+    description=tool_description("ask"),
     parameters={
         "type": "object",
         "properties": {

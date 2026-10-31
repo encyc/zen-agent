@@ -12,6 +12,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from zenagent.prompts.registry import read_block
+from zenagent.prompts.render import render
+
 __all__ = [
     "CONTEXT_FILE_NAMES",
     "MAX_CONTEXT_BYTES",
@@ -85,4 +88,5 @@ def system_prompt_with_context(base: str, context_text: str) -> str:
     """Append project instructions to the base system prompt."""
     if not context_text.strip():
         return base
-    return f"{base.rstrip()}\n\n## Project instructions\n{context_text}"
+    block = render(read_block("context_files"), {"context_text": context_text})
+    return f"{base.rstrip()}\n\n{block}"

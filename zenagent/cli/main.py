@@ -39,9 +39,6 @@ from zenagent.app.support import (
     resolve_model,
     session_id_for,
 )
-from zenagent.app.support import (
-    system_prompt as _system_prompt,
-)
 from zenagent.attachments import read_image_argument
 from zenagent.cli.doctor import run_doctor
 from zenagent.cli.exportcmd import run_export
@@ -51,12 +48,12 @@ from zenagent.config import ContextGuard, apply_user_config, load_user_config
 from zenagent.context_files import (
     discover_context_files,
     load_context_files,
-    system_prompt_with_context,
 )
 from zenagent.events import AgentEvent
 from zenagent.extensions import load_extensions
 from zenagent.mcp.config import load_mcp_config
 from zenagent.mcp.manager import McpManager
+from zenagent.prompts import PromptContext, compose_system
 from zenagent.providers.catalog import Model, load_catalog
 from zenagent.providers.registry import StreamFn
 from zenagent.skills import (
@@ -94,13 +91,21 @@ def _build_agent(
 ) -> Agent:
     """Construct the run's Agent (a seam for tests to inject a fake stream)."""
     tool_list = list(ALL_TOOLS if tools is None else tools)
-    prompt = _system_prompt([tool.name for tool in tool_list])
-    if context_files:
-        prompt = system_prompt_with_context(
-            prompt, load_context_files(discover_context_files(Path.cwd()))
-        )
-    if extra_prompt:
-        prompt = f"{prompt}\n\n{extra_prompt}"
+    context_text = (
+        load_context_files(discover_context_files(Path.cwd()))
+        if context_files
+        else ""
+    )
+    prompt_context = PromptContext(
+        cwd=Path.cwd(),
+        tool_names=tuple(tool.name for tool in tool_list),
+        context_text=context_text,
+        extension_fragments=(extra_prompt,) if extra_prompt else (),
+        include_context=context_files,
+        include_skills=False,
+        include_mode=False,
+    )
+    prompt = compose_system(prompt_context).text
     return Agent(
         model=model,
         system_prompt=prompt,
@@ -649,6 +654,10 @@ def main(argv: list[str] | None = None) -> int:
             sys.modules.pop(spec.name, None)
             raise
         return module.main(raw[1:])
+    if raw and raw[0] == "prompts":
+        from zenagent.cli.prompts_cmd import main as prompts_main
+
+        return prompts_main(raw[1:])
     args = build_parser().parse_args(argv)
     mode = resolve_mode(
         explicit=args.mode, assume_yes=args.yes, read_only=args.read_only

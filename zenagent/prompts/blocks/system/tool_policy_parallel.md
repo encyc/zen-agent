@@ -1,0 +1,1 @@
+- Parallel: batch independent tool calls in one response; keep dependent calls sequential.
