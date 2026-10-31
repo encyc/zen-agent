@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-31-i18n-theme-design.md`（已批准，theme 方案 A）
 
+> 状态：已完成（2026-10-31，`bash scripts/check.sh` 全绿；见 CHANGELOG Unreleased）
+
 ## Global Constraints
 
 - 无新依赖；只用 stdlib + 现有 `textual`/`rich`。

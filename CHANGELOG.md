@@ -54,6 +54,16 @@ matches the release tag; older history is in the repository tags and commits.
   tokens, without interrupting a running turn. `auto` follows the terminal
   through `COLORFGBG` and falls back to dark. Legacy REPL themes
   (`default|mono|solarized|<path.json>`) keep working, REPL-only.
+- **Interface language (`language = auto|en|zh`)**: a stdlib-only message
+  catalog (`zenagent/i18n/`) now drives every user-facing string in the TUI,
+  the REPL, slash-command descriptions and argument hints, approval/ask dialogs
+  and command output. `/lang`, `/settings → Language…` and `--lang` switch it;
+  `auto` follows `LANG`/`LC_ALL` (zh prefix → Chinese) and the choice persists
+  in `settings.json`. Switching is live (command registry rebuild, sidebar
+  headings and Rich text repaint) and never interrupts a running turn. Types
+  labels (`command ·`/`template ·`/`extension ·`/`skill ·`) and CJK-aware
+  clipping ship with it; model-facing prompts, tool schemas and skill bodies
+  stay English by design.
 
 ## v0.4.4 — 2026-10-31
 

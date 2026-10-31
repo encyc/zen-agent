@@ -1,6 +1,6 @@
 # ZenAgent i18n 与明暗主题设计（2026-10-31）
 
-状态：已批准（2026-10-31，用户拍板：theme 方案 A + i18n 方案 1）；实现计划见 `docs/superpowers/plans/2026-10-31-theme-appearance.md` 与 `...-i18n.md`
+状态：已批准（2026-10-31，用户拍板：theme 方案 A + i18n 方案 1）；实现已完成并通过全量闸门（分支 `feat/i18n-theme`，见 CHANGELOG Unreleased）。实现计划：`docs/superpowers/plans/2026-10-31-theme-appearance.md` 与 `...-i18n.md`
 作者：Lead
 基线：v0.4.4 + TUI 工作面板打磨第二轮（main `76d564f`，2026-10-31 21:20；本地领先 `origin/main` 11 个提交）
 

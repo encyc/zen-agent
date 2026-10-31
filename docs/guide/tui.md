@@ -73,6 +73,14 @@ provider 错误不会进转录区，而是停在 dock 顶部的错误横幅里�
   不允许写死 hex（`tests/test_tui_theme_css.py` 会拦）。
 - REPL 的 `default|mono|solarized|<path.json>` 是 legacy 主题，只在 REPL 生效。
 
+## 界面语言
+
+- `auto`（默认）/`en`/`zh`：`/lang`、`/settings → Language…`、`--lang` 三处可改，持久化到
+  `~/.zenagent/settings.json` 的 `prefs.language`；优先级 `--lang` > pref > 环境（`LANG` 等）。
+- 切换即时生效：命令描述重建（registry 构建期翻译）、侧栏标题刷新、Rich 文本重绘；
+  正在进行的输出不中止。命令名、flag、tool 名始终是英文（`/` 补全仍显示英文命令名）。
+- 文案范围与术语表、以及"哪些东西故意不翻"，见 [界面语言（i18n）](i18n.md)。
+
 ## 键位
 
 | 键 | 行为 |
