@@ -745,3 +745,105 @@ async def test_slash_retry_reruns_the_last_prompt(isolated_sessions, capsys):
     for request in stream.requests:
         users = [m for m in request if m.to_json()["role"] == "user"]
         assert len(users) == 1 and users[0].content == "hello"
+
+
+# ---------------------------------------------------------------------------
+# /skill:<name> invocation (user-side body injection)
+# ---------------------------------------------------------------------------
+
+
+def _write_skill(root, name: str, body: str):
+    directory = root / ".zenagent" / "skills" / name
+    directory.mkdir(parents=True)
+    path = directory / "SKILL.md"
+    path.write_text(
+        f"---\nname: {name}\ndescription: Build reports\n---\n{body}\n"
+    )
+    return path
+
+
+async def test_repl_injects_the_skill_body(
+    isolated_sessions, tmp_path, monkeypatch
+):
+    from zenagent.types import UserMessage
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    _write_skill(tmp_path, "pdf-report", "REPL SKILL BODY")
+    stream = scripted_stream(0.0, "done")
+    printed: list[str] = []
+
+    code = await repl(
+        "glm-5.3",
+        stream_fn=stream,
+        input_fn=scripted_input("/skill:pdf-report summarize this", "/exit", settle=0.02),
+        print_fn=printed.append,
+        api_key="k",
+        skills=True,
+        templates=False,
+        mcp=False,
+    )
+    assert code == 0
+    assert len(stream.requests) == 1
+    user_messages = [
+        message for message in stream.requests[0] if isinstance(message, UserMessage)
+    ]
+    injected = user_messages[0].content
+    assert isinstance(injected, str)
+    assert injected.startswith("[skill:pdf-report] summarize this")
+    assert "REPL SKILL BODY" in injected
+    assert "[IMPORTANT: User invoked the" in injected
+
+
+async def test_repl_reports_an_unknown_skill_without_running(
+    isolated_sessions, tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    _write_skill(tmp_path, "pdf-report", "body")
+    stream = scripted_stream(0.0, "done")
+    printed: list[str] = []
+
+    code = await repl(
+        "glm-5.3",
+        stream_fn=stream,
+        input_fn=scripted_input("/skill:nope go", "/exit", settle=0.02),
+        print_fn=printed.append,
+        api_key="k",
+        skills=True,
+        templates=False,
+        mcp=False,
+    )
+    assert code == 0
+    assert stream.requests == []
+    assert any("unknown skill: nope" in line for line in printed)
+
+
+async def test_repl_injects_an_embedded_skill_token(
+    isolated_sessions, tmp_path, monkeypatch
+):
+    from zenagent.types import UserMessage
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    _write_skill(tmp_path, "pdf-report", "EMBEDDED BODY")
+    stream = scripted_stream(0.0, "done")
+
+    code = await repl(
+        "glm-5.3",
+        stream_fn=stream,
+        input_fn=scripted_input("please /skill:pdf-report check it", "/exit", settle=0.02),
+        print_fn=lambda *a, **k: None,
+        api_key="k",
+        skills=True,
+        templates=False,
+        mcp=False,
+    )
+    assert code == 0
+    (user_message,) = [
+        message for message in stream.requests[0] if isinstance(message, UserMessage)
+    ]
+    injected = user_message.content
+    assert isinstance(injected, str)
+    assert injected.startswith("[skill:pdf-report] please check it")
+    assert "EMBEDDED BODY" in injected

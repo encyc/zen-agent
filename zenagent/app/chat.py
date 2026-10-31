@@ -19,6 +19,7 @@ from zenagent.app.views import (
     args_preview,
     messages_to_views,
     usage_total,
+    user_view,
 )
 from zenagent.events import AgentEvent
 from zenagent.tools.todo import coerce_todo_phases, load_todo_phases
@@ -428,7 +429,7 @@ class ChatController:
 
     def _on_message_start(self, message) -> None:
         if isinstance(message, UserMessage):
-            self._transcript.append(MessageView(kind="user", text=_user_text(message)))
+            self._transcript.append(user_view(_user_text(message)))
         elif isinstance(message, AssistantMessage):
             self._current = MessageView(kind="assistant", text="")
             self._transcript.append(self._current)

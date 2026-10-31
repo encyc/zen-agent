@@ -123,6 +123,24 @@ Screen {
     color: #d9a86c;
 }
 
+.skill-message {
+    background: #0d1319;
+    border: none;
+    height: 1;
+    text-wrap: nowrap;
+    margin: 0 0 0 1;
+    color: #d7e0e8;
+}
+
+.skill-message.expanded {
+    height: auto;
+    text-wrap: wrap;
+}
+
+.skill-message:focus {
+    color: #d9a86c;
+}
+
 /* omp's plain-tinted cards: body tint by state, success stays quiet. */
 .tool-card {
     background: #0d1319;

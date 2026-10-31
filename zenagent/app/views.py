@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from zenagent.agent.loop import LOOP_GUARD_PREFIX
+from zenagent.app.skill_commands import parse_skill_display
 from zenagent.types import (
     AssistantMessage,
     Cost,
@@ -28,6 +29,7 @@ __all__ = [
     "args_preview",
     "messages_to_views",
     "usage_total",
+    "user_view",
 ]
 
 _PREVIEW_LIMIT = 120
@@ -35,16 +37,32 @@ _PREVIEW_LIMIT = 120
 
 @dataclass
 class MessageView:
-    """A rendered user/assistant turn (text plus optional thinking)."""
+    """A rendered user/assistant/skill turn (text plus optional thinking)."""
 
-    kind: Literal["user", "assistant"]
+    kind: Literal["user", "assistant", "skill"]
     text: str
+    #: For ``kind == "skill"``: the user's arguments and the injected body.
+    skill_args: str | None = None
+    skill_body: str | None = None
     thinking: str | None = None
     #: ``time.monotonic()`` when the current reasoning block started; None when
     #: the model is not reasoning (history replay has no timing at all).
     thinking_started_at: float | None = None
     #: Finished reasoning seconds for this turn; None when timing is unknown.
     thinking_seconds: float | None = None
+
+
+def user_view(text: str) -> MessageView:
+    """A user turn, or the compact view of an injected ``/skill:`` message."""
+    display = parse_skill_display(text)
+    if display is not None:
+        return MessageView(
+            kind="skill",
+            text=display.name,
+            skill_args=display.args,
+            skill_body=display.body,
+        )
+    return MessageView(kind="user", text=text)
 
 
 @dataclass
@@ -149,7 +167,7 @@ def messages_to_views(messages: list[Message]) -> list[MessageView | ToolCallVie
             )
             if text.startswith(LOOP_GUARD_PREFIX):
                 continue  # synthetic model-only corrective, not a user turn
-            views.append(MessageView(kind="user", text=text))
+            views.append(user_view(text))
         elif isinstance(message, AssistantMessage):
             text = _text_of(message.content)
             thinking = "\n".join(
