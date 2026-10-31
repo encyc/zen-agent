@@ -104,6 +104,8 @@ class ZenAgentApp(App):
         #: ctrl+b intent; the actual visibility also depends on the width.
         self._sidebar_open = False
         self._sidebar_visible = False
+        #: 1s poll while background jobs/subagents are live (else none).
+        self._work_timer = None
         self.command_hints: CommandHints | None = None
         self.models = ModelManager(runtime)
         self.sessions = SessionManager(runtime)
@@ -346,6 +348,7 @@ class ZenAgentApp(App):
         for sidebar in self.query(Sidebar):
             sidebar.refresh_contents(self.chat, self.models)
         self._sync_chrome(status)
+        self._sync_work_timer(status)
 
     def action_show_todo_list(self) -> None:
         """Open the read-only checklist behind the one-line HUD summary."""
@@ -367,6 +370,21 @@ class ZenAgentApp(App):
         """Work strip click: reveal the sidebar the strip is standing in for."""
         self._sidebar_open = True
         self._sync_chrome()
+
+    def _sync_work_timer(self, status: RunStatus) -> None:
+        """Poll while background work is live; go quiet when it is not.
+
+        Jobs have no change events (they finish outside any agent event), so a
+        slow poll is what keeps the sidebar honest. Nothing live means no timer.
+        """
+        live = status.active_subagent is not None or any(
+            job.status == "running" for job in status.jobs
+        )
+        if live and self._work_timer is None:
+            self._work_timer = self.set_interval(1.0, self._on_change)
+        elif not live and self._work_timer is not None:
+            self._work_timer.stop()
+            self._work_timer = None
 
     def _sync_chrome(self, status: RunStatus | None = None) -> None:
         """Decide sidebar / todo HUD / work strip visibility in one place.

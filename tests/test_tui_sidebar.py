@@ -11,6 +11,7 @@ import time
 from zenagent.agent.loop import ToolResultAgent
 from zenagent.cli.tui.app import ZenAgentApp
 from zenagent.cli.tui.widgets.sidebar import Sidebar, SidebarRow, SidebarSection
+from zenagent.cli.tui.widgets.work_strip import WorkStrip
 from zenagent.events import AgentEvent
 from zenagent.types import TextContent
 
@@ -224,8 +225,6 @@ def _running_job(job_id="bg_1"):
 
 
 async def test_work_strip_appears_only_while_the_sidebar_is_closed(fake_runtime, monkeypatch):
-    from zenagent.cli.tui.widgets.work_strip import WorkStrip
-
     class _Manager:
         def list(self) -> list:
             return [_running_job()]
@@ -251,8 +250,6 @@ async def test_work_strip_appears_only_while_the_sidebar_is_closed(fake_runtime,
 
 
 async def test_work_strip_mentions_a_running_subagent(fake_runtime):
-    from zenagent.cli.tui.widgets.work_strip import WorkStrip
-
     app = ZenAgentApp(fake_runtime)
     async with app.run_test(size=(140, 40)) as pilot:
         await pilot.pause()
@@ -272,9 +269,62 @@ async def test_work_strip_mentions_a_running_subagent(fake_runtime):
 
 
 async def test_work_strip_is_hidden_without_background_work(fake_runtime):
-    from zenagent.cli.tui.widgets.work_strip import WorkStrip
-
     app = ZenAgentApp(fake_runtime)
     async with app.run_test(size=(140, 40)) as pilot:
         await pilot.pause()
         assert app.query_one(WorkStrip).display is False
+
+
+async def test_work_timer_only_runs_while_something_is_live(fake_runtime, monkeypatch):
+    import asyncio
+
+    jobs: list = []
+
+    class _Manager:
+        def list(self) -> list:
+            return jobs
+
+    monkeypatch.setattr("zenagent.app.chat.get_job_manager", lambda: _Manager())
+
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        assert app._work_timer is None
+
+        jobs.append(_running_job())
+        app._refresh_status()
+        await pilot.pause()
+        assert app._work_timer is not None
+
+        jobs.clear()
+        await asyncio.sleep(1.15)  # let the 1s timer poll the manager
+
+        assert app._work_timer is None
+        assert app.query_one(WorkStrip).display is False
+
+
+async def test_work_timer_refresh_updates_the_sidebar_rows(fake_runtime, monkeypatch):
+    import asyncio
+
+    job = _running_job()
+
+    class _Manager:
+        def list(self) -> list:
+            return [job]
+
+    monkeypatch.setattr("zenagent.app.chat.get_job_manager", lambda: _Manager())
+
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        await pilot.press("ctrl+b")  # sidebar visible: rows are rendered
+        await pilot.pause()
+        app._refresh_status()
+        await pilot.pause()
+        assert any("bg_1" in row for row in rows(app, "Jobs"))
+
+        job.status = "ok"
+        job.duration_ms = 250
+        await asyncio.sleep(1.15)
+
+        assert any("✓ bg_1" in row for row in rows(app, "Jobs"))
