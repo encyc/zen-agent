@@ -15,6 +15,8 @@ for the model.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import inspect
 from collections.abc import Awaitable, Callable
 
@@ -196,16 +198,20 @@ def _normalize_answers(raw: object, questions: list[dict]) -> list[dict]:
         question_id = entry.get("id")
         if not isinstance(question_id, str) or question_id not in wanted:
             continue
+        question = next(item for item in questions if item["id"] == question_id)
+        allowed = [option["label"] for option in question["options"]]
         raw_selected = entry.get("selected")
         selected = (
             [
                 label.strip()
                 for label in raw_selected
-                if isinstance(label, str) and label.strip()
+                if isinstance(label, str) and label.strip() in allowed
             ]
             if isinstance(raw_selected, list)
             else []
         )
+        if not question.get("multi"):
+            selected = selected[:1]
         answer: dict = {"id": question_id, "selected": selected}
         raw_custom = entry.get("custom")
         if isinstance(raw_custom, str) and raw_custom.strip():
@@ -243,16 +249,42 @@ async def _ask(tool_call_id: str, args: dict, abort=None, on_update=None) -> Too
     handler = get_ask_handler()
     if handler is None:
         return _text(_NO_UI_TEXT, available=False)
-    try:
+
+    async def _run_handler():
         outcome = handler(questions)
         # Accept a plain sync callable too (a REPL reading stdin may not be async).
-        raw_answers = await outcome if inspect.isawaitable(outcome) else outcome
+        return await outcome if inspect.isawaitable(outcome) else outcome
+
+    handler_task = asyncio.create_task(_run_handler())
+    abort_task = None
+    try:
+        if abort is not None:
+            abort_task = asyncio.create_task(abort.wait())
+            done, _pending = await asyncio.wait(
+                {handler_task, abort_task}, return_when=asyncio.FIRST_COMPLETED
+            )
+            if abort_task in done and handler_task not in done:
+                handler_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await handler_task
+                return _text(
+                    "aborted while waiting for the user's answer; proceed with "
+                    "the most conservative option and state the assumption.",
+                    available=True,
+                    aborted=True,
+                )
+        raw_answers = await handler_task
     except Exception as exc:  # noqa: BLE001 - a UI failure must not kill the run
         return _text(
             f"the interactive UI failed to answer: {type(exc).__name__}: {exc}",
             is_error=True,
             available=True,
         )
+    finally:
+        if abort_task is not None:
+            abort_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await abort_task
 
     answers = _normalize_answers(raw_answers, questions)
     if not answers:

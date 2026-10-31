@@ -251,3 +251,21 @@ def test_already_budgeted_result_is_not_saved_again(tmp_path):
     assert second_calls == []
     assert _all_text(twice) == _all_text(once)
     assert twice.details["artifact"] == str(tmp_path / "first.txt")
+
+
+def test_single_line_artifact_notice_explains_how_to_slice_it(tmp_path):
+    saved: list[str] = []
+
+    def sink(tool_name: str, text: str):
+        saved.append(text)
+        return tmp_path / "artifact.txt"
+
+    result = apply_result_budget(
+        _text_result("z" * (MAX_RESULT_BYTES + 10)),
+        tool_name="bash",
+        save_artifact=sink,
+    )
+    rendered = _all_text(result)
+    assert saved and len(saved[0]) == MAX_RESULT_BYTES + 10
+    assert "one long line" in rendered
+    assert "sed/fold" in rendered

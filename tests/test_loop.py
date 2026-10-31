@@ -1424,3 +1424,27 @@ async def test_async_bash_and_wait_in_the_same_batch():
     assert "started background job bg_1" in ends[0].result.content[0].text
     assert "job bg_1: ok" in ends[1].result.content[0].text
     assert "same-batch" in ends[1].result.content[0].text
+
+
+async def test_subagent_spend_counts_toward_max_cost():
+    async def taskish(name, args, abort, on_update=None):
+        return ToolResultAgent(
+            content=[TextContent(text="<task-result …>")],
+            details={"subagent_cost": 0.05, "subagent_tokens": 100},
+        )
+
+    stream = ScriptedStream(
+        [
+            [call_tool("t1", "taskish", {}), finish("tool_use")],
+            [say("done"), finish("stop")],
+        ]
+    )
+    state = AgentState()
+    await run(
+        "go",
+        state,
+        make_config(stream, tools=[make_tool("taskish", taskish)], max_cost=0.01),
+    )
+    assert state.termination == "max_cost"
+    assert state.subagent_spend == 0.05
+    assert len(stream.calls) == 1, "the guard stops before the next provider call"

@@ -209,6 +209,7 @@ async def _run(args) -> int:
                 base_tools=list(ALL_TOOLS),
                 api_key=api_key,
                 thinking="off" if not model.reasoning else "high",
+                max_cost=args.max_cost,
             ),
         ],
         max_turns=args.max_turns,

@@ -314,6 +314,7 @@ async def run_headless(
                 stream_fn=stream_fn,
                 thinking=thinking,
                 artifact_sink=build_artifact_sink(session.path),
+                max_cost=max_cost,
             )
         )
 

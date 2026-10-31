@@ -554,11 +554,12 @@ async def repl(
     artifact_sink = build_artifact_sink(session.path)
     task_tool = (
         build_task_tool(
-            model=model,
+            model=lambda: agent.model,
             base_tools=list(ALL_TOOLS),
-            api_key=key,
+            api_key=lambda: agent.api_key,
             stream_fn=stream_fn,
-            thinking="high" if model.reasoning else "off",
+            thinking=lambda: agent.thinking,
+            max_cost=max_cost,
             # Read through the current sink so /fork, /compact and /import
             # retarget child artifacts too.
             artifact_sink=lambda tool_name, text: artifact_sink(tool_name, text),
@@ -817,9 +818,14 @@ async def repl(
         extra_values={"/model": model_values},
     )
     run_task: asyncio.Task | None = None
+    #: Only one reader may own stdin: the REPL's steering reader and the ask
+    #: handler would otherwise steal each other's lines during a run.
+    input_lock = asyncio.Lock()
+    ask_active = asyncio.Event()
 
     async def ask_user(questions: list[dict]) -> list[dict]:
         """Answer an ``ask`` tool call from the terminal (blank = dismiss)."""
+        ask_active.set()
         answers: list[dict] = []
         for index, question in enumerate(questions, start=1):
             title = question.get("header") or question.get("id") or f"question {index}"
@@ -839,8 +845,10 @@ async def repl(
             )
             while True:
                 try:
-                    raw = await read()
+                    async with input_lock:
+                        raw = await read()
                 except (EOFError, KeyboardInterrupt):
+                    ask_active.clear()
                     return answers
                 parts = [
                     part
@@ -848,6 +856,7 @@ async def repl(
                     if part.strip()
                 ]
                 if not parts:
+                    ask_active.clear()
                     return answers
                 picks: list[str] = []
                 for part in parts:
@@ -865,6 +874,7 @@ async def repl(
                     answers.append({"id": question["id"], "selected": picks})
                     break
                 print_fn("invalid selection; try again")
+        ask_active.clear()
         return answers
 
     async def reap() -> None:
@@ -896,14 +906,25 @@ async def repl(
     try:
         while True:
             await reap()
+            if ask_active.is_set():
+                # A pending ask (from inside the running agent) owns stdin.
+                await ask_active.wait()
+                continue
             try:
-                line = await read()
+                async with input_lock:
+                    if ask_active.is_set():
+                        line = None
+                    else:
+                        line = await read()
             except (EOFError, KeyboardInterrupt):
                 if run_task is not None:
                     agent.abort()
                     await asyncio.gather(run_task, return_exceptions=True)
                 print_fn("")
                 return 0
+            if line is None:
+                await ask_active.wait()
+                continue
 
             await reap()  # the run may have finished while the user was typing
             if not line.strip():

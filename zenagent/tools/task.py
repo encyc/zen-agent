@@ -16,7 +16,7 @@ import asyncio
 import contextlib
 import re
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from zenagent.agent.agent import Agent
 from zenagent.agent.artifacts import ArtifactSink
@@ -73,7 +73,12 @@ def _child_usage(messages) -> tuple[float, int]:
         if not isinstance(message, AssistantMessage):
             continue
         usage = message.usage
-        tokens += usage.input + usage.output
+        tokens += (
+            usage.input
+            + usage.output
+            + usage.cache_read
+            + usage.cache_write
+        )
         cost += usage.cost.total
     return cost, tokens
 
@@ -98,7 +103,9 @@ def _envelope(
     output: str,
     error: str,
 ) -> str:
-    body = output or error or "(no output)"
+    body = (output or error or "(no output)").replace(
+        "</task-result>", "&lt;/task-result&gt;"
+    )
     return (
         f'<task-result name="{name}" status="{status}" '
         f'duration_ms="{duration_ms}" cost="${cost:.6f}" tokens="{tokens}">\n'
@@ -106,18 +113,28 @@ def _envelope(
     )
 
 
+def _live(value):
+    """Resolve a static value or a live getter (model switches need the latter)."""
+    return value() if callable(value) else value
+
+
 def build_task_tool(
     *,
-    model: Model,
+    model: Model | Callable[[], Model],
     base_tools: Sequence[AgentTool],
-    api_key: str = "",
+    api_key: str | Callable[[], str] = "",
     stream_fn: StreamFn | None = None,
-    thinking: str | None = None,
+    thinking: str | Callable[[], str | None] | None = None,
     max_turns: int = DEFAULT_TASK_MAX_TURNS,
     max_cost: float | None = None,
     artifact_sink: ArtifactSink | None = None,
 ) -> AgentTool:
-    """Build the per-run ``task`` tool (the child uses the parent's model)."""
+    """Build the per-run ``task`` tool (the child uses the parent's model).
+
+    ``model``/``api_key``/``thinking`` may be callables: the child must follow
+    the parent Agent's live values, or a ``/model`` switch would keep running
+    subagents on the provider selected at bootstrap.
+    """
     child_tools = [
         tool for tool in base_tools if tool.name in CHILD_TOOL_NAMES
     ]
@@ -135,14 +152,17 @@ def build_task_tool(
         raw_name = str(args.get("name") or "task").strip() or "task"
         name = _SAFE_NAME.sub("_", raw_name)[:32]
         started = time.monotonic()
+        live_model = _live(model)
+        live_key = _live(api_key)
+        live_thinking = _live(thinking)
 
-        guard = ContextGuard(model.context_window)
+        guard = ContextGuard(live_model.context_window)
         child = Agent(
-            model=model,
+            model=live_model,
             system_prompt=_CHILD_SYSTEM_PROMPT,
             tools=list(child_tools),
-            api_key=api_key,
-            thinking=thinking,
+            api_key=live_key,
+            thinking=live_thinking,
             stream_fn=stream_fn,
             transform_context=guard.transform,
             max_turns=max_turns,
@@ -164,7 +184,7 @@ def build_task_tool(
                         "duration_ms": 0,
                         "cost": 0.0,
                         "tokens": 0,
-                        "model": model.id,
+                        "model": live_model.id,
                     },
                 )
 
@@ -201,7 +221,7 @@ def build_task_tool(
                 "duration_ms": duration_ms,
                 "cost": cost,
                 "tokens": tokens,
-                "model": model.id,
+                "model": live_model.id,
                 "termination": child.termination,
                 "error": error,
                 # Cost attribution for the parent status/telemetry layer.

@@ -363,3 +363,60 @@ async def test_ask_runs_through_the_agent_loop(runtime_factory):
     assert not results[0].is_error
     text = "\n".join(block.text for block in results[0].content)
     assert "User answers:" in text and "Postgres" in text
+
+
+async def test_answers_are_validated_against_the_offered_options():
+    async def handler(_questions):
+        return [
+            {
+                "id": "q1",
+                "selected": ["SQLite", "not-an-option"],
+                "custom": "note",
+            }
+        ]
+
+    set_ask_handler(handler)
+    result = await call({"questions": [question()]})
+    assert "SQLite" in result.content[0].text
+    assert "not-an-option" not in result.content[0].text
+    assert result.details["answers"] == [
+        {"id": "q1", "selected": ["SQLite"], "custom": "note"}
+    ]
+
+
+async def test_single_select_answers_keep_only_the_first_label():
+    async def handler(_questions):
+        return [{"id": "q1", "selected": ["SQLite", "Postgres"]}]
+
+    set_ask_handler(handler)
+    result = await call({"questions": [question()]})
+    assert result.details["answers"] == [{"id": "q1", "selected": ["SQLite"]}]
+
+
+async def test_ask_returns_promptly_when_the_run_is_aborted():
+    import asyncio
+
+    from zenagent.events import AbortToken
+
+    blocker = asyncio.Event()
+
+    async def handler(_questions):
+        await blocker.wait()
+        return []
+
+    set_ask_handler(handler)
+    abort = AbortToken()
+
+    async def trigger():
+        await asyncio.sleep(0.05)
+        abort.abort()
+
+    task = asyncio.create_task(trigger())
+    result = await asyncio.wait_for(
+        ASK.execute("c1", {"questions": [question()]}, abort), timeout=5
+    )
+    await task
+    blocker.set()
+    assert not result.is_error
+    assert result.details.get("aborted") is True
+    assert "conservative" in result.content[0].text

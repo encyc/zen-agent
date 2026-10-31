@@ -110,7 +110,9 @@ class ToolResultAgent:
 - 交互由前端 handler 决定：TUI 在 mount 时注册 `set_ask_handler`（framed DialogScreen，数字键/点击，
   `multi` 可多选，Esc 取消）；REPL 注册终端问答；headless/RPC 无 handler → 非 error 降级
   （"continue with the most conservative option"）。
-- 答案返回 `details["answers"]=[{id, selected, custom?}]`；无 free-text "Other"（schema 预留 custom）。
+- 答案返回 `details["answers"]=[{id, selected, custom?}]`：handler 返回的 label 必须属于该题选项，
+  单选只保留第一个；等待与 run abort 赛跑（abort 时返回"按最保守选项继续"的非 error 结果）。
+  无 free-text "Other"（schema 预留 custom）。
 
 ### artifact 落盘
 

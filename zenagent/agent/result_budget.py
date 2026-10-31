@@ -84,6 +84,11 @@ def _truncate_bytes(
     )
     if artifact:
         notice += f"\n[full output saved: {artifact}]"
+        if "\n" not in text:
+            notice += (
+                " (the artifact is one long line; use bash with sed/fold to "
+                "read a slice)"
+            )
     return head + notice + "\n\n" + tail
 
 

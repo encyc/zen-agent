@@ -182,6 +182,9 @@ class AgentState:
 
     messages: list[Message] = field(default_factory=list)
     termination: str | None = None
+    #: Spend attributed to subagents this run (counted by the cost guard but
+    #: not by the parent transcript's own usage).
+    subagent_spend: float = 0.0
 
 
 @dataclass
@@ -527,7 +530,8 @@ async def agent_loop(
                 # A pathological model loop, or the caller's explicit cap.
                 termination = "max_turns"
                 break
-            if config.max_cost is not None and _run_cost(new_messages) > config.max_cost:
+            run_spend = _run_cost(new_messages) + state.subagent_spend
+            if config.max_cost is not None and run_spend > config.max_cost:
                 # Budget already spent: finish here rather than open a new turn,
                 # so the transcript keeps every tool call paired with a result.
                 termination = "max_cost"
@@ -662,6 +666,12 @@ async def agent_loop(
                 stats["calls"] += 1
                 stats["errors"] += int(bool(outcome.result.is_error))
                 stats["ms"] += outcome.duration_ms
+                try:
+                    state.subagent_spend += float(
+                        (outcome.result.details or {}).get("subagent_cost") or 0.0
+                    )
+                except (TypeError, ValueError):  # pragma: no cover - defensive
+                    pass
                 yield AgentEvent(
                     type="tool_execution_end",
                     tool_call_id=outcome.call.id,

@@ -142,6 +142,8 @@ class Runtime:
         # (not just switch_session) keeps the TUI's retry/compaction paths,
         # which set ``runtime.session`` directly, spilling to the right place.
         self.artifact_sink = build_artifact_sink(session.path)
+        if self.todo_tool is not None:
+            self.todo_tool.bind_session(session.path)
         agent = getattr(self, "agent", None)
         if agent is not None:
             agent.artifact_sink = self.artifact_sink
@@ -285,11 +287,12 @@ class Runtime:
         # The task tool spawns read-only child agents; the child inherits the
         # parent's model/stream and follows the session artifact sink.
         runtime.task_tool = build_task_tool(
-            model=model,
+            model=lambda: runtime.agent.model,
             base_tools=list(ALL_TOOLS),
-            api_key=api_key,
+            api_key=lambda: runtime.agent.api_key,
             stream_fn=stream_fn,
-            thinking=thinking,
+            thinking=lambda: runtime.agent.thinking,
+            max_cost=options.max_cost,
             artifact_sink=lambda tool_name, text: (
                 runtime.artifact_sink(tool_name, text)
                 if runtime.artifact_sink is not None
