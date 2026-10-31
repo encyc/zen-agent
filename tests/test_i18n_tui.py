@@ -203,3 +203,43 @@ async def test_dialogs_and_overlays_are_chinese(fake_runtime, monkeypatch):
         app.push_screen(todo_screen)
         await pilot.pause()
         assert "待办" in _plain(todo_screen.query_one("#dialog-title", Static))
+
+
+async def test_app_chrome_and_help_are_chinese(fake_runtime, monkeypatch):
+    from zenagent.cli.tui.app import ZenAgentApp
+    from zenagent.cli.tui.widgets.prompt_input import PromptInput
+    from zenagent.cli.tui.widgets.rows import NoticeRow
+    from zenagent.cli.tui.widgets.transcript import TranscriptView
+
+    monkeypatch.setattr("zenagent.settings.get_pref", lambda name, default=None: None)
+    app = ZenAgentApp(fake_runtime, language="zh")
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert app.query_one(PromptInput).placeholder == "输入消息…"
+        await app._dispatch_command("help", "")
+        await pilot.pause()
+        transcript = app.query_one(TranscriptView)
+        notices = [row.plain for row in transcript.query(NoticeRow)]
+        assert any("命令（输入 / 补全）" in line for line in notices)
+
+
+def test_tool_card_statuses_are_chinese():
+    from zenagent.app.views import ToolCallView
+    from zenagent.cli.tui.widgets.tool_card import ToolCard
+
+    i18n.set_locale("zh")
+    try:
+        view = ToolCallView(
+            call_id="c1",
+            name="bash",
+            args_preview="",
+            args={"command": "ls"},
+            details={"exit_code": 0},
+            status="ok",
+        )
+        plain = ToolCard(view)._renderable().plain
+        assert "完成" in plain
+        assert "退出码 0" in plain
+    finally:
+        i18n.set_locale("en")
+

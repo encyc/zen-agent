@@ -14,13 +14,23 @@ from textual.widgets import Static
 
 from zenagent.app.views import ToolCallView
 from zenagent.cli.tui import palette
+from zenagent.i18n import t
 
 __all__ = ["MAX_RESULT_LINES", "ToolCard"]
 
 
 MAX_RESULT_LINES = 12
 
-_STATUS_LABEL = {"running": "running", "ok": "ok", "error": "failed"}
+_STATUS_KEYS = {
+    "running": "tui.tool.status_running",
+    "ok": "tui.tool.status_ok",
+    "error": "tui.tool.status_error",
+}
+
+
+def _status_label(status: str) -> str:
+    key = _STATUS_KEYS.get(status)
+    return t(key) if key else status
 _STATUS_DOT = {"running": ("◐", palette.ACCENT), "ok": ("●", palette.MUTED), "error": ("●", palette.ERROR)}
 
 
@@ -121,7 +131,7 @@ class ToolCard(Static):
             text.append("  ")
             text.append(detail, style=palette.DIM)
         text.append("  ·  ", style=palette.DIM)
-        text.append(_STATUS_LABEL.get(view.status, view.status), style=palette.DIM)
+        text.append(_status_label(view.status), style=palette.DIM)
         if view.duration_ms is not None:
             text.append(f" · {view.duration_ms}ms", style=palette.DIM)
         return text
@@ -142,14 +152,22 @@ class ToolCard(Static):
             exit_code = details.get("exit_code")
             if exit_code is None:
                 return command
-            return f"{command}  ·  exit {exit_code}" if command else f"exit {exit_code}"
+            exit_label = t("tui.tool.exit", code=exit_code)
+            return f"{command}  ·  {exit_label}" if command else exit_label
 
         path = details.get("path") or args.get("path")
         if name == "read_file":
             total = details.get("total_lines")
-            parts = [value for value in (path, f"{total} lines" if total else "") if value]
+            parts = [
+                value
+                for value in (
+                    path,
+                    t("tui.tool.lines", n=total) if total else "",
+                )
+                if value
+            ]
             if details.get("truncated"):
-                parts.append("truncated")
+                parts.append(t("tui.tool.truncated"))
             return "  ·  ".join(parts)
 
         if name == "edit_file":
@@ -160,7 +178,14 @@ class ToolCard(Static):
         if name == "write_file":
             content = args.get("content")
             lines = len(content.splitlines()) if isinstance(content, str) else 0
-            parts = [value for value in (path, f"{lines} lines" if lines else "") if value]
+            parts = [
+                value
+                for value in (
+                    path,
+                    t("tui.tool.lines", n=lines) if lines else "",
+                )
+                if value
+            ]
             return "  ·  ".join(parts)
 
         if name == "grep":
@@ -168,7 +193,7 @@ class ToolCard(Static):
             matches = details.get("matches")
             parts = [f"'{pattern}'" if pattern is not None else ""]
             if matches is not None:
-                parts.append(f"{matches} matches")
+                parts.append(t("tui.tool.matches", n=matches))
             return "  ·  ".join(part for part in parts if part)
 
         if name == "glob":
@@ -186,7 +211,7 @@ class ToolCard(Static):
                 if budget > 8:
                     text.append(_clip_cells(hint, budget), style=palette.DIM)
             else:
-                hint = "  (enter: expand)"
+                hint = t("tui.tool.expand_hint")
                 if cell_len(text.plain) + cell_len(hint) <= self._width():
                     text.append(hint, style=palette.DIM)
             return text
@@ -194,7 +219,9 @@ class ToolCard(Static):
         lines = (self.view.result_text or "").splitlines()
         if len(lines) > MAX_RESULT_LINES:
             dropped = len(lines) - MAX_RESULT_LINES
-            text.append(f"\n   … {dropped} earlier lines", style=palette.DIM)
+            text.append(
+                "\n" + t("tui.tool.earlier_lines", n=dropped), style=palette.DIM
+            )
             lines = lines[-MAX_RESULT_LINES:]
         for line in lines:
             text.append("\n   ")
@@ -203,7 +230,7 @@ class ToolCard(Static):
             if self.view.status == "running" and self.view.progress:
                 text.append(f"\n   ⚙ {self.view.progress}", style=palette.DIM)
             else:
-                text.append("\n   (no output)", style=palette.DIM)
+                text.append("\n   " + t("tui.tool.no_output"), style=palette.DIM)
         if self.view.diff:
             for line in self.view.diff.splitlines():
                 text.append("\n   ")

@@ -13,6 +13,7 @@ from textual.widgets import Static
 
 from zenagent.app.views import MessageView
 from zenagent.cli.tui import palette
+from zenagent.i18n import t
 
 __all__ = ["SkillBlock"]
 
@@ -48,7 +49,7 @@ class SkillBlock(Static):
     def _renderable(self) -> Text:
         text = Text()
         text.append("✦ ", style=f"bold {palette.ACCENT}")
-        text.append("skill:", style=f"bold {palette.ACCENT}")
+        text.append(t("tui.skill.label"), style=f"bold {palette.ACCENT}")
         text.append(self.skill_name, style=f"bold {palette.TEXT}")
         args = " ".join(self.skill_args.split())
         if args:
