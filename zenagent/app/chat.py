@@ -12,16 +12,21 @@ from zenagent.app.retry import prepare_retry
 from zenagent.app.runtime import Runtime
 from zenagent.app.support import cache_hit_ratio
 from zenagent.app.views import (
+    JobView,
     MessageView,
     RunStatus,
+    SubagentView,
     ToolCallView,
     TranscriptNotice,
     args_preview,
+    job_views,
     messages_to_views,
+    sort_jobs,
     usage_total,
     user_view,
 )
 from zenagent.events import AgentEvent
+from zenagent.tools.jobs import get_job_manager
 from zenagent.tools.todo import coerce_todo_phases, load_todo_phases
 from zenagent.types import (
     AssistantMessage,
@@ -93,6 +98,7 @@ class ChatController:
         context_used = (
             last.input + last.output if last is not None else usage.input + usage.output
         )
+        subagents = self._subagent_views()
         return RunStatus(
             model_id=agent.model.id,
             thinking=agent.thinking,
@@ -116,7 +122,33 @@ class ChatController:
             todos=self.todos,
             subagent_cost=self._subagent_cost,
             subagent_tokens=self._subagent_tokens,
+            jobs=self._job_views(),
+            subagents=subagents,
+            active_subagent=next(
+                (view.call_id for view in subagents if view.status == "running"), None
+            ),
         )
+
+    # -- work-in-progress snapshots -----------------------------------------
+
+    def _job_views(self) -> list[JobView]:
+        """Background jobs for the sidebar; empty when no loop owns a manager."""
+        try:
+            manager = get_job_manager()
+        except RuntimeError:  # no running loop (headless, sync tests)
+            return []
+        return sort_jobs(job_views(manager.list()))
+
+    def _subagent_views(self) -> list[SubagentView]:
+        """The live ``task`` call plus recent ones, newest first."""
+        running: list[SubagentView] = []
+        finished: list[SubagentView] = []
+        for card in reversed(list(self._cards.values())):
+            if card.name != "task":
+                continue
+            view = _subagent_view(card)
+            (running if view.status == "running" else finished).append(view)
+        return running + finished
 
     # -- commands -----------------------------------------------------------
 
@@ -395,6 +427,7 @@ class ChatController:
                 args_preview=args_preview(event.args or {}),
                 args=event.args or {},
                 status="running",
+                started_at=time.monotonic(),
             )
             self._cards[card.call_id] = card
             self._transcript.append(card)
@@ -516,6 +549,33 @@ def _user_text(message: UserMessage) -> str:
         elif isinstance(block, ImageContent):
             parts.append(f"[image {block.mime_type}]")
     return "\n".join(parts)
+
+
+_TASK_SUBAGENT_STATUSES = ("ok", "error", "aborted", "truncated", "interrupted")
+
+
+def _subagent_view(card: ToolCallView) -> SubagentView:
+    """One ``task`` card as a sidebar row (live card or finished envelope)."""
+    details = card.details or {}
+    if card.status == "running":
+        started = card.started_at
+        duration_ms = int((time.monotonic() - started) * 1000) if started else 0
+        status = "running"
+    else:
+        raw = str(details.get("status") or ("error" if card.is_error else "ok"))
+        status = (
+            raw if raw in _TASK_SUBAGENT_STATUSES else ("error" if card.is_error else "ok")
+        )
+        duration_ms = int(details.get("duration_ms") or card.duration_ms or 0)
+    return SubagentView(
+        call_id=card.call_id,
+        name=str(card.args.get("name") or "task"),
+        status=status,
+        duration_ms=duration_ms,
+        cost=float(details.get("cost") or 0.0),
+        tokens=int(details.get("tokens") or 0),
+        has_transcript=False,
+    )
 
 
 def _progress_line(result) -> str:

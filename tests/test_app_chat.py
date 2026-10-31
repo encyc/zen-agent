@@ -492,3 +492,139 @@ async def test_task_result_cost_is_surfaced_in_run_status(runtime_factory):
     status = chat.status
     assert status.subagent_cost == 0.03
     assert status.subagent_tokens == 1500
+
+
+async def test_status_exposes_background_jobs(runtime_factory, monkeypatch):
+    from zenagent.app.views import JobView
+
+    runtime = await runtime_factory()
+    chat = ChatController(runtime)
+
+    class _Running:
+        id = "bg_2"
+        command = "pytest -q"
+        status = "running"
+        started_at = 20.0
+        duration_ms = None
+        exit_code = None
+
+    class _Finished:
+        id = "bg_1"
+        command = "ls"
+        status = "ok"
+        started_at = 10.0
+        duration_ms = 120
+        exit_code = 0
+
+    class _Manager:
+        def list(self) -> list:
+            return [_Finished(), _Running()]
+
+    monkeypatch.setattr("zenagent.app.chat.get_job_manager", lambda: _Manager())
+
+    views = chat.status.jobs
+
+    assert [view.id for view in views] == ["bg_2", "bg_1"]
+    assert all(isinstance(view, JobView) for view in views)
+    assert views[1].duration_ms == 120
+
+
+async def test_status_jobs_degrades_to_empty_without_a_loop(runtime_factory, monkeypatch):
+    runtime = await runtime_factory()
+    chat = ChatController(runtime)
+
+    def no_loop():
+        raise RuntimeError("no running event loop")
+
+    monkeypatch.setattr("zenagent.app.chat.get_job_manager", no_loop)
+
+    assert chat.status.jobs == []
+
+
+async def test_status_lists_task_subagents_with_the_active_one_first(runtime_factory):
+    from zenagent.agent.loop import ToolResultAgent
+    from zenagent.app.views import ToolCallView
+    from zenagent.events import AgentEvent
+    from zenagent.types import TextContent
+
+    runtime = await runtime_factory()
+    chat = ChatController(runtime)
+
+    # A non-task tool must not show up in the subagent section.
+    chat._on_event(
+        AgentEvent(
+            type="tool_execution_start",
+            tool_call_id="t1",
+            tool_name="bash",
+            args={"command": "make"},
+        )
+    )
+    chat._on_event(
+        AgentEvent(
+            type="tool_execution_end",
+            tool_call_id="t1",
+            tool_name="bash",
+            args={"command": "make"},
+            result=ToolResultAgent(content=[TextContent(text="done")]),
+            is_error=False,
+            duration_ms=5,
+        )
+    )
+    chat._on_event(
+        AgentEvent(
+            type="tool_execution_start",
+            tool_call_id="t2",
+            tool_name="task",
+            args={"prompt": "go", "name": "research"},
+        )
+    )
+    chat._on_event(
+        AgentEvent(
+            type="tool_execution_end",
+            tool_call_id="t2",
+            tool_name="task",
+            args={"prompt": "go", "name": "research"},
+            result=ToolResultAgent(
+                content=[TextContent(text="<task-result …>")],
+                details={
+                    "status": "ok",
+                    "duration_ms": 18400,
+                    "cost": 0.0031,
+                    "tokens": 812,
+                },
+            ),
+            is_error=False,
+            duration_ms=18400,
+        )
+    )
+    chat._on_event(
+        AgentEvent(
+            type="tool_execution_start",
+            tool_call_id="t3",
+            tool_name="task",
+            args={"prompt": "again", "name": "scan"},
+        )
+    )
+
+    status = chat.status
+
+    assert [view.call_id for view in status.subagents] == ["t3", "t2"]
+    active, done = status.subagents
+    assert (active.status, active.name) == ("running", "scan")
+    assert active.duration_ms >= 0
+    assert (done.status, done.name, done.cost, done.tokens) == (
+        "ok",
+        "research",
+        0.0031,
+        812,
+    )
+    assert status.active_subagent == "t3"
+    # A live card has no sidecar yet: its sidebar row is not clickable.
+    assert active.has_transcript is False
+
+    card = next(
+        view
+        for view in chat.transcript
+        if isinstance(view, ToolCallView) and view.call_id == "t3"
+    )
+    assert card.started_at is not None

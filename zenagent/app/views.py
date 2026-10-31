@@ -166,7 +166,7 @@ class SubagentView:
 
     call_id: str
     name: str
-    status: Literal["running", "ok", "error", "aborted", "interrupted"]
+    status: Literal["running", "ok", "error", "aborted", "truncated", "interrupted"]
     duration_ms: int
     cost: float
     tokens: int
