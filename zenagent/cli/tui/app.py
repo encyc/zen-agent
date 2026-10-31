@@ -106,6 +106,10 @@ class ZenAgentApp(App):
             theme, pref=_saved_theme(), warnings=appearance_warnings
         )
         self._appearance_warnings = appearance_warnings
+        #: The vocabulary value currently selected in the theme picker.
+        self._theme_spec = (theme or _saved_theme() or "auto").strip().lower()
+        if self._theme_spec not in ("auto", "dark", "light"):
+            self._theme_spec = "auto"
         self.register_theme(textual_theme(APPEARANCES["dark"]))
         self.register_theme(textual_theme(APPEARANCES["light"]))
         self.theme = theme_name(self._appearance)
@@ -872,6 +876,51 @@ class ZenAgentApp(App):
             for command in self.commands.names():
                 log.append_notice(f"  /{command.name}  {command.description}")
 
+    def set_appearance(self, spec: str) -> str:
+        """Switch the palette to ``spec`` (auto|dark|light); persist known values."""
+        from zenagent import settings
+        from zenagent.app.appearance import THEME_CHOICES
+
+        normalized = (spec or "").strip().lower()
+        self._apply_appearance(resolve_theme(normalized))
+        if normalized in THEME_CHOICES:
+            settings.set_pref("theme", normalized)
+            self._theme_spec = normalized
+        return theme_name(self._appearance)
+
+    def _apply_appearance(self, appearance) -> None:
+        palette.bind(appearance)
+        self._appearance = appearance
+        self.theme = theme_name(appearance)
+        self._repaint_rich()
+
+    def _repaint_rich(self) -> None:
+        """Rebuild the text that carries literal colours (not CSS variables).
+
+        A theme switch repaints stylesheet-driven widgets on its own, but the
+        transcript rows and status band embed Rich styles from ``palette``, so
+        they are rebuilt from the current views instead.
+        """
+        for log in self.query(TranscriptView):
+            log.reset()
+        self._refresh_status()
+
+    def open_theme_picker(self) -> None:
+        from zenagent.app.slash_args import argument_values
+        from zenagent.cli.tui.screens.modals import ChoicePicker
+
+        async def selected(value: str | None) -> None:
+            if not value:
+                return
+            self.set_appearance(value)
+            self.notify(f"theme: {value}", timeout=3)
+
+        self.open_menu(
+            "theme",
+            lambda: ChoicePicker("Theme", argument_values("/theme"), self._theme_spec),
+            selected,
+        )
+
     def open_settings(self) -> None:
         from zenagent.cli.tui.screens.modals import SettingsPicker
 
@@ -882,6 +931,8 @@ class ZenAgentApp(App):
                 self.action_toggle_sidebar()
             elif choice == "thinking":
                 self.action_cycle_thinking()
+            elif choice == "theme":
+                self.open_theme_picker()
             elif choice == "model-keys":
                 self.open_model_keys()
             elif choice == "search-keys":
@@ -894,7 +945,9 @@ class ZenAgentApp(App):
         status = self.chat.status
         self.open_menu(
             "settings",
-            lambda: SettingsPicker(status.thinking, status.model_id),
+            lambda: SettingsPicker(
+                status.thinking, status.model_id, self._theme_spec
+            ),
             selected,
         )
 
@@ -1192,6 +1245,8 @@ class ZenAgentApp(App):
             self.open_mode_picker()
         elif result.screen == "thinking-picker":
             self.open_thinking_picker()
+        elif result.screen == "theme-picker":
+            self.open_theme_picker()
         elif result.screen == "settings":
             self.open_settings()
         elif result.screen == "search-settings":
@@ -1207,6 +1262,10 @@ class ZenAgentApp(App):
         elif result.message:
             for log in self.query(TranscriptView):
                 log.append_notice(result.message)
+        if result.appearance:
+            applied = self.set_appearance(result.appearance)
+            for log in self.query(TranscriptView):
+                log.append_notice(f"theme: {applied}")
         # `/mode` and friends change state the band renders; refresh after every
         # dispatch so the change is visible without waiting for the next event.
         self._refresh_status()

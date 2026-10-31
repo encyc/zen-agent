@@ -32,9 +32,9 @@ ARG_VALUES: dict[str, list[tuple[str, str]]] = {
         ("max", "the model's supported maximum"),
     ],
     "/theme": [
-        ("default", "built-in colours"),
-        ("mono", "no colour"),
-        ("solarized", "solarized palette"),
+        ("auto", "follow the terminal (COLORFGBG)"),
+        ("dark", "harbor dark"),
+        ("light", "harbor light"),
     ],
     "/mcp": [("retry", "reconnect failed servers")],
     "/images": [("clear", "forget attached images")],

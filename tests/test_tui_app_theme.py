@@ -76,3 +76,83 @@ async def test_unknown_theme_warns_and_boots_dark(fake_runtime):
             assert app._appearance_warnings == []
     finally:
         palette.bind(APPEARANCES["dark"])
+
+
+async def test_theme_command_switches_persists_and_repaints(fake_runtime, monkeypatch):
+    from zenagent.cli.tui.app import ZenAgentApp
+    from zenagent.cli.tui.widgets.transcript import TranscriptView
+
+    saved: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "zenagent.settings.set_pref",
+        lambda name, value: saved.append((name, value)),
+    )
+    app = ZenAgentApp(fake_runtime)
+    try:
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            transcript = app.query_one(TranscriptView)
+            resets: list[int] = []
+            original_reset = transcript.reset
+            monkeypatch.setattr(
+                transcript, "reset", lambda: (resets.append(1), original_reset())[1]
+            )
+            await app._dispatch_command("theme", "light")
+            await pilot.pause()
+            assert app.theme == "harbor-light"
+            assert palette.INK == "#f7f5f0"
+            assert resets, "switching must rebuild the rich transcript"
+            assert ("theme", "light") in saved
+    finally:
+        palette.bind(APPEARANCES["dark"])
+
+
+async def test_theme_command_rejects_unknown_value(fake_runtime):
+    from zenagent.cli.tui.app import ZenAgentApp
+
+    app = ZenAgentApp(fake_runtime)
+    try:
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await app._dispatch_command("theme", "nonsense")
+            await pilot.pause()
+            assert app.theme == "harbor-dark"
+            assert app._theme_spec == "auto"
+    finally:
+        palette.bind(APPEARANCES["dark"])
+
+
+async def test_theme_command_auto_follows_the_terminal(fake_runtime, monkeypatch):
+    from zenagent.cli.tui.app import ZenAgentApp
+
+    monkeypatch.setenv("COLORFGBG", "0;15")
+    app = ZenAgentApp(fake_runtime, theme="dark")
+    try:
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await app._dispatch_command("theme", "auto")
+            await pilot.pause()
+            assert app.theme == "harbor-light"
+    finally:
+        palette.bind(APPEARANCES["dark"])
+
+
+async def test_theme_command_without_argument_opens_the_picker(fake_runtime):
+    from zenagent.cli.tui.app import ZenAgentApp
+
+    app = ZenAgentApp(fake_runtime)
+    try:
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await app._dispatch_command("theme", "")
+            await pilot.pause()
+            assert "theme" in app._menus
+    finally:
+        palette.bind(APPEARANCES["dark"])
+
+
+def test_theme_slash_values_are_the_new_vocabulary():
+    from zenagent.app.slash_args import argument_values
+
+    values = [value for value, _ in argument_values("/theme")]
+    assert values == ["auto", "dark", "light"]

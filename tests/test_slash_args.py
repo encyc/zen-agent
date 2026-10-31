@@ -21,10 +21,10 @@ def test_thinking_values_match_the_command_levels():
     assert values("/thinking", "h") == ["high"]
 
 
-def test_theme_values_match_the_builtin_themes():
-    from zenagent.cli.theme import THEMES
+def test_theme_values_match_the_appearance_choices():
+    from zenagent.app.appearance import THEME_CHOICES
 
-    assert values("/theme") == list(THEMES)
+    assert values("/theme") == list(THEME_CHOICES)
 
 
 def test_argument_filter_is_case_insensitive():

@@ -569,7 +569,7 @@ class AskQuestion(DialogScreen[list[str] | None]):
 class SettingsPicker(PaletteScreen[str]):
     """A small settings surface: only the knobs this build can actually change."""
 
-    def __init__(self, thinking: str | None, model: str) -> None:
+    def __init__(self, thinking: str | None, model: str, theme: str = "auto") -> None:
         from zenagent import settings as settings_module
         from zenagent.cli.tui.screens.palette import PaletteItem
 
@@ -579,6 +579,7 @@ class SettingsPicker(PaletteScreen[str]):
             status = f"⚠ {described['problem']}"
         items = [
             PaletteItem(label="Switch model…", value="model", note=model),
+            PaletteItem(label="Theme…", value="theme", note=theme),
             PaletteItem(label="Settings file", value="noop", note=status, enabled=False),
             PaletteItem(label="Model API keys…", value="model-keys", note="paste a key"),
             PaletteItem(label="Search provider…", value="search-provider", note="default engine"),

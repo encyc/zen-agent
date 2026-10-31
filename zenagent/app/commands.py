@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from zenagent.agent.session import session_title
+from zenagent.app.appearance import THEME_CHOICES
 from zenagent.app.chat import ChatController
 from zenagent.app.models import ModelManager
 from zenagent.app.modes import describe_modes
@@ -40,6 +41,8 @@ class CommandResult:
     quit: bool = False
     show_help: bool = False
     reset_transcript: bool = False
+    #: When set, the frontend switches to this appearance (auto|dark|light).
+    appearance: str | None = None
 
 
 @dataclass
@@ -104,6 +107,19 @@ async def _mode(services: AppServices, argument: str) -> CommandResult:
     except ValueError as exc:
         return CommandResult(message=str(exc))
     return CommandResult(message=f"mode: {mode} · {describe_modes()}")
+
+
+@_command("theme", "set the colour theme: auto|dark|light")
+async def _theme(services: AppServices, argument: str) -> CommandResult:
+    requested = argument.strip().lower()
+    if not requested:
+        # TUI opens a selector; REPL prints the current theme.
+        return CommandResult(screen="theme-picker")
+    if requested not in THEME_CHOICES:
+        return CommandResult(
+            message=f"unknown theme: {requested} (choose {'|'.join(THEME_CHOICES)})"
+        )
+    return CommandResult(appearance=requested)
 
 
 @_command("sessions", "browse, resume or fork sessions")
@@ -450,6 +466,7 @@ def build_default_commands(services: AppServices) -> CommandRegistry:
         _undo,
         _retry,
         _search,
+        _theme,
     ):
         registry.register(factory(services))
     return registry
