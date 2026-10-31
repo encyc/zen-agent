@@ -1,0 +1,1 @@
+Load a skill's instructions by name before following it. Available skills: {{skill_names}}

@@ -15,6 +15,7 @@ __all__ = [
     "BLOCKS",
     "PROMPT_VERSION",
     "SYSTEM_BLOCK_ORDER",
+    "TOOL_BLOCK_NAMES",
     "BlockSpec",
 ]
 
@@ -124,3 +125,43 @@ SYSTEM_BLOCK_ORDER: tuple[str, ...] = (
     "system.tool_policy_parallel",
     "system.closing",
 )
+
+
+#: One description block per tool; :func:`zenagent.prompts.tool_description`
+#: renders these. Keep the order in sync with the tool roster tests.
+TOOL_BLOCK_NAMES: tuple[str, ...] = (
+    "read_file",
+    "write_file",
+    "edit_file",
+    "list_dir",
+    "bash",
+    "wait",
+    "ask",
+    "glob",
+    "grep",
+    "web_search",
+    "fetch",
+    "todo",
+    "task",
+    "read_skill",
+)
+
+#: Variables a tool block declares; the tool module supplies the values so the
+#: implementation constants stay the single source of truth.
+_TOOL_VARS: dict[str, tuple[str, ...]] = {
+    "read_file": ("default_read_limit", "max_read_limit"),
+    "glob": ("max_glob_results",),
+    "grep": ("max_grep_files_per_page", "max_grep_hits_per_file"),
+    "web_search": ("max_results",),
+    "read_skill": ("skill_names",),
+}
+
+for _tool_name in TOOL_BLOCK_NAMES:
+    BLOCKS[f"tool.{_tool_name}"] = BlockSpec(
+        id=f"tool.{_tool_name}",
+        path=f"tools/{_tool_name}.md",
+        version=PROMPT_VERSION,
+        cache_class="stable",
+        budget_chars=900,
+        required_vars=_TOOL_VARS.get(_tool_name, ()),
+    )

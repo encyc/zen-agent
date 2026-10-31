@@ -21,6 +21,7 @@ import shutil
 from pathlib import Path
 
 from zenagent.agent.loop import AgentTool, ToolResultAgent
+from zenagent.prompts import tool_description
 from zenagent.types import TextContent
 
 __all__ = [
@@ -309,11 +310,7 @@ async def _grep(tool_call_id: str, args: dict, abort, on_update=None) -> ToolRes
 
 GLOB = AgentTool(
     name="glob",
-    description=(
-        "Find files by glob pattern (e.g. '**/*.py') under a directory. Hidden "
-        f"files are skipped unless include_hidden; returns at most limit paths "
-        f"(default {MAX_GLOB_RESULTS})."
-    ),
+    description=tool_description("glob", max_glob_results=str(MAX_GLOB_RESULTS)),
     parameters={
         "type": "object",
         "properties": {
@@ -339,12 +336,10 @@ GLOB = AgentTool(
 
 GREP = AgentTool(
     name="grep",
-    description=(
-        "Search file contents with a regular expression. Uses ripgrep when "
-        "available, otherwise a slow Python scan. Results are grouped by file "
-        f"and paged: at most {MAX_GREP_FILES_PER_PAGE} matching files and "
-        f"{MAX_GREP_HITS_PER_FILE} hits per file per call. A truncated page "
-        "reports the skip value for the next page."
+    description=tool_description(
+        "grep",
+        max_grep_files_per_page=str(MAX_GREP_FILES_PER_PAGE),
+        max_grep_hits_per_file=str(MAX_GREP_HITS_PER_FILE),
     ),
     parameters={
         "type": "object",

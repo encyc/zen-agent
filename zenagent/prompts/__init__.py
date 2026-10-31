@@ -14,11 +14,17 @@ from pathlib import Path
 
 from zenagent.prompts.registry import read_block
 from zenagent.prompts.render import PromptRenderError, render, template_vars
-from zenagent.prompts.spec import BLOCKS, PROMPT_VERSION, SYSTEM_BLOCK_ORDER
+from zenagent.prompts.spec import (
+    BLOCKS,
+    PROMPT_VERSION,
+    SYSTEM_BLOCK_ORDER,
+    TOOL_BLOCK_NAMES,
+)
 
 __all__ = [
     "BLOCKS",
     "PROMPT_VERSION",
+    "TOOL_BLOCK_NAMES",
     "PromptContext",
     "PromptRenderError",
     "RenderedBlock",
@@ -26,6 +32,7 @@ __all__ = [
     "compose_system",
     "render",
     "template_vars",
+    "tool_description",
 ]
 
 
@@ -156,3 +163,12 @@ def compose_system(ctx: PromptContext) -> RenderedPrompt:
         text = f"{text}\n\n{part}"
         blocks.append(_block("plan_mode", part))
     return RenderedPrompt(text=text, blocks=tuple(blocks), version=PROMPT_VERSION)
+
+
+def tool_description(name: str, *, root: Path | None = None, **values: str) -> str:
+    """Render one tool's description block (``tool.<name>``).
+
+    Tool modules pass their implementation constants as keyword values, so the
+    block holds placeholders and the constants stay the only source of truth.
+    """
+    return render(read_block(f"tool.{name}", root), values)

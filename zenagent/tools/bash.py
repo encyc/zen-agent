@@ -28,6 +28,7 @@ from pathlib import Path
 
 from zenagent.agent.loop import AgentTool, ToolResultAgent
 from zenagent.events import AbortToken
+from zenagent.prompts import tool_description
 from zenagent.tools.jobs import (
     DEFAULT_JOB_TIMEOUT_S,
     MAX_JOB_TIMEOUT_S,
@@ -207,13 +208,7 @@ async def _bash(
 
 BASH = AgentTool(
     name="bash",
-    description=(
-        "Run a shell command. stdout and stderr are merged; output is truncated "
-        "to head+tail if very large. Runs non-interactively (pagers/prompts are "
-        "disabled) and in an optional cwd. Report the exit code yourself when it "
-        "matters. With async=true the command runs in the background and the "
-        "wait tool collects its result."
-    ),
+    description=tool_description("bash"),
     parameters={
         "type": "object",
         "properties": {

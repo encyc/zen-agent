@@ -1,0 +1,1 @@
+Search file contents with a regular expression. Uses ripgrep when available, otherwise a slow Python scan. Results are grouped by file and paged: at most {{max_grep_files_per_page}} matching files and {{max_grep_hits_per_file}} hits per file per call. A truncated page reports the skip value for the next page.

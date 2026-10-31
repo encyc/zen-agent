@@ -1,0 +1,3 @@
+Search the web: returns titles, URLs and snippets. Use it when the answer depends on information outside this repository (current library APIs, release notes, error messages).
+The query accepts Google-style operators: "exact phrase", -exclude, site:domain, -site:domain, filetype:pdf, intitle:word, inurl:word, lang:en, after:2025-01-01, before:2026-01-01, and `a OR b`. Each engine gets only the operators it understands; constraints that would return nothing are relaxed and reported.
+Chain: DeepSeek -> Tavily -> Brave -> Bing -> DuckDuckGo, first usable wins. Returns at most {{max_results}} results; follow up with `fetch` to read a page.

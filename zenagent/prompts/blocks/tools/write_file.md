@@ -1,0 +1,1 @@
+Write UTF-8 text to a file, creating parent directories as needed. Overwrites the whole file. An existing file's CRLF line endings and UTF-8 BOM are kept; a new file is written with LF line endings.

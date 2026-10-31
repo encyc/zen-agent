@@ -1,0 +1,1 @@
+Fetch a URL and return its readable text (HTML stripped). Use it after `web_search` to read a result in full.

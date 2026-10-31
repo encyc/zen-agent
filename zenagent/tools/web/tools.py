@@ -8,6 +8,7 @@ import re
 import httpx
 
 from zenagent.agent.loop import AgentTool, ToolResultAgent
+from zenagent.prompts import tool_description
 from zenagent.tools.web import net
 from zenagent.tools.web.providers import LABELS
 from zenagent.tools.web.query import parse_query
@@ -184,19 +185,7 @@ async def _fetch(tool_call_id: str, args: dict, abort, on_update=None) -> ToolRe
 
 WEB_SEARCH = AgentTool(
     name="web_search",
-    description=(
-        "Search the web: returns titles, URLs and snippets. Use it when the "
-        "answer depends on information outside this repository (current library "
-        "APIs, release notes, error messages).\n"
-        "The query accepts Google-style operators: \"exact phrase\", -exclude, "
-        "site:domain, -site:domain, filetype:pdf, intitle:word, inurl:word, "
-        "lang:en, after:2025-01-01, before:2026-01-01, and `a OR b`. Each engine "
-        "gets only the operators it understands; constraints that would return "
-        "nothing are relaxed and reported.\n"
-        "Chain: DeepSeek -> Tavily -> Brave -> Bing -> DuckDuckGo, first usable "
-        f"wins. Returns at most {MAX_RESULTS} results; follow up with `fetch` to "
-        "read a page."
-    ),
+    description=tool_description("web_search", max_results=str(MAX_RESULTS)),
     parameters={
         "type": "object",
         "properties": {
@@ -219,10 +208,7 @@ WEB_SEARCH = AgentTool(
 
 FETCH = AgentTool(
     name="fetch",
-    description=(
-        "Fetch a URL and return its readable text (HTML stripped). Use it after "
-        "`web_search` to read a result in full."
-    ),
+    description=tool_description("fetch"),
     parameters={
         "type": "object",
         "properties": {

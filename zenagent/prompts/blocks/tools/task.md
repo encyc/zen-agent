@@ -1,0 +1,1 @@
+Delegate a self-contained research job to a read-only subagent. The child has read_file/list_dir/glob/grep/web_search/fetch but cannot edit files, run commands, or ask questions. Use it for independent investigation whose intermediate steps you do not need in this transcript; pass a self-contained prompt and a short name.

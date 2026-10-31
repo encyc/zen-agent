@@ -19,6 +19,7 @@ from pathlib import Path
 
 from zenagent.agent.loop import AgentTool, ToolResultAgent
 from zenagent.frontmatter import parse_frontmatter
+from zenagent.prompts import tool_description
 from zenagent.prompts.registry import read_block
 from zenagent.prompts.render import render
 from zenagent.types import TextContent
@@ -135,10 +136,7 @@ def build_skill_tool(skills: list[Skill]) -> AgentTool:
 
     return AgentTool(
         name="read_skill",
-        description=(
-            "Load a skill's instructions by name before following it. "
-            f"Available skills: {names or '(none)'}"
-        ),
+        description=tool_description("read_skill", skill_names=names or "(none)"),
         parameters={
             "type": "object",
             "properties": {

@@ -22,6 +22,7 @@ from zenagent.agent.agent import Agent
 from zenagent.agent.artifacts import ArtifactSink
 from zenagent.agent.loop import AgentTool, ToolResultAgent
 from zenagent.config import ContextGuard
+from zenagent.prompts import tool_description
 from zenagent.providers.catalog import Model
 from zenagent.providers.registry import StreamFn
 from zenagent.types import AssistantMessage, TextContent
@@ -232,13 +233,7 @@ def build_task_tool(
 
     return AgentTool(
         name="task",
-        description=(
-            "Delegate a self-contained research job to a read-only subagent. "
-            "The child has read_file/list_dir/glob/grep/web_search/fetch but "
-            "cannot edit files, run commands, or ask questions. Use it for "
-            "independent investigation whose intermediate steps you do not need "
-            "in this transcript; pass a self-contained prompt and a short name."
-        ),
+        description=tool_description("task"),
         parameters={
             "type": "object",
             "properties": {
