@@ -57,6 +57,51 @@ _BINARY_SNIFF_BYTES = 8192
 #: Lines of unified diff kept in a tool result (enough for a review, bounded).
 MAX_DIFF_LINES = 200
 
+#: UTF-8 BOM: as a character (what decoding yields) and as bytes on disk.
+_BOM = "\ufeff"
+_BOM_BYTES = b"\xef\xbb\xbf"
+
+
+def _read_existing(path: Path) -> tuple[str, bytes | None]:
+    """Return ``(decoded_text, raw_bytes)`` for an existing file.
+
+    The text is what diffing compares against; unreadable and binary files have
+    empty text. ``raw`` is the on-disk bytes (when readable) so callers can
+    detect the file's BOM/newline convention without a second read.
+    """
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return "", None
+    if b"\x00" in raw[:_BINARY_SNIFF_BYTES]:
+        return "", raw
+    return raw.decode("utf-8", errors="replace"), raw
+
+
+def _read_text_or_empty(path: Path) -> str:
+    """Existing content for diffing; unreadable/binary files count as empty."""
+    return _read_existing(path)[0]
+
+
+def _detect_file_conventions(raw: bytes) -> tuple[bool, str]:
+    """Return ``(has_bom, newline)`` for the bytes of an existing file."""
+    has_bom = raw.startswith(_BOM_BYTES)
+    return has_bom, "\r\n" if b"\r\n" in raw else "\n"
+
+
+def _apply_file_conventions(text: str, *, has_bom: bool, newline: str) -> str:
+    """Re-apply an existing file's BOM and newline style to ``text``.
+
+    LF-only model text is written back as CRLF for a CRLF file, while text that
+    already uses CRLF is not double-converted. A file without a BOM keeps one
+    the model explicitly included; a file with a BOM gets exactly one.
+    """
+    if has_bom and text.startswith(_BOM):
+        text = text[1:]  # the BOM is re-added below, so this would be a dupe
+    if newline == "\r\n":
+        text = text.replace("\r\n", "\n").replace("\n", "\r\n")
+    return _BOM + text if has_bom else text
+
 
 def unified_diff(
     path: str, old: str, new: str, *, context: int = 3, max_lines: int = MAX_DIFF_LINES
@@ -76,17 +121,6 @@ def unified_diff(
         dropped = len(lines) - max_lines
         lines = lines[:max_lines] + [f"... [{dropped} more diff lines] ..."]
     return "\n".join(lines)
-
-
-def _read_text_or_empty(path: Path) -> str:
-    """Existing content for diffing; unreadable/binary files count as empty."""
-    try:
-        raw = path.read_bytes()
-    except OSError:
-        return ""
-    if b"\x00" in raw[:_BINARY_SNIFF_BYTES]:
-        return ""
-    return raw.decode("utf-8", errors="replace")
 
 
 def _text(text: str, *, is_error: bool = False, **details) -> ToolResultAgent:
@@ -240,7 +274,7 @@ async def _write_file(
 ) -> ToolResultAgent:
     path = Path(args["path"])
     content = args["content"]
-    previous = _read_text_or_empty(path)
+    previous, raw = _read_existing(path)
     # A model that read one page and writes it back would silently truncate the
     # file. Refuse when the payload is still a truncated read projection and is
     # smaller than what is on disk; the error tells it how to recover.
@@ -258,14 +292,24 @@ async def _write_file(
             is_error=True,
             path=str(path),
         )
+    # Preserve an existing text file's conventions; new files stay LF/no-BOM.
+    has_bom, newline = False, "\n"
+    if raw is not None and previous:
+        has_bom, newline = _detect_file_conventions(raw)
+    payload = _apply_file_conventions(content, has_bom=has_bom, newline=newline)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
+        path.write_bytes(payload.encode("utf-8"))
     except OSError as exc:
         return _text(f"cannot write {path}: {exc}", is_error=True)
-    diff = unified_diff(str(path), previous, content)
+    diff = unified_diff(str(path), previous, payload)
+    notice = ""
+    if payload != content:
+        notice = " (kept the existing file's CRLF/BOM convention)"
     return _text(
-        f"wrote {len(content)} characters to {path}", path=str(path), diff=diff
+        f"wrote {len(content)} characters to {path}{notice}",
+        path=str(path),
+        diff=diff,
     )
 
 
@@ -275,17 +319,34 @@ async def _edit_file(
     path = Path(args["path"])
     old = args["old_string"]
     new = args["new_string"]
+    replace_all = args.get("replace_all", False)
+    if replace_all is None:
+        replace_all = False
+    if not isinstance(replace_all, bool):
+        return _text("replace_all must be a boolean", is_error=True)
     if not old:
         return _text("old_string must not be empty", is_error=True)
 
     try:
-        text = path.read_text(encoding="utf-8")
+        raw = path.read_bytes()
     except FileNotFoundError:
         return _text(f"file not found: {path}", is_error=True)
-    except (OSError, UnicodeDecodeError) as exc:
+    except OSError as exc:
+        return _text(f"cannot read {path}: {exc}", is_error=True)
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
         return _text(f"cannot read {path}: {exc}", is_error=True)
 
-    matches = text.count(old)
+    # Match newline-insensitively: a model editing a CRLF file often supplies
+    # LF-only old_string/new_string, and an LF file may receive CRLF text.
+    # The result is converted back to the file's own convention on write.
+    _, newline = _detect_file_conventions(raw)
+    searchable = text.replace("\r\n", "\n")
+    target = old.replace("\r\n", "\n")
+    replacement = new.replace("\r\n", "\n")
+
+    matches = searchable.count(target)
     if matches == 0:
         return _text(
             f"old_string not found in {path}; nothing changed. Include more "
@@ -293,7 +354,7 @@ async def _edit_file(
             is_error=True,
             matches=0,
         )
-    if matches > 1:
+    if matches > 1 and not replace_all:
         return _text(
             f"old_string matches {matches} times in {path}; it must be unique. "
             "Include more surrounding context; nothing changed.",
@@ -301,14 +362,25 @@ async def _edit_file(
             matches=matches,
         )
 
-    updated = text.replace(old, new, 1)
+    updated_searchable = searchable.replace(
+        target, replacement, -1 if replace_all else 1
+    )
+    if newline == "\r\n":
+        updated = updated_searchable.replace("\n", "\r\n")
+    else:
+        updated = updated_searchable
     try:
-        path.write_text(updated, encoding="utf-8")
+        path.write_bytes(updated.encode("utf-8"))
     except OSError as exc:
         return _text(f"cannot write {path}: {exc}", is_error=True)
     diff = unified_diff(str(path), text, updated)
+    count = matches if replace_all else 1
+    noun = "occurrence" if count == 1 else "occurrences"
     return _text(
-        f"edited {path}: replaced 1 occurrence", path=str(path), diff=diff
+        f"edited {path}: replaced {count} {noun}",
+        path=str(path),
+        diff=diff,
+        replacements=count,
     )
 
 
@@ -376,7 +448,8 @@ READ_FILE = _tool(
 WRITE_FILE = _tool(
     "write_file",
     "Write UTF-8 text to a file, creating parent directories as needed. "
-    "Overwrites the whole file.",
+    "Overwrites the whole file. An existing file's CRLF line endings and "
+    "UTF-8 BOM are kept; a new file is written with LF line endings.",
     {
         "path": {"type": "string", "description": "File path to write."},
         "content": {"type": "string", "description": "Full file content."},
@@ -388,15 +461,26 @@ WRITE_FILE = _tool(
 
 EDIT_FILE = _tool(
     "edit_file",
-    "Replace one exact string in a file. old_string must match exactly once; "
-    "on zero or multiple matches the file is left unchanged.",
+    "Replace an exact string in a file. By default old_string must match "
+    "exactly once; set replace_all to replace every occurrence. On zero "
+    "matches (or multiple matches without replace_all) the file is left "
+    "unchanged. The file's CRLF line endings and BOM are kept.",
     {
         "path": {"type": "string", "description": "File to edit."},
         "old_string": {
             "type": "string",
-            "description": "Exact text to replace (must be unique in the file).",
+            "description": (
+                "Exact text to replace (must be unique unless replace_all)."
+            ),
         },
         "new_string": {"type": "string", "description": "Replacement text."},
+        "replace_all": {
+            "type": "boolean",
+            "default": False,
+            "description": (
+                "Replace every occurrence instead of requiring a unique match."
+            ),
+        },
     },
     ["path", "old_string", "new_string"],
     _edit_file,
