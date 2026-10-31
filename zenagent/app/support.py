@@ -35,14 +35,47 @@ def describe_tools(tools: list) -> str:
 
 
 def system_prompt(tool_names: list[str]) -> str:
+    """Base prompt: identity, tool list, and the compact tool policy.
+
+    The policy section mirrors omp's Specialized / General / Exploration split
+    (``docs/research/omp-cli-study/10-tools-gap.md`` P1-9): it is short on
+    purpose — a prompt that grows a paragraph per tool costs tokens every turn.
+    The todo rule is only emitted when the tool is actually registered, because
+    the headless/REPL frontends build their tool list independently of
+    :meth:`zenagent.app.runtime.Runtime.bootstrap`.
+    """
     tools = ", ".join(tool_names) if tool_names else "(none available yet)"
-    return (
-        "You are zenagent, a coding agent working in the user's repository.\n"
-        f"Working directory: {Path.cwd()}\n"
-        f"Available tools: {tools}\n"
-        "Answer concisely. Prefer using tools to inspect the code instead of "
-        "guessing. Explain what you did when you finish."
+    lines = [
+        "You are zenagent, a coding agent working in the user's repository.",
+        f"Working directory: {Path.cwd()}",
+        f"Available tools: {tools}",
+        "Tool policy:",
+        (
+            "- Specialized: prefer read_file, list_dir, glob, grep, web_search "
+            "and fetch over shell equivalents."
+        ),
+        "- General: use bash only when no specialized tool fits.",
+        (
+            "- Exploration: never guess file contents; read or grep the code "
+            "before changing it."
+        ),
+    ]
+    if "todo" in tool_names:
+        lines.append(
+            "- Todo: for work with 3+ steps, call todo in the same response as "
+            "your plan and keep it current; address tasks by their exact "
+            "content (start/done/block as you go)."
+        )
+    lines.extend(
+        [
+            (
+                "- Parallel: batch independent tool calls in one response; keep "
+                "dependent calls sequential."
+            ),
+            "Answer concisely. Explain what you did when you finish.",
+        ]
     )
+    return "\n".join(lines)
 
 
 def resolve_model(catalog: dict[str, ProviderConfig], model_id: str | None) -> Model:

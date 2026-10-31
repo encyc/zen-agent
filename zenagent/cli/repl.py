@@ -71,6 +71,7 @@ from zenagent.skills import (
 from zenagent.telemetry import MetricsRecorder, append_metrics
 from zenagent.templates import default_template_roots, discover_templates, expand
 from zenagent.tools import ALL_TOOLS
+from zenagent.tools.todo import build_todo_tool
 from zenagent.trace import TraceRecorder
 from zenagent.types import ImageContent
 
@@ -517,6 +518,8 @@ async def repl(
 
     tool_list = list(ALL_TOOLS if tools is None else tools)
     session = _session_for(resume)
+    if tools is None:
+        tool_list.append(build_todo_tool(session.path))
     guard = ContextGuard(model.context_window)
     base_tools = list(tool_list)
     extension_files = [*user_config.extensions, *(extension_paths or [])]

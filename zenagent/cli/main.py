@@ -66,6 +66,7 @@ from zenagent.skills import (
 )
 from zenagent.telemetry import MetricsRecorder, append_metrics
 from zenagent.tools import ALL_TOOLS
+from zenagent.tools.todo import build_todo_tool
 from zenagent.trace import TraceRecorder
 from zenagent.types import AssistantMessage, ImageContent, Message
 
@@ -289,6 +290,22 @@ async def run_headless(
         for part in (skills_index, extension_prompt, mode_prompt_note(resolved_mode))
         if part
     )
+    # Open the session before the agent is built: the todo tool is per-session
+    # state bound to a sidecar next to the JSONL.
+    if resume is not None:
+        path = latest_session() if resume == "latest" else Path(resume)
+        if path is not None and path.is_file():
+            session = Session(path)
+            for warning in session.warnings:
+                print(f"zenagent: {warning}", file=sys.stderr)
+        else:
+            print(f"zenagent: no session to resume ({resume})", file=sys.stderr)
+            session = Session(unique_session_path())
+    else:
+        session = Session(unique_session_path())
+    if tools is None:
+        tool_list.append(build_todo_tool(session.path))
+
     guard = ContextGuard(model.context_window)
     agent = _build_agent(
         model,
@@ -305,18 +322,8 @@ async def run_headless(
         extra_prompt=extra_prompt,
     )
 
-    if resume is not None:
-        path = latest_session() if resume == "latest" else Path(resume)
-        if path is not None and path.is_file():
-            session = Session(path)
-            agent.replace_messages(session.load())
-            for warning in session.warnings:
-                print(f"zenagent: {warning}", file=sys.stderr)
-        else:
-            print(f"zenagent: no session to resume ({resume})", file=sys.stderr)
-            session = Session(unique_session_path())
-    else:
-        session = Session(unique_session_path())
+    if resume is not None and session.messages:
+        agent.replace_messages(session.load())
 
     def persist(event: AgentEvent) -> None:
         if event.type == "agent_end" and event.new_messages:

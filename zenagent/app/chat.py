@@ -21,6 +21,7 @@ from zenagent.app.views import (
     usage_total,
 )
 from zenagent.events import AgentEvent
+from zenagent.tools.todo import coerce_todo_phases, load_todo_phases
 from zenagent.types import (
     AssistantMessage,
     ImageContent,
@@ -59,6 +60,10 @@ class ChatController:
         self._notices: list[TranscriptNotice] = []
         #: Images attached with /image that will ride along with the next prompt.
         self._attachments: list[ImageContent] = []
+        #: Latest canonical todo phases (``details["phases"]`` shape) for the
+        #: HUD. Seeded from the current session's sidecar so resume/start shows
+        #: the list before the first tool call of the restored transcript.
+        self._todos: list[dict] = load_todo_phases(self._session_path())
         runtime.agent.subscribe(self._on_event)
 
     # -- snapshots ----------------------------------------------------------
@@ -66,6 +71,15 @@ class ChatController:
     @property
     def transcript(self) -> list[MessageView | ToolCallView]:
         return list(self._transcript)
+
+    @property
+    def todos(self) -> list[dict]:
+        """Current todo phases for the HUD (``[]`` while there is no list)."""
+        return list(self._todos)
+
+    def _session_path(self) -> Path | None:
+        session = getattr(self.runtime, "session", None)
+        return Path(session.path) if session is not None else None
 
     @property
     def status(self) -> RunStatus:
@@ -95,6 +109,7 @@ class ChatController:
             session_name=Path(self.runtime.session.path).stem,
             cwd=str(Path.cwd()),
             mode=self.runtime.mode,
+            todos=self.todos,
         )
 
     # -- commands -----------------------------------------------------------
@@ -237,6 +252,8 @@ class ChatController:
         self._transcript = messages_to_views(self.runtime.agent.messages)
         self._cards.clear()
         self._current = None
+        # Switching sessions/compaction changes the sidecar the HUD reads.
+        self._todos = load_todo_phases(self._session_path())
         self._notify()
 
     def clear(self) -> None:
@@ -245,6 +262,7 @@ class ChatController:
         self._cards.clear()
         self._current = None
         self._attachments.clear()
+        self._todos = []
         self._notify()
 
     def retry(self) -> str | None:
@@ -371,13 +389,18 @@ class ChatController:
                 return
             card.progress = _progress_line(event.partial_result)
         elif event.type == "tool_execution_end":
+            details = dict(getattr(event.result, "details", None) or {})
             card = self._cards.get(event.tool_call_id or "")
             if card is not None:
                 card.is_error = bool(event.is_error)
                 card.status = "error" if event.is_error else "ok"
                 card.result_text = _result_text(event.result)
-                card.details = dict(getattr(event.result, "details", None) or {})
+                card.details = details
                 card.duration_ms = event.duration_ms
+            if event.tool_name == "todo" and "phases" in details:
+                # The tool returns the canonical snapshot even for a rejected
+                # call, so the HUD always reflects the stored list.
+                self._todos = coerce_todo_phases(details.get("phases"))
         else:
             return
         self._notify()

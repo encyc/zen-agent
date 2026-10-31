@@ -97,6 +97,11 @@ class RunStatus:
     cwd: str = ""
     mode: str = ""
     git_branch: str = ""
+    #: Current todo list as the tool's canonical phase details (``todo``
+    #: ``details["phases"]`` / the ``<session>.todo.json`` sidecar); the TUI HUD
+    #: renders it and hides itself while it is empty. Plain dicts keep this
+    #: UI-agnostic module free of tool imports.
+    todos: list[dict] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

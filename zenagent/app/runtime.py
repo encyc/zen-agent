@@ -55,6 +55,7 @@ from zenagent.templates import (
     discover_templates,
 )
 from zenagent.tools import ALL_TOOLS
+from zenagent.tools.todo import TodoTool, build_todo_tool
 
 __all__ = ["Runtime", "RuntimeOptions"]
 
@@ -103,6 +104,8 @@ class Runtime:
         self.extension_files: list[str] = []
         self.before_switch: SwitchHook | None = None
         self.gate: PermissionGate | None = None
+        #: The per-session todo tool; ``switch_session`` re-points its sidecar.
+        self.todo_tool: TodoTool | None = None
         self._mode: str = DEFAULT_MODE
         self._base_prompt: str = ""
         self._base_tools: list = []
@@ -201,7 +204,14 @@ class Runtime:
             gate.set_mode(mode)
         runtime.gate = gate
 
+        # Open the session before assembling tools: the todo tool is per-session
+        # state bound to the sidecar next to the JSONL, so its factory needs the
+        # final path (resume picks that path here).
+        runtime.session = runtime._open_session(options.resume)
+
         tools = list(ALL_TOOLS)
+        runtime.todo_tool = build_todo_tool(runtime.session.path)
+        tools.append(runtime.todo_tool)
         if options.mcp:
             runtime.mcp = await runtime._start_mcp(options)
             if runtime.mcp is not None:
@@ -275,7 +285,6 @@ class Runtime:
             agent.subscribe(hook)
 
         runtime.agent = agent
-        runtime.session = runtime._open_session(options.resume)
 
         def persist(event) -> None:
             if event.type == "agent_end" and event.new_messages:
@@ -381,4 +390,8 @@ class Runtime:
             session = Session(unique_session_path())
         self.agent.replace_messages(session.load())
         self.session = session
+        if self.todo_tool is not None:
+            # Todo state follows the session: the sidecar next to the file now
+            # in context is the one the HUD shows (and the tool updates).
+            self.todo_tool.bind_session(session.path)
         self.guard.last_usage = None
