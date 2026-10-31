@@ -11,7 +11,21 @@ import json
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
-__all__ = ["DEFAULT_THEME", "THEMES", "Theme", "load_theme"]
+from zenagent.app.appearance import Appearance, resolve_theme
+
+__all__ = [
+    "DEFAULT_THEME",
+    "LEGACY_THEME_NAMES",
+    "THEMES",
+    "Theme",
+    "load_theme",
+    "resolve_theme_spec",
+    "theme_from_appearance",
+]
+
+#: Renderer themes that predate appearances; the REPL keeps them as an escape
+#: hatch, the TUI only knows auto|dark|light.
+LEGACY_THEME_NAMES: frozenset[str] = frozenset({"default", "mono", "solarized"})
 
 
 @dataclass
@@ -95,3 +109,36 @@ def load_theme(spec: str | None = None, warnings: list[str] | None = None) -> Th
 def theme_as_json(theme: Theme) -> str:
     """Pretty JSON for documentation and ``/theme export`` style output."""
     return json.dumps(asdict(theme), indent=2, ensure_ascii=False)
+
+
+def theme_from_appearance(appearance: Appearance) -> Theme:
+    """Derive the REPL renderer's Rich styles from the appearance tokens."""
+    tokens = appearance.tokens
+    return Theme(
+        name=f"harbor-{appearance.name}",
+        thinking=tokens["dim"],
+        diff_add=tokens["ok"],
+        diff_del=tokens["error"],
+        diff_hunk=tokens["accent"],
+        diff_meta="bold",
+        dim=tokens["dim"],
+        accent=tokens["accent"],
+    )
+
+
+def resolve_theme_spec(
+    spec: str | None = None,
+    *,
+    pref: str | None = None,
+    warnings: list[str] | None = None,
+) -> Theme:
+    """Resolve a REPL theme: legacy names/JSON files stay, else an appearance.
+
+    ``auto|dark|light`` (and an unset spec) route through the shared appearance
+    resolver, so the REPL and the TUI always agree on the default palette.
+    """
+    if spec:
+        candidate = Path(spec).expanduser()
+        if spec in LEGACY_THEME_NAMES or candidate.is_file():
+            return load_theme(spec, warnings)
+    return theme_from_appearance(resolve_theme(spec, pref=pref, warnings=warnings))

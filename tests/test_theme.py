@@ -108,3 +108,51 @@ def test_build_key_bindings_returns_bindings():
     bindings = build_key_bindings({"newline": "c-j"})
     assert isinstance(bindings, KeyBindings)
     assert build_key_bindings() is not None
+
+
+# ---------------------------------------------------------------------------
+# appearance-derived themes (0.4.x light/dark)
+# ---------------------------------------------------------------------------
+
+
+def test_theme_from_appearance_maps_tokens():
+    from zenagent.app.appearance import APPEARANCES
+    from zenagent.cli.theme import theme_from_appearance
+
+    theme = theme_from_appearance(APPEARANCES["light"])
+    tokens = APPEARANCES["light"].tokens
+    assert theme.name == "harbor-light"
+    assert theme.diff_add == tokens["ok"]
+    assert theme.diff_del == tokens["error"]
+    assert theme.diff_hunk == tokens["accent"]
+    assert theme.thinking == tokens["dim"]
+    assert theme.dim == tokens["dim"]
+    assert theme.accent == tokens["accent"]
+
+
+def test_resolve_theme_spec_keeps_legacy_names(tmp_path):
+    from zenagent.cli.theme import resolve_theme_spec
+
+    assert resolve_theme_spec("mono").name == "mono"
+    assert resolve_theme_spec("solarized").diff_add == "#859900"
+
+    custom = tmp_path / "mine.json"
+    custom.write_text(json.dumps({"diff_add": "#00ff00"}))
+    assert resolve_theme_spec(str(custom)).diff_add == "#00ff00"
+
+
+def test_resolve_theme_spec_uses_the_saved_preference():
+    from zenagent.cli.theme import resolve_theme_spec
+
+    theme = resolve_theme_spec(None, pref="light")
+    assert theme.name == "harbor-light"
+    assert resolve_theme_spec("dark", pref="light").name == "harbor-dark"
+
+
+def test_resolve_theme_spec_treats_unknown_as_auto():
+    from zenagent.cli.theme import resolve_theme_spec
+
+    warnings: list[str] = []
+    theme = resolve_theme_spec("chartreuse", warnings=warnings)
+    assert theme.name == "harbor-dark"
+    assert warnings and "chartreuse" in warnings[0]

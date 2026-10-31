@@ -30,6 +30,7 @@ from zenagent.agent.session import (
     truncate_last_turn,
     unique_session_path,
 )
+from zenagent.app.appearance import THEME_CHOICES
 from zenagent.app.compact import compact, maybe_auto_compact
 from zenagent.app.modes import describe_modes, mode_prompt_note
 from zenagent.app.retry import prepare_retry
@@ -50,7 +51,12 @@ from zenagent.cli.render import (
     status_line,
     tool_result_line,
 )
-from zenagent.cli.theme import DEFAULT_THEME, Theme, load_theme
+from zenagent.cli.theme import (
+    DEFAULT_THEME,
+    LEGACY_THEME_NAMES,
+    Theme,
+    resolve_theme_spec,
+)
 from zenagent.config import ContextGuard, apply_user_config, load_user_config
 from zenagent.context_files import (
     discover_context_files,
@@ -310,7 +316,10 @@ async def handle_slash(
             print_fn("themes are unavailable here")
             return None
         if not argument:
-            print_fn("usage: /theme default|mono|solarized|<path.json>")
+            print_fn(
+                "usage: /theme auto|dark|light (or a legacy name: "
+                "default|mono|solarized|<path.json>)"
+            )
             return None
         set_theme(argument)
         return None
@@ -458,6 +467,13 @@ def _session_for(resume: str | Path | None) -> Session:
     else:
         path = Path(resume)
     return Session(path)
+
+
+def _saved_theme() -> str | None:
+    """The persisted ``theme`` preference (tests patch the settings store)."""
+    from zenagent import settings
+
+    return settings.get_pref("theme")
 
 
 def _make_default_reader(
@@ -774,7 +790,7 @@ async def repl(
     console = Console() if sys.stdout.isatty() else None
     theme_warnings: list[str] = []
     try:
-        active_theme = load_theme(theme, theme_warnings)
+        active_theme = resolve_theme_spec(theme, pref=_saved_theme(), warnings=theme_warnings)
     except ValueError as exc:
         theme_warnings.append(str(exc))
         active_theme = DEFAULT_THEME
@@ -788,11 +804,24 @@ async def repl(
 
     def set_theme(spec: str) -> None:
         nonlocal active_theme
+        normalized = spec.strip().lower()
+        legacy = normalized in LEGACY_THEME_NAMES or Path(spec).expanduser().is_file()
+        if normalized not in THEME_CHOICES and not legacy:
+            print_fn(
+                f"unknown theme: {spec} (choose {'|'.join(THEME_CHOICES)}"
+                f", or a legacy name/path)"
+            )
+            return
         try:
-            active_theme = load_theme(spec)
+            theme = resolve_theme_spec(spec)
         except ValueError as exc:
             print_fn(str(exc))
             return
+        if normalized in THEME_CHOICES:
+            from zenagent import settings
+
+            settings.set_pref("theme", normalized)
+        active_theme = theme
         printer.theme = active_theme
         print_fn(f"theme -> {active_theme.name}")
 

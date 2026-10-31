@@ -512,7 +512,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--theme",
         metavar="NAME",
-        help="repl colour theme: default|mono|solarized|<path.json>",
+        help="colour theme: auto|dark|light (repl also accepts default|mono|solarized|<path.json>)",
     )
     parser.add_argument(
         "--extension",
@@ -752,7 +752,7 @@ def main(argv: list[str] | None = None) -> int:
                     options, gate=broker, allow_missing_key=True
                 )
                 try:
-                    app = ZenAgentApp(runtime)
+                    app = ZenAgentApp(runtime, theme=args.theme)
                     broker.set_confirm(app.request_tool_approval)
                     await app.run_async()
                     if app.exit_summary:
