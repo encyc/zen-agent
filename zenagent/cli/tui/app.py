@@ -36,6 +36,7 @@ from zenagent.cli.tui.widgets.new_content import NewContentBar
 from zenagent.cli.tui.widgets.prompt_gutter import PromptGutter
 from zenagent.cli.tui.widgets.prompt_input import PromptInput
 from zenagent.cli.tui.widgets.sidebar import NARROW_WIDTH, Sidebar
+from zenagent.cli.tui.widgets.sidebar_resize import SidebarResizeHandle
 from zenagent.cli.tui.widgets.status_band import StatusBand
 from zenagent.cli.tui.widgets.subagent_banner import SubagentBanner
 from zenagent.cli.tui.widgets.todo_hud import TodoHud
@@ -105,6 +106,9 @@ class ZenAgentApp(App):
         #: ctrl+b intent; the actual visibility also depends on the width.
         self._sidebar_open = False
         self._sidebar_visible = False
+        #: Drag-resized sidebar width (process-local; 26 at every launch).
+        self._sidebar_width = self.DEFAULT_SIDEBAR_WIDTH
+        self._sidebar_resizing = False
         #: 1s poll while background jobs/subagents are live (else none).
         self._work_timer = None
         #: ``task`` call id whose read-only transcript is on screen.
@@ -212,6 +216,12 @@ class ZenAgentApp(App):
 
     WHEEL_ROWS = 3
 
+    #: Sidebar width bounds; the main column never drops below the minimum.
+    DEFAULT_SIDEBAR_WIDTH = 26
+    MIN_SIDEBAR_WIDTH = 20
+    MAX_SIDEBAR_WIDTH = 60
+    MAIN_COLUMN_MIN = 30
+
     def _on_mouse_scroll_up(self, event: MouseScrollUp) -> None:
         self._scroll_chat(-self.WHEEL_ROWS)
 
@@ -241,6 +251,7 @@ class ZenAgentApp(App):
                         yield PromptGutter()
                         yield PromptInput()
                         yield WorkIndicator()
+            yield SidebarResizeHandle()
             yield Sidebar()
 
     def on_mount(self) -> None:
@@ -444,6 +455,34 @@ class ZenAgentApp(App):
         if restore_focus:
             prompt.focus()
 
+    # -- sidebar width -------------------------------------------------------
+
+    @property
+    def sidebar_width(self) -> int:
+        """The current sidebar width (clamped to the bounds above)."""
+        return self._sidebar_width
+
+    def begin_sidebar_resize(self) -> None:
+        """Mouse-down on the handle; the move handler owns the actual updates."""
+        self._sidebar_resizing = True
+
+    def end_sidebar_resize(self) -> None:
+        self._sidebar_resizing = False
+
+    def resize_sidebar(self, screen_x: int) -> None:
+        """Anchor the sidebar's left edge at ``screen_x`` (the right edge is fixed)."""
+        width = self.size.width - int(screen_x)
+        room = self.size.width - self.MAIN_COLUMN_MIN
+        self._sidebar_width = max(
+            self.MIN_SIDEBAR_WIDTH,
+            min(self.MAX_SIDEBAR_WIDTH, room, width),
+        )
+        self._apply_sidebar_width()
+
+    def _apply_sidebar_width(self) -> None:
+        for sidebar in self.query(Sidebar):
+            sidebar.styles.width = self._sidebar_width
+
     # -- chrome -------------------------------------------------------------
 
     def _open_sidebar_from_strip(self) -> None:
@@ -479,6 +518,9 @@ class ZenAgentApp(App):
         self._sidebar_visible = visible
         for sidebar in self.query(Sidebar):
             sidebar.display = visible
+        for handle in self.query(SidebarResizeHandle):
+            handle.display = visible
+        self._apply_sidebar_width()
         for hud in self.query(TodoHud):
             hud.display = bool(status.todos) and not visible
         running = sum(1 for job in status.jobs if job.status == "running")
