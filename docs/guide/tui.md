@@ -5,7 +5,9 @@
 
 ## 布局
 
-单列结构，抄自 omp 的主屏：**转录区在上，底部一条 dock（状态带 + 输入行）**。
+单列结构，抄自 omp 的主屏：**转录区在上，底部一条 dock（todo HUD + 状态带 + 输入行）**。
+dock 里 `TodoHud` 只有存在 todo 时显示一行（当前 phase / 当前任务 / closed/total），
+数据来自 `ChatController.todos`（启动时从 `<session>.todo.json` 恢复）。
 没有底部状态栏，状态信息就是输入框上方那条填色带；屏幕最后一行就是输入行。
 
 ```

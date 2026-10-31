@@ -11,6 +11,7 @@ class AgentTool:
     execution_mode: str = "parallel"  # or "sequential"
     execute: Callable[[str, dict, AbortToken|None, Callable|None], Awaitable[ToolResultAgent]]
     approval: str = "exec"            # 工具声明的能力级：read / write / exec
+    timeout_s: float | None = None    # 内核级 deadline（None = 工具自管/无）
 
 @dataclass
 class ToolResultAgent:
@@ -18,6 +19,7 @@ class ToolResultAgent:
     details: dict = {}                          # 仅 UI/日志
     is_error: bool = False
     terminate: bool = False                     # 结束本 run
+    error_kind: str = ""                        # 机器可读失败类别（循环自动填）
 ```
 
 不变量：
@@ -64,8 +66,8 @@ class ToolResultAgent:
 | 工具 | 关键限制 |
 |---|---|
 | `read_file` | 默认每次 `DEFAULT_READ_LIMIT = 400` 行、硬上限 `MAX_READ_LIMIT = 2000`；支持 `offset`（0 基行号）/`limit`，截断页尾给出下一页的精确 `offset`；二进制（前若干字节有 NUL）/非 UTF-8 拒绝 |
-| `write_file` | 覆盖写，返回摘要；**拒绝把"截断的 read 页"回写**：content 仍带 `[truncated:` 页尾且比磁盘文件短 → `is_error`，防止静默截断数据 |
-| `edit_file` | old 必须唯一匹配；返回 unified diff（`MAX_DIFF_LINES = 200`） |
+| `write_file` | 覆盖写，返回摘要；保留已有文件的 CRLF/BOM 约定（新文件 LF/无 BOM）；**拒绝把"截断的 read 页"回写**：content 仍带 `[truncated:` 页尾且比磁盘文件短 → `is_error`，防止静默截断数据 |
+| `edit_file` | old 默认必须唯一匹配（`replace_all=true` 时全替换）；匹配对换行风格不敏感；返回 unified diff（`MAX_DIFF_LINES = 200`）；写回保留 CRLF/BOM |
 | `list_dir` | `MAX_LIST_ENTRIES = 500`，目录带 `/` 标记 |
 
 ### bash
@@ -78,10 +80,24 @@ class ToolResultAgent:
 - `start_new_session=True`：超时/取消时 `killpg` 杀整个进程组，避免孤儿进程。
 - 危险命令（`rm -rf /`、`curl|sh`、fork bomb 等）在权限门里拦截。
 
+### todo（会话级编排）
+
+- 单个工具 `todo`（`tools/todo.py`），`approval="read"`、`execution_mode="sequential"`：
+  它只改会话进度状态，不碰工作区文件；串行保证同一轮的多个 todo 变更不交错。
+- 9 个 op：`init/start/done/rm/drop/block/unblock/append/view`；任务**按内容寻址**
+  （不生成 ID，模型传 `task-N` 会得到专门文案）；一次调用若任一 op 非法，整批丢弃且
+  状态不变（原子）。
+- 状态写入 `<session>.todo.json`（mkstemp + fsync + `os.replace` 原子替换）；
+  无会话文件时仅内存。`details["phases"]` 是 UI/HUD 的 canonical 快照，
+  `summarize_todo`/`coerce_todo_phases` 供控制器复用。
+- 启用面：TUI 走 `Runtime.bootstrap` 注入；headless/REPL 绑定各自 session；
+  RPC 无 JSONL 会话，用内存态。
+
 ### search
 
 - `glob`：按模式找文件（不跟随符号链接逃逸）。
-- `grep`：正则搜索；跳过二进制/超大文件；结果行数有上限。
+- `grep`：正则搜索；跳过二进制/超大文件；按文件分页（每页 20 个文件、每文件 20 条命中，
+  内部扫描上限 2000 条），页脚给出下一页 `skip`，`rg` 与 Python fallback 语义一致。
 
 ## 并发执行模型
 
@@ -95,6 +111,25 @@ loop 里对每个 call：
 6. 追加 `ToolResultMessage`，发出 `tool_execution_end`。
 
 结果顺序与请求顺序一致，id 一一对应；并行只是执行顺序，不影响写回顺序。
+
+### 超时与取消
+
+- 内核级 deadline 由 `agent/timeouts.py` 决定：工具自己的 `timeout_s` 优先，其次
+  `TOOL_TIMEOUTS` 表（`web_search`/`fetch`/`mcp`），clamp 到 0.1–600s；`bash` 不在表内
+  （它自己 `killpg`，避免双重计时）。
+- 超时 → `error_kind="timeout"` 的 `is_error` 结果，loop 继续下一轮。
+
+### 错误类别（`error_kind`）
+
+loop 的降级路径都会填一个机器可读类别：`unknown_tool` / `invalid_arguments` /
+`policy`（权限或自定义 hook 拦截）/ `tool_error`（工具异常）/ `timeout`；
+工具自己返回的错误可以带更具体的类别。UI/遥测按类别聚合，模型按文本处理。
+
+### 并发与 exclusive
+
+- 默认 `execution_mode="parallel"`：并行批用 `asyncio.gather` 同时跑。
+- **exclusive** = `execution_mode="sequential"` 或 `approval="write"`：先等并行批全部结束，
+  再按请求顺序逐个执行。文件写类工具因此不会与读/搜索交错；这不是"两轨并发"。
 
 ### 流式进度（partial result）
 
