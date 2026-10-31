@@ -16,6 +16,9 @@ __all__ = [
     "PROMPT_VERSION",
     "SYSTEM_BLOCK_ORDER",
     "TOOL_BLOCK_NAMES",
+    "TOOL_BUDGET_CHARS",
+    "TOOL_TOTAL_BUDGET_CHARS",
+    "TOTAL_BUDGET_CHARS",
     "BlockSpec",
 ]
 
@@ -188,3 +191,9 @@ for _tool_name in TOOL_BLOCK_NAMES:
         budget_chars=900,
         required_vars=_TOOL_VARS.get(_tool_name, ()),
     )
+
+
+#: Hard budgets from the design doc (§6.3); enforced by the budget test.
+TOTAL_BUDGET_CHARS = 9000
+TOOL_TOTAL_BUDGET_CHARS = 4400
+TOOL_BUDGET_CHARS = 900

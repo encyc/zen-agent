@@ -654,6 +654,10 @@ def main(argv: list[str] | None = None) -> int:
             sys.modules.pop(spec.name, None)
             raise
         return module.main(raw[1:])
+    if raw and raw[0] == "prompts":
+        from zenagent.cli.prompts_cmd import main as prompts_main
+
+        return prompts_main(raw[1:])
     args = build_parser().parse_args(argv)
     mode = resolve_mode(
         explicit=args.mode, assume_yes=args.yes, read_only=args.read_only
