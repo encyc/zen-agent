@@ -14,6 +14,8 @@ from rich.text import Text
 
 from zenagent.app.views import RunStatus
 from zenagent.cli.tui import palette
+from zenagent.cli.tui.textutil import clip_cells_left
+from zenagent.i18n import t, tn
 
 __all__ = ["SEGMENTS", "SEGMENT_IDS", "SegmentContext", "render_status_line"]
 
@@ -72,8 +74,7 @@ def _render_path(ctx: SegmentContext) -> Text | None:
         shown = "~" + cwd[len(home) :]
     else:
         shown = cwd
-    if len(shown) > ctx.path_max:
-        shown = "…" + shown[-(ctx.path_max - 1) :]
+    shown = clip_cells_left(shown, ctx.path_max)
     return _muted(shown)
 
 
@@ -88,7 +89,9 @@ def _render_tokens(ctx: SegmentContext) -> Text | None:
     status = ctx.status
     if not status.input_tokens and not status.output_tokens:
         return None
-    return _muted(f"{status.input_tokens} in / {status.output_tokens} out")
+    return _muted(
+        t("tui.status.tokens", input=status.input_tokens, output=status.output_tokens)
+    )
 
 
 def _render_cost(ctx: SegmentContext) -> Text | None:
@@ -105,7 +108,7 @@ def _render_cache_hit(ctx: SegmentContext) -> Text | None:
     ratio = ctx.status.cache_hit_ratio
     if ratio is None:
         return None
-    return _muted(f"cache {ratio * 100:.0f}%")
+    return _muted(t("tui.status.cache", pct=f"{ratio * 100:.0f}"))
 
 
 def _render_time_spent(ctx: SegmentContext) -> Text | None:
@@ -118,7 +121,8 @@ def _render_token_rate(ctx: SegmentContext) -> Text | None:
     status = ctx.status
     if not status.turn_ms or not status.turn_output_tokens:
         return None
-    return _muted(f"{status.turn_output_tokens / (status.turn_ms / 1000):.1f} tok/s")
+    rate = status.turn_output_tokens / (status.turn_ms / 1000)
+    return _muted(t("tui.status.token_rate", rate=f"{rate:.1f}"))
 
 
 def _render_context(ctx: SegmentContext) -> Text | None:
@@ -127,16 +131,16 @@ def _render_context(ctx: SegmentContext) -> Text | None:
     if not window:
         return None
     percent = status.context_used * 100 / window
-    return _muted(f"context {percent:.1f}%")
+    return _muted(t("tui.status.context", pct=f"{percent:.1f}"))
 
 
 def _render_queued(ctx: SegmentContext) -> Text | None:
     status = ctx.status
     parts: list[str] = []
     if status.follow_ups:
-        parts.append(f"{status.follow_ups} queued")
+        parts.append(tn("tui.status.queued", status.follow_ups))
     if status.steering:
-        parts.append(f"{status.steering} steering")
+        parts.append(tn("tui.status.steering", status.steering))
     if not parts:
         return None
     return Text(" · ".join(parts), style=palette.ACCENT if status.running else palette.MUTED)

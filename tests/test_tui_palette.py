@@ -8,7 +8,7 @@ must be read at render time, never snapshotted at import.
 from zenagent.app.appearance import APPEARANCES
 from zenagent.cli.tui import palette
 
-SECTIONS = ["Session", "Model", "Runtime", "Context", "Todo", "Subagent", "Jobs"]
+SECTIONS = ["session", "model", "runtime", "context", "todo", "subagent", "jobs"]
 
 
 def test_bind_switches_palette_tokens():
@@ -17,7 +17,7 @@ def test_bind_switches_palette_tokens():
     palette.bind(APPEARANCES["light"])
     assert palette.TEXT == "#1f262c"
     assert palette.ACCENT == "#8a5a20"
-    assert palette.SECTION_ACCENTS["Session"] == "#2a6478"
+    assert palette.SECTION_ACCENTS["session"] == "#2a6478"
     assert palette.STATE_COLORS["timed_out"] == "#7a5c1a"
     palette.bind(APPEARANCES["dark"])
 
@@ -46,8 +46,8 @@ def test_state_colours_cover_every_rendered_state():
 
 def test_state_and_context_maps_track_the_binding():
     palette.bind(APPEARANCES["light"])
-    assert palette.CONTEXT_COLORS["system"] == palette.SECTION_ACCENTS["Session"]
-    assert palette.CONTEXT_COLORS["session"] == palette.SECTION_ACCENTS["Context"]
+    assert palette.CONTEXT_COLORS["system"] == palette.SECTION_ACCENTS["session"]
+    assert palette.CONTEXT_COLORS["session"] == palette.SECTION_ACCENTS["context"]
     assert palette.STATE_COLORS["pending"] == palette.MUTED
     palette.bind(APPEARANCES["dark"])
     assert palette.CONTEXT_COLORS["system"] == "#7fb3c9"
@@ -76,5 +76,5 @@ async def test_sidebar_titles_use_their_section_accent(fake_runtime):
             title = section.query_one(".sidebar-title")
             color = title.styles.color
             assert color is not None, section.title
-            expected = palette.SECTION_ACCENTS[section.title].lower()
+            expected = palette.SECTION_ACCENTS[section.key].lower()
             assert color.hex6.lower() == expected, section.title

@@ -11,6 +11,7 @@ from rich.text import Text
 from textual.widgets import Static
 
 from zenagent.cli.tui import palette
+from zenagent.i18n import t
 
 __all__ = ["NewContentBar"]
 
@@ -26,7 +27,7 @@ class NewContentBar(Static):
     def show_marker(self) -> None:
         text = Text()
         text.append("↓ ", style=palette.ACCENT)
-        text.append("new output", style=palette.MUTED)
+        text.append(t("tui.new_output.label"), style=palette.MUTED)
         text.append("  ·  pagedown", style=palette.DIM)
         self.update(text)
         self.display = True

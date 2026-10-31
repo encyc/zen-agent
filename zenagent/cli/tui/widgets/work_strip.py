@@ -14,6 +14,7 @@ from rich.text import Text
 from textual.widgets import Static
 
 from zenagent.cli.tui import palette
+from zenagent.i18n import t, tn
 
 __all__ = ["WorkStrip"]
 
@@ -55,10 +56,9 @@ class WorkStrip(Static):
             return
         parts: list[str] = []
         if jobs_running:
-            noun = "job" if jobs_running == 1 else "jobs"
-            parts.append(f"{jobs_running} {noun}")
+            parts.append(tn("tui.work.jobs", jobs_running))
         if task:
-            parts.append("1 task")
+            parts.append(t("tui.work.task"))
         text = Text()
         text.append("◐ ", style=palette.ACCENT)
         text.append(" · ".join(parts), style=palette.MUTED)

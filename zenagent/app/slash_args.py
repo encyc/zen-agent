@@ -36,6 +36,11 @@ ARG_VALUES: dict[str, list[tuple[str, str]]] = {
         ("dark", "harbor dark"),
         ("light", "harbor light"),
     ],
+    "/lang": [
+        ("auto", "follow the system locale"),
+        ("en", "English"),
+        ("zh", "简体中文"),
+    ],
     "/mcp": [("retry", "reconnect failed servers")],
     "/images": [("clear", "forget attached images")],
 }

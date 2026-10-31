@@ -46,6 +46,7 @@ from zenagent.cli.tui.widgets.todo_hud import TodoHud
 from zenagent.cli.tui.widgets.transcript import TranscriptView
 from zenagent.cli.tui.widgets.work_indicator import WorkIndicator
 from zenagent.cli.tui.widgets.work_strip import WorkStrip
+from zenagent.i18n import LANGUAGE_CHOICES, resolve_language, set_locale
 
 __all__ = ["DOUBLE_ESCAPE_SECONDS", "ZenAgentApp"]
 
@@ -59,6 +60,13 @@ def _saved_theme() -> str | None:
     from zenagent import settings
 
     return settings.get_pref("theme")
+
+
+def _saved_language() -> str | None:
+    """The persisted ``language`` preference, read lazily (tests patch settings)."""
+    from zenagent import settings
+
+    return settings.get_pref("language")
 
 
 class ZenAgentApp(App):
@@ -97,6 +105,7 @@ class ZenAgentApp(App):
         chat: ChatController | None = None,
         history_path: Path | None = None,
         theme: str | None = None,
+        language: str | None = None,
     ) -> None:
         super().__init__()
         # Resolve and register the appearance before the first paint, so a
@@ -114,6 +123,18 @@ class ZenAgentApp(App):
         self.register_theme(textual_theme(APPEARANCES["light"]))
         self.theme = theme_name(self._appearance)
         palette.bind(self._appearance)
+        # Interface language is resolved before any command/description exists,
+        # so a fresh process never builds English chrome under a zh locale.
+        language_warnings: list[str] = []
+        self._language_spec = (language or _saved_language() or "auto").strip().lower()
+        if self._language_spec not in LANGUAGE_CHOICES:
+            self._language_spec = "auto"
+        set_locale(
+            resolve_language(
+                language, pref=_saved_language(), warnings=language_warnings
+            )
+        )
+        self._language_warnings = language_warnings
         self.runtime = runtime
         self.chat = chat or ChatController(runtime, on_change=self._on_change)
         self.history = PromptHistory(history_path)
@@ -296,6 +317,7 @@ class ZenAgentApp(App):
 
         set_subagent_observer(self.chat.on_subagent_event)
         self._announce_appearance_warnings()
+        self._announce_language_warnings()
         self._announce_missing_key()
         # A resumed session already has messages: build the transcript views
         # before the first paint, or history (and its subagent rows) is blank.
@@ -316,6 +338,15 @@ class ZenAgentApp(App):
 
         set_ask_handler(None)
         set_subagent_observer(None)
+
+    def _announce_language_warnings(self) -> None:
+        """Report a rejected language pref without stopping the app."""
+        warnings, self._language_warnings = self._language_warnings, []
+        if not warnings:
+            return
+        transcript = self.query_one(TranscriptView)
+        for warning in warnings:
+            transcript.append_notice(f"language: {warning}")
 
     def _announce_appearance_warnings(self) -> None:
         """Report a rejected theme pref without stopping the app."""
@@ -921,6 +952,51 @@ class ZenAgentApp(App):
             selected,
         )
 
+    def set_language(self, spec: str) -> str:
+        """Switch the interface language (auto|en|zh) and rebuild the chrome."""
+        from zenagent import settings
+
+        normalized = (spec or "").strip().lower()
+        code = resolve_language(normalized)
+        set_locale(code)
+        if normalized in LANGUAGE_CHOICES:
+            settings.set_pref("language", normalized)
+            self._language_spec = normalized
+        self._rebuild_commands()
+        for sidebar in self.query(Sidebar):
+            sidebar.refresh_language()
+        self._repaint_rich()
+        return code
+
+    def _rebuild_commands(self) -> None:
+        """Describe commands in the active language (registry text is resolved)."""
+        self.commands = build_default_commands(
+            AppServices(
+                runtime=self.runtime,
+                chat=self.chat,
+                models=self.models,
+                sessions=self.sessions,
+            )
+        )
+
+    def open_language_picker(self) -> None:
+        from zenagent.app.slash_args import argument_values
+        from zenagent.cli.tui.screens.modals import ChoicePicker
+
+        async def selected(value: str | None) -> None:
+            if not value:
+                return
+            self.set_language(value)
+            self.notify(f"language: {value}", timeout=3)
+
+        self.open_menu(
+            "language",
+            lambda: ChoicePicker(
+                "Language", argument_values("/lang"), self._language_spec
+            ),
+            selected,
+        )
+
     def open_settings(self) -> None:
         from zenagent.cli.tui.screens.modals import SettingsPicker
 
@@ -933,6 +1009,8 @@ class ZenAgentApp(App):
                 self.action_cycle_thinking()
             elif choice == "theme":
                 self.open_theme_picker()
+            elif choice == "language":
+                self.open_language_picker()
             elif choice == "model-keys":
                 self.open_model_keys()
             elif choice == "search-keys":
@@ -946,7 +1024,10 @@ class ZenAgentApp(App):
         self.open_menu(
             "settings",
             lambda: SettingsPicker(
-                status.thinking, status.model_id, self._theme_spec
+                status.thinking,
+                status.model_id,
+                self._theme_spec,
+                self._language_spec,
             ),
             selected,
         )
@@ -1247,6 +1328,8 @@ class ZenAgentApp(App):
             self.open_thinking_picker()
         elif result.screen == "theme-picker":
             self.open_theme_picker()
+        elif result.screen == "language-picker":
+            self.open_language_picker()
         elif result.screen == "settings":
             self.open_settings()
         elif result.screen == "search-settings":
@@ -1266,6 +1349,10 @@ class ZenAgentApp(App):
             applied = self.set_appearance(result.appearance)
             for log in self.query(TranscriptView):
                 log.append_notice(f"theme: {applied}")
+        if result.language:
+            code = self.set_language(result.language)
+            for log in self.query(TranscriptView):
+                log.append_notice(f"language: {code}")
         # `/mode` and friends change state the band renders; refresh after every
         # dispatch so the change is visible without waiting for the next event.
         self._refresh_status()

@@ -12,6 +12,7 @@ from zenagent.app.models import ModelManager
 from zenagent.app.modes import describe_modes
 from zenagent.app.runtime import Runtime
 from zenagent.app.sessions import SessionManager
+from zenagent.i18n import LANGUAGE_CHOICES
 
 __all__ = [
     "AppServices",
@@ -43,6 +44,8 @@ class CommandResult:
     reset_transcript: bool = False
     #: When set, the frontend switches to this appearance (auto|dark|light).
     appearance: str | None = None
+    #: When set, the frontend switches to this interface language.
+    language: str | None = None
 
 
 @dataclass
@@ -107,6 +110,18 @@ async def _mode(services: AppServices, argument: str) -> CommandResult:
     except ValueError as exc:
         return CommandResult(message=str(exc))
     return CommandResult(message=f"mode: {mode} · {describe_modes()}")
+
+
+@_command("lang", "set the interface language: auto|en|zh")
+async def _lang(services: AppServices, argument: str) -> CommandResult:
+    requested = argument.strip().lower()
+    if not requested:
+        return CommandResult(screen="language-picker")
+    if requested not in LANGUAGE_CHOICES:
+        return CommandResult(
+            message=f"unknown language: {requested} (choose {'|'.join(LANGUAGE_CHOICES)})"
+        )
+    return CommandResult(language=requested)
 
 
 @_command("theme", "set the colour theme: auto|dark|light")
@@ -467,6 +482,7 @@ def build_default_commands(services: AppServices) -> CommandRegistry:
         _retry,
         _search,
         _theme,
+        _lang,
     ):
         registry.register(factory(services))
     return registry

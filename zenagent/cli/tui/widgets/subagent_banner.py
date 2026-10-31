@@ -11,11 +11,13 @@ from rich.text import Text
 from textual.widgets import Static
 
 from zenagent.cli.tui import palette
+from zenagent.i18n import t
 
 __all__ = ["SubagentBanner"]
 
 
-_STATUS_LABELS = {"ok": "done"}
+def _status_label(status: str) -> str:
+    return t("tui.subagent.done") if status == "ok" else status
 
 
 class SubagentBanner(Static):
@@ -42,12 +44,12 @@ class SubagentBanner(Static):
         running = status in (None, "running")
         text = Text()
         text.append("◐ " if running else "✓ ", style=palette.ACCENT if running else palette.OK)
-        text.append("subagent: ", style=palette.ACCENT)
+        text.append(t("tui.subagent.label"), style=palette.ACCENT)
         text.append(name, style=palette.MUTED)
         if not running and status:
-            label = _STATUS_LABELS.get(status, status)
+            label = _status_label(status)
             text.append(f" · {label}", style=palette.MUTED)
-        text.append(" · 只读 · esc 返回", style=palette.DIM)
+        text.append(" · " + t("tui.subagent.readonly"), style=palette.DIM)
         self._plain = text.plain
         self.update(text)
         self.display = True

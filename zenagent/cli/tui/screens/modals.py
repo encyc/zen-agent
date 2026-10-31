@@ -17,6 +17,7 @@ from textual.widgets import Input, OptionList, Static
 from zenagent.app.models import ModelEntry
 from zenagent.app.sessions import SessionEntry
 from zenagent.cli.tui.screens.palette import PaletteItem, PaletteScreen
+from zenagent.cli.tui.textutil import clip_cells
 
 __all__ = [
     "AskQuestion",
@@ -282,7 +283,7 @@ def _choice(key: str, label: str) -> Text:
 
 def _clip(text: str, limit: int) -> str:
     flat = " ".join(text.split())
-    return flat if len(flat) <= limit else flat[: limit - 1] + "…"
+    return clip_cells(flat, limit)
 
 
 def _approval_body(tool_name: str, arguments: dict) -> list[tuple[str, str]]:
@@ -569,7 +570,13 @@ class AskQuestion(DialogScreen[list[str] | None]):
 class SettingsPicker(PaletteScreen[str]):
     """A small settings surface: only the knobs this build can actually change."""
 
-    def __init__(self, thinking: str | None, model: str, theme: str = "auto") -> None:
+    def __init__(
+        self,
+        thinking: str | None,
+        model: str,
+        theme: str = "auto",
+        language: str = "auto",
+    ) -> None:
         from zenagent import settings as settings_module
         from zenagent.cli.tui.screens.palette import PaletteItem
 
@@ -580,6 +587,7 @@ class SettingsPicker(PaletteScreen[str]):
         items = [
             PaletteItem(label="Switch model…", value="model", note=model),
             PaletteItem(label="Theme…", value="theme", note=theme),
+            PaletteItem(label="Language…", value="language", note=language),
             PaletteItem(label="Settings file", value="noop", note=status, enabled=False),
             PaletteItem(label="Model API keys…", value="model-keys", note="paste a key"),
             PaletteItem(label="Search provider…", value="search-provider", note="default engine"),

@@ -51,6 +51,7 @@ from zenagent.context_files import (
 )
 from zenagent.events import AgentEvent
 from zenagent.extensions import load_extensions
+from zenagent.i18n import LANGUAGE_CHOICES
 from zenagent.mcp.config import load_mcp_config
 from zenagent.mcp.manager import McpManager
 from zenagent.prompts import PromptContext, compose_system
@@ -461,6 +462,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="refuse every tool that can modify the filesystem or run commands",
     )
     parser.add_argument(
+        "--lang",
+        choices=LANGUAGE_CHOICES,
+        default=None,
+        help="interface language: auto (system) | en | zh",
+    )
+    parser.add_argument(
         "--mode",
         choices=MODES,
         default=None,
@@ -752,7 +759,7 @@ def main(argv: list[str] | None = None) -> int:
                     options, gate=broker, allow_missing_key=True
                 )
                 try:
-                    app = ZenAgentApp(runtime, theme=args.theme)
+                    app = ZenAgentApp(runtime, theme=args.theme, language=args.lang)
                     broker.set_confirm(app.request_tool_approval)
                     await app.run_async()
                     if app.exit_summary:

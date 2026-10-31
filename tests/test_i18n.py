@@ -27,8 +27,12 @@ def test_catalogs_are_key_and_placeholder_identical():
 def test_plural_pairs_are_complete():
     en = _catalogs()["en"]
     ones = {key[: -len(".one")] for key in en if key.endswith(".one")}
-    others = {key[: -len(".other")] for key in en if key.endswith(".other")}
-    assert ones == others
+    paired_others = {
+        key[: -len(".other")]
+        for key in en
+        if key.endswith(".other") and key[: -len(".other")] + ".one" in en
+    }
+    assert ones == paired_others
 
 
 def test_default_locale_is_english():

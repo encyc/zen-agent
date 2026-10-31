@@ -16,6 +16,7 @@ from textual.widgets import Static
 
 from zenagent.app.views import MessageView, RunStatus
 from zenagent.cli.tui import palette
+from zenagent.i18n import t
 
 __all__ = [
     "NoticeRow",
@@ -152,7 +153,8 @@ class ThinkingRow(Static):
         active = self.active
         text = Text()
         text.append("✻ ", style=f"bold {palette.ACCENT}" if active else palette.DIM)
-        text.append("thinking…" if active else "thinking", style=f"italic {palette.MUTED}")
+        thinking = t("tui.rows.thinking_active") if active else t("tui.rows.thinking")
+        text.append(thinking, style=f"italic {palette.MUTED}")
         duration = self.duration_text
         suffix = f"  ·  {duration}" if duration else ""
         if not self.collapsed:
@@ -235,11 +237,14 @@ class UsageRow(Static):
 
 
 def _usage_text(status: RunStatus) -> Text:
-    parts = [f"in {status.input_tokens}", f"out {status.output_tokens}"]
+    parts = [
+        t("tui.rows.in", n=status.input_tokens),
+        t("tui.rows.out", n=status.output_tokens),
+    ]
     if status.cache_read:
-        parts.append(f"cache {status.cache_read}")
+        parts.append(t("tui.rows.cache", n=status.cache_read))
     parts.append(f"${status.cost:.4f}")
-    return Text("done · " + " · ".join(parts), style=palette.DIM)
+    return Text(t("tui.rows.done") + " · " + " · ".join(parts), style=palette.DIM)
 
 
 class DividerRow(Static):

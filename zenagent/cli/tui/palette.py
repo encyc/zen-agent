@@ -58,13 +58,13 @@ def __getattr__(name: str) -> str:
 def _section_accents() -> dict[str, str]:
     """One quiet accent per sidebar section so the panel scans by colour."""
     return {
-        "Session": _active["sec-session"],
-        "Model": _active["sec-model"],
-        "Runtime": _active["sec-runtime"],
-        "Context": _active["sec-context"],
-        "Todo": _active["accent"],
-        "Subagent": _active["sec-subagent"],
-        "Jobs": _active["sec-jobs"],
+        "session": _active["sec-session"],
+        "model": _active["sec-model"],
+        "runtime": _active["sec-runtime"],
+        "context": _active["sec-context"],
+        "todo": _active["accent"],
+        "subagent": _active["sec-subagent"],
+        "jobs": _active["sec-jobs"],
     }
 
 
@@ -92,13 +92,13 @@ def _context_colors() -> dict[str, str]:
     """One colour per context slice (shares the section accents on purpose)."""
     accents = _section_accents()
     return {
-        "system": accents["Session"],
-        "agents": accents["Model"],
-        "skills": accents["Subagent"],
-        "extensions": accents["Runtime"],
+        "system": accents["session"],
+        "agents": accents["model"],
+        "skills": accents["subagent"],
+        "extensions": accents["runtime"],
         "plan": _active["accent"],
         "mode": _active["accent"],
-        "tools": accents["Jobs"],
+        "tools": accents["jobs"],
         "session": _active["sec-context"],
         "other": _active["dim"],
     }
