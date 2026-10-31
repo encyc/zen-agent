@@ -91,6 +91,8 @@ ToolResultAgent(
 - schema 校验失败：`is_error=True`，错误里带字段路径（`arguments.text: expected string`）。
 - 工具抛异常：loop 捕获，`is_error=True`，异常文本截断到 500 字符。
 - 并行执行时，所有结果按 assistant 请求顺序写回，`id` 一一对应。
+- 所有结果（含 MCP/扩展）在写回前统一过内核结果预算：单行 >2000 字符中间截断，
+  文本 >40 KB 保留头尾并附截断提示；详见[工具内核](../internals/tools-internals.md)。
 
 ## 危险命令
 

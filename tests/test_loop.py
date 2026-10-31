@@ -1015,3 +1015,34 @@ async def test_termination_records_abort_and_error():
     state = AgentState()
     await run("go", state, make_config(failed))
     assert state.termination == "error"
+
+
+# ---------------------------------------------------------------------------
+# Scenario: the kernel result budget is applied after the tool returns
+# ---------------------------------------------------------------------------
+
+
+async def test_tool_result_budget_caps_oversized_output():
+    payload = "q" * 50_000
+
+    async def big(name, args, abort, on_update=None):
+        return ToolResultAgent(content=[TextContent(text=payload)])
+
+    stream = ScriptedStream(
+        [
+            [call_tool("t1", "big", {}), finish("tool_use")],
+            [say("ok"), finish("stop")],
+        ]
+    )
+    state = AgentState()
+    events = await run("go", state, make_config(stream, tools=[make_tool("big", big)]))
+    types = types_of(events)
+
+    end = events[types.index("tool_execution_end")]
+    rendered = end.result.content[0].text
+    assert len(rendered) < len(payload)
+    assert "truncated" in rendered
+
+    result_message = state.messages[2]
+    assert isinstance(result_message, ToolResultMessage)
+    assert result_message.content[0].text == rendered

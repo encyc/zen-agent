@@ -35,6 +35,7 @@ import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 
+from zenagent.agent.result_budget import apply_result_budget
 from zenagent.agent.validate import validate_arguments
 from zenagent.events import AbortToken, AgentEvent
 from zenagent.providers.catalog import Model
@@ -285,6 +286,11 @@ async def _execute_tool(
                 result.is_error = patched["is_error"]
             if "terminate" in patched:
                 result.terminate = patched["terminate"]
+
+    # Safety net above the per-tool caps: every result — including MCP and
+    # extension tools that enforce no cap of their own — gets the same byte
+    # budget and truncation notice before it enters the transcript.
+    result = apply_result_budget(result)
 
     duration_ms = round((time.monotonic() - started) * 1000)
     return _ToolOutcome(call=call, result=result, duration_ms=duration_ms)

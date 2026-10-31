@@ -40,6 +40,22 @@ class ToolResultAgent:
 
 为什么窄：工具自己会防御内部；保持内核零依赖。错误信息带字段路径，模型能自己修。
 
+## 结果预算（`agent/result_budget.py`）
+
+每个工具结果在写回 transcript 前都会过一层**内核级预算**（`after_tool_call`
+之后执行），不只是内置工具——MCP / 扩展工具同样适用：
+
+- 单行超过 `MAX_LINE_CHARS = 2000` 字符 → 中间截断（保留行首尾），标记
+  `…[line truncated]`；
+- 文本总字节超过 `MAX_RESULT_BYTES = 40_000` → 保留头部 20 KB + 尾部 12 KB，
+  中间换成 `… [truncated N of M bytes: … narrow the tool call …] …`；
+- `ImageContent` 原样保留；
+- 结果 `details["budget"]` 记录 `truncated / original_bytes / truncated_lines`。
+
+各工具自己的硬上限（bash 30 KB、fetch 12k 字符……）仍然保留，是第一道防线；
+这层是兜底，保证"新增工具忘了设上限"不会把上下文打爆。`terminal` 与
+`is_error` 语义不变。
+
 ## 内置工具
 
 ### fs
