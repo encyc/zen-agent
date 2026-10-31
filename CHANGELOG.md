@@ -3,6 +3,45 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## v0.4.5 — 2026-10-31
+
+**TUI work-panel polish: resize, context composition, inline checklist, job logs.**
+
+### Added
+
+- **Drag-resizable sidebar**: a one-column grab handle between the transcript
+  and the panel; width clamps to 20–60 columns, the main column keeps at least
+  30, and rows/strip bars re-clip to the real content width.
+- **Context section + breakdown overlay**: the sidebar shows window usage, a
+  per-slice stacked bar (the remainder is free space) and the two biggest
+  contributors; clicking opens a read-only table with exact block character
+  counts and estimated token shares (system prompt, AGENTS.md, skills,
+  extensions, plan note, tool schemas, session, free space).
+- **Inline todo list**: the sidebar lists every task (phase header + one
+  clipped line each) instead of a single summary; clicking a row opens the
+  existing full-text overlay.
+- **Job logs**: background-job rows are clickable and open a read-only overlay
+  with the command, status, duration and captured output (truncation is called
+  out); a running job's log refreshes with the 1 s poll.
+- **Semantic palette** (`zenagent/cli/tui/palette.py`): widgets take colours
+  from one module; sidebar sections get one quiet accent each and state glyphs
+  (running/done/failed/blocked) are coloured by meaning.
+
+### Fixed
+
+- Status-band segments degraded for the terminal width instead of the dock
+  column and were not re-rendered when the sidebar was resized; they now use
+  the actual column width and repaint on toggle and drag.
+- Context composition: a resumed session (no provider usage yet) fell back to
+  cumulative usage and could read `ctx 312%`; the total is now the estimate.
+  Slice percentages use the model window as the denominator (with a
+  `free space` row) instead of the used total.
+
+### Tests
+
+1487 offline tests; `bash scripts/check.sh` clean and packaging verified with
+`scripts/release-check.sh`.
+
 ## v0.4.4 — 2026-10-31
 
 ### Added
