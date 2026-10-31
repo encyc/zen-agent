@@ -27,6 +27,7 @@ from zenagent.app.models import ModelManager
 from zenagent.app.runtime import Runtime
 from zenagent.app.sessions import SessionManager
 from zenagent.app.skill_commands import build_skill_submission, slash_token_at
+from zenagent.app.views import RunStatus
 from zenagent.cli.tui.history import PromptHistory
 from zenagent.cli.tui.widgets.attachments import AttachmentChips
 from zenagent.cli.tui.widgets.command_hints import CommandHints
@@ -34,11 +35,12 @@ from zenagent.cli.tui.widgets.error_banner import ErrorBanner
 from zenagent.cli.tui.widgets.new_content import NewContentBar
 from zenagent.cli.tui.widgets.prompt_gutter import PromptGutter
 from zenagent.cli.tui.widgets.prompt_input import PromptInput
-from zenagent.cli.tui.widgets.sidebar import Sidebar
+from zenagent.cli.tui.widgets.sidebar import NARROW_WIDTH, Sidebar
 from zenagent.cli.tui.widgets.status_band import StatusBand
 from zenagent.cli.tui.widgets.todo_hud import TodoHud
 from zenagent.cli.tui.widgets.transcript import TranscriptView
 from zenagent.cli.tui.widgets.work_indicator import WorkIndicator
+from zenagent.cli.tui.widgets.work_strip import WorkStrip
 
 __all__ = ["DOUBLE_ESCAPE_SECONDS", "ZenAgentApp"]
 
@@ -99,6 +101,9 @@ class ZenAgentApp(App):
         self._hint_kind = "slash"
         self._session_scope = "project"
         self._last_escape_at: float | None = None
+        #: ctrl+b intent; the actual visibility also depends on the width.
+        self._sidebar_open = False
+        self._sidebar_visible = False
         self.command_hints: CommandHints | None = None
         self.models = ModelManager(runtime)
         self.sessions = SessionManager(runtime)
@@ -222,6 +227,7 @@ class ZenAgentApp(App):
                     yield CommandHints()
                     yield AttachmentChips()
                     yield TodoHud()
+                    yield WorkStrip()
                     yield StatusBand()
                     with Horizontal(id="prompt-row"):
                         yield PromptGutter()
@@ -231,7 +237,7 @@ class ZenAgentApp(App):
 
     def on_mount(self) -> None:
         self.command_hints = self.query_one(CommandHints)
-        self.query_one(Sidebar).display = False
+        self.query_one(WorkStrip).set_handler(self._open_sidebar_from_strip)
         self._announce_missing_key()
         self._refresh_status()
         self.query_one(PromptInput).focus()
@@ -337,6 +343,43 @@ class ZenAgentApp(App):
             chips.set_attachments(self.chat.attachments)
         for sidebar in self.query(Sidebar):
             sidebar.refresh_contents(self.chat, self.models)
+        self._sync_chrome(status)
+
+    # -- chrome -------------------------------------------------------------
+
+    def _open_sidebar_from_strip(self) -> None:
+        """Work strip click: reveal the sidebar the strip is standing in for."""
+        self._sidebar_open = True
+        self._sync_chrome()
+
+    def _sync_chrome(self, status: RunStatus | None = None) -> None:
+        """Decide sidebar / todo HUD / work strip visibility in one place.
+
+        ``ctrl+b`` is an intent, not a display flag: the panel only appears when
+        the terminal is wide enough, and the todo keeps exactly one visible home
+        (the sidebar when it is shown, the dock HUD otherwise).
+        """
+        if status is None:
+            status = self.chat.status
+        visible = self._sidebar_open and self.size.width >= NARROW_WIDTH
+        self._sidebar_visible = visible
+        for sidebar in self.query(Sidebar):
+            sidebar.display = visible
+        for hud in self.query(TodoHud):
+            hud.display = bool(status.todos) and not visible
+        running = sum(1 for job in status.jobs if job.status == "running")
+        task = None
+        if status.active_subagent is not None:
+            task = next(
+                (
+                    view.name
+                    for view in status.subagents
+                    if view.call_id == status.active_subagent
+                ),
+                "task",
+            )
+        for strip in self.query(WorkStrip):
+            strip.set_work(running, task, sidebar_hidden=not visible)
 
     def dismiss_error(self) -> None:
         """Click on the error banner: drop it and repaint the dock."""
@@ -531,8 +574,8 @@ class ZenAgentApp(App):
             gutter.styles.height = message.rows
 
     def action_toggle_sidebar(self) -> None:
-        for sidebar in self.query(Sidebar):
-            sidebar.display = not sidebar.display
+        self._sidebar_open = not self._sidebar_open
+        self._sync_chrome()
 
     def get_system_commands(self, screen):
         from textual.app import SystemCommand

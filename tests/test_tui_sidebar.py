@@ -209,3 +209,72 @@ async def test_jobs_section_renders_the_status_snapshot(fake_runtime, monkeypatc
         assert jobs.display is True
         assert [row.key for row in jobs.query(SidebarRow)] == ["bg_2", "bg_1"]
         assert "bg_2" in rows(app, "Jobs")[0]
+
+
+def _running_job(job_id="bg_1"):
+    class _Job:
+        id = job_id
+        command = "sleep 5"
+        status = "running"
+        started_at = time.time()
+        duration_ms = None
+        exit_code = None
+
+    return _Job()
+
+
+async def test_work_strip_appears_only_while_the_sidebar_is_closed(fake_runtime, monkeypatch):
+    from zenagent.cli.tui.widgets.work_strip import WorkStrip
+
+    class _Manager:
+        def list(self) -> list:
+            return [_running_job()]
+
+    monkeypatch.setattr("zenagent.app.chat.get_job_manager", lambda: _Manager())
+
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        strip = app.query_one(WorkStrip)
+        app._refresh_status()
+        await pilot.pause()
+
+        assert strip.display is True
+        assert "1 job" in strip.plain
+        assert "ctrl+b" in strip.plain
+
+        await pilot.click(WorkStrip)
+        await pilot.pause()
+
+        assert app.query_one(Sidebar).display is True
+        assert strip.display is False, "the strip is only for a closed sidebar"
+
+
+async def test_work_strip_mentions_a_running_subagent(fake_runtime):
+    from zenagent.cli.tui.widgets.work_strip import WorkStrip
+
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        strip = app.query_one(WorkStrip)
+
+        app.chat._on_event(task_start("t9", "scan"))
+        app._refresh_status()
+        await pilot.pause()
+
+        assert strip.display is True
+        assert "1 task" in strip.plain
+
+        app.chat._on_event(task_end("t9", "scan"))
+        app._refresh_status()
+        await pilot.pause()
+        assert strip.display is False, "finished work must clear the strip"
+
+
+async def test_work_strip_is_hidden_without_background_work(fake_runtime):
+    from zenagent.cli.tui.widgets.work_strip import WorkStrip
+
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        assert app.query_one(WorkStrip).display is False
