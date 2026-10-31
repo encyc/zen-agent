@@ -27,16 +27,24 @@
 
 ## settings.json（API key 与偏好）
 
-由应用写入，**不要手改**：`/settings` → `Model API keys…` / `Search API keys…` / `Search provider…`。
-模型和 web 搜索共用这一个 store，设一次两边都生效。
+由应用写入，**不要手改**：`/settings` → `Model API keys…` / `Search API keys…` /
+`Search provider…` / `Theme…` / `Language…`。模型和 web 搜索共用这一个 store，设一次两边都生效。
 
 ```json
 {
   "version": 1,
   "api_keys": {"DEEPSEEK_API_KEY": "…", "TAVILY_API_KEY": "…"},
-  "prefs": {"search_provider": "deepseek"}
+  "prefs": {"search_provider": "deepseek", "theme": "auto", "language": "auto"}
 }
 ```
+
+`prefs.theme` 是界面外观（`auto` / `dark` / `light`，见 [TUI § 外观与主题](tui.md#外观与主题)）；
+优先级 `--theme` > `prefs.theme` > `auto`。`auto` 用终端 `COLORFGBG` 判断背景亮暗，
+缺失或无法解析时回退 dark。
+
+`prefs.language` 是界面语言（`auto` / `en` / `zh`，见 [界面语言](i18n.md)）；优先级
+`--lang` > `prefs.language` > `ZENAGENT_LANG` > `LANG`/`LC_ALL`/`LC_MESSAGES` > en。
+`auto` 跟系统 locale，`zh*` 归一成 `zh`。
 
 - 权限 `0600`、目录 `0700`；写入是"临时文件 + rename"，断电不会留下半截文件；
 - **设置里的 key 优先于环境变量**（应用里显式设的赢），env 仅作兜底（CI/headless）；

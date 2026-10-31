@@ -21,6 +21,7 @@ from textual.containers import Horizontal, Vertical
 from textual.events import MouseScrollDown, MouseScrollUp
 
 from zenagent import update_check
+from zenagent.app.appearance import APPEARANCES, resolve_theme
 from zenagent.app.chat import ChatController
 from zenagent.app.commands import AppServices, build_default_commands
 from zenagent.app.models import ModelManager
@@ -28,6 +29,8 @@ from zenagent.app.runtime import Runtime
 from zenagent.app.sessions import SessionManager
 from zenagent.app.skill_commands import build_skill_submission, slash_token_at
 from zenagent.app.views import RunStatus
+from zenagent.cli.tui import palette
+from zenagent.cli.tui.app_theme import textual_theme, theme_name
 from zenagent.cli.tui.history import PromptHistory
 from zenagent.cli.tui.widgets.attachments import AttachmentChips
 from zenagent.cli.tui.widgets.command_hints import CommandHints
@@ -43,12 +46,27 @@ from zenagent.cli.tui.widgets.todo_hud import TodoHud
 from zenagent.cli.tui.widgets.transcript import TranscriptView
 from zenagent.cli.tui.widgets.work_indicator import WorkIndicator
 from zenagent.cli.tui.widgets.work_strip import WorkStrip
+from zenagent.i18n import LANGUAGE_CHOICES, resolve_language, set_locale, t
 
 __all__ = ["DOUBLE_ESCAPE_SECONDS", "ZenAgentApp"]
 
 #: Two empty-draft Escapes this close together mean "rewind the last turn"
 #: (omp's Esc chain level 13); a slower second press just interrupts nothing.
 DOUBLE_ESCAPE_SECONDS = 0.6
+
+
+def _saved_theme() -> str | None:
+    """The persisted ``theme`` preference, read lazily (tests patch settings)."""
+    from zenagent import settings
+
+    return settings.get_pref("theme")
+
+
+def _saved_language() -> str | None:
+    """The persisted ``language`` preference, read lazily (tests patch settings)."""
+    from zenagent import settings
+
+    return settings.get_pref("language")
 
 
 class ZenAgentApp(App):
@@ -86,8 +104,37 @@ class ZenAgentApp(App):
         *,
         chat: ChatController | None = None,
         history_path: Path | None = None,
+        theme: str | None = None,
+        language: str | None = None,
     ) -> None:
         super().__init__()
+        # Resolve and register the appearance before the first paint, so a
+        # light terminal never flashes the dark palette on startup.
+        appearance_warnings: list[str] = []
+        self._appearance = resolve_theme(
+            theme, pref=_saved_theme(), warnings=appearance_warnings
+        )
+        self._appearance_warnings = appearance_warnings
+        #: The vocabulary value currently selected in the theme picker.
+        self._theme_spec = (theme or _saved_theme() or "auto").strip().lower()
+        if self._theme_spec not in ("auto", "dark", "light"):
+            self._theme_spec = "auto"
+        self.register_theme(textual_theme(APPEARANCES["dark"]))
+        self.register_theme(textual_theme(APPEARANCES["light"]))
+        self.theme = theme_name(self._appearance)
+        palette.bind(self._appearance)
+        # Interface language is resolved before any command/description exists,
+        # so a fresh process never builds English chrome under a zh locale.
+        language_warnings: list[str] = []
+        self._language_spec = (language or _saved_language() or "auto").strip().lower()
+        if self._language_spec not in LANGUAGE_CHOICES:
+            self._language_spec = "auto"
+        set_locale(
+            resolve_language(
+                language, pref=_saved_language(), warnings=language_warnings
+            )
+        )
+        self._language_warnings = language_warnings
         self.runtime = runtime
         self.chat = chat or ChatController(runtime, on_change=self._on_change)
         self.history = PromptHistory(history_path)
@@ -154,7 +201,7 @@ class ZenAgentApp(App):
         except TimeoutError:
             if self.screen is screen:
                 self.pop_screen()
-            self.notify("approval timed out; denied", timeout=3)
+            self.notify(t("tui.app.approval_timeout"), timeout=3)
             return "deny"
 
     async def request_ask(self, questions: list[dict]) -> list[dict]:
@@ -200,9 +247,12 @@ class ZenAgentApp(App):
     def action_quit_app(self) -> None:
         status = self.chat.status
         session = getattr(self.runtime.session, "path", None)
-        self.exit_summary = (
-            f"session: {session} · {status.input_tokens} in / "
-            f"{status.output_tokens} out · ${status.cost:.4f}"
+        self.exit_summary = t(
+            "tui.app.exit_summary",
+            path=session,
+            input=status.input_tokens,
+            output=status.output_tokens,
+            cost=f"{status.cost:.4f}",
         )
         self.exit()
 
@@ -269,6 +319,8 @@ class ZenAgentApp(App):
         from zenagent.tools.task import set_subagent_observer
 
         set_subagent_observer(self.chat.on_subagent_event)
+        self._announce_appearance_warnings()
+        self._announce_language_warnings()
         self._announce_missing_key()
         # A resumed session already has messages: build the transcript views
         # before the first paint, or history (and its subagent rows) is blank.
@@ -289,6 +341,24 @@ class ZenAgentApp(App):
 
         set_ask_handler(None)
         set_subagent_observer(None)
+
+    def _announce_language_warnings(self) -> None:
+        """Report a rejected language pref without stopping the app."""
+        warnings, self._language_warnings = self._language_warnings, []
+        if not warnings:
+            return
+        transcript = self.query_one(TranscriptView)
+        for warning in warnings:
+            transcript.append_notice(f"language: {warning}")
+
+    def _announce_appearance_warnings(self) -> None:
+        """Report a rejected theme pref without stopping the app."""
+        warnings, self._appearance_warnings = self._appearance_warnings, []
+        if not warnings:
+            return
+        transcript = self.query_one(TranscriptView)
+        for warning in warnings:
+            transcript.append_notice(f"theme: {warning}")
 
     def _start_update_check(self) -> None:
         """Kick off the cached notice and background refresh; never break startup."""
@@ -339,8 +409,11 @@ class ZenAgentApp(App):
         if not env_name:
             return
         self.chat.set_last_error(
-            f"no API key for {self.runtime.model.id} — /settings → Model API keys, "
-            f"or set {env_name} and restart"
+            t(
+                "tui.app.no_api_key",
+                model=self.runtime.model.id,
+                env=env_name,
+            )
         )
 
     def _on_change(self) -> None:
@@ -417,7 +490,7 @@ class ZenAgentApp(App):
 
         phases = self.chat.todos
         if not phases:
-            self.notify("no todo list in this session")
+            self.notify(t("tui.app.no_todo"))
             return
 
         def restore_focus(_result=None) -> None:
@@ -433,7 +506,7 @@ class ZenAgentApp(App):
 
         report = self.chat.status.context
         if report is None:
-            self.notify("no context report yet")
+            self.notify(t("tui.app.no_context"))
             return
 
         def restore_focus(_result=None) -> None:
@@ -449,7 +522,7 @@ class ZenAgentApp(App):
 
         view = self.chat.job_log(job_id)
         if view is None:
-            self.notify(f"job {job_id} is already gone")
+            self.notify(t("tui.app.job_gone", id=job_id))
             return
         screen = JobLogScreen(view)
         self._job_log_screen = screen
@@ -465,7 +538,7 @@ class ZenAgentApp(App):
         """Swap the main area to the child transcript (read-only)."""
         views = self.chat.subagent_transcript(call_id)
         if views is None:
-            self.notify("no transcript for this subagent")
+            self.notify(t("tui.app.no_subagent_transcript"))
             return
         name = next(
             (
@@ -675,7 +748,10 @@ class ZenAgentApp(App):
     def _command_matches(self, token_text: str) -> list[tuple[str, str]]:
         needle = token_text[1:].lower()
         return [
-            (command.name, f"command · {command.description}")
+            (
+                command.name,
+                f"{t('type.command')} · {command.description}",
+            )
             for command in self.commands.names()
             if command.name.startswith(needle)
         ]
@@ -703,7 +779,10 @@ class ZenAgentApp(App):
                     if f"skill:{skill.name}".lower().startswith(needle)
                 ]
         return [
-            (f"skill:{skill.name}", f"skill · {skill.description}")
+            (
+                f"skill:{skill.name}",
+                f"{t('type.skill')} · {skill.description}",
+            )
             for skill in sorted(selected, key=lambda item: item.name)
         ]
 
@@ -716,7 +795,11 @@ class ZenAgentApp(App):
                 (
                     entry.id,
                     f"{entry.provider} · "
-                    + ("ready" if entry.available else entry.reason or "unavailable"),
+                    + (
+                        t("tui.app.model_ready")
+                        if entry.available
+                        else entry.reason or t("tui.app.model_unavailable")
+                    ),
                 )
                 for entry in self.models.entries()
             ]
@@ -799,8 +882,8 @@ class ZenAgentApp(App):
 
         yield from super().get_system_commands(screen)
         yield SystemCommand(
-            "Show todo list",
-            "Open the session todo checklist",
+            t("tui.app.show_todo"),
+            t("tui.app.show_todo_desc"),
             self.action_show_todo_list,
         )
         for command in self.commands.names():
@@ -836,9 +919,107 @@ class ZenAgentApp(App):
 
     def _show_help(self) -> None:
         for log in self.query(TranscriptView):
-            log.append_notice("commands (type / to complete):")
+            log.append_notice(t("tui.app.help_header"))
             for command in self.commands.names():
-                log.append_notice(f"  /{command.name}  {command.description}")
+                log.append_notice(
+                    f"  /{command.name}  {command.description}"
+                )
+
+    def set_appearance(self, spec: str) -> str:
+        """Switch the palette to ``spec`` (auto|dark|light); persist known values."""
+        from zenagent import settings
+        from zenagent.app.appearance import THEME_CHOICES
+
+        normalized = (spec or "").strip().lower()
+        self._apply_appearance(resolve_theme(normalized))
+        if normalized in THEME_CHOICES:
+            settings.set_pref("theme", normalized)
+            self._theme_spec = normalized
+        return theme_name(self._appearance)
+
+    def _apply_appearance(self, appearance) -> None:
+        palette.bind(appearance)
+        self._appearance = appearance
+        self.theme = theme_name(appearance)
+        self._repaint_rich()
+
+    def _repaint_rich(self) -> None:
+        """Rebuild the text that carries literal colours (not CSS variables).
+
+        A theme switch repaints stylesheet-driven widgets on its own, but the
+        transcript rows and status band embed Rich styles from ``palette``, so
+        they are rebuilt from the current views instead.
+        """
+        for log in self.query(TranscriptView):
+            log.reset()
+        self._refresh_status()
+
+    def open_theme_picker(self) -> None:
+        from zenagent.app.slash_args import argument_values
+        from zenagent.cli.tui.screens.modals import ChoicePicker
+
+        async def selected(value: str | None) -> None:
+            if not value:
+                return
+            self.set_appearance(value)
+            self.notify(t("tui.app.theme_set", value=value), timeout=3)
+
+        self.open_menu(
+            "theme",
+            lambda: ChoicePicker(
+                t("tui.app.theme_header"),
+                argument_values("/theme"),
+                self._theme_spec,
+            ),
+            selected,
+        )
+
+    def set_language(self, spec: str) -> str:
+        """Switch the interface language (auto|en|zh) and rebuild the chrome."""
+        from zenagent import settings
+
+        normalized = (spec or "").strip().lower()
+        code = resolve_language(normalized)
+        set_locale(code)
+        if normalized in LANGUAGE_CHOICES:
+            settings.set_pref("language", normalized)
+            self._language_spec = normalized
+        self._rebuild_commands()
+        for sidebar in self.query(Sidebar):
+            sidebar.refresh_language()
+        self._repaint_rich()
+        return code
+
+    def _rebuild_commands(self) -> None:
+        """Describe commands in the active language (registry text is resolved)."""
+        self.commands = build_default_commands(
+            AppServices(
+                runtime=self.runtime,
+                chat=self.chat,
+                models=self.models,
+                sessions=self.sessions,
+            )
+        )
+
+    def open_language_picker(self) -> None:
+        from zenagent.app.slash_args import argument_values
+        from zenagent.cli.tui.screens.modals import ChoicePicker
+
+        async def selected(value: str | None) -> None:
+            if not value:
+                return
+            self.set_language(value)
+            self.notify(t("tui.app.language_set", value=value), timeout=3)
+
+        self.open_menu(
+            "language",
+            lambda: ChoicePicker(
+                t("tui.app.language_header"),
+                argument_values("/lang"),
+                self._language_spec,
+            ),
+            selected,
+        )
 
     def open_settings(self) -> None:
         from zenagent.cli.tui.screens.modals import SettingsPicker
@@ -850,6 +1031,10 @@ class ZenAgentApp(App):
                 self.action_toggle_sidebar()
             elif choice == "thinking":
                 self.action_cycle_thinking()
+            elif choice == "theme":
+                self.open_theme_picker()
+            elif choice == "language":
+                self.open_language_picker()
             elif choice == "model-keys":
                 self.open_model_keys()
             elif choice == "search-keys":
@@ -862,7 +1047,12 @@ class ZenAgentApp(App):
         status = self.chat.status
         self.open_menu(
             "settings",
-            lambda: SettingsPicker(status.thinking, status.model_id),
+            lambda: SettingsPicker(
+                status.thinking,
+                status.model_id,
+                self._theme_spec,
+                self._language_spec,
+            ),
             selected,
         )
 
@@ -896,7 +1086,7 @@ class ZenAgentApp(App):
 
         async def selected(env_name: str | None) -> None:
             if env_name:
-                self._prompt_secret(env_name, "model provider key")
+                self._prompt_secret(env_name, "model")
 
         self.open_menu(
             "model-keys",
@@ -909,7 +1099,7 @@ class ZenAgentApp(App):
 
         async def selected(env_name: str | None) -> None:
             if env_name:
-                self._prompt_secret(env_name, "search provider key")
+                self._prompt_secret(env_name, "search")
 
         self.open_menu(
             "search-keys",
@@ -926,7 +1116,9 @@ class ZenAgentApp(App):
             from zenagent import settings
 
             settings.set_pref("search_provider", None if name == "auto" else name)
-            self.notify(f"search provider: {name}", timeout=3)
+            self.notify(
+                t("tui.app.search_provider_set", name=name), timeout=3
+            )
             self._refresh_status()
 
         self.open_menu("search-provider", SearchProviderPicker, selected)
@@ -943,14 +1135,21 @@ class ZenAgentApp(App):
             if recovered:
                 self.chat.clear_last_error()
             self.notify(
-                f"saved {env_name}" + (" · ready" if recovered else ""), timeout=3
+                t(
+                    "tui.app.saved_key_ready" if recovered else "tui.app.saved_key",
+                    env=env_name,
+                ),
+                timeout=3,
             )
             self._refresh_status()
 
+        scope_key = (
+            "tui.secrets.scope_model" if scope == "model" else "tui.secrets.scope_search"
+        )
         self.push_screen(
             SecretInput(
                 title=env_name,
-                hint=f"{scope} · enter saves · esc cancels · stored in ~/.zenagent/settings.json",
+                hint=t("tui.secrets.hint", scope=t(scope_key)),
             ),
             entered,
         )
@@ -965,7 +1164,7 @@ class ZenAgentApp(App):
             if model_id:
                 result = self.models.switch(model_id)
                 if not result.ok:
-                    self.notify(result.reason or "switch failed")
+                    self.notify(result.reason or t("tui.app.switch_failed"))
                 elif self.runtime.missing_api_key:
                     # Picking a model that already has a key heals the banner.
                     self.runtime.missing_api_key = None
@@ -981,12 +1180,16 @@ class ZenAgentApp(App):
         async def selected(mode: str | None) -> None:
             if mode:
                 self.runtime.set_mode(mode)
-                self.notify(f"mode: {mode}")
+                self.notify(t("tui.app.mode_set", mode=mode))
                 self._refresh_status()
 
         self.open_menu(
             "mode",
-            lambda: ChoicePicker("Mode", argument_values("/mode"), self.runtime.mode),
+            lambda: ChoicePicker(
+                t("tui.app.mode_header"),
+                argument_values("/mode"),
+                self.runtime.mode,
+            ),
             selected,
         )
 
@@ -999,13 +1202,13 @@ class ZenAgentApp(App):
         async def selected(level: str | None) -> None:
             if level:
                 agent.thinking = None if level == "off" else level
-                self.notify(f"thinking: {level}")
+                self.notify(t("tui.app.thinking_set", level=level))
                 self._refresh_status()
 
         self.open_menu(
             "thinking",
             lambda: ChoicePicker(
-                "Thinking",
+                t("tui.app.thinking_header"),
                 argument_values("/thinking"),
                 agent.thinking or "off",
             ),
@@ -1048,9 +1251,9 @@ class ZenAgentApp(App):
             await self.sessions.resume(action.path)
             self._reset_after_switch()
             if owner is not None and owner != current:
-                self.notify("cross-project session: tools still run in this cwd")
+                self.notify(t("tui.app.cross_project"))
             elif owner is None:
-                self.notify("legacy session: tools run in this cwd")
+                self.notify(t("tui.app.legacy_session"))
             return
         if action.kind in ("new", "fork"):
             if action.kind == "new":
@@ -1061,17 +1264,18 @@ class ZenAgentApp(App):
             return
         target = action.path or self.sessions.current()
         if action.kind == "delete":
-            if not await self._confirm(f"delete {target.name}? (moved to .trash)"):
+            prompt = t("tui.app.delete_confirm", name=target.name)
+            if not await self._confirm(prompt):
                 return
             was_current = target == self.sessions.current()
             self.sessions.delete(target)
             if was_current:
                 self._reset_after_switch()
             self._refresh_status()
-            self.notify("session moved to trash")
+            self.notify(t("tui.app.session_trashed"))
         elif action.kind == "export":
             exported = self.sessions.export(target)
-            self.notify(f"exported: {exported}")
+            self.notify(t("tui.app.exported", path=exported))
         elif action.kind == "rename":
             name = await self._prompt_rename(session_title(target))
             if name is None:
@@ -1081,7 +1285,7 @@ class ZenAgentApp(App):
             except ValueError as exc:
                 self.notify(str(exc))
                 return
-            self.notify(f"renamed: {stored}")
+            self.notify(t("tui.app.renamed", name=stored))
 
     def _reset_after_switch(self) -> None:
         if self._viewing is not None:
@@ -1136,7 +1340,7 @@ class ZenAgentApp(App):
                 await self._dispatch_command(name, argument)
                 return
             for log in self.query(TranscriptView):
-                log.append_notice(f"unknown command: /{name}")
+                log.append_notice(t("tui.app.unknown_command", name=name))
             return
         self.history.add(text)
         await self.chat.submit(text)
@@ -1148,7 +1352,9 @@ class ZenAgentApp(App):
             # Slash commands run inside an input handler: anything escaping here
             # reaches Textual's _handle_exception, which tears the app down.
             for log in self.query(TranscriptView):
-                log.append_notice(f"/{name} failed: {exc}")
+                log.append_notice(
+                    t("tui.app.command_failed", name=name, error=exc)
+                )
             return
         if result.screen == "model-picker":
             self.open_model_picker()
@@ -1160,6 +1366,10 @@ class ZenAgentApp(App):
             self.open_mode_picker()
         elif result.screen == "thinking-picker":
             self.open_thinking_picker()
+        elif result.screen == "theme-picker":
+            self.open_theme_picker()
+        elif result.screen == "language-picker":
+            self.open_language_picker()
         elif result.screen == "settings":
             self.open_settings()
         elif result.screen == "search-settings":
@@ -1175,6 +1385,14 @@ class ZenAgentApp(App):
         elif result.message:
             for log in self.query(TranscriptView):
                 log.append_notice(result.message)
+        if result.appearance:
+            applied = self.set_appearance(result.appearance)
+            for log in self.query(TranscriptView):
+                log.append_notice(t("tui.app.theme_set", value=applied))
+        if result.language:
+            code = self.set_language(result.language)
+            for log in self.query(TranscriptView):
+                log.append_notice(t("tui.app.language_set", value=code))
         # `/mode` and friends change state the band renders; refresh after every
         # dispatch so the change is visible without waiting for the next event.
         self._refresh_status()
@@ -1193,7 +1411,7 @@ class ZenAgentApp(App):
         if self.chat.status.running:
             self._last_escape_at = None
             self.chat.abort()
-            self.notify("interrupted", timeout=2)
+            self.notify(t("tui.app.interrupted"), timeout=2)
             return
         prompt = self.query_one(PromptInput)
         if prompt.text:
@@ -1226,7 +1444,7 @@ class ZenAgentApp(App):
         """Ctrl+R: search submitted prompts and recall one into the composer."""
         entries = self.history.entries()
         if not entries:
-            self.notify("no prompt history yet", timeout=2)
+            self.notify(t("tui.app.no_history"), timeout=2)
             return
 
         from zenagent.cli.tui.screens.modals import HistorySearch
@@ -1273,7 +1491,7 @@ class ZenAgentApp(App):
             index = 0
         result = self.models.switch(ids[index])
         if not result.ok:
-            self.notify(result.reason or "switch failed", timeout=3)
+            self.notify(result.reason or t("tui.app.switch_failed"), timeout=3)
         self._refresh_status()
 
     def action_cycle_thinking(self) -> None:

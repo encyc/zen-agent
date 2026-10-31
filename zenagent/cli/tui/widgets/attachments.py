@@ -15,8 +15,6 @@ from zenagent.types import ImageContent
 
 __all__ = ["AttachmentChips", "Chip"]
 
-_MUTED = palette.MUTED
-_DIM = palette.DIM
 
 
 class Chip(Static):
@@ -25,7 +23,7 @@ class Chip(Static):
     def __init__(self, mime_type: str, index: int) -> None:
         self.mime_type = mime_type
         self.index = index
-        super().__init__(Text(f"[{mime_type}]", style=_MUTED), classes="attachment-chip")
+        super().__init__(Text(f"[{mime_type}]", style=palette.MUTED), classes="attachment-chip")
 
     @property
     def plain(self) -> str:

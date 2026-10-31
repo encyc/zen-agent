@@ -19,13 +19,12 @@ from rich.text import Text
 from textual.widgets import Static
 
 from zenagent.cli.tui import palette
+from zenagent.cli.tui.textutil import clip_cells
+from zenagent.i18n import t, tn
 from zenagent.tools.todo import summarize_todo
 
 __all__ = ["MAX_CURRENT_CHARS", "TodoHud"]
 
-_ACCENT = palette.ACCENT
-_MUTED = palette.MUTED
-_DIM = palette.DIM
 
 #: The optional "what am I doing" fragment is clipped, never wrapped.
 MAX_CURRENT_CHARS = 48
@@ -37,7 +36,7 @@ class TodoHud(Static):
     DEFAULT_CSS = """
     TodoHud {
         height: 1;
-        background: #141c24;
+        background: $surface;
         padding: 0 1;
     }
     """
@@ -77,24 +76,27 @@ class TodoHud(Static):
             return
 
         text = Text()
-        text.append("todo", style=_ACCENT)
+        text.append(t("tui.todo.title"), style=palette.ACCENT)
         if info["phase"]:
-            text.append(" · ", style=_DIM)
-            text.append(info["phase"], style=_MUTED)
+            text.append(" · ", style=palette.DIM)
+            text.append(info["phase"], style=palette.MUTED)
         if info["current"]:
-            current = info["current"]
-            if len(current) > MAX_CURRENT_CHARS:
-                current = current[: MAX_CURRENT_CHARS - 1] + "…"
-            text.append(" · ", style=_DIM)
-            text.append(current, style=_MUTED)
-        text.append(" · ", style=_DIM)
-        text.append(f"{info['closed']}/{info['total']} closed", style=_MUTED)
+            current = clip_cells(info["current"], MAX_CURRENT_CHARS)
+            text.append(" · ", style=palette.DIM)
+            text.append(current, style=palette.MUTED)
+        text.append(" · ", style=palette.DIM)
+        text.append(
+            t("tui.todo.closed", closed=info["closed"], total=info["total"]),
+            style=palette.MUTED,
+        )
         if info["remaining"] == 0:
-            text.append(" · ", style=_DIM)
-            text.append("all done", style=palette.OK)
+            text.append(" · ", style=palette.DIM)
+            text.append(t("tui.todo.done"), style=palette.OK)
         elif info["blocked"]:
-            text.append(" · ", style=_DIM)
-            text.append(f"{info['blocked']} blocked", style=_DIM)
+            text.append(" · ", style=palette.DIM)
+            text.append(
+                tn("tui.todo.blocked", info["blocked"]), style=palette.DIM
+            )
 
         self._plain = text.plain
         self.update(text)

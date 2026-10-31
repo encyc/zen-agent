@@ -66,13 +66,14 @@ zen -p "analyze" --read-only --trace run.jsonl --cwd /path/to/project
 旧行为是 cmd.exe，可用 `ZENAGENT_SHELL=cmd` 保持）。
 | `--no-skills` / `--no-templates` | 不加载 skills / 模板 |
 | `--extension PATH` | 加载扩展（可重复） |
-| `--theme NAME` | REPL 主题 |
+| `--theme auto\|dark\|light` | 界面外观（TUI + REPL）；REPL 另接受 `default\|mono\|solarized\|<path.json>` legacy 主题 |
+| `--lang auto\|en\|zh` | 界面语言（TUI + REPL），覆盖 `prefs.language`；见 [i18n](i18n.md) |
 | `--json` | headless 输出 JSON |
 
 ## 参数值补全
 
 REPL 里命令参数也能补全（`Tab`）：`/mode ` → `plan` / `ask` / `full`，`/thinking ` →
-`off` / `low` / `medium` / `high` / `max`，`/theme ` → 内置主题，`/model ` → 当前 catalog
+`off` / `low` / `medium` / `high` / `max`，`/theme ` → `auto` / `dark` / `light`，`/lang ` → `auto` / `en` / `zh`，`/model ` → 当前 catalog
 里的模型 id（带 ready / no key 标记）。值表在 `zenagent/app/slash_args.py`，TUI 与 REPL 共用。
 
 ## 运行模式（plan / ask / full）

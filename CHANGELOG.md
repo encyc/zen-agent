@@ -3,6 +3,29 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+### Added
+
+- **Dark/light appearance (`theme = auto|dark|light`)**: one colour-token
+  source (`zenagent/app/appearance.py`) now feeds the TUI (two registered
+  Textual themes plus CSS variables, with the Rich palette bound at runtime),
+  the REPL renderer, and `--theme`. `/theme` and `/settings → Theme…` switch
+  live: CSS repaints and the transcript/status band rebuild from the same
+  tokens, without interrupting a running turn. `auto` follows the terminal
+  through `COLORFGBG` and falls back to dark. Legacy REPL themes
+  (`default|mono|solarized|<path.json>`) keep working, REPL-only.
+- **Interface language (`language = auto|en|zh`)**: a stdlib-only message
+  catalog (`zenagent/i18n/`) now drives every user-facing string in the TUI,
+  the REPL, slash-command descriptions and argument hints, approval/ask dialogs
+  and command output. `/lang`, `/settings → Language…` and `--lang` switch it;
+  `auto` follows `LANG`/`LC_ALL` (zh prefix → Chinese) and the choice persists
+  in `settings.json`. Switching is live (command registry rebuild, sidebar
+  headings and Rich text repaint) and never interrupts a running turn. Types
+  labels (`command ·`/`template ·`/`extension ·`/`skill ·`) and CJK-aware
+  clipping ship with it; model-facing prompts, tool schemas and skill bodies
+  stay English by design.
+
 ## v0.4.5 — 2026-10-31
 
 **TUI work-panel polish: resize, context composition, inline checklist, job logs.**

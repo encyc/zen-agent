@@ -69,6 +69,8 @@
 | 工作面板侧栏（Todo/Subagent/Jobs）+ 后台活提示条 | `widgets/{sidebar,work_strip}.py`、`app.py` | `test_tui_sidebar.py`、`test_tui_layout.py` | [TUI](guide/tui.md) |
 | todo 只读浮层（HUD/侧栏点击、命令面板入口） | `screens/todo_list.py`、`widgets/todo_hud.py` | `test_tui_todo.py` | 同上 |
 | 工作面板打磨：拖拽调宽、ctx 组成（条+浮层）、job 日志浮层、todo 全量内联、语义色板 | `widgets/{sidebar,sidebar_resize}.py`、`screens/{context_breakdown,job_log,todo_list}.py`、`palette.py`、`app/context.py` | `test_tui_{sidebar_resize,context,job_log,palette}.py`、`test_app_context.py` | [TUI](guide/tui.md) |
+| 外观与主题：dark/light/auto、统一色彩 token、TUI 双 Textual 主题 + REPL 派生、即时切换 | `app/appearance.py`、`cli/tui/app_theme.py`、`cli/tui/{palette.py,theme.tcss}`、`cli/theme.py` | `test_appearance.py`、`test_tui_{app_theme,theme_css,palette}.py`、`test_theme.py` | [TUI](guide/tui.md) |
+| 界面语言（i18n）：en/zh catalog、`/lang`/`--lang`/设置面板、TUI+REPL+命令描述翻译、CJK 宽度 | `i18n/{__init__,en,zh}.py`、`cli/tui/{app.py,labels.py,textutil.py}`、`app/{commands,slash_args}.py`、`cli/{repl,completion}.py` | `test_i18n.py`、`test_i18n_tui.py`、`test_i18n_app.py`、`test_completion.py` | [i18n](guide/i18n.md) |
 | 子代理转录：sidecar 持久化 + 只读查看 + resume 回看 | `agent/subagents.py`、`tools/task.py`、`app/chat.py`、`cli/tui/{widgets/subagent_banner.py,app.py}` | `test_subagents_store.py`、`test_task.py`、`test_app_chat.py`、`test_tui_subagent_view.py`、`test_tui_subagent_resume.py` | 同上 |
 | 会话操作（new/fork/delete/export/rename） | `screens/modals.py::SessionPicker`、`cli/tui/app.py` | `test_tui_sessions.py` | 同上 |
 | 收尾（窄屏/退出摘要） | `widgets/status_bar.py`、`app.py` | `test_tui_polish.py` | 同上 |
@@ -85,7 +87,7 @@
 | 图片输入 | `attachments.py` | `test_images.py` | — |
 | 主题 / 键位 | `cli/theme.py`、`cli/keybindings.py` | `test_theme.py` | — |
 
-REPL 命令：`/help /exit /clear /model /thinking /mode /session /sessions /rename /fork /import /undo /compact /image /images /skills /mcp /reload /theme /hotkeys`。
+REPL 命令：`/help /exit /clear /model /thinking /mode /session /sessions /rename /fork /import /undo /compact /image /images /skills /mcp /reload /theme /lang /hotkeys`。
 
 ## 7. MCP
 

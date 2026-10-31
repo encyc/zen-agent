@@ -17,6 +17,8 @@ from textual.containers import Vertical, VerticalScroll
 from textual.widgets import Static
 
 from zenagent.cli.tui import palette
+from zenagent.cli.tui.textutil import clip_cells
+from zenagent.i18n import t, tn
 
 __all__ = [
     "MAX_JOB_ROWS",
@@ -36,9 +38,6 @@ MAX_JOB_ROWS = 6
 #: Inner content width: ``#sidebar`` is 26 wide with ``padding: 1 2``.
 _CONTENT_WIDTH = 22
 
-_TEXT = palette.TEXT
-_MUTED = palette.MUTED
-_ACCENT = palette.ACCENT
 
 _SUBAGENT_MARKS = {
     "running": "◐",
@@ -52,12 +51,12 @@ _SUBAGENT_MARKS = {
 _TODO_CLOSED = frozenset({"completed", "abandoned", "done"})
 
 _TODO_MARKS = {
-    "completed": ("✓", palette.STATE_COLORS["completed"]),
-    "done": ("✓", palette.STATE_COLORS["done"]),
-    "in_progress": ("▶", palette.STATE_COLORS["in_progress"]),
-    "pending": ("○", palette.STATE_COLORS["pending"]),
-    "blocked": ("⊘", palette.STATE_COLORS["blocked"]),
-    "abandoned": ("-", palette.STATE_COLORS["abandoned"]),
+    "completed": "✓",
+    "done": "✓",
+    "in_progress": "▶",
+    "pending": "○",
+    "blocked": "⊘",
+    "abandoned": "-",
 }
 
 _JOB_MARKS = {
@@ -69,8 +68,8 @@ _JOB_MARKS = {
 
 
 def _clip(text: str, width: int = _CONTENT_WIDTH) -> str:
-    """One sidebar row is one terminal line; never wrap."""
-    return text if len(text) <= width else text[: width - 1] + "…"
+    """One sidebar row is one terminal line; never wrap (CJK is two cells)."""
+    return clip_cells(text, width)
 
 
 def _seconds(value: float) -> str:
@@ -128,7 +127,7 @@ class SidebarSection(Vertical):
     }
     SidebarSection .sidebar-title {
         height: 1;
-        color: #8296a6;
+        color: $muted;
         text-style: bold;
     }
     SidebarSection .sidebar-rows {
@@ -138,23 +137,38 @@ class SidebarSection(Vertical):
 
     def __init__(
         self,
-        title: str,
+        section_key: str,
         *,
         on_row_click: Callable[[str], None] | None = None,
     ) -> None:
         super().__init__(classes="sidebar-section")
-        self.title = title
+        #: Stable, locale-independent id (``session``, ``jobs`` …).
+        self.key = section_key
         self._on_row_click = on_row_click
         self._rows: dict[str, SidebarRow] = {}
         self._rows_box = Vertical(classes="sidebar-rows")
+
+    @property
+    def title(self) -> str:
+        """Localized section heading (English under the default locale)."""
+        return t(f"tui.sidebar.{self.key}")
 
     def compose(self):
         yield Static(self.title, classes="sidebar-title")
         yield self._rows_box
 
     def on_mount(self) -> None:
-        accent = palette.SECTION_ACCENTS.get(self.title, palette.MUTED)
-        self.query_one(".sidebar-title", Static).styles.color = accent
+        self._apply_title()
+
+    def _apply_title(self) -> None:
+        accent = palette.SECTION_ACCENTS.get(self.key, palette.MUTED)
+        title = self.query_one(".sidebar-title", Static)
+        title.update(self.title)
+        title.styles.color = accent
+
+    def refresh_language(self) -> None:
+        """Re-render the heading after a locale switch (rows rebuild on repaint)."""
+        self._apply_title()
 
     def set_rows(self, items: list[tuple[str, Text | str]]) -> None:
         """Reconcile this section's rows against ``items`` (key order = display)."""
@@ -199,13 +213,18 @@ class Sidebar(VerticalScroll):
         self._on_context_click: Callable[[], None] | None = None
 
     def compose(self):
-        yield SidebarSection("Session")
-        yield SidebarSection("Model")
-        yield SidebarSection("Runtime")
-        yield SidebarSection("Context", on_row_click=lambda _key: self._context_clicked())
-        yield SidebarSection("Todo", on_row_click=lambda _key: self._todo_clicked())
-        yield SidebarSection("Subagent", on_row_click=self._subagent_clicked)
-        yield SidebarSection("Jobs", on_row_click=self._job_clicked)
+        yield SidebarSection("session")
+        yield SidebarSection("model")
+        yield SidebarSection("runtime")
+        yield SidebarSection("context", on_row_click=lambda _key: self._context_clicked())
+        yield SidebarSection("todo", on_row_click=lambda _key: self._todo_clicked())
+        yield SidebarSection("subagent", on_row_click=self._subagent_clicked)
+        yield SidebarSection("jobs", on_row_click=self._job_clicked)
+
+    def refresh_language(self) -> None:
+        """Repaint every section heading for the active locale."""
+        for section in self.query(SidebarSection):
+            section.refresh_language()
 
     # -- wiring -------------------------------------------------------------
 
@@ -241,11 +260,11 @@ class Sidebar(VerticalScroll):
 
     # -- data ---------------------------------------------------------------
 
-    def _section(self, title: str) -> SidebarSection:
+    def _section(self, name: str) -> SidebarSection:
         for section in self.query(SidebarSection):
-            if section.title == title:
+            if name in (section.key, section.title):
                 return section
-        raise AssertionError(f"sidebar has no {title!r} section")
+        raise AssertionError(f"sidebar has no {name!r} section")
 
     def refresh_contents(self, chat, models, *, width: int | None = None) -> None:
         """Repaint every section from the one status snapshot.
@@ -261,54 +280,64 @@ class Sidebar(VerticalScroll):
         def fit(value: str) -> str:
             return _clip(value, self._content_width)
 
-        self._section("Session").set_rows(
+        self._section("session").set_rows(
             [
-                ("name", Text(fit(status.session_name), style=_TEXT)),
-                ("messages", Text(f"{len(chat.transcript)} messages", style=_MUTED)),
+                ("name", Text(fit(status.session_name), style=palette.TEXT)),
+                ("messages", Text(tn("tui.sidebar.messages", len(chat.transcript)), style=palette.MUTED)),
             ]
         )
-        self._section("Model").set_rows(
+        self._section("model").set_rows(
             [
-                ("model", Text(fit(status.model_id), style=_ACCENT)),
+                ("model", Text(fit(status.model_id), style=palette.ACCENT)),
                 (
                     "context",
                     Text(
-                        fit(f"ctx {status.context_used}/{status.context_window}"),
-                        style=_MUTED,
+                        t(
+                            "tui.sidebar.ctx",
+                            used=status.context_used,
+                            window=status.context_window,
+                        ),
+                        style=palette.MUTED,
                     ),
                 ),
-                ("spend", Text(f"spend ${status.cost:.4f}", style=_MUTED)),
+                ("spend", Text(t("tui.sidebar.spend", cost=f"{status.cost:.4f}"), style=palette.MUTED)),
             ]
         )
-        self._section("Runtime").set_rows(
+        self._section("runtime").set_rows(
             [
-                ("state", Text("running" if status.running else "idle")),
+                ("state", Text(
+                    t("tui.sidebar.state_running")
+                    if status.running
+                    else t("tui.sidebar.state_idle")
+                )),
                 (
                     "queue",
                     Text(
-                        fit(
-                            f"queued {status.follow_ups} · steer {status.steering}"
+                        t(
+                            "tui.sidebar.queue",
+                            queued=status.follow_ups,
+                            steer=status.steering,
                         ),
-                        style=_MUTED,
+                        style=palette.MUTED,
                     ),
                 ),
-                ("models", Text(f"{len(models.entries())} models", style=_MUTED)),
+                ("models", Text(tn("tui.sidebar.models", len(models.entries())), style=palette.MUTED)),
             ]
         )
 
         report = status.context
         if report is not None and report.slices:
-            self._section("Context").set_rows(_context_rows(report, self._content_width))
+            self._section("context").set_rows(_context_rows(report, self._content_width))
         else:
             self._section("Context").set_rows([])
 
         # Every task is listed inline (one clipped line each, phases as headers);
         # the overlay stays the place where full text is readable.
         todo_rows: list[tuple[str, Text | str]] = []
-        phase_style = f"bold {palette.SECTION_ACCENTS['Todo']}"
+        phase_style = f"bold {palette.SECTION_ACCENTS['todo']}"
         for phase_index, phase in enumerate(status.todos):
             tasks = phase.get("tasks") or []
-            name = str(phase.get("name") or "Tasks")
+            name = str(phase.get("name") or t("tui.todo.tasks"))
             closed = sum(
                 1 for task in tasks if task.get("status") in _TODO_CLOSED
             )
@@ -320,22 +349,21 @@ class Sidebar(VerticalScroll):
             )
             for task_index, task in enumerate(tasks):
                 state = str(task.get("status") or "pending")
-                mark, color = _TODO_MARKS.get(
-                    state, ("○", palette.STATE_COLORS["pending"])
-                )
+                mark = _TODO_MARKS.get(state, "○")
+                color = palette.STATE_COLORS.get(state, palette.STATE_COLORS["pending"])
                 label = f"{mark} {task.get('content') or ''}"
                 todo_rows.append(
                     (f"task:{phase_index}:{task_index}", Text(fit(label), style=color))
                 )
-        self._section("Todo").set_rows(todo_rows)
+        self._section("todo").set_rows(todo_rows)
 
         subagents = []
         for view in status.subagents[:MAX_SUBAGENT_ROWS]:
             mark = _SUBAGENT_MARKS.get(view.status, "•")
             label = f"{mark} {view.name} {_seconds(view.duration_ms / 1000)}"
-            style = palette.STATE_COLORS.get(view.status, _TEXT)
+            style = palette.STATE_COLORS.get(view.status, palette.TEXT)
             subagents.append((view.call_id, Text(fit(label), style=style)))
-        self._section("Subagent").set_rows(subagents)
+        self._section("subagent").set_rows(subagents)
 
         jobs = []
         now = time.time()
@@ -347,9 +375,9 @@ class Sidebar(VerticalScroll):
                 else max(0.0, now - job.started_at)
             )
             label = f"{mark} {job.id} {_seconds(elapsed)}"
-            style = palette.STATE_COLORS.get(job.status, _MUTED)
+            style = palette.STATE_COLORS.get(job.status, palette.MUTED)
             jobs.append((job.id, Text(fit(label), style=style)))
-        self._section("Jobs").set_rows(jobs)
+        self._section("jobs").set_rows(jobs)
 
     def apply_width(self, width: int) -> bool:
         """Whether the panel fits; the app owns the actual ``display`` flag."""
@@ -361,17 +389,21 @@ def _context_rows(report, width: int) -> list[tuple[str, Text | str]]:
     window = report.window
     pct = report.total_tokens / window * 100.0 if window else 0.0
     mark = "" if report.measured else "≈"
-    total_line = (
-        f"ctx {pct:.0f}% · {mark}{_human(report.total_tokens)}/{_human(window)}"
+    total_line = t(
+        "tui.sidebar.ctx_total",
+        pct=f"{pct:.0f}",
+        mark=mark,
+        used=_human(report.total_tokens),
+        window=_human(window),
     )
     biggest = sorted(report.slices, key=lambda item: item.tokens, reverse=True)[:2]
     top = " · ".join(
-        f"{_SHORT_SLICES.get(item.id, item.id)} {_fmt_pct(item.pct)}" for item in biggest
+        f"{_short(item.id)} {_fmt_pct(item.pct)}" for item in biggest
     )
     return [
-        ("ctx-total", Text(_clip(total_line, width), style=_TEXT)),
+        ("ctx-total", Text(_clip(total_line, width), style=palette.TEXT)),
         ("ctx-bar", _context_bar(report, max(6, width - 2))),
-        ("ctx-top", Text(_clip(top, width), style=_MUTED)),
+        ("ctx-top", Text(_clip(top, width), style=palette.MUTED)),
     ]
 
 
@@ -408,14 +440,8 @@ def _human(count: int) -> str:
     return str(count)
 
 
-_SHORT_SLICES = {
-    "system": "sys",
-    "agents": "AGENTS",
-    "skills": "skills",
-    "extensions": "ext",
-    "plan": "plan",
-    "mode": "mode",
-    "tools": "tools",
-    "session": "session",
-    "other": "other",
-}
+def _short(slice_id: str) -> str:
+    """Compact context-slice label (falls back to the stable id)."""
+    key = f"tui.sidebar.short.{slice_id}"
+    value = t(key)
+    return slice_id if value == key else value

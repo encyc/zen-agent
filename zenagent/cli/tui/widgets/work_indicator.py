@@ -13,11 +13,11 @@ from rich.text import Text
 from textual.widgets import Static
 
 from zenagent.cli.tui import palette
+from zenagent.i18n import t
 
 __all__ = ["WorkIndicator"]
 
 _FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-_ACCENT = palette.ACCENT
 
 
 class WorkIndicator(Static):
@@ -59,9 +59,9 @@ class WorkIndicator(Static):
         self._frame = (self._frame + 1) % len(_FRAMES)
         elapsed = int(time.monotonic() - self._started)
         text = Text()
-        text.append(f"{_FRAMES[self._frame]} ", style=_ACCENT)
-        text.append("working", style=_ACCENT)
+        text.append(f"{_FRAMES[self._frame]} ", style=palette.ACCENT)
+        text.append(t("tui.work.working"), style=palette.ACCENT)
         if elapsed >= 1:
-            text.append(f" {elapsed}s", style="#8296a6")
+            text.append(f" {elapsed}s", style=palette.MUTED)
         self._last = text.plain
         self.update(text)

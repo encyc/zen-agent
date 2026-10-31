@@ -28,6 +28,7 @@ from zenagent.agent.session import (
 from zenagent.agent.subagents import carry_task_dir, trash_task_dir
 from zenagent.app.runtime import Runtime
 from zenagent.export import export_session
+from zenagent.i18n import t
 
 __all__ = ["SessionEntry", "SessionManager", "adopt_legacy_session"]
 
@@ -72,13 +73,13 @@ def adopt_legacy_session(path: Path, *, cwd: Path | None = None) -> Path:
         else session_module.sessions_dir()
     )
     if source.suffix != ".jsonl" or not source.is_file():
-        raise ValueError(f"not a legacy session file: {source}")
+        raise ValueError(t("session.legacy_file", source=source))
     if not _same_directory(source.parent, legacy_dir):
         raise ValueError(
-            f"not a legacy session file: {source} (expected under {legacy_dir})"
+            t("session.legacy_dir", source=source, dir=legacy_dir)
         )
     if _same_directory(source.parent, target_dir):
-        raise ValueError(f"session already belongs to the current project: {source}")
+        raise ValueError(t("session.already_current", source=source))
 
     title = read_session_titles(legacy_dir).get(source.name)
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -163,7 +164,7 @@ class SessionManager:
         """Flip the pinned flag of one saved session; returns the new state."""
         target = Path(path)
         if not target.is_file():
-            raise ValueError(f"session not found: {target}")
+            raise ValueError(t("session.not_found", target=target))
         currently = target.name in read_session_pins(target.parent)
         return set_session_pin(target, not currently)
 

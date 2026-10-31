@@ -89,7 +89,7 @@ def test_thinking_arguments_are_completed():
 
 def test_theme_arguments_are_completed():
     completer = ReplCompleter(base_dir=Path("/tmp"))
-    assert complete(completer, "/theme ") == ["default", "mono", "solarized"]
+    assert complete(completer, "/theme ") == ["auto", "dark", "light"]
 
 
 def test_commands_without_argument_values_complete_nothing():

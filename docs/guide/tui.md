@@ -61,6 +61,26 @@ provider 错误不会进转录区，而是停在 dock 顶部的错误横幅里�
 
 成功态刻意**不用绿色**（omp 的规则：运行中=accent、成功=暗、只有错误才着色）。
 
+## 外观与主题
+
+- 三种外观：`auto`（按终端 `COLORFGBG` 判断背景亮暗，失败回退 dark）、`dark`、`light`。
+- 切换方式：`/theme`、`/settings → Theme…`、启动参数 `--theme`；选择持久化到
+  `~/.zenagent/settings.json` 的 `prefs.theme`，`--theme` 覆盖 pref。
+- 即时生效：Textual 主题重算 CSS 变量，转录与状态带用同一套 token 重建；
+  不打断正在进行的输出，也不丢会话。
+- 颜色只有一个来源（`zenagent/app/appearance.py`）：TUI 的 Rich 文本、Textual
+  样式表、REPL 渲染器都从它派生。新增 widget 必须用 palette / 主题变量，
+  不允许写死 hex（`tests/test_tui_theme_css.py` 会拦）。
+- REPL 的 `default|mono|solarized|<path.json>` 是 legacy 主题，只在 REPL 生效。
+
+## 界面语言
+
+- `auto`（默认）/`en`/`zh`：`/lang`、`/settings → Language…`、`--lang` 三处可改，持久化到
+  `~/.zenagent/settings.json` 的 `prefs.language`；优先级 `--lang` > pref > 环境（`LANG` 等）。
+- 切换即时生效：命令描述重建（registry 构建期翻译）、侧栏标题刷新、Rich 文本重绘；
+  正在进行的输出不中止。命令名、flag、tool 名始终是英文（`/` 补全仍显示英文命令名）。
+- 文案范围与术语表、以及"哪些东西故意不翻"，见 [界面语言（i18n）](i18n.md)。
+
 ## 键位
 
 | 键 | 行为 |

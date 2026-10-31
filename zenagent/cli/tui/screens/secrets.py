@@ -13,6 +13,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Input, Static
 
 from zenagent.cli.tui.screens.palette import PaletteItem, PaletteScreen
+from zenagent.i18n import t
 from zenagent.tools.web import LABELS
 from zenagent.tools.web.providers import available_providers
 from zenagent.tools.web.registry import default_provider
@@ -35,34 +36,36 @@ class SecretInput(ModalScreen[str | None]):
         width: 72;
         height: auto;
         padding: 1 2;
-        background: #141c24;
-        border: round #263441;
+        background: $surface;
+        border: round $line;
     }
 
     SecretInput #secret-title {
         height: 1;
-        color: #d9a86c;
+        color: $accent;
         text-style: bold;
     }
 
     SecretInput #secret-hint {
         height: 1;
-        color: #5d6f7e;
+        color: $dim;
     }
 
     SecretInput #secret-input {
         height: 1;
         border: none;
-        background: #0d1319;
-        color: #d7e0e8;
+        background: $ink;
+        color: $foreground;
     }
     """
 
-    def __init__(self, *, title: str, hint: str, placeholder: str = "paste the key") -> None:
+    def __init__(
+        self, *, title: str, hint: str, placeholder: str | None = None
+    ) -> None:
         super().__init__()
         self.title_text = title
         self.hint_text = hint
-        self.placeholder = placeholder
+        self.placeholder = placeholder or t("tui.secrets.paste_key")
 
     def compose(self) -> ComposeResult:
         with Vertical(id="secret-panel"):
@@ -88,9 +91,12 @@ class SearchProviderPicker(PaletteScreen[str]):
         current = default_provider() or "auto"
         items = [
             PaletteItem(
-                label=f"{'●' if current == 'auto' else ' '} Auto (chain order)",
+                label=(
+                    f"{'●' if current == 'auto' else ' '} "
+                    + t("tui.secrets.auto")
+                ),
                 value="auto",
-                note="deepseek → tavily → brave → bing → duckduckgo",
+                note=t("tui.secrets.chain_note"),
                 selected=current == "auto",
             )
         ]
@@ -99,12 +105,18 @@ class SearchProviderPicker(PaletteScreen[str]):
                 PaletteItem(
                     label=f"{'●' if current == name else ' '} {LABELS.get(name, name)}",
                     value=name,
-                    note="ready" if available else reason,
+                    note=(
+                        t("tui.secrets.ready") if available else reason
+                    ),
                     enabled=True,
                     selected=current == name,
                 )
             )
-        super().__init__(title="Search provider", items=items, placeholder="Search providers")
+        super().__init__(
+            title=t("tui.secrets.provider_title"),
+            items=items,
+            placeholder=t("tui.secrets.providers_search"),
+        )
 
 
 class ProviderKeyPicker(PaletteScreen[str]):
@@ -120,11 +132,23 @@ class ProviderKeyPicker(PaletteScreen[str]):
             PaletteItem(
                 label=f"{'●' if configured else ' '} {label}",
                 value=env_name,
-                note="key set" if configured else f"needs {env_name}",
+                note=(
+                    t("tui.secrets.key_set")
+                    if configured
+                    else t("tui.secrets.needs", env=env_name)
+                ),
                 enabled=True,
                 selected=configured,
             )
             for label, env_name, configured in providers
         ]
-        title = "Model API keys" if scope == "model" else "Search API keys"
-        super().__init__(title=title, items=items, placeholder="Search providers")
+        title = t(
+            "tui.secrets.model_title"
+            if scope == "model"
+            else "tui.secrets.search_title"
+        )
+        super().__init__(
+            title=title,
+            items=items,
+            placeholder=t("tui.secrets.providers_search"),
+        )

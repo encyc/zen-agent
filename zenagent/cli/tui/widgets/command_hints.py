@@ -16,10 +16,6 @@ __all__ = ["CommandHints"]
 
 MAX_ROWS = 6
 
-_TEXT = palette.TEXT
-_MUTED = palette.MUTED
-_DIM = palette.DIM
-_ACCENT = palette.ACCENT
 
 
 class CommandHints(Static):
@@ -94,15 +90,15 @@ class CommandHints(Static):
             if index > start:
                 text.append("\n")
             selected = index == self._index
-            text.append("▸ " if selected else "  ", style=_ACCENT if selected else _DIM)
+            text.append("▸ " if selected else "  ", style=palette.ACCENT if selected else palette.DIM)
             label = f"{self._prefix}{name}"
-            text.append(label, style=f"bold {_ACCENT}" if selected else _TEXT)
+            text.append(label, style=f"bold {palette.ACCENT}" if selected else palette.TEXT)
             budget = width - len(label) - 4
             if description and budget > 8:
                 note = description if len(description) <= budget else description[: budget - 1] + "…"
                 text.append("  ")
-                text.append(note, style=_MUTED)
+                text.append(note, style=palette.MUTED)
         hidden = len(self._matches) - (end - start)
         if hidden > 0:
-            text.append(f"\n  … {hidden} more", style=_DIM)
+            text.append(f"\n  … {hidden} more", style=palette.DIM)
         return text

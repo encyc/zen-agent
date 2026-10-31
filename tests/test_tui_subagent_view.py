@@ -116,7 +116,7 @@ async def test_clicking_a_subagent_row_opens_the_read_only_view(fake_runtime):
 
         banner = app.query_one(SubagentBanner)
         assert banner.display is True
-        assert "research" in banner.plain and "只读" in banner.plain
+        assert "research" in banner.plain and "read-only" in banner.plain
 
         prompt = app.query_one(PromptInput)
         assert prompt.disabled is True

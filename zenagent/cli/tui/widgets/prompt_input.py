@@ -11,6 +11,8 @@ from textual import events
 from textual.message import Message
 from textual.widgets import TextArea
 
+from zenagent.i18n import t
+
 __all__ = ["PromptInput"]
 
 MAX_ROWS = 8
@@ -56,8 +58,12 @@ class PromptInput(TextArea):
             super().__init__()
             self.rows = rows
 
-    def __init__(self, placeholder: str = "Type a message…") -> None:
-        super().__init__(text="", placeholder=placeholder, id="prompt-input")
+    def __init__(self, placeholder: str | None = None) -> None:
+        super().__init__(
+            text="",
+            placeholder=placeholder or t("tui.prompt.placeholder"),
+            id="prompt-input",
+        )
         self._rows = 1
 
     def _set_rows(self, rows: int) -> None:

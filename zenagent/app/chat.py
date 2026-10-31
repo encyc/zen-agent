@@ -27,6 +27,7 @@ from zenagent.app.views import (
     usage_total,
 )
 from zenagent.events import AgentEvent
+from zenagent.i18n import t
 from zenagent.tools.jobs import get_job_manager
 from zenagent.tools.todo import coerce_todo_phases, load_todo_phases
 from zenagent.types import ImageContent
@@ -376,7 +377,7 @@ class ChatController:
         # Compaction continues the same work: carry the todo checklist over.
         await self.runtime.switch_session(path, carry_todos=True)
         self.reload_transcript()
-        text = f"compacted · {before:,} prompt tokens → summary session"
+        text = t("notice.compacted", tokens=before)
         self._notices.append(TranscriptNotice("divider", text))
         self._notify()
         return text
@@ -457,7 +458,9 @@ class ChatController:
             if self.runtime.agent.termination == "error":
                 detail = self.runtime.agent.error_message
                 self._last_error = (
-                    detail if detail and detail != "error" else "the run failed"
+                    detail
+                    if detail and detail != "error"
+                    else t("notice.run_failed")
                 )
             self._notify()
             # Stay busy (running=True, task set) through the summarizer call so
@@ -487,7 +490,9 @@ class ChatController:
             await self.compact_now(force=True)
         except Exception as exc:  # noqa: BLE001 - never break the session
             self._notices.append(
-                TranscriptNotice("info", f"auto-compaction failed: {exc}")
+                TranscriptNotice(
+                    "info", t("notice.auto_compaction_failed", error=exc)
+                )
             )
         finally:
             self._compacting = False

@@ -14,12 +14,10 @@ from rich.text import Text
 from textual.widgets import Static
 
 from zenagent.cli.tui import palette
+from zenagent.i18n import t, tn
 
 __all__ = ["WorkStrip"]
 
-_ACCENT = palette.ACCENT
-_MUTED = palette.MUTED
-_DIM = palette.DIM
 
 
 class WorkStrip(Static):
@@ -28,7 +26,7 @@ class WorkStrip(Static):
     DEFAULT_CSS = """
     WorkStrip {
         height: 1;
-        background: #141c24;
+        background: $surface;
         padding: 0 1;
     }
     """
@@ -58,14 +56,13 @@ class WorkStrip(Static):
             return
         parts: list[str] = []
         if jobs_running:
-            noun = "job" if jobs_running == 1 else "jobs"
-            parts.append(f"{jobs_running} {noun}")
+            parts.append(tn("tui.work.jobs", jobs_running))
         if task:
-            parts.append("1 task")
+            parts.append(t("tui.work.task"))
         text = Text()
-        text.append("◐ ", style=_ACCENT)
-        text.append(" · ".join(parts), style=_MUTED)
-        text.append(" · ctrl+b", style=_DIM)
+        text.append("◐ ", style=palette.ACCENT)
+        text.append(" · ".join(parts), style=palette.MUTED)
+        text.append(" · ctrl+b", style=palette.DIM)
         self._plain = text.plain
         self.update(text)
         self.display = True

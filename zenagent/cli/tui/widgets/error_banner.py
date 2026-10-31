@@ -14,7 +14,6 @@ from zenagent.cli.tui import palette
 
 __all__ = ["MAX_MESSAGE_CHARS", "ErrorBanner"]
 
-_ERROR = palette.ERROR
 
 #: Long provider errors would push the prompt off-screen; the tail of a provider
 #: error is rarely unique, the head names the cause.
@@ -43,7 +42,7 @@ class ErrorBanner(Static):
             self.update("")
             return
         self.display = True
-        self.update(Text(f"✘ {text}", style=_ERROR))
+        self.update(Text(f"✘ {text}", style=palette.ERROR))
 
     def on_click(self) -> None:
         """Click to dismiss, like omp's dock banner."""

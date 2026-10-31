@@ -19,6 +19,8 @@ from textual.screen import ModalScreen
 from textual.widgets import Input, OptionList, Static
 from textual.widgets.option_list import Option
 
+from zenagent.i18n import t
+
 __all__ = ["PaletteItem", "PaletteScreen"]
 
 T = TypeVar("T")
@@ -79,13 +81,13 @@ class PaletteScreen(ModalScreen[T | None], Generic[T]):
         height: auto;
         max-height: 70%;
         padding: 1 2;
-        background: #141c24;
-        border-top: solid #263441;
+        background: $surface;
+        border-top: solid $line;
     }
 
     PaletteScreen #palette-title {
         height: 1;
-        color: #d9a86c;
+        color: $accent;
         text-style: bold;
     }
 
@@ -94,28 +96,28 @@ class PaletteScreen(ModalScreen[T | None], Generic[T]):
         margin: 0 0 1 0;
         padding: 0;
         border: none;
-        background: #141c24;
-        color: #d7e0e8;
+        background: $surface;
+        color: $foreground;
     }
 
     PaletteScreen #palette-list {
         height: auto;
         max-height: 20;
-        background: #141c24;
+        background: $surface;
         border: none;
         padding: 0;
         scrollbar-size-vertical: 1;
     }
 
     PaletteScreen #palette-list > .option-list--option-highlighted {
-        background: #263441;
-        color: #d7e0e8;
+        background: $line;
+        color: $foreground;
     }
 
     PaletteScreen #palette-footer {
         height: 1;
         margin: 1 0 0 0;
-        color: #5d6f7e;
+        color: $dim;
     }
     """
 
@@ -124,14 +126,14 @@ class PaletteScreen(ModalScreen[T | None], Generic[T]):
         *,
         title: str,
         items: list[PaletteItem[T]],
-        placeholder: str = "Search",
-        footer: str = "↑↓ move   enter select   esc cancel",
+        placeholder: str | None = None,
+        footer: str | None = None,
     ) -> None:
         super().__init__()
         self.title_text = title
         self.items = items
-        self.placeholder = placeholder
-        self.footer_text = footer
+        self.placeholder = placeholder or t("tui.picker.search")
+        self.footer_text = footer or t("tui.picker.footer")
         self._filtered: list[PaletteItem[T]] = list(items)
 
     # -- composition --------------------------------------------------------
@@ -159,7 +161,9 @@ class PaletteScreen(ModalScreen[T | None], Generic[T]):
         option_list = self.query_one("#palette-list", OptionList)
         option_list.clear_options()
         if not self._filtered:
-            option_list.add_option(Option("no matches", disabled=True))
+            option_list.add_option(
+                Option(t("tui.picker.no_matches"), disabled=True)
+            )
             return
         option_list.add_options([self._option(item) for item in self._filtered])
         # Preselect the active entry (omp highlights the current model/session).

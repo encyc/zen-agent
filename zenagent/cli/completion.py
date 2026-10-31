@@ -16,34 +16,46 @@ from prompt_toolkit.document import Document
 
 from zenagent.app.skill_commands import SKILL_SLASH_PREFIX
 from zenagent.app.slash_args import argument_values
+from zenagent.i18n import t
 
-__all__ = ["SLASH_COMMANDS", "ReplCompleter", "help_text"]
+__all__ = ["SLASH_COMMANDS", "ReplCompleter", "help_text", "slash_commands"]
 
-#: Command → one-line description (drives both completion and ``/help``).
+#: Command → catalog key of its one-line description (drives completion + /help).
+#: Keys are resolved at read time, so /lang switches the table live.
 SLASH_COMMANDS: dict[str, str] = {
-    "/help": "show this help",
-    "/exit": "leave the REPL (Ctrl+D also works)",
-    "/clear": "start over with an empty transcript",
-    "/model": "show or switch the model (takes effect next turn)",
-    "/thinking": "show or set reasoning level: off|low|medium|high|max",
-    "/mode": "set runtime mode: plan|ask|full (plan = read-only)",
-    "/session": "show model, context and spend for this session",
-    "/tools": "list the tools the model can call",
-    "/compact": "summarize the conversation into a fresh session",
-    "/undo": "drop the last turn into a fresh session file",
-    "/retry": "re-run the last turn (new session file)",
-    "/image": "attach an image for the next prompt (/image <path>)",
-    "/images": "list attached images, or /images clear",
-    "/mcp": "show MCP servers, or /mcp retry to reconnect",
-    "/skills": "list available skills",
-    "/reload": "re-discover skills, templates and extensions",
-    "/theme": "switch theme: default|mono|solarized|<path.json>",
-    "/hotkeys": "show the active keybindings",
-    "/sessions": "list saved sessions (/sessions all for every project)",
-    "/rename": "rename the current session (/rename <name>)",
-    "/fork": "branch a new session at a user message (/fork <n>)",
-    "/import": "load a session file and continue it (/import <path>)",
+    "/help": "cmd.repl.help",
+    "/exit": "cmd.repl.exit",
+    "/clear": "cmd.repl.clear",
+    "/model": "cmd.repl.model",
+    "/thinking": "cmd.repl.thinking",
+    "/mode": "cmd.repl.mode",
+    "/session": "cmd.repl.session",
+    "/tools": "cmd.repl.tools",
+    "/compact": "cmd.repl.compact",
+    "/undo": "cmd.repl.undo",
+    "/retry": "cmd.repl.retry",
+    "/image": "cmd.repl.image",
+    "/images": "cmd.repl.images",
+    "/mcp": "cmd.repl.mcp",
+    "/skills": "cmd.repl.skills",
+    "/reload": "cmd.repl.reload",
+    "/theme": "cmd.repl.theme",
+    "/lang": "cmd.repl.lang",
+    "/hotkeys": "cmd.repl.hotkeys",
+    "/sessions": "cmd.repl.sessions",
+    "/rename": "cmd.repl.rename",
+    "/fork": "cmd.repl.fork",
+    "/import": "cmd.repl.import",
 }
+
+
+def _translated_slash_commands() -> dict[str, str]:
+    return slash_commands()
+
+
+def slash_commands() -> dict[str, str]:
+    """The REPL command table with descriptions in the active locale."""
+    return {name: t(key) for name, key in SLASH_COMMANDS.items()}
 
 #: Text matched when the cursor sits in an ``@path`` token.
 _AT_TOKEN = re.compile(r"(?:^|\s)@(\S*)$")
@@ -51,12 +63,15 @@ _AT_TOKEN = re.compile(r"(?:^|\s)@(\S*)$")
 
 def help_text() -> str:
     """Render the command table plus usage notes for ``/help``."""
-    width = max(len(name) for name in SLASH_COMMANDS)
-    rows = [f"  {name:<{width}}  {description}" for name, description in SLASH_COMMANDS.items()]
+    table = slash_commands()
+    width = max(len(name) for name in table)
+    rows = [f"  {name:<{width}}  {description}" for name, description in table.items()]
     return (
-        "commands:\n"
+        t("repl.help.header")
+        + "\n"
         + "\n".join(rows)
-        + "\nwhile the agent is working, any line you type is queued as steering input."
+        + "\n"
+        + t("repl.help.footer")
     )
 
 
@@ -79,7 +94,10 @@ class ReplCompleter(Completer):
         typed_provider: Callable[[], list[tuple[str, str, str]]] | None = None,
         skill_provider: Callable[[], list[tuple[str, str]]] | None = None,
     ) -> None:
-        self.slash_commands = dict(slash_commands or SLASH_COMMANDS)
+        if slash_commands is None:
+            self.slash_commands = _translated_slash_commands()
+        else:
+            self.slash_commands = dict(slash_commands)
         self.base_dir = Path(base_dir) if base_dir is not None else Path.cwd()
         #: Frontend-supplied value sets (e.g. model ids), keyed with the slash.
         self.extra_values = dict(extra_values or {})
@@ -170,12 +188,15 @@ class ReplCompleter(Completer):
                         if name[1:].lower().startswith(needle)
                     ]
             matches = [
-                (name, f"{skills[name][1]} · {skills[name][0]}")
+                (
+                    name,
+                    f"{t('type.skill')} · {skills[name][0]}",
+                )
                 for name in sorted(selected)
             ]
         else:
             matches = [
-                (name, f"{kind} · {description}")
+                (name, f"{t(f'type.{kind}')} · {description}")
                 for name, (description, kind) in entries.items()
                 if name.lower().startswith(token_text.lower())
             ]

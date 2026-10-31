@@ -12,13 +12,10 @@ from textual.widgets import Static
 
 from zenagent import __version__
 from zenagent.cli.tui import palette
+from zenagent.i18n import t
 
 __all__ = ["WelcomeBlock"]
 
-_TEXT = palette.TEXT
-_MUTED = palette.MUTED
-_DIM = palette.DIM
-_ACCENT = palette.ACCENT
 
 
 class WelcomeBlock(Static):
@@ -30,10 +27,13 @@ class WelcomeBlock(Static):
     def _renderable(self) -> Text:
         text = Text()
         text.append("\n")
-        text.append("zen\n", style=f"bold {_ACCENT}")
-        text.append(f"v{__version__} · python agent loop\n", style=_DIM)
+        text.append("zen\n", style=f"bold {palette.ACCENT}")
+        text.append(
+            t("tui.welcome.subtitle", version=__version__) + "\n",
+            style=palette.DIM,
+        )
         text.append("\n")
-        text.append("/ commands  ·  ctrl+b info  ·  ctrl+d quit\n", style=_MUTED)
+        text.append(t("tui.welcome.hints") + "\n", style=palette.MUTED)
         text.append("\n")
         return text
 

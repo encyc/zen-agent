@@ -17,7 +17,8 @@ import fnmatch
 import re
 from pathlib import Path
 
-from zenagent.app.modes import DEFAULT_MODE, MODES, normalize_mode
+from zenagent.app.modes import DEFAULT_MODE, normalize_mode
+from zenagent.i18n import t
 from zenagent.types import ToolCall
 
 __all__ = [
@@ -229,7 +230,7 @@ class PermissionGate:
     def _validated_mode(mode: str) -> str:
         normalized = normalize_mode(mode)
         if normalized is None:
-            raise ValueError(f"unknown mode: {mode!r} (choose {'|'.join(MODES)})")
+            raise ValueError(t("mode.unknown", mode=mode))
         return normalized
 
     def set_mode(self, mode: str) -> None:
@@ -297,7 +298,9 @@ class PermissionGate:
         if len(preview) > _MAX_ARGS_PREVIEW:
             preview = preview[:_MAX_ARGS_PREVIEW] + "…"
         try:
-            answer = input(f"allow {tool_name}({preview})? [y/n/a] ").strip().lower()
+            answer = input(
+                t("perm.repl_prompt", tool=tool_name, args=preview)
+            ).strip().lower()
         except (EOFError, KeyboardInterrupt):
             return False, f"permission denied for {tool_name!r}: no answer"
         if answer in ("a", "all"):

@@ -1,12 +1,12 @@
 # ZenAgent i18n 与明暗主题设计（2026-10-31）
 
-状态：已批准（2026-10-31，用户拍板：theme 方案 A + i18n 方案 1）；实现计划见 `docs/superpowers/plans/2026-10-31-theme-appearance.md` 与 `...-i18n.md`
+状态：已批准（2026-10-31，用户拍板：theme 方案 A + i18n 方案 1）；实现已完成并通过全量闸门（分支 `feat/i18n-theme`，见 CHANGELOG Unreleased）。实现计划：`docs/superpowers/plans/2026-10-31-theme-appearance.md` 与 `...-i18n.md`
 作者：Lead
 基线：v0.4.4 + TUI 工作面板打磨第二轮（main `76d564f`，2026-10-31 21:20；本地领先 `origin/main` 11 个提交）
 
 相关：`zenagent/cli/tui/{app.py,theme.tcss,palette.py,widgets/*,screens/*,status/segments.py}`、
 `zenagent/cli/{theme.py,repl.py,main.py}`、`zenagent/app/{commands.py,permissions.py,slash_args.py,chat.py,views.py,runtime.py}`、
-`zenagent/settings.py`、新增 `zenagent/cli/appearance.py`、新增 `zenagent/i18n/{__init__,en,zh}.py`、
+`zenagent/settings.py`、新增 `zenagent/app/appearance.py`、新增 `zenagent/i18n/{__init__,en,zh}.py`、
 新增 `zenagent/cli/tui/textutil.py`
 参考：omp 的 theme / settings 体系（`/tmp/oh-my-pi/docs/{theme,settings}.md`）、Textual 8.2.8 的 theme API。
 
@@ -110,7 +110,7 @@ i18n 则是空白：CLI + app 层约有 **820 条**候选界面文案（启发�
 
 ### 5.1 外观与 token 源
 
-新增 `zenagent/cli/appearance.py`（无 UI 依赖，TUI/REPL/CLI 共用）：
+新增 `zenagent/app/appearance.py`（无 UI 依赖，TUI/REPL/CLI 共用）：
 
 ```python
 @dataclass(frozen=True)

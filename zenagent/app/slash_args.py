@@ -11,33 +11,35 @@ this module only owns the fixed vocabulary.
 from __future__ import annotations
 
 from zenagent.app.modes import MODES
+from zenagent.i18n import t
 
 __all__ = ["ARG_VALUES", "argument_values"]
 
 #: Mode descriptions mirror ``describe_modes`` but stay picker-friendly.
-_MODE_DESCRIPTIONS = {
-    "plan": "read-only planning; proposes a plan",
-    "ask": "confirm writes/commands (default)",
-    "full": "run writes/commands automatically",
-}
-
-#: command (with slash) → [(value, one-line description), ...] in display order.
+#: command (with slash) → [(value, catalog key of the one-line description), ...]
+#: in display order. Keys are resolved at read time, so a language switch is
+#: picked up by the next picker open / completion request.
 ARG_VALUES: dict[str, list[tuple[str, str]]] = {
-    "/mode": [(mode, _MODE_DESCRIPTIONS[mode]) for mode in MODES],
+    "/mode": [(mode, f"arg.mode.{mode}") for mode in MODES],
     "/thinking": [
-        ("off", "no reasoning"),
-        ("low", "cheap / fast"),
-        ("medium", "balanced"),
-        ("high", "default for reasoning models"),
-        ("max", "the model's supported maximum"),
+        ("off", "arg.thinking.off"),
+        ("low", "arg.thinking.low"),
+        ("medium", "arg.thinking.medium"),
+        ("high", "arg.thinking.high"),
+        ("max", "arg.thinking.max"),
     ],
     "/theme": [
-        ("default", "built-in colours"),
-        ("mono", "no colour"),
-        ("solarized", "solarized palette"),
+        ("auto", "arg.theme.auto"),
+        ("dark", "arg.theme.dark"),
+        ("light", "arg.theme.light"),
     ],
-    "/mcp": [("retry", "reconnect failed servers")],
-    "/images": [("clear", "forget attached images")],
+    "/lang": [
+        ("auto", "arg.lang.auto"),
+        ("en", "arg.lang.en"),
+        ("zh", "arg.lang.zh"),
+    ],
+    "/mcp": [("retry", "arg.mcp.retry")],
+    "/images": [("clear", "arg.images.clear")],
 }
 
 
@@ -50,7 +52,7 @@ def argument_values(command: str, prefix: str = "") -> list[tuple[str, str]]:
     values = ARG_VALUES.get(key.lower(), [])
     needle = prefix.strip().lower()
     return [
-        (value, description)
+        (value, t(description))
         for value, description in values
         if value.lower().startswith(needle)
     ]

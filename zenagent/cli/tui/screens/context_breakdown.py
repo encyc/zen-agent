@@ -9,7 +9,10 @@ from textual.widgets import Static
 
 from zenagent.app.context import ContextReport
 from zenagent.cli.tui import palette
+from zenagent.cli.tui.labels import context_label
 from zenagent.cli.tui.screens.modals import DialogScreen
+from zenagent.cli.tui.textutil import pad_cells
+from zenagent.i18n import t
 
 __all__ = ["ContextBreakdownScreen"]
 
@@ -29,7 +32,7 @@ class ContextBreakdownScreen(DialogScreen[None]):
     }
     ContextBreakdownScreen .context-note {
         height: auto;
-        color: #5d6f7e;
+        color: $dim;
     }
     """
 
@@ -39,7 +42,7 @@ class ContextBreakdownScreen(DialogScreen[None]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
-            yield Static(Text("context"), id="dialog-title")
+            yield Static(Text(t("tui.ctx.title")), id="dialog-title")
             with Vertical(id="context-body"):
                 yield Static(self._total_row(), classes="context-row")
                 for item in self.report.slices:
@@ -47,16 +50,20 @@ class ContextBreakdownScreen(DialogScreen[None]):
                 if self.report.window:
                     yield Static(self._free_row(), classes="context-row")
             yield Static(Text(self._note()), classes="context-note")
-            yield Static(Text("[esc] close"), id="dialog-hint")
+            yield Static(Text(t("tui.dialog.close")), id="dialog-hint")
 
     def _total_row(self) -> Text:
         report = self.report
         pct = report.total_tokens / report.window * 100 if report.window else 0.0
         mark = "" if report.measured else "≈"
         text = Text()
-        text.append("total ", style=palette.TEXT)
         text.append(
-            f"{mark}{_human(report.total_tokens)}/{_human(report.window)}",
+            t(
+                "tui.ctx.total",
+                mark=mark,
+                used=_human(report.total_tokens),
+                window=_human(report.window),
+            ),
             style=palette.TEXT,
         )
         text.append(f"  {pct:.0f}%", style=palette.ACCENT)
@@ -64,9 +71,8 @@ class ContextBreakdownScreen(DialogScreen[None]):
 
     def _slice_row(self, item) -> Text:
         text = Text()
-        text.append(
-            f"{item.label:<12}", style=palette.STATE_COLORS.get(item.id, palette.MUTED)
-        )
+        label = pad_cells(context_label(item.id, item.label), 12)
+        text.append(label, style=palette.STATE_COLORS.get(item.id, palette.MUTED))
         text.append(f" ≈{item.tokens:<6}", style=palette.MUTED)
         text.append(f" {item.pct:>5.1f}%", style=palette.TEXT)
         chars = f"{item.chars:>6} ch" if item.chars else "      —"
@@ -76,16 +82,15 @@ class ContextBreakdownScreen(DialogScreen[None]):
     def _free_row(self) -> Text:
         pct = self.report.free_tokens / self.report.window * 100
         text = Text()
-        text.append(f"{'free space':<12}", style=palette.DIM)
+        text.append(pad_cells(t("tui.ctx.free"), 12), style=palette.DIM)
         text.append(f" ≈{self.report.free_tokens:<6}", style=palette.DIM)
         text.append(f" {pct:>5.1f}%", style=palette.DIM)
         return text
 
     def _note(self) -> str:
-        base = "percentages are shares of the model window"
         if self.report.measured:
-            return f"{base}; slices are estimates (≈), the used total is provider-measured"
-        return f"{base}; slices and total are estimated (≈) — no provider usage yet"
+            return t("tui.ctx.note_window_measured")
+        return t("tui.ctx.note_window_estimated")
 
     def action_close(self) -> None:
         self.dismiss(None)
