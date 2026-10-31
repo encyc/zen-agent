@@ -120,3 +120,53 @@ async def test_missing_command_argument_is_rejected_by_the_schema():
 
     assert validate_arguments(BASH.parameters, {}) is not None
     assert validate_arguments(BASH.parameters, {"command": "echo hi"}) is None
+
+
+# ---------------------------------------------------------------------------
+# Non-interactive environment and cwd
+# ---------------------------------------------------------------------------
+
+
+async def test_commands_run_without_a_pager_or_interactive_prompt(monkeypatch):
+    """git/man/npm must not wait for a TTY that does not exist."""
+    for key in ("PAGER", "GIT_TERMINAL_PROMPT", "PIP_NO_INPUT", "CI"):
+        monkeypatch.delenv(key, raising=False)
+
+    result = await call(
+        command='printf "%s|%s|%s|%s" "$PAGER" "$GIT_TERMINAL_PROMPT" "$PIP_NO_INPUT" "$CI"'
+    )
+    assert not result.is_error
+    assert "cat|0|1|true" in result.content[0].text
+
+
+async def test_user_environment_wins_over_the_non_interactive_defaults(monkeypatch):
+    monkeypatch.setenv("PAGER", "less")
+    result = await call(command='printf "%s" "$PAGER"')
+    assert "less" in result.content[0].text
+
+
+async def test_cwd_argument_runs_the_command_in_that_directory(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    result = await call(command="pwd", cwd="sub")
+    assert not result.is_error
+    assert str(sub) in result.content[0].text
+    assert result.details["cwd"] == str(sub)
+
+
+async def test_missing_cwd_is_an_error_result(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result = await call(command="pwd", cwd="does/not/exist")
+    assert result.is_error
+    assert "cwd" in result.content[0].text.lower() or "directory" in result.content[0].text.lower()
+
+
+async def test_cwd_does_not_leak_between_calls(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    await call(command="pwd", cwd="sub")
+    result = await call(command="pwd")
+    assert str(tmp_path) in result.content[0].text
+    assert str(sub) not in result.content[0].text

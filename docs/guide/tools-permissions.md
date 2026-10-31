@@ -8,7 +8,7 @@
 | `write_file` | 覆盖写文件；拒绝用"截断的 read 页"回写（防数据丢失） | 需确认 |
 | `edit_file` | 唯一匹配替换（old→new） | 需确认 |
 | `list_dir` | 列目录（标记目录/文件） | 只读 |
-| `bash` | 执行命令，禁止危险模式 | 需确认 |
+| `bash` | 执行命令（非交互环境，支持 `cwd`），禁止危险模式 | 需确认 |
 | `glob` | 按模式找文件 | 只读 |
 | `grep` | 正则搜内容（忽略二进制/大文件） | 只读 |
 | `web_search` | 联网搜索，返回标题/URL/摘要（DeepSeek → Tavily → Brave → Bing → DuckDuckGo） | 只读，免确认 |

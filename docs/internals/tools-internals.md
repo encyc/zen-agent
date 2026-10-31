@@ -70,7 +70,10 @@ class ToolResultAgent:
 ### bash
 
 - 输出上限 `MAX_OUTPUT_BYTES = 30_000`，超限保留**头 + 尾**（中间省略），保证能看到末尾错误。
-- 默认超时 120s，可传 `timeout_s`。
+- 默认超时 120s，可传 `timeout_s`；`cwd` 可指定工作目录（相对/绝对，缺省为进程 cwd，不跨调用泄漏）。
+- **非交互环境**：未设置时补 `PAGER/GIT_PAGER/MANPAGER=cat`、`TERM=dumb`、`CI=true`、
+  `GIT_TERMINAL_PROMPT=0`、`PIP_NO_INPUT=1`、`npm_config_yes=true` 等（`NON_INTERACTIVE_ENV`，
+  用户真实 env 优先），避免 `git log`/`man`/`npm install` 卡在分页或提示上。
 - `start_new_session=True`：超时/取消时 `killpg` 杀整个进程组，避免孤儿进程。
 - 危险命令（`rm -rf /`、`curl|sh`、fork bomb 等）在权限门里拦截。
 
