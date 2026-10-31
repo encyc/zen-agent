@@ -12,7 +12,7 @@ from zenagent.app.models import ModelManager
 from zenagent.app.modes import describe_modes
 from zenagent.app.runtime import Runtime
 from zenagent.app.sessions import SessionManager
-from zenagent.i18n import LANGUAGE_CHOICES
+from zenagent.i18n import LANGUAGE_CHOICES, t
 
 __all__ = [
     "AppServices",
@@ -74,14 +74,20 @@ class CommandRegistry:
     async def dispatch(self, name: str, argument: str = "") -> CommandResult:
         command = self._commands.get(name)
         if command is None:
-            return CommandResult(message=f"unknown command: {name} (try help)")
+            return CommandResult(
+                message=t("cmdmsg.unknown_command", name=name)
+            )
         return await command.handler(self._services, argument)
 
 
-def _command(name: str, description: str):
+def _command(name: str):
     def decorate(handler):
         def factory(services: AppServices) -> Command:
-            return Command(name=name, description=description, handler=handler)
+            return Command(
+                name=name,
+                description=t(f"cmd.{name}.description"),
+                handler=handler,
+            )
 
         factory.name = name  # type: ignore[attr-defined]
         return factory
@@ -89,17 +95,17 @@ def _command(name: str, description: str):
     return decorate
 
 
-@_command("help", "list every command")
+@_command("help")
 async def _help(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(show_help=True)
 
 
-@_command("model", "browse and switch models")
+@_command("model")
 async def _model(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(screen="model-picker")
 
 
-@_command("mode", "set runtime mode: plan|ask|full")
+@_command("mode")
 async def _mode(services: AppServices, argument: str) -> CommandResult:
     requested = argument.strip()
     if not requested:
@@ -109,22 +115,28 @@ async def _mode(services: AppServices, argument: str) -> CommandResult:
         mode = services.runtime.set_mode(requested)
     except ValueError as exc:
         return CommandResult(message=str(exc))
-    return CommandResult(message=f"mode: {mode} · {describe_modes()}")
+    return CommandResult(
+        message=t("cmdmsg.mode_set", mode=mode, modes=describe_modes())
+    )
 
 
-@_command("lang", "set the interface language: auto|en|zh")
+@_command("lang")
 async def _lang(services: AppServices, argument: str) -> CommandResult:
     requested = argument.strip().lower()
     if not requested:
         return CommandResult(screen="language-picker")
     if requested not in LANGUAGE_CHOICES:
         return CommandResult(
-            message=f"unknown language: {requested} (choose {'|'.join(LANGUAGE_CHOICES)})"
+            message=t(
+                "cmdmsg.lang_unknown",
+                requested=requested,
+                choices="|".join(LANGUAGE_CHOICES),
+            )
         )
     return CommandResult(language=requested)
 
 
-@_command("theme", "set the colour theme: auto|dark|light")
+@_command("theme")
 async def _theme(services: AppServices, argument: str) -> CommandResult:
     requested = argument.strip().lower()
     if not requested:
@@ -132,32 +144,38 @@ async def _theme(services: AppServices, argument: str) -> CommandResult:
         return CommandResult(screen="theme-picker")
     if requested not in THEME_CHOICES:
         return CommandResult(
-            message=f"unknown theme: {requested} (choose {'|'.join(THEME_CHOICES)})"
+            message=t(
+                "cmdmsg.theme_unknown",
+                requested=requested,
+                choices="|".join(THEME_CHOICES),
+            )
         )
     return CommandResult(appearance=requested)
 
 
-@_command("sessions", "browse, resume or fork sessions")
+@_command("sessions")
 async def _sessions(services: AppServices, argument: str) -> CommandResult:
     if argument.strip().lower() == "all":
         return CommandResult(screen="session-picker-all")
     return CommandResult(screen="session-picker")
 
 
-@_command("rename", "rename the current session")
+@_command("rename")
 async def _rename(services: AppServices, argument: str) -> CommandResult:
     current = services.sessions.current()
     requested = argument.strip()
     if not requested:
-        return CommandResult(message=f"session name: {session_title(current)}")
+        return CommandResult(
+            message=t("cmdmsg.session_name", name=session_title(current))
+        )
     try:
         stored = services.sessions.rename(current, requested)
     except ValueError as exc:
         return CommandResult(message=str(exc))
-    return CommandResult(message=f"renamed: {stored}")
+    return CommandResult(message=t("cmdmsg.renamed", name=stored))
 
 
-@_command("pin", "pin or unpin the current session")
+@_command("pin")
 async def _pin(services: AppServices, argument: str) -> CommandResult:
     from zenagent.agent.session import session_title
 
@@ -168,33 +186,38 @@ async def _pin(services: AppServices, argument: str) -> CommandResult:
             state = services.sessions.set_pin(current, requested == "on")
         elif requested:
             return CommandResult(
-                message=f"unknown pin argument: {requested} (use on|off)"
+                message=t("cmdmsg.pin_unknown", requested=requested)
             )
         else:
             state = services.sessions.toggle_pin(current)
     except ValueError as exc:
         return CommandResult(message=str(exc))
     return CommandResult(
-        message=f"{'pinned' if state else 'unpinned'} {session_title(current)}"
+        message=t(
+            "cmdmsg.pinned" if state else "cmdmsg.unpinned",
+            name=session_title(current),
+        )
     )
 
 
-@_command("clear", "clear the visible conversation")
+@_command("clear")
 async def _clear(services: AppServices, argument: str) -> CommandResult:
     services.chat.clear()
-    return CommandResult(message="cleared the conversation")
+    return CommandResult(message=t("cmdmsg.cleared"))
 
 
-@_command("compact", "summarize the conversation now")
+@_command("compact")
 async def _compact(services: AppServices, argument: str) -> CommandResult:
     try:
         message = await services.chat.compact_now()
     except (ValueError, RuntimeError) as exc:
-        return CommandResult(message=f"compaction failed: {exc}")
-    return CommandResult(message=message or "nothing to compact", reset_transcript=True)
+        return CommandResult(message=t("cmdmsg.compaction_failed", error=exc))
+    return CommandResult(
+        message=message or t("cmdmsg.nothing_to_compact"), reset_transcript=True
+    )
 
 
-@_command("image", "attach an image for the next prompt (/image <path>)")
+@_command("image")
 async def _image(services: AppServices, argument: str) -> CommandResult:
     from pathlib import Path
 
@@ -202,40 +225,51 @@ async def _image(services: AppServices, argument: str) -> CommandResult:
 
     path = argument.strip()
     if not path:
-        return CommandResult(message="usage: /image <path>")
+        return CommandResult(message=t("cmdmsg.image_usage"))
     model = services.runtime.agent.model
     if not model.supports_vision:
-        return CommandResult(message=f"{model.id} does not accept images")
+        return CommandResult(
+            message=t("cmdmsg.image_not_supported", model=model.id)
+        )
     try:
         block = read_image_argument(Path(path).expanduser())
     except ValueError as exc:
         return CommandResult(message=str(exc))
     services.chat.attach_image(block)
     return CommandResult(
-        message=f"attached {block.mime_type} ({len(services.chat.attachments)} pending)"
+        message=t(
+            "cmdmsg.image_attached",
+            mime=block.mime_type,
+            count=len(services.chat.attachments),
+        )
     )
 
 
-@_command("images", "list attached images, or /images clear")
+@_command("images")
 async def _images(services: AppServices, argument: str) -> CommandResult:
     if argument.strip() == "clear":
         services.chat.clear_attachments()
-        return CommandResult(message="cleared attached images")
+        return CommandResult(message=t("cmdmsg.images_cleared"))
     blocks = services.chat.attachments
     if not blocks:
-        return CommandResult(message="no attached images")
+        return CommandResult(message=t("cmdmsg.no_images"))
     rows = [
-        f"{position}. {block.mime_type} ({len(block.data)} base64 chars)"
+        t(
+            "cmdmsg.image_row",
+            position=position,
+            mime=block.mime_type,
+            chars=len(block.data),
+        )
         for position, block in enumerate(blocks, start=1)
     ]
     return CommandResult(message="\n".join(rows))
 
 
-@_command("mcp", "reconnect MCP servers and refresh tools")
+@_command("mcp")
 async def _mcp(services: AppServices, argument: str) -> CommandResult:
     manager = services.runtime.mcp
     if manager is None:
-        return CommandResult(message="no MCP servers configured")
+        return CommandResult(message=t("cmdmsg.no_mcp"))
     streaming = services.runtime.agent.is_streaming
     if not streaming:
         try:
@@ -244,10 +278,12 @@ async def _mcp(services: AppServices, argument: str) -> CommandResult:
             return CommandResult(message=str(exc))
     connected = ", ".join(manager.connected_names) or "(none)"
     suffix = " · tools not refreshed while the agent is working" if streaming else ""
-    return CommandResult(message=f"mcp connected: {connected}{suffix}")
+    return CommandResult(
+        message=t("cmdmsg.mcp_connected", connected=connected, suffix=suffix)
+    )
 
 
-@_command("skills", "list discovered skills (rescans the skill roots)")
+@_command("skills")
 async def _skills(services: AppServices, argument: str) -> CommandResult:
     """Rescan before listing, so a skill added on disk shows up immediately.
 
@@ -256,7 +292,7 @@ async def _skills(services: AppServices, argument: str) -> CommandResult:
     that disagreed with what the model can actually load would be a lie.
     """
     if not services.runtime.skills_enabled:
-        return CommandResult(message="skills are disabled (--no-skills)")
+        return CommandResult(message=t("cmdmsg.skills_disabled"))
     notes = services.runtime.refresh_skills()
     skills = services.runtime.skills
     if not skills:
@@ -265,20 +301,23 @@ async def _skills(services: AppServices, argument: str) -> CommandResult:
             message="\n".join(
                 [
                     *notes,
-                    "no skills found (put SKILL.md files under .zenagent/skills)",
+                    t("cmdmsg.no_skills"),
                 ]
             )
         )
-    lines = [f"- {skill.name}: {skill.description}" for skill in skills]
+    lines = [
+        t("cmdmsg.skill_row", name=skill.name, description=skill.description)
+        for skill in skills
+    ]
     if notes:
         lines.insert(0, "; ".join(notes))
     return CommandResult(message="\n".join(lines))
 
 
-@_command("reload", "re-discover skills, templates and extensions")
+@_command("reload")
 async def _reload(services: AppServices, argument: str) -> CommandResult:
     if services.runtime.agent.is_streaming:
-        return CommandResult(message="cannot reload while the agent is working")
+        return CommandResult(message=t("cmdmsg.cannot_reload"))
     # MCP retries can take seconds; a run may start while we wait, and swapping
     # tools under it must not happen (and must not escape as an exception the
     # TUI would treat as fatal).
@@ -287,42 +326,33 @@ async def _reload(services: AppServices, argument: str) -> CommandResult:
         notes = services.runtime.rediscover()
     except RuntimeError as exc:
         return CommandResult(message=str(exc))
-    return CommandResult(message=f"reloaded: {' · '.join(notes)}")
+    return CommandResult(message=t("cmdmsg.reloaded", notes=" · ".join(notes)))
 
 
-@_command("export", "export the current session as markdown")
+@_command("export")
 async def _export(services: AppServices, argument: str) -> CommandResult:
     path = services.sessions.export(services.sessions.current(), argument or "md")
-    return CommandResult(message=f"exported: {path}")
+    return CommandResult(message=t("cmdmsg.exported", path=path))
 
 
-@_command("doctor", "run environment checks")
+@_command("doctor")
 async def _doctor(services: AppServices, argument: str) -> CommandResult:
-    return CommandResult(message="run `zen doctor` for the full report")
+    return CommandResult(message=t("cmdmsg.doctor_hint"))
 
 
-@_command("quit", "leave the app")
+@_command("quit")
 async def _quit(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(quit=True)
 
 
-@_command("exit", "leave the app (alias of quit)")
+@_command("exit")
 async def _exit(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(quit=True)
 
 
 THINKING_LEVELS = ("off", "low", "medium", "high", "max")
 
-HOTKEYS_TEXT = """\
-enter send · shift+enter newline
-esc interrupt · empty-draft double esc rewind · ctrl+c clear draft · ctrl+d quit
-ctrl+q queue follow-up · alt+up dequeue · ctrl+s steer · ctrl+x clear queue
-ctrl+p next model · alt+p pick model · shift+tab thinking
-ctrl+o expand tools · ctrl+t hide thinking
-ctrl+k commands · ctrl+b info · pageup/pagedown scroll"""
-
-
-@_command("thinking", "show or set reasoning: off|low|medium|high|max")
+@_command("thinking")
 async def _thinking(services: AppServices, argument: str) -> CommandResult:
     agent = services.runtime.agent
     level = argument.strip().lower()
@@ -331,58 +361,77 @@ async def _thinking(services: AppServices, argument: str) -> CommandResult:
         return CommandResult(screen="thinking-picker")
     if level not in THINKING_LEVELS:
         return CommandResult(
-            message=f"unknown thinking level: {level} (use {'|'.join(THINKING_LEVELS)})"
+            message=t(
+                "cmdmsg.thinking_unknown",
+                level=level,
+                choices="|".join(THINKING_LEVELS),
+            )
         )
     agent.thinking = None if level == "off" else level
-    return CommandResult(message=f"thinking: {level}")
+    return CommandResult(message=t("cmdmsg.thinking_set", level=level))
 
 
-@_command("tools", "list the tools the model can call")
+@_command("tools")
 async def _tools(services: AppServices, argument: str) -> CommandResult:
     from zenagent.app.support import describe_tools
 
     return CommandResult(message=describe_tools(services.runtime.agent.tools))
 
 
-@_command("session", "show this session's model, context and spend")
+@_command("session")
 async def _session(services: AppServices, argument: str) -> CommandResult:
     status = services.chat.status
     window = status.context_window or 1
     return CommandResult(
-        message=(
-            f"session: {status.session_name}\n"
-            f"model: {status.model_id} · thinking {status.thinking or 'off'}\n"
-            f"context: {status.context_used}/{status.context_window} "
-            f"({status.context_used * 100 / window:.1f}%)\n"
-            f"spend: ${status.cost:.4f} · {status.input_tokens} in / {status.output_tokens} out"
+        message=t(
+            "cmdmsg.session_info",
+            name=status.session_name,
+            model=status.model_id,
+            thinking=status.thinking or "off",
+            used=status.context_used,
+            window=status.context_window,
+            pct=status.context_used * 100 / window,
+            cost=f"{status.cost:.4f}",
+            input=status.input_tokens,
+            output=status.output_tokens,
         )
     )
 
 
-@_command("usage", "token and cost totals for this session")
+@_command("usage")
 async def _usage(services: AppServices, argument: str) -> CommandResult:
     status = services.chat.status
     return CommandResult(
         message=(
-            f"in {status.input_tokens} · out {status.output_tokens} · "
-            f"cache read {status.cache_read} · ${status.cost:.4f}"
+            t(
+                "cmdmsg.usage_info",
+                input=status.input_tokens,
+                output=status.output_tokens,
+                cache=status.cache_read,
+                cost=f"{status.cost:.4f}",
+            )
         )
     )
 
 
-@_command("context", "how full the context window is")
+@_command("context")
 async def _context(services: AppServices, argument: str) -> CommandResult:
     status = services.chat.status
     window = status.context_window or 1
     percent = status.context_used * 100 / window
     remaining = max(0, status.context_window - status.context_used)
     return CommandResult(
-        message=f"context: {status.context_used}/{status.context_window} "
-        f"({percent:.1f}% used, {remaining} left)"
+        message=t(
+            "cmdmsg.context_info",
+            used=status.context_used,
+            window=status.context_window,
+            pct=percent,
+            left=remaining,
+        )
     )
 
 
-@_command("search", "search the web, or open search settings")
+@_command("search")
 async def _search(services: AppServices, argument: str) -> CommandResult:
     from zenagent.tools.web import format_results, run_search
     from zenagent.tools.web.registry import default_provider
@@ -391,59 +440,65 @@ async def _search(services: AppServices, argument: str) -> CommandResult:
     if not query or query in ("settings", "provider", "status"):
         chosen = default_provider() or "auto"
         return CommandResult(
-            message=f"search provider: {chosen}",
+            message=t("cmdmsg.search_provider_info", provider=chosen),
             screen="search-settings",
         )
     result = await run_search(query, limit=5)
     return CommandResult(message=format_results(result))
 
 
-@_command("hotkeys", "show the active keybindings")
+@_command("hotkeys")
 async def _hotkeys(services: AppServices, argument: str) -> CommandResult:
-    return CommandResult(message=HOTKEYS_TEXT)
+    return CommandResult(message=t("cmdmsg.hotkeys_text"))
 
 
-@_command("undo", "drop the last turn (recoverable: new session file)")
+@_command("undo")
 async def _undo(services: AppServices, argument: str) -> CommandResult:
     if services.chat.status.running:
-        return CommandResult(message="cannot undo while the agent is working")
+        return CommandResult(message=t("cmdmsg.cannot_undo"))
     result = services.sessions.undo()
     if result is None:
-        return CommandResult(message="nothing to undo")
+        return CommandResult(message=t("cmdmsg.nothing_to_undo"))
     dropped, path = result
     services.chat.reload_transcript()
     return CommandResult(
-        message=f"undid the last turn ({dropped} messages) → {path.name}",
+        message=t("cmdmsg.undone", count=dropped, path=path.name),
         reset_transcript=True,
     )
 
 
-@_command("retry", "re-run the last turn")
+@_command("retry")
 async def _retry(services: AppServices, argument: str) -> CommandResult:
     if services.chat.status.running:
-        return CommandResult(message="already working")
+        return CommandResult(message=t("cmdmsg.already_working"))
     text = services.chat.retry()
     if text is None:
-        return CommandResult(message="nothing to retry")
+        return CommandResult(message=t("cmdmsg.nothing_to_retry"))
     preview = text if len(text) <= 60 else text[:59] + "…"
-    return CommandResult(message=f"retrying: {preview}", reset_transcript=True)
+    return CommandResult(
+        message=t("cmdmsg.retrying", preview=preview), reset_transcript=True
+    )
 
 
-@_command("new", "start a new session")
+@_command("new")
 async def _new(services: AppServices, argument: str) -> CommandResult:
     path = await services.sessions.new()
     services.chat.reload_transcript()
-    return CommandResult(message=f"new session: {path.name}", reset_transcript=True)
+    return CommandResult(
+        message=t("cmdmsg.new_session", path=path.name), reset_transcript=True
+    )
 
 
-@_command("fork", "copy this session into a branch and switch to it")
+@_command("fork")
 async def _fork(services: AppServices, argument: str) -> CommandResult:
     path = await services.sessions.fork()
     services.chat.reload_transcript()
-    return CommandResult(message=f"forked to {path.name}", reset_transcript=True)
+    return CommandResult(
+        message=t("cmdmsg.forked", path=path.name), reset_transcript=True
+    )
 
 
-@_command("settings", "open settings")
+@_command("settings")
 async def _settings(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(screen="settings")
 

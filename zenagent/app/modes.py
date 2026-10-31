@@ -14,6 +14,7 @@ REPL and TUI all resolve and display the same three words.
 
 from __future__ import annotations
 
+from zenagent.i18n import t
 from zenagent.prompts.registry import read_block
 
 __all__ = [
@@ -74,7 +75,4 @@ def mode_prompt_note(mode: str) -> str:
 
 def describe_modes() -> str:
     """One-line description used by ``/mode`` and the help text."""
-    return (
-        "modes: plan = read-only planning · ask = confirm writes/commands · "
-        "full = run writes/commands without asking (dangerous commands still blocked)"
-    )
+    return t("mode.describe")
