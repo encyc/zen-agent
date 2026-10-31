@@ -80,7 +80,8 @@ print(agent.messages[-1].content[0].text)
 | `agent.termination` | `None`/`stop`/`length`/`error`/`aborted`/`max_turns`/`max_cost` |
 
 完全离线的最小例子（自定义工具 + fake stream）：`examples/custom_tool.py`。
-其他示例：`examples/headless.py`、`examples/mcp.py`、`examples/rpc_client.py`。
+其他示例：`examples/headless.py`（`run_headless`）、`examples/embed.py`（`Runtime` + `ChatController`）、`examples/mcp.py`、`examples/rpc_client.py`。
+每个示例演示什么、需要不要 key，见 `examples/README.md`。
 
 ## 源码对照
 

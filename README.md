@@ -120,9 +120,10 @@ agent = Agent(
 await agent.prompt("explain this repo")   # events via agent.subscribe(fn)
 ```
 
-See `examples/` for a headless run, a custom tool with a fake stream (offline),
-a direct MCP call, and a `zen rpc` client. For embedding with the full app layer
-(MCP, skills, sessions), use `Runtime` + `ChatController` — see `examples/embed.py`.
+See `examples/README.md` for a headless run, a custom tool with a fake stream
+(offline), a direct MCP call, and a `zen rpc` client. For embedding with the full
+app layer (MCP, skills, sessions), use `Runtime` + `ChatController` — see
+`examples/embed.py`.
 
 ### REPL commands
 
