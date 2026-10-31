@@ -3,10 +3,15 @@
 import asyncio
 from pathlib import Path
 
-from textual.widgets import Input
+from textual.widgets import Input, Static
 
 from zenagent.agent.session import session_title
-from zenagent.cli.tui.screens.modals import Confirm, RenamePrompt, SessionPicker
+from zenagent.cli.tui.screens.modals import (
+    Confirm,
+    DialogChoice,
+    RenamePrompt,
+    SessionPicker,
+)
 
 
 async def _wait_for_screen(app, screen_type):
@@ -62,6 +67,8 @@ async def test_session_picker_delete_needs_confirmation(picker_app):
         await _wait_for_screen(app, SessionPicker)
         await pilot.press("d")
         await _wait_for_screen(app, Confirm)
+        choices = list(app.screen.query(DialogChoice))
+        assert [choice.plain for choice in choices] == ["[y] yes", "[n] no"]
         await pilot.press("n")
         await pilot.pause()
         assert current.exists(), "cancelling the confirmation must keep the session"
@@ -83,6 +90,8 @@ async def test_session_picker_rename_updates_the_display_name(picker_app):
         await _wait_for_screen(app, SessionPicker)
         await pilot.press("r")
         await _wait_for_screen(app, RenamePrompt)
+        hint = app.screen.query_one("#dialog-hint", Static)
+        assert "[enter] save" in hint.content.plain, "shortcuts must stay visible"
         app.screen.query_one("#rename-input", Input).value = "release checklist"
         await pilot.press("enter")
         await _wait_until(
