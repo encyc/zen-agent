@@ -182,26 +182,42 @@ class ZenAgentApp(App):
         self._announce_missing_key()
         self._refresh_status()
         self.query_one(PromptInput).focus()
-        self._maybe_show_cached_update()
-        if not update_check.is_disabled():
-            self.run_worker(self._refresh_update_check(), exclusive=False)
+        self._start_update_check()
+
+    def _start_update_check(self) -> None:
+        """Kick off the cached notice and background refresh; never break startup."""
+        try:
+            if update_check.is_disabled() or not update_check.installed_version():
+                return
+            self._maybe_show_cached_update()
+            self.run_worker(
+                self._refresh_update_check(), exclusive=False, exit_on_error=False
+            )
+        except Exception:  # noqa: BLE001 - a check must never break the UI
+            return
 
     def _maybe_show_cached_update(self) -> None:
-        version = update_check.pending_notice()
+        try:
+            version = update_check.pending_notice()
+        except Exception:  # noqa: BLE001 - a check must never break the UI
+            return
         if version:
             self._show_update_notice(version)
 
     def _show_update_notice(self, version: str) -> None:
-        if self._update_notice_shown:
+        try:
+            if self._update_notice_shown:
+                return
+            installed = update_check.installed_version()
+            if not installed:
+                return
+            notice = update_check.format_notice(version, installed)
+            for transcript in self.query(TranscriptView):
+                transcript.append_notice(notice)
+            update_check.mark_notified(version)
+            self._update_notice_shown = True
+        except Exception:  # noqa: BLE001 - a check must never break the UI
             return
-        installed = update_check.installed_version()
-        if not installed:
-            return
-        notice = update_check.format_notice(version, installed)
-        for transcript in self.query(TranscriptView):
-            transcript.append_notice(notice)
-        update_check.mark_notified(version)
-        self._update_notice_shown = True
 
     async def _refresh_update_check(self) -> None:
         try:

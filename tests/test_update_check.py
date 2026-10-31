@@ -208,3 +208,80 @@ def test_format_notice_pins_the_copy(monkeypatch):
         'Update available: v0.4.0 (you have v0.3.0) · '
         'python -m pip install -U "zenagent-py[cli]"'
     )
+
+
+@pytest.mark.parametrize("payload", ["[]", '"x"', "42", "true"])
+def test_non_object_cache_reads_as_empty(payload, tmp_path, monkeypatch):
+    cache = tmp_path / "update.json"
+    cache.write_text(payload, encoding="utf-8")
+    monkeypatch.setenv("ZENAGENT_UPDATE_CACHE_PATH", str(cache))
+    assert update_check.read_cache() == {}
+
+
+def test_pending_notice_without_cache_is_none(tmp_path, monkeypatch):
+    monkeypatch.setenv("ZENAGENT_UPDATE_CACHE_PATH", str(tmp_path / "missing.json"))
+    monkeypatch.delenv("ZENAGENT_NO_UPDATE_CHECK", raising=False)
+    assert update_check.pending_notice(installed="0.3.0") is None
+
+
+def test_pending_notice_without_installed_version_is_none(tmp_path, monkeypatch):
+    _write({"checked_at": time.time(), "latest": "0.4.0"}, tmp_path, monkeypatch)
+    monkeypatch.setattr(update_check, "installed_version", lambda: None)
+    assert update_check.pending_notice() is None
+
+
+async def test_refresh_does_not_network_without_installed_version(tmp_path, monkeypatch):
+    _write({"checked_at": 0.0}, tmp_path, monkeypatch)
+    calls: list[int] = []
+
+    async def fake_fetch() -> str:
+        calls.append(1)
+        return "0.9.0"
+
+    monkeypatch.setattr(update_check, "installed_version", lambda: None)
+    assert await update_check.refresh(fetch=fake_fetch) is None
+    assert calls == []
+    assert update_check.read_cache()["checked_at"] == 0.0
+
+
+def test_installed_version_survives_broken_metadata(monkeypatch):
+    class _Dist:
+        def read_text(self, name: str) -> None:
+            return None
+
+        @property
+        def version(self) -> str:
+            raise KeyError("Version")
+
+    monkeypatch.setattr(update_check.importlib.metadata, "distribution", lambda name: _Dist())
+    assert update_check.installed_version() is None
+
+
+def test_read_cache_survives_unresolvable_home(monkeypatch):
+    def _no_home():
+        raise RuntimeError("no home")
+
+    monkeypatch.setattr(update_check, "cache_path", _no_home)
+    assert update_check.read_cache() == {}
+
+
+def test_mark_notified_survives_unresolvable_home(monkeypatch):
+    def _no_home():
+        raise RuntimeError("no home")
+
+    monkeypatch.setattr(update_check, "cache_path", _no_home)
+    update_check.mark_notified("0.4.0")  # must not raise
+
+
+async def test_refresh_survives_unresolvable_home(monkeypatch):
+    monkeypatch.delenv("ZENAGENT_NO_UPDATE_CHECK", raising=False)
+
+    def _no_home():
+        raise RuntimeError("no home")
+
+    monkeypatch.setattr(update_check, "cache_path", _no_home)
+
+    async def fake_fetch() -> str:
+        return "0.4.0"
+
+    assert await update_check.refresh(installed="0.3.0", fetch=fake_fetch) == "0.4.0"

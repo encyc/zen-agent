@@ -84,7 +84,7 @@ def read_cache() -> dict:
     """The cached answer, or ``{}`` when it is missing, corrupt or not an object."""
     try:
         payload = json.loads(cache_path().read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except (OSError, ValueError, RuntimeError):
         return {}
     return payload if isinstance(payload, dict) else {}
 
@@ -184,11 +184,11 @@ def installed_version() -> str | None:
     """
     try:
         dist = importlib.metadata.distribution("zenagent-py")
-    except importlib.metadata.PackageNotFoundError:
+        if _editable(dist):
+            return None
+        return dist.version
+    except Exception:  # noqa: BLE001 - a broken install must not break the TUI
         return None
-    if _editable(dist):
-        return None
-    return dist.version
 
 
 def _update_cache(**updates: object) -> None:
@@ -197,7 +197,7 @@ def _update_cache(**updates: object) -> None:
     payload.update(updates)
     try:
         _write_cache(payload)
-    except OSError:
+    except (OSError, RuntimeError):
         pass
 
 
@@ -253,6 +253,9 @@ async def refresh(
     """
     if is_disabled():
         return None
+    current = installed if installed is not None else installed_version()
+    if not current:
+        return None
     current_time = time.time() if now is None else now
     cache = read_cache()
     checked_at = cache.get("checked_at")
@@ -266,9 +269,6 @@ async def refresh(
         _update_cache(checked_at=current_time)
         return None
     _update_cache(checked_at=current_time, latest=latest)
-    current = installed if installed is not None else installed_version()
-    if not current:
-        return None
     if compare_versions(latest, current) <= 0:
         return None
     if cache.get("notified") == latest:
