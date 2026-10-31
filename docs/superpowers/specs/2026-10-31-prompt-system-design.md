@@ -95,8 +95,9 @@ zenagent/prompts/
     system/
       identity.md        # "You are zenagent, ..."
       environment.md     # {{cwd}} + {{tool_list}}
-      tool_policy.md     # Specialized / General / Exploration / Parallel
+      tool_policy.md     # Specialized / General / Exploration
       tool_policy_todo.md# 条件块：todo 行（工具面含 todo 时）
+      tool_policy_parallel.md # "- Parallel: ..." 行
       closing.md         # "Answer concisely. ..."
     plan_mode.md         # C plan 附注
     context_files.md     # D 上下文包装（## Project instructions + 逐文件节）
@@ -159,7 +160,7 @@ class RenderedPrompt:
 system(A) → context(D，默认开) → skills(E，有 skill 时) → extensions(G，有扩展时) → plan note(C，仅 plan)
 ```
 
-- 顶层块用 `\n\n` 连接；system 内部子块按 `identity → environment → tool_policy → tool_policy_todo（条件） → closing` 用 `\n` 连接（拼出来必须与 0.4.1 的 802 字符逐字节一致）。D 的包装保持 `## Project instructions` + `### <path>` 的现有格式；E 保持现有页眉；C 直接追加。
+- 顶层块用 `\n\n` 连接；system 内部子块按 `identity → environment → tool_policy → tool_policy_todo（条件） → tool_policy_parallel → closing` 用 `\n` 连接（拼出来必须与 0.4.1 的 802 字符逐字节一致）。D 的包装保持 `## Project instructions` + `### <path>` 的现有格式；E 保持现有页眉；C 直接追加。
 - 条件在 Python：`include_*` 开关由前端决定；`system_override` 非空时替换 A（用于 eval 的 case 级覆盖）。
 - 前端 include 组合（P0 保持现状）：
 
@@ -237,8 +238,9 @@ system(A) → context(D，默认开) → skills(E，有 skill 时) → extension
 |---|---|---|
 | `system/identity` | 120 | 66 |
 | `system/environment` | 240 | 170 |
-| `system/tool_policy` | 700 | 507 |
+| `system/tool_policy` | 700 | 252 |
 | `system/tool_policy_todo` | 220 | 163 |
+| `system/tool_policy_parallel` | 120 | 90 |
 | `system/closing` | 100 | 55 |
 | **system 合计** | **1,600** | **802** |
 | plan_mode | 700 | 294 |

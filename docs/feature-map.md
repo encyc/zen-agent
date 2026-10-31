@@ -97,6 +97,7 @@ REPL 命令：`/help /exit /clear /model /thinking /mode /session /sessions /ren
 |---|---|---|---|
 | Skills（SKILL.md、read_skill、索引） | `skills.py`、`frontmatter.py` | `test_skills.py` | [Skills/模板](guide/skills-templates.md) |
 | 提示词模板（`/name args`） | `templates.py` | `test_templates.py` | 同上 |
+| Prompt 体系（blocks / compose / golden / 预算） | `prompts/`、`app/support.py::system_prompt`（薄封装） | `test_prompts_*.py` | [设计](superpowers/specs/2026-10-31-prompt-system-design.md) |
 | `/reload` 热加载 | `cli/repl.py::reload_runtime`、`app/runtime.py::rediscover` | `test_repl_logic.py`、`test_app_discovery.py` | 同上 |
 | `/skills` 实时重扫 | `app/runtime.py::refresh_skills` | `test_app_discovery.py` | 同上 |
 | Python 扩展（register(api)） | `extensions.py` | `test_extensions.py` | [扩展](guide/extensions.md)、[扩展内核](internals/extensions-internals.md) |
