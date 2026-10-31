@@ -20,6 +20,7 @@ from textual.app import App
 from textual.containers import Horizontal, Vertical
 from textual.events import MouseScrollDown, MouseScrollUp
 
+from zenagent import update_check
 from zenagent.app.chat import ChatController
 from zenagent.app.commands import AppServices, build_default_commands
 from zenagent.app.models import ModelManager
@@ -87,6 +88,7 @@ class ZenAgentApp(App):
         self.exit_summary: str | None = None
         self._menus: dict[str, object] = {}
         self._refresh_pending = False
+        self._update_notice_shown = False
         self._hint_start = 0
         self._hint_prefix = "/"
         self._session_scope = "project"
@@ -180,6 +182,34 @@ class ZenAgentApp(App):
         self._announce_missing_key()
         self._refresh_status()
         self.query_one(PromptInput).focus()
+        self._maybe_show_cached_update()
+        if not update_check.is_disabled():
+            self.run_worker(self._refresh_update_check(), exclusive=False)
+
+    def _maybe_show_cached_update(self) -> None:
+        version = update_check.pending_notice()
+        if version:
+            self._show_update_notice(version)
+
+    def _show_update_notice(self, version: str) -> None:
+        if self._update_notice_shown:
+            return
+        installed = update_check.installed_version()
+        if not installed:
+            return
+        notice = update_check.format_notice(version, installed)
+        for transcript in self.query(TranscriptView):
+            transcript.append_notice(notice)
+        update_check.mark_notified(version)
+        self._update_notice_shown = True
+
+    async def _refresh_update_check(self) -> None:
+        try:
+            version = await update_check.refresh()
+        except Exception:  # noqa: BLE001 - a check must never break the UI
+            return
+        if version:
+            self._show_update_notice(version)
 
     def _announce_missing_key(self) -> None:
         """A keyless first launch still opens; the banner says where to paste one."""
