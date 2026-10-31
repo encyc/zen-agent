@@ -335,6 +335,8 @@ class ZenAgentApp(App):
             banner.set_error(status.last_error)
         for chips in self.query(AttachmentChips):
             chips.set_attachments(self.chat.attachments)
+        for sidebar in self.query(Sidebar):
+            sidebar.refresh_contents(self.chat, self.models)
 
     def dismiss_error(self) -> None:
         """Click on the error banner: drop it and repaint the dock."""
