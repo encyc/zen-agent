@@ -20,11 +20,8 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 from prompt_fixtures import CONFIGS, SKILLS, TOOL_GOLDEN_NAMES, TRANSCRIPT
 
-from zenagent.app.modes import mode_prompt_note
-from zenagent.app.support import system_prompt
-from zenagent.context_files import system_prompt_with_context
-from zenagent.prompts import compose_compact
-from zenagent.skills import build_skill_tool, skills_prompt_index
+from zenagent.prompts import PromptContext, compose_compact, compose_system
+from zenagent.skills import build_skill_tool, format_skill_entries
 from zenagent.tools import ALL_TOOLS
 from zenagent.tools.task import build_task_tool
 from zenagent.tools.todo import build_todo_tool
@@ -38,31 +35,31 @@ def _normalize(text: str, cwd: str) -> str:
 
 
 def render_config(cfg) -> tuple[str, str]:
-    """Render ``(system_only, full)`` for one config using the legacy assembly order.
-
-    ``system_only`` is the bare system prompt (override or ``system_prompt``);
-    ``full`` applies the context wrapper, skills index, extension fragments and
-    plan note in the order the frontends use.
-    """
+    """Render ``(system_only, full)`` for one config through compose_system."""
     cwd = str(Path.cwd())
-    system_text = (
-        cfg.system_override
-        if cfg.system_override is not None
-        else system_prompt(list(cfg.tool_names))
-    )
-    text = system_text
-    if cfg.context_text:
-        text = system_prompt_with_context(text, cfg.context_text)
-    parts: list[str] = []
-    if cfg.skills:
-        parts.append(skills_prompt_index(list(cfg.skills)))
-    if cfg.extension_fragments:
-        parts.append("\n\n".join(cfg.extension_fragments))
-    if parts:
-        text = f"{text}\n\n" + "\n\n".join(parts)
-    if cfg.mode == "plan":
-        text = f"{text}\n\n" + mode_prompt_note("plan")
-    return _normalize(system_text, cwd), _normalize(text, cwd)
+    base = compose_system(
+        PromptContext(
+            cwd=Path.cwd(),
+            tool_names=cfg.tool_names,
+            system_override=cfg.system_override,
+            include_context=False,
+            include_skills=False,
+            include_extensions=False,
+            include_mode=False,
+        )
+    ).text
+    full = compose_system(
+        PromptContext(
+            cwd=Path.cwd(),
+            tool_names=cfg.tool_names,
+            mode=cfg.mode,
+            context_text=cfg.context_text,
+            skill_entries=format_skill_entries(list(cfg.skills)),
+            extension_fragments=cfg.extension_fragments,
+            system_override=cfg.system_override,
+        )
+    ).text
+    return _normalize(base, cwd), _normalize(full, cwd)
 
 
 def tool_descriptions() -> dict[str, dict]:

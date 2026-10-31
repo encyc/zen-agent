@@ -56,18 +56,18 @@ from zenagent.config import ContextGuard, apply_user_config, load_user_config
 from zenagent.context_files import (
     discover_context_files,
     load_context_files,
-    system_prompt_with_context,
 )
 from zenagent.events import AgentEvent
 from zenagent.extensions import load_extensions
 from zenagent.mcp.config import load_mcp_config
 from zenagent.mcp.manager import McpManager
+from zenagent.prompts import PromptContext, compose_system
 from zenagent.providers.catalog import load_catalog
 from zenagent.skills import (
     build_skill_tool,
     default_skill_roots,
     discover_skills,
-    skills_prompt_index,
+    format_skill_entries,
 )
 from zenagent.tools import ALL_TOOLS
 from zenagent.types import AssistantMessage
@@ -209,17 +209,14 @@ async def run_case(
                 },
             )
 
-            prompt = (
+            system_override = (
                 options.get("system_prompt_override")
                 or "You are zenagent, a coding agent. Be concise."
             )
-            if options.get("context_files"):
-                prompt = system_prompt_with_context(
-                    prompt, load_context_files(discover_context_files(root))
-                )
 
             tool_list = list(ALL_TOOLS)
-            prompt_parts: list[str] = []
+            skill_entries = ""
+            extension_fragments: list[str] = []
 
             skills_wanted = options.get(
                 "skills", (root / ".zenagent" / "skills").is_dir()
@@ -228,7 +225,7 @@ async def run_case(
                 discovered, _warnings = discover_skills(default_skill_roots(root))
                 if discovered:
                     tool_list.append(build_skill_tool(discovered))
-                    prompt_parts.append(skills_prompt_index(discovered))
+                    skill_entries = format_skill_entries(discovered)
 
             extension_hooks: dict = {}
             extension_paths = options.get("extensions") or []
@@ -236,7 +233,7 @@ async def run_case(
                 loaded = load_extensions(extension_paths)
                 tool_list.extend(loaded.tools)
                 if loaded.prompt_text:
-                    prompt_parts.append(loaded.prompt_text)
+                    extension_fragments.append(loaded.prompt_text)
                 extension_hooks = loaded.hooks
 
             mcp_manager: McpManager | None = None
@@ -250,8 +247,22 @@ async def run_case(
                 await mcp_manager.start()
                 tool_list.extend(mcp_manager.tool_defs())
 
-            if prompt_parts:
-                prompt = f"{prompt}\n\n" + "\n\n".join(prompt_parts)
+            prompt = compose_system(
+                PromptContext(
+                    cwd=root,
+                    tool_names=tuple(tool.name for tool in tool_list),
+                    context_text=(
+                        load_context_files(discover_context_files(root))
+                        if options.get("context_files")
+                        else ""
+                    ),
+                    skill_entries=skill_entries,
+                    extension_fragments=tuple(extension_fragments),
+                    include_context=bool(options.get("context_files")),
+                    include_mode=False,
+                    system_override=system_override,
+                )
+            ).text
 
             gate = PermissionGate(
                 assume_yes=options.get("assume_yes", True),
