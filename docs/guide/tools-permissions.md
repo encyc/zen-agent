@@ -10,6 +10,7 @@
 | `list_dir` | 列目录（标记目录/文件） | 只读 |
 | `bash` | 执行命令（非交互环境、`cwd`、`async` 后台作业），禁止危险模式 | 需确认 |
 | `wait` | 等待 `bash async` 启动的后台作业并取回结果（只读、串行） | 只读 |
+| `ask` | 向用户发起结构化提问（1–5 题、每题 2–6 个选项，`header`/`multi`/`recommended` 可选）；只有当前端注册了交互 handler 时才弹对话框，否则降级为「按最保守选项继续」 | 只读，免确认 |
 | `glob` | 按模式找文件；`limit`（默认 500）、`include_hidden`（.git 永远跳过） | 只读 |
 | `grep` | 正则搜内容（忽略二进制/大文件）；按文件分页：每页 20 个文件 × 每文件 20 条，`skip` 续页 | 只读 |
 | `web_search` | 联网搜索，返回标题/URL/摘要（DeepSeek → Tavily → Brave → Bing → DuckDuckGo） | 只读，免确认 |

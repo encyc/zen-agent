@@ -103,6 +103,10 @@ class RunStatus:
     #: renders it and hides itself while it is empty. Plain dicts keep this
     #: UI-agnostic module free of tool imports.
     todos: list[dict] = field(default_factory=list)
+    #: Spend/usage attributed to ``task`` subagents this session (kept apart
+    #: from the parent's own cost).
+    subagent_cost: float = 0.0
+    subagent_tokens: int = 0
 
 
 @dataclass(frozen=True)

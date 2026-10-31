@@ -395,3 +395,26 @@ async def test_directory_grant_does_not_leak_to_sibling_tools(monkeypatch, tmp_p
     monkeypatch.setattr(builtins, "input", lambda prompt: "n")
     # Same directory, different tool: not covered.
     assert (await gate.check("edit_file", {"path": str(tmp_path / "x.py")}))[0] is False
+
+
+async def test_task_and_ask_are_read_only_for_name_only_callers():
+    from zenagent.tools.ask import ASK
+
+    assert ASK.approval == "read"
+    gate = PermissionGate(interactive=False, mode="plan")
+    assert (await gate.check("ask", {}))[0] is True
+    assert (await gate.check("task", {"prompt": "x"}))[0] is True
+    # Declarations agree with the name fallback.
+    async def _noop(*args, **kwargs):  # pragma: no cover - never executed
+        raise AssertionError
+
+    from zenagent.agent.loop import AgentTool
+
+    task = AgentTool(
+        name="task",
+        description="task",
+        parameters={"type": "object"},
+        execute=_noop,
+        approval="read",
+    )
+    assert (await gate.check("task", {"prompt": "x"}, task))[0] is True

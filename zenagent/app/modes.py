@@ -69,7 +69,7 @@ def mode_prompt_note(mode: str) -> str:
         return ""
     return (
         "PLAN MODE: you are in read-only plan mode. Investigate with read-only "
-        "tools (read_file, list_dir, glob, grep, web_search, fetch, wait), then present a concise, "
+        "tools (read_file, list_dir, glob, grep, web_search, fetch, wait, ask, task), then present a concise, "
         "step-by-step plan. Do not modify files or run mutating commands; the "
         "user switches to ask or full mode to execute the plan."
     )

@@ -1056,6 +1056,48 @@ async def test_tool_result_budget_caps_oversized_output():
     assert result_message.content[0].text == rendered
 
 
+async def test_tool_result_budget_spills_oversized_output_to_an_artifact(tmp_path):
+    payload = "q" * 50_000
+    artifact = tmp_path / "artifacts" / "big-1.txt"
+    saved: dict = {}
+
+    async def big(name, args, abort, on_update=None):
+        return ToolResultAgent(content=[TextContent(text=payload)])
+
+    def sink(tool_name: str, text: str):
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        artifact.write_text(text, encoding="utf-8")
+        saved["tool_name"] = tool_name
+        return artifact
+
+    stream = ScriptedStream(
+        [
+            [call_tool("t1", "big", {}), finish("tool_use")],
+            [say("ok"), finish("stop")],
+        ]
+    )
+    state = AgentState()
+    events = await run(
+        "go",
+        state,
+        make_config(stream, tools=[make_tool("big", big)], artifact_sink=sink),
+    )
+    types = types_of(events)
+
+    end = events[types.index("tool_execution_end")]
+    rendered = end.result.content[0].text
+    assert saved["tool_name"] == "big"
+    assert artifact.read_text(encoding="utf-8") == payload
+    assert f"[full output saved: {artifact}]" in rendered
+    assert end.result.details["artifact"] == str(artifact)
+    assert len(rendered) < len(payload)
+
+    # The transcript (what the next request carries) has the notice too.
+    result_message = state.messages[2]
+    assert isinstance(result_message, ToolResultMessage)
+    assert result_message.content[0].text == rendered
+
+
 async def test_two_argument_hooks_keep_working():
     """v0.3 library users may pass a 2-arg hook; that must not crash the run."""
     seen = []

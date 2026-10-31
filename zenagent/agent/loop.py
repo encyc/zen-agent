@@ -36,6 +36,7 @@ import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from zenagent.agent.result_budget import apply_result_budget
 from zenagent.agent.timeouts import effective_timeout
@@ -163,6 +164,10 @@ class AgentConfig:
     max_cost: float | None = None
     #: Extra attempts for transient assistant-call failures (0 -> no retry).
     retries: int = 0
+    #: Optional artifact spill sink for oversized tool results: called as
+    #: ``sink(tool_name, full_text)`` and returns the saved path (or None when
+    #: spilling failed). None keeps the plain truncation behavior.
+    artifact_sink: Callable[[str, str], Path | None] | None = None
 
 
 @dataclass
@@ -359,8 +364,11 @@ async def _execute_tool(
 
     # Safety net above the per-tool caps: every result — including MCP and
     # extension tools that enforce no cap of their own — gets the same byte
-    # budget and truncation notice before it enters the transcript.
-    result = apply_result_budget(result)
+    # budget and truncation notice before it enters the transcript. The spill
+    # sink (when configured) saves the full text so the model can read it back.
+    result = apply_result_budget(
+        result, tool_name=call.name, save_artifact=config.artifact_sink
+    )
 
     duration_ms = round((time.monotonic() - started) * 1000)
     return _ToolOutcome(call=call, result=result, duration_ms=duration_ms)

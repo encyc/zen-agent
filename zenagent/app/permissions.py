@@ -46,6 +46,8 @@ READ_ONLY_TOOLS = frozenset(
         "fetch",
         "read_skill",
         "wait",
+        "ask",
+        "task",
     }
 )
 

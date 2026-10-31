@@ -252,8 +252,11 @@ page), `write_file` (refuses writing back a truncated read page),
 30 KB head+tail truncation, process-group kill on timeout/abort, non-interactive
 environment, optional `cwd`), `glob`, `grep` (ripgrep when available, Python
 fallback), `web_search` (provider chain), `fetch` (URL → readable text), `wait`
-(background-job results) and `todo` (session-scoped checklist with a TUI HUD).
-`bash` supports `async` background jobs; job results are collected with `wait`.
+(background-job results), `todo` (session-scoped checklist with a TUI HUD), `ask`
+(structured questions to the user; TUI dialog / REPL prompt / graceful headless
+degrade), `task` (read-only subagent delegation with its own transcript and cost)
+and artifact spill for oversized tool results. `bash` supports `async` background
+jobs; job results are collected with `wait`.
 
 ## Tests
 

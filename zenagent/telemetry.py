@@ -34,6 +34,9 @@ class RunMetrics:
     termination: str | None
     #: Per-tool ``{calls, errors, ms}`` from ``agent_end.tool_stats``.
     tools: dict = field(default_factory=dict)
+    #: Spend/tokens attributed to ``task`` subagents (kept apart from the run).
+    subagent_cost: float = 0.0
+    subagent_tokens: int = 0
 
     @property
     def duration_ms(self) -> int:
@@ -50,6 +53,8 @@ class MetricsRecorder:
         self.turns = 0
         self.tool_calls = 0
         self.tool_stats: dict = {}
+        self.subagent_cost = 0.0
+        self.subagent_tokens = 0
         self.usage = Usage()
 
     def __call__(self, event: AgentEvent) -> None:
@@ -57,6 +62,11 @@ class MetricsRecorder:
             self.turns += 1
         elif event.type == "tool_execution_start":
             self.tool_calls += 1
+        elif event.type == "tool_execution_end":
+            details = getattr(event.result, "details", None) or {}
+            if "subagent_cost" in details:
+                self.subagent_cost += float(details.get("subagent_cost") or 0.0)
+                self.subagent_tokens += int(details.get("subagent_tokens") or 0)
         elif event.type == "agent_end" and event.tool_stats:
             self.tool_stats = dict(event.tool_stats.get("tools") or {})
         elif event.type == "message_end" and isinstance(event.message, AssistantMessage):
@@ -82,6 +92,8 @@ class MetricsRecorder:
             cost=self.usage.cost.total,
             termination=termination,
             tools=dict(self.tool_stats),
+            subagent_cost=self.subagent_cost,
+            subagent_tokens=self.subagent_tokens,
         )
 
 

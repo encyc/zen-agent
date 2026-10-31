@@ -817,3 +817,13 @@ def test_unknown_mode_is_rejected(monkeypatch):
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
     with pytest.raises(SystemExit):
         cli_main.main(["-p", "hi", "--mode", "yolo"])
+
+
+def test_headless_exposes_the_task_tool(monkeypatch, capsys):
+    monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
+    captured: dict = {}
+    _patch_agent(monkeypatch, fake_stream("ok"), captured)
+    assert cli_main.main(["-p", "hi"]) == 0
+    names = [tool.name for tool in captured["tools"]]
+    assert "task" in names
+    assert "ask" in names

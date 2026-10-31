@@ -467,3 +467,28 @@ async def test_tool_update_after_the_call_finished_is_ignored(runtime_factory):
     card = chat.transcript[-1]
     assert isinstance(card, ToolCallView)
     assert card.progress == ""
+
+
+async def test_task_result_cost_is_surfaced_in_run_status(runtime_factory):
+    from zenagent.agent.loop import ToolResultAgent
+    from zenagent.app.chat import ChatController
+    from zenagent.events import AgentEvent
+    from zenagent.types import TextContent
+
+    runtime = await runtime_factory()
+    chat = ChatController(runtime)
+    result = ToolResultAgent(
+        content=[TextContent(text="<task-result …>")],
+        details={"subagent_cost": 0.03, "subagent_tokens": 1500},
+    )
+    chat._on_event(
+        AgentEvent(
+            type="tool_execution_end",
+            tool_call_id="t1",
+            tool_name="task",
+            result=result,
+        )
+    )
+    status = chat.status
+    assert status.subagent_cost == 0.03
+    assert status.subagent_tokens == 1500

@@ -13,6 +13,7 @@ from pathlib import Path
 
 from zenagent import project
 from zenagent.agent import Agent
+from zenagent.agent.artifacts import build_artifact_sink
 from zenagent.agent.session import Session, latest_session, unique_session_path
 from zenagent.app.modes import (
     DEFAULT_MODE,
@@ -55,6 +56,7 @@ from zenagent.templates import (
     discover_templates,
 )
 from zenagent.tools import ALL_TOOLS
+from zenagent.tools.task import build_task_tool
 from zenagent.tools.todo import (
     TodoTool,
     build_todo_tool,
@@ -94,7 +96,7 @@ class Runtime:
 
     def __init__(self) -> None:
         self.agent: Agent
-        self.session: Session
+        self._session: Session
         self.model = None
         #: Env var the current model needs when the app started without a key.
         self.missing_api_key: str | None = None
@@ -111,8 +113,12 @@ class Runtime:
         self.gate: PermissionGate | None = None
         #: The per-session todo tool; ``switch_session`` re-points its sidecar.
         self.todo_tool: TodoTool | None = None
+        #: Spill sink for oversized tool results; follows the session.
+        self.artifact_sink: Callable[[str, str], Path | None] | None = None
         #: Whether bootstrap acquired a background-job-manager reference.
         self._jobs_acquired = False
+        #: Per-session task/subagent tool (read-only children share this model).
+        self.task_tool = None
         self._mode: str = DEFAULT_MODE
         self._base_prompt: str = ""
         self._base_tools: list = []
@@ -123,6 +129,22 @@ class Runtime:
         self._hook_unsubscribes: list = []
         self._options: RuntimeOptions | None = None
         self._context_files = True
+
+    @property
+    def session(self) -> Session:
+        """The session in context; assigning one retargets the spill sink."""
+        return self._session
+
+    @session.setter
+    def session(self, session: Session) -> None:
+        self._session = session
+        # Artifacts belong to the session in context. Hooking the assignment
+        # (not just switch_session) keeps the TUI's retry/compaction paths,
+        # which set ``runtime.session`` directly, spilling to the right place.
+        self.artifact_sink = build_artifact_sink(session.path)
+        agent = getattr(self, "agent", None)
+        if agent is not None:
+            agent.artifact_sink = self.artifact_sink
 
     @property
     def mode(self) -> str:
@@ -217,7 +239,8 @@ class Runtime:
         runtime.gate = gate
 
         # Open the session before discovery/recompose: the todo tool is
-        # per-session state bound to the sidecar next to the JSONL.
+        # per-session state bound to the sidecar next to the JSONL, and the
+        # session setter also builds the artifact spill sink next to it.
         runtime.session = runtime._open_session(options.resume)
         runtime.todo_tool = build_todo_tool(runtime.session.path)
         # Refcount the process-wide background-job manager: closing one Runtime
@@ -256,11 +279,25 @@ class Runtime:
         runtime._options = options
         runtime._context_files = options.context_files
         runtime.guard = ContextGuard(model.context_window)
-        runtime._recompose()
-        prompt = runtime._prompt_with_mode()
         thinking = options.thinking
         if thinking is None:
             thinking = "high" if model.reasoning else "off"
+        # The task tool spawns read-only child agents; the child inherits the
+        # parent's model/stream and follows the session artifact sink.
+        runtime.task_tool = build_task_tool(
+            model=model,
+            base_tools=list(ALL_TOOLS),
+            api_key=api_key,
+            stream_fn=stream_fn,
+            thinking=thinking,
+            artifact_sink=lambda tool_name, text: (
+                runtime.artifact_sink(tool_name, text)
+                if runtime.artifact_sink is not None
+                else None
+            ),
+        )
+        runtime._recompose()
+        prompt = runtime._prompt_with_mode()
 
         agent = Agent(
             model=model,
@@ -275,6 +312,7 @@ class Runtime:
             max_turns=options.max_turns,
             max_cost=options.max_cost,
             retries=options.retries,
+            artifact_sink=runtime.artifact_sink,
         )
         agent.subscribe(runtime.guard.on_event)
         runtime.agent = agent
@@ -363,6 +401,8 @@ class Runtime:
         tools = list(ALL_TOOLS)
         if self.todo_tool is not None:
             tools.append(self.todo_tool)
+        if self.task_tool is not None:
+            tools.append(self.task_tool)
         if self.mcp is not None:
             tools.extend(self.mcp.tool_defs())
         if self.skills:

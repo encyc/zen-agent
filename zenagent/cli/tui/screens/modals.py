@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Generic, TypeVar
@@ -18,6 +19,7 @@ from zenagent.app.sessions import SessionEntry
 from zenagent.cli.tui.screens.palette import PaletteItem, PaletteScreen
 
 __all__ = [
+    "AskQuestion",
     "ChoicePicker",
     "Confirm",
     "DialogChoice",
@@ -234,11 +236,24 @@ class DialogScreen(ModalScreen[_T], Generic[_T]):
 
 
 class DialogChoice(Static):
-    """One clickable option row; the screen's ``action_<name>`` handles it."""
+    """One clickable option row; the screen's ``action_<name>`` handles it.
 
-    def __init__(self, text: Text, action: str, *, primary: bool = False) -> None:
+    ``on_select`` is for dynamic option lists (the ask dialog): when provided it
+    runs on click instead of looking up ``action_<action>`` by name, so a screen
+    can build rows from model-provided labels without one action method per row.
+    """
+
+    def __init__(
+        self,
+        text: Text,
+        action: str,
+        *,
+        primary: bool = False,
+        on_select: Callable[[], None] | None = None,
+    ) -> None:
         self.action_name = action
         self._text = text
+        self._on_select = on_select
         classes = "dialog-choice" + (" -primary" if primary else "")
         super().__init__(text, classes=classes)
 
@@ -246,7 +261,15 @@ class DialogChoice(Static):
     def plain(self) -> str:
         return self._text.plain
 
+    def set_text(self, text: Text) -> None:
+        """Replace the row label (multi-select toggles redraw their marker)."""
+        self._text = text
+        self.update(text)
+
     def on_click(self) -> None:
+        if self._on_select is not None:
+            self._on_select()
+            return
         handler = getattr(self.screen, f"action_{self.action_name}", None)
         if handler is not None:
             handler()
@@ -416,6 +439,131 @@ class ToolApproval(DialogScreen[str]):
 
     def action_deny(self) -> None:
         self.dismiss("deny")
+
+
+class AskQuestion(DialogScreen[list[str] | None]):
+    """One question from the ``ask`` tool: pick one option, or several when multi.
+
+    Single-select questions dismiss on choice (``1``-``6`` or a click); ``multi``
+    questions toggle rows and submit on Enter, where an empty selection is a
+    valid "none of these" answer. Escape dismisses the whole ask (``None``),
+    which the caller reports as unanswered; a stray Enter never submits a
+    single-select answer, mirroring :class:`ToolApproval`.
+    """
+
+    BINDINGS = [  # noqa: RUF012 - Textual class API
+        ("escape", "cancel", "Cancel"),
+        ("enter", "submit", "Submit"),
+        ("1", "choose_1", "1"),
+        ("2", "choose_2", "2"),
+        ("3", "choose_3", "3"),
+        ("4", "choose_4", "4"),
+        ("5", "choose_5", "5"),
+        ("6", "choose_6", "6"),
+    ]
+
+    def __init__(
+        self, question: dict, *, index: int = 1, total: int = 1
+    ) -> None:
+        super().__init__()
+        self.question = question
+        self.index = index
+        self.total = total
+        self.selected: list[str] = []
+        self._rows: list[DialogChoice] = []
+
+    @property
+    def multi(self) -> bool:
+        return bool(self.question.get("multi"))
+
+    def compose(self) -> ComposeResult:
+        title = self.question.get("header") or f"question {self.index}/{self.total}"
+        if self.total > 1 and self.question.get("header"):
+            title = f"{title} · {self.index}/{self.total}"
+        with Vertical(id="dialog"):
+            yield Static(Text(title), id="dialog-title")
+            with Vertical(id="dialog-body"):
+                yield Static(
+                    Text(self.question["question"]), classes="dialog-detail"
+                )
+                recommended = self.question.get("recommended")
+                if recommended:
+                    yield Static(
+                        Text(f"recommended: {recommended}"), classes="dialog-note"
+                    )
+            with Vertical(id="dialog-choices"):
+                for position, option in enumerate(self.question["options"]):
+                    row = DialogChoice(
+                        self._choice_text(position, option),
+                        f"option_{position}",
+                        primary=option["label"] == self.question.get("recommended"),
+                        on_select=lambda position=position: self._choose(position),
+                    )
+                    self._rows.append(row)
+                    yield row
+            yield Static(Text(self._hint()), id="dialog-hint")
+
+    def _hint(self) -> str:
+        if self.multi:
+            return "[1-6] toggle   [enter] submit   [esc] cancel"
+        return "[1-6] choose   [esc] cancel"
+
+    def _choice_text(self, position: int, option: dict) -> Text:
+        text = Text(f"[{position + 1}] ")
+        if self.multi:
+            text.append("✓ " if option["label"] in self.selected else "  ")
+        text.append(option["label"])
+        if option["label"] == self.question.get("recommended"):
+            text.append(" (Recommended)")
+        description = option.get("description")
+        if description:
+            text.append(f"  — {description}")
+        return text
+
+    def _refresh_rows(self) -> None:
+        for position, row in enumerate(self._rows):
+            row.set_text(
+                self._choice_text(position, self.question["options"][position])
+            )
+
+    def _choose(self, position: int) -> None:
+        options = self.question["options"]
+        if not 0 <= position < len(options):
+            return
+        label = options[position]["label"]
+        if not self.multi:
+            self.dismiss([label])
+            return
+        if label in self.selected:
+            self.selected.remove(label)
+        else:
+            self.selected.append(label)
+        self._refresh_rows()
+
+    def action_choose_1(self) -> None:
+        self._choose(0)
+
+    def action_choose_2(self) -> None:
+        self._choose(1)
+
+    def action_choose_3(self) -> None:
+        self._choose(2)
+
+    def action_choose_4(self) -> None:
+        self._choose(3)
+
+    def action_choose_5(self) -> None:
+        self._choose(4)
+
+    def action_choose_6(self) -> None:
+        self._choose(5)
+
+    def action_submit(self) -> None:
+        if self.multi:
+            self.dismiss(list(self.selected))
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
 
 
 class SettingsPicker(PaletteScreen[str]):
