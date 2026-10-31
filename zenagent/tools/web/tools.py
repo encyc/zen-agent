@@ -27,6 +27,10 @@ __all__ = [
 
 MAX_RESULTS = 8
 MAX_FETCH_CHARS = 12_000
+#: Per-call fetch timeout bounds (seconds); the network layer's default applies
+#: when the model does not ask.
+MIN_FETCH_TIMEOUT_S = 1.0
+MAX_FETCH_TIMEOUT_S = 45.0
 RECENCY_VALUES = ("day", "week", "month", "year")
 
 _TAG = re.compile(r"<[^>]+>")
@@ -88,12 +92,25 @@ def strip_html(body: str) -> str:
     return _WS.sub(" ", html.unescape(_TAG.sub(" ", _SCRIPT_STYLE.sub(" ", body)))).strip()
 
 
+def _clamp_fetch_timeout(raw) -> float | None:
+    """Validate ``timeout_s``; None means "use the network layer default"."""
+    if raw is None or raw == "":
+        return None
+    try:
+        seconds = float(raw)
+    except (TypeError, ValueError):
+        return None
+    return max(MIN_FETCH_TIMEOUT_S, min(seconds, MAX_FETCH_TIMEOUT_S))
+
+
 async def _fetch(tool_call_id: str, args: dict, abort, on_update=None) -> ToolResultAgent:
     url = str(args.get("url", "")).strip()
     if not url.startswith(("http://", "https://")):
         return _text("url must start with http:// or https://", is_error=True)
+    timeout_s = _clamp_fetch_timeout(args.get("timeout_s"))
+    kwargs = {} if timeout_s is None else {"timeout": timeout_s}
     try:
-        response = await net.get(url)
+        response = await net.get(url, **kwargs)
         response.raise_for_status()
     except (httpx.HTTPError, OSError, UnicodeDecodeError) as exc:
         return _text(f"fetch failed: {exc}", is_error=True)
@@ -105,7 +122,12 @@ async def _fetch(tool_call_id: str, args: dict, abort, on_update=None) -> ToolRe
     if truncated:
         text = text[:MAX_FETCH_CHARS] + "\n… (truncated)"
     header = f"fetched {url} ({response.status_code}, {len(response.content)} bytes)"
-    return _text(f"{header}\n\n{text}", url=url, truncated=truncated)
+    return _text(
+        f"{header}\n\n{text}",
+        url=url,
+        truncated=truncated,
+        timeout_s=timeout_s,
+    )
 
 
 WEB_SEARCH = AgentTool(
@@ -151,7 +173,16 @@ FETCH = AgentTool(
     ),
     parameters={
         "type": "object",
-        "properties": {"url": {"type": "string", "description": "Absolute http(s) URL."}},
+        "properties": {
+            "url": {"type": "string", "description": "Absolute http(s) URL."},
+            "timeout_s": {
+                "type": "number",
+                "description": (
+                    "Per-call fetch timeout in seconds (default: network layer; "
+                    f"clamped to {MIN_FETCH_TIMEOUT_S:g}-{MAX_FETCH_TIMEOUT_S:g})."
+                ),
+            },
+        },
         "required": ["url"],
     },
     execute=_fetch,

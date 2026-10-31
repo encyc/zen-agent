@@ -55,6 +55,12 @@ from zenagent.templates import (
     discover_templates,
 )
 from zenagent.tools import ALL_TOOLS
+from zenagent.tools.todo import (
+    TodoTool,
+    build_todo_tool,
+    load_todo_phases,
+    save_todo_phases,
+)
 
 __all__ = ["Runtime", "RuntimeOptions"]
 
@@ -103,6 +109,8 @@ class Runtime:
         self.extension_files: list[str] = []
         self.before_switch: SwitchHook | None = None
         self.gate: PermissionGate | None = None
+        #: The per-session todo tool; ``switch_session`` re-points its sidecar.
+        self.todo_tool: TodoTool | None = None
         self._mode: str = DEFAULT_MODE
         self._base_prompt: str = ""
         self._base_tools: list = []
@@ -206,6 +214,10 @@ class Runtime:
             gate.set_mode(mode)
         runtime.gate = gate
 
+        # Open the session before discovery/recompose: the todo tool is
+        # per-session state bound to the sidecar next to the JSONL.
+        runtime.session = runtime._open_session(options.resume)
+        runtime.todo_tool = build_todo_tool(runtime.session.path)
         if options.mcp:
             runtime.mcp = await runtime._start_mcp(options)
 
@@ -258,8 +270,6 @@ class Runtime:
         agent.subscribe(runtime.guard.on_event)
         runtime.agent = agent
         runtime._subscribe_hooks()
-
-        runtime.session = runtime._open_session(options.resume)
 
         def persist(event) -> None:
             if event.type == "agent_end" and event.new_messages:
@@ -342,6 +352,8 @@ class Runtime:
         from drifting apart after a reload.
         """
         tools = list(ALL_TOOLS)
+        if self.todo_tool is not None:
+            tools.append(self.todo_tool)
         if self.mcp is not None:
             tools.extend(self.mcp.tool_defs())
         if self.skills:
@@ -511,8 +523,18 @@ class Runtime:
             self._note(warning)
         self._recompose()
 
-    async def switch_session(self, path: Path | None) -> None:
-        """Abort any run, then load `path` (or a fresh session) into the agent."""
+    async def switch_session(
+        self, path: Path | None, *, carry_todos: bool = False
+    ) -> None:
+        """Abort any run, then load `path` (or a fresh session) into the agent.
+
+        ``carry_todos`` copies the current todo sidecar into the new session:
+        compaction is a continuation of the same work, so the checklist must
+        survive it (fork/new are new branches and start empty).
+        """
+        carried: list[dict] = []
+        if carry_todos:
+            carried = load_todo_phases(self.session.path)
         if self.before_switch is not None and not await self.before_switch(path):
             return
         self.agent.abort()
@@ -525,4 +547,10 @@ class Runtime:
             session = Session(unique_session_path())
         self.agent.replace_messages(session.load())
         self.session = session
+        if self.todo_tool is not None:
+            if carried:
+                save_todo_phases(session.path, carried)
+            # Todo state follows the session: the sidecar next to the file now
+            # in context is the one the HUD shows (and the tool updates).
+            self.todo_tool.bind_session(session.path)
         self.guard.last_usage = None

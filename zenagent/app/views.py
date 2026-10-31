@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Literal
 
+from zenagent.agent.loop import LOOP_GUARD_PREFIX
 from zenagent.types import (
     AssistantMessage,
     Cost,
@@ -97,6 +98,11 @@ class RunStatus:
     cwd: str = ""
     mode: str = ""
     git_branch: str = ""
+    #: Current todo list as the tool's canonical phase details (``todo``
+    #: ``details["phases"]`` / the ``<session>.todo.json`` sidecar); the TUI HUD
+    #: renders it and hides itself while it is empty. Plain dicts keep this
+    #: UI-agnostic module free of tool imports.
+    todos: list[dict] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -132,14 +138,14 @@ def messages_to_views(messages: list[Message]) -> list[MessageView | ToolCallVie
 
     for message in messages:
         if isinstance(message, UserMessage):
-            views.append(
-                MessageView(
-                    kind="user",
-                    text=message.content
-                    if isinstance(message.content, str)
-                    else _text_of(message.content),
-                )
+            text = (
+                message.content
+                if isinstance(message.content, str)
+                else _text_of(message.content)
             )
+            if text.startswith(LOOP_GUARD_PREFIX):
+                continue  # synthetic model-only corrective, not a user turn
+            views.append(MessageView(kind="user", text=text))
         elif isinstance(message, AssistantMessage):
             text = _text_of(message.content)
             thinking = "\n".join(

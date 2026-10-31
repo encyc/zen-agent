@@ -377,11 +377,14 @@ class ToolApproval(DialogScreen[str]):
         arguments: dict,
         *,
         timeout: float | None = None,
+        target: str | None = None,
     ) -> None:
         super().__init__()
         self.tool_name = tool_name
         self.arguments = arguments
         self.timeout = timeout
+        #: The exact scope an "always" answer would remember (path / command).
+        self.target = target
 
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
@@ -391,6 +394,10 @@ class ToolApproval(DialogScreen[str]):
                 with Vertical(id="dialog-body"):
                     for line, css_class in body:
                         yield Static(Text(line), classes=css_class)
+            if self.target:
+                yield Static(
+                    Text(f"always allows: {self.target}"), id="dialog-scope"
+                )
             with Vertical(id="dialog-choices"):
                 yield DialogChoice(_choice("y", "allow"), "allow", primary=True)
                 yield DialogChoice(_choice("a", "allow for this session"), "always")

@@ -39,6 +39,14 @@ async def stream(model, messages, tools, options) -> AsyncIterator[AssistantEven
 `thinking` 用户级取值统一为 `off/low/medium/high/max`（`providers/compat.py::normalize_thinking`），
 `off` 在 loop 里被转成 `None`，线上永远收不到字符串 `"off"`。
 
+## 输出 token 拟合（`providers/limits.py`）
+
+Chat Completions 系 request 里 `prompt + max_tokens` 超过上下文窗口会直接 400。三个适配器
+在构造请求前都过 `fit_stream_options()`：请求的 cap 放得下就保持原值（包括"不显式传"），
+放不下就压到 `window − prompt_est − 64`（低于 1024 时按剩余空间取，至少 1），
+避免长 prompt 在第一轮就失败。`prompt_est` 包含消息 + **工具 schema**（9 个内置/MCP 工具
+可以是数千 token）；图片按固定 1024 token 估算而不是 base64 字符数。
+
 ## 传输层（`providers/transport.py`）
 
 - `post_stream()`：发请求，按状态码重试（429/5xx），等待带 abort；`Retry-After` 尊重。

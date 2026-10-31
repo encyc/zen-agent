@@ -30,7 +30,7 @@ turn_start
  ├─ stop_reason == tool_use ?
  │    ├─ 校验参数（JSON → schema）
  │    ├─ before_tool_call（权限/自定义拦截）
- │    ├─ 并行执行 + 串行执行（execution_mode）
+ │    ├─ 并行批执行 → exclusive（write tier/sequential）按序执行
  │    ├─ 每个结果：after_tool_call 可替换 → 追加 ToolResultMessage
  │    └─ 所有结果都 terminate → 结束
  ├─ 否则结束
@@ -59,11 +59,23 @@ turn_end
 顺序是：JSON 解析 → `validate_arguments`（schema 子集）→ `before_tool_call` → `execute`。
 所以权限 hook 和工具永远只看到合法输入；非法输入直接变成 `is_error` 结果。
 
-### 并行与串行
+### 并行与 exclusive
 
 - 默认 `execution_mode="parallel"`：同一轮的所有工具用 `asyncio.gather` 并发执行。
-- `execution_mode="sequential"`：串行、按模型请求顺序执行（用于有共享状态的工具）。
-- 并行与串行两组之间也并发（`gather(run_parallel(), run_sequential())`）。
+- exclusive = `execution_mode="sequential"` 或 `approval="write"`：**先等并行批结束**，
+  再按模型请求顺序逐个执行（文件写类工具不与读/搜索交错）。旧实现的两轨并发不是
+  omp 的 exclusive 语义，已修正。
+
+### 超时、错误类别与循环守卫
+
+- 每次工具调用按 `agent/timeouts.py` 的 effective deadline 包 `asyncio.wait_for`；
+  超时变成 `error_kind="timeout"` 的 is_error 结果，loop 继续。
+- 降级结果带 `error_kind`：`unknown_tool` / `invalid_arguments` / `policy` /
+  `tool_error` / `timeout`。
+- **循环守卫**：同一批工具（name + 规范化 args 完全相同）连续 5 轮重复时，追加一条
+  `[tool-loop guard] …` 的 user 消息到**模型上下文**（每 run 最多一次）。它不写入
+  `new_messages`、不发 message 事件、不进 session JSONL：UI/回放会过滤它（`messages_to_views`），
+  它只用于纠正模型。`sleep/tail/ps/pgrep/top/jobs/wait` 等纯轮询命令豁免。
 - 结果**按请求顺序**写回 state，`tool_call_id` 一一对应，与完成顺序无关。
 
 ### 错误隔离

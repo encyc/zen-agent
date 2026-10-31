@@ -359,3 +359,11 @@ async def test_anthropic_cost_includes_cache_components():
     assert usage.cost.input == pytest.approx(12 / 1_000_000)
     assert usage.cost.output == pytest.approx(25 / 1_000_000)
     assert usage.cost.total == pytest.approx(37 / 1_000_000)
+
+
+def test_thinking_budget_is_disabled_when_max_tokens_cannot_fit_it():
+    from zenagent.providers.anthropic_messages import thinking_budget
+
+    assert thinking_budget("high", 500) is None
+    budget = thinking_budget("high", 2_000)
+    assert budget is not None and 1024 <= budget < 2_000

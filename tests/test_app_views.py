@@ -89,3 +89,13 @@ def test_cache_hit_ratio_is_none_without_cache_reads():
     from zenagent.types import Usage
 
     assert cache_hit_ratio(Usage(input=1000), "openai-completions") is None
+
+
+def test_messages_to_views_hides_the_loop_guard_notice():
+    from zenagent.app.views import messages_to_views
+    from zenagent.types import UserMessage
+
+    guard = UserMessage(content="[tool-loop guard] stop repeating", timestamp=0)
+    real = UserMessage(content="hello", timestamp=1)
+    views = messages_to_views([guard, real])
+    assert [view.text for view in views] == ["hello"]

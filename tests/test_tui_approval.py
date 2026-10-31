@@ -107,3 +107,18 @@ async def test_enter_does_not_approve_by_accident(picker_app):
 
         await pilot.press("n")
         assert await task == "deny"
+
+
+async def test_approval_dialog_shows_the_grant_target(picker_app):
+    from textual.widgets import Static
+
+    app = picker_app
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        task = await _open_approval(app)
+        assert getattr(app.screen, "target", None)
+        assert "write_file" in app.screen.target
+        scope = app.screen.query_one("#dialog-scope", Static)
+        assert "always allows:" in scope.content.plain
+        await pilot.press("n")
+        assert await task == "deny"

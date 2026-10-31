@@ -35,6 +35,7 @@ from zenagent.cli.tui.widgets.prompt_gutter import PromptGutter
 from zenagent.cli.tui.widgets.prompt_input import PromptInput
 from zenagent.cli.tui.widgets.sidebar import Sidebar
 from zenagent.cli.tui.widgets.status_band import StatusBand
+from zenagent.cli.tui.widgets.todo_hud import TodoHud
 from zenagent.cli.tui.widgets.transcript import TranscriptView
 from zenagent.cli.tui.widgets.work_indicator import WorkIndicator
 
@@ -111,10 +112,14 @@ class ZenAgentApp(App):
         The agent tool round is awaited on this future, so the modal blocks that
         tool (not the UI). A timeout resolves to ``deny`` and closes the modal.
         """
+        from zenagent.app.permissions import tool_target
         from zenagent.cli.tui.screens.modals import ToolApproval
 
         screen = ToolApproval(
-            tool_name, arguments, timeout=self.approval_timeout_s
+            tool_name,
+            arguments,
+            timeout=self.approval_timeout_s,
+            target=tool_target(tool_name, arguments),
         )
         future: asyncio.Future[str] = asyncio.get_running_loop().create_future()
 
@@ -171,6 +176,7 @@ class ZenAgentApp(App):
                     yield ErrorBanner()
                     yield CommandHints()
                     yield AttachmentChips()
+                    yield TodoHud()
                     yield StatusBand()
                     with Horizontal(id="prompt-row"):
                         yield PromptGutter()
@@ -255,6 +261,10 @@ class ZenAgentApp(App):
         width = self.size.width
         for band in self.query(StatusBand):
             band.update_status(status, width)
+        # Todo state rides the same snapshot as everything else in the dock;
+        # the row hides itself while the session has no list.
+        for hud in self.query(TodoHud):
+            hud.set_todos(status.todos)
         for log in self.query(TranscriptView):
             log.sync(self.chat.transcript, status)
         for notice in self.chat.take_notices():

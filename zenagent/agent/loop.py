@@ -31,11 +31,14 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
+import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 
 from zenagent.agent.result_budget import apply_result_budget
+from zenagent.agent.timeouts import effective_timeout
 from zenagent.agent.validate import validate_arguments
 from zenagent.events import AbortToken, AgentEvent
 from zenagent.providers.catalog import Model
@@ -78,6 +81,10 @@ class ToolResultAgent:
     details: dict = field(default_factory=dict)
     is_error: bool = False
     terminate: bool = False
+    #: Machine-readable failure category ('' for success). The loop fills in
+    #: its own kinds (unknown_tool/invalid_arguments/policy/tool_error/timeout);
+    #: tools may set a more specific one in the result they return.
+    error_kind: str = ""
 
 
 @dataclass
@@ -113,6 +120,9 @@ class AgentTool:
     ) = None
     #: Capability tier declared by the tool (``read``/``write``/``exec``).
     approval: str = "exec"
+    #: Per-tool wall-clock budget; the loop wraps the call in ``wait_for``.
+    #: None means "no kernel deadline" (the tool manages its own, e.g. bash).
+    timeout_s: float | None = None
 
 
 @dataclass
@@ -219,8 +229,10 @@ def _run_cost(messages: list[Message]) -> float:
     )
 
 
-def _error_result(text: str) -> ToolResultAgent:
-    return ToolResultAgent(content=[TextContent(text=text)], is_error=True)
+def _error_result(text: str, *, kind: str = "tool_error") -> ToolResultAgent:
+    return ToolResultAgent(
+        content=[TextContent(text=text)], is_error=True, error_kind=kind
+    )
 
 
 def _truncated_call_outcome(call: ToolCall) -> _ToolOutcome:
@@ -230,7 +242,8 @@ def _truncated_call_outcome(call: ToolCall) -> _ToolOutcome:
         result=_error_result(
             f"tool call {call.name!r} was not executed: the response hit the "
             "output token limit, so its arguments may be truncated. "
-            "Re-issue the call with complete arguments."
+            "Re-issue the call with complete arguments.",
+            kind="invalid_arguments",
         ),
         duration_ms=0,
     )
@@ -255,16 +268,20 @@ async def _execute_tool(
     result: ToolResultAgent | None = None
 
     if tool is None:
-        result = _error_result(f"unknown tool: {call.name}")
+        result = _error_result(f"unknown tool: {call.name}", kind="unknown_tool")
     elif call.arguments_error is not None:
-        result = _error_result(call.arguments_error)
+        result = _error_result(call.arguments_error, kind="invalid_arguments")
     elif not isinstance(call.arguments, dict):
         result = _error_result(
             f"invalid arguments for tool {call.name}: expected a JSON object, "
-            f"got {type(call.arguments).__name__}"
+            f"got {type(call.arguments).__name__}",
+            kind="invalid_arguments",
         )
     elif (problem := validate_arguments(tool.parameters, call.arguments)) is not None:
-        result = _error_result(f"invalid arguments for tool {call.name}: {problem}")
+        result = _error_result(
+            f"invalid arguments for tool {call.name}: {problem}",
+            kind="invalid_arguments",
+        )
     else:
         verdict = None
         if config.before_tool_call is not None:
@@ -281,9 +298,13 @@ async def _execute_tool(
                     config.before_tool_call(call, call.arguments)
                 )
         if isinstance(verdict, dict) and verdict.get("block"):
-            result = _error_result(str(verdict.get("reason", "blocked")))
+            result = _error_result(
+                str(verdict.get("reason", "blocked")), kind="policy"
+            )
         elif tool.execute is None:
-            result = _error_result(f"tool {call.name} has no execute callable")
+            result = _error_result(
+                f"tool {call.name} has no execute callable", kind="tool_error"
+            )
         else:
             accepting = True
 
@@ -292,10 +313,34 @@ async def _execute_tool(
                 if accepting and on_update is not None:
                     on_update(partial)
 
+            timeout = effective_timeout(tool, call.name)
             try:
-                result = await tool.execute(call.id, call.arguments, abort, forward)
+                if timeout is not None:
+                    result = await asyncio.wait_for(
+                        tool.execute(call.id, call.arguments, abort, forward),
+                        timeout=timeout,
+                    )
+                else:
+                    result = await tool.execute(
+                        call.id, call.arguments, abort, forward
+                    )
+            except TimeoutError as exc:
+                if timeout is not None:
+                    result = _error_result(
+                        f"tool {call.name!r} timed out after {timeout:g}s",
+                        kind="timeout",
+                    )
+                else:
+                    # The tool raised TimeoutError itself; with no kernel
+                    # deadline this is a normal tool failure, not a run-abort.
+                    result = _error_result(
+                        f"{type(exc).__name__}: {exc}"[:_MAX_ERROR_TEXT],
+                        kind="tool_error",
+                    )
             except Exception as exc:  # noqa: BLE001 - degrade, never crash the loop
-                result = _error_result(f"{type(exc).__name__}: {exc}"[:_MAX_ERROR_TEXT])
+                result = _error_result(
+                    f"{type(exc).__name__}: {exc}"[:_MAX_ERROR_TEXT]
+                )
             finally:
                 accepting = False
 
@@ -321,13 +366,25 @@ async def _execute_tool(
     return _ToolOutcome(call=call, result=result, duration_ms=duration_ms)
 
 
+def _is_exclusive(tool: AgentTool | None) -> bool:
+    """Whether a call must run alone, after the rest of the batch.
+
+    Two declarations mean exclusive: ``execution_mode="sequential"`` and the
+    ``write`` approval tier (file mutations). This mirrors omp's
+    ``concurrency="exclusive"`` for edit/write without hard-coding tool names.
+    """
+    if tool is None:
+        return False
+    return tool.execution_mode == "sequential" or tool.approval == "write"
+
+
 async def _run_tool_batch(
     calls: list[ToolCall],
     config: AgentConfig,
     abort: AbortToken | None,
     emit_update: Callable[[AgentEvent], None] | None = None,
 ) -> list[_ToolOutcome]:
-    """Execute a tool batch: parallel tools concurrently, sequential in order.
+    """Execute a tool batch: parallel tools concurrently, exclusive ones after.
 
     Returns outcomes in assistant source order regardless of completion order.
     ``emit_update`` receives one ``tool_execution_update`` event per streamed
@@ -335,18 +392,12 @@ async def _run_tool_batch(
     """
     tools_by_name = {t.name: t for t in config.tools}
     outcomes: list[_ToolOutcome | None] = [None] * len(calls)
-    parallel = [
+    exclusive = [
         i
         for i, call in enumerate(calls)
-        if tools_by_name.get(call.name) is None
-        or tools_by_name[call.name].execution_mode != "sequential"
+        if _is_exclusive(tools_by_name.get(call.name))
     ]
-    sequential = [
-        i
-        for i, call in enumerate(calls)
-        if tools_by_name.get(call.name) is not None
-        and tools_by_name[call.name].execution_mode == "sequential"
-    ]
+    parallel = [i for i in range(len(calls)) if i not in exclusive]
 
     async def run_one(index: int) -> None:
         call = calls[index]
@@ -365,17 +416,55 @@ async def _run_tool_batch(
 
         outcomes[index] = await _execute_tool(call, config, abort, forward)
 
-    async def run_parallel() -> None:
+    # Two phases: the parallel batch fans out, then exclusive tools run one at
+    # a time, in call order. Exclusive tools must not overlap the parallel
+    # batch — that is what "exclusive" means (the old implementation ran both
+    # tracks concurrently, which was not omp's semantics).
+    if parallel:
         await asyncio.gather(*(run_one(i) for i in parallel))
-
-    async def run_sequential() -> None:
-        for index in sequential:
-            await run_one(index)
-
-    # Two tracks: the parallel batch fans out while the sequential tools run
-    # one after another in call order.
-    await asyncio.gather(run_parallel(), run_sequential())
+    for index in exclusive:
+        await run_one(index)
     return [outcome for outcome in outcomes if outcome is not None]
+
+
+#: Consecutive identical tool rounds before the loop injects a corrective notice.
+_LOOP_GUARD_THRESHOLD = 5
+
+#: Prefix of the synthetic, non-persisted corrective message (the UI filters it).
+LOOP_GUARD_PREFIX = "[tool-loop guard]"
+
+_LOOP_GUARD_TEXT = (
+    LOOP_GUARD_PREFIX + " The same tool call has repeated {n} times with identical "
+    "arguments and produced no new progress. Stop repeating it: change the "
+    "arguments, use a different tool, or explain to the user what is blocking you."
+)
+
+#: Commands that are legitimate to repeat: they observe a changing state.
+_POLL_COMMAND = re.compile(r"^\s*(sleep|wait|tail|ps|pgrep|top|jobs)\b")
+
+
+def is_loop_guard_message(message: object) -> bool:
+    """Whether ``message`` is the synthetic loop-guard corrective."""
+    return isinstance(message, UserMessage) and str(
+        getattr(message, "content", "")
+    ).startswith(LOOP_GUARD_PREFIX)
+
+
+def _is_poll_call(call: ToolCall) -> bool:
+    """Whether this call is a pure wait/observe poll (exempt from the guard)."""
+    if call.name != "bash":
+        return False
+    return bool(_POLL_COMMAND.match(str(call.arguments.get("command", ""))))
+
+
+def _calls_signature(calls: list[ToolCall]) -> tuple:
+    """Stable signature of a tool batch, for detecting identical repeats."""
+    return tuple(
+        sorted(
+            (call.name, json.dumps(call.arguments, sort_keys=True, default=str))
+            for call in calls
+        )
+    )
 
 
 async def agent_loop(
@@ -404,6 +493,9 @@ async def agent_loop(
     turns = 0
     length_failures = 0
     termination = "stop"
+    last_signature: tuple | None = None
+    repeat_streak = 0
+    guard_injected = False
     try:
         # Input typed while the previous run was finishing is still queued: pick
         # it up before the first request instead of waiting for a tool round.
@@ -570,6 +662,29 @@ async def agent_loop(
             if length_failures >= _MAX_LENGTH_FAILURES:
                 break  # truncation is not resolving: stop instead of re-asking forever
 
+            # Cross-turn loop guard: a model repeating the same call(s) with
+            # identical arguments is stuck. Inject one corrective message per
+            # run (as a user-role notice) instead of burning max_turns.
+            signature = _calls_signature(calls)
+            poll_like = all(_is_poll_call(call) for call in calls)
+            if poll_like:
+                repeat_streak = 0
+            elif signature == last_signature:
+                repeat_streak += 1
+            else:
+                last_signature = signature
+                repeat_streak = 1
+            if repeat_streak >= _LOOP_GUARD_THRESHOLD and not guard_injected:
+                guard_injected = True
+                notice = UserMessage(
+                    content=_LOOP_GUARD_TEXT.format(n=repeat_streak),
+                    timestamp=int(time.time()),
+                )
+                # Model-facing only: appended to the request context but NOT to
+                # new_messages and with no message events, so it is never
+                # persisted, rendered as a user turn, or counted by fork/retry.
+                state.messages.append(notice)
+
             if config.get_steering_messages is not None:
                 for message in await config.get_steering_messages():
                     state.messages.append(message)
@@ -578,5 +693,12 @@ async def agent_loop(
                     yield AgentEvent(type="message_end", message=message)
             # else / loop continues: another round with the tool results in context
     finally:
+        # The corrective exists only for the turns after it fired: drop it from
+        # the durable transcript so resume/retry/fork never see synthetic text.
+        state.messages[:] = [
+            message
+            for message in state.messages
+            if not is_loop_guard_message(message)
+        ]
         state.termination = termination
         yield AgentEvent(type="agent_end", new_messages=new_messages)

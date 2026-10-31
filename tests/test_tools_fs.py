@@ -387,3 +387,148 @@ async def test_read_empty_file_with_offset_past_eof_is_an_error():
     result = await call(READ_FILE, path="empty.txt", offset=3)
     assert result.is_error
     assert "past" in result.content[0].text or "EOF" in result.content[0].text
+
+
+# ---------------------------------------------------------------------------
+# write_file / edit_file: keep the existing file's CRLF and BOM conventions
+# ---------------------------------------------------------------------------
+
+
+async def test_write_keeps_crlf_when_given_lf_content():
+    from pathlib import Path
+
+    Path("win.txt").write_bytes(b"one\r\ntwo\r\n")
+    result = await call(WRITE_FILE, path="win.txt", content="one\ntwo\nthree\n")
+    assert not result.is_error
+    assert Path("win.txt").read_bytes() == b"one\r\ntwo\r\nthree\r\n"
+
+
+async def test_write_keeps_bom_and_crlf_of_the_existing_file():
+    from pathlib import Path
+
+    Path("bom.txt").write_bytes(b"\xef\xbb\xbfone\r\ntwo\r\n")
+    result = await call(WRITE_FILE, path="bom.txt", content="one\ntwo\nthree\n")
+    assert not result.is_error
+    assert Path("bom.txt").read_bytes() == b"\xef\xbb\xbfone\r\ntwo\r\nthree\r\n"
+
+
+async def test_write_does_not_double_convert_content_already_using_crlf():
+    from pathlib import Path
+
+    Path("win.txt").write_bytes(b"a\r\nb\r\n")
+    result = await call(WRITE_FILE, path="win.txt", content="a\r\nb\r\nc\r\n")
+    assert not result.is_error
+    assert Path("win.txt").read_bytes() == b"a\r\nb\r\nc\r\n"
+
+
+async def test_write_new_file_stays_lf_without_a_bom():
+    from pathlib import Path
+
+    result = await call(WRITE_FILE, path="new.txt", content="a\nb\n")
+    assert not result.is_error
+    assert Path("new.txt").read_bytes() == b"a\nb\n"
+
+
+async def test_edit_keeps_crlf_and_accepts_an_lf_old_string():
+    from pathlib import Path
+
+    Path("win.py").write_bytes(b"alpha\r\nbeta\r\ngamma\r\n")
+    result = await call(
+        EDIT_FILE,
+        path="win.py",
+        old_string="beta\ngamma",
+        new_string="beta\nDELTA",
+    )
+    assert not result.is_error
+    assert Path("win.py").read_bytes() == b"alpha\r\nbeta\r\nDELTA\r\n"
+
+
+async def test_edit_keeps_bom_and_crlf_after_the_edit():
+    from pathlib import Path
+
+    Path("bom.py").write_bytes(b"\xef\xbb\xbfhello\r\nworld\r\n")
+    result = await call(
+        EDIT_FILE, path="bom.py", old_string="world", new_string="there"
+    )
+    assert not result.is_error
+    assert Path("bom.py").read_bytes() == b"\xef\xbb\xbfhello\r\nthere\r\n"
+
+
+# ---------------------------------------------------------------------------
+# edit_file: replace_all
+# ---------------------------------------------------------------------------
+
+
+async def test_edit_replace_all_replaces_every_occurrence():
+    from pathlib import Path
+
+    Path("vars.py").write_text("a = 1\nb = 1\nc = 1\n")
+    result = await call(
+        EDIT_FILE,
+        path="vars.py",
+        old_string="= 1",
+        new_string="= 2",
+        replace_all=True,
+    )
+    assert not result.is_error
+    assert Path("vars.py").read_text() == "a = 2\nb = 2\nc = 2\n"
+    assert "3 occurrences" in result.content[0].text
+
+
+async def test_edit_replace_all_with_zero_matches_is_an_error():
+    from pathlib import Path
+
+    Path("one.py").write_text("a\n")
+    result = await call(
+        EDIT_FILE,
+        path="one.py",
+        old_string="zzz",
+        new_string="b",
+        replace_all=True,
+    )
+    assert result.is_error
+    assert "not found" in result.content[0].text
+    assert Path("one.py").read_text() == "a\n"
+
+
+async def test_edit_replace_all_false_still_requires_a_unique_match():
+    from pathlib import Path
+
+    original = "x = 1\ny = 1\n"
+    Path("two.py").write_text(original)
+    result = await call(
+        EDIT_FILE,
+        path="two.py",
+        old_string="= 1",
+        new_string="= 2",
+        replace_all=False,
+    )
+    assert result.is_error
+    assert "2 times" in result.content[0].text
+    assert Path("two.py").read_text() == original
+
+
+async def test_edit_schema_declares_replace_all():
+    prop = EDIT_FILE.parameters["properties"]["replace_all"]
+    assert prop["type"] == "boolean"
+    assert prop.get("default") is False
+    assert "replace_all" not in EDIT_FILE.parameters["required"]
+
+
+async def test_edit_keeps_a_bom_even_when_old_string_mentions_it():
+    from pathlib import Path
+
+    Path("bom.py").write_bytes("\ufeffimport os\n".encode())
+    result = await call(EDIT_FILE, path="bom.py", old_string="import os", new_string="import sys")
+    assert not result.is_error
+    assert Path("bom.py").read_bytes().startswith(b"\xef\xbb\xbf")
+    assert "import sys" in Path("bom.py").read_text(encoding="utf-8")
+
+
+async def test_writing_empty_content_to_a_bom_only_file_truncates_to_zero():
+    from pathlib import Path
+
+    Path("bom.txt").write_bytes(b"\xef\xbb\xbf")
+    result = await call(WRITE_FILE, path="bom.txt", content="")
+    assert not result.is_error
+    assert Path("bom.txt").read_bytes() == b""

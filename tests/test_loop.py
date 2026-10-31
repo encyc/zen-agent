@@ -151,13 +151,21 @@ def make_config(stream: ScriptedStream, **overrides) -> AgentConfig:
     return config
 
 
-def make_tool(name: str, execute: Callable, execution_mode: str = "parallel") -> AgentTool:
+def make_tool(
+    name: str,
+    execute: Callable,
+    execution_mode: str = "parallel",
+    approval: str = "exec",
+    timeout_s: float | None = None,
+) -> AgentTool:
     return AgentTool(
         name=name,
         description=f"{name} tool",
         parameters={"type": "object", "properties": {}},
         execution_mode=execution_mode,
         execute=execute,
+        approval=approval,
+        timeout_s=timeout_s,
     )
 
 
@@ -1076,3 +1084,193 @@ async def test_two_argument_hooks_keep_working():
     assert seen == ["echo"]
     assert end.is_error is True
     assert end.result.content[0].text == "legacy hook"
+
+
+async def test_exclusive_write_tier_waits_for_the_parallel_batch():
+    gate = asyncio.Event()
+    log: list[str] = []
+
+    async def read(name, args, abort, on_update=None):
+        log.append("read:start")
+        await gate.wait()
+        log.append("read:end")
+        return ToolResultAgent(content=[TextContent(text="read-done")])
+
+    async def write(name, args, abort, on_update=None):
+        log.append("write:start")
+        return ToolResultAgent(content=[TextContent(text="write-done")])
+
+    stream = ScriptedStream(
+        [
+            [
+                call_tool("t1", "read_file", {}),
+                call_tool("t2", "write_file", {}),
+                finish("tool_use"),
+            ],
+            [say("done"), finish("stop")],
+        ]
+    )
+    state = AgentState()
+    tools = [
+        make_tool("read_file", read, approval="read"),
+        make_tool("write_file", write, approval="write"),
+    ]
+    run_task = asyncio.create_task(run("go", state, make_config(stream, tools=tools)))
+    await asyncio.sleep(0.05)
+    assert "write:start" not in log, "write-tier tools must wait for the parallel batch"
+    gate.set()
+    await run_task
+    assert log == ["read:start", "read:end", "write:start"]
+
+
+async def test_sequential_tools_wait_for_the_parallel_batch():
+    gate = asyncio.Event()
+    log: list[str] = []
+
+    async def slow(name, args, abort, on_update=None):
+        log.append("slow:start")
+        await gate.wait()
+        log.append("slow:end")
+        return ToolResultAgent(content=[TextContent(text="slow-done")])
+
+    async def seq(name, args, abort, on_update=None):
+        log.append("seq:start")
+        return ToolResultAgent(content=[TextContent(text="seq-done")])
+
+    stream = ScriptedStream(
+        [
+            [
+                call_tool("t1", "slow", {}),
+                call_tool("t2", "seq", {}),
+                finish("tool_use"),
+            ],
+            [say("done"), finish("stop")],
+        ]
+    )
+    state = AgentState()
+    tools = [
+        make_tool("slow", slow),
+        make_tool("seq", seq, execution_mode="sequential"),
+    ]
+    run_task = asyncio.create_task(run("go", state, make_config(stream, tools=tools)))
+    await asyncio.sleep(0.05)
+    assert "seq:start" not in log, "exclusive tools must not overlap the parallel batch"
+    gate.set()
+    await run_task
+    assert log == ["slow:start", "slow:end", "seq:start"]
+
+
+async def test_error_results_carry_a_machine_readable_kind():
+    async def boom(name, args, abort, on_update=None):
+        raise RuntimeError("kaput")
+
+    stream = ScriptedStream(
+        [
+            [
+                call_tool("t1", "ghost", {}),
+                call_tool("t2", "boom", {}),
+                call_tool("t3", "boom", {"bad": True}, arguments_error="not json"),
+                finish("tool_use"),
+            ],
+            [say("done"), finish("stop")],
+        ]
+    )
+    state = AgentState()
+    events = await run("go", state, make_config(stream, tools=[make_tool("boom", boom)]))
+    ends = [e for e in events if e.type == "tool_execution_end"]
+
+    assert ends[0].result.error_kind == "unknown_tool"
+    assert ends[1].result.error_kind == "tool_error"
+    assert ends[2].result.error_kind == "invalid_arguments"
+
+
+async def test_tool_exceptions_and_policy_blocks_have_distinct_kinds():
+    async def boom(name, args, abort, on_update=None):
+        raise RuntimeError("kaput")
+
+    def guard(call, args, tool=None):
+        return {"block": True, "reason": "no"}
+
+    stream = ScriptedStream(
+        [
+            [call_tool("t1", "boom", {}), finish("tool_use")],
+            [say("done"), finish("stop")],
+        ]
+    )
+    state = AgentState()
+    events = await run("go", state, make_config(stream, tools=[make_tool("boom", boom)]))
+    end = next(e for e in events if e.type == "tool_execution_end")
+    assert end.result.error_kind == "tool_error"
+
+    stream2 = ScriptedStream(
+        [
+            [call_tool("t1", "boom", {}), finish("tool_use")],
+            [say("done"), finish("stop")],
+        ]
+    )
+    state2 = AgentState()
+    events2 = await run(
+        "go",
+        state2,
+        make_config(stream2, tools=[make_tool("boom", boom)], before_tool_call=guard),
+    )
+    end2 = next(e for e in events2 if e.type == "tool_execution_end")
+    assert end2.result.error_kind == "policy"
+
+
+async def test_repeated_identical_tool_calls_get_one_corrective_notice():
+    async def echo(name, args, abort, on_update=None):
+        return ToolResultAgent(content=[TextContent(text="again")])
+
+    script = [
+        [call_tool("t1", "echo", {"x": 1}), finish("tool_use")]
+        for _ in range(5)
+    ]
+    script.append([say("done"), finish("stop")])
+    stream = ScriptedStream(script)
+    state = AgentState()
+    events = await run(
+        "go", state, make_config(stream, tools=[make_tool("echo", echo)])
+    )
+
+    # The corrective reached the model (the last request carries it)...
+    last_request = stream.calls[-1]["messages"]
+    assert any(
+        "tool-loop guard" in str(getattr(message, "content", ""))
+        for message in last_request
+    )
+    # ...but not the UI/persistence/durable transcript.
+    end = next(event for event in events if event.type == "agent_end")
+    assert not any(
+        "tool-loop guard" in str(getattr(message, "content", ""))
+        for message in end.new_messages
+    )
+    assert not any(
+        "tool-loop guard" in str(getattr(message, "content", ""))
+        for message in state.messages
+    )
+    assert not [
+        event
+        for event in events
+        if event.type == "message_start"
+        and "tool-loop guard" in str(getattr(event.message, "content", ""))
+    ]
+
+
+async def test_poll_like_commands_are_exempt_from_the_loop_guard():
+    async def echo(name, args, abort, on_update=None):
+        return ToolResultAgent(content=[TextContent(text="still running")])
+
+    script = [
+        [call_tool("t1", "bash", {"command": "sleep 1"}), finish("tool_use")]
+        for _ in range(6)
+    ]
+    script.append([say("done"), finish("stop")])
+    state = AgentState()
+    await run(
+        "go", state, make_config(ScriptedStream(script), tools=[make_tool("bash", echo)])
+    )
+    assert not any(
+        "tool-loop guard" in str(getattr(message, "content", ""))
+        for message in state.messages
+    )

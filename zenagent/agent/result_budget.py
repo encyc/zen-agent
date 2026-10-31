@@ -118,5 +118,6 @@ def apply_result_budget(result: ToolResultAgent) -> ToolResultAgent:
         details=details,
         is_error=result.is_error,
         terminate=result.terminate,
+        error_kind=result.error_kind,
     )
 

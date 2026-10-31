@@ -77,3 +77,33 @@ def test_public_embedding_api_is_importable():
         Runtime,
         SessionManager,
     )
+
+
+async def test_switch_session_can_carry_todo_state(runtime_factory, tmp_path):
+    from zenagent.agent.session import unique_session_path
+    from zenagent.tools.todo import load_todo_phases, save_todo_phases
+
+    runtime = await runtime_factory()
+    old_path = runtime.session.path
+    phases = [
+        {"name": "work", "tasks": [{"content": "one", "status": "completed"}]}
+    ]
+    save_todo_phases(old_path, phases)
+
+    new_path = unique_session_path()
+    await runtime.switch_session(new_path, carry_todos=True)
+    assert load_todo_phases(new_path) == phases
+    assert runtime.todo_tool is not None
+
+
+async def test_switch_session_without_carry_starts_empty(runtime_factory, tmp_path):
+    from zenagent.tools.todo import load_todo_phases, save_todo_phases
+
+    runtime = await runtime_factory()
+    save_todo_phases(
+        runtime.session.path,
+        [{"name": "work", "tasks": [{"content": "one", "status": "pending"}]}],
+    )
+    new_path = tmp_path / "other-session.jsonl"
+    await runtime.switch_session(new_path)
+    assert load_todo_phases(new_path) == []

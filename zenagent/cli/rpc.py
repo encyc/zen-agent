@@ -188,6 +188,7 @@ async def _run(args) -> int:
     from zenagent.config import apply_user_config, load_user_config
     from zenagent.providers.catalog import load_catalog
     from zenagent.tools import ALL_TOOLS
+    from zenagent.tools.todo import build_todo_tool
 
     user_config = load_user_config()
     catalog = apply_user_config(load_catalog(), user_config)
@@ -199,7 +200,7 @@ async def _run(args) -> int:
         api_key,
         "off" if not model.reasoning else "high",
         gate,
-        tools=list(ALL_TOOLS),
+        tools=[*list(ALL_TOOLS), build_todo_tool(None)],
         max_turns=args.max_turns,
         max_cost=args.max_cost,
     )
