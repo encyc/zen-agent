@@ -28,6 +28,7 @@ import sys
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from zenagent.agent.loop import (
     AgentConfig,
@@ -87,6 +88,7 @@ class Agent:
         max_turns: int | None = None,
         max_cost: float | None = None,
         retries: int = 0,
+        artifact_sink: Callable[[str, str], Path | None] | None = None,
     ) -> None:
         self.model = model
         self.system_prompt = system_prompt
@@ -101,6 +103,8 @@ class Agent:
         self.max_turns = max_turns
         self.max_cost = max_cost
         self.retries = retries
+        #: Oversized tool results spill here (``(tool_name, full_text) -> path``).
+        self.artifact_sink = artifact_sink
 
         self._state = AgentState(messages=list(messages or []))
         self._listeners: list[AgentListener] = []
@@ -214,6 +218,7 @@ class Agent:
             max_turns=self.max_turns,
             max_cost=self.max_cost,
             retries=self.retries,
+            artifact_sink=self.artifact_sink,
         )
 
     async def _drain_steering(self) -> list[Message]:

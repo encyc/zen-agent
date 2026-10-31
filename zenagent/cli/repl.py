@@ -20,6 +20,7 @@ from pathlib import Path
 from rich.console import Console
 
 from zenagent.agent import Agent
+from zenagent.agent.artifacts import build_artifact_sink
 from zenagent.agent.session import (
     Session,
     latest_session,
@@ -71,6 +72,8 @@ from zenagent.skills import (
 from zenagent.telemetry import MetricsRecorder, append_metrics
 from zenagent.templates import default_template_roots, discover_templates, expand
 from zenagent.tools import ALL_TOOLS
+from zenagent.tools.ask import set_ask_handler
+from zenagent.tools.task import build_task_tool
 from zenagent.tools.todo import build_todo_tool
 from zenagent.trace import TraceRecorder
 from zenagent.types import ImageContent
@@ -548,6 +551,24 @@ async def repl(
     todo_tool = build_todo_tool(session.path) if tools is None else None
     if todo_tool is not None:
         tool_list.append(todo_tool)
+    artifact_sink = build_artifact_sink(session.path)
+    task_tool = (
+        build_task_tool(
+            model=lambda: agent.model,
+            base_tools=list(ALL_TOOLS),
+            api_key=lambda: agent.api_key,
+            stream_fn=stream_fn,
+            thinking=lambda: agent.thinking,
+            max_cost=max_cost,
+            # Read through the current sink so /fork, /compact and /import
+            # retarget child artifacts too.
+            artifact_sink=lambda tool_name, text: artifact_sink(tool_name, text),
+        )
+        if tools is None
+        else None
+    )
+    if task_tool is not None:
+        tool_list.append(task_tool)
     guard = ContextGuard(model.context_window)
     base_tools = list(tool_list)
     extension_files = [*user_config.extensions, *(extension_paths or [])]
@@ -662,6 +683,7 @@ async def repl(
         max_cost=max_cost,
         retries=retries,
         before_tool_call=gate.before_tool_call,
+        artifact_sink=artifact_sink,
     )
 
     def set_mode(argument: str) -> str:
@@ -751,7 +773,12 @@ async def repl(
     pending_images: list[ImageContent] = []
 
     def switch_session(new_session: Session) -> None:
+        nonlocal artifact_sink
         session_box[0] = new_session
+        # Artifacts belong to the session in context: retarget the spill sink
+        # (and the task child's sink, which reads this variable).
+        artifact_sink = build_artifact_sink(new_session.path)
+        agent.artifact_sink = artifact_sink
         if todo_tool is not None:
             todo_tool.bind_session(new_session.path)
 
@@ -791,6 +818,64 @@ async def repl(
         extra_values={"/model": model_values},
     )
     run_task: asyncio.Task | None = None
+    #: Only one reader may own stdin: the REPL's steering reader and the ask
+    #: handler would otherwise steal each other's lines during a run.
+    input_lock = asyncio.Lock()
+    ask_active = asyncio.Event()
+
+    async def ask_user(questions: list[dict]) -> list[dict]:
+        """Answer an ``ask`` tool call from the terminal (blank = dismiss)."""
+        ask_active.set()
+        answers: list[dict] = []
+        for index, question in enumerate(questions, start=1):
+            title = question.get("header") or question.get("id") or f"question {index}"
+            print_fn(f"\n[{index}/{len(questions)}] {title}: {question['question']}")
+            options = question["options"]
+            for position, option in enumerate(options, start=1):
+                line = f"  {position}. {option['label']}"
+                if option.get("description"):
+                    line += f" — {option['description']}"
+                if option["label"] == question.get("recommended"):
+                    line += " (Recommended)"
+                print_fn(line)
+            print_fn(
+                "answer with "
+                + ("numbers, comma-separated" if question.get("multi") else "a number")
+                + " · blank line = cancel"
+            )
+            while True:
+                try:
+                    async with input_lock:
+                        raw = await read()
+                except (EOFError, KeyboardInterrupt):
+                    ask_active.clear()
+                    return answers
+                parts = [
+                    part
+                    for part in raw.replace(",", " ").split()
+                    if part.strip()
+                ]
+                if not parts:
+                    ask_active.clear()
+                    return answers
+                picks: list[str] = []
+                for part in parts:
+                    try:
+                        value = int(part)
+                    except ValueError:
+                        continue
+                    if 1 <= value <= len(options):
+                        label = options[value - 1]["label"]
+                        if label not in picks:
+                            picks.append(label)
+                if not question.get("multi"):
+                    picks = picks[:1]
+                if picks:
+                    answers.append({"id": question["id"], "selected": picks})
+                    break
+                print_fn("invalid selection; try again")
+        ask_active.clear()
+        return answers
 
     async def reap() -> None:
         """Clear a finished run so the next line is treated as a new prompt."""
@@ -817,17 +902,29 @@ async def repl(
                 )
             )
 
+    set_ask_handler(ask_user)
     try:
         while True:
             await reap()
+            if ask_active.is_set():
+                # A pending ask (from inside the running agent) owns stdin.
+                await ask_active.wait()
+                continue
             try:
-                line = await read()
+                async with input_lock:
+                    if ask_active.is_set():
+                        line = None
+                    else:
+                        line = await read()
             except (EOFError, KeyboardInterrupt):
                 if run_task is not None:
                     agent.abort()
                     await asyncio.gather(run_task, return_exceptions=True)
                 print_fn("")
                 return 0
+            if line is None:
+                await ask_active.wait()
+                continue
 
             await reap()  # the run may have finished while the user was typing
             if not line.strip():
@@ -902,6 +999,7 @@ async def repl(
             else:
                 run_task = asyncio.create_task(agent.prompt(prompt_text))
     finally:
+        set_ask_handler(None)
         if run_task is not None:
             agent.abort()
             await asyncio.gather(run_task, return_exceptions=True)

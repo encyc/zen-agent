@@ -88,6 +88,8 @@ class ZenAgentApp(App):
         self.history = PromptHistory(history_path)
         self.exit_summary: str | None = None
         self._menus: dict[str, object] = {}
+        #: Serializes ask dialogs: one interactive question surface at a time.
+        self._ask_lock = asyncio.Lock()
         self._refresh_pending = False
         self._update_notice_shown = False
         self._hint_start = 0
@@ -135,6 +137,46 @@ class ZenAgentApp(App):
                 self.pop_screen()
             self.notify("approval timed out; denied", timeout=3)
             return "deny"
+
+    async def request_ask(self, questions: list[dict]) -> list[dict]:
+        """Handle one ``ask`` tool call: one framed dialog per question.
+
+        Returns the answer list the tool expects (``{"id": "selected"}``); an
+        empty list means the user dismissed the ask, and a shorter list means
+        they closed a later dialog. The tool call is blocked on this coroutine,
+        so the agent loop waits exactly like it does for an approval — the UI
+        itself stays responsive.
+        """
+        answers: list[dict] = []
+        # One interactive surface at a time: two parallel ask calls must not
+        # stack dialogs (the tool keeps the default parallel execution mode).
+        async with self._ask_lock:
+            for index, question in enumerate(questions, start=1):
+                selected = await self._ask_question(
+                    question, index=index, total=len(questions)
+                )
+                if selected is None:
+                    break
+                answers.append({"id": question["id"], "selected": list(selected)})
+        return answers
+
+    async def _ask_question(
+        self, question: dict, *, index: int, total: int
+    ) -> list[str] | None:
+        """Show one question; ``None`` means the user cancelled the ask."""
+        from zenagent.cli.tui.screens.modals import AskQuestion
+
+        screen = AskQuestion(question, index=index, total=total)
+        future: asyncio.Future[list[str] | None] = (
+            asyncio.get_running_loop().create_future()
+        )
+
+        def done(selection: list[str] | None) -> None:
+            if not future.done():
+                future.set_result(selection)
+
+        self.push_screen(screen, done)
+        return await future
 
     def action_quit_app(self) -> None:
         status = self.chat.status
@@ -191,6 +233,17 @@ class ZenAgentApp(App):
         self._refresh_status()
         self.query_one(PromptInput).focus()
         self._start_update_check()
+        # The ask tool is a static builtin: this mounted app is the interactive
+        # surface that answers it. Headless frontends simply leave it unset.
+        from zenagent.tools.ask import set_ask_handler
+
+        set_ask_handler(self.request_ask)
+
+    def on_unmount(self) -> None:
+        """Drop the ask handler so a later headless run degrades, not hangs."""
+        from zenagent.tools.ask import set_ask_handler
+
+        set_ask_handler(None)
 
     def _start_update_check(self) -> None:
         """Kick off the cached notice and background refresh; never break startup."""

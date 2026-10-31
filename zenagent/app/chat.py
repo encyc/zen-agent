@@ -60,6 +60,9 @@ class ChatController:
         self._notices: list[TranscriptNotice] = []
         #: Images attached with /image that will ride along with the next prompt.
         self._attachments: list[ImageContent] = []
+        #: Subagent spend/tokens accumulated from ``task`` tool results.
+        self._subagent_cost = 0.0
+        self._subagent_tokens = 0
         #: Latest canonical todo phases (``details["phases"]`` shape) for the
         #: HUD. Seeded from the current session's sidecar so resume/start shows
         #: the list before the first tool call of the restored transcript.
@@ -110,6 +113,8 @@ class ChatController:
             cwd=str(Path.cwd()),
             mode=self.runtime.mode,
             todos=self.todos,
+            subagent_cost=self._subagent_cost,
+            subagent_tokens=self._subagent_tokens,
         )
 
     # -- commands -----------------------------------------------------------
@@ -253,7 +258,10 @@ class ChatController:
         self._transcript = messages_to_views(self.runtime.agent.messages)
         self._cards.clear()
         self._current = None
-        # Switching sessions/compaction changes the sidecar the HUD reads.
+        # Switching sessions/compaction changes the sidecar the HUD reads and
+        # starts a fresh subagent-cost accounting bucket.
+        self._subagent_cost = 0.0
+        self._subagent_tokens = 0
         self._todos = load_todo_phases(self._session_path())
         self._notify()
 
@@ -267,6 +275,8 @@ class ChatController:
         if todo_tool is not None:
             todo_tool.clear()
         self._todos = []
+        self._subagent_cost = 0.0
+        self._subagent_tokens = 0
         self._notify()
 
     def retry(self) -> str | None:
@@ -405,6 +415,9 @@ class ChatController:
                 card.result_text = _result_text(event.result)
                 card.details = details
                 card.duration_ms = event.duration_ms
+            if event.tool_name == "task" and "subagent_cost" in details:
+                self._subagent_cost += float(details.get("subagent_cost") or 0.0)
+                self._subagent_tokens += int(details.get("subagent_tokens") or 0)
             if event.tool_name == "todo" and "phases" in details:
                 # The tool returns the canonical snapshot even for a rejected
                 # call, so the HUD always reflects the stored list.

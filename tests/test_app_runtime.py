@@ -123,3 +123,66 @@ async def test_two_runtimes_share_the_job_manager_until_the_last_closes(runtime_
 
     await second.close()
     assert get_job_manager() is not manager, "last close disposes the manager"
+
+
+# ---------------------------------------------------------------------------
+# v0.4.1: oversized tool results spill to the *current* session's artifacts
+# ---------------------------------------------------------------------------
+
+
+async def test_bootstrap_wires_an_artifact_sink(runtime_factory):
+    runtime = await runtime_factory()
+
+    assert callable(runtime.agent.artifact_sink)
+    path = runtime.agent.artifact_sink("bash", "payload")
+    assert path is not None
+    assert (
+        path.parent
+        == runtime.session.path.parent / "artifacts" / runtime.session.path.stem
+    )
+    assert path.read_text(encoding="utf-8") == "payload"
+
+
+async def test_artifact_sink_follows_the_session_switch(runtime_factory):
+    from zenagent.agent.session import unique_session_path
+
+    runtime = await runtime_factory()
+    first = runtime.agent.artifact_sink("bash", "from the first session")
+    assert first is not None
+    assert first.read_text(encoding="utf-8") == "from the first session"
+
+    new_path = unique_session_path()
+    await runtime.switch_session(new_path)
+    second = runtime.agent.artifact_sink("bash", "from the new session")
+
+    assert second is not None
+    assert second.parent == new_path.parent / "artifacts" / new_path.stem
+    assert second.read_text(encoding="utf-8") == "from the new session"
+
+
+async def test_assigning_the_session_directly_retargets_the_sink(runtime_factory):
+    """The TUI retry/compaction paths assign ``runtime.session`` directly."""
+    from zenagent.agent.session import Session, unique_session_path
+
+    runtime = await runtime_factory()
+    new_path = unique_session_path()
+    runtime.session = Session(new_path)
+
+    path = runtime.agent.artifact_sink("bash", "payload")
+    assert path is not None
+    assert path.parent == new_path.parent / "artifacts" / new_path.stem
+
+
+async def test_runtime_exposes_a_read_only_task_tool(runtime_factory):
+    runtime = await runtime_factory()
+    tools = {tool.name: tool for tool in runtime._base_tools}
+    assert "task" in tools and "todo" in tools
+    task = tools["task"]
+    assert task.approval == "read"
+    assert task.execution_mode == "sequential"
+    # The child tool set is the read-only allowlist, never the parent's writers.
+    from zenagent.tools.task import child_tool_names
+
+    child = child_tool_names(list(runtime._base_tools))
+    assert child <= {"read_file", "list_dir", "glob", "grep", "web_search", "fetch"}
+    assert "write_file" not in child and "bash" not in child

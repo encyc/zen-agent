@@ -6,7 +6,10 @@ before it is written back to the transcript:
   up one line at a time);
 - a result whose text payload exceeds ``MAX_RESULT_BYTES`` keeps its head and
   tail and gets one uniform truncation notice;
-- image blocks are preserved untouched.
+- image blocks are preserved untouched;
+- when a spill sink is supplied (v0.4.1), the *complete* text is saved first
+  and the notice points at the saved artifact, so the model can read back what
+  was truncated. A failed spill degrades to the plain truncation.
 
 The module deliberately does not import the loop at runtime (the loop imports
 this), so the result object is handled structurally.
@@ -14,6 +17,8 @@ this), so the result object is handled structurally.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from zenagent.types import ImageContent, TextContent
@@ -64,7 +69,9 @@ def _cap_long_lines(text: str) -> tuple[str, int]:
     return "\n".join(out), truncated
 
 
-def _truncate_bytes(text: str, total_bytes: int) -> str:
+def _truncate_bytes(
+    text: str, total_bytes: int, *, artifact: str = ""
+) -> str:
     """Keep the head and tail of ``text`` and mark the removed middle."""
     raw = text.encode("utf-8")
     head = raw[:HEAD_BYTES].decode("utf-8", "ignore")
@@ -73,13 +80,32 @@ def _truncate_bytes(text: str, total_bytes: int) -> str:
     notice = (
         f"\n\n… [truncated {removed} of {total_bytes} bytes: kept the first "
         f"{HEAD_BYTES} and last {TAIL_BYTES} (long lines trimmed); narrow the "
-        "tool call (read with offset/limit, or grep) for the rest] …\n\n"
+        "tool call (read with offset/limit, or grep) for the rest] …"
     )
-    return head + notice + tail
+    if artifact:
+        notice += f"\n[full output saved: {artifact}]"
+        if "\n" not in text:
+            notice += (
+                " (the artifact is one long line; use bash with sed/fold to "
+                "read a slice)"
+            )
+    return head + notice + "\n\n" + tail
 
 
-def apply_result_budget(result: ToolResultAgent) -> ToolResultAgent:
-    """Cap one tool result's text payloads; image blocks pass through."""
+def apply_result_budget(
+    result: ToolResultAgent,
+    *,
+    tool_name: str = "",
+    save_artifact: Callable[[str, str], Path | None] | None = None,
+) -> ToolResultAgent:
+    """Cap one tool result's text payloads; image blocks pass through.
+
+    ``save_artifact`` (``(tool_name, full_text) -> Path | None``) is the
+    v0.4.1 artifact sink: when the result is over budget the complete text is
+    handed to it first, and on success the truncation notice gains the saved
+    path plus ``details["artifact"]``. A None return or a raising sink keeps
+    today's plain truncation (spilling must never break a run).
+    """
     texts = [
         block.text for block in result.content if isinstance(block, TextContent)
     ]
@@ -97,10 +123,19 @@ def apply_result_budget(result: ToolResultAgent) -> ToolResultAgent:
         # compact `jq -c` output) that are small enough to keep whole.
         return result
 
+    artifact = ""
+    if save_artifact is not None:
+        try:
+            saved = save_artifact(tool_name, text)
+        except Exception:  # noqa: BLE001 - spilling is best effort, never fatal
+            saved = None
+        if saved is not None:
+            artifact = str(saved)
+
     budget: dict = {"truncated": True, "original_bytes": original_bytes}
     # Byte-budget first: a single overlong line must not swallow the head and
     # tail that make the truncation recoverable.
-    capped = _truncate_bytes(text, original_bytes)
+    capped = _truncate_bytes(text, original_bytes, artifact=artifact)
     capped, truncated_lines = _cap_long_lines(capped)
     if truncated_lines:
         budget["truncated_lines"] = truncated_lines
@@ -110,6 +145,8 @@ def apply_result_budget(result: ToolResultAgent) -> ToolResultAgent:
     ]
     details = dict(result.details)
     details["budget"] = budget
+    if artifact:
+        details["artifact"] = artifact
     # ``type(result)`` avoids importing the loop at module load time (it imports
     # us); the loop's contract is that a tool returns that dataclass, and using
     # the actual class keeps any subclass intact when it has the same fields.

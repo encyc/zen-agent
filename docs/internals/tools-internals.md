@@ -93,6 +93,36 @@ class ToolResultAgent:
 - 启用面：TUI 走 `Runtime.bootstrap` 注入；headless/REPL 绑定各自 session；
   RPC 无 JSONL 会话，用内存态。
 
+### 子代理（`task`）
+
+- `task(prompt, name?)` 只做**同步单发**：child = 新 `Agent`（同 model/stream、只读工具集
+  `read_file/list_dir/glob/grep/web_search/fetch`、独立 `ContextGuard`、不落 session），
+  父上下文只收到 `<task-result name status duration_ms cost tokens>…</task-result>` envelope。
+- 递归深度 1（child 看不到 `task`）；`approval="read"`、`execution_mode="sequential"`；
+  plan/ask 下可派只读子代理，child 不会弹审批。
+- child 失败/abort 不产生 is_error：envelope 的 `status=error|aborted|truncated` 描述原因；
+  `details` 带 `subagent_cost/subagent_tokens`，父的状态带与 telemetry 单独累计。
+- 已知限制：child 的中间事件不流式显示；child 不继承 `todo/skills`；成本只汇总不分模型。
+
+### 用户提问（`ask`）
+
+- 静态工具 `ask`（`tools/ask.py`，read 档）：`questions[]`（1–5 题、每题 2–6 选项）。
+- 交互由前端 handler 决定：TUI 在 mount 时注册 `set_ask_handler`（framed DialogScreen，数字键/点击，
+  `multi` 可多选，Esc 取消）；REPL 注册终端问答；headless/RPC 无 handler → 非 error 降级
+  （"continue with the most conservative option"）。
+- 答案返回 `details["answers"]=[{id, selected, custom?}]`：handler 返回的 label 必须属于该题选项，
+  单选只保留第一个；等待与 run abort 赛跑（abort 时返回"按最保守选项继续"的非 error 结果）。
+  无 free-text "Other"（schema 预留 custom）。
+
+### artifact 落盘
+
+- 结果预算截断超过 40KB 的结果时，完整文本先写入
+  `<session 目录>/artifacts/<session stem>/<tool>-NNNN.txt`（原子写，失败降级纯截断），
+  notice 追加 `[full output saved: <path>]`，`details["artifact"]` 给 UI；
+  `read_file` 可按 offset/limit 回读。
+- 保留策略：每 session 64 个文件 / 8 MiB，超限删最旧；单文件超过总预算则拒绝保存。
+- `task` 的 child 与父共用当前 session 的 sink（fork/compact 后随 session 重定向）。
+
 ### 后台作业（`bash async` + `wait`）
 
 - `bash` 的 `async: true` 会通过 `tools/jobs.py` 的 `JobManager` 启动后台作业并立即返回

@@ -36,6 +36,7 @@ import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from zenagent.agent.result_budget import apply_result_budget
 from zenagent.agent.timeouts import effective_timeout
@@ -163,6 +164,10 @@ class AgentConfig:
     max_cost: float | None = None
     #: Extra attempts for transient assistant-call failures (0 -> no retry).
     retries: int = 0
+    #: Optional artifact spill sink for oversized tool results: called as
+    #: ``sink(tool_name, full_text)`` and returns the saved path (or None when
+    #: spilling failed). None keeps the plain truncation behavior.
+    artifact_sink: Callable[[str, str], Path | None] | None = None
 
 
 @dataclass
@@ -177,6 +182,9 @@ class AgentState:
 
     messages: list[Message] = field(default_factory=list)
     termination: str | None = None
+    #: Spend attributed to subagents this run (counted by the cost guard but
+    #: not by the parent transcript's own usage).
+    subagent_spend: float = 0.0
 
 
 @dataclass
@@ -359,8 +367,11 @@ async def _execute_tool(
 
     # Safety net above the per-tool caps: every result — including MCP and
     # extension tools that enforce no cap of their own — gets the same byte
-    # budget and truncation notice before it enters the transcript.
-    result = apply_result_budget(result)
+    # budget and truncation notice before it enters the transcript. The spill
+    # sink (when configured) saves the full text so the model can read it back.
+    result = apply_result_budget(
+        result, tool_name=call.name, save_artifact=config.artifact_sink
+    )
 
     duration_ms = round((time.monotonic() - started) * 1000)
     return _ToolOutcome(call=call, result=result, duration_ms=duration_ms)
@@ -519,7 +530,8 @@ async def agent_loop(
                 # A pathological model loop, or the caller's explicit cap.
                 termination = "max_turns"
                 break
-            if config.max_cost is not None and _run_cost(new_messages) > config.max_cost:
+            run_spend = _run_cost(new_messages) + state.subagent_spend
+            if config.max_cost is not None and run_spend > config.max_cost:
                 # Budget already spent: finish here rather than open a new turn,
                 # so the transcript keeps every tool call paired with a result.
                 termination = "max_cost"
@@ -654,6 +666,12 @@ async def agent_loop(
                 stats["calls"] += 1
                 stats["errors"] += int(bool(outcome.result.is_error))
                 stats["ms"] += outcome.duration_ms
+                try:
+                    state.subagent_spend += float(
+                        (outcome.result.details or {}).get("subagent_cost") or 0.0
+                    )
+                except (TypeError, ValueError):  # pragma: no cover - defensive
+                    pass
                 yield AgentEvent(
                     type="tool_execution_end",
                     tool_call_id=outcome.call.id,

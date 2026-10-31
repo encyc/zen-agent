@@ -80,3 +80,35 @@ async def test_metrics_recorder_captures_tool_stats():
     metrics = recorder.build("stop")
     assert metrics.tools["bash"]["calls"] == 2
     assert metrics.tools["bash"]["errors"] == 1
+
+
+def test_metrics_recorder_records_subagent_cost_from_task_results():
+    from zenagent.agent.loop import ToolResultAgent
+    from zenagent.events import AgentEvent
+    from zenagent.telemetry import MetricsRecorder
+    from zenagent.types import TextContent
+
+    recorder = MetricsRecorder("m")
+    task_result = ToolResultAgent(
+        content=[TextContent(text="<task-result …>")],
+        details={"subagent_cost": 0.02, "subagent_tokens": 1234},
+    )
+    recorder(
+        AgentEvent(
+            type="tool_execution_end",
+            tool_call_id="t1",
+            tool_name="task",
+            result=task_result,
+        )
+    )
+    recorder(
+        AgentEvent(
+            type="tool_execution_end",
+            tool_call_id="t2",
+            tool_name="task",
+            result=task_result,
+        )
+    )
+    metrics = recorder.build("stop")
+    assert metrics.subagent_cost == 0.04
+    assert metrics.subagent_tokens == 2468

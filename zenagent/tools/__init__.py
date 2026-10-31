@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from zenagent.tools.ask import ASK
 from zenagent.tools.bash import BASH
 from zenagent.tools.fs import EDIT_FILE, LIST_DIR, READ_FILE, WRITE_FILE
 from zenagent.tools.search import GLOB, GREP
@@ -13,6 +14,7 @@ from zenagent.tools.web import FETCH, WEB_SEARCH
 
 __all__ = [
     "ALL_TOOLS",
+    "ASK",
     "BASH",
     "EDIT_FILE",
     "FETCH",
@@ -33,6 +35,7 @@ ALL_TOOLS = [
     LIST_DIR,
     BASH,
     WAIT,
+    ASK,
     GLOB,
     GREP,
     WEB_SEARCH,

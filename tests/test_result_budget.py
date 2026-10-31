@@ -8,6 +8,8 @@ call it after the tool (and after ``after_tool_call``) without side effects.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from zenagent.agent.loop import ToolResultAgent
 from zenagent.agent.result_budget import (
     MAX_RESULT_BYTES,
@@ -143,3 +145,127 @@ def test_error_kind_survives_budgeting():
     )
     budgeted = apply_result_budget(result)
     assert budgeted.error_kind == "timeout"
+
+
+# ---------------------------------------------------------------------------
+# v0.4.1: spill the full payload to an artifact before truncating it
+# ---------------------------------------------------------------------------
+
+
+def _recording_sink(path):
+    calls: list[tuple[str, str]] = []
+
+    def sink(tool_name: str, text: str):
+        calls.append((tool_name, text))
+        return path
+
+    return sink, calls
+
+
+def test_over_budget_result_is_saved_before_truncation_and_points_at_the_file(
+    tmp_path,
+):
+    text = "HEAD-" + ("x" * 100_000) + "-TAIL"
+    artifact = tmp_path / "artifacts" / "bash-1.txt"
+    sink, calls = _recording_sink(artifact)
+
+    budgeted = apply_result_budget(
+        _text_result(text), tool_name="bash", save_artifact=sink
+    )
+
+    # The sink receives the COMPLETE payload, not the truncated view.
+    assert calls == [("bash", text)]
+    rendered = _all_text(budgeted)
+    assert f"[full output saved: {artifact}]" in rendered
+    assert rendered.startswith("HEAD-") and rendered.endswith("-TAIL")
+    assert "truncated" in rendered
+    assert budgeted.details["artifact"] == str(artifact)
+    assert budgeted.details["budget"]["truncated"] is True
+
+
+def test_sink_returning_none_degrades_to_plain_truncation():
+    text = "HEAD-" + ("x" * 100_000) + "-TAIL"
+    budgeted = apply_result_budget(
+        _text_result(text),
+        tool_name="bash",
+        save_artifact=lambda tool_name, full_text: None,
+    )
+
+    rendered = _all_text(budgeted)
+    assert "truncated" in rendered
+    assert "full output saved" not in rendered
+    assert budgeted.details.get("artifact") is None
+    assert budgeted.details["budget"]["truncated"] is True
+
+
+def test_sink_exception_degrades_to_plain_truncation():
+    text = "HEAD-" + ("x" * 100_000) + "-TAIL"
+
+    def broken_sink(tool_name, full_text):
+        raise RuntimeError("disk exploded")
+
+    budgeted = apply_result_budget(
+        _text_result(text), tool_name="bash", save_artifact=broken_sink
+    )
+
+    assert "full output saved" not in _all_text(budgeted)
+    assert budgeted.details.get("artifact") is None
+    assert budgeted.details["budget"]["truncated"] is True
+
+
+def test_under_budget_result_is_never_saved():
+    sink, calls = _recording_sink(Path("/tmp/never-used.txt"))
+    budgeted = apply_result_budget(
+        _text_result("small enough"), tool_name="bash", save_artifact=sink
+    )
+
+    assert calls == []
+    assert _all_text(budgeted) == "small enough"
+    assert budgeted.details.get("artifact") is None
+
+
+def test_multiple_text_blocks_are_saved_joined_as_one_payload(tmp_path):
+    first = "a" * (MAX_RESULT_BYTES // 2 + 1)
+    second = "b" * (MAX_RESULT_BYTES // 2 + 1)
+    result = ToolResultAgent(
+        content=[TextContent(text=first), TextContent(text=second)]
+    )
+    sink, calls = _recording_sink(tmp_path / "artifact.txt")
+
+    apply_result_budget(result, tool_name="mcp__files__read", save_artifact=sink)
+
+    assert len(calls) == 1
+    assert calls[0][0] == "mcp__files__read"
+    assert calls[0][1] == first + "\n" + second
+
+
+def test_already_budgeted_result_is_not_saved_again(tmp_path):
+    text = "z" * (MAX_RESULT_BYTES + 1)
+    first_sink, first_calls = _recording_sink(tmp_path / "first.txt")
+    second_sink, second_calls = _recording_sink(tmp_path / "second.txt")
+
+    once = apply_result_budget(_text_result(text), tool_name="bash", save_artifact=first_sink)
+    twice = apply_result_budget(once, tool_name="bash", save_artifact=second_sink)
+
+    assert len(first_calls) == 1
+    assert second_calls == []
+    assert _all_text(twice) == _all_text(once)
+    assert twice.details["artifact"] == str(tmp_path / "first.txt")
+
+
+def test_single_line_artifact_notice_explains_how_to_slice_it(tmp_path):
+    saved: list[str] = []
+
+    def sink(tool_name: str, text: str):
+        saved.append(text)
+        return tmp_path / "artifact.txt"
+
+    result = apply_result_budget(
+        _text_result("z" * (MAX_RESULT_BYTES + 10)),
+        tool_name="bash",
+        save_artifact=sink,
+    )
+    rendered = _all_text(result)
+    assert saved and len(saved[0]) == MAX_RESULT_BYTES + 10
+    assert "one long line" in rendered
+    assert "sed/fold" in rendered

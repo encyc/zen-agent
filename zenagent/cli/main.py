@@ -23,6 +23,7 @@ from pathlib import Path
 
 from zenagent import __version__
 from zenagent.agent import Agent
+from zenagent.agent.artifacts import build_artifact_sink
 from zenagent.agent.session import (
     Session,
     latest_session,
@@ -66,6 +67,7 @@ from zenagent.skills import (
 )
 from zenagent.telemetry import MetricsRecorder, append_metrics
 from zenagent.tools import ALL_TOOLS
+from zenagent.tools.task import build_task_tool
 from zenagent.tools.todo import build_todo_tool
 from zenagent.trace import TraceRecorder
 from zenagent.types import AssistantMessage, ImageContent, Message
@@ -291,7 +293,8 @@ async def run_headless(
         if part
     )
     # Open the session before the agent is built: the todo tool is per-session
-    # state bound to a sidecar next to the JSONL.
+    # state bound to a sidecar next to the JSONL, and oversized tool results
+    # spill next to the same session.
     if resume is not None:
         path = latest_session() if resume == "latest" else Path(resume)
         if path is not None and path.is_file():
@@ -303,6 +306,17 @@ async def run_headless(
         session = Session(unique_session_path())
     if tools is None:
         tool_list.append(build_todo_tool(session.path))
+        tool_list.append(
+            build_task_tool(
+                model=model,
+                base_tools=list(ALL_TOOLS),
+                api_key=api_key,
+                stream_fn=stream_fn,
+                thinking=thinking,
+                artifact_sink=build_artifact_sink(session.path),
+                max_cost=max_cost,
+            )
+        )
 
     guard = ContextGuard(model.context_window)
     agent = _build_agent(
@@ -319,6 +333,9 @@ async def run_headless(
         context_files=context_files,
         extra_prompt=extra_prompt,
     )
+    # Wire the spill sink after the build seam so tests that replace
+    # ``_build_agent`` keep working; the loop reads it when a run starts.
+    agent.artifact_sink = build_artifact_sink(session.path)
 
     if resume is not None:
         loaded = session.load()
