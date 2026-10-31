@@ -191,6 +191,8 @@ class Sidebar(VerticalScroll):
 
     def __init__(self) -> None:
         super().__init__(id="sidebar")
+        #: Filled from the app on every repaint; drag width - chrome.
+        self._content_width = _CONTENT_WIDTH
         self._on_todo_click: Callable[[], None] | None = None
         self._on_subagent_click: Callable[[str], None] | None = None
         self._on_job_click: Callable[[str], None] | None = None
@@ -245,27 +247,33 @@ class Sidebar(VerticalScroll):
                 return section
         raise AssertionError(f"sidebar has no {title!r} section")
 
-    def refresh_contents(self, chat, models) -> None:
+    def refresh_contents(self, chat, models, *, width: int | None = None) -> None:
         """Repaint every section from the one status snapshot.
 
         Reads only the snapshot: ``SessionManager.current()`` eagerly touches
         the session file, and a repaint must never resurrect a deleted one.
         """
+        if width is not None:
+            # 1 border + 2+2 padding are chrome, not content.
+            self._content_width = max(12, int(width) - 5)
         status = chat.status
+
+        def fit(value: str) -> str:
+            return _clip(value, self._content_width)
 
         self._section("Session").set_rows(
             [
-                ("name", Text(_clip(status.session_name), style=_TEXT)),
+                ("name", Text(fit(status.session_name), style=_TEXT)),
                 ("messages", Text(f"{len(chat.transcript)} messages", style=_MUTED)),
             ]
         )
         self._section("Model").set_rows(
             [
-                ("model", Text(_clip(status.model_id), style=_ACCENT)),
+                ("model", Text(fit(status.model_id), style=_ACCENT)),
                 (
                     "context",
                     Text(
-                        _clip(f"ctx {status.context_used}/{status.context_window}"),
+                        fit(f"ctx {status.context_used}/{status.context_window}"),
                         style=_MUTED,
                     ),
                 ),
@@ -278,7 +286,7 @@ class Sidebar(VerticalScroll):
                 (
                     "queue",
                     Text(
-                        _clip(
+                        fit(
                             f"queued {status.follow_ups} · steer {status.steering}"
                         ),
                         style=_MUTED,
@@ -290,7 +298,7 @@ class Sidebar(VerticalScroll):
 
         report = status.context
         if report is not None and report.slices:
-            self._section("Context").set_rows(_context_rows(report))
+            self._section("Context").set_rows(_context_rows(report, self._content_width))
         else:
             self._section("Context").set_rows([])
 
@@ -307,7 +315,7 @@ class Sidebar(VerticalScroll):
             todo_rows.append(
                 (
                     f"phase:{phase_index}",
-                    Text(_clip(f"{name} {closed}/{len(tasks)}"), style=phase_style),
+                    Text(fit(f"{name} {closed}/{len(tasks)}"), style=phase_style),
                 )
             )
             for task_index, task in enumerate(tasks):
@@ -317,7 +325,7 @@ class Sidebar(VerticalScroll):
                 )
                 label = f"{mark} {task.get('content') or ''}"
                 todo_rows.append(
-                    (f"task:{phase_index}:{task_index}", Text(_clip(label), style=color))
+                    (f"task:{phase_index}:{task_index}", Text(fit(label), style=color))
                 )
         self._section("Todo").set_rows(todo_rows)
 
@@ -326,7 +334,7 @@ class Sidebar(VerticalScroll):
             mark = _SUBAGENT_MARKS.get(view.status, "•")
             label = f"{mark} {view.name} {_seconds(view.duration_ms / 1000)}"
             style = palette.STATE_COLORS.get(view.status, _TEXT)
-            subagents.append((view.call_id, Text(_clip(label), style=style)))
+            subagents.append((view.call_id, Text(fit(label), style=style)))
         self._section("Subagent").set_rows(subagents)
 
         jobs = []
@@ -340,7 +348,7 @@ class Sidebar(VerticalScroll):
             )
             label = f"{mark} {job.id} {_seconds(elapsed)}"
             style = palette.STATE_COLORS.get(job.status, _MUTED)
-            jobs.append((job.id, Text(_clip(label), style=style)))
+            jobs.append((job.id, Text(fit(label), style=style)))
         self._section("Jobs").set_rows(jobs)
 
     def apply_width(self, width: int) -> bool:
@@ -348,7 +356,7 @@ class Sidebar(VerticalScroll):
         return width >= NARROW_WIDTH
 
 
-def _context_rows(report) -> list[tuple[str, Text | str]]:
+def _context_rows(report, width: int) -> list[tuple[str, Text | str]]:
     """Total line, a 20-cell stacked bar and the two biggest slices."""
     window = report.window
     pct = report.total_tokens / window * 100.0 if window else 0.0
@@ -361,13 +369,13 @@ def _context_rows(report) -> list[tuple[str, Text | str]]:
         f"{_SHORT_SLICES.get(item.id, item.id)} {item.pct:.0f}%" for item in biggest
     )
     return [
-        ("ctx-total", Text(_clip(total_line), style=_TEXT)),
-        ("ctx-bar", _context_bar(report)),
-        ("ctx-top", Text(_clip(top), style=_MUTED)),
+        ("ctx-total", Text(_clip(total_line, width), style=_TEXT)),
+        ("ctx-bar", _context_bar(report, max(6, width - 2))),
+        ("ctx-top", Text(_clip(top, width), style=_MUTED)),
     ]
 
 
-def _context_bar(report, width: int = _CONTENT_WIDTH - 2) -> Text:
+def _context_bar(report, width: int) -> Text:
     """A stacked bar of the slices, filling exactly ``width`` cells."""
     text = Text()
     remaining = width

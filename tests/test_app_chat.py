@@ -785,7 +785,7 @@ async def test_status_exposes_a_context_composition_report(runtime_factory):
     report = chat.status.context
 
     assert report is not None
-    assert report.total_tokens == chat.status.context_used
+    assert report.total_tokens == report.prompt_tokens, "no usage yet: total is the estimate"
     assert report.window == runtime.agent.model.context_window
     assert report.measured is False, "no provider usage yet"
     ids = {item.id for item in report.slices}

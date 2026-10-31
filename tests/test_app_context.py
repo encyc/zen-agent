@@ -78,7 +78,7 @@ def test_missing_usage_is_marked_as_estimated():
     report = _build(last_usage=None)
 
     assert report.measured is False
-    assert report.total_tokens == 500
+    assert report.total_tokens == report.prompt_tokens
 
 
 def test_missing_prompt_report_still_reports_tools_and_session():
@@ -113,3 +113,14 @@ def test_public_text_estimator_matches_the_fitting_heuristic():
 
     assert estimate_text_tokens("a" * 400) == 100
     assert estimate_text_tokens("中文" * 10) > 20  # CJK chars cost ~1 token each
+
+
+def test_unmeasured_total_is_the_estimate_not_cumulative_usage():
+    # A resumed 20-turn session: context_used falls back to cumulative usage,
+    # which is not a context size. Without usage the total must be the estimate.
+    report = _build(last_usage=None, context_used=400_000)
+
+    assert report.measured is False
+    assert report.total_tokens == report.prompt_tokens
+    assert report.total_tokens < 400_000
+    assert 99.0 <= sum(item.pct for item in report.slices) <= 101.0

@@ -392,3 +392,28 @@ async def test_clicking_a_todo_row_opens_the_detail_overlay(fake_runtime):
         await pilot.pause()
 
         assert isinstance(app.screen, TodoListScreen)
+
+
+async def test_sidebar_rows_widen_when_the_panel_is_dragged(fake_runtime):
+    long_item = "read a very long todo item that will not fit in the default sidebar width at all"
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        await open_sidebar(app, pilot)
+        app.chat._on_event(
+            todo_event(
+                [{"name": "Explore", "tasks": [{"content": long_item, "status": "pending"}]}]
+            )
+        )
+        app._refresh_status()
+        await pilot.pause()
+        narrow = next(row.plain for row in section(app, "Todo").query(SidebarRow) if row.key == "task:0:0")
+
+        app.resize_sidebar(79)  # 140 - 79 - 1 = 60 wide sidebar
+        await pilot.pause()
+        app._refresh_status()
+        await pilot.pause()
+        wide = next(row.plain for row in section(app, "Todo").query(SidebarRow) if row.key == "task:0:0")
+
+        assert len(wide) > len(narrow) + 20
+        assert wide.endswith("…"), "rows still clip, but to the real content width"

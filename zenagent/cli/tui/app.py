@@ -405,7 +405,9 @@ class ZenAgentApp(App):
             else:
                 self._job_log_screen.set_view(view)
         for sidebar in self.query(Sidebar):
-            sidebar.refresh_contents(self.chat, self.models)
+            sidebar.refresh_contents(
+                self.chat, self.models, width=self._sidebar_width
+            )
         self._sync_chrome(status)
         self._sync_work_timer(status)
 

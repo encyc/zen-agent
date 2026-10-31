@@ -83,8 +83,12 @@ def build_context_report(
     context_used: int,
     window: int,
 ) -> ContextReport:
-    """Split the current context into labelled slices (see module docstring)."""
-    total = max(0, int(context_used or 0))
+    """Split the current context into labelled slices (see module docstring).
+
+    The total is the provider-measured prompt size when usage exists, otherwise
+    the sum of the estimates: a resumed session carries cumulative usage totals,
+    which are not a context size and must never become the denominator.
+    """
     window = max(0, int(window or 0))
     measured = last_usage is not None
 
@@ -119,6 +123,7 @@ def build_context_report(
             entries.append((group_id, label, 0, estimate))
 
     estimate_sum = sum(entry[3] for entry in entries)
+    total = max(0, int(context_used or 0)) if measured else estimate_sum
     slices: list[ContextSlice] = []
 
     if total <= 0:
@@ -127,8 +132,6 @@ def build_context_report(
             for group_id, label, size, estimate in entries
         ]
     elif estimate_sum > total:
-        # Estimates overshoot the measured total: scale them so the bar is
-        # honest instead of inventing a negative "other" row.
         scale = total / estimate_sum
         scaled = [
             [group_id, label, size, int(estimate * scale)]
@@ -136,7 +139,6 @@ def build_context_report(
         ]
         used = sum(row[3] for row in scaled)
         if scaled and used < total:
-            # Rounding crumbs go to the largest row so the bar still sums to 100%.
             biggest = max(range(len(scaled)), key=lambda index: scaled[index][3])
             scaled[biggest][3] += total - used
         slices = [
