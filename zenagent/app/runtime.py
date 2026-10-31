@@ -142,6 +142,9 @@ class Runtime:
         self.artifact_sink = build_artifact_sink(session.path)
         if self.todo_tool is not None:
             self.todo_tool.bind_session(session.path)
+        task_tool = getattr(self, "task_tool", None)
+        if task_tool is not None:
+            task_tool.bind_session(session.path)
         agent = getattr(self, "agent", None)
         if agent is not None:
             agent.artifact_sink = self.artifact_sink

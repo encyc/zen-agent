@@ -266,3 +266,52 @@ async def test_pinned_sessions_sort_first(session_runtime):
     entries = manager.entries()
     assert entries[0].path == first and entries[0].pinned is True
     assert entries[1].pinned is False
+
+
+async def test_fork_carries_subagent_transcripts(session_runtime):
+    from zenagent.agent.subagents import SubagentStore, task_dir
+
+    runtime = session_runtime
+    manager = SessionManager(runtime)
+    original = manager.current()
+    store = SubagentStore(original)
+    store.begin("c1", "research", "m")
+    store.finish("c1", status="ok", duration_ms=1, cost=0.0, tokens=0)
+
+    forked = await manager.fork()
+
+    assert (task_dir(forked) / "c1.jsonl").is_file()
+    assert store.load("c1") is not None
+
+
+async def test_undo_carries_subagent_transcripts(session_runtime):
+    from zenagent.agent.subagents import SubagentStore, task_dir
+
+    runtime = session_runtime
+    manager = SessionManager(runtime)
+    store = SubagentStore(manager.current())
+    store.begin("c1", "research", "m")
+    store.finish("c1", status="ok", duration_ms=1, cost=0.0, tokens=0)
+    await runtime.agent.prompt("hello")
+
+    result = manager.undo()
+
+    assert result is not None
+    _dropped, new_path = result
+    assert (task_dir(new_path) / "c1.jsonl").is_file()
+
+
+async def test_delete_trashes_subagent_transcripts(session_runtime):
+    from zenagent.agent.subagents import SubagentStore, task_dir
+
+    runtime = session_runtime
+    manager = SessionManager(runtime)
+    path = manager.current()
+    store = SubagentStore(path)
+    store.begin("c1", "research", "m")
+    store.finish("c1", status="ok", duration_ms=1, cost=0.0, tokens=0)
+
+    manager.delete(path)
+
+    assert not task_dir(path).exists()
+    assert (path.parent / ".trash" / f"{path.stem}.tasks").is_dir()

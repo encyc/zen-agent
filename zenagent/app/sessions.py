@@ -25,6 +25,7 @@ from zenagent.agent.session import (
     truncate_last_turn,
     unique_session_path,
 )
+from zenagent.agent.subagents import carry_task_dir, trash_task_dir
 from zenagent.app.runtime import Runtime
 from zenagent.export import export_session
 
@@ -189,10 +190,13 @@ class SessionManager:
     async def fork(self) -> Path:
         """Copy the current transcript into a new session and switch to it."""
         self._touch_project_meta()
-        messages = Session(self.current()).load()
+        source = self.current()
+        messages = Session(source).load()
         target = Session(unique_session_path("fork"))
         for message in messages:
             target.append(message)
+        # Historical subagent transcripts follow the history they describe.
+        carry_task_dir(source, target.path)
         await self.runtime.switch_session(target.path)
         return target.path
 
@@ -213,7 +217,10 @@ class SessionManager:
         if dropped == 0:
             return None
         self.runtime.agent.replace_messages(truncated)
-        new_path = Session(self.current()).rewrite(truncated)
+        source = self.current()
+        new_path = Session(source).rewrite(truncated)
+        # The truncated history keeps its subagent transcripts.
+        carry_task_dir(source, new_path)
         self.runtime.session = Session(new_path)
         return dropped, new_path
 
@@ -226,6 +233,7 @@ class SessionManager:
         if destination.exists():
             destination = trash / f"{target.stem}-{time.strftime('%H%M%S')}.jsonl"
         target.replace(destination)
+        trash_task_dir(target, trash)
         if self.runtime.session.path == target:
             self.runtime.session = Session(unique_session_path())
             self.runtime.agent.replace_messages([])

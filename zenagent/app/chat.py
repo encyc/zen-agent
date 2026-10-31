@@ -7,6 +7,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from zenagent.agent.subagents import carry_task_dir
 from zenagent.app.compact import compact, should_auto_compact
 from zenagent.app.retry import prepare_retry
 from zenagent.app.runtime import Runtime
@@ -265,7 +266,10 @@ class ChatController:
         if not self.runtime.agent.messages:
             return None
         before = self._before_tokens()
+        old_path = self.runtime.session.path
         path = await compact(self.runtime.agent)
+        # Compaction continues the same work: keep its subagent transcripts.
+        carry_task_dir(old_path, path)
         # Compaction continues the same work: carry the todo checklist over.
         await self.runtime.switch_session(path, carry_todos=True)
         self.reload_transcript()
@@ -305,10 +309,12 @@ class ChatController:
         """
         if self._running:
             return None
+        old_path = self.runtime.session.path
         prepared = prepare_retry(self.runtime.agent, self.runtime.session)
         if prepared is None:
             return None
         text, new_session = prepared
+        carry_task_dir(old_path, new_session.path)
         self.runtime.session = new_session
         todo_tool = getattr(self.runtime, "todo_tool", None)
         if todo_tool is not None:
