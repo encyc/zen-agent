@@ -4,7 +4,7 @@
 
 **Goal:** 给 ZenAgent 一套单一颜色 token 源，TUI 与 REPL 都从它派生，支持 `auto|dark|light` 三态、即时切换、`--theme`/`/theme`/设置面板三处可改，并把所有散落 hex 收进 token 源。
 
-**Architecture:** 新增 `zenagent/cli/appearance.py`（无 UI 依赖的 token 源 + 自动探测）。TUI 由 `zenagent/cli/tui/app_theme.py` 把它翻译成两个 Textual Theme（`harbor-dark`/`harbor-light`），`theme.tcss` 与各 widget 的 `DEFAULT_CSS` 全部改用 CSS 变量；`zenagent/cli/tui/palette.py` 改成按当前外观动态取色（模块 `__getattr__` + 实时 Mapping）。REPL 的 rich 主题由 `cli/theme.py::theme_from_appearance` 从同一套 token 派生，旧的 `mono`/`solarized`/JSON 主题保留为 legacy。切换主题时 CSS 由 Textual 自动重算，Rich 文本走一次显式重建（`transcript.reset()+sync()`）。
+**Architecture:** 新增 `zenagent/app/appearance.py`（无 UI 依赖的 token 源 + 自动探测）。TUI 由 `zenagent/cli/tui/app_theme.py` 把它翻译成两个 Textual Theme（`harbor-dark`/`harbor-light`），`theme.tcss` 与各 widget 的 `DEFAULT_CSS` 全部改用 CSS 变量；`zenagent/cli/tui/palette.py` 改成按当前外观动态取色（模块 `__getattr__` + 实时 Mapping）。REPL 的 rich 主题由 `cli/theme.py::theme_from_appearance` 从同一套 token 派生，旧的 `mono`/`solarized`/JSON 主题保留为 legacy。切换主题时 CSS 由 Textual 自动重算，Rich 文本走一次显式重建（`transcript.reset()+sync()`）。
 
 **Tech Stack:** Python 3.11+、Textual 8.2.8（`Theme`/`register_theme`/CSS 变量）、rich（`cell_len`、`Style`）、pytest + Textual `run_test()`。
 
@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - 无新依赖；只用 stdlib + 现有 `textual`/`rich`。
-- `zenagent/app/*` 不得 import textual/rich；`zenagent/cli/appearance.py` 也不得 import textual/rich。
+- `zenagent/app/*` 不得 import textual/rich；`zenagent/app/appearance.py` 也不得 import textual/rich。
 - 默认外观必须与现在完全一致：dark 的 token 值就是当前 `palette.py`/`theme.tcss` 里的 hex。
 - 默认 locale/语言行为不受本计划影响；i18n 是后续独立计划。
 - 每个 task 结束必须跑该 task 的测试 + `bash scripts/check.sh`（ruff + 全量 offline pytest）。
@@ -34,7 +34,7 @@
 ### Task 1: appearance token 源
 
 **Files:**
-- Create: `zenagent/cli/appearance.py`
+- Create: `zenagent/app/appearance.py`
 - Test: `tests/test_appearance.py`
 
 **Interfaces:**
@@ -133,7 +133,7 @@ def test_light_text_colours_meet_contrast_on_surface():
 Run: `.venv/bin/python -m pytest tests/test_appearance.py -q`
 Expected: FAIL (`ModuleNotFoundError: zenagent.cli.appearance`)
 
-- [ ] **Step 3: Implement `zenagent/cli/appearance.py`**
+- [ ] **Step 3: Implement `zenagent/app/appearance.py`**
 
 `resolve_theme` 语义：`flag` 与 `pref` 依次尝试，第一个非空值被解析；`auto`/空/缺省 → `detect_dark()`；`dark`/`light` 直接取表；其他值 → `warnings.append(f"unknown theme {raw!r} (choose auto|dark|light); using auto")` 后按 auto 处理。`detect_dark` 取 `COLORFGBG` 最后一个 `;` 分段当背景索引，`< 8` → dark，其他/缺失/非法 → dark。模块 docstring 说明"TUI/REPL 唯一颜色来源"。
 
@@ -145,7 +145,7 @@ Run: `bash scripts/check.sh` → 全绿
 - [ ] **Step 5: Commit**
 
 ```bash
-git add zenagent/cli/appearance.py tests/test_appearance.py
+git add zenagent/app/appearance.py tests/test_appearance.py
 git commit -m "feat(cli): appearance token source with dark/light and auto detection"
 ```
 

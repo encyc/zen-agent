@@ -6,7 +6,7 @@
 
 相关：`zenagent/cli/tui/{app.py,theme.tcss,palette.py,widgets/*,screens/*,status/segments.py}`、
 `zenagent/cli/{theme.py,repl.py,main.py}`、`zenagent/app/{commands.py,permissions.py,slash_args.py,chat.py,views.py,runtime.py}`、
-`zenagent/settings.py`、新增 `zenagent/cli/appearance.py`、新增 `zenagent/i18n/{__init__,en,zh}.py`、
+`zenagent/settings.py`、新增 `zenagent/app/appearance.py`、新增 `zenagent/i18n/{__init__,en,zh}.py`、
 新增 `zenagent/cli/tui/textutil.py`
 参考：omp 的 theme / settings 体系（`/tmp/oh-my-pi/docs/{theme,settings}.md`）、Textual 8.2.8 的 theme API。
 
@@ -110,7 +110,7 @@ i18n 则是空白：CLI + app 层约有 **820 条**候选界面文案（启发�
 
 ### 5.1 外观与 token 源
 
-新增 `zenagent/cli/appearance.py`（无 UI 依赖，TUI/REPL/CLI 共用）：
+新增 `zenagent/app/appearance.py`（无 UI 依赖，TUI/REPL/CLI 共用）：
 
 ```python
 @dataclass(frozen=True)

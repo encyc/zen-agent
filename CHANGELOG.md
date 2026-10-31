@@ -42,6 +42,19 @@ matches the release tag; older history is in the repository tags and commits.
 1487 offline tests; `bash scripts/check.sh` clean and packaging verified with
 `scripts/release-check.sh`.
 
+## Unreleased
+
+### Added
+
+- **Dark/light appearance (`theme = auto|dark|light`)**: one colour-token
+  source (`zenagent/app/appearance.py`) now feeds the TUI (two registered
+  Textual themes plus CSS variables, with the Rich palette bound at runtime),
+  the REPL renderer, and `--theme`. `/theme` and `/settings → Theme…` switch
+  live: CSS repaints and the transcript/status band rebuild from the same
+  tokens, without interrupting a running turn. `auto` follows the terminal
+  through `COLORFGBG` and falls back to dark. Legacy REPL themes
+  (`default|mono|solarized|<path.json>`) keep working, REPL-only.
+
 ## v0.4.4 — 2026-10-31
 
 ### Added
