@@ -21,7 +21,12 @@ import importlib.metadata
 import json
 import os
 import re
+import sys
+import time
+from collections.abc import Awaitable, Callable
 from pathlib import Path
+
+import httpx
 
 __all__ = [
     "CACHE_TTL_S",
@@ -29,9 +34,15 @@ __all__ = [
     "REQUEST_TIMEOUT_S",
     "cache_path",
     "compare_versions",
+    "fetch_latest",
+    "format_notice",
     "installed_version",
     "is_disabled",
+    "mark_notified",
+    "pending_notice",
     "read_cache",
+    "refresh",
+    "upgrade_command",
 ]
 
 #: The only version source; ``info.version`` is the published release.
@@ -178,3 +189,108 @@ def installed_version() -> str | None:
     if _editable(dist):
         return None
     return dist.version
+
+
+def _update_cache(**updates: object) -> None:
+    """Merge ``updates`` into the cache; a failed write never breaks the caller."""
+    payload = dict(read_cache())
+    payload.update(updates)
+    try:
+        _write_cache(payload)
+    except OSError:
+        pass
+
+
+async def fetch_latest(
+    *,
+    timeout_s: float = REQUEST_TIMEOUT_S,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> str | None:
+    """The version PyPI publishes, or ``None`` when it cannot be read."""
+    try:
+        async with httpx.AsyncClient(
+            timeout=timeout_s,
+            transport=transport,
+            headers={"User-Agent": "zenagent update-check"},
+        ) as client:
+            response = await client.get(PYPI_URL)
+            response.raise_for_status()
+            data = response.json()
+        version = data["info"]["version"]
+    except Exception:  # noqa: BLE001 - a version check never breaks a session
+        return None
+    return version if isinstance(version, str) and version else None
+
+
+def pending_notice(*, installed: str | None = None) -> str | None:
+    """A newer version the user has not been told about yet, from the cache only."""
+    if is_disabled():
+        return None
+    current = installed if installed is not None else installed_version()
+    if not current:
+        return None
+    cache = read_cache()
+    latest = cache.get("latest")
+    if not isinstance(latest, str) or not latest:
+        return None
+    if compare_versions(latest, current) <= 0:
+        return None
+    if cache.get("notified") == latest:
+        return None
+    return latest
+
+
+async def refresh(
+    *,
+    installed: str | None = None,
+    fetch: Callable[[], Awaitable[str | None]] | None = None,
+    now: float | None = None,
+) -> str | None:
+    """Refresh the cache when it is stale; return a version worth notifying.
+
+    A failed lookup still stamps ``checked_at`` so an offline machine waits the
+    full TTL instead of paying the timeout on every launch.
+    """
+    if is_disabled():
+        return None
+    current_time = time.time() if now is None else now
+    cache = read_cache()
+    checked_at = cache.get("checked_at")
+    if isinstance(checked_at, (int, float)) and current_time - checked_at < CACHE_TTL_S:
+        return None
+    try:
+        latest = await (fetch or fetch_latest)()
+    except Exception:  # noqa: BLE001 - a failed lookup just backs off
+        latest = None
+    if not isinstance(latest, str) or not latest:
+        _update_cache(checked_at=current_time)
+        return None
+    _update_cache(checked_at=current_time, latest=latest)
+    current = installed if installed is not None else installed_version()
+    if not current:
+        return None
+    if compare_versions(latest, current) <= 0:
+        return None
+    if cache.get("notified") == latest:
+        return None
+    return latest
+
+
+def mark_notified(version: str) -> None:
+    """Remember that this version was already shown, so it is not shown again."""
+    _update_cache(notified=version)
+
+
+def upgrade_command() -> str:
+    """The command that upgrades the running installation."""
+    prefix = sys.prefix.replace(os.sep, "/")
+    if "/uv/tools/" in prefix:
+        return "uv tool upgrade zenagent-py"
+    if "/pipx/venvs/" in prefix:
+        return "pipx upgrade zenagent-py"
+    return 'python -m pip install -U "zenagent-py[cli]"'
+
+
+def format_notice(version: str, installed: str) -> str:
+    """The one quiet transcript line the TUI shows."""
+    return f"Update available: v{version} (you have v{installed}) · {upgrade_command()}"
