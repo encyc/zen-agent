@@ -76,3 +76,15 @@ def test_google_request_fits_max_output_tokens_to_the_context_window():
         model, _long_prompt(), [], StreamOptions(api_key="k")
     )
     assert body["generationConfig"]["maxOutputTokens"] < 1_600
+
+
+def test_estimate_counts_wide_characters_conservatively():
+    ascii_text = "x" * 400
+    wide_text = "汉" * 400
+    ascii_estimate = estimate_prompt_tokens(
+        [UserMessage(content=ascii_text, timestamp=0)]
+    )
+    wide_estimate = estimate_prompt_tokens(
+        [UserMessage(content=wide_text, timestamp=0)]
+    )
+    assert wide_estimate > ascii_estimate

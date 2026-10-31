@@ -61,6 +61,10 @@ def matches_any(patterns: list[str], name: str) -> str | None:
 #: Tools whose approval is scoped to a concrete filesystem path.
 _PATH_TARGET_TOOLS = frozenset({"read_file", "write_file", "edit_file", "list_dir"})
 
+#: Shell metacharacters that make a command "not a simple prefix": granting a
+#: two-word prefix must never auto-allow `git status && something-else`.
+_BASH_COMPOUND = re.compile(r"[;&|`\n<>]|\$\(")
+
 
 def tool_target(tool_name: str, args: dict) -> str | None:
     """Stable target key for a session-scoped "always allow" grant.
@@ -84,9 +88,13 @@ def tool_target(tool_name: str, args: dict) -> str | None:
             resolved = Path(str(raw))
         return f"{tool_name}:{resolved}"
     if tool_name == "bash":
-        command = str(args.get("command") or "").strip()
+        command = " ".join(str(args.get("command") or "").split())
         if not command:
             return None
+        if _BASH_COMPOUND.search(command):
+            # Compound/redirecting commands get an exact-match target: a
+            # prefix grant for `git status` must not cover `git status && …`.
+            return f"bash:{command}"
         return "bash:" + " ".join(command.split()[:2])
     return None
 

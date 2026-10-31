@@ -14,6 +14,7 @@ so the common case keeps the catalog default (and providers that omit it).
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import replace
 from typing import Any
 
@@ -48,15 +49,26 @@ def _message_text(message: Message) -> str:
     return str(getattr(message, "content", ""))
 
 
+#: CJK/full-width ranges: these are ~1 token per character, not 4 chars/token.
+_WIDE = re.compile(r"[\u2e80-\u9fff\uac00-\ud7af\uff00-\uffef\u3000-\u303f]")
+
+
+def _estimate_text_tokens(text: str) -> int:
+    # Start from the Latin heuristic, then add back the wide characters whose
+    # real token cost is ~1/char (4 chars/token would underestimate badly).
+    return len(text) // 4 + len(_WIDE.findall(text))
+
+
 def estimate_prompt_tokens(messages: list[Message]) -> int:
-    """Cheap upper-ish estimate: 4 chars/token plus per-message framing.
+    """Cheap upper-ish estimate: 4 latin chars/token, ~1 token per CJK char.
 
     Deliberately not a real tokenizer (the kernel has no tokenizer dependency);
     the margin is covered by ``OUTPUT_FIT_HEADROOM_TOKENS``.
     """
     total = 0
     for message in messages:
-        total += max(1, len(_message_text(message)) // 4) + _MESSAGE_FRAMING_TOKENS
+        total += max(1, _estimate_text_tokens(_message_text(message)))
+        total += _MESSAGE_FRAMING_TOKENS
     return total
 
 

@@ -296,3 +296,37 @@ async def test_broker_always_allow_is_target_scoped():
     other = ToolCall(id="2", name="write_file", arguments={"path": "/tmp/x/two.txt"})
     assert await broker.before_tool_call(other, other.arguments) is None
     assert len(prompts) == 2
+
+
+async def test_command_prefix_grant_does_not_cover_compound_commands(monkeypatch):
+    """"always allow git status" must not auto-allow `git status && ...`."""
+    import builtins
+
+    monkeypatch.setattr(builtins, "input", lambda prompt: "a")
+    gate = PermissionGate(interactive=True)
+    assert (await gate.check("bash", {"command": "git status"}))[0] is True
+    # Same simple command family stays covered (no prompt: input would return a
+    # again, but we assert the answer is True regardless).
+    assert (await gate.check("bash", {"command": "git status --short"}))[0] is True
+
+    # A compound command sharing the prefix must be re-confirmed.
+    monkeypatch.setattr(builtins, "input", lambda prompt: "n")
+    allowed, _reason = await gate.check(
+        "bash", {"command": "git status && rm -rf ./build"}
+    )
+    assert allowed is False
+
+
+async def test_compound_command_grant_is_exact(monkeypatch):
+    import builtins
+
+    monkeypatch.setattr(builtins, "input", lambda prompt: "a")
+    gate = PermissionGate(interactive=True)
+    compound = "git status && touch marker"
+    assert (await gate.check("bash", {"command": compound}))[0] is True
+    assert (await gate.check("bash", {"command": compound}))[0] is True
+    # A different compound command is not covered by the grant.
+    monkeypatch.setattr(builtins, "input", lambda prompt: "n")
+    assert (
+        await gate.check("bash", {"command": "git status && touch other"})
+    )[0] is False
