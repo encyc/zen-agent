@@ -44,7 +44,7 @@ zen -p "analyze" --read-only --trace run.jsonl --cwd /path/to/project
 | `--thinking` | `off/low/medium/high/max` |
 | `--mode` | `plan` / `ask` / `full`（默认 ask；`--yes`≈full，`--read-only`≈plan） |
 | `--yes` | 自动批准需要确认的工具（等价 `--mode full`） |
-| `--read-only` | 拒绝所有非只读工具（含 MCP；等价 `--mode plan`） |
+| `--read-only` | 拒绝所有非只读工具（含未声明 `readOnlyHint` 的 MCP；等价 `--mode plan`） |
 | `--allow-dangerous` | 允许 `rm -rf` 等危险命令（`--yes` 也不够） |
 | `--max-turns` / `--max-cost` | 硬上限；超限终止并记录在 termination |
 | `--retries` | provider 瞬时错误的额外重试次数（默认 0）。启用后每次尝试先缓冲，**关闭 token 流式**（文本在调用结束时出现） |
@@ -76,7 +76,8 @@ REPL 里命令参数也能补全（`Tab`）：`/mode ` → `plan` / `ask` / `ful
 `--mode plan|ask|full` 选择启动模式；显式 `--mode` 优先于 `--yes` / `--read-only`，
 后两者只是兼容映射（`--yes` → full，`--read-only` → plan），都不传则 `ask`。
 
-- **plan**：只读。写/执行工具（含 MCP 工具）被拒绝，system prompt 要求模型先调研并给出计划。
+- **plan**：只读。写/执行工具（含未声明只读的 MCP 工具）被拒绝；`web_search`/`fetch`
+  与声明 `readOnlyHint` 的 MCP 工具可联网调研。system prompt 要求模型先调研并给出计划。
 - **ask**：写/执行需要确认。REPL 在终端问 `[y/n/a]`；TUI 弹审批框（Allow / Allow for
   session / Deny，120 秒无响应视为 Deny）；headless 无交互，默认拒绝，需显式放行。
 - **full**：写/执行直接放行。危险命令（`rm -rf /` 等）仍需 `--allow-dangerous`；

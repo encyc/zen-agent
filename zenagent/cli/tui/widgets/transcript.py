@@ -55,6 +55,8 @@ class TranscriptView(VerticalScroll):
         self._cards_by_id: dict[str, ToolCard] = {}
         #: Rendered status per call id, so unchanged cards are not repainted.
         self._card_status: dict[str, str] = {}
+        #: Last rendered progress line per call id (streaming tool output).
+        self._card_progress: dict[str, str] = {}
         self._follow_pending = False
 
     def on_mount(self) -> None:
@@ -166,7 +168,8 @@ class TranscriptView(VerticalScroll):
 
         Called on every streamed delta, so it must be proportional to what
         changed, not to the transcript length: append new views, repaint the
-        live assistant tail and only the tool cards whose status moved.
+        live assistant tail and only the tool cards whose status or streamed
+        progress moved.
         """
         if len(views) < self._count:
             # The controller transcript shrank (auto-compaction, session switch):
@@ -186,7 +189,13 @@ class TranscriptView(VerticalScroll):
             if isinstance(tail, MessageView) and tail.kind == "assistant":
                 self._update_assistant(len(self._assistant_widgets) - 1, tail)
             for index, view in enumerate(views):
-                if isinstance(view, ToolCallView) and self._card_status.get(view.call_id) != view.status:
+                if not isinstance(view, ToolCallView):
+                    continue
+                changed = (
+                    self._card_status.get(view.call_id) != view.status
+                    or self._card_progress.get(view.call_id) != view.progress
+                )
+                if changed:
                     self._update_tool(view)
 
         self._maybe_usage(status)
@@ -252,6 +261,7 @@ class TranscriptView(VerticalScroll):
         card = ToolCard(view)
         self._cards_by_id[view.call_id] = card
         self._card_status[view.call_id] = view.status
+        self._card_progress[view.call_id] = view.progress
         self.mount(card)
 
     def _update_tool(self, view: ToolCallView) -> None:
@@ -259,6 +269,7 @@ class TranscriptView(VerticalScroll):
         if card is None:
             return
         self._card_status[view.call_id] = view.status
+        self._card_progress[view.call_id] = view.progress
         card.view = view
         card.refresh_view()
 
@@ -282,6 +293,7 @@ class TranscriptView(VerticalScroll):
         self._thinking_rows.clear()
         self._cards_by_id.clear()
         self._card_status.clear()
+        self._card_progress.clear()
         self._usage_shown = 0
         self.mount(WelcomeBlock())
 

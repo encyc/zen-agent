@@ -140,6 +140,7 @@ WEB_SEARCH = AgentTool(
         "required": ["query"],
     },
     execute=_web_search,
+    approval="read",
 )
 
 FETCH = AgentTool(
@@ -154,4 +155,5 @@ FETCH = AgentTool(
         "required": ["url"],
     },
     execute=_fetch,
+    approval="read",
 )

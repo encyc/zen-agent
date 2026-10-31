@@ -126,3 +126,18 @@ def test_long_bash_command_never_wraps_the_collapsed_row():
     card = ToolCard(view(name="bash", args={"command": "x" * 500},
                         details={"exit_code": 0}))
     assert card.size.height in (0, 1)
+
+
+def test_running_card_shows_streamed_progress_in_the_head():
+    card = ToolCard(
+        view(status="running", result_text="", progress="linking 2 files")
+    )
+    assert "linking 2 files" in card.plain
+
+
+def test_cjk_progress_is_clipped_by_cell_width():
+    from rich.cells import cell_len
+
+    progress = "正在编译并链接整个工程" * 8  # wide glyphs: chars != cells
+    card = ToolCard(view(status="running", result_text="", progress=progress))
+    assert cell_len(card.plain) <= card._width()

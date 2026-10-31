@@ -388,3 +388,82 @@ async def test_cache_hit_ratio_uses_provider_usage_semantics(runtime_factory):
     await chat.wait_for_idle()
 
     assert chat.status.cache_hit_ratio == pytest.approx(0.75)
+
+
+async def test_tool_update_events_populate_card_progress(runtime_factory):
+    """bash streams partial output; the controller must expose it on the card."""
+    from zenagent.agent.loop import ToolResultAgent
+    from zenagent.app.views import ToolCallView
+    from zenagent.events import AgentEvent
+    from zenagent.types import TextContent
+
+    runtime = await runtime_factory()
+    changes: list[int] = []
+    chat = ChatController(runtime, on_change=lambda: changes.append(1))
+
+    chat._on_event(
+        AgentEvent(
+            type="tool_execution_start",
+            tool_call_id="t1",
+            tool_name="bash",
+            args={"command": "make"},
+        )
+    )
+    chat._on_event(
+        AgentEvent(
+            type="tool_execution_update",
+            tool_call_id="t1",
+            tool_name="bash",
+            args={"command": "make"},
+            partial_result=ToolResultAgent(
+                content=[TextContent(text="compiling\nlinking 2 files")]
+            ),
+        )
+    )
+
+    card = chat.transcript[-1]
+    assert isinstance(card, ToolCallView)
+    assert card.progress == "linking 2 files"
+    assert changes, "frontends must be notified about streamed progress"
+
+
+async def test_tool_update_after_the_call_finished_is_ignored(runtime_factory):
+    from zenagent.agent.loop import ToolResultAgent
+    from zenagent.app.views import ToolCallView
+    from zenagent.events import AgentEvent
+    from zenagent.types import TextContent
+
+    runtime = await runtime_factory()
+    chat = ChatController(runtime)
+    chat._on_event(
+        AgentEvent(
+            type="tool_execution_start",
+            tool_call_id="t1",
+            tool_name="bash",
+            args={"command": "make"},
+        )
+    )
+    chat._on_event(
+        AgentEvent(
+            type="tool_execution_end",
+            tool_call_id="t1",
+            tool_name="bash",
+            args={"command": "make"},
+            result=ToolResultAgent(content=[TextContent(text="done")]),
+            is_error=False,
+            duration_ms=5,
+        )
+    )
+    chat._on_event(
+        AgentEvent(
+            type="tool_execution_update",
+            tool_call_id="t1",
+            tool_name="bash",
+            args={"command": "make"},
+            partial_result=ToolResultAgent(content=[TextContent(text="late")]),
+        )
+    )
+
+    card = chat.transcript[-1]
+    assert isinstance(card, ToolCallView)
+    assert card.progress == ""

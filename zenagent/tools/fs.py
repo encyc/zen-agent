@@ -15,21 +15,38 @@ returns ``is_error=True`` with an explanatory message instead of raising.
 from __future__ import annotations
 
 import difflib
+import re
 from pathlib import Path
 
 from zenagent.agent.loop import AgentTool, ToolResultAgent
+from zenagent.agent.result_budget import LINE_TRUNCATION_MARKER
 from zenagent.types import TextContent
 
 __all__ = [
+    "DEFAULT_READ_LIMIT",
     "EDIT_FILE",
     "LIST_DIR",
     "MAX_DIFF_LINES",
+    "MAX_READ_LIMIT",
+    "MAX_READ_LINES",
     "READ_FILE",
+    "READ_TRUNCATION_MARKER",
     "WRITE_FILE",
 ]
 
-#: Lines returned by ``read_file`` before truncation kicks in.
-MAX_READ_LINES = 2000
+#: Lines returned by ``read_file`` per call when the model does not say.
+DEFAULT_READ_LIMIT = 400
+
+#: Hard cap for a single ``read_file`` call (the model may ask for less).
+MAX_READ_LIMIT = 2000
+
+#: Backwards-compatible alias: the old "lines before truncation" constant.
+MAX_READ_LINES = MAX_READ_LIMIT
+
+#: Prefix of the footer ``read_file`` appends to a truncated page. ``write_file``
+#: refuses to overwrite a file with content that still carries it: that content
+#: is a partial read projection, not the file.
+READ_TRUNCATION_MARKER = "[truncated:"
 
 #: Total lines reported by ``list_dir`` before truncation.
 MAX_LIST_ENTRIES = 500
@@ -84,6 +101,7 @@ def _tool(
     properties: dict,
     required: list[str],
     execute,
+    approval: str = "exec",
 ) -> AgentTool:
     return AgentTool(
         name=name,
@@ -94,6 +112,7 @@ def _tool(
             "required": required,
         },
         execute=execute,
+        approval=approval,
     )
 
 
@@ -127,15 +146,93 @@ async def _read_file(
         return _text(f"refusing to read {path}: not valid UTF-8 ({exc})", is_error=True)
 
     lines = text.splitlines()
-    if len(lines) > MAX_READ_LINES:
-        shown = lines[:MAX_READ_LINES]
-        body = "\n".join(shown)
-        suffix = (
-            f"\n\n[truncated: showing {MAX_READ_LINES} of {len(lines)} lines; "
-            "read a smaller range or use grep]"
+    total = len(lines)
+    try:
+        offset = 0 if args.get("offset") is None else int(args["offset"])
+        limit = (
+            DEFAULT_READ_LIMIT if args.get("limit") is None else int(args["limit"])
         )
-        return _text(body + suffix, truncated=True, total_lines=len(lines))
-    return _text(text, total_lines=len(lines))
+    except (TypeError, ValueError):
+        return _text("offset and limit must be integers", is_error=True)
+    if offset < 0:
+        return _text(
+            f"offset must be >= 0 (got {offset}); it is a 0-based line index",
+            is_error=True,
+        )
+    if limit <= 0:
+        return _text(f"limit must be >= 1 (got {limit})", is_error=True)
+    limit = min(limit, MAX_READ_LIMIT)
+
+    if total == 0 and offset == 0:
+        return _text(
+            "", total_lines=0, offset=offset, limit=limit, truncated=False
+        )
+    if offset >= total:
+        return _text(
+            f"offset {offset} is past EOF: {path} has {total} line(s) "
+            f"(valid offsets: 0-{max(total - 1, 0)})",
+            is_error=True,
+            total_lines=total,
+            offset=offset,
+        )
+
+    end = offset + min(limit, total - offset)
+    details = {
+        "path": str(path),
+        "total_lines": total,
+        "offset": offset,
+        "limit": limit,
+        "truncated": end < total,
+    }
+    # Whole-file read keeps the legacy byte-exact result (including the final
+    # newline); paged reads are line slices.
+    if offset == 0 and end == total:
+        return _text(text, **details)
+
+    body = "\n".join(lines[offset:end])
+    if end < total:
+        body += (
+            f"\n\n{READ_TRUNCATION_MARKER} showing lines {offset + 1}-{end} of "
+            f"{total} lines; call read_file with offset={end} for the next page]"
+        )
+    return _text(body, **details)
+
+
+#: Footer ``read_file`` appends to a truncated page (anchored at end of text).
+_PAGE_FOOTER_RE = re.compile(
+    r"\n\n\[truncated: showing lines \d+-\d+ of \d+ lines; "
+    r"call read_file with offset=\d+ for the next page\]\s*$"
+)
+
+#: Kernel result-budget notice, which can sit between the kept head and tail.
+_BUDGET_NOTICE_RE = re.compile(
+    r"\n\n… \[truncated \d+ of \d+ bytes: .*?\] …\n\n", re.DOTALL
+)
+
+
+def _strip_read_projection(content: str) -> tuple[str, bool]:
+    """Return ``(body, was_projected)`` for a possibly truncated read result.
+
+    A read projection is any result the model received that is *not* the whole
+    file: a paged read (page footer), a kernel-budget truncation (byte notice),
+    or a line-capped result (line marker). Stripping the notices lets the write
+    guard compare the real body with what is on disk; testing the un-stripped
+    length is what let a 401-line page (longer on disk because of its footer)
+    slip through.
+    """
+    body = content
+    projected = False
+    match = _PAGE_FOOTER_RE.search(body)
+    if match is not None:
+        projected = True
+        body = body[: match.start()]
+    match = _BUDGET_NOTICE_RE.search(body)
+    if match is not None:
+        projected = True
+        body = body[: match.start()] + body[match.end() :]
+    if LINE_TRUNCATION_MARKER in content:
+        projected = True
+    return body, projected
 
 
 async def _write_file(
@@ -144,6 +241,23 @@ async def _write_file(
     path = Path(args["path"])
     content = args["content"]
     previous = _read_text_or_empty(path)
+    # A model that read one page and writes it back would silently truncate the
+    # file. Refuse when the payload is still a truncated read projection and is
+    # smaller than what is on disk; the error tells it how to recover.
+    body, projected = _strip_read_projection(content)
+    body_bytes = len(body.encode("utf-8"))
+    previous_bytes = len(previous.encode("utf-8"))
+    if previous_bytes and projected and body_bytes < previous_bytes:
+        return _text(
+            f"refusing to write {path}: the content is a truncated read_file "
+            "projection (page footer, budget or line truncation) and its body "
+            f"is shorter than the file on disk ({body_bytes} < "
+            f"{previous_bytes} bytes). A page is not the whole file. Re-read "
+            "every page with offset/limit and write the complete content, or "
+            "use edit_file for a targeted change.",
+            is_error=True,
+            path=str(path),
+        )
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
@@ -236,11 +350,27 @@ async def _list_dir(
 
 READ_FILE = _tool(
     "read_file",
-    "Read a UTF-8 text file. Binary files are refused. Output is truncated "
-    f"after {MAX_READ_LINES} lines.",
-    {"path": {"type": "string", "description": "File path to read."}},
+    "Read a UTF-8 text file. Binary files are refused. Returns whole small "
+    f"files; at most {DEFAULT_READ_LIMIT} lines per call by default (hard cap "
+    f"{MAX_READ_LIMIT}). A truncated result reports the exact offset for the "
+    "next page.",
+    {
+        "path": {"type": "string", "description": "File path to read."},
+        "offset": {
+            "type": "integer",
+            "description": "0-based line index to start from (default 0).",
+        },
+        "limit": {
+            "type": "integer",
+            "description": (
+                f"Maximum lines to return (default {DEFAULT_READ_LIMIT}, "
+                f"cap {MAX_READ_LIMIT})."
+            ),
+        },
+    },
     ["path"],
     _read_file,
+    approval="read",
 )
 
 WRITE_FILE = _tool(
@@ -253,6 +383,7 @@ WRITE_FILE = _tool(
     },
     ["path", "content"],
     _write_file,
+    approval="write",
 )
 
 EDIT_FILE = _tool(
@@ -269,6 +400,7 @@ EDIT_FILE = _tool(
     },
     ["path", "old_string", "new_string"],
     _edit_file,
+    approval="write",
 )
 
 LIST_DIR = _tool(
@@ -277,4 +409,5 @@ LIST_DIR = _tool(
     {"path": {"type": "string", "description": "Directory to list."}},
     ["path"],
     _list_dir,
+    approval="read",
 )

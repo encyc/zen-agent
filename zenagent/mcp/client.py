@@ -51,11 +51,17 @@ class McpTimeout(McpError):
 
 @dataclass
 class McpTool:
-    """One tool advertised by a server."""
+    """One tool advertised by a server.
+
+    ``read_only`` is MCP's ``annotations.readOnlyHint``: the server tells us the
+    tool cannot mutate state, so the permission gate can treat it like a local
+    read instead of prompting on every call.
+    """
 
     name: str
     description: str
     input_schema: dict
+    read_only: bool = False
 
 
 @dataclass
@@ -392,11 +398,17 @@ class McpClient:
         for raw in result.get("tools") or []:
             if not isinstance(raw, dict) or not raw.get("name"):
                 continue
+            annotations = raw.get("annotations")
+            read_only = bool(
+                isinstance(annotations, dict)
+                and annotations.get("readOnlyHint") is True
+            )
             tools.append(
                 McpTool(
                     name=str(raw["name"]),
                     description=str(raw.get("description") or ""),
                     input_schema=raw.get("inputSchema") or {"type": "object"},
+                    read_only=read_only,
                 )
             )
         return tools

@@ -361,6 +361,15 @@ class ChatController:
             )
             self._cards[card.call_id] = card
             self._transcript.append(card)
+        elif event.type == "tool_execution_update":
+            card = self._cards.get(event.tool_call_id or "")
+            if (
+                card is None
+                or card.status != "running"
+                or event.partial_result is None
+            ):
+                return
+            card.progress = _progress_line(event.partial_result)
         elif event.type == "tool_execution_end":
             card = self._cards.get(event.tool_call_id or "")
             if card is not None:
@@ -462,6 +471,22 @@ def _user_text(message: UserMessage) -> str:
         elif isinstance(block, ImageContent):
             parts.append(f"[image {block.mime_type}]")
     return "\n".join(parts)
+
+
+def _progress_line(result) -> str:
+    """Last non-empty streamed line, collapsed and bounded for a tool card."""
+    content = getattr(result, "content", None) or []
+    text = "\n".join(
+        block.text for block in content if isinstance(block, TextContent)
+    )
+    lines = [
+        "".join(ch if ch.isprintable() else " " for ch in line).strip()
+        for line in text.splitlines()
+    ]
+    lines = [line for line in lines if line]
+    if not lines:
+        return ""
+    return lines[-1][:120]
 
 
 def _result_text(result) -> str:

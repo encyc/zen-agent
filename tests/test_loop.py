@@ -317,7 +317,7 @@ async def test_before_tool_call_blocks_execution():
         executed.append(name)
         return ToolResultAgent(content=[TextContent(text="never")])
 
-    def guard(tool_call, args):
+    def guard(tool_call, args, tool=None):
         return {"block": True, "reason": "not allowed"}
 
     stream = ScriptedStream(
@@ -663,11 +663,35 @@ async def test_after_tool_call_can_replace_or_patch_result():
     assert len(stream.calls) == 2  # terminate untouched -> loop continued
 
 
+async def test_before_tool_call_receives_the_resolved_tool():
+    """Hooks need the AgentTool (tier, name) to make policy decisions."""
+    seen = []
+
+    async def echo(name, args, abort, on_update=None):
+        return ToolResultAgent(content=[TextContent(text="ran")])
+
+    def guard(call, args, tool=None):
+        seen.append(tool)
+
+    stream = ScriptedStream(
+        [
+            [call_tool("t1", "echo", {}), finish("tool_use")],
+            [say("ok"), finish("stop")],
+        ]
+    )
+    state = AgentState()
+    await run("go", state, make_config(stream, tools=[make_tool("echo", echo)], before_tool_call=guard))
+
+    assert len(seen) == 1
+    assert isinstance(seen[0], AgentTool)
+    assert seen[0].name == "echo"
+
+
 async def test_async_before_tool_call_hook_is_awaited():
     async def echo(name, args, abort, on_update=None):
         return ToolResultAgent(content=[TextContent(text="ran")])
 
-    async def guard(call, args):
+    async def guard(call, args, tool=None):
         return {"block": True, "reason": "async block"}
 
     stream = ScriptedStream(
@@ -991,3 +1015,64 @@ async def test_termination_records_abort_and_error():
     state = AgentState()
     await run("go", state, make_config(failed))
     assert state.termination == "error"
+
+
+# ---------------------------------------------------------------------------
+# Scenario: the kernel result budget is applied after the tool returns
+# ---------------------------------------------------------------------------
+
+
+async def test_tool_result_budget_caps_oversized_output():
+    payload = "q" * 50_000
+
+    async def big(name, args, abort, on_update=None):
+        return ToolResultAgent(content=[TextContent(text=payload)])
+
+    stream = ScriptedStream(
+        [
+            [call_tool("t1", "big", {}), finish("tool_use")],
+            [say("ok"), finish("stop")],
+        ]
+    )
+    state = AgentState()
+    events = await run("go", state, make_config(stream, tools=[make_tool("big", big)]))
+    types = types_of(events)
+
+    end = events[types.index("tool_execution_end")]
+    rendered = end.result.content[0].text
+    assert len(rendered) < len(payload)
+    assert "truncated" in rendered
+
+    result_message = state.messages[2]
+    assert isinstance(result_message, ToolResultMessage)
+    assert result_message.content[0].text == rendered
+
+
+async def test_two_argument_hooks_keep_working():
+    """v0.3 library users may pass a 2-arg hook; that must not crash the run."""
+    seen = []
+
+    async def echo(name, args, abort, on_update=None):
+        return ToolResultAgent(content=[TextContent(text="ran")])
+
+    def legacy_guard(call, args):
+        seen.append(call.name)
+        return {"block": True, "reason": "legacy hook"}
+
+    stream = ScriptedStream(
+        [
+            [call_tool("t1", "echo", {}), finish("tool_use")],
+            [say("ok"), finish("stop")],
+        ]
+    )
+    state = AgentState()
+    events = await run(
+        "go",
+        state,
+        make_config(stream, tools=[make_tool("echo", echo)], before_tool_call=legacy_guard),
+    )
+    types = types_of(events)
+    end = events[types.index("tool_execution_end")]
+    assert seen == ["echo"]
+    assert end.is_error is True
+    assert end.result.content[0].text == "legacy hook"

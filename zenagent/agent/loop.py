@@ -35,6 +35,7 @@ import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 
+from zenagent.agent.result_budget import apply_result_budget
 from zenagent.agent.validate import validate_arguments
 from zenagent.events import AbortToken, AgentEvent
 from zenagent.providers.catalog import Model
@@ -88,6 +89,13 @@ class AgentTool:
     for streaming partial results (ignored by most tools). ``execution_mode=
     "sequential"`` opts the tool out of the concurrent batch: such tools run one
     at a time, in the order the assistant requested them.
+
+    ``approval`` is the tool's own capability declaration consumed by the
+    harness permission gate: ``"read"`` (never needs confirmation, allowed in
+    read-only modes), ``"write"`` (mutates files/state) or ``"exec"`` (runs
+    commands; the default when a tool does not say). The kernel does not
+    enforce it — the declaration lets the harness classify tools without a
+    hard-coded name list.
     """
 
     name: str
@@ -103,6 +111,8 @@ class AgentTool:
         ]
         | None
     ) = None
+    #: Capability tier declared by the tool (``read``/``write``/``exec``).
+    approval: str = "exec"
 
 
 @dataclass
@@ -111,9 +121,11 @@ class AgentConfig:
 
     Hooks (all optional, all may be sync or async unless typed otherwise):
 
-    * ``before_tool_call(tool_call, args)`` — return ``{"block": True,
+    * ``before_tool_call(tool_call, args, tool)`` — return ``{"block": True,
       "reason": str}`` to veto the call; the tool result becomes an is_error
-      carrying the reason and ``execute`` is never invoked.
+      carrying the reason and ``execute`` is never invoked. ``tool`` is the
+      resolved :class:`AgentTool`, so policy can read its declarations. A
+      2-argument hook is still accepted (the v0.3 signature).
     * ``after_tool_call(tool_call, result)`` — return a ``ToolResultAgent`` to
       replace the result, or a ``{"content"/"is_error"/"terminate"}`` dict to
       patch individual fields.
@@ -164,6 +176,24 @@ class _ToolOutcome:
     call: ToolCall
     result: ToolResultAgent
     duration_ms: int
+
+
+def _hook_accepts_tool(hook) -> bool:
+    """Whether a before hook accepts the resolved tool as a third argument.
+
+    The 3-arg form is the current contract; the 2-arg form was the v0.3
+    contract and is still accepted for library users (a TypeError escaping the
+    hook would otherwise abort the whole run, outside the tool try/except).
+    """
+    try:
+        signature = inspect.signature(hook)
+    except (TypeError, ValueError):  # C callable: assume the current contract
+        return True
+    try:
+        signature.bind(None, {}, None)
+    except TypeError:
+        return False
+    return True
 
 
 async def _maybe_await(value):
@@ -238,7 +268,18 @@ async def _execute_tool(
     else:
         verdict = None
         if config.before_tool_call is not None:
-            verdict = await _maybe_await(config.before_tool_call(call, call.arguments))
+            # The resolved tool object accompanies the call so harness hooks can
+            # read the tool's own declarations (approval tier, timeout, …)
+            # instead of keeping a name list in sync with the tool registry.
+            # v0.3-style 2-arg hooks keep working.
+            if _hook_accepts_tool(config.before_tool_call):
+                verdict = await _maybe_await(
+                    config.before_tool_call(call, call.arguments, tool)
+                )
+            else:
+                verdict = await _maybe_await(
+                    config.before_tool_call(call, call.arguments)
+                )
         if isinstance(verdict, dict) and verdict.get("block"):
             result = _error_result(str(verdict.get("reason", "blocked")))
         elif tool.execute is None:
@@ -270,6 +311,11 @@ async def _execute_tool(
                 result.is_error = patched["is_error"]
             if "terminate" in patched:
                 result.terminate = patched["terminate"]
+
+    # Safety net above the per-tool caps: every result — including MCP and
+    # extension tools that enforce no cap of their own — gets the same byte
+    # budget and truncation notice before it enters the transcript.
+    result = apply_result_budget(result)
 
     duration_ms = round((time.monotonic() - started) * 1000)
     return _ToolOutcome(call=call, result=result, duration_ms=duration_ms)

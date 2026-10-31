@@ -20,12 +20,13 @@ import contextlib
 import os
 import signal
 import time
+from pathlib import Path
 
 from zenagent.agent.loop import AgentTool, ToolResultAgent
 from zenagent.events import AbortToken
 from zenagent.types import TextContent
 
-__all__ = ["BASH", "MAX_OUTPUT_BYTES"]
+__all__ = ["BASH", "MAX_OUTPUT_BYTES", "NON_INTERACTIVE_ENV"]
 
 #: Total output kept before head/tail truncation kicks in.
 MAX_OUTPUT_BYTES = 30_000
@@ -40,6 +41,47 @@ _UPDATE_BYTES = 4096
 _UPDATE_INTERVAL_S = 0.5
 #: Grace period for the read loop to drain after a kill.
 _DRAIN_TIMEOUT_S = 5.0
+
+#: Environment defaults that keep commands from waiting on a human/TTY.
+#: The caller's real environment always wins (``setdefault``): these are only
+#: filled in when the process does not already define them.
+NON_INTERACTIVE_ENV: dict[str, str] = {
+    "PAGER": "cat",
+    "GIT_PAGER": "cat",
+    "MANPAGER": "cat",
+    "SYSTEMD_PAGER": "cat",
+    "TERM": "dumb",
+    "CI": "true",
+    "GIT_TERMINAL_PROMPT": "0",
+    "GIT_ASKPASS": "echo",
+    "GCM_INTERACTIVE": "never",
+    "PIP_NO_INPUT": "1",
+    "DEBIAN_FRONTEND": "noninteractive",
+    "npm_config_yes": "true",
+}
+
+
+def _command_env() -> dict[str, str]:
+    """Process environment with non-interactive defaults for unset keys."""
+    env = dict(os.environ)
+    for key, value in NON_INTERACTIVE_ENV.items():
+        env.setdefault(key, value)
+    return env
+
+
+def _resolve_cwd(raw: object) -> Path | str:
+    """Resolve the optional ``cwd`` argument; returns an error string if bad."""
+    if raw is None or raw == "":
+        return Path(os.getcwd())
+    try:
+        path = Path(str(raw)).expanduser()
+    except (TypeError, ValueError):
+        return f"invalid cwd: {raw!r}"
+    if not path.is_absolute():
+        path = Path(os.getcwd()) / path
+    if not path.is_dir():
+        return f"cwd does not exist or is not a directory: {path}"
+    return path
 
 
 def _text(text: str, *, is_error: bool = False, **details) -> ToolResultAgent:
@@ -105,6 +147,9 @@ async def _bash(
 ) -> ToolResultAgent:
     command = args["command"]
     timeout_s = float(args.get("timeout_s") or 120.0)
+    cwd = _resolve_cwd(args.get("cwd"))
+    if isinstance(cwd, str):
+        return _text(cwd, is_error=True)
     started = time.monotonic()
 
     try:
@@ -113,7 +158,8 @@ async def _bash(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             stdin=asyncio.subprocess.DEVNULL,
-            cwd=os.getcwd(),
+            cwd=str(cwd),
+            env=_command_env(),
             start_new_session=True,  # own process group, so we can kill children
         )
     except OSError as exc:
@@ -200,15 +246,17 @@ async def _bash(
         aborted=aborted,
         truncated=buffer.truncated,
         duration_ms=duration_ms,
+        cwd=str(cwd),
     )
 
 
 BASH = AgentTool(
     name="bash",
     description=(
-        "Run a shell command in the working directory. stdout and stderr are "
-        "merged; output is truncated to head+tail if very large. Report the "
-        "exit code yourself when it matters."
+        "Run a shell command. stdout and stderr are merged; output is truncated "
+        "to head+tail if very large. Runs non-interactively (pagers/prompts are "
+        "disabled) and in an optional cwd. Report the exit code yourself when it "
+        "matters."
     ),
     parameters={
         "type": "object",
@@ -218,8 +266,16 @@ BASH = AgentTool(
                 "type": "number",
                 "description": "Kill the command after this many seconds (default 120).",
             },
+            "cwd": {
+                "type": "string",
+                "description": (
+                    "Directory to run in (absolute, or relative to the current "
+                    "working directory; default: the agent's cwd)."
+                ),
+            },
         },
         "required": ["command"],
     },
     execute=_bash,
+    approval="exec",
 )

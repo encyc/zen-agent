@@ -75,6 +75,7 @@ provider 错误不会进转录区，而是停在 dock 顶部的错误横幅里�
 | `shift+tab` | 循环 thinking 档位（off/low/medium/high） |
 | `ctrl+t` | 隐藏/显示所有 thinking 行 |
 | `ctrl+o` | 展开/收起所有工具卡（单卡仍用 `enter`） |
+| — | 运行中的工具卡会实时显示一行流式进度（`bash` 的长命令输出，1s 内多次更新合并渲染） |
 | `ctrl+x` | 清空 follow-up 队列 |
 | `ctrl+s` | steer：把输入插入当前 run |
 | `ctrl+k` | 命令面板（模型/会话/退出） |

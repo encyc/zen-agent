@@ -57,7 +57,8 @@ extensions = ["~/work/my-ext.py"]
 - **隔离**：import 失败、`register()` 抛异常、没有 `register` → 只 warning 并跳过，其他扩展照常加载。
 - **命令冲突**：内置斜杠命令优先；扩展之间重名保留第一个并 warning。
 - **hook 异常**：被捕获并打印 warning，不会中断 run。
-- **权限**：扩展工具和内置工具一样经过 `PermissionGate`，`--read-only` 下非只读工具全拒。
+- **权限**：扩展工具和内置工具一样经过 `PermissionGate`；`--read-only` 下非只读工具全拒。
+  给只读扩展工具设 `AgentTool(..., approval="read")` 即可免确认。
 - **`/reload`**：会重新 import 扩展并替换工具/命令/prompt；但**已订阅的 hooks 不会重复订阅**
   （避免副作用翻倍），hook 变更需要重启会话。
 

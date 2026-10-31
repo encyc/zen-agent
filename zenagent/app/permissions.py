@@ -24,12 +24,19 @@ __all__ = [
     "PermissionGate",
     "dangerous_command_reason",
     "matches_any",
+    "tool_is_read_only",
 ]
 
-#: Tools that only read state; they never need confirmation. ``read_skill``
-#: reads a local markdown file, so it belongs here even though it is not a
-#: filesystem tool.
-READ_ONLY_TOOLS = frozenset({"read_file", "list_dir", "glob", "grep", "read_skill"})
+#: Fallback classification for callers that only have a tool name (tests, the
+#: `check(name, args)` shorthand). Tools normally declare their own tier via
+#: ``AgentTool.approval`` and that declaration is authoritative.
+#:
+#: ``read_skill`` reads a local markdown file, and ``web_search``/``fetch``
+#: only read remote state, so they belong here even though they are not
+#: filesystem tools.
+READ_ONLY_TOOLS = frozenset(
+    {"read_file", "list_dir", "glob", "grep", "web_search", "fetch", "read_skill"}
+)
 
 #: Cap for argument text echoed in a prompt.
 _MAX_ARGS_PREVIEW = 120
@@ -47,6 +54,19 @@ def matches_any(patterns: list[str], name: str) -> str | None:
         if fnmatch.fnmatchcase(name, pattern):
             return pattern
     return None
+
+
+def tool_is_read_only(tool_name: str, tool=None) -> bool:
+    """Whether a call only reads state and never needs confirmation.
+
+    A tool's own ``approval`` declaration wins; the ``READ_ONLY_TOOLS`` name
+    set is only the fallback for callers that don't pass the tool object
+    (direct ``check(name, args)`` calls and tests).
+    """
+    approval = getattr(tool, "approval", None)
+    if approval is not None:
+        return approval == "read"
+    return tool_name in READ_ONLY_TOOLS
 
 
 def _dangerous_rm(command: str) -> str | None:
@@ -140,12 +160,13 @@ class PermissionGate:
         """Switch the runtime mode; the next tool call sees it immediately."""
         self.mode = self._validated_mode(mode)
 
-    def policy_refusal(self, tool_name: str, args: dict) -> str | None:
+    def policy_refusal(self, tool_name: str, args: dict, tool=None) -> str | None:
         """Why a call is refused *before any confirmation*, or ``None``.
 
         Danger, explicit deny patterns, plan mode and ``--read-only`` are
         policy: they beat both ``--yes`` and a session-wide "always allow".
         """
+        read_only = tool_is_read_only(tool_name, tool)
         if tool_name == "bash" and not self.allow_dangerous:
             # --yes means "don't ask me", not "run anything": catastrophic
             # commands need the explicit --allow-dangerous escape hatch.
@@ -155,23 +176,23 @@ class PermissionGate:
         denied_by = matches_any(self.deny, tool_name)
         if denied_by is not None:
             return f"tool {tool_name!r} is denied by policy ({denied_by})"
-        if self.mode == "plan" and tool_name not in READ_ONLY_TOOLS:
+        if self.mode == "plan" and not read_only:
             return (
                 f"tool {tool_name!r} is blocked by plan mode (read-only); "
                 "switch to /mode ask or /mode full to execute"
             )
-        if self.read_only and tool_name not in READ_ONLY_TOOLS:
+        if self.read_only and not read_only:
             return f"tool {tool_name!r} is blocked by --read-only"
         return None
 
-    async def check(self, tool_name: str, args: dict) -> tuple[bool, str]:
+    async def check(self, tool_name: str, args: dict, tool=None) -> tuple[bool, str]:
         """Return ``(allowed, reason)``; reason is empty when allowed."""
-        refusal = self.policy_refusal(tool_name, args)
+        refusal = self.policy_refusal(tool_name, args, tool)
         if refusal is not None:
             return False, refusal
         if matches_any(self.allow, tool_name) is not None:
             return True, ""
-        if tool_name in READ_ONLY_TOOLS:
+        if tool_is_read_only(tool_name, tool):
             return True, ""
         if (
             self.mode == "full"
@@ -202,14 +223,17 @@ class PermissionGate:
             return True, ""
         return False, f"permission denied for {tool_name!r} by the user"
 
-    async def before_tool_call(self, tool_call: ToolCall | str, args: dict) -> dict | None:
+    async def before_tool_call(
+        self, tool_call: ToolCall | str, args: dict, tool=None
+    ) -> dict | None:
         """Loop hook: ``{"block": True, "reason": ...}`` or ``None`` to allow.
 
         Accepts either a :class:`ToolCall` (the loop's hook contract) or a bare
-        tool name, so tests and callers can reuse it directly.
+        tool name, so tests and callers can reuse it directly. ``tool`` is the
+        resolved tool object when the loop calls the hook.
         """
         tool_name = tool_call.name if isinstance(tool_call, ToolCall) else str(tool_call)
-        allowed, reason = await self.check(tool_name, args)
+        allowed, reason = await self.check(tool_name, args, tool)
         if allowed:
             return None
         return {"block": True, "reason": reason}
@@ -252,16 +276,15 @@ class PermissionBroker:
     def allow_for_session(self, tool_name: str) -> None:
         self._allowed.add(tool_name)
 
-    async def before_tool_call(self, tool_call, arguments: dict):
+    async def before_tool_call(self, tool_call, arguments: dict, tool=None):
         name = getattr(tool_call, "name", "")
-        from zenagent.app.permissions import READ_ONLY_TOOLS
 
         # Policy first: plan mode, deny patterns and catastrophic commands win
         # over a session-wide "always allow" grant.
-        refusal = self._gate.policy_refusal(name, arguments)
+        refusal = self._gate.policy_refusal(name, arguments, tool)
         if refusal is not None:
             return {"block": True, "reason": refusal}
-        if name in READ_ONLY_TOOLS or name in self._allowed:
+        if tool_is_read_only(name, tool) or name in self._allowed:
             return None
         if matches_any(self._gate.allow, name) is not None:
             return None

@@ -65,7 +65,8 @@ StreamFn = Callable[[Model, list[Message], list[ToolDef], StreamOptions],
 ## 8. MCP 工具与权限
 
 - MCP 工具名空间 `mcp__<server>__<tool>`，不与内置工具冲突（内置优先）。
-- MCP 工具同样经过 `PermissionGate`，`--read-only` 下全部拒绝。
+- MCP 工具同样经过 `PermissionGate`：服务器声明 `annotations.readOnlyHint: true` 的按 `read`
+  档处理（`--read-only`/plan 放行、免确认），其余在 `--read-only` 下拒绝。
 - 启动失败**不是致命错误**：server 保持 `failed` 状态，后续可重试（见 [MCP](../guide/mcp.md)）。
 
 ## 9. 扩展隔离

@@ -363,3 +363,46 @@ def test_broken_project_mcp_config_raises_with_its_path(tmp_path, monkeypatch):
         load_mcp_config()
     assert "cannot read mcp config" in str(excinfo.value)
     assert str(project_path) in str(excinfo.value)
+
+
+class _ToolsTransport:
+    """Minimal transport that only answers tools/list (no process/handshake)."""
+
+    def __init__(self, tools: list[dict]) -> None:
+        self.tools = tools
+        self.methods: list[str] = []
+
+    async def request(self, method: str, params, timeout_s: float) -> dict:
+        self.methods.append(method)
+        return {"tools": self.tools}
+
+    async def notify(self, method: str, params=None) -> None:  # pragma: no cover - unused
+        return None
+
+    async def close(self) -> None:  # pragma: no cover - unused
+        return None
+
+
+async def test_list_tools_carries_the_read_only_annotation():
+    """MCP servers declare ``annotations.readOnlyHint``; the client keeps it."""
+    transport = _ToolsTransport(
+        [
+            {
+                "name": "query",
+                "description": "read-only query",
+                "inputSchema": {"type": "object"},
+                "annotations": {"readOnlyHint": True},
+            },
+            {
+                "name": "write",
+                "description": "mutating write",
+                "inputSchema": {"type": "object"},
+                "annotations": {"readOnlyHint": False},
+            },
+            {"name": "plain", "description": "no annotations", "inputSchema": {}},
+        ]
+    )
+    mcp = McpClient("stub", transport)  # type: ignore[arg-type]
+    tools = await mcp.list_tools()
+
+    assert [tool.read_only for tool in tools] == [True, False, False]

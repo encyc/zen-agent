@@ -144,6 +144,7 @@ def build_skill_tool(skills: list[Skill]) -> AgentTool:
             "required": ["name"],
         },
         execute=execute,
+        approval="read",
     )
 
 

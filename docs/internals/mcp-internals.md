@@ -63,6 +63,8 @@ await client.close()
 - name：`mcp__<server>__<tool>`（非字母数字下划线转 `_`）；
 - description：`[server] <原描述>`；
 - parameters：MCP 的 `inputSchema`（由 `validate_arguments` 校验）；
+- approval：`tools/list` 的 `annotations.readOnlyHint: true` → `"read"`，否则保守 `"write"`
+  （权限门据此决定 plan/`--read-only` 是否放行、是否需要确认；这是服务器自述）；
 - execute：调用 `client.call_tool`，把 content blocks 映射成 `TextContent`/`ImageContent`；
   `isError` → `is_error=True`；`McpError` → `is_error=True` 的结果（不抛给 loop）。
 
