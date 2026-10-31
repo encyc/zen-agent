@@ -95,7 +95,7 @@ agent_end 事件
 | `zenagent/agent/agent.py` | 有状态包装 | `Agent`（subscribe/steer/abort/wait_for_idle） |
 | `zenagent/agent/validate.py` | 参数 schema 校验 | `validate_arguments` |
 | `zenagent/agent/session.py` | JSONL 会话持久化 | `Session`、`latest_session`、`truncate_last_turn` |
-| `zenagent/tools/` | 内置工具 | `read_file`/`write_file`/`edit_file`/`list_dir`/`bash`/`glob`/`grep` |
+| `zenagent/tools/` | 内置工具 | `read_file`/`write_file`/`edit_file`/`list_dir`/`bash`/`glob`/`grep`/`web_search`/`fetch` |
 | `zenagent/cli/` | 所有交互面 | `main`、`repl`、`PermissionGate`、`RpcServer` |
 | `zenagent/mcp/` | MCP 客户端与生命周期 | `McpClient`、`StdioTransport`、`HttpTransport`、`McpManager` |
 | `zenagent/skills.py` / `templates.py` | 文件即扩展 | `discover_skills`、`build_skill_tool`、`expand` |

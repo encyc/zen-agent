@@ -31,7 +31,7 @@
 
 | 功能 | 源码 | 测试 | 文档 |
 |---|---|---|---|
-| 7 个内置工具 | `tools/{fs,bash,search}.py` | `test_tools_*.py` | [工具与权限](guide/tools-permissions.md) |
+| 9 个内置工具 + 工具内核（审批档/结果预算/分页） | `tools/{fs,bash,search}.py`、`tools/web/`、`agent/result_budget.py` | `test_tools_*.py`、`test_result_budget.py` | [工具与权限](guide/tools-permissions.md) |
 | 权限门（deny/allow/read-only/危险命令） | `app/permissions.py` | `test_permissions.py` | 同上 |
 | 运行模式 plan/ask/full | `app/modes.py`、`app/permissions.py` | `test_modes.py` | 同上 |
 | 交互审批（TUI 弹窗/超时/会话授权） | `app/permissions.py::PermissionBroker`、`cli/tui/screens/modals.py::ToolApproval` | `test_app_permissions.py`、`test_tui_approval.py` | 同上 |

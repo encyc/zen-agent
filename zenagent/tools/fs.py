@@ -21,15 +21,30 @@ from zenagent.agent.loop import AgentTool, ToolResultAgent
 from zenagent.types import TextContent
 
 __all__ = [
+    "DEFAULT_READ_LIMIT",
     "EDIT_FILE",
     "LIST_DIR",
     "MAX_DIFF_LINES",
+    "MAX_READ_LIMIT",
+    "MAX_READ_LINES",
     "READ_FILE",
+    "READ_TRUNCATION_MARKER",
     "WRITE_FILE",
 ]
 
-#: Lines returned by ``read_file`` before truncation kicks in.
-MAX_READ_LINES = 2000
+#: Lines returned by ``read_file`` per call when the model does not say.
+DEFAULT_READ_LIMIT = 400
+
+#: Hard cap for a single ``read_file`` call (the model may ask for less).
+MAX_READ_LIMIT = 2000
+
+#: Backwards-compatible alias: the old "lines before truncation" constant.
+MAX_READ_LINES = MAX_READ_LIMIT
+
+#: Prefix of the footer ``read_file`` appends to a truncated page. ``write_file``
+#: refuses to overwrite a file with content that still carries it: that content
+#: is a partial read projection, not the file.
+READ_TRUNCATION_MARKER = "[truncated:"
 
 #: Total lines reported by ``list_dir`` before truncation.
 MAX_LIST_ENTRIES = 500
@@ -129,15 +144,61 @@ async def _read_file(
         return _text(f"refusing to read {path}: not valid UTF-8 ({exc})", is_error=True)
 
     lines = text.splitlines()
-    if len(lines) > MAX_READ_LINES:
-        shown = lines[:MAX_READ_LINES]
-        body = "\n".join(shown)
-        suffix = (
-            f"\n\n[truncated: showing {MAX_READ_LINES} of {len(lines)} lines; "
-            "read a smaller range or use grep]"
+    total = len(lines)
+    try:
+        offset = int(args.get("offset") or 0)
+        limit = int(args.get("limit") or DEFAULT_READ_LIMIT)
+    except (TypeError, ValueError):
+        return _text("offset and limit must be integers", is_error=True)
+    if offset < 0:
+        return _text(
+            f"offset must be >= 0 (got {offset}); it is a 0-based line index",
+            is_error=True,
         )
-        return _text(body + suffix, truncated=True, total_lines=len(lines))
-    return _text(text, total_lines=len(lines))
+    if limit <= 0:
+        return _text(f"limit must be >= 1 (got {limit})", is_error=True)
+    limit = min(limit, MAX_READ_LIMIT)
+
+    if total == 0:
+        return _text(
+            "", total_lines=0, offset=offset, limit=limit, truncated=False
+        )
+    if offset >= total:
+        return _text(
+            f"offset {offset} is past EOF: {path} has {total} line(s) "
+            f"(valid offsets: 0-{total - 1})",
+            is_error=True,
+            total_lines=total,
+            offset=offset,
+        )
+
+    end = offset + min(limit, total - offset)
+    details = {
+        "path": str(path),
+        "total_lines": total,
+        "offset": offset,
+        "limit": limit,
+        "truncated": end < total,
+    }
+    # Whole-file read keeps the legacy byte-exact result (including the final
+    # newline); paged reads are line slices.
+    if offset == 0 and end == total:
+        return _text(text, **details)
+
+    body = "\n".join(lines[offset:end])
+    if end < total:
+        body += (
+            f"\n\n{READ_TRUNCATION_MARKER} showing lines {offset + 1}-{end} of "
+            f"{total} lines; call read_file with offset={end} for the next page]"
+        )
+    return _text(body, **details)
+
+
+def _looks_like_truncated_read(content: str) -> bool:
+    """Whether ``content`` still ends with a page footer from ``read_file``."""
+    # The footer is the last thing appended to a truncated page; look at the tail
+    # only so a file that merely mentions the marker in its body is not refused.
+    return READ_TRUNCATION_MARKER in content[-600:]
 
 
 async def _write_file(
@@ -146,6 +207,25 @@ async def _write_file(
     path = Path(args["path"])
     content = args["content"]
     previous = _read_text_or_empty(path)
+    # A model that read one page and writes it back would silently truncate the
+    # file. Refuse when the payload is still a truncated read projection and is
+    # smaller than what is on disk; the error tells it how to recover.
+    new_bytes = len(content.encode("utf-8"))
+    previous_bytes = len(previous.encode("utf-8"))
+    if (
+        previous_bytes
+        and new_bytes < previous_bytes
+        and _looks_like_truncated_read(content)
+    ):
+        return _text(
+            f"refusing to write {path}: the content still ends with a truncated "
+            "read_file projection and is shorter than the file on disk "
+            f"({new_bytes} < {previous_bytes} bytes). A page is not the whole "
+            "file. Re-read every page with offset/limit and write the complete "
+            "content, or use edit_file for a targeted change.",
+            is_error=True,
+            path=str(path),
+        )
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
@@ -238,9 +318,24 @@ async def _list_dir(
 
 READ_FILE = _tool(
     "read_file",
-    "Read a UTF-8 text file. Binary files are refused. Output is truncated "
-    f"after {MAX_READ_LINES} lines.",
-    {"path": {"type": "string", "description": "File path to read."}},
+    "Read a UTF-8 text file. Binary files are refused. Returns whole small "
+    f"files; at most {DEFAULT_READ_LIMIT} lines per call by default (hard cap "
+    f"{MAX_READ_LIMIT}). A truncated result reports the exact offset for the "
+    "next page.",
+    {
+        "path": {"type": "string", "description": "File path to read."},
+        "offset": {
+            "type": "integer",
+            "description": "0-based line index to start from (default 0).",
+        },
+        "limit": {
+            "type": "integer",
+            "description": (
+                f"Maximum lines to return (default {DEFAULT_READ_LIMIT}, "
+                f"cap {MAX_READ_LIMIT})."
+            ),
+        },
+    },
     ["path"],
     _read_file,
     approval="read",

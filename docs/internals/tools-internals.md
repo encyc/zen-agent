@@ -62,8 +62,8 @@ class ToolResultAgent:
 
 | 工具 | 关键限制 |
 |---|---|
-| `read_file` | `MAX_READ_LINES = 2000` 行，超出截断提示；二进制（前若干字节有 NUL）拒绝 |
-| `write_file` | 覆盖写，返回摘要 |
+| `read_file` | 默认每次 `DEFAULT_READ_LIMIT = 400` 行、硬上限 `MAX_READ_LIMIT = 2000`；支持 `offset`（0 基行号）/`limit`，截断页尾给出下一页的精确 `offset`；二进制（前若干字节有 NUL）/非 UTF-8 拒绝 |
+| `write_file` | 覆盖写，返回摘要；**拒绝把"截断的 read 页"回写**：content 仍带 `[truncated:` 页尾且比磁盘文件短 → `is_error`，防止静默截断数据 |
 | `edit_file` | old 必须唯一匹配；返回 unified diff（`MAX_DIFF_LINES = 200`） |
 | `list_dir` | `MAX_LIST_ENTRIES = 500`，目录带 `/` 标记 |
 
