@@ -356,7 +356,7 @@ class ZenAgentApp(App):
 
     def _refresh_status(self) -> None:
         status = self.chat.status
-        width = self.size.width
+        width = self._band_width()
         for band in self.query(StatusBand):
             band.update_status(status, width)
         # Todo state rides the same snapshot as everything else in the dock;
@@ -524,6 +524,19 @@ class ZenAgentApp(App):
             min(self.MAX_SIDEBAR_WIDTH, room, width),
         )
         self._apply_sidebar_width()
+        # Dragging changes the dock column: re-degrade the status segments on
+        # the next coalesced repaint instead of leaving the old layout on screen.
+        self._on_change()
+
+    def _band_width(self) -> int:
+        """Width the dock actually has: the terminal minus the sidebar chrome.
+
+        Segment degradation must use this, not ``size.width``: with the sidebar
+        open the dock is narrower, and dragging changes it.
+        """
+        if self._sidebar_open and self.size.width >= NARROW_WIDTH:
+            return max(20, self.size.width - self._sidebar_width - 1)
+        return self.size.width
 
     def _apply_sidebar_width(self) -> None:
         for sidebar in self.query(Sidebar):
@@ -778,6 +791,8 @@ class ZenAgentApp(App):
     def action_toggle_sidebar(self) -> None:
         self._sidebar_open = not self._sidebar_open
         self._sync_chrome()
+        # The dock column changed width: re-degrade the status segments.
+        self._refresh_status()
 
     def get_system_commands(self, screen):
         from textual.app import SystemCommand

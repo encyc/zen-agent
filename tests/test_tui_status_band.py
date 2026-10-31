@@ -132,3 +132,49 @@ def test_turn_time_and_rate_need_a_finished_turn():
     assert "2.0s" in plain and "25.0 tok/s" in plain
     _, idle = render_status_line(status(turn_ms=0, turn_output_tokens=0), 200)
     assert "tok/s" not in idle and "2.0s" not in idle
+
+
+def _long_status() -> RunStatus:
+    return status(
+        model_id="a-very-long-model-identifier-xyz",
+        session_name="a-rather-long-session-name-12345",
+        cwd="/Users/somebody/projects/a-very-long-project-name/here",
+        git_branch="feature/a-very-long-branch-name",
+    )
+
+
+async def test_band_fits_the_column_beside_the_sidebar(fake_runtime, monkeypatch):
+    """The band degrades for the space it actually has, not for the terminal.
+
+    With the sidebar open the dock is narrower than the terminal, and dragging
+    the sidebar changes that width; the segment list must be re-rendered for the
+    new column instead of keeping the old terminal-width layout.
+    """
+    import asyncio
+
+    from rich.cells import cell_len
+
+    from zenagent.cli.tui.app import ZenAgentApp
+    from zenagent.cli.tui.widgets.status_band import StatusBand
+
+    monkeypatch.setattr(
+        "zenagent.app.chat.ChatController.status", property(lambda _self: _long_status())
+    )
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        await pilot.press("ctrl+b")
+        await pilot.pause()
+
+        band = app.query_one(StatusBand)
+        assert band.size.width == 113
+        assert cell_len(band.plain) <= band.size.width
+
+        app.resize_sidebar(79)  # sidebar 60 wide → dock column 79
+        await pilot.pause()
+        await asyncio.sleep(0.02)
+        await pilot.pause()
+
+        band = app.query_one(StatusBand)
+        assert band.size.width == 79
+        assert cell_len(band.plain) <= band.size.width
