@@ -20,10 +20,10 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 from prompt_fixtures import CONFIGS, SKILLS, TOOL_GOLDEN_NAMES, TRANSCRIPT
 
-from zenagent.app.compact import _SUMMARIZE_SYSTEM, SUMMARIZE_PROMPT
 from zenagent.app.modes import mode_prompt_note
 from zenagent.app.support import system_prompt
 from zenagent.context_files import system_prompt_with_context
+from zenagent.prompts import compose_compact
 from zenagent.skills import build_skill_tool, skills_prompt_index
 from zenagent.tools import ALL_TOOLS
 from zenagent.tools.task import build_task_tool
@@ -83,10 +83,8 @@ def tool_descriptions() -> dict[str, dict]:
 
 
 def compact_prompts() -> dict[str, str]:
-    return {
-        "system": _SUMMARIZE_SYSTEM,
-        "user": SUMMARIZE_PROMPT.format(transcript=TRANSCRIPT),
-    }
+    system, user = compose_compact(TRANSCRIPT)
+    return {"system": system, "user": user}
 
 
 def render_all() -> dict[str, str]:

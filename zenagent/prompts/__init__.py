@@ -29,6 +29,8 @@ __all__ = [
     "PromptRenderError",
     "RenderedBlock",
     "RenderedPrompt",
+    "compact_result",
+    "compose_compact",
     "compose_system",
     "render",
     "template_vars",
@@ -172,3 +174,15 @@ def tool_description(name: str, *, root: Path | None = None, **values: str) -> s
     block holds placeholders and the constants stay the only source of truth.
     """
     return render(read_block(f"tool.{name}", root), values)
+
+
+def compose_compact(transcript: str, *, root: Path | None = None) -> tuple[str, str]:
+    """Render the compaction request as ``(system, user)``."""
+    system = read_block("compact.system", root)
+    user = render(read_block("compact.summary", root), {"transcript": transcript})
+    return system, user
+
+
+def compact_result(summary: str, *, root: Path | None = None) -> str:
+    """Render the user message that replaces the transcript after compaction."""
+    return render(read_block("compact.result", root), {"summary": summary})

@@ -12,6 +12,7 @@ from pathlib import Path
 
 from zenagent.agent import Agent
 from zenagent.agent.session import Session, unique_session_path
+from zenagent.prompts import compact_result, compose_compact
 from zenagent.providers.openai_completions import StreamOptions
 from zenagent.providers.registry import StreamFn, safe_stream, stream_fn_for
 from zenagent.types import (
@@ -24,7 +25,6 @@ from zenagent.types import (
 
 __all__ = [
     "AUTO_COMPACT_THRESHOLD",
-    "SUMMARIZE_PROMPT",
     "compact",
     "maybe_auto_compact",
     "should_auto_compact",
@@ -32,23 +32,6 @@ __all__ = [
 
 #: Fraction of the context window that triggers an automatic compaction.
 AUTO_COMPACT_THRESHOLD = 0.85
-
-SUMMARIZE_PROMPT = """请把下面这段编码会话压缩成一份可继续工作的摘要。
-
-要求：
-1. 用中文，分三节：**任务目标**、**已做出的决定**、**未竟事项**。
-2. 保留关键文件路径、命令、错误信息与结论；不要保留寒暄与重复内容。
-3. 不要编造会话里没有的事实；信息不足就写"未提及"。
-4. 只输出摘要正文，不要加开场白。
-
-===== 会话记录 =====
-{transcript}
-===== 记录结束 ===="""
-
-_SUMMARIZE_SYSTEM = (
-    "You compress coding-session transcripts into a compact handoff summary. "
-    "Be faithful to the transcript and never invent facts."
-)
 
 
 def _render_transcript(messages) -> str:
@@ -132,11 +115,10 @@ async def compact(agent: Agent, stream_fn: StreamFn | None = None) -> Path:
 
     transcript = _render_transcript(agent.messages)
     now = int(time.time())
+    system_prompt, user_prompt = compose_compact(transcript)
     request = [
-        SystemMessage(content=_SUMMARIZE_SYSTEM, timestamp=now),
-        UserMessage(
-            content=SUMMARIZE_PROMPT.format(transcript=transcript), timestamp=now
-        ),
+        SystemMessage(content=system_prompt, timestamp=now),
+        UserMessage(content=user_prompt, timestamp=now),
     ]
     options = StreamOptions(api_key=agent.api_key, thinking=None)
     fn = stream_fn or agent.stream_fn or stream_fn_for(agent.model)
@@ -157,7 +139,7 @@ async def compact(agent: Agent, stream_fn: StreamFn | None = None) -> Path:
         raise RuntimeError("compaction produced an empty summary")
 
     message = UserMessage(
-        content=f"# 此前会话摘要\n{summary.strip()}", timestamp=int(time.time())
+        content=compact_result(summary.strip()), timestamp=int(time.time())
     )
     session = Session(unique_session_path("compact"))
     session.append(message)

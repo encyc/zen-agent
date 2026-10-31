@@ -113,6 +113,29 @@ BLOCKS: dict[str, BlockSpec] = {
         required_vars=("entries",),
         optional=True,
     ),
+    "compact.system": BlockSpec(
+        id="compact.system",
+        path="compact_system.md",
+        version=PROMPT_VERSION,
+        cache_class="session",
+        budget_chars=200,
+    ),
+    "compact.summary": BlockSpec(
+        id="compact.summary",
+        path="compact_summary.md",
+        version=PROMPT_VERSION,
+        cache_class="volatile",
+        budget_chars=1600,
+        required_vars=("transcript",),
+    ),
+    "compact.result": BlockSpec(
+        id="compact.result",
+        path="compact_result.md",
+        version=PROMPT_VERSION,
+        cache_class="volatile",
+        budget_chars=40,
+        required_vars=("summary",),
+    ),
 }
 
 #: Assembly order for the base system prompt. Sub-blocks are joined with a
