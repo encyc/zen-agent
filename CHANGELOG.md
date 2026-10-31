@@ -3,7 +3,9 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased
+## v0.5.0 — 2026-10-31
+
+**Two appearances and a bilingual interface: dark/light themes on one colour-token source, and en/zh UI text with live switching.**
 
 ### Added
 
