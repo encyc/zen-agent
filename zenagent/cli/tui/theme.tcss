@@ -20,11 +20,23 @@ Screen {
     height: 1fr;
 }
 
+#transcript-stack {
+    height: 1fr;
+}
+
 #transcript {
     height: 1fr;
     background: #0d1319;
     padding: 1 2;
     scrollbar-size-vertical: 1;
+}
+
+#subagent-transcript {
+    height: 1fr;
+    background: #0d1319;
+    padding: 1 2;
+    scrollbar-size-vertical: 1;
+    display: none;
 }
 
 #command-hints {

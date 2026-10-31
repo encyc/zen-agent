@@ -41,8 +41,9 @@ class TranscriptView(VerticalScroll):
             super().__init__()
             self.pending = pending
 
-    def __init__(self) -> None:
-        super().__init__(id="transcript")
+    def __init__(self, *, id: str = "transcript", welcome: bool = True) -> None:
+        super().__init__(id=id)
+        self._welcome = welcome
         self._count = 0
         self._assistant_widgets: list[Markdown] = []
         self._thinking_rows: dict[int, ThinkingRow] = {}
@@ -61,7 +62,8 @@ class TranscriptView(VerticalScroll):
         self._follow_pending = False
 
     def on_mount(self) -> None:
-        self.mount(WelcomeBlock())
+        if self._welcome:
+            self.mount(WelcomeBlock())
 
     @property
     def pending(self) -> bool:
@@ -299,7 +301,8 @@ class TranscriptView(VerticalScroll):
         self._card_status.clear()
         self._card_progress.clear()
         self._usage_shown = 0
-        self.mount(WelcomeBlock())
+        if self._welcome:
+            self.mount(WelcomeBlock())
 
     def append_notice(self, text: str, *, error: bool = False) -> None:
         self.mount(NoticeRow(text, error=error))

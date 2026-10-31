@@ -37,6 +37,7 @@ from zenagent.cli.tui.widgets.prompt_gutter import PromptGutter
 from zenagent.cli.tui.widgets.prompt_input import PromptInput
 from zenagent.cli.tui.widgets.sidebar import NARROW_WIDTH, Sidebar
 from zenagent.cli.tui.widgets.status_band import StatusBand
+from zenagent.cli.tui.widgets.subagent_banner import SubagentBanner
 from zenagent.cli.tui.widgets.todo_hud import TodoHud
 from zenagent.cli.tui.widgets.transcript import TranscriptView
 from zenagent.cli.tui.widgets.work_indicator import WorkIndicator
@@ -106,6 +107,8 @@ class ZenAgentApp(App):
         self._sidebar_visible = False
         #: 1s poll while background jobs/subagents are live (else none).
         self._work_timer = None
+        #: ``task`` call id whose read-only transcript is on screen.
+        self._viewing: str | None = None
         self.command_hints: CommandHints | None = None
         self.models = ModelManager(runtime)
         self.sessions = SessionManager(runtime)
@@ -222,7 +225,10 @@ class ZenAgentApp(App):
     def compose(self):
         with Horizontal(id="root"):
             with Vertical(id="main-column"):
-                yield TranscriptView()
+                with Vertical(id="transcript-stack"):
+                    yield SubagentBanner()
+                    yield TranscriptView()
+                    yield TranscriptView(id="subagent-transcript", welcome=False)
                 yield NewContentBar()
                 with Vertical(id="dock"):
                     yield ErrorBanner()
@@ -241,7 +247,13 @@ class ZenAgentApp(App):
         self.command_hints = self.query_one(CommandHints)
         self.query_one(WorkStrip).set_handler(self._open_sidebar_from_strip)
         self.query_one(TodoHud).set_handler(self.action_show_todo_list)
-        self.query_one(Sidebar).set_handlers(on_todo=self.action_show_todo_list)
+        self.query_one(Sidebar).set_handlers(
+            on_todo=self.action_show_todo_list,
+            on_subagent=self.enter_subagent_view,
+        )
+        from zenagent.tools.task import set_subagent_observer
+
+        set_subagent_observer(self.chat.on_subagent_event)
         self._announce_missing_key()
         self._refresh_status()
         self.query_one(PromptInput).focus()
@@ -253,10 +265,12 @@ class ZenAgentApp(App):
         set_ask_handler(self.request_ask)
 
     def on_unmount(self) -> None:
-        """Drop the ask handler so a later headless run degrades, not hangs."""
+        """Drop the tool handlers so a later headless run degrades, not hangs."""
         from zenagent.tools.ask import set_ask_handler
+        from zenagent.tools.task import set_subagent_observer
 
         set_ask_handler(None)
+        set_subagent_observer(None)
 
     def _start_update_check(self) -> None:
         """Kick off the cached notice and background refresh; never break startup."""
@@ -286,8 +300,8 @@ class ZenAgentApp(App):
             if not installed:
                 return
             notice = update_check.format_notice(version, installed)
-            for transcript in self.query(TranscriptView):
-                transcript.append_notice(notice)
+            # Parent transcript only: the subagent view is a read-only swap.
+            self.query_one("#transcript", TranscriptView).append_notice(notice)
             update_check.mark_notified(version)
             self._update_notice_shown = True
         except Exception:  # noqa: BLE001 - a check must never break the UI
@@ -331,14 +345,21 @@ class ZenAgentApp(App):
         # the row hides itself while the session has no list.
         for hud in self.query(TodoHud):
             hud.set_todos(status.todos)
-        for log in self.query(TranscriptView):
-            log.sync(self.chat.transcript, status)
+        parent = self.query_one("#transcript", TranscriptView)
+        parent.sync(self.chat.transcript, status)
+        if self._viewing is not None:
+            child_views = self.chat.subagent_transcript(self._viewing)
+            if child_views is None:
+                self._exit_subagent_view(restore_focus=False)
+            else:
+                self.query_one("#subagent-transcript", TranscriptView).sync(
+                    child_views, status
+                )
         for notice in self.chat.take_notices():
-            for log in self.query(TranscriptView):
-                if notice.kind == "divider":
-                    log.append_divider(notice.text)
-                else:
-                    log.append_notice(notice.text)
+            if notice.kind == "divider":
+                parent.append_divider(notice.text)
+            else:
+                parent.append_notice(notice.text)
         for indicator in self.query(WorkIndicator):
             indicator.set_running(status.running)
         for banner in self.query(ErrorBanner):
@@ -363,6 +384,42 @@ class ZenAgentApp(App):
             self.query_one(PromptInput).focus()
 
         self.push_screen(TodoListScreen(phases), restore_focus)
+
+    # -- subagent view -------------------------------------------------------
+
+    def enter_subagent_view(self, call_id: str) -> None:
+        """Swap the main area to the child transcript (read-only)."""
+        views = self.chat.subagent_transcript(call_id)
+        if views is None:
+            self.notify("no transcript for this subagent")
+            return
+        name = next(
+            (
+                view.name
+                for view in self.chat.status.subagents
+                if view.call_id == call_id
+            ),
+            call_id,
+        )
+        self._viewing = call_id
+        child = self.query_one("#subagent-transcript", TranscriptView)
+        child.reset()
+        child.sync(views, self.chat.status)
+        child.display = True
+        self.query_one("#transcript", TranscriptView).display = False
+        self.query_one(SubagentBanner).show(name)
+        self.query_one(PromptInput).disabled = True
+        child.focus()
+
+    def _exit_subagent_view(self, *, restore_focus: bool = True) -> None:
+        self._viewing = None
+        self.query_one(SubagentBanner).hide()
+        self.query_one("#subagent-transcript", TranscriptView).display = False
+        self.query_one("#transcript", TranscriptView).display = True
+        prompt = self.query_one(PromptInput)
+        prompt.disabled = False
+        if restore_focus:
+            prompt.focus()
 
     # -- chrome -------------------------------------------------------------
 
@@ -901,6 +958,8 @@ class ZenAgentApp(App):
             self.notify(f"renamed: {stored}")
 
     def _reset_after_switch(self) -> None:
+        if self._viewing is not None:
+            self._exit_subagent_view(restore_focus=False)
         for log in self.query(TranscriptView):
             log.reset()
         self.chat.reload_transcript()
@@ -995,6 +1054,10 @@ class ZenAgentApp(App):
         self._refresh_status()
 
     def action_interrupt(self) -> None:
+        if self._viewing is not None:
+            self._exit_subagent_view()
+            return
+
         """Esc: abort a run; on an empty idle draft, a double press rewinds.
 
         omp's chain: ``Esc`` always protects the draft, and two quick presses
