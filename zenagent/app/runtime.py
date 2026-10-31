@@ -38,6 +38,7 @@ from zenagent.context_files import (
     load_context_files,
 )
 from zenagent.extensions import load_extensions
+from zenagent.i18n import t
 from zenagent.mcp.config import load_mcp_config
 from zenagent.mcp.manager import McpManager
 from zenagent.prompts import (
@@ -167,7 +168,7 @@ class Runtime:
         """Switch mode; takes effect for the next tool call without a restart."""
         normalized = normalize_mode(mode)
         if normalized is None:
-            raise ValueError(f"unknown mode: {mode!r} (choose plan|ask|full)")
+            raise ValueError(t("mode.unknown", mode=mode))
         self._mode = normalized
         if self.gate is not None and hasattr(self.gate, "set_mode"):
             self.gate.set_mode(normalized)
@@ -240,7 +241,7 @@ class Runtime:
             provider = runtime.catalog.get(model.provider)
             env_name = provider.api_key_env if provider else "the provider's API key"
             if not allow_missing_key:
-                raise RuntimeError(f"missing API key for {model.id} (set {env_name})")
+                raise RuntimeError(t("runtime.missing_key", model=model.id, env=env_name))
             # The TUI is a workbench, not a one-shot run: open it even without a
             # key and let the user paste one from /settings instead of refusing
             # to start. reload_api_key() adopts it for the next turn.
@@ -382,7 +383,7 @@ class Runtime:
             if path is not None and Path(path).is_file():
                 self._note_session_scope(Path(path))
                 return Session(Path(path))
-            self.warnings.append(f"no session to resume ({resume})")
+            self.warnings.append(t("runtime.no_resume", resume=resume))
         self._touch_project()
         return Session(unique_session_path())
 
@@ -475,7 +476,7 @@ class Runtime:
                     try:
                         callback(event)
                     except Exception as exc:  # noqa: BLE001 - extension hooks are isolated
-                        self._note(f"extension hook failed: {exc}")
+                        self._note(t("runtime.hook_failed", error=exc))
 
             self._hook_unsubscribes.append(self.agent.subscribe(hook))
 
@@ -560,7 +561,7 @@ class Runtime:
         ``agent.is_streaming`` first to render a nicer message.
         """
         if hasattr(self, "agent") and self.agent.is_streaming:
-            raise RuntimeError("cannot reload while the agent is working")
+            raise RuntimeError(t("cmdmsg.cannot_reload"))
         options = self._options
         notes: list[str] = []
 

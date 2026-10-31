@@ -55,9 +55,7 @@ def resolve_mode(
     if explicit is not None:
         mode = normalize_mode(explicit)
         if mode is None:
-            raise ValueError(
-                f"unknown mode: {explicit!r} (choose {'|'.join(MODES)})"
-            )
+            raise ValueError(t("mode.unknown", mode=explicit))
         return mode
     if read_only:
         return "plan"

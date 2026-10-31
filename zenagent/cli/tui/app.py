@@ -750,7 +750,7 @@ class ZenAgentApp(App):
         return [
             (
                 command.name,
-                t("tui.app.command_label", description=command.description),
+                f"{t('type.command')} · {command.description}",
             )
             for command in self.commands.names()
             if command.name.startswith(needle)
@@ -781,7 +781,7 @@ class ZenAgentApp(App):
         return [
             (
                 f"skill:{skill.name}",
-                t("tui.app.skill_label", description=skill.description),
+                f"{t('type.skill')} · {skill.description}",
             )
             for skill in sorted(selected, key=lambda item: item.name)
         ]

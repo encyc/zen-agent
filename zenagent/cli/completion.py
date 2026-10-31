@@ -16,6 +16,7 @@ from prompt_toolkit.document import Document
 
 from zenagent.app.skill_commands import SKILL_SLASH_PREFIX
 from zenagent.app.slash_args import argument_values
+from zenagent.i18n import t
 
 __all__ = ["SLASH_COMMANDS", "ReplCompleter", "help_text"]
 
@@ -170,12 +171,15 @@ class ReplCompleter(Completer):
                         if name[1:].lower().startswith(needle)
                     ]
             matches = [
-                (name, f"{skills[name][1]} · {skills[name][0]}")
+                (
+                    name,
+                    f"{t('type.skill')} · {skills[name][0]}",
+                )
                 for name in sorted(selected)
             ]
         else:
             matches = [
-                (name, f"{kind} · {description}")
+                (name, f"{t(f'type.{kind}')} · {description}")
                 for name, (description, kind) in entries.items()
                 if name.lower().startswith(token_text.lower())
             ]

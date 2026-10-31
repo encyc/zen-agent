@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from zenagent.frontmatter import parse_frontmatter
+from zenagent.i18n import t
 from zenagent.skills import MAX_SKILL_BODY_BYTES, Skill
 
 __all__ = [
@@ -297,7 +298,7 @@ def build_skill_submission(
         if len(available) > 12:
             listed += f", … (+{len(available) - 12})"
         return SkillResolution(
-            error=f"unknown skill: {invocation.name} (available: {listed})"
+            error=t("skill.unknown", name=invocation.name, available=listed)
         )
 
     body, truncated = load_skill_body(skill)
