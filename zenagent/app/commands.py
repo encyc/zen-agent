@@ -205,13 +205,15 @@ async def _mcp(services: AppServices, argument: str) -> CommandResult:
     manager = services.runtime.mcp
     if manager is None:
         return CommandResult(message="no MCP servers configured")
-    if not services.runtime.agent.is_streaming:
+    streaming = services.runtime.agent.is_streaming
+    if not streaming:
         try:
             await services.runtime.refresh_mcp()
         except RuntimeError as exc:  # a run started while we waited
             return CommandResult(message=str(exc))
     connected = ", ".join(manager.connected_names) or "(none)"
-    return CommandResult(message=f"mcp connected: {connected}")
+    suffix = " · tools not refreshed while the agent is working" if streaming else ""
+    return CommandResult(message=f"mcp connected: {connected}{suffix}")
 
 
 @_command("skills", "list discovered skills (rescans the skill roots)")

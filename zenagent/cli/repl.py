@@ -114,6 +114,7 @@ async def handle_slash(
     mcp_manager: McpManager | None = None,
     refresh_mcp=None,
     skill_list=None,
+    skills_enabled: bool = True,
     template_list=None,
     extension_commands=None,
     reload_runtime=None,
@@ -330,6 +331,9 @@ async def handle_slash(
         # remains the operation that applies changes. Showing the disk truth and
         # naming what is pending is the honest middle: the list is never stale,
         # and the hint says how to make the model see it.
+        if not skills_enabled:
+            print_fn("skills are disabled (--no-skills)")
+            return None
         fresh, _warnings = discover_skills(default_skill_roots(Path.cwd()))
         if not fresh:
             print_fn("no skills found (put SKILL.md files under .zenagent/skills)")
@@ -337,15 +341,21 @@ async def handle_slash(
         for skill in fresh:
             print_fn(f"- {skill.name}: {skill.description}")
 
-        def signature(skills):
-            return {(skill.name, skill.description, skill.body) for skill in skills}
+        # ``skill_list`` is None for callers that do not track what the agent
+        # loaded; without it there is nothing to diff against, so no hint.
+        if skill_list is not None:
+            def signature(skills):
+                return {
+                    (skill.name, skill.description, skill.body) for skill in skills
+                }
 
-        pending = sorted({item[0] for item in signature(fresh) ^ signature(skill_list)})
-        if pending:
-            print_fn(
-                f"changed on disk ({', '.join(pending)}): "
-                "/reload makes them available to the model"
+            pending = sorted(
+                {item[0] for item in signature(fresh) ^ signature(skill_list)}
             )
+            if pending:
+                print_fn(
+                    f"changed on disk ({', '.join(pending)}): /reload applies them"
+                )
         return None
     if command == "mcp":
         if mcp_manager is None:
@@ -857,6 +867,7 @@ async def repl(
                         mcp_manager=mcp_manager,
                         refresh_mcp=refresh_mcp,
                         skill_list=skill_list,
+                        skills_enabled=skills,
                         template_list=template_list,
                         extension_commands=extension_commands,
                         reload_runtime=reload_runtime,

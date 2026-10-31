@@ -176,6 +176,24 @@ async def test_reload_reports_an_edited_skill_not_only_a_new_one(
     assert result.message == "reloaded: skills 1 -> 1 (~late)"
 
 
+async def test_reload_reports_an_edited_template(runtime_factory, tmp_path, monkeypatch):
+    root = tmp_path / "templates"
+    root.mkdir()
+    template = root / "review.md"
+    template.write_text(
+        "---\ndescription: review a file\n---\nold body {{args}}\n", encoding="utf-8"
+    )
+    monkeypatch.setattr("zenagent.app.runtime.default_template_roots", lambda cwd: [root])
+    runtime = await runtime_factory(templates=True)
+
+    template.write_text(
+        "---\ndescription: review a file\n---\nnew body {{args}}\n", encoding="utf-8"
+    )
+    notes = runtime.rediscover()
+
+    assert "templates 1 -> 1 (~review)" in notes
+
+
 async def test_reload_reports_nothing_changed(runtime_factory, skill_root):
     runtime = await runtime_factory(skills=True)
     registry = build_default_commands(make_services(runtime))
@@ -341,7 +359,9 @@ async def test_mcp_command_does_not_refresh_tools_during_a_run(
     result = await registry.dispatch("mcp", "")
 
     assert manager.refreshed == 0  # tools stay put under an in-flight request
-    assert result.message == "mcp connected: echo"
+    assert result.message == (
+        "mcp connected: echo · tools not refreshed while the agent is working"
+    )
 
 
 async def test_reload_does_not_duplicate_extension_tools_or_hooks(
