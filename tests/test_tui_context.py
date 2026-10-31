@@ -1,7 +1,5 @@
 """Context section and breakdown overlay: measured total, estimated slices."""
 
-import pytest
-
 from zenagent.app.context import ContextReport, ContextSlice
 from zenagent.app.views import RunStatus
 from zenagent.cli.tui.app import ZenAgentApp

@@ -27,14 +27,14 @@ def _tool(name: str = "read_file") -> SimpleNamespace:
 
 
 def _build(**overrides):
-    defaults = dict(
-        prompt_report=_report(("system.identity", 400), ("context_files", 400)),
-        tools=[_tool()],
-        messages=[UserMessage(content="hello", timestamp=1)],
-        last_usage=Usage(input=300, cache_read=20),
-        context_used=500,
-        window=1000,
-    )
+    defaults = {
+        "prompt_report": _report(("system.identity", 400), ("context_files", 400)),
+        "tools": [_tool()],
+        "messages": [UserMessage(content="hello", timestamp=1)],
+        "last_usage": Usage(input=300, cache_read=20),
+        "context_used": 500,
+        "window": 1000,
+    }
     defaults.update(overrides)
     return build_context_report(**defaults)
 

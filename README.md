@@ -314,6 +314,8 @@ interactive REPL + TUI, MCP, skills/templates/extensions, RPC/SDK,
 export/usage/telemetry, four protocol adapters, runtime modes
 (`plan`/`ask`/`full`), session display names + rename, and TUI session
 management (new/fork/delete/export/rename). The TUI sidebar (`ctrl+b`) is a
-work panel: the todo checklist, running subagents and background jobs; a
-subagent row opens its read-only transcript, which survives `--resume`.
+drag-resizable work panel: the full todo checklist, running subagents and
+background jobs (click one for its log), plus a context-composition section
+with a per-slice breakdown overlay. A subagent row opens its read-only
+transcript, which survives `--resume`.
 Not yet: OS-level sandboxing.
