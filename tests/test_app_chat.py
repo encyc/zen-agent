@@ -776,3 +776,18 @@ async def test_sidebar_hides_transcripts_the_transcript_no_longer_references(
 
     assert chat.status.subagents == []
     assert chat.subagent_transcript("ghost") is not None
+
+
+async def test_status_exposes_a_context_composition_report(runtime_factory):
+    runtime = await runtime_factory()
+    chat = ChatController(runtime)
+
+    report = chat.status.context
+
+    assert report is not None
+    assert report.total_tokens == chat.status.context_used
+    assert report.window == runtime.agent.model.context_window
+    assert report.measured is False, "no provider usage yet"
+    ids = {item.id for item in report.slices}
+    assert {"system", "tools"} <= ids
+    assert any(item.chars > 0 for item in report.slices)

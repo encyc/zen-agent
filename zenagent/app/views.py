@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from zenagent.agent.loop import LOOP_GUARD_PREFIX
+from zenagent.app.context import ContextReport
 from zenagent.app.skill_commands import parse_skill_display
 from zenagent.events import AgentEvent
 from zenagent.types import (
@@ -145,6 +146,8 @@ class RunStatus:
     subagents: list[SubagentView] = field(default_factory=list)
     #: ``call_id`` of the subagent currently running, when there is one.
     active_subagent: str | None = None
+    #: Context-window composition (measured total, estimated slices).
+    context: ContextReport | None = None
 
 
 #: Job states the sidebar renders; mirrors ``zenagent.tools.jobs.JobStatus``.

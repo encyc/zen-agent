@@ -9,6 +9,7 @@ from pathlib import Path
 
 from zenagent.agent.subagents import SubagentStore, carry_task_dir
 from zenagent.app.compact import compact, should_auto_compact
+from zenagent.app.context import build_context_report
 from zenagent.app.retry import prepare_retry
 from zenagent.app.runtime import Runtime
 from zenagent.app.support import cache_hit_ratio
@@ -124,6 +125,14 @@ class ChatController:
             subagents=subagents,
             active_subagent=next(
                 (view.call_id for view in subagents if view.status == "running"), None
+            ),
+            context=build_context_report(
+                getattr(self.runtime, "prompt_report", None),
+                agent.tools,
+                agent.messages,
+                self.runtime.guard.last_usage,
+                context_used,
+                agent.model.context_window,
             ),
         )
 

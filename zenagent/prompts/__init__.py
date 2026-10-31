@@ -46,6 +46,8 @@ class RenderedBlock:
     chars: int
     cache_class: str
     version: str
+    #: Token estimate for the block (chars stays exact; see limits.py).
+    tokens: int = 0
 
 
 @dataclass(frozen=True)
@@ -80,6 +82,13 @@ class PromptContext:
     root: Path | None = None
 
 
+def _block_tokens(text: str) -> int:
+    """Estimate one block's token cost (lazy import avoids an import cycle)."""
+    from zenagent.providers.limits import estimate_text_tokens
+
+    return estimate_text_tokens(text)
+
+
 def _tool_list(tool_names: Sequence[str]) -> str:
     return ", ".join(tool_names) if tool_names else "(none available yet)"
 
@@ -105,6 +114,7 @@ def _render_system(ctx: PromptContext) -> tuple[str, list[RenderedBlock]]:
                 chars=len(text),
                 cache_class=spec.cache_class,
                 version=spec.version,
+                tokens=_block_tokens(text),
             )
         )
     return "\n".join(parts), blocks
@@ -113,7 +123,11 @@ def _render_system(ctx: PromptContext) -> tuple[str, list[RenderedBlock]]:
 def _block(block_id: str, text: str) -> RenderedBlock:
     spec = BLOCKS[block_id]
     return RenderedBlock(
-        id=block_id, chars=len(text), cache_class=spec.cache_class, version=spec.version
+        id=block_id,
+        chars=len(text),
+        cache_class=spec.cache_class,
+        version=spec.version,
+        tokens=_block_tokens(text),
     )
 
 
@@ -134,6 +148,7 @@ def compose_system(ctx: PromptContext) -> RenderedPrompt:
                 chars=len(text),
                 cache_class="stable",
                 version=PROMPT_VERSION,
+                tokens=_block_tokens(text),
             )
         )
     else:
@@ -158,6 +173,7 @@ def compose_system(ctx: PromptContext) -> RenderedPrompt:
                 chars=len(part),
                 cache_class="session",
                 version=PROMPT_VERSION,
+                tokens=_block_tokens(part),
             )
         )
     if ctx.include_mode and ctx.mode == "plan":

@@ -40,8 +40,14 @@ from zenagent.context_files import (
 from zenagent.extensions import load_extensions
 from zenagent.mcp.config import load_mcp_config
 from zenagent.mcp.manager import McpManager
-from zenagent.prompts import PromptContext, compose_system
+from zenagent.prompts import (
+    PromptContext,
+    RenderedBlock,
+    RenderedPrompt,
+    compose_system,
+)
 from zenagent.providers.catalog import ProviderConfig, load_catalog
+from zenagent.providers.limits import estimate_text_tokens
 from zenagent.providers.registry import StreamFn
 from zenagent.skills import (
     build_skill_tool,
@@ -120,6 +126,9 @@ class Runtime:
         self.task_tool = None
         self._mode: str = DEFAULT_MODE
         self._base_prompt: str = ""
+        #: Block provenance of the last composed system prompt (ctx report).
+        self._base_prompt_report: RenderedPrompt | None = None
+        self.prompt_report: RenderedPrompt | None = None
         self._base_tools: list = []
         self._skill_entries = ""
         self._extension_prompt = ""
@@ -168,6 +177,23 @@ class Runtime:
 
     def _prompt_with_mode(self) -> str:
         note = mode_prompt_note(self._mode)
+        report = self._base_prompt_report
+        if report is not None:
+            blocks = report.blocks
+            if note:
+                blocks = blocks + (
+                    RenderedBlock(
+                        id="mode_note",
+                        chars=len(note),
+                        cache_class="session",
+                        version=report.version,
+                        tokens=estimate_text_tokens(note),
+                    ),
+                )
+            text = report.text if not note else f"{report.text}\n\n{note}"
+            self.prompt_report = RenderedPrompt(
+                text=text, blocks=blocks, version=report.version
+            )
         if not note:
             return self._base_prompt
         return f"{self._base_prompt}\n\n{note}"
@@ -402,7 +428,10 @@ class Runtime:
             include_context=self._context_files,
             include_mode=False,
         )
-        return compose_system(context).text
+        rendered = compose_system(context)
+        self._base_prompt_report = rendered
+        self.prompt_report = rendered
+        return rendered.text
 
     def _recompose(self) -> None:
         """Rebuild the tool list and prompt from the current discovery results.
