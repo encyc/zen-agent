@@ -116,6 +116,21 @@ provider 错误不会进转录区，而是停在 dock 顶部的错误横幅里�
 立即生效、无需重启；也可以继续写 `~/.zenagent/config.toml` 或设置 provider 的环境变量。
 启动时缺 key **不挡窗口**：TUI 照常打开，底部横幅提示该配哪个变量，配好后横幅消失。
 
+## 更新提醒
+
+TUI 启动后如果 PyPI 上有更新的 `zenagent-py`，转录区会出现一行：
+
+```
+Update available: v0.4.0 (you have v0.3.0) · uv tool upgrade zenagent-py
+```
+
+- 本地缓存 `~/.zenagent/update.json` 24 小时内不重复联网；每个新版本只提醒一次，每次
+  会话最多一条。
+- 升级命令按安装方式给出（uv tool / pipx / pip）；`[cli]` 是 extra，核心 agent 与 TUI
+  一起升级。
+- `-p`、`--json`、REPL、RPC 不检查、不输出。
+- 关闭：`ZENAGENT_NO_UPDATE_CHECK=1`。
+
 ## 会话管理
 
 `ctrl+k` → `sessions`（或 `/sessions`，`/sessions all` 直接进全项目视图）打开选择器：同一套浮层骨架，带搜索。

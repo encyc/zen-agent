@@ -33,6 +33,10 @@ zen --help                          # imports as `zenagent`; needs Python 3.11+
 uv sync --extra cli                 # kernel + interactive extras (prompt_toolkit, rich)
 ```
 
+The interactive TUI checks PyPI at most once a day for a newer `zenagent-py`
+and prints one quiet line in the transcript when one exists; `-p`/`--json`
+never check. Disable it with `ZENAGENT_NO_UPDATE_CHECK=1`.
+
 Requires Python 3.15+ (the project targets the current `uv` toolchain; any
 3.11+ should work for the kernel itself).
 
