@@ -15,6 +15,7 @@ from textual.timer import Timer
 from textual.widgets import Static
 
 from zenagent.app.views import MessageView, RunStatus
+from zenagent.cli.tui import palette
 
 __all__ = [
     "NoticeRow",
@@ -24,11 +25,11 @@ __all__ = [
     "format_thinking_duration",
 ]
 
-_TEXT = "#d7e0e8"
-_MUTED = "#8296a6"
-_DIM = "#5d6f7e"
-_ACCENT = "#d9a86c"
-_ERROR = "#e08787"
+_TEXT = palette.TEXT
+_MUTED = palette.MUTED
+_DIM = palette.DIM
+_ACCENT = palette.ACCENT
+_ERROR = palette.ERROR
 
 
 class UserBlock(Static):

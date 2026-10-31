@@ -12,13 +12,14 @@ from rich.text import Text
 from textual.widgets import Static
 
 from zenagent.app.views import MessageView
+from zenagent.cli.tui import palette
 
 __all__ = ["SkillBlock"]
 
-_TEXT = "#d7e0e8"
-_MUTED = "#8296a6"
-_DIM = "#5d6f7e"
-_ACCENT = "#d9a86c"
+_TEXT = palette.TEXT
+_MUTED = palette.MUTED
+_DIM = palette.DIM
+_ACCENT = palette.ACCENT
 
 #: Longest arg preview shown in the collapsed chip.
 _MAX_ARGS = 98

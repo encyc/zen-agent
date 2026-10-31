@@ -10,9 +10,11 @@ from __future__ import annotations
 from rich.text import Text
 from textual.widgets import Static
 
+from zenagent.cli.tui import palette
+
 __all__ = ["MAX_MESSAGE_CHARS", "ErrorBanner"]
 
-_ERROR = "#e08787"
+_ERROR = palette.ERROR
 
 #: Long provider errors would push the prompt off-screen; the tail of a provider
 #: error is rarely unique, the head names the cause.

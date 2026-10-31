@@ -10,14 +10,16 @@ from __future__ import annotations
 from rich.text import Text
 from textual.widgets import Static
 
+from zenagent.cli.tui import palette
+
 __all__ = ["CommandHints"]
 
 MAX_ROWS = 6
 
-_TEXT = "#d7e0e8"
-_MUTED = "#8296a6"
-_DIM = "#5d6f7e"
-_ACCENT = "#d9a86c"
+_TEXT = palette.TEXT
+_MUTED = palette.MUTED
+_DIM = palette.DIM
+_ACCENT = palette.ACCENT
 
 
 class CommandHints(Static):

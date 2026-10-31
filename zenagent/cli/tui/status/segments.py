@@ -13,13 +13,14 @@ from pathlib import Path
 from rich.text import Text
 
 from zenagent.app.views import RunStatus
+from zenagent.cli.tui import palette
 
 __all__ = ["SEGMENTS", "SEGMENT_IDS", "SegmentContext", "render_status_line"]
 
-_TEXT = "#d7e0e8"
-_MUTED = "#8296a6"
-_ACCENT = "#d9a86c"
-_ERROR = "#e08787"
+_TEXT = palette.TEXT
+_MUTED = palette.MUTED
+_ACCENT = palette.ACCENT
+_ERROR = palette.ERROR
 
 SEPARATOR = " · "
 

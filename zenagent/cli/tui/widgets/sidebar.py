@@ -16,6 +16,7 @@ from rich.text import Text
 from textual.containers import Vertical, VerticalScroll
 from textual.widgets import Static
 
+from zenagent.cli.tui import palette
 from zenagent.tools.todo import summarize_todo
 
 __all__ = [
@@ -36,9 +37,9 @@ MAX_JOB_ROWS = 6
 #: Inner content width: ``#sidebar`` is 26 wide with ``padding: 1 2``.
 _CONTENT_WIDTH = 22
 
-_TEXT = "#d7e0e8"
-_MUTED = "#8296a6"
-_ACCENT = "#d9a86c"
+_TEXT = palette.TEXT
+_MUTED = palette.MUTED
+_ACCENT = palette.ACCENT
 
 _SUBAGENT_MARKS = {
     "running": "◐",
@@ -140,6 +141,10 @@ class SidebarSection(Vertical):
     def compose(self):
         yield Static(self.title, classes="sidebar-title")
         yield self._rows_box
+
+    def on_mount(self) -> None:
+        accent = palette.SECTION_ACCENTS.get(self.title, palette.MUTED)
+        self.query_one(".sidebar-title", Static).styles.color = accent
 
     def set_rows(self, items: list[tuple[str, Text | str]]) -> None:
         """Reconcile this section's rows against ``items`` (key order = display)."""
@@ -276,7 +281,7 @@ class Sidebar(VerticalScroll):
         for view in status.subagents[:MAX_SUBAGENT_ROWS]:
             mark = _SUBAGENT_MARKS.get(view.status, "•")
             label = f"{mark} {view.name} {_seconds(view.duration_ms / 1000)}"
-            style = _TEXT if view.status == "running" else _MUTED
+            style = palette.STATE_COLORS.get(view.status, _TEXT)
             subagents.append((view.call_id, Text(_clip(label), style=style)))
         self._section("Subagent").set_rows(subagents)
 
@@ -290,7 +295,7 @@ class Sidebar(VerticalScroll):
                 else max(0.0, now - job.started_at)
             )
             label = f"{mark} {job.id} {_seconds(elapsed)}"
-            style = _TEXT if job.status == "running" else _MUTED
+            style = palette.STATE_COLORS.get(job.status, _MUTED)
             jobs.append((job.id, Text(_clip(label), style=style)))
         self._section("Jobs").set_rows(jobs)
 
