@@ -799,6 +799,7 @@ def main(argv: list[str] | None = None) -> int:
                     read_only=args.read_only,
                     mode=mode,
                     theme=args.theme,
+                    lang=args.lang,
                     templates=not args.no_templates,
                 )
             )

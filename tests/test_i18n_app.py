@@ -92,3 +92,37 @@ async def test_command_hints_prefix_is_chinese(fake_runtime, monkeypatch):
         await pilot.pause()
         matches = app._command_matches("/he")
         assert matches and matches[0][1].startswith("命令 · ")
+
+
+def test_repl_command_table_follows_locale():
+    from zenagent.cli.completion import help_text, slash_commands
+
+    i18n.set_locale("zh")
+    try:
+        table = slash_commands()
+        assert table["/help"] == "显示本帮助"
+        assert table["/lang"] == "切换界面语言：auto|en|zh"
+        assert "命令：" in help_text()
+        assert "agent 运行期间" in help_text()
+    finally:
+        i18n.set_locale("en")
+
+
+async def test_repl_slash_lang_switches_locale():
+    from zenagent.cli.repl import handle_slash
+
+    calls: list[str] = []
+
+    def fake_set_language(spec: str) -> None:
+        i18n.set_locale(spec)
+        calls.append(spec)
+
+    await handle_slash(
+        object(),
+        "lang",
+        "zh",
+        print_fn=lambda *a, **k: None,
+        set_language=fake_set_language,
+    )
+    assert i18n.active_locale() == "zh"
+    assert calls == ["zh"]

@@ -248,3 +248,12 @@ def sequenced_stream(texts: list[str]):
         yield AssistantEvent(type="done", partial=partial, reason="stop")
 
     return stream
+
+@pytest.fixture(autouse=True)
+def _reset_i18n_locale():
+    """Keep the global locale deterministic across tests."""
+    from zenagent import i18n
+
+    i18n.set_locale("en")
+    yield
+    i18n.set_locale("en")
