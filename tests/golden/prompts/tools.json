@@ -1,0 +1,58 @@
+{
+  "ask": {
+    "chars": 509,
+    "text": "Ask the user a structured question and wait for the answer. Use it only when the decision genuinely belongs to the user (an irreversible choice, a preference with no defensible default) or when you are blocked on information only they have; do not ask things you can find out with the other tools. Send 1-5 questions, each with 2-6 options; mark the obvious default as recommended. Without an interactive UI the call returns a note telling you to proceed with the most conservative option instead of blocking."
+  },
+  "bash": {
+    "chars": 312,
+    "text": "Run a shell command. stdout and stderr are merged; output is truncated to head+tail if very large. Runs non-interactively (pagers/prompts are disabled) and in an optional cwd. Report the exit code yourself when it matters. With async=true the command runs in the background and the wait tool collects its result."
+  },
+  "edit_file": {
+    "chars": 259,
+    "text": "Replace an exact string in a file. By default old_string must match exactly once; set replace_all to replace every occurrence. On zero matches (or multiple matches without replace_all) the file is left unchanged. The file's CRLF line endings and BOM are kept."
+  },
+  "fetch": {
+    "chars": 109,
+    "text": "Fetch a URL and return its readable text (HTML stripped). Use it after `web_search` to read a result in full."
+  },
+  "glob": {
+    "chars": 153,
+    "text": "Find files by glob pattern (e.g. '**/*.py') under a directory. Hidden files are skipped unless include_hidden; returns at most limit paths (default 500)."
+  },
+  "grep": {
+    "chars": 261,
+    "text": "Search file contents with a regular expression. Uses ripgrep when available, otherwise a slow Python scan. Results are grouped by file and paged: at most 20 matching files and 20 hits per file per call. A truncated page reports the skip value for the next page."
+  },
+  "list_dir": {
+    "chars": 61,
+    "text": "List one directory level, marking directories and file sizes."
+  },
+  "read_file": {
+    "chars": 194,
+    "text": "Read a UTF-8 text file. Binary files are refused. Returns whole small files; at most 400 lines per call by default (hard cap 2000). A truncated result reports the exact offset for the next page."
+  },
+  "read_skill": {
+    "chars": 86,
+    "text": "Load a skill's instructions by name before following it. Available skills: alpha, beta"
+  },
+  "task": {
+    "chars": 323,
+    "text": "Delegate a self-contained research job to a read-only subagent. The child has read_file/list_dir/glob/grep/web_search/fetch but cannot edit files, run commands, or ask questions. Use it for independent investigation whose intermediate steps you do not need in this transcript; pass a self-contained prompt and a short name."
+  },
+  "todo": {
+    "chars": 719,
+    "text": "Track progress on a multi-step task with a phased checklist. Use it when the work has 3+ steps, call it in the same response as your plan, and keep it current: start a task before working on it, mark it done when it is (or drop it), and block it with a one-line reason when you cannot proceed. Tasks are addressed by their exact content, never by generated IDs. Phases run in order and the in-progress pointer advances automatically. One op per call: init replaces the list; start/done/drop/block/unblock take a task (done/drop/block/unblock also accept a phase, and default to every task); rm removes a task or clears a phase; append adds tasks to a phase; view is a read-only checklist. A failed call changes nothing."
+  },
+  "wait": {
+    "chars": 233,
+    "text": "Wait for a background bash job started with bash async: true and return its status, exit code and output. Without job_id it waits for any running job. On timeout it returns a still-running snapshot, so call wait again for the result."
+  },
+  "web_search": {
+    "chars": 629,
+    "text": "Search the web: returns titles, URLs and snippets. Use it when the answer depends on information outside this repository (current library APIs, release notes, error messages).\nThe query accepts Google-style operators: \"exact phrase\", -exclude, site:domain, -site:domain, filetype:pdf, intitle:word, inurl:word, lang:en, after:2025-01-01, before:2026-01-01, and `a OR b`. Each engine gets only the operators it understands; constraints that would return nothing are relaxed and reported.\nChain: DeepSeek -> Tavily -> Brave -> Bing -> DuckDuckGo, first usable wins. Returns at most 8 results; follow up with `fetch` to read a page."
+  },
+  "write_file": {
+    "chars": 198,
+    "text": "Write UTF-8 text to a file, creating parent directories as needed. Overwrites the whole file. An existing file's CRLF line endings and UTF-8 BOM are kept; a new file is written with LF line endings."
+  }
+}
