@@ -291,6 +291,7 @@ class Runtime:
             stream_fn=stream_fn,
             thinking=lambda: runtime.agent.thinking,
             max_cost=options.max_cost,
+            session_path=runtime.session.path,
             artifact_sink=lambda tool_name, text: (
                 runtime.artifact_sink(tool_name, text)
                 if runtime.artifact_sink is not None

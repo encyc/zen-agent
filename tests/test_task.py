@@ -251,3 +251,113 @@ async def test_child_usage_counts_cache_tokens():
     tool = _tool(ChildStream(usage=usage))
     result = await tool.execute("t1", {"prompt": "a"})
     assert result.details["tokens"] == 135
+
+
+class ToolCallChildStream:
+    """Fake child stream: asks for one read_file, then answers."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def __call__(self, model, messages, tools, options):
+        from zenagent.types import ToolCall, ToolResultMessage
+
+        self.calls += 1
+        partial = AssistantMessage(
+            content=[],
+            provider="p",
+            model="m",
+            usage=Usage(input=5, output=5),
+            stop_reason="pending",
+            timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        if not isinstance(messages[-1], ToolResultMessage):
+            call = ToolCall(id="c1", name="read_file", arguments={"path": "a.py"})
+            partial.content = [call]
+            yield AssistantEvent(
+                type="toolcall_start", partial=partial, content_index=0, tool_call=call
+            )
+            yield AssistantEvent(
+                type="toolcall_end", partial=partial, content_index=0, tool_call=call
+            )
+            partial.stop_reason = "tool_use"
+            yield AssistantEvent(type="done", partial=partial, reason="tool_use")
+            return
+        partial.content = [TextContent("child answer")]
+        partial.stop_reason = "stop"
+        yield AssistantEvent(
+            type="text_delta", partial=partial, content_index=0, delta="child answer"
+        )
+        partial.content = [TextContent("child answer")]
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+
+async def test_task_persists_its_transcript_and_broadcasts_lifecycle(tmp_path):
+    from zenagent.agent.subagents import SubagentStore, task_dir
+    from zenagent.tools.task import set_subagent_observer
+
+    session = tmp_path / "sessions" / "s.jsonl"
+    events: list[tuple[str, str, dict]] = []
+    set_subagent_observer(
+        lambda call_id, kind, payload: events.append((call_id, kind, payload))
+    )
+    try:
+        task = _tool(ChildStream("child answer"), session_path=session)
+        result = await task.execute("call_1", {"prompt": "go", "name": "research"})
+    finally:
+        set_subagent_observer(None)
+
+    assert not result.is_error
+    kinds = [kind for _call, kind, _payload in events]
+    assert kinds[0] == "start" and kinds[-1] == "end"
+    assert {call for call, _kind, _payload in events} == {"call_1"}
+
+    store = SubagentStore(session)
+    [meta] = store.list()
+    assert (meta.call_id, meta.name, meta.status) == ("call_1", "research", "ok")
+    assert (task_dir(session) / "call_1.jsonl").is_file()
+    loaded = store.load("call_1")
+    assert loaded and loaded[0].to_json()["role"] == "user"
+
+
+async def test_task_forwards_child_tool_progress_to_the_card(tmp_path):
+    task = _tool(ToolCallChildStream(), session_path=tmp_path / "s.jsonl")
+    updates: list[ToolResultAgent] = []
+
+    result = await task.execute(
+        "call_1", {"prompt": "go"}, abort=None, on_update=updates.append
+    )
+
+    assert not result.is_error
+    lines = [
+        "".join(block.text for block in update.content) for update in updates
+    ]
+    assert any("read_file" in line for line in lines), lines
+
+
+async def test_task_survives_an_unwritable_transcript_directory(tmp_path):
+    blocker = tmp_path / "blocked"
+    blocker.write_text("this is a file, not a directory")
+    task = _tool(ChildStream("child answer"), session_path=blocker / "s.jsonl")
+
+    result = await task.execute("call_1", {"prompt": "go"})
+
+    assert not result.is_error
+    assert "<task-result" in result.content[0].text
+
+
+async def test_task_tool_rebinds_its_session(tmp_path):
+    from zenagent.agent.subagents import task_dir
+
+    first = tmp_path / "first.jsonl"
+    second = tmp_path / "second.jsonl"
+    tool = _tool(ChildStream("a"), session_path=first)
+
+    await tool.execute("c1", {"prompt": "go"})
+    tool.bind_session(second)
+    await tool.execute("c2", {"prompt": "go"})
+
+    assert (task_dir(first) / "c1.jsonl").is_file()
+    assert (task_dir(second) / "c2.jsonl").is_file()
+    assert not (task_dir(second) / "c1.jsonl").exists()

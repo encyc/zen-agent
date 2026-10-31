@@ -592,6 +592,7 @@ async def repl(
             # Read through the current sink so /fork, /compact and /import
             # retarget child artifacts too.
             artifact_sink=lambda tool_name, text: artifact_sink(tool_name, text),
+            session_path=session.path,
         )
         if tools is None
         else None
