@@ -28,6 +28,9 @@ from zenagent.app.runtime import Runtime
 from zenagent.app.sessions import SessionManager
 from zenagent.app.skill_commands import build_skill_submission, slash_token_at
 from zenagent.app.views import RunStatus
+from zenagent.cli.appearance import APPEARANCES, resolve_theme
+from zenagent.cli.tui import palette
+from zenagent.cli.tui.app_theme import textual_theme, theme_name
 from zenagent.cli.tui.history import PromptHistory
 from zenagent.cli.tui.widgets.attachments import AttachmentChips
 from zenagent.cli.tui.widgets.command_hints import CommandHints
@@ -49,6 +52,13 @@ __all__ = ["DOUBLE_ESCAPE_SECONDS", "ZenAgentApp"]
 #: Two empty-draft Escapes this close together mean "rewind the last turn"
 #: (omp's Esc chain level 13); a slower second press just interrupts nothing.
 DOUBLE_ESCAPE_SECONDS = 0.6
+
+
+def _saved_theme() -> str | None:
+    """The persisted ``theme`` preference, read lazily (tests patch settings)."""
+    from zenagent import settings
+
+    return settings.get_pref("theme")
 
 
 class ZenAgentApp(App):
@@ -86,8 +96,20 @@ class ZenAgentApp(App):
         *,
         chat: ChatController | None = None,
         history_path: Path | None = None,
+        theme: str | None = None,
     ) -> None:
         super().__init__()
+        # Resolve and register the appearance before the first paint, so a
+        # light terminal never flashes the dark palette on startup.
+        appearance_warnings: list[str] = []
+        self._appearance = resolve_theme(
+            theme, pref=_saved_theme(), warnings=appearance_warnings
+        )
+        self._appearance_warnings = appearance_warnings
+        self.register_theme(textual_theme(APPEARANCES["dark"]))
+        self.register_theme(textual_theme(APPEARANCES["light"]))
+        self.theme = theme_name(self._appearance)
+        palette.bind(self._appearance)
         self.runtime = runtime
         self.chat = chat or ChatController(runtime, on_change=self._on_change)
         self.history = PromptHistory(history_path)
@@ -269,6 +291,7 @@ class ZenAgentApp(App):
         from zenagent.tools.task import set_subagent_observer
 
         set_subagent_observer(self.chat.on_subagent_event)
+        self._announce_appearance_warnings()
         self._announce_missing_key()
         # A resumed session already has messages: build the transcript views
         # before the first paint, or history (and its subagent rows) is blank.
@@ -289,6 +312,15 @@ class ZenAgentApp(App):
 
         set_ask_handler(None)
         set_subagent_observer(None)
+
+    def _announce_appearance_warnings(self) -> None:
+        """Report a rejected theme pref without stopping the app."""
+        warnings, self._appearance_warnings = self._appearance_warnings, []
+        if not warnings:
+            return
+        transcript = self.query_one(TranscriptView)
+        for warning in warnings:
+            transcript.append_notice(f"theme: {warning}")
 
     def _start_update_check(self) -> None:
         """Kick off the cached notice and background refresh; never break startup."""
