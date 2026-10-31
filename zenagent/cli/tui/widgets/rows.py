@@ -115,6 +115,10 @@ class ThinkingRow(Static):
         self.collapsed = not self.collapsed
         self.update(self._renderable())
 
+    def on_click(self) -> None:
+        """Click the row to expand/collapse it, like the tool cards."""
+        self.action_toggle()
+
 
 class UsageRow(Static):
     """The dim tail of a finished turn."""

@@ -117,6 +117,45 @@ async def test_clicking_a_tool_card_toggles_it(chat_app_with_one_tool):
         assert card.collapsed is False
 
 
+async def test_clicking_a_thinking_row_toggles_it(runtime_factory):
+    from zenagent.cli.tui.widgets.rows import ThinkingRow
+    from zenagent.events import AssistantEvent
+    from zenagent.types import AssistantMessage, TextContent, ThinkingContent, Usage
+
+    async def stream(model, messages, tools, options):
+        partial = AssistantMessage(
+            content=[], provider="p", model="m", usage=Usage(),
+            stop_reason="pending", timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        partial.content.append(ThinkingContent(thinking="first line\nsecond line"))
+        yield AssistantEvent(type="thinking_start", partial=partial, content_index=0)
+        partial.content.append(TextContent(text="done"))
+        yield AssistantEvent(type="text_delta", partial=partial, content_index=1, delta="done")
+        partial.stop_reason = "stop"
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    runtime = await runtime_factory(stream_fn=stream)
+    app = ZenAgentApp(runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await app.chat.submit("go")
+        await app.chat.wait_for_idle()
+        await pilot.pause()
+        await pilot.pause()
+
+        row = app.query_one(ThinkingRow)
+        assert row.collapsed is True
+
+        await pilot.click(row)
+        await pilot.pause()
+        assert row.collapsed is False, "a click expands the reasoning"
+
+        await pilot.click(row)
+        await pilot.pause()
+        assert row.collapsed is True
+
+
 async def test_wheel_that_bubbles_to_the_app_still_scrolls(runtime_factory):
     from conftest import sequenced_stream
 

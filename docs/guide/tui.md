@@ -46,8 +46,8 @@
 |---|---|
 | 用户消息 | 整行填色块，**没有 `›` 前缀** |
 | assistant 正文 | Markdown，无装饰 |
-| thinking | 折叠成一行 `✻ thinking  <正文首行>…`（只显示第一行，超出宽度截断），`enter` 展开 |
-| 工具调用 | 一行 `● name args · ok · 19ms`，状态点+底色区分运行/成功/失败，`enter` 展开 |
+| thinking | 折叠成一行 `✻ thinking  <正文首行>…`（只显示第一行，超出宽度截断），`enter` 或点击展开 |
+| 工具调用 | 一行 `● name args · ok · 19ms`，状态点+底色区分运行/成功/失败，`enter` 或点击展开 |
 | 工具输出 | 展开后只留**尾部** 12 行，头部显示 `… N earlier lines` |
 | 错误 | 红色点 + 红底卡片；失败的工具自动展开 |
 | 压缩分隔线 | dim 一行 `── compacted · N prompt tokens → summary session ──`，后面跟着摘要 |
