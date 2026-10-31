@@ -151,7 +151,7 @@ class DialogScreen(ModalScreen[_T], Generic[_T]):
     DEFAULT_CSS = """
     DialogScreen {
         align: center middle;
-        background: #0d1319 65%;
+        background: $ink 65%;
     }
 
     DialogScreen #dialog {
@@ -159,14 +159,14 @@ class DialogScreen(ModalScreen[_T], Generic[_T]):
         max-width: 88;
         height: auto;
         padding: 1 2;
-        background: #141c24;
-        border: round #263441;
+        background: $surface;
+        border: round $line;
     }
 
     DialogScreen #dialog-title {
         height: auto;
         padding: 0 0 1 0;
-        color: #d9a86c;
+        color: $accent;
         text-style: bold;
     }
 
@@ -177,28 +177,28 @@ class DialogScreen(ModalScreen[_T], Generic[_T]):
 
     DialogScreen .dialog-detail {
         height: auto;
-        color: #8296a6;
+        color: $muted;
     }
 
     DialogScreen .dialog-command,
     DialogScreen .dialog-target {
         height: auto;
-        color: #d7e0e8;
+        color: $foreground;
     }
 
     DialogScreen .dialog-note {
         height: auto;
-        color: #5d6f7e;
+        color: $dim;
     }
 
     DialogScreen .dialog-add {
         height: auto;
-        color: #8fbf8f;
+        color: $success;
     }
 
     DialogScreen .dialog-remove {
         height: auto;
-        color: #e08787;
+        color: $error;
     }
 
     DialogScreen #dialog-choices {
@@ -207,30 +207,30 @@ class DialogScreen(ModalScreen[_T], Generic[_T]):
 
     DialogScreen .dialog-choice {
         height: 1;
-        color: #8296a6;
+        color: $muted;
     }
 
     DialogScreen .dialog-choice:hover {
-        background: #1b222a;
-        color: #d7e0e8;
+        background: $raised;
+        color: $foreground;
     }
 
     DialogScreen .dialog-choice.-primary {
-        color: #d9a86c;
+        color: $accent;
     }
 
     DialogScreen #dialog-hint {
         height: auto;
         margin: 1 0 0 0;
-        color: #5d6f7e;
+        color: $dim;
     }
 
     DialogScreen #rename-input {
         height: 1;
         padding: 0;
         border: none;
-        background: #0d1319;
-        color: #d7e0e8;
+        background: $ink;
+        color: $foreground;
     }
     """
 

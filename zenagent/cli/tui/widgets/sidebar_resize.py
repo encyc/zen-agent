@@ -19,10 +19,10 @@ class SidebarResizeHandle(Static):
     SidebarResizeHandle {
         width: 1;
         height: 1fr;
-        background: #141c24;
+        background: $surface;
     }
     SidebarResizeHandle:hover {
-        background: #263441;
+        background: $line;
     }
     """
 

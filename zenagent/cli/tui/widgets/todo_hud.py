@@ -34,7 +34,7 @@ class TodoHud(Static):
     DEFAULT_CSS = """
     TodoHud {
         height: 1;
-        background: #141c24;
+        background: $surface;
         padding: 0 1;
     }
     """

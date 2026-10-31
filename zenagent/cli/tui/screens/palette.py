@@ -79,13 +79,13 @@ class PaletteScreen(ModalScreen[T | None], Generic[T]):
         height: auto;
         max-height: 70%;
         padding: 1 2;
-        background: #141c24;
-        border-top: solid #263441;
+        background: $surface;
+        border-top: solid $line;
     }
 
     PaletteScreen #palette-title {
         height: 1;
-        color: #d9a86c;
+        color: $accent;
         text-style: bold;
     }
 
@@ -94,28 +94,28 @@ class PaletteScreen(ModalScreen[T | None], Generic[T]):
         margin: 0 0 1 0;
         padding: 0;
         border: none;
-        background: #141c24;
-        color: #d7e0e8;
+        background: $surface;
+        color: $foreground;
     }
 
     PaletteScreen #palette-list {
         height: auto;
         max-height: 20;
-        background: #141c24;
+        background: $surface;
         border: none;
         padding: 0;
         scrollbar-size-vertical: 1;
     }
 
     PaletteScreen #palette-list > .option-list--option-highlighted {
-        background: #263441;
-        color: #d7e0e8;
+        background: $line;
+        color: $foreground;
     }
 
     PaletteScreen #palette-footer {
         height: 1;
         margin: 1 0 0 0;
-        color: #5d6f7e;
+        color: $dim;
     }
     """
 

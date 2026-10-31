@@ -29,7 +29,7 @@ class ContextBreakdownScreen(DialogScreen[None]):
     }
     ContextBreakdownScreen .context-note {
         height: auto;
-        color: #5d6f7e;
+        color: $dim;
     }
     """
 

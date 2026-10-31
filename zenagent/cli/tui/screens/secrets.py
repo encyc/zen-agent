@@ -35,26 +35,26 @@ class SecretInput(ModalScreen[str | None]):
         width: 72;
         height: auto;
         padding: 1 2;
-        background: #141c24;
-        border: round #263441;
+        background: $surface;
+        border: round $line;
     }
 
     SecretInput #secret-title {
         height: 1;
-        color: #d9a86c;
+        color: $accent;
         text-style: bold;
     }
 
     SecretInput #secret-hint {
         height: 1;
-        color: #5d6f7e;
+        color: $dim;
     }
 
     SecretInput #secret-input {
         height: 1;
         border: none;
-        background: #0d1319;
-        color: #d7e0e8;
+        background: $ink;
+        color: $foreground;
     }
     """
 

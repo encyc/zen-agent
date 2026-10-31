@@ -61,6 +61,6 @@ class WorkIndicator(Static):
         text.append(f"{_FRAMES[self._frame]} ", style=palette.ACCENT)
         text.append("working", style=palette.ACCENT)
         if elapsed >= 1:
-            text.append(f" {elapsed}s", style="#8296a6")
+            text.append(f" {elapsed}s", style=palette.MUTED)
         self._last = text.plain
         self.update(text)

@@ -44,13 +44,13 @@ class TodoListScreen(DialogScreen[None]):
         height: auto;
         padding: 0 0 0 0;
         margin: 0 0 0 0;
-        color: #8296a6;
+        color: $muted;
         text-style: bold;
     }
     TodoListScreen .todo-item {
         height: auto;
         padding: 0 0 0 1;
-        color: #d7e0e8;
+        color: $foreground;
     }
     """
 

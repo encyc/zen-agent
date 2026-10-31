@@ -24,7 +24,7 @@ class SubagentBanner(Static):
     DEFAULT_CSS = """
     SubagentBanner {
         height: 1;
-        background: #141c24;
+        background: $surface;
         padding: 0 2;
     }
     """

@@ -1,14 +1,15 @@
 /* ZenAgent TUI — "harbor": cold slate with a single warm accent.
-   Tokens: ink #0d1319 · surface #141c24 · line #263441
-           text #d7e0e8 · muted #8296a6 · accent #d9a86c · error #e08787
+   Colours come from the active appearance's Textual theme: $ink, $surface,
+   $line, $foreground, $muted, $dim, $accent, $success, $error, $warning and
+   the $tool-*-bg tints.
 
    Layout follows omp's single-column dock:
      #transcript (1fr)  →  #status-band (1 row)  →  #prompt-row (╰─ + input)
    No bottom status bar, no frame around the prompt. */
 
 Screen {
-    background: #0d1319;
-    color: #d7e0e8;
+    background: $ink;
+    color: $foreground;
 }
 
 #root {
@@ -26,14 +27,14 @@ Screen {
 
 #transcript {
     height: 1fr;
-    background: #0d1319;
+    background: $ink;
     padding: 1 2;
     scrollbar-size-vertical: 1;
 }
 
 #subagent-transcript {
     height: 1fr;
-    background: #0d1319;
+    background: $ink;
     padding: 1 2;
     scrollbar-size-vertical: 1;
     display: none;
@@ -42,37 +43,37 @@ Screen {
 #command-hints {
     height: auto;
     max-height: 8;
-    background: #141c24;
+    background: $surface;
     padding: 0 1;
 }
 
 #new-content {
     height: 1;
-    background: #141c24;
+    background: $surface;
     padding: 0 1;
 }
 
 #dock {
     height: auto;
-    background: #0d1319;
+    background: $ink;
 }
 
 /* The band is a filled strip flush with the left edge, omp's default shape. */
 #status-band {
     height: 1;
-    background: #141c24;
+    background: $surface;
     padding: 0 0;
 }
 
 #prompt-row {
     height: auto;
-    background: #0d1319;
+    background: $ink;
 }
 
 #prompt-input {
     width: 1fr;
     height: 1;
-    background: #0d1319;
+    background: $ink;
     border: none;
     padding: 0 1 0 0;
 }
@@ -81,16 +82,16 @@ Screen {
     width: auto;
     height: 1;
     padding: 0 1 0 1;
-    color: #d9a86c;
-    background: #0d1319;
+    color: $accent;
+    background: $ink;
 }
 
 #prompt-input:focus {
-    background: #0d1319;
+    background: $ink;
 }
 
 .welcome {
-    color: #d7e0e8;
+    color: $foreground;
     text-align: center;
     margin: 1 0 1 0;
 }
@@ -98,16 +99,16 @@ Screen {
 #sidebar {
     width: 26;
     height: 1fr;
-    background: #141c24;
-    border-left: solid #263441;
+    background: $surface;
+    border-left: solid $line;
     padding: 1 2;
     scrollbar-size-vertical: 1;
 }
 
 /* omp: the user turn is a filled full-width bar, no prefix. */
 .user-message {
-    background: #1b222a;
-    color: #d7e0e8;
+    background: $raised;
+    color: $foreground;
     padding: 0 1;
     margin: 1 0 0 0;
     width: 100%;
@@ -118,14 +119,14 @@ Screen {
 }
 
 .thinking-row {
-    background: #0d1319;
+    background: $ink;
     border: none;
     /* A collapsed preview must never wrap, even before the first layout pass
        knows the real width (the widget clips its own text to the row too). */
     height: 1;
     text-wrap: nowrap;
     margin: 0 0 0 1;
-    color: #8296a6;
+    color: $muted;
 }
 
 .thinking-row.expanded {
@@ -134,16 +135,16 @@ Screen {
 }
 
 .thinking-row:focus {
-    color: #d9a86c;
+    color: $accent;
 }
 
 .skill-message {
-    background: #0d1319;
+    background: $ink;
     border: none;
     height: 1;
     text-wrap: nowrap;
     margin: 0 0 0 1;
-    color: #d7e0e8;
+    color: $foreground;
 }
 
 .skill-message.expanded {
@@ -152,61 +153,61 @@ Screen {
 }
 
 .skill-message:focus {
-    color: #d9a86c;
+    color: $accent;
 }
 
 /* omp's plain-tinted cards: body tint by state, success stays quiet. */
 .tool-card {
-    background: #0d1319;
+    background: $ink;
     height: auto;
     margin: 0 0 0 0;
-    color: #8296a6;
+    color: $muted;
 }
 
 .tool-card.-running {
-    background: #121a22;
+    background: $tool-running-bg;
 }
 
 .tool-card.-ok {
-    background: #10171e;
+    background: $tool-ok-bg;
 }
 
 .tool-card.-error {
-    background: #241a1a;
+    background: $tool-error-bg;
 }
 
 .tool-card:focus {
-    color: #d9a86c;
+    color: $accent;
 }
 
 .usage-row {
-    color: #5d6f7e;
+    color: $dim;
     margin: 0 0 1 0;
 }
 
 .notice {
-    color: #8296a6;
+    color: $muted;
     margin: 0 0 1 0;
 }
 
 /* Sticky provider-error banner (dock row, hidden while there is no error). */
 #error-banner {
     height: 1;
-    background: #3a1d1f;
-    color: #e08787;
+    background: $error-banner-bg;
+    color: $error;
     padding: 0 1;
 }
 
 /* Pending image attachments (one chip per image; hidden while empty). */
 #attachment-chips {
     height: 1;
-    background: #141c24;
+    background: $surface;
     padding: 0 1;
 }
 
 .attachment-chip {
     width: auto;
     height: 1;
-    color: #8296a6;
+    color: $muted;
     margin: 0 1 0 0;
 }

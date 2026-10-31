@@ -125,7 +125,7 @@ class SidebarSection(Vertical):
     }
     SidebarSection .sidebar-title {
         height: 1;
-        color: #8296a6;
+        color: $muted;
         text-style: bold;
     }
     SidebarSection .sidebar-rows {

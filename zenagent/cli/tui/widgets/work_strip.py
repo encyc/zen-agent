@@ -25,7 +25,7 @@ class WorkStrip(Static):
     DEFAULT_CSS = """
     WorkStrip {
         height: 1;
-        background: #141c24;
+        background: $surface;
         padding: 0 1;
     }
     """

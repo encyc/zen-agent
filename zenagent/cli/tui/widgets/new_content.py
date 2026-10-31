@@ -27,7 +27,7 @@ class NewContentBar(Static):
         text = Text()
         text.append("↓ ", style=palette.ACCENT)
         text.append("new output", style=palette.MUTED)
-        text.append("  ·  pagedown", style="#5d6f7e")
+        text.append("  ·  pagedown", style=palette.DIM)
         self.update(text)
         self.display = True
 
