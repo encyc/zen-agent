@@ -39,6 +39,11 @@ class MessageView:
     kind: Literal["user", "assistant"]
     text: str
     thinking: str | None = None
+    #: ``time.monotonic()`` when the current reasoning block started; None when
+    #: the model is not reasoning (history replay has no timing at all).
+    thinking_started_at: float | None = None
+    #: Finished reasoning seconds for this turn; None when timing is unknown.
+    thinking_seconds: float | None = None
 
 
 @dataclass

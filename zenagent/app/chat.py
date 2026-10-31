@@ -284,6 +284,10 @@ class ChatController:
         try:
             await self.runtime.agent.prompt(text, images=images or None)
         finally:
+            if self._current is not None:
+                # Aborts and provider errors skip message_end; do not leave a
+                # row ticking after the run is over.
+                self._finish_thinking(self._current)
             self._current = None
             self._turn_ms = int((time.monotonic() - started) * 1000)
             self._turn_output = (
@@ -337,6 +341,9 @@ class ChatController:
             self._on_assistant_event(event)
         elif event.type == "message_end" and isinstance(event.message, AssistantMessage):
             if self._current is not None:
+                # Reasoning always ends before the message does, even when the
+                # provider never sends thinking_end (fake streams, aborts).
+                self._finish_thinking(self._current)
                 # Canonicalize from the final message: some providers (and fake
                 # streams) deliver the whole text in the terminal message only.
                 self._current.text = _assistant_text(event.message)
@@ -380,17 +387,48 @@ class ChatController:
         if assistant_event is None:
             return
         kind = assistant_event.type
-        if kind == "text_delta" and assistant_event.delta:
+        if kind in ("thinking_start", "thinking_delta"):
+            if self._current is not None:
+                self._begin_thinking(self._current)
+                if assistant_event.delta:
+                    self._current.thinking = (
+                        self._current.thinking or ""
+                    ) + assistant_event.delta
+        elif kind == "thinking_end":
+            if self._current is not None:
+                self._finish_thinking(self._current)
+        elif kind in ("text_start", "text_delta"):
             if self._current is None:
+                if not assistant_event.delta:
+                    return
                 self._current = MessageView(kind="assistant", text="")
                 self._transcript.append(self._current)
-            self._current.text += assistant_event.delta
-        elif kind in ("thinking_delta", "thinking_start") and assistant_event.delta:
-            if self._current is not None:
-                self._current.thinking = (self._current.thinking or "") + assistant_event.delta
+            # The answer starting is what ends the reasoning block.
+            self._finish_thinking(self._current)
+            if assistant_event.delta:
+                self._current.text += assistant_event.delta
         elif kind == "toolcall_end":
             # tool cards are appended on tool_execution_start (args complete there)
             return
+
+    @staticmethod
+    def _begin_thinking(view: MessageView) -> None:
+        """Start the clock for a reasoning block (a turn may have several)."""
+        if view.thinking_started_at is not None:
+            return
+        if view.thinking_seconds is None:
+            view.thinking_seconds = 0.0
+        view.thinking_started_at = time.monotonic()
+
+    @staticmethod
+    def _finish_thinking(view: MessageView) -> None:
+        started = view.thinking_started_at
+        if started is None:
+            return
+        view.thinking_seconds = (view.thinking_seconds or 0.0) + (
+            time.monotonic() - started
+        )
+        view.thinking_started_at = None
 
     def _notify(self) -> None:
         self._on_change()

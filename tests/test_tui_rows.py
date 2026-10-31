@@ -116,7 +116,8 @@ async def test_collapsed_thinking_stays_one_row_when_the_first_line_overflows(ru
         assert row.collapsed is True
         assert row.region.height == 1, "the preview must be clipped, never wrapped"
         assert row.plain.startswith("✻ thinking  weighing the options")
-        assert row.plain.endswith("…")
+        # The duration suffix follows the preview; the preview itself is clipped.
+        assert row.plain.split("  ·  ")[0].endswith("…")
         assert "second line stays folded" not in row.plain
 
 

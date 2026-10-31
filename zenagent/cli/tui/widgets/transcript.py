@@ -199,13 +199,14 @@ class TranscriptView(VerticalScroll):
     def _update_assistant(self, slot: int, view: MessageView) -> None:
         if slot < 0 or slot >= len(self._assistant_widgets):
             return
-        if self._assistant_text.get(slot) == view.text:
-            return
-        self._assistant_text[slot] = view.text
-        widget = self._assistant_widgets[slot]
-        if widget.is_mounted:
-            widget.update(view.text)
-        self._sync_thinking(slot, view.thinking)
+        if self._assistant_text.get(slot) != view.text:
+            self._assistant_text[slot] = view.text
+            widget = self._assistant_widgets[slot]
+            if widget.is_mounted:
+                widget.update(view.text)
+        # Thinking streams (and its timer runs) before the answer text exists,
+        # so it is synced independently of the Markdown widget.
+        self._sync_thinking(slot, view)
 
     # -- appends ------------------------------------------------------------
 
@@ -216,24 +217,36 @@ class TranscriptView(VerticalScroll):
         if view.thinking:
             # Register the row now so _sync_thinking updates it instead of
             # mounting a second copy when thinking streams in later.
-            row = ThinkingRow(view.thinking)
+            row = ThinkingRow(
+                view.thinking,
+                started_at=view.thinking_started_at,
+                seconds=view.thinking_seconds,
+            )
             self._thinking_rows[len(self._assistant_widgets)] = row
             self.mount(row)
         widget = Markdown(view.text, classes="assistant-message")
         self._assistant_widgets.append(widget)
         self.mount(widget)
 
-    def _sync_thinking(self, index: int, thinking: str | None) -> None:
+    def _sync_thinking(self, index: int, view: MessageView) -> None:
         """Thinking often arrives after the bubble, so mount the row lazily."""
-        if not thinking:
+        if not view.thinking:
             return
         row = self._thinking_rows.get(index)
         if row is None:
-            row = ThinkingRow(thinking)
+            row = ThinkingRow(
+                view.thinking,
+                started_at=view.thinking_started_at,
+                seconds=view.thinking_seconds,
+            )
             self._thinking_rows[index] = row
             self.mount(row, before=self._assistant_widgets[index])
             return
-        row.set_thinking(thinking)
+        row.set_thinking(
+            view.thinking,
+            started_at=view.thinking_started_at,
+            seconds=view.thinking_seconds,
+        )
 
     def _append_tool(self, view: ToolCallView) -> None:
         card = ToolCard(view)
