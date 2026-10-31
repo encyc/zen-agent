@@ -13,11 +13,13 @@ from collections.abc import Callable
 from rich.text import Text
 from textual.widgets import Static
 
+from zenagent.cli.tui import palette
+
 __all__ = ["WorkStrip"]
 
-_ACCENT = "#d9a86c"
-_MUTED = "#8296a6"
-_DIM = "#5d6f7e"
+_ACCENT = palette.ACCENT
+_MUTED = palette.MUTED
+_DIM = palette.DIM
 
 
 class WorkStrip(Static):

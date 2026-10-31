@@ -10,12 +10,13 @@ from rich.text import Text
 from textual.containers import Horizontal
 from textual.widgets import Static
 
+from zenagent.cli.tui import palette
 from zenagent.types import ImageContent
 
 __all__ = ["AttachmentChips", "Chip"]
 
-_MUTED = "#8296a6"
-_DIM = "#5d6f7e"
+_MUTED = palette.MUTED
+_DIM = palette.DIM
 
 
 class Chip(Static):

@@ -36,6 +36,7 @@ from zenagent.cli.tui.widgets.new_content import NewContentBar
 from zenagent.cli.tui.widgets.prompt_gutter import PromptGutter
 from zenagent.cli.tui.widgets.prompt_input import PromptInput
 from zenagent.cli.tui.widgets.sidebar import NARROW_WIDTH, Sidebar
+from zenagent.cli.tui.widgets.sidebar_resize import SidebarResizeHandle
 from zenagent.cli.tui.widgets.status_band import StatusBand
 from zenagent.cli.tui.widgets.subagent_banner import SubagentBanner
 from zenagent.cli.tui.widgets.todo_hud import TodoHud
@@ -105,10 +106,15 @@ class ZenAgentApp(App):
         #: ctrl+b intent; the actual visibility also depends on the width.
         self._sidebar_open = False
         self._sidebar_visible = False
+        #: Drag-resized sidebar width (process-local; 26 at every launch).
+        self._sidebar_width = self.DEFAULT_SIDEBAR_WIDTH
+        self._sidebar_resizing = False
         #: 1s poll while background jobs/subagents are live (else none).
         self._work_timer = None
         #: ``task`` call id whose read-only transcript is on screen.
         self._viewing: str | None = None
+        #: The open job-log overlay, refreshed while the job is running.
+        self._job_log_screen = None
         self.command_hints: CommandHints | None = None
         self.models = ModelManager(runtime)
         self.sessions = SessionManager(runtime)
@@ -212,6 +218,12 @@ class ZenAgentApp(App):
 
     WHEEL_ROWS = 3
 
+    #: Sidebar width bounds; the main column never drops below the minimum.
+    DEFAULT_SIDEBAR_WIDTH = 26
+    MIN_SIDEBAR_WIDTH = 20
+    MAX_SIDEBAR_WIDTH = 60
+    MAIN_COLUMN_MIN = 30
+
     def _on_mouse_scroll_up(self, event: MouseScrollUp) -> None:
         self._scroll_chat(-self.WHEEL_ROWS)
 
@@ -241,6 +253,7 @@ class ZenAgentApp(App):
                         yield PromptGutter()
                         yield PromptInput()
                         yield WorkIndicator()
+            yield SidebarResizeHandle()
             yield Sidebar()
 
     def on_mount(self) -> None:
@@ -250,6 +263,8 @@ class ZenAgentApp(App):
         self.query_one(Sidebar).set_handlers(
             on_todo=self.action_show_todo_list,
             on_subagent=self.enter_subagent_view,
+            on_job=self.show_job_log,
+            on_context=self.action_show_context_breakdown,
         )
         from zenagent.tools.task import set_subagent_observer
 
@@ -383,8 +398,16 @@ class ZenAgentApp(App):
             banner.set_error(status.last_error)
         for chips in self.query(AttachmentChips):
             chips.set_attachments(self.chat.attachments)
+        if self._job_log_screen is not None:
+            view = self.chat.job_log(self._job_log_screen.job_id)
+            if view is None:
+                self._job_log_screen = None
+            else:
+                self._job_log_screen.set_view(view)
         for sidebar in self.query(Sidebar):
-            sidebar.refresh_contents(self.chat, self.models)
+            sidebar.refresh_contents(
+                self.chat, self.models, width=self._sidebar_width
+            )
         self._sync_chrome(status)
         self._sync_work_timer(status)
 
@@ -401,6 +424,40 @@ class ZenAgentApp(App):
             self.query_one(PromptInput).focus()
 
         self.push_screen(TodoListScreen(phases), restore_focus)
+
+    # -- context -------------------------------------------------------------
+
+    def action_show_context_breakdown(self) -> None:
+        """Open the full context split (sidebar row click / palette caller)."""
+        from zenagent.cli.tui.screens.context_breakdown import ContextBreakdownScreen
+
+        report = self.chat.status.context
+        if report is None:
+            self.notify("no context report yet")
+            return
+
+        def restore_focus(_result=None) -> None:
+            self.query_one(PromptInput).focus()
+
+        self.push_screen(ContextBreakdownScreen(report), restore_focus)
+
+    # -- job log -------------------------------------------------------------
+
+    def show_job_log(self, job_id: str) -> None:
+        """Open a job's bounded output; a retired job only gets a notice."""
+        from zenagent.cli.tui.screens.job_log import JobLogScreen
+
+        view = self.chat.job_log(job_id)
+        if view is None:
+            self.notify(f"job {job_id} is already gone")
+            return
+        screen = JobLogScreen(view)
+        self._job_log_screen = screen
+        self.push_screen(screen, self._job_log_closed)
+
+    def _job_log_closed(self, _result=None) -> None:
+        self._job_log_screen = None
+        self.query_one(PromptInput).focus()
 
     # -- subagent view -------------------------------------------------------
 
@@ -444,6 +501,34 @@ class ZenAgentApp(App):
         if restore_focus:
             prompt.focus()
 
+    # -- sidebar width -------------------------------------------------------
+
+    @property
+    def sidebar_width(self) -> int:
+        """The current sidebar width (clamped to the bounds above)."""
+        return self._sidebar_width
+
+    def begin_sidebar_resize(self) -> None:
+        """Mouse-down on the handle; the move handler owns the actual updates."""
+        self._sidebar_resizing = True
+
+    def end_sidebar_resize(self) -> None:
+        self._sidebar_resizing = False
+
+    def resize_sidebar(self, screen_x: int) -> None:
+        """Anchor the sidebar's left edge at ``screen_x`` (the right edge is fixed)."""
+        width = self.size.width - int(screen_x)
+        room = self.size.width - self.MAIN_COLUMN_MIN
+        self._sidebar_width = max(
+            self.MIN_SIDEBAR_WIDTH,
+            min(self.MAX_SIDEBAR_WIDTH, room, width),
+        )
+        self._apply_sidebar_width()
+
+    def _apply_sidebar_width(self) -> None:
+        for sidebar in self.query(Sidebar):
+            sidebar.styles.width = self._sidebar_width
+
     # -- chrome -------------------------------------------------------------
 
     def _open_sidebar_from_strip(self) -> None:
@@ -479,6 +564,9 @@ class ZenAgentApp(App):
         self._sidebar_visible = visible
         for sidebar in self.query(Sidebar):
             sidebar.display = visible
+        for handle in self.query(SidebarResizeHandle):
+            handle.display = visible
+        self._apply_sidebar_width()
         for hud in self.query(TodoHud):
             hud.display = bool(status.todos) and not visible
         running = sum(1 for job in status.jobs if job.status == "running")

@@ -12,10 +12,12 @@ import time
 from rich.text import Text
 from textual.widgets import Static
 
+from zenagent.cli.tui import palette
+
 __all__ = ["WorkIndicator"]
 
 _FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-_ACCENT = "#d9a86c"
+_ACCENT = palette.ACCENT
 
 
 class WorkIndicator(Static):

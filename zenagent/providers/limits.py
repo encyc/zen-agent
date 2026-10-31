@@ -31,6 +31,7 @@ __all__ = [
     "MIN_FITTED_OUTPUT_TOKENS",
     "OUTPUT_FIT_HEADROOM_TOKENS",
     "estimate_prompt_tokens",
+    "estimate_text_tokens",
     "estimate_tool_tokens",
     "fit_max_tokens",
     "fit_stream_options",
@@ -104,6 +105,11 @@ def _estimate_text_tokens(text: str) -> int:
     # Start from the Latin heuristic, then add back the wide characters whose
     # real token cost is ~1/char (4 chars/token would underestimate badly).
     return len(text) // 4 + len(_WIDE.findall(text))
+
+
+def estimate_text_tokens(text: str) -> int:
+    """Public view of the fitting heuristic: 4 latin chars/token, ~1 per CJK."""
+    return _estimate_text_tokens(text)
 
 
 def estimate_prompt_tokens(

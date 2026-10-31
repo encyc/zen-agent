@@ -9,10 +9,12 @@ from pathlib import Path
 
 from zenagent.agent.subagents import SubagentStore, carry_task_dir
 from zenagent.app.compact import compact, should_auto_compact
+from zenagent.app.context import build_context_report
 from zenagent.app.retry import prepare_retry
 from zenagent.app.runtime import Runtime
 from zenagent.app.support import cache_hit_ratio
 from zenagent.app.views import (
+    JobLogView,
     JobView,
     MessageView,
     RunStatus,
@@ -124,6 +126,14 @@ class ChatController:
             active_subagent=next(
                 (view.call_id for view in subagents if view.status == "running"), None
             ),
+            context=build_context_report(
+                getattr(self.runtime, "prompt_report", None),
+                agent.tools,
+                agent.messages,
+                self.runtime.guard.last_usage,
+                context_used,
+                agent.model.context_window,
+            ),
         )
 
     # -- work-in-progress snapshots -----------------------------------------
@@ -165,6 +175,24 @@ class ChatController:
         # The live elapsed is computed per call: caching the views would freeze
         # a running subagent's clock between tool events.
         return running + finished
+
+    def job_log(self, job_id: str) -> JobLogView | None:
+        """One background job's bounded output; None when it is already retired."""
+        try:
+            job = get_job_manager().snapshot(job_id)
+        except RuntimeError:  # no running loop
+            return None
+        if job is None:
+            return None
+        return JobLogView(
+            id=str(job.id),
+            command=str(job.command),
+            status=str(job.status),
+            duration_ms=job.duration_ms,
+            exit_code=job.exit_code,
+            output=job.output,
+            truncated=bool(job.truncated),
+        )
 
     # -- subagent transcripts -----------------------------------------------
 

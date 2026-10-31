@@ -13,15 +13,16 @@ from textual.app import ComposeResult
 from textual.containers import Vertical, VerticalScroll
 from textual.widgets import Static
 
+from zenagent.cli.tui import palette
 from zenagent.cli.tui.screens.modals import DialogScreen
 
 __all__ = ["TodoListScreen"]
 
-_TEXT = "#d7e0e8"
-_MUTED = "#8296a6"
-_DONE = "#8fbf8f"
-_BLOCKED = "#e08787"
-_ACCENT = "#d9a86c"
+_TEXT = palette.TEXT
+_MUTED = palette.MUTED
+_DONE = palette.OK
+_BLOCKED = palette.ERROR
+_ACCENT = palette.ACCENT
 
 #: ``todo`` tool status → the glyph in front of an item.
 _MARKS = {

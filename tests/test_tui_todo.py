@@ -226,7 +226,9 @@ async def test_sidebar_todo_row_opens_the_same_overlay(fake_runtime):
         await pilot.press("ctrl+b")
         await pilot.pause()
 
-        row = next(row for row in app.query(SidebarRow) if row.key == "todo")
+        row = next(
+            row for row in app.query(SidebarRow) if row.key == "task:0:0"
+        )
         await pilot.click(row)
         await pilot.pause()
 

@@ -18,13 +18,14 @@ from collections.abc import Callable
 from rich.text import Text
 from textual.widgets import Static
 
+from zenagent.cli.tui import palette
 from zenagent.tools.todo import summarize_todo
 
 __all__ = ["MAX_CURRENT_CHARS", "TodoHud"]
 
-_ACCENT = "#d9a86c"
-_MUTED = "#8296a6"
-_DIM = "#5d6f7e"
+_ACCENT = palette.ACCENT
+_MUTED = palette.MUTED
+_DIM = palette.DIM
 
 #: The optional "what am I doing" fragment is clipped, never wrapped.
 MAX_CURRENT_CHARS = 48
@@ -90,7 +91,7 @@ class TodoHud(Static):
         text.append(f"{info['closed']}/{info['total']} closed", style=_MUTED)
         if info["remaining"] == 0:
             text.append(" · ", style=_DIM)
-            text.append("all done", style=_ACCENT)
+            text.append("all done", style=palette.OK)
         elif info["blocked"]:
             text.append(" · ", style=_DIM)
             text.append(f"{info['blocked']} blocked", style=_DIM)

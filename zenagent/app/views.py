@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from zenagent.agent.loop import LOOP_GUARD_PREFIX
+from zenagent.app.context import ContextReport
 from zenagent.app.skill_commands import parse_skill_display
 from zenagent.events import AgentEvent
 from zenagent.types import (
@@ -25,6 +26,7 @@ from zenagent.types import (
 )
 
 __all__ = [
+    "JobLogView",
     "JobStatusView",
     "JobView",
     "MessageView",
@@ -144,6 +146,8 @@ class RunStatus:
     subagents: list[SubagentView] = field(default_factory=list)
     #: ``call_id`` of the subagent currently running, when there is one.
     active_subagent: str | None = None
+    #: Context-window composition (measured total, estimated slices).
+    context: ContextReport | None = None
 
 
 #: Job states the sidebar renders; mirrors ``zenagent.tools.jobs.JobStatus``.
@@ -161,6 +165,19 @@ class JobView:
     started_at: float
     duration_ms: int | None
     exit_code: int | None
+
+
+@dataclass(frozen=True)
+class JobLogView:
+    """A background job's bounded log, for the read-only overlay."""
+
+    id: str
+    command: str
+    status: str
+    duration_ms: int | None
+    exit_code: int | None
+    output: str
+    truncated: bool = False
 
 
 @dataclass(frozen=True)

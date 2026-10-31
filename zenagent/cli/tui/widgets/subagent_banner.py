@@ -10,11 +10,13 @@ from __future__ import annotations
 from rich.text import Text
 from textual.widgets import Static
 
+from zenagent.cli.tui import palette
+
 __all__ = ["SubagentBanner"]
 
-_ACCENT = "#d9a86c"
-_MUTED = "#8296a6"
-_DIM = "#5d6f7e"
+_ACCENT = palette.ACCENT
+_MUTED = palette.MUTED
+_DIM = palette.DIM
 
 _STATUS_LABELS = {"ok": "done"}
 
@@ -42,7 +44,7 @@ class SubagentBanner(Static):
     def show(self, name: str, *, status: str | None = None) -> None:
         running = status in (None, "running")
         text = Text()
-        text.append("◐ " if running else "✓ ", style=_ACCENT)
+        text.append("◐ " if running else "✓ ", style=_ACCENT if running else palette.OK)
         text.append("subagent: ", style=_ACCENT)
         text.append(name, style=_MUTED)
         if not running and status:

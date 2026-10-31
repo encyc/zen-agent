@@ -10,10 +10,12 @@ from __future__ import annotations
 from rich.text import Text
 from textual.widgets import Static
 
+from zenagent.cli.tui import palette
+
 __all__ = ["NewContentBar"]
 
-_ACCENT = "#d9a86c"
-_MUTED = "#8296a6"
+_ACCENT = palette.ACCENT
+_MUTED = palette.MUTED
 
 
 class NewContentBar(Static):

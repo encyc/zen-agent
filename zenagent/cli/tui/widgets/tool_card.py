@@ -13,15 +13,16 @@ from rich.text import Text
 from textual.widgets import Static
 
 from zenagent.app.views import ToolCallView
+from zenagent.cli.tui import palette
 
 __all__ = ["MAX_RESULT_LINES", "ToolCard"]
 
-_TEXT = "#d7e0e8"
-_MUTED = "#8296a6"
-_DIM = "#5d6f7e"
-_ACCENT = "#d9a86c"
-_ERROR = "#e08787"
-_ADDED = "#8fbf8f"
+_TEXT = palette.TEXT
+_MUTED = palette.MUTED
+_DIM = palette.DIM
+_ACCENT = palette.ACCENT
+_ERROR = palette.ERROR
+_ADDED = palette.OK
 
 MAX_RESULT_LINES = 12
 
