@@ -4,7 +4,7 @@ on:
   push:
     tags: ["v*"]
   # Manual runs are dry runs: they build and verify the artifacts but never
-  # upload. Publishing requires a tag push (see the `if:` on the publish job).
+  # upload. Publishing requires a tag push (see the `if:` on the publish step).
   workflow_dispatch:
 
 # Never let two runs race for the same PyPI project.
@@ -12,9 +12,16 @@ concurrency:
   group: publish-${{ github.ref }}
   cancel-in-progress: false
 
+# One job on purpose: the dist never travels through actions/upload-artifact,
+# so a GitHub artifact-storage quota (account-wide) cannot block a release.
+# The artifact round-trip buys nothing here — the publish step runs on the same
+# runner a few seconds after the build.
 jobs:
-  build:
+  publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # kept for a future switch to PyPI trusted publishing
     steps:
       - uses: actions/checkout@v4
         with:
@@ -26,10 +33,6 @@ jobs:
         run: uv build --clear
       - name: Verify the artifacts (release gate)
         run: bash scripts/release-check.sh --skip-build
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist/
       - name: Dry-run summary
         if: github.event_name == 'workflow_dispatch'
         run: |
@@ -38,22 +41,9 @@ jobs:
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           ls -l dist/ >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-
-  publish:
-    needs: build
-    # A tag push is the only path to PyPI: a manual run, or a tag pushed from a
-    # branch dispatch, stays a dry run.
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write # kept for a future switch to PyPI trusted publishing
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist/
       - name: Publish to PyPI
+        # A tag push is the only path to PyPI: a manual run stays a dry run.
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
