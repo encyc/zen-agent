@@ -131,6 +131,13 @@ BLOCKS: dict[str, BlockSpec] = {
         budget_chars=1600,
         required_vars=("transcript",),
     ),
+    "task_child_system": BlockSpec(
+        id="task_child_system",
+        path="task_child_system.md",
+        version=PROMPT_VERSION,
+        cache_class="stable",
+        budget_chars=600,
+    ),
     "compact.result": BlockSpec(
         id="compact.result",
         path="compact_result.md",

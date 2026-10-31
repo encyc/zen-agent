@@ -27,6 +27,7 @@ MARKERS = (
     "[tool_call",
     "- ... more skills omitted",
     "You are zenagent, a coding agent. Be concise.",
+    "You are a read-only research subagent",
 )
 
 #: (relative file, marker) pairs that are allowed outside the block files.

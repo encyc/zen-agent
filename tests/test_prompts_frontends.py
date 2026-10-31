@@ -40,3 +40,34 @@ def test_tui_and_headless_keep_their_own_roster_order() -> None:
     headless = frontend_prompt("headless-14")
     assert "todo, task, read_skill" in tui
     assert "read_skill, todo, task" in headless
+
+
+def test_real_build_agent_composes_the_prompt() -> None:
+    from zenagent.app.support import resolve_model
+    from zenagent.cli.main import _build_agent
+    from zenagent.cli.permissions import PermissionGate
+    from zenagent.providers.catalog import load_catalog
+    from zenagent.tools.fs import READ_FILE
+
+    model = resolve_model(load_catalog(), None)
+    gate = PermissionGate(assume_yes=True, interactive=False)
+    agent = _build_agent(
+        model,
+        "test-key",
+        "off",
+        gate,
+        tools=[READ_FILE],
+        context_files=False,
+        extra_prompt="EXT",
+    )
+    assert agent.system_prompt.endswith("\n\nEXT")
+    assert "Available tools: read_file" in agent.system_prompt
+
+
+def test_repl_compose_prompt_is_compose_based() -> None:
+    from zenagent.cli.repl import _compose_prompt
+    from zenagent.tools.fs import READ_FILE
+
+    prompt = _compose_prompt([READ_FILE], context_files=False, extra_text="EXT")
+    assert prompt.endswith("\n\nEXT")
+    assert "Available tools: read_file" in prompt

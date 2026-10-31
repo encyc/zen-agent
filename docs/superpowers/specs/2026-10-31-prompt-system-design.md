@@ -15,7 +15,7 @@
 
 审计（`11-prompt-inventory-and-comparison.md`）确认了症状与病根：
 
-- 症状（按 v0.4.1 `dde8bf0` 重测）：9 个 prompt 位置 / 21 个制品，固定文本 **5,581 字符**；基础 system prompt **802 字符**（11 内置 + todo/task/read_skill）、**14 条工具描述**、一条 plan 附注（294 字符）、4KB skills 索引、32KB 上下文注入、1 条中文压缩摘要。omp 同位置是 10,360+ 字符 system + 7,303 B 工具描述 + 261 个提示词文件。
+- 症状（按 v0.4.1 `dde8bf0` 重测）：9 个 prompt 位置 / 22 个制品，固定文本 **5,949 字符**；基础 system prompt **802 字符**（11 内置 + todo/task/read_skill）、**14 条工具描述**、一条 plan 附注（294 字符）、4KB skills 索引、32KB 上下文注入、1 条中文压缩摘要。omp 同位置是 10,360+ 字符 system + 7,303 B 工具描述 + 261 个提示词文件。
 - 病根：**散**。prompt 文本散在 6 个模块（`support.py`/`modes.py`/`context_files.py`/`skills.py`/`compact.py`/各工具模块）；装配逻辑在 4 个前端各写一遍（`app/runtime.py`、`cli/main.py`、`cli/repl.py`、`cli/rpc.py`），顺序还不完全一致；`scripts/eval.py` 另有一条自己的 base prompt；没有版本、没有 lint、没有 golden、没有 token 预算；工具描述焊死在工具实现里。
 
 现有资产（要复用，不要重造）：
@@ -105,6 +105,7 @@ zenagent/prompts/
     compact_system.md    # F 压缩 system
     compact_summary.md   # F 压缩 user（含 {{transcript}}）
     compact_result.md    # F 压缩结果注入（# 此前会话摘要 + {{summary}}）
+    task_child_system.md # task 子代理的只读子代理 system prompt
     tools/
       read_file.md write_file.md edit_file.md list_dir.md bash.md wait.md
       ask.md task.md glob.md grep.md web_search.md fetch.md todo.md read_skill.md
@@ -249,9 +250,10 @@ system(A) → context(D，默认开) → skills(E，有 skill 时) → extension
 | compact system | 200 | 125 |
 | compact summary | 1,600 | 201 |
 | compact result | 40 | 30 |
+| task_child_system | 600 | 368 |
 | 单个工具描述 | 900 | 最大 719（todo） |
 | 工具描述合计 | 4,400 | 4,041（11 内置 2,918 + todo 719 + task 323 + read_skill 81） |
-| **固定文本合计** | **9,000** | **5,581** |
+| **固定文本合计** | **9,000** | **5,949** |
 
 - 预算依据：0.4.1 的 system 已到 802；H2（交付契约 ~250）+ H3（workflow ~350）会把 system 推到 ~1,400，system 预算给到 1,600 留余量；H8 的 8 节 handoff 需要 ~1,200–1,600 的 compact summary；H6 的「更深规则覆盖」提示需要 context wrapper 从 26 到 ~110。预算给到「能容纳预期 lift 但不无限膨胀」的位置，超出即视为实验失败或需要重新设计。
 
@@ -418,7 +420,7 @@ system(A) → context(D，默认开) → skills(E，有 skill 时) → extension
 14. eval 从 P1 起默认跑真实 composed system prompt（旧短句变 `dev-short` variant），并重跑 baseline；否则 system 内容实验不可测。
 15. P2 首批候选文本（H2/H3/H4/H8）在实施计划里起草；付费实验由实现者用仓库 `.env` 执行，canonical model = catalog 默认模型，单实验 ≤$0.10、总计 ≤$0.50。
 16. 文本来源闸门用显式 allowlist 豁免（§6.5），新增豁免必须显式加。
-17. 基线按 **v0.4.1** 重测（`ask`/`task` 新工具、plan 附注 294、固定文本 5,581）；P0 的字节级基线以 v0.4.1 为准，设计初稿的 0.4.0 数字已全部替换。
+17. 基线按 **v0.4.1** 重测（`ask`/`task` 新工具、plan 附注 294、固定文本 5,949，含 review 补入的 `task_child_system` 368 字符）；P0 的字节级基线以 v0.4.1 为准，设计初稿的 0.4.0 数字已全部替换。
 
 ## 14. Builder check 的问题与处理（2026-10-31）
 

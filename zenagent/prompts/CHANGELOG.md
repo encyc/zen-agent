@@ -9,7 +9,8 @@ P0 extracted the v0.4.1 text verbatim — no behavior change.
 - Moved every fixed prompt string into `zenagent/prompts/blocks/`: system
   sub-blocks (identity / environment / tool policy / todo line / parallel line /
   closing), plan mode, project context wrapper, skills index header, compaction
-  system/summary/result, and the 14 tool descriptions.
+  system/summary/result, the 14 tool descriptions, and the `task` subagent's
+  read-only child system prompt (`task_child_system.md`).
 - Added the registry (`spec.py`), single-pass renderer, `compose_system()`,
   `compose_compact()`, `tool_description()`, the golden parity suite, the
   source gate and the budget gate.

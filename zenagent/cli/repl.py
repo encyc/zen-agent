@@ -488,6 +488,27 @@ def _make_default_reader(
     return read
 
 
+def _compose_prompt(
+    current_tools, *, context_files: bool, extra_text: str = ""
+) -> str:
+    """Compose the REPL system prompt through the single compose contract."""
+    context_text = (
+        load_context_files(discover_context_files(Path.cwd()))
+        if context_files
+        else ""
+    )
+    context = PromptContext(
+        cwd=Path.cwd(),
+        tool_names=tuple(tool.name for tool in current_tools),
+        context_text=context_text,
+        extension_fragments=(extra_text,) if extra_text else (),
+        include_context=context_files,
+        include_skills=False,
+        include_mode=False,
+    )
+    return compose_system(context).text
+
+
 async def repl(
     model_id: str | None = None,
     resume: str | Path | None = None,
@@ -576,21 +597,9 @@ async def repl(
         print(f"zenagent: {message}", file=sys.stderr)
 
     def build_prompt(current_tools, extra_text: str = "") -> str:
-        context_text = (
-            load_context_files(discover_context_files(Path.cwd()))
-            if context_files
-            else ""
+        return _compose_prompt(
+            current_tools, context_files=context_files, extra_text=extra_text
         )
-        context = PromptContext(
-            cwd=Path.cwd(),
-            tool_names=tuple(tool.name for tool in current_tools),
-            context_text=context_text,
-            extension_fragments=(extra_text,) if extra_text else (),
-            include_context=context_files,
-            include_skills=False,
-            include_mode=False,
-        )
-        return compose_system(context).text
 
     mcp_manager: McpManager | None = None
     if mcp and tools is None:

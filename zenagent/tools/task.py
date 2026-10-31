@@ -23,6 +23,7 @@ from zenagent.agent.artifacts import ArtifactSink
 from zenagent.agent.loop import AgentTool, ToolResultAgent
 from zenagent.config import ContextGuard
 from zenagent.prompts import tool_description
+from zenagent.prompts.registry import read_block
 from zenagent.providers.catalog import Model
 from zenagent.providers.registry import StreamFn
 from zenagent.types import AssistantMessage, TextContent
@@ -41,12 +42,6 @@ CHILD_TOOL_NAMES = frozenset(
 )
 
 DEFAULT_TASK_MAX_TURNS = 12
-
-_CHILD_SYSTEM_PROMPT = """You are a read-only research subagent inside a coding agent.
-You cannot modify files, run shell commands, or ask the user questions. Work only
-on the delegated task and finish with a concise, self-contained answer. Cite
-file paths (and line numbers when useful). If the task cannot be completed with
-the tools you have, say exactly what is missing instead of guessing."""
 
 _SAFE_NAME = re.compile(r"[^A-Za-z0-9_.-]")
 
@@ -160,7 +155,7 @@ def build_task_tool(
         guard = ContextGuard(live_model.context_window)
         child = Agent(
             model=live_model,
-            system_prompt=_CHILD_SYSTEM_PROMPT,
+            system_prompt=read_block("task_child_system"),
             tools=list(child_tools),
             api_key=live_key,
             thinking=live_thinking,
