@@ -14,6 +14,7 @@ from __future__ import annotations
 
 __all__ = [
     "ACCENT",
+    "CONTEXT_COLORS",
     "DIM",
     "ERROR",
     "INK",
@@ -50,6 +51,7 @@ SECTION_ACCENTS: dict[str, str] = {
     "Session": "#7fb3c9",  # cool blue
     "Model": "#9ab87a",  # moss
     "Runtime": "#c9a97f",  # sand
+    "Context": "#7f9ec9",  # horizon blue
     "Todo": ACCENT,  # warm
     "Subagent": "#b79ad0",  # lavender
     "Jobs": "#7fb398",  # sea green
@@ -71,4 +73,17 @@ STATE_COLORS: dict[str, str] = {
     "aborted": ERROR,
     "interrupted": DIM,
     "truncated": "#d9c06c",
+}
+
+#: One colour per context slice (shares the section accents intentionally).
+CONTEXT_COLORS: dict[str, str] = {
+    "system": SECTION_ACCENTS["Session"],
+    "agents": SECTION_ACCENTS["Model"],
+    "skills": SECTION_ACCENTS["Subagent"],
+    "extensions": SECTION_ACCENTS["Runtime"],
+    "plan": ACCENT,
+    "mode": ACCENT,
+    "tools": SECTION_ACCENTS["Jobs"],
+    "session": "#7f9ec9",
+    "other": DIM,
 }

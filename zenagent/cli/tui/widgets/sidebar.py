@@ -194,11 +194,13 @@ class Sidebar(VerticalScroll):
         self._on_todo_click: Callable[[], None] | None = None
         self._on_subagent_click: Callable[[str], None] | None = None
         self._on_job_click: Callable[[str], None] | None = None
+        self._on_context_click: Callable[[], None] | None = None
 
     def compose(self):
         yield SidebarSection("Session")
         yield SidebarSection("Model")
         yield SidebarSection("Runtime")
+        yield SidebarSection("Context", on_row_click=lambda _key: self._context_clicked())
         yield SidebarSection("Todo", on_row_click=lambda _key: self._todo_clicked())
         yield SidebarSection("Subagent", on_row_click=self._subagent_clicked)
         yield SidebarSection("Jobs", on_row_click=self._job_clicked)
@@ -211,11 +213,13 @@ class Sidebar(VerticalScroll):
         on_todo: Callable[[], None] | None = None,
         on_subagent: Callable[[str], None] | None = None,
         on_job: Callable[[str], None] | None = None,
+        on_context: Callable[[], None] | None = None,
     ) -> None:
         """Install click handlers (None clears one)."""
         self._on_todo_click = on_todo
         self._on_subagent_click = on_subagent
         self._on_job_click = on_job
+        self._on_context_click = on_context
 
     def _todo_clicked(self) -> None:
         if self._on_todo_click is not None:
@@ -228,6 +232,10 @@ class Sidebar(VerticalScroll):
     def _job_clicked(self, key: str) -> None:
         if self._on_job_click is not None:
             self._on_job_click(key)
+
+    def _context_clicked(self) -> None:
+        if self._on_context_click is not None:
+            self._on_context_click()
 
     # -- data ---------------------------------------------------------------
 
@@ -279,6 +287,12 @@ class Sidebar(VerticalScroll):
                 ("models", Text(f"{len(models.entries())} models", style=_MUTED)),
             ]
         )
+
+        report = status.context
+        if report is not None and report.slices:
+            self._section("Context").set_rows(_context_rows(report))
+        else:
+            self._section("Context").set_rows([])
 
         # Every task is listed inline (one clipped line each, phases as headers);
         # the overlay stays the place where full text is readable.
@@ -332,3 +346,63 @@ class Sidebar(VerticalScroll):
     def apply_width(self, width: int) -> bool:
         """Whether the panel fits; the app owns the actual ``display`` flag."""
         return width >= NARROW_WIDTH
+
+
+def _context_rows(report) -> list[tuple[str, Text | str]]:
+    """Total line, a 20-cell stacked bar and the two biggest slices."""
+    window = report.window
+    pct = report.total_tokens / window * 100.0 if window else 0.0
+    mark = "" if report.measured else "≈"
+    total_line = (
+        f"ctx {pct:.0f}% · {mark}{_human(report.total_tokens)}/{_human(window)}"
+    )
+    biggest = sorted(report.slices, key=lambda item: item.tokens, reverse=True)[:2]
+    top = " · ".join(
+        f"{_SHORT_SLICES.get(item.id, item.id)} {item.pct:.0f}%" for item in biggest
+    )
+    return [
+        ("ctx-total", Text(_clip(total_line), style=_TEXT)),
+        ("ctx-bar", _context_bar(report)),
+        ("ctx-top", Text(_clip(top), style=_MUTED)),
+    ]
+
+
+def _context_bar(report, width: int = _CONTENT_WIDTH - 2) -> Text:
+    """A stacked bar of the slices, filling exactly ``width`` cells."""
+    text = Text()
+    remaining = width
+    slices = list(report.slices)
+    for index, item in enumerate(slices):
+        if index == len(slices) - 1:
+            cells = remaining
+        else:
+            cells = round(item.pct / 100.0 * width)
+        cells = max(0, min(cells, remaining))
+        if cells:
+            color = palette.CONTEXT_COLORS.get(item.id, palette.DIM)
+            text.append("█" * cells, style=color)
+            remaining -= cells
+    if remaining > 0:
+        text.append("░" * remaining, style=palette.DIM)
+    return text
+
+
+def _human(count: int) -> str:
+    if count >= 1_000_000:
+        return f"{count / 1_000_000:.1f}m"
+    if count >= 1_000:
+        return f"{count / 1_000:.0f}k"
+    return str(count)
+
+
+_SHORT_SLICES = {
+    "system": "sys",
+    "agents": "AGENTS",
+    "skills": "skills",
+    "extensions": "ext",
+    "plan": "plan",
+    "mode": "mode",
+    "tools": "tools",
+    "session": "session",
+    "other": "other",
+}

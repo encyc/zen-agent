@@ -85,6 +85,7 @@ async def test_sidebar_mounts_the_six_sections_in_order(fake_runtime):
             "Session",
             "Model",
             "Runtime",
+            "Context",
             "Todo",
             "Subagent",
             "Jobs",

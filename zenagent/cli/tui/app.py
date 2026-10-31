@@ -264,6 +264,7 @@ class ZenAgentApp(App):
             on_todo=self.action_show_todo_list,
             on_subagent=self.enter_subagent_view,
             on_job=self.show_job_log,
+            on_context=self.action_show_context_breakdown,
         )
         from zenagent.tools.task import set_subagent_observer
 
@@ -421,6 +422,22 @@ class ZenAgentApp(App):
             self.query_one(PromptInput).focus()
 
         self.push_screen(TodoListScreen(phases), restore_focus)
+
+    # -- context -------------------------------------------------------------
+
+    def action_show_context_breakdown(self) -> None:
+        """Open the full context split (sidebar row click / palette caller)."""
+        from zenagent.cli.tui.screens.context_breakdown import ContextBreakdownScreen
+
+        report = self.chat.status.context
+        if report is None:
+            self.notify("no context report yet")
+            return
+
+        def restore_focus(_result=None) -> None:
+            self.query_one(PromptInput).focus()
+
+        self.push_screen(ContextBreakdownScreen(report), restore_focus)
 
     # -- job log -------------------------------------------------------------
 

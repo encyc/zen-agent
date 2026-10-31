@@ -10,7 +10,7 @@ from zenagent.cli.tui import palette
 
 _HEX = re.compile(r"#[0-9a-f]{6}$")
 
-SECTIONS = ["Session", "Model", "Runtime", "Todo", "Subagent", "Jobs"]
+SECTIONS = ["Session", "Model", "Runtime", "Context", "Todo", "Subagent", "Jobs"]
 
 def test_palette_colours_are_hex():
     for name in ("INK", "SURFACE", "LINE", "TEXT", "MUTED", "DIM", "ACCENT", "OK", "ERROR"):
