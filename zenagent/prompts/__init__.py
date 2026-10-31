@@ -101,24 +101,58 @@ def _render_system(ctx: PromptContext) -> tuple[str, list[RenderedBlock]]:
     return "\n".join(parts), blocks
 
 
+def _block(block_id: str, text: str) -> RenderedBlock:
+    spec = BLOCKS[block_id]
+    return RenderedBlock(
+        id=block_id, chars=len(text), cache_class=spec.cache_class, version=spec.version
+    )
+
+
 def compose_system(ctx: PromptContext) -> RenderedPrompt:
     """Render the system prompt for ``ctx``.
 
-    P0 stage: the base system blocks only. Context, skills, extensions and the
-    plan note are appended by Task 4.
+    Assembly order matches v0.4.1: base system blocks, then the project
+    context, skills index, extension fragments and (plan mode only) the plan
+    note. Appends keep the legacy ``"\\n\\n"`` join exactly — the golden parity
+    tests pin this byte for byte.
     """
+    blocks: list[RenderedBlock] = []
     if ctx.system_override is not None:
-        return RenderedPrompt(
-            text=ctx.system_override,
-            blocks=(
-                RenderedBlock(
-                    id="override",
-                    chars=len(ctx.system_override),
-                    cache_class="stable",
-                    version=PROMPT_VERSION,
-                ),
-            ),
-            version=PROMPT_VERSION,
+        text = ctx.system_override
+        blocks.append(
+            RenderedBlock(
+                id="override",
+                chars=len(text),
+                cache_class="stable",
+                version=PROMPT_VERSION,
+            )
         )
-    text, blocks = _render_system(ctx)
+    else:
+        text, system_blocks = _render_system(ctx)
+        blocks.extend(system_blocks)
+    if ctx.include_context and ctx.context_text.strip():
+        part = render(
+            read_block("context_files", ctx.root), {"context_text": ctx.context_text}
+        )
+        text = f"{text.rstrip()}\n\n{part}"
+        blocks.append(_block("context_files", part))
+    if ctx.include_skills and ctx.skill_entries.strip():
+        part = render(read_block("skills", ctx.root), {"entries": ctx.skill_entries})
+        text = f"{text}\n\n{part}"
+        blocks.append(_block("skills", part))
+    if ctx.include_extensions and ctx.extension_fragments:
+        part = "\n\n".join(ctx.extension_fragments)
+        text = f"{text}\n\n{part}"
+        blocks.append(
+            RenderedBlock(
+                id="extensions",
+                chars=len(part),
+                cache_class="session",
+                version=PROMPT_VERSION,
+            )
+        )
+    if ctx.include_mode and ctx.mode == "plan":
+        part = read_block("plan_mode", ctx.root)
+        text = f"{text}\n\n{part}"
+        blocks.append(_block("plan_mode", part))
     return RenderedPrompt(text=text, blocks=tuple(blocks), version=PROMPT_VERSION)

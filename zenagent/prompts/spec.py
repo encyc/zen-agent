@@ -86,6 +86,32 @@ BLOCKS: dict[str, BlockSpec] = {
         budget_chars=100,
         optional=True,
     ),
+    "plan_mode": BlockSpec(
+        id="plan_mode",
+        path="plan_mode.md",
+        version=PROMPT_VERSION,
+        cache_class="session",
+        budget_chars=700,
+        optional=True,
+    ),
+    "context_files": BlockSpec(
+        id="context_files",
+        path="context_files.md",
+        version=PROMPT_VERSION,
+        cache_class="volatile",
+        budget_chars=160,
+        required_vars=("context_text",),
+        optional=True,
+    ),
+    "skills": BlockSpec(
+        id="skills",
+        path="skills.md",
+        version=PROMPT_VERSION,
+        cache_class="session",
+        budget_chars=120,
+        required_vars=("entries",),
+        optional=True,
+    ),
 }
 
 #: Assembly order for the base system prompt. Sub-blocks are joined with a

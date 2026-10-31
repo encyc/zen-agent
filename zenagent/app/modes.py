@@ -14,6 +14,8 @@ REPL and TUI all resolve and display the same three words.
 
 from __future__ import annotations
 
+from zenagent.prompts.registry import read_block
+
 __all__ = [
     "DEFAULT_MODE",
     "MODES",
@@ -67,12 +69,7 @@ def mode_prompt_note(mode: str) -> str:
     """Extra system-prompt paragraph for the mode, or ``""`` when none."""
     if normalize_mode(mode) != "plan":
         return ""
-    return (
-        "PLAN MODE: you are in read-only plan mode. Investigate with read-only "
-        "tools (read_file, list_dir, glob, grep, web_search, fetch, wait, ask, task), then present a concise, "
-        "step-by-step plan. Do not modify files or run mutating commands; the "
-        "user switches to ask or full mode to execute the plan."
-    )
+    return read_block("plan_mode")
 
 
 def describe_modes() -> str:
