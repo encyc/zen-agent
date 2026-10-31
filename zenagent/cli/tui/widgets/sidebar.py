@@ -193,6 +193,7 @@ class Sidebar(VerticalScroll):
         super().__init__(id="sidebar")
         self._on_todo_click: Callable[[], None] | None = None
         self._on_subagent_click: Callable[[str], None] | None = None
+        self._on_job_click: Callable[[str], None] | None = None
 
     def compose(self):
         yield SidebarSection("Session")
@@ -200,7 +201,7 @@ class Sidebar(VerticalScroll):
         yield SidebarSection("Runtime")
         yield SidebarSection("Todo", on_row_click=lambda _key: self._todo_clicked())
         yield SidebarSection("Subagent", on_row_click=self._subagent_clicked)
-        yield SidebarSection("Jobs")
+        yield SidebarSection("Jobs", on_row_click=self._job_clicked)
 
     # -- wiring -------------------------------------------------------------
 
@@ -209,10 +210,12 @@ class Sidebar(VerticalScroll):
         *,
         on_todo: Callable[[], None] | None = None,
         on_subagent: Callable[[str], None] | None = None,
+        on_job: Callable[[str], None] | None = None,
     ) -> None:
         """Install click handlers (None clears one)."""
         self._on_todo_click = on_todo
         self._on_subagent_click = on_subagent
+        self._on_job_click = on_job
 
     def _todo_clicked(self) -> None:
         if self._on_todo_click is not None:
@@ -221,6 +224,10 @@ class Sidebar(VerticalScroll):
     def _subagent_clicked(self, key: str) -> None:
         if self._on_subagent_click is not None:
             self._on_subagent_click(key)
+
+    def _job_clicked(self, key: str) -> None:
+        if self._on_job_click is not None:
+            self._on_job_click(key)
 
     # -- data ---------------------------------------------------------------
 

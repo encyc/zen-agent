@@ -113,6 +113,8 @@ class ZenAgentApp(App):
         self._work_timer = None
         #: ``task`` call id whose read-only transcript is on screen.
         self._viewing: str | None = None
+        #: The open job-log overlay, refreshed while the job is running.
+        self._job_log_screen = None
         self.command_hints: CommandHints | None = None
         self.models = ModelManager(runtime)
         self.sessions = SessionManager(runtime)
@@ -261,6 +263,7 @@ class ZenAgentApp(App):
         self.query_one(Sidebar).set_handlers(
             on_todo=self.action_show_todo_list,
             on_subagent=self.enter_subagent_view,
+            on_job=self.show_job_log,
         )
         from zenagent.tools.task import set_subagent_observer
 
@@ -394,6 +397,12 @@ class ZenAgentApp(App):
             banner.set_error(status.last_error)
         for chips in self.query(AttachmentChips):
             chips.set_attachments(self.chat.attachments)
+        if self._job_log_screen is not None:
+            view = self.chat.job_log(self._job_log_screen.job_id)
+            if view is None:
+                self._job_log_screen = None
+            else:
+                self._job_log_screen.set_view(view)
         for sidebar in self.query(Sidebar):
             sidebar.refresh_contents(self.chat, self.models)
         self._sync_chrome(status)
@@ -412,6 +421,24 @@ class ZenAgentApp(App):
             self.query_one(PromptInput).focus()
 
         self.push_screen(TodoListScreen(phases), restore_focus)
+
+    # -- job log -------------------------------------------------------------
+
+    def show_job_log(self, job_id: str) -> None:
+        """Open a job's bounded output; a retired job only gets a notice."""
+        from zenagent.cli.tui.screens.job_log import JobLogScreen
+
+        view = self.chat.job_log(job_id)
+        if view is None:
+            self.notify(f"job {job_id} is already gone")
+            return
+        screen = JobLogScreen(view)
+        self._job_log_screen = screen
+        self.push_screen(screen, self._job_log_closed)
+
+    def _job_log_closed(self, _result=None) -> None:
+        self._job_log_screen = None
+        self.query_one(PromptInput).focus()
 
     # -- subagent view -------------------------------------------------------
 

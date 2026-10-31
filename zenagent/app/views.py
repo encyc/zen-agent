@@ -25,6 +25,7 @@ from zenagent.types import (
 )
 
 __all__ = [
+    "JobLogView",
     "JobStatusView",
     "JobView",
     "MessageView",
@@ -161,6 +162,19 @@ class JobView:
     started_at: float
     duration_ms: int | None
     exit_code: int | None
+
+
+@dataclass(frozen=True)
+class JobLogView:
+    """A background job's bounded log, for the read-only overlay."""
+
+    id: str
+    command: str
+    status: str
+    duration_ms: int | None
+    exit_code: int | None
+    output: str
+    truncated: bool = False
 
 
 @dataclass(frozen=True)
