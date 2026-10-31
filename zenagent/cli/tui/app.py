@@ -255,6 +255,9 @@ class ZenAgentApp(App):
 
         set_subagent_observer(self.chat.on_subagent_event)
         self._announce_missing_key()
+        # A resumed session already has messages: build the transcript views
+        # before the first paint, or history (and its subagent rows) is blank.
+        self.chat.reload_transcript()
         self._refresh_status()
         self.query_one(PromptInput).focus()
         self._start_update_check()

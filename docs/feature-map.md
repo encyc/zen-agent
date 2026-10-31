@@ -65,7 +65,10 @@
 | Textual 外壳、状态栏、输入 | `cli/tui/{app,run}.py`、`widgets/{status_bar,prompt_input}.py` | `test_tui_skeleton.py` | [TUI](guide/tui.md) |
 | 富渲染（markdown/工具卡/usage） | `widgets/{chat_log,tool_card}.py` | `test_tui_chat.py` | 同上 |
 | 队列/steer/中断 | `app.py`、`app/chat.py` | `test_tui_controls.py` | 同上 |
-| 模型/会话选择器、侧边栏、命令面板 | `screens/modals.py`、`widgets/sidebar.py` | `test_tui_pickers.py` | 同上 |
+| 模型/会话选择器、命令面板 | `screens/modals.py` | `test_tui_pickers.py` | 同上 |
+| 工作面板侧栏（Todo/Subagent/Jobs）+ 后台活提示条 | `widgets/{sidebar,work_strip}.py`、`app.py` | `test_tui_sidebar.py`、`test_tui_layout.py` | [TUI](guide/tui.md) |
+| todo 只读浮层（HUD/侧栏点击、命令面板入口） | `screens/todo_list.py`、`widgets/todo_hud.py` | `test_tui_todo.py` | 同上 |
+| 子代理转录：sidecar 持久化 + 只读查看 + resume 回看 | `agent/subagents.py`、`tools/task.py`、`app/chat.py`、`cli/tui/{widgets/subagent_banner.py,app.py}` | `test_subagents_store.py`、`test_task.py`、`test_app_chat.py`、`test_tui_subagent_view.py`、`test_tui_subagent_resume.py` | 同上 |
 | 会话操作（new/fork/delete/export/rename） | `screens/modals.py::SessionPicker`、`cli/tui/app.py` | `test_tui_sessions.py` | 同上 |
 | 收尾（窄屏/退出摘要） | `widgets/status_bar.py`、`app.py` | `test_tui_polish.py` | 同上 |
 
