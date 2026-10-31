@@ -13,9 +13,9 @@ from typing import Literal
 
 __all__ = [
     "BLOCKS",
-    "BlockSpec",
     "PROMPT_VERSION",
     "SYSTEM_BLOCK_ORDER",
+    "BlockSpec",
 ]
 
 #: Bumped whenever block content changes; recorded in eval reports and the

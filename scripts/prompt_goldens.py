@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Capture or check the v0.4.1 prompt golden baseline.
 
     uv run python scripts/prompt_goldens.py            # write tests/golden/prompts/
@@ -19,21 +18,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
 
-from prompt_fixtures import (  # noqa: E402
-    CONFIGS,
-    SKILLS,
-    TOOL_GOLDEN_NAMES,
-    TRANSCRIPT,
-)
+from prompt_fixtures import CONFIGS, SKILLS, TOOL_GOLDEN_NAMES, TRANSCRIPT
 
-from zenagent.app.compact import SUMMARIZE_PROMPT, _SUMMARIZE_SYSTEM  # noqa: E402
-from zenagent.app.modes import mode_prompt_note  # noqa: E402
-from zenagent.app.support import system_prompt  # noqa: E402
-from zenagent.context_files import system_prompt_with_context  # noqa: E402
-from zenagent.skills import build_skill_tool, skills_prompt_index  # noqa: E402
-from zenagent.tools import ALL_TOOLS  # noqa: E402
-from zenagent.tools.task import build_task_tool  # noqa: E402
-from zenagent.tools.todo import build_todo_tool  # noqa: E402
+from zenagent.app.compact import _SUMMARIZE_SYSTEM, SUMMARIZE_PROMPT
+from zenagent.app.modes import mode_prompt_note
+from zenagent.app.support import system_prompt
+from zenagent.context_files import system_prompt_with_context
+from zenagent.skills import build_skill_tool, skills_prompt_index
+from zenagent.tools import ALL_TOOLS
+from zenagent.tools.task import build_task_tool
+from zenagent.tools.todo import build_todo_tool
 
 DEFAULT_OUT = ROOT / "tests" / "golden" / "prompts"
 

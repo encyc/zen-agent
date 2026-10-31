@@ -53,6 +53,7 @@ def test_check_mode_matches_committed_goldens() -> None:
     result = subprocess.run(
         [sys.executable, str(SCRIPT), "--check"],
         cwd=ROOT,
+        check=False,
         capture_output=True,
         text=True,
     )

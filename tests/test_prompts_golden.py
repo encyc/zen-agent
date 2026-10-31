@@ -5,10 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from prompt_fixtures import CONFIGS, CWD
 
 from zenagent.prompts import PromptContext, compose_system
-
-from prompt_fixtures import CONFIGS, CWD
 
 GOLDEN = Path(__file__).resolve().parent / "golden" / "prompts"
 BASE_CONFIGS = ("default-11", "tui-14", "headless-14", "rpc-13", "eval-11")

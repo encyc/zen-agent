@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from zenagent.prompts import PromptContext, compose_system
-
 from prompt_fixtures import CWD
+
+from zenagent.prompts import PromptContext, compose_system
 
 
 def test_todo_line_only_with_todo_tool() -> None:

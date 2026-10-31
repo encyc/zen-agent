@@ -7,7 +7,7 @@ template's variables match the spec's declaration. Composition lives in
 
 from __future__ import annotations
 
-from functools import lru_cache
+from functools import cache
 from importlib import resources
 from pathlib import Path
 
@@ -17,7 +17,7 @@ from zenagent.prompts.spec import BLOCKS
 __all__ = ["read_block", "validate_registry"]
 
 
-@lru_cache(maxsize=None)
+@cache
 def _read_package(block_id: str) -> str:
     spec = BLOCKS[block_id]
     return (
@@ -27,7 +27,7 @@ def _read_package(block_id: str) -> str:
     )
 
 
-@lru_cache(maxsize=None)
+@cache
 def _read_overlay(block_id: str, root: str) -> str:
     spec = BLOCKS[block_id]
     return (Path(root) / "blocks" / spec.path).read_text(encoding="utf-8")
