@@ -107,3 +107,19 @@ async def test_switch_session_without_carry_starts_empty(runtime_factory, tmp_pa
     new_path = tmp_path / "other-session.jsonl"
     await runtime.switch_session(new_path)
     assert load_todo_phases(new_path) == []
+
+
+async def test_two_runtimes_share_the_job_manager_until_the_last_closes(runtime_factory):
+    from zenagent.tools.jobs import get_job_manager
+
+    first = await runtime_factory()
+    second = await runtime_factory()
+    manager = get_job_manager()
+    job = await manager.start("sleep 2", timeout_s=10)
+
+    await first.close()
+    assert get_job_manager() is manager, "one Runtime close must not kill shared jobs"
+    assert manager.snapshot(job.id) is not None
+
+    await second.close()
+    assert get_job_manager() is not manager, "last close disposes the manager"

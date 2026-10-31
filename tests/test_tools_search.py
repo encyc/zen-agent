@@ -284,3 +284,17 @@ async def test_glob_hides_dotfiles_unless_opted_in(tmp_path, monkeypatch):
     text = opted_in.content[0].text
     assert "visible.txt" in text and ".hidden.txt" in text
     assert ".git" not in text, ".git is always skipped"
+
+
+async def test_glob_patterns_that_name_dot_paths_are_not_hidden(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    workflows = tmp_path / ".github" / "workflows"
+    workflows.mkdir(parents=True)
+    (workflows / "ci.yml").write_text("on: push\n")
+    (tmp_path / ".env.local").write_text("SECRET=1\n")
+
+    explicit_dir = await call(GLOB, pattern=".github/**/*.yml")
+    assert ".github/workflows/ci.yml" in explicit_dir.content[0].text
+
+    explicit_file = await call(GLOB, pattern="**/.env*")
+    assert ".env.local" in explicit_file.content[0].text

@@ -1312,3 +1312,73 @@ async def test_agent_end_has_no_tool_stats_without_tool_calls():
     events = await run("go", state, make_config(stream))
     end = next(event for event in events if event.type == "agent_end")
     assert end.tool_stats is None
+
+
+async def test_repeated_wait_calls_are_exempt_from_the_loop_guard():
+    """Waiting for one long job is legitimate progress, not a loop."""
+    async def fake_wait(name, args, abort, on_update=None):
+        return ToolResultAgent(content=[TextContent(text="job still running")])
+
+    script = [
+        [call_tool("t1", "wait", {"job_id": "bg_1"}), finish("tool_use")]
+        for _ in range(6)
+    ]
+    script.append([say("done"), finish("stop")])
+    stream = ScriptedStream(script)
+    state = AgentState()
+    await run(
+        "go",
+        state,
+        make_config(stream, tools=[make_tool("wait", fake_wait, approval="read")]),
+    )
+    # The guard (if any) would have been injected into a later request.
+    assert not any(
+        "tool-loop guard" in str(getattr(message, "content", ""))
+        for call in stream.calls
+        for message in call["messages"]
+    )
+
+
+async def test_async_bash_then_wait_through_the_loop():
+    from zenagent.tools.bash import BASH
+    from zenagent.tools.wait import WAIT
+
+    stream = ScriptedStream(
+        [
+            [
+                call_tool("t1", "bash", {"command": "echo from-job", "async": True}),
+                finish("tool_use"),
+            ],
+            [call_tool("t2", "wait", {"job_id": "bg_1"}), finish("tool_use")],
+            [say("done"), finish("stop")],
+        ]
+    )
+    state = AgentState()
+    events = await run("go", state, make_config(stream, tools=[BASH, WAIT]))
+    ends = [event for event in events if event.type == "tool_execution_end"]
+    assert "started background job bg_1" in ends[0].result.content[0].text
+    waited = ends[1].result.content[0].text
+    assert "job bg_1: ok" in waited
+    assert "from-job" in waited
+
+
+async def test_async_bash_and_wait_in_the_same_batch():
+    from zenagent.tools.bash import BASH
+    from zenagent.tools.wait import WAIT
+
+    stream = ScriptedStream(
+        [
+            [
+                call_tool("t1", "bash", {"command": "echo same-batch", "async": True}),
+                call_tool("t2", "wait", {"job_id": "bg_1"}),
+                finish("tool_use"),
+            ],
+            [say("done"), finish("stop")],
+        ]
+    )
+    state = AgentState()
+    events = await run("go", state, make_config(stream, tools=[BASH, WAIT]))
+    ends = [event for event in events if event.type == "tool_execution_end"]
+    assert "started background job bg_1" in ends[0].result.content[0].text
+    assert "job bg_1: ok" in ends[1].result.content[0].text
+    assert "same-batch" in ends[1].result.content[0].text

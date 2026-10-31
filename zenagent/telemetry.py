@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from zenagent.events import AgentEvent
@@ -32,6 +32,8 @@ class RunMetrics:
     cache_write: int
     cost: float
     termination: str | None
+    #: Per-tool ``{calls, errors, ms}`` from ``agent_end.tool_stats``.
+    tools: dict = field(default_factory=dict)
 
     @property
     def duration_ms(self) -> int:
@@ -47,6 +49,7 @@ class MetricsRecorder:
         self.started_at = time.time()
         self.turns = 0
         self.tool_calls = 0
+        self.tool_stats: dict = {}
         self.usage = Usage()
 
     def __call__(self, event: AgentEvent) -> None:
@@ -54,6 +57,8 @@ class MetricsRecorder:
             self.turns += 1
         elif event.type == "tool_execution_start":
             self.tool_calls += 1
+        elif event.type == "agent_end" and event.tool_stats:
+            self.tool_stats = dict(event.tool_stats.get("tools") or {})
         elif event.type == "message_end" and isinstance(event.message, AssistantMessage):
             usage = event.message.usage
             self.usage.input += usage.input
@@ -76,6 +81,7 @@ class MetricsRecorder:
             cache_write=self.usage.cache_write,
             cost=self.usage.cost.total,
             termination=termination,
+            tools=dict(self.tool_stats),
         )
 
 

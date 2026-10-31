@@ -34,8 +34,6 @@ MAX_FETCH_TIMEOUT_S = 45.0
 RECENCY_VALUES = ("day", "week", "month", "year")
 
 _TAG = re.compile(r"<[^>]+>")
-_SCRIPT_STYLE = re.compile(r"<(script|style|noscript)[^>]*>.*?</\1>", re.DOTALL)
-_WS = re.compile(r"[ \t\r\f\v]+")
 
 #: Elements that are never readable content.
 _DROP_ELEMENTS = re.compile(
@@ -108,30 +106,38 @@ async def _web_search(tool_call_id: str, args: dict, abort, on_update=None) -> T
     )
 
 
-def strip_html(body: str) -> str:
-    return _WS.sub(" ", html.unescape(_TAG.sub(" ", _SCRIPT_STYLE.sub(" ", body)))).strip()
+def _clean_fragment(fragment: str) -> str:
+    """Strip chrome/tags from one content fragment, paragraph-shaped."""
+    text = _CHROME.sub(" ", fragment)
+    text = _BLOCK_BOUNDARY.sub("\n", text)
+    text = html.unescape(_TAG.sub(" ", text))
+    lines = [" ".join(line.split()) for line in text.splitlines()]
+    return "\n".join(line for line in lines if line)
 
 
 def readable_text(body: str) -> tuple[str, str]:
     """Extract readable text from an HTML page; returns ``(text, method)``.
 
-    Prefer an ``<article>``/``<main>`` container (a page's actual content),
-    drop scripts/styles and page chrome, and turn block boundaries into line
-    breaks so paragraph structure survives. ``method`` is reported in the
-    result details (``article``/``main``/``body``).
+    Every ``<article>``/``<main>`` block is scored by extracted length, because
+    real pages often render empty placeholders or small teaser cards before the
+    actual content; the longest candidate wins (on a tie ``main`` beats a
+    teaser ``article``), and an empty page falls back to the whole body.
+    ``method`` is reported in the result details (``article``/``main``/``body``).
     """
     cleaned = _DROP_ELEMENTS.sub(" ", body)
-    content, method = cleaned, "body"
+    candidates: list[tuple[int, int, str, str]] = []
     for pattern, name in _CONTENT_BLOCKS:
-        match = pattern.search(cleaned)
-        if match is not None:
-            content, method = match.group(1), name
-            break
-    content = _CHROME.sub(" ", content)
-    content = _BLOCK_BOUNDARY.sub("\n", content)
-    content = html.unescape(_TAG.sub(" ", content))
-    lines = [" ".join(line.split()) for line in content.splitlines()]
-    return "\n".join(line for line in lines if line), method
+        for match in pattern.finditer(cleaned):
+            text = _clean_fragment(match.group(1))
+            # Tie-break: prefer <main> (usually the real container) over a
+            # teaser <article> of the same size.
+            tie_break = 1 if name == "main" else 0
+            candidates.append((len(text), tie_break, name, text))
+    if candidates:
+        length, _tie_break, name, text = max(candidates, key=lambda item: (item[0], item[1]))
+        if length > 0:
+            return text, name
+    return _clean_fragment(cleaned), "body"
 
 
 def _clamp_fetch_timeout(raw) -> float | None:

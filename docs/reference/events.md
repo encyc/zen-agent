@@ -24,7 +24,7 @@
 | type | 关键字段 | 说明 |
 |---|---|---|
 | `agent_start` | — | run 开始 |
-| `agent_end` | `new_messages`、`tool_stats` | run 结束；本 run 追加的所有消息；按工具名汇总的 `{calls, errors, ms}`（无工具调用时为 None） |
+| `agent_end` | `new_messages`、`tool_stats` | run 结束；本 run 追加的所有消息；按工具名汇总的 `{calls, errors, ms}`（无工具调用时为 None；`MetricsRecorder` 会写进 run metrics 的 `tools`） |
 | `turn_start` | — | 一次 provider 请求开始 |
 | `turn_end` | — | 一次请求结束 |
 | `message_start` | `message` | 一条消息开始（assistant 是流式） |

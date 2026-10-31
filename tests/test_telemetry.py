@@ -64,3 +64,19 @@ def test_appends_one_line_per_run(tmp_path):
 def test_failed_run_still_records_termination():
     metrics = MetricsRecorder("m").build("max_turns")
     assert metrics.termination == "max_turns"
+
+
+async def test_metrics_recorder_captures_tool_stats():
+    from zenagent.events import AgentEvent
+    from zenagent.telemetry import MetricsRecorder
+
+    recorder = MetricsRecorder("m")
+    recorder(
+        AgentEvent(
+            type="agent_end",
+            tool_stats={"tools": {"bash": {"calls": 2, "errors": 1, "ms": 15}}},
+        )
+    )
+    metrics = recorder.build("stop")
+    assert metrics.tools["bash"]["calls"] == 2
+    assert metrics.tools["bash"]["errors"] == 1

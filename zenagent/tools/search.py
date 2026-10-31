@@ -99,7 +99,13 @@ async def _glob(tool_call_id: str, args: dict, abort, on_update=None) -> ToolRes
     if limit <= 0:
         return _text(f"limit must be >= 1 (got {limit})", is_error=True)
     limit = min(limit, MAX_GLOB_LIMIT)
-    include_hidden = bool(args.get("include_hidden", False))
+    # A pattern that names a dot segment (".github/**", "**/.env*") asks for
+    # hidden paths explicitly; filtering them would report "no matches" for a
+    # file the model already named.
+    pattern_names_hidden = any(
+        part.startswith(".") for part in Path(pattern).parts
+    )
+    include_hidden = bool(args.get("include_hidden", False)) or pattern_names_hidden
 
     try:
         found: list[str] = []

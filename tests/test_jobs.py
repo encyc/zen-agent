@@ -210,3 +210,39 @@ async def test_wait_leaves_no_extra_tasks_behind(manager):
         if not task.done() and task is not asyncio.current_task()
     }
     assert leftover == set(), leftover
+
+
+async def test_job_manager_refcount_last_release_closes():
+    from zenagent.tools.jobs import (
+        acquire_job_manager,
+        get_job_manager,
+        release_job_manager,
+    )
+
+    first = acquire_job_manager()
+    job = await first.start("sleep 2", timeout_s=10)
+    second = acquire_job_manager()
+    assert second is first
+
+    await release_job_manager()  # one runtime still alive
+    assert get_job_manager() is first
+    assert first.snapshot(job.id) is not None
+
+    await release_job_manager()  # last runtime: manager closed
+    fresh = get_job_manager()
+    assert fresh is not first
+    assert fresh.list() == []
+
+
+async def test_finished_jobs_are_reaped_beyond_the_retention_cap(monkeypatch):
+    import zenagent.tools.jobs as jobs_module
+
+    monkeypatch.setattr(jobs_module, "MAX_RETAINED_JOBS", 2)
+    manager = jobs_module.JobManager()
+    try:
+        for _ in range(4):
+            job = await manager.start("true", timeout_s=5)
+            await job._done.wait()
+        assert len(manager.list()) <= 2
+    finally:
+        await manager.close()

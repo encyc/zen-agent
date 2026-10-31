@@ -452,6 +452,9 @@ def is_loop_guard_message(message: object) -> bool:
 
 def _is_poll_call(call: ToolCall) -> bool:
     """Whether this call is a pure wait/observe poll (exempt from the guard)."""
+    if call.name == "wait":
+        # Waiting for a background job is exactly the legitimate long poll.
+        return True
     if call.name != "bash":
         return False
     return bool(_POLL_COMMAND.match(str(call.arguments.get("command", ""))))

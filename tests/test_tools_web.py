@@ -351,3 +351,33 @@ async def test_fetch_falls_back_to_the_whole_body(monkeypatch):
     result = await call(FETCH, url="https://example.com/plain")
     assert "Just the body." in result.content[0].text
     assert result.details["method"] == "body"
+
+
+async def test_fetch_falls_back_when_the_article_is_empty(monkeypatch):
+    body = "<html><body><article></article><main><p>Main content.</p></main></body></html>"
+
+    async def fake_get(url, **kwargs):
+        return _html_response(url, body)
+
+    monkeypatch.setattr(net, "get", fake_get)
+    result = await call(FETCH, url="https://example.com/empty-article")
+    assert "Main content." in result.content[0].text
+    assert result.details["method"] == "main"
+
+
+async def test_fetch_prefers_the_real_content_over_a_teaser_card(monkeypatch):
+    body = (
+        "<html><body>"
+        "<article>Read more</article>"
+        "<main><p>This is the real body of the page, with enough text to win.</p></main>"
+        "</body></html>"
+    )
+
+    async def fake_get(url, **kwargs):
+        return _html_response(url, body)
+
+    monkeypatch.setattr(net, "get", fake_get)
+    result = await call(FETCH, url="https://example.com/teaser")
+    text = result.content[0].text
+    assert "real body of the page" in text
+    assert "Read more" not in text

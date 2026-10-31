@@ -70,7 +70,8 @@ zen -p "..." --metrics ~/.zenagent/metrics.jsonl
 ```
 
 - trace：turn / 工具调用 / 耗时，给调试用。
-- metrics：每 run 一行 JSON（turns、tool_calls、tokens、cache、cost、termination），
+- metrics：每 run 一行 JSON（turns、tool_calls、tokens、cache、cost、termination，
+  以及 `tools`：按工具名的 `{calls, errors, ms}` 汇总），
   **不含 prompt 或模型输出文本**。
 
 ## 崩溃日志与诊断

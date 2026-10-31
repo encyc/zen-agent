@@ -102,10 +102,14 @@ class ToolResultAgent:
   完成返回 `status/exit_code/duration` + 输出；`timeout_s`（默认 120，1–600）到点返回
   still-running 快照；未知 `job_id` 报错并列出已知 id；没有作业时返回 "nothing to wait for"。
   等待过程可被用户 abort（作业继续运行，之后仍可 wait）。
-- 作业是事件循环级的进程内单例；`Runtime.close()` 会关闭并清理残留进程组。
+- 作业管理器是**进程内单例**（按事件循环绑定）：`Runtime` 在 bootstrap 时 acquire、
+  `close()` 时 release，**最后一个 Runtime 关闭才真正清理**（多 Runtime/嵌入场景不会互相杀作业）。
+  未 wait 的已完成作业最多保留 `MAX_RETAINED_JOBS = 32` 个，超出按完成时间回收。
+  注意 `wait` 不传 `job_id` 时选择的是**进程内**最早的运行中作业（单 Runtime CLI 下等价于本会话）。
 - **shell 抽象**（`tools/shell.py`）：前台 bash 与后台作业共用 `resolve_shell()`；
   `ZENAGENT_SHELL=posix|powershell|pwsh|cmd|<绝对路径>`，Windows 默认探测
-  pwsh→powershell→cmd；未知值 → bash 返回 is_error。POSIX 用 `/bin/sh -c`
+  pwsh→powershell→cmd（**这是相对旧 `create_subprocess_shell` 的行为变化**；需要旧行为用
+  `ZENAGENT_SHELL=cmd`）；未知值 → bash 返回 is_error。POSIX 用 `/bin/sh -c`
   且 `start_new_session`（超时可 killpg）。
 
 ### search

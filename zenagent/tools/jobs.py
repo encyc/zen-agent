@@ -49,8 +49,10 @@ __all__ = [
     "JobStartError",
     "JobStatus",
     "UnknownJobError",
+    "acquire_job_manager",
     "close_job_manager",
     "get_job_manager",
+    "release_job_manager",
 ]
 
 JobStatus = Literal["running", "ok", "failed", "timed_out"]
@@ -60,6 +62,8 @@ DEFAULT_JOB_TIMEOUT_S = 600.0
 #: Bounds the bash tool clamps a model-supplied background deadline to.
 MIN_JOB_TIMEOUT_S = 1.0
 MAX_JOB_TIMEOUT_S = 3600.0
+#: Finished jobs kept without being waited; older ones are reaped first.
+MAX_RETAINED_JOBS = 32
 
 
 class JobStartError(RuntimeError):
@@ -168,6 +172,7 @@ class JobManager:
             raise JobStartError(f"cannot start command: {exc}") from exc
         job._proc = proc
         self._jobs[job.id] = job
+        self._reap_retained()
         job._task = asyncio.create_task(self._monitor(job, proc, timeout_s))
         return job
 
@@ -237,6 +242,22 @@ class JobManager:
     def _retire(self, job: Job) -> None:
         """Drop a finished job (cleanup-on-wait)."""
         self._jobs.pop(job.id, None)
+
+    def _reap_retained(self) -> None:
+        """Bound memory: retire the oldest finished jobs beyond the cap.
+
+        A model that starts background work and never waits must not leak one
+        Job (plus its output buffer) per call for the process lifetime.
+        """
+        if len(self._jobs) <= MAX_RETAINED_JOBS:
+            return
+        finished = sorted(
+            (job for job in self._jobs.values() if not job.running),
+            key=lambda job: (job.finished_at or job.started_at, job.id),
+        )
+        excess = len(self._jobs) - MAX_RETAINED_JOBS
+        for job in finished[:excess]:
+            self._jobs.pop(job.id, None)
 
     def _abandon(self) -> None:
         """Drop every job without awaiting: used when the loop changed."""
@@ -345,6 +366,26 @@ class JobManager:
 
 
 _manager: JobManager | None = None
+_refs = 0
+
+
+def acquire_job_manager() -> JobManager:
+    """Acquire the shared manager for one Runtime (paired with release)."""
+    global _refs
+    manager = get_job_manager()
+    _refs += 1
+    return manager
+
+
+async def release_job_manager() -> None:
+    """Release one Runtime's claim; the last release closes the manager."""
+    global _manager, _refs
+    if _refs > 0:
+        _refs -= 1
+    if _refs > 0 or _manager is None:
+        return
+    manager, _manager = _manager, None
+    await manager.close()
 
 
 def get_job_manager() -> JobManager:
@@ -366,8 +407,9 @@ def get_job_manager() -> JobManager:
 
 
 async def close_job_manager() -> None:
-    """Close and forget the process-wide manager (app shutdown)."""
-    global _manager
+    """Force-close and forget the process-wide manager (hard shutdown)."""
+    global _manager, _refs
+    _refs = 0
     manager, _manager = _manager, None
     if manager is not None:
         await manager.close()
