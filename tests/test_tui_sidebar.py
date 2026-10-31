@@ -143,8 +143,10 @@ async def test_todo_section_tracks_the_hud_snapshot(fake_runtime):
 
         todo = section(app, "Todo")
         assert todo.display is True
-        assert "0/2" in " ".join(rows(app, "Todo"))
-        assert "Explore" in " ".join(rows(app, "Todo"))
+        texts = rows(app, "Todo")
+        assert texts[0].startswith("Explore 0/2")
+        assert "▶ read a" in texts[1]
+        assert "○ read b" in texts[2]
 
         app.chat._on_event(todo_event([]))
         app._refresh_status()
@@ -328,3 +330,64 @@ async def test_work_timer_refresh_updates_the_sidebar_rows(fake_runtime, monkeyp
         await asyncio.sleep(1.15)
 
         assert any("✓ bg_1" in row for row in rows(app, "Jobs"))
+
+
+def _three_task_phases():
+    return [
+        {
+            "name": "Explore",
+            "tasks": [
+                {"content": "read a", "status": "completed"},
+                {"content": "read b", "status": "in_progress"},
+            ],
+        },
+        {"name": "Build", "tasks": [{"content": "write c", "status": "pending"}]},
+    ]
+
+
+async def test_todo_section_lists_every_task_inline(fake_runtime):
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        await open_sidebar(app, pilot)
+
+        app.chat._on_event(todo_event(_three_task_phases()))
+        app._refresh_status()
+        await pilot.pause()
+
+        todo = section(app, "Todo")
+        assert [row.key for row in todo.query(SidebarRow)] == [
+            "phase:0",
+            "task:0:0",
+            "task:0:1",
+            "phase:1",
+            "task:1:0",
+        ]
+        texts = rows(app, "Todo")
+        assert texts[0].startswith("Explore 1/2")
+        assert "✓ read a" in texts[1]
+        assert "▶ read b" in texts[2]
+        assert texts[3].startswith("Build 0/1")
+        assert "○ write c" in texts[4]
+
+
+async def test_clicking_a_todo_row_opens_the_detail_overlay(fake_runtime):
+    from zenagent.cli.tui.screens.todo_list import TodoListScreen
+
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        await open_sidebar(app, pilot)
+        app.chat._on_event(todo_event(_three_task_phases()))
+        app._refresh_status()
+        await pilot.pause()
+
+        row = next(
+            row
+            for row in section(app, "Todo").query(SidebarRow)
+            if row.key == "task:1:0"
+        )
+        await pilot.click(row)
+        await pilot.pause()
+
+        assert isinstance(app.screen, TodoListScreen)

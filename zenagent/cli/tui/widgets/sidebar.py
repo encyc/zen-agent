@@ -17,7 +17,6 @@ from textual.containers import Vertical, VerticalScroll
 from textual.widgets import Static
 
 from zenagent.cli.tui import palette
-from zenagent.tools.todo import summarize_todo
 
 __all__ = [
     "MAX_JOB_ROWS",
@@ -48,6 +47,17 @@ _SUBAGENT_MARKS = {
     "aborted": "⊘",
     "truncated": "…",
     "interrupted": "⊘",
+}
+
+_TODO_CLOSED = frozenset({"completed", "abandoned", "done"})
+
+_TODO_MARKS = {
+    "completed": ("✓", palette.STATE_COLORS["completed"]),
+    "done": ("✓", palette.STATE_COLORS["done"]),
+    "in_progress": ("▶", palette.STATE_COLORS["in_progress"]),
+    "pending": ("○", palette.STATE_COLORS["pending"]),
+    "blocked": ("⊘", palette.STATE_COLORS["blocked"]),
+    "abandoned": ("-", palette.STATE_COLORS["abandoned"]),
 }
 
 _JOB_MARKS = {
@@ -263,19 +273,32 @@ class Sidebar(VerticalScroll):
             ]
         )
 
-        info = summarize_todo(status.todos)
-        if info["total"]:
-            parts = []
-            if info["phase"]:
-                parts.append(str(info["phase"]))
-            if info["current"]:
-                parts.append(str(info["current"]))
-            parts.append(f"{info['closed']}/{info['total']}")
-            self._section("Todo").set_rows(
-                [("todo", Text(_clip(" · ".join(parts)), style=_TEXT))]
+        # Every task is listed inline (one clipped line each, phases as headers);
+        # the overlay stays the place where full text is readable.
+        todo_rows: list[tuple[str, Text | str]] = []
+        phase_style = f"bold {palette.SECTION_ACCENTS['Todo']}"
+        for phase_index, phase in enumerate(status.todos):
+            tasks = phase.get("tasks") or []
+            name = str(phase.get("name") or "Tasks")
+            closed = sum(
+                1 for task in tasks if task.get("status") in _TODO_CLOSED
             )
-        else:
-            self._section("Todo").set_rows([])
+            todo_rows.append(
+                (
+                    f"phase:{phase_index}",
+                    Text(_clip(f"{name} {closed}/{len(tasks)}"), style=phase_style),
+                )
+            )
+            for task_index, task in enumerate(tasks):
+                state = str(task.get("status") or "pending")
+                mark, color = _TODO_MARKS.get(
+                    state, ("○", palette.STATE_COLORS["pending"])
+                )
+                label = f"{mark} {task.get('content') or ''}"
+                todo_rows.append(
+                    (f"task:{phase_index}:{task_index}", Text(_clip(label), style=color))
+                )
+        self._section("Todo").set_rows(todo_rows)
 
         subagents = []
         for view in status.subagents[:MAX_SUBAGENT_ROWS]:

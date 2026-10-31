@@ -62,6 +62,8 @@ STATE_COLORS: dict[str, str] = {
     "pending": MUTED,
     "ok": OK,
     "done": OK,
+    "completed": OK,
+    "abandoned": DIM,
     "error": ERROR,
     "failed": ERROR,
     "blocked": ERROR,
