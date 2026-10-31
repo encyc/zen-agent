@@ -324,11 +324,28 @@ async def handle_slash(
         await reload_runtime()
         return None
     if command == "skills":
-        if not skill_list:
+        # Rescan for display only. The REPL's discovery is monolithic (skills,
+        # templates and extensions in one pass), so adopting here would mean
+        # re-executing extension files inside a display command; `/reload`
+        # remains the operation that applies changes. Showing the disk truth and
+        # naming what is pending is the honest middle: the list is never stale,
+        # and the hint says how to make the model see it.
+        fresh, _warnings = discover_skills(default_skill_roots(Path.cwd()))
+        if not fresh:
             print_fn("no skills found (put SKILL.md files under .zenagent/skills)")
             return None
-        for skill in skill_list:
+        for skill in fresh:
             print_fn(f"- {skill.name}: {skill.description}")
+
+        def signature(skills):
+            return {(skill.name, skill.description, skill.body) for skill in skills}
+
+        pending = sorted({item[0] for item in signature(fresh) ^ signature(skill_list)})
+        if pending:
+            print_fn(
+                f"changed on disk ({', '.join(pending)}): "
+                "/reload makes them available to the model"
+            )
         return None
     if command == "mcp":
         if mcp_manager is None:

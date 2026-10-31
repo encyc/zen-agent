@@ -150,6 +150,32 @@ async def test_reload_refuses_while_the_agent_is_streaming(
     assert not any(tool.name == "read_skill" for tool in runtime.agent.tools)
 
 
+async def test_reload_picks_up_a_skill_added_after_bootstrap(runtime_factory, skill_root):
+    runtime = await runtime_factory(skills=True)
+    registry = build_default_commands(make_services(runtime))
+    write_skill(skill_root, "late", description="added while running")
+
+    result = await registry.dispatch("reload", "")
+
+    assert result.message == "reloaded: skills 0 -> 1 (+late)"
+    assert any(tool.name == "read_skill" for tool in runtime.agent.tools)
+    loaded = await read_skill_tool(runtime).execute("c", {"name": "late"}, None)
+    assert not loaded.is_error
+
+
+async def test_reload_reports_an_edited_skill_not_only_a_new_one(
+    runtime_factory, skill_root
+):
+    write_skill(skill_root, "late", body="old body")
+    runtime = await runtime_factory(skills=True)
+    registry = build_default_commands(make_services(runtime))
+    write_skill(skill_root, "late", body="new body")
+
+    result = await registry.dispatch("reload", "")
+
+    assert result.message == "reloaded: skills 1 -> 1 (~late)"
+
+
 async def test_reload_reports_nothing_changed(runtime_factory, skill_root):
     runtime = await runtime_factory(skills=True)
     registry = build_default_commands(make_services(runtime))
@@ -157,6 +183,22 @@ async def test_reload_reports_nothing_changed(runtime_factory, skill_root):
     result = await registry.dispatch("reload", "")
 
     assert result.message == "reloaded: nothing changed"
+
+
+async def test_skills_command_keeps_the_note_when_the_last_skill_disappears(
+    runtime_factory, skill_root
+):
+    write_skill(skill_root, "late")
+    runtime = await runtime_factory(skills=True)
+    registry = build_default_commands(make_services(runtime))
+
+    import shutil
+
+    shutil.rmtree(skill_root / "late")
+    result = await registry.dispatch("skills", "")
+
+    assert result.message.splitlines()[0] == "skills 1 -> 0 (-late)"
+    assert "no skills found" in result.message
 
 
 async def test_reload_does_not_duplicate_mcp_tools(runtime_factory, skill_root):
@@ -189,6 +231,117 @@ async def test_reload_does_not_duplicate_mcp_tools(runtime_factory, skill_root):
 
     await runtime.refresh_mcp()
     assert [tool.name for tool in runtime.agent.tools].count("mcp__echo__echo") == 1
+
+
+async def test_reload_delivers_extension_hooks_exactly_once_per_event(
+    runtime_factory, tmp_path, skill_root, monkeypatch
+):
+    """The unsubscribe bookkeeping matters, so assert on delivery, not on a list."""
+    from conftest import text_stream
+
+    monkeypatch.setenv("EXT_HOOK_LOG", str(tmp_path / "hook.log"))
+    extension = tmp_path / "ext.py"
+    extension.write_text(
+        """
+import os
+
+
+def register(api):
+    def note(event):
+        with open(os.environ["EXT_HOOK_LOG"], "a", encoding="utf-8") as handle:
+            handle.write("x")
+
+    api.on("agent_end", note)
+""",
+        encoding="utf-8",
+    )
+    runtime = await runtime_factory(
+        extension_paths=[str(extension)], stream_fn=text_stream()
+    )
+
+    runtime.rediscover()  # re-executes ext.py: the old generation must go first
+    runtime.rediscover()
+    await runtime.agent.prompt("hi")
+    await runtime.agent.wait_for_idle()
+
+    assert (tmp_path / "hook.log").read_text(encoding="utf-8") == "x"
+
+
+async def test_reload_keeps_the_todo_tool_exactly_once(runtime_factory, skill_root):
+    runtime = await runtime_factory(skills=True)
+    names = [tool.name for tool in runtime.agent.tools]
+    assert names.count("todo") == 1
+
+    runtime.rediscover()
+
+    after = [tool.name for tool in runtime.agent.tools]
+    assert after.count("todo") == 1
+    assert runtime.todo_tool is not None
+
+
+async def test_reload_failure_paths_return_messages_instead_of_raising(
+    runtime_factory, skill_root, monkeypatch
+):
+    """A run that starts during the MCP retry must not take the TUI down."""
+    runtime = await runtime_factory(skills=True)
+    registry = build_default_commands(make_services(runtime))
+    awaited: list[str] = []
+
+    async def slow_refresh():
+        # the run begins while /reload is waiting; then the guard trips
+        awaited.append("refresh_mcp")
+        monkeypatch.setattr(
+            type(runtime.agent), "is_streaming", property(lambda self: True)
+        )
+
+    monkeypatch.setattr(runtime, "refresh_mcp", slow_refresh)
+    result = await registry.dispatch("reload", "")
+
+    # The message must come from the rediscover() guard, not the early return:
+    # refresh_mcp had to be awaited first for this to be the real race.
+    assert awaited == ["refresh_mcp"]
+    assert result.message == "cannot reload while the agent is working"
+
+
+async def test_mcp_command_does_not_refresh_tools_during_a_run(
+    runtime_factory, skill_root, monkeypatch
+):
+    from zenagent.agent.loop import AgentTool
+
+    class StubMcp:
+        def __init__(self):
+            self.refreshed = 0
+
+        async def retry_failed(self, *, force: bool = False):
+            self.refreshed += 1
+            return []
+
+        def tool_defs(self):
+            return [
+                AgentTool(
+                    name="mcp__echo__echo",
+                    description="echo",
+                    parameters={"type": "object", "properties": {}},
+                )
+            ]
+
+        @property
+        def connected_names(self):
+            return ["echo"]
+
+        async def close(self):
+            return None
+
+    runtime = await runtime_factory()
+    manager = StubMcp()
+    runtime.mcp = manager
+    registry = build_default_commands(make_services(runtime))
+    monkeypatch.setattr(type(runtime.agent), "is_streaming", property(lambda self: True))
+
+    result = await registry.dispatch("mcp", "")
+
+    assert manager.refreshed == 0  # tools stay put under an in-flight request
+    assert result.message == "mcp connected: echo"
 
 
 async def test_reload_does_not_duplicate_extension_tools_or_hooks(

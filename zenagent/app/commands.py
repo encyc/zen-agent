@@ -202,10 +202,14 @@ async def _images(services: AppServices, argument: str) -> CommandResult:
 
 @_command("mcp", "reconnect MCP servers and refresh tools")
 async def _mcp(services: AppServices, argument: str) -> CommandResult:
-    await services.runtime.refresh_mcp()
     manager = services.runtime.mcp
     if manager is None:
         return CommandResult(message="no MCP servers configured")
+    if not services.runtime.agent.is_streaming:
+        try:
+            await services.runtime.refresh_mcp()
+        except RuntimeError as exc:  # a run started while we waited
+            return CommandResult(message=str(exc))
     connected = ", ".join(manager.connected_names) or "(none)"
     return CommandResult(message=f"mcp connected: {connected}")
 
@@ -223,8 +227,14 @@ async def _skills(services: AppServices, argument: str) -> CommandResult:
     notes = services.runtime.refresh_skills()
     skills = services.runtime.skills
     if not skills:
+        # Keep the notes: "skills 1 -> 0 (-gone)" is the whole point of the line.
         return CommandResult(
-            message="no skills found (put SKILL.md files under .zenagent/skills)"
+            message="\n".join(
+                [
+                    *notes,
+                    "no skills found (put SKILL.md files under .zenagent/skills)",
+                ]
+            )
         )
     lines = [f"- {skill.name}: {skill.description}" for skill in skills]
     if notes:
@@ -236,8 +246,14 @@ async def _skills(services: AppServices, argument: str) -> CommandResult:
 async def _reload(services: AppServices, argument: str) -> CommandResult:
     if services.runtime.agent.is_streaming:
         return CommandResult(message="cannot reload while the agent is working")
-    await services.runtime.refresh_mcp()
-    notes = services.runtime.rediscover()
+    # MCP retries can take seconds; a run may start while we wait, and swapping
+    # tools under it must not happen (and must not escape as an exception the
+    # TUI would treat as fatal).
+    try:
+        await services.runtime.refresh_mcp()
+        notes = services.runtime.rediscover()
+    except RuntimeError as exc:
+        return CommandResult(message=str(exc))
     return CommandResult(message=f"reloaded: {' · '.join(notes)}")
 
 

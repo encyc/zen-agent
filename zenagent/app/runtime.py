@@ -401,21 +401,28 @@ class Runtime:
         return self._options is None or self._options.skills
 
     @staticmethod
-    def _skill_signature(skills: list) -> list[tuple[str, str, str, str]]:
-        """What makes a skill "the same skill": a body edit counts, an mtime does not."""
-        return [(skill.name, skill.description, str(skill.path), skill.body) for skill in skills]
+    def _signature(items: list) -> list[tuple[str, str, str, str]]:
+        """What makes a discovered item "the same item": a body edit counts.
 
-    def _skill_change_note(self, skills: list) -> str:
-        current = {skill.name: skill for skill in self.skills}
-        added = sorted({skill.name for skill in skills} - set(current))
-        removed = sorted(set(current) - {skill.name for skill in skills})
+        Shared by skills and templates; mtimes deliberately do not participate,
+        so a ``touch`` does not report a change.
+        """
+        return [
+            (item.name, item.description, str(item.path), item.body) for item in items
+        ]
+
+    @classmethod
+    def _change_note(cls, label: str, before: list, after: list) -> str:
+        old = {item.name: item for item in before}
+        new = {item.name: item for item in after}
+        added = sorted(set(new) - set(old))
+        removed = sorted(set(old) - set(new))
         edited = sorted(
-            skill.name
-            for skill in skills
-            if skill.name in current
-            and (skill.description, skill.body) != (current[skill.name].description, current[skill.name].body)
+            name
+            for name in set(old) & set(new)
+            if cls._signature([old[name]]) != cls._signature([new[name]])
         )
-        note = f"skills {len(self.skills)} -> {len(skills)}"
+        note = f"{label} {len(before)} -> {len(after)}"
         if added:
             note += f" (+{', '.join(added)})"
         if removed:
@@ -442,9 +449,9 @@ class Runtime:
         skills, warnings = discover_skills(default_skill_roots(Path.cwd()))
         for warning in warnings:
             self._note(f"skills {warning}")
-        if self._skill_signature(skills) == self._skill_signature(self.skills):
+        if self._signature(skills) == self._signature(self.skills):
             return []
-        note = self._skill_change_note(skills)
+        note = self._change_note("skills", self.skills, skills)
         if hasattr(self, "agent") and self.agent.is_streaming:
             return [f"{note}; applies after this run"]
         self.skills = skills
@@ -472,18 +479,16 @@ class Runtime:
             skills, warnings = discover_skills(default_skill_roots(Path.cwd()))
             for warning in warnings:
                 self._note(f"skills {warning}")
-            if self._skill_signature(skills) != self._skill_signature(self.skills):
-                notes.append(self._skill_change_note(skills))
+            if self._signature(skills) != self._signature(self.skills):
+                notes.append(self._change_note("skills", self.skills, skills))
             self.skills = skills
 
         if options is None or options.templates:
             templates, warnings = discover_templates(default_template_roots(Path.cwd()))
             for warning in warnings:
                 self._note(f"templates {warning}")
-            if [template.name for template in templates] != [
-                template.name for template in self.templates
-            ]:
-                notes.append(f"templates {len(self.templates)} -> {len(templates)}")
+            if self._signature(templates) != self._signature(self.templates):
+                notes.append(self._change_note("templates", self.templates, templates))
             self.templates = templates
 
         if self.extension_files:
@@ -516,9 +521,15 @@ class Runtime:
         Rebuilt through :meth:`_recompose` rather than appended to
         ``_base_tools``: that list already contains the MCP tools, so extending
         it would list every server tool twice.
+
+        Raises ``RuntimeError`` while a run is streaming -- the same invariant
+        as :meth:`rediscover`, since reconnecting may change ``agent.tools``
+        under a request the model already composed.
         """
         if self.mcp is None:
             return
+        if hasattr(self, "agent") and self.agent.is_streaming:
+            raise RuntimeError("cannot refresh tools while the agent is working")
         for warning in await self.mcp.retry_failed():
             self._note(warning)
         self._recompose()

@@ -35,8 +35,12 @@ description: Build a PDF status report from a CSV
 - `read_skill` 返回正文，上限 32KB，超出截断并标注。
 - `read_skill` 是只读工具，不需要 `--yes`。
 - `/skills` **先重扫 skills 根目录再列出**（纯文件读取，15 个 skill 约 0.7ms），
-  新装/改动的 skill 立刻出现在列表里，`read_skill` 的工具清单和 prompt 索引同步换掉；
-  agent 正在运行时只报告变化、不动工具（见下文「热加载」）。
+  所以列表永远是磁盘真相，不会显示启动时的旧快照：
+  - **TUI/app**：发现变化就同时换掉 `read_skill` 的工具清单和 prompt 索引，立刻可用；
+  - **REPL**：只重扫展示（REPL 的发现是一次性打包 skills/templates/extensions 的，
+    在展示命令里就地重建等于重跑扩展），列表尾部会提示
+    `changed on disk (...)`: `/reload makes them available to the model`；
+  - agent 正在运行时两处都只报告变化、不动工具（见下文「热加载」）。
 
 ## Templates
 
@@ -66,12 +70,17 @@ Review {{args}} and list concrete problems.
 |---|---|---|---|
 | `/skills` | 只重扫 skills 根目录 | 纯读取，0.7ms/15 个 | 只提示「跑完生效」，**不改** `agent.tools` |
 | `/reload` | skills + templates + extensions（TUI 还会重连 MCP） | 会**重新执行**扩展代码 | 直接拒绝 |
+| `/mcp` | 重连 MCP server 并重建工具表 | 网络往返，可能数秒 | 跳过刷新、只列状态 |
+
+TUI/app 的 `/skills` 会把变化直接采纳（重建 `read_skill` + 索引）；
+REPL 的 `/skills` 只重扫展示并在有变化时提示 `/reload`——REPL 的发现是
+skills/templates/extensions 一次打包的，就地采纳等于在展示命令里重跑扩展。
 
 `/reload` 之后：
 
 - 重新发现 skills/templates/extensions；
 - 更新 `agent.tools` 与 system prompt；
-- 刷新模板与扩展命令表；
+- 刷新模板表（REPL 还会刷新扩展命令表；TUI 的扩展命令尚未接线，见 known gaps）；
 - 旧的扩展 hooks 先退订再重订，不会重复投递事件。
 
 `/skills` **故意**不做完整 reload：`load_extensions()` 内部是 `exec_module()` + `register(api)`，
