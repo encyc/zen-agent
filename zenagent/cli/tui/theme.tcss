@@ -106,9 +106,17 @@ Screen {
 .thinking-row {
     background: #0d1319;
     border: none;
-    height: auto;
+    /* A collapsed preview must never wrap, even before the first layout pass
+       knows the real width (the widget clips its own text to the row too). */
+    height: 1;
+    text-wrap: nowrap;
     margin: 0 0 0 1;
     color: #8296a6;
+}
+
+.thinking-row.expanded {
+    height: auto;
+    text-wrap: wrap;
 }
 
 .thinking-row:focus {

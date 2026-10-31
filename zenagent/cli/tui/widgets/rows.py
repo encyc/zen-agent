@@ -111,8 +111,11 @@ class ThinkingRow(Static):
         return None
 
     def on_mount(self) -> None:
-        # The constructor rendered before the widget had a width: redo it now.
+        # The constructor rendered before the widget had a width: redo it now,
+        # and once more after the first layout (the width can still be 0 here).
+        self._sync_classes()
         self.update(self._renderable())
+        self.call_after_refresh(lambda: self.update(self._renderable()))
         self._sync_ticker()
 
     def on_unmount(self) -> None:
@@ -176,10 +179,20 @@ class ThinkingRow(Static):
             text.append(suffix, style=_DIM)
         return text
 
+    def _sync_classes(self) -> None:
+        """The CSS single-line guarantee follows the expanded/collapsed state."""
+        if not self.is_mounted:
+            return
+        if self.collapsed:
+            self.remove_class("expanded")
+        else:
+            self.add_class("expanded")
+
     def set_expanded(self, expanded: bool) -> None:
         if expanded == (not self.collapsed):
             return
         self.collapsed = not expanded
+        self._sync_classes()
         if self.is_mounted:
             self.update(self._renderable())
 
@@ -206,6 +219,7 @@ class ThinkingRow(Static):
 
     def action_toggle(self) -> None:
         self.collapsed = not self.collapsed
+        self._sync_classes()
         self.update(self._renderable())
 
     def on_click(self) -> None:

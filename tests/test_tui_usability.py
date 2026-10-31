@@ -172,11 +172,13 @@ async def test_ctrl_t_expands_and_collapses_thinking(runtime_factory):
         await pilot.press("ctrl+t")
         await pilot.pause()
         assert row.collapsed is False
+        assert row.has_class("expanded"), "wrapping is opt-in via the class"
         assert "step one, step two" in row.plain
 
         await pilot.press("ctrl+t")
         await pilot.pause()
         assert row.collapsed is True
+        assert not row.has_class("expanded")
 
 
 async def test_work_indicator_switches_with_the_run(gated_app):
