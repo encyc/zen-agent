@@ -21,6 +21,8 @@ Repo: <https://github.com/encyc/zen-agent> · PyPI package: `zenagent-py` (impor
 
 Full documentation — architecture, usage guides, internals (source tour), contracts and the
 feature map — lives in [`docs/`](docs/README.md). Start with [`docs/architecture.md`](docs/architecture.md).
+Release notes: [`CHANGELOG.md`](CHANGELOG.md); the tool-kernel gap study and the next roadmap
+live under [`docs/research/omp-cli-study/`](docs/research/omp-cli-study/00-README.md).
 
 ## Install
 

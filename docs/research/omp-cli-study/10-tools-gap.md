@@ -284,6 +284,11 @@ browser、computer、debug/DAP、ida、security_scan、tts、generate_image、ev
 
 建议把 P0 作为 **v0.4.0**（主题：工具内核治理），P1 作为 **v0.4.1–v0.4.3**（主题：工具面质量 + todo），P2 条件项进 **v0.5** 路线图。这样每个版本有一个可验收主题，而不是"一次对齐 omp"。
 
+> **发布记录（2026-10-31 更新）**：实际执行把 **P0 + P1 + P2 已实现切片合并为 v0.4.0** 一次发布
+> （三者共享同一套工具内核，拆开发版只会产生半成品接口）。本节的 v0.4.x 拆分建议**不再采用**；
+> P2 中未实现的项（task/ask/LSP/github/artifact/registry/MCP retry/checkpoint）转入
+> [`12-v0.5-plan.md`](12-v0.5-plan.md)。
+
 ---
 
 ## 7. 直接回答用户的问题

@@ -23,6 +23,8 @@
 | [`09-zenagent-vs-omp-gap.md`](09-zenagent-vs-omp-gap.md) | ZenAgent × omp 的功能对标与必要性判断（TUI/命令/键位/状态段/工具渲染器） | 决定"还差哪些功能、哪些明确不做"时 |
 | [`10-tools-gap.md`](10-tools-gap.md) | **工具层差距与 v0.4 路线**（2026-10-31）：工具面矩阵 + 工具内核机制 + P0/P1/P2/N 建议 | 开始做 Agent 内核/工具时先读这篇 |
 | `10a`–`10e` | 五份源码级证据附录（核心工具族 / 编排工具 / 世界集成 / ZenAgent 基线 / 工具控制面） | 需要逐条 `file:line` 证据时 |
+| [`12-v0.5-plan.md`](12-v0.5-plan.md) | **v0.5 正式路线**（2026-10-31）：task/ask/artifact/registry + 条件项（LSP/github/checkpoint）的范围、边界与验收 | 规划 v0.5 或判断"某项要不要做"时先读这篇 |
+| [`11-prompt-inventory-and-comparison.md`](11-prompt-inventory-and-comparison.md) | **提示词全量清单与对比**（2026-10-31，zen `fecc9df` × omp 18.14.1）：zen 9 位置/21 制品 vs omp 261 个提示词文件；system prompt、工具描述、plan、上下文、skills、压缩逐项对照 | 想改 prompt / 压缩 / plan 提示词时读 |
 
 ## 五条最反直觉的结论
 
