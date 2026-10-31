@@ -112,9 +112,10 @@ class ZenAgentApp(App):
         The agent tool round is awaited on this future, so the modal blocks that
         tool (not the UI). A timeout resolves to ``deny`` and closes the modal.
         """
+        from zenagent.app.permissions import tool_target
         from zenagent.cli.tui.screens.modals import ToolApproval
 
-        screen = ToolApproval(tool_name, arguments)
+        screen = ToolApproval(tool_name, arguments, target=tool_target(tool_name, arguments))
         future: asyncio.Future[str] = asyncio.get_running_loop().create_future()
 
         def done(choice: str | None) -> None:

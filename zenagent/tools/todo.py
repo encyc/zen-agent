@@ -113,20 +113,26 @@ class TodoPhase:
 
 
 def _from_details(phases: list[dict]) -> list[TodoPhase]:
-    return [
-        TodoPhase(
-            name=phase["name"],
-            tasks=[
+    # A hand-edited/corrupt sidecar can carry duplicate content; content is the
+    # task identity, so keep the first occurrence and drop the rest.
+    built: list[TodoPhase] = []
+    for phase in phases:
+        seen: set[str] = set()
+        tasks: list[TodoTask] = []
+        for task in phase["tasks"]:
+            content = task["content"]
+            if content in seen:
+                continue
+            seen.add(content)
+            tasks.append(
                 TodoTask(
-                    content=task["content"],
+                    content=content,
                     status=task["status"],
                     blocker=task.get("blocker", ""),
                 )
-                for task in phase["tasks"]
-            ],
-        )
-        for phase in phases
-    ]
+            )
+        built.append(TodoPhase(name=phase["name"], tasks=tasks))
+    return built
 
 
 def _to_details(phases: list[TodoPhase]) -> list[dict]:
@@ -174,12 +180,16 @@ def coerce_todo_phases(value: Any) -> list[dict]:
             continue
         raw_tasks = raw_phase.get("tasks")
         tasks: list[dict] = []
+        seen: set[str] = set()
         for raw_task in raw_tasks if isinstance(raw_tasks, list) else []:
             if not isinstance(raw_task, dict):
                 continue
             content = raw_task.get("content")
             if not isinstance(content, str) or not content.strip():
                 continue
+            if content.strip() in seen:
+                continue  # content is the task identity; drop duplicate rows
+            seen.add(content.strip())
             status = raw_task.get("status")
             if status not in _STATUSES:
                 status = "pending"
@@ -645,6 +655,11 @@ class _TodoState:
         if self._session_path is not None:
             _write_todo_sidecar(self._session_path, _to_details(phases))
 
+    def clear(self) -> None:
+        """Drop the list (memory and sidecar)."""
+        self._phases = []
+        self._persist(self._phases)
+
     async def execute(
         self,
         tool_call_id: str,
@@ -693,6 +708,11 @@ class _TodoState:
             },
             is_error=failed,
         )
+
+
+def save_todo_phases(session_path: Path, phases: list[dict]) -> None:
+    """Write canonical phase details to a session sidecar (atomic)."""
+    _write_todo_sidecar(Path(session_path), coerce_todo_phases(phases))
 
 
 def _noop_bind(session_path: Path | None) -> None:
@@ -755,9 +775,10 @@ _PARAMETERS = {
 
 @dataclass
 class TodoTool(AgentTool):
-    """The ``todo`` tool plus the session-rebinding hook the runtime uses."""
+    """The ``todo`` tool plus the session-rebinding/clear hooks the runtime uses."""
 
     bind_session: Callable[[Path | None], None] = _noop_bind
+    clear: Callable[[], None] = lambda: None
 
 
 def build_todo_tool(session_path: Path | None) -> TodoTool:
@@ -771,4 +792,5 @@ def build_todo_tool(session_path: Path | None) -> TodoTool:
         execute=state.execute,
         approval="read",
         bind_session=state.bind_session,
+        clear=state.clear,
     )

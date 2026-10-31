@@ -516,10 +516,11 @@ async def repl(
         for candidate in provider.models
     ]
 
-    tool_list = list(ALL_TOOLS if tools is None else tools)
     session = _session_for(resume)
-    if tools is None:
-        tool_list.append(build_todo_tool(session.path))
+    tool_list = list(ALL_TOOLS if tools is None else tools)
+    todo_tool = build_todo_tool(session.path) if tools is None else None
+    if todo_tool is not None:
+        tool_list.append(todo_tool)
     guard = ContextGuard(model.context_window)
     base_tools = list(tool_list)
     extension_files = [*user_config.extensions, *(extension_paths or [])]
@@ -724,6 +725,8 @@ async def repl(
 
     def switch_session(new_session: Session) -> None:
         session_box[0] = new_session
+        if todo_tool is not None:
+            todo_tool.bind_session(new_session.path)
 
     def on_event(event: AgentEvent) -> None:
         if event.type == "agent_end" and event.new_messages:

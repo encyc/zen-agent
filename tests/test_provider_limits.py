@@ -10,7 +10,13 @@ from zenagent.providers.limits import (
     fit_stream_options,
 )
 from zenagent.providers.openai_completions import StreamOptions
-from zenagent.types import Cost, UserMessage
+from zenagent.types import (
+    Cost,
+    ImageContent,
+    TextContent,
+    ToolDef,
+    UserMessage,
+)
 
 
 def _model(context_window: int, max_tokens: int) -> Model:
@@ -88,3 +94,47 @@ def test_estimate_counts_wide_characters_conservatively():
         [UserMessage(content=wide_text, timestamp=0)]
     )
     assert wide_estimate > ascii_estimate
+
+
+def _schema_heavy_tools(count: int = 6) -> list[ToolDef]:
+    return [
+        ToolDef(
+            name=f"tool_{index}",
+            description="d" * 800,
+            parameters={
+                "type": "object",
+                "properties": {"path": {"type": "string", "description": "p" * 400}},
+            },
+        )
+        for index in range(count)
+    ]
+
+
+def test_tool_schemas_count_towards_the_prompt_estimate():
+    model = _model(context_window=4_000, max_tokens=3_000)
+    prompt = _long_prompt(2_500)
+    without = fit_max_tokens(model, prompt, 3_000)
+    with_tools = fit_max_tokens(model, prompt, 3_000, tools=_schema_heavy_tools())
+    assert with_tools < without
+
+
+def test_image_blocks_are_not_counted_as_base64_text():
+    big = UserMessage(
+        content=[
+            TextContent(text="what is this?"),
+            ImageContent(data="A" * 400_000, mime_type="image/png"),
+        ],
+        timestamp=0,
+    )
+    estimate = estimate_prompt_tokens([big])
+    assert estimate < 5_000, "base64 image data must not be counted char-by-char"
+
+
+def test_anthropic_request_accounts_for_tools_when_fitting():
+    model = _model(context_window=6_000, max_tokens=5_000)
+    prompt = _long_prompt(4_000)
+    _, _, without = anthropic_request(model, prompt, [], StreamOptions(api_key="k"))
+    _, _, with_tools = anthropic_request(
+        model, prompt, _schema_heavy_tools(), StreamOptions(api_key="k")
+    )
+    assert with_tools["max_tokens"] < without["max_tokens"]

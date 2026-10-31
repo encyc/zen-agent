@@ -52,3 +52,14 @@ async def test_approval_timeout_denies_and_closes(picker_app):
         task = await _open_approval(app)
         assert await asyncio.wait_for(task, timeout=2) == "deny"
         assert not isinstance(app.screen, ToolApproval)
+
+
+async def test_approval_modal_shows_the_grant_target(picker_app):
+    app = picker_app
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        task = await _open_approval(app)
+        assert getattr(app.screen, "target", None)
+        assert "write_file" in app.screen.target
+        await pilot.press("n")
+        await task

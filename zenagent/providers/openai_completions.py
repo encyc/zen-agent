@@ -609,7 +609,7 @@ async def stream(
     with usage and stop_reason complete. A non-empty ``options.session_id``
     is sent as the gateway's ``x-opencode-session`` header.
     """
-    options = fit_stream_options(model, messages, options)
+    options = fit_stream_options(model, messages, options, tools)
     params = build_params(model, tools, options, model.compat)
     params["messages"] = to_request_messages(messages, model.compat)
 

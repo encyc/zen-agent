@@ -32,6 +32,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
@@ -323,11 +324,19 @@ async def _execute_tool(
                     result = await tool.execute(
                         call.id, call.arguments, abort, forward
                     )
-            except TimeoutError:
-                result = _error_result(
-                    f"tool {call.name!r} timed out after {timeout:g}s",
-                    kind="timeout",
-                )
+            except TimeoutError as exc:
+                if timeout is not None:
+                    result = _error_result(
+                        f"tool {call.name!r} timed out after {timeout:g}s",
+                        kind="timeout",
+                    )
+                else:
+                    # The tool raised TimeoutError itself; with no kernel
+                    # deadline this is a normal tool failure, not a run-abort.
+                    result = _error_result(
+                        f"{type(exc).__name__}: {exc}"[:_MAX_ERROR_TEXT],
+                        kind="tool_error",
+                    )
             except Exception as exc:  # noqa: BLE001 - degrade, never crash the loop
                 result = _error_result(
                     f"{type(exc).__name__}: {exc}"[:_MAX_ERROR_TEXT]
@@ -421,11 +430,24 @@ async def _run_tool_batch(
 #: Consecutive identical tool rounds before the loop injects a corrective notice.
 _LOOP_GUARD_THRESHOLD = 5
 
+#: Prefix of the synthetic, non-persisted corrective message (the UI filters it).
+LOOP_GUARD_PREFIX = "[tool-loop guard]"
+
 _LOOP_GUARD_TEXT = (
-    "[tool-loop guard] The same tool call has repeated {n} times with identical "
+    LOOP_GUARD_PREFIX + " The same tool call has repeated {n} times with identical "
     "arguments and produced no new progress. Stop repeating it: change the "
     "arguments, use a different tool, or explain to the user what is blocking you."
 )
+
+#: Commands that are legitimate to repeat: they observe a changing state.
+_POLL_COMMAND = re.compile(r"^\s*(sleep|wait|tail|ps|pgrep|top|jobs)\b")
+
+
+def _is_poll_call(call: ToolCall) -> bool:
+    """Whether this call is a pure wait/observe poll (exempt from the guard)."""
+    if call.name != "bash":
+        return False
+    return bool(_POLL_COMMAND.match(str(call.arguments.get("command", ""))))
 
 
 def _calls_signature(calls: list[ToolCall]) -> tuple:
@@ -637,7 +659,10 @@ async def agent_loop(
             # identical arguments is stuck. Inject one corrective message per
             # run (as a user-role notice) instead of burning max_turns.
             signature = _calls_signature(calls)
-            if signature == last_signature:
+            poll_like = all(_is_poll_call(call) for call in calls)
+            if poll_like:
+                repeat_streak = 0
+            elif signature == last_signature:
                 repeat_streak += 1
             else:
                 last_signature = signature
@@ -648,10 +673,10 @@ async def agent_loop(
                     content=_LOOP_GUARD_TEXT.format(n=repeat_streak),
                     timestamp=int(time.time()),
                 )
+                # Model-facing only: appended to the request context but NOT to
+                # new_messages and with no message events, so it is never
+                # persisted, rendered as a user turn, or counted by fork/retry.
                 state.messages.append(notice)
-                new_messages.append(notice)
-                yield AgentEvent(type="message_start", message=notice)
-                yield AgentEvent(type="message_end", message=notice)
 
             if config.get_steering_messages is not None:
                 for message in await config.get_steering_messages():

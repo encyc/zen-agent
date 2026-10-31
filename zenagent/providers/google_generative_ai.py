@@ -105,7 +105,7 @@ def to_contents(messages: list[Message]) -> tuple[str, list[dict]]:
 def build_request(
     model: Model, messages: list[Message], tools: list[ToolDef], options: StreamOptions
 ) -> tuple[str, dict, dict]:
-    options = fit_stream_options(model, messages, options)
+    options = fit_stream_options(model, messages, options, tools)
     system, contents = to_contents(messages)
     body: dict = {"contents": contents}
     if system:

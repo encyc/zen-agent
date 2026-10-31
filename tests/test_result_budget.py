@@ -133,3 +133,13 @@ def test_budgeting_is_idempotent():
     twice = apply_result_budget(once)
     assert _all_text(twice) == _all_text(once)
     assert twice.details["budget"]["truncated"] is True
+
+
+def test_error_kind_survives_budgeting():
+    result = ToolResultAgent(
+        content=[TextContent(text="e" * (MAX_RESULT_BYTES + 1))],
+        is_error=True,
+        error_kind="timeout",
+    )
+    budgeted = apply_result_budget(result)
+    assert budgeted.error_kind == "timeout"

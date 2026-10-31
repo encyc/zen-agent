@@ -44,7 +44,8 @@ async def stream(model, messages, tools, options) -> AsyncIterator[AssistantEven
 Chat Completions 系 request 里 `prompt + max_tokens` 超过上下文窗口会直接 400。三个适配器
 在构造请求前都过 `fit_stream_options()`：请求的 cap 放得下就保持原值（包括"不显式传"），
 放不下就压到 `window − prompt_est − 64`（低于 1024 时按剩余空间取，至少 1），
-避免长 prompt 在第一轮就失败。
+避免长 prompt 在第一轮就失败。`prompt_est` 包含消息 + **工具 schema**（9 个内置/MCP 工具
+可以是数千 token）；图片按固定 1024 token 估算而不是 base64 字符数。
 
 ## 传输层（`providers/transport.py`）
 

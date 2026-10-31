@@ -23,8 +23,14 @@ __all__ = [
 ]
 
 #: Tool name → wall-clock seconds for one call.
+#:
+#: ``web_search`` allows for the whole provider chain (up to five providers at
+#: the ~20s per-request budget) instead of aborting the fallback half-way.
+#: Local filesystem/search tools are deliberately absent: their work is
+#: blocking, so ``asyncio.wait_for`` cannot preempt them; bash is absent
+#: because it kills its own process group.
 TOOL_TIMEOUTS: dict[str, float] = {
-    "web_search": 25.0,
+    "web_search": 120.0,
     "fetch": 45.0,
     "mcp": 30.0,
 }

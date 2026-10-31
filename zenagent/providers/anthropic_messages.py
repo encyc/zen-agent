@@ -79,6 +79,9 @@ def thinking_budget(level: str | None, max_tokens: int) -> int | None:
             f"invalid thinking level {level!r}; expected one of "
             "None, 'off', 'low', 'medium', 'high', 'max'"
         )
+    if max_tokens <= 1024:
+        # budget_tokens must be >=1024 and strictly below max_tokens.
+        return None
     cap = max(1024, max_tokens // 2)
     return min(_THINKING_BUDGETS[level], cap)
 
@@ -197,7 +200,7 @@ def build_request(
     options: StreamOptions,
 ) -> tuple[str, dict, dict]:
     """Return ``(url, headers, body)`` for one streaming Messages request."""
-    options = fit_stream_options(model, messages, options)
+    options = fit_stream_options(model, messages, options, tools)
     system, turns = to_anthropic_messages(messages)
     max_tokens = options.max_tokens or model.max_tokens
     level = normalize_thinking(options.thinking)

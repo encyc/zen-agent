@@ -61,10 +61,6 @@ def matches_any(patterns: list[str], name: str) -> str | None:
 #: Tools whose approval is scoped to a concrete filesystem path.
 _PATH_TARGET_TOOLS = frozenset({"read_file", "write_file", "edit_file", "list_dir"})
 
-#: Shell metacharacters that make a command "not a simple prefix": granting a
-#: two-word prefix must never auto-allow `git status && something-else`.
-_BASH_COMPOUND = re.compile(r"[;&|`\n<>]|\$\(")
-
 
 def tool_target(tool_name: str, args: dict) -> str | None:
     """Stable target key for a session-scoped "always allow" grant.
@@ -86,17 +82,43 @@ def tool_target(tool_name: str, args: dict) -> str | None:
             resolved = Path(str(raw)).expanduser().resolve()
         except (OSError, RuntimeError):
             resolved = Path(str(raw))
-        return f"{tool_name}:{resolved}"
+        kind = "dir" if resolved.is_dir() else "file"
+        return f"{tool_name}:{kind}:{resolved}"
     if tool_name == "bash":
-        command = " ".join(str(args.get("command") or "").split())
+        # Exact command only. Prefix grants for shell commands are a consent
+        # trap: `git status`, `git status --short`, `git status && rm -rf x`
+        # and multi-line scripts all share the same first words.
+        command = str(args.get("command") or "").strip()
         if not command:
             return None
-        if _BASH_COMPOUND.search(command):
-            # Compound/redirecting commands get an exact-match target: a
-            # prefix grant for `git status` must not cover `git status && …`.
-            return f"bash:{command}"
-        return "bash:" + " ".join(command.split()[:2])
+        return f"bash:{command}"
     return None
+
+
+def target_is_granted(tool_name: str, args: dict, grants: set[str]) -> bool:
+    """Whether a call is covered by an already-remembered target grant.
+
+    Exact targets cover themselves. A directory grant additionally covers the
+    *direct children* of that directory for the same tool (one level only, no
+    descendants, no cross-tool leakage).
+    """
+    target = tool_target(tool_name, args)
+    if target is None:
+        return False
+    if target in grants:
+        return True
+    marker = ":file:"
+    if marker in target:
+        tool_part, path = target.split(marker, 1)
+        parent = f"{tool_part}:dir:{Path(path).parent}"
+        if parent in grants:
+            return True
+    return False
+
+
+def expects_target(tool_name: str) -> bool:
+    """Whether the tool always has a natural approval target."""
+    return tool_name in _PATH_TARGET_TOOLS or tool_name == "bash"
 
 
 def tool_is_read_only(tool_name: str, tool=None) -> bool:
@@ -237,8 +259,7 @@ class PermissionGate:
             return True, ""
         if tool_is_read_only(tool_name, tool):
             return True, ""
-        target = tool_target(tool_name, args)
-        if target is not None and target in self._always_allowed:
+        if target_is_granted(tool_name, args, self._always_allowed):
             return True, ""
         if (
             self.mode == "full"
@@ -270,7 +291,12 @@ class PermissionGate:
             return False, f"permission denied for {tool_name!r}: no answer"
         if answer in ("a", "all"):
             target = tool_target(tool_name, args)
-            self._always_allowed.add(target if target is not None else tool_name)
+            if target is not None:
+                self._always_allowed.add(target)
+            elif not expects_target(tool_name):
+                # Target-less tools fall back to a tool-wide grant; a tool with
+                # a natural target but a blank argument must not.
+                self._always_allowed.add(tool_name)
             return True, ""
         if answer in ("y", "yes"):
             return True, ""
@@ -333,14 +359,14 @@ class PermissionBroker:
 
     async def before_tool_call(self, tool_call, arguments: dict, tool=None):
         name = getattr(tool_call, "name", "")
+        target = tool_target(name, arguments)
 
         # Policy first: plan mode, deny patterns and catastrophic commands win
         # over a session-wide "always allow" grant.
         refusal = self._gate.policy_refusal(name, arguments, tool)
         if refusal is not None:
             return {"block": True, "reason": refusal}
-        target = tool_target(name, arguments)
-        if target is not None and target in self._allowed_targets:
+        if target is not None and target_is_granted(name, arguments, self._allowed_targets):
             return None
         if tool_is_read_only(name, tool) or name in self._allowed:
             return None
@@ -358,7 +384,7 @@ class PermissionBroker:
         if answer == "always":
             if target is not None:
                 self._allowed_targets.add(target)
-            else:
+            elif not expects_target(name):
                 self.allow_for_session(name)
             return None
         return {"block": True, "reason": f"denied by user: {name}"}

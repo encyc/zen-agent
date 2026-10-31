@@ -252,11 +252,12 @@ async def test_always_allow_is_cached_per_path_not_per_tool(monkeypatch, tmp_pat
     # Different target: asks again and can be denied.
     allowed, _reason = await gate.check("write_file", {"path": target_b})
     assert allowed is False
-    assert len(asked) == 2
-    assert target_b in asked[1] or "b.txt" in asked[1]
+    assert len(asked) == 2  # a new target asks again
+    assert "write_file(" in asked[1]
 
 
-async def test_always_allow_uses_a_command_prefix_for_bash(monkeypatch):
+async def test_always_allow_for_bash_is_exact_commands(monkeypatch):
+    """A bash grant covers the exact command, not a prefix family."""
     import builtins
 
     answers = iter(["a", "n"])
@@ -267,12 +268,33 @@ async def test_always_allow_uses_a_command_prefix_for_bash(monkeypatch):
     gate = PermissionGate(interactive=True)
 
     assert (await gate.check("bash", {"command": "git status"}))[0] is True
-    # Same command family: cached by prefix.
-    assert (await gate.check("bash", {"command": "git status --short"}))[0] is True
+    # The exact same command is remembered.
+    assert (await gate.check("bash", {"command": "git status"}))[0] is True
     assert len(asked) == 1
-    # A different command asks again.
-    assert (await gate.check("bash", {"command": "rm -rf ./build"}))[0] is False
+    # A variant is a different command and asks again.
+    assert (await gate.check("bash", {"command": "git status --short"}))[0] is False
     assert len(asked) == 2
+
+
+async def test_multiline_and_wrapper_bash_commands_are_not_prefix_shared(monkeypatch):
+    """Consent scope must not leak across newline/wrapper variants."""
+    import builtins
+
+    answers = iter(["a", "n"])
+    asked: list[str] = []
+    monkeypatch.setattr(
+        builtins, "input", lambda prompt: (asked.append(prompt), next(answers))[1]
+    )
+    gate = PermissionGate(interactive=True)
+
+    first = "git status\nrm -rf ./x"
+    assert (await gate.check("bash", {"command": first}))[0] is True
+    # A different multi-line command must prompt again.
+    assert (await gate.check("bash", {"command": "git status\nrm -rf ./y"}))[0] is False
+    # A wrapper variant of a previously approved command must prompt too.
+    assert len(asked) == 2
+    monkeypatch.setattr(builtins, "input", lambda prompt: "n")
+    assert (await gate.check("bash", {"command": "sudo git status"}))[0] is False
 
 
 async def test_broker_always_allow_is_target_scoped():
@@ -298,18 +320,14 @@ async def test_broker_always_allow_is_target_scoped():
     assert len(prompts) == 2
 
 
-async def test_command_prefix_grant_does_not_cover_compound_commands(monkeypatch):
-    """"always allow git status" must not auto-allow `git status && ...`."""
+async def test_command_grant_does_not_cover_compound_commands(monkeypatch):
+    """An exact grant for `git status` must not auto-allow `git status && ...`."""
     import builtins
 
     monkeypatch.setattr(builtins, "input", lambda prompt: "a")
     gate = PermissionGate(interactive=True)
     assert (await gate.check("bash", {"command": "git status"}))[0] is True
-    # Same simple command family stays covered (no prompt: input would return a
-    # again, but we assert the answer is True regardless).
-    assert (await gate.check("bash", {"command": "git status --short"}))[0] is True
 
-    # A compound command sharing the prefix must be re-confirmed.
     monkeypatch.setattr(builtins, "input", lambda prompt: "n")
     allowed, _reason = await gate.check(
         "bash", {"command": "git status && rm -rf ./build"}
@@ -330,3 +348,50 @@ async def test_compound_command_grant_is_exact(monkeypatch):
     assert (
         await gate.check("bash", {"command": "git status && touch other"})
     )[0] is False
+
+
+async def test_blank_targets_never_fall_back_to_a_tool_wide_grant(monkeypatch):
+    """A tool with a natural target must not become tool-wide on a blank arg."""
+    import builtins
+
+    answers = iter(["a", "n"])
+    monkeypatch.setattr(builtins, "input", lambda prompt: next(answers))
+    gate = PermissionGate(interactive=True)
+
+    assert (await gate.check("write_file", {"path": ""}))[0] is True
+    # The blank-target approval must not grant every later write.
+    assert (await gate.check("write_file", {"path": "/tmp/other.txt"}))[0] is False
+
+
+async def test_directory_grant_covers_one_level_but_not_descendants(monkeypatch, tmp_path):
+    import builtins
+
+    answers = iter(["a", "n"])
+    asked: list[str] = []
+    monkeypatch.setattr(
+        builtins, "input", lambda prompt: (asked.append(prompt), next(answers))[1]
+    )
+    gate = PermissionGate(interactive=True)
+
+    # Approve the directory itself (write_file's target is a path).
+    assert (await gate.check("write_file", {"path": str(tmp_path)}))[0] is True
+    assert len(asked) == 1
+    # A direct child is covered by the one-level directory grant.
+    assert (await gate.check("write_file", {"path": str(tmp_path / "child.txt")}))[0] is True
+    assert len(asked) == 1
+    # A nested descendant is not covered.
+    nested = str(tmp_path / "sub" / "deep.txt")
+    assert (await gate.check("write_file", {"path": nested}))[0] is False
+    assert len(asked) == 2
+
+
+async def test_directory_grant_does_not_leak_to_sibling_tools(monkeypatch, tmp_path):
+    import builtins
+
+    monkeypatch.setattr(builtins, "input", lambda prompt: "a")
+    gate = PermissionGate(interactive=True)
+    assert (await gate.check("write_file", {"path": str(tmp_path)}))[0] is True
+
+    monkeypatch.setattr(builtins, "input", lambda prompt: "n")
+    # Same directory, different tool: not covered.
+    assert (await gate.check("edit_file", {"path": str(tmp_path / "x.py")}))[0] is False

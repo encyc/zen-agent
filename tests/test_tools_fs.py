@@ -513,3 +513,22 @@ async def test_edit_schema_declares_replace_all():
     assert prop["type"] == "boolean"
     assert prop.get("default") is False
     assert "replace_all" not in EDIT_FILE.parameters["required"]
+
+
+async def test_edit_keeps_a_bom_even_when_old_string_mentions_it():
+    from pathlib import Path
+
+    Path("bom.py").write_bytes("\ufeffimport os\n".encode())
+    result = await call(EDIT_FILE, path="bom.py", old_string="import os", new_string="import sys")
+    assert not result.is_error
+    assert Path("bom.py").read_bytes().startswith(b"\xef\xbb\xbf")
+    assert "import sys" in Path("bom.py").read_text(encoding="utf-8")
+
+
+async def test_writing_empty_content_to_a_bom_only_file_truncates_to_zero():
+    from pathlib import Path
+
+    Path("bom.txt").write_bytes(b"\xef\xbb\xbf")
+    result = await call(WRITE_FILE, path="bom.txt", content="")
+    assert not result.is_error
+    assert Path("bom.txt").read_bytes() == b""

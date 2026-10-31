@@ -66,7 +66,7 @@ class ToolResultAgent:
 | 工具 | 关键限制 |
 |---|---|
 | `read_file` | 默认每次 `DEFAULT_READ_LIMIT = 400` 行、硬上限 `MAX_READ_LIMIT = 2000`；支持 `offset`（0 基行号）/`limit`，截断页尾给出下一页的精确 `offset`；二进制（前若干字节有 NUL）/非 UTF-8 拒绝 |
-| `write_file` | 覆盖写，返回摘要；保留已有文件的 CRLF/BOM 约定（新文件 LF/无 BOM）；**拒绝把"截断的 read 页"回写**：content 仍带 `[truncated:` 页尾且比磁盘文件短 → `is_error`，防止静默截断数据 |
+| `write_file` | 覆盖写，返回摘要；保留已有文件的 CRLF/BOM 约定（新文件 LF/无 BOM）；**拒绝把"截断的 read 页"回写**：内容剥离"截断页脚 / 预算 notice / 行截断标记"后，body 比磁盘文件短 → `is_error`，防止静默截断数据 |
 | `edit_file` | old 默认必须唯一匹配（`replace_all=true` 时全替换）；匹配对换行风格不敏感；返回 unified diff（`MAX_DIFF_LINES = 200`）；写回保留 CRLF/BOM |
 | `list_dir` | `MAX_LIST_ENTRIES = 500`，目录带 `/` 标记 |
 
@@ -123,7 +123,8 @@ loop 里对每个 call：
 
 loop 的降级路径都会填一个机器可读类别：`unknown_tool` / `invalid_arguments` /
 `policy`（权限或自定义 hook 拦截）/ `tool_error`（工具异常）/ `timeout`；
-工具自己返回的错误可以带更具体的类别。UI/遥测按类别聚合，模型按文本处理。
+工具自己返回的错误可以带更具体的类别。当前类别只由 loop 设置、供调试/后续遥测使用；
+它还没有被 UI 消费，也没有持久化到 session JSONL，模型仍按文本处理。
 
 ### 并发与 exclusive
 

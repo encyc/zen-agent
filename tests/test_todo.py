@@ -687,3 +687,41 @@ async def test_todo_runs_through_the_agent_loop(runtime_factory):
     ]
     assert todo_sidecar_path(runtime.session.path).is_file()
     assert "todo" in runtime.agent.system_prompt
+
+
+def test_duplicate_task_content_in_a_sidecar_is_deduped_on_load(tmp_path):
+    from zenagent.tools.todo import (
+        load_todo_phases,
+        save_todo_phases,
+    )
+
+    session = tmp_path / "s.jsonl"
+    save_todo_phases(
+        session,
+        [
+            {
+                "name": "work",
+                "tasks": [
+                    {"content": "dup", "status": "pending"},
+                    {"content": "dup", "status": "pending"},
+                ],
+            }
+        ],
+    )
+    phases = load_todo_phases(session)
+    tasks = phases[0]["tasks"]
+    assert [task["content"] for task in tasks] == ["dup"]
+
+
+def test_clear_removes_tasks_and_the_sidecar(tmp_path):
+    from zenagent.tools.todo import build_todo_tool, load_todo_phases
+
+    session = tmp_path / "s.jsonl"
+    tool = build_todo_tool(session)
+    import asyncio
+
+    asyncio.run(
+        tool.execute("1", {"op": "init", "items": ["one"]}, None)
+    )
+    tool.clear()
+    assert load_todo_phases(session) == []

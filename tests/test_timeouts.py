@@ -16,6 +16,7 @@ from zenagent.agent.loop import ToolResultAgent
 from zenagent.agent.timeouts import (
     MAX_TOOL_TIMEOUT_S,
     MIN_TOOL_TIMEOUT_S,
+    TOOL_TIMEOUTS,
     clamp_timeout,
     effective_timeout,
 )
@@ -86,3 +87,47 @@ def stream_state():
     from zenagent.agent.loop import AgentState
 
     return AgentState()
+
+
+async def test_tool_raising_timeout_error_without_a_deadline_does_not_crash():
+    """A tool may raise TimeoutError itself; with no kernel deadline that is a
+    normal tool error, not a crash."""
+    async def flaky(name, args, abort, on_update=None):
+        raise TimeoutError("subprocess timed out")
+
+    stream = ScriptedStream(
+        [
+            [call_tool("t1", "flaky", {}), finish("tool_use")],
+            [say("done"), finish("stop")],
+        ]
+    )
+    events = await run("go", stream_state(), make_config(stream, tools=[make_tool("flaky", flaky)]))
+    end = next(e for e in events if e.type == "tool_execution_end")
+    assert end.is_error is True
+    assert end.result.error_kind == "tool_error"
+    assert "TimeoutError" in end.result.content[0].text
+    assert len(stream.calls) == 2
+
+
+async def test_loop_applies_the_name_based_timeout_table(monkeypatch):
+    monkeypatch.setitem(TOOL_TIMEOUTS, "tbl_tool", 0.05)
+
+    async def slow(name, args, abort, on_update=None):
+        await asyncio.sleep(10)
+        return ToolResultAgent(content=[TextContent(text="never")])
+
+    stream = ScriptedStream(
+        [
+            [call_tool("t1", "tbl_tool", {}), finish("tool_use")],
+            [say("done"), finish("stop")],
+        ]
+    )
+    events = await run("go", stream_state(), make_config(stream, tools=[make_tool("tbl_tool", slow)]))
+    end = next(e for e in events if e.type == "tool_execution_end")
+    assert end.is_error and end.result.error_kind == "timeout"
+
+
+def test_web_search_deadline_allows_the_provider_chain():
+    # Up to five providers at ~20s each, so a 25s kernel deadline would abort
+    # the fallback chain instead of letting it reach the keyless last resort.
+    assert TOOL_TIMEOUTS["web_search"] >= 100

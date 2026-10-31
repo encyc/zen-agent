@@ -296,8 +296,6 @@ async def run_headless(
         path = latest_session() if resume == "latest" else Path(resume)
         if path is not None and path.is_file():
             session = Session(path)
-            for warning in session.warnings:
-                print(f"zenagent: {warning}", file=sys.stderr)
         else:
             print(f"zenagent: no session to resume ({resume})", file=sys.stderr)
             session = Session(unique_session_path())
@@ -322,8 +320,12 @@ async def run_headless(
         extra_prompt=extra_prompt,
     )
 
-    if resume is not None and session.messages:
-        agent.replace_messages(session.load())
+    if resume is not None:
+        loaded = session.load()
+        if loaded:
+            agent.replace_messages(loaded)
+        for warning in session.warnings:
+            print(f"zenagent: {warning}", file=sys.stderr)
 
     def persist(event: AgentEvent) -> None:
         if event.type == "agent_end" and event.new_messages:

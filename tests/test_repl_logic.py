@@ -473,6 +473,7 @@ async def test_reload_discovers_skills_added_mid_session(tmp_path, monkeypatch):
     from zenagent.config import UserConfig
 
     monkeypatch.setattr(repl_module, "load_user_config", lambda: UserConfig())
+    monkeypatch.setenv("HOME", str(tmp_path))  # don't discover the developer's global skills
     monkeypatch.chdir(tmp_path)
 
     calls = {"n": 0}

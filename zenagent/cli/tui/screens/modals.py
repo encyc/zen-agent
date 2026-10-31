@@ -190,20 +190,26 @@ class ToolApproval(ModalScreen[str]):
         ("enter", "allow", "Allow"),
     ]
 
-    def __init__(self, tool_name: str, arguments: dict) -> None:
+    def __init__(
+        self, tool_name: str, arguments: dict, target: str | None = None
+    ) -> None:
         super().__init__()
         self.tool_name = tool_name
         self.arguments = arguments
+        #: The exact scope an "always" answer would remember (path / command).
+        self.target = target
 
     def compose(self) -> ComposeResult:
         preview = ", ".join(f"{key}={value!r}" for key, value in self.arguments.items())
         if len(preview) > 200:
             preview = preview[:199] + "…"
+        scope = self.target or "all calls to this tool this session"
         with Vertical(classes="modal"):
             yield Label(f"allow {self.tool_name}?")
             if preview:
                 yield Label(preview)
-            yield Label("[y] allow   [a] allow for this session   [n] deny")
+            yield Label(f"always allows: {scope}")
+            yield Label("[y] allow once   [a] always allow this target   [n] deny")
 
     def action_allow(self) -> None:
         self.dismiss("allow")

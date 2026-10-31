@@ -238,7 +238,8 @@ class ChatController:
             return None
         before = self._before_tokens()
         path = await compact(self.runtime.agent)
-        await self.runtime.switch_session(path)
+        # Compaction continues the same work: carry the todo checklist over.
+        await self.runtime.switch_session(path, carry_todos=True)
         self.reload_transcript()
         text = f"compacted · {before:,} prompt tokens → summary session"
         self._notices.append(TranscriptNotice("divider", text))
@@ -262,6 +263,9 @@ class ChatController:
         self._cards.clear()
         self._current = None
         self._attachments.clear()
+        todo_tool = getattr(self.runtime, "todo_tool", None)
+        if todo_tool is not None:
+            todo_tool.clear()
         self._todos = []
         self._notify()
 
@@ -279,6 +283,10 @@ class ChatController:
             return None
         text, new_session = prepared
         self.runtime.session = new_session
+        todo_tool = getattr(self.runtime, "todo_tool", None)
+        if todo_tool is not None:
+            todo_tool.bind_session(new_session.path)
+        self._todos = load_todo_phases(self._session_path())
         self._transcript = messages_to_views(self.runtime.agent.messages)
         self._cards.clear()
         self._current = None

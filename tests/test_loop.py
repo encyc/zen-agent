@@ -1228,7 +1228,9 @@ async def test_repeated_identical_tool_calls_get_one_corrective_notice():
     ]
     script.append([say("done"), finish("stop")])
     state = AgentState()
-    await run("go", state, make_config(ScriptedStream(script), tools=[make_tool("echo", echo)]))
+    events = await run(
+        "go", state, make_config(ScriptedStream(script), tools=[make_tool("echo", echo)])
+    )
 
     corrective = [
         message
@@ -1236,3 +1238,30 @@ async def test_repeated_identical_tool_calls_get_one_corrective_notice():
         if getattr(message, "content", "").count("tool-loop guard") == 1
     ]
     assert len(corrective) == 1
+    # The corrective is model-facing only: not persisted, not rendered as a turn.
+    end = next(event for event in events if event.type == "agent_end")
+    assert corrective[0] not in end.new_messages
+    assert not [
+        event
+        for event in events
+        if event.type == "message_start" and event.message is corrective[0]
+    ]
+
+
+async def test_poll_like_commands_are_exempt_from_the_loop_guard():
+    async def echo(name, args, abort, on_update=None):
+        return ToolResultAgent(content=[TextContent(text="still running")])
+
+    script = [
+        [call_tool("t1", "bash", {"command": "sleep 1"}), finish("tool_use")]
+        for _ in range(6)
+    ]
+    script.append([say("done"), finish("stop")])
+    state = AgentState()
+    await run(
+        "go", state, make_config(ScriptedStream(script), tools=[make_tool("bash", echo)])
+    )
+    assert not any(
+        "tool-loop guard" in str(getattr(message, "content", ""))
+        for message in state.messages
+    )

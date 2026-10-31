@@ -296,6 +296,9 @@ async def _write_file(
     has_bom, newline = False, "\n"
     if raw is not None and previous:
         has_bom, newline = _detect_file_conventions(raw)
+    if content == "":
+        # An empty write means an empty file: do not leave a BOM/newline corpse.
+        has_bom, newline = False, "\n"
     payload = _apply_file_conventions(content, has_bom=has_bom, newline=newline)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -341,7 +344,11 @@ async def _edit_file(
     # Match newline-insensitively: a model editing a CRLF file often supplies
     # LF-only old_string/new_string, and an LF file may receive CRLF text.
     # The result is converted back to the file's own convention on write.
-    _, newline = _detect_file_conventions(raw)
+    has_bom, newline = _detect_file_conventions(raw)
+    if has_bom and text.startswith(_BOM):
+        # Match without the BOM and re-add it on write, so an edit whose
+        # old_string mentions \ufeff cannot silently drop the BOM.
+        text = text[1:]
     searchable = text.replace("\r\n", "\n")
     target = old.replace("\r\n", "\n")
     replacement = new.replace("\r\n", "\n")
@@ -369,6 +376,8 @@ async def _edit_file(
         updated = updated_searchable.replace("\n", "\r\n")
     else:
         updated = updated_searchable
+    if has_bom:
+        updated = _BOM + updated
     try:
         path.write_bytes(updated.encode("utf-8"))
     except OSError as exc:
