@@ -369,6 +369,11 @@ class Runtime:
         if self.mcp is not None:
             manager, self.mcp = self.mcp, None
             await manager.close()
+        # Background bash jobs belong to this app/session: do not leave orphan
+        # process groups behind when the runtime shuts down.
+        from zenagent.tools.jobs import close_job_manager
+
+        await close_job_manager()
 
     async def refresh_mcp(self) -> None:
         """Reconnect failed MCP servers and swap refreshed tools into the agent."""

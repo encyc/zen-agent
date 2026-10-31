@@ -93,9 +93,24 @@ class ToolResultAgent:
 - 启用面：TUI 走 `Runtime.bootstrap` 注入；headless/REPL 绑定各自 session；
   RPC 无 JSONL 会话，用内存态。
 
+### 后台作业（`bash async` + `wait`）
+
+- `bash` 的 `async: true` 会通过 `tools/jobs.py` 的 `JobManager` 启动后台作业并立即返回
+  `job_id`（`bg_1`…）与 `status="running"`；后台 deadline 默认 600s（`timeout_s` 可覆盖
+  1–3600），超时杀整个进程组；输出同样过 30KB head+tail 缓冲。
+- `wait`（`approval="read"`、`execution_mode="sequential"`）等待指定/任意运行中作业：
+  完成返回 `status/exit_code/duration` + 输出；`timeout_s`（默认 120，1–600）到点返回
+  still-running 快照；未知 `job_id` 报错并列出已知 id；没有作业时返回 "nothing to wait for"。
+  等待过程可被用户 abort（作业继续运行，之后仍可 wait）。
+- 作业是事件循环级的进程内单例；`Runtime.close()` 会关闭并清理残留进程组。
+- **shell 抽象**（`tools/shell.py`）：前台 bash 与后台作业共用 `resolve_shell()`；
+  `ZENAGENT_SHELL=posix|powershell|pwsh|cmd|<绝对路径>`，Windows 默认探测
+  pwsh→powershell→cmd；未知值 → bash 返回 is_error。POSIX 用 `/bin/sh -c`
+  且 `start_new_session`（超时可 killpg）。
+
 ### search
 
-- `glob`：按模式找文件（不跟随符号链接逃逸）。
+- `glob`：按模式找文件（不跟随符号链接逃逸）；`limit` clamp 到 1–2000、`include_hidden` 控制 dotfile，`.git` 永远跳过；`details` 带 `matches/shown/limit`。
 - `grep`：正则搜索；跳过二进制/超大文件；按文件分页（每页 20 个文件、每文件 20 条命中，
   内部扫描上限 2000 条），页脚给出下一页 `skip`，`rg` 与 Python fallback 语义一致。
 

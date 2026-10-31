@@ -8,6 +8,7 @@ from __future__ import annotations
 from zenagent.tools.bash import BASH
 from zenagent.tools.fs import EDIT_FILE, LIST_DIR, READ_FILE, WRITE_FILE
 from zenagent.tools.search import GLOB, GREP
+from zenagent.tools.wait import WAIT
 from zenagent.tools.web import FETCH, WEB_SEARCH
 
 __all__ = [
@@ -19,6 +20,7 @@ __all__ = [
     "GREP",
     "LIST_DIR",
     "READ_FILE",
+    "WAIT",
     "WEB_SEARCH",
     "WRITE_FILE",
 ]
@@ -30,6 +32,7 @@ ALL_TOOLS = [
     EDIT_FILE,
     LIST_DIR,
     BASH,
+    WAIT,
     GLOB,
     GREP,
     WEB_SEARCH,
