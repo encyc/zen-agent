@@ -34,8 +34,21 @@ class UserBlock(Static):
         return self._text
 
 
+def _preview_line(thinking: str) -> str:
+    """The first line with content: the collapsed row's one-line summary."""
+    for line in thinking.splitlines():
+        if line.strip():
+            return line.strip()
+    return ""
+
+
 class ThinkingRow(Static):
-    """One muted line while collapsed; the full reasoning when opened."""
+    """A one-line preview while collapsed; the full reasoning when opened.
+
+    The head mirrors the tool cards: a glyph and a label, then the first line of
+    the body dimmed and clipped to the row. Keeping the body itself out of the
+    collapsed renderable is what makes the row exactly one line at any width.
+    """
 
     can_focus = True
     BINDINGS = [("enter,space", "toggle", "Expand")]  # noqa: RUF012 - Textual class API
@@ -49,20 +62,39 @@ class ThinkingRow(Static):
     def plain(self) -> str:
         return self._renderable().plain
 
+    def on_mount(self) -> None:
+        # The constructor rendered before the widget had a width: redo it now.
+        self.update(self._renderable())
+
+    def on_resize(self) -> None:
+        # The preview is clipped to the row, so a narrower terminal re-clips it.
+        self.update(self._renderable())
+
+    def _width(self) -> int:
+        try:
+            width = self.size.width
+        except RuntimeError:  # not mounted yet: render against a default width
+            width = 0
+        return max(24, (width or 80) - 2)
+
     def _renderable(self) -> Text:
         text = Text()
-        if self.collapsed:
-            chars = len(self.thinking)
-            label = f"{chars / 1000:.1f}k" if chars >= 1000 else str(chars)
-            text.append("✻ ", style=_DIM)
-            text.append(f"thinking · {label} chars", style=f"italic {_MUTED}")
-            return text
         text.append("✻ ", style=_DIM)
-        text.append("thinking\n", style=_MUTED)
-        for line in self.thinking.splitlines():
+        if not self.collapsed:
+            text.append("thinking\n", style=_MUTED)
+            for line in self.thinking.splitlines():
+                text.append("  ")
+                text.append(line, style=f"italic {_MUTED}")
+                text.append("\n")
+            return text
+        text.append("thinking", style=f"italic {_MUTED}")
+        preview = _preview_line(self.thinking)
+        if preview:
+            budget = max(8, self._width() - len(text.plain) - 2)
+            if len(preview) > budget:
+                preview = preview[: max(1, budget - 1)] + "…"
             text.append("  ")
-            text.append(line, style=f"italic {_MUTED}")
-            text.append("\n")
+            text.append(preview, style=_DIM)
         return text
 
     def set_expanded(self, expanded: bool) -> None:

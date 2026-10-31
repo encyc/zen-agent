@@ -63,6 +63,63 @@ async def test_thinking_is_one_quiet_row_until_opened(runtime_factory):
         assert "weighing options" in row.plain
 
 
+def test_collapsed_thinking_previews_the_first_non_empty_line():
+    row = ThinkingRow("\n\n  first real line\nfolded away")
+
+    assert row.collapsed is True
+    assert row.plain == "✻ thinking  first real line"
+    assert "folded away" not in row.plain
+
+
+def test_collapsed_thinking_without_content_is_just_the_label():
+    assert ThinkingRow("").plain == "✻ thinking"
+
+
+def test_collapsed_thinking_clips_the_preview_to_the_row_width():
+    row = ThinkingRow("x" * 500)
+
+    assert row.plain.endswith("…")
+    assert len(row.plain) <= 80, "the unmounted fallback width is 80"
+    assert "x" * 500 not in row.plain
+
+
+async def test_collapsed_thinking_stays_one_row_when_the_first_line_overflows(runtime_factory):
+    from zenagent.events import AssistantEvent
+    from zenagent.types import AssistantMessage, TextContent, ThinkingContent, Usage
+
+    wide_first_line = "weighing the options very carefully " * 4
+
+    async def stream(model, messages, tools, options):
+        partial = AssistantMessage(
+            content=[], provider="p", model="m", usage=Usage(),
+            stop_reason="pending", timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        partial.content.append(
+            ThinkingContent(thinking=f"{wide_first_line}\nsecond line stays folded")
+        )
+        yield AssistantEvent(type="thinking_start", partial=partial, content_index=0)
+        partial.content.append(TextContent(text="done"))
+        yield AssistantEvent(type="text_delta", partial=partial, content_index=1, delta="done")
+        partial.stop_reason = "stop"
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    runtime = await runtime_factory(stream_fn=stream)
+    app = ZenAgentApp(runtime)
+    async with app.run_test(size=(60, 30)) as pilot:
+        await pilot.pause()
+        await app.chat.submit("think")
+        await app.chat.wait_for_idle()
+        await pilot.pause()
+
+        row = app.query_one(ThinkingRow)
+        assert row.collapsed is True
+        assert row.region.height == 1, "the preview must be clipped, never wrapped"
+        assert row.plain.startswith("✻ thinking  weighing the options")
+        assert row.plain.endswith("…")
+        assert "second line stays folded" not in row.plain
+
+
 async def test_transcript_follows_new_output_only_while_at_bottom(runtime_factory):
     from conftest import sequenced_stream
 
