@@ -13,6 +13,8 @@ streamed delta cannot leave the HUD stale.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from rich.text import Text
 from textual.widgets import Static
 
@@ -43,6 +45,7 @@ class TodoHud(Static):
         super().__init__("", id="todo-hud")
         self._phases: list[dict] = []
         self._plain = ""
+        self._on_click_handler: Callable[[], None] | None = None
         self.display = False
 
     @property
@@ -53,6 +56,14 @@ class TodoHud(Static):
     @property
     def phases(self) -> list[dict]:
         return list(self._phases)
+
+    def set_handler(self, handler: Callable[[], None] | None) -> None:
+        """Install the click handler (None clears it)."""
+        self._on_click_handler = handler
+
+    def on_click(self) -> None:
+        if self._on_click_handler is not None:
+            self._on_click_handler()
 
     def set_todos(self, phases: list[dict] | None) -> None:
         """Render one canonical phase snapshot; empty means "hide the row"."""

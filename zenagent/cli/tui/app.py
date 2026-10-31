@@ -238,6 +238,8 @@ class ZenAgentApp(App):
     def on_mount(self) -> None:
         self.command_hints = self.query_one(CommandHints)
         self.query_one(WorkStrip).set_handler(self._open_sidebar_from_strip)
+        self.query_one(TodoHud).set_handler(self.action_show_todo_list)
+        self.query_one(Sidebar).set_handlers(on_todo=self.action_show_todo_list)
         self._announce_missing_key()
         self._refresh_status()
         self.query_one(PromptInput).focus()
@@ -344,6 +346,20 @@ class ZenAgentApp(App):
         for sidebar in self.query(Sidebar):
             sidebar.refresh_contents(self.chat, self.models)
         self._sync_chrome(status)
+
+    def action_show_todo_list(self) -> None:
+        """Open the read-only checklist behind the one-line HUD summary."""
+        from zenagent.cli.tui.screens.todo_list import TodoListScreen
+
+        phases = self.chat.todos
+        if not phases:
+            self.notify("no todo list in this session")
+            return
+
+        def restore_focus(_result=None) -> None:
+            self.query_one(PromptInput).focus()
+
+        self.push_screen(TodoListScreen(phases), restore_focus)
 
     # -- chrome -------------------------------------------------------------
 
@@ -581,6 +597,11 @@ class ZenAgentApp(App):
         from textual.app import SystemCommand
 
         yield from super().get_system_commands(screen)
+        yield SystemCommand(
+            "Show todo list",
+            "Open the session todo checklist",
+            self.action_show_todo_list,
+        )
         for command in self.commands.names():
             yield SystemCommand(
                 command.name,
