@@ -496,6 +496,7 @@ async def agent_loop(
     last_signature: tuple | None = None
     repeat_streak = 0
     guard_injected = False
+    tool_stats: dict[str, dict] = {}
     try:
         # Input typed while the previous run was finishing is still queued: pick
         # it up before the first request instead of waiting for a tool round.
@@ -644,6 +645,12 @@ async def agent_loop(
                 )
                 state.messages.append(message)
                 new_messages.append(message)
+                stats = tool_stats.setdefault(
+                    outcome.call.name, {"calls": 0, "errors": 0, "ms": 0}
+                )
+                stats["calls"] += 1
+                stats["errors"] += int(bool(outcome.result.is_error))
+                stats["ms"] += outcome.duration_ms
                 yield AgentEvent(
                     type="tool_execution_end",
                     tool_call_id=outcome.call.id,
@@ -701,4 +708,8 @@ async def agent_loop(
             if not is_loop_guard_message(message)
         ]
         state.termination = termination
-        yield AgentEvent(type="agent_end", new_messages=new_messages)
+        yield AgentEvent(
+            type="agent_end",
+            new_messages=new_messages,
+            tool_stats={"tools": tool_stats} if tool_stats else None,
+        )

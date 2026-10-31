@@ -1274,3 +1274,41 @@ async def test_poll_like_commands_are_exempt_from_the_loop_guard():
         "tool-loop guard" in str(getattr(message, "content", ""))
         for message in state.messages
     )
+
+
+async def test_agent_end_carries_per_tool_stats():
+    async def ok(name, args, abort, on_update=None):
+        return ToolResultAgent(content=[TextContent(text="ok")])
+
+    async def boom(name, args, abort, on_update=None):
+        raise RuntimeError("kaput")
+
+    stream = ScriptedStream(
+        [
+            [
+                call_tool("t1", "ok", {}),
+                call_tool("t2", "boom", {}),
+                finish("tool_use"),
+            ],
+            [say("done"), finish("stop")],
+        ]
+    )
+    state = AgentState()
+    events = await run(
+        "go",
+        state,
+        make_config(stream, tools=[make_tool("ok", ok), make_tool("boom", boom)]),
+    )
+    end = next(event for event in events if event.type == "agent_end")
+    stats = end.tool_stats["tools"]
+    assert stats["ok"]["calls"] == 1 and stats["ok"]["errors"] == 0
+    assert stats["boom"]["calls"] == 1 and stats["boom"]["errors"] == 1
+    assert stats["ok"]["ms"] >= 0 and stats["boom"]["ms"] >= 0
+
+
+async def test_agent_end_has_no_tool_stats_without_tool_calls():
+    stream = ScriptedStream([[say("hi"), finish("stop")]])
+    state = AgentState()
+    events = await run("go", state, make_config(stream))
+    end = next(event for event in events if event.type == "agent_end")
+    assert end.tool_stats is None

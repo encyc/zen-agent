@@ -37,6 +37,26 @@ _TAG = re.compile(r"<[^>]+>")
 _SCRIPT_STYLE = re.compile(r"<(script|style|noscript)[^>]*>.*?</\1>", re.DOTALL)
 _WS = re.compile(r"[ \t\r\f\v]+")
 
+#: Elements that are never readable content.
+_DROP_ELEMENTS = re.compile(
+    r"<(script|style|noscript|template|svg|iframe)[^>]*>.*?</\1>",
+    re.DOTALL | re.IGNORECASE,
+)
+#: Preferred content containers, in priority order.
+_CONTENT_BLOCKS = (
+    (re.compile(r"<article[^>]*>(.*?)</article>", re.DOTALL | re.IGNORECASE), "article"),
+    (re.compile(r"<main[^>]*>(.*?)</main>", re.DOTALL | re.IGNORECASE), "main"),
+)
+#: Page chrome removed even inside the chosen content container.
+_CHROME = re.compile(
+    r"<(nav|aside|footer|header)[^>]*>.*?</\1>", re.DOTALL | re.IGNORECASE
+)
+#: Block-level boundaries become line breaks so the text stays paragraph-shaped.
+_BLOCK_BOUNDARY = re.compile(
+    r"</?(?:p|div|section|article|main|li|ul|ol|tr|table|h[1-6]|br|pre|blockquote)\b[^>]*>",
+    re.IGNORECASE,
+)
+
 
 def _text(body: str, *, is_error: bool = False, **details) -> ToolResultAgent:
     return ToolResultAgent(
@@ -92,6 +112,28 @@ def strip_html(body: str) -> str:
     return _WS.sub(" ", html.unescape(_TAG.sub(" ", _SCRIPT_STYLE.sub(" ", body)))).strip()
 
 
+def readable_text(body: str) -> tuple[str, str]:
+    """Extract readable text from an HTML page; returns ``(text, method)``.
+
+    Prefer an ``<article>``/``<main>`` container (a page's actual content),
+    drop scripts/styles and page chrome, and turn block boundaries into line
+    breaks so paragraph structure survives. ``method`` is reported in the
+    result details (``article``/``main``/``body``).
+    """
+    cleaned = _DROP_ELEMENTS.sub(" ", body)
+    content, method = cleaned, "body"
+    for pattern, name in _CONTENT_BLOCKS:
+        match = pattern.search(cleaned)
+        if match is not None:
+            content, method = match.group(1), name
+            break
+    content = _CHROME.sub(" ", content)
+    content = _BLOCK_BOUNDARY.sub("\n", content)
+    content = html.unescape(_TAG.sub(" ", content))
+    lines = [" ".join(line.split()) for line in content.splitlines()]
+    return "\n".join(line for line in lines if line), method
+
+
 def _clamp_fetch_timeout(raw) -> float | None:
     """Validate ``timeout_s``; None means "use the network layer default"."""
     if raw is None or raw == "":
@@ -117,7 +159,10 @@ async def _fetch(tool_call_id: str, args: dict, abort, on_update=None) -> ToolRe
 
     content_type = response.headers.get("content-type", "")
     body = response.text
-    text = strip_html(body) if "html" in content_type or body.lstrip().startswith("<") else body
+    if "html" in content_type or body.lstrip().startswith("<"):
+        text, method = readable_text(body)
+    else:
+        text, method = body, "text"
     truncated = len(text) > MAX_FETCH_CHARS
     if truncated:
         text = text[:MAX_FETCH_CHARS] + "\n… (truncated)"
@@ -127,6 +172,7 @@ async def _fetch(tool_call_id: str, args: dict, abort, on_update=None) -> ToolRe
         url=url,
         truncated=truncated,
         timeout_s=timeout_s,
+        method=method,
     )
 
 

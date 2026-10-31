@@ -76,6 +76,9 @@ class AgentEvent:
     is_error: bool = False
     duration_ms: int | None = None
     new_messages: list[Message] | None = None
+    #: Per-run tool summary, attached to ``agent_end``:
+    #: ``{"tools": {name: {"calls", "errors", "ms"}}}``.
+    tool_stats: dict | None = None
 
 
 class Aborted(Exception):
