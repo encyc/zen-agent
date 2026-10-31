@@ -210,6 +210,7 @@ async def _run(args) -> int:
                 api_key=api_key,
                 thinking="off" if not model.reasoning else "high",
                 max_cost=args.max_cost,
+                session_path=None,
             ),
         ],
         max_turns=args.max_turns,

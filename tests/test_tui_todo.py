@@ -11,6 +11,7 @@ import json
 
 from zenagent.agent.loop import ToolResultAgent
 from zenagent.cli.tui.app import ZenAgentApp
+from zenagent.cli.tui.widgets.prompt_input import PromptInput
 from zenagent.cli.tui.widgets.status_band import StatusBand
 from zenagent.cli.tui.widgets.todo_hud import TodoHud
 from zenagent.events import AgentEvent
@@ -178,3 +179,88 @@ async def test_status_snapshot_carries_the_phases(fake_runtime):
 
         assert app.chat.todos == phases
         assert app.chat.status.todos == phases
+
+
+def _plain(widget) -> str:
+    content = widget.content
+    return content.plain if hasattr(content, "plain") else str(content)
+
+
+async def _todos_ready(app, pilot):
+    app.chat._on_event(todo_event(two_tasks()))
+    app._refresh_status()
+    await pilot.pause()
+
+
+async def test_hud_click_opens_the_read_only_todo_overlay(fake_runtime):
+    from zenagent.cli.tui.screens.todo_list import TodoListScreen
+
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await _todos_ready(app, pilot)
+
+        await pilot.click(TodoHud)
+        await pilot.pause()
+
+        assert isinstance(app.screen, TodoListScreen)
+        items = [_plain(widget) for widget in app.screen.query(".todo-item")]
+        assert any("read a" in item for item in items)
+        assert any("read b" in item for item in items)
+        assert any("in progress" in item for item in items)
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert not isinstance(app.screen, TodoListScreen)
+        assert app.focused is app.query_one(PromptInput)
+
+
+async def test_sidebar_todo_row_opens_the_same_overlay(fake_runtime):
+    from zenagent.cli.tui.screens.todo_list import TodoListScreen
+    from zenagent.cli.tui.widgets.sidebar import SidebarRow
+
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        await _todos_ready(app, pilot)
+        await pilot.press("ctrl+b")
+        await pilot.pause()
+
+        row = next(row for row in app.query(SidebarRow) if row.key == "todo")
+        await pilot.click(row)
+        await pilot.pause()
+
+        assert isinstance(app.screen, TodoListScreen)
+
+
+async def test_overlay_shows_the_full_item_text_not_the_clipped_hud(fake_runtime):
+    long = "refactor the sidebar so clicking a subagent opens its transcript view"
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        app.chat._on_event(
+            todo_event(
+                [
+                    {
+                        "name": "Explore",
+                        "tasks": [{"content": long, "status": "pending"}],
+                    }
+                ]
+            )
+        )
+        app._refresh_status()
+        await pilot.pause()
+        app.action_show_todo_list()
+        await pilot.pause()
+
+        items = [_plain(widget) for widget in app.screen.query(".todo-item")]
+        assert any(long in item for item in items)
+
+
+async def test_palette_lists_the_todo_overlay_command(fake_runtime):
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        names = [command.title for command in app.get_system_commands(app.screen)]
+
+        assert "Show todo list" in names

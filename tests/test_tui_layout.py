@@ -137,3 +137,74 @@ async def test_ctrl_q_queues_while_running(gated_app):
 
         gate.set()
         await app.chat.wait_for_idle()
+
+
+def _todo_event(phases):
+    from zenagent.agent.loop import ToolResultAgent
+    from zenagent.events import AgentEvent
+    from zenagent.types import TextContent
+
+    return AgentEvent(
+        type="tool_execution_end",
+        tool_call_id="t1",
+        tool_name="todo",
+        result=ToolResultAgent(
+            content=[TextContent(text="todo")],
+            details={"op": "init", "phases": phases},
+        ),
+    )
+
+
+def _phases():
+    return [
+        {
+            "name": "Explore",
+            "tasks": [{"content": "read a", "status": "in_progress"}],
+        }
+    ]
+
+
+async def test_todo_has_exactly_one_visible_home(fake_runtime):
+    """Sidebar visible owns the todo; collapsing hands it back to the dock HUD."""
+    from zenagent.cli.tui.widgets.sidebar import Sidebar
+    from zenagent.cli.tui.widgets.todo_hud import TodoHud
+
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        app.chat._on_event(_todo_event(_phases()))
+        app._refresh_status()
+        await pilot.pause()
+
+        hud = app.query_one(TodoHud)
+        sidebar = app.query_one(Sidebar)
+        assert sidebar.display is False
+        assert hud.display is True
+
+        await pilot.press("ctrl+b")
+        await pilot.pause()
+        assert sidebar.display is True
+        assert hud.display is False, "the dock HUD must yield to the sidebar"
+
+        await pilot.press("ctrl+b")
+        await pilot.pause()
+        assert sidebar.display is False
+        assert hud.display is True
+
+
+async def test_sidebar_toggle_is_ignored_on_narrow_terminals(fake_runtime):
+    from zenagent.cli.tui.widgets.sidebar import Sidebar
+    from zenagent.cli.tui.widgets.todo_hud import TodoHud
+
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(90, 30)) as pilot:
+        await pilot.pause()
+        app.chat._on_event(_todo_event(_phases()))
+        app._refresh_status()
+        await pilot.pause()
+
+        await pilot.press("ctrl+b")
+        await pilot.pause()
+
+        assert app.query_one(Sidebar).display is False
+        assert app.query_one(TodoHud).display is True

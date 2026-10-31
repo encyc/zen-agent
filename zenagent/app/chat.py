@@ -7,28 +7,27 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from zenagent.agent.subagents import SubagentStore, carry_task_dir
 from zenagent.app.compact import compact, should_auto_compact
 from zenagent.app.retry import prepare_retry
 from zenagent.app.runtime import Runtime
 from zenagent.app.support import cache_hit_ratio
 from zenagent.app.views import (
+    JobView,
     MessageView,
     RunStatus,
+    SubagentView,
     ToolCallView,
+    TranscriptBuilder,
     TranscriptNotice,
-    args_preview,
-    messages_to_views,
+    job_views,
+    sort_jobs,
     usage_total,
-    user_view,
 )
 from zenagent.events import AgentEvent
+from zenagent.tools.jobs import get_job_manager
 from zenagent.tools.todo import coerce_todo_phases, load_todo_phases
-from zenagent.types import (
-    AssistantMessage,
-    ImageContent,
-    TextContent,
-    UserMessage,
-)
+from zenagent.types import ImageContent
 
 __all__ = ["ChatController"]
 
@@ -41,9 +40,12 @@ class ChatController:
     ) -> None:
         self.runtime = runtime
         self._on_change = on_change
-        self._transcript: list[MessageView | ToolCallView] = []
-        self._current: MessageView | None = None
-        self._cards: dict[str, ToolCallView] = {}
+        self._builder = TranscriptBuilder()
+        #: Live subagent transcripts keyed by the parent ``task`` call id.
+        self._subagent_builders: dict[str, TranscriptBuilder] = {}
+        self._subagent_meta: dict[str, dict] = {}
+        #: Cached read of the session's transcript sidecars (disk scan only).
+        self._subagent_disk_metas: dict | None = None
         #: (text, images) pairs; images are captured when the turn is queued.
         self._follow_ups: list[tuple[str, list[ImageContent]]] = []
         self._task: asyncio.Task | None = None
@@ -73,8 +75,8 @@ class ChatController:
     # -- snapshots ----------------------------------------------------------
 
     @property
-    def transcript(self) -> list[MessageView | ToolCallView]:
-        return list(self._transcript)
+    def transcript(self) -> list[ToolCallView]:
+        return list(self._builder.views)
 
     @property
     def todos(self) -> list[dict]:
@@ -93,6 +95,7 @@ class ChatController:
         context_used = (
             last.input + last.output if last is not None else usage.input + usage.output
         )
+        subagents = self._subagent_views()
         return RunStatus(
             model_id=agent.model.id,
             thinking=agent.thinking,
@@ -116,7 +119,102 @@ class ChatController:
             todos=self.todos,
             subagent_cost=self._subagent_cost,
             subagent_tokens=self._subagent_tokens,
+            jobs=self._job_views(),
+            subagents=subagents,
+            active_subagent=next(
+                (view.call_id for view in subagents if view.status == "running"), None
+            ),
         )
+
+    # -- work-in-progress snapshots -----------------------------------------
+
+    def _job_views(self) -> list[JobView]:
+        """Background jobs for the sidebar; empty when no loop owns a manager."""
+        try:
+            manager = get_job_manager()
+        except RuntimeError:  # no running loop (headless, sync tests)
+            return []
+        return sort_jobs(job_views(manager.list()))
+
+    def _subagent_views(self) -> list[SubagentView]:
+        """The live ``task`` call plus recent ones, newest first.
+
+        Only transcripts the current transcript still references are listed:
+        ``/undo`` and ``/fork`` truncation leaves sidecar files behind, and
+        resurrecting their rows would invent work that is no longer in history.
+        """
+        if self._subagent_disk_metas is None:
+            self._subagent_disk_metas = {
+                meta.call_id: meta
+                for meta in SubagentStore(self._session_path()).list()
+            }
+        persisted = self._subagent_disk_metas
+        running: list[SubagentView] = []
+        finished: list[SubagentView] = []
+        for card in reversed(list(self._builder.cards.values())):
+            if card.name != "task":
+                continue
+            meta = persisted.get(card.call_id)
+            view = _subagent_view(
+                card,
+                meta=meta,
+                has_transcript=card.call_id in self._subagent_builders
+                or meta is not None,
+            )
+            (running if view.status == "running" else finished).append(view)
+        # The live elapsed is computed per call: caching the views would freeze
+        # a running subagent's clock between tool events.
+        return running + finished
+
+    # -- subagent transcripts -----------------------------------------------
+
+    def on_subagent_event(self, call_id: str, kind: str, payload: dict) -> None:
+        """Live hook from ``tools.task`` (the module-level observer)."""
+        if kind == "start":
+            self._subagent_builders[call_id] = TranscriptBuilder()
+            self._subagent_meta[call_id] = {
+                "name": str(payload.get("name") or "task"),
+                "status": "running",
+                "duration_ms": 0,
+                "cost": 0.0,
+                "tokens": 0,
+            }
+            self._subagent_disk_metas = None
+            self._notify()
+            return
+        if kind == "event":
+            builder = self._subagent_builders.get(call_id)
+            event = payload.get("event")
+            if builder is not None and event is not None and builder.apply(event):
+                self._subagent_disk_metas = None
+                self._notify()
+            return
+        if kind == "end":
+            meta = self._subagent_meta.setdefault(
+                call_id, {"name": str(payload.get("name") or "task")}
+            )
+            meta.update(
+                status=str(payload.get("status") or "ok"),
+                duration_ms=int(payload.get("duration_ms") or 0),
+                cost=float(payload.get("cost") or 0.0),
+                tokens=int(payload.get("tokens") or 0),
+            )
+            self._subagent_disk_metas = None
+            self._notify()
+
+    def subagent_transcript(
+        self, call_id: str
+    ) -> list[MessageView | ToolCallView] | None:
+        """Live buffer first, persisted sidecar otherwise (after resume)."""
+        builder = self._subagent_builders.get(call_id)
+        if builder is not None:
+            return list(builder.views)
+        messages = SubagentStore(self._session_path()).load(call_id)
+        if messages is None:
+            return None
+        persisted = TranscriptBuilder()
+        persisted.load(messages)
+        return list(persisted.views)
 
     # -- commands -----------------------------------------------------------
 
@@ -243,7 +341,10 @@ class ChatController:
         if not self.runtime.agent.messages:
             return None
         before = self._before_tokens()
+        old_path = self.runtime.session.path
         path = await compact(self.runtime.agent)
+        # Compaction continues the same work: keep its subagent transcripts.
+        carry_task_dir(old_path, path)
         # Compaction continues the same work: carry the todo checklist over.
         await self.runtime.switch_session(path, carry_todos=True)
         self.reload_transcript()
@@ -254,13 +355,10 @@ class ChatController:
 
     def reload_transcript(self) -> None:
         """Rebuild views from the current agent messages (after a session switch)."""
-        from zenagent.app.views import messages_to_views
-
-        self._transcript = messages_to_views(self.runtime.agent.messages)
-        self._cards.clear()
-        self._current = None
+        self._builder.load(self.runtime.agent.messages)
         # Switching sessions/compaction changes the sidecar the HUD reads and
         # starts a fresh subagent-cost accounting bucket.
+        self._reset_subagent_state()
         self._subagent_cost = 0.0
         self._subagent_tokens = 0
         self._todos = load_todo_phases(self._session_path())
@@ -268,9 +366,8 @@ class ChatController:
 
     def clear(self) -> None:
         self.runtime.agent.reset()
-        self._transcript.clear()
-        self._cards.clear()
-        self._current = None
+        self._builder.reset()
+        self._reset_subagent_state()
         self._attachments.clear()
         todo_tool = getattr(self.runtime, "todo_tool", None)
         if todo_tool is not None:
@@ -289,18 +386,19 @@ class ChatController:
         """
         if self._running:
             return None
+        old_path = self.runtime.session.path
         prepared = prepare_retry(self.runtime.agent, self.runtime.session)
         if prepared is None:
             return None
         text, new_session = prepared
+        carry_task_dir(old_path, new_session.path)
         self.runtime.session = new_session
         todo_tool = getattr(self.runtime, "todo_tool", None)
         if todo_tool is not None:
             todo_tool.bind_session(new_session.path)
         self._todos = load_todo_phases(self._session_path())
-        self._transcript = messages_to_views(self.runtime.agent.messages)
-        self._cards.clear()
-        self._current = None
+        self._builder.load(self.runtime.agent.messages)
+        self._reset_subagent_state()
         self._task = asyncio.create_task(self._run(text))
         self._notify()
         return text
@@ -321,11 +419,9 @@ class ChatController:
         try:
             await self.runtime.agent.prompt(text, images=images or None)
         finally:
-            if self._current is not None:
-                # Aborts and provider errors skip message_end; do not leave a
-                # row ticking after the run is over.
-                self._finish_thinking(self._current)
-            self._current = None
+            # Aborts and provider errors skip message_end; do not leave a row
+            # ticking after the run is over.
+            self._builder.finalize()
             self._turn_ms = int((time.monotonic() - started) * 1000)
             self._turn_output = (
                 usage_total(self.runtime.agent.messages).output - before_output
@@ -372,50 +468,14 @@ class ChatController:
     # -- event → view models ------------------------------------------------
 
     def _on_event(self, event: AgentEvent) -> None:
-        if event.type == "message_start" and event.message is not None:
-            self._on_message_start(event.message)
-        elif event.type == "message_update" and event.assistant_event is not None:
-            self._on_assistant_event(event)
-        elif event.type == "message_end" and isinstance(event.message, AssistantMessage):
-            if self._current is not None:
-                # Reasoning always ends before the message does, even when the
-                # provider never sends thinking_end (fake streams, aborts).
-                self._finish_thinking(self._current)
-                # Canonicalize from the final message: some providers (and fake
-                # streams) deliver the whole text in the terminal message only.
-                self._current.text = _assistant_text(event.message)
-                self._current.thinking = (
-                    _assistant_thinking(event.message) or self._current.thinking
-                )
-                self._current = None
-        elif event.type == "tool_execution_start":
-            card = ToolCallView(
-                call_id=event.tool_call_id or "",
-                name=event.tool_name or "?",
-                args_preview=args_preview(event.args or {}),
-                args=event.args or {},
-                status="running",
-            )
-            self._cards[card.call_id] = card
-            self._transcript.append(card)
-        elif event.type == "tool_execution_update":
-            card = self._cards.get(event.tool_call_id or "")
-            if (
-                card is None
-                or card.status != "running"
-                or event.partial_result is None
-            ):
-                return
-            card.progress = _progress_line(event.partial_result)
-        elif event.type == "tool_execution_end":
+        changed = self._builder.apply(event)
+        if (
+            event.type in ("tool_execution_start", "tool_execution_end")
+            and event.tool_name == "task"
+        ):
+            self._subagent_disk_metas = None
+        if event.type == "tool_execution_end":
             details = dict(getattr(event.result, "details", None) or {})
-            card = self._cards.get(event.tool_call_id or "")
-            if card is not None:
-                card.is_error = bool(event.is_error)
-                card.status = "error" if event.is_error else "ok"
-                card.result_text = _result_text(event.result)
-                card.details = details
-                card.duration_ms = event.duration_ms
             if event.tool_name == "task" and "subagent_cost" in details:
                 self._subagent_cost += float(details.get("subagent_cost") or 0.0)
                 self._subagent_tokens += int(details.get("subagent_tokens") or 0)
@@ -423,118 +483,50 @@ class ChatController:
                 # The tool returns the canonical snapshot even for a rejected
                 # call, so the HUD always reflects the stored list.
                 self._todos = coerce_todo_phases(details.get("phases"))
-        else:
-            return
-        self._notify()
+        if changed:
+            self._notify()
 
-    def _on_message_start(self, message) -> None:
-        if isinstance(message, UserMessage):
-            self._transcript.append(user_view(_user_text(message)))
-        elif isinstance(message, AssistantMessage):
-            self._current = MessageView(kind="assistant", text="")
-            self._transcript.append(self._current)
-        else:
-            return
-
-    def _on_assistant_event(self, event: AgentEvent) -> None:
-        assistant_event = event.assistant_event
-        if assistant_event is None:
-            return
-        kind = assistant_event.type
-        if kind in ("thinking_start", "thinking_delta"):
-            if self._current is not None:
-                self._begin_thinking(self._current)
-                if assistant_event.delta:
-                    self._current.thinking = (
-                        self._current.thinking or ""
-                    ) + assistant_event.delta
-        elif kind == "thinking_end":
-            if self._current is not None:
-                self._finish_thinking(self._current)
-        elif kind in ("text_start", "text_delta"):
-            if self._current is None:
-                if not assistant_event.delta:
-                    return
-                self._current = MessageView(kind="assistant", text="")
-                self._transcript.append(self._current)
-            # The answer starting is what ends the reasoning block.
-            self._finish_thinking(self._current)
-            if assistant_event.delta:
-                self._current.text += assistant_event.delta
-        elif kind == "toolcall_end":
-            # tool cards are appended on tool_execution_start (args complete there)
-            return
-
-    @staticmethod
-    def _begin_thinking(view: MessageView) -> None:
-        """Start the clock for a reasoning block (a turn may have several)."""
-        if view.thinking_started_at is not None:
-            return
-        if view.thinking_seconds is None:
-            view.thinking_seconds = 0.0
-        view.thinking_started_at = time.monotonic()
-
-    @staticmethod
-    def _finish_thinking(view: MessageView) -> None:
-        started = view.thinking_started_at
-        if started is None:
-            return
-        view.thinking_seconds = (view.thinking_seconds or 0.0) + (
-            time.monotonic() - started
-        )
-        view.thinking_started_at = None
+    def _reset_subagent_state(self) -> None:
+        self._subagent_builders.clear()
+        self._subagent_meta.clear()
+        self._subagent_disk_metas = None
 
     def _notify(self) -> None:
         self._on_change()
 
 
-def _assistant_text(message: AssistantMessage) -> str:
-    return "\n".join(
-        block.text for block in message.content if isinstance(block, TextContent) and block.text
+_TASK_SUBAGENT_STATUSES = ("ok", "error", "aborted", "truncated", "interrupted")
+
+
+def _subagent_view(card: ToolCallView, *, meta=None, has_transcript=False) -> SubagentView:
+    """One ``task`` card as a sidebar row (live card, sidecar meta, envelope)."""
+    details = card.details or {}
+    name = str(card.args.get("name") or "task")
+    if card.status == "running":
+        started = card.started_at
+        duration_ms = int((time.monotonic() - started) * 1000) if started else 0
+        status, cost, tokens = "running", 0.0, 0
+    elif meta is not None:
+        status = meta.status if meta.status in _TASK_SUBAGENT_STATUSES else "ok"
+        duration_ms = meta.duration_ms
+        cost, tokens = meta.cost, meta.tokens
+        name = meta.name or name
+    else:
+        raw = str(details.get("status") or ("error" if card.is_error else "ok"))
+        status = (
+            raw if raw in _TASK_SUBAGENT_STATUSES else ("error" if card.is_error else "ok")
+        )
+        duration_ms = int(details.get("duration_ms") or card.duration_ms or 0)
+        cost = float(details.get("cost") or 0.0)
+        tokens = int(details.get("tokens") or 0)
+    return SubagentView(
+        call_id=card.call_id,
+        name=name,
+        status=status,
+        duration_ms=duration_ms,
+        cost=cost,
+        tokens=tokens,
+        has_transcript=has_transcript,
     )
 
 
-def _assistant_thinking(message: AssistantMessage) -> str | None:
-    from zenagent.types import ThinkingContent
-
-    text = "\n".join(
-        block.thinking
-        for block in message.content
-        if isinstance(block, ThinkingContent) and block.thinking
-    )
-    return text or None
-
-
-def _user_text(message: UserMessage) -> str:
-    content = message.content
-    if isinstance(content, str):
-        return content
-    parts: list[str] = []
-    for block in content:
-        if isinstance(block, TextContent):
-            parts.append(block.text)
-        elif isinstance(block, ImageContent):
-            parts.append(f"[image {block.mime_type}]")
-    return "\n".join(parts)
-
-
-def _progress_line(result) -> str:
-    """Last non-empty streamed line, collapsed and bounded for a tool card."""
-    content = getattr(result, "content", None) or []
-    text = "\n".join(
-        block.text for block in content if isinstance(block, TextContent)
-    )
-    lines = [
-        "".join(ch if ch.isprintable() else " " for ch in line).strip()
-        for line in text.splitlines()
-    ]
-    lines = [line for line in lines if line]
-    if not lines:
-        return ""
-    return lines[-1][:120]
-
-
-def _result_text(result) -> str:
-    content = getattr(result, "content", None) or []
-    texts = [block.text for block in content if isinstance(block, TextContent)]
-    return "\n".join(texts)

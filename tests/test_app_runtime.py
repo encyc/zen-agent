@@ -186,3 +186,17 @@ async def test_runtime_exposes_a_read_only_task_tool(runtime_factory):
     child = child_tool_names(list(runtime._base_tools))
     assert child <= {"read_file", "list_dir", "glob", "grep", "web_search", "fetch"}
     assert "write_file" not in child and "bash" not in child
+
+
+async def test_switching_sessions_rebinds_the_task_tool(runtime_factory):
+    runtime = await runtime_factory()
+    task_tool = runtime.task_tool
+    assert task_tool is not None
+    bound: list = []
+    original = task_tool.bind_session
+    task_tool.bind_session = lambda path: (bound.append(path), original(path))[1]
+
+    new_path = runtime.session.path.parent / "rebound.jsonl"
+    await runtime.switch_session(new_path)
+
+    assert bound and bound[-1] == new_path

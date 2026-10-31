@@ -17,10 +17,13 @@ import contextlib
 import re
 import time
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from pathlib import Path
 
 from zenagent.agent.agent import Agent
 from zenagent.agent.artifacts import ArtifactSink
 from zenagent.agent.loop import AgentTool, ToolResultAgent
+from zenagent.agent.subagents import SubagentStore
 from zenagent.config import ContextGuard
 from zenagent.prompts import tool_description
 from zenagent.prompts.registry import read_block
@@ -31,8 +34,12 @@ from zenagent.types import AssistantMessage, TextContent
 __all__ = [
     "CHILD_TOOL_NAMES",
     "DEFAULT_TASK_MAX_TURNS",
+    "SubagentObserver",
+    "TaskTool",
     "build_task_tool",
     "child_tool_names",
+    "get_subagent_observer",
+    "set_subagent_observer",
 ]
 
 #: Tools a read-only child may use. An allowlist (not "everything read-tier")
@@ -114,6 +121,132 @@ def _live(value):
     return value() if callable(value) else value
 
 
+#: The interactive frontend's live hook (the TUI's subagent view).
+SubagentObserver = Callable[[str, str, dict], None]
+
+_OBSERVER: SubagentObserver | None = None
+
+
+def set_subagent_observer(observer: SubagentObserver | None) -> None:
+    """Register the live subagent observer (None clears it, like ask_handler)."""
+    global _OBSERVER
+    _OBSERVER = observer
+
+
+def get_subagent_observer() -> SubagentObserver | None:
+    """The current live observer, or None for headless runs."""
+    return _OBSERVER
+
+
+def _emit(call_id: str, kind: str, payload: dict) -> None:
+    observer = _OBSERVER
+    if observer is None:
+        return
+    try:
+        observer(call_id, kind, payload)
+    except Exception:  # noqa: BLE001 - a UI observer must never break a run
+        return
+
+
+def _progress_text(turn: int, tool: str, args: dict) -> str:
+    preview = ""
+    for value in args.values():
+        if isinstance(value, str) and value.strip():
+            preview = " " + value.strip().splitlines()[0][:60]
+            break
+    return f"turn {turn} · {tool}{preview}"
+
+
+class _TaskRecorder:
+    """Per-call side effects: persistence, card progress, live observer events."""
+
+    #: Structural events the live viewer needs; text arrives at message_end.
+    _FORWARDED = frozenset(
+        {
+            "message_start",
+            "message_end",
+            "tool_execution_start",
+            "tool_execution_update",
+            "tool_execution_end",
+        }
+    )
+
+    #: Minimum seconds between two progress lines pushed to the tool card.
+    PROGRESS_INTERVAL = 0.1
+
+    def __init__(self, *, store, call_id, name, model, messages, on_update):
+        self._store = store
+        self._call_id = call_id
+        self._name = name
+        self._model = model
+        self._messages = messages
+        self._on_update = on_update
+        self._turn = 0
+        self._last_progress = 0.0
+
+    def start(self) -> None:
+        self._store.begin(self._call_id, self._name, self._model)
+        _emit(self._call_id, "start", {"name": self._name, "model": self._model})
+
+    def on_event(self, event) -> None:
+        kind = event.type
+        if kind == "message_end":
+            self._turn += 1
+            self._store.append(self._call_id, self._messages())
+        elif kind == "tool_execution_start":
+            self._push_progress(event)
+            self._store.append(self._call_id, self._messages())
+        elif kind == "tool_execution_end":
+            self._store.append(self._call_id, self._messages())
+        if kind in self._FORWARDED:
+            _emit(self._call_id, "event", {"event": event})
+
+    def finish(self, *, status, duration_ms, cost, tokens) -> None:
+        self._store.append(self._call_id, self._messages())
+        self._store.finish(
+            self._call_id,
+            status=status,
+            duration_ms=duration_ms,
+            cost=cost,
+            tokens=tokens,
+        )
+        _emit(
+            self._call_id,
+            "end",
+            {
+                "name": self._name,
+                "status": status,
+                "duration_ms": duration_ms,
+                "cost": cost,
+                "tokens": tokens,
+            },
+        )
+
+    def _push_progress(self, event) -> None:
+        if self._on_update is None:
+            return
+        now = time.monotonic()
+        if now - self._last_progress < self.PROGRESS_INTERVAL:
+            return
+        self._last_progress = now
+        line = _progress_text(
+            max(1, self._turn), str(event.tool_name or "tool"), event.args or {}
+        )
+        with contextlib.suppress(Exception):
+            self._on_update(ToolResultAgent(content=[TextContent(text=line)]))
+
+
+def _noop_bind(_session_path) -> None:
+    return None
+
+
+@dataclass
+class TaskTool(AgentTool):
+    """The ``task`` tool plus the session-rebinding hook the runtime uses."""
+
+    bind_session: Callable = _noop_bind
+
+
 def build_task_tool(
     *,
     model: Model | Callable[[], Model],
@@ -124,7 +257,8 @@ def build_task_tool(
     max_turns: int = DEFAULT_TASK_MAX_TURNS,
     max_cost: float | None = None,
     artifact_sink: ArtifactSink | None = None,
-) -> AgentTool:
+    session_path: Path | None = None,
+) -> TaskTool:
     """Build the per-run ``task`` tool (the child uses the parent's model).
 
     ``model``/``api_key``/``thinking`` may be callables: the child must follow
@@ -134,6 +268,7 @@ def build_task_tool(
     child_tools = [
         tool for tool in base_tools if tool.name in CHILD_TOOL_NAMES
     ]
+    store = SubagentStore(session_path)
 
     async def execute(
         tool_call_id: str, args: dict, abort=None, on_update=None
@@ -190,6 +325,17 @@ def build_task_tool(
 
             abort_task = asyncio.create_task(watch_abort())
 
+        recorder = _TaskRecorder(
+            store=store,
+            call_id=tool_call_id,
+            name=name,
+            model=live_model.id,
+            messages=lambda: child.messages,
+            on_update=on_update,
+        )
+        recorder.start()
+        child.subscribe(recorder.on_event)
+
         failure = ""
         try:
             await child.prompt(f"[task: {name}]\n{prompt}")
@@ -209,6 +355,12 @@ def build_task_tool(
         cost, tokens = _child_usage(child.messages)
         error = failure or child.error_message or ""
         text = _envelope(name, status, duration_ms, cost, tokens, output, error)
+        recorder.finish(
+            status=status,
+            duration_ms=duration_ms,
+            cost=cost,
+            tokens=tokens,
+        )
         return ToolResultAgent(
             content=[TextContent(text=text)],
             details={
@@ -226,7 +378,7 @@ def build_task_tool(
             },
         )
 
-    return AgentTool(
+    return TaskTool(
         name="task",
         description=tool_description("task"),
         parameters={
@@ -246,4 +398,5 @@ def build_task_tool(
         execution_mode="sequential",
         approval="read",
         execute=execute,
+        bind_session=store.bind_session,
     )
