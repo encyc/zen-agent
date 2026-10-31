@@ -32,7 +32,8 @@ allowed, reason = await gate.check(tool_name, args)
 - `before_tool_call` 返回 `{"block": True, "reason": ...}`，loop 生成 `is_error` 结果且**不执行**工具
   —— 所以权限拒绝对模型是可见、可恢复的。
 - 拒绝原因会写进工具结果，模型能据此换一种做法。
-- `--read-only` 是「能力边界」而非「提示」：连 MCP 工具一起拒。
+- `--read-only` 是「能力边界」而非「提示」：未声明只读的 MCP 工具一起拒；
+  工具自己声明 `approval="read"`（或 MCP `readOnlyHint`）的按只读放行。
 
 ## 3. 预算与循环上限
 

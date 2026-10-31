@@ -15,9 +15,11 @@ returns ``is_error=True`` with an explanatory message instead of raising.
 from __future__ import annotations
 
 import difflib
+import re
 from pathlib import Path
 
 from zenagent.agent.loop import AgentTool, ToolResultAgent
+from zenagent.agent.result_budget import LINE_TRUNCATION_MARKER
 from zenagent.types import TextContent
 
 __all__ = [
@@ -146,8 +148,10 @@ async def _read_file(
     lines = text.splitlines()
     total = len(lines)
     try:
-        offset = int(args.get("offset") or 0)
-        limit = int(args.get("limit") or DEFAULT_READ_LIMIT)
+        offset = 0 if args.get("offset") is None else int(args["offset"])
+        limit = (
+            DEFAULT_READ_LIMIT if args.get("limit") is None else int(args["limit"])
+        )
     except (TypeError, ValueError):
         return _text("offset and limit must be integers", is_error=True)
     if offset < 0:
@@ -159,14 +163,14 @@ async def _read_file(
         return _text(f"limit must be >= 1 (got {limit})", is_error=True)
     limit = min(limit, MAX_READ_LIMIT)
 
-    if total == 0:
+    if total == 0 and offset == 0:
         return _text(
             "", total_lines=0, offset=offset, limit=limit, truncated=False
         )
     if offset >= total:
         return _text(
             f"offset {offset} is past EOF: {path} has {total} line(s) "
-            f"(valid offsets: 0-{total - 1})",
+            f"(valid offsets: 0-{max(total - 1, 0)})",
             is_error=True,
             total_lines=total,
             offset=offset,
@@ -194,11 +198,41 @@ async def _read_file(
     return _text(body, **details)
 
 
-def _looks_like_truncated_read(content: str) -> bool:
-    """Whether ``content`` still ends with a page footer from ``read_file``."""
-    # The footer is the last thing appended to a truncated page; look at the tail
-    # only so a file that merely mentions the marker in its body is not refused.
-    return READ_TRUNCATION_MARKER in content[-600:]
+#: Footer ``read_file`` appends to a truncated page (anchored at end of text).
+_PAGE_FOOTER_RE = re.compile(
+    r"\n\n\[truncated: showing lines \d+-\d+ of \d+ lines; "
+    r"call read_file with offset=\d+ for the next page\]\s*$"
+)
+
+#: Kernel result-budget notice, which can sit between the kept head and tail.
+_BUDGET_NOTICE_RE = re.compile(
+    r"\n\n… \[truncated \d+ of \d+ bytes: .*?\] …\n\n", re.DOTALL
+)
+
+
+def _strip_read_projection(content: str) -> tuple[str, bool]:
+    """Return ``(body, was_projected)`` for a possibly truncated read result.
+
+    A read projection is any result the model received that is *not* the whole
+    file: a paged read (page footer), a kernel-budget truncation (byte notice),
+    or a line-capped result (line marker). Stripping the notices lets the write
+    guard compare the real body with what is on disk; testing the un-stripped
+    length is what let a 401-line page (longer on disk because of its footer)
+    slip through.
+    """
+    body = content
+    projected = False
+    match = _PAGE_FOOTER_RE.search(body)
+    if match is not None:
+        projected = True
+        body = body[: match.start()]
+    match = _BUDGET_NOTICE_RE.search(body)
+    if match is not None:
+        projected = True
+        body = body[: match.start()] + body[match.end() :]
+    if LINE_TRUNCATION_MARKER in content:
+        projected = True
+    return body, projected
 
 
 async def _write_file(
@@ -210,19 +244,17 @@ async def _write_file(
     # A model that read one page and writes it back would silently truncate the
     # file. Refuse when the payload is still a truncated read projection and is
     # smaller than what is on disk; the error tells it how to recover.
-    new_bytes = len(content.encode("utf-8"))
+    body, projected = _strip_read_projection(content)
+    body_bytes = len(body.encode("utf-8"))
     previous_bytes = len(previous.encode("utf-8"))
-    if (
-        previous_bytes
-        and new_bytes < previous_bytes
-        and _looks_like_truncated_read(content)
-    ):
+    if previous_bytes and projected and body_bytes < previous_bytes:
         return _text(
-            f"refusing to write {path}: the content still ends with a truncated "
-            "read_file projection and is shorter than the file on disk "
-            f"({new_bytes} < {previous_bytes} bytes). A page is not the whole "
-            "file. Re-read every page with offset/limit and write the complete "
-            "content, or use edit_file for a targeted change.",
+            f"refusing to write {path}: the content is a truncated read_file "
+            "projection (page footer, budget or line truncation) and its body "
+            f"is shorter than the file on disk ({body_bytes} < "
+            f"{previous_bytes} bytes). A page is not the whole file. Re-read "
+            "every page with offset/limit and write the complete content, or "
+            "use edit_file for a targeted change.",
             is_error=True,
             path=str(path),
         )

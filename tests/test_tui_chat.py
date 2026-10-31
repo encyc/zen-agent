@@ -89,7 +89,7 @@ async def test_collapsed_tool_card_is_one_line(chat_app_with_one_tool):
         assert card.region.height <= 2, f"collapsed card took {card.region.height} rows"
 
 
-async def test_tool_card_repaints_on_streamed_progress(runtime_factory):
+async def test_tool_card_repaints_on_streamed_progress(runtime_factory, monkeypatch):
     """A progress update (status still running) must refresh the live card."""
     from conftest import text_stream
 
@@ -97,6 +97,15 @@ async def test_tool_card_repaints_on_streamed_progress(runtime_factory):
     from zenagent.cli.tui.widgets.tool_card import ToolCard
     from zenagent.events import AgentEvent
     from zenagent.types import TextContent
+
+    refreshed: list[str] = []
+    original_refresh = ToolCard.refresh_view
+
+    def spy(self) -> None:
+        refreshed.append(self.view.call_id)
+        original_refresh(self)
+
+    monkeypatch.setattr(ToolCard, "refresh_view", spy)
 
     runtime = await runtime_factory(stream_fn=text_stream())
     app = ZenAgentApp(runtime)
@@ -126,4 +135,5 @@ async def test_tool_card_repaints_on_streamed_progress(runtime_factory):
         await pilot.pause()
         cards = list(app.query(ToolCard))
         assert cards, "tool_execution_start should mount a card"
+        assert "t1" in refreshed, "the live card must be repainted on progress"
         assert "linking 2 files" in cards[0].plain

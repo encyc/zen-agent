@@ -196,3 +196,29 @@ async def test_broker_honors_a_declared_read_only_tier():
     tool = _declared_tool("mcp__db__query", "read")
     call = ToolCall(id="c1", name="mcp__db__query", arguments={})
     assert await broker.before_tool_call(call, {}, tool) is None
+
+
+async def test_every_builtin_tool_declares_an_approval_tier():
+    from zenagent.tools import ALL_TOOLS
+
+    tiers = {tool.name: tool.approval for tool in ALL_TOOLS}
+    assert tiers["read_file"] == "read"
+    assert tiers["list_dir"] == "read"
+    assert tiers["glob"] == "read"
+    assert tiers["grep"] == "read"
+    assert tiers["read_skill" if "read_skill" in tiers else "web_search"] == "read"
+    assert tiers["web_search"] == "read"
+    assert tiers["fetch"] == "read"
+    assert tiers["write_file"] == "write"
+    assert tiers["edit_file"] == "write"
+    assert tiers["bash"] == "exec"
+    assert set(tiers.values()) <= {"read", "write", "exec"}
+
+
+async def test_plan_mode_gates_real_builtin_tools_by_their_declaration():
+    from zenagent.tools import ALL_TOOLS
+
+    gate = PermissionGate(interactive=False, mode="plan")
+    for tool in ALL_TOOLS:
+        allowed, reason = await gate.check(tool.name, {"command": "true"}, tool)
+        assert allowed is (tool.approval == "read"), (tool.name, reason)

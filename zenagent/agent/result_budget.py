@@ -23,6 +23,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 __all__ = [
     "HEAD_BYTES",
+    "LINE_TRUNCATION_MARKER",
     "MAX_LINE_CHARS",
     "MAX_RESULT_BYTES",
     "TAIL_BYTES",
@@ -39,7 +40,9 @@ MAX_RESULT_BYTES = 40_000
 HEAD_BYTES = 20_000
 TAIL_BYTES = 12_000
 
-_LINE_MARKER = " …[line truncated]"
+#: Marker inserted where an overlong line was middle-truncated.
+LINE_TRUNCATION_MARKER = " …[line truncated]"
+_LINE_MARKER = LINE_TRUNCATION_MARKER
 
 
 def _cap_long_lines(text: str) -> tuple[str, int]:
@@ -68,9 +71,9 @@ def _truncate_bytes(text: str, total_bytes: int) -> str:
     tail = raw[-TAIL_BYTES:].decode("utf-8", "ignore")
     removed = total_bytes - HEAD_BYTES - TAIL_BYTES
     notice = (
-        f"\n\n… [truncated {removed} of {total_bytes} bytes: showing the first "
-        f"{HEAD_BYTES} and last {TAIL_BYTES}; narrow the tool call (read with "
-        "offset/limit, or grep) for the rest] …\n\n"
+        f"\n\n… [truncated {removed} of {total_bytes} bytes: kept the first "
+        f"{HEAD_BYTES} and last {TAIL_BYTES} (long lines trimmed); narrow the "
+        "tool call (read with offset/limit, or grep) for the rest] …\n\n"
     )
     return head + notice + tail
 
@@ -88,21 +91,19 @@ def apply_result_budget(result: ToolResultAgent) -> ToolResultAgent:
 
     text = "\n".join(texts)
     original_bytes = len(text.encode("utf-8"))
-    over_budget = original_bytes > MAX_RESULT_BYTES
+    if original_bytes <= MAX_RESULT_BYTES:
+        # Under budget the payload is returned untouched. Capping a single
+        # long line here would destroy one-line payloads (minified HTML/JSON,
+        # compact `jq -c` output) that are small enough to keep whole.
+        return result
 
-    budget: dict = {"truncated": over_budget}
-    if over_budget:
-        # Byte-budget first: a single overlong line must not swallow the head
-        # and tail that make the truncation recoverable.
-        budget["original_bytes"] = original_bytes
-        capped = _truncate_bytes(text, original_bytes)
-    else:
-        capped = text
+    budget: dict = {"truncated": True, "original_bytes": original_bytes}
+    # Byte-budget first: a single overlong line must not swallow the head and
+    # tail that make the truncation recoverable.
+    capped = _truncate_bytes(text, original_bytes)
     capped, truncated_lines = _cap_long_lines(capped)
     if truncated_lines:
         budget["truncated_lines"] = truncated_lines
-    if not over_budget and not truncated_lines:
-        return result
 
     images = [
         block for block in result.content if isinstance(block, ImageContent)
@@ -110,7 +111,8 @@ def apply_result_budget(result: ToolResultAgent) -> ToolResultAgent:
     details = dict(result.details)
     details["budget"] = budget
     # ``type(result)`` avoids importing the loop at module load time (it imports
-    # us); the result object is structurally guaranteed to be that dataclass.
+    # us); the loop's contract is that a tool returns that dataclass, and using
+    # the actual class keeps any subclass intact when it has the same fields.
     return type(result)(
         content=[TextContent(text=capped), *images],
         details=details,

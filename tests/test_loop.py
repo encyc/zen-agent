@@ -1046,3 +1046,33 @@ async def test_tool_result_budget_caps_oversized_output():
     result_message = state.messages[2]
     assert isinstance(result_message, ToolResultMessage)
     assert result_message.content[0].text == rendered
+
+
+async def test_two_argument_hooks_keep_working():
+    """v0.3 library users may pass a 2-arg hook; that must not crash the run."""
+    seen = []
+
+    async def echo(name, args, abort, on_update=None):
+        return ToolResultAgent(content=[TextContent(text="ran")])
+
+    def legacy_guard(call, args):
+        seen.append(call.name)
+        return {"block": True, "reason": "legacy hook"}
+
+    stream = ScriptedStream(
+        [
+            [call_tool("t1", "echo", {}), finish("tool_use")],
+            [say("ok"), finish("stop")],
+        ]
+    )
+    state = AgentState()
+    events = await run(
+        "go",
+        state,
+        make_config(stream, tools=[make_tool("echo", echo)], before_tool_call=legacy_guard),
+    )
+    types = types_of(events)
+    end = events[types.index("tool_execution_end")]
+    assert seen == ["echo"]
+    assert end.is_error is True
+    assert end.result.content[0].text == "legacy hook"

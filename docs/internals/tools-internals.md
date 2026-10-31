@@ -50,10 +50,11 @@ class ToolResultAgent:
 - 文本总字节超过 `MAX_RESULT_BYTES = 40_000` → 保留头部 20 KB + 尾部 12 KB，
   中间换成 `… [truncated N of M bytes: … narrow the tool call …] …`；
 - `ImageContent` 原样保留；
-- 结果 `details["budget"]` 记录 `truncated / original_bytes / truncated_lines`。
+- 结果 `details["budget"]` 记录 `truncated`（恒 True）与 `original_bytes`，行截断时另有
+  `truncated_lines`；未超预算的结果原样返回、不写 `budget`。
 
 各工具自己的硬上限（bash 30 KB、fetch 12k 字符……）仍然保留，是第一道防线；
-这层是兜底，保证"新增工具忘了设上限"不会把上下文打爆。`terminal` 与
+这层是兜底，保证"新增工具忘了设上限"不会把上下文打爆。`terminate` 与
 `is_error` 语义不变。
 
 ## 内置工具

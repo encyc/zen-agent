@@ -38,7 +38,9 @@ ZenAgent 手写实现 MCP 客户端（不依赖官方 SDK），支持 **stdio** 
 - 每个 MCP 工具暴露为 `mcp__<server>__<tool>`，例如 `mcp__files__read_text_file`。
 - 参数 schema 直接用 MCP 的 `inputSchema`。
 - 描述带 `[server]` 前缀，便于模型区分来源。
-- MCP 工具**不是只读工具**，默认要 `--yes` 或 allowlist；`--read-only` 下全拒。
+- MCP 工具默认按**写/执行**处理：需要 `--yes`、allowlist 或交互确认，`--read-only` 下拒绝。
+  例外：服务器在工具 `annotations.readOnlyHint` 里声明只读时，按 `read` 档处理
+  （plan / `--read-only` 放行、免确认）。`readOnlyHint` 是**服务器自述**，不是本地保证。
 - 与内置工具重名不会冲突（命名空间隔离），内置优先。
 
 ## 启动失败不是终点（重点）

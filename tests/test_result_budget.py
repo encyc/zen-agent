@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from zenagent.agent.loop import ToolResultAgent
 from zenagent.agent.result_budget import (
-    MAX_LINE_CHARS,
     MAX_RESULT_BYTES,
     apply_result_budget,
 )
@@ -68,14 +67,41 @@ def test_large_result_preserves_image_blocks():
     assert isinstance(budgeted.content[0], TextContent)
 
 
-def test_overlong_line_is_capped_even_when_the_result_is_small():
-    line = "y" * (MAX_LINE_CHARS + 500)
+def test_small_single_line_result_is_untouched():
+    """A page of minified HTML/JSON is one line; cutting it destroys the data."""
+    line = "y" * 8_000
+    budgeted = apply_result_budget(_text_result(line))
+    assert _all_text(budgeted) == line
+    assert budgeted.details.get("budget") is None
+
+
+def test_over_budget_single_line_result_keeps_both_ends_and_caps_lines():
+    line = "z" * (MAX_RESULT_BYTES + 20_000)
     budgeted = apply_result_budget(_text_result(line))
 
     rendered = _all_text(budgeted)
-    assert len(rendered) <= MAX_LINE_CHARS + 64
+    assert len(rendered.encode("utf-8")) < len(line.encode("utf-8"))
+    assert rendered.startswith("z") and rendered.endswith("z")
+    assert "truncated" in rendered
     assert "line truncated" in rendered
-    assert budgeted.details["budget"]["truncated_lines"] == 1
+    assert budgeted.details["budget"]["truncated_lines"] >= 1
+
+
+def test_utf8_boundary_is_not_corrupted():
+    text = "汉字内容" * 20_000  # 320 KB of 3-byte characters
+    budgeted = apply_result_budget(_text_result(text))
+    rendered = _all_text(budgeted)
+    assert "\ufffd" not in rendered
+    assert "汉字" in rendered
+
+
+def test_a_30kb_bash_style_result_is_not_double_truncated():
+    """bash's own 30KB cap is below the kernel budget; the kernel must no-op."""
+    text = "line\n" * 6_000  # 30 KB, many short lines
+    budgeted = apply_result_budget(_text_result(text))
+    assert budgeted is not None
+    assert _all_text(budgeted) == text
+    assert budgeted.details.get("budget") is None
 
 
 def test_many_normal_lines_under_the_threshold_are_not_touched():

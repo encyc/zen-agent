@@ -151,4 +151,4 @@ def test_tool_defs_translate_the_read_only_annotation_into_an_approval_tier():
     )
 
     assert read_tool.approval == "read"
-    assert write_tool.approval == "exec"
+    assert write_tool.approval == "write"

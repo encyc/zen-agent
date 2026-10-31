@@ -168,7 +168,8 @@ class TranscriptView(VerticalScroll):
 
         Called on every streamed delta, so it must be proportional to what
         changed, not to the transcript length: append new views, repaint the
-        live assistant tail and only the tool cards whose status moved.
+        live assistant tail and only the tool cards whose status or streamed
+        progress moved.
         """
         if len(views) < self._count:
             # The controller transcript shrank (auto-compaction, session switch):
@@ -280,7 +281,6 @@ class TranscriptView(VerticalScroll):
         self._cards_by_id.clear()
         self._card_status.clear()
         self._card_progress.clear()
-        self._card_status.clear()
         self._usage_shown = 0
         self.mount(WelcomeBlock())
 

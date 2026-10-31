@@ -428,7 +428,11 @@ def _progress_line(result) -> str:
     text = "\n".join(
         block.text for block in content if isinstance(block, TextContent)
     )
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    lines = [
+        "".join(ch if ch.isprintable() else " " for ch in line).strip()
+        for line in text.splitlines()
+    ]
+    lines = [line for line in lines if line]
     if not lines:
         return ""
     return lines[-1][:120]

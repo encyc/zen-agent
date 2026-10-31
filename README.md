@@ -228,12 +228,23 @@ extra.
   result, so the transcript never carries a dangling `tool_call`.
 - **Every event carries a `partial` snapshot**, so the UI never assembles deltas
   itself; assembly belongs to the adapter and happens once.
+- **Tools declare their approval tier** (`read` / `write` / `exec`); the kernel
+  does not enforce it — the harness permission gate does. Plan/`--read-only`
+  therefore allow `web_search`/`fetch` and MCP tools with `readOnlyHint: true`,
+  while the kernel stays policy-free.
+- **Every tool result goes through one budget.** Over 40 KB keeps the head and
+  tail with a uniform truncation notice; overlong lines are middle-truncated.
+  Per-tool caps remain the first line of defense, MCP/extension tools get the
+  same safety net.
 
 ## Tools
 
-`read_file`, `write_file`, `edit_file` (exactly-one-match replacement),
-`list_dir`, `bash` (merged output, 30 KB head+tail truncation, process-group
-kill on timeout/abort), `glob`, `grep` (ripgrep when available, Python fallback).
+`read_file` (paged: 400 lines per call by default, `offset`/`limit` for the next
+page), `write_file` (refuses writing back a truncated read page),
+`edit_file` (exactly-one-match replacement), `list_dir`, `bash` (merged output,
+30 KB head+tail truncation, process-group kill on timeout/abort, non-interactive
+environment, optional `cwd`), `glob`, `grep` (ripgrep when available, Python
+fallback), `web_search` (provider chain) and `fetch` (URL → readable text).
 
 ## Tests
 

@@ -319,3 +319,71 @@ async def test_huge_diff_is_truncated():
     diff = unified_diff("big.txt", "", "\n".join(f"line{i}" for i in range(500)))
     assert "more diff lines" in diff
     assert len(diff.splitlines()) <= MAX_DIFF_LINES + 1
+
+
+async def test_write_refuses_a_short_401_line_page_even_though_it_is_longer_with_the_footer():
+    """The canonical near-boundary case: footer makes the page *longer* on disk."""
+    from pathlib import Path
+
+
+    Path("near.txt").write_text("\n".join("x" for _ in range(401)))
+    read = await call(READ_FILE, path="near.txt")
+    assert READ_TRUNCATION_MARKER in read.content[0].text
+
+    result = await call(WRITE_FILE, path="near.txt", content=read.content[0].text)
+    assert result.is_error
+    assert len(Path("near.txt").read_text().splitlines()) == 401
+
+
+async def test_write_refuses_a_budget_truncated_whole_file_projection():
+    """A whole-file read capped by the kernel budget has no page footer."""
+    from pathlib import Path
+
+    from zenagent.agent.result_budget import apply_result_budget
+
+    Path("huge.txt").write_text("H" * 150_000)
+    read = await call(READ_FILE, path="huge.txt")
+    # The loop applies the kernel budget before the model sees the result.
+    projected = apply_result_budget(
+        type(read)(content=read.content, details=read.details)
+    )
+    assert projected.details["budget"]["truncated"] is True
+
+    result = await call(
+        WRITE_FILE, path="huge.txt", content=projected.content[0].text
+    )
+    assert result.is_error
+    assert Path("huge.txt").stat().st_size == 150_000
+
+
+async def test_write_refuses_a_crlf_truncated_page():
+    from pathlib import Path
+
+    body = "\r\n".join(f"line {i}" for i in range(DEFAULT_READ_LIMIT + 5))
+    Path("crlf.txt").write_bytes(body.encode())
+    read = await call(READ_FILE, path="crlf.txt")
+    assert READ_TRUNCATION_MARKER in read.content[0].text
+
+    result = await call(WRITE_FILE, path="crlf.txt", content=read.content[0].text)
+    assert result.is_error
+    assert Path("crlf.txt").read_bytes().decode().splitlines() == [
+        f"line {i}" for i in range(DEFAULT_READ_LIMIT + 5)
+    ]
+
+
+async def test_read_limit_zero_is_rejected_not_silently_defaulted():
+    from pathlib import Path
+
+    Path("x.txt").write_text("a\nb\n")
+    result = await call(READ_FILE, path="x.txt", limit=0)
+    assert result.is_error
+    assert "limit" in result.content[0].text
+
+
+async def test_read_empty_file_with_offset_past_eof_is_an_error():
+    from pathlib import Path
+
+    Path("empty.txt").write_text("")
+    result = await call(READ_FILE, path="empty.txt", offset=3)
+    assert result.is_error
+    assert "past" in result.content[0].text or "EOF" in result.content[0].text

@@ -8,6 +8,7 @@ one ``Text`` so the collapsed height is exactly one row.
 
 from __future__ import annotations
 
+from rich.cells import cell_len
 from rich.text import Text
 from textual.widgets import Static
 
@@ -31,6 +32,23 @@ _STATUS_DOT = {"running": ("◐", _ACCENT), "ok": ("●", _MUTED), "error": ("�
 def _first_line(value: object) -> str:
     text = str(value or "")
     return text.splitlines()[0] if text.splitlines() else ""
+
+
+def _clip_cells(text: str, budget: int) -> str:
+    """Truncate ``text`` to at most ``budget`` terminal cells (CJK-safe)."""
+    if budget <= 0:
+        return ""
+    if cell_len(text) <= budget:
+        return text
+    out: list[str] = []
+    used = 0
+    for char in text:
+        width = cell_len(char)
+        if used + width > budget - 1:  # leave one cell for the ellipsis
+            break
+        out.append(char)
+        used += width
+    return "".join(out) + "…"
 
 
 def _diff_stats(diff: str) -> tuple[int, int]:
@@ -169,13 +187,13 @@ class ToolCard(Static):
         if self.collapsed:
             if self.view.status == "running" and self.view.progress:
                 hint = f"  ⚙ {self.view.progress}"
+                budget = self._width() - cell_len(text.plain)
+                if budget > 8:
+                    text.append(_clip_cells(hint, budget), style=_DIM)
             else:
                 hint = "  (enter: expand)"
-            budget = self._width() - len(text.plain)
-            if budget > 8:
-                if len(hint) > budget:
-                    hint = hint[: budget - 1] + "…"
-                text.append(hint, style=_DIM)
+                if cell_len(text.plain) + cell_len(hint) <= self._width():
+                    text.append(hint, style=_DIM)
             return text
 
         lines = (self.view.result_text or "").splitlines()

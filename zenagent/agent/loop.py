@@ -124,7 +124,8 @@ class AgentConfig:
     * ``before_tool_call(tool_call, args, tool)`` — return ``{"block": True,
       "reason": str}`` to veto the call; the tool result becomes an is_error
       carrying the reason and ``execute`` is never invoked. ``tool`` is the
-      resolved :class:`AgentTool`, so policy can read its declarations.
+      resolved :class:`AgentTool`, so policy can read its declarations. A
+      2-argument hook is still accepted (the v0.3 signature).
     * ``after_tool_call(tool_call, result)`` — return a ``ToolResultAgent`` to
       replace the result, or a ``{"content"/"is_error"/"terminate"}`` dict to
       patch individual fields.
@@ -175,6 +176,24 @@ class _ToolOutcome:
     call: ToolCall
     result: ToolResultAgent
     duration_ms: int
+
+
+def _hook_accepts_tool(hook) -> bool:
+    """Whether a before hook accepts the resolved tool as a third argument.
+
+    The 3-arg form is the current contract; the 2-arg form was the v0.3
+    contract and is still accepted for library users (a TypeError escaping the
+    hook would otherwise abort the whole run, outside the tool try/except).
+    """
+    try:
+        signature = inspect.signature(hook)
+    except (TypeError, ValueError):  # C callable: assume the current contract
+        return True
+    try:
+        signature.bind(None, {}, None)
+    except TypeError:
+        return False
+    return True
 
 
 async def _maybe_await(value):
@@ -252,9 +271,15 @@ async def _execute_tool(
             # The resolved tool object accompanies the call so harness hooks can
             # read the tool's own declarations (approval tier, timeout, …)
             # instead of keeping a name list in sync with the tool registry.
-            verdict = await _maybe_await(
-                config.before_tool_call(call, call.arguments, tool)
-            )
+            # v0.3-style 2-arg hooks keep working.
+            if _hook_accepts_tool(config.before_tool_call):
+                verdict = await _maybe_await(
+                    config.before_tool_call(call, call.arguments, tool)
+                )
+            else:
+                verdict = await _maybe_await(
+                    config.before_tool_call(call, call.arguments)
+                )
         if isinstance(verdict, dict) and verdict.get("block"):
             result = _error_result(str(verdict.get("reason", "blocked")))
         elif tool.execute is None:
