@@ -10,11 +10,11 @@ from zenagent.cli.tui.widgets.sidebar import SidebarRow, SidebarSection
 
 def _report(maxed: bool = True) -> ContextReport:
     slices = [
-        ContextSlice("system", "system prompt", 1200, 300, 15.0),
-        ContextSlice("agents", "AGENTS.md", 2400, 600, 30.0),
-        ContextSlice("skills", "skills", 400, 100, 5.0),
-        ContextSlice("tools", "tool schemas", 0, 500, 25.0),
-        ContextSlice("session", "session", 0, 500, 25.0),
+        ContextSlice("system", "system prompt", 1200, 300, 3.75),
+        ContextSlice("agents", "AGENTS.md", 2400, 600, 7.5),
+        ContextSlice("skills", "skills", 400, 100, 1.25),
+        ContextSlice("tools", "tool schemas", 0, 500, 6.25),
+        ContextSlice("session", "session", 0, 500, 6.25),
     ]
     return ContextReport(
         slices=tuple(slices),
@@ -22,6 +22,7 @@ def _report(maxed: bool = True) -> ContextReport:
         window=8000,
         measured=maxed,
         prompt_tokens=2000,
+        free_tokens=6000,
     )
 
 
@@ -117,10 +118,13 @@ async def test_breakdown_lists_slices_with_exact_chars_and_estimated_tokens(
         assert "2400" in text, "characters are exact"
         assert "2k" in text or "2,000" in text
 
+        assert "free space" in text
+        assert "6k" in text or "6000" in text
         footer = " ".join(
             str(widget.content) for widget in app.screen.query(".context-note")
         )
         assert "estimate" in footer.lower()
+        assert "model window" in footer.lower()
 
 
 async def test_breakdown_marks_an_unmeasured_total(fake_runtime, monkeypatch):

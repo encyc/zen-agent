@@ -366,7 +366,7 @@ def _context_rows(report, width: int) -> list[tuple[str, Text | str]]:
     )
     biggest = sorted(report.slices, key=lambda item: item.tokens, reverse=True)[:2]
     top = " · ".join(
-        f"{_SHORT_SLICES.get(item.id, item.id)} {item.pct:.0f}%" for item in biggest
+        f"{_SHORT_SLICES.get(item.id, item.id)} {_fmt_pct(item.pct)}" for item in biggest
     )
     return [
         ("ctx-total", Text(_clip(total_line, width), style=_TEXT)),
@@ -376,15 +376,15 @@ def _context_rows(report, width: int) -> list[tuple[str, Text | str]]:
 
 
 def _context_bar(report, width: int) -> Text:
-    """A stacked bar of the slices, filling exactly ``width`` cells."""
+    """A stacked bar of the slices across the model window; the rest is free.
+
+    ``pct`` is a share of the window, so cells are allocated by it directly and
+    the remainder stays empty (░) instead of being handed to the last slice.
+    """
     text = Text()
     remaining = width
-    slices = list(report.slices)
-    for index, item in enumerate(slices):
-        if index == len(slices) - 1:
-            cells = remaining
-        else:
-            cells = round(item.pct / 100.0 * width)
+    for item in report.slices:
+        cells = round(item.pct / 100.0 * width)
         cells = max(0, min(cells, remaining))
         if cells:
             color = palette.CONTEXT_COLORS.get(item.id, palette.DIM)
@@ -393,6 +393,11 @@ def _context_bar(report, width: int) -> Text:
     if remaining > 0:
         text.append("░" * remaining, style=palette.DIM)
     return text
+
+
+def _fmt_pct(value: float) -> str:
+    """Small window shares keep one decimal; full percents stay integers."""
+    return f"{value:.1f}%" if value < 1 else f"{value:.0f}%"
 
 
 def _human(count: int) -> str:

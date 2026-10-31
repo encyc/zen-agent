@@ -44,6 +44,8 @@ class ContextBreakdownScreen(DialogScreen[None]):
                 yield Static(self._total_row(), classes="context-row")
                 for item in self.report.slices:
                     yield Static(self._slice_row(item), classes="context-row")
+                if self.report.window:
+                    yield Static(self._free_row(), classes="context-row")
             yield Static(Text(self._note()), classes="context-note")
             yield Static(Text("[esc] close"), id="dialog-hint")
 
@@ -62,16 +64,28 @@ class ContextBreakdownScreen(DialogScreen[None]):
 
     def _slice_row(self, item) -> Text:
         text = Text()
-        text.append(f"{item.label:<14}", style=palette.STATE_COLORS.get(item.id, palette.MUTED))
+        text.append(
+            f"{item.label:<12}", style=palette.STATE_COLORS.get(item.id, palette.MUTED)
+        )
         text.append(f" ≈{item.tokens:<6}", style=palette.MUTED)
         text.append(f" {item.pct:>5.1f}%", style=palette.TEXT)
-        text.append(f"  {item.chars:>6} ch", style=palette.DIM)
+        chars = f"{item.chars:>6} ch" if item.chars else "      —"
+        text.append(f"  {chars}", style=palette.DIM)
+        return text
+
+    def _free_row(self) -> Text:
+        pct = self.report.free_tokens / self.report.window * 100
+        text = Text()
+        text.append(f"{'free space':<12}", style=palette.DIM)
+        text.append(f" ≈{self.report.free_tokens:<6}", style=palette.DIM)
+        text.append(f" {pct:>5.1f}%", style=palette.DIM)
         return text
 
     def _note(self) -> str:
+        base = "percentages are shares of the model window"
         if self.report.measured:
-            return "slices are estimates (≈); the total is provider-measured"
-        return "slices and total are estimated (≈) — no provider usage yet"
+            return f"{base}; slices are estimates (≈), the used total is provider-measured"
+        return f"{base}; slices and total are estimated (≈) — no provider usage yet"
 
     def action_close(self) -> None:
         self.dismiss(None)

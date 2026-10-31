@@ -8,9 +8,9 @@ split. This module therefore keeps two kinds of numbers apart:
 * **tokens** are estimated with the same heuristic request fitting uses
   (:mod:`zenagent.providers.limits`), and the UI shows them with ``≈``.
 
-The measured total comes from the provider usage (``input + cache_read`` via
-:func:`~zenagent.config.token_estimate`); slices are scaled or padded with an
-"other" row so their percentages add up to the total the user actually sees.
+Percentages are always shares of the **model window** (``ContextReport.window``).
+A context is a filling tank, not a pie: ``0.5`` of the window used, the rest is
+free space -- never "80% of whatever was allocated so far".
 """
 
 from __future__ import annotations
@@ -50,20 +50,24 @@ class ContextSlice:
     label: str
     chars: int
     tokens: int
+    #: Share of the model window, 0-100.
     pct: float
 
 
 @dataclass(frozen=True)
 class ContextReport:
-    """The context window split into slices, sized against the measured total."""
+    """The context window split into slices; ``pct`` is against ``window``."""
 
     slices: tuple[ContextSlice, ...]
+    #: Occupied tokens (provider-measured when ``measured``, else estimated).
     total_tokens: int
     window: int
     #: True when a provider usage supplied the total (not the estimator).
     measured: bool
-    #: Sum of the per-slice estimates before scaling/residual handling.
+    #: Sum of the per-slice estimates.
     prompt_tokens: int
+    #: Unused room left in the window (never negative).
+    free_tokens: int = 0
 
 
 def _group_for(block_id: str) -> str | None:
@@ -73,6 +77,10 @@ def _group_for(block_id: str) -> str | None:
         ):
             return group_id
     return None
+
+
+def _pct(tokens: int, window: int) -> float:
+    return tokens / window * 100.0 if window > 0 else 0.0
 
 
 def build_context_report(
@@ -87,7 +95,8 @@ def build_context_report(
 
     The total is the provider-measured prompt size when usage exists, otherwise
     the sum of the estimates: a resumed session carries cumulative usage totals,
-    which are not a context size and must never become the denominator.
+    which are not a context size. Every percentage uses the model window as its
+    denominator.
     """
     window = max(0, int(window or 0))
     measured = last_usage is not None
@@ -124,49 +133,22 @@ def build_context_report(
 
     estimate_sum = sum(entry[3] for entry in entries)
     total = max(0, int(context_used or 0)) if measured else estimate_sum
-    slices: list[ContextSlice] = []
 
-    if total <= 0:
-        slices = [
-            ContextSlice(group_id, label, size, estimate, 0.0)
-            for group_id, label, size, estimate in entries
-        ]
-    elif estimate_sum > total:
-        scale = total / estimate_sum
-        scaled = [
-            [group_id, label, size, int(estimate * scale)]
-            for group_id, label, size, estimate in entries
-        ]
-        used = sum(row[3] for row in scaled)
-        if scaled and used < total:
-            biggest = max(range(len(scaled)), key=lambda index: scaled[index][3])
-            scaled[biggest][3] += total - used
-        slices = [
-            ContextSlice(group_id, label, size, estimate, estimate / total * 100.0)
-            for group_id, label, size, estimate in scaled
-        ]
-    else:
-        slices = [
+    slices = [
+        ContextSlice(group_id, label, size, estimate, _pct(estimate, window))
+        for group_id, label, size, estimate in entries
+    ]
+    residual = max(0, total - estimate_sum)
+    if residual:
+        slices.append(
             ContextSlice(
-                group_id,
-                label,
-                size,
-                estimate,
-                estimate / total * 100.0,
+                "other",
+                "other (generation/overhead)",
+                0,
+                residual,
+                _pct(residual, window),
             )
-            for group_id, label, size, estimate in entries
-        ]
-        residual = total - estimate_sum
-        if residual > 0:
-            slices.append(
-                ContextSlice(
-                    "other",
-                    "other (generation/overhead)",
-                    0,
-                    residual,
-                    residual / total * 100.0,
-                )
-            )
+        )
 
     return ContextReport(
         slices=tuple(slices),
@@ -174,4 +156,5 @@ def build_context_report(
         window=window,
         measured=measured,
         prompt_tokens=estimate_sum,
+        free_tokens=max(0, window - max(total, estimate_sum)),
     )
