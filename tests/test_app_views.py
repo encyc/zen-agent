@@ -217,3 +217,127 @@ def test_subagent_view_carries_cost_and_transcript_flag():
     assert view.has_transcript is True
     assert view.cost == 0.0031
     assert view.tokens == 812
+
+
+def test_transcript_builder_maps_streamed_events_to_views():
+    from zenagent.app.views import TranscriptBuilder
+    from zenagent.events import AgentEvent, AssistantEvent
+    from zenagent.types import AssistantMessage, Usage
+
+    builder = TranscriptBuilder()
+    partial = AssistantMessage(
+        content=[],
+        provider="p",
+        model="m",
+        usage=Usage(),
+        stop_reason="pending",
+        timestamp=2,
+    )
+
+    builder.apply(AgentEvent(type="message_start", message=UserMessage("hi", 1)))
+    builder.apply(AgentEvent(type="message_start", message=partial))
+    builder.apply(
+        AgentEvent(
+            type="message_update",
+            assistant_event=AssistantEvent(
+                type="text_delta", partial=partial, content_index=0, delta="hello"
+            ),
+        )
+    )
+    partial.content = [TextContent(text="hello")]  # canonical final content
+    builder.apply(AgentEvent(type="message_end", message=partial))
+
+    assert [type(view).__name__ for view in builder.views] == [
+        "MessageView",
+        "MessageView",
+    ]
+    assert builder.views[0].kind == "user" and builder.views[0].text == "hi"
+    assert builder.views[1].text == "hello"
+    assert builder.current is None, "message_end must close the live row"
+
+
+def test_transcript_builder_pairs_tool_calls_and_updates_progress():
+    from zenagent.agent.loop import ToolResultAgent
+    from zenagent.app.views import TranscriptBuilder
+    from zenagent.events import AgentEvent
+    from zenagent.types import TextContent
+
+    builder = TranscriptBuilder()
+
+    assert builder.apply(
+        AgentEvent(
+            type="tool_execution_start",
+            tool_call_id="t1",
+            tool_name="bash",
+            args={"command": "make"},
+        )
+    )
+    card = builder.cards["t1"]
+    assert card.name == "bash" and card.started_at is not None
+
+    builder.apply(
+        AgentEvent(
+            type="tool_execution_update",
+            tool_call_id="t1",
+            tool_name="bash",
+            args={"command": "make"},
+            partial_result=ToolResultAgent(
+                content=[TextContent(text="compiling\nlinking 2 files")]
+            ),
+        )
+    )
+    assert builder.cards["t1"].progress == "linking 2 files"
+
+    assert builder.apply(
+        AgentEvent(
+            type="tool_execution_end",
+            tool_call_id="t1",
+            tool_name="bash",
+            args={"command": "make"},
+            result=ToolResultAgent(content=[TextContent(text="done")]),
+            is_error=False,
+            duration_ms=5,
+        )
+    )
+    assert card.status == "ok"
+    assert card.result_text == "done"
+    assert card.duration_ms == 5
+
+
+def test_transcript_builder_ignores_progress_after_the_call_settled():
+    from zenagent.agent.loop import ToolResultAgent
+    from zenagent.app.views import TranscriptBuilder
+    from zenagent.events import AgentEvent
+    from zenagent.types import TextContent
+
+    builder = TranscriptBuilder()
+    builder.apply(
+        AgentEvent(
+            type="tool_execution_start",
+            tool_call_id="t1",
+            tool_name="bash",
+            args={"command": "make"},
+        )
+    )
+    builder.apply(
+        AgentEvent(
+            type="tool_execution_end",
+            tool_call_id="t1",
+            tool_name="bash",
+            result=ToolResultAgent(content=[TextContent(text="done")]),
+            is_error=False,
+            duration_ms=5,
+        )
+    )
+
+    changed = builder.apply(
+        AgentEvent(
+            type="tool_execution_update",
+            tool_call_id="t1",
+            tool_name="bash",
+            partial_result=ToolResultAgent(content=[TextContent(text="late")]),
+        )
+    )
+
+    assert changed is False
+    assert builder.cards["t1"].progress == ""

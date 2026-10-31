@@ -170,7 +170,7 @@ async def test_subagent_rows_are_ordered_and_updated_in_place(fake_runtime):
         assert "research" in rows(app, "Subagent")[1]
 
         first_row = subagent.query(SidebarRow)[0]
-        app.chat._cards["t3"].started_at = time.monotonic() - 12
+        app.chat._builder.cards["t3"].started_at = time.monotonic() - 12
         app._refresh_status()
 
         assert subagent.query(SidebarRow)[0] is first_row

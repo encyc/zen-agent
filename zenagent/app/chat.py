@@ -13,27 +13,19 @@ from zenagent.app.runtime import Runtime
 from zenagent.app.support import cache_hit_ratio
 from zenagent.app.views import (
     JobView,
-    MessageView,
     RunStatus,
     SubagentView,
     ToolCallView,
+    TranscriptBuilder,
     TranscriptNotice,
-    args_preview,
     job_views,
-    messages_to_views,
     sort_jobs,
     usage_total,
-    user_view,
 )
 from zenagent.events import AgentEvent
 from zenagent.tools.jobs import get_job_manager
 from zenagent.tools.todo import coerce_todo_phases, load_todo_phases
-from zenagent.types import (
-    AssistantMessage,
-    ImageContent,
-    TextContent,
-    UserMessage,
-)
+from zenagent.types import ImageContent
 
 __all__ = ["ChatController"]
 
@@ -46,9 +38,7 @@ class ChatController:
     ) -> None:
         self.runtime = runtime
         self._on_change = on_change
-        self._transcript: list[MessageView | ToolCallView] = []
-        self._current: MessageView | None = None
-        self._cards: dict[str, ToolCallView] = {}
+        self._builder = TranscriptBuilder()
         #: (text, images) pairs; images are captured when the turn is queued.
         self._follow_ups: list[tuple[str, list[ImageContent]]] = []
         self._task: asyncio.Task | None = None
@@ -78,8 +68,8 @@ class ChatController:
     # -- snapshots ----------------------------------------------------------
 
     @property
-    def transcript(self) -> list[MessageView | ToolCallView]:
-        return list(self._transcript)
+    def transcript(self) -> list[ToolCallView]:
+        return list(self._builder.views)
 
     @property
     def todos(self) -> list[dict]:
@@ -143,7 +133,7 @@ class ChatController:
         """The live ``task`` call plus recent ones, newest first."""
         running: list[SubagentView] = []
         finished: list[SubagentView] = []
-        for card in reversed(list(self._cards.values())):
+        for card in reversed(list(self._builder.cards.values())):
             if card.name != "task":
                 continue
             view = _subagent_view(card)
@@ -286,11 +276,7 @@ class ChatController:
 
     def reload_transcript(self) -> None:
         """Rebuild views from the current agent messages (after a session switch)."""
-        from zenagent.app.views import messages_to_views
-
-        self._transcript = messages_to_views(self.runtime.agent.messages)
-        self._cards.clear()
-        self._current = None
+        self._builder.load(self.runtime.agent.messages)
         # Switching sessions/compaction changes the sidecar the HUD reads and
         # starts a fresh subagent-cost accounting bucket.
         self._subagent_cost = 0.0
@@ -300,9 +286,7 @@ class ChatController:
 
     def clear(self) -> None:
         self.runtime.agent.reset()
-        self._transcript.clear()
-        self._cards.clear()
-        self._current = None
+        self._builder.reset()
         self._attachments.clear()
         todo_tool = getattr(self.runtime, "todo_tool", None)
         if todo_tool is not None:
@@ -330,9 +314,7 @@ class ChatController:
         if todo_tool is not None:
             todo_tool.bind_session(new_session.path)
         self._todos = load_todo_phases(self._session_path())
-        self._transcript = messages_to_views(self.runtime.agent.messages)
-        self._cards.clear()
-        self._current = None
+        self._builder.load(self.runtime.agent.messages)
         self._task = asyncio.create_task(self._run(text))
         self._notify()
         return text
@@ -353,11 +335,9 @@ class ChatController:
         try:
             await self.runtime.agent.prompt(text, images=images or None)
         finally:
-            if self._current is not None:
-                # Aborts and provider errors skip message_end; do not leave a
-                # row ticking after the run is over.
-                self._finish_thinking(self._current)
-            self._current = None
+            # Aborts and provider errors skip message_end; do not leave a row
+            # ticking after the run is over.
+            self._builder.finalize()
             self._turn_ms = int((time.monotonic() - started) * 1000)
             self._turn_output = (
                 usage_total(self.runtime.agent.messages).output - before_output
@@ -404,51 +384,9 @@ class ChatController:
     # -- event → view models ------------------------------------------------
 
     def _on_event(self, event: AgentEvent) -> None:
-        if event.type == "message_start" and event.message is not None:
-            self._on_message_start(event.message)
-        elif event.type == "message_update" and event.assistant_event is not None:
-            self._on_assistant_event(event)
-        elif event.type == "message_end" and isinstance(event.message, AssistantMessage):
-            if self._current is not None:
-                # Reasoning always ends before the message does, even when the
-                # provider never sends thinking_end (fake streams, aborts).
-                self._finish_thinking(self._current)
-                # Canonicalize from the final message: some providers (and fake
-                # streams) deliver the whole text in the terminal message only.
-                self._current.text = _assistant_text(event.message)
-                self._current.thinking = (
-                    _assistant_thinking(event.message) or self._current.thinking
-                )
-                self._current = None
-        elif event.type == "tool_execution_start":
-            card = ToolCallView(
-                call_id=event.tool_call_id or "",
-                name=event.tool_name or "?",
-                args_preview=args_preview(event.args or {}),
-                args=event.args or {},
-                status="running",
-                started_at=time.monotonic(),
-            )
-            self._cards[card.call_id] = card
-            self._transcript.append(card)
-        elif event.type == "tool_execution_update":
-            card = self._cards.get(event.tool_call_id or "")
-            if (
-                card is None
-                or card.status != "running"
-                or event.partial_result is None
-            ):
-                return
-            card.progress = _progress_line(event.partial_result)
-        elif event.type == "tool_execution_end":
+        changed = self._builder.apply(event)
+        if event.type == "tool_execution_end":
             details = dict(getattr(event.result, "details", None) or {})
-            card = self._cards.get(event.tool_call_id or "")
-            if card is not None:
-                card.is_error = bool(event.is_error)
-                card.status = "error" if event.is_error else "ok"
-                card.result_text = _result_text(event.result)
-                card.details = details
-                card.duration_ms = event.duration_ms
             if event.tool_name == "task" and "subagent_cost" in details:
                 self._subagent_cost += float(details.get("subagent_cost") or 0.0)
                 self._subagent_tokens += int(details.get("subagent_tokens") or 0)
@@ -456,99 +394,11 @@ class ChatController:
                 # The tool returns the canonical snapshot even for a rejected
                 # call, so the HUD always reflects the stored list.
                 self._todos = coerce_todo_phases(details.get("phases"))
-        else:
-            return
-        self._notify()
-
-    def _on_message_start(self, message) -> None:
-        if isinstance(message, UserMessage):
-            self._transcript.append(user_view(_user_text(message)))
-        elif isinstance(message, AssistantMessage):
-            self._current = MessageView(kind="assistant", text="")
-            self._transcript.append(self._current)
-        else:
-            return
-
-    def _on_assistant_event(self, event: AgentEvent) -> None:
-        assistant_event = event.assistant_event
-        if assistant_event is None:
-            return
-        kind = assistant_event.type
-        if kind in ("thinking_start", "thinking_delta"):
-            if self._current is not None:
-                self._begin_thinking(self._current)
-                if assistant_event.delta:
-                    self._current.thinking = (
-                        self._current.thinking or ""
-                    ) + assistant_event.delta
-        elif kind == "thinking_end":
-            if self._current is not None:
-                self._finish_thinking(self._current)
-        elif kind in ("text_start", "text_delta"):
-            if self._current is None:
-                if not assistant_event.delta:
-                    return
-                self._current = MessageView(kind="assistant", text="")
-                self._transcript.append(self._current)
-            # The answer starting is what ends the reasoning block.
-            self._finish_thinking(self._current)
-            if assistant_event.delta:
-                self._current.text += assistant_event.delta
-        elif kind == "toolcall_end":
-            # tool cards are appended on tool_execution_start (args complete there)
-            return
-
-    @staticmethod
-    def _begin_thinking(view: MessageView) -> None:
-        """Start the clock for a reasoning block (a turn may have several)."""
-        if view.thinking_started_at is not None:
-            return
-        if view.thinking_seconds is None:
-            view.thinking_seconds = 0.0
-        view.thinking_started_at = time.monotonic()
-
-    @staticmethod
-    def _finish_thinking(view: MessageView) -> None:
-        started = view.thinking_started_at
-        if started is None:
-            return
-        view.thinking_seconds = (view.thinking_seconds or 0.0) + (
-            time.monotonic() - started
-        )
-        view.thinking_started_at = None
+        if changed:
+            self._notify()
 
     def _notify(self) -> None:
         self._on_change()
-
-
-def _assistant_text(message: AssistantMessage) -> str:
-    return "\n".join(
-        block.text for block in message.content if isinstance(block, TextContent) and block.text
-    )
-
-
-def _assistant_thinking(message: AssistantMessage) -> str | None:
-    from zenagent.types import ThinkingContent
-
-    text = "\n".join(
-        block.thinking
-        for block in message.content
-        if isinstance(block, ThinkingContent) and block.thinking
-    )
-    return text or None
-
-
-def _user_text(message: UserMessage) -> str:
-    content = message.content
-    if isinstance(content, str):
-        return content
-    parts: list[str] = []
-    for block in content:
-        if isinstance(block, TextContent):
-            parts.append(block.text)
-        elif isinstance(block, ImageContent):
-            parts.append(f"[image {block.mime_type}]")
-    return "\n".join(parts)
 
 
 _TASK_SUBAGENT_STATUSES = ("ok", "error", "aborted", "truncated", "interrupted")
@@ -578,23 +428,3 @@ def _subagent_view(card: ToolCallView) -> SubagentView:
     )
 
 
-def _progress_line(result) -> str:
-    """Last non-empty streamed line, collapsed and bounded for a tool card."""
-    content = getattr(result, "content", None) or []
-    text = "\n".join(
-        block.text for block in content if isinstance(block, TextContent)
-    )
-    lines = [
-        "".join(ch if ch.isprintable() else " " for ch in line).strip()
-        for line in text.splitlines()
-    ]
-    lines = [line for line in lines if line]
-    if not lines:
-        return ""
-    return lines[-1][:120]
-
-
-def _result_text(result) -> str:
-    content = getattr(result, "content", None) or []
-    texts = [block.text for block in content if isinstance(block, TextContent)]
-    return "\n".join(texts)
