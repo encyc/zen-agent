@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -22,12 +23,17 @@ from zenagent.types import (
 )
 
 __all__ = [
+    "JobStatusView",
+    "JobView",
     "MessageView",
     "RunStatus",
+    "SubagentView",
     "ToolCallView",
     "TranscriptNotice",
     "args_preview",
+    "job_views",
     "messages_to_views",
+    "sort_jobs",
     "usage_total",
     "user_view",
 ]
@@ -84,6 +90,9 @@ class ToolCallView:
     is_error: bool = False
     duration_ms: int | None = None
     diff: str | None = None
+    #: ``time.monotonic()`` when the call started (live only; history replay has
+    #: no timing). The sidebar derives a subagent's live elapsed from it.
+    started_at: float | None = None
 
 
 @dataclass
@@ -125,6 +134,44 @@ class RunStatus:
     #: from the parent's own cost).
     subagent_cost: float = 0.0
     subagent_tokens: int = 0
+    #: Background jobs (``bash async``) known to the session; running ones first,
+    #: then newest finished. The sidebar caps the rendered rows.
+    jobs: list[JobView] = field(default_factory=list)
+    #: ``task`` subagents: the live one plus recent persisted ones, newest first.
+    subagents: list[SubagentView] = field(default_factory=list)
+    #: ``call_id`` of the subagent currently running, when there is one.
+    active_subagent: str | None = None
+
+
+#: Job states the sidebar renders; mirrors ``zenagent.tools.jobs.JobStatus``.
+JobStatusView = Literal["running", "ok", "failed", "timed_out"]
+
+
+@dataclass(frozen=True)
+class JobView:
+    """One background job as the sidebar renders it."""
+
+    id: str
+    command: str
+    status: JobStatusView
+    #: ``time.time()`` epoch seconds; the UI derives live elapsed itself.
+    started_at: float
+    duration_ms: int | None
+    exit_code: int | None
+
+
+@dataclass(frozen=True)
+class SubagentView:
+    """One ``task`` subagent: a live card or a persisted transcript's meta."""
+
+    call_id: str
+    name: str
+    status: Literal["running", "ok", "error", "aborted", "interrupted"]
+    duration_ms: int
+    cost: float
+    tokens: int
+    #: False for replayed/missing transcripts: the sidebar row is not clickable.
+    has_transcript: bool = False
 
 
 @dataclass(frozen=True)
@@ -203,6 +250,26 @@ def messages_to_views(messages: list[Message]) -> list[MessageView | ToolCallVie
             card.status = "error" if message.is_error else "ok"
 
     return views
+
+
+def job_views(jobs: Iterable[object]) -> list[JobView]:
+    """Map ``JobManager`` entries to UI-neutral views (duck-typed)."""
+    return [
+        JobView(
+            id=str(job.id),
+            command=str(job.command),
+            status=job.status,
+            started_at=float(job.started_at),
+            duration_ms=job.duration_ms,
+            exit_code=job.exit_code,
+        )
+        for job in jobs
+    ]
+
+
+def sort_jobs(views: list[JobView]) -> list[JobView]:
+    """Running jobs first, then the most recently started finished ones."""
+    return sorted(views, key=lambda view: (view.status != "running", -view.started_at))
 
 
 def usage_total(messages: list[Message]) -> Usage:
