@@ -6,7 +6,7 @@ import pytest
 
 from zenagent.app.chat import ChatController
 from zenagent.events import AssistantEvent
-from zenagent.types import AssistantMessage, TextContent, Usage
+from zenagent.types import AssistantMessage, TextContent, Usage, UserMessage
 
 
 def gated_stream(gate: asyncio.Event):
@@ -628,3 +628,151 @@ async def test_status_lists_task_subagents_with_the_active_one_first(runtime_fac
         if isinstance(view, ToolCallView) and view.call_id == "t3"
     )
     assert card.started_at is not None
+
+
+def _subagent_event(kind, name="research", **payload):
+    return (kind, {"name": name, "model": "m", **payload})
+
+
+def _child_events():
+    from zenagent.events import AgentEvent
+    from zenagent.types import AssistantMessage, Usage, UserMessage
+
+    partial = AssistantMessage(
+        content=[],
+        provider="p",
+        model="m",
+        usage=Usage(),
+        stop_reason="pending",
+        timestamp=1,
+    )
+    return [
+        AgentEvent(type="message_start", message=UserMessage("go", 0)),
+        AgentEvent(type="message_start", message=partial),
+        AgentEvent(
+            type="tool_execution_start",
+            tool_call_id="tc1",
+            tool_name="read_file",
+            args={"path": "a.py"},
+        ),
+        AgentEvent(type="message_end", message=partial),
+    ]
+
+
+async def test_subagent_events_build_a_live_read_only_transcript(runtime_factory):
+    runtime = await runtime_factory()
+    chat = ChatController(runtime)
+
+    from zenagent.events import AgentEvent
+
+    chat._on_event(
+        AgentEvent(
+            type="tool_execution_start",
+            tool_call_id="c1",
+            tool_name="task",
+            args={"prompt": "go", "name": "research"},
+        )
+    )
+    chat.on_subagent_event("c1", "start", {"name": "research", "model": "m"})
+    for event in _child_events():
+        chat.on_subagent_event("c1", "event", {"event": event})
+    chat.on_subagent_event(
+        "c1",
+        "end",
+        {"name": "research", "status": "ok", "duration_ms": 1000, "cost": 0.01, "tokens": 9},
+    )
+    from zenagent.agent.loop import ToolResultAgent
+    from zenagent.types import TextContent
+
+    chat._on_event(
+        AgentEvent(
+            type="tool_execution_end",
+            tool_call_id="c1",
+            tool_name="task",
+            args={"prompt": "go", "name": "research"},
+            result=ToolResultAgent(
+                content=[TextContent(text="<task-result …>")],
+                details={
+                    "status": "ok",
+                    "duration_ms": 1000,
+                    "cost": 0.01,
+                    "tokens": 9,
+                },
+            ),
+            is_error=False,
+            duration_ms=1000,
+        )
+    )
+
+    views = chat.subagent_transcript("c1")
+    assert views is not None
+    assert any(getattr(view, "call_id", "") == "tc1" for view in views)
+
+    [entry] = chat.status.subagents
+    assert (entry.call_id, entry.status, entry.has_transcript) == ("c1", "ok", True)
+    assert entry.cost == 0.01
+
+
+async def test_subagent_transcript_reads_the_session_sidecar_after_resume(
+    runtime_factory,
+):
+    from zenagent.agent.loop import ToolResultAgent
+    from zenagent.agent.subagents import SubagentStore
+    from zenagent.app.views import ToolCallView
+    from zenagent.events import AgentEvent
+    from zenagent.types import TextContent
+
+    runtime = await runtime_factory()
+    chat = ChatController(runtime)
+    store = SubagentStore(chat._session_path())
+    store.begin("c1", "research", "m")
+    store.append("c1", [UserMessage("go", 0)])
+    store.finish("c1", status="ok", duration_ms=18400, cost=0.0031, tokens=812)
+
+    # Replayed history: the task card has no live details, only its call id.
+    chat._on_event(
+        AgentEvent(
+            type="tool_execution_start",
+            tool_call_id="c1",
+            tool_name="task",
+            args={"prompt": "go", "name": "research"},
+        )
+    )
+    chat._on_event(
+        AgentEvent(
+            type="tool_execution_end",
+            tool_call_id="c1",
+            tool_name="task",
+            args={"prompt": "go", "name": "research"},
+            result=ToolResultAgent(content=[TextContent(text="<task-result …>")]),
+            is_error=False,
+            duration_ms=18400,
+        )
+    )
+
+    views = chat.subagent_transcript("c1")
+    assert views is not None and views[0].text == "go"
+
+    [entry] = chat.status.subagents
+    assert isinstance(chat.transcript[-1], ToolCallView)
+    assert (entry.status, entry.cost, entry.tokens, entry.has_transcript) == (
+        "ok",
+        0.0031,
+        812,
+        True,
+    )
+
+
+async def test_sidebar_hides_transcripts_the_transcript_no_longer_references(
+    runtime_factory,
+):
+    from zenagent.agent.subagents import SubagentStore
+
+    runtime = await runtime_factory()
+    chat = ChatController(runtime)
+    store = SubagentStore(chat._session_path())
+    store.begin("ghost", "ghost", "m")
+    store.finish("ghost", status="ok", duration_ms=1, cost=0.0, tokens=0)
+
+    assert chat.status.subagents == []
+    assert chat.subagent_transcript("ghost") is not None
