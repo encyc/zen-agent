@@ -3,7 +3,7 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased
+## v0.4.4 — 2026-10-31
 
 ### Added
 
@@ -16,6 +16,20 @@ matches the release tag; older history is in the repository tags and commits.
   list; `--no-skills` keeps them out of the menu.
 - Slash completion entries carry type labels (`command ·`, `template ·`,
   `extension ·`, `skill ·`) so same-name entries are distinguishable.
+- **TUI work panel**: a sidebar with todo, subagent and background-job
+  sections, a background-work strip above the prompt, a read-only todo overlay
+  (HUD click and palette entry), and a once-per-second job poll while work is
+  live. `RunStatus` now carries job/subagent view models for the panel and
+  desk chrome.
+- **Subagent transcripts**: `task` children persist session-scoped transcripts
+  (bound, carried and trashed with the session), stream progress live, and can
+  be read in a read-only transcript view swapped into the TUI main area, with
+  resume integration and a completion banner.
+
+### Changed
+
+- The TUI transcript is now built through an extracted `TranscriptBuilder`
+  shared by the live event path and session resume/reload.
 
 ## v0.4.3 — 2026-10-31
 
