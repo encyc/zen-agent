@@ -222,4 +222,5 @@ BASH = AgentTool(
         "required": ["command"],
     },
     execute=_bash,
+    approval="exec",
 )

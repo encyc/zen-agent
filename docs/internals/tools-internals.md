@@ -10,6 +10,7 @@ class AgentTool:
     parameters: dict                  # JSON Schema（子集校验）
     execution_mode: str = "parallel"  # or "sequential"
     execute: Callable[[str, dict, AbortToken|None, Callable|None], Awaitable[ToolResultAgent]]
+    approval: str = "exec"            # 工具声明的能力级：read / write / exec
 
 @dataclass
 class ToolResultAgent:
@@ -24,6 +25,8 @@ class ToolResultAgent:
 1. `execute` 必须返回 `ToolResultAgent`，不允许抛异常（抛了会被 loop 转成错误结果，但那是兜底）。
 2. `content` 是唯一发给模型的内容，不要往 `details` 里塞模型需要的信息。
 3. 长时间操作应检查 `abort.aborted` 并提前返回。
+4. `approval` 是**声明**不是强制：内核不拦任何调用；权限门（harness）读这个字段决定
+   read-only 模式放行、是否需要确认。没声明的工具按 `exec`（最保守）处理。
 
 ## 参数校验（`agent/validate.py`）
 
@@ -66,7 +69,7 @@ loop 里对每个 call：
 
 1. 解析 JSON 参数（失败 → error 结果，不执行）；
 2. `validate_arguments`（失败 → error 结果）；
-3. `before_tool_call`（返回 `{"block": True, "reason": ...}` → error 结果，不执行）；
+3. `before_tool_call(tool_call, args, tool)`（返回 `{"block": True, "reason": ...}` → error 结果，不执行；`tool` 是解析后的 `AgentTool`，权限门靠它读 `approval` / 名称）；
 4. 执行（并行组 gather / 串行组顺序）；
 5. `after_tool_call`（可替换结果或 patch content/is_error/terminate）；
 6. 追加 `ToolResultMessage`，发出 `tool_execution_end`。
@@ -82,7 +85,13 @@ from zenagent.types import TextContent
 async def hello(call_id, args, abort, on_update=None):
     return ToolResultAgent(content=[TextContent(text="hello")])
 
-HELLO = AgentTool(name="hello", description="say hello", parameters={"type": "object"}, execute=hello)
+HELLO = AgentTool(
+    name="hello",
+    description="say hello",
+    parameters={"type": "object"},
+    execute=hello,
+    approval="read",  # 只读工具：plan / --read-only 下放行，免确认
+)
 ```
 
 加进 `zenagent/tools/__init__.py::ALL_TOOLS` 或通过扩展 `api.register_tool`。

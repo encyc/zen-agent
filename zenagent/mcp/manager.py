@@ -181,6 +181,7 @@ class McpManager:
             description=f"[{server_name}] {description}",
             parameters=tool.input_schema,
             execute=execute,
+            approval="read" if getattr(tool, "read_only", False) else "exec",
         )
 
     async def call(self, server: str, tool: str, arguments: dict) -> McpCallResult:

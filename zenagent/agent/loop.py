@@ -88,6 +88,13 @@ class AgentTool:
     for streaming partial results (ignored by most tools). ``execution_mode=
     "sequential"`` opts the tool out of the concurrent batch: such tools run one
     at a time, in the order the assistant requested them.
+
+    ``approval`` is the tool's own capability declaration consumed by the
+    harness permission gate: ``"read"`` (never needs confirmation, allowed in
+    read-only modes), ``"write"`` (mutates files/state) or ``"exec"`` (runs
+    commands; the default when a tool does not say). The kernel does not
+    enforce it — the declaration lets the harness classify tools without a
+    hard-coded name list.
     """
 
     name: str
@@ -103,6 +110,8 @@ class AgentTool:
         ]
         | None
     ) = None
+    #: Capability tier declared by the tool (``read``/``write``/``exec``).
+    approval: str = "exec"
 
 
 @dataclass
@@ -111,9 +120,10 @@ class AgentConfig:
 
     Hooks (all optional, all may be sync or async unless typed otherwise):
 
-    * ``before_tool_call(tool_call, args)`` — return ``{"block": True,
+    * ``before_tool_call(tool_call, args, tool)`` — return ``{"block": True,
       "reason": str}`` to veto the call; the tool result becomes an is_error
-      carrying the reason and ``execute`` is never invoked.
+      carrying the reason and ``execute`` is never invoked. ``tool`` is the
+      resolved :class:`AgentTool`, so policy can read its declarations.
     * ``after_tool_call(tool_call, result)`` — return a ``ToolResultAgent`` to
       replace the result, or a ``{"content"/"is_error"/"terminate"}`` dict to
       patch individual fields.
@@ -238,7 +248,12 @@ async def _execute_tool(
     else:
         verdict = None
         if config.before_tool_call is not None:
-            verdict = await _maybe_await(config.before_tool_call(call, call.arguments))
+            # The resolved tool object accompanies the call so harness hooks can
+            # read the tool's own declarations (approval tier, timeout, …)
+            # instead of keeping a name list in sync with the tool registry.
+            verdict = await _maybe_await(
+                config.before_tool_call(call, call.arguments, tool)
+            )
         if isinstance(verdict, dict) and verdict.get("block"):
             result = _error_result(str(verdict.get("reason", "blocked")))
         elif tool.execute is None:

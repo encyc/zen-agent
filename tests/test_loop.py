@@ -317,7 +317,7 @@ async def test_before_tool_call_blocks_execution():
         executed.append(name)
         return ToolResultAgent(content=[TextContent(text="never")])
 
-    def guard(tool_call, args):
+    def guard(tool_call, args, tool=None):
         return {"block": True, "reason": "not allowed"}
 
     stream = ScriptedStream(
@@ -663,11 +663,35 @@ async def test_after_tool_call_can_replace_or_patch_result():
     assert len(stream.calls) == 2  # terminate untouched -> loop continued
 
 
+async def test_before_tool_call_receives_the_resolved_tool():
+    """Hooks need the AgentTool (tier, name) to make policy decisions."""
+    seen = []
+
+    async def echo(name, args, abort, on_update=None):
+        return ToolResultAgent(content=[TextContent(text="ran")])
+
+    def guard(call, args, tool=None):
+        seen.append(tool)
+
+    stream = ScriptedStream(
+        [
+            [call_tool("t1", "echo", {}), finish("tool_use")],
+            [say("ok"), finish("stop")],
+        ]
+    )
+    state = AgentState()
+    await run("go", state, make_config(stream, tools=[make_tool("echo", echo)], before_tool_call=guard))
+
+    assert len(seen) == 1
+    assert isinstance(seen[0], AgentTool)
+    assert seen[0].name == "echo"
+
+
 async def test_async_before_tool_call_hook_is_awaited():
     async def echo(name, args, abort, on_update=None):
         return ToolResultAgent(content=[TextContent(text="ran")])
 
-    async def guard(call, args):
+    async def guard(call, args, tool=None):
         return {"block": True, "reason": "async block"}
 
     stream = ScriptedStream(

@@ -126,3 +126,73 @@ def test_matches_any_returns_the_pattern():
 
     assert matches_any(["read_*", "grep"], "read_file") == "read_*"
     assert matches_any(["write_*"], "read_file") is None
+
+
+# ---------------------------------------------------------------------------
+# P0-1: tool-declared approval tiers and the read-only classification
+# ---------------------------------------------------------------------------
+
+
+def _declared_tool(name: str, approval: str):
+    from zenagent.agent.loop import AgentTool
+
+    return AgentTool(
+        name=name,
+        description="declared tier",
+        parameters={"type": "object", "properties": {}},
+        approval=approval,
+    )
+
+
+async def test_web_tools_are_read_only_in_plan_mode():
+    """Networking is a read: plan mode must allow web_search/fetch."""
+    gate = PermissionGate(interactive=False, mode="plan")
+    allowed, reason = await gate.check("web_search", {"query": "python 3.14"})
+    assert allowed is True, reason
+    allowed, reason = await gate.check("fetch", {"url": "https://example.com"})
+    assert allowed is True, reason
+
+
+async def test_web_tools_are_read_only_under_the_read_only_flag():
+    gate = PermissionGate(interactive=False, read_only=True)
+    assert (await gate.check("web_search", {"query": "x"}))[0] is True
+    assert (await gate.check("fetch", {"url": "https://example.com"}))[0] is True
+
+
+async def test_declared_read_only_tool_is_allowed_in_plan_mode():
+    """A tool the kernel/extension declares read-only needs no name allowlist."""
+    gate = PermissionGate(interactive=False, mode="plan")
+    tool = _declared_tool("mcp__db__query", "read")
+    allowed, reason = await gate.check("mcp__db__query", {"sql": "select 1"}, tool)
+    assert allowed is True, reason
+
+
+async def test_declared_tier_wins_over_the_name_allowlist():
+    """The tool declaration is authoritative: an exec declaration is not a read."""
+    gate = PermissionGate(interactive=False, mode="plan")
+    tool = _declared_tool("read_file", "exec")
+    allowed, reason = await gate.check("read_file", {"path": "x"}, tool)
+    assert allowed is False
+    assert "plan mode" in reason
+
+
+async def test_declared_write_tool_needs_confirmation_in_ask_mode():
+    gate = PermissionGate(interactive=False, mode="ask")
+    tool = _declared_tool("mcp__db__write", "write")
+    allowed, _ = await gate.check("mcp__db__write", {"sql": "update t"}, tool)
+    assert allowed is False
+
+
+async def test_declared_read_only_tool_is_allowed_under_the_read_only_flag():
+    gate = PermissionGate(interactive=False, read_only=True)
+    tool = _declared_tool("mcp__db__query", "read")
+    assert (await gate.check("mcp__db__query", {}, tool))[0] is True
+
+
+async def test_broker_honors_a_declared_read_only_tier():
+    from zenagent.app.permissions import PermissionBroker
+
+    broker = PermissionBroker.wrap(PermissionGate(interactive=False, mode="plan"))
+    tool = _declared_tool("mcp__db__query", "read")
+    call = ToolCall(id="c1", name="mcp__db__query", arguments={})
+    assert await broker.before_tool_call(call, {}, tool) is None

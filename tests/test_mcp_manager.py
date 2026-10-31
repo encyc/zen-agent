@@ -136,3 +136,19 @@ async def test_image_content_from_mcp_is_preserved():
         assert result.name == "mcp__echo__img"
     finally:
         await manager.close()
+
+
+def test_tool_defs_translate_the_read_only_annotation_into_an_approval_tier():
+    """A read-only MCP tool must not need confirmation in plan/ask mode."""
+    from zenagent.mcp.client import McpTool
+
+    manager = McpManager({})
+    read_tool = manager._make_tool(
+        "db", McpTool(name="query", description="", input_schema={}, read_only=True)
+    )
+    write_tool = manager._make_tool(
+        "db", McpTool(name="write", description="", input_schema={}, read_only=False)
+    )
+
+    assert read_tool.approval == "read"
+    assert write_tool.approval == "exec"

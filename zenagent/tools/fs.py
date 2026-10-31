@@ -84,6 +84,7 @@ def _tool(
     properties: dict,
     required: list[str],
     execute,
+    approval: str = "exec",
 ) -> AgentTool:
     return AgentTool(
         name=name,
@@ -94,6 +95,7 @@ def _tool(
             "required": required,
         },
         execute=execute,
+        approval=approval,
     )
 
 
@@ -241,6 +243,7 @@ READ_FILE = _tool(
     {"path": {"type": "string", "description": "File path to read."}},
     ["path"],
     _read_file,
+    approval="read",
 )
 
 WRITE_FILE = _tool(
@@ -253,6 +256,7 @@ WRITE_FILE = _tool(
     },
     ["path", "content"],
     _write_file,
+    approval="write",
 )
 
 EDIT_FILE = _tool(
@@ -269,6 +273,7 @@ EDIT_FILE = _tool(
     },
     ["path", "old_string", "new_string"],
     _edit_file,
+    approval="write",
 )
 
 LIST_DIR = _tool(
@@ -277,4 +282,5 @@ LIST_DIR = _tool(
     {"path": {"type": "string", "description": "Directory to list."}},
     ["path"],
     _list_dir,
+    approval="read",
 )

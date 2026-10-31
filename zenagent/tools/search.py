@@ -173,6 +173,7 @@ GLOB = AgentTool(
         "required": ["pattern"],
     },
     execute=_glob,
+    approval="read",
 )
 
 GREP = AgentTool(
@@ -194,6 +195,7 @@ GREP = AgentTool(
         "required": ["pattern"],
     },
     execute=_grep,
+    approval="read",
 )
 
 #: Convenience alias used by tests/importers that want the pair.
