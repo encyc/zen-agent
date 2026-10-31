@@ -18,6 +18,7 @@ from zenagent.app.models import ModelEntry
 from zenagent.app.sessions import SessionEntry
 from zenagent.cli.tui.screens.palette import PaletteItem, PaletteScreen
 from zenagent.cli.tui.textutil import clip_cells
+from zenagent.i18n import t
 
 __all__ = [
     "AskQuestion",
@@ -45,16 +46,25 @@ class ModelPicker(PaletteScreen[str]):
             PaletteItem(
                 label=f"{'●' if entry.current else ' '} {entry.provider}/{entry.id}",
                 value=entry.id,
-                note=(
-                    f"{entry.context_window // 1000}k · "
-                    f"{'ready' if entry.available else entry.reason}"
+                note=t(
+                    "tui.picker.model_note",
+                    context=entry.context_window // 1000,
+                    state=(
+                        t("tui.picker.ready")
+                        if entry.available
+                        else entry.reason
+                    ),
                 ),
                 enabled=entry.available,
                 selected=entry.current,
             )
             for entry in entries
         ]
-        super().__init__(title="Models", items=items, placeholder="Search models")
+        super().__init__(
+            title=t("tui.picker.models"),
+            items=items,
+            placeholder=t("tui.picker.models_search"),
+        )
 
 
 @dataclass(frozen=True)
@@ -89,7 +99,7 @@ class SessionPicker(PaletteScreen[SessionAction]):
         for entry in entries:
             marker = f"{'★' if entry.pinned else ' '}{'●' if entry.current else ' '}"
             if scope == "all":
-                project_label = entry.project or "legacy"
+                project_label = entry.project or t("tui.picker.legacy_project")
                 label = f"{marker} [{project_label}] {entry.title or entry.path.name}"
             else:
                 label = f"{marker} {entry.title or entry.path.name}"
@@ -97,22 +107,24 @@ class SessionPicker(PaletteScreen[SessionAction]):
                 PaletteItem(
                     label=label,
                     value=SessionAction("resume", entry.path),
-                    note=(
-                        f"{entry.messages} msgs · "
-                        f"{time.strftime('%m-%d %H:%M', time.localtime(entry.created))}"
+                    note=t(
+                        "tui.picker.messages_note",
+                        n=entry.messages,
+                        time=time.strftime(
+                            "%m-%d %H:%M", time.localtime(entry.created)
+                        ),
                     ),
                     selected=entry.current,
                 )
             )
-        scope_hint = "tab: project sessions" if scope == "all" else "tab: all projects"
+        scope_hint = t(
+            "tui.picker.scope_all" if scope == "all" else "tui.picker.scope_project"
+        )
         super().__init__(
-            title="Sessions",
+            title=t("tui.picker.sessions"),
             items=items,
-            placeholder="Search sessions",
-            footer=(
-                f"↑↓ move   enter resume   n new   f fork   "
-                f"d delete   e export   r rename   {scope_hint}"
-            ),
+            placeholder=t("tui.picker.sessions_search"),
+            footer=t("tui.picker.session_footer", scope_hint=scope_hint),
         )
 
     def _highlighted_path(self) -> Path | None:
@@ -278,7 +290,7 @@ class DialogChoice(Static):
 
 def _choice(key: str, label: str) -> Text:
     """``[y] allow`` -- Text, so the square brackets stay literal markup."""
-    return Text(f"[{key}] {label}")
+    return Text(t("tui.dialog.key_hint", key=key, label=label))
 
 
 def _clip(text: str, limit: int) -> str:
@@ -296,7 +308,9 @@ def _approval_body(tool_name: str, arguments: dict) -> list[tuple[str, str]]:
         rows.append((f"$ {lines[0]}", "dialog-command"))
         rows.extend((f"  {line}", "dialog-command") for line in lines[1:8])
         if len(lines) > 8:
-            rows.append((f"  … {len(lines) - 8} more lines", "dialog-note"))
+            rows.append(
+                (t("tui.dialog.more_lines", n=len(lines) - 8), "dialog-note")
+            )
 
     path = arguments.get("path")
     if isinstance(path, str) and path:
@@ -304,7 +318,12 @@ def _approval_body(tool_name: str, arguments: dict) -> list[tuple[str, str]]:
 
     content = arguments.get("content")
     if isinstance(content, str) and content:
-        rows.append((f"{len(content.splitlines())} lines to write", "dialog-note"))
+        rows.append(
+            (
+                t("tui.dialog.lines_to_write", n=len(content.splitlines())),
+                "dialog-note",
+            )
+        )
 
     old = arguments.get("old_string")
     new = arguments.get("new_string")
@@ -315,13 +334,18 @@ def _approval_body(tool_name: str, arguments: dict) -> list[tuple[str, str]]:
 
     pattern = arguments.get("pattern")
     if isinstance(pattern, str) and pattern:
-        rows.append((f"pattern  {pattern}", "dialog-detail"))
+        rows.append((t("tui.dialog.pattern", pattern=pattern), "dialog-detail"))
 
     if not rows:
         for key, value in list(arguments.items())[:5]:
             rows.append((f"{key} = {_clip(str(value), 100)}", "dialog-detail"))
         if len(arguments) > 5:
-            rows.append((f"… {len(arguments) - 5} more arguments", "dialog-note"))
+            rows.append(
+                (
+                    t("tui.dialog.more_arguments", n=len(arguments) - 5),
+                    "dialog-note",
+                )
+            )
     return rows
 
 
@@ -336,12 +360,14 @@ class Confirm(DialogScreen[bool]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
-            yield Static(Text("confirm"), id="dialog-title")
+            yield Static(Text(t("tui.dialog.confirm")), id="dialog-title")
             with Vertical(id="dialog-body"):
                 yield Static(Text(self.prompt), classes="dialog-detail")
             with Vertical(id="dialog-choices"):
-                yield DialogChoice(_choice("y", "yes"), "yes", primary=True)
-                yield DialogChoice(_choice("n", "no"), "no")
+                yield DialogChoice(
+                    _choice("y", t("tui.dialog.yes")), "yes", primary=True
+                )
+                yield DialogChoice(_choice("n", t("tui.dialog.no")), "no")
 
     def action_yes(self) -> None:
         self.dismiss(True)
@@ -361,14 +387,14 @@ class RenamePrompt(DialogScreen[str]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
-            yield Static(Text("rename session"), id="dialog-title")
+            yield Static(Text(t("tui.dialog.rename")), id="dialog-title")
             with Vertical(id="dialog-body"):
                 yield Input(
                     value=self.initial,
                     id="rename-input",
-                    placeholder="session name",
+                    placeholder=t("tui.dialog.rename_placeholder"),
                 )
-            yield Static(Text("[enter] save   [esc] cancel"), id="dialog-hint")
+            yield Static(Text(t("tui.dialog.save_cancel")), id="dialog-hint")
 
     def on_mount(self) -> None:
         field = self.query_one("#rename-input", Input)
@@ -412,7 +438,10 @@ class ToolApproval(DialogScreen[str]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
-            yield Static(Text(f"allow {self.tool_name}?"), id="dialog-title")
+            yield Static(
+                Text(t("tui.dialog.allow", tool=self.tool_name)),
+                id="dialog-title",
+            )
             body = _approval_body(self.tool_name, self.arguments)
             if body:
                 with Vertical(id="dialog-body"):
@@ -420,15 +449,22 @@ class ToolApproval(DialogScreen[str]):
                         yield Static(Text(line), classes=css_class)
             if self.target:
                 yield Static(
-                    Text(f"always allows: {self.target}"), id="dialog-scope"
+                    Text(t("tui.dialog.always_allows", target=self.target)),
+                    id="dialog-scope",
                 )
             with Vertical(id="dialog-choices"):
-                yield DialogChoice(_choice("y", "allow"), "allow", primary=True)
-                yield DialogChoice(_choice("a", "allow for this session"), "always")
-                yield DialogChoice(_choice("n", "deny"), "deny")
+                yield DialogChoice(
+                    _choice("y", t("tui.dialog.allow_choice")), "allow", primary=True
+                )
+                yield DialogChoice(
+                    _choice("a", t("tui.dialog.allow_session")), "always"
+                )
+                yield DialogChoice(_choice("n", t("tui.dialog.deny")), "deny")
             if self.timeout:
                 yield Static(
-                    Text(f"no answer in {self.timeout:g}s = deny"),
+                    Text(
+                        t("tui.dialog.timeout", seconds=f"{self.timeout:g}")
+                    ),
                     id="dialog-hint",
                 )
 
@@ -478,7 +514,9 @@ class AskQuestion(DialogScreen[list[str] | None]):
         return bool(self.question.get("multi"))
 
     def compose(self) -> ComposeResult:
-        title = self.question.get("header") or f"question {self.index}/{self.total}"
+        title = self.question.get("header") or t(
+            "tui.dialog.question", index=self.index, total=self.total
+        )
         if self.total > 1 and self.question.get("header"):
             title = f"{title} · {self.index}/{self.total}"
         with Vertical(id="dialog"):
@@ -490,7 +528,8 @@ class AskQuestion(DialogScreen[list[str] | None]):
                 recommended = self.question.get("recommended")
                 if recommended:
                     yield Static(
-                        Text(f"recommended: {recommended}"), classes="dialog-note"
+                        Text(t("tui.dialog.recommended", label=recommended)),
+                        classes="dialog-note",
                     )
             with Vertical(id="dialog-choices"):
                 for position, option in enumerate(self.question["options"]):
@@ -506,8 +545,8 @@ class AskQuestion(DialogScreen[list[str] | None]):
 
     def _hint(self) -> str:
         if self.multi:
-            return "[1-6] toggle   [enter] submit   [esc] cancel"
-        return "[1-6] choose   [esc] cancel"
+            return t("tui.dialog.multi_hint")
+        return t("tui.dialog.single_hint")
 
     def _choice_text(self, position: int, option: dict) -> Text:
         text = Text(f"[{position + 1}] ")
@@ -515,7 +554,7 @@ class AskQuestion(DialogScreen[list[str] | None]):
             text.append("✓ " if option["label"] in self.selected else "  ")
         text.append(option["label"])
         if option["label"] == self.question.get("recommended"):
-            text.append(" (Recommended)")
+            text.append(t("tui.dialog.recommended_suffix"))
         description = option.get("description")
         if description:
             text.append(f"  — {description}")
@@ -581,27 +620,60 @@ class SettingsPicker(PaletteScreen[str]):
         from zenagent.cli.tui.screens.palette import PaletteItem
 
         described = settings_module.describe()
-        status = f"{len(described['keys'])} keys · {described['path']}"
+        status = t(
+            "tui.settings.file_status",
+            n=len(described["keys"]),
+            path=described["path"],
+        )
         if described["problem"]:
-            status = f"⚠ {described['problem']}"
+            status = t("tui.settings.file_problem", problem=described["problem"])
         items = [
-            PaletteItem(label="Switch model…", value="model", note=model),
-            PaletteItem(label="Theme…", value="theme", note=theme),
-            PaletteItem(label="Language…", value="language", note=language),
-            PaletteItem(label="Settings file", value="noop", note=status, enabled=False),
-            PaletteItem(label="Model API keys…", value="model-keys", note="paste a key"),
-            PaletteItem(label="Search provider…", value="search-provider", note="default engine"),
-            PaletteItem(label="Search API keys…", value="search-keys", note="tavily / brave"),
             PaletteItem(
-                label="Thinking level…",
-                value="thinking",
-                note=thinking or "off",
+                label=t("tui.settings.switch_model"), value="model", note=model
             ),
-            PaletteItem(label="Toggle info sidebar", value="sidebar", note="ctrl+b"),
-            PaletteItem(label="Clear conversation", value="clear"),
-            PaletteItem(label="Export session as markdown", value="export"),
+            PaletteItem(
+                label=t("tui.settings.theme"), value="theme", note=theme
+            ),
+            PaletteItem(
+                label=t("tui.settings.language"), value="language", note=language
+            ),
+            PaletteItem(
+                label=t("tui.settings.file"),
+                value="noop",
+                note=status,
+                enabled=False,
+            ),
+            PaletteItem(
+                label=t("tui.settings.model_keys"),
+                value="model-keys",
+                note=t("tui.settings.paste_key"),
+            ),
+            PaletteItem(
+                label=t("tui.settings.search_provider"),
+                value="search-provider",
+                note=t("tui.settings.default_engine"),
+            ),
+            PaletteItem(
+                label=t("tui.settings.search_keys"),
+                value="search-keys",
+                note=t("tui.settings.search_keys_note"),
+            ),
+            PaletteItem(
+                label=t("tui.settings.thinking"),
+                value="thinking",
+                note=thinking or t("tui.settings.off"),
+            ),
+            PaletteItem(
+                label=t("tui.settings.sidebar"), value="sidebar", note="ctrl+b"
+            ),
+            PaletteItem(label=t("tui.settings.clear"), value="clear"),
+            PaletteItem(label=t("tui.settings.export"), value="export"),
         ]
-        super().__init__(title="Settings", items=items, placeholder="Search settings")
+        super().__init__(
+            title=t("tui.picker.settings"),
+            items=items,
+            placeholder=t("tui.picker.settings_search"),
+        )
 
 
 class ChoicePicker(PaletteScreen[str]):
@@ -617,8 +689,10 @@ class ChoicePicker(PaletteScreen[str]):
         title: str,
         choices: list[tuple[str, str]],
         selected: str = "",
-        placeholder: str = "Search",
+        placeholder: str | None = None,
     ) -> None:
+        if placeholder is None:
+            placeholder = t("tui.picker.search")
         items = [
             PaletteItem(
                 label=value,
@@ -640,10 +714,10 @@ class HistorySearch(PaletteScreen[str]):
             for text in entries
         ]
         super().__init__(
-            title="History",
+            title=t("tui.picker.history"),
             items=items,
-            placeholder="Search history",
-            footer="↑↓ move   enter recall   esc cancel",
+            placeholder=t("tui.picker.history_search"),
+            footer=t("tui.picker.history_footer"),
         )
 
 

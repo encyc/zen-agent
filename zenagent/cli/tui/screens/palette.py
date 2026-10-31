@@ -19,6 +19,8 @@ from textual.screen import ModalScreen
 from textual.widgets import Input, OptionList, Static
 from textual.widgets.option_list import Option
 
+from zenagent.i18n import t
+
 __all__ = ["PaletteItem", "PaletteScreen"]
 
 T = TypeVar("T")
@@ -124,14 +126,14 @@ class PaletteScreen(ModalScreen[T | None], Generic[T]):
         *,
         title: str,
         items: list[PaletteItem[T]],
-        placeholder: str = "Search",
-        footer: str = "↑↓ move   enter select   esc cancel",
+        placeholder: str | None = None,
+        footer: str | None = None,
     ) -> None:
         super().__init__()
         self.title_text = title
         self.items = items
-        self.placeholder = placeholder
-        self.footer_text = footer
+        self.placeholder = placeholder or t("tui.picker.search")
+        self.footer_text = footer or t("tui.picker.footer")
         self._filtered: list[PaletteItem[T]] = list(items)
 
     # -- composition --------------------------------------------------------
@@ -159,7 +161,9 @@ class PaletteScreen(ModalScreen[T | None], Generic[T]):
         option_list = self.query_one("#palette-list", OptionList)
         option_list.clear_options()
         if not self._filtered:
-            option_list.add_option(Option("no matches", disabled=True))
+            option_list.add_option(
+                Option(t("tui.picker.no_matches"), disabled=True)
+            )
             return
         option_list.add_options([self._option(item) for item in self._filtered])
         # Preselect the active entry (omp highlights the current model/session).

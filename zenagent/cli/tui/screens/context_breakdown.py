@@ -12,6 +12,7 @@ from zenagent.cli.tui import palette
 from zenagent.cli.tui.labels import context_label
 from zenagent.cli.tui.screens.modals import DialogScreen
 from zenagent.cli.tui.textutil import pad_cells
+from zenagent.i18n import t
 
 __all__ = ["ContextBreakdownScreen"]
 

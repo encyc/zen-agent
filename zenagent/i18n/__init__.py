@@ -118,20 +118,26 @@ def _lookup(locale: str, key: str) -> str | None:
     return _catalogs().get(locale, {}).get(key)
 
 
-def t(key: str, **fmt: object) -> str:
-    """Translate ``key``; fall back to English, then to the key itself."""
-    text = _lookup(_active, key)
+def t(message_key: str, **fmt: object) -> str:
+    """Translate ``message_key``; fall back to English, then to the key itself.
+
+    The key parameter is positional-only in spirit (it is named so a placeholder
+    called ``key`` or ``n`` can still be passed as a format argument).
+    """
+    text = _lookup(_active, message_key)
     if text is None:
-        text = _lookup(_DEFAULT, key)
+        text = _lookup(_DEFAULT, message_key)
     if text is None:
-        return key
+        return message_key
     return text.format(**fmt) if fmt else text
 
 
-def tn(key: str, n: int, **fmt: object) -> str:
+def tn(message_key: str, count: int, **fmt: object) -> str:
     """Plural-aware translate: ``<key>.one`` for 1, ``<key>.other`` otherwise."""
-    suffix = "one" if n == 1 else "other"
-    text = _lookup(_active, f"{key}.{suffix}") or _lookup(_DEFAULT, f"{key}.{suffix}")
+    suffix = "one" if count == 1 else "other"
+    text = _lookup(_active, f"{message_key}.{suffix}") or _lookup(
+        _DEFAULT, f"{message_key}.{suffix}"
+    )
     if text is None:
-        return t(key, n=n, **fmt)
-    return text.format(n=n, **fmt)
+        return t(message_key, n=count, **fmt)
+    return text.format(n=count, **fmt)

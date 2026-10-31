@@ -14,14 +14,15 @@ from textual.widgets import Static
 from zenagent.app.views import JobLogView
 from zenagent.cli.tui import palette
 from zenagent.cli.tui.screens.modals import DialogScreen
+from zenagent.i18n import t
 
 __all__ = ["JobLogScreen"]
 
-_STATUS_LABELS = {
-    "running": "running",
-    "ok": "done",
-    "failed": "failed",
-    "timed_out": "timed out",
+_STATUS_KEYS = {
+    "running": "tui.jobs.status_running",
+    "ok": "tui.jobs.status_ok",
+    "failed": "tui.jobs.status_failed",
+    "timed_out": "tui.jobs.status_timed_out",
 }
 
 
@@ -50,13 +51,17 @@ class JobLogScreen(DialogScreen[None]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
-            yield Static(Text("job log"), id="dialog-title")
+            yield Static(Text(t("tui.jobs.title")), id="dialog-title")
             yield Static(self._header(), id="dialog-body", classes="job-log-text")
             with VerticalScroll(id="job-log-body"):
                 yield Static(
                     self._output(), id="job-log-output", classes="job-log-text"
                 )
-            yield Static(Text("[esc] close"), id="dialog-hint", classes="job-log-text")
+            yield Static(
+                Text(t("tui.dialog.close")),
+                id="dialog-hint",
+                classes="job-log-text",
+            )
 
     def set_view(self, view: JobLogView) -> None:
         """Swap the snapshot (the 1s poll calls this while the job runs)."""
@@ -70,22 +75,27 @@ class JobLogScreen(DialogScreen[None]):
         text.append(self.view.id, style=palette.TEXT)
         text.append(" · ", style=palette.DIM)
         text.append(
-            _STATUS_LABELS.get(status, status),
+            t(_STATUS_KEYS[status]) if status in _STATUS_KEYS else status,
             style=palette.STATE_COLORS.get(status, palette.MUTED),
         )
         if self.view.duration_ms is not None:
             text.append(f" · {self.view.duration_ms / 1000:.1f}s", style=palette.MUTED)
         if self.view.exit_code is not None:
-            text.append(f" · exit {self.view.exit_code}", style=palette.MUTED)
+            text.append(
+                " · " + t("tui.jobs.exit", code=self.view.exit_code),
+                style=palette.MUTED,
+            )
         text.append("\n$ ", style=palette.DIM)
         text.append(self.view.command, style=palette.MUTED)
         return text
 
     def _output(self) -> Text:
-        text = Text(self.view.output or "(no output yet)", style=palette.TEXT)
+        text = Text(
+            self.view.output or t("tui.jobs.no_output"), style=palette.TEXT
+        )
         if self.view.truncated:
             text.append(
-                "\n\n[output truncated: the job exceeded the capture budget]",
+                "\n\n" + t("tui.jobs.truncated"),
                 style=palette.DIM,
             )
         return text

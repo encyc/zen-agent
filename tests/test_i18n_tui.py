@@ -125,3 +125,81 @@ async def test_sidebar_and_welcome_speak_chinese(fake_runtime, monkeypatch):
         assert app.query_one(Sidebar)._section("session").title == "会话"
         welcome = app.query_one(WelcomeBlock).plain
         assert "/ 命令" in welcome
+
+
+def _plain(static) -> str:
+    from rich.text import Text
+
+    content = static._Static__content  # what Static.update()/ctor stored
+    return content.plain if isinstance(content, Text) else str(content)
+
+
+async def test_settings_menu_is_chinese(fake_runtime, monkeypatch):
+    from zenagent.cli.tui.app import ZenAgentApp
+
+    monkeypatch.setattr("zenagent.settings.get_pref", lambda name, default=None: None)
+    app = ZenAgentApp(fake_runtime, language="zh")
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await app._dispatch_command("settings", "")
+        await pilot.pause()
+        picker = app._menus["settings"]
+        labels = [item.label for item in picker.items]
+        assert "切换模型…" in labels
+        assert "主题…" in labels and "语言…" in labels
+
+
+async def test_dialogs_and_overlays_are_chinese(fake_runtime, monkeypatch):
+    from textual.widgets import Static
+
+    from zenagent.app.context import ContextReport
+    from zenagent.app.views import JobLogView
+    from zenagent.cli.tui.app import ZenAgentApp
+    from zenagent.cli.tui.screens.context_breakdown import ContextBreakdownScreen
+    from zenagent.cli.tui.screens.job_log import JobLogScreen
+    from zenagent.cli.tui.screens.modals import ToolApproval
+    from zenagent.cli.tui.screens.todo_list import TodoListScreen
+
+    monkeypatch.setattr("zenagent.settings.get_pref", lambda name, default=None: None)
+    app = ZenAgentApp(fake_runtime, language="zh")
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        approval = ToolApproval("bash", {"command": "ls"}, target="/tmp")
+        app.push_screen(approval)
+        await pilot.pause()
+        assert "允许 bash" in _plain(approval.query_one("#dialog-title", Static))
+        approval.dismiss(None)
+        await pilot.pause()
+
+        job = JobLogView(
+            id="bg_1",
+            command="sleep 1",
+            status="running",
+            duration_ms=1000,
+            exit_code=None,
+            output="hi",
+        )
+        job_screen = JobLogScreen(job)
+        app.push_screen(job_screen)
+        await pilot.pause()
+        assert "job 日志" in _plain(job_screen.query_one("#dialog-title", Static))
+        assert "运行中" in _plain(job_screen.query_one("#dialog-body", Static))
+        job_screen.dismiss(None)
+        await pilot.pause()
+
+        report = ContextReport(
+            slices=(), total_tokens=100, window=200, measured=True, prompt_tokens=100
+        )
+        ctx_screen = ContextBreakdownScreen(report)
+        app.push_screen(ctx_screen)
+        await pilot.pause()
+        assert "上下文" in _plain(ctx_screen.query_one("#dialog-title", Static))
+        ctx_screen.dismiss(None)
+        await pilot.pause()
+
+        todo_screen = TodoListScreen(
+            [{"name": "阶段", "tasks": [{"content": "做点什么", "status": "blocked"}]}]
+        )
+        app.push_screen(todo_screen)
+        await pilot.pause()
+        assert "待办" in _plain(todo_screen.query_one("#dialog-title", Static))

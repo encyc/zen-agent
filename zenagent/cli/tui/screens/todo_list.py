@@ -15,6 +15,7 @@ from textual.widgets import Static
 
 from zenagent.cli.tui import palette
 from zenagent.cli.tui.screens.modals import DialogScreen
+from zenagent.i18n import t
 
 __all__ = ["TodoListScreen"]
 
@@ -27,7 +28,10 @@ _MARKS = {
     "blocked": ("⊘", palette.ERROR),
 }
 
-_STATUS_LABELS = {"in_progress": "in progress", "blocked": "blocked"}
+_STATUS_KEYS = {
+    "in_progress": "tui.todo.status_in_progress",
+    "blocked": "tui.todo.status_blocked",
+}
 
 
 class TodoListScreen(DialogScreen[None]):
@@ -60,14 +64,14 @@ class TodoListScreen(DialogScreen[None]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
-            yield Static(Text("todo"), id="dialog-title")
+            yield Static(Text(t("tui.todo.title")), id="dialog-title")
             with VerticalScroll(id="todo-body"):
                 for phase in self.phases:
-                    name = str(phase.get("name") or "Tasks")
+                    name = str(phase.get("name") or t("tui.todo.tasks"))
                     yield Static(Text(name), classes="todo-phase")
                     for task in phase.get("tasks") or []:
                         yield Static(self._item_text(task), classes="todo-item")
-            yield Static(Text("[esc] close"), id="dialog-hint")
+            yield Static(Text(t("tui.dialog.close")), id="dialog-hint")
 
     @staticmethod
     def _item_text(task: dict) -> Text:
@@ -75,9 +79,9 @@ class TodoListScreen(DialogScreen[None]):
         mark, style = _MARKS.get(status, ("○", palette.MUTED))
         text = Text(f"{mark} ", style=style)
         text.append(str(task.get("content") or ""), style=palette.TEXT)
-        label = _STATUS_LABELS.get(status)
-        if label:
-            text.append(f" · {label}", style=palette.MUTED)
+        status_key = _STATUS_KEYS.get(status)
+        if status_key:
+            text.append(f" · {t(status_key)}", style=palette.MUTED)
         return text
 
     def action_close(self) -> None:
