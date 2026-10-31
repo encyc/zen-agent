@@ -358,6 +358,20 @@ class ZenAgentApp(App):
                 self.query_one("#subagent-transcript", TranscriptView).sync(
                     child_views, status
                 )
+                # The view stays open after the child finishes; the banner is
+                # what tells the user it is now a finished transcript.
+                entry = next(
+                    (
+                        view
+                        for view in status.subagents
+                        if view.call_id == self._viewing
+                    ),
+                    None,
+                )
+                self.query_one(SubagentBanner).show(
+                    entry.name if entry is not None else self._viewing,
+                    status=entry.status if entry is not None else None,
+                )
         for notice in self.chat.take_notices():
             if notice.kind == "divider":
                 parent.append_divider(notice.text)
@@ -404,13 +418,19 @@ class ZenAgentApp(App):
             ),
             call_id,
         )
+        entry = next(
+            (view for view in self.chat.status.subagents if view.call_id == call_id),
+            None,
+        )
         self._viewing = call_id
         child = self.query_one("#subagent-transcript", TranscriptView)
         child.reset()
         child.sync(views, self.chat.status)
         child.display = True
         self.query_one("#transcript", TranscriptView).display = False
-        self.query_one(SubagentBanner).show(name)
+        self.query_one(SubagentBanner).show(
+            name, status=entry.status if entry is not None else None
+        )
         self.query_one(PromptInput).disabled = True
         child.focus()
 

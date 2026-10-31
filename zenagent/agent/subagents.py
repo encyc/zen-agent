@@ -209,9 +209,12 @@ class SubagentStore:
         cost: float,
         tokens: int,
     ) -> None:
-        """Write the footer line (idempotent; a second call is ignored)."""
-        if call_id in self._stopped:
-            return
+        """Write the footer line.
+
+        Runs even when the body was stopped (size cap / write failure): the
+        terminal status is exactly what a truncated-but-successful run must
+        not lose — without it the row would read ``interrupted`` forever.
+        """
         if self._directory is None:
             memory = self._memory.get(call_id)
             if memory is not None:
@@ -367,8 +370,13 @@ def _read_meta(path: Path) -> SubagentMeta | None:
 
 
 def _scan_tail(tail: str) -> tuple[dict | None, bool]:
-    """Last ``end`` payload and whether the tail shows damage/truncation."""
+    """The ``end`` payload (if any) and whether the tail shows damage.
+
+    The whole tail is scanned: the ``truncated`` marker sits *before* the
+    ``end`` line, so stopping at the first ``end`` would hide it.
+    """
     truncated = False
+    end: dict | None = None
     for raw in reversed(tail.splitlines()):
         line = raw.strip()
         if not line:
@@ -383,9 +391,9 @@ def _scan_tail(tail: str) -> tuple[dict | None, bool]:
         if payload.get("type") == "truncated":
             truncated = True
             continue
-        if payload.get("type") == "end":
-            return payload, truncated
-    return None, truncated
+        if payload.get("type") == "end" and end is None:
+            end = payload
+    return end, truncated
 
 
 def _chmod(path: Path, mode: int) -> None:

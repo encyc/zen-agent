@@ -16,6 +16,8 @@ _ACCENT = "#d9a86c"
 _MUTED = "#8296a6"
 _DIM = "#5d6f7e"
 
+_STATUS_LABELS = {"ok": "done"}
+
 
 class SubagentBanner(Static):
     """``◐ subagent: research · 只读 · esc 返回``; hidden outside the view."""
@@ -44,7 +46,8 @@ class SubagentBanner(Static):
         text.append("subagent: ", style=_ACCENT)
         text.append(name, style=_MUTED)
         if not running and status:
-            text.append(f" · {status}", style=_MUTED)
+            label = _STATUS_LABELS.get(status, status)
+            text.append(f" · {label}", style=_MUTED)
         text.append(" · 只读 · esc 返回", style=_DIM)
         self._plain = text.plain
         self.update(text)

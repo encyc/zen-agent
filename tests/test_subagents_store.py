@@ -191,3 +191,32 @@ def test_no_session_path_is_memory_only(tmp_path):
     [meta] = store.list()
     assert meta.status == "ok"
     assert not list(tmp_path.rglob("*.jsonl")), "memory-only must not write"
+
+
+def test_final_status_survives_a_body_stopped_by_the_size_cap(tmp_path):
+    path = session_file(tmp_path)
+    store = SubagentStore(path)
+    store.begin("c1", "research", "m")
+    big = [
+        AssistantMessage(
+            content=[TextContent(text="x" * (MAX_TASK_FILE_BYTES // 2))],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="stop",
+            timestamp=index,
+        )
+        for index in range(6)
+    ]
+    store.append("c1", big)  # exceeds the cap: body is stopped, marked truncated
+
+    store.finish("c1", status="ok", duration_ms=5, cost=0.1, tokens=7)
+
+    [meta] = store.list()
+    assert meta.truncated is True
+    assert (meta.status, meta.duration_ms, meta.cost, meta.tokens) == (
+        "ok",
+        5,
+        0.1,
+        7,
+    )

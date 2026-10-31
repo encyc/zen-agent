@@ -203,3 +203,58 @@ async def test_rows_without_a_transcript_are_not_clickable(fake_runtime):
 
         assert app._viewing is None
         assert app.query_one("#subagent-transcript", TranscriptView).display is False
+
+
+async def test_banner_flips_to_done_when_the_viewed_subagent_finishes(fake_runtime):
+    """Spec §5.6: the view stays open and the banner says the child finished."""
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        chat = app.chat
+        chat._on_event(
+            AgentEvent(
+                type="tool_execution_start",
+                tool_call_id="c1",
+                tool_name="task",
+                args={"prompt": "go", "name": "research"},
+            )
+        )
+        chat.on_subagent_event("c1", "start", {"name": "research", "model": "m"})
+        for event in _child_events():
+            chat.on_subagent_event("c1", "event", {"event": event})
+        app._refresh_status()
+        await pilot.pause()
+        await _open_view(app, pilot)
+        banner = app.query_one(SubagentBanner)
+        assert "◐" in banner.plain
+
+        chat.on_subagent_event(
+            "c1",
+            "end",
+            {"name": "research", "status": "ok", "duration_ms": 1000, "cost": 0.01, "tokens": 9},
+        )
+        chat._on_event(
+            AgentEvent(
+                type="tool_execution_end",
+                tool_call_id="c1",
+                tool_name="task",
+                args={"prompt": "go", "name": "research"},
+                result=ToolResultAgent(
+                    content=[TextContent(text="<task-result …>")],
+                    details={
+                        "status": "ok",
+                        "duration_ms": 1000,
+                        "cost": 0.01,
+                        "tokens": 9,
+                    },
+                ),
+                is_error=False,
+                duration_ms=1000,
+            )
+        )
+        app._refresh_status()
+        await pilot.pause()
+
+        assert app._viewing == "c1", "finishing must not kick the user out"
+        assert "✓" in banner.plain
+        assert "done" in banner.plain
