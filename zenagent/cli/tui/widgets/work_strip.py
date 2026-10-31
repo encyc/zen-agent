@@ -17,9 +17,6 @@ from zenagent.cli.tui import palette
 
 __all__ = ["WorkStrip"]
 
-_ACCENT = palette.ACCENT
-_MUTED = palette.MUTED
-_DIM = palette.DIM
 
 
 class WorkStrip(Static):
@@ -63,9 +60,9 @@ class WorkStrip(Static):
         if task:
             parts.append("1 task")
         text = Text()
-        text.append("◐ ", style=_ACCENT)
-        text.append(" · ".join(parts), style=_MUTED)
-        text.append(" · ctrl+b", style=_DIM)
+        text.append("◐ ", style=palette.ACCENT)
+        text.append(" · ".join(parts), style=palette.MUTED)
+        text.append(" · ctrl+b", style=palette.DIM)
         self._plain = text.plain
         self.update(text)
         self.display = True

@@ -1,89 +1,133 @@
-"""Semantic colour tokens for the TUI.
+"""Semantic colour tokens for the TUI, bound to the active appearance.
 
-Layout colours stay in ``theme.tcss`` (CSS cannot import Python), but every
-widget that builds Rich text should take its colours from here instead of
-repeating hex literals. The palette keeps the repo's quiet "harbor" base and
-only adds distinction where it carries meaning: one accent per panel section
-and one colour per state.
+The values live in :mod:`zenagent.cli.appearance` (the single colour source);
+this module is the ergonomic accessor the widgets use. ``bind()`` swaps the
+active appearance and every later read sees the new colours — which is why
+widgets must read ``palette.TEXT`` at render time instead of snapshotting it
+into a module constant.
 
-Token values are the same ones the stylesheet was written with, so existing
-screens keep their look; new widgets inherit it for free.
+Layout colours stay in ``theme.tcss`` (CSS cannot import Python) but come from
+the same appearance through the Textual theme's CSS variables.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator, Mapping
+
+from zenagent.cli.appearance import APPEARANCES, Appearance
+
 __all__ = [
-    "ACCENT",
     "CONTEXT_COLORS",
-    "DIM",
-    "ERROR",
-    "INK",
-    "LINE",
-    "MUTED",
-    "OK",
     "SECTION_ACCENTS",
     "STATE_COLORS",
-    "SURFACE",
-    "TEXT",
+    "bind",
 ]
 
-#: Page background.
-INK = "#0d1319"
-#: Raised surfaces (sidebar, dock strips, dialogs).
-SURFACE = "#141c24"
-#: Hairlines and borders.
-LINE = "#263441"
-#: Primary text.
-TEXT = "#d7e0e8"
-#: Secondary text.
-MUTED = "#8296a6"
-#: Tertiary text (hints, timestamps).
-DIM = "#5d6f7e"
-#: The single warm accent: activity, current item, focus.
-ACCENT = "#d9a86c"
-#: Success / additions.
-OK = "#8fbf8f"
-#: Failures.
-ERROR = "#e08787"
+#: Accessor name → token name in the appearance.
+_BASE = {
+    "INK": "ink",
+    "SURFACE": "surface",
+    "LINE": "line",
+    "TEXT": "text",
+    "MUTED": "muted",
+    "DIM": "dim",
+    "ACCENT": "accent",
+    "OK": "ok",
+    "ERROR": "error",
+    "WARN": "warn",
+}
+
+#: Bound appearance tokens; dark is the default so a bare import still works.
+_active: Mapping[str, str] = APPEARANCES["dark"].tokens
+
+
+def bind(appearance: Appearance) -> None:
+    """Make ``appearance`` the source for every token read from now on."""
+    global _active
+    _active = appearance.tokens
+
+
+def __getattr__(name: str) -> str:
+    """Resolve ``palette.TEXT`` and friends against the active appearance."""
+    token = _BASE.get(name)
+    if token is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    return _active[token]
+
+
+def _section_accents() -> dict[str, str]:
+    """One quiet accent per sidebar section so the panel scans by colour."""
+    return {
+        "Session": _active["sec-session"],
+        "Model": _active["sec-model"],
+        "Runtime": _active["sec-runtime"],
+        "Context": _active["sec-context"],
+        "Todo": _active["accent"],
+        "Subagent": _active["sec-subagent"],
+        "Jobs": _active["sec-jobs"],
+    }
+
+
+def _state_colors() -> dict[str, str]:
+    """Every state glyph the work panel renders, keyed by state name."""
+    return {
+        "running": _active["accent"],
+        "in_progress": _active["accent"],
+        "pending": _active["muted"],
+        "ok": _active["ok"],
+        "done": _active["ok"],
+        "completed": _active["ok"],
+        "abandoned": _active["dim"],
+        "error": _active["error"],
+        "failed": _active["error"],
+        "blocked": _active["error"],
+        "timed_out": _active["warn"],
+        "aborted": _active["error"],
+        "interrupted": _active["dim"],
+        "truncated": _active["warn"],
+    }
+
+
+def _context_colors() -> dict[str, str]:
+    """One colour per context slice (shares the section accents on purpose)."""
+    accents = _section_accents()
+    return {
+        "system": accents["Session"],
+        "agents": accents["Model"],
+        "skills": accents["Subagent"],
+        "extensions": accents["Runtime"],
+        "plan": _active["accent"],
+        "mode": _active["accent"],
+        "tools": accents["Jobs"],
+        "session": _active["sec-context"],
+        "other": _active["dim"],
+    }
+
+
+class _LiveMap(Mapping[str, str]):
+    """A read-only mapping recomputed from the active appearance on every read."""
+
+    def __init__(self, resolver: Callable[[], dict[str, str]]) -> None:
+        self._resolver = resolver
+
+    def __getitem__(self, key: str) -> str:
+        return self._resolver()[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._resolver())
+
+    def __len__(self) -> int:
+        return len(self._resolver())
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({self._resolver()!r})"
+
 
 #: One quiet accent per sidebar section so the panel scans by colour.
-SECTION_ACCENTS: dict[str, str] = {
-    "Session": "#7fb3c9",  # cool blue
-    "Model": "#9ab87a",  # moss
-    "Runtime": "#c9a97f",  # sand
-    "Context": "#7f9ec9",  # horizon blue
-    "Todo": ACCENT,  # warm
-    "Subagent": "#b79ad0",  # lavender
-    "Jobs": "#7fb398",  # sea green
-}
+SECTION_ACCENTS: Mapping[str, str] = _LiveMap(_section_accents)
 
 #: State → colour; every glyph/status the work panel renders is covered.
-STATE_COLORS: dict[str, str] = {
-    "running": ACCENT,
-    "in_progress": ACCENT,
-    "pending": MUTED,
-    "ok": OK,
-    "done": OK,
-    "completed": OK,
-    "abandoned": DIM,
-    "error": ERROR,
-    "failed": ERROR,
-    "blocked": ERROR,
-    "timed_out": "#d9c06c",
-    "aborted": ERROR,
-    "interrupted": DIM,
-    "truncated": "#d9c06c",
-}
+STATE_COLORS: Mapping[str, str] = _LiveMap(_state_colors)
 
 #: One colour per context slice (shares the section accents intentionally).
-CONTEXT_COLORS: dict[str, str] = {
-    "system": SECTION_ACCENTS["Session"],
-    "agents": SECTION_ACCENTS["Model"],
-    "skills": SECTION_ACCENTS["Subagent"],
-    "extensions": SECTION_ACCENTS["Runtime"],
-    "plan": ACCENT,
-    "mode": ACCENT,
-    "tools": SECTION_ACCENTS["Jobs"],
-    "session": "#7f9ec9",
-    "other": DIM,
-}
+CONTEXT_COLORS: Mapping[str, str] = _LiveMap(_context_colors)

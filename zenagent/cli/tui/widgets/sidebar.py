@@ -36,9 +36,6 @@ MAX_JOB_ROWS = 6
 #: Inner content width: ``#sidebar`` is 26 wide with ``padding: 1 2``.
 _CONTENT_WIDTH = 22
 
-_TEXT = palette.TEXT
-_MUTED = palette.MUTED
-_ACCENT = palette.ACCENT
 
 _SUBAGENT_MARKS = {
     "running": "◐",
@@ -52,12 +49,12 @@ _SUBAGENT_MARKS = {
 _TODO_CLOSED = frozenset({"completed", "abandoned", "done"})
 
 _TODO_MARKS = {
-    "completed": ("✓", palette.STATE_COLORS["completed"]),
-    "done": ("✓", palette.STATE_COLORS["done"]),
-    "in_progress": ("▶", palette.STATE_COLORS["in_progress"]),
-    "pending": ("○", palette.STATE_COLORS["pending"]),
-    "blocked": ("⊘", palette.STATE_COLORS["blocked"]),
-    "abandoned": ("-", palette.STATE_COLORS["abandoned"]),
+    "completed": "✓",
+    "done": "✓",
+    "in_progress": "▶",
+    "pending": "○",
+    "blocked": "⊘",
+    "abandoned": "-",
 }
 
 _JOB_MARKS = {
@@ -263,21 +260,21 @@ class Sidebar(VerticalScroll):
 
         self._section("Session").set_rows(
             [
-                ("name", Text(fit(status.session_name), style=_TEXT)),
-                ("messages", Text(f"{len(chat.transcript)} messages", style=_MUTED)),
+                ("name", Text(fit(status.session_name), style=palette.TEXT)),
+                ("messages", Text(f"{len(chat.transcript)} messages", style=palette.MUTED)),
             ]
         )
         self._section("Model").set_rows(
             [
-                ("model", Text(fit(status.model_id), style=_ACCENT)),
+                ("model", Text(fit(status.model_id), style=palette.ACCENT)),
                 (
                     "context",
                     Text(
                         fit(f"ctx {status.context_used}/{status.context_window}"),
-                        style=_MUTED,
+                        style=palette.MUTED,
                     ),
                 ),
-                ("spend", Text(f"spend ${status.cost:.4f}", style=_MUTED)),
+                ("spend", Text(f"spend ${status.cost:.4f}", style=palette.MUTED)),
             ]
         )
         self._section("Runtime").set_rows(
@@ -289,10 +286,10 @@ class Sidebar(VerticalScroll):
                         fit(
                             f"queued {status.follow_ups} · steer {status.steering}"
                         ),
-                        style=_MUTED,
+                        style=palette.MUTED,
                     ),
                 ),
-                ("models", Text(f"{len(models.entries())} models", style=_MUTED)),
+                ("models", Text(f"{len(models.entries())} models", style=palette.MUTED)),
             ]
         )
 
@@ -320,9 +317,8 @@ class Sidebar(VerticalScroll):
             )
             for task_index, task in enumerate(tasks):
                 state = str(task.get("status") or "pending")
-                mark, color = _TODO_MARKS.get(
-                    state, ("○", palette.STATE_COLORS["pending"])
-                )
+                mark = _TODO_MARKS.get(state, "○")
+                color = palette.STATE_COLORS.get(state, palette.STATE_COLORS["pending"])
                 label = f"{mark} {task.get('content') or ''}"
                 todo_rows.append(
                     (f"task:{phase_index}:{task_index}", Text(fit(label), style=color))
@@ -333,7 +329,7 @@ class Sidebar(VerticalScroll):
         for view in status.subagents[:MAX_SUBAGENT_ROWS]:
             mark = _SUBAGENT_MARKS.get(view.status, "•")
             label = f"{mark} {view.name} {_seconds(view.duration_ms / 1000)}"
-            style = palette.STATE_COLORS.get(view.status, _TEXT)
+            style = palette.STATE_COLORS.get(view.status, palette.TEXT)
             subagents.append((view.call_id, Text(fit(label), style=style)))
         self._section("Subagent").set_rows(subagents)
 
@@ -347,7 +343,7 @@ class Sidebar(VerticalScroll):
                 else max(0.0, now - job.started_at)
             )
             label = f"{mark} {job.id} {_seconds(elapsed)}"
-            style = palette.STATE_COLORS.get(job.status, _MUTED)
+            style = palette.STATE_COLORS.get(job.status, palette.MUTED)
             jobs.append((job.id, Text(fit(label), style=style)))
         self._section("Jobs").set_rows(jobs)
 
@@ -369,9 +365,9 @@ def _context_rows(report, width: int) -> list[tuple[str, Text | str]]:
         f"{_SHORT_SLICES.get(item.id, item.id)} {_fmt_pct(item.pct)}" for item in biggest
     )
     return [
-        ("ctx-total", Text(_clip(total_line, width), style=_TEXT)),
+        ("ctx-total", Text(_clip(total_line, width), style=palette.TEXT)),
         ("ctx-bar", _context_bar(report, max(6, width - 2))),
-        ("ctx-top", Text(_clip(top, width), style=_MUTED)),
+        ("ctx-top", Text(_clip(top, width), style=palette.MUTED)),
     ]
 
 

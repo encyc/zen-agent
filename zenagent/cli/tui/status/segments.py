@@ -17,10 +17,6 @@ from zenagent.cli.tui import palette
 
 __all__ = ["SEGMENTS", "SEGMENT_IDS", "SegmentContext", "render_status_line"]
 
-_TEXT = palette.TEXT
-_MUTED = palette.MUTED
-_ACCENT = palette.ACCENT
-_ERROR = palette.ERROR
 
 SEPARATOR = " · "
 
@@ -38,18 +34,18 @@ Renderer = Callable[[SegmentContext], Text | None]
 
 
 def _muted(value: str) -> Text:
-    return Text(value, style=_MUTED)
+    return Text(value, style=palette.MUTED)
 
 
 def _render_model(ctx: SegmentContext) -> Text | None:
-    return Text(ctx.status.model_id, style=f"bold {_ACCENT}")
+    return Text(ctx.status.model_id, style=f"bold {palette.ACCENT}")
 
 
 def _render_pi(ctx: SegmentContext) -> Text | None:
     """Brand mark: omp's `pi` segment doubles as the run indicator."""
     if ctx.status.running:
-        return Text("◐", style=_ACCENT)
-    return Text("zen", style=_MUTED)
+        return Text("◐", style=palette.ACCENT)
+    return Text("zen", style=palette.MUTED)
 
 
 def _render_thinking(ctx: SegmentContext) -> Text | None:
@@ -62,7 +58,7 @@ def _render_thinking(ctx: SegmentContext) -> Text | None:
 def _render_mode(ctx: SegmentContext) -> Text | None:
     if not ctx.status.mode:
         return None
-    return Text(ctx.status.mode, style=_ACCENT)
+    return Text(ctx.status.mode, style=palette.ACCENT)
 
 
 def _render_path(ctx: SegmentContext) -> Text | None:
@@ -143,14 +139,14 @@ def _render_queued(ctx: SegmentContext) -> Text | None:
         parts.append(f"{status.steering} steering")
     if not parts:
         return None
-    return Text(" · ".join(parts), style=_ACCENT if status.running else _MUTED)
+    return Text(" · ".join(parts), style=palette.ACCENT if status.running else palette.MUTED)
 
 
 def _render_session(ctx: SegmentContext) -> Text | None:
     name = ctx.status.session_name
     if not name:
         return None
-    return Text(name, style=_MUTED)
+    return Text(name, style=palette.MUTED)
 
 
 SEGMENTS: dict[str, Renderer] = {
@@ -177,7 +173,7 @@ def _join(parts: list[Text]) -> Text:
     joined = Text()
     for index, part in enumerate(parts):
         if index:
-            joined.append(SEPARATOR, style=_MUTED)
+            joined.append(SEPARATOR, style=palette.MUTED)
         joined.append_text(part)
     return joined
 

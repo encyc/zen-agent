@@ -11,10 +11,10 @@ from rich.style import Style
 from textual.strip import Strip
 from textual.widget import Widget
 
+from zenagent.cli.tui import palette
+
 __all__ = ["PromptGutter"]
 
-_ACCENT = Style(color="#d9a86c")
-_BLANK = Style(color="#d7e0e8")
 _INDENT = "   "
 
 
@@ -37,5 +37,5 @@ class PromptGutter(Widget):
 
     def render_line(self, y: int) -> Strip:
         if y == 0:
-            return Strip([Segment("╰─ ", _ACCENT)])
-        return Strip([Segment(_INDENT, _BLANK)])
+            return Strip([Segment("╰─ ", Style(color=palette.ACCENT))])
+        return Strip([Segment(_INDENT, Style(color=palette.TEXT))])

@@ -25,11 +25,6 @@ __all__ = [
     "format_thinking_duration",
 ]
 
-_TEXT = palette.TEXT
-_MUTED = palette.MUTED
-_DIM = palette.DIM
-_ACCENT = palette.ACCENT
-_ERROR = palette.ERROR
 
 
 class UserBlock(Static):
@@ -37,7 +32,7 @@ class UserBlock(Static):
 
     def __init__(self, text: str) -> None:
         self._text = text
-        super().__init__(Text(text, style=_TEXT), classes="user-message")
+        super().__init__(Text(text, style=palette.TEXT), classes="user-message")
 
     @property
     def plain(self) -> str:
@@ -156,17 +151,17 @@ class ThinkingRow(Static):
     def _renderable(self) -> Text:
         active = self.active
         text = Text()
-        text.append("✻ ", style=f"bold {_ACCENT}" if active else _DIM)
-        text.append("thinking…" if active else "thinking", style=f"italic {_MUTED}")
+        text.append("✻ ", style=f"bold {palette.ACCENT}" if active else palette.DIM)
+        text.append("thinking…" if active else "thinking", style=f"italic {palette.MUTED}")
         duration = self.duration_text
         suffix = f"  ·  {duration}" if duration else ""
         if not self.collapsed:
             if suffix:
-                text.append(suffix, style=_DIM)
+                text.append(suffix, style=palette.DIM)
             text.append("\n")
             for line in self.thinking.splitlines():
                 text.append("  ")
-                text.append(line, style=f"italic {_MUTED}")
+                text.append(line, style=f"italic {palette.MUTED}")
                 text.append("\n")
             return text
         preview = _preview_line(self.thinking)
@@ -175,9 +170,9 @@ class ThinkingRow(Static):
             if len(preview) > budget:
                 preview = preview[: max(1, budget - 1)] + "…"
             text.append("  ")
-            text.append(preview, style=_DIM)
+            text.append(preview, style=palette.DIM)
         if suffix:
-            text.append(suffix, style=_DIM)
+            text.append(suffix, style=palette.DIM)
         return text
 
     def _sync_classes(self) -> None:
@@ -244,7 +239,7 @@ def _usage_text(status: RunStatus) -> Text:
     if status.cache_read:
         parts.append(f"cache {status.cache_read}")
     parts.append(f"${status.cost:.4f}")
-    return Text("done · " + " · ".join(parts), style=_DIM)
+    return Text("done · " + " · ".join(parts), style=palette.DIM)
 
 
 class DividerRow(Static):
@@ -252,7 +247,7 @@ class DividerRow(Static):
 
     def __init__(self, text: str) -> None:
         self._text = f"── {text} ──"
-        super().__init__(Text(self._text, style=_DIM), classes="divider-row")
+        super().__init__(Text(self._text, style=palette.DIM), classes="divider-row")
 
     @property
     def plain(self) -> str:
@@ -264,7 +259,7 @@ class NoticeRow(Static):
 
     def __init__(self, text: str, *, error: bool = False) -> None:
         self._text = text
-        super().__init__(Text(text, style=_ERROR if error else _MUTED), classes="notice")
+        super().__init__(Text(text, style=palette.ERROR if error else palette.MUTED), classes="notice")
 
     @property
     def plain(self) -> str:
@@ -273,4 +268,4 @@ class NoticeRow(Static):
 
 def assistant_text(view: MessageView) -> Text:
     """Plain-text fallback for an assistant turn with no markdown renderer."""
-    return Text(view.text, style=_TEXT)
+    return Text(view.text, style=palette.TEXT)

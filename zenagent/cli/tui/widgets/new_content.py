@@ -14,8 +14,6 @@ from zenagent.cli.tui import palette
 
 __all__ = ["NewContentBar"]
 
-_ACCENT = palette.ACCENT
-_MUTED = palette.MUTED
 
 
 class NewContentBar(Static):
@@ -27,8 +25,8 @@ class NewContentBar(Static):
 
     def show_marker(self) -> None:
         text = Text()
-        text.append("↓ ", style=_ACCENT)
-        text.append("new output", style=_MUTED)
+        text.append("↓ ", style=palette.ACCENT)
+        text.append("new output", style=palette.MUTED)
         text.append("  ·  pagedown", style="#5d6f7e")
         self.update(text)
         self.display = True

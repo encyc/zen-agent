@@ -16,10 +16,6 @@ from zenagent.cli.tui import palette
 
 __all__ = ["SkillBlock"]
 
-_TEXT = palette.TEXT
-_MUTED = palette.MUTED
-_DIM = palette.DIM
-_ACCENT = palette.ACCENT
 
 #: Longest arg preview shown in the collapsed chip.
 _MAX_ARGS = 98
@@ -51,18 +47,18 @@ class SkillBlock(Static):
 
     def _renderable(self) -> Text:
         text = Text()
-        text.append("✦ ", style=f"bold {_ACCENT}")
-        text.append("skill:", style=f"bold {_ACCENT}")
-        text.append(self.skill_name, style=f"bold {_TEXT}")
+        text.append("✦ ", style=f"bold {palette.ACCENT}")
+        text.append("skill:", style=f"bold {palette.ACCENT}")
+        text.append(self.skill_name, style=f"bold {palette.TEXT}")
         args = " ".join(self.skill_args.split())
         if args:
             clipped = args if len(args) <= _MAX_ARGS else args[: _MAX_ARGS - 1] + "…"
-            text.append(" · ", style=_DIM)
-            text.append(clipped, style=_MUTED)
+            text.append(" · ", style=palette.DIM)
+            text.append(clipped, style=palette.MUTED)
         if not self.collapsed:
             text.append("\n")
             for line in self.skill_body.splitlines():
-                text.append(line, style=_MUTED)
+                text.append(line, style=palette.MUTED)
                 text.append("\n")
         return text
 

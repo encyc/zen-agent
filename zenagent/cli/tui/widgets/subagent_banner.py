@@ -14,9 +14,6 @@ from zenagent.cli.tui import palette
 
 __all__ = ["SubagentBanner"]
 
-_ACCENT = palette.ACCENT
-_MUTED = palette.MUTED
-_DIM = palette.DIM
 
 _STATUS_LABELS = {"ok": "done"}
 
@@ -44,13 +41,13 @@ class SubagentBanner(Static):
     def show(self, name: str, *, status: str | None = None) -> None:
         running = status in (None, "running")
         text = Text()
-        text.append("◐ " if running else "✓ ", style=_ACCENT if running else palette.OK)
-        text.append("subagent: ", style=_ACCENT)
-        text.append(name, style=_MUTED)
+        text.append("◐ " if running else "✓ ", style=palette.ACCENT if running else palette.OK)
+        text.append("subagent: ", style=palette.ACCENT)
+        text.append(name, style=palette.MUTED)
         if not running and status:
             label = _STATUS_LABELS.get(status, status)
-            text.append(f" · {label}", style=_MUTED)
-        text.append(" · 只读 · esc 返回", style=_DIM)
+            text.append(f" · {label}", style=palette.MUTED)
+        text.append(" · 只读 · esc 返回", style=palette.DIM)
         self._plain = text.plain
         self.update(text)
         self.display = True

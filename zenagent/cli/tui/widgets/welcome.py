@@ -15,10 +15,6 @@ from zenagent.cli.tui import palette
 
 __all__ = ["WelcomeBlock"]
 
-_TEXT = palette.TEXT
-_MUTED = palette.MUTED
-_DIM = palette.DIM
-_ACCENT = palette.ACCENT
 
 
 class WelcomeBlock(Static):
@@ -30,10 +26,10 @@ class WelcomeBlock(Static):
     def _renderable(self) -> Text:
         text = Text()
         text.append("\n")
-        text.append("zen\n", style=f"bold {_ACCENT}")
-        text.append(f"v{__version__} · python agent loop\n", style=_DIM)
+        text.append("zen\n", style=f"bold {palette.ACCENT}")
+        text.append(f"v{__version__} · python agent loop\n", style=palette.DIM)
         text.append("\n")
-        text.append("/ commands  ·  ctrl+b info  ·  ctrl+d quit\n", style=_MUTED)
+        text.append("/ commands  ·  ctrl+b info  ·  ctrl+d quit\n", style=palette.MUTED)
         text.append("\n")
         return text
 

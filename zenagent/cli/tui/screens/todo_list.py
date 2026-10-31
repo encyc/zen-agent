@@ -18,18 +18,13 @@ from zenagent.cli.tui.screens.modals import DialogScreen
 
 __all__ = ["TodoListScreen"]
 
-_TEXT = palette.TEXT
-_MUTED = palette.MUTED
-_DONE = palette.OK
-_BLOCKED = palette.ERROR
-_ACCENT = palette.ACCENT
 
 #: ``todo`` tool status → the glyph in front of an item.
 _MARKS = {
-    "done": ("✓", _DONE),
-    "in_progress": ("▶", _ACCENT),
-    "pending": ("○", _MUTED),
-    "blocked": ("⊘", _BLOCKED),
+    "done": ("✓", palette.OK),
+    "in_progress": ("▶", palette.ACCENT),
+    "pending": ("○", palette.MUTED),
+    "blocked": ("⊘", palette.ERROR),
 }
 
 _STATUS_LABELS = {"in_progress": "in progress", "blocked": "blocked"}
@@ -77,12 +72,12 @@ class TodoListScreen(DialogScreen[None]):
     @staticmethod
     def _item_text(task: dict) -> Text:
         status = str(task.get("status") or "pending")
-        mark, style = _MARKS.get(status, ("○", _MUTED))
+        mark, style = _MARKS.get(status, ("○", palette.MUTED))
         text = Text(f"{mark} ", style=style)
-        text.append(str(task.get("content") or ""), style=_TEXT)
+        text.append(str(task.get("content") or ""), style=palette.TEXT)
         label = _STATUS_LABELS.get(status)
         if label:
-            text.append(f" · {label}", style=_MUTED)
+            text.append(f" · {label}", style=palette.MUTED)
         return text
 
     def action_close(self) -> None:

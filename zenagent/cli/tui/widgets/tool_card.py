@@ -17,17 +17,11 @@ from zenagent.cli.tui import palette
 
 __all__ = ["MAX_RESULT_LINES", "ToolCard"]
 
-_TEXT = palette.TEXT
-_MUTED = palette.MUTED
-_DIM = palette.DIM
-_ACCENT = palette.ACCENT
-_ERROR = palette.ERROR
-_ADDED = palette.OK
 
 MAX_RESULT_LINES = 12
 
 _STATUS_LABEL = {"running": "running", "ok": "ok", "error": "failed"}
-_STATUS_DOT = {"running": ("◐", _ACCENT), "ok": ("●", _MUTED), "error": ("●", _ERROR)}
+_STATUS_DOT = {"running": ("◐", palette.ACCENT), "ok": ("●", palette.MUTED), "error": ("●", palette.ERROR)}
 
 
 def _first_line(value: object) -> str:
@@ -115,21 +109,21 @@ class ToolCard(Static):
 
     def _head(self) -> Text:
         view = self.view
-        dot, dot_style = _STATUS_DOT.get(view.status, ("●", _MUTED))
+        dot, dot_style = _STATUS_DOT.get(view.status, ("●", palette.MUTED))
         text = Text()
         text.append(f"{dot} ", style=dot_style)
-        text.append(view.name, style=_TEXT)
+        text.append(view.name, style=palette.TEXT)
         detail = self._family_detail()
         if detail:
             budget = max(8, self._width() - len(text.plain) - 24)
             if len(detail) > budget:
                 detail = detail[: max(1, budget - 1)] + "…"
             text.append("  ")
-            text.append(detail, style=_DIM)
-        text.append("  ·  ", style=_DIM)
-        text.append(_STATUS_LABEL.get(view.status, view.status), style=_DIM)
+            text.append(detail, style=palette.DIM)
+        text.append("  ·  ", style=palette.DIM)
+        text.append(_STATUS_LABEL.get(view.status, view.status), style=palette.DIM)
         if view.duration_ms is not None:
-            text.append(f" · {view.duration_ms}ms", style=_DIM)
+            text.append(f" · {view.duration_ms}ms", style=palette.DIM)
         return text
 
     def _family_detail(self) -> str:
@@ -190,33 +184,33 @@ class ToolCard(Static):
                 hint = f"  ⚙ {self.view.progress}"
                 budget = self._width() - cell_len(text.plain)
                 if budget > 8:
-                    text.append(_clip_cells(hint, budget), style=_DIM)
+                    text.append(_clip_cells(hint, budget), style=palette.DIM)
             else:
                 hint = "  (enter: expand)"
                 if cell_len(text.plain) + cell_len(hint) <= self._width():
-                    text.append(hint, style=_DIM)
+                    text.append(hint, style=palette.DIM)
             return text
 
         lines = (self.view.result_text or "").splitlines()
         if len(lines) > MAX_RESULT_LINES:
             dropped = len(lines) - MAX_RESULT_LINES
-            text.append(f"\n   … {dropped} earlier lines", style=_DIM)
+            text.append(f"\n   … {dropped} earlier lines", style=palette.DIM)
             lines = lines[-MAX_RESULT_LINES:]
         for line in lines:
             text.append("\n   ")
-            text.append(line, style=_MUTED)
+            text.append(line, style=palette.MUTED)
         if not lines and not self.view.diff:
             if self.view.status == "running" and self.view.progress:
-                text.append(f"\n   ⚙ {self.view.progress}", style=_DIM)
+                text.append(f"\n   ⚙ {self.view.progress}", style=palette.DIM)
             else:
-                text.append("\n   (no output)", style=_DIM)
+                text.append("\n   (no output)", style=palette.DIM)
         if self.view.diff:
             for line in self.view.diff.splitlines():
                 text.append("\n   ")
-                style = _MUTED
+                style = palette.MUTED
                 if line.startswith("+"):
-                    style = _ADDED
+                    style = palette.OK
                 elif line.startswith("-"):
-                    style = _ERROR
+                    style = palette.ERROR
                 text.append(line, style=style)
         return text
