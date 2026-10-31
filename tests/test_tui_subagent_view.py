@@ -6,7 +6,6 @@ parent keeps syncing behind the scenes so returning shows everything that
 happened meanwhile.
 """
 
-import time
 
 from zenagent.agent.loop import ToolResultAgent
 from zenagent.cli.tui.app import ZenAgentApp
@@ -14,7 +13,7 @@ from zenagent.cli.tui.widgets.prompt_input import PromptInput
 from zenagent.cli.tui.widgets.sidebar import Sidebar, SidebarRow
 from zenagent.cli.tui.widgets.subagent_banner import SubagentBanner
 from zenagent.cli.tui.widgets.transcript import TranscriptView
-from zenagent.events import AgentEvent, AssistantEvent
+from zenagent.events import AgentEvent
 from zenagent.types import AssistantMessage, TextContent, Usage, UserMessage
 
 

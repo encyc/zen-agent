@@ -100,7 +100,7 @@ async def test_resumed_session_can_open_the_subagent_transcript(runtime_factory)
 
 
 async def test_interrupted_transcript_is_still_readable(runtime_factory):
-    from zenagent.agent.subagents import SubagentStore, task_dir
+    from zenagent.agent.subagents import task_dir
 
     runtime = await runtime_factory(stream_fn=TaskCallingStream())
     app = ZenAgentApp(runtime)
