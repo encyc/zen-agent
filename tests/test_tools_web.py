@@ -3,7 +3,14 @@
 import httpx
 import pytest
 
-from zenagent.tools.web import FETCH, WEB_SEARCH, net, providers, registry
+from zenagent.tools.web import (
+    FETCH,
+    MAX_FETCH_TIMEOUT_S,
+    WEB_SEARCH,
+    net,
+    providers,
+    registry,
+)
 
 
 def web_request(query: str, limit: int = 5, recency=None):
@@ -245,3 +252,41 @@ async def test_snippets_keep_their_content_only_whitespace_collapses(monkeypatch
     text = result.content[0].text
     assert "# comment" in text, "a leading '#' is content, not markup to strip"
     assert "code here" in text
+
+
+async def test_fetch_timeout_s_is_forwarded_and_clamped(monkeypatch):
+    seen: dict = {}
+
+    async def fake_get(url, **kwargs):
+        seen.update(kwargs)
+        return httpx.Response(
+            200,
+            text="ok",
+            headers={"content-type": "text/plain"},
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(net, "get", fake_get)
+    result = await call(FETCH, url="https://example.com", timeout_s=999)
+    assert not result.is_error
+    assert seen["timeout"] == MAX_FETCH_TIMEOUT_S
+    assert result.details["timeout_s"] == MAX_FETCH_TIMEOUT_S
+
+
+async def test_fetch_defaults_to_the_network_timeout(monkeypatch):
+    seen: dict = {}
+
+    async def fake_get(url, **kwargs):
+        seen.update(kwargs)
+        return httpx.Response(
+            200,
+            text="ok",
+            headers={"content-type": "text/plain"},
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(net, "get", fake_get)
+    result = await call(FETCH, url="https://example.com")
+    assert not result.is_error
+    assert "timeout" not in seen
+    assert result.details["timeout_s"] is None

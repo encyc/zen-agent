@@ -222,3 +222,77 @@ async def test_plan_mode_gates_real_builtin_tools_by_their_declaration():
     for tool in ALL_TOOLS:
         allowed, reason = await gate.check(tool.name, {"command": "true"}, tool)
         assert allowed is (tool.approval == "read"), (tool.name, reason)
+
+
+# ---------------------------------------------------------------------------
+# P1-3: "always allow" is cached per target, not per tool class
+# ---------------------------------------------------------------------------
+
+
+async def test_always_allow_is_cached_per_path_not_per_tool(monkeypatch, tmp_path):
+    import builtins
+
+    answers = iter(["a", "n"])
+    asked: list[str] = []
+
+    def fake_input(prompt: str) -> str:
+        asked.append(prompt)
+        return next(answers)
+
+    monkeypatch.setattr(builtins, "input", fake_input)
+    gate = PermissionGate(interactive=True)
+    target_a = str(tmp_path / "a.txt")
+    target_b = str(tmp_path / "b.txt")
+
+    assert (await gate.check("write_file", {"path": target_a}))[0] is True
+    # Same target: remembered, no second prompt.
+    assert (await gate.check("write_file", {"path": target_a}))[0] is True
+    assert len(asked) == 1
+
+    # Different target: asks again and can be denied.
+    allowed, _reason = await gate.check("write_file", {"path": target_b})
+    assert allowed is False
+    assert len(asked) == 2
+    assert target_b in asked[1] or "b.txt" in asked[1]
+
+
+async def test_always_allow_uses_a_command_prefix_for_bash(monkeypatch):
+    import builtins
+
+    answers = iter(["a", "n"])
+    asked: list[str] = []
+    monkeypatch.setattr(
+        builtins, "input", lambda prompt: (asked.append(prompt), next(answers))[1]
+    )
+    gate = PermissionGate(interactive=True)
+
+    assert (await gate.check("bash", {"command": "git status"}))[0] is True
+    # Same command family: cached by prefix.
+    assert (await gate.check("bash", {"command": "git status --short"}))[0] is True
+    assert len(asked) == 1
+    # A different command asks again.
+    assert (await gate.check("bash", {"command": "rm -rf ./build"}))[0] is False
+    assert len(asked) == 2
+
+
+async def test_broker_always_allow_is_target_scoped():
+    from zenagent.app.permissions import PermissionBroker
+
+    prompts: list[tuple[str, dict]] = []
+
+    async def confirm(name, args):
+        prompts.append((name, dict(args)))
+        return "always"
+
+    broker = PermissionBroker.wrap(PermissionGate(interactive=True))
+    broker.set_confirm(confirm)
+
+    first = ToolCall(id="1", name="write_file", arguments={"path": "/tmp/x/one.txt"})
+    assert await broker.before_tool_call(first, first.arguments) is None
+    # Same path is remembered.
+    assert await broker.before_tool_call(first, first.arguments) is None
+    assert len(prompts) == 1
+    # Different path prompts again (and here is approved).
+    other = ToolCall(id="2", name="write_file", arguments={"path": "/tmp/x/two.txt"})
+    assert await broker.before_tool_call(other, other.arguments) is None
+    assert len(prompts) == 2

@@ -15,6 +15,7 @@ import httpx
 
 from zenagent.events import AbortToken, AssistantEvent
 from zenagent.providers.catalog import Model
+from zenagent.providers.limits import fit_stream_options
 from zenagent.providers.openai_completions import StreamOptions
 from zenagent.providers.transport import default_client, iter_sse_data, post_stream
 from zenagent.types import (
@@ -104,6 +105,7 @@ def to_contents(messages: list[Message]) -> tuple[str, list[dict]]:
 def build_request(
     model: Model, messages: list[Message], tools: list[ToolDef], options: StreamOptions
 ) -> tuple[str, dict, dict]:
+    options = fit_stream_options(model, messages, options)
     system, contents = to_contents(messages)
     body: dict = {"contents": contents}
     if system:

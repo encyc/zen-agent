@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import fnmatch
 import re
+from pathlib import Path
 
 from zenagent.app.modes import DEFAULT_MODE, MODES, normalize_mode
 from zenagent.types import ToolCall
@@ -25,6 +26,7 @@ __all__ = [
     "dangerous_command_reason",
     "matches_any",
     "tool_is_read_only",
+    "tool_target",
 ]
 
 #: Fallback classification for callers that only have a tool name (tests, the
@@ -53,6 +55,39 @@ def matches_any(patterns: list[str], name: str) -> str | None:
     for pattern in patterns:
         if fnmatch.fnmatchcase(name, pattern):
             return pattern
+    return None
+
+
+#: Tools whose approval is scoped to a concrete filesystem path.
+_PATH_TARGET_TOOLS = frozenset({"read_file", "write_file", "edit_file", "list_dir"})
+
+
+def tool_target(tool_name: str, args: dict) -> str | None:
+    """Stable target key for a session-scoped "always allow" grant.
+
+    A grant is scoped to what the call touches, not to the tool class: one
+    ``write_file`` approval must not silently allow every later write. File
+    tools key on the resolved path; bash keys on the first two command words
+    (``git status`` covers ``git status --short`` but not ``git push``).
+    Tools with no natural target return ``None`` and fall back to a
+    tool-wide grant.
+    """
+    if not isinstance(args, dict):
+        return None
+    if tool_name in _PATH_TARGET_TOOLS:
+        raw = args.get("path")
+        if not raw:
+            return None
+        try:
+            resolved = Path(str(raw)).expanduser().resolve()
+        except (OSError, RuntimeError):
+            resolved = Path(str(raw))
+        return f"{tool_name}:{resolved}"
+    if tool_name == "bash":
+        command = str(args.get("command") or "").strip()
+        if not command:
+            return None
+        return "bash:" + " ".join(command.split()[:2])
     return None
 
 
@@ -194,6 +229,9 @@ class PermissionGate:
             return True, ""
         if tool_is_read_only(tool_name, tool):
             return True, ""
+        target = tool_target(tool_name, args)
+        if target is not None and target in self._always_allowed:
+            return True, ""
         if (
             self.mode == "full"
             or self.assume_yes
@@ -209,7 +247,13 @@ class PermissionGate:
         return self._ask(tool_name, args)
 
     def _ask(self, tool_name: str, args: dict) -> tuple[bool, str]:
-        preview = ", ".join(f"{key}={value!r}" for key, value in args.items())
+        target = tool_target(tool_name, args)
+        if target is not None:
+            # Show what the grant will cover (path / command prefix), not just
+            # the argument blob: a one-time path approval must be legible.
+            preview = target.split(":", 1)[1]
+        else:
+            preview = ", ".join(f"{key}={value!r}" for key, value in args.items())
         if len(preview) > _MAX_ARGS_PREVIEW:
             preview = preview[:_MAX_ARGS_PREVIEW] + "…"
         try:
@@ -217,7 +261,8 @@ class PermissionGate:
         except (EOFError, KeyboardInterrupt):
             return False, f"permission denied for {tool_name!r}: no answer"
         if answer in ("a", "all"):
-            self._always_allowed.add(tool_name)
+            target = tool_target(tool_name, args)
+            self._always_allowed.add(target if target is not None else tool_name)
             return True, ""
         if answer in ("y", "yes"):
             return True, ""
@@ -252,6 +297,8 @@ class PermissionBroker:
         self._gate = gate or _Gate(assume_yes=False, interactive=False)
         self._confirm = None
         self._allowed: set[str] = set()
+        #: Target-scoped "always" grants (paths / command prefixes).
+        self._allowed_targets: set[str] = set()
         # Tool calls run concurrently; approval modals must not stack.
         self._confirm_lock = asyncio.Lock()
 
@@ -284,6 +331,9 @@ class PermissionBroker:
         refusal = self._gate.policy_refusal(name, arguments, tool)
         if refusal is not None:
             return {"block": True, "reason": refusal}
+        target = tool_target(name, arguments)
+        if target is not None and target in self._allowed_targets:
+            return None
         if tool_is_read_only(name, tool) or name in self._allowed:
             return None
         if matches_any(self._gate.allow, name) is not None:
@@ -298,6 +348,9 @@ class PermissionBroker:
         if answer is True or answer == "allow":
             return None
         if answer == "always":
-            self.allow_for_session(name)
+            if target is not None:
+                self._allowed_targets.add(target)
+            else:
+                self.allow_for_session(name)
             return None
         return {"block": True, "reason": f"denied by user: {name}"}

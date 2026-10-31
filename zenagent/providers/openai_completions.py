@@ -31,6 +31,7 @@ import httpx
 from zenagent.events import AbortToken, AssistantEvent
 from zenagent.providers.catalog import Model
 from zenagent.providers.compat import CompatFlags, normalize_thinking
+from zenagent.providers.limits import fit_stream_options
 from zenagent.providers.transport import (
     default_client,
     iter_sse_data,
@@ -608,6 +609,7 @@ async def stream(
     with usage and stop_reason complete. A non-empty ``options.session_id``
     is sent as the gateway's ``x-opencode-session`` header.
     """
+    options = fit_stream_options(model, messages, options)
     params = build_params(model, tools, options, model.compat)
     params["messages"] = to_request_messages(messages, model.compat)
 
