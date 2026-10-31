@@ -52,6 +52,13 @@ def isolated_tui_history(tmp_path, monkeypatch):
     )
 
 
+@pytest.fixture(autouse=True)
+def isolated_update_check(tmp_path, monkeypatch):
+    """Update checks never run or touch the real cache file in tests."""
+    monkeypatch.setenv("ZENAGENT_NO_UPDATE_CHECK", "1")
+    monkeypatch.setenv("ZENAGENT_UPDATE_CACHE_PATH", str(tmp_path / "update.json"))
+
+
 @pytest.fixture
 async def runtime_factory(app_env):
     """Build Runtime instances for tests; closes them all on teardown."""
