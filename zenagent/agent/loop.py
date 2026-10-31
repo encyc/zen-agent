@@ -443,6 +443,13 @@ _LOOP_GUARD_TEXT = (
 _POLL_COMMAND = re.compile(r"^\s*(sleep|wait|tail|ps|pgrep|top|jobs)\b")
 
 
+def is_loop_guard_message(message: object) -> bool:
+    """Whether ``message`` is the synthetic loop-guard corrective."""
+    return isinstance(message, UserMessage) and str(
+        getattr(message, "content", "")
+    ).startswith(LOOP_GUARD_PREFIX)
+
+
 def _is_poll_call(call: ToolCall) -> bool:
     """Whether this call is a pure wait/observe poll (exempt from the guard)."""
     if call.name != "bash":
@@ -686,5 +693,12 @@ async def agent_loop(
                     yield AgentEvent(type="message_end", message=message)
             # else / loop continues: another round with the tool results in context
     finally:
+        # The corrective exists only for the turns after it fired: drop it from
+        # the durable transcript so resume/retry/fork never see synthetic text.
+        state.messages[:] = [
+            message
+            for message in state.messages
+            if not is_loop_guard_message(message)
+        ]
         state.termination = termination
         yield AgentEvent(type="agent_end", new_messages=new_messages)

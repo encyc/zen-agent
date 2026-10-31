@@ -1227,24 +1227,33 @@ async def test_repeated_identical_tool_calls_get_one_corrective_notice():
         for _ in range(5)
     ]
     script.append([say("done"), finish("stop")])
+    stream = ScriptedStream(script)
     state = AgentState()
     events = await run(
-        "go", state, make_config(ScriptedStream(script), tools=[make_tool("echo", echo)])
+        "go", state, make_config(stream, tools=[make_tool("echo", echo)])
     )
 
-    corrective = [
-        message
-        for message in state.messages
-        if getattr(message, "content", "").count("tool-loop guard") == 1
-    ]
-    assert len(corrective) == 1
-    # The corrective is model-facing only: not persisted, not rendered as a turn.
+    # The corrective reached the model (the last request carries it)...
+    last_request = stream.calls[-1]["messages"]
+    assert any(
+        "tool-loop guard" in str(getattr(message, "content", ""))
+        for message in last_request
+    )
+    # ...but not the UI/persistence/durable transcript.
     end = next(event for event in events if event.type == "agent_end")
-    assert corrective[0] not in end.new_messages
+    assert not any(
+        "tool-loop guard" in str(getattr(message, "content", ""))
+        for message in end.new_messages
+    )
+    assert not any(
+        "tool-loop guard" in str(getattr(message, "content", ""))
+        for message in state.messages
+    )
     assert not [
         event
         for event in events
-        if event.type == "message_start" and event.message is corrective[0]
+        if event.type == "message_start"
+        and "tool-loop guard" in str(getattr(event.message, "content", ""))
     ]
 
 
