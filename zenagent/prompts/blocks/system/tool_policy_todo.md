@@ -1,0 +1,1 @@
+- Todo: for work with 3+ steps, call todo in the same response as your plan and keep it current; address tasks by their exact content (start/done/block as you go).
