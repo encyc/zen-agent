@@ -99,3 +99,19 @@ def test_messages_to_views_hides_the_loop_guard_notice():
     real = UserMessage(content="hello", timestamp=1)
     views = messages_to_views([guard, real])
     assert [view.text for view in views] == ["hello"]
+
+
+def test_user_view_recognises_an_injected_skill_message():
+    from zenagent.app.views import user_view
+
+    view = user_view(
+        "[skill:pdf-report] review this\n\n[IMPORTANT: x]\nDo the thing."
+    )
+    assert view.kind == "skill"
+    assert view.text == "pdf-report"
+    assert view.skill_args == "review this"
+    assert view.skill_body is not None
+    assert "Do the thing." in view.skill_body
+
+    plain = user_view("hello")
+    assert plain.kind == "user" and plain.text == "hello"

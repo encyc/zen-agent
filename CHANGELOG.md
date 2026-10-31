@@ -3,6 +3,20 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+### Added
+
+- **User-side skill invocation (`/skill:<name>`)**: skills now appear in the
+  REPL and TUI slash completion with their descriptions, line-start and
+  mid-sentence (`please /skill:review this`). Submitting reads SKILL.md and
+  injects the full body as a user message (omp-style), so the model does not
+  have to decide to call `read_skill`; TUI renders it as an expandable
+  `✦ skill:<name> · args` chip. Unknown names are reported with the available
+  list; `--no-skills` keeps them out of the menu.
+- Slash completion entries carry type labels (`command ·`, `template ·`,
+  `extension ·`, `skill ·`) so same-name entries are distinguishable.
+
 ## v0.4.3 — 2026-10-31
 
 ### Changed
@@ -14,6 +28,7 @@ matches the release tag; older history is in the repository tags and commits.
   RPC and eval paths. Adds the `zen prompts list|show|estimate` command, a
   byte-parity golden suite against v0.4.1, source/budget gates, and a wheel
   packaging check. No prompt text changed; content experiments land later.
+
 
 ## v0.4.2 — 2026-10-31
 

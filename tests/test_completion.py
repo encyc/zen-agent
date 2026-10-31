@@ -104,3 +104,84 @@ def test_extra_values_supply_dynamic_model_ids():
         extra_values={"/model": [("deepseek-flash", "ready")]},
     )
     assert complete(completer, "/model ") == ["deepseek-flash"]
+
+
+# ---------------------------------------------------------------------------
+# Embedded skill tokens + typed slash entries (0.4.x)
+# ---------------------------------------------------------------------------
+
+
+def complete_items(completer: ReplCompleter, text: str) -> list[tuple[str, str]]:
+    document = Document(text, cursor_position=len(text))
+    return [
+        (completion.text, completion.display_meta_text)
+        for completion in completer.get_completions(document, None)
+    ]
+
+
+def skill_list():
+    return [("pdf-report", "Build reports"), ("review", "Review a diff")]
+
+
+def test_line_start_slash_lists_skill_commands_with_meta():
+    completer = ReplCompleter(base_dir=Path("/tmp"), skill_provider=skill_list)
+    items = complete_items(completer, "/skill:p")
+    assert items == [("/skill:pdf-report", "skill · Build reports")]
+
+    bare = complete(completer, "/")
+    assert "/skill:pdf-report" in bare and "/skill:review" in bare
+
+
+def test_typed_commands_carry_a_type_label():
+    completer = ReplCompleter(
+        base_dir=Path("/tmp"),
+        typed_commands=[
+            ("/review", "Review a file carefully", "template"),
+            ("/deploy", "Deploy the service", "extension"),
+        ],
+    )
+    items = dict(complete_items(completer, "/re"))
+    assert items["/review"] == "template · Review a file carefully"
+    items = dict(complete_items(completer, "/dep"))
+    assert items["/deploy"] == "extension · Deploy the service"
+
+
+def test_builtin_commands_are_tagged_as_command():
+    completer = ReplCompleter(base_dir=Path("/tmp"))
+    items = dict(complete_items(completer, "/mo"))
+    assert items["/mode"] == "command · set runtime mode: plan|ask|full (plan = read-only)"
+
+
+def test_mid_sentence_slash_offers_only_skills():
+    completer = ReplCompleter(base_dir=Path("/tmp"), skill_provider=skill_list)
+    # "/p" is a skill-name prefix; "/sk" is the /skill: command prefix, so it
+    # lists the whole skill namespace (never commands).
+    assert complete(completer, "please /p") == ["/skill:pdf-report"]
+    assert set(complete(completer, "please /sk")) == {
+        "/skill:pdf-report",
+        "/skill:review",
+    }
+
+
+def test_mid_sentence_skill_prefix_filters_names():
+    completer = ReplCompleter(base_dir=Path("/tmp"), skill_provider=skill_list)
+    assert complete(completer, "look /skill:re") == ["/skill:review"]
+
+
+def test_mid_sentence_other_command_suppresses_slash_completion():
+    completer = ReplCompleter(base_dir=Path("/tmp"), skill_provider=skill_list)
+    assert complete(completer, "/mode /sk") == []
+    assert complete(completer, "hello there") == []
+
+
+def test_skill_provider_is_read_live():
+    skills = [("pdf-report", "Build reports")]
+    completer = ReplCompleter(
+        base_dir=Path("/tmp"), skill_provider=lambda: list(skills)
+    )
+    assert complete(completer, "/skill:") == ["/skill:pdf-report"]
+    skills.append(("review", "Review a diff"))
+    assert set(complete(completer, "/skill:")) == {
+        "/skill:pdf-report",
+        "/skill:review",
+    }

@@ -33,6 +33,7 @@ from zenagent.agent.session import (
 from zenagent.app.compact import compact, maybe_auto_compact
 from zenagent.app.modes import describe_modes, mode_prompt_note
 from zenagent.app.retry import prepare_retry
+from zenagent.app.skill_commands import build_skill_submission
 from zenagent.app.support import describe_tools
 from zenagent.attachments import read_image_argument
 from zenagent.cli.completion import SLASH_COMMANDS, ReplCompleter, help_text
@@ -464,6 +465,9 @@ def _make_default_reader(
     extra_commands: dict[str, str] | None = None,
     keybindings: dict[str, str] | None = None,
     extra_values: dict[str, list[tuple[str, str]]] | None = None,
+    *,
+    typed_provider: Callable[[], list[tuple[str, str, str]]] | None = None,
+    skill_provider: Callable[[], list[tuple[str, str]]] | None = None,
 ) -> InputFn:
     """prompt_toolkit reader with persistent history and completion."""
     from prompt_toolkit import PromptSession
@@ -475,7 +479,12 @@ def _make_default_reader(
     session = PromptSession(
         history=FileHistory(str(history)),
         completer=(
-            ReplCompleter(slash_commands=commands, extra_values=extra_values)
+            ReplCompleter(
+                slash_commands=commands,
+                extra_values=extra_values,
+                typed_provider=typed_provider,
+                skill_provider=skill_provider,
+            )
             if completion
             else None
         ),
@@ -665,11 +674,18 @@ async def repl(
         extension_hooks,
     ) = discover_runtime()
     template_by_name = {template.name: template for template in template_list}
-    extra_commands = {
-        f"/{template.name}": template.description for template in template_list
-    }
-    for command in extension_commands.values():
-        extra_commands.setdefault(f"/{command.name}", command.description)
+
+    def typed_commands() -> list[tuple[str, str, str]]:
+        """Slash entries with their type label; re-read after /reload."""
+        entries = [
+            (f"/{template.name}", template.description, "template")
+            for template in template_list
+        ]
+        entries.extend(
+            (f"/{command.name}", command.description, "extension")
+            for command in extension_commands.values()
+        )
+        return entries
 
     gate = PermissionGate(
         interactive=True,
@@ -730,7 +746,7 @@ async def repl(
     async def reload_runtime() -> None:
         """Re-discover skills, templates and extensions without restarting."""
         nonlocal tool_list, skill_list, template_list, template_by_name
-        nonlocal extra_commands, extension_commands
+        nonlocal extension_commands
         nonlocal extension_hooks, base_prompt
         if agent.is_streaming:
             print_fn("cannot reload while the agent is working")
@@ -745,11 +761,6 @@ async def repl(
         ) = discover_runtime()
         tool_list, skill_list, template_list = tools_now, skills_now, templates_now
         template_by_name = {template.name: template for template in templates_now}
-        extra_commands = {
-            f"/{template.name}": template.description for template in templates_now
-        }
-        for command in commands_now.values():
-            extra_commands.setdefault(f"/{command.name}", command.description)
         extension_commands, extension_hooks = commands_now, hooks_now
         agent.tools = tools_now
         base_prompt = build_prompt(tools_now, extra_now)
@@ -826,11 +837,15 @@ async def repl(
     if console is not None:
         console.print(f"[grey50]{session.path.name}[/grey50] · /help for commands")
 
+    def skill_provider() -> list[tuple[str, str]]:
+        return [(skill.name, skill.description) for skill in skill_list]
+
     read = input_fn or _make_default_reader(
         completion=completion,
-        extra_commands=extra_commands,
         keybindings=active_keybindings,
         extra_values={"/model": model_values},
+        typed_provider=typed_commands,
+        skill_provider=skill_provider,
     )
     run_task: asyncio.Task | None = None
     #: Only one reader may own stdin: the REPL's steering reader and the ask
@@ -947,9 +962,23 @@ async def repl(
 
             command, argument = split_input(line)
             prompt_text = line.strip()
+            skill_prompt: str | None = None
             if command and command in template_by_name:
                 prompt_text = expand(template_by_name[command].body, argument)
                 command = ""
+            resolution = build_skill_submission(
+                line,
+                skill_list,
+                reserved_names={*template_by_name, *extension_commands},
+            )
+            if resolution is not None:
+                if resolution.error is not None:
+                    print_fn(resolution.error)
+                    continue
+                if resolution.submission is not None:
+                    skill_prompt = resolution.submission.prompt
+                    prompt_text = skill_prompt
+                    command = ""
             if command == "retry":
                 # Retry is a loop-level command: it truncates the session and
                 # turns the recovered prompt into this iteration's input.
@@ -997,7 +1026,9 @@ async def repl(
 
             if run_task is not None:
                 # A run is still going: this line steers it instead of stacking.
-                agent.steer(line.strip())
+                agent.steer(
+                    skill_prompt if skill_prompt is not None else line.strip()
+                )
                 continue
 
             await refresh_mcp()

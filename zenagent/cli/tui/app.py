@@ -26,6 +26,7 @@ from zenagent.app.commands import AppServices, build_default_commands
 from zenagent.app.models import ModelManager
 from zenagent.app.runtime import Runtime
 from zenagent.app.sessions import SessionManager
+from zenagent.app.skill_commands import build_skill_submission, slash_token_at
 from zenagent.cli.tui.history import PromptHistory
 from zenagent.cli.tui.widgets.attachments import AttachmentChips
 from zenagent.cli.tui.widgets.command_hints import CommandHints
@@ -93,7 +94,9 @@ class ZenAgentApp(App):
         self._refresh_pending = False
         self._update_notice_shown = False
         self._hint_start = 0
+        self._hint_end = 0
         self._hint_prefix = "/"
+        self._hint_kind = "slash"
         self._session_scope = "project"
         self._last_escape_at: float | None = None
         self.command_hints: CommandHints | None = None
@@ -347,48 +350,102 @@ class ZenAgentApp(App):
         self._refresh_status()
 
     def on_text_area_changed(self, event) -> None:
-        """Keep the suggestion list in sync: command names, then argument values."""
+        """Keep the suggestion list in sync: commands, argument values, skills."""
         hints = self.command_hints
         if hints is None:
             return
-        text = self.query_one(PromptInput).text
-        matches, prefix, start = self._hint_context(text)
+        prompt = self.query_one(PromptInput)
+        text = prompt.text
+        cursor = prompt.document.get_index_from_location(prompt.cursor_location)
+        matches, prefix, start, end, kind = self._hint_context(text, cursor)
         self._hint_prefix = prefix
         self._hint_start = start
+        self._hint_end = end
+        self._hint_kind = kind
         if matches:
             hints.show(matches, prefix=prefix)
         else:
             hints.hide()
 
     def _hint_context(
-        self, text: str
-    ) -> tuple[list[tuple[str, str]], str, int]:
-        """``(matches, render prefix, replace start)`` for the current draft.
+        self, text: str, cursor: int
+    ) -> tuple[list[tuple[str, str]], str, int, int, str]:
+        """``(matches, prefix, replace start, replace end, kind)`` for the draft.
 
-        Before the space we list commands (``/mod`` → mode/model); after it we
-        list that command's argument values (``/mode `` → plan/ask/full).
+        Line-start ``/`` lists commands and skill commands; an embedded ``/``
+        token (mid-sentence) lists only ``/skill:<name>`` entries; after a known
+        command's space we list that command's argument values.
         """
-        if "\n" in text or not text.startswith("/"):
-            return [], "/", 0
-        head, separator, rest = text.partition(" ")
-        if not separator:
-            needle = text[1:].lower()
-            matches = [
-                (command.name, command.description)
-                for command in self.commands.names()
-                if command.name.startswith(needle)
-            ]
-            return matches, "/", 0
-        name = head[1:].lower()
-        if " " in rest or self.commands.get(name) is None:
-            return [], "/", 0
-        needle = rest.strip().lower()
-        matches = [
-            (value, description)
-            for value, description in self._argument_values(name)
-            if value.lower().startswith(needle)
+        if "\n" in text:
+            return [], "/", 0, 0, "slash"
+        token = slash_token_at(text, cursor)
+        if token is not None:
+            line_prefix = text[token.line_start : token.start].strip()
+            if not line_prefix:
+                if token.text.startswith("/skill:"):
+                    matches = self._skill_matches(token.text)
+                else:
+                    matches = [*self._command_matches(token.text), *self._skill_matches(token.text)]
+                    matches.sort(key=lambda item: item[0])
+                return matches, "/", token.start, token.end, "slash"
+            line = text[token.line_start :].lstrip()
+            if line.startswith("/") and not line.startswith("/skill:"):
+                return [], "/", 0, 0, "slash"
+            return (
+                self._skill_matches(token.text),
+                "/",
+                token.start,
+                token.end,
+                "slash",
+            )
+
+        if cursor == len(text) and text.startswith("/") and " " in text:
+            head, _, rest = text.partition(" ")
+            name = head[1:].lower()
+            if " " not in rest and self.commands.get(name) is not None:
+                needle = rest.strip().lower()
+                matches = [
+                    (value, description)
+                    for value, description in self._argument_values(name)
+                    if value.lower().startswith(needle)
+                ]
+                return matches, "", len(head) + 1, len(text), "arg"
+        return [], "/", 0, 0, "slash"
+
+    def _command_matches(self, token_text: str) -> list[tuple[str, str]]:
+        needle = token_text[1:].lower()
+        return [
+            (command.name, f"command · {command.description}")
+            for command in self.commands.names()
+            if command.name.startswith(needle)
         ]
-        return matches, "", len(head) + 1
+
+    def _skill_matches(self, token_text: str) -> list[tuple[str, str]]:
+        skills = [skill for skill in (self.runtime.skills or [])]
+        if not skills:
+            return []
+        if token_text.startswith("/skill:"):
+            needle = token_text[len("/skill:") :].lower()
+            selected = [
+                skill
+                for skill in skills
+                if skill.name.lower().startswith(needle)
+            ]
+        else:
+            needle = token_text[1:].lower()
+            selected = [
+                skill for skill in skills if skill.name.lower().startswith(needle)
+            ]
+            if not selected:
+                selected = [
+                    skill
+                    for skill in skills
+                    if f"skill:{skill.name}".lower().startswith(needle)
+                ]
+        return [
+            (f"skill:{skill.name}", f"skill · {skill.description}")
+            for skill in sorted(selected, key=lambda item: item.name)
+        ]
 
     def _argument_values(self, name: str) -> list[tuple[str, str]]:
         """Fixed vocabulary from the shared table; model ids come from the catalog."""
@@ -425,13 +482,24 @@ class ZenAgentApp(App):
         if not selected:
             return
         prompt = self.query_one(PromptInput)
-        if self._hint_prefix == "/":
-            prompt.clear()
-            prompt.insert(f"/{selected} ")
+        draft = prompt.text
+        if self._hint_kind == "arg":
+            # Argument values replace the typed value and keep the old shape.
+            replacement = f"{selected} "
+            tail = ""
         else:
-            draft = prompt.text
-            prompt.clear()
-            prompt.insert(draft[: self._hint_start] + selected + " ")
+            # Slash entries may be completed mid-sentence: replace only the
+            # token, keep the prose before and after it.
+            replacement = f"/{selected} "
+            tail = draft[self._hint_end :]
+        new_text = draft[: self._hint_start] + replacement + tail
+        prompt.clear()
+        prompt.insert(new_text)
+        prompt.move_cursor(
+            prompt.document.get_location_from_index(
+                self._hint_start + len(replacement)
+            )
+        )
         prompt.focus()
         hints.hide()
 
@@ -777,6 +845,22 @@ class ZenAgentApp(App):
 
     async def on_prompt_input_submitted(self, message: PromptInput.Submitted) -> None:
         text = message.text
+        # A /skill: token can appear at line start or inside a sentence; the
+        # parser rejects drafts owned by another slash command.
+        if "/skill:" in text:
+            resolution = build_skill_submission(text, list(self.runtime.skills or []))
+            if resolution is not None:
+                if resolution.error is not None:
+                    for log in self.query(TranscriptView):
+                        log.append_notice(resolution.error)
+                    return
+                submission = resolution.submission
+                if submission is not None:
+                    # Keep the user's own `/skill:...` line in history; the
+                    # injected body goes to the model, the chip to the transcript.
+                    self.history.add(text)
+                    await self.chat.submit(submission.prompt)
+                    return
         if text.startswith("/"):
             name, _, argument = text[1:].partition(" ")
             if self.commands.get(name) is not None:

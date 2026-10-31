@@ -42,6 +42,26 @@ description: Build a PDF status report from a CSV
     `changed on disk (...): /reload applies them`；`--no-skills` 启动时只提示已禁用；
   - agent 正在运行时两处都只报告变化、不动工具（见下文「热加载」）。
 
+### 用户侧调用：`/skill:<name>`
+
+除了模型自己 `read_skill`，你也可以直接调用一个 skill（omp 风格）：
+
+```
+/skill:pdf-report review report.csv
+please /skill:pdf-report review this file
+```
+
+- REPL 和 TUI 的 `/` 补全/提示里会出现 `skill:<name>`（带 description 与类型标签）；
+  **行首和句子中间**都支持，句子中间的 token 前后的散文会作为参数传进 skill。
+- 提交时前端会**重新读取 SKILL.md 正文**并注入成一条 user 消息：
+  `[skill:<name>]` 标记行 + `[IMPORTANT: User invoked …]` + 正文（32KB 截断）+
+  skill 目录提示（相对路径按目录解析）+ `User: <args>`。模型不需要自己决定去读哪个 skill。
+- TUI 转录里显示为一行 `✦ skill:<name> · args`，`enter`/`space`/点击可展开查看注入正文；
+  session 文件里仍是完整正文，导出/回放语义不变。
+- 未知 skill 会报错并列出可用名字；`--no-skills` 时菜单里不出现、提交也不会拦截。
+- 类型标签：内置命令 `command ·`、模板 `template ·`、扩展命令 `extension ·`、
+  skill `skill ·`（TUI 目前只支持内置命令与 skill）。
+
 ## Templates
 
 ```

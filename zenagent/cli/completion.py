@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.document import Document
 
+from zenagent.app.skill_commands import SKILL_SLASH_PREFIX
 from zenagent.app.slash_args import argument_values
 
 __all__ = ["SLASH_COMMANDS", "ReplCompleter", "help_text"]
@@ -60,33 +61,141 @@ def help_text() -> str:
 
 
 class ReplCompleter(Completer):
-    """Completes slash commands and ``@`` file paths."""
+    """Completes slash commands (line-start and embedded skill tokens) and ``@`` paths.
+
+    Slash completion is token-based so ``please /skill:pd`` can complete in the
+    middle of a sentence: a line-start ``/`` token offers commands, templates,
+    extension commands and skills; an embedded ``/`` token offers only
+    ``/skill:<name>`` entries (the only slash token meaningful mid-sentence).
+    """
 
     def __init__(
         self,
         slash_commands: dict[str, str] | None = None,
         base_dir: Path | None = None,
         extra_values: dict[str, list[tuple[str, str]]] | None = None,
+        *,
+        typed_commands: list[tuple[str, str, str]] | None = None,
+        typed_provider: Callable[[], list[tuple[str, str, str]]] | None = None,
+        skill_provider: Callable[[], list[tuple[str, str]]] | None = None,
     ) -> None:
         self.slash_commands = dict(slash_commands or SLASH_COMMANDS)
         self.base_dir = Path(base_dir) if base_dir is not None else Path.cwd()
         #: Frontend-supplied value sets (e.g. model ids), keyed with the slash.
         self.extra_values = dict(extra_values or {})
+        #: Extra slash entries as ``(name, description, kind)``; kind is shown
+        #: in the completion meta (template/extension/...).
+        self.typed_commands = list(typed_commands or [])
+        #: Live extra entries; /reload rebuilds them without a new reader.
+        self.typed_provider = typed_provider
+        #: Live skill list ``[(name, description)]``; re-read on every keystroke
+        #: so /reload's rebuilt list is reflected without recreating the reader.
+        self.skill_provider = skill_provider
+
+    # -- entries -----------------------------------------------------------
+
+    def _slash_entries(self) -> dict[str, tuple[str, str]]:
+        entries: dict[str, tuple[str, str]] = {
+            name: (description, "command")
+            for name, description in self.slash_commands.items()
+        }
+        typed = (
+            self.typed_provider() if self.typed_provider is not None else self.typed_commands
+        )
+        for name, description, kind in typed:
+            entries[name] = (description, kind)
+        if self.skill_provider is not None:
+            for name, description in self.skill_provider():
+                entries.setdefault(
+                    f"{SKILL_SLASH_PREFIX}{name}", (description, "skill")
+                )
+        return entries
+
+    def _token(self, text: str) -> tuple[int, int, str, int] | None:
+        """``(start, end, token, line_start)`` for the current ``/`` token."""
+        end = len(text)
+        start = end
+        while start > 0 and not text[start - 1].isspace():
+            start -= 1
+        token = text[start:end]
+        if not token.startswith("/"):
+            return None
+        line_start = text.rfind("\n", 0, start) + 1
+        return start, end, token, line_start
+
+    def _slash_completions(
+        self, text: str
+    ) -> tuple[list[tuple[str, str, str]], int] | None:
+        token = self._token(text)
+        if token is None:
+            return None
+        start, _end, token_text, line_start = token
+        line_prefix = text[line_start:start].strip()
+        skill_only = token_text.startswith(SKILL_SLASH_PREFIX)
+        if line_prefix:
+            # Mid-sentence: only skill tokens are meaningful. Suppress when the
+            # line is already another slash command's argument list.
+            line_head = text[line_start:].lstrip()
+            if line_head.startswith("/") and not line_head.startswith(
+                SKILL_SLASH_PREFIX
+            ):
+                return [], -len(token_text)
+            skill_only = True
+
+        entries = self._slash_entries()
+        if skill_only:
+            skills = {name: (description, kind) for name, (description, kind) in entries.items() if kind == "skill"}
+            if token_text.startswith(SKILL_SLASH_PREFIX):
+                # "/skill:re" filters by the skill name itself.
+                needle = token_text[len(SKILL_SLASH_PREFIX) :].lower()
+                selected = [
+                    name
+                    for name in skills
+                    if name[len(SKILL_SLASH_PREFIX) :].lower().startswith(needle)
+                ]
+            else:
+                # A bare "/p" filters by skill-name prefix; "/sk" (the start
+                # of "skill:") falls back to the command prefix so the whole
+                # namespace is offered once no name matches.
+                needle = token_text[1:].lower()
+                selected = [
+                    name
+                    for name in skills
+                    if name[len(SKILL_SLASH_PREFIX) :].lower().startswith(needle)
+                ]
+                if not selected:
+                    selected = [
+                        name
+                        for name in skills
+                        if name[1:].lower().startswith(needle)
+                    ]
+            matches = [
+                (name, f"{skills[name][1]} · {skills[name][0]}")
+                for name in sorted(selected)
+            ]
+        else:
+            matches = [
+                (name, f"{kind} · {description}")
+                for name, (description, kind) in entries.items()
+                if name.lower().startswith(token_text.lower())
+            ]
+        return sorted(matches), -len(token_text)
 
     def get_completions(
         self, document: Document, complete_event
     ) -> Iterable[Completion]:
         text = document.text_before_cursor
 
-        if text.startswith("/") and " " not in text:
-            for name, description in sorted(self.slash_commands.items()):
-                if name.startswith(text):
-                    yield Completion(
-                        name,
-                        start_position=-len(text),
-                        display=name,
-                        display_meta=description,
-                    )
+        slash = self._slash_completions(text)
+        if slash is not None:
+            matches, start_position = slash
+            for name, description in matches:
+                yield Completion(
+                    name,
+                    start_position=start_position,
+                    display=name,
+                    display_meta=description,
+                )
             return
 
         if text.startswith("/") and " " in text:

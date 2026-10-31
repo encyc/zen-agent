@@ -18,6 +18,7 @@ from zenagent.cli.tui.widgets.rows import (
     UsageRow,
     UserBlock,
 )
+from zenagent.cli.tui.widgets.skill_block import SkillBlock
 from zenagent.cli.tui.widgets.tool_card import ToolCard
 from zenagent.cli.tui.widgets.welcome import WelcomeBlock
 
@@ -222,6 +223,9 @@ class TranscriptView(VerticalScroll):
     def _append_message(self, view: MessageView) -> None:
         if view.kind == "user":
             self.mount(UserBlock(view.text))
+            return
+        if view.kind == "skill":
+            self.mount(SkillBlock(view))
             return
         if view.thinking:
             # Register the row now so _sync_thinking updates it instead of
