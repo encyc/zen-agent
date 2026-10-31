@@ -3,6 +3,17 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## v0.4.2 — 2026-10-31
+
+### Fixed
+
+- **Collapsed thinking rows could wrap to two lines on Python 3.14.** The
+  one-line preview is now enforced by CSS (`height: 1; text-wrap: nowrap`) and
+  expansion opts back into `height: auto; text-wrap: wrap` via an `expanded`
+  class; the widget also re-renders after the first layout pass, so a stale
+  pre-layout width can no longer produce an extra row. This was the py3.14 CI
+  failure on both ubuntu and macos.
+
 ## v0.4.1 — 2026-10-31
 
 **Autonomy slice: delegate, ask, keep the big artifacts.** Pulls three v0.5-plan
