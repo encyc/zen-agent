@@ -67,9 +67,7 @@ async def runtime_factory(app_env):
     created = []
 
     async def make(*, stream_fn=None, **overrides):
-        options = RuntimeOptions(
-            mcp=False, skills=False, templates=False, **overrides
-        )
+        options = RuntimeOptions(**{"mcp": False, "skills": False, "templates": False, **overrides})
         runtime = await Runtime.bootstrap(options, stream_fn=stream_fn)
         created.append(runtime)
         return runtime

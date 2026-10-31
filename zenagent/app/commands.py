@@ -202,26 +202,61 @@ async def _images(services: AppServices, argument: str) -> CommandResult:
 
 @_command("mcp", "reconnect MCP servers and refresh tools")
 async def _mcp(services: AppServices, argument: str) -> CommandResult:
-    await services.runtime.refresh_mcp()
     manager = services.runtime.mcp
     if manager is None:
         return CommandResult(message="no MCP servers configured")
+    streaming = services.runtime.agent.is_streaming
+    if not streaming:
+        try:
+            await services.runtime.refresh_mcp()
+        except RuntimeError as exc:  # a run started while we waited
+            return CommandResult(message=str(exc))
     connected = ", ".join(manager.connected_names) or "(none)"
-    return CommandResult(message=f"mcp connected: {connected}")
+    suffix = " · tools not refreshed while the agent is working" if streaming else ""
+    return CommandResult(message=f"mcp connected: {connected}{suffix}")
 
 
-@_command("skills", "list discovered skills")
+@_command("skills", "list discovered skills (rescans the skill roots)")
 async def _skills(services: AppServices, argument: str) -> CommandResult:
+    """Rescan before listing, so a skill added on disk shows up immediately.
+
+    The rescan is a plain directory + frontmatter read (no extension code runs),
+    and it also swaps ``read_skill``'s roster while the agent is idle -- a list
+    that disagreed with what the model can actually load would be a lie.
+    """
+    if not services.runtime.skills_enabled:
+        return CommandResult(message="skills are disabled (--no-skills)")
+    notes = services.runtime.refresh_skills()
     skills = services.runtime.skills
     if not skills:
-        return CommandResult(message="no skills found")
-    return CommandResult(message="\n".join(f"- {skill.name}: {skill.description}" for skill in skills))
+        # Keep the notes: "skills 1 -> 0 (-gone)" is the whole point of the line.
+        return CommandResult(
+            message="\n".join(
+                [
+                    *notes,
+                    "no skills found (put SKILL.md files under .zenagent/skills)",
+                ]
+            )
+        )
+    lines = [f"- {skill.name}: {skill.description}" for skill in skills]
+    if notes:
+        lines.insert(0, "; ".join(notes))
+    return CommandResult(message="\n".join(lines))
 
 
 @_command("reload", "re-discover skills, templates and extensions")
 async def _reload(services: AppServices, argument: str) -> CommandResult:
-    await services.runtime.refresh_mcp()
-    return CommandResult(message="reloaded")
+    if services.runtime.agent.is_streaming:
+        return CommandResult(message="cannot reload while the agent is working")
+    # MCP retries can take seconds; a run may start while we wait, and swapping
+    # tools under it must not happen (and must not escape as an exception the
+    # TUI would treat as fatal).
+    try:
+        await services.runtime.refresh_mcp()
+        notes = services.runtime.rediscover()
+    except RuntimeError as exc:
+        return CommandResult(message=str(exc))
+    return CommandResult(message=f"reloaded: {' · '.join(notes)}")
 
 
 @_command("export", "export the current session as markdown")

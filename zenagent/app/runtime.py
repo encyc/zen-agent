@@ -115,6 +115,11 @@ class Runtime:
         self._base_prompt: str = ""
         self._base_tools: list = []
         self._extra_prompt = ""
+        self._skills_index = ""
+        self._extension_prompt = ""
+        self._extension_tools: list = []
+        self._hook_unsubscribes: list = []
+        self._options: RuntimeOptions | None = None
         self._context_files = True
 
     @property
@@ -209,28 +214,18 @@ class Runtime:
             gate.set_mode(mode)
         runtime.gate = gate
 
-        # Open the session before assembling tools: the todo tool is per-session
-        # state bound to the sidecar next to the JSONL, so its factory needs the
-        # final path (resume picks that path here).
+        # Open the session before discovery/recompose: the todo tool is
+        # per-session state bound to the sidecar next to the JSONL.
         runtime.session = runtime._open_session(options.resume)
-
-        tools = list(ALL_TOOLS)
         runtime.todo_tool = build_todo_tool(runtime.session.path)
-        tools.append(runtime.todo_tool)
         if options.mcp:
             runtime.mcp = await runtime._start_mcp(options)
-            if runtime.mcp is not None:
-                tools.extend(runtime.mcp.tool_defs())
 
-        skills_index = ""
         if options.skills:
             runtime.skills, warnings = discover_skills(
                 default_skill_roots(Path.cwd())
             )
             runtime.warnings.extend(f"skills {warning}" for warning in warnings)
-            if runtime.skills:
-                tools.append(build_skill_tool(runtime.skills))
-                skills_index = skills_prompt_index(runtime.skills)
 
         if options.templates:
             runtime.templates, warnings = discover_templates(
@@ -238,7 +233,6 @@ class Runtime:
             )
             runtime.warnings.extend(f"templates {warning}" for warning in warnings)
 
-        extension_prompt = ""
         runtime.extension_files = [
             *runtime.user_config.extensions,
             *options.extension_paths,
@@ -246,17 +240,14 @@ class Runtime:
         if runtime.extension_files:
             loaded = load_extensions(runtime.extension_files)
             runtime.warnings.extend(f"extension {warning}" for warning in loaded.warnings)
-            tools.extend(loaded.tools)
+            runtime._extension_tools = list(loaded.tools)
             runtime.hooks = loaded.hooks
-            extension_prompt = loaded.prompt_text
+            runtime._extension_prompt = loaded.prompt_text
 
+        runtime._options = options
         runtime._context_files = options.context_files
-        runtime._base_tools = list(tools)
-        runtime._extra_prompt = "\n\n".join(
-            part for part in (skills_index, extension_prompt) if part
-        )
         runtime.guard = ContextGuard(model.context_window)
-        runtime._base_prompt = runtime._build_prompt(tools)
+        runtime._recompose()
         prompt = runtime._prompt_with_mode()
         thinking = options.thinking
         if thinking is None:
@@ -265,7 +256,7 @@ class Runtime:
         agent = Agent(
             model=model,
             system_prompt=prompt,
-            tools=tools,
+            tools=runtime._base_tools,
             api_key=api_key,
             thinking=thinking,
             session_id=session_id_for(model),
@@ -277,19 +268,8 @@ class Runtime:
             retries=options.retries,
         )
         agent.subscribe(runtime.guard.on_event)
-        for event_type, callbacks in runtime.hooks.items():
-            def hook(event, _type=event_type, _callbacks=callbacks) -> None:
-                if event.type != _type:
-                    return
-                for callback in _callbacks:
-                    try:
-                        callback(event)
-                    except Exception as exc:  # noqa: BLE001 - extension hooks are isolated
-                        runtime.warnings.append(f"extension hook failed: {exc}")
-
-            agent.subscribe(hook)
-
         runtime.agent = agent
+        runtime._subscribe_hooks()
 
         def persist(event) -> None:
             if event.type == "agent_end" and event.new_messages:
@@ -363,6 +343,171 @@ class Runtime:
             text = f"{text}\n\n{self._extra_prompt}"
         return text
 
+    def _recompose(self) -> None:
+        """Rebuild the tool list and prompt from the current discovery results.
+
+        Skills, extension tools and MCP tools all contribute to both. Rebuilding
+        from scratch (rather than patching the previous list) is what keeps
+        ``read_skill``'s roster, the prompt's skill index and ``agent.tools``
+        from drifting apart after a reload.
+        """
+        tools = list(ALL_TOOLS)
+        if self.todo_tool is not None:
+            tools.append(self.todo_tool)
+        if self.mcp is not None:
+            tools.extend(self.mcp.tool_defs())
+        if self.skills:
+            tools.append(build_skill_tool(self.skills))
+        tools.extend(self._extension_tools)
+        self._skills_index = skills_prompt_index(self.skills)
+        self._extra_prompt = "\n\n".join(
+            part for part in (self._skills_index, self._extension_prompt) if part
+        )
+        self._base_tools = list(tools)
+        self._base_prompt = self._build_prompt(tools)
+        if hasattr(self, "agent"):
+            self.agent.tools = list(tools)
+            self.agent.system_prompt = self._prompt_with_mode()
+
+    def _subscribe_hooks(self) -> None:
+        """Attach the current extension hooks, replacing the previous generation.
+
+        Reloading re-executes extension files, so without dropping the old
+        listeners every reload would deliver each event one extra time.
+        """
+        for unsubscribe in self._hook_unsubscribes:
+            unsubscribe()
+        self._hook_unsubscribes = []
+        for event_type, callbacks in self.hooks.items():
+            def hook(event, _type=event_type, _callbacks=callbacks) -> None:
+                if event.type != _type:
+                    return
+                for callback in _callbacks:
+                    try:
+                        callback(event)
+                    except Exception as exc:  # noqa: BLE001 - extension hooks are isolated
+                        self._note(f"extension hook failed: {exc}")
+
+            self._hook_unsubscribes.append(self.agent.subscribe(hook))
+
+    def _note(self, message: str) -> None:
+        """Record a warning once; repeated reloads must not stack duplicates."""
+        if message not in self.warnings:
+            self.warnings.append(message)
+
+    @property
+    def skills_enabled(self) -> bool:
+        """Whether discovery ran with skills turned on (``--no-skills`` aside)."""
+        return self._options is None or self._options.skills
+
+    @staticmethod
+    def _signature(items: list) -> list[tuple[str, str, str, str]]:
+        """What makes a discovered item "the same item": a body edit counts.
+
+        Shared by skills and templates; mtimes deliberately do not participate,
+        so a ``touch`` does not report a change.
+        """
+        return [
+            (item.name, item.description, str(item.path), item.body) for item in items
+        ]
+
+    @classmethod
+    def _change_note(cls, label: str, before: list, after: list) -> str:
+        old = {item.name: item for item in before}
+        new = {item.name: item for item in after}
+        added = sorted(set(new) - set(old))
+        removed = sorted(set(old) - set(new))
+        edited = sorted(
+            name
+            for name in set(old) & set(new)
+            if cls._signature([old[name]]) != cls._signature([new[name]])
+        )
+        note = f"{label} {len(before)} -> {len(after)}"
+        if added:
+            note += f" (+{', '.join(added)})"
+        if removed:
+            note += f" (-{', '.join(removed)})"
+        if edited:
+            note += f" (~{', '.join(edited)})"
+        return note
+
+    def refresh_skills(self) -> list[str]:
+        """Rescan the skill roots and adopt the result when it changed.
+
+        Cheap and side-effect free -- a directory listing plus the ``SKILL.md``
+        reads, well under a millisecond for a normal library -- so a display
+        command may call it on every invocation. Unlike :meth:`rediscover` it
+        never runs extension code.
+
+        Returns change notes (empty when nothing changed). While a run is
+        streaming the agent is left untouched: the model has already been told
+        which skills exist, and swapping the tool under it would make
+        ``read_skill`` disagree with the prompt.
+        """
+        if not self.skills_enabled:
+            return []
+        skills, warnings = discover_skills(default_skill_roots(Path.cwd()))
+        for warning in warnings:
+            self._note(f"skills {warning}")
+        if self._signature(skills) == self._signature(self.skills):
+            return []
+        note = self._change_note("skills", self.skills, skills)
+        if hasattr(self, "agent") and self.agent.is_streaming:
+            return [f"{note}; applies after this run"]
+        self.skills = skills
+        if hasattr(self, "agent"):
+            self._recompose()
+        return [note]
+
+    def rediscover(self) -> list[str]:
+        """Re-run every discovery step and swap the result into the live agent.
+
+        Skills and templates are file reads, but extensions are *executed*
+        again (``importlib`` + ``register(api)``), which is why this belongs on
+        an explicit ``/reload`` and never inside a display command.
+
+        Refuses while a run is streaming: tools cannot be swapped under an
+        in-flight request. Raises ``RuntimeError``; callers check
+        ``agent.is_streaming`` first to render a nicer message.
+        """
+        if hasattr(self, "agent") and self.agent.is_streaming:
+            raise RuntimeError("cannot reload while the agent is working")
+        options = self._options
+        notes: list[str] = []
+
+        if options is None or options.skills:
+            skills, warnings = discover_skills(default_skill_roots(Path.cwd()))
+            for warning in warnings:
+                self._note(f"skills {warning}")
+            if self._signature(skills) != self._signature(self.skills):
+                notes.append(self._change_note("skills", self.skills, skills))
+            self.skills = skills
+
+        if options is None or options.templates:
+            templates, warnings = discover_templates(default_template_roots(Path.cwd()))
+            for warning in warnings:
+                self._note(f"templates {warning}")
+            if self._signature(templates) != self._signature(self.templates):
+                notes.append(self._change_note("templates", self.templates, templates))
+            self.templates = templates
+
+        if self.extension_files:
+            loaded = load_extensions(self.extension_files)
+            for warning in loaded.warnings:
+                self._note(f"extension {warning}")
+            self._extension_tools = list(loaded.tools)
+            self._extension_prompt = loaded.prompt_text
+            self.hooks = loaded.hooks
+            notes.append(
+                f"{len(self._extension_tools)} extension tools "
+                f"from {len(self.extension_files)} files"
+            )
+
+        self._recompose()
+        if hasattr(self, "agent"):
+            self._subscribe_hooks()
+        return notes or ["nothing changed"]
+
     # -- lifecycle ----------------------------------------------------------
 
     async def close(self) -> None:
@@ -371,15 +516,23 @@ class Runtime:
             await manager.close()
 
     async def refresh_mcp(self) -> None:
-        """Reconnect failed MCP servers and swap refreshed tools into the agent."""
+        """Reconnect failed MCP servers and swap refreshed tools into the agent.
+
+        Rebuilt through :meth:`_recompose` rather than appended to
+        ``_base_tools``: that list already contains the MCP tools, so extending
+        it would list every server tool twice.
+
+        Raises ``RuntimeError`` while a run is streaming -- the same invariant
+        as :meth:`rediscover`, since reconnecting may change ``agent.tools``
+        under a request the model already composed.
+        """
         if self.mcp is None:
             return
-        self.warnings.extend(await self.mcp.retry_failed())
-        tools = [*self._base_tools, *self.mcp.tool_defs()]
-        if [tool.name for tool in tools] != [tool.name for tool in self.agent.tools]:
-            self.agent.tools = tools
-            self._base_prompt = self._build_prompt(tools)
-            self.agent.system_prompt = self._prompt_with_mode()
+        if hasattr(self, "agent") and self.agent.is_streaming:
+            raise RuntimeError("cannot refresh tools while the agent is working")
+        for warning in await self.mcp.retry_failed():
+            self._note(warning)
+        self._recompose()
 
     async def switch_session(
         self, path: Path | None, *, carry_todos: bool = False

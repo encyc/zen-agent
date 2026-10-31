@@ -5,16 +5,27 @@ import asyncio
 from zenagent.cli.tui.screens.modals import ToolApproval
 
 
-async def _open_approval(app):
-    """Start a request and wait until its modal is on top."""
+async def _open_approval(app, *, laid_out: bool = True):
+    """Start a request and wait until the dialog is up (and laid out).
+
+    ``app.screen`` flips to the modal before the first layout pass, so returning
+    immediately can hand a test a 0x0 panel (a CI flake under load). Tests that
+    only press a key can skip the layout wait; a tight timeout makes that race
+    unavoidable.
+    """
     task = asyncio.create_task(
         app.request_tool_approval("write_file", {"path": "x.txt"})
     )
-    for _ in range(100):
-        if isinstance(app.screen, ToolApproval):
-            return task
+    for _ in range(200):
+        screen = app.screen
+        if isinstance(screen, ToolApproval):
+            if not laid_out:
+                return task
+            panels = list(screen.query("#dialog"))
+            if panels and panels[0].region.width > 0:
+                return task
         await asyncio.sleep(0.01)
-    raise AssertionError("approval modal never appeared")
+    raise AssertionError("approval modal never appeared (or never laid out)")
 
 
 async def test_approval_allow_returns_allow(picker_app):
@@ -49,7 +60,7 @@ async def test_approval_timeout_denies_and_closes(picker_app):
     app.approval_timeout_s = 0.05
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
-        task = await _open_approval(app)
+        task = await _open_approval(app, laid_out=False)
         assert await asyncio.wait_for(task, timeout=2) == "deny"
         assert not isinstance(app.screen, ToolApproval)
 

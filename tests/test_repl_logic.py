@@ -441,26 +441,99 @@ async def test_repl_reconnects_a_late_mcp_server(tmp_path, isolated_sessions):
     assert "flaky: connected" in joined
 
 
-async def test_slash_skills_lists_them(capsys):
-    from pathlib import Path
-
-    from zenagent.skills import Skill
-
-    agent = Agent(model(), "s", api_key="k")
-    await handle_slash(
-        agent,
-        "skills",
-        "",
-        skill_list=[Skill(name="deploy", description="ship it", path=Path("/x"), body="")],
+async def test_slash_skills_lists_them(tmp_path, monkeypatch, capsys):
+    # `/skills` prints the disk truth, so the skill has to exist on disk: the
+    # loaded list only decides whether a "changed on disk" hint is needed.
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    skill_dir = tmp_path / ".zenagent" / "skills" / "deploy"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: deploy\ndescription: ship it\n---\nbody\n", encoding="utf-8"
     )
+    agent = Agent(model(), "s", api_key="k")
+
+    await handle_slash(agent, "skills", "", skill_list=[])
+
     out = capsys.readouterr().out
-    assert "deploy" in out and "ship it" in out
+    assert "- deploy: ship it" in out
 
 
-async def test_slash_skills_with_none_configured(capsys):
+async def test_slash_skills_with_none_configured(tmp_path, monkeypatch, capsys):
+    # Discovery reads the project root and ~/.zenagent/skills: point both at the
+    # tmpdir so a developer's own skill library cannot appear in the output.
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
     agent = Agent(model(), "s", api_key="k")
     await handle_slash(agent, "skills", "", skill_list=[])
     assert "no skills found" in capsys.readouterr().out
+
+
+async def test_slash_skills_shows_what_is_on_disk_and_names_what_is_pending(
+    tmp_path, monkeypatch, capsys
+):
+    """The REPL rescan is display-only: the hint says `/reload` applies it."""
+    from zenagent.skills import discover_skills
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    skill_dir = tmp_path / ".zenagent" / "skills" / "late"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: late\ndescription: on disk only\n---\nbody\n", encoding="utf-8"
+    )
+    agent = Agent(model(), "s", api_key="k")
+
+    # Nothing loaded yet: the disk truth is still listed, and the hint names it.
+    await handle_slash(agent, "skills", "", skill_list=[])
+    out = capsys.readouterr().out
+    assert "- late: on disk only" in out
+    assert "changed on disk (late)" in out and "/reload" in out
+
+    # Once `/reload` has adopted it, there is nothing left to warn about.
+    loaded, _ = discover_skills([tmp_path / ".zenagent" / "skills"])
+    await handle_slash(agent, "skills", "", skill_list=loaded)
+    assert "changed on disk" not in capsys.readouterr().out
+
+
+async def test_slash_skills_reports_when_discovery_is_disabled(
+    tmp_path, monkeypatch, capsys
+):
+    """`--no-skills` means the model never gets them: say so, do not rescan."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    skill_dir = tmp_path / ".zenagent" / "skills" / "late"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: late\ndescription: on disk only\n---\nbody\n", encoding="utf-8"
+    )
+    agent = Agent(model(), "s", api_key="k")
+
+    await handle_slash(agent, "skills", "", skill_list=[], skills_enabled=False)
+
+    out = capsys.readouterr().out
+    assert "disabled" in out and "--no-skills" in out
+    assert "late" not in out, "a disabled session must not advertise disk skills"
+
+
+async def test_slash_skills_without_a_loaded_list_does_not_crash(
+    tmp_path, monkeypatch, capsys
+):
+    """`skill_list` defaults to None for callers that do not track discovery."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    skill_dir = tmp_path / ".zenagent" / "skills" / "late"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: late\ndescription: on disk only\n---\nbody\n", encoding="utf-8"
+    )
+    agent = Agent(model(), "s", api_key="k")
+
+    await handle_slash(agent, "skills", "")
+
+    out = capsys.readouterr().out
+    assert "- late: on disk only" in out
+    assert "changed on disk" not in out, "nothing loaded, nothing to diff against"
 
 
 # ---------------------------------------------------------------------------
@@ -475,6 +548,9 @@ async def test_reload_discovers_skills_added_mid_session(tmp_path, monkeypatch):
     monkeypatch.setattr(repl_module, "load_user_config", lambda: UserConfig())
     monkeypatch.setenv("HOME", str(tmp_path))  # don't discover the developer's global skills
     monkeypatch.chdir(tmp_path)
+    # Discovery also reads ~/.zenagent/skills: point HOME at the tmpdir so the
+    # developer's own skill library cannot leak into the count below.
+    monkeypatch.setenv("HOME", str(tmp_path))
 
     calls = {"n": 0}
 

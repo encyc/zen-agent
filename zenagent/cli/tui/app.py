@@ -736,7 +736,14 @@ class ZenAgentApp(App):
         await self.chat.submit(text)
 
     async def _dispatch_command(self, name: str, argument: str) -> None:
-        result = await self.commands.dispatch(name, argument)
+        try:
+            result = await self.commands.dispatch(name, argument)
+        except Exception as exc:  # noqa: BLE001 - a command must never exit the app
+            # Slash commands run inside an input handler: anything escaping here
+            # reaches Textual's _handle_exception, which tears the app down.
+            for log in self.query(TranscriptView):
+                log.append_notice(f"/{name} failed: {exc}")
+            return
         if result.screen == "model-picker":
             self.open_model_picker()
         elif result.screen == "session-picker":
