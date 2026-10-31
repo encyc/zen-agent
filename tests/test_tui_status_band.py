@@ -91,7 +91,7 @@ def test_narrow_width_drops_right_group_first():
 def test_path_is_the_last_left_segment_to_go():
     _, tiny = render_status_line(status(), 34, preset="default")
     assert "glm-5.3" in tiny
-    assert "py-agent" in tiny or "…" in tiny or "~" in tiny
+    assert "repo" in tiny, "the path survives, abbreviated, while other segments drop"
 
 
 def test_path_is_abbreviated_when_space_is_tight():

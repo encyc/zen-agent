@@ -10,6 +10,11 @@
 
 评测**不进** `check.sh`：它需要 key、会花钱、结果受模型随机性影响。
 
+`.venv` 把创建时的绝对路径烧进了 `activate` 和控制台脚本的 shebang，**仓库目录改名/移动后
+不能复用**：`pytest`/`zen` 会报 `bad interpreter` 或 `No module named zenagent`。
+手动重建是 `rm -rf .venv && uv sync --extra cli --dev`；`check.sh` 也会检测 `activate` 里
+记录的旧路径并自动重建，所以改名后直接跑闸门即可。
+
 `release-check.sh` 也不进 `check.sh`：它要构建并由 wheel 安装，约 3 秒（缓存热时）。
 默认用 `requires-python` 下限建临时 venv；`--skip-build` 复用刚构建的 `dist/`，
 `--python 3.13` 换解释器。手动触发 publish workflow 只做 dry run，只有推 `v*`
