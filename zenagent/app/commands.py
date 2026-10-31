@@ -210,18 +210,35 @@ async def _mcp(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(message=f"mcp connected: {connected}")
 
 
-@_command("skills", "list discovered skills")
+@_command("skills", "list discovered skills (rescans the skill roots)")
 async def _skills(services: AppServices, argument: str) -> CommandResult:
+    """Rescan before listing, so a skill added on disk shows up immediately.
+
+    The rescan is a plain directory + frontmatter read (no extension code runs),
+    and it also swaps ``read_skill``'s roster while the agent is idle -- a list
+    that disagreed with what the model can actually load would be a lie.
+    """
+    if not services.runtime.skills_enabled:
+        return CommandResult(message="skills are disabled (--no-skills)")
+    notes = services.runtime.refresh_skills()
     skills = services.runtime.skills
     if not skills:
-        return CommandResult(message="no skills found")
-    return CommandResult(message="\n".join(f"- {skill.name}: {skill.description}" for skill in skills))
+        return CommandResult(
+            message="no skills found (put SKILL.md files under .zenagent/skills)"
+        )
+    lines = [f"- {skill.name}: {skill.description}" for skill in skills]
+    if notes:
+        lines.insert(0, "; ".join(notes))
+    return CommandResult(message="\n".join(lines))
 
 
 @_command("reload", "re-discover skills, templates and extensions")
 async def _reload(services: AppServices, argument: str) -> CommandResult:
+    if services.runtime.agent.is_streaming:
+        return CommandResult(message="cannot reload while the agent is working")
     await services.runtime.refresh_mcp()
-    return CommandResult(message="reloaded")
+    notes = services.runtime.rediscover()
+    return CommandResult(message=f"reloaded: {' · '.join(notes)}")
 
 
 @_command("export", "export the current session as markdown")

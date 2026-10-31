@@ -474,6 +474,9 @@ async def test_reload_discovers_skills_added_mid_session(tmp_path, monkeypatch):
 
     monkeypatch.setattr(repl_module, "load_user_config", lambda: UserConfig())
     monkeypatch.chdir(tmp_path)
+    # Discovery also reads ~/.zenagent/skills: point HOME at the tmpdir so the
+    # developer's own skill library cannot leak into the count below.
+    monkeypatch.setenv("HOME", str(tmp_path))
 
     calls = {"n": 0}
 
