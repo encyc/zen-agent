@@ -90,6 +90,8 @@ class Runtime:
         self.agent: Agent
         self.session: Session
         self.model = None
+        #: Env var the current model needs when the app started without a key.
+        self.missing_api_key: str | None = None
         self.catalog: dict[str, ProviderConfig] = {}
         self.user_config = UserConfig()
         self.guard: ContextGuard
@@ -130,6 +132,22 @@ class Runtime:
             return self._base_prompt
         return f"{self._base_prompt}\n\n{note}"
 
+    def reload_api_key(self) -> bool:
+        """Adopt a key the user saved from the app; true when the model has one.
+
+        The Agent is handed its key at bootstrap, so a key pasted into the TUI's
+        settings screen must be pushed into the live agent for the next turn to
+        use it without a restart.
+        """
+        if self.model is None or not hasattr(self, "agent"):
+            return False
+        api_key = api_key_for(self.catalog, self.model)
+        if not api_key:
+            return False
+        self.agent.api_key = api_key
+        self.missing_api_key = None
+        return True
+
     # -- construction -------------------------------------------------------
 
     @classmethod
@@ -140,6 +158,7 @@ class Runtime:
         stream_fn: StreamFn | None = None,
         assume_yes: bool = False,
         gate: PermissionGate | None = None,
+        allow_missing_key: bool = False,
     ) -> Runtime:
         runtime = cls()
         runtime.user_config = load_user_config()
@@ -149,12 +168,18 @@ class Runtime:
         model = resolve_model(
             runtime.catalog, options.model_id or runtime.user_config.default_model
         )
+        runtime.model = model
         api_key = api_key_for(runtime.catalog, model)
         if not api_key:
             provider = runtime.catalog.get(model.provider)
             env_name = provider.api_key_env if provider else "the provider's API key"
-            raise RuntimeError(f"missing API key for {model.id} (set {env_name})")
-        runtime.model = model
+            if not allow_missing_key:
+                raise RuntimeError(f"missing API key for {model.id} (set {env_name})")
+            # The TUI is a workbench, not a one-shot run: open it even without a
+            # key and let the user paste one from /settings instead of refusing
+            # to start. reload_api_key() adopts it for the next turn.
+            runtime.missing_api_key = env_name
+            api_key = ""
 
         mode = resolve_mode(
             explicit=options.mode,

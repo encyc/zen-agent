@@ -177,8 +177,19 @@ class ZenAgentApp(App):
     def on_mount(self) -> None:
         self.command_hints = self.query_one(CommandHints)
         self.query_one(Sidebar).display = False
+        self._announce_missing_key()
         self._refresh_status()
         self.query_one(PromptInput).focus()
+
+    def _announce_missing_key(self) -> None:
+        """A keyless first launch still opens; the banner says where to paste one."""
+        env_name = self.runtime.missing_api_key
+        if not env_name:
+            return
+        self.chat.set_last_error(
+            f"no API key for {self.runtime.model.id} — /settings → Model API keys, "
+            f"or set {env_name} and restart"
+        )
 
     def _on_change(self) -> None:
         # Streaming fires this per delta; coalesce bursts into one repaint.
@@ -482,7 +493,12 @@ class ZenAgentApp(App):
             if not value:
                 return
             settings.set_api_key(env_name, value)
-            self.notify(f"saved {env_name}", timeout=3)
+            recovered = self.runtime.reload_api_key()
+            if recovered:
+                self.chat.clear_last_error()
+            self.notify(
+                f"saved {env_name}" + (" · ready" if recovered else ""), timeout=3
+            )
             self._refresh_status()
 
         self.push_screen(
@@ -504,6 +520,10 @@ class ZenAgentApp(App):
                 result = self.models.switch(model_id)
                 if not result.ok:
                     self.notify(result.reason or "switch failed")
+                elif self.runtime.missing_api_key:
+                    # Picking a model that already has a key heals the banner.
+                    self.runtime.missing_api_key = None
+                    self.chat.clear_last_error()
                 self._refresh_status()
 
         self.open_menu("model", lambda: ModelPicker(self.models.entries()), selected)

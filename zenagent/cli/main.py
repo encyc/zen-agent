@@ -712,7 +712,9 @@ def main(argv: list[str] | None = None) -> int:
                 # Imported here so a broken install is reported by the except
                 # below instead of escaping as a traceback.
                 ZenAgentApp = _tui_app_class()
-                runtime = await Runtime.bootstrap(options, gate=broker)
+                runtime = await Runtime.bootstrap(
+                    options, gate=broker, allow_missing_key=True
+                )
                 try:
                     app = ZenAgentApp(runtime)
                     broker.set_confirm(app.request_tool_approval)

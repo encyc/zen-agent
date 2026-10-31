@@ -112,7 +112,9 @@ provider 错误不会进转录区，而是停在 dock 顶部的错误横幅里�
 - 下一轮生效；上下文窗口、thinking 默认值、session id 同步更新。
 - 重复按同一个快捷键只会聚焦已经打开的浮层，不会叠出第二个。
 
-编辑 provider/密钥请改 `~/.zenagent/config.toml`，TUI 不做内联编辑。
+密钥在 `/settings → Model API keys…` 里粘贴（存 `~/.zenagent/settings.json`，0600），保存后
+立即生效、无需重启；也可以继续写 `~/.zenagent/config.toml` 或设置 provider 的环境变量。
+启动时缺 key **不挡窗口**：TUI 照常打开，底部横幅提示该配哪个变量，配好后横幅消失。
 
 ## 会话管理
 
@@ -131,6 +133,7 @@ provider 错误不会进转录区，而是停在 dock 顶部的错误横幅里�
 ## 排障
 
 - 界面异常/无法启动：`TERM=dumb`、极老 conhost、非 TTY 环境会自动回落到 REPL。
+- 首次启动没配 key：TUI 不会拒绝启动，底部横幅提示到 `/settings → Model API keys` 粘贴即可。
 - 想看纯文本输出：`zen --no-tui`。
 - 只想跑一次：`zen -p "..."`（headless，不涉及 TUI）。
 - 缺 textual：`uv sync --extra cli`（缺依赖时 `zen` 会直接给出这句提示并以退出码 2 结束）。
@@ -145,6 +148,8 @@ provider 错误不会进转录区，而是停在 dock 顶部的错误横幅里�
 
 provider/流式失败会停在 dock 顶部的一行红色横幅（`✘ <原因>`）里，不再被后续输出刷走；
 **点击横幅**关闭，或开始下一轮时自动清掉。工具失败仍然落在各自的工具卡上，不进横幅。
+启动时缺 API key 也走这条横幅（`✘ no API key for … — /settings → Model API keys`），
+在设置里粘贴 key 后自动消失。
 
 ## 图片附件
 

@@ -176,6 +176,19 @@ class ChatController:
         self.runtime.agent.abort()
         self._notify()
 
+    def set_last_error(self, message: str) -> None:
+        """Show a frontend-initiated problem in the dock banner.
+
+        Used for setup states that block a run before the agent starts (a first
+        launch without an API key); a provider failure still overwrites it on
+        the next run.
+        """
+        message = (message or "").strip()
+        if message == self._last_error:
+            return
+        self._last_error = message
+        self._notify()
+
     def clear_last_error(self) -> None:
         """Dismiss the provider-error banner (click on the dock row)."""
         if self._last_error:
