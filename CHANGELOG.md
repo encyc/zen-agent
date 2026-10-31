@@ -3,6 +3,18 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## v0.4.3 — 2026-10-31
+
+### Changed
+
+- **Prompt subsystem, behavior-neutral.** Every fixed prompt string now lives in
+  `zenagent/prompts/blocks/` (26 blocks plus the `task` subagent's read-only
+  child prompt), assembled by a single contract (`compose_system` /
+  `compose_compact` / `tool_description`) shared by the TUI, headless, REPL,
+  RPC and eval paths. Adds the `zen prompts list|show|estimate` command, a
+  byte-parity golden suite against v0.4.1, source/budget gates, and a wheel
+  packaging check. No prompt text changed; content experiments land later.
+
 ## v0.4.2 — 2026-10-31
 
 ### Fixed
