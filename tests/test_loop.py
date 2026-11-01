@@ -1583,3 +1583,26 @@ async def test_after_tool_call_receives_the_tool_context():
         make_config(stream, tools=[make_tool("echo", echo)], after_tool_call=after),
     )
     assert seen == {"call_id": "t1", "tool": "echo"}
+
+
+async def test_after_tool_call_context_tolerates_an_unknown_tool():
+    seen: dict = {}
+
+    def after(tool_call, result, context):
+        seen["tool"] = context.tool
+        seen["approval"] = context.approval
+
+    stream = ScriptedStream(
+        [
+            [call_tool("t1", "ghost", {}), finish("tool_use")],
+            [say("ok"), finish("stop")],
+        ]
+    )
+    events = await run(
+        "go",
+        AgentState(),
+        make_config(stream, tools=[], after_tool_call=after),
+    )
+    end = events[types_of(events).index("tool_execution_end")]
+    assert end.is_error is True
+    assert seen == {"tool": None, "approval": "exec"}

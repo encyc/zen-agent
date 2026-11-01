@@ -144,7 +144,8 @@ class ToolContext:
     """
 
     call_id: str
-    tool: AgentTool
+    #: None only when the model called a tool that is not registered.
+    tool: AgentTool | None
     cwd: str
     approval: str
     timeout_s: float | None
@@ -419,8 +420,8 @@ async def _execute_tool(
             call_id=call.id,
             tool=tool,
             cwd=str(Path.cwd()),
-            approval=tool.approval,
-            timeout_s=effective_timeout(tool, call.name),
+            approval=tool.approval if tool is not None else "exec",
+            timeout_s=effective_timeout(tool, call.name) if tool is not None else None,
         )
         hook = config.after_tool_call
         if _hook_accepts(hook, 3):
