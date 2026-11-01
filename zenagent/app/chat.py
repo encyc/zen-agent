@@ -95,6 +95,17 @@ class ChatController:
     def transcript(self) -> list[ToolCallView]:
         return list(self._builder.views)
 
+    def last_assistant_text(self) -> str:
+        """The most recent assistant prose, or ``''`` when there is none.
+
+        Plan review reads this: plan mode is still "read-only + a prompt note",
+        so the plan itself is just the model's last answer.
+        """
+        for view in reversed(self.transcript):
+            if getattr(view, "kind", None) == "assistant" and view.text.strip():
+                return view.text.strip()
+        return ""
+
     @property
     def todos(self) -> list[dict]:
         """Current todo phases for the HUD (``[]`` while there is no list)."""

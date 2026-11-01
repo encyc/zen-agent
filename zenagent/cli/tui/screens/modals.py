@@ -10,7 +10,7 @@ from typing import Generic, TypeVar
 
 from rich.text import Text
 from textual.app import ComposeResult
-from textual.containers import Vertical
+from textual.containers import Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Input, OptionList, Static
 
@@ -30,6 +30,7 @@ __all__ = [
     "DialogScreen",
     "HistorySearch",
     "ModelPicker",
+    "PlanReview",
     "RenamePrompt",
     "SessionAction",
     "SessionPicker",
@@ -440,6 +441,36 @@ class Confirm(DialogScreen[bool]):
 
     def action_no(self) -> None:
         self.dismiss(False)
+
+
+class PlanReview(DialogScreen[str]):
+    """Read-only review of the last plan; approving switches to full mode."""
+
+    BINDINGS = [  # noqa: RUF012 - Textual class API
+        ("a", "approve", "Approve"),
+        ("k,escape", "keep", "Keep plan"),
+    ]
+
+    def __init__(self, plan: str) -> None:
+        super().__init__()
+        self.plan = plan
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Static(Text(t("tui.dialog.plan_review")), id="dialog-title")
+            with VerticalScroll(id="dialog-body"):
+                yield Static(Text(self.plan), classes="dialog-detail")
+            with Vertical(id="dialog-choices"):
+                yield DialogChoice(
+                    _choice("a", t("tui.dialog.approve_full")), "approve", primary=True
+                )
+                yield DialogChoice(_choice("k", t("tui.dialog.keep_plan")), "keep")
+
+    def action_approve(self) -> None:
+        self.dismiss("approve")
+
+    def action_keep(self) -> None:
+        self.dismiss("keep")
 
 
 class RenamePrompt(DialogScreen[str]):

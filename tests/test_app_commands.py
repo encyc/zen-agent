@@ -161,3 +161,18 @@ async def test_import_command_requires_a_path(services):
     registry = build_default_commands(services)
     result = await registry.dispatch("import", "")
     assert "usage" in (result.message or "")
+
+
+async def test_plan_review_command_needs_a_plan(services, monkeypatch):
+    registry = build_default_commands(services)
+    monkeypatch.setattr(services.chat, "last_assistant_text", lambda: "")
+    result = await registry.dispatch("plan-review", "")
+    assert result.screen is None
+    assert "no plan" in (result.message or "")
+
+
+async def test_plan_review_command_opens_the_review_screen(services, monkeypatch):
+    registry = build_default_commands(services)
+    monkeypatch.setattr(services.chat, "last_assistant_text", lambda: "1. do X")
+    result = await registry.dispatch("plan-review", "")
+    assert result.screen == "plan-review"

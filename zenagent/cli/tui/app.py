@@ -1215,6 +1215,25 @@ class ZenAgentApp(App):
 
         self.open_menu("model", lambda: ModelPicker(self.models.entries()), selected)
 
+    def open_plan_review(self) -> None:
+        """Read the last plan, then approve (→ full) or keep planning."""
+        from zenagent.cli.tui.screens.modals import PlanReview
+
+        plan = self.chat.last_assistant_text()
+        if not plan:
+            self.notify(t("tui.app.no_plan"), timeout=3)
+            return
+
+        async def reviewed(choice: str | None) -> None:
+            if choice != "approve":
+                return
+            self._mode_before_plan = None
+            self.runtime.set_mode("full")
+            self.notify(t("tui.app.mode_set", mode="full"))
+            self._refresh_status()
+
+        self.open_menu("plan-review", lambda: PlanReview(plan), reviewed)
+
     def open_mode_picker(self) -> None:
         from zenagent.app.slash_args import argument_values
         from zenagent.cli.tui.screens.modals import ChoicePicker
@@ -1454,6 +1473,8 @@ class ZenAgentApp(App):
             self.open_language_picker()
         elif result.screen == "settings":
             self.open_settings()
+        elif result.screen == "plan-review":
+            self.open_plan_review()
         elif result.screen == "search-settings":
             self.open_search_provider()
         elif result.show_help:

@@ -523,6 +523,15 @@ async def _settings(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(screen="settings")
 
 
+@_command("plan-review")
+async def _plan_review(services: AppServices, argument: str) -> CommandResult:
+    """Review the plan the model produced in plan mode (approve → full)."""
+    plan = services.chat.last_assistant_text()
+    if not plan:
+        return CommandResult(message=t("cmdmsg.no_plan"))
+    return CommandResult(screen="plan-review")
+
+
 @_command("import")
 async def _import(services: AppServices, argument: str) -> CommandResult:
     """Load a session file and continue it (the REPL's /import, for the TUI)."""
@@ -573,6 +582,7 @@ def build_default_commands(services: AppServices) -> CommandRegistry:
         _fork,
         _import,
         _settings,
+        _plan_review,
         _undo,
         _restore,
         _retry,

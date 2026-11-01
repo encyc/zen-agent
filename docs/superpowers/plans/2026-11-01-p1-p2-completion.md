@@ -3,7 +3,7 @@
 > **For agentic workers:** 逐任务执行；每个任务先写失败测试（RED），再实现（GREEN），跑定向测试，最后 `bash scripts/check.sh` 全量闸门。任务用 `- [ ]` 跟踪。
 > **状态**：2026-11-01 制定；基线 `d5f1dcf`（v0.5.1），分支 `feat/p1-p2-completion`。
 > **来源**：2026-11-01 全量代码核查（09/10/12 三份调研文档已过时，以核查结果为准）。
-> **执行进度（round 1，HEAD 见分支）**：M1（T1–T5）、M2（T6–T8）、T9/T10/T11 完成；T12 完成专用卡与 warning 级，连续 read 分组留待后续；下一步 T13（plan review）→ M4（github/checkpoint/LSP/内核小项）→ M5 → M6。全量测试 1803 passed。
+> **执行进度（round 1，HEAD 见分支）**：M1（T1–T5）、M2（T6–T8）、T9/T10/T11 完成；T12 完成专用卡与 warning 级（连续 read 分组留待后续）、T13（plan review）完成；下一步 M4（github/checkpoint/LSP/内核小项）→ M5 → M6。全量测试 1803 passed。
 > **Goal**：把 2026-11-01 报告里的 P1、P2 项全部排期并实现，交付一个可合并的 worktree。
 
 ## Global Constraints
