@@ -13,6 +13,10 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import os
+import shlex
+import subprocess
+import tempfile
 import time
 from pathlib import Path
 
@@ -98,6 +102,7 @@ class ZenAgentApp(App):
         ("ctrl+o", "toggle_tools", "Expand tools"),
         ("ctrl+k", "command_palette", "Commands"),
         ("ctrl+r", "history_search", "History"),
+        ("ctrl+g", "edit_external", "Editor"),
         ("ctrl+b", "toggle_sidebar", "Info"),
         ("ctrl+s", "steer", "Steer"),
         ("ctrl+x", "clear_queue", "Clear queue"),
@@ -1588,6 +1593,53 @@ class ZenAgentApp(App):
     def action_retry(self) -> None:
         """F5 / alt+r: same path as ``/retry`` so the two cannot drift."""
         self.run_worker(self._dispatch_command("retry", ""))
+
+    def action_edit_external(self) -> None:
+        """ctrl+g: edit the draft in ``$VISUAL``/``$EDITOR`` and put it back."""
+        prompt = self.query_one(PromptInput)
+        edited = self.edit_draft_externally(prompt.text)
+        if edited is None:
+            return
+        prompt.clear()
+        prompt.insert(edited)
+
+    def edit_draft_externally(self, text: str) -> str | None:
+        """Open ``text`` in the user's editor; return the result or ``None``.
+
+        Returns ``None`` (leaving the draft untouched) when no editor is
+        configured, the editor exits non-zero, or the process cannot start.
+        Split out from the action so tests can drive it without a terminal.
+        """
+        raw = os.environ.get("VISUAL") or os.environ.get("EDITOR")
+        if not raw or not raw.strip():
+            self.notify(t("tui.app.no_editor"), timeout=3)
+            return None
+        try:
+            command = shlex.split(raw)
+        except ValueError:
+            command = []
+        if not command:
+            self.notify(t("tui.app.no_editor"), timeout=3)
+            return None
+        handle = tempfile.NamedTemporaryFile(
+            "w", suffix=".md", delete=False, encoding="utf-8"
+        )
+        try:
+            with handle:
+                handle.write(text)
+            path = Path(handle.name)
+            try:
+                with self.suspend():
+                    code = subprocess.call([*command, str(path)])
+            except Exception as exc:  # noqa: BLE001 - never kill the app
+                self.notify(t("tui.app.editor_failed", error=exc), timeout=3)
+                return None
+            if code != 0:
+                self.notify(t("tui.app.editor_failed", error=f"exit {code}"), timeout=3)
+                return None
+            return path.read_text(encoding="utf-8")
+        finally:
+            Path(handle.name).unlink(missing_ok=True)
 
     def action_cycle_thinking(self) -> None:
         levels = ["off", "low", "medium", "high"]

@@ -228,6 +228,8 @@ CATALOG: dict[str, str] = {
     "tui.app.exported": "已导出：{path}",
     "tui.app.renamed": "已重命名：{name}",
     "tui.app.unknown_command": "未知命令：/{name}",
+    "tui.app.no_editor": "设置 $VISUAL 或 $EDITOR 才能用外部编辑器",
+    "tui.app.editor_failed": "编辑器失败：{error}",
     "tui.app.command_failed": "/{name} 执行失败：{error}",
     # TUI：工具卡
     "tui.tool.status_running": "运行中",
@@ -339,7 +341,7 @@ CATALOG: dict[str, str] = {
     "cmdmsg.usage_info": "入 {input} · 出 {output} · 缓存读 {cache} · ${cost}",
     "cmdmsg.context_info": "上下文：{used}/{window}（已用 {pct:.1f}%，剩余 {left}）",
     "cmdmsg.search_provider_info": "搜索 provider：{provider}",
-    "cmdmsg.hotkeys_text": "enter 发送 · shift+enter 换行\nesc 中断 · 空草稿连按两次 esc 回退 · ctrl+c 清草稿 · ctrl+d 退出\nctrl+q 排队追加 · alt+up 取回 · ctrl+s 插话 · ctrl+x 清空队列\nctrl+p 下一个模型 · shift+ctrl+p 上一个模型 · alt+p 选模型 · shift+tab 思考\nalt+shift+p plan 模式 · f5 重跑 · ctrl+o 展开工具 · ctrl+t 收起思考\nctrl+k 命令 · ctrl+b 信息 · pageup/pagedown 滚动",
+    "cmdmsg.hotkeys_text": "enter 发送 · shift+enter 换行\nesc 中断 · 空草稿连按两次 esc 回退 · ctrl+c 清草稿 · ctrl+d 退出\nctrl+q 排队追加 · alt+up 取回 · ctrl+s 插话 · ctrl+x 清空队列\nctrl+p 下一个模型 · shift+ctrl+p 上一个模型 · alt+p 选模型 · shift+tab 思考\nalt+shift+p plan 模式 · f5 重跑 · ctrl+o 展开工具 · ctrl+t 收起思考\nctrl+k 命令 · ctrl+b 信息 · ctrl+g 编辑器 · pageup/pagedown 滚动",
     "cmdmsg.cannot_undo": "agent 正在运行时不能撤回",
     "cmdmsg.nothing_to_undo": "没有可撤回的内容",
     "cmdmsg.undone": "已撤回上一轮（{count} 条消息）→ {path}",

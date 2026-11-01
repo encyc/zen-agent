@@ -273,3 +273,42 @@ async def test_f5_and_alt_r_dispatch_the_shared_retry_command(picker_app, monkey
         await pilot.press("alt+r")
         await pilot.pause()
     assert calls == [("retry", ""), ("retry", "")]
+
+
+async def test_ctrl_g_replaces_the_draft_with_the_edited_text(picker_app, monkeypatch):
+    app = picker_app
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        prompt = app.query_one(PromptInput)
+        prompt.insert("draft")
+        monkeypatch.setattr(
+            app, "edit_draft_externally", lambda text: text + " (edited)"
+        )
+        await pilot.press("ctrl+g")
+        await pilot.pause()
+        assert prompt.text == "draft (edited)"
+
+
+async def test_ctrl_g_keeps_the_draft_when_editing_is_cancelled(
+    picker_app, monkeypatch
+):
+    app = picker_app
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        prompt = app.query_one(PromptInput)
+        prompt.insert("draft")
+        monkeypatch.setattr(app, "edit_draft_externally", lambda text: None)
+        await pilot.press("ctrl+g")
+        await pilot.pause()
+        assert prompt.text == "draft"
+
+
+async def test_external_editor_without_a_configured_editor_notifies(
+    picker_app, monkeypatch
+):
+    monkeypatch.delenv("VISUAL", raising=False)
+    monkeypatch.delenv("EDITOR", raising=False)
+    app = picker_app
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        assert app.edit_draft_externally("draft") is None
