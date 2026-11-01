@@ -327,6 +327,11 @@ async def run_headless(
     else:
         session = Session(unique_session_path())
     if tools is None:
+        from zenagent.tools.github import build_github_tool
+
+        github_tool = build_github_tool()
+        if github_tool is not None:
+            tool_list.append(github_tool)
         tool_list.append(build_todo_tool(session.path))
         tool_list.append(
             build_task_tool(

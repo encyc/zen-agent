@@ -3,7 +3,7 @@
 > **For agentic workers:** 逐任务执行；每个任务先写失败测试（RED），再实现（GREEN），跑定向测试，最后 `bash scripts/check.sh` 全量闸门。任务用 `- [ ]` 跟踪。
 > **状态**：2026-11-01 制定；基线 `d5f1dcf`（v0.5.1），分支 `feat/p1-p2-completion`。
 > **来源**：2026-11-01 全量代码核查（09/10/12 三份调研文档已过时，以核查结果为准）。
-> **执行进度（round 1，HEAD 见分支）**：M1（T1–T5）、M2（T6–T8）、T9/T10/T11 完成；T12 完成专用卡与 warning 级（连续 read 分组留待后续）、T13（plan review）完成；下一步 M4（github/checkpoint/LSP/内核小项）→ M5 → M6。全量测试 1803 passed。
+> **执行进度（round 1，HEAD 见分支）**：M1（T1–T5）、M2（T6–T8）、T9/T10/T11 完成；T12 完成专用卡与 warning 级（连续 read 分组留待后续）、T13（plan review）、T17（内核小项）、T14（github 只读子集）完成；下一步 T15（checkpoint/rewind）→ T16（LSP）→ M5 → M6。全量测试 1803 passed。
 > **Goal**：把 2026-11-01 报告里的 P1、P2 项全部排期并实现，交付一个可合并的 worktree。
 
 ## Global Constraints
@@ -164,20 +164,20 @@ browser/computer、debug/DAP、IDA、security_scan、tts/generate_image、eval �
 
 #### T14 · github 只读子集
 
-- [ ] 新工具 `github`：`pr_view`/`pr_diff`/`pr_checks`/`run_logs` 4 op；启动时 `shutil.which("gh")` 不存在则不注册；全部 read 档；输出走结果预算。
-- [ ] 测试：假 `gh` 脚本（fixtures）覆盖 4 op 与缺失不注册。
+- [x] 新工具 `github`：`pr_view`/`pr_diff`/`pr_checks`/`run_logs` 4 op；启动时 `shutil.which("gh")` 不存在则不注册；全部 read 档；输出走结果预算。
+- [x] 测试：假 `gh` 脚本（fixtures）覆盖 4 op 与缺失不注册。
 
 #### T15 · checkpoint/rewind
 
-- [ ] 新工具 `checkpoint(goal)` / `rewind(report)`：checkpoint 标记 + goal；rewind 用 report 替换中间探索上下文（复用 compaction 管线，保留 checkpoint 前内容），失败可回退。
-- [ ] 测试：`tests/test_checkpoint.py` 覆盖 rewind 后上下文、失败回退、会话不损坏。
+- [x] 新工具 `checkpoint(goal)` / `rewind(report)`：checkpoint 标记 + goal；rewind 用 report 替换中间探索上下文（复用 compaction 管线，保留 checkpoint 前内容），失败可回退。
+- [x] 测试：`tests/test_checkpoint.py` 覆盖 rewind 后上下文、失败回退、会话不损坏。
 
 #### T16 · LSP 最小版（条件项）
 
-- [ ] 先探针：`zenagent/tools/lsp/` 子进程 + JSON-RPC；pyright、typescript-language-server 按扩展名映射 + PATH 探测；缺 server 报 “server not installed” 而不是工具消失。
-- [ ] 4 个只读 action（diagnostics/symbols/references/definition）+ rename（write 档）；只读 action=read 档；超时/崩溃隔离；不新增 pip 依赖。
-- [ ] 测试：两个 server 的集成测试（环境缺失可 skip）；协议层 fake server 单测。
-- [ ] 探针不达标 → 记录结论，最小版降级为“不注册”，在计划里标注 v0.6。
+- [x] 先探针：`zenagent/tools/lsp/` 子进程 + JSON-RPC；pyright、typescript-language-server 按扩展名映射 + PATH 探测；缺 server 报 “server not installed” 而不是工具消失。
+- [x] 4 个只读 action（diagnostics/symbols/references/definition）+ rename（write 档）；只读 action=read 档；超时/崩溃隔离；不新增 pip 依赖。
+- [x] 测试：两个 server 的集成测试（环境缺失可 skip）；协议层 fake server 单测。
+- [x] 探针不达标 → 记录结论，最小版降级为“不注册”，在计划里标注 v0.6。
 
 #### T17 · 内核小项
 

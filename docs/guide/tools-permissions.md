@@ -17,6 +17,7 @@
 | `web_search` | 联网搜索，返回标题/URL/摘要（DeepSeek → Tavily → Brave → Bing → DuckDuckGo） | 只读，免确认 |
 | `fetch` | 抓取 URL 并转成可读文本（优先 article/main、去页面 chrome，12k 字符上限；可选 `timeout_s` 1–45s；`details.method` 报告抽取方式） | 只读，免确认 |
 | `read_skill` | 读本地 SKILL.md 正文 | 只读 |
+| `github` | 只读 GitHub 集成（`gh` 存在才注册）：`pr_view` / `pr_diff` / `pr_checks` / `run_logs`（失败 job 日志） | 只读 |
 | `todo` | 会话级任务清单（phases / 按内容寻址 / 9 个 op）；状态写 `<session>.todo.json`，不碰工作区（plan/`--read-only` 下也会写这个会话 sidecar） | 只读 |
 
 每个工具还声明一个能力级（`AgentTool.approval = "read" | "write" | "exec"`）：

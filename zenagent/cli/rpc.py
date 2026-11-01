@@ -203,6 +203,7 @@ async def _run(args) -> int:
     from zenagent.config import apply_user_config, load_user_config
     from zenagent.providers.catalog import load_catalog
     from zenagent.tools import ALL_TOOLS
+    from zenagent.tools.github import build_github_tool
     from zenagent.tools.task import build_task_tool
     from zenagent.tools.todo import build_todo_tool
 
@@ -218,6 +219,7 @@ async def _run(args) -> int:
         gate,
         tools=[
             *list(ALL_TOOLS),
+            *([build_github_tool()] if build_github_tool() is not None else []),
             build_todo_tool(None),
             build_task_tool(
                 model=model,

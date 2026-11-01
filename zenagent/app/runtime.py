@@ -65,6 +65,7 @@ from zenagent.templates import (
     discover_templates,
 )
 from zenagent.tools import ALL_TOOLS
+from zenagent.tools.github import build_github_tool
 from zenagent.tools.task import build_task_tool
 from zenagent.tools.todo import (
     TodoTool,
@@ -472,6 +473,9 @@ class Runtime:
         prompt's skill index and ``agent.tools`` from drifting apart.
         """
         tools = list(ALL_TOOLS)
+        github_tool = build_github_tool()
+        if github_tool is not None:
+            tools.append(github_tool)
         if self.todo_tool is not None:
             tools.append(self.todo_tool)
         if self.task_tool is not None:
