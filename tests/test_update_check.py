@@ -114,6 +114,28 @@ async def test_refresh_skips_fresh_cache(tmp_path, monkeypatch):
     assert calls == []
 
 
+def test_cache_ttl_is_one_hour():
+    # Releases land several times a day; a longer TTL hides a fresh release from
+    # anyone who opened the TUI before it was published.
+    assert update_check.CACHE_TTL_S == 60 * 60
+
+
+async def test_refresh_refetches_a_cache_older_than_an_hour(tmp_path, monkeypatch):
+    _write(
+        {"checked_at": time.time() - update_check.CACHE_TTL_S - 1, "latest": "0.3.0"},
+        tmp_path,
+        monkeypatch,
+    )
+    calls: list[int] = []
+
+    async def fake_fetch() -> str:
+        calls.append(1)
+        return "0.4.0"
+
+    assert await update_check.refresh(installed="0.3.0", fetch=fake_fetch) == "0.4.0"
+    assert calls == [1]
+
+
 async def test_refresh_fetches_updates_cache_and_returns_candidate(tmp_path, monkeypatch):
     _write({"checked_at": 0.0, "latest": "0.3.0"}, tmp_path, monkeypatch)
 

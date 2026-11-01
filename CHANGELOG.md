@@ -3,6 +3,16 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased — update-check responsiveness
+
+### Changed
+
+- **Update check cache TTL: 24 h → 1 h** (`CACHE_TTL_S` in `zenagent/update_check.py`).
+  A cached PyPI answer is revalidated every hour, so a release published after the
+  last check is reported within the hour instead of the next day. The
+  once-per-version `notified` dedupe, the background-only lookup and the silent
+  failure handling are unchanged; `README.md` now documents "at most once an hour".
+
 ## v0.6.0 — 2026-11-01
 
 **P1/P2 completion: tool registry and world tools (LSP, GitHub, checkpoint/rewind),

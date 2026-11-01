@@ -1,7 +1,7 @@
 """Is there a newer ``zenagent-py`` on PyPI? (Interactive TUI only.)
 
 The TUI reads a small local cache at startup and, when the cache is older than
-a day, refreshes it from PyPI in one background worker; if the published
+an hour, refreshes it from PyPI in one background worker; if the published
 version is newer than the installed one it prints a single quiet line in the
 transcript. Headless, ``--json``, REPL and RPC modes never call into this
 module, and every failure here is silent: a version check may never delay or
@@ -47,8 +47,10 @@ __all__ = [
 
 #: The only version source; ``info.version`` is the published release.
 PYPI_URL = "https://pypi.org/pypi/zenagent-py/json"
-#: Seconds a cached answer is trusted before another network check.
-CACHE_TTL_S = 24 * 60 * 60
+#: Seconds a cached answer is trusted before another network check. This project
+#: releases several times a day, so an hour bounds how long a fresh release can
+#: go unseen without putting the lookup on the hot path.
+CACHE_TTL_S = 60 * 60
 #: Network budget for the PyPI lookup.
 REQUEST_TIMEOUT_S = 3.0
 
