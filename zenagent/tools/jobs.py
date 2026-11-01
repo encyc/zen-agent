@@ -201,6 +201,29 @@ class JobManager:
             self._retire(job)
         return job
 
+    async def kill(self, job_id: str) -> Job:
+        """Cancel one job: kill its process group and mark it failed.
+
+        Used by ``/jobs kill``; finished jobs are left alone (their result is
+        what ``wait`` reports). Raises :class:`UnknownJobError` for a bad id.
+        """
+        job = self._jobs.get(job_id)
+        if job is None:
+            raise UnknownJobError(job_id, self.ids())
+        if job.running:
+            if job._task is not None:
+                job._task.cancel()
+            if job._proc is not None:
+                import contextlib
+
+                with contextlib.suppress(Exception):
+                    await kill_process_group(job._proc)
+            job.status = "failed"
+            job.error = job.error or "killed by /jobs"
+            job.finished_at = job.finished_at or time.time()
+            job._done.set()
+        return job
+
     async def close(self) -> None:
         """Cancel every job, kill its process group and drop it.
 

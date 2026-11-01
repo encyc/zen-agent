@@ -100,6 +100,8 @@ class ZenAgentApp(App):
         ("alt+r", "retry", "Retry"),
         ("ctrl+t", "toggle_thinking", "Expand thinking"),
         ("ctrl+o", "toggle_tools", "Expand tools"),
+        ("ctrl+shift+o", "toggle_tool_visibility", "Show/hide tools"),
+        ("alt+l", "display_reset", "Reset display"),
         ("ctrl+k", "command_palette", "Commands"),
         ("ctrl+r", "history_search", "History"),
         ("ctrl+g", "edit_external", "Editor"),
@@ -935,6 +937,11 @@ class ZenAgentApp(App):
         because our palettes are all rooted at the same screen.
         """
         if kind in self._menus:
+            # A repeat request must not stack a second panel; focus the open one.
+            existing = self._menus[kind]
+            focus = getattr(existing, "focus", None)
+            if callable(focus):
+                focus()
             return
         screen = factory()
         self._menus[kind] = screen
@@ -1475,6 +1482,8 @@ class ZenAgentApp(App):
             self.open_settings()
         elif result.screen == "plan-review":
             self.open_plan_review()
+        elif result.screen == "display-reset":
+            self.action_display_reset()
         elif result.screen == "search-settings":
             self.open_search_provider()
         elif result.show_help:
@@ -1748,6 +1757,22 @@ class ZenAgentApp(App):
         if cleared:
             self.notify(t("tui.queue.cleared"), timeout=2)
         self._refresh_status()
+
+    def action_toggle_tool_visibility(self) -> None:
+        """ctrl+shift+o: hide/show every tool card (omp's tools.toggleVisibility)."""
+        transcript = self.query_one(TranscriptView)
+        transcript.set_tools_hidden(not transcript.tools_hidden)
+
+    def action_display_reset(self) -> None:
+        """alt+l: restore the default display state after fiddling with cards."""
+        from zenagent.cli.tui.widgets.rows import ThinkingRow
+
+        transcript = self.query_one(TranscriptView)
+        transcript.set_tools_hidden(False)
+        for row in self.query(ThinkingRow):
+            if not row.collapsed:
+                row.action_toggle()
+        transcript.scroll_end(animate=False)
 
     def action_toggle_tools(self) -> None:
         """Batch expand/collapse; single cards keep Enter/space (omp parity)."""

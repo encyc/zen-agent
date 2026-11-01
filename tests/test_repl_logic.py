@@ -976,3 +976,33 @@ async def test_slash_doctor_runs_the_checks(capsys, monkeypatch):
     agent = Agent(model(), "s", api_key="k")
     await handle_slash(agent, "doctor", "")
     assert "demo" in capsys.readouterr().out
+
+
+async def test_slash_dirs_tracks_extra_roots(tmp_path, capsys):
+    agent = Agent(model(), "s", api_key="k")
+    extra = tmp_path / "extra"
+    extra.mkdir()
+    dirs: list[str] = []
+    await handle_slash(agent, "add-dir", str(extra), extra_dirs=dirs)
+    assert dirs == [str(extra)]
+    await handle_slash(agent, "dirs", "", extra_dirs=dirs)
+    out = capsys.readouterr().out
+    assert str(extra) in out
+
+
+async def test_slash_btw_requires_a_question(capsys):
+    agent = Agent(model(), "s", api_key="k")
+    await handle_slash(agent, "btw", "")
+    assert "usage" in capsys.readouterr().out
+
+
+async def test_slash_shake_rejects_unknown_kind(capsys):
+    agent = Agent(model(), "s", api_key="k")
+    await handle_slash(agent, "shake", "everything")
+    assert "usage" in capsys.readouterr().out
+
+
+async def test_slash_trace_reports_disabled(capsys):
+    agent = Agent(model(), "s", api_key="k")
+    await handle_slash(agent, "trace", "")
+    assert "not enabled" in capsys.readouterr().out

@@ -188,8 +188,9 @@ browser/computer、debug/DAP、IDA、security_scan、tts/generate_image、eval �
 
 #### T18 · 命令批
 
-- [ ] `/jobs`（列表 + kill）、`/trace`（打开当前 trace 文件）、`/shake`（分级瘦身：工具结果/图片/thinking）、`/handoff`（总结成交接文档后压缩）、`/btw`（侧问答，不污染主上下文）、`/copy`（选段复制）、`/add-dir` `/remove-dir` `/dirs`（多根工作区）、`/fresh` `/restart`。
-- [ ] 测试：`tests/test_app_commands.py`、`tests/test_repl_logic.py`；多根工作区改 `Runtime`/工具 cwd 解析。
+- [x] `/jobs`（列表 + kill）、`/shake`（tools/images/thinking，新会话文件）、`/btw`（旁路问答，不进 transcript）、`/copy`（剪贴板）、`/add-dir` `/remove-dir` `/dirs`、`/fresh`（重置显示状态）、`/handoff`（compact + 交接 md）、`/trace`（报告 trace 路径）。
+- [x] 测试：`tests/test_app_commands.py`、`tests/test_repl_logic.py`。
+- [ ] 未做（记录理由）：`/restart`（需要进程 supervisor，TUI 内重启不安全）；多根目录目前只记录/展示，工具 cwd 解析仍以单根为准（`/add-dir` 不改变安全围栏）。
 
 #### T19 · 浮层批
 

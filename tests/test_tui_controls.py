@@ -378,3 +378,84 @@ async def test_plan_review_without_a_plan_does_not_open(picker_app, monkeypatch)
         app.open_plan_review()
         await pilot.pause()
         assert app.runtime.mode != "full"
+
+
+async def test_escape_clears_the_picker_search_before_closing(picker_app):
+    from zenagent.cli.tui.screens.modals import ModelPicker
+
+    app = picker_app
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        app.open_model_picker()
+        await pilot.pause()
+        assert isinstance(app.screen, ModelPicker)
+        picker = app.screen
+
+        picker.query_one("#palette-search").value = "deep"
+        await pilot.pause()
+        await pilot.press("escape")
+        await pilot.pause()
+        assert isinstance(app.screen, ModelPicker), "first escape only clears the search"
+        assert picker.query_one("#palette-search").value == ""
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert not isinstance(app.screen, ModelPicker)
+
+
+async def test_ctrl_shift_o_hides_and_shows_tool_cards(chat_app_with_one_tool):
+    from zenagent.cli.tui.widgets.rows import ReadGroup
+
+    app = chat_app_with_one_tool
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await app.chat.submit("go")
+        await app.chat.wait_for_idle()
+        await pilot.pause()
+        await pilot.pause()
+        group = app.query(ReadGroup).first()
+        assert group.display is True
+
+        await pilot.press("ctrl+shift+o")
+        await pilot.pause()
+        assert group.display is False
+
+        await pilot.press("ctrl+shift+o")
+        await pilot.pause()
+        assert group.display is True
+
+
+async def test_alt_l_restores_the_default_display(chat_app_with_one_tool):
+    from zenagent.cli.tui.widgets.rows import ReadGroup
+
+    app = chat_app_with_one_tool
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await app.chat.submit("go")
+        await app.chat.wait_for_idle()
+        await pilot.pause()
+        await pilot.pause()
+        await pilot.press("ctrl+shift+o")
+        await pilot.pause()
+        assert app.query(ReadGroup).first().display is False
+
+        await pilot.press("alt+l")
+        await pilot.pause()
+        assert app.query(ReadGroup).first().display is True
+
+
+async def test_reopening_a_menu_does_not_stack_a_second_panel(picker_app):
+    from zenagent.cli.tui.screens.modals import ModelPicker
+
+    app = picker_app
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        app.open_model_picker()
+        await pilot.pause()
+        screens = sum(isinstance(screen, ModelPicker) for screen in app.screen_stack)
+        assert screens == 1
+
+        app.open_model_picker()
+        await pilot.pause()
+        screens = sum(isinstance(screen, ModelPicker) for screen in app.screen_stack)
+        assert screens == 1

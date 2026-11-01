@@ -90,7 +90,7 @@
 | 图片输入 | `attachments.py` | `test_images.py` | — |
 | 主题 / 键位 | `cli/theme.py`、`cli/keybindings.py` | `test_theme.py` | — |
 
-REPL 命令：`/help /exit /clear /model /thinking /mode /session /sessions /rename /fork /import /undo /restore /retry /tools /compact /image /images /skills /mcp /reload /theme /lang /hotkeys`。
+REPL 命令：`/help /exit /clear /model /thinking /mode /session /sessions /rename /fork /import /undo /restore /retry /tools /compact /image /images /skills /mcp /reload /theme /lang /hotkeys /pin /new /settings /search /doctor /jobs /copy /btw /shake /handoff /add-dir /remove-dir /dirs /fresh /trace`。
 
 ## 7. MCP
 

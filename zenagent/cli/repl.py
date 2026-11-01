@@ -99,7 +99,7 @@ from zenagent.tools.ask import set_ask_handler
 from zenagent.tools.task import build_task_tool
 from zenagent.tools.todo import build_todo_tool
 from zenagent.trace import TraceRecorder
-from zenagent.types import ImageContent
+from zenagent.types import ImageContent, TextContent
 
 __all__ = [
     "THINKING_LEVELS",
@@ -149,6 +149,8 @@ async def handle_slash(
     keybindings=None,
     set_mode=None,
     restore=None,
+    extra_dirs: list[str] | None = None,
+    trace_path: str | None = None,
 ) -> str | None:
     """Run one slash command; returns ``"exit"`` when the REPL should stop."""
     if command in ("exit", "quit"):
@@ -559,6 +561,155 @@ async def handle_slash(
             print_fn(t("repl.compaction_failed", error=exc))
         else:
             print_fn(t("repl.compacted", path=path.name))
+        return None
+
+    if command == "jobs":
+        from zenagent.tools.jobs import UnknownJobError, get_job_manager
+
+        manager = get_job_manager()
+        raw = argument.strip()
+        if raw.startswith("kill"):
+            job_id = raw[len("kill") :].strip()
+            if not job_id:
+                print_fn(t("cmdmsg.jobs_usage"))
+                return None
+            try:
+                job = await manager.kill(job_id)
+            except UnknownJobError as exc:
+                print_fn(str(exc))
+                return None
+            print_fn(t("cmdmsg.job_killed", id=job.id))
+            return None
+        jobs = manager.list()
+        if not jobs:
+            print_fn(t("cmdmsg.no_jobs"))
+            return None
+        for job in jobs:
+            print_fn(
+                t(
+                    "cmdmsg.jobs_row",
+                    id=job.id,
+                    status=job.status,
+                    command=job.command[:70],
+                )
+            )
+        return None
+    if command == "copy":
+        from zenagent.cli.tui.clipboard import write_clipboard_text
+        from zenagent.types import AssistantMessage
+
+        text = argument.strip()
+        if not text:
+            for message in reversed(agent.messages):
+                if not isinstance(message, AssistantMessage):
+                    continue
+                text = "".join(
+                    block.text
+                    for block in message.content
+                    if isinstance(block, TextContent)
+                ).strip()
+                if text:
+                    break
+        if not text:
+            print_fn(t("cmdmsg.copy_empty"))
+            return None
+        print_fn(
+            t("cmdmsg.copied") if write_clipboard_text(text) else t("cmdmsg.copy_failed")
+        )
+        return None
+    if command == "btw":
+        from zenagent.app.btw import ask_side_question
+
+        if not argument.strip():
+            print_fn(t("cmdmsg.btw_usage"))
+            return None
+        try:
+            answer = await ask_side_question(agent, argument)
+        except (ValueError, RuntimeError) as exc:
+            print_fn(str(exc))
+            return None
+        print_fn(answer)
+        return None
+    if command == "shake":
+        from zenagent.app.shake import KINDS, shake
+
+        raw = argument.strip().lower()
+        if raw in ("", "all"):
+            kinds = set(KINDS)
+        elif raw in KINDS:
+            kinds = {raw}
+        else:
+            print_fn(t("cmdmsg.shake_usage"))
+            return None
+        try:
+            changed, new_session = shake(agent, kinds)
+        except ValueError as exc:
+            print_fn(str(exc))
+            return None
+        if switch_session is not None:
+            switch_session(new_session)
+        print_fn(t("cmdmsg.shaken", count=changed, path=new_session.path.name))
+        return None
+    if command == "handoff":
+        from zenagent.app.compact import compact as compact_session
+
+        try:
+            path = await compact_session(agent)
+        except (ValueError, RuntimeError) as exc:
+            print_fn(str(exc))
+            return None
+        summary = "\n".join(
+            block.text
+            for message in agent.messages
+            for block in getattr(message, "content", [])
+            if isinstance(block, TextContent)
+        ).strip()
+        document = Path.cwd() / f"handoff-{time.strftime('%Y%m%d-%H%M%S')}.md"
+        try:
+            document.write_text(f"# Handoff\n\n{summary}\n", encoding="utf-8")
+        except OSError as exc:
+            print_fn(str(exc))
+            return None
+        if switch_session is not None:
+            switch_session(Session(path))
+        print_fn(t("cmdmsg.handoff", path=document.name))
+        return None
+    if command in ("add-dir", "remove-dir", "dirs"):
+        if extra_dirs is None:
+            print_fn(t("cmdmsg.dirs_usage"))
+            return None
+        if command == "dirs":
+            print_fn(
+                t("cmdmsg.dirs", dirs="\n".join([str(Path.cwd()), *extra_dirs]))
+            )
+            return None
+        raw = argument.strip()
+        if not raw:
+            print_fn(t("cmdmsg.dirs_usage"))
+            return None
+        path = Path(raw).expanduser().resolve()
+        if command == "add-dir":
+            if not path.is_dir():
+                print_fn(t("cmdmsg.dir_missing", path=path))
+                return None
+            if str(path) not in extra_dirs:
+                extra_dirs.append(str(path))
+            print_fn(t("cmdmsg.dir_added", path=path))
+            return None
+        if str(path) in extra_dirs:
+            extra_dirs.remove(str(path))
+            print_fn(t("cmdmsg.dir_removed", path=path))
+            return None
+        print_fn(t("cmdmsg.dir_missing", path=path))
+        return None
+    if command == "fresh":
+        print_fn(t("cmdmsg.fresh"))
+        return None
+    if command == "trace":
+        if not trace_path:
+            print_fn(t("cmdmsg.trace_off"))
+            return None
+        print_fn(t("cmdmsg.trace_path", path=trace_path))
         return None
     if extension_commands and command in extension_commands:
         handler = extension_commands[command].handler
@@ -1240,6 +1391,7 @@ async def repl(
                 )
             )
 
+    extra_dirs: list[str] = []
     set_ask_handler(ask_user)
     try:
         while True:
@@ -1329,6 +1481,8 @@ async def repl(
                             argument,
                             running=agent.is_streaming,
                         ),
+                        extra_dirs=extra_dirs,
+                        trace_path=trace,
                     )
                     == "exit"
                 ):

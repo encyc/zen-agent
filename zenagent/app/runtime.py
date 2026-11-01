@@ -146,6 +146,10 @@ class Runtime:
         self.tool_registry = ToolRegistry()
         #: Checkpoint/rewind markers (context projection; transcript stays intact).
         self.rewind = RewindState()
+        #: Extra workspace roots tracked by /add-dir (display only for now).
+        self.extra_dirs: list[Path] = []
+        #: JSONL trace path when the frontend started with --trace.
+        self.trace_path: str | None = None
         self._skill_entries = ""
         self._extension_prompt = ""
         self._extension_tools: list = []

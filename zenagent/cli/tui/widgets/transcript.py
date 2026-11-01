@@ -63,6 +63,8 @@ class TranscriptView(VerticalScroll):
         self._follow_pending = False
         #: Open consecutive-read group; closed by any other row.
         self._open_read_group: ReadGroup | None = None
+        #: ctrl+shift+o state: tool cards hidden but still updating.
+        self.tools_hidden = False
 
     def on_mount(self) -> None:
         if self._welcome:
@@ -267,8 +269,17 @@ class TranscriptView(VerticalScroll):
             seconds=view.thinking_seconds,
         )
 
+    def set_tools_hidden(self, hidden: bool) -> None:
+        """Hide/show every tool card (and read group) without dropping state."""
+        self.tools_hidden = hidden
+        for widget in self.query(ToolCard):
+            widget.display = not hidden
+        for group in self.query(ReadGroup):
+            group.display = not hidden
+
     def _append_tool(self, view: ToolCallView) -> None:
         card = ToolCard(view)
+        card.display = not self.tools_hidden
         self._cards_by_id[view.call_id] = card
         self._card_status[view.call_id] = view.status
         self._card_progress[view.call_id] = view.progress

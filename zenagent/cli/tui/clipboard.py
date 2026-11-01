@@ -16,7 +16,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 
-__all__ = ["read_clipboard_text"]
+__all__ = ["read_clipboard_text", "write_clipboard_text"]
 
 #: ``(binary, argv)`` candidates, most native first.
 _COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -50,3 +50,34 @@ def read_clipboard_text() -> str | None:
         if completed.returncode == 0:
             return completed.stdout
     return None
+
+
+#: ``(binary, argv)`` writers for :func:`write_clipboard_text`.
+_WRITERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("pbcopy", ()),
+    ("wl-copy", ()),
+    ("xclip", ("-selection", "clipboard")),
+    ("xsel", ("--clipboard", "--input")),
+    ("powershell", ("-NoProfile", "-Command", "Set-Clipboard")),
+)
+
+
+def write_clipboard_text(text: str) -> bool:
+    """Put ``text`` on the system clipboard; False when no writer exists."""
+    for name, arguments in _WRITERS:
+        executable = shutil.which(name)
+        if executable is None:
+            continue
+        try:
+            completed = subprocess.run(
+                [executable, *arguments],
+                input=text,
+                text=True,
+                timeout=_TIMEOUT_S,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if completed.returncode == 0:
+            return True
+    return False

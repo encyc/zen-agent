@@ -212,4 +212,15 @@ class PaletteScreen(ModalScreen[T | None], Generic[T]):
         self.dismiss(item.value)
 
     def action_cancel(self) -> None:
+        """Esc clears the search first; a second Esc closes the panel."""
+        from textual.css.query import NoMatches
+
+        try:
+            field = self.query_one("#palette-search", Input)
+        except NoMatches:
+            self.dismiss(None)
+            return
+        if field.value:
+            field.value = ""
+            return
         self.dismiss(None)

@@ -176,3 +176,78 @@ async def test_plan_review_command_opens_the_review_screen(services, monkeypatch
     monkeypatch.setattr(services.chat, "last_assistant_text", lambda: "1. do X")
     result = await registry.dispatch("plan-review", "")
     assert result.screen == "plan-review"
+
+
+async def test_dirs_track_extra_roots(services, tmp_path):
+    extra = tmp_path / "other"
+    extra.mkdir()
+    registry = build_default_commands(services)
+
+    assert str(extra) not in (await registry.dispatch("dirs", "")).message
+    added = await registry.dispatch("add-dir", str(extra))
+    assert str(extra) in added.message
+    assert services.runtime.extra_dirs == [extra]
+    listed = await registry.dispatch("dirs", "")
+    assert str(extra) in listed.message
+    removed = await registry.dispatch("remove-dir", str(extra))
+    assert str(extra) in removed.message
+    assert services.runtime.extra_dirs == []
+
+
+async def test_add_dir_rejects_a_missing_path(services, tmp_path):
+    registry = build_default_commands(services)
+    result = await registry.dispatch("add-dir", str(tmp_path / "nope"))
+    assert "not a tracked directory" in (result.message or "")
+
+
+async def test_copy_uses_the_clipboard(services, monkeypatch):
+    from zenagent.cli.tui import clipboard
+
+    copied: list[str] = []
+    monkeypatch.setattr(clipboard, "write_clipboard_text", lambda text: copied.append(text) or True)
+    registry = build_default_commands(services)
+    result = await registry.dispatch("copy", "hello")
+    assert copied == ["hello"]
+    assert "copied" in (result.message or "")
+
+
+async def test_copy_reports_a_missing_clipboard(services, monkeypatch):
+    from zenagent.cli.tui import clipboard
+
+    monkeypatch.setattr(clipboard, "write_clipboard_text", lambda text: False)
+    registry = build_default_commands(services)
+    result = await registry.dispatch("copy", "hello")
+    assert "clipboard tool" in (result.message or "")
+
+
+async def test_shake_rejects_an_unknown_kind(services):
+    registry = build_default_commands(services)
+    result = await registry.dispatch("shake", "everything")
+    assert "usage" in (result.message or "")
+
+
+async def test_jobs_lists_nothing_by_default(services):
+    registry = build_default_commands(services)
+    result = await registry.dispatch("jobs", "")
+    assert result.message in ("no background jobs", "没有后台作业")
+
+
+async def test_fresh_returns_the_display_reset_screen(services):
+    registry = build_default_commands(services)
+    result = await registry.dispatch("fresh", "")
+    assert result.screen == "display-reset"
+
+
+async def test_trace_is_off_without_a_trace_file(services):
+    registry = build_default_commands(services)
+    result = await registry.dispatch("trace", "")
+    assert "not enabled" in (result.message or "")
+    services.runtime.trace_path = "/tmp/trace.jsonl"
+    result = await registry.dispatch("trace", "")
+    assert "/tmp/trace.jsonl" in (result.message or "")
+
+
+async def test_btw_requires_a_question(services):
+    registry = build_default_commands(services)
+    result = await registry.dispatch("btw", "")
+    assert "usage" in (result.message or "")

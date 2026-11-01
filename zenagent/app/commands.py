@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from zenagent.agent.session import session_title
+from zenagent.agent.session import Session, session_title
 from zenagent.app.appearance import THEME_CHOICES
 from zenagent.app.chat import ChatController
 from zenagent.app.models import ModelManager
@@ -551,6 +552,159 @@ async def _import(services: AppServices, argument: str) -> CommandResult:
     )
 
 
+
+@_command("jobs")
+async def _jobs(services: AppServices, argument: str) -> CommandResult:
+    """List background jobs, or kill one with ``/jobs kill <id>``."""
+    from zenagent.tools.jobs import UnknownJobError, get_job_manager
+
+    raw = argument.strip()
+    manager = get_job_manager()
+    if raw.startswith("kill"):
+        job_id = raw[len("kill") :].strip()
+        if not job_id:
+            return CommandResult(message=t("cmdmsg.jobs_usage"))
+        try:
+            job = await manager.kill(job_id)
+        except UnknownJobError as exc:
+            return CommandResult(message=str(exc))
+        return CommandResult(message=t("cmdmsg.job_killed", id=job.id))
+    jobs = manager.list()
+    if not jobs:
+        return CommandResult(message=t("cmdmsg.no_jobs"))
+    rows = [
+        t("cmdmsg.jobs_row", id=job.id, status=job.status, command=job.command[:70])
+        for job in jobs
+    ]
+    return CommandResult(message="\n".join(rows))
+
+
+@_command("copy")
+async def _copy(services: AppServices, argument: str) -> CommandResult:
+    """Copy the argument (or the last answer) to the system clipboard."""
+    from zenagent.cli.tui.clipboard import write_clipboard_text
+
+    text = argument.strip() or services.chat.last_assistant_text()
+    if not text:
+        return CommandResult(message=t("cmdmsg.copy_empty"))
+    if write_clipboard_text(text):
+        return CommandResult(message=t("cmdmsg.copied"))
+    return CommandResult(message=t("cmdmsg.copy_failed"))
+
+
+@_command("shake")
+async def _shake(services: AppServices, argument: str) -> CommandResult:
+    """Drop one class of heavy content without summarizing (tools/images/thinking)."""
+    from zenagent.app.shake import KINDS, shake
+
+    raw = argument.strip().lower()
+    if raw in ("", "all"):
+        kinds = set(KINDS)
+    elif raw in KINDS:
+        kinds = {raw}
+    else:
+        return CommandResult(message=t("cmdmsg.shake_usage"))
+    try:
+        changed, session = shake(services.runtime.agent, kinds)
+    except ValueError as exc:
+        return CommandResult(message=str(exc))
+    services.runtime.session = session
+    services.chat.reload_transcript(drop_pending=True)
+    return CommandResult(
+        message=t("cmdmsg.shaken", count=changed, path=session.path.name),
+        reset_transcript=True,
+    )
+
+
+@_command("btw")
+async def _btw(services: AppServices, argument: str) -> CommandResult:
+    """Ask a side question without touching the main transcript."""
+    from zenagent.app.btw import ask_side_question
+
+    if not argument.strip():
+        return CommandResult(message=t("cmdmsg.btw_usage"))
+    try:
+        answer = await ask_side_question(services.runtime.agent, argument)
+    except (ValueError, RuntimeError) as exc:
+        return CommandResult(message=str(exc))
+    return CommandResult(message=answer)
+
+
+@_command("add-dir")
+async def _add_dir(services: AppServices, argument: str) -> CommandResult:
+    raw = argument.strip()
+    if not raw:
+        return CommandResult(message=t("cmdmsg.dirs_usage"))
+    path = Path(raw).expanduser().resolve()
+    if not path.is_dir():
+        return CommandResult(message=t("cmdmsg.dir_missing", path=path))
+    if path not in services.runtime.extra_dirs:
+        services.runtime.extra_dirs.append(path)
+    return CommandResult(message=t("cmdmsg.dir_added", path=path))
+
+
+@_command("remove-dir")
+async def _remove_dir(services: AppServices, argument: str) -> CommandResult:
+    raw = argument.strip()
+    if not raw:
+        return CommandResult(message=t("cmdmsg.dirs_usage"))
+    path = Path(raw).expanduser().resolve()
+    if path in services.runtime.extra_dirs:
+        services.runtime.extra_dirs.remove(path)
+        return CommandResult(message=t("cmdmsg.dir_removed", path=path))
+    return CommandResult(message=t("cmdmsg.dir_missing", path=path))
+
+
+@_command("dirs")
+async def _dirs(services: AppServices, argument: str) -> CommandResult:
+    dirs = [str(Path.cwd()), *(str(path) for path in services.runtime.extra_dirs)]
+    return CommandResult(message=t("cmdmsg.dirs", dirs="\n".join(dirs)))
+
+
+@_command("fresh")
+async def _fresh(services: AppServices, argument: str) -> CommandResult:
+    """Reset transient display state (hidden cards, collapsed thinking, pending)."""
+    services.chat.drop_pending()
+    return CommandResult(message=t("cmdmsg.fresh"), screen="display-reset")
+
+
+@_command("handoff")
+async def _handoff(services: AppServices, argument: str) -> CommandResult:
+    """Summarize the session into a handoff document, then compact in place."""
+    from zenagent.app.compact import compact
+    from zenagent.types import TextContent
+
+    agent = services.runtime.agent
+    try:
+        path = await compact(agent)
+    except (ValueError, RuntimeError) as exc:
+        return CommandResult(message=str(exc))
+    summary = "\n".join(
+        block.text
+        for message in agent.messages
+        for block in getattr(message, "content", [])
+        if isinstance(block, TextContent)
+    ).strip()
+    document = Path.cwd() / f"handoff-{time.strftime('%Y%m%d-%H%M%S')}.md"
+    try:
+        document.write_text(f"# Handoff\n\n{summary}\n", encoding="utf-8")
+    except OSError as exc:
+        return CommandResult(message=str(exc))
+    services.runtime.session = Session(path)
+    services.chat.reload_transcript(drop_pending=True)
+    return CommandResult(
+        message=t("cmdmsg.handoff", path=document.name), reset_transcript=True
+    )
+
+
+@_command("trace")
+async def _trace(services: AppServices, argument: str) -> CommandResult:
+    path = getattr(services.runtime, "trace_path", None)
+    if not path:
+        return CommandResult(message=t("cmdmsg.trace_off"))
+    return CommandResult(message=t("cmdmsg.trace_path", path=path))
+
+
 def build_default_commands(services: AppServices) -> CommandRegistry:
     """Build the built-in registry for one app instance."""
     registry = CommandRegistry(services)
@@ -589,6 +743,16 @@ def build_default_commands(services: AppServices) -> CommandRegistry:
         _search,
         _theme,
         _lang,
+        _jobs,
+        _copy,
+        _shake,
+        _btw,
+        _add_dir,
+        _remove_dir,
+        _dirs,
+        _fresh,
+        _handoff,
+        _trace,
     ):
         registry.register(factory(services))
     return registry
