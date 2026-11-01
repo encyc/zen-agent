@@ -103,6 +103,7 @@ class ZenAgentApp(App):
         ("ctrl+k", "command_palette", "Commands"),
         ("ctrl+r", "history_search", "History"),
         ("ctrl+g", "edit_external", "Editor"),
+        ("ctrl+v", "paste_clipboard", "Paste"),
         ("ctrl+b", "toggle_sidebar", "Info"),
         ("ctrl+s", "steer", "Steer"),
         ("ctrl+x", "clear_queue", "Clear queue"),
@@ -1603,6 +1604,44 @@ class ZenAgentApp(App):
         prompt.clear()
         prompt.insert(edited)
 
+    def action_paste_clipboard(self) -> None:
+        """ctrl+v: attach an image path from the clipboard, else paste the text.
+
+        Terminals do not hand image bytes to the app, so the pragmatic contract
+        is "copy a path, press ctrl+v": an existing image file is attached
+        through the same channel as ``/image``; anything else is inserted into
+        the draft as text.
+        """
+        from zenagent.attachments import read_image_argument
+        from zenagent.cli.tui.clipboard import read_clipboard_text
+
+        text = read_clipboard_text()
+        if not text:
+            self.notify(t("tui.app.clipboard_empty"), timeout=2)
+            return
+        candidate = text.strip()
+        if candidate and "\n" not in candidate:
+            path = Path(candidate).expanduser()
+            if path.is_file():
+                try:
+                    block = read_image_argument(path)
+                except ValueError:
+                    block = None
+                if block is not None:
+                    model = self.runtime.agent.model
+                    if not model.supports_vision:
+                        self.notify(
+                            t("cmdmsg.image_not_supported", model=model.id),
+                            timeout=3,
+                        )
+                        return
+                    self.chat.attach_image(block)
+                    self.notify(
+                        t("tui.app.image_attached", mime=block.mime_type), timeout=2
+                    )
+                    return
+        self.query_one(PromptInput).insert(text)
+
     def edit_draft_externally(self, text: str) -> str | None:
         """Open ``text`` in the user's editor; return the result or ``None``.
 
@@ -1621,13 +1660,13 @@ class ZenAgentApp(App):
         if not command:
             self.notify(t("tui.app.no_editor"), timeout=3)
             return None
-        handle = tempfile.NamedTemporaryFile(
+        with tempfile.NamedTemporaryFile(
             "w", suffix=".md", delete=False, encoding="utf-8"
-        )
+        ) as handle:
+            handle.write(text)
+            name = handle.name
+        path = Path(name)
         try:
-            with handle:
-                handle.write(text)
-            path = Path(handle.name)
             try:
                 with self.suspend():
                     code = subprocess.call([*command, str(path)])
@@ -1639,7 +1678,7 @@ class ZenAgentApp(App):
                 return None
             return path.read_text(encoding="utf-8")
         finally:
-            Path(handle.name).unlink(missing_ok=True)
+            path.unlink(missing_ok=True)
 
     def action_cycle_thinking(self) -> None:
         levels = ["off", "low", "medium", "high"]

@@ -231,6 +231,8 @@ CATALOG: dict[str, str] = {
     "tui.app.unknown_command": "unknown command: /{name}",
     "tui.app.no_editor": "set $VISUAL or $EDITOR to edit the draft externally",
     "tui.app.editor_failed": "editor failed: {error}",
+    "tui.app.clipboard_empty": "clipboard is empty or unavailable",
+    "tui.app.image_attached": "attached {mime} from the clipboard",
     "tui.app.command_failed": "/{name} failed: {error}",
     # TUI: tool cards
     "tui.tool.status_running": "running",
@@ -342,7 +344,7 @@ CATALOG: dict[str, str] = {
     "cmdmsg.usage_info": "in {input} · out {output} · cache read {cache} · ${cost}",
     "cmdmsg.context_info": "context: {used}/{window} ({pct:.1f}% used, {left} left)",
     "cmdmsg.search_provider_info": "search provider: {provider}",
-    "cmdmsg.hotkeys_text": "enter send · shift+enter newline\nesc interrupt · empty-draft double esc rewind · ctrl+c clear draft · ctrl+d quit\nctrl+q queue follow-up · alt+up dequeue · ctrl+s steer · ctrl+x clear queue\nctrl+p next model · shift+ctrl+p previous model · alt+p pick model · shift+tab thinking\nalt+shift+p plan mode · f5 retry · ctrl+o expand tools · ctrl+t hide thinking\nctrl+k commands · ctrl+b info · ctrl+g editor · pageup/pagedown scroll",
+    "cmdmsg.hotkeys_text": "enter send · shift+enter newline\nesc interrupt · empty-draft double esc rewind · ctrl+c clear draft · ctrl+d quit\nctrl+q queue follow-up · alt+up dequeue · ctrl+s steer · ctrl+x clear queue\nctrl+p next model · shift+ctrl+p previous model · alt+p pick model · shift+tab thinking\nalt+shift+p plan mode · f5 retry · ctrl+o expand tools · ctrl+t hide thinking\nctrl+k commands · ctrl+b info · ctrl+g editor · ctrl+v paste · pageup/pagedown scroll",
     "cmdmsg.cannot_undo": "cannot undo while the agent is working",
     "cmdmsg.nothing_to_undo": "nothing to undo",
     "cmdmsg.undone": "undid the last turn ({count} messages) → {path}",

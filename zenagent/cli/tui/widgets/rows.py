@@ -29,11 +29,24 @@ __all__ = [
 
 
 class UserBlock(Static):
-    """The user's turn as a filled, full-width bar -- no prefix, no quoting."""
+    """The user's turn as a filled, full-width bar -- no prefix, no quoting.
+
+    Image attachments inside the message render as their own dim line
+    (``[image image/png]``) instead of blending into the prose, which is what
+    makes a vision turn visually distinct without adding a second widget.
+    """
 
     def __init__(self, text: str) -> None:
         self._text = text
-        super().__init__(Text(text, style=palette.TEXT), classes="user-message")
+        renderable = Text()
+        for index, line in enumerate(text.splitlines() or [""]):
+            if index:
+                renderable.append("\n")
+            if line.startswith("[image ") and line.endswith("]"):
+                renderable.append(line, style=palette.DIM)
+            else:
+                renderable.append(line, style=palette.TEXT)
+        super().__init__(renderable, classes="user-message")
 
     @property
     def plain(self) -> str:

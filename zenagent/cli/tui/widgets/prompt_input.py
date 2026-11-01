@@ -46,6 +46,10 @@ class PromptInput(TextArea):
 
     MAX_ROWS = MAX_ROWS
 
+    #: TextArea binds ctrl+v to "paste from the terminal"; the chat prompt
+    #: needs the app-level action instead (clipboard image path vs text).
+    BINDINGS = [("ctrl+v", "paste_clipboard", "Paste")]  # noqa: RUF012
+
     class Submitted(Message):
         def __init__(self, text: str) -> None:
             super().__init__()
@@ -111,6 +115,12 @@ class PromptInput(TextArea):
             self.insert("\n")
             return
         await super()._on_key(event)
+
+    def action_paste_clipboard(self) -> None:
+        """Hand ctrl+v to the app: clipboard image path vs plain text."""
+        action = getattr(self.app, "action_paste_clipboard", None)
+        if action is not None:
+            action()
 
     async def _handle_hint_key(self, event: events.Key) -> bool:
         """Arrows/tab/enter/esc belong to the suggestion list while it is open.
