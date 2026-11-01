@@ -3,10 +3,13 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased — P1/P2 completion
+## v0.6.0 — 2026-11-01
+
+**P1/P2 completion: tool registry and world tools (LSP, GitHub, checkpoint/rewind),
+a reconciling reload path, and the remaining TUI/REPL surfaces from the omp gap study.**
 
 Plan: `docs/superpowers/plans/2026-11-01-p1-p2-completion.md` (M1–M6). Executed on
-`feat/p1-p2-completion`; `bash scripts/check.sh` is the gate.
+`feat/p1-p2-completion` and merged fast-forward; `bash scripts/check.sh` is the gate.
 
 ### Added — tools
 
