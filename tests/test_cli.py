@@ -106,7 +106,7 @@ def _patch_agent(monkeypatch, stream, captured: dict):
         extra_prompt="",
     ):
         captured.update(model=model, thinking=thinking, gate=gate, tools=tools)
-        return Agent(
+        agent = Agent(
             model=model,
             system_prompt="test",
             api_key=api_key,
@@ -116,6 +116,8 @@ def _patch_agent(monkeypatch, stream, captured: dict):
             max_turns=max_turns,
             max_cost=max_cost,
         )
+        captured["agent"] = agent
+        return agent
 
     monkeypatch.setattr(cli_main, "_build_agent", build)
 
@@ -827,3 +829,44 @@ def test_headless_exposes_the_task_tool(monkeypatch, capsys):
     names = [tool.name for tool in captured["tools"]]
     assert "task" in names
     assert "ask" in names
+
+
+def test_parser_accepts_guard_flags():
+    args = cli_main.build_parser().parse_args(
+        [
+            "--allow-outside",
+            "/tmp/a",
+            "--allow-outside",
+            "/tmp/b",
+            "--allow-destructive",
+            "--allow-protected",
+        ]
+    )
+    assert args.allow_outside == ["/tmp/a", "/tmp/b"]
+    assert args.allow_destructive is True
+    assert args.allow_protected is True
+
+
+async def test_headless_wires_policy_and_journal(monkeypatch, app_env):
+    from pathlib import Path
+
+    from zenagent import project
+
+    monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
+    captured: dict = {}
+    _patch_agent(monkeypatch, fake_stream("ok"), captured)
+
+    code = await cli_main.run_headless(
+        "hi",
+        assume_yes=True,
+        allow_outside=["/tmp/outside"],
+        allow_destructive=True,
+        allow_protected=True,
+    )
+    assert code == 0
+    gate = captured["gate"]
+    allow_outside = [str(path) for path in gate.policy.allow_outside]
+    assert str(Path("/tmp/outside").resolve()) in allow_outside
+    assert gate.policy.allow_destructive and gate.policy.allow_protected
+    assert captured["agent"].after_tool_call is not None
+    assert project.project_backups_dir().is_dir()

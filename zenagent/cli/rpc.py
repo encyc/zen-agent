@@ -183,8 +183,8 @@ def _stdout_line(text: str) -> None:
 
 
 async def _run(args) -> int:
+    from zenagent.app.permissions import build_permission_gate
     from zenagent.cli.main import _api_key_for, _build_agent, resolve_model
-    from zenagent.cli.permissions import PermissionGate
     from zenagent.config import apply_user_config, load_user_config
     from zenagent.providers.catalog import load_catalog
     from zenagent.tools import ALL_TOOLS
@@ -195,7 +195,7 @@ async def _run(args) -> int:
     catalog = apply_user_config(load_catalog(), user_config)
     model = resolve_model(catalog, args.model)
     api_key = _api_key_for(catalog, model)
-    gate = PermissionGate(assume_yes=args.yes, interactive=False)
+    gate = build_permission_gate(assume_yes=args.yes, interactive=False)
     agent = _build_agent(
         model,
         api_key,

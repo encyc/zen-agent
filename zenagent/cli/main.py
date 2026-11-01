@@ -31,7 +31,10 @@ from zenagent.agent.session import (
     unique_session_path,
 )
 from zenagent.app.compact import maybe_auto_compact
+from zenagent.app.journal import attach_journal, journal_for, load_backup_policy
 from zenagent.app.modes import MODES, mode_prompt_note, resolve_mode
+from zenagent.app.permissions import PermissionGate, build_permission_gate
+from zenagent.app.safety import GuardPolicy
 from zenagent.app.support import (
     api_key_for as _api_key_for,
 )
@@ -42,7 +45,6 @@ from zenagent.app.support import (
 from zenagent.attachments import read_image_argument
 from zenagent.cli.doctor import run_doctor
 from zenagent.cli.exportcmd import run_export
-from zenagent.cli.permissions import PermissionGate
 from zenagent.cli.usagecmd import run_usage
 from zenagent.config import ContextGuard, apply_user_config, load_user_config
 from zenagent.context_files import (
@@ -193,6 +195,9 @@ async def run_headless(
     thinking: str | None = None,
     *,
     allow_dangerous: bool = False,
+    allow_outside: list[str] | None = None,
+    allow_destructive: bool = False,
+    allow_protected: bool = False,
     json_output: bool = False,
     max_turns: int | None = None,
     max_cost: float | None = None,
@@ -251,13 +256,21 @@ async def run_headless(
     resolved_mode = resolve_mode(
         explicit=mode, assume_yes=assume_yes, read_only=read_only
     )
-    gate = PermissionGate(
+    policy = GuardPolicy.from_config(
+        user_config,
+        cwd=Path.cwd(),
+        allow_outside=allow_outside or [],
+        allow_destructive=allow_destructive,
+        allow_protected=allow_protected,
+    )
+    gate = build_permission_gate(
         assume_yes=assume_yes,
         interactive=False,
         allow_dangerous=allow_dangerous,
         allow=user_config.tool_allow,
         deny=user_config.tool_deny,
         mode=resolved_mode,
+        policy=policy,
     )
     tool_list = list(ALL_TOOLS if tools is None else tools)
     mcp_manager: McpManager | None = None
@@ -343,6 +356,9 @@ async def run_headless(
     # Wire the spill sink after the build seam so tests that replace
     # ``_build_agent`` keep working; the loop reads it when a run starts.
     agent.artifact_sink = build_artifact_sink(session.path)
+    journal = journal_for(session.path, load_backup_policy(user_config))
+    if journal is not None:
+        attach_journal(agent, journal)
 
     if resume is not None:
         loaded = session.load()
@@ -477,6 +493,23 @@ def build_parser() -> argparse.ArgumentParser:
         "--allow-dangerous",
         action="store_true",
         help="also allow catastrophic shell commands (rm -rf /, mkfs, ...)",
+    )
+    parser.add_argument(
+        "--allow-outside",
+        action="append",
+        dest="allow_outside",
+        metavar="PATH",
+        help="allow writes outside the workspace under this path (repeatable)",
+    )
+    parser.add_argument(
+        "--allow-destructive",
+        action="store_true",
+        help="allow destructive shell commands (git reset --hard, ...)",
+    )
+    parser.add_argument(
+        "--allow-protected",
+        action="store_true",
+        help="allow writes to protected credential paths",
     )
     parser.add_argument(
         "--resume", nargs="?", const="latest", help="resume a session (Task 15)"
@@ -714,7 +747,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if not args.prompt:
         if sys.stdout.isatty() and not args.no_tui:
-            from zenagent.app.permissions import PermissionBroker, PermissionGate
+            from zenagent.app.permissions import PermissionBroker
             from zenagent.app.runtime import Runtime, RuntimeOptions
 
             missing = _missing_extra("textual", "rich")
@@ -733,6 +766,9 @@ def main(argv: list[str] | None = None) -> int:
                 context_files=not args.no_context_files,
                 read_only=args.read_only,
                 allow_dangerous=args.allow_dangerous,
+                allow_outside=args.allow_outside or [],
+                allow_destructive=args.allow_destructive,
+                allow_protected=args.allow_protected,
                 mode=mode,
                 retries=args.retries,
                 max_turns=args.max_turns,
@@ -740,14 +776,22 @@ def main(argv: list[str] | None = None) -> int:
             )
 
             tui_config = load_user_config()
+            tui_policy = GuardPolicy.from_config(
+                tui_config,
+                cwd=Path.cwd(),
+                allow_outside=args.allow_outside or [],
+                allow_destructive=args.allow_destructive,
+                allow_protected=args.allow_protected,
+            )
             broker = PermissionBroker.wrap(
-                PermissionGate(
+                build_permission_gate(
                     assume_yes=False,
                     interactive=False,
                     allow_dangerous=args.allow_dangerous,
                     allow=tui_config.tool_allow,
                     deny=tui_config.tool_deny,
                     mode=mode,
+                    policy=tui_policy,
                 )
             )
 
@@ -797,6 +841,9 @@ def main(argv: list[str] | None = None) -> int:
                     skills=not args.no_skills,
                     extension_paths=args.extension_paths,
                     read_only=args.read_only,
+                    allow_outside=args.allow_outside or [],
+                    allow_destructive=args.allow_destructive,
+                    allow_protected=args.allow_protected,
                     mode=mode,
                     theme=args.theme,
                     lang=args.lang,
@@ -814,6 +861,9 @@ def main(argv: list[str] | None = None) -> int:
                 assume_yes=args.yes,
                 thinking=args.thinking,
                 allow_dangerous=args.allow_dangerous,
+                allow_outside=args.allow_outside or [],
+                allow_destructive=args.allow_destructive,
+                allow_protected=args.allow_protected,
                 json_output=args.json,
                 resume=args.resume,
                 max_turns=args.max_turns,

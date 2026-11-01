@@ -847,3 +847,24 @@ async def test_repl_injects_an_embedded_skill_token(
     assert isinstance(injected, str)
     assert injected.startswith("[skill:pdf-report] please check it")
     assert "EMBEDDED BODY" in injected
+
+
+async def test_slash_restore_uses_the_shared_command_core():
+    lines: list[str] = []
+
+    result = await handle_slash(
+        None,
+        "restore",
+        "list",
+        print_fn=lines.append,
+        restore=lambda argument: f"restored:{argument}",
+    )
+    assert result is None
+    assert lines == ["restored:list"]
+
+
+async def test_slash_restore_without_a_journal_explains():
+    lines: list[str] = []
+    result = await handle_slash(None, "restore", "", print_fn=lines.append)
+    assert result is None
+    assert lines and "unavailable" in lines[0].lower()

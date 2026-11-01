@@ -200,3 +200,36 @@ async def test_switching_sessions_rebinds_the_task_tool(runtime_factory):
     await runtime.switch_session(new_path)
 
     assert bound and bound[-1] == new_path
+
+
+async def test_bootstrap_creates_a_write_journal(runtime_factory):
+    runtime = await runtime_factory()
+    assert runtime.journal is not None
+    assert runtime.agent.after_tool_call is not None
+
+
+async def test_bootstrap_respects_disabled_backups(monkeypatch, app_env):
+    from zenagent.config import UserConfig
+
+    monkeypatch.setattr(
+        "zenagent.app.runtime.load_user_config",
+        lambda *args, **kwargs: UserConfig(default_model="deepseek-flash", backup_enabled=False),
+    )
+    runtime = await Runtime.bootstrap(_options(), stream_fn=None)
+    try:
+        assert runtime.journal is None
+    finally:
+        await runtime.close()
+
+
+async def test_bootstrap_carries_guard_policy_options(runtime_factory, tmp_path):
+    runtime = await runtime_factory(
+        allow_outside=[str(tmp_path / "outside")],
+        allow_destructive=True,
+        allow_protected=True,
+    )
+    assert runtime.gate is not None
+    allow_outside = [str(path) for path in runtime.gate.policy.allow_outside]
+    assert str(tmp_path / "outside") in allow_outside
+    assert runtime.gate.policy.allow_destructive
+    assert runtime.gate.policy.allow_protected

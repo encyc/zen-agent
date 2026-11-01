@@ -32,8 +32,12 @@ from zenagent.agent.session import (
 )
 from zenagent.app.appearance import THEME_CHOICES
 from zenagent.app.compact import compact, maybe_auto_compact
+from zenagent.app.journal import attach_journal, journal_for, load_backup_policy
 from zenagent.app.modes import describe_modes, mode_prompt_note
+from zenagent.app.permissions import build_permission_gate
+from zenagent.app.restore import run_restore_command
 from zenagent.app.retry import prepare_retry
+from zenagent.app.safety import GuardPolicy
 from zenagent.app.skill_commands import build_skill_submission
 from zenagent.app.support import describe_tools
 from zenagent.attachments import read_image_argument
@@ -48,7 +52,6 @@ from zenagent.cli.main import (
     resolve_model,
     session_id_for,
 )
-from zenagent.cli.permissions import PermissionGate
 from zenagent.cli.render import (
     aggregate_usage,
     render_diff,
@@ -133,10 +136,17 @@ async def handle_slash(
     set_language=None,
     keybindings=None,
     set_mode=None,
+    restore=None,
 ) -> str | None:
     """Run one slash command; returns ``"exit"`` when the REPL should stop."""
     if command in ("exit", "quit"):
         return "exit"
+    if command == "restore":
+        if restore is None:
+            print_fn(t("cmdmsg.restore_unavailable"))
+            return None
+        print_fn(restore(argument))
+        return None
     if command in ("help", "?"):
         print_fn(help_text())
         if template_list:
@@ -622,6 +632,9 @@ async def repl(
     api_key: str | None = None,
     tools: list | None = None,
     allow_dangerous: bool = False,
+    allow_outside: list[str] | None = None,
+    allow_destructive: bool = False,
+    allow_protected: bool = False,
     max_turns: int | None = None,
     max_cost: float | None = None,
     retries: int = 0,
@@ -790,12 +803,20 @@ async def repl(
         )
         return entries
 
-    gate = PermissionGate(
+    policy = GuardPolicy.from_config(
+        user_config,
+        cwd=Path.cwd(),
+        allow_outside=allow_outside or [],
+        allow_destructive=allow_destructive,
+        allow_protected=allow_protected,
+    )
+    gate = build_permission_gate(
         interactive=True,
         allow_dangerous=allow_dangerous,
         allow=user_config.tool_allow,
         deny=user_config.tool_deny,
         mode=mode,
+        policy=policy,
     )
 
     def system_prompt_for(base: str) -> str:
@@ -819,6 +840,9 @@ async def repl(
         before_tool_call=gate.before_tool_call,
         artifact_sink=artifact_sink,
     )
+    journal = journal_for(session.path, load_backup_policy(user_config))
+    if journal is not None:
+        attach_journal(agent, journal)
 
     def set_mode(argument: str) -> str:
         requested = argument.strip()
@@ -1174,6 +1198,11 @@ async def repl(
                         set_language=set_language,
                         keybindings=active_keybindings,
                         set_mode=set_mode,
+                        restore=lambda argument: run_restore_command(
+                            journal,
+                            argument,
+                            running=agent.is_streaming,
+                        ),
                     )
                     == "exit"
                 ):

@@ -15,13 +15,15 @@ from zenagent import project
 from zenagent.agent import Agent
 from zenagent.agent.artifacts import build_artifact_sink
 from zenagent.agent.session import Session, latest_session, unique_session_path
+from zenagent.app.journal import attach_journal, journal_for, load_backup_policy
 from zenagent.app.modes import (
     DEFAULT_MODE,
     mode_prompt_note,
     normalize_mode,
     resolve_mode,
 )
-from zenagent.app.permissions import PermissionGate
+from zenagent.app.permissions import PermissionGate, build_permission_gate
+from zenagent.app.safety import GuardPolicy
 from zenagent.app.support import (
     api_key_for,
     resolve_model,
@@ -91,6 +93,9 @@ class RuntimeOptions:
     context_files: bool = True
     read_only: bool = False
     allow_dangerous: bool = False
+    allow_outside: list[str] = field(default_factory=list)
+    allow_destructive: bool = False
+    allow_protected: bool = False
     mode: str | None = None
     retries: int = 0
     max_turns: int | None = None
@@ -257,14 +262,22 @@ class Runtime:
         )
         runtime._mode = mode
 
+        policy = GuardPolicy.from_config(
+            runtime.user_config,
+            cwd=Path.cwd(),
+            allow_outside=options.allow_outside,
+            allow_destructive=options.allow_destructive,
+            allow_protected=options.allow_protected,
+        )
         if gate is None:
-            gate = PermissionGate(
+            gate = build_permission_gate(
                 assume_yes=assume_yes,
                 interactive=False,
                 allow_dangerous=options.allow_dangerous,
                 allow=runtime.user_config.tool_allow,
                 deny=runtime.user_config.tool_deny,
                 mode=mode,
+                policy=policy,
             )
         elif hasattr(gate, "set_mode"):
             gate.set_mode(mode)
@@ -274,6 +287,9 @@ class Runtime:
         # per-session state bound to the sidecar next to the JSONL, and the
         # session setter also builds the artifact spill sink next to it.
         runtime.session = runtime._open_session(options.resume)
+        runtime.journal = journal_for(
+            runtime.session.path, load_backup_policy(runtime.user_config)
+        )
         runtime.todo_tool = build_todo_tool(runtime.session.path)
         # Refcount the process-wide background-job manager: closing one Runtime
         # must not kill another live Runtime's jobs (last close wins). The todo
@@ -358,6 +374,8 @@ class Runtime:
                     runtime.session.append(message)
 
         agent.subscribe(persist)
+        if runtime.journal is not None:
+            attach_journal(agent, runtime.journal)
         if runtime.session.messages:
             agent.replace_messages(runtime.session.messages)
         runtime.warnings.extend(
