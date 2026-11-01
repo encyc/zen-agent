@@ -458,13 +458,13 @@ class PermissionBroker:
     """
 
     def __init__(self, gate=None) -> None:
-        from zenagent.app.permissions import PermissionGate as _Gate
-
-        self._gate = gate or _Gate(assume_yes=False, interactive=False)
+        self._gate = gate or PermissionGate(assume_yes=False, interactive=False)
         self._confirm = None
         self._allowed: set[str] = set()
         #: Target-scoped "always" grants (paths / command prefixes).
         self._allowed_targets: set[str] = set()
+        #: Targets a confirm-level risk was explicitly allowed for this session.
+        self._risk_targets: set[str] = set()
         # Tool calls run concurrently; approval modals must not stack.
         self._confirm_lock = asyncio.Lock()
 
@@ -490,14 +490,33 @@ class PermissionBroker:
         self._allowed.add(tool_name)
 
     async def before_tool_call(self, tool_call, arguments: dict, tool=None):
-        name = getattr(tool_call, "name", "")
+        name = (
+            tool_call.name if isinstance(tool_call, ToolCall) else str(tool_call)
+        )
         target = tool_target(name, arguments)
 
         # Policy first: plan mode, deny patterns and catastrophic commands win
         # over a session-wide "always allow" grant.
-        refusal = self._gate.policy_refusal(name, arguments, tool)
-        if refusal is not None:
-            return {"block": True, "reason": refusal}
+        verdict = self._gate.assess(name, arguments, tool)
+        if verdict.kind == "refuse":
+            return {"block": True, "reason": verdict.reason}
+        if verdict.kind == "confirm":
+            # full mode is the explicit "don't ask me to run ordinary work"
+            # branch, not a licence to leave the workspace or destroy state.
+            risk_target = verdict.target or target
+            if risk_target is not None and risk_target in self._risk_targets:
+                return None
+            if self._confirm is None:
+                return {"block": True, "reason": verdict.reason}
+            async with self._confirm_lock:
+                answer = await self._confirm(name, arguments, verdict)
+            if answer is True or answer == "allow":
+                return None
+            if answer == "always":
+                if risk_target is not None:
+                    self._risk_targets.add(risk_target)
+                return None
+            return {"block": True, "reason": f"denied by user: {name}"}
         if target is not None and target_is_granted(name, arguments, self._allowed_targets):
             return None
         if tool_is_read_only(name, tool) or name in self._allowed:
@@ -505,12 +524,11 @@ class PermissionBroker:
         if matches_any(self._gate.allow, name) is not None:
             return None
         if self._gate.mode == "full":
-            # full mode is the explicit "don't ask me" branch.
             return None
         if self._confirm is None:
             return {"block": True, "reason": f"tool {name!r} requires approval"}
         async with self._confirm_lock:
-            answer = await self._confirm(name, arguments)
+            answer = await self._confirm(name, arguments, verdict)
         if answer is True or answer == "allow":
             return None
         if answer == "always":

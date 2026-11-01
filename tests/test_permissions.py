@@ -304,7 +304,7 @@ async def test_broker_always_allow_is_target_scoped():
 
     prompts: list[tuple[str, dict]] = []
 
-    async def confirm(name, args):
+    async def confirm(name, args, verdict):
         prompts.append((name, dict(args)))
         return "always"
 

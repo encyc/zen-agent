@@ -174,7 +174,9 @@ class ZenAgentApp(App):
     #: Seconds an ask-mode tool approval may stay open before it counts as Deny.
     approval_timeout_s: float = 120.0
 
-    async def request_tool_approval(self, tool_name: str, arguments: dict) -> str:
+    async def request_tool_approval(
+        self, tool_name: str, arguments: dict, verdict=None
+    ) -> str:
         """Show the ask-mode modal; returns ``allow`` / ``always`` / ``deny``.
 
         The agent tool round is awaited on this future, so the modal blocks that
