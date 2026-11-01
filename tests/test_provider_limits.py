@@ -10,6 +10,7 @@ from zenagent.providers.limits import (
     fit_stream_options,
 )
 from zenagent.providers.openai_completions import StreamOptions
+from zenagent.providers.openai_responses import build_params as responses_request
 from zenagent.types import (
     Cost,
     ImageContent,
@@ -82,6 +83,15 @@ def test_google_request_fits_max_output_tokens_to_the_context_window():
         model, _long_prompt(), [], StreamOptions(api_key="k")
     )
     assert body["generationConfig"]["maxOutputTokens"] < 1_600
+
+
+def test_responses_request_fits_max_output_tokens_to_the_context_window():
+    model = _model(context_window=2_000, max_tokens=1_600)
+    _, _, body = responses_request(
+        model, _long_prompt(), [], StreamOptions(api_key="k")
+    )
+    assert body["max_output_tokens"] < 1_600
+    assert body["max_output_tokens"] >= 1_024
 
 
 def test_estimate_counts_wide_characters_conservatively():

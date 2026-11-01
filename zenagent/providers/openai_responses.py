@@ -17,6 +17,7 @@ from zenagent.events import AbortToken, AssistantEvent
 from zenagent.providers.catalog import Model
 from zenagent.providers.history import replayable
 from zenagent.providers.openai_completions import StreamOptions
+from zenagent.providers.limits import fit_stream_options
 from zenagent.providers.transport import default_client, iter_sse_data, post_stream
 from zenagent.types import (
     AssistantMessage,
@@ -97,6 +98,9 @@ def to_responses_input(messages: list[Message]) -> tuple[str, list[dict]]:
 def build_params(
     model: Model, messages: list[Message], tools: list[ToolDef], options: StreamOptions
 ) -> tuple[str, dict, dict]:
+    # Responses rejects prompt + max_output_tokens over the window just like the
+    # chat-completions family; fit the cap before serializing (see limits.py).
+    options = fit_stream_options(model, messages, options, tools)
     instructions, items = to_responses_input(messages)
     body: dict = {
         "model": model.id,
