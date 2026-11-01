@@ -35,6 +35,7 @@ __all__ = [
     "find_project_root",
     "legacy_sessions_dir",
     "load_project_meta",
+    "project_backups_dir",
     "project_config_path",
     "project_dir",
     "project_key",
@@ -102,6 +103,11 @@ def project_sessions_dir(
 ) -> Path:
     """Per-project transcript directory (not created here)."""
     return project_dir(cwd, root=root) / "sessions"
+
+
+def project_backups_dir(cwd: Path | str | None = None) -> Path:
+    """Per-project write-snapshot store (not created here)."""
+    return project_dir(cwd) / "backups"
 
 
 def project_config_path(cwd: Path | str | None = None) -> Path:
