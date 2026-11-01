@@ -212,6 +212,7 @@ CATALOG: dict[str, str] = {
     "tui.app.thinking_header": "思考",
     "tui.app.switch_failed": "切换失败",
     "tui.app.mode_set": "模式：{mode}",
+    "tui.app.model_set": "模型：{model}",
     "tui.app.thinking_set": "思考：{level}",
     "tui.app.search_provider_set": "搜索 provider：{name}",
     "tui.app.saved_key": "已保存 {env}",

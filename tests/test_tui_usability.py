@@ -308,6 +308,94 @@ async def test_enter_on_a_value_hint_accepts_and_submits(fake_runtime):
         assert prompt.text == ""
 
 
+async def test_enter_on_a_model_value_hint_switches_without_a_picker(fake_runtime):
+    """/model matches /mode: the highlighted value executes on Enter."""
+    from zenagent.cli.tui.app import ZenAgentApp
+    from zenagent.cli.tui.screens.modals import ModelPicker
+    from zenagent.cli.tui.widgets.command_hints import CommandHints
+
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        prompt = app.query_one(PromptInput)
+        prompt.focus()
+        for char in "/model":
+            await pilot.press(char)
+        await pilot.press("space")
+        await pilot.pause()
+
+        hints = app.query_one(CommandHints)
+        assert hints.matches[0][0] == app.runtime.agent.model.id, "current model leads"
+        assert hints.matches[1][0] == "deepseek-v4-pro", "usable models before keyless ones"
+
+        await pilot.press("down")  # current -> deepseek-v4-pro
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.pause()
+        assert not isinstance(app.screen, ModelPicker), "no redundant submenu"
+        assert app.runtime.agent.model.id == "deepseek-v4-pro"
+        assert app.chat.status.model_id == "deepseek-v4-pro"
+        assert prompt.text == ""
+
+
+async def test_model_command_with_an_id_switches_directly(fake_runtime):
+    """Typing `/model <id>` is the same one-Enter path as the value hint."""
+    from zenagent.cli.tui.app import ZenAgentApp
+    from zenagent.cli.tui.screens.modals import ModelPicker
+
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        prompt = app.query_one(PromptInput)
+        prompt.focus()
+        for char in "/model deepseek-v4-pro":
+            await pilot.press(char)
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.pause()
+        assert not isinstance(app.screen, ModelPicker)
+        assert app.runtime.agent.model.id == "deepseek-v4-pro"
+        assert prompt.text == ""
+
+
+async def test_model_command_with_an_unknown_id_opens_no_picker(fake_runtime):
+    from zenagent.cli.tui.app import ZenAgentApp
+    from zenagent.cli.tui.screens.modals import ModelPicker
+
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        prompt = app.query_one(PromptInput)
+        prompt.focus()
+        for char in "/model nope-9000":
+            await pilot.press(char)
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.pause()
+        assert not isinstance(app.screen, ModelPicker)
+        assert app.runtime.agent.model.id == "deepseek-flash", "kept the old model"
+
+
+async def test_bare_model_command_still_opens_the_picker(fake_runtime):
+    """Only the argument path skips the picker; the bare command keeps it."""
+    from zenagent.cli.tui.app import ZenAgentApp
+    from zenagent.cli.tui.screens.modals import ModelPicker
+
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        prompt = app.query_one(PromptInput)
+        prompt.focus()
+        for char in "/model":
+            await pilot.press(char)
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.pause()
+        assert isinstance(app.screen, ModelPicker)
+        assert app.runtime.agent.model.id == "deepseek-flash"
+        assert prompt.text == ""
+
+
 async def test_enter_on_a_command_hint_reaches_the_command_picker(fake_runtime):
     """A bare command (no value yet) still opens its selector after Enter."""
     from zenagent.cli.tui.app import ZenAgentApp

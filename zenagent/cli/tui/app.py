@@ -801,6 +801,13 @@ class ZenAgentApp(App):
         from zenagent.app.slash_args import argument_values
 
         if name == "model":
+            # Enter executes the highlighted value, so the list leads with the
+            # current model and then the usable ones: a blind Enter is a no-op
+            # instead of a switch to a model whose key is missing.
+            entries = sorted(
+                self.models.entries(),
+                key=lambda entry: (not entry.current, not entry.available),
+            )
             return [
                 (
                     entry.id,
@@ -811,7 +818,7 @@ class ZenAgentApp(App):
                         else entry.reason or t("tui.app.model_unavailable")
                     ),
                 )
-                for entry in self.models.entries()
+                for entry in entries
             ]
         return argument_values("/" + name)
 
@@ -1167,19 +1174,31 @@ class ZenAgentApp(App):
     def action_pick_model(self) -> None:
         self.open_model_picker()
 
+    def _apply_model(self, model_id: str) -> None:
+        """Switch models and repeat every side effect, for every entry point.
+
+        The picker (``alt+p`` / bare ``/model``), the argument path
+        (``/model <id>``, including Enter on a value hint) and ``ctrl+p``
+        cycling must not drift: the banner healing, the confirmation toast and
+        the status repaint happen here once.
+        """
+        result = self.models.switch(model_id)
+        if not result.ok:
+            self.notify(result.reason or t("tui.app.switch_failed"))
+            return
+        if self.runtime.missing_api_key:
+            # Picking a model that already has a key heals the banner.
+            self.runtime.missing_api_key = None
+            self.chat.clear_last_error()
+        self.notify(t("tui.app.model_set", model=self.models.current()), timeout=3)
+        self._refresh_status()
+
     def open_model_picker(self) -> None:
         from zenagent.cli.tui.screens.modals import ModelPicker
 
         async def selected(model_id: str | None) -> None:
             if model_id:
-                result = self.models.switch(model_id)
-                if not result.ok:
-                    self.notify(result.reason or t("tui.app.switch_failed"))
-                elif self.runtime.missing_api_key:
-                    # Picking a model that already has a key heals the banner.
-                    self.runtime.missing_api_key = None
-                    self.chat.clear_last_error()
-                self._refresh_status()
+                self._apply_model(model_id)
 
         self.open_menu("model", lambda: ModelPicker(self.models.entries()), selected)
 
@@ -1366,6 +1385,10 @@ class ZenAgentApp(App):
                     t("tui.app.command_failed", name=name, error=exc)
                 )
             return
+        if result.model:
+            # `/model <id>` (or Enter on a value hint) switches directly; only a
+            # bare `/model` reaches the picker branch below.
+            self._apply_model(result.model)
         if result.screen == "model-picker":
             self.open_model_picker()
         elif result.screen == "session-picker":
@@ -1499,10 +1522,7 @@ class ZenAgentApp(App):
             index = (ids.index(current) + 1) % len(ids)
         except ValueError:
             index = 0
-        result = self.models.switch(ids[index])
-        if not result.ok:
-            self.notify(result.reason or t("tui.app.switch_failed"), timeout=3)
-        self._refresh_status()
+        self._apply_model(ids[index])
 
     def action_cycle_thinking(self) -> None:
         levels = ["off", "low", "medium", "high"]

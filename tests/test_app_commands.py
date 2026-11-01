@@ -9,6 +9,18 @@ async def test_dispatch_model_command_returns_screen(services):
     assert result.screen == "model-picker"
 
 
+async def test_model_command_with_an_argument_switches_like_mode(services):
+    """`/model <id>` is the argument counterpart of `/mode <value>`.
+
+    The handler used to drop its argument and always open the picker, so the
+    value hint (``/model `` + Enter) made the user choose the same model twice.
+    """
+    registry = build_default_commands(services)
+    result = await registry.dispatch("model", "deepseek-v4-pro")
+    assert result.model == "deepseek-v4-pro"
+    assert result.screen is None
+
+
 async def test_unknown_command_returns_a_message(services):
     registry = build_default_commands(services)
     result = await registry.dispatch("nope", "")

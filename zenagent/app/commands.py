@@ -47,6 +47,9 @@ class CommandResult:
     appearance: str | None = None
     #: When set, the frontend switches to this interface language.
     language: str | None = None
+    #: When set, the frontend switches models (the picker and the argument path
+    #: share one implementation, so both heal the same state).
+    model: str | None = None
 
 
 @dataclass
@@ -103,7 +106,13 @@ async def _help(services: AppServices, argument: str) -> CommandResult:
 
 @_command("model")
 async def _model(services: AppServices, argument: str) -> CommandResult:
-    return CommandResult(screen="model-picker")
+    requested = argument.strip()
+    if not requested:
+        return CommandResult(screen="model-picker")
+    # The value path mirrors `/mode <value>`: the argument is applied directly
+    # instead of opening the picker again (the frontend owns the switch so the
+    # hint path and the picker cannot drift).
+    return CommandResult(model=requested)
 
 
 @_command("mode")

@@ -17,6 +17,44 @@ async def test_model_picker_switches_model(picker_app):
         assert app.runtime.agent.model.id != "deepseek-flash"
 
 
+async def test_ctrl_p_cycles_to_the_next_usable_model(picker_app):
+    """The third entry point (cycling) rides the same switch helper."""
+    app = picker_app
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await pilot.press("ctrl+p")
+        await pilot.pause()
+        assert app.runtime.agent.model.id != "deepseek-flash"
+        assert app.chat.status.model_id == app.runtime.agent.model.id
+
+
+async def test_switching_from_the_composer_heals_the_missing_key_banner(picker_app):
+    """A switch through `/model <id>` repeats every side effect of the picker."""
+    from zenagent.cli.tui.widgets.error_banner import ErrorBanner
+    from zenagent.cli.tui.widgets.prompt_input import PromptInput
+
+    app = picker_app
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        app.runtime.missing_api_key = "DEEPSEEK_API_KEY"
+        app.chat.set_last_error("no API key for deepseek/deepseek-flash")
+        app._refresh_status()
+        await pilot.pause()
+        assert app.query_one(ErrorBanner).display is True
+
+        prompt = app.query_one(PromptInput)
+        prompt.focus()
+        for char in "/model deepseek-v4-pro":
+            await pilot.press(char)
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.pause()
+
+        assert app.runtime.agent.model.id == "deepseek-v4-pro"
+        assert app.runtime.missing_api_key is None
+        assert app.query_one(ErrorBanner).display is False
+
+
 async def test_sidebar_hidden_on_narrow_screen(narrow_app):
     app = narrow_app
     async with app.run_test(size=(80, 24)) as pilot:

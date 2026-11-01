@@ -117,10 +117,11 @@ class PromptInput(TextArea):
 
         ``Tab`` completes the highlighted candidate into the draft and stays
         there; ``Enter`` completes it *and* submits -- so a value hint executes
-        immediately (``/mode `` + Enter applies the highlighted mode), while a
-        command-name hint still reaches the command's own picker (``/mode`` +
-        Enter opens the mode selector). This avoids the old three-Enter detour
-        through the picker just to choose a value that was already highlighted.
+        immediately (``/mode `` + Enter applies the highlighted mode, ``/model
+        `` + Enter switches to the highlighted model), while a command-name hint
+        still reaches the command's own picker (``/mode`` + Enter opens the mode
+        selector). This avoids the old three-Enter detour through the picker
+        just to choose a value that was already highlighted.
         """
         if event.key in ("up", "down"):
             event.stop()

@@ -143,8 +143,9 @@ provider 错误不会进转录区，而是停在 dock 顶部的错误横幅里�
 - **选择器**：裸 `/mode` 或 `/thinking` 按 `enter` 直接打开选择器（当前值预选中），`enter` 应用、
   `esc` 取消；这对应 omp 的 thinking-selector/theme-selector 交互。
 - **Enter 接受并提交、Tab 只补全**：值提示打开时，Enter 直接对高亮值执行（`/mode ` 选 full 再
-  Enter 就是 `/mode full`，不再多绕一层选择器）；命令名提示打开时，Enter 补成 `/mode ` 再提交
-  （裸命令因此会打开选择器）；`Tab` 只补全、不提交，适合继续输入。
+  Enter 就是 `/mode full`，`/model ` 选中某个模型再 Enter 就是直接切换，都不再多绕一层
+  选择器）；命令名提示打开时，Enter 补成 `/mode ` 再提交（裸命令因此会打开选择器）；
+  `Tab` 只补全、不提交，适合继续输入。
 - `/mode plan|ask|full` 显式给值、或 `zen --mode ...` 启动模式也照常可用（默认 ask）。
 - **plan**：写/执行工具被拒，模型改为只读调研并给出计划。
 - **ask**：写/执行工具弹审批框：`y` 允许一次、`a` 本会话对该**目标**总是允许（框里会显示目标）、`n`/`esc` 拒绝；
@@ -157,12 +158,16 @@ provider 错误不会进转录区，而是停在 dock 顶部的错误横幅里�
 
 ## 模型管理
 
-`alt+p`（或 `ctrl+k` → `model`，或 `/model`）打开选择器：
+`alt+p`（或 `ctrl+k` → `model`，或裸 `/model`）打开选择器：
 
 - 底部贴底的浮层，带搜索框；`↑↓` 移动、`enter` 选择、`esc` 取消，输入即过滤。
 - `●` 标记当前模型并默认选中；未配置 API key 的模型置灰并显示原因，不能选择。
 - 下一轮生效；上下文窗口、thinking 默认值、session id 同步更新。
 - 重复按同一个快捷键只会聚焦已经打开的浮层，不会叠出第二个。
+
+想直接切换时用 `/model <id>`（或输入 `/model ` 后按 enter 选中高亮模型）：与 `/mode <值>`
+一致，一次 enter 就换好，不再打开选择器。值提示里**当前模型排第一、可用的排在前面**，
+所以没有输入时按 enter 只是原地不动，不会误切到缺 key 的模型。
 
 密钥在 `/settings → Model API keys…` 里粘贴（存 `~/.zenagent/settings.json`，0600），保存后
 立即生效、无需重启；也可以继续写 `~/.zenagent/config.toml` 或设置 provider 的环境变量。

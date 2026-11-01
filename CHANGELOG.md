@@ -82,6 +82,20 @@ adapter and transport suites.
 - **Pending doesn't cross conversations**: session switch, `/new`, `/undo`, `/fork` and
   `/retry` drop pending messages with a one-line notice; compaction keeps them (same session).
 
+### TUI `/model` switches in one Enter
+
+**`/model` now behaves like `/mode`: a value reaches the runtime directly instead of making the user pick twice.**
+
+- **The argument is applied**: `/model <id>` — including Enter on a value hint after `/model `
+  — switches immediately. The command used to drop its argument and open the model picker, so
+  completing a model in the hint list then pressing Enter asked for the same choice a second
+  time. Only a bare `/model` (or `alt+p`) opens the picker.
+- **One implementation for both entry points**: the picker callback and the argument path now
+  share `_apply_model`, so banner healing (a switch to a keyed model dismisses the missing-key
+  banner), the success toast and the status repaint cannot drift.
+- **Value hints lead with the current model**, then usable models, then keyless ones — a blind
+  Enter on `/model ` is a no-op rather than a switch to a model whose key is missing.
+
 ## v0.5.0 — 2026-10-31
 
 **Two appearances and a bilingual interface: dark/light themes on one colour-token source, and en/zh UI text with live switching.**

@@ -213,6 +213,7 @@ CATALOG: dict[str, str] = {
     "tui.app.thinking_header": "Thinking",
     "tui.app.switch_failed": "switch failed",
     "tui.app.mode_set": "mode: {mode}",
+    "tui.app.model_set": "model: {model}",
     "tui.app.thinking_set": "thinking: {level}",
     "tui.app.search_provider_set": "search provider: {name}",
     "tui.app.saved_key": "saved {env}",
