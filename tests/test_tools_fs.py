@@ -563,3 +563,37 @@ async def test_writing_empty_content_to_a_bom_only_file_truncates_to_zero():
     result = await call(WRITE_FILE, path="bom.txt", content="")
     assert not result.is_error
     assert Path("bom.txt").read_bytes() == b""
+
+
+async def test_read_file_can_number_lines(tmp_path):
+    (tmp_path / "n.txt").write_text("alpha\nbeta\ngamma\n")
+    result = await call(READ_FILE, path="n.txt", line_numbers=True)
+    text = result.content[0].text
+    assert text.splitlines()[:3] == ["1| alpha", "2| beta", "3| gamma"]
+    assert result.details["numbered"] is True
+
+    paged = await call(READ_FILE, path="n.txt", offset=1, limit=1, line_numbers=True)
+    assert paged.content[0].text.splitlines()[0] == "2| beta"
+
+
+async def test_read_file_default_output_is_unchanged(tmp_path):
+    (tmp_path / "n.txt").write_text("alpha\nbeta\n")
+    result = await call(READ_FILE, path="n.txt")
+    assert result.content[0].text == "alpha\nbeta\n"
+    assert result.details["numbered"] is False
+
+
+async def test_write_file_preserves_an_executable_bit(tmp_path):
+    script = tmp_path / "run.sh"
+    script.write_text("#!/bin/sh\necho old\n")
+    script.chmod(0o755)
+
+    result = await call(WRITE_FILE, path="run.sh", content="#!/bin/sh\necho new\n")
+    assert not result.is_error
+    assert script.stat().st_mode & 0o111, "the executable bit must survive a rewrite"
+
+    edited = await call(
+        EDIT_FILE, path="run.sh", old_string="echo new", new_string="echo newer"
+    )
+    assert not edited.is_error
+    assert script.stat().st_mode & 0o111

@@ -181,8 +181,8 @@ browser/computer、debug/DAP、IDA、security_scan、tts/generate_image、eval �
 
 #### T17 · 内核小项
 
-- [ ] `write_file` 保留/设置可执行位（目标已有可执行位时保持）；`read_file` 输出行号（`N| `）；`glob` 支持 `.gitignore` 过滤与 mtime 排序。
-- [ ] 测试：`tests/test_tools_fs.py`、`tests/test_tools_search.py`。
+- [x] `write_file` 保留/设置可执行位（目标已有可执行位时保持）；`read_file` 输出行号（`N| `）；`glob` 支持 `.gitignore` 过滤与 mtime 排序。
+- [x] 测试：`tests/test_tools_fs.py`、`tests/test_tools_search.py`。
 
 ### M5 · 命令与浮层
 

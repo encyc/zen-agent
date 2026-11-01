@@ -16,8 +16,8 @@
     "text": "Fetch a URL and return its readable text (HTML stripped). Use it after `web_search` to read a result in full."
   },
   "glob": {
-    "chars": 153,
-    "text": "Find files by glob pattern (e.g. '**/*.py') under a directory. Hidden files are skipped unless include_hidden; returns at most limit paths (default 500)."
+    "chars": 279,
+    "text": "Find files by glob pattern (e.g. '**/*.py') under a directory. Hidden files are skipped unless include_hidden, and paths ignored by the root .gitignore are skipped unless include_ignored; returns at most limit paths (default 500). sort='path' (default) or 'mtime' (newest first)."
   },
   "grep": {
     "chars": 261,
@@ -28,8 +28,8 @@
     "text": "List one directory level, marking directories and file sizes."
   },
   "read_file": {
-    "chars": 194,
-    "text": "Read a UTF-8 text file. Binary files are refused. Returns whole small files; at most 400 lines per call by default (hard cap 2000). A truncated result reports the exact offset for the next page."
+    "chars": 315,
+    "text": "Read a UTF-8 text file. Binary files are refused. Returns whole small files; at most 400 lines per call by default (hard cap 2000). A truncated result reports the exact offset for the next page. Set line_numbers=true to prefix each line with its 1-based number (for inspection only; never write numbered text back)."
   },
   "read_skill": {
     "chars": 86,

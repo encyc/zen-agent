@@ -298,3 +298,55 @@ async def test_glob_patterns_that_name_dot_paths_are_not_hidden(tmp_path, monkey
 
     explicit_file = await call(GLOB, pattern="**/.env*")
     assert ".env.local" in explicit_file.content[0].text
+
+
+async def test_glob_skips_gitignored_paths_by_default(tree):
+    (tree / ".gitignore").write_text("*.log\nbuild/\n")
+    (tree / "debug.log").write_text("noise\n")
+    (tree / "build").mkdir()
+    (tree / "build" / "out.py").write_text("x = 1\n")
+
+    result = await call(GLOB, pattern="**/*")
+    text = result.content[0].text
+    assert "debug.log" not in text
+    assert "build/out.py" not in text
+    assert "pkg/a.py" in text
+
+
+async def test_glob_can_include_ignored_paths_on_request(tree):
+    (tree / ".gitignore").write_text("*.log\n")
+    (tree / "debug.log").write_text("noise\n")
+
+    result = await call(GLOB, pattern="**/*.log", include_ignored=True)
+    assert "debug.log" in result.content[0].text
+
+
+async def test_glob_gitignore_negation_keeps_a_file(tree):
+    (tree / ".gitignore").write_text("*.log\n!keep.log\n")
+    (tree / "drop.log").write_text("x\n")
+    (tree / "keep.log").write_text("x\n")
+
+    result = await call(GLOB, pattern="**/*.log")
+    text = result.content[0].text
+    assert "keep.log" in text and "drop.log" not in text
+
+
+async def test_glob_sorts_by_mtime_newest_first(tree):
+    import os
+    import time
+
+    (tree / "old.py").write_text("old\n")
+    (tree / "new.py").write_text("new\n")
+    now = time.time()
+    os.utime(tree / "old.py", (now - 100, now - 100))
+    os.utime(tree / "new.py", (now, now))
+
+    result = await call(GLOB, pattern="*.py", sort="mtime")
+    lines = result.content[0].text.splitlines()
+    assert lines[0] == "new.py"
+    assert "old.py" in lines
+
+
+async def test_glob_rejects_an_unknown_sort(tree):
+    result = await call(GLOB, pattern="*", sort="size")
+    assert result.is_error

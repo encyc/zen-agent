@@ -222,19 +222,37 @@ async def _read_file(
         )
 
     end = offset + min(limit, total - offset)
+    numbered = bool(args.get("line_numbers"))
     details = {
         "path": str(path),
         "total_lines": total,
         "offset": offset,
         "limit": limit,
         "truncated": end < total,
+        "numbered": numbered,
     }
+
+    def render(start: int) -> str:
+        chunk = lines[start:end]
+        if not numbered:
+            return "\n".join(chunk)
+        width = len(str(total))
+        return "\n".join(
+            f"{start + index + 1:>{width}}| {line}"
+            for index, line in enumerate(chunk)
+        )
+
     # Whole-file read keeps the legacy byte-exact result (including the final
     # newline); paged reads are line slices.
     if offset == 0 and end == total:
-        return _text(text, **details)
+        if not numbered:
+            return _text(text, **details)
+        body = render(0)
+        if text.endswith("\n"):
+            body += "\n"
+        return _text(body, **details)
 
-    body = "\n".join(lines[offset:end])
+    body = render(offset)
     if end < total:
         body += (
             f"\n\n{READ_TRUNCATION_MARKER} showing lines {offset + 1}-{end} of "
@@ -458,6 +476,13 @@ READ_FILE = _tool(
             "description": (
                 f"Maximum lines to return (default {DEFAULT_READ_LIMIT}, "
                 f"cap {MAX_READ_LIMIT})."
+            ),
+        },
+        "line_numbers": {
+            "type": "boolean",
+            "description": (
+                "Prefix every line with its 1-based number ('  12| code'). "
+                "For inspection: do not write numbered text back."
             ),
         },
     },

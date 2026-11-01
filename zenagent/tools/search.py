@@ -88,6 +88,64 @@ class _GrepHits:
         return True
 
 
+def _gitignore_rules(root: Path) -> list[tuple[str, bool, bool, bool]]:
+    """Read the root ``.gitignore`` into ``(pattern, negated, dir_only, anchored)``.
+
+    Deliberately small: this is not a full gitignore implementation. It covers
+    the patterns that matter for "don't list build junk": comments, blanks,
+    ``*.ext``, ``name``, ``dir/``, leading ``/`` anchoring and ``!negation``
+    (last match wins). Nested ``.gitignore`` files are not read.
+    """
+    path = root / ".gitignore"
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    rules: list[tuple[str, bool, bool, bool]] = []
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        negated = line.startswith("!")
+        if negated:
+            line = line[1:].strip()
+        if not line:
+            continue
+        dir_only = line.endswith("/")
+        if dir_only:
+            line = line.rstrip("/")
+        anchored = line.startswith("/")
+        if anchored:
+            line = line.lstrip("/")
+        if line:
+            rules.append((line, negated, dir_only, anchored))
+    return rules
+
+
+def _gitignored(rel: Path, rules: list[tuple[str, bool, bool, bool]]) -> bool:
+    """Whether a path is ignored by ``rules`` (last matching rule wins)."""
+    if not rules:
+        return False
+    import fnmatch
+
+    rel_posix = rel.as_posix()
+    parts = rel.parts
+    ignored = False
+    for pattern, negated, dir_only, anchored in rules:
+        if anchored or "/" in pattern:
+            prefix = pattern.rstrip("/")
+            matched = fnmatch.fnmatch(rel_posix, pattern) or (
+                rel_posix == prefix or rel_posix.startswith(prefix + "/")
+            )
+        elif dir_only:
+            matched = any(fnmatch.fnmatch(part, pattern) for part in parts[:-1])
+        else:
+            matched = any(fnmatch.fnmatch(part, pattern) for part in parts)
+        if matched:
+            ignored = not negated
+    return ignored
+
+
 async def _glob(tool_call_id: str, args: dict, abort, on_update=None) -> ToolResultAgent:
     pattern = args["pattern"]
     root = Path(args.get("path") or ".")
@@ -107,9 +165,14 @@ async def _glob(tool_call_id: str, args: dict, abort, on_update=None) -> ToolRes
         part.startswith(".") for part in Path(pattern).parts
     )
     include_hidden = bool(args.get("include_hidden", False)) or pattern_names_hidden
+    include_ignored = bool(args.get("include_ignored", False))
+    rules = [] if include_ignored else _gitignore_rules(root)
+    sort = args.get("sort") or "path"
+    if sort not in ("path", "mtime"):
+        return _text("sort must be 'path' or 'mtime'", is_error=True)
 
     try:
-        found: list[str] = []
+        found: list[Path] = []
         for path in root.rglob(pattern):
             if not path.is_file():
                 continue
@@ -119,8 +182,20 @@ async def _glob(tool_call_id: str, args: dict, abort, on_update=None) -> ToolRes
                 continue
             if not include_hidden and any(part.startswith(".") for part in parts):
                 continue
-            found.append(str(rel) if path != root else str(path))
-        matches = sorted(found)
+            if _gitignored(rel, rules):
+                continue
+            found.append(rel)
+        if sort == "mtime":
+            def _mtime(item: Path) -> float:
+                try:
+                    return (root / item).stat().st_mtime
+                except OSError:
+                    return 0.0
+
+            found.sort(key=lambda item: (-_mtime(item), item.as_posix()))
+        else:
+            found.sort(key=lambda item: item.as_posix())
+        matches = [str(item) for item in found]
     except (ValueError, NotImplementedError, OSError) as exc:
         return _text(f"invalid glob pattern {pattern!r}: {exc}", is_error=True)
 
@@ -326,6 +401,15 @@ GLOB = AgentTool(
             "include_hidden": {
                 "type": "boolean",
                 "description": "Include dotfiles/dot-directories (.git is always skipped).",
+            },
+            "include_ignored": {
+                "type": "boolean",
+                "description": "Include paths ignored by the root .gitignore (default false).",
+            },
+            "sort": {
+                "type": "string",
+                "enum": ["path", "mtime"],
+                "description": "Order: 'path' (default) or 'mtime' (newest first).",
             },
         },
         "required": ["pattern"],

@@ -1,1 +1,1 @@
-Find files by glob pattern (e.g. '**/*.py') under a directory. Hidden files are skipped unless include_hidden; returns at most limit paths (default {{max_glob_results}}).
+Find files by glob pattern (e.g. '**/*.py') under a directory. Hidden files are skipped unless include_hidden, and paths ignored by the root .gitignore are skipped unless include_ignored; returns at most limit paths (default {{max_glob_results}}). sort='path' (default) or 'mtime' (newest first).
