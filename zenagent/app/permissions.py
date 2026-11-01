@@ -18,12 +18,21 @@ import re
 from pathlib import Path
 
 from zenagent.app.modes import DEFAULT_MODE, normalize_mode
+from zenagent.app.safety import (
+    GuardPolicy,
+    Verdict,
+    classify_write_path,
+    default_allow_outside,
+    destructive_command_reason,
+    workspace_root,
+)
 from zenagent.i18n import t
 from zenagent.types import ToolCall
 
 __all__ = [
     "READ_ONLY_TOOLS",
     "PermissionGate",
+    "build_permission_gate",
     "dangerous_command_reason",
     "matches_any",
     "tool_is_read_only",
@@ -54,6 +63,16 @@ READ_ONLY_TOOLS = frozenset(
 
 #: Cap for argument text echoed in a prompt.
 _MAX_ARGS_PREVIEW = 120
+
+#: Tools whose path becomes the risk target (and the session grant key).
+_PATH_WRITE_TOOLS = frozenset({"write_file", "edit_file"})
+
+#: How a non-interactive run can explicitly resolve each confirm-level risk.
+_RISK_HINTS = {
+    "outside": "pass --allow-outside PATH to allow it",
+    "protected": "pass --allow-protected to allow it",
+    "destructive": "pass --allow-destructive to allow it",
+}
 
 #: Paths whose recursive forced deletion is never a normal coding action.
 _CATASTROPHIC_TARGETS = frozenset({"/", "/*", "~", "~/", "$home", "*", "/.*", "/*/"})
@@ -215,6 +234,7 @@ class PermissionGate:
         deny: list[str] | None = None,
         read_only: bool = False,
         mode: str = DEFAULT_MODE,
+        policy: GuardPolicy | None = None,
     ) -> None:
         self.assume_yes = assume_yes
         self.interactive = interactive
@@ -223,8 +243,13 @@ class PermissionGate:
         self.deny = list(deny or [])
         self.read_only = read_only
         self.mode = self._validated_mode(mode)
+        self.policy = policy or GuardPolicy(
+            workspace=workspace_root(), allow_outside=default_allow_outside()
+        )
         #: Tools the user answered "a" for during this session.
         self._always_allowed: set[str] = set()
+        #: Confirm-level risk targets the user explicitly allowed this session.
+        self._risk_grants: set[str] = set()
 
     @staticmethod
     def _validated_mode(mode: str) -> str:
@@ -237,11 +262,11 @@ class PermissionGate:
         """Switch the runtime mode; the next tool call sees it immediately."""
         self.mode = self._validated_mode(mode)
 
-    def policy_refusal(self, tool_name: str, args: dict, tool=None) -> str | None:
-        """Why a call is refused *before any confirmation*, or ``None``.
+    def assess(self, tool_name: str, args: dict, tool=None) -> Verdict:
+        """Classify a call as allow, confirm (with a risk label) or refuse.
 
-        Danger, explicit deny patterns, plan mode and ``--read-only`` are
-        policy: they beat both ``--yes`` and a session-wide "always allow".
+        The order is the design's fixed precedence: catastrophic command, deny
+        pattern, plan/read-only policy, then the new risk tiers, then allow.
         """
         read_only = tool_is_read_only(tool_name, tool)
         if tool_name == "bash" and not self.allow_dangerous:
@@ -249,24 +274,82 @@ class PermissionGate:
             # commands need the explicit --allow-dangerous escape hatch.
             danger = dangerous_command_reason(str(args.get("command", "")))
             if danger is not None:
-                return f"refused {danger}; this needs --allow-dangerous"
+                return Verdict(
+                    "refuse", f"refused {danger}; this needs --allow-dangerous"
+                )
         denied_by = matches_any(self.deny, tool_name)
         if denied_by is not None:
-            return f"tool {tool_name!r} is denied by policy ({denied_by})"
+            return Verdict(
+                "refuse", f"tool {tool_name!r} is denied by policy ({denied_by})"
+            )
         if self.mode == "plan" and not read_only:
-            return (
+            return Verdict(
+                "refuse",
                 f"tool {tool_name!r} is blocked by plan mode (read-only); "
-                "switch to /mode ask or /mode full to execute"
+                "switch to /mode ask or /mode full to execute",
             )
         if self.read_only and not read_only:
-            return f"tool {tool_name!r} is blocked by --read-only"
-        return None
+            return Verdict("refuse", f"tool {tool_name!r} is blocked by --read-only")
+        if tool_name == "bash" and not self.allow_dangerous:
+            # --allow-dangerous is the single escape hatch for catastrophic
+            # *and* destructive shell commands; asking for it twice would be
+            # a trap for scripted runs.
+            reason = destructive_command_reason(
+                str(args.get("command", "")), self.policy
+            )
+            if reason is not None:
+                return Verdict(
+                    "confirm",
+                    f"destructive command ({reason})",
+                    risk="destructive",
+                    target=tool_target(tool_name, args),
+                )
+        if tool_name in _PATH_WRITE_TOOLS:
+            raw = args.get("path")
+            if isinstance(raw, str) and raw:
+                try:
+                    scope, resolved = classify_write_path(raw, self.policy)
+                except (OSError, RuntimeError) as exc:
+                    return Verdict("refuse", f"cannot resolve {raw!r}: {exc}")
+                if scope == "protected":
+                    return Verdict(
+                        "confirm",
+                        f"{resolved} is a protected credential path",
+                        risk="protected",
+                        target=tool_target(tool_name, args),
+                    )
+                if scope == "outside":
+                    return Verdict(
+                        "confirm",
+                        f"{resolved} is outside the workspace "
+                        f"{self.policy.workspace}",
+                        risk="outside",
+                        target=tool_target(tool_name, args),
+                    )
+        return Verdict("allow", "")
+
+    def policy_refusal(self, tool_name: str, args: dict, tool=None) -> str | None:
+        """Why a call is refused *before any confirmation*, or ``None``.
+
+        Danger, explicit deny patterns, plan mode and ``--read-only`` are
+        policy: they beat both ``--yes`` and a session-wide "always allow".
+        """
+        verdict = self.assess(tool_name, args, tool)
+        return verdict.reason if verdict.kind == "refuse" else None
 
     async def check(self, tool_name: str, args: dict, tool=None) -> tuple[bool, str]:
         """Return ``(allowed, reason)``; reason is empty when allowed."""
-        refusal = self.policy_refusal(tool_name, args, tool)
-        if refusal is not None:
-            return False, refusal
+        verdict = self.assess(tool_name, args, tool)
+        if verdict.kind == "refuse":
+            return False, verdict.reason
+        if verdict.kind == "confirm":
+            target = verdict.target or tool_target(tool_name, args)
+            if target is not None and target in self._risk_grants:
+                return True, ""
+            if self.interactive:
+                return self._ask(tool_name, args, verdict)
+            hint = _RISK_HINTS.get(verdict.risk or "", "")
+            return False, f"{verdict.reason}; {hint}" if hint else verdict.reason
         if matches_any(self.allow, tool_name) is not None:
             return True, ""
         if tool_is_read_only(tool_name, tool):
@@ -287,7 +370,9 @@ class PermissionGate:
             return False, reason
         return self._ask(tool_name, args)
 
-    def _ask(self, tool_name: str, args: dict) -> tuple[bool, str]:
+    def _ask(
+        self, tool_name: str, args: dict, verdict: Verdict | None = None
+    ) -> tuple[bool, str]:
         target = tool_target(tool_name, args)
         if target is not None:
             # Show what the grant will cover (path / command prefix), not just
@@ -297,14 +382,23 @@ class PermissionGate:
             preview = ", ".join(f"{key}={value!r}" for key, value in args.items())
         if len(preview) > _MAX_ARGS_PREVIEW:
             preview = preview[:_MAX_ARGS_PREVIEW] + "…"
+        risk_line = ""
+        if verdict is not None and verdict.risk is not None:
+            if verdict.risk == "destructive":
+                risk_line = t("perm.risk_destructive", reason=verdict.reason) + "\n"
+            else:
+                risk_line = t(f"perm.risk_{verdict.risk}", target=preview) + "\n"
         try:
             answer = input(
-                t("perm.repl_prompt", tool=tool_name, args=preview)
+                risk_line + t("perm.repl_prompt", tool=tool_name, args=preview)
             ).strip().lower()
         except (EOFError, KeyboardInterrupt):
             return False, f"permission denied for {tool_name!r}: no answer"
         if answer in ("a", "all"):
-            target = tool_target(tool_name, args)
+            if verdict is not None and verdict.kind == "confirm":
+                if target is not None:
+                    self._risk_grants.add(target)
+                return True, ""
             if target is not None:
                 self._always_allowed.add(target)
             elif not expects_target(tool_name):
@@ -330,6 +424,30 @@ class PermissionGate:
         if allowed:
             return None
         return {"block": True, "reason": reason}
+
+
+def build_permission_gate(
+    *,
+    interactive: bool,
+    assume_yes: bool = False,
+    allow_dangerous: bool = False,
+    allow: list[str] | None = None,
+    deny: list[str] | None = None,
+    mode: str = DEFAULT_MODE,
+    read_only: bool = False,
+    policy: GuardPolicy | None = None,
+) -> PermissionGate:
+    """Build the gate every frontend uses, so policy wiring never drifts."""
+    return PermissionGate(
+        assume_yes=assume_yes,
+        interactive=interactive,
+        allow_dangerous=allow_dangerous,
+        allow=allow,
+        deny=deny,
+        read_only=read_only,
+        mode=mode,
+        policy=policy,
+    )
 
 
 class PermissionBroker:

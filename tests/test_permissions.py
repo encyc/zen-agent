@@ -2,6 +2,8 @@
 
 import pytest
 
+from zenagent.app.permissions import build_permission_gate
+from zenagent.app.safety import GuardPolicy
 from zenagent.cli.permissions import PermissionGate, dangerous_command_reason
 from zenagent.types import ToolCall
 
@@ -418,3 +420,160 @@ async def test_task_and_ask_are_read_only_for_name_only_callers():
         approval="read",
     )
     assert (await gate.check("task", {"prompt": "x"}, task))[0] is True
+
+
+# ---------------------------------------------------------------------------
+# Risk verdicts: workspace fence, protected paths, destructive commands
+# ---------------------------------------------------------------------------
+
+
+async def test_outside_write_is_refused_with_flag_hint(tmp_path):
+    gate = build_permission_gate(
+        interactive=False, policy=GuardPolicy(workspace=tmp_path)
+    )
+    allowed, reason = await gate.check(
+        "write_file", {"path": "/etc/hosts", "content": "x"}
+    )
+    assert allowed is False
+    assert "--allow-outside" in reason
+
+
+async def test_full_mode_does_not_bypass_outside_write(tmp_path):
+    gate = build_permission_gate(
+        interactive=False,
+        assume_yes=True,
+        mode="full",
+        policy=GuardPolicy(workspace=tmp_path),
+    )
+    assert (
+        await gate.check("write_file", {"path": "/etc/hosts", "content": "x"})
+    )[0] is False
+
+
+async def test_tools_allow_cannot_bypass_risk(tmp_path):
+    gate = build_permission_gate(
+        interactive=False,
+        assume_yes=True,
+        allow=["*"],
+        policy=GuardPolicy(workspace=tmp_path),
+    )
+    assert (
+        await gate.check("write_file", {"path": "/etc/hosts", "content": "x"})
+    )[0] is False
+
+
+async def test_allow_outside_policy_resolves_the_risk(tmp_path):
+    workspace = tmp_path / "workspace"
+    other = tmp_path / "other"
+    workspace.mkdir()
+    other.mkdir()
+    gate = build_permission_gate(
+        interactive=False,
+        assume_yes=True,
+        policy=GuardPolicy(workspace=workspace, allow_outside=(other,)),
+    )
+    assert (
+        await gate.check("write_file", {"path": str(other / "x"), "content": "x"})
+    )[0] is True
+
+
+async def test_plain_workspace_write_still_allowed_under_yes(tmp_path):
+    gate = build_permission_gate(
+        interactive=False, assume_yes=True, policy=GuardPolicy(workspace=tmp_path)
+    )
+    assert (
+        await gate.check("write_file", {"path": str(tmp_path / "a.py"), "content": "x"})
+    )[0] is True
+
+
+async def test_protected_path_requires_confirmation(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    (home / ".ssh").mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(home))
+    gate = build_permission_gate(
+        interactive=False, assume_yes=True, policy=GuardPolicy(workspace=tmp_path)
+    )
+    allowed, reason = await gate.check(
+        "write_file", {"path": str(home / ".ssh" / "config"), "content": "x"}
+    )
+    assert allowed is False
+    assert "--allow-protected" in reason
+
+
+async def test_destructive_bash_requires_confirmation(tmp_path):
+    gate = build_permission_gate(
+        interactive=False,
+        assume_yes=True,
+        mode="full",
+        policy=GuardPolicy(workspace=tmp_path),
+    )
+    allowed, reason = await gate.check("bash", {"command": "git reset --hard"})
+    assert allowed is False
+    assert "--allow-destructive" in reason
+
+
+async def test_destructive_bash_is_quiet_for_build_dir(tmp_path):
+    gate = build_permission_gate(
+        interactive=False,
+        assume_yes=True,
+        mode="full",
+        policy=GuardPolicy(workspace=tmp_path),
+    )
+    assert (await gate.check("bash", {"command": "rm -rf ./build"}))[0] is True
+
+
+async def test_plan_mode_still_refuses_risky_writes(tmp_path):
+    gate = build_permission_gate(
+        interactive=False, mode="plan", policy=GuardPolicy(workspace=tmp_path)
+    )
+    allowed, reason = await gate.check(
+        "write_file", {"path": "/etc/hosts", "content": "x"}
+    )
+    assert allowed is False
+    assert "plan mode" in reason
+
+
+async def test_catastrophic_bash_still_refused_under_yes(tmp_path):
+    gate = build_permission_gate(
+        interactive=False,
+        assume_yes=True,
+        policy=GuardPolicy(workspace=tmp_path),
+    )
+    allowed, reason = await gate.check("bash", {"command": "rm -rf /"})
+    assert allowed is False
+    assert "--allow-dangerous" in reason
+
+
+async def test_read_tools_are_not_fenced(tmp_path):
+    gate = build_permission_gate(
+        interactive=False, policy=GuardPolicy(workspace=tmp_path)
+    )
+    assert (await gate.check("read_file", {"path": "/etc/hosts"}))[0] is True
+
+
+async def test_interactive_risk_always_is_target_scoped(tmp_path, monkeypatch):
+    prompts: list[str] = []
+    answers = iter(["a"])
+
+    def fake_input(prompt=""):
+        prompts.append(prompt)
+        return next(answers, "n")
+
+    monkeypatch.setattr("builtins.input", fake_input)
+    gate = build_permission_gate(
+        interactive=True, policy=GuardPolicy(workspace=tmp_path)
+    )
+    args = {"path": "/etc/hosts", "content": "x"}
+    assert (await gate.check("write_file", args))[0] is True
+    assert (await gate.check("write_file", args))[0] is True
+    assert len(prompts) == 1
+    assert "outside workspace" in prompts[0]
+
+
+async def test_assess_returns_verdict_kinds(tmp_path):
+    gate = build_permission_gate(
+        interactive=False, policy=GuardPolicy(workspace=tmp_path)
+    )
+    assert gate.assess("read_file", {"path": "x"}).kind == "allow"
+    verdict = gate.assess("write_file", {"path": "/etc/hosts"})
+    assert verdict.kind == "confirm" and verdict.risk == "outside"
