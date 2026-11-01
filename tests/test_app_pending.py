@@ -8,9 +8,18 @@ how many entries disappeared.
 
 import asyncio
 
+from conftest import text_stream
+
 from zenagent.app.chat import ChatController
 from zenagent.events import AssistantEvent
-from zenagent.types import AssistantMessage, ImageContent, TextContent, Usage
+from zenagent.types import (
+    AssistantMessage,
+    ImageContent,
+    TextContent,
+    ToolCall,
+    Usage,
+    UserMessage,
+)
 
 
 def gated_stream(gate: asyncio.Event):
@@ -31,6 +40,44 @@ def gated_stream(gate: asyncio.Event):
             type="text_delta", partial=partial, content_index=0, delta="done"
         )
         yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    return stream
+
+
+def gated_tool_stream(gate: asyncio.Event):
+    """First turn asks for ``read_file`` and waits at ``gate``; then answers."""
+
+    calls = {"n": 0}
+
+    async def stream(model, messages, tools, options):
+        calls["n"] += 1
+        partial = AssistantMessage(
+            content=[],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="pending",
+            timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        if calls["n"] == 1:
+            call = ToolCall(
+                id="c1", name="read_file", arguments={"path": "README.md"}
+            )
+            partial.content = [call]
+            yield AssistantEvent(
+                type="toolcall_end", partial=partial, tool_call=call
+            )
+            await gate.wait()
+            partial.stop_reason = "tool_use"
+            yield AssistantEvent(type="done", partial=partial, reason="tool_use")
+        else:
+            partial.content = [TextContent(text="done")]
+            partial.stop_reason = "stop"
+            yield AssistantEvent(
+                type="text_delta", partial=partial, content_index=0, delta="done"
+            )
+            yield AssistantEvent(type="done", partial=partial, reason="stop")
 
     return stream
 
@@ -122,3 +169,107 @@ async def test_pending_ids_increase_and_survive_dequeue(runtime_factory):
     gate.set()
     await task
     await chat.wait_for_idle()
+
+
+async def test_steer_while_streaming_shows_in_the_steer_lane(runtime_factory):
+    gate = asyncio.Event()
+    runtime = await runtime_factory(stream_fn=gated_stream(gate))
+    chat = ChatController(runtime)
+    task = asyncio.create_task(chat.submit("hi"))
+    await asyncio.sleep(0.05)
+
+    chat.steer("actually, check the logs")
+
+    assert [(p.lane, p.text) for p in chat.status.pending] == [
+        ("steer", "actually, check the logs")
+    ]
+    assert runtime.agent.pending_steering == 1
+
+    gate.set()
+    await task
+
+
+async def test_promote_moves_a_queued_entry_to_the_steer_lane(runtime_factory):
+    gate = asyncio.Event()
+    runtime = await runtime_factory(stream_fn=gated_stream(gate))
+    chat = ChatController(runtime)
+    task = asyncio.create_task(chat.submit("hi"))
+    await asyncio.sleep(0.05)
+
+    chat.queue_follow_up("use the staging config")
+    entry = chat.status.pending[0]
+
+    assert chat.promote(entry.id) == "ok"
+    assert [(p.lane, p.text) for p in chat.status.pending] == [
+        ("steer", "use the staging config")
+    ]
+    assert runtime.agent.pending_steering == 1
+
+    gate.set()
+    await task
+
+
+async def test_promote_rejects_entries_with_images(runtime_factory):
+    gate = asyncio.Event()
+    runtime = await runtime_factory(stream_fn=gated_stream(gate))
+    chat = ChatController(runtime)
+    task = asyncio.create_task(chat.submit("hi"))
+    await asyncio.sleep(0.05)
+
+    chat.attach_image(ImageContent(data="aGk=", mime_type="image/png"))
+    chat.queue_follow_up("with a screenshot")
+    entry = chat.status.pending[0]
+
+    assert chat.promote(entry.id) == "blocked_images"
+    assert [p.lane for p in chat.status.pending] == ["queue"]
+    assert runtime.agent.pending_steering == 0
+
+    gate.set()
+    await task
+
+
+async def test_promote_when_idle_is_not_running(runtime_factory):
+    runtime = await runtime_factory(stream_fn=text_stream())
+    chat = ChatController(runtime)
+    chat.queue_follow_up("later")
+    entry = chat.status.pending[0]
+
+    assert chat.promote(entry.id) == "not_running"
+    assert [p.lane for p in chat.status.pending] == ["queue"]
+    assert chat.promote(999) == "missing"
+
+
+async def test_steer_when_idle_falls_back_to_the_queue(runtime_factory):
+    runtime = await runtime_factory(stream_fn=text_stream())
+    chat = ChatController(runtime)
+
+    chat.steer("later")
+
+    assert [(p.lane, p.text) for p in chat.status.pending] == [
+        ("queue", "later")
+    ]
+    assert runtime.agent.pending_steering == 0
+
+
+async def test_injected_steering_clears_the_mirror_and_lands_in_transcript(
+    runtime_factory,
+):
+    gate = asyncio.Event()
+    runtime = await runtime_factory(stream_fn=gated_tool_stream(gate))
+    chat = ChatController(runtime)
+    task = asyncio.create_task(chat.submit("check the readme"))
+    await asyncio.sleep(0.05)
+
+    chat.steer("actually, check the logs")
+    assert [(p.lane, p.text) for p in chat.status.pending] == [
+        ("steer", "actually, check the logs")
+    ]
+    gate.set()
+    await task
+    await chat.wait_for_idle()
+
+    assert chat.status.pending == []
+    assert runtime.agent.pending_steering == 0
+    users = [m for m in runtime.agent.messages if isinstance(m, UserMessage)]
+    assert any("actually, check the logs" in str(m.content) for m in users)
+

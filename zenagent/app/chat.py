@@ -318,6 +318,9 @@ class ChatController:
         cleared = len(self._pending)
         if not cleared:
             return 0
+        # Undelivered steering also lives on the agent; reclaim it or it would
+        # be injected into the next run's first request after the user cleared.
+        self.runtime.agent.take_steering()
         self._pending.clear()
         self._notify()
         return cleared
@@ -370,9 +373,42 @@ class ChatController:
         return None
 
     def steer(self, text: str) -> None:
-        if text.strip():
-            self.runtime.agent.steer(text)
-            self._notify()
+        """Deliver ``text`` at the running turn's next step boundary.
+
+        Falls back to the follow-up queue when no run is streaming (compaction,
+        or a run that just finished), so nothing is silently stranded.
+        """
+        if not text.strip():
+            return
+        if not self.runtime.agent.is_streaming:
+            self.queue_follow_up(text)
+            return
+        self._add_pending(text, [], "steer")
+        self.runtime.agent.steer(text)
+        self._notify()
+
+    def promote(self, pending_id: int) -> str:
+        """Move one queued entry into the steering lane.
+
+        Returns ``"ok"``, ``"blocked_images"`` (the steering channel is
+        text-only), ``"not_running"`` (no step boundary to inject at), or
+        ``"missing"`` (unknown id, or already steering).
+        """
+        item = next(
+            (item for item in self._pending if item.message.id == pending_id),
+            None,
+        )
+        if item is None or item.message.lane != "queue":
+            return "missing"
+        if item.images:
+            return "blocked_images"
+        if not self.runtime.agent.is_streaming:
+            return "not_running"
+        self._pending.remove(item)
+        self._add_pending(item.message.text, [], "steer")
+        self.runtime.agent.steer(item.message.text)
+        self._notify()
+        return "ok"
 
     def abort(self) -> None:
         self.runtime.agent.abort()
@@ -571,6 +607,15 @@ class ChatController:
                 # The tool returns the canonical snapshot even for a rejected
                 # call, so the HUD always reflects the stored list.
                 self._todos = coerce_todo_phases(details.get("phases"))
+        # The loop drains steering before yielding the injected user message, so
+        # an empty agent queue means every mirror entry has been delivered.
+        if self.runtime.agent.pending_steering == 0 and any(
+            item.message.lane == "steer" for item in self._pending
+        ):
+            self._pending = [
+                item for item in self._pending if item.message.lane != "steer"
+            ]
+            changed = True
         if changed:
             self._notify()
 
