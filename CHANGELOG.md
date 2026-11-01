@@ -3,7 +3,9 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased — update-check responsiveness
+## v0.6.1 — 2026-11-01
+
+**Update check: revalidate the PyPI cache every hour instead of once a day.**
 
 ### Changed
 
