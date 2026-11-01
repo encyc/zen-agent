@@ -322,6 +322,56 @@ async def test_stream_posts_to_the_messages_endpoint(monkeypatch):
     assert real_client is not am.default_client  # sanity: patch scoped
 
 
+async def test_stream_drops_turns_no_provider_accepts(monkeypatch):
+    """A failed/aborted turn kept for the UI never reaches the wire."""
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        fixture = (FIXTURES / "anthropic-text.txt").read_text()
+        return httpx.Response(200, content=fixture.encode())
+
+    transport = httpx.MockTransport(handler)
+    monkeypatch.setattr(
+        am, "default_client", lambda: httpx.AsyncClient(transport=transport)
+    )
+
+    def assistant(content, stop_reason):
+        return AssistantMessage(
+            content=content,
+            provider="opencode-go",
+            model="claude-test",
+            usage=Usage(),
+            stop_reason=stop_reason,
+            timestamp=3,
+        )
+
+    messages = [
+        SystemMessage(content="sys", timestamp=0),
+        UserMessage(content="hi", timestamp=1),
+        assistant([ThinkingContent(thinking="partial")], "aborted"),
+        UserMessage(content="again", timestamp=4),
+        assistant([], "error"),
+    ]
+    events = [
+        event
+        async for event in am.stream(model(), messages, [], StreamOptions(api_key="k"))
+    ]
+
+    assert events[-1].type == "done"
+    # The two dropped turns leave consecutive user turns, which the adapter
+    # merges into one Messages-API turn.
+    assert captured["body"]["messages"] == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "hi"},
+                {"type": "text", "text": "again"},
+            ],
+        }
+    ]
+
+
 def test_adaptive_thinking_shape_for_gateway_models():
     adaptive = model()
     adaptive.compat = CompatFlags(anthropic_adaptive_thinking=True)

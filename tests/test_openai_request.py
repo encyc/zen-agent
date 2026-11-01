@@ -183,6 +183,22 @@ def test_assistant_tool_call_only_content_is_none():
     assert request["tool_calls"][0]["function"]["arguments"] == "{}"
 
 
+def test_assistant_thinking_only_sends_empty_content_not_null():
+    """DeepSeek rejects ``content: null`` without tool_calls (400)."""
+    message = _assistant([ThinkingContent(thinking="pondering")])
+    request = to_request_messages([message], DEEPSEEK)[0]
+    assert request == {
+        "role": "assistant",
+        "content": "",
+        "reasoning_content": "pondering",
+    }
+
+
+def test_assistant_without_blocks_sends_empty_content_not_null():
+    request = to_request_messages([_assistant([])], ZAI)[0]
+    assert request == {"role": "assistant", "content": ""}
+
+
 def test_tool_call_with_arguments_error_serializes_empty_json():
     message = _assistant(
         [

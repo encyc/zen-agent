@@ -15,6 +15,7 @@ import httpx
 
 from zenagent.events import AbortToken, AssistantEvent
 from zenagent.providers.catalog import Model
+from zenagent.providers.history import replayable
 from zenagent.providers.limits import fit_stream_options
 from zenagent.providers.openai_completions import StreamOptions
 from zenagent.providers.transport import default_client, iter_sse_data, post_stream
@@ -231,6 +232,7 @@ async def _chunk_stream(response: httpx.Response) -> AsyncIterator[dict]:
 async def stream(
     model: Model, messages: list[Message], tools: list[ToolDef], options: StreamOptions
 ) -> AsyncIterator[AssistantEvent]:
+    messages = replayable(messages)
     url, headers, body = build_request(model, messages, tools, options)
     client = default_client()
     try:
