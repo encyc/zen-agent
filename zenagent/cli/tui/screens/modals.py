@@ -15,10 +15,12 @@ from textual.screen import ModalScreen
 from textual.widgets import Input, OptionList, Static
 
 from zenagent.app.models import ModelEntry
+from zenagent.app.safety import Verdict
 from zenagent.app.sessions import SessionEntry
 from zenagent.cli.tui.screens.palette import PaletteItem, PaletteScreen
 from zenagent.cli.tui.textutil import clip_cells
 from zenagent.i18n import t
+from zenagent.tools.fs import unified_diff
 
 __all__ = [
     "AskQuestion",
@@ -214,6 +216,18 @@ class DialogScreen(ModalScreen[_T], Generic[_T]):
         color: $error;
     }
 
+    DialogScreen #dialog-risk {
+        height: auto;
+        padding: 0 0 1 0;
+        color: $warning;
+        text-style: bold;
+    }
+
+    DialogScreen #dialog-diff {
+        height: auto;
+        margin: 0 0 1 0;
+    }
+
     DialogScreen #dialog-choices {
         height: auto;
     }
@@ -296,6 +310,52 @@ def _choice(key: str, label: str) -> Text:
 def _clip(text: str, limit: int) -> str:
     flat = " ".join(text.split())
     return clip_cells(flat, limit)
+
+
+def preview_diff(
+    tool_name: str, arguments: dict, *, max_lines: int = 12
+) -> list[str]:
+    """Bounded unified-diff preview for a write/edit approval, or ``[]``.
+
+    Reads the target itself (the tool has not run yet); a missing or binary
+    file, a non-matching edit, or any other tool yields no preview rather than
+    a misleading one.
+    """
+    raw_path = arguments.get("path")
+    if not isinstance(raw_path, str) or not raw_path:
+        return []
+    target = Path(raw_path).expanduser()
+    try:
+        if not target.is_file():
+            return []
+        data = target.read_bytes()
+    except OSError:
+        return []
+    if b"\x00" in data[:8192]:
+        return []
+    before = data.decode("utf-8", errors="replace")
+    if tool_name == "write_file":
+        content = arguments.get("content")
+        if not isinstance(content, str):
+            return []
+        after = content
+    elif tool_name == "edit_file":
+        old = arguments.get("old_string")
+        new = arguments.get("new_string")
+        if not isinstance(old, str) or not isinstance(new, str) or not old:
+            return []
+        if old not in before:
+            return []
+        after = before.replace(old, new, 1)
+    else:
+        return []
+    lines = unified_diff(str(target), before, after).splitlines()
+    if not lines:
+        return []
+    shown = lines[:max_lines]
+    if len(lines) > max_lines:
+        shown.append("…")
+    return shown
 
 
 def _approval_body(tool_name: str, arguments: dict) -> list[tuple[str, str]]:
@@ -428,6 +488,7 @@ class ToolApproval(DialogScreen[str]):
         *,
         timeout: float | None = None,
         target: str | None = None,
+        verdict: Verdict | None = None,
     ) -> None:
         super().__init__()
         self.tool_name = tool_name
@@ -435,6 +496,8 @@ class ToolApproval(DialogScreen[str]):
         self.timeout = timeout
         #: The exact scope an "always" answer would remember (path / command).
         self.target = target
+        #: Confirm-level risk from the broker (outside/protected/destructive).
+        self.verdict = verdict
 
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
@@ -442,10 +505,24 @@ class ToolApproval(DialogScreen[str]):
                 Text(t("tui.dialog.allow", tool=self.tool_name)),
                 id="dialog-title",
             )
+            risk = self._risk_text()
+            if risk:
+                yield Static(Text(risk), id="dialog-risk")
             body = _approval_body(self.tool_name, self.arguments)
             if body:
                 with Vertical(id="dialog-body"):
                     for line, css_class in body:
+                        yield Static(Text(line), classes=css_class)
+            diff = preview_diff(self.tool_name, self.arguments)
+            if diff:
+                with Vertical(id="dialog-diff"):
+                    for line in diff:
+                        if line.startswith("+"):
+                            css_class = "dialog-add"
+                        elif line.startswith("-"):
+                            css_class = "dialog-remove"
+                        else:
+                            css_class = "dialog-detail"
                         yield Static(Text(line), classes=css_class)
             if self.target:
                 yield Static(
@@ -467,6 +544,15 @@ class ToolApproval(DialogScreen[str]):
                     ),
                     id="dialog-hint",
                 )
+
+    def _risk_text(self) -> str:
+        verdict = self.verdict
+        if verdict is None or verdict.risk is None:
+            return ""
+        if verdict.risk == "destructive":
+            return t("tui.dialog.risk_destructive", reason=verdict.reason)
+        target = self.arguments.get("path") or verdict.target or ""
+        return t(f"tui.dialog.risk_{verdict.risk}", target=target)
 
     def action_allow(self) -> None:
         self.dismiss("allow")

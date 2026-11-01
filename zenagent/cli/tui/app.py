@@ -190,6 +190,7 @@ class ZenAgentApp(App):
             arguments,
             timeout=self.approval_timeout_s,
             target=tool_target(tool_name, arguments),
+            verdict=verdict,
         )
         future: asyncio.Future[str] = asyncio.get_running_loop().create_future()
 

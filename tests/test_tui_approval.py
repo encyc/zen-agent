@@ -2,10 +2,18 @@
 
 import asyncio
 
-from zenagent.cli.tui.screens.modals import ToolApproval
+from zenagent.app.safety import Verdict
+from zenagent.cli.tui.screens.modals import ToolApproval, preview_diff
 
 
-async def _open_approval(app, *, laid_out: bool = True):
+async def _open_approval(
+    app,
+    *,
+    laid_out: bool = True,
+    verdict=None,
+    tool: str = "write_file",
+    arguments: dict | None = None,
+):
     """Start a request and wait until the dialog is up (and laid out).
 
     ``app.screen`` flips to the modal before the first layout pass, so returning
@@ -14,7 +22,9 @@ async def _open_approval(app, *, laid_out: bool = True):
     unavoidable.
     """
     task = asyncio.create_task(
-        app.request_tool_approval("write_file", {"path": "x.txt"})
+        app.request_tool_approval(
+            tool, arguments if arguments is not None else {"path": "x.txt"}, verdict=verdict
+        )
     )
     for _ in range(200):
         screen = app.screen
@@ -133,3 +143,92 @@ async def test_approval_dialog_shows_the_grant_target(picker_app):
         assert "always allows:" in scope.content.plain
         await pilot.press("n")
         assert await task == "deny"
+
+
+# ---------------------------------------------------------------------------
+# Risk badge and diff preview
+# ---------------------------------------------------------------------------
+
+
+async def test_approval_shows_outside_risk_badge(picker_app):
+    from textual.widgets import Static
+
+    app = picker_app
+    verdict = Verdict(
+        "confirm",
+        "outside workspace",
+        risk="outside",
+        target="/etc/hosts",
+    )
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        task = await _open_approval(
+            app, verdict=verdict, arguments={"path": "/etc/hosts", "content": "x"}
+        )
+        badge = app.screen.query_one("#dialog-risk", Static)
+        assert "outside workspace" in badge.content.plain
+        assert "/etc/hosts" in badge.content.plain
+        await pilot.press("n")
+        assert await task == "deny"
+
+
+async def test_approval_shows_diff_preview(picker_app, tmp_path):
+    from textual.widgets import Static
+
+    target = tmp_path / "a.txt"
+    target.write_text("one\ntwo\n")
+    app = picker_app
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        task = await _open_approval(
+            app,
+            tool="edit_file",
+            arguments={
+                "path": str(target),
+                "old_string": "two",
+                "new_string": "three",
+            },
+        )
+        block = app.screen.query_one("#dialog-diff")
+        lines = [row.content.plain for row in block.query(Static)]
+        assert any(line.startswith("+") and "three" in line for line in lines)
+        assert any(line.startswith("-") and "two" in line for line in lines)
+        await pilot.press("n")
+        assert await task == "deny"
+
+
+def test_preview_diff_write_file(tmp_path):
+    target = tmp_path / "a.txt"
+    target.write_text("old\n")
+    lines = preview_diff("write_file", {"path": str(target), "content": "new\n"})
+    assert any(line.startswith("+") and "new" in line for line in lines)
+    assert any(line.startswith("-") and "old" in line for line in lines)
+
+
+def test_preview_diff_edit_requires_a_match(tmp_path):
+    target = tmp_path / "a.txt"
+    target.write_text("one\ntwo\n")
+    assert preview_diff(
+        "edit_file",
+        {"path": str(target), "old_string": "absent", "new_string": "x"},
+    ) == []
+
+
+def test_preview_diff_missing_file_is_empty(tmp_path):
+    target = tmp_path / "nope.txt"
+    assert preview_diff("write_file", {"path": str(target), "content": "x"}) == []
+
+
+def test_preview_diff_truncates(tmp_path):
+    target = tmp_path / "a.txt"
+    target.write_text("\n".join(f"old {n}" for n in range(20)) + "\n")
+    content = "\n".join(f"new {n}" for n in range(20)) + "\n"
+    lines = preview_diff(
+        "write_file", {"path": str(target), "content": content}, max_lines=3
+    )
+    assert len(lines) == 4
+    assert lines[-1] == "…"
+
+
+def test_preview_diff_ignores_other_tools():
+    assert preview_diff("bash", {"command": "ls"}) == []
