@@ -117,6 +117,8 @@ class Runtime:
         self.extension_files: list[str] = []
         self.before_switch: SwitchHook | None = None
         self.gate: PermissionGate | None = None
+        #: Pre-write snapshot log; set by bootstrap when backups are enabled.
+        self.journal = None
         #: The per-session todo tool; ``switch_session`` re-points its sidecar.
         self.todo_tool: TodoTool | None = None
         #: Spill sink for oversized tool results; follows the session.

@@ -10,6 +10,7 @@ from zenagent.app.appearance import THEME_CHOICES
 from zenagent.app.chat import ChatController
 from zenagent.app.models import ModelManager
 from zenagent.app.modes import describe_modes
+from zenagent.app.restore import run_restore_command
 from zenagent.app.runtime import Runtime
 from zenagent.app.sessions import SessionManager
 from zenagent.i18n import LANGUAGE_CHOICES, t
@@ -498,6 +499,16 @@ async def _fork(services: AppServices, argument: str) -> CommandResult:
     )
 
 
+@_command("restore")
+async def _restore(services: AppServices, argument: str) -> CommandResult:
+    message = run_restore_command(
+        services.runtime.journal,
+        argument,
+        running=services.chat.status.running,
+    )
+    return CommandResult(message=message)
+
+
 @_command("settings")
 async def _settings(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(screen="settings")
@@ -534,6 +545,7 @@ def build_default_commands(services: AppServices) -> CommandRegistry:
         _fork,
         _settings,
         _undo,
+        _restore,
         _retry,
         _search,
         _theme,
