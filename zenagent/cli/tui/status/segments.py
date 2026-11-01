@@ -14,7 +14,7 @@ from rich.text import Text
 
 from zenagent.app.views import RunStatus
 from zenagent.cli.tui import palette
-from zenagent.cli.tui.textutil import clip_cells_left
+from zenagent.cli.tui.textutil import clip_cells, clip_cells_left
 from zenagent.i18n import t, tn
 
 __all__ = ["SEGMENTS", "SEGMENT_IDS", "SegmentContext", "render_status_line"]
@@ -30,6 +30,9 @@ class SegmentContext:
     status: RunStatus
     width: int
     path_max: int = 40
+    #: Branch names are unbounded; keep the head and clip before marks so a
+    #: long feature branch cannot crowd the queued/fact segments off the band.
+    git_max: int = 18
 
 
 Renderer = Callable[[SegmentContext], Text | None]
@@ -96,7 +99,11 @@ def _render_git(ctx: SegmentContext) -> Text | None:
         marks.append(f"~{status.git_dirty}")
     if status.git_untracked:
         marks.append(f"?{status.git_untracked}")
-    return _muted(" ".join((branch, *marks)))
+    mark_text = " ".join(marks)
+    if mark_text:
+        branch = clip_cells(branch, max(8, ctx.git_max - len(mark_text) - 1))
+        return _muted(f"{branch} {mark_text}")
+    return _muted(clip_cells(branch, ctx.git_max))
 
 
 def _render_tokens(ctx: SegmentContext) -> Text | None:
@@ -254,7 +261,12 @@ def render_status_line(
         visible_right = [segment_id for segment_id in right_ids if SEGMENTS[segment_id](ctx)]
         visible_left = [segment_id for segment_id in left_ids if SEGMENTS[segment_id](ctx)]
         if visible_right:
-            right_ids.remove(visible_right[-1])
+            # Facts degrade before identity, but "n queued" is actionable state:
+            # keep it until nothing else is left to drop.
+            droppable_right = [
+                segment_id for segment_id in visible_right if segment_id != "queued"
+            ] or visible_right
+            right_ids.remove(droppable_right[-1])
             continue
         if "path" in visible_left and path_max > 8:
             path_max = max(8, path_max - 8)

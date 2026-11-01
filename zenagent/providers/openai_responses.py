@@ -16,8 +16,8 @@ import httpx
 from zenagent.events import AbortToken, AssistantEvent
 from zenagent.providers.catalog import Model
 from zenagent.providers.history import replayable
-from zenagent.providers.openai_completions import StreamOptions
 from zenagent.providers.limits import fit_stream_options
+from zenagent.providers.openai_completions import StreamOptions
 from zenagent.providers.transport import default_client, iter_sse_data, post_stream
 from zenagent.types import (
     AssistantMessage,

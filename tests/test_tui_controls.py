@@ -221,3 +221,55 @@ async def test_error_keeps_the_banner_and_the_demoted_steer_visible(runtime_fact
         assert band.display is True
         assert "Queued · 1" in band.plain
         assert "save the logs" in band.plain
+
+
+async def test_alt_shift_p_toggles_plan_mode_and_back(picker_app):
+    app = picker_app
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        assert app.runtime.mode != "plan"
+        await pilot.press("alt+shift+p")
+        await pilot.pause()
+        assert app.runtime.mode == "plan"
+        await pilot.press("alt+shift+p")
+        await pilot.pause()
+        assert app.runtime.mode == "ask"
+
+
+async def test_shift_ctrl_p_cycles_models_backward(picker_app, monkeypatch):
+    from dataclasses import replace
+    from types import SimpleNamespace
+
+    app = picker_app
+    app.runtime.agent.model = replace(app.runtime.agent.model, id="b")
+    entries = [SimpleNamespace(id=name, available=True) for name in ("a", "b", "c")]
+    monkeypatch.setattr(app.models, "entries", lambda: entries)
+    applied: list[str] = []
+    monkeypatch.setattr(app, "_apply_model", applied.append)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await pilot.press("shift+ctrl+p")
+        await pilot.pause()
+        assert applied == ["a"], "backward cycle must pick the previous model"
+
+        await pilot.press("ctrl+p")
+        await pilot.pause()
+        assert applied == ["a", "c"], "forward cycle keeps working"
+
+
+async def test_f5_and_alt_r_dispatch_the_shared_retry_command(picker_app, monkeypatch):
+    app = picker_app
+    calls: list[tuple[str, str]] = []
+
+    async def capture(name: str, argument: str = "") -> None:
+        calls.append((name, argument))
+
+    monkeypatch.setattr(app, "_dispatch_command", capture)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await pilot.press("f5")
+        await pilot.pause()
+        await pilot.press("alt+r")
+        await pilot.pause()
+    assert calls == [("retry", ""), ("retry", "")]

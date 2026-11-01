@@ -76,34 +76,34 @@ browser/computer、debug/DAP、IDA、security_scan、tts/generate_image、eval �
 
 #### T1 · openai-responses 输出预算拟合
 
-- [ ] `zenagent/providers/openai_responses.py::stream` 在 `build_params` 前调用 `fit_stream_options(model, messages, options, tools)`，与另外 3 个适配器一致。
-- [ ] 测试：`tests/test_openai_responses.py` 构造“窗口放不下默认 max_tokens”的场景，断言请求体 `max_output_tokens` 被下调、且不低于 1024；正常场景不变。
-- [ ] 顺带修 CHANGELOG 的 “all three provider adapters” → 4 个。
+- [x] `zenagent/providers/openai_responses.py::build_params` 内调用 `fit_stream_options(model, messages, options, tools)`（与 anthropic/google 的请求构造器一致），`stream` 不再重复拟合。
+- [x] 测试：`tests/test_openai_responses.py` 构造“窗口放不下默认 max_tokens”的场景，断言请求体 `max_output_tokens` 被下调、且不低于 1024；正常场景不变。
+- [x] 顺带修 CHANGELOG 的 “all three provider adapters” → 4 个。
 
 #### T2 · MCP 调用级重连重试
 
-- [ ] `zenagent/mcp/client.py` 增加 `McpTransportError(McpError)`；把传输层失败（连接关闭、写失败、进程退出、HTTP 传输错误、非法 JSON/SSE 不匹配）改抛该类；JSON-RPC 业务错误保持 `McpError`。
-- [ ] `zenagent/mcp/manager.py::call`：捕获 `McpTransportError` → 关闭并丢弃旧 client → `_connect(server)` 一次 → 重发一次；仍失败返回可读 `McpError`。**不重试** `McpTimeout` 与 JSON-RPC 业务错误。
-- [ ] 测试：新增 fixture `tests/fixtures/mcp_crash_once_server.py`（首次 `tools/call` 直接退出并留标记，重启后正常）；`tests/test_mcp_manager.py` 断言重连后调用成功、业务错误不重连（client 身份不变）。
+- [x] `zenagent/mcp/client.py` 增加 `McpTransportError(McpError)`；把传输层失败（连接关闭、写失败、进程退出、HTTP 传输错误、非法 JSON/SSE 不匹配）改抛该类；JSON-RPC 业务错误保持 `McpError`。
+- [x] `zenagent/mcp/manager.py::call`：捕获 `McpTransportError` → 关闭并丢弃旧 client → `_connect(server)` 一次 → 重发一次；仍失败返回可读 `McpError`。**不重试** `McpTimeout` 与 JSON-RPC 业务错误。
+- [x] 测试：新增 fixture `tests/fixtures/mcp_crash_once_server.py`（首次 `tools/call` 直接退出并留标记，重启后正常）；`tests/test_mcp_manager.py` 断言重连后调用成功、业务错误不重连（client 身份不变）。
 
 #### T3 · partial result 全前端
 
-- [ ] `zenagent/cli/repl.py`：消费 `tool_execution_update`，在 stderr/渲染器打一行 1s 节流进度（复用 `cli/render.py::tool_progress_line`，删除死代码状态）。
-- [ ] `zenagent/cli/rpc.py`：事件序列化带上 `partial_result` 文本（截断），不改变既有字段。
-- [ ] headless（`cli/main.py`）保持安全忽略，并加注释说明；`tests/test_rpc.py`、`tests/test_repl_logic.py` 覆盖。
-- [ ] 单测：update 事件不丢/不乱序；REPL 同一 call 的进度行被替换而非刷屏。
+- [x] `zenagent/cli/repl.py`：消费 `tool_execution_update`，TTY 下打一行 0.2s 节流、原地覆盖的进度行（复用 `cli/render.py::tool_progress_line`，`tool_progress_line` 不再是死代码）；非 TTY 不输出。
+- [x] `zenagent/cli/rpc.py`：事件序列化带上 `partial_result` 文本（截断），不改变既有字段。
+- [x] headless（`cli/main.py`）保持安全忽略，并加注释说明；`tests/test_rpc.py`、`tests/test_repl_logic.py` 覆盖。
+- [x] 单测：update 事件不丢/不乱序；REPL 同一 call 的进度行被替换而非刷屏。
 
 #### T4 · 状态带 git / cache 段
 
-- [ ] `RunStatus` 增加 `git_branch`/`git_dirty`/`git_staged`/`git_untracked` 或一个 `git_status` 字符串；`ChatController` 构造状态时填充（`git status --porcelain -b`，带 2s 缓存，失败静默）。
-- [ ] `status/segments.py` 增加 `cache_read`/`cache_write` 段（数据已有），`git` 段显示 `branch ±n`；presets 补位。
-- [ ] 测试：`tests/test_tui_status_band.py` 覆盖 branch/dirty/clean、无 git 仓库时段消失、cache 段数值。
+- [x] `RunStatus` 增加 `git_branch`/`git_dirty`/`git_staged`/`git_untracked` 或一个 `git_status` 字符串；`ChatController` 构造状态时填充（`git status --porcelain -b`，带 2s 缓存，失败静默）。
+- [x] `status/segments.py` 增加 `cache_read`/`cache_write` 段（数据已有），`git` 段显示 `branch ±n`；presets 补位。
+- [x] 测试：`tests/test_tui_status_band.py` 覆盖 branch/dirty/clean、无 git 仓库时段消失、cache 段数值。
 
 #### T5 · TUI 键位补齐
 
-- [ ] `app.py` BINDINGS：`f5`/`alt+r` → retry（与 `/retry` 同一实现）；`shift+ctrl+p` → 反向循环模型；`alt+shift+p` → plan↔上次模式切换。
-- [ ] `i18n` 补 hotkeys 文案；`docs/guide/tui.md` 键位表同步。
-- [ ] 测试：`tests/test_tui_controls.py` 断言三个 action 的效果（无 run 时 retry 提示、模式切换、模型反向）。
+- [x] `app.py` BINDINGS：`f5`/`alt+r` → retry（与 `/retry` 同一实现）；`shift+ctrl+p` → 反向循环模型；`alt+shift+p` → plan↔上次模式切换。
+- [x] `i18n` 补 hotkeys 文案；`docs/guide/tui.md` 键位表同步。
+- [x] 测试：`tests/test_tui_controls.py` 断言三个 action 的效果（无 run 时 retry 提示、模式切换、模型反向）。
 
 ### M2 · 工具治理
 

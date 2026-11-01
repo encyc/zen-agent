@@ -34,9 +34,12 @@ dock 里 `TodoHud` 只有存在 todo 时显示一行（当前 phase / 当前任�
 - **输入历史**：普通 prompt 记在 `~/.zenagent/tui-history.jsonl`（最多 500 条），`ctrl+r` 打开搜索面板，
   最新的排在最前；多行 prompt 也能完整回填。斜杠命令不入历史。
 - **状态带**：一行填色，在 `╰─` 上方。它是**有序列的 segment**，窄屏按固定顺序丢信息：
-  先丢右侧事实（tokens/cache 命中率/花费/上下文/上一轮耗时/生成速率/session）→ 再缩路径 →
-  最后才丢左侧身份（model/thinking），**路径永远最后走**。`cache_hit` 由 app 层按 provider 方言归一化
+  先丢右侧事实（tokens/cache 命中率/cache 读/写/花费/上下文/上一轮耗时/生成速率/session）→ 再缩路径 →
+  最后才丢左侧身份（model/thinking），**路径永远最后走**；排队/插话计数是唯一被保留到最后的右侧段
+  （它是可操作状态，不是事实）。`cache_hit` 由 app 层按 provider 方言归一化
   （OpenAI/Gemini 的 `input` 已含缓存，Anthropic 的 `input` 不含缓存）；`time_spent`/`token_rate` 只在上一轮已结束时出现。
+  `git` 段显示分支与改动计数（`+staged ~modified ?untracked`，干净时只显示分支；分支过长会裁头），
+  数据由 app 层 `git status --porcelain -b` 探测并缓存 3 秒，不在仓库里时整段消失。
 - **输入行**：无边框，`╰─ ` 是唯一的装饰；草稿超过一行时输入框自动长高（最多 8 行），
   `╰─` 只在第一行。
 - **侧栏**：默认隐藏，`ctrl+b` 打开（宽 <100 列时自动不显示）。
@@ -93,8 +96,11 @@ provider 错误不会进转录区，而是停在 dock 顶部的错误横幅里�
 | `ctrl+q` | 排队 follow-up：run 中入队，空闲时直接发送 |
 | `alt+up` | 把**最后一条**排队消息取回输入框（dequeue，比清空更常用） |
 | `ctrl+p` | 循环切换模型 |
+| `shift+ctrl+p` | 反向循环切换模型 |
 | `alt+p` | 打开模型选择器 |
 | `shift+tab` | 循环 thinking 档位（off/low/medium/high） |
+| `alt+shift+p` | 切换 plan 模式（再按一次回到之前的模式） |
+| `f5` / `alt+r` | 重跑上一轮（等价 `/retry`） |
 | `ctrl+t` | 隐藏/显示所有 thinking 行 |
 | `ctrl+o` | 展开/收起所有工具卡（单卡仍用 `enter`） |
 | `1`–`6` / `enter` / `esc` | `ask` 工具弹框：数字键或点击选项、`multi` 时数字切换后 `enter` 提交、`esc` 取消 |

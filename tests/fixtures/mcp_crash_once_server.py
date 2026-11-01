@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from mcp_echo_server import TOOLS, result, send  # noqa: E402
+from mcp_echo_server import TOOLS, result, send
 
 MARKER_ENV = "MCP_CRASH_MARKER"
 

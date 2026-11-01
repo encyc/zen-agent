@@ -87,8 +87,12 @@ class ZenAgentApp(App):
         ("ctrl+d", "quit_app", "Quit"),
         ("ctrl+q", "follow_up", "Follow-up"),
         ("ctrl+p", "cycle_model", "Next model"),
+        ("shift+ctrl+p", "cycle_model_backward", "Previous model"),
         ("alt+p", "pick_model", "Pick model"),
         ("shift+tab", "cycle_thinking", "Thinking"),
+        ("alt+shift+p", "toggle_plan", "Plan mode"),
+        ("f5", "retry", "Retry"),
+        ("alt+r", "retry", "Retry"),
         ("ctrl+t", "toggle_thinking", "Expand thinking"),
         ("ctrl+o", "toggle_tools", "Expand tools"),
         ("ctrl+k", "command_palette", "Commands"),
@@ -154,6 +158,8 @@ class ZenAgentApp(App):
         #: ctrl+b intent; the actual visibility also depends on the width.
         self._sidebar_open = False
         self._sidebar_visible = False
+        #: Mode to return to when alt+shift+p leaves plan (None = ask).
+        self._mode_before_plan: str | None = None
         #: Drag-resized sidebar width (process-local; 26 at every launch).
         self._sidebar_width = self.DEFAULT_SIDEBAR_WIDTH
         self._sidebar_resizing = False
@@ -1513,16 +1519,38 @@ class ZenAgentApp(App):
             self.run_worker(self.chat.submit(text))
 
     def action_cycle_model(self) -> None:
+        self._cycle_model(1)
+
+    def action_cycle_model_backward(self) -> None:
+        self._cycle_model(-1)
+
+    def _cycle_model(self, step: int) -> None:
         entries = [entry for entry in self.models.entries() if entry.available]
         if not entries:
             return
         ids = [entry.id for entry in entries]
         current = self.chat.status.model_id
         try:
-            index = (ids.index(current) + 1) % len(ids)
+            index = (ids.index(current) + step) % len(ids)
         except ValueError:
             index = 0
         self._apply_model(ids[index])
+
+    def action_toggle_plan(self) -> None:
+        """alt+shift+p: flip plan mode on, and back to the previous mode off."""
+        if self.runtime.mode == "plan":
+            mode = self._mode_before_plan or "ask"
+            self._mode_before_plan = None
+        else:
+            self._mode_before_plan = self.runtime.mode
+            mode = "plan"
+        self.runtime.set_mode(mode)
+        self.notify(t("tui.app.mode_set", mode=mode))
+        self._refresh_status()
+
+    def action_retry(self) -> None:
+        """F5 / alt+r: same path as ``/retry`` so the two cannot drift."""
+        self.run_worker(self._dispatch_command("retry", ""))
 
     def action_cycle_thinking(self) -> None:
         levels = ["off", "low", "medium", "high"]
