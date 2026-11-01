@@ -31,7 +31,7 @@
 
 | 功能 | 源码 | 测试 | 文档 |
 |---|---|---|---|
-| 11 个内置工具 + `todo`/`task`/`ask`/`wait` + 工具内核（审批档/结果预算/分页/超时/循环守卫/hidden 注册表） | `tools/{fs,bash,search,todo,task,ask,wait}.py`、`tools/web/`、`agent/{result_budget,timeouts,registry}.py`、`providers/limits.py` | `test_tools_*.py`、`test_result_budget.py`、`test_todo.py`、`test_timeouts.py`、`test_provider_limits.py`、`test_tool_registry.py` | [工具与权限](guide/tools-permissions.md) |
+| 11 个内置工具 + `todo`/`task`/`ask`/`wait`/`checkpoint`/`rewind`/`lsp` + `github`（条件） + 工具内核（审批档/结果预算/分页/超时/循环守卫/hidden 注册表） | `tools/{fs,bash,search,todo,task,ask,wait,lsp,github}.py`、`tools/web/`、`app/rewind.py`、`agent/{result_budget,timeouts,registry}.py`、`providers/limits.py` | `test_tools_*.py`、`test_rewind.py`、`test_result_budget.py`、`test_todo.py`、`test_timeouts.py`、`test_provider_limits.py`、`test_tool_registry.py` | [工具与权限](guide/tools-permissions.md) |
 | 权限门（deny/allow/read-only/危险命令） | `app/permissions.py` | `test_permissions.py` | 同上 |
 | 风险判定与路径围栏（workspace / protected / destructive） | `app/safety.py`、`app/permissions.py::assess` | `test_safety.py`、`test_permissions.py` | 同上 |
 | 写入快照与 `/restore` | `app/journal.py`、`app/restore.py`、`project.py::project_backups_dir` | `test_journal.py`、`test_restore.py` | 同上 |

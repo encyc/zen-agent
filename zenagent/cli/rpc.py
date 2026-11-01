@@ -204,6 +204,7 @@ async def _run(args) -> int:
     from zenagent.providers.catalog import load_catalog
     from zenagent.tools import ALL_TOOLS
     from zenagent.tools.github import build_github_tool
+    from zenagent.tools.lsp import build_lsp_tool
     from zenagent.tools.task import build_task_tool
     from zenagent.tools.todo import build_todo_tool
 
@@ -220,6 +221,7 @@ async def _run(args) -> int:
         tools=[
             *list(ALL_TOOLS),
             *([build_github_tool()] if build_github_tool() is not None else []),
+            build_lsp_tool(),
             build_todo_tool(None),
             build_task_tool(
                 model=model,

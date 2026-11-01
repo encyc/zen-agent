@@ -67,6 +67,7 @@ from zenagent.templates import (
 )
 from zenagent.tools import ALL_TOOLS
 from zenagent.tools.github import build_github_tool
+from zenagent.tools.lsp import build_lsp_tool, shutdown_clients
 from zenagent.tools.task import build_task_tool
 from zenagent.tools.todo import (
     TodoTool,
@@ -486,6 +487,7 @@ class Runtime:
         github_tool = build_github_tool()
         if github_tool is not None:
             tools.append(github_tool)
+        tools.append(build_lsp_tool())
         if self.todo_tool is not None:
             tools.append(self.todo_tool)
         if self.task_tool is not None:
@@ -662,6 +664,7 @@ class Runtime:
     # -- lifecycle ----------------------------------------------------------
 
     async def close(self) -> None:
+        await shutdown_clients()
         if self.mcp is not None:
             manager, self.mcp = self.mcp, None
             await manager.close()

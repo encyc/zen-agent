@@ -335,6 +335,9 @@ async def run_headless(
             tool_list.append(github_tool)
         rewind_state = RewindState()
         agent_holder: dict = {}
+        from zenagent.tools.lsp import build_lsp_tool
+
+        tool_list.append(build_lsp_tool())
         tool_list.extend(
             build_checkpoint_tools(lambda: agent_holder.get("agent"), rewind_state)
         )
