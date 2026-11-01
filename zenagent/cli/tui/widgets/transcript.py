@@ -304,8 +304,10 @@ class TranscriptView(VerticalScroll):
         if self._welcome:
             self.mount(WelcomeBlock())
 
-    def append_notice(self, text: str, *, error: bool = False) -> None:
-        self.mount(NoticeRow(text, error=error))
+    def append_notice(
+        self, text: str, *, error: bool = False, warning: bool = False
+    ) -> None:
+        self.mount(NoticeRow(text, error=error, warning=warning))
         self.scroll_end(animate=False)
 
     def append_divider(self, text: str) -> None:

@@ -368,7 +368,7 @@ class ZenAgentApp(App):
             return
         transcript = self.query_one(TranscriptView)
         for warning in warnings:
-            transcript.append_notice(f"language: {warning}")
+            transcript.append_notice(f"language: {warning}", warning=True)
 
     def _announce_appearance_warnings(self) -> None:
         """Report a rejected theme pref without stopping the app."""
@@ -377,7 +377,7 @@ class ZenAgentApp(App):
             return
         transcript = self.query_one(TranscriptView)
         for warning in warnings:
-            transcript.append_notice(f"theme: {warning}")
+            transcript.append_notice(f"theme: {warning}", warning=True)
 
     def _start_update_check(self) -> None:
         """Kick off the cached notice and background refresh; never break startup."""

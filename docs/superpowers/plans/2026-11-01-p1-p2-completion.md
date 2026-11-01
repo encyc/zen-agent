@@ -138,26 +138,26 @@ browser/computer、debug/DAP、IDA、security_scan、tts/generate_image、eval �
 
 #### T10 · Ctrl+G 外部编辑器
 
-- [ ] `app.py`：Ctrl+G 把草稿写入临时文件、`self.suspend()` 调 `$VISUAL`/`$EDITOR`、回读替换草稿；退出码非 0 保留原草稿。
-- [ ] 测试：monkeypatch editor 为脚本；无 editor 时提示。
+- [x] `app.py`：Ctrl+G 把草稿写入临时文件、`self.suspend()` 调 `$VISUAL`/`$EDITOR`、回读替换草稿；退出码非 0 保留原草稿。
+- [x] 测试：monkeypatch editor 为脚本；无 editor 时提示。
 
 #### T11 · 图片粘贴 + 转录图片行
 
-- [ ] Ctrl+V：读剪贴板（`pbpaste`/`wl-paste`/`xclip` 探测），若是存在的图片路径或 file:// URL → 走 `/image` 同一条附件通道；否则按文本粘贴。
-- [ ] 转录区：带图用户消息显示 `[image/png]` 行（复用 attachment chips 的模型）。
-- [ ] 测试：`tests/test_images.py`、`tests/test_tui_chat.py`。
+- [x] Ctrl+V：读剪贴板（`pbpaste`/`wl-paste`/`xclip` 探测），若是存在的图片路径或 file:// URL → 走 `/image` 同一条附件通道；否则按文本粘贴。
+- [x] 转录区：带图用户消息显示 `[image/png]` 行（复用 attachment chips 的模型）。
+- [x] 测试：`tests/test_images.py`、`tests/test_tui_chat.py`。
 
 #### T12 · 转录/工具卡降噪
 
-- [ ] 连续 `read_file` 调用合并为一张组卡（展开看每张）；`task`/`todo`/`ask`/`wait`/`fetch` 增加专用标题行。
-- [ ] `NoticeRow` 增加 warning 级（黄），与 error 区分。
-- [ ] 测试：`tests/test_tui_chat.py`、`tests/test_tui_rows.py`。
+- [x] 连续 `read_file` 调用合并为一张组卡（展开看每张）；`task`/`todo`/`ask`/`wait`/`fetch` 增加专用标题行。
+- [x] `NoticeRow` 增加 warning 级（黄），与 error 区分。
+- [x] 测试：`tests/test_tui_chat.py`、`tests/test_tui_rows.py`。
 
 #### T13 · plan review 最小版
 
-- [ ] plan 模式下模型输出计划后，`/plan-review` 打开只读复核浮层（计划全文 + “批准并切 full”/“继续 plan”）；批准=切模式，不改会话。
-- [ ] 计划来源：最后一条 assistant 文本；无计划时提示。
-- [ ] 测试：`tests/test_tui_usability.py` + `tests/test_app_commands.py`。
+- [x] plan 模式下模型输出计划后，`/plan-review` 打开只读复核浮层（计划全文 + “批准并切 full”/“继续 plan”）；批准=切模式，不改会话。
+- [x] 计划来源：最后一条 assistant 文本；无计划时提示。
+- [x] 测试：`tests/test_tui_usability.py` + `tests/test_app_commands.py`。
 
 ### M4 · 条件工具
 

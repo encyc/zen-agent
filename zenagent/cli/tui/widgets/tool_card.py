@@ -200,6 +200,71 @@ class ToolCard(Static):
             pattern = args.get("pattern")
             return f"'{pattern}'" if pattern is not None else ""
 
+        if name == "list_dir":
+            count = details.get("entries") or details.get("count")
+            return "  ·  ".join(
+                part for part in (path, f"{count} entries" if count else "") if part
+            )
+
+        if name == "task":
+            parts = [
+                str(details.get("name") or ""),
+                str(details.get("status") or ""),
+            ]
+            cost = details.get("cost")
+            if isinstance(cost, (int, float)) and cost:
+                parts.append(f"${cost:.4f}")
+            return "  ·  ".join(part for part in parts if part)
+
+        if name == "todo":
+            op = details.get("op")
+            phases = details.get("phases") or {}
+            total = sum(
+                len(phase.get("tasks") or [])
+                for phase in (
+                    phases.values() if isinstance(phases, dict) else phases
+                )
+                if isinstance(phase, dict)
+            )
+            parts = [str(op or "")]
+            if total:
+                parts.append(f"{total} tasks")
+            return "  ·  ".join(part for part in parts if part)
+
+        if name == "ask":
+            answers = details.get("answers")
+            questions = args.get("questions")
+            count = len(answers) if isinstance(answers, list) else None
+            if count is None and isinstance(questions, list):
+                count = len(questions)
+            return f"{count} answers" if count else ""
+
+        if name == "wait":
+            job_id = details.get("job_id") or args.get("job_id")
+            status = details.get("status")
+            exit_code = details.get("exit_code")
+            parts = [str(job_id or ""), str(status or "")]
+            if exit_code is not None:
+                parts.append(t("tui.tool.exit", code=exit_code))
+            return "  ·  ".join(part for part in parts if part)
+
+        if name == "web_search":
+            query = args.get("query")
+            results = details.get("results")
+            provider = details.get("provider")
+            parts = [f"'{query}'" if query is not None else ""]
+            if results is not None:
+                parts.append(f"{results} results")
+            if provider:
+                parts.append(str(provider))
+            return "  ·  ".join(part for part in parts if part)
+
+        if name == "fetch":
+            url = details.get("url") or args.get("url")
+            method = details.get("method")
+            parts = [str(url or ""), str(method or "")]
+            return "  ·  ".join(part for part in parts if part)
+
         return view.args_preview
 
     def _renderable(self) -> Text:

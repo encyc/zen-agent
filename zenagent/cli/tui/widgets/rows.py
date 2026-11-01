@@ -275,9 +275,20 @@ class DividerRow(Static):
 class NoticeRow(Static):
     """A quiet one-off line: command output, unknown command, warnings."""
 
-    def __init__(self, text: str, *, error: bool = False) -> None:
+    def __init__(
+        self, text: str, *, error: bool = False, warning: bool = False
+    ) -> None:
         self._text = text
-        super().__init__(Text(text, style=palette.ERROR if error else palette.MUTED), classes="notice")
+        if error:
+            self.level = "error"
+            style = palette.ERROR
+        elif warning:
+            self.level = "warning"
+            style = palette.WARN
+        else:
+            self.level = "info"
+            style = palette.MUTED
+        super().__init__(Text(text, style=style), classes="notice")
 
     @property
     def plain(self) -> str:
