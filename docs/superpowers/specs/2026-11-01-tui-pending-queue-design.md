@@ -119,11 +119,13 @@ class PendingMessage:
      → 起"延续运行" `_run(None)`（loop 起始注入 steering，随即请求模型；`continue_`
      抛错即空 transcript 时退化为排队条目）。其他非 aborted 结局（`error`/`no_stream`/
      `tool_terminate`/`max_turns`/`max_cost`）用 `agent.take_steering()` 把未送达插话
-     **降级为排队条目**，再走现有排队语义（非 aborted 会续跑）——不额外自动重试、
-     不掩盖错误横幅，也不丢文本。`aborted` 同样降级为排队，但不自动运行。
+     **降级为排队条目**并让控制器回到空闲——**不自动起下一轮**，错误横幅留在屏上、
+     条目留在待发区，由用户决定何时重跑（评审修正：原稿"再走现有排队语义"会立刻续跑
+     并清空横幅，与 §7.1 冲突，以 §7.1 为准）。`aborted` 同样降级为排队，不自动运行。
   2. **自动压缩**：仅当两条 lane 都为空时执行；有待发（排队或插话）就跳过，让延续运行/
      排队轮次跑在未压缩的转录上（把现有"排队优先压缩"的不变量扩展到插话）。
-  3. **续跑**：延续运行优先；否则按现有语义取排队第一条 `_run(text, images)`。
+  3. **续跑**：延续运行优先；否则**仅当 `termination == "stop"`** 时取排队第一条
+     `_run(text, images)`，其他结局停在空闲（待发条目可见，等用户下一轮再处理）。
      延续运行会在 loop 起始排空 steering，一批插话最多触发一次延续；用户在延续期间
      继续插话时按同一规则重复即可，无需额外上限。
 - 自动压缩期间提交会进排队（现状）；此时没有进行中的 run，插话会退化为排队（见上），
@@ -212,8 +214,9 @@ app 接线（`zenagent/cli/tui/app.py`）：
 - `tests/test_app_chat.py` / 新增 `tests/test_app_pending.py`：待发快照 lane/text/顺序；
   steer 镜像在注入后消失；promote 成功、带图片拒绝、not_running；dequeue/clear；
   run 结束滞留插话自动延续一轮且 transcript 出现该消息；非 `stop` 结局（`error`）把
-  插话降级为排队并续跑；`aborted` 降级为排队但不自动跑；替换会话的操作清空待发并留
-  notice；有待发时跳过自动压缩。
+  插话降级为排队、**不续跑且错误横幅保留**（TUI 级断言）；`aborted` 降级为排队但不
+  自动跑；替换会话的操作（命令级与 session picker 级）清空待发并留 notice；压缩保留
+  待发；有待发时跳过自动压缩。
 - `tests/test_tui_pending_band.py`（新）：分组/顺序/截断/折叠/空隐藏/宽度；点击排队行
   触发 promote；组头、插话行、提示行点击无效。
 - `tests/test_tui_layout.py`、`tests/test_tui_controls.py`：中途提交后待发区可见；
@@ -249,9 +252,10 @@ app 接线（`zenagent/cli/tui/app.py`）：
 
 fresh reviewer 读稿后提出四处需要拍板的地方，以下是已并入正文的决定：
 
-1. **延续运行只对正常结束（`stop`）触发**。`error`/`no_stream`/`tool_terminate`/
-   `max_turns`/`max_cost` 一律把未送达插话降级为排队，再走现有排队语义：不额外自动
-   重试、不在用户读到错误横幅前再起一轮、也不让 `max_*` 天花板被悄悄重置。
+1. **延续与续跑都只对正常结束（`stop`）触发**。`error`/`no_stream`/`tool_terminate`/
+   `max_turns`/`max_cost` 一律把未送达插话降级为排队并回到空闲：不自动重试、不吞掉
+   错误横幅、也不让 `max_*` 天花板被悄悄重置（评审确认：这条与 §4.1 原稿的"走现有
+   排队语义"矛盾，实现已按本条修正）。
 2. **待发不跨会话**：`/clear`、`/new`、会话切换/resume、`/undo`、`/fork`、`/retry`
    清空两条 lane，丢弃时经 `TranscriptNotice` 提示。避免旧会话文本发进新会话，也避免
    `agent.reset()` 后的 steer 死行。

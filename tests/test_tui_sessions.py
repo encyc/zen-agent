@@ -140,3 +140,19 @@ def test_session_picker_all_scope_labels_the_project():
     ]
     picker = SessionPicker(entries, scope="all")
     assert any("[other-app]" in item.label for item in picker.items)
+
+
+async def test_session_picker_new_drops_pending(picker_app):
+    app = picker_app
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        app.chat.queue_follow_up("leftover")
+        assert app.chat.status.pending
+
+        before = app.runtime.session.path
+        app.open_session_picker()
+        await _wait_for_screen(app, SessionPicker)
+        await pilot.press("n")
+        await _wait_until(lambda: app.runtime.session.path != before)
+
+        assert app.chat.status.pending == []

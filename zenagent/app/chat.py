@@ -608,7 +608,10 @@ class ChatController:
             self._notify()
             if continuation:
                 self._task = asyncio.create_task(self._run(None))
-            elif termination != "aborted":
+            elif termination == "stop":
+                # Only a normal finish auto-drains the queue. An error/cap
+                # ending leaves the pending rows visible and the banner up;
+                # the user decides when to run again (Review Focus #4).
                 item = self._take_next_queue_item()
                 if item is not None:
                     self._task = asyncio.create_task(

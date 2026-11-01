@@ -114,3 +114,65 @@ async def test_undo_and_retry_are_tui_commands(runtime_factory):
             await pilot.press(char)
         await pilot.pause()
         assert "retry" in [name for name, _ in app.query_one(CommandHints).matches]
+
+
+async def test_new_command_drops_pending_with_a_notice(runtime_factory):
+    from conftest import sequenced_stream
+
+    runtime = await runtime_factory(stream_fn=sequenced_stream(["a"]))
+    svc = services(runtime)
+    commands = build_default_commands(svc)
+    await run_turn(svc.chat, "hello")
+    svc.chat.queue_follow_up("leftover")
+
+    await commands.dispatch("new", "")
+
+    assert svc.chat.status.pending == []
+    notices = svc.chat.take_notices()
+    assert any("pending messages" in notice.text for notice in notices)
+
+
+async def test_undo_command_drops_pending(runtime_factory):
+    from conftest import sequenced_stream
+
+    runtime = await runtime_factory(
+        stream_fn=sequenced_stream(["first answer", "second answer"])
+    )
+    svc = services(runtime)
+    commands = build_default_commands(svc)
+    await run_turn(svc.chat, "one")
+    await run_turn(svc.chat, "two")
+    svc.chat.queue_follow_up("leftover")
+
+    await commands.dispatch("undo", "")
+
+    assert svc.chat.status.pending == []
+
+
+async def test_fork_command_drops_pending(runtime_factory):
+    from conftest import sequenced_stream
+
+    runtime = await runtime_factory(stream_fn=sequenced_stream(["a"]))
+    svc = services(runtime)
+    commands = build_default_commands(svc)
+    await run_turn(svc.chat, "hello")
+    svc.chat.queue_follow_up("leftover")
+
+    await commands.dispatch("fork", "")
+
+    assert svc.chat.status.pending == []
+
+
+async def test_retry_command_drops_pending(runtime_factory):
+    from conftest import sequenced_stream
+
+    runtime = await runtime_factory(stream_fn=sequenced_stream(["a", "a again"]))
+    svc = services(runtime)
+    commands = build_default_commands(svc)
+    await run_turn(svc.chat, "hello")
+    svc.chat.queue_follow_up("leftover")
+
+    await commands.dispatch("retry", "")
+    await svc.chat.wait_for_idle()
+
+    assert svc.chat.status.pending == []

@@ -1,9 +1,14 @@
 """Run controls: follow-up queue, interrupt and queue clearing."""
 
+import asyncio
+
 from zenagent.cli.tui.app import ZenAgentApp
+from zenagent.cli.tui.widgets.error_banner import ErrorBanner
 from zenagent.cli.tui.widgets.pending_band import PendingBand
 from zenagent.cli.tui.widgets.prompt_input import PromptInput
 from zenagent.cli.tui.widgets.status_band import StatusBand
+from zenagent.events import AssistantEvent
+from zenagent.types import AssistantMessage, TextContent, Usage
 
 
 async def test_queue_is_visible_and_ctrl_c_aborts(gated_app):
@@ -155,6 +160,7 @@ async def test_ctrl_x_clears_both_lanes(gated_app):
         await pilot.pause()
 
         assert app.chat.status.pending == []
+        assert app.chat.runtime.agent.pending_steering == 0
         assert app.query_one(PendingBand).display is False
 
         gate.set()
@@ -179,3 +185,39 @@ async def test_pending_band_follows_the_dock_width_with_the_sidebar_open(gated_a
         await pilot.press("ctrl+b")
         gate.set()
         await app.chat.wait_for_idle()
+
+
+async def test_error_keeps_the_banner_and_the_demoted_steer_visible(runtime_factory):
+    gate = asyncio.Event()
+    calls: list[int] = []
+
+    async def stream(model, messages, tools, options):
+        calls.append(1)
+        partial = AssistantMessage(
+            content=[TextContent(text="")], provider="p", model="m",
+            usage=Usage(), stop_reason="pending", timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        await gate.wait()
+        partial.stop_reason = "error"
+        yield AssistantEvent(type="error", partial=partial, reason="error")
+
+    runtime = await runtime_factory(stream_fn=stream)
+    app = ZenAgentApp(runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await app.chat.submit("hi")
+        await pilot.pause()
+        app.chat.steer("save the logs")
+        gate.set()
+        await app.chat.wait_for_idle()
+        await pilot.pause()
+        await pilot.pause()
+
+        assert len(calls) == 1, "an error ending must not auto-run the queue"
+        banner = app.query_one(ErrorBanner)
+        assert banner.display is True and banner.plain, "the error stays readable"
+        band = app.query_one(PendingBand)
+        assert band.display is True
+        assert "Queued · 1" in band.plain
+        assert "save the logs" in band.plain

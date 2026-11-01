@@ -205,6 +205,7 @@ async def test_promote_moves_a_queued_entry_to_the_steer_lane(runtime_factory):
         ("steer", "use the staging config")
     ]
     assert runtime.agent.pending_steering == 1
+    assert chat.promote(entry.id) == "missing", "a steer row is read-only"
 
     gate.set()
     await task
@@ -273,6 +274,28 @@ async def test_injected_steering_clears_the_mirror_and_lands_in_transcript(
     assert runtime.agent.pending_steering == 0
     users = [m for m in runtime.agent.messages if isinstance(m, UserMessage)]
     assert any("actually, check the logs" in str(m.content) for m in users)
+
+
+async def test_two_steers_merge_into_one_user_message(runtime_factory):
+    gate = asyncio.Event()
+    runtime = await runtime_factory(stream_fn=gated_tool_stream(gate))
+    chat = ChatController(runtime)
+    task = asyncio.create_task(chat.submit("check the readme"))
+    await asyncio.sleep(0.05)
+
+    chat.steer("first correction")
+    chat.steer("second correction")
+    assert [p.lane for p in chat.status.pending] == ["steer", "steer"]
+
+    gate.set()
+    await task
+    await chat.wait_for_idle()
+
+    assert chat.status.pending == []
+    users = [m for m in runtime.agent.messages if isinstance(m, UserMessage)]
+    merged = [m for m in users if "first correction" in str(m.content)]
+    assert len(merged) == 1, "the loop aggregates queued steers into one message"
+    assert "second correction" in str(merged[0].content)
 
 
 async def test_stranded_steering_continues_the_run(runtime_factory):
@@ -349,11 +372,13 @@ async def test_error_ending_demotes_steering_to_the_queue(runtime_factory):
         for state in states
         if state[2] and state[1] and all(p.lane == "queue" for p in state[1])
     ]
-    assert demoted, "the steer must become a visible queue entry before the next run"
-    assert len(calls) == 2
-    assert chat.status.pending == []
-    users = [m for m in runtime.agent.messages if isinstance(m, UserMessage)]
-    assert any("save the logs" in str(m.content) for m in users)
+    assert demoted, "the steer must become a visible queue entry"
+    assert len(calls) == 1, "an error ending must not start another run"
+    assert [(p.lane, p.text) for p in chat.status.pending] == [
+        ("queue", "save the logs")
+    ]
+    assert chat.status.running is False
+    assert chat.status.last_error != "", "the error banner must survive the demotion"
 
 
 async def test_aborted_run_keeps_steering_as_a_visible_queue_entry(runtime_factory):
@@ -461,3 +486,17 @@ async def test_reload_transcript_keeps_pending_by_default(runtime_factory):
 
     chat.reload_transcript(drop_pending=True)
     assert chat.status.pending == []
+
+
+async def test_manual_compaction_keeps_pending(runtime_factory):
+    from conftest import sequenced_stream
+
+    runtime = await runtime_factory(stream_fn=sequenced_stream(["hi", "summary"]))
+    chat = ChatController(runtime)
+    await chat.submit("hello")
+    await chat.wait_for_idle()
+    chat.queue_follow_up("keep me")
+
+    await chat.compact_now()
+
+    assert [p.text for p in chat.status.pending] == ["keep me"]
