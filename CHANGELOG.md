@@ -3,9 +3,9 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased
+## v0.5.1 — 2026-11-01
 
-**Hand-slip guardrails: workspace fence, protected paths, destructive-command confirmations, and project-scoped write snapshots with `/restore`.**
+**Hand-slip guardrails with `/restore`, a visible mid-run input queue with steering, and one-Enter `/model` switching.**
 
 ### Added
 
