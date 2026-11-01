@@ -378,3 +378,14 @@ async def test_pending_steering_counts_and_drains():
     assert agent.pending_steering == 1
     await agent.prompt("hi")
     assert agent.pending_steering == 0   # consumed when the run starts
+
+
+async def test_take_steering_removes_and_returns_in_order():
+    agent = make_agent(scripted([("text", "x"), end()]))
+    agent.steer("first")
+    agent.steer("second")
+    assert agent.pending_steering == 2
+    assert agent.take_steering() == ["first", "second"]
+    assert agent.pending_steering == 0
+    assert agent.take_steering() == []
+

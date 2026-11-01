@@ -158,6 +158,12 @@ class Agent:
         """Queue input to be injected after the current tool round."""
         self._steering.append(text)
 
+    def take_steering(self) -> list[str]:
+        """Remove and return queued steering input (abort / clear cleanup)."""
+        texts = self._steering
+        self._steering = []
+        return texts
+
     # -- control ------------------------------------------------------------
 
     def abort(self) -> None:
