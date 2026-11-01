@@ -9,7 +9,10 @@ and a committable project layer at ``<root>/.zenagent/config.toml`` (root = the
 nearest directory with ``.git``). Scalars and per-provider tables merge with the
 project layer winning; list-shaped keys append (``tools.allow``) or union
 (``tools.deny``, so a project can never widen permissions). Relative
-``extensions`` paths resolve against the directory of the file that names them.
+``extensions`` paths (and ``safety.allow_outside`` entries) resolve against the
+directory of the file that names them. ``[safety]`` and ``[backup]`` are
+global-only: a project layer that defines either is rejected, so a checked-out
+repository can never grant itself permissions or switch off backups.
 
 :func:`naive_overflow_prune` is the automatic last resort before a request goes
 out: it estimates the context level (real ``usage`` when we have it, a char/4
@@ -52,6 +55,100 @@ def config_path() -> Path:
 
 #: Provider keys accepted inside ``[providers.custom.<id>]``.
 _CUSTOM_PROVIDER_KEYS = frozenset({"name", "base_url", "api_key_env", "adapter", "models"})
+#: Keys accepted inside ``[safety]``.
+_SAFETY_KEYS = frozenset({"allow_outside", "allow_destructive", "allow_protected"})
+#: Keys accepted inside ``[backup]``.
+_BACKUP_KEYS = frozenset({"enabled", "max_file_bytes", "keep_runs"})
+#: Defaults for a missing ``[backup]`` key.
+_DEFAULT_BACKUP_MAX_FILE_BYTES = 2 * 1024 * 1024
+_DEFAULT_BACKUP_KEEP_RUNS = 50
+
+
+def _absolute_path(raw: str, target: Path) -> str:
+    """Normalize one config path: ``~`` expands, relatives resolve next to the file."""
+    candidate = Path(raw).expanduser()
+    if not candidate.is_absolute():
+        candidate = (target.parent / candidate).resolve()
+    return str(candidate)
+
+
+def _unknown_section_keys(
+    table: dict, allowed: frozenset[str], section: str, target: Path
+) -> None:
+    unknown = set(table) - allowed
+    if unknown:
+        raise ValueError(
+            f"config {target}: [{section}] has unknown keys {sorted(unknown)}"
+        )
+
+
+def _bool_value(
+    table: dict, key: str, default: bool, section: str, target: Path
+) -> bool:
+    value = table.get(key, default)
+    if not isinstance(value, bool):
+        raise ValueError(  # noqa: TRY004 - config errors are ValueError by contract
+            f"config {target}: {section}.{key} must be a boolean"
+        )
+    return value
+
+
+def _positive_int(
+    table: dict, key: str, default: int, section: str, target: Path
+) -> int:
+    value = table.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError(f"config {target}: {section}.{key} must be a positive integer")
+    return value
+
+
+def _string_array(table: dict, key: str, section: str, target: Path) -> list[str]:
+    value = table.get(key)
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ValueError(
+            f"config {target}: {section}.{key} must be an array of strings"
+        )
+    return [*value]
+
+
+def _section_table(data: dict, section: str, target: Path) -> dict:
+    """Return one optional top-level section; a missing section is empty."""
+    raw = data.get(section)
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError(  # noqa: TRY004 - config errors are ValueError by contract
+            f"config {target}: [{section}] must be a table"
+        )
+    return raw
+
+
+def _parse_safety(table: dict, target: Path) -> tuple[list[str], bool, bool]:
+    """Parse a ``[safety]`` table into ``(allow_outside, destructive, protected)``."""
+    _unknown_section_keys(table, _SAFETY_KEYS, "safety", target)
+    allow_outside = [
+        _absolute_path(item, target)
+        for item in _string_array(table, "allow_outside", "safety", target)
+    ]
+    return (
+        allow_outside,
+        _bool_value(table, "allow_destructive", False, "safety", target),
+        _bool_value(table, "allow_protected", False, "safety", target),
+    )
+
+
+def _parse_backup(table: dict, target: Path) -> tuple[bool, int, int]:
+    """Parse a ``[backup]`` table into ``(enabled, max_file_bytes, keep_runs)``."""
+    _unknown_section_keys(table, _BACKUP_KEYS, "backup", target)
+    return (
+        _bool_value(table, "enabled", True, "backup", target),
+        _positive_int(
+            table, "max_file_bytes", _DEFAULT_BACKUP_MAX_FILE_BYTES, "backup", target
+        ),
+        _positive_int(table, "keep_runs", _DEFAULT_BACKUP_KEEP_RUNS, "backup", target),
+    )
 
 
 def _parse_custom_providers(raw: object, target: Path) -> dict[str, ProviderConfig]:
@@ -121,16 +218,39 @@ class UserConfig:
     tool_allow: list[str] = field(default_factory=list)
     #: fnmatch patterns: tools that are always refused
     tool_deny: list[str] = field(default_factory=list)
+    #: absolute paths write tools may touch outside the workspace
+    safety_allow_outside: list[str] = field(default_factory=list)
+    #: destructive shell commands are allowed without confirmation
+    safety_allow_destructive: bool = False
+    #: writes to protected paths (``~/.ssh``, ``~/.zenagent``, …) are allowed
+    safety_allow_protected: bool = False
+    #: snapshot writes so ``/restore`` can roll them back
+    backup_enabled: bool = True
+    #: writes larger than this are never snapshotted
+    backup_max_file_bytes: int = _DEFAULT_BACKUP_MAX_FILE_BYTES
+    #: number of backup runs kept per project
+    backup_keep_runs: int = _DEFAULT_BACKUP_KEEP_RUNS
 
 
-def _load_config_file(target: Path) -> UserConfig:
-    """Read one config file; a missing file means "use the defaults"."""
+def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfig:
+    """Read one config file; a missing file means "use the defaults".
+
+    ``project_layer=True`` marks the committable ``<root>/.zenagent/config.toml``
+    layer: it may not set the global-only ``[safety]``/``[backup]`` sections, so
+    a repository can never grant itself permissions.
+    """
     if not target.is_file():
         return UserConfig()
     try:
         data = tomllib.loads(target.read_text(encoding="utf-8"))
     except (tomllib.TOMLDecodeError, OSError) as exc:
         raise ValueError(f"cannot read config {target}: {exc}") from exc
+
+    if project_layer and ("safety" in data or "backup" in data):
+        raise ValueError(
+            f"config {target}: [safety] and [backup] are global-only; "
+            f"move them to {config_path()}"
+        )
 
     default_model = data.get("default_model")
     if default_model is not None and not isinstance(default_model, str):
@@ -150,12 +270,7 @@ def _load_config_file(target: Path) -> UserConfig:
         raise ValueError(
             f"config {target}: extensions must be an array of strings"
         )
-    extensions: list[str] = []
-    for item in extensions_raw:
-        candidate = Path(item).expanduser()
-        if not candidate.is_absolute():
-            candidate = (target.parent / candidate).resolve()
-        extensions.append(str(candidate))
+    extensions = [_absolute_path(item, target) for item in extensions_raw]
 
     tools_table = data.get("tools") or {}
     if not isinstance(tools_table, dict):
@@ -196,6 +311,13 @@ def _load_config_file(target: Path) -> UserConfig:
         overrides[provider_id] = {
             key: str(value) for key, value in values.items() if value is not None
         }
+
+    safety_allow_outside, safety_allow_destructive, safety_allow_protected = (
+        _parse_safety(_section_table(data, "safety", target), target)
+    )
+    backup_enabled, backup_max_file_bytes, backup_keep_runs = _parse_backup(
+        _section_table(data, "backup", target), target
+    )
     return UserConfig(
         default_model=default_model,
         provider_overrides=overrides,
@@ -203,6 +325,12 @@ def _load_config_file(target: Path) -> UserConfig:
         extensions=extensions,
         tool_allow=tool_allow,
         tool_deny=tool_deny,
+        safety_allow_outside=safety_allow_outside,
+        safety_allow_destructive=safety_allow_destructive,
+        safety_allow_protected=safety_allow_protected,
+        backup_enabled=backup_enabled,
+        backup_max_file_bytes=backup_max_file_bytes,
+        backup_keep_runs=backup_keep_runs,
     )
 
 
@@ -234,6 +362,13 @@ def _merge_user_configs(base: UserConfig, override: UserConfig) -> UserConfig:
         extensions=[*base.extensions, *override.extensions],
         tool_allow=_dedupe([*base.tool_allow, *override.tool_allow]),
         tool_deny=_dedupe([*base.tool_deny, *override.tool_deny]),
+        # global-only sections always come from the global layer
+        safety_allow_outside=list(base.safety_allow_outside),
+        safety_allow_destructive=base.safety_allow_destructive,
+        safety_allow_protected=base.safety_allow_protected,
+        backup_enabled=base.backup_enabled,
+        backup_max_file_bytes=base.backup_max_file_bytes,
+        backup_keep_runs=base.backup_keep_runs,
     )
 
 
@@ -241,15 +376,22 @@ def load_user_config(path: Path | None = None, *, cwd: Path | None = None) -> Us
     """Read config, layering the project file over the global one.
 
     An explicit ``path`` disables layering: only that file is read, preserving
-    the old behaviour for callers that choose a file themselves. Otherwise the
-    global ``~/.zenagent/config.toml`` is read first and ``<root>/.zenagent/
+    the old behaviour for callers that choose a file themselves (it counts as
+    the global layer, so ``[safety]``/``[backup]`` are allowed there). Otherwise
+    the global ``~/.zenagent/config.toml`` is read first and ``<root>/.zenagent/
     config.toml`` second; ``cwd`` selects the project root (default: cwd).
     """
     if path is not None:
         return _load_config_file(Path(path))
+    global_config = config_path()
+    project_config = project.project_config_path(cwd)
+    if project_config.resolve() == global_config.resolve():
+        # Run from $HOME (or a dotfiles repo rooted there): the "project" file is
+        # the global file itself, so parse it once — as the global layer.
+        return _load_config_file(global_config)
     return _merge_user_configs(
-        _load_config_file(config_path()),
-        _load_config_file(project.project_config_path(cwd)),
+        _load_config_file(global_config),
+        _load_config_file(project_config, project_layer=True),
     )
 
 

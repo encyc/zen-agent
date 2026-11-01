@@ -517,3 +517,149 @@ def test_explicit_path_ignores_the_project_layer(tmp_path, monkeypatch):
     assert config.default_model == "explicit-model"
     assert config.tool_deny == []  # the project layer is not consulted
     assert load_user_config(tmp_path / "absent.toml") == UserConfig()
+
+
+# ---------------------------------------------------------------------------
+# [safety] / [backup] sections (global-only in the project layer)
+# ---------------------------------------------------------------------------
+
+
+def test_safety_and_backup_sections_parse(tmp_path, monkeypatch):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        '[safety]\nallow_outside = ["~/scratch", "notes"]\nallow_destructive = true\n'
+        '[backup]\nenabled = false\nmax_file_bytes = 4096\nkeep_runs = 7\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    loaded = load_user_config(cfg)
+    assert loaded.safety_allow_outside == [str(tmp_path / "home" / "scratch"), str(tmp_path / "notes")]
+    assert loaded.safety_allow_destructive is True
+    assert loaded.backup_enabled is False
+    assert loaded.backup_max_file_bytes == 4096
+    assert loaded.backup_keep_runs == 7
+
+
+@pytest.mark.parametrize(
+    "snippet",
+    ["[safety]\nallow_destructive = true\n", "[backup]\nenabled = false\n"],
+    ids=["safety", "backup"],
+)
+def test_project_layer_may_not_set_safety(tmp_path, monkeypatch, snippet):
+    # the global path derives from HOME: never fall through to the developer's real config
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    project_cfg = tmp_path / "proj" / ".zenagent" / "config.toml"
+    project_cfg.parent.mkdir(parents=True)
+    project_cfg.write_text(snippet, encoding="utf-8")
+    with pytest.raises(ValueError, match="global-only") as excinfo:
+        load_user_config(cwd=tmp_path / "proj")
+    assert str(home / ".zenagent" / "config.toml") in str(excinfo.value)
+
+
+def test_unknown_keys_in_new_sections_are_errors(tmp_path):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text("[backup]\nnope = 1\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="unknown keys"):
+        load_user_config(cfg)
+
+
+def test_unknown_key_in_safety_names_the_file_and_the_key(tmp_path):
+    cfg = write_config(tmp_path, "[safety]\nallow_all = true\n")
+    with pytest.raises(ValueError, match="unknown keys") as excinfo:
+        load_user_config(cfg)
+    assert str(cfg) in str(excinfo.value)
+    assert "allow_all" in str(excinfo.value)
+
+
+def test_new_fields_have_documented_defaults(tmp_path):
+    config = load_user_config(write_config(tmp_path, ""))
+    assert config.safety_allow_outside == []
+    assert config.safety_allow_destructive is False
+    assert config.safety_allow_protected is False
+    assert config.backup_enabled is True
+    assert config.backup_max_file_bytes == 2 * 1024 * 1024
+    assert config.backup_keep_runs == 50
+
+
+def test_partial_sections_keep_the_remaining_defaults(tmp_path):
+    config = load_user_config(
+        write_config(
+            tmp_path,
+            "[safety]\nallow_protected = true\n[backup]\nkeep_runs = 3\n",
+        )
+    )
+    assert config.safety_allow_outside == []
+    assert config.safety_allow_protected is True
+    assert config.backup_enabled is True
+    assert config.backup_max_file_bytes == 2 * 1024 * 1024
+    assert config.backup_keep_runs == 3
+
+
+def test_explicit_path_is_the_global_layer_even_inside_dot_zenagent(tmp_path):
+    cfg = tmp_path / "proj" / ".zenagent" / "config.toml"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text("[safety]\nallow_destructive = true\n", encoding="utf-8")
+    assert load_user_config(cfg).safety_allow_destructive is True
+
+
+def test_running_from_home_parses_the_global_file_once(tmp_path, monkeypatch):
+    # In $HOME (or a dotfiles repo rooted there) the "project" config path is the
+    # global file itself; it must be read as the global layer, not rejected.
+    home = tmp_path / "home"
+    (home / ".zenagent").mkdir(parents=True)
+    (home / ".zenagent" / "config.toml").write_text(
+        '[safety]\nallow_destructive = true\n[backup]\nkeep_runs = 2\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(home)
+
+    config = load_user_config()
+
+    assert config.safety_allow_destructive is True
+    assert config.backup_keep_runs == 2
+
+
+def test_project_layer_inherits_global_safety_and_backup(tmp_path, monkeypatch):
+    repo, _ = stacked_config(
+        tmp_path,
+        monkeypatch,
+        global_text=(
+            'default_model = "global-model"\n'
+            '[safety]\nallow_outside = ["/opt/shared"]\nallow_protected = true\n'
+            "[backup]\nkeep_runs = 3\n"
+        ),
+        project_text='default_model = "project-model"\n',
+    )
+    monkeypatch.chdir(repo)
+
+    config = load_user_config()
+
+    assert config.default_model == "project-model"
+    assert config.safety_allow_outside == ["/opt/shared"]
+    assert config.safety_allow_protected is True
+    assert config.backup_keep_runs == 3
+
+
+@pytest.mark.parametrize(
+    "snippet, message",
+    [
+        ('[safety]\nallow_outside = "~/scratch"\n', "array of strings"),
+        ("[safety]\nallow_outside = [1]\n", "array of strings"),
+        ('[safety]\nallow_destructive = "yes"\n', "boolean"),
+        ("[safety]\nallow_protected = 1\n", "boolean"),
+        ("[backup]\nenabled = 0\n", "boolean"),
+        ("[backup]\nmax_file_bytes = 0\n", "positive integer"),
+        ("[backup]\nmax_file_bytes = true\n", "positive integer"),
+        ("[backup]\nkeep_runs = -1\n", "positive integer"),
+        ("[backup]\nkeep_runs = 1.5\n", "positive integer"),
+        ("safety = 1\n", "must be a table"),
+        ('backup = "on"\n', "must be a table"),
+    ],
+)
+def test_bad_safety_and_backup_values_are_rejected(tmp_path, snippet, message):
+    path = write_config(tmp_path, snippet)
+    with pytest.raises(ValueError, match=message):
+        load_user_config(path)
