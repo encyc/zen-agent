@@ -11,7 +11,8 @@ import asyncio
 from conftest import text_stream
 
 from zenagent.app.chat import ChatController
-from zenagent.events import AssistantEvent
+from zenagent.app.views import PendingMessage
+from zenagent.events import Aborted, AssistantEvent
 from zenagent.types import (
     AssistantMessage,
     ImageContent,
@@ -273,3 +274,157 @@ async def test_injected_steering_clears_the_mirror_and_lands_in_transcript(
     users = [m for m in runtime.agent.messages if isinstance(m, UserMessage)]
     assert any("actually, check the logs" in str(m.content) for m in users)
 
+
+async def test_stranded_steering_continues_the_run(runtime_factory):
+    gate = asyncio.Event()
+    calls: list[list] = []
+
+    async def stream(model, messages, tools, options):
+        calls.append(list(messages))
+        partial = AssistantMessage(
+            content=[TextContent(text="")], provider="p", model="m",
+            usage=Usage(), stop_reason="pending", timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        await gate.wait()
+        partial.content = [TextContent(text=f"answer{len(calls)}")]
+        partial.stop_reason = "stop"
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    runtime = await runtime_factory(stream_fn=stream)
+    chat = ChatController(runtime)
+    task = asyncio.create_task(chat.submit("hi"))
+    await asyncio.sleep(0.05)
+
+    chat.steer("also add tests")   # 本轮没有工具轮，插话等不到边界
+    gate.set()
+    await task
+    await chat.wait_for_idle()
+
+    assert len(calls) == 2, "the stranded steer must trigger a continuation run"
+    assert chat.status.running is False
+    assert chat.status.pending == []
+    users = [m for m in runtime.agent.messages if isinstance(m, UserMessage)]
+    assert any("also add tests" in str(m.content) for m in users)
+
+
+async def test_error_ending_demotes_steering_to_the_queue(runtime_factory):
+    gate = asyncio.Event()
+    calls: list[list] = []
+    states: list[tuple[bool, list[PendingMessage], str]] = []
+
+    async def stream(model, messages, tools, options):
+        calls.append(list(messages))
+        partial = AssistantMessage(
+            content=[TextContent(text="")], provider="p", model="m",
+            usage=Usage(), stop_reason="pending", timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        await gate.wait()
+        if len(calls) == 1:
+            partial.stop_reason = "error"
+            yield AssistantEvent(type="error", partial=partial, reason="error")
+        else:
+            partial.content = [TextContent(text="carried on")]
+            partial.stop_reason = "stop"
+            yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    runtime = await runtime_factory(stream_fn=stream)
+    chat = ChatController(
+        runtime,
+        on_change=lambda: states.append(
+            (chat.status.running, list(chat.status.pending), chat.status.last_error)
+        ),
+    )
+    task = asyncio.create_task(chat.submit("hi"))
+    await asyncio.sleep(0.05)
+
+    chat.steer("save the logs")
+    gate.set()
+    await task
+    await chat.wait_for_idle()
+
+    demoted = [
+        state
+        for state in states
+        if state[2] and state[1] and all(p.lane == "queue" for p in state[1])
+    ]
+    assert demoted, "the steer must become a visible queue entry before the next run"
+    assert len(calls) == 2
+    assert chat.status.pending == []
+    users = [m for m in runtime.agent.messages if isinstance(m, UserMessage)]
+    assert any("save the logs" in str(m.content) for m in users)
+
+
+async def test_aborted_run_keeps_steering_as_a_visible_queue_entry(runtime_factory):
+    gate = asyncio.Event()
+    calls: list[list] = []
+
+    async def stream(model, messages, tools, options):
+        calls.append(list(messages))
+        partial = AssistantMessage(
+            content=[TextContent(text="")], provider="p", model="m",
+            usage=Usage(), stop_reason="pending", timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        await gate.wait()
+        if options.abort is not None and options.abort.aborted:
+            raise Aborted("cancelled by user")
+        partial.stop_reason = "stop"
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    runtime = await runtime_factory(stream_fn=stream)
+    chat = ChatController(runtime)
+    task = asyncio.create_task(chat.submit("hi"))
+    await asyncio.sleep(0.05)
+
+    chat.steer("save the logs")
+    chat.abort()
+    gate.set()
+    await task
+    await chat.wait_for_idle()
+
+    assert len(calls) == 1, "an aborted run must not auto-continue"
+    assert chat.status.running is False
+    assert [(p.lane, p.text) for p in chat.status.pending] == [
+        ("queue", "save the logs")
+    ]
+
+
+async def test_continuation_runs_before_auto_compaction(runtime_factory, monkeypatch):
+    import zenagent.app.chat as chat_module
+
+    gate = asyncio.Event()
+    compacted: list[list[str]] = []
+    calls: list[list] = []
+
+    async def stream(model, messages, tools, options):
+        calls.append(list(messages))
+        partial = AssistantMessage(
+            content=[TextContent(text="")], provider="p", model="m",
+            usage=Usage(), stop_reason="pending", timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        await gate.wait()
+        partial.content = [TextContent(text=f"answer{len(calls)}")]
+        partial.stop_reason = "stop"
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    runtime = await runtime_factory(stream_fn=stream)
+    chat = ChatController(runtime)
+    monkeypatch.setattr(chat_module, "should_auto_compact", lambda *a, **k: True)
+
+    async def fake_compact(force: bool = False) -> str | None:
+        compacted.append([p.lane for p in chat.status.pending])
+        return None
+
+    monkeypatch.setattr(chat, "compact_now", fake_compact)
+
+    task = asyncio.create_task(chat.submit("hi"))
+    await asyncio.sleep(0.05)
+    chat.steer("also add tests")
+    gate.set()
+    await task
+    await chat.wait_for_idle()
+
+    assert compacted == [[]], "compaction must wait until the pending lanes are empty"

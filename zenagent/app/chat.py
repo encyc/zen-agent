@@ -529,15 +529,26 @@ class ChatController:
 
     # -- run loop -----------------------------------------------------------
 
-    async def _run(self, text: str, images: list[ImageContent] | None = None) -> None:
+    async def _run(
+        self, text: str | None, images: list[ImageContent] | None = None
+    ) -> None:
         self._running = True
         self._last_error = ""
         self._notify()
         started = time.monotonic()
         before_output = usage_total(self.runtime.agent.messages).output
         try:
-            await self.runtime.agent.prompt(text, images=images or None)
+            if text is None:
+                try:
+                    await self.runtime.agent.continue_()
+                except ValueError:
+                    # Nothing to continue: keep the steering text visible
+                    # instead of raising out of the task.
+                    self._demote_steering()
+            else:
+                await self.runtime.agent.prompt(text, images=images or None)
         finally:
+            termination = self.runtime.agent.termination
             # Aborts and provider errors skip message_end; do not leave a row
             # ticking after the run is over.
             self._builder.finalize()
@@ -545,7 +556,7 @@ class ChatController:
             self._turn_output = (
                 usage_total(self.runtime.agent.messages).output - before_output
             )
-            if self.runtime.agent.termination == "error":
+            if termination == "error":
                 detail = self.runtime.agent.error_message
                 self._last_error = (
                     detail
@@ -553,20 +564,44 @@ class ChatController:
                     else t("notice.run_failed")
                 )
             self._notify()
+            # A steer typed after the last step boundary never reached the
+            # model. A normal finish continues the run so the model answers it
+            # at the next request; any other ending demotes it to a visible
+            # follow-up (never silently stranded, never auto-retried).
+            continuation = False
+            if self.runtime.agent.pending_steering:
+                if termination == "stop":
+                    continuation = True
+                else:
+                    self._demote_steering()
             # Stay busy (running=True, task set) through the summarizer call so
             # a submit during compaction queues instead of racing it. Queued
             # turns go first: compress only between bursts (Review Focus #1).
-            if self.runtime.agent.termination != "aborted" and not self._pending:
+            if termination != "aborted" and not self._pending:
                 await self._maybe_auto_compact()
             self._running = False
             self._task = None
             self._notify()
-            if self.runtime.agent.termination != "aborted":
+            if continuation:
+                self._task = asyncio.create_task(self._run(None))
+            elif termination != "aborted":
                 item = self._take_next_queue_item()
                 if item is not None:
                     self._task = asyncio.create_task(
                         self._run(item.message.text, item.images)
                     )
+
+    def _demote_steering(self) -> None:
+        """Turn undelivered steering into visible queue entries (nothing lost)."""
+        texts = self.runtime.agent.take_steering()
+        if not texts:
+            return
+        self._pending = [
+            item for item in self._pending if item.message.lane != "steer"
+        ]
+        for text in texts:
+            self._add_pending(text, [], "queue")
+        self._notify()
 
     async def _maybe_auto_compact(self) -> None:
         """One automatic compaction; failures become a transcript notice."""
