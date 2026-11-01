@@ -165,6 +165,14 @@ provider 错误不会进转录区，而是停在 dock 顶部的错误横幅里�
   `confirm`（删会话）与 `rename` 用的是同一套面板。
 - **full**：直接放行；危险命令仍被拦截（除非 `--allow-dangerous`），`[tools] deny` 永远优先。
 
+## 浮层：快捷键 / 用量 / todo / MCP
+
+- `/hotkeys` 打开只读按键表（应用键位 + 输入框 chord），`esc` 关闭；REPL 仍打印文本表。
+- `/usage` 打开用量面板：当前会话 in/out/cache/成本/上下文 + 子代理花费，下面附最近 50 个会话的聚合报告。
+- `/todo` 打开**可编辑** todo 列表（与模型 `todo` 工具共用 `<session>.todo.json`）：`a` 添加、`d` 完成、`b` 阻塞、`u` 取消阻塞、`x` 删除、`esc` 保存并刷新 HUD。
+- `/mcp add` 打开两字段向导（服务器名 + 命令），保存到 `~/.zenagent/mcp.json`（原子写、0600）并尝试重连；REPL 只提示编辑文件。
+- `/plan-review` 见「运行模式」；`esc` 在浮层里先清搜索、再关面板（Palette 的 Esc 分层）。
+
 ## 模型管理
 
 `alt+p`（或 `ctrl+k` → `model`，或裸 `/model`）打开选择器：

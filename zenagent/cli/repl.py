@@ -563,6 +563,21 @@ async def handle_slash(
             print_fn(t("repl.compacted", path=path.name))
         return None
 
+    if command == "todo":
+        from zenagent.tools.todo import load_todo_phases
+
+        phases = load_todo_phases(session.path if session is not None else None)
+        rows = [
+            f"[{task.get('status', 'pending')}] {task.get('content', '')}"
+            for phase in phases
+            for task in (phase.get("tasks") or [])
+            if isinstance(task, dict)
+        ]
+        if not rows:
+            print_fn(t("cmdmsg.todo_empty"))
+            return None
+        print_fn("\n".join(rows))
+        return None
     if command == "jobs":
         from zenagent.tools.jobs import UnknownJobError, get_job_manager
 

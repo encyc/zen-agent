@@ -251,3 +251,25 @@ async def test_btw_requires_a_question(services):
     registry = build_default_commands(services)
     result = await registry.dispatch("btw", "")
     assert "usage" in (result.message or "")
+
+
+async def test_hotkeys_and_usage_return_their_overlays(services):
+    registry = build_default_commands(services)
+    hotkeys = await registry.dispatch("hotkeys", "")
+    assert hotkeys.screen == "hotkeys"
+    assert hotkeys.message
+    usage = await registry.dispatch("usage", "")
+    assert usage.screen == "usage-dashboard"
+
+
+async def test_mcp_add_returns_the_wizard_screen(services):
+    registry = build_default_commands(services)
+    result = await registry.dispatch("mcp", "add")
+    assert result.screen == "mcp-add"
+    assert "TUI" in (result.message or "")
+
+
+async def test_todo_command_opens_the_editor(services):
+    registry = build_default_commands(services)
+    result = await registry.dispatch("todo", "")
+    assert result.screen == "todo-edit"

@@ -95,6 +95,11 @@ class ChatController:
     def transcript(self) -> list[ToolCallView]:
         return list(self._builder.views)
 
+    def reload_todos(self) -> None:
+        """Re-read the session todo sidecar (after the /todo editor wrote it)."""
+        self._todos = load_todo_phases(self._session_path())
+        self._notify()
+
     def last_assistant_text(self) -> str:
         """The most recent assistant prose, or ``''`` when there is none.
 

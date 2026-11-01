@@ -406,3 +406,47 @@ async def test_list_tools_carries_the_read_only_annotation():
     tools = await mcp.list_tools()
 
     assert [tool.read_only for tool in tools] == [True, False, False]
+
+
+def test_save_server_creates_and_preserves_servers(tmp_path):
+    from zenagent.mcp.config import load_mcp_config, save_server
+
+    target = tmp_path / "mcp.json"
+    save_server("alpha", ["npx", "-y", "alpha"], path=target)
+    save_server("beta", ["python", "beta.py"], path=target)
+
+    servers = load_mcp_config(path=target)
+    assert set(servers) == {"alpha", "beta"}
+    assert servers["alpha"].command == ["npx", "-y", "alpha"]
+    assert oct(target.stat().st_mode & 0o777) == "0o600"
+
+
+def test_save_server_refuses_a_corrupt_file(tmp_path):
+    from zenagent.mcp.config import save_server
+
+    target = tmp_path / "mcp.json"
+    target.write_text("not json")
+    try:
+        save_server("alpha", ["x"], path=target)
+    except ValueError as exc:
+        assert "cannot read" in str(exc)
+    else:  # pragma: no cover - the call must fail
+        raise AssertionError("a corrupt mcp.json must not be overwritten")
+
+
+def test_save_server_validates_input(tmp_path):
+    from zenagent.mcp.config import save_server
+
+    target = tmp_path / "mcp.json"
+    try:
+        save_server("", ["x"], path=target)
+    except ValueError:
+        pass
+    else:  # pragma: no cover
+        raise AssertionError("empty names must be rejected")
+    try:
+        save_server("alpha", [], path=target)
+    except ValueError:
+        pass
+    else:  # pragma: no cover
+        raise AssertionError("empty commands must be rejected")

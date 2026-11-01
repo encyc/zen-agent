@@ -279,6 +279,10 @@ async def _images(services: AppServices, argument: str) -> CommandResult:
 
 @_command("mcp")
 async def _mcp(services: AppServices, argument: str) -> CommandResult:
+    if argument.strip().lower() in ("add", "wizard"):
+        return CommandResult(
+            message=t("cmdmsg.mcp_add_hint"), screen="mcp-add"
+        )
     manager = services.runtime.mcp
     if manager is None:
         return CommandResult(message=t("cmdmsg.no_mcp"))
@@ -421,7 +425,8 @@ async def _usage(services: AppServices, argument: str) -> CommandResult:
                 cache=status.cache_read,
                 cost=f"{status.cost:.4f}",
             )
-        )
+        ),
+        screen="usage-dashboard",
     )
 
 
@@ -460,7 +465,7 @@ async def _search(services: AppServices, argument: str) -> CommandResult:
 
 @_command("hotkeys")
 async def _hotkeys(services: AppServices, argument: str) -> CommandResult:
-    return CommandResult(message=t("cmdmsg.hotkeys_text"))
+    return CommandResult(message=t("cmdmsg.hotkeys_text"), screen="hotkeys")
 
 
 @_command("undo")
@@ -517,6 +522,12 @@ async def _restore(services: AppServices, argument: str) -> CommandResult:
         running=services.chat.status.running,
     )
     return CommandResult(message=message)
+
+
+@_command("todo")
+async def _todo(services: AppServices, argument: str) -> CommandResult:
+    """Open the editable todo list (the model shares the same sidecar)."""
+    return CommandResult(screen="todo-edit")
 
 
 @_command("settings")
@@ -737,6 +748,7 @@ def build_default_commands(services: AppServices) -> CommandRegistry:
         _import,
         _settings,
         _plan_review,
+        _todo,
         _undo,
         _restore,
         _retry,

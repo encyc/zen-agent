@@ -194,8 +194,9 @@ browser/computer、debug/DAP、IDA、security_scan、tts/generate_image、eval �
 
 #### T19 · 浮层批
 
-- [ ] hotkeys sheet（按键表浮层）、session tree（基于会话消息树的选择器）、usage dashboard（按会话/模型聚合）、settings 全屏中心（现有 palette 升级）、MCP add 向导（写 `~/.zenagent/mcp.json`）。
-- [ ] 测试：`tests/test_tui_pickers.py`、`tests/test_tui_settings.py`。
+- [x] hotkeys sheet（`HotkeysSheet`，`/hotkeys`）、usage dashboard（`UsageDashboard`，当前会话 + 近 50 个会话聚合）、MCP add 向导（`McpAdd`，写 `~/.zenagent/mcp.json`，原子 0600）。
+- [x] 测试：`tests/test_tui_controls.py`、`tests/test_mcp_client.py`。
+- [ ] 未做（记录理由）：session tree（当前会话是线性 JSONL，没有消息树模型，先做会引入非 append-only 语义）；settings 全屏中心（现有 `/settings` palette 已覆盖全部可调项，全屏只是外观）。
 
 #### T20 · dock/交互
 
@@ -204,8 +205,8 @@ browser/computer、debug/DAP、IDA、security_scan、tts/generate_image、eval �
 
 #### T21 · todo 用户编辑
 
-- [ ] `/todo` 命令 + 可编辑浮层（新增/完成/删除/阻塞），与模型 `todo` 工具共用 sidecar。
-- [ ] 测试：`tests/test_tui_todo.py`、`tests/test_todo.py`。
+- [x] `/todo` 命令 + 可编辑浮层（新增/完成/删除/阻塞），与模型 `todo` 工具共用 sidecar。
+- [x] 测试：`tests/test_tui_todo.py`、`tests/test_todo.py`。
 
 ### M6 · 收尾
 

@@ -1222,6 +1222,98 @@ class ZenAgentApp(App):
 
         self.open_menu("model", lambda: ModelPicker(self.models.entries()), selected)
 
+    def open_hotkeys(self) -> None:
+        """Read-only key-binding sheet (omp's /hotkeys overlay)."""
+        from zenagent.cli.tui.screens.modals import HotkeysSheet
+        from zenagent.cli.tui.widgets.prompt_input import APP_CHORDS
+
+        lines = [f"{key:<16} {description}" for key, _action, description in self.BINDINGS]
+        lines.extend(f"{key:<16} {action}" for key, action in APP_CHORDS.items())
+        self.open_menu("hotkeys", lambda: HotkeysSheet(lines), lambda _result: None)
+
+    def open_usage_dashboard(self) -> None:
+        """Current-session totals plus the recent-session usage report."""
+        from zenagent.cli.tui.screens.modals import UsageDashboard
+
+        status = self.chat.status
+        lines = [
+            t("tui.usage.current"),
+            (
+                f"  in {status.input_tokens} · out {status.output_tokens} · "
+                f"cache {status.cache_read} · ${status.cost:.4f}"
+            ),
+            f"  context {status.context_used}/{status.context_window}",
+        ]
+        if status.subagent_cost or status.subagent_tokens:
+            lines.append(
+                f"  subagents: ${status.subagent_cost:.4f} · "
+                f"{status.subagent_tokens} tokens"
+            )
+        try:
+            from zenagent.usage import collect_usage, render_report, session_paths
+
+            report = collect_usage(session_paths()[-50:])
+            lines.append("")
+            lines.extend(render_report(report).splitlines())
+        except Exception:  # noqa: BLE001 - the dashboard must never crash the app
+            lines.append(t("tui.usage.unavailable"))
+        self.open_menu(
+            "usage", lambda: UsageDashboard(lines), lambda _result: None
+        )
+
+    def open_mcp_add(self) -> None:
+        """Two-field wizard that appends a stdio server to mcp.json."""
+        from zenagent.cli.tui.screens.modals import McpAdd
+
+        async def added(result) -> None:
+            if not result:
+                return
+            import shlex
+
+            from zenagent.mcp.config import save_server
+
+            name, command_text = result
+            try:
+                command = shlex.split(command_text)
+            except ValueError:
+                command = [command_text]
+            try:
+                save_server(name, command)
+            except ValueError as exc:
+                self.notify(t("tui.app.mcp_add_failed", error=exc), timeout=3)
+                return
+            self.notify(t("tui.app.mcp_added", name=name))
+            try:
+                await self.runtime.refresh_mcp()
+            except RuntimeError:
+                pass
+            self._refresh_status()
+
+        self.open_menu("mcp-add", lambda: McpAdd(), added)
+
+    def open_todo_editor(self) -> None:
+        """Editable todo list; writes the same sidecar the model's tool uses."""
+        from zenagent.cli.tui.screens.modals import TodoEditor
+        from zenagent.tools.todo import save_todo_phases
+
+        async def edited(phases) -> None:
+            if phases is None:
+                return
+            session = getattr(self.runtime, "session", None)
+            if session is None:
+                return
+            try:
+                save_todo_phases(Path(session.path), phases)
+            except OSError as exc:
+                self.notify(t("tui.app.todo_save_failed", error=exc), timeout=3)
+                return
+            self.chat.reload_todos()
+            self._refresh_status()
+
+        self.open_menu(
+            "todo-edit", lambda: TodoEditor(self.chat.todos), edited
+        )
+
     def open_plan_review(self) -> None:
         """Read the last plan, then approve (→ full) or keep planning."""
         from zenagent.cli.tui.screens.modals import PlanReview
@@ -1484,6 +1576,14 @@ class ZenAgentApp(App):
             self.open_plan_review()
         elif result.screen == "display-reset":
             self.action_display_reset()
+        elif result.screen == "hotkeys":
+            self.open_hotkeys()
+        elif result.screen == "usage-dashboard":
+            self.open_usage_dashboard()
+        elif result.screen == "mcp-add":
+            self.open_mcp_add()
+        elif result.screen == "todo-edit":
+            self.open_todo_editor()
         elif result.screen == "search-settings":
             self.open_search_provider()
         elif result.show_help:

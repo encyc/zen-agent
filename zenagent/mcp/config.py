@@ -115,6 +115,53 @@ def load_mcp_config(
     return servers
 
 
+def save_server(
+    name: str, command: list[str], path: Path | None = None
+) -> Path:
+    """Add/replace one stdio server in ``mcp.json`` (atomic, mode 0600).
+
+    Used by the TUI's MCP add wizard. A corrupt existing file is an error rather
+    than silently overwritten: the user's other servers must not be lost.
+    """
+    import os
+    import tempfile
+
+    if not name.strip():
+        raise ValueError("server name must not be empty")
+    if not command or not all(isinstance(part, str) and part for part in command):
+        raise ValueError("command must be a non-empty list of strings")
+    target = Path(path) if path is not None else config_path()
+    data: dict = {}
+    if target.is_file():
+        try:
+            data = json.loads(target.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise ValueError(f"cannot read mcp config {target}: {exc}") from exc
+        if not isinstance(data, dict):
+            raise ValueError(f"mcp config {target} must contain an object")
+    servers = data.get("servers")
+    if not isinstance(servers, dict):
+        servers = {}
+    servers[name.strip()] = {"command": list(command)}
+    data["servers"] = servers
+    target.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temp_name = tempfile.mkstemp(
+        dir=target.parent, prefix=f"{target.name}.", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(data, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temp_name, 0o600)
+        os.replace(temp_name, target)
+    except BaseException:
+        Path(temp_name).unlink(missing_ok=True)
+        raise
+    return target
+
+
 def make_transport(config: McpServerConfig) -> Transport:
     """Build the transport a server config describes."""
     if config.url:

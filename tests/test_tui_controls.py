@@ -459,3 +459,85 @@ async def test_reopening_a_menu_does_not_stack_a_second_panel(picker_app):
         await pilot.pause()
         screens = sum(isinstance(screen, ModelPicker) for screen in app.screen_stack)
         assert screens == 1
+
+
+async def test_hotkeys_command_opens_the_sheet(picker_app):
+    from zenagent.cli.tui.screens.modals import HotkeysSheet
+
+    app = picker_app
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await app._dispatch_command("hotkeys", "")
+        await pilot.pause()
+        assert isinstance(app.screen, HotkeysSheet)
+        await pilot.press("escape")
+        await pilot.pause()
+        assert not isinstance(app.screen, HotkeysSheet)
+
+
+async def test_usage_command_opens_the_dashboard(picker_app):
+    from zenagent.cli.tui.screens.modals import UsageDashboard
+
+    app = picker_app
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await app._dispatch_command("usage", "")
+        await pilot.pause()
+        assert isinstance(app.screen, UsageDashboard)
+        await pilot.press("escape")
+        await pilot.pause()
+        assert not isinstance(app.screen, UsageDashboard)
+
+
+async def test_mcp_add_wizard_saves_a_server(picker_app, monkeypatch):
+    from zenagent.cli.tui.screens.modals import McpAdd
+
+    saved: list[tuple[str, list[str]]] = []
+    monkeypatch.setattr(
+        "zenagent.mcp.config.save_server",
+        lambda name, command: saved.append((name, command)),
+    )
+    app = picker_app
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        app.open_mcp_add()
+        await pilot.pause()
+        assert isinstance(app.screen, McpAdd)
+        screen = app.screen
+        screen.query_one("#mcp-name").value = "demo"
+        screen.query_one("#mcp-command").value = "npx -y demo"
+        screen.query_one("#mcp-command").focus()
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.pause()
+    assert saved == [("demo", ["npx", "-y", "demo"])]
+
+
+async def test_todo_editor_writes_the_session_sidecar(picker_app):
+    from zenagent.cli.tui.screens.modals import TodoEditor
+    from zenagent.tools.todo import todo_sidecar_path
+
+    app = picker_app
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        app.open_todo_editor()
+        await pilot.pause()
+        assert isinstance(app.screen, TodoEditor)
+        screen = app.screen
+        screen.query_one("#todo-new").value = "write docs"
+        screen.action_add()
+        await pilot.pause()
+        assert "write docs" in str(screen.query_one("#todo-list").get_option_at_index(0).prompt)
+
+        await pilot.press("escape")
+        await pilot.pause()
+        await pilot.pause()
+
+    sidecar = todo_sidecar_path(app.runtime.session.path)
+    assert sidecar.is_file()
+    assert "write docs" in sidecar.read_text(encoding="utf-8")
+    assert any(
+        task.get("content") == "write docs"
+        for phase in app.chat.todos
+        for task in (phase.get("tasks") or [])
+    )

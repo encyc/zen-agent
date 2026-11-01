@@ -1006,3 +1006,18 @@ async def test_slash_trace_reports_disabled(capsys):
     agent = Agent(model(), "s", api_key="k")
     await handle_slash(agent, "trace", "")
     assert "not enabled" in capsys.readouterr().out
+
+
+async def test_slash_todo_prints_the_session_list(isolated_sessions, capsys):
+    from zenagent.agent.session import Session
+    from zenagent.tools.todo import save_todo_phases
+
+    path = isolated_sessions / "20260101-000000.jsonl"
+    isolated_sessions.mkdir(parents=True, exist_ok=True)
+    path.write_text("")
+    save_todo_phases(path, [{"name": "Tasks", "tasks": [{"content": "write docs", "status": "pending"}]}])
+
+    agent = Agent(model(), "s", api_key="k")
+    await handle_slash(agent, "todo", "", session=Session(path))
+    out = capsys.readouterr().out
+    assert "write docs" in out and "pending" in out
