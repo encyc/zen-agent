@@ -36,6 +36,7 @@ from zenagent.cli.tui.widgets.attachments import AttachmentChips
 from zenagent.cli.tui.widgets.command_hints import CommandHints
 from zenagent.cli.tui.widgets.error_banner import ErrorBanner
 from zenagent.cli.tui.widgets.new_content import NewContentBar
+from zenagent.cli.tui.widgets.pending_band import PendingBand
 from zenagent.cli.tui.widgets.prompt_gutter import PromptGutter
 from zenagent.cli.tui.widgets.prompt_input import PromptInput
 from zenagent.cli.tui.widgets.sidebar import NARROW_WIDTH, Sidebar
@@ -302,6 +303,7 @@ class ZenAgentApp(App):
                     yield TodoHud()
                     yield WorkStrip()
                     yield StatusBand()
+                    yield PendingBand()
                     with Horizontal(id="prompt-row"):
                         yield PromptGutter()
                         yield PromptInput()

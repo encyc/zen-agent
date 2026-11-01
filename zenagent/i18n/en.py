@@ -23,6 +23,12 @@ CATALOG: dict[str, str] = {
     "tui.status.queued.other": "{n} queued",
     "tui.status.steering.one": "{n} steering",
     "tui.status.steering.other": "{n} steering",
+    # TUI: pending band (above the composer)
+    "tui.queue.title.queued": "Queued",
+    "tui.queue.title.steer": "Steering",
+    "tui.queue.hint": "└ alt+↑ edit · ctrl+x clear · click a queued row to steer",
+    "tui.queue.more": "… {n} more",
+    "tui.queue.images": "img {n}",
     # TUI: welcome / work chrome
     "tui.welcome.subtitle": "v{version} · python agent loop",
     "tui.welcome.hints": "/ commands  ·  ctrl+b info  ·  ctrl+d quit",

@@ -22,6 +22,12 @@ CATALOG: dict[str, str] = {
     "tui.status.queued.other": "排队 {n}",
     "tui.status.steering.one": "插话 {n}",
     "tui.status.steering.other": "插话 {n}",
+    # TUI：输入框上方的待发区
+    "tui.queue.title.queued": "排队",
+    "tui.queue.title.steer": "插话",
+    "tui.queue.hint": "└ alt+↑ 取回 · ctrl+x 清空 · 点击排队行插话",
+    "tui.queue.more": "… 还有 {n} 条",
+    "tui.queue.images": "图 {n}",
     # TUI：欢迎 / 工作条
     "tui.welcome.subtitle": "v{version} · Python agent 循环",
     "tui.welcome.hints": "/ 命令  ·  ctrl+b 面板  ·  ctrl+d 退出",
