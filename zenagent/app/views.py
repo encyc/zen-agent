@@ -30,6 +30,8 @@ __all__ = [
     "JobStatusView",
     "JobView",
     "MessageView",
+    "PendingLane",
+    "PendingMessage",
     "RunStatus",
     "SubagentView",
     "ToolCallView",
@@ -139,6 +141,10 @@ class RunStatus:
     #: from the parent's own cost).
     subagent_cost: float = 0.0
     subagent_tokens: int = 0
+    #: Pending user input the frontend renders above the composer: follow-ups
+    #: waiting for the run to end (``queue``) and messages waiting for the next
+    #: step boundary inside the running turn (``steer``).
+    pending: list[PendingMessage] = field(default_factory=list)
     #: Background jobs (``bash async``) known to the session; running ones first,
     #: then newest finished. The sidebar caps the rendered rows.
     jobs: list[JobView] = field(default_factory=list)
@@ -148,6 +154,25 @@ class RunStatus:
     active_subagent: str | None = None
     #: Context-window composition (measured total, estimated slices).
     context: ContextReport | None = None
+
+
+#: Delivery lane of a pending message: ``queue`` waits for the run to end,
+#: ``steer`` is injected after the current tool round of the running turn.
+PendingLane = Literal["queue", "steer"]
+
+
+@dataclass(frozen=True)
+class PendingMessage:
+    """One user message waiting to be delivered, as the dock band renders it."""
+
+    id: int
+    lane: PendingLane
+    text: str
+    #: Number of images travelling with the message (only the queue lane can
+    #: carry them; the steering channel is text-only).
+    images: int = 0
+    #: ``time.time()`` epoch seconds, for ordering/diagnostics.
+    created_at: float = 0.0
 
 
 #: Job states the sidebar renders; mirrors ``zenagent.tools.jobs.JobStatus``.

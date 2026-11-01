@@ -1,10 +1,11 @@
-"""ChatController: one run at a time, view-model state, follow-up queue."""
+"""ChatController: one run at a time, view-model state, pending queue."""
 
 from __future__ import annotations
 
 import asyncio
 import time
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from zenagent.agent.subagents import SubagentStore, carry_task_dir
@@ -17,6 +18,8 @@ from zenagent.app.views import (
     JobLogView,
     JobView,
     MessageView,
+    PendingLane,
+    PendingMessage,
     RunStatus,
     SubagentView,
     ToolCallView,
@@ -35,6 +38,14 @@ from zenagent.types import ImageContent
 __all__ = ["ChatController"]
 
 
+@dataclass
+class _PendingItem:
+    """One pending message plus the images that travel with it."""
+
+    message: PendingMessage
+    images: list[ImageContent] = field(default_factory=list)
+
+
 class ChatController:
     """Drives the agent and exposes snapshots a frontend can render."""
 
@@ -49,8 +60,10 @@ class ChatController:
         self._subagent_meta: dict[str, dict] = {}
         #: Cached read of the session's transcript sidecars (disk scan only).
         self._subagent_disk_metas: dict | None = None
-        #: (text, images) pairs; images are captured when the turn is queued.
-        self._follow_ups: list[tuple[str, list[ImageContent]]] = []
+        #: Pending user input, in creation order: ``queue`` entries wait for the
+        #: run to end, ``steer`` entries are injected at the next step boundary.
+        self._pending: list[_PendingItem] = []
+        self._next_pending_id = 1
         self._task: asyncio.Task | None = None
         self._running = False
         #: True while an automatic compaction runs: the controller stays busy
@@ -114,8 +127,11 @@ class ChatController:
             cost=usage.cost.total,
             context_used=context_used,
             context_window=agent.model.context_window,
-            follow_ups=len(self._follow_ups),
+            follow_ups=sum(
+                1 for item in self._pending if item.message.lane == "queue"
+            ),
             steering=agent.pending_steering,
+            pending=[item.message for item in self._pending],
             session_name=Path(self.runtime.session.path).stem,
             cwd=str(Path.cwd()),
             mode=self.runtime.mode,
@@ -291,15 +307,24 @@ class ChatController:
         """Queue a follow-up; ``images=None`` takes the pending attachments."""
         if not text.strip():
             return
-        pending = list(images if images is not None else self._attachments)
+        blocks = list(images if images is not None else self._attachments)
         if images is None:
             self._attachments.clear()
-        self._follow_ups.append((text, pending))
+        self._add_pending(text, blocks, "queue")
         self._notify()
 
-    def clear_follow_ups(self) -> None:
-        self._follow_ups.clear()
+    def clear_pending(self) -> int:
+        """Drop every pending message (both lanes); returns how many went."""
+        cleared = len(self._pending)
+        if not cleared:
+            return 0
+        self._pending.clear()
         self._notify()
+        return cleared
+
+    def clear_follow_ups(self) -> None:
+        """Backwards-compatible alias for :meth:`clear_pending`."""
+        self.clear_pending()
 
     def dequeue_follow_up(self) -> str | None:
         """Take the most recently queued follow-up back out of the queue.
@@ -307,13 +332,42 @@ class ChatController:
         omp's dequeue semantics: the last thing you queued is the one you most
         likely want to edit, so pop from the end. Returns ``None`` when empty.
         """
-        if not self._follow_ups:
-            return None
-        text, images = self._follow_ups.pop()
-        if images:
-            self._attachments[:0] = images  # put the images back in the composer
-        self._notify()
-        return text
+        for index in range(len(self._pending) - 1, -1, -1):
+            item = self._pending[index]
+            if item.message.lane != "queue":
+                continue
+            del self._pending[index]
+            if item.images:
+                self._attachments[:0] = item.images  # back into the composer
+            self._notify()
+            return item.message.text
+        return None
+
+    def _add_pending(
+        self,
+        text: str,
+        images: list[ImageContent] | None,
+        lane: PendingLane,
+    ) -> PendingMessage:
+        """Append one pending entry and return its view-model snapshot."""
+        blocks = list(images or [])
+        message = PendingMessage(
+            id=self._next_pending_id,
+            lane=lane,
+            text=text,
+            images=len(blocks),
+            created_at=time.time(),
+        )
+        self._next_pending_id += 1
+        self._pending.append(_PendingItem(message=message, images=blocks))
+        return message
+
+    def _take_next_queue_item(self) -> _PendingItem | None:
+        """Pop the oldest queue-lane entry (the next turn), if any."""
+        for index, item in enumerate(self._pending):
+            if item.message.lane == "queue":
+                return self._pending.pop(index)
+        return None
 
     def steer(self, text: str) -> None:
         if text.strip():
@@ -466,16 +520,17 @@ class ChatController:
             # Stay busy (running=True, task set) through the summarizer call so
             # a submit during compaction queues instead of racing it. Queued
             # turns go first: compress only between bursts (Review Focus #1).
-            if self.runtime.agent.termination != "aborted" and not self._follow_ups:
+            if self.runtime.agent.termination != "aborted" and not self._pending:
                 await self._maybe_auto_compact()
             self._running = False
             self._task = None
             self._notify()
-            if self._follow_ups and self.runtime.agent.termination != "aborted":
-                text, images = self._follow_ups.pop(0)
-                self._task = asyncio.create_task(self._run(text, images))
-            elif self._follow_ups:
-                self._notify()
+            if self.runtime.agent.termination != "aborted":
+                item = self._take_next_queue_item()
+                if item is not None:
+                    self._task = asyncio.create_task(
+                        self._run(item.message.text, item.images)
+                    )
 
     async def _maybe_auto_compact(self) -> None:
         """One automatic compaction; failures become a transcript notice."""
