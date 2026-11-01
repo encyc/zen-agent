@@ -14,6 +14,7 @@ from pathlib import Path
 from zenagent import project
 from zenagent.agent import Agent
 from zenagent.agent.artifacts import build_artifact_sink
+from zenagent.agent.registry import ToolRegistry
 from zenagent.agent.session import Session, latest_session, unique_session_path
 from zenagent.app.journal import attach_journal, journal_for, load_backup_policy
 from zenagent.app.modes import (
@@ -138,6 +139,8 @@ class Runtime:
         self._base_prompt_report: RenderedPrompt | None = None
         self.prompt_report: RenderedPrompt | None = None
         self._base_tools: list = []
+        #: Desired set + activation policy for the model-visible tool list.
+        self.tool_registry = ToolRegistry()
         self._skill_entries = ""
         self._extension_prompt = ""
         self._extension_tools: list = []
@@ -457,10 +460,13 @@ class Runtime:
     def _recompose(self) -> None:
         """Rebuild the tool list and prompt from the current discovery results.
 
-        Skills, extension tools and MCP tools all contribute to both. Rebuilding
-        from scratch (rather than patching the previous list) is what keeps
-        ``read_skill``'s roster, the prompt's skill index and ``agent.tools``
-        from drifting apart after a reload.
+        Skills, extension tools and MCP tools all contribute to both. The
+        desired set goes through :attr:`tool_registry`, which applies
+        ``hidden``/``default_inactive`` and any activation override, and reports
+        whether the model-visible set changed -- so a reload that finds nothing
+        new does not touch the live agent. Rebuilding from scratch (rather than
+        patching the previous list) is what keeps ``read_skill``'s roster, the
+        prompt's skill index and ``agent.tools`` from drifting apart.
         """
         tools = list(ALL_TOOLS)
         if self.todo_tool is not None:
@@ -473,11 +479,28 @@ class Runtime:
             tools.append(build_skill_tool(self.skills))
         tools.extend(self._extension_tools)
         self._skill_entries = format_skill_entries(self.skills)
-        self._base_tools = list(tools)
-        self._base_prompt = self._build_prompt(tools)
+        self.tool_registry.reconcile(tools)
+        active = self.tool_registry.active()
+        self._base_tools = list(active)
+        self._base_prompt = self._build_prompt(active)
         if hasattr(self, "agent"):
-            self.agent.tools = list(tools)
+            self.agent.tools = list(active)
             self.agent.system_prompt = self._prompt_with_mode()
+
+    def reconcile(self) -> list[str]:
+        """Single entry point for every tool-set change, synchronously.
+
+        MCP refresh is the one async half (see :meth:`reconcile_async`); this
+        covers skills, extensions and templates, and is what ``/reload`` and
+        the discovery tests call. Kept as a thin alias so callers express intent
+        ("reconcile the tool set") rather than mechanism ("rediscover").
+        """
+        return self.rediscover()
+
+    async def reconcile_async(self) -> list[str]:
+        """The full reload path: reconnect MCP servers, then rediscover files."""
+        await self.refresh_mcp()
+        return self.rediscover()
 
     def _subscribe_hooks(self) -> None:
         """Attach the current extension hooks, replacing the previous generation.

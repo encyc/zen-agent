@@ -1,5 +1,9 @@
 # ZenAgent × omp 功能对标与必要性判断
 
+> **历史基线（2026-11-01 注）**：本文写于 v0.3.0，现状列已过时；v0.4.0–v0.5.1 已交付的内容与剩余项见
+> [`docs/superpowers/plans/2026-11-01-p1-p2-completion.md`](../../superpowers/plans/2026-11-01-p1-p2-completion.md)。
+> 本文的 omp 调研与取舍理由仍然有效。
+
 日期：2026-10-30 · 作者：Lead（与用户讨论后整理）
 
 > **基线**

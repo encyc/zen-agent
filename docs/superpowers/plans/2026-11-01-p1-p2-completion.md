@@ -109,23 +109,23 @@ browser/computer、debug/DAP、IDA、security_scan、tts/generate_image、eval �
 
 #### T6 · ToolRegistry / hidden / default_inactive
 
-- [ ] `AgentTool` 增加 `hidden: bool = False`、`default_inactive: bool = False`（内核只声明）。
-- [ ] 新增 `zenagent/agent/registry.py`：`ToolRegistry`（active set、`reconcile(desired)`、变更通知）；`hidden` 工具不进 prompt、不可被模型调用；`default_inactive` 初始不在 active。
-- [ ] `Runtime` 改用 registry：`_recompose` → `registry.reconcile(...)`，MCP/skills/extensions 热更新走同一路径；TUI/REPL `/reload` 复用。
-- [ ] 测试：hidden 不进 prompt/不可调用；reconcile 只重建一次 prompt；MCP 后补连接后工具出现。
+- [x] `AgentTool` 增加 `hidden: bool = False`、`default_inactive: bool = False`（内核只声明）。
+- [x] 新增 `zenagent/agent/registry.py`：`ToolRegistry`（active set、`reconcile(desired)`、变更通知）；`hidden` 工具不进 prompt、不可被模型调用；`default_inactive` 初始不在 active。
+- [x] `Runtime` 改用 registry：`_recompose` → `registry.reconcile(...)`，MCP/skills/extensions 热更新走同一路径；TUI/REPL `/reload` 复用。
+- [x] 测试：hidden 不进 prompt/不可调用；reconcile 只重建一次 prompt；MCP 后补连接后工具出现。
 
 #### T7 · 工具声明 context 对象
 
-- [ ] `before_tool_call`/`after_tool_call` 钩子拿到解析后的 `AgentTool`（已有）＋ `ToolContext`（cwd、approval、timeout、call_id）；after 钩子可改写 args 并重新校验。
-- [ ] 保持向后兼容（现有钩子签名不改；新信息通过可选参数/字段）。
-- [ ] 测试：钩子读到声明；after 改写 args 后校验失败 → 错误结果。
+- [x] `before_tool_call`/`after_tool_call` 钩子拿到解析后的 `AgentTool`（已有）＋ `ToolContext`（cwd、approval、timeout、call_id）；after 钩子可改写 args 并重新校验。
+- [x] 保持向后兼容（现有钩子签名不改；新信息通过可选参数/字段）。
+- [x] 测试：钩子读到声明；after 改写 args 后校验失败 → 错误结果。
 
 #### T8 · 文档一致性修复
 
-- [ ] `docs/feature-map.md`：9 → 11 个内置工具 + todo/task；REPL 命令清单补 `/tools /restore /retry`。
-- [ ] `docs/internals/providers.md`：工具数量；`docs/guide/tools-permissions.md`：补 `task`、`replace_all`。
-- [ ] `docs/guide/tui.md`：修正 git branch/快捷键重复聚焦的描述；补新键位。
-- [ ] `CHANGELOG.md`：Unreleased 段记录本分支交付。
+- [x] `docs/feature-map.md`：9 → 11 个内置工具 + todo/task；REPL 命令清单补 `/tools /restore /retry`。
+- [x] `docs/internals/providers.md`：工具数量；`docs/guide/tools-permissions.md`：补 `task`、`replace_all`。
+- [x] `docs/guide/tui.md`：修正 git branch/快捷键重复聚焦的描述；补新键位。
+- [x] `CHANGELOG.md`：Unreleased 段记录本分支交付。
 
 ### M3 · 前端一致性
 

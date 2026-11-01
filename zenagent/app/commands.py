@@ -332,8 +332,7 @@ async def _reload(services: AppServices, argument: str) -> CommandResult:
     # tools under it must not happen (and must not escape as an exception the
     # TUI would treat as fatal).
     try:
-        await services.runtime.refresh_mcp()
-        notes = services.runtime.rediscover()
+        notes = await services.runtime.reconcile_async()
     except RuntimeError as exc:
         return CommandResult(message=str(exc))
     return CommandResult(message=t("cmdmsg.reloaded", notes=" · ".join(notes)))

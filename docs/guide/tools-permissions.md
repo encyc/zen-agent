@@ -6,10 +6,11 @@
 |---|---|---|
 | `read_file` | 读文本；默认 400 行/次，可用 `offset`/`limit` 续读（硬上限 2000 行） | 只读，免确认 |
 | `write_file` | 覆盖写文件；拒绝用"截断的 read 页"回写（防数据丢失） | 需确认 |
-| `edit_file` | 唯一匹配替换（old→new） | 需确认 |
+| `edit_file` | 唯一匹配替换（old→new）；`replace_all` 可替换全部匹配 | 需确认 |
 | `list_dir` | 列目录（标记目录/文件） | 只读 |
 | `bash` | 执行命令（非交互环境、`cwd`、`async` 后台作业），禁止危险模式 | 需确认 |
 | `wait` | 等待 `bash async` 启动的后台作业并取回结果（只读、串行） | 只读 |
+| `task` | 把自包含子任务交给只读子代理（独立上下文/转录与成本，深度 1）；父上下文只收 `<task-result>` envelope | 只读，免确认 |
 | `ask` | 向用户发起结构化提问（1–5 题、每题 2–6 个选项，`header`/`multi`/`recommended` 可选）；只有当前端注册了交互 handler 时才弹对话框，否则降级为「按最保守选项继续」 | 只读，免确认 |
 | `glob` | 按模式找文件；`limit`（默认 500）、`include_hidden`（.git 永远跳过） | 只读 |
 | `grep` | 正则搜内容（忽略二进制/大文件）；按文件分页：每页 20 个文件 × 每文件 20 条，`skip` 续页 | 只读 |
@@ -22,6 +23,11 @@
 权限门读声明决定「plan 是否放行 / 是否需要确认」，而不是维护一份硬编码工具名表；
 没声明的工具按 `exec` 处理（最保守）。MCP 工具如果服务器声明了
 `annotations.readOnlyHint`，也会被当成 `read`。
+
+装配层还有两个声明位（内核只声明、`ToolRegistry` 决定是否暴露）：
+`hidden` 的工具永不进 prompt / 模型可调用集；`default_inactive` 的工具默认不暴露，
+可由前端或配置激活。热更新（`/reload`、MCP 后补连接、扩展变更）都走
+`Runtime.reconcile()` / `reconcile_async()` 这一条路径，工具集合变化只重建一次 prompt。
 
 工具签名是：
 

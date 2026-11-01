@@ -3,6 +3,38 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased — P1/P2 completion
+
+Plan: `docs/superpowers/plans/2026-11-01-p1-p2-completion.md`.
+
+### Added
+
+- **Tool registry with `hidden` / `default_inactive`** (`agent/registry.py`):
+  the kernel declares visibility, the assembly layer decides it; hot reload
+  (`/reload`, MCP late connections, extension changes) goes through
+  `Runtime.reconcile()` / `reconcile_async()` and rebuilds the prompt once.
+- **Tool context for hooks**: 4-arg `before_tool_call` and 3-arg
+  `after_tool_call` receive a `ToolContext` (call id, resolved tool, cwd,
+  approval tier, timeout); a before hook may rewrite arguments, which are
+  re-validated against the schema without touching the transcript.
+- **MCP call-level reconnect**: a transport failure drops the client,
+  reconnects once and replays the call once; JSON-RPC errors and timeouts are
+  never retried.
+- **Running-tool progress outside the TUI**: the REPL paints a throttled
+  in-place progress line; RPC events carry a bounded `partial_result` tail.
+- **Status band**: real git branch + staged/modified/untracked counts (cached
+  3s, degrades to hidden outside a repository), `cache_read` / `cache_write`
+  segments; `n queued` now survives width degradation.
+- **TUI keys**: `f5`/`alt+r` retry, `shift+ctrl+p` reverse model cycle,
+  `alt+shift+p` plan toggle.
+- **Responses adapter** now fits `max_output_tokens` to the context window like
+  the other three adapters (it could 400 on a long prompt).
+
+### Fixed
+
+- `RunStatus.git_branch` was dead code: the status band advertised a git
+  segment that never rendered.
+
 ## v0.5.1 — 2026-11-01
 
 **Hand-slip guardrails with `/restore`, a visible mid-run input queue with steering, and one-Enter `/model` switching.**

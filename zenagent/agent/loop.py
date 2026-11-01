@@ -62,6 +62,7 @@ __all__ = [
     "AgentConfig",
     "AgentState",
     "AgentTool",
+    "ToolContext",
     "ToolResultAgent",
     "agent_loop",
 ]
@@ -124,6 +125,29 @@ class AgentTool:
     #: Per-tool wall-clock budget; the loop wraps the call in ``wait_for``.
     #: None means "no kernel deadline" (the tool manages its own, e.g. bash).
     timeout_s: float | None = None
+    #: Declared but never exposed: the tool exists in the assembly layer (so a
+    #: frontend may toggle it later) yet the model must not see or call it.
+    hidden: bool = False
+    #: Exposed only after the user activates it (settings or a frontend
+    #: toggle); the registry starts it out of the active set.
+    default_inactive: bool = False
+
+
+@dataclass(frozen=True)
+class ToolContext:
+    """What a tool-call hook may inspect about the call being executed.
+
+    Passed to 4-argument ``before_tool_call`` hooks and 3-argument
+    ``after_tool_call`` hooks. It carries the resolved tool declarations plus
+    the process cwd the tool will actually run against, so a harness hook never
+    has to re-derive policy from a name list.
+    """
+
+    call_id: str
+    tool: AgentTool
+    cwd: str
+    approval: str
+    timeout_s: float | None
 
 
 @dataclass
@@ -196,22 +220,28 @@ class _ToolOutcome:
     duration_ms: int
 
 
-def _hook_accepts_tool(hook) -> bool:
-    """Whether a before hook accepts the resolved tool as a third argument.
+def _hook_accepts(hook, arity: int) -> bool:
+    """Whether ``hook`` can be called with ``arity`` positional arguments.
 
-    The 3-arg form is the current contract; the 2-arg form was the v0.3
-    contract and is still accepted for library users (a TypeError escaping the
-    hook would otherwise abort the whole run, outside the tool try/except).
+    Hooks evolved: v0.3 ``before_tool_call(call, args)``, v0.4 added the
+    resolved tool as a third argument, and the current contract also passes a
+    :class:`ToolContext`. A ``TypeError`` escaping the hook would abort the run
+    outside the tool try/except, so the loop probes the signature instead.
     """
     try:
         signature = inspect.signature(hook)
     except (TypeError, ValueError):  # C callable: assume the current contract
-        return True
+        return arity == 4
     try:
-        signature.bind(None, {}, None)
+        signature.bind(*(None for _ in range(arity)))
     except TypeError:
         return False
     return True
+
+
+def _hook_accepts_tool(hook) -> bool:
+    """Whether a before hook accepts the resolved tool as a third argument."""
+    return _hook_accepts(hook, 3)
 
 
 async def _maybe_await(value):
@@ -257,6 +287,45 @@ def _truncated_call_outcome(call: ToolCall) -> _ToolOutcome:
     )
 
 
+async def _run_tool(
+    tool: AgentTool,
+    call: ToolCall,
+    arguments: dict,
+    abort: AbortToken | None,
+    on_update: Callable[[ToolResultAgent], None] | None,
+    timeout: float | None,
+) -> ToolResultAgent:
+    """Execute one tool, forwarding progress and degrading every failure."""
+    assert tool.execute is not None
+    accepting = True
+
+    def forward(partial: ToolResultAgent) -> None:
+        """Deliver progress only while the tool is still running."""
+        if accepting and on_update is not None:
+            on_update(partial)
+
+    try:
+        if timeout is not None:
+            return await asyncio.wait_for(
+                tool.execute(call.id, arguments, abort, forward), timeout=timeout
+            )
+        return await tool.execute(call.id, arguments, abort, forward)
+    except TimeoutError as exc:
+        if timeout is not None:
+            return _error_result(
+                f"tool {call.name!r} timed out after {timeout:g}s", kind="timeout"
+            )
+        # The tool raised TimeoutError itself; with no kernel deadline this is a
+        # normal tool failure, not a run-abort.
+        return _error_result(
+            f"{type(exc).__name__}: {exc}"[:_MAX_ERROR_TEXT], kind="tool_error"
+        )
+    except Exception as exc:  # noqa: BLE001 - degrade, never crash the loop
+        return _error_result(f"{type(exc).__name__}: {exc}"[:_MAX_ERROR_TEXT])
+    finally:
+        accepting = False
+
+
 async def _execute_tool(
     call: ToolCall,
     config: AgentConfig,
@@ -291,70 +360,73 @@ async def _execute_tool(
             kind="invalid_arguments",
         )
     else:
+        arguments = call.arguments
+        timeout = effective_timeout(tool, call.name)
+        context = ToolContext(
+            call_id=call.id,
+            tool=tool,
+            cwd=str(Path.cwd()),
+            approval=tool.approval,
+            timeout_s=timeout,
+        )
         verdict = None
         if config.before_tool_call is not None:
             # The resolved tool object accompanies the call so harness hooks can
             # read the tool's own declarations (approval tier, timeout, …)
             # instead of keeping a name list in sync with the tool registry.
             # v0.3-style 2-arg hooks keep working.
-            if _hook_accepts_tool(config.before_tool_call):
-                verdict = await _maybe_await(
-                    config.before_tool_call(call, call.arguments, tool)
-                )
+            hook = config.before_tool_call
+            if _hook_accepts(hook, 4):
+                verdict = await _maybe_await(hook(call, arguments, tool, context))
+            elif _hook_accepts(hook, 3):
+                verdict = await _maybe_await(hook(call, arguments, tool))
             else:
-                verdict = await _maybe_await(
-                    config.before_tool_call(call, call.arguments)
-                )
+                verdict = await _maybe_await(hook(call, arguments))
         if isinstance(verdict, dict) and verdict.get("block"):
             result = _error_result(
                 str(verdict.get("reason", "blocked")), kind="policy"
             )
+        elif isinstance(verdict, dict) and isinstance(verdict.get("args"), dict):
+            # A hook may normalize arguments (e.g. expand a path). The rewrite is
+            # re-validated against the tool schema, and the original ToolCall is
+            # left untouched so the transcript keeps what the model actually
+            # asked for.
+            arguments = verdict["args"]
+            problem = validate_arguments(tool.parameters, arguments)
+            if problem is not None:
+                result = _error_result(
+                    f"invalid arguments for tool {call.name}: {problem}",
+                    kind="invalid_arguments",
+                )
+            elif tool.execute is None:
+                result = _error_result(
+                    f"tool {call.name} has no execute callable", kind="tool_error"
+                )
+            else:
+                result = await _run_tool(
+                    tool, call, arguments, abort, on_update, timeout
+                )
         elif tool.execute is None:
             result = _error_result(
                 f"tool {call.name} has no execute callable", kind="tool_error"
             )
         else:
-            accepting = True
-
-            def forward(partial: ToolResultAgent) -> None:
-                """Deliver progress only while the tool is still running."""
-                if accepting and on_update is not None:
-                    on_update(partial)
-
-            timeout = effective_timeout(tool, call.name)
-            try:
-                if timeout is not None:
-                    result = await asyncio.wait_for(
-                        tool.execute(call.id, call.arguments, abort, forward),
-                        timeout=timeout,
-                    )
-                else:
-                    result = await tool.execute(
-                        call.id, call.arguments, abort, forward
-                    )
-            except TimeoutError as exc:
-                if timeout is not None:
-                    result = _error_result(
-                        f"tool {call.name!r} timed out after {timeout:g}s",
-                        kind="timeout",
-                    )
-                else:
-                    # The tool raised TimeoutError itself; with no kernel
-                    # deadline this is a normal tool failure, not a run-abort.
-                    result = _error_result(
-                        f"{type(exc).__name__}: {exc}"[:_MAX_ERROR_TEXT],
-                        kind="tool_error",
-                    )
-            except Exception as exc:  # noqa: BLE001 - degrade, never crash the loop
-                result = _error_result(
-                    f"{type(exc).__name__}: {exc}"[:_MAX_ERROR_TEXT]
-                )
-            finally:
-                accepting = False
+            result = await _run_tool(tool, call, arguments, abort, on_update, timeout)
 
     assert result is not None  # every branch above assigns
     if config.after_tool_call is not None:
-        patched = await _maybe_await(config.after_tool_call(call, result))
+        context = ToolContext(
+            call_id=call.id,
+            tool=tool,
+            cwd=str(Path.cwd()),
+            approval=tool.approval,
+            timeout_s=effective_timeout(tool, call.name),
+        )
+        hook = config.after_tool_call
+        if _hook_accepts(hook, 3):
+            patched = await _maybe_await(hook(call, result, context))
+        else:
+            patched = await _maybe_await(hook(call, result))
         if isinstance(patched, ToolResultAgent):
             result = patched
         elif isinstance(patched, dict):

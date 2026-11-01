@@ -1448,3 +1448,138 @@ async def test_subagent_spend_counts_toward_max_cost():
     assert state.termination == "max_cost"
     assert state.subagent_spend == 0.05
     assert len(stream.calls) == 1, "the guard stops before the next provider call"
+
+
+# ---------------------------------------------------------------------------
+# Tool context + hook-driven argument rewrite
+# ---------------------------------------------------------------------------
+
+
+async def test_before_tool_call_receives_a_tool_context():
+    from pathlib import Path
+
+    seen: dict = {}
+
+    async def echo(name, args, abort, on_update=None):
+        return ToolResultAgent(content=[TextContent(text="ok")])
+
+    def guard(tool_call, args, tool, context):
+        seen.update(
+            call_id=context.call_id,
+            approval=context.approval,
+            timeout=context.timeout_s,
+            cwd=context.cwd,
+            tool=context.tool.name,
+        )
+
+    stream = ScriptedStream(
+        [
+            [call_tool("t1", "echo", {"x": 1}), finish("tool_use")],
+            [say("ok"), finish("stop")],
+        ]
+    )
+    await run(
+        "go",
+        AgentState(),
+        make_config(
+            stream,
+            tools=[make_tool("echo", echo, approval="read", timeout_s=5)],
+            before_tool_call=guard,
+        ),
+    )
+    assert seen == {
+        "call_id": "t1",
+        "approval": "read",
+        "timeout": 5,
+        "cwd": str(Path.cwd()),
+        "tool": "echo",
+    }
+
+
+async def test_before_tool_call_can_rewrite_arguments():
+    seen: dict = {}
+
+    async def echo(name, args, abort, on_update=None):
+        seen["args"] = args
+        return ToolResultAgent(content=[TextContent(text="ok")])
+
+    def guard(tool_call, args, tool, context):
+        return {"args": {"path": "/normalized"}}
+
+    stream = ScriptedStream(
+        [
+            [call_tool("t1", "read", {"path": "~/x"}), finish("tool_use")],
+            [say("ok"), finish("stop")],
+        ]
+    )
+    state = AgentState()
+    await run(
+        "go",
+        state,
+        make_config(stream, tools=[make_tool("read", echo)], before_tool_call=guard),
+    )
+    assert seen["args"] == {"path": "/normalized"}
+    # The transcript keeps what the model actually asked for.
+    assistant = state.messages[1]
+    assert assistant.content[0].arguments == {"path": "~/x"}
+
+
+async def test_rewritten_arguments_are_revalidated_against_the_schema():
+    executed = []
+
+    async def need(name, args, abort, on_update=None):
+        executed.append(args)
+        return ToolResultAgent(content=[TextContent(text="ok")])
+
+    tool = AgentTool(
+        name="need",
+        description="needs a path",
+        parameters={
+            "type": "object",
+            "required": ["path"],
+            "properties": {"path": {"type": "string"}},
+        },
+        execute=need,
+        approval="read",
+    )
+
+    def guard(tool_call, args, tool_, context):
+        return {"args": {}}  # drops the required field
+
+    stream = ScriptedStream(
+        [
+            [call_tool("t1", "need", {"path": "a"}), finish("tool_use")],
+            [say("ok"), finish("stop")],
+        ]
+    )
+    events = await run(
+        "go", AgentState(), make_config(stream, tools=[tool], before_tool_call=guard)
+    )
+    assert executed == []
+    end = events[types_of(events).index("tool_execution_end")]
+    assert end.is_error is True
+    assert end.result.error_kind == "invalid_arguments"
+
+
+async def test_after_tool_call_receives_the_tool_context():
+    seen: dict = {}
+
+    async def echo(name, args, abort, on_update=None):
+        return ToolResultAgent(content=[TextContent(text="ok")])
+
+    def after(tool_call, result, context):
+        seen["call_id"] = context.call_id
+        seen["tool"] = context.tool.name
+
+    stream = ScriptedStream(
+        [
+            [call_tool("t1", "echo", {}), finish("tool_use")],
+            [say("ok"), finish("stop")],
+        ]
+    )
+    await run(
+        "go",
+        AgentState(),
+        make_config(stream, tools=[make_tool("echo", echo)], after_tool_call=after),
+    )
+    assert seen == {"call_id": "t1", "tool": "echo"}
