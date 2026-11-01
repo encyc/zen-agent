@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import shutil
 import sys
+import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
@@ -56,6 +58,7 @@ from zenagent.cli.render import (
     aggregate_usage,
     render_diff,
     status_line,
+    tool_progress_line,
     tool_result_line,
 )
 from zenagent.cli.theme import (
@@ -103,6 +106,9 @@ InputFn = Callable[[], Awaitable[str]]
 PrintFn = Callable[..., None]
 
 THINKING_LEVELS = ("off", "low", "medium", "high", "max")
+
+#: Minimum seconds between two in-place progress repaints of a running tool.
+_PROGRESS_INTERVAL_S = 0.2
 
 
 def split_input(line: str) -> tuple[str, str]:
@@ -498,14 +504,22 @@ class _EventPrinter:
         self.print = print_fn
         self.theme = theme or DEFAULT_THEME
         self._line_open = False
+        #: A tool progress line is currently painted on the terminal.
+        self._progress_open = False
+        self._last_progress_at = 0.0
 
     def __call__(self, event: AgentEvent) -> None:
         if event.type == "message_start":
+            self._clear_progress()
             self._line_open = False
+            return
+        if event.type == "tool_execution_update":
+            self._progress(event)
             return
         if event.type == "message_update" and event.assistant_event is not None:
             assistant_event = event.assistant_event
             if assistant_event.type == "text_delta" and assistant_event.delta:
+                self._clear_progress()
                 self.print(assistant_event.delta, end="")
                 if self.print is print:
                     # stdout is line-buffered on a TTY (block-buffered on a
@@ -518,6 +532,7 @@ class _EventPrinter:
                 self.console.print("[grey50]· thought[/grey50]", highlight=False)
             return
         if event.type == "tool_execution_end":
+            self._clear_progress()
             self._close_line()
             line = tool_result_line(
                 event.tool_name or "?", event.result, event.duration_ms
@@ -531,7 +546,37 @@ class _EventPrinter:
                 self.print(line)
             return
         if event.type == "message_end":
+            self._clear_progress()
             self._close_line()
+
+    def _progress(self, event: AgentEvent) -> None:
+        """Paint a running tool's latest output in place (TTY only).
+
+        The tool layer already throttles updates (bash: 0.5 s / 4 KB); the
+        printer adds a small guard so an MCP server streaming a line per token
+        cannot make the REPL redraw on every event. Pipes and non-TTY runs get
+        nothing — a carriage-return progress line would corrupt captured text.
+        """
+        if self.console is None or event.partial_result is None:
+            return
+        now = time.monotonic()
+        if now - self._last_progress_at < _PROGRESS_INTERVAL_S:
+            return
+        line = tool_progress_line(event.tool_name or "?", event.partial_result)
+        width = max(20, shutil.get_terminal_size((80, 24)).columns - 1)
+        if len(line) > width:
+            line = line[: width - 1] + "…"
+        sys.stdout.write("\r" + line + "\x1b[K")
+        sys.stdout.flush()
+        self._progress_open = True
+        self._last_progress_at = now
+
+    def _clear_progress(self) -> None:
+        if not self._progress_open:
+            return
+        sys.stdout.write("\r\x1b[K")
+        sys.stdout.flush()
+        self._progress_open = False
 
     def _close_line(self) -> None:
         if self._line_open:

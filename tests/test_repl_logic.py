@@ -868,3 +868,53 @@ async def test_slash_restore_without_a_journal_explains():
     result = await handle_slash(None, "restore", "", print_fn=lines.append)
     assert result is None
     assert lines and "unavailable" in lines[0].lower()
+
+
+def test_repl_paints_tool_progress_in_place_on_a_tty(capsys):
+    """A running bash call must show its latest line without spamming the log."""
+    from rich.console import Console
+
+    from zenagent.agent.loop import ToolResultAgent
+    from zenagent.events import AgentEvent
+
+    printer = repl_module._EventPrinter(
+        console=Console(force_terminal=True), print_fn=lambda *args, **kwargs: None
+    )
+    partial = ToolResultAgent(content=[TextContent(text="building\nstep 1 of 3")])
+    update = AgentEvent(
+        type="tool_execution_update", tool_name="bash", partial_result=partial
+    )
+    printer(update)
+    printer(update)  # inside the throttle window: must not repaint
+    out = capsys.readouterr().out
+    assert out.count("\r") == 1
+    assert "⚙ bash" in out and "step 1 of 3" in out
+    assert printer._progress_open is True
+
+    printer(
+        AgentEvent(
+            type="tool_execution_end",
+            tool_name="bash",
+            result=ToolResultAgent(content=[TextContent(text="done")]),
+            duration_ms=5,
+        )
+    )
+    out = capsys.readouterr().out
+    assert "\x1b[K" in out  # the progress line was cleared before the result
+    assert printer._progress_open is False
+
+
+def test_repl_does_not_paint_progress_without_a_terminal(capsys):
+    """Pipes/redirected runs must not get carriage-return noise."""
+    from zenagent.agent.loop import ToolResultAgent
+    from zenagent.events import AgentEvent
+
+    printer = repl_module._EventPrinter(console=None)
+    printer(
+        AgentEvent(
+            type="tool_execution_update",
+            tool_name="bash",
+            partial_result=ToolResultAgent(content=[TextContent(text="step")]),
+        )
+    )
+    assert capsys.readouterr().out == ""

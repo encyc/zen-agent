@@ -155,6 +155,9 @@ class _PlainOutput:
             self.out.write(f"[{event.tool_name}: {status}]\n")
             self.out.flush()
             return
+        # ``tool_execution_update`` (streamed partial output) is deliberately
+        # ignored here: headless output is one scriptable transcript, and
+        # in-place progress lines would corrupt a pipe/redirected capture.
         if event.type == "message_end" and isinstance(event.message, AssistantMessage):
             self._newline_if_needed()
             self.out.flush()

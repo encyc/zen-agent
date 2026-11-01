@@ -14,12 +14,15 @@ from collections.abc import Awaitable, Callable
 
 from zenagent.agent import Agent
 from zenagent.events import AgentEvent
-from zenagent.types import AssistantMessage
+from zenagent.types import AssistantMessage, TextContent
 
 __all__ = ["RpcServer", "main", "serialize_event"]
 
 ReadLine = Callable[[], Awaitable[str | None]]
 WriteLine = Callable[[str], None]
+
+#: How much of a running tool's streamed output an RPC event may carry.
+_PARTIAL_RESULT_CHARS = 4000
 
 
 def serialize_event(event: AgentEvent) -> dict:
@@ -36,6 +39,18 @@ def serialize_event(event: AgentEvent) -> dict:
         payload["assistant_event"] = {"type": assistant_event.type}
         if assistant_event.delta:
             payload["assistant_event"]["delta"] = assistant_event.delta
+    partial = getattr(event, "partial_result", None)
+    if partial is not None:
+        # A running tool's streamed output (bash progress, subagent text). The
+        # tail is what an embedding UI can render; the full result follows in
+        # ``tool_execution_end``. Never let one update carry unbounded bytes.
+        text = "".join(
+            block.text
+            for block in getattr(partial, "content", [])
+            if isinstance(block, TextContent)
+        )
+        if text:
+            payload["partial_result"] = text[-_PARTIAL_RESULT_CHARS:]
     return payload
 
 

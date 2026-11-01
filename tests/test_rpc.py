@@ -122,3 +122,22 @@ async def test_eof_ends_the_loop():
     code, messages = await run([])
     assert code == 0
     assert messages == []
+
+
+def test_serialize_event_carries_bounded_partial_tool_output():
+    from zenagent.agent.loop import ToolResultAgent
+    from zenagent.cli.rpc import serialize_event
+    from zenagent.events import AgentEvent
+
+    partial = ToolResultAgent(content=[TextContent(text="x" * 10_000)])
+    payload = serialize_event(
+        AgentEvent(
+            type="tool_execution_update", tool_name="bash", partial_result=partial
+        )
+    )
+    assert payload["type"] == "tool_execution_update"
+    assert payload["tool_name"] == "bash"
+    assert len(payload["partial_result"]) == 4000
+
+    # a plain event stays unchanged: no stray key
+    assert "partial_result" not in serialize_event(AgentEvent(type="turn_start"))
