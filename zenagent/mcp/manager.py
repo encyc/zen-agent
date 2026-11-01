@@ -16,7 +16,13 @@ import time
 from dataclasses import dataclass, field
 
 from zenagent.agent.loop import AgentTool, ToolResultAgent
-from zenagent.mcp.client import McpCallResult, McpClient, McpError, McpTool
+from zenagent.mcp.client import (
+    McpCallResult,
+    McpClient,
+    McpError,
+    McpTool,
+    McpTransportError,
+)
 from zenagent.mcp.config import McpServerConfig, make_transport
 from zenagent.types import ImageContent, TextContent
 
@@ -65,6 +71,7 @@ class McpManager:
         self._servers = {name: _Server(config=config) for name, config in configs.items()}
         self._timeout_s = timeout_s
         self._retry_interval_s = retry_interval_s
+        self._closed = False
 
     # -- introspection ------------------------------------------------------
 
@@ -127,6 +134,7 @@ class McpManager:
         return before != [tool.name for tool in self.tool_defs()]
 
     async def close(self) -> None:
+        self._closed = True
         for server in self._servers.values():
             client, server.client = server.client, None
             if client is not None:
@@ -193,7 +201,29 @@ class McpManager:
                 f"MCP server {server!r} is not connected"
                 + (f" ({state.error})" if state.error else "")
             )
-        return await state.client.call_tool(tool, arguments, timeout_s=self._timeout_s)
+        try:
+            return await state.client.call_tool(
+                tool, arguments, timeout_s=self._timeout_s
+            )
+        except McpTransportError as first:
+            # The wire died mid-call (server crashed, pipe closed, bad HTTP).
+            # Reconnect once and replay once; a JSON-RPC error answer or a
+            # timeout is a real outcome and must never be retried.
+            if self._closed:
+                raise
+            client, state.client = state.client, None
+            if client is not None:
+                with contextlib.suppress(Exception):
+                    await client.close()
+            warning = await self._connect(server)
+            if warning or state.client is None:
+                raise McpError(
+                    f"MCP server {server!r} lost its connection and could not "
+                    f"reconnect: {first}"
+                ) from first
+            return await state.client.call_tool(
+                tool, arguments, timeout_s=self._timeout_s
+            )
 
 
 def _to_result(result: McpCallResult) -> ToolResultAgent:

@@ -32,6 +32,7 @@ __all__ = [
     "McpError",
     "McpTimeout",
     "McpTool",
+    "McpTransportError",
     "StdioTransport",
 ]
 
@@ -47,6 +48,15 @@ class McpError(Exception):
 
 class McpTimeout(McpError):
     """The server did not answer in time."""
+
+
+class McpTransportError(McpError):
+    """The connection broke: closed pipe, dead process, bad HTTP, junk bytes.
+
+    Kept apart from :class:`McpError` so the manager can tell "the wire died
+    mid-call" (safe to reconnect and retry once) from "the server answered with
+    a JSON-RPC error" (a real business answer, never retried).
+    """
 
 
 @dataclass
@@ -181,12 +191,12 @@ class StdioTransport:
     def _fail_pending(self, reason: str) -> None:
         for future in self._pending.values():
             if not future.done():
-                future.set_exception(McpError(reason))
+                future.set_exception(McpTransportError(reason))
         self._pending.clear()
 
     async def request(self, method: str, params: dict | None, timeout_s: float) -> dict:
         if self._closed or self._process is None or self._process.stdin is None:
-            raise McpError(self._read_error or "transport is closed")
+            raise McpTransportError(self._read_error or "transport is closed")
         self._next_id += 1
         request_id = self._next_id
         loop = asyncio.get_running_loop()
@@ -200,7 +210,7 @@ class StdioTransport:
             await self._process.stdin.drain()
         except (BrokenPipeError, ConnectionResetError) as exc:
             self._pending.pop(request_id, None)
-            raise McpError(f"cannot write to MCP server: {exc}") from exc
+            raise McpTransportError(f"cannot write to MCP server: {exc}") from exc
         try:
             return await asyncio.wait_for(future, timeout_s)
         except TimeoutError as exc:
@@ -283,7 +293,7 @@ class HttpTransport:
 
     async def request(self, method: str, params: dict | None, timeout_s: float) -> dict:
         if self._closed:
-            raise McpError("transport is closed")
+            raise McpTransportError("transport is closed")
         if self._client is None:
             await self.start()
         assert self._client is not None
@@ -298,7 +308,7 @@ class HttpTransport:
         except httpx.TimeoutException as exc:
             raise McpTimeout(f"{method} timed out after {timeout_s}s") from exc
         except httpx.HTTPError as exc:
-            raise McpError(f"http transport error: {exc}") from exc
+            raise McpTransportError(f"http transport error: {exc}") from exc
 
         session_id = response.headers.get("mcp-session-id")
         if session_id:
@@ -331,11 +341,11 @@ class HttpTransport:
                     continue
                 if message.get("id") == request_id:
                     return message
-            raise McpError("SSE response contained no matching JSON-RPC message")
+            raise McpTransportError("SSE response contained no matching JSON-RPC message")
         try:
             return response.json()
         except ValueError as exc:
-            raise McpError("response was not valid JSON") from exc
+            raise McpTransportError("response was not valid JSON") from exc
 
     async def notify(self, method: str, params: dict | None = None) -> None:
         if self._closed:

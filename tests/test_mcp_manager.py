@@ -12,6 +12,7 @@ from zenagent.types import ImageContent, TextContent
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 ECHO = FIXTURES / "mcp_echo_server.py"
 FLAKY = FIXTURES / "mcp_flaky_server.py"
+CRASH_ONCE = FIXTURES / "mcp_crash_once_server.py"
 
 
 def stdio(name: str, script: Path, env: dict[str, str] | None = None) -> McpServerConfig:
@@ -152,3 +153,61 @@ def test_tool_defs_translate_the_read_only_annotation_into_an_approval_tier():
 
     assert read_tool.approval == "read"
     assert write_tool.approval == "write"
+
+
+async def test_transport_failure_reconnects_and_retries_once(tmp_path):
+    """A server that dies mid-call must be reconnected and the call replayed."""
+    marker = tmp_path / "crashed"
+    manager = McpManager(
+        {"flaky": stdio("flaky", CRASH_ONCE, {"MCP_CRASH_MARKER": str(marker)})}
+    )
+    await manager.start()
+    try:
+        result = await manager.call("flaky", "echo", {"text": "hi"})
+        assert marker.exists(), "the first call should have killed the server"
+        assert result.is_error is False
+        assert result.content[0]["text"] == "echo:hi"
+        assert manager.status()[0].state == "connected"
+        # the replacement connection stays usable for later calls
+        again = await manager.call("flaky", "echo", {"text": "again"})
+        assert again.content[0]["text"] == "echo:again"
+    finally:
+        await manager.close()
+
+
+async def test_json_rpc_errors_are_not_retried():
+    """A JSON-RPC error answer is a real result: keep the connection, no replay."""
+    from zenagent.mcp.client import McpError
+
+    manager = McpManager({"echo": stdio("echo", ECHO)})
+    await manager.start()
+    try:
+        client = manager._servers["echo"].client
+        with pytest.raises(McpError, match="rpc error"):
+            await manager.call("echo", "no_such_tool", {})
+        assert manager._servers["echo"].client is client
+    finally:
+        await manager.close()
+
+
+async def test_retry_surfaces_a_readable_error_when_reconnect_fails(
+    tmp_path, monkeypatch
+):
+    """If the reconnect itself fails, the caller gets one readable error."""
+    from zenagent.mcp.client import McpError
+
+    marker = tmp_path / "crashed"
+    manager = McpManager(
+        {"flaky": stdio("flaky", CRASH_ONCE, {"MCP_CRASH_MARKER": str(marker)})}
+    )
+    await manager.start()
+
+    async def refuse(_name: str) -> str:
+        return "flaky: reconnect refused"
+
+    monkeypatch.setattr(manager, "_connect", refuse)
+    try:
+        with pytest.raises(McpError, match="could not reconnect"):
+            await manager.call("flaky", "echo", {"text": "hi"})
+    finally:
+        await manager.close()
