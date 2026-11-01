@@ -232,3 +232,9 @@ def test_preview_diff_truncates(tmp_path):
 
 def test_preview_diff_ignores_other_tools():
     assert preview_diff("bash", {"command": "ls"}) == []
+
+
+def test_preview_diff_skips_large_files(tmp_path):
+    target = tmp_path / "big.txt"
+    target.write_bytes(b"x" * (300 * 1024))
+    assert preview_diff("write_file", {"path": str(target), "content": "y"}) == []

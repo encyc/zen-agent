@@ -82,13 +82,16 @@ _PROTECTED_NAME_PATTERNS = (
 #: Characters that make a shell expand a path before ``rm`` ever sees it.
 _GLOB_CHARS = frozenset("*?[")
 
+#: Prefixes that do not change which command runs in a segment (``time rm …``).
+_SHELL_WRAPPERS = frozenset({"sudo", "time", "nice", "env", "command", "nohup"})
+
 #: ``(pattern, reason)`` for commands that are confirmable-destructive.
 #: Deliberately narrow and table-driven: everyday commands must never match.
 _DESTRUCTIVE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (
         re.compile(
             r"\b(?:curl|wget)\b[^;&|]*\|\s*(?:sudo\s+)?"
-            r"(?:sh|bash|zsh|python[\d.]*|perl|ruby)\b"
+            r"(?:[\w./-]*/)?(?:sh|bash|zsh|python[\d.]*|perl|ruby)\b"
         ),
         "download piped into an interpreter",
     ),
@@ -101,8 +104,8 @@ _DESTRUCTIVE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
         "git clean removes untracked files",
     ),
     (
-        re.compile(r"\bgit\s+checkout\s+--\s+\.(?:\s|$)"),
-        "git checkout -- . discards uncommitted changes",
+        re.compile(r"\bgit\s+checkout\s+(?:--\s+)?\.{1,2}/?(?:\s|$)"),
+        "git checkout . discards uncommitted changes",
     ),
     (
         re.compile(r"\bgit\s+restore\s+\.(?:\s|$)"),
@@ -113,7 +116,9 @@ _DESTRUCTIVE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
         "git stash drop/clear discards stashed work",
     ),
     (
-        re.compile(r"\bgit\s+push\b[^;&|]*\s--force(?!-with-lease)\b"),
+        re.compile(
+            r"\bgit\s+push\b[^;&|]*\s(?:-f\b|--force(?!-with-lease)\b)"
+        ),
         "git push --force rewrites remote history",
     ),
     (
@@ -121,7 +126,11 @@ _DESTRUCTIVE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
         "find deleting matched files",
     ),
     (re.compile(r"\btruncate\b[^;&|]*\s-s\s+0\b"), "truncate -s 0 empties a file"),
-    (re.compile(r"\bshred\b"), "shred overwrites a file beyond recovery"),
+    (
+        # Command position only: "cat shred.txt" is a normal read.
+        re.compile(r"(?:^|[;&|]\s*)shred\b"),
+        "shred overwrites a file beyond recovery",
+    ),
     (
         re.compile(r"\bdd\b[^;&|]*\bof\s*=\s*(?!/dev/)"),
         "dd writing over a file",
@@ -283,8 +292,16 @@ def _recursive_rm_reason(command: str, policy: GuardPolicy) -> str | None:
     allowed = (cwd, workspace, *(_resolved(path) for path in policy.allow_outside))
     for segment in re.split(r"[;&|\n]", command):
         tokens = segment.split()
-        if tokens and tokens[0].lower() == "sudo":
-            tokens = tokens[1:]
+        # Strip prefixes that do not change which command runs (sudo/time/nice/env)
+        # and leading ``VAR=value`` assignments.
+        while tokens:
+            head = tokens[0].lower()
+            if head in _SHELL_WRAPPERS or (
+                "=" in tokens[0] and not tokens[0].startswith("/")
+            ):
+                tokens = tokens[1:]
+                continue
+            break
         if not tokens or tokens[0].lower() != "rm":
             continue
         flags = [token for token in tokens[1:] if token.startswith("-")]

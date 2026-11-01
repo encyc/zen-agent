@@ -312,6 +312,10 @@ def _clip(text: str, limit: int) -> str:
     return clip_cells(flat, limit)
 
 
+#: Above this size a diff preview is noise (and reading it would stall the UI).
+_MAX_PREVIEW_BYTES = 256 * 1024
+
+
 def preview_diff(
     tool_name: str, arguments: dict, *, max_lines: int = 12
 ) -> list[str]:
@@ -327,6 +331,8 @@ def preview_diff(
     target = Path(raw_path).expanduser()
     try:
         if not target.is_file():
+            return []
+        if target.stat().st_size > _MAX_PREVIEW_BYTES:
             return []
         data = target.read_bytes()
     except OSError:

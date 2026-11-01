@@ -302,3 +302,21 @@ async def test_attach_journal_with_two_arg_hook(tmp_path):
 
 def test_project_backups_dir(tmp_path):
     assert project.project_backups_dir(tmp_path) == project.project_dir(tmp_path) / "backups"
+
+
+async def test_restore_survives_a_new_session_file(tmp_path):
+    backups = tmp_path / "backups"
+    journal = SnapshotJournal(backups, BackupPolicy(), session="s1")
+    _start(journal)
+    path = tmp_path / "a.txt"
+    path.write_text("old")
+    await journal.after_tool_call(await _capture(journal, path), _ok())
+
+    # /undo, /compact and /fork all point the runtime at a fresh session file;
+    # the project-scoped log must still see the earlier run.
+    rewritten = SnapshotJournal(backups, BackupPolicy(), session="s2")
+    runs = rewritten.runs()
+    assert runs and runs[0].session == "s1"
+    report = rewritten.restore(runs[0].run)
+    assert report.restored == [str(path)]
+    assert path.read_text() == "old"
