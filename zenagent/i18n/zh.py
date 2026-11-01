@@ -28,6 +28,9 @@ CATALOG: dict[str, str] = {
     "tui.queue.hint": "└ alt+↑ 取回 · ctrl+x 清空 · 点击排队行插话",
     "tui.queue.more": "… 还有 {n} 条",
     "tui.queue.images": "图 {n}",
+    "tui.queue.promoted": "已转为插话，下一步立即送达",
+    "tui.queue.blocked_images": "带图片的排队消息不能插话，本轮结束后发送",
+    "tui.queue.cleared": "已清空待发消息",
     # TUI：欢迎 / 工作条
     "tui.welcome.subtitle": "v{version} · Python agent 循环",
     "tui.welcome.hints": "/ 命令  ·  ctrl+b 面板  ·  ctrl+d 退出",

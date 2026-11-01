@@ -315,6 +315,7 @@ class ZenAgentApp(App):
         self.command_hints = self.query_one(CommandHints)
         self.query_one(WorkStrip).set_handler(self._open_sidebar_from_strip)
         self.query_one(TodoHud).set_handler(self.action_show_todo_list)
+        self.query_one(PendingBand).set_handler(self._promote_pending)
         self.query_one(Sidebar).set_handlers(
             on_todo=self.action_show_todo_list,
             on_subagent=self.enter_subagent_view,
@@ -437,6 +438,10 @@ class ZenAgentApp(App):
         width = self._band_width()
         for band in self.query(StatusBand):
             band.update_status(status, width)
+        # Pending messages sit between the status band and the composer; the
+        # band hides itself while both lanes are empty.
+        for pending_band in self.query(PendingBand):
+            pending_band.set_pending(status.pending, width)
         # Todo state rides the same snapshot as everything else in the dock;
         # the row hides itself while the session has no list.
         for hud in self.query(TodoHud):
@@ -1520,15 +1525,32 @@ class ZenAgentApp(App):
         for row in rows:
             row.set_expanded(expand)
 
+    def _promote_pending(self, pending_id: int) -> None:
+        """Click / Ctrl+S on a queued message: move it to the steering lane."""
+        result = self.chat.promote(pending_id)
+        if result == "ok":
+            self.notify(t("tui.queue.promoted"), timeout=2)
+        elif result == "blocked_images":
+            self.notify(t("tui.queue.blocked_images"), timeout=2)
+        self._refresh_status()
+
     def action_steer(self) -> None:
         prompt = self.query_one(PromptInput)
         text = prompt.text.strip()
-        if text and self.chat.status.running:
-            prompt.clear()
-            self.chat.steer(text)
+        if text:
+            if self.chat.status.running:
+                prompt.clear()
+                self.chat.steer(text)
+            return
+        queued = [item for item in self.chat.status.pending if item.lane == "queue"]
+        if queued:
+            self._promote_pending(queued[-1].id)
 
     def action_clear_queue(self) -> None:
-        self.chat.clear_follow_ups()
+        cleared = self.chat.clear_pending()
+        if cleared:
+            self.notify(t("tui.queue.cleared"), timeout=2)
+        self._refresh_status()
 
     def action_toggle_tools(self) -> None:
         """Batch expand/collapse; single cards keep Enter/space (omp parity)."""

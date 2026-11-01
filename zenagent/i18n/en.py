@@ -29,6 +29,9 @@ CATALOG: dict[str, str] = {
     "tui.queue.hint": "└ alt+↑ edit · ctrl+x clear · click a queued row to steer",
     "tui.queue.more": "… {n} more",
     "tui.queue.images": "img {n}",
+    "tui.queue.promoted": "Now steering; delivered at the next step",
+    "tui.queue.blocked_images": "A queued message with images can't steer; it is sent after this run",
+    "tui.queue.cleared": "Pending messages cleared",
     # TUI: welcome / work chrome
     "tui.welcome.subtitle": "v{version} · python agent loop",
     "tui.welcome.hints": "/ commands  ·  ctrl+b info  ·  ctrl+d quit",
