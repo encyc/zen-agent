@@ -18,6 +18,7 @@ Three concerns live here so no adapter reinvents them:
 """
 
 import asyncio
+import json
 from collections.abc import AsyncIterable, AsyncIterator
 
 import httpx
@@ -36,6 +37,9 @@ __all__ = [
 
 #: Statuses worth retrying: rate limiting plus transient server errors.
 RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
+
+#: Cap for provider error text folded into an exception message.
+_ERROR_DETAIL_CHARS = 500
 
 
 def _process_line(line: str, data_lines: list[str]) -> str:
@@ -165,6 +169,57 @@ def _backoff_delay(
     return min(base_s * 2 ** (attempt - 1), cap_s)
 
 
+def _error_message(payload: object) -> str:
+    """The human-readable message inside a provider error payload."""
+    if not isinstance(payload, dict):
+        return ""
+    error = payload.get("error")
+    if isinstance(error, dict):
+        message = error.get("message") or error.get("detail")
+        if isinstance(message, str) and message:
+            return message
+    elif isinstance(error, str) and error:
+        return error
+    for key in ("message", "detail"):
+        value = payload.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return ""
+
+
+async def _status_error(response: httpx.Response) -> httpx.HTTPStatusError:
+    """The status error for a failed response, carrying the provider's reason.
+
+    A provider explains a 4xx in the response body (DeepSeek answers a bad
+    assistant message with ``400 Invalid assistant message: content or
+    tool_calls must be set``); the bare status line alone is undebuggable, so
+    the body's message is appended when it can be read. Reading is
+    best-effort: an unreadable or empty body leaves the stock httpx message
+    untouched. The response is closed either way.
+    """
+    detail = ""
+    try:
+        body = await response.aread()
+    except Exception:  # noqa: BLE001 - diagnostics must never mask the status error
+        body = b""
+    if body:
+        text = body.decode("utf-8", errors="replace").strip()
+        try:
+            detail = _error_message(json.loads(text))
+        except ValueError:
+            detail = text
+        detail = " ".join(detail.split())[:_ERROR_DETAIL_CHARS]
+    await response.aclose()
+    kind = "Server" if response.status_code >= 500 else "Client"
+    message = (
+        f"{kind} error '{response.status_code} {response.reason_phrase}' "
+        f"for url '{response.url}'"
+    )
+    if detail:
+        message = f"{message}: {detail}"
+    return httpx.HTTPStatusError(message, request=response.request, response=response)
+
+
 async def post_stream(
     client: httpx.AsyncClient,
     url: str,
@@ -184,8 +239,11 @@ async def post_stream(
     (seconds form) overrides the exponential backoff when present, capped at
     ``backoff_cap_s``. Non-retryable HTTP error statuses raise
     ``httpx.HTTPStatusError`` immediately; exhausted retries raise the last
-    error. An aborted ``abort`` token raises :class:`~zenagent.events.Aborted`
-    before any attempt, and interrupts a backoff wait.
+    error. Both carry the provider's own error message from the response body
+    when one can be read (see :func:`_status_error`), because a bare
+    ``400 Bad Request`` line cannot be debugged. An aborted ``abort`` token
+    raises :class:`~zenagent.events.Aborted` before any attempt, and
+    interrupts a backoff wait.
     """
     for attempt in range(1, max_attempts + 1):
         if abort is not None and abort.aborted:
@@ -202,17 +260,18 @@ async def post_stream(
             continue
         if should_retry(response.status_code, None):
             retry_after = _retry_after_seconds(response.headers)
+            if attempt >= max_attempts:  # exhausted: surface the last status error
+                error = await _status_error(response)
+                raise error
             await response.aclose()
-            if attempt >= max_attempts:
-                response.raise_for_status()  # exhausted: surface the last status error
             await _sleep(
                 _backoff_delay(attempt, retry_after, backoff_base_s, backoff_cap_s),
                 abort,
             )
             continue
         if not response.is_success:
-            await response.aclose()
-            response.raise_for_status()
+            error = await _status_error(response)
+            raise error
         return response
     raise AssertionError("unreachable: post_stream must return or raise inside the loop")
 

@@ -202,6 +202,42 @@ async def test_post_stream_400_raises_status_error_without_retry():
             )
     assert exc_info.value.response.status_code == 400
     assert len(calls) == 1  # client errors are never retried
+    assert "bad request" in str(exc_info.value)  # provider reason is carried
+
+
+async def test_post_stream_400_carries_the_provider_error_message():
+    """A bare ``400 Bad Request`` line is undebuggable; the body explains it."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            400,
+            json={
+                "error": {
+                    "message": "Invalid assistant message: content or "
+                    "tool_calls must be set",
+                    "type": "invalid_request_error",
+                }
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+            await post_stream(client, URL, headers={}, body={}, max_attempts=1)
+    message = str(exc_info.value)
+    assert "Client error '400 Bad Request'" in message
+    assert "Invalid assistant message: content or tool_calls must be set" in message
+
+
+async def test_post_stream_400_plain_text_body_is_carried():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(422, text="model not found\nsecond line")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+            await post_stream(client, URL, headers={}, body={}, max_attempts=1)
+    message = str(exc_info.value)
+    assert "422" in message
+    assert "model not found second line" in message
 
 
 async def test_post_stream_exhausted_retries_raises_last_status_error(monkeypatch):

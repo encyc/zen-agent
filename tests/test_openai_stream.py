@@ -25,10 +25,12 @@ from zenagent.providers.openai_completions import (
 )
 from zenagent.providers.transport import iter_sse_data
 from zenagent.types import (
+    AssistantMessage,
     Cost,
     SystemMessage,
     TextContent,
     ThinkingContent,
+    Usage,
     UserMessage,
 )
 
@@ -444,6 +446,58 @@ async def test_stream_wiring_via_mock_transport(monkeypatch):
     assert events[-1].type == "done"
     assert events[-1].partial.usage.output == 18
     assert events[-1].partial.stop_reason == "stop"
+
+
+async def test_stream_drops_turns_no_provider_accepts(monkeypatch):
+    """Failed/aborted turns kept for the UI must not reach the wire.
+
+    An aborted thinking-only turn serializes to ``content: null`` without
+    tool_calls, which strict endpoints reject with a 400 that then poisons
+    every later request; the request view drops it instead.
+    """
+    fixture = (FIXTURES / "zai-glm-5.3-text+thinking.txt").read_text(encoding="utf-8")
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["json"] = json.loads(request.content)
+        return httpx.Response(200, content=fixture.encode())
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    monkeypatch.setattr(oc, "default_client", lambda: client)
+
+    def assistant(content, stop_reason, error_message=None):
+        return AssistantMessage(
+            content=content,
+            provider="zai-coding-cn",
+            model="glm-5.3",
+            usage=Usage(),
+            stop_reason=stop_reason,
+            timestamp=3,
+            error_message=error_message,
+        )
+
+    messages = [
+        SystemMessage(content="sys", timestamp=0),
+        UserMessage(content="first", timestamp=1),
+        assistant([ThinkingContent(thinking="partial")], "aborted"),
+        UserMessage(content="second", timestamp=4),
+        assistant([], "error", error_message="HTTPStatusError: 400 Bad Request"),
+        UserMessage(content="third", timestamp=5),
+    ]
+    events = [
+        event
+        async for event in stream(
+            _model(), messages, [], StreamOptions(api_key="sk-test")
+        )
+    ]
+
+    assert events[-1].type == "done"
+    assert captured["json"]["messages"] == [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "first"},
+        {"role": "user", "content": "second"},
+        {"role": "user", "content": "third"},
+    ]
 
 
 # ---------------------------------------------------------------------------

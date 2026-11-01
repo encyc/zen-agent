@@ -31,6 +31,7 @@ import httpx
 from zenagent.events import AbortToken, AssistantEvent
 from zenagent.providers.catalog import Model
 from zenagent.providers.compat import CompatFlags, normalize_thinking
+from zenagent.providers.history import replayable
 from zenagent.providers.limits import fit_stream_options
 from zenagent.providers.transport import (
     default_client,
@@ -99,11 +100,15 @@ def _user_content(content: str | list) -> str | list[dict]:
 def _assistant_request_message(message: AssistantMessage, compat: CompatFlags) -> dict:
     """Split assistant content blocks into text / tool_calls / reasoning.
 
-    ``content`` is the newline-joined text (None when the turn carries no
-    text — e.g. thinking- or tool-call-only turns). Tool arguments are
-    serialized to a JSON string; a ToolCall whose arguments failed to
-    parse degrades to ``"{}"`` so the request stays well-formed. DeepSeek
-    reasoner additionally requires the thinking text echoed back as
+    ``content`` is the newline-joined text; it is ``None`` only when the turn
+    carries tool calls and no text (the OpenAI shape). A turn with neither
+    text nor tool calls sends ``""``: a strict endpoint rejects
+    ``content: null`` there (DeepSeek: ``400 Invalid assistant message:
+    content or tool_calls must be set``), and a thinking-only turn is still a
+    legal assistant turn once its content is a string. Tool arguments are
+    serialized to a JSON string; a ToolCall whose arguments failed to parse
+    degrades to ``"{}"`` so the request stays well-formed. DeepSeek reasoner
+    additionally requires the thinking text echoed back as
     ``reasoning_content`` on assistant turns.
     """
     texts = [b.text for b in message.content if isinstance(b, TextContent)]
@@ -112,7 +117,9 @@ def _assistant_request_message(message: AssistantMessage, compat: CompatFlags) -
 
     request: dict = {
         "role": "assistant",
-        "content": "\n".join(texts) if texts else None,
+        # content: null is only legal next to tool_calls; otherwise "" keeps a
+        # thinking-only or empty turn acceptable to strict providers.
+        "content": "\n".join(texts) if texts or not calls else None,
     }
     if calls:
         request["tool_calls"] = [
@@ -608,7 +615,12 @@ async def stream(
     ``error`` (reason "error"/"aborted") event is the final AssistantMessage
     with usage and stop_reason complete. A non-empty ``options.session_id``
     is sent as the gateway's ``x-opencode-session`` header.
+
+    The transcript is projected through ``replayable`` first: failed/aborted
+    turns and dangling tool calls that the UI keeps for the user must never
+    reach a provider.
     """
+    messages = replayable(messages)
     options = fit_stream_options(model, messages, options, tools)
     params = build_params(model, tools, options, model.compat)
     params["messages"] = to_request_messages(messages, model.compat)

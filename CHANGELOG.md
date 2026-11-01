@@ -38,10 +38,28 @@ matches the release tag; older history is in the repository tags and commits.
 - Headless runs now write snapshots unless `[backup] enabled = false`.
 - `/undo` still only rewinds the transcript; `/restore` is the file-level counterpart.
 
+### Fixed
+
+- **A provider 400 no longer poisons the whole session.** An aborted turn that produced only
+  thinking (or a failed turn with empty content) was stored as an assistant message with
+  `content: null` and no tool calls. Strict chat-completions endpoints reject that — DeepSeek
+  answers `400 Invalid assistant message: content or tool_calls must be set` — and because the
+  failed turn stayed in the transcript, every later turn replayed it and failed the same way:
+  the session was permanently broken (GLM tolerated it, which made the failure look
+  provider-specific). Requests now go through a replay-safe transcript view
+  (`zenagent/providers/history.py`) that drops failed/aborted turns with no text, partial
+  thinking, and tool calls whose results are missing; a text-less assistant turn serializes as
+  `content: ""` instead of `null`.
+- **Provider errors are debuggable.** `post_stream` now reads the error body and appends the
+  provider's own message to the raised `HTTPStatusError` (e.g. the DeepSeek reason above),
+  instead of surfacing a bare `400 Bad Request` line.
+
 ### Tests
 
 Offline suite covers the risk matrix, journal/restore semantics, config layering, approval UI and
-command wiring; `bash scripts/check.sh` is the gate.
+command wiring; `bash scripts/check.sh` is the gate. Replay-safety projection, the request view
+and provider-error text are covered by `tests/test_history_replay.py` plus additions to the
+adapter and transport suites.
 
 ## v0.5.0 — 2026-10-31
 
