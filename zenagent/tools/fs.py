@@ -63,6 +63,16 @@ _BOM = "\ufeff"
 _BOM_BYTES = b"\xef\xbb\xbf"
 
 
+def _arg_path(value: str) -> Path:
+    """Resolve a model-supplied path argument: expand ``~``, leave the rest alone.
+
+    The permission gate classifies paths with the same expansion, so ``~`` must
+    never mean a literal ``./~/...`` directory to the tool while the gate talks
+    about ``$HOME/...``.
+    """
+    return Path(value).expanduser()
+
+
 def _read_existing(path: Path) -> tuple[str, bytes | None]:
     """Return ``(decoded_text, raw_bytes)`` for an existing file.
 
@@ -159,7 +169,7 @@ def _looks_binary(data: bytes) -> bool:
 async def _read_file(
     tool_call_id: str, args: dict, abort, on_update=None
 ) -> ToolResultAgent:
-    path = Path(args["path"])
+    path = _arg_path(args["path"])
     try:
         data = path.read_bytes()
     except FileNotFoundError:
@@ -273,7 +283,7 @@ def _strip_read_projection(content: str) -> tuple[str, bool]:
 async def _write_file(
     tool_call_id: str, args: dict, abort, on_update=None
 ) -> ToolResultAgent:
-    path = Path(args["path"])
+    path = _arg_path(args["path"])
     content = args["content"]
     previous, raw = _read_existing(path)
     # A model that read one page and writes it back would silently truncate the
@@ -320,7 +330,7 @@ async def _write_file(
 async def _edit_file(
     tool_call_id: str, args: dict, abort, on_update=None
 ) -> ToolResultAgent:
-    path = Path(args["path"])
+    path = _arg_path(args["path"])
     old = args["old_string"]
     new = args["new_string"]
     replace_all = args.get("replace_all", False)
@@ -405,7 +415,7 @@ def _format_size(size: int) -> str:
 async def _list_dir(
     tool_call_id: str, args: dict, abort, on_update=None
 ) -> ToolResultAgent:
-    path = Path(args["path"])
+    path = _arg_path(args["path"])
     try:
         entries = sorted(path.iterdir(), key=lambda entry: (not entry.is_dir(), entry.name))
     except FileNotFoundError:

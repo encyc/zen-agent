@@ -32,6 +32,37 @@ def in_tmp(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
+async def test_paths_expand_home(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+
+    written = await call(WRITE_FILE, path="~/note.txt", content="hi")
+    assert not written.is_error
+    assert (home / "note.txt").read_text() == "hi"
+
+    read = await call(READ_FILE, path="~/note.txt")
+    assert not read.is_error
+    assert read.content[0].text == "hi"
+
+
+async def test_edit_and_list_expand_home(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    (home / "sub").mkdir(parents=True)
+    (home / "sub" / "a.txt").write_text("one\ntwo\n")
+    monkeypatch.setenv("HOME", str(home))
+
+    edited = await call(
+        EDIT_FILE, path="~/sub/a.txt", old_string="two", new_string="three"
+    )
+    assert not edited.is_error
+    assert (home / "sub" / "a.txt").read_text() == "one\nthree\n"
+
+    listed = await call(LIST_DIR, path="~/sub")
+    assert not listed.is_error
+    assert "a.txt" in listed.content[0].text
+
+
 async def test_write_then_read_round_trip():
     written = await call(WRITE_FILE, path="notes/a.txt", content="hello\nworld\n")
     assert not written.is_error
