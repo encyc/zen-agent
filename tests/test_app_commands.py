@@ -132,3 +132,32 @@ async def test_image_command_rejects_non_vision_models(services, monkeypatch, tm
     result = await build_default_commands(services).dispatch("image", str(png))
     assert "does not accept images" in (result.message or "")
     assert services.chat.attachments == []
+
+
+async def test_import_command_switches_to_the_session_file(services, tmp_path):
+    from zenagent.agent.session import Session
+    from zenagent.types import UserMessage
+
+    source = tmp_path / "20260101-000000.jsonl"
+    session = Session(source)
+    session.append(UserMessage(content="imported prompt", timestamp=1))
+
+    registry = build_default_commands(services)
+    result = await registry.dispatch("import", str(source))
+
+    assert result.reset_transcript is True
+    assert result.message and source.name in result.message
+    assert services.runtime.session.path == source
+    assert [m.content for m in services.runtime.agent.messages] == ["imported prompt"]
+
+
+async def test_import_command_reports_a_missing_file(services, tmp_path):
+    registry = build_default_commands(services)
+    result = await registry.dispatch("import", str(tmp_path / "nope.jsonl"))
+    assert "no such session" in (result.message or "")
+
+
+async def test_import_command_requires_a_path(services):
+    registry = build_default_commands(services)
+    result = await registry.dispatch("import", "")
+    assert "usage" in (result.message or "")

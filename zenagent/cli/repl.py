@@ -28,6 +28,7 @@ from zenagent.agent.session import (
     latest_session,
     list_sessions,
     session_title,
+    sessions_dir,
     set_session_title,
     truncate_last_turn,
     unique_session_path,
@@ -67,7 +68,12 @@ from zenagent.cli.theme import (
     Theme,
     resolve_theme_spec,
 )
-from zenagent.config import ContextGuard, apply_user_config, load_user_config
+from zenagent.config import (
+    ContextGuard,
+    apply_user_config,
+    config_path,
+    load_user_config,
+)
 from zenagent.context_files import (
     discover_context_files,
     load_context_files,
@@ -470,6 +476,81 @@ async def handle_slash(
         return None
     if command == "tools":
         print_fn(describe_tools(agent.tools))
+        return None
+    if command == "pin":
+        if session is None:
+            print_fn(t("repl.pin_unavailable"))
+            return None
+        requested = argument.strip().lower()
+        if requested not in ("", "on", "off"):
+            print_fn(t("repl.pin_usage"))
+            return None
+        from zenagent.agent.session import read_session_pins, set_session_pin
+
+        pinned_now = session.path.name in read_session_pins(session.path.parent)
+        target = {"on": True, "off": False}.get(requested, not pinned_now)
+        try:
+            state = set_session_pin(session.path, target)
+        except ValueError as exc:
+            print_fn(str(exc))
+            return None
+        print_fn(
+            t(
+                "repl.pinned" if state else "repl.unpinned",
+                name=session_title(session.path),
+            )
+        )
+        return None
+    if command == "new":
+        if switch_session is None:
+            print_fn(t("repl.new_unavailable"))
+            return None
+        fresh = Session(unique_session_path())
+        agent.replace_messages([])
+        switch_session(fresh)
+        print_fn(t("repl.new_session", path=fresh.path.name))
+        return None
+    if command == "settings":
+        from zenagent import settings as settings_store
+
+        prefs = settings_store.describe()["prefs"]
+        print_fn(t("repl.settings_header"))
+        for key, value in (
+            (t("repl.settings.model"), agent.model.id),
+            (t("repl.settings.thinking"), agent.thinking or "off"),
+            (t("repl.settings.theme"), str(prefs.get("theme", "auto"))),
+            (t("repl.settings.language"), str(prefs.get("language", "auto"))),
+        ):
+            print_fn(t("repl.settings_row", key=key, value=value))
+        print_fn(
+            t(
+                "repl.settings_paths",
+                config=config_path(),
+                settings=settings_store.settings_path(),
+                sessions=sessions_dir(),
+            )
+        )
+        return None
+    if command == "search":
+        from zenagent.tools.web import format_results, run_search
+        from zenagent.tools.web.registry import default_provider
+
+        query = argument.strip()
+        if not query or query in ("settings", "provider", "status"):
+            print_fn(
+                t(
+                    "cmdmsg.search_provider_info",
+                    provider=default_provider() or "auto",
+                )
+            )
+            return None
+        result = await run_search(query, limit=5)
+        print_fn(format_results(result))
+        return None
+    if command == "doctor":
+        from zenagent.cli.doctor import run_doctor
+
+        await run_doctor(print_fn=print_fn)
         return None
     if command == "compact":
         try:

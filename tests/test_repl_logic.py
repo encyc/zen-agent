@@ -918,3 +918,61 @@ def test_repl_does_not_paint_progress_without_a_terminal(capsys):
         )
     )
     assert capsys.readouterr().out == ""
+
+
+async def test_slash_pin_toggles_the_pins_sidecar(isolated_sessions, capsys):
+    import json
+
+    from zenagent.agent.session import Session
+
+    isolated_sessions.mkdir(parents=True, exist_ok=True)
+    path = isolated_sessions / "20260101-000000.jsonl"
+    path.write_text("")
+    agent = Agent(model(), "s", api_key="k")
+
+    await handle_slash(agent, "pin", "", session=Session(path))
+    assert "pinned:" in capsys.readouterr().out
+    assert json.loads((isolated_sessions / ".pins.json").read_text()) == [path.name]
+
+    await handle_slash(agent, "pin", "off", session=Session(path))
+    assert "unpinned:" in capsys.readouterr().out
+    assert json.loads((isolated_sessions / ".pins.json").read_text()) == []
+
+
+async def test_slash_new_switches_to_a_fresh_session(isolated_sessions, capsys):
+    agent = Agent(model(), "s", api_key="k")
+    switched = []
+    await handle_slash(agent, "new", "", switch_session=switched.append)
+    assert switched and switched[0].path.parent == isolated_sessions
+    assert agent.messages == []
+    assert "new session" in capsys.readouterr().out
+
+
+async def test_slash_settings_prints_model_and_paths(isolated_sessions, capsys):
+    agent = Agent(model(), "s", api_key="k")
+    await handle_slash(agent, "settings", "")
+    out = capsys.readouterr().out
+    assert agent.model.id in out
+    assert "config" in out and "sessions" in out
+
+
+async def test_slash_search_without_query_reports_the_provider(capsys, monkeypatch):
+    from zenagent.tools.web import registry
+
+    monkeypatch.setattr(registry, "default_provider", lambda: "tavily")
+    agent = Agent(model(), "s", api_key="k")
+    await handle_slash(agent, "search", "")
+    assert "tavily" in capsys.readouterr().out
+
+
+async def test_slash_doctor_runs_the_checks(capsys, monkeypatch):
+    from zenagent.cli import doctor
+
+    async def fake_doctor(print_fn=print):
+        print_fn("ok   demo  fine")
+        return 0
+
+    monkeypatch.setattr(doctor, "run_doctor", fake_doctor)
+    agent = Agent(model(), "s", api_key="k")
+    await handle_slash(agent, "doctor", "")
+    assert "demo" in capsys.readouterr().out

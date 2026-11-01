@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 from zenagent.agent.session import session_title
 from zenagent.app.appearance import THEME_CHOICES
@@ -522,6 +523,25 @@ async def _settings(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(screen="settings")
 
 
+@_command("import")
+async def _import(services: AppServices, argument: str) -> CommandResult:
+    """Load a session file and continue it (the REPL's /import, for the TUI)."""
+    raw = argument.strip()
+    if not raw:
+        return CommandResult(message=t("cmdmsg.import_usage"))
+    target = Path(raw).expanduser()
+    if not target.is_file():
+        return CommandResult(message=t("cmdmsg.import_missing", path=target))
+    try:
+        await services.runtime.switch_session(target)
+    except Exception as exc:  # noqa: BLE001 - a bad file must not exit the app
+        return CommandResult(message=t("cmdmsg.import_failed", error=exc))
+    services.chat.reload_transcript(drop_pending=True)
+    return CommandResult(
+        message=t("cmdmsg.imported", path=target.name), reset_transcript=True
+    )
+
+
 def build_default_commands(services: AppServices) -> CommandRegistry:
     """Build the built-in registry for one app instance."""
     registry = CommandRegistry(services)
@@ -551,6 +571,7 @@ def build_default_commands(services: AppServices) -> CommandRegistry:
         _hotkeys,
         _new,
         _fork,
+        _import,
         _settings,
         _undo,
         _restore,

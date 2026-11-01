@@ -48,6 +48,7 @@ from zenagent.cli.tui.widgets.transcript import TranscriptView
 from zenagent.cli.tui.widgets.work_indicator import WorkIndicator
 from zenagent.cli.tui.widgets.work_strip import WorkStrip
 from zenagent.i18n import LANGUAGE_CHOICES, resolve_language, set_locale, t
+from zenagent.templates import expand
 
 __all__ = ["DOUBLE_ESCAPE_SECONDS", "ZenAgentApp"]
 
@@ -1353,10 +1354,18 @@ class ZenAgentApp(App):
 
     async def on_prompt_input_submitted(self, message: PromptInput.Submitted) -> None:
         text = message.text
+        templates = {
+            template.name: template for template in (self.runtime.templates or [])
+        }
+        extension_commands = self.runtime.extension_commands or {}
         # A /skill: token can appear at line start or inside a sentence; the
         # parser rejects drafts owned by another slash command.
         if "/skill:" in text:
-            resolution = build_skill_submission(text, list(self.runtime.skills or []))
+            resolution = build_skill_submission(
+                text,
+                list(self.runtime.skills or []),
+                reserved_names={*templates, *extension_commands},
+            )
             if resolution is not None:
                 if resolution.error is not None:
                     for log in self.query(TranscriptView):
@@ -1374,11 +1383,39 @@ class ZenAgentApp(App):
             if self.commands.get(name) is not None:
                 await self._dispatch_command(name, argument)
                 return
+            template = templates.get(name)
+            if template is not None:
+                # Prompt templates are the REPL's `/name args` feature; the TUI
+                # shares the same expansion so a saved command works in both.
+                self.history.add(text)
+                await self.chat.submit(expand(template.body, argument))
+                return
+            extension = extension_commands.get(name)
+            if extension is not None:
+                self.history.add(text)
+                await self._run_extension_command(extension, argument)
+                return
             for log in self.query(TranscriptView):
                 log.append_notice(t("tui.app.unknown_command", name=name))
             return
         self.history.add(text)
         await self.chat.submit(text)
+
+    async def _run_extension_command(self, command, argument: str) -> None:
+        """Run an extension's slash command; its return value becomes a notice."""
+        try:
+            result = command.handler(self.runtime.agent, argument)
+            if inspect.isawaitable(result):
+                result = await result
+        except Exception as exc:  # noqa: BLE001 - an extension must not kill the app
+            for log in self.query(TranscriptView):
+                log.append_notice(
+                    t("tui.app.command_failed", name=command.name, error=exc)
+                )
+            return
+        if result:
+            for log in self.query(TranscriptView):
+                log.append_notice(str(result))
 
     async def _dispatch_command(self, name: str, argument: str) -> None:
         try:

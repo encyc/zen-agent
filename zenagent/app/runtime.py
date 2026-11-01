@@ -144,6 +144,8 @@ class Runtime:
         self._skill_entries = ""
         self._extension_prompt = ""
         self._extension_tools: list = []
+        #: Slash commands contributed by extensions (name → ExtensionCommand).
+        self.extension_commands: dict = {}
         self._hook_unsubscribes: list = []
         self._options: RuntimeOptions | None = None
         self._context_files = True
@@ -324,6 +326,7 @@ class Runtime:
             loaded = load_extensions(runtime.extension_files)
             runtime.warnings.extend(f"extension {warning}" for warning in loaded.warnings)
             runtime._extension_tools = list(loaded.tools)
+            runtime.extension_commands = dict(loaded.commands)
             runtime.hooks = loaded.hooks
             runtime._extension_prompt = loaded.prompt_text
 
@@ -629,6 +632,7 @@ class Runtime:
             for warning in loaded.warnings:
                 self._note(f"extension {warning}")
             self._extension_tools = list(loaded.tools)
+            self.extension_commands = dict(loaded.commands)
             self._extension_prompt = loaded.prompt_text
             self.hooks = loaded.hooks
             notes.append(

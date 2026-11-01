@@ -427,3 +427,46 @@ async def test_palette_commands_dispatch_through_the_registry(fake_runtime):
         await pilot.pause()
         await pilot.pause()
         assert any("read_file" in row.plain for row in app.query(NoticeRow))
+
+
+async def test_template_slash_expands_and_submits(fake_runtime, monkeypatch):
+    from pathlib import Path
+
+    from zenagent.templates import PromptTemplate
+
+    app = ZenAgentApp(fake_runtime)
+    submitted: list[str] = []
+
+    async def capture(text, **kwargs):
+        submitted.append(text)
+
+    monkeypatch.setattr(app.chat, "submit", capture)
+    app.runtime.templates = [
+        PromptTemplate(name="fix", description="", path=Path("fix.md"), body="fix {{args}}")
+    ]
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await app.on_prompt_input_submitted(PromptInput.Submitted("/fix the bug"))
+        await pilot.pause()
+    assert submitted == ["fix the bug"]
+
+
+async def test_extension_command_runs_from_the_composer(fake_runtime):
+    from zenagent.extensions import ExtensionCommand
+
+    app = ZenAgentApp(fake_runtime)
+    calls: list[tuple[object, str]] = []
+
+    def handler(agent, argument):
+        calls.append((agent, argument))
+        return "extension ran"
+
+    app.runtime.extension_commands = {
+        "hello": ExtensionCommand(name="hello", description="", handler=handler)
+    }
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await app.on_prompt_input_submitted(PromptInput.Submitted("/hello world"))
+        await pilot.pause()
+    assert calls and calls[0][1] == "world"
+    assert calls[0][0] is app.runtime.agent
