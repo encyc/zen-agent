@@ -27,6 +27,8 @@ PRESETS: dict[str, Preset] = {
         right=(
             "tokens",
             "cache_hit",
+            "cache_read",
+            "cache_write",
             "cost",
             "context_pct",
             "time_spent",

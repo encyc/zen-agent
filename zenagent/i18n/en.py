@@ -16,6 +16,8 @@ CATALOG: dict[str, str] = {
     "test.apples.other": "{n} apples",
     # TUI: status band
     "tui.status.cache": "cache {pct}%",
+    "tui.status.cache_read": "cache read {n}",
+    "tui.status.cache_write": "cache write {n}",
     "tui.status.context": "context {pct}%",
     "tui.status.tokens": "{input} in / {output} out",
     "tui.status.token_rate": "{rate} tok/s",

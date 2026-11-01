@@ -50,6 +50,8 @@ def test_segment_ids_cover_the_documented_set():
         "queued",
         "session_name",
         "cache_hit",
+        "cache_read",
+        "cache_write",
         "time_spent",
         "token_rate",
     }
@@ -123,8 +125,29 @@ def test_cache_hit_renders_the_provider_normalized_ratio():
 
 
 def test_cache_hit_hidden_without_a_ratio():
-    _, plain = render_status_line(status(cache_hit_ratio=None), 200)
-    assert "cache " not in plain
+    _, plain = render_status_line(
+        status(cache_hit_ratio=None, cache_read=0, cache_write=0), 200
+    )
+    assert "cache" not in plain
+
+
+def test_cache_read_and_write_segments_appear_when_nonzero():
+    _, plain = render_status_line(status(cache_read=1664, cache_write=32), 200)
+    assert "cache read 1664" in plain
+    assert "cache write 32" in plain
+
+
+def test_git_segment_shows_branch_and_change_counts():
+    _, plain = render_status_line(
+        status(git_branch="main", git_staged=2, git_dirty=1, git_untracked=3), 200
+    )
+    assert "main +2 ~1 ?3" in plain
+    # a clean tree renders the branch alone (no zero markers)
+    _, clean = render_status_line(status(git_branch="main"), 200)
+    assert "main" in clean and "+0" not in clean
+    # outside a repository the segment disappears
+    _, bare = render_status_line(status(git_branch=""), 200)
+    assert "main" not in bare
 
 
 def test_turn_time_and_rate_need_a_finished_turn():

@@ -132,6 +132,11 @@ class RunStatus:
     cwd: str = ""
     mode: str = ""
     git_branch: str = ""
+    #: Working-tree change counts (staged / modified / untracked) for the status
+    #: band; all zero when git is unavailable or the cwd is not a repository.
+    git_staged: int = 0
+    git_dirty: int = 0
+    git_untracked: int = 0
     #: Current todo list as the tool's canonical phase details (``todo``
     #: ``details["phases"]`` / the ``<session>.todo.json`` sidecar); the TUI HUD
     #: renders it and hides itself while it is empty. Plain dicts keep this

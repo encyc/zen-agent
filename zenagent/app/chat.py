@@ -11,6 +11,7 @@ from pathlib import Path
 from zenagent.agent.subagents import SubagentStore, carry_task_dir
 from zenagent.app.compact import compact, should_auto_compact
 from zenagent.app.context import build_context_report
+from zenagent.app.git import git_status
 from zenagent.app.retry import prepare_retry
 from zenagent.app.runtime import Runtime
 from zenagent.app.support import cache_hit_ratio
@@ -112,6 +113,7 @@ class ChatController:
             last.input + last.output if last is not None else usage.input + usage.output
         )
         subagents = self._subagent_views()
+        git = git_status(Path.cwd())
         return RunStatus(
             model_id=agent.model.id,
             thinking=agent.thinking,
@@ -135,6 +137,10 @@ class ChatController:
             session_name=Path(self.runtime.session.path).stem,
             cwd=str(Path.cwd()),
             mode=self.runtime.mode,
+            git_branch=git.branch if git else "",
+            git_staged=git.staged if git else 0,
+            git_dirty=git.dirty if git else 0,
+            git_untracked=git.untracked if git else 0,
             todos=self.todos,
             subagent_cost=self._subagent_cost,
             subagent_tokens=self._subagent_tokens,

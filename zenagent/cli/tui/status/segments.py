@@ -79,10 +79,24 @@ def _render_path(ctx: SegmentContext) -> Text | None:
 
 
 def _render_git(ctx: SegmentContext) -> Text | None:
-    branch = ctx.status.git_branch
+    """Branch plus the three change counts the app layer measured.
+
+    ``+N`` staged, ``~N`` modified in the working tree, ``?N`` untracked; a
+    clean tree renders the branch alone. The segment hides itself outside a
+    repository instead of showing a stale branch.
+    """
+    status = ctx.status
+    branch = status.git_branch
     if not branch:
         return None
-    return _muted(branch)
+    marks = []
+    if status.git_staged:
+        marks.append(f"+{status.git_staged}")
+    if status.git_dirty:
+        marks.append(f"~{status.git_dirty}")
+    if status.git_untracked:
+        marks.append(f"?{status.git_untracked}")
+    return _muted(" ".join((branch, *marks)))
 
 
 def _render_tokens(ctx: SegmentContext) -> Text | None:
@@ -109,6 +123,18 @@ def _render_cache_hit(ctx: SegmentContext) -> Text | None:
     if ratio is None:
         return None
     return _muted(t("tui.status.cache", pct=f"{ratio * 100:.0f}"))
+
+
+def _render_cache_read(ctx: SegmentContext) -> Text | None:
+    if not ctx.status.cache_read:
+        return None
+    return _muted(t("tui.status.cache_read", n=ctx.status.cache_read))
+
+
+def _render_cache_write(ctx: SegmentContext) -> Text | None:
+    if not ctx.status.cache_write:
+        return None
+    return _muted(t("tui.status.cache_write", n=ctx.status.cache_write))
 
 
 def _render_time_spent(ctx: SegmentContext) -> Text | None:
@@ -163,6 +189,8 @@ SEGMENTS: dict[str, Renderer] = {
     "tokens": _render_tokens,
     "cost": _render_cost,
     "cache_hit": _render_cache_hit,
+    "cache_read": _render_cache_read,
+    "cache_write": _render_cache_write,
     "context_pct": _render_context,
     "time_spent": _render_time_spent,
     "token_rate": _render_token_rate,

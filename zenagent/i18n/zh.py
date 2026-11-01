@@ -15,6 +15,8 @@ CATALOG: dict[str, str] = {
     "test.apples.other": "{n} 个苹果",
     # TUI：状态带
     "tui.status.cache": "缓存 {pct}%",
+    "tui.status.cache_read": "缓存读 {n}",
+    "tui.status.cache_write": "缓存写 {n}",
     "tui.status.context": "上下文 {pct}%",
     "tui.status.tokens": "入 {input} / 出 {output}",
     "tui.status.token_rate": "{rate} tok/s",

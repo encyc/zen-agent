@@ -791,3 +791,19 @@ async def test_status_exposes_a_context_composition_report(runtime_factory):
     ids = {item.id for item in report.slices}
     assert {"system", "tools"} <= ids
     assert any(item.chars > 0 for item in report.slices)
+
+
+async def test_status_carries_git_facts(runtime_factory, monkeypatch):
+    import zenagent.app.chat as chat_module
+    from zenagent.app.git import GitStatus
+
+    runtime = await runtime_factory()
+    monkeypatch.setattr(
+        chat_module,
+        "git_status",
+        lambda cwd=None: GitStatus(branch="main", staged=1, dirty=2, untracked=3),
+    )
+    chat = ChatController(runtime)
+    status = chat.status
+    assert status.git_branch == "main"
+    assert (status.git_staged, status.git_dirty, status.git_untracked) == (1, 2, 3)
