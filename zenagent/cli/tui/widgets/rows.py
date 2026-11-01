@@ -11,6 +11,7 @@ from __future__ import annotations
 import time
 
 from rich.text import Text
+from textual.containers import Vertical
 from textual.timer import Timer
 from textual.widgets import Static
 
@@ -20,6 +21,7 @@ from zenagent.i18n import t
 
 __all__ = [
     "NoticeRow",
+    "ReadGroup",
     "ThinkingRow",
     "UsageRow",
     "UserBlock",
@@ -235,6 +237,66 @@ class ThinkingRow(Static):
 
     def on_click(self) -> None:
         """Click the row to expand/collapse it, like the tool cards."""
+        self.action_toggle()
+
+
+class ReadGroup(Vertical):
+    """Consecutive ``read_file`` cards folded under one header.
+
+    A turn that reads ten files should not push ten cards into the transcript;
+    the group keeps one line until expanded. Cards stay real ``ToolCard``
+    widgets (so live progress and per-card expansion still work) — only their
+    visibility is group-controlled.
+    """
+
+    BINDINGS = [("enter,space", "toggle", "Expand")]  # noqa: RUF012
+    can_focus = True
+
+    def __init__(self) -> None:
+        super().__init__(classes="read-group")
+        self.collapsed = True
+        self._cards: list = []
+        self._header_text = ""
+        self._header = Static("", classes="read-group-header")
+
+    def compose(self):
+        yield self._header
+
+    @property
+    def cards(self) -> list:
+        return list(self._cards)
+
+    @property
+    def header_text(self) -> str:
+        return self._header_text
+
+    def add_card(self, card) -> None:
+        self._cards.append(card)
+        self.mount(card)
+        card.display = not self.collapsed
+        self._refresh()
+
+    def _refresh(self) -> None:
+        count = len(self._cards)
+        files = len(
+            {
+                str(card.view.details.get("path") or card.view.args.get("path") or "")
+                for card in self._cards
+            }
+        )
+        text = t("tui.read_group.header", count=count, files=files)
+        if self.collapsed:
+            text += t("tui.read_group.hint")
+        self._header_text = text
+        self._header.update(Text(text, style=palette.MUTED))
+
+    def action_toggle(self) -> None:
+        self.collapsed = not self.collapsed
+        for card in self._cards:
+            card.display = not self.collapsed
+        self._refresh()
+
+    def on_click(self) -> None:
         self.action_toggle()
 
 

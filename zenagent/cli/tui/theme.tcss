@@ -211,3 +211,8 @@ Screen {
     color: $muted;
     margin: 0 1 0 0;
 }
+
+.read-group-header {
+    color: $muted;
+    padding: 0 1;
+}

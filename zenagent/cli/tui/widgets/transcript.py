@@ -14,6 +14,7 @@ from zenagent.app.views import MessageView, RunStatus, ToolCallView
 from zenagent.cli.tui.widgets.rows import (
     DividerRow,
     NoticeRow,
+    ReadGroup,
     ThinkingRow,
     UsageRow,
     UserBlock,
@@ -60,6 +61,8 @@ class TranscriptView(VerticalScroll):
         #: Last rendered progress line per call id (streaming tool output).
         self._card_progress: dict[str, str] = {}
         self._follow_pending = False
+        #: Open consecutive-read group; closed by any other row.
+        self._open_read_group: ReadGroup | None = None
 
     def on_mount(self) -> None:
         if self._welcome:
@@ -223,6 +226,7 @@ class TranscriptView(VerticalScroll):
     # -- appends ------------------------------------------------------------
 
     def _append_message(self, view: MessageView) -> None:
+        self._open_read_group = None
         if view.kind == "user":
             self.mount(UserBlock(view.text))
             return
@@ -268,6 +272,15 @@ class TranscriptView(VerticalScroll):
         self._cards_by_id[view.call_id] = card
         self._card_status[view.call_id] = view.status
         self._card_progress[view.call_id] = view.progress
+        if view.name == "read_file":
+            group = self._open_read_group
+            if group is None:
+                group = ReadGroup()
+                self._open_read_group = group
+                self.mount(group)
+            group.add_card(card)
+            return
+        self._open_read_group = None
         self.mount(card)
 
     def _update_tool(self, view: ToolCallView) -> None:
@@ -301,16 +314,19 @@ class TranscriptView(VerticalScroll):
         self._card_status.clear()
         self._card_progress.clear()
         self._usage_shown = 0
+        self._open_read_group = None
         if self._welcome:
             self.mount(WelcomeBlock())
 
     def append_notice(
         self, text: str, *, error: bool = False, warning: bool = False
     ) -> None:
+        self._open_read_group = None
         self.mount(NoticeRow(text, error=error, warning=warning))
         self.scroll_end(animate=False)
 
     def append_divider(self, text: str) -> None:
         """Mark a point the conversation was compacted at."""
+        self._open_read_group = None
         self.mount(DividerRow(text))
         self.scroll_end(animate=False)

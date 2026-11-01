@@ -16,6 +16,8 @@ CATALOG: dict[str, str] = {
     "test.apples.other": "{n} apples",
     # TUI: status band
     "tui.status.cache": "cache {pct}%",
+    "tui.read_group.header": "read_file ×{count} · {files} file(s)",
+    "tui.read_group.hint": "  (enter: expand)",
     "tui.status.cache_read": "cache read {n}",
     "tui.status.cache_write": "cache write {n}",
     "tui.status.context": "context {pct}%",

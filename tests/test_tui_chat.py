@@ -137,3 +137,63 @@ async def test_tool_card_repaints_on_streamed_progress(runtime_factory, monkeypa
         assert cards, "tool_execution_start should mount a card"
         assert "t1" in refreshed, "the live card must be repainted on progress"
         assert "linking 2 files" in cards[0].plain
+
+
+async def test_consecutive_reads_fold_into_one_group(runtime_factory):
+    from zenagent.cli.tui.widgets.rows import ReadGroup
+    from zenagent.events import AssistantEvent
+    from zenagent.types import AssistantMessage, TextContent, ToolCall, Usage
+
+    async def stream(model, messages, tools, options):
+        partial = AssistantMessage(
+            content=[], provider="p", model="m", usage=Usage(),
+            stop_reason="pending", timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        from zenagent.types import ToolResultMessage
+
+        if any(isinstance(message, ToolResultMessage) for message in messages):
+            partial.content = [TextContent(text="done")]
+            partial.stop_reason = "stop"
+            yield AssistantEvent(
+                type="text_delta", partial=partial, content_index=0, delta="done"
+            )
+            yield AssistantEvent(type="done", partial=partial, reason="stop")
+            return
+        calls = [
+            ToolCall(id="r1", name="read_file", arguments={"path": "README.md"}),
+            ToolCall(id="r2", name="read_file", arguments={"path": "pyproject.toml"}),
+        ]
+        partial.content = list(calls)
+        for index, call in enumerate(calls):
+            yield AssistantEvent(
+                type="toolcall_start", partial=partial, content_index=index, tool_call=call
+            )
+            yield AssistantEvent(
+                type="toolcall_end", partial=partial, content_index=index, tool_call=call
+            )
+        partial.stop_reason = "tool_use"
+        yield AssistantEvent(type="done", partial=partial, reason="tool_use")
+
+    runtime = await runtime_factory(stream_fn=stream)
+    app = ZenAgentApp(runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await app.chat.submit("read two files")
+        await app.chat.wait_for_idle()
+        await pilot.pause()
+        await pilot.pause()
+
+        groups = list(app.query(ReadGroup))
+        assert len(groups) == 1, "two consecutive reads must share one group"
+        group = groups[0]
+        assert len(group.cards) == 2
+        assert group.collapsed is True
+        assert "read_file ×2" in group.header_text
+        assert group.cards[0].display is False
+
+        app.set_focus(group)
+        await pilot.press("enter")
+        await pilot.pause()
+        assert group.collapsed is False
+        assert group.cards[0].display is True
