@@ -18,6 +18,8 @@
 | `fetch` | 抓取 URL 并转成可读文本（优先 article/main、去页面 chrome，12k 字符上限；可选 `timeout_s` 1–45s；`details.method` 报告抽取方式） | 只读，免确认 |
 | `read_skill` | 读本地 SKILL.md 正文 | 只读 |
 | `github` | 只读 GitHub 集成（`gh` 存在才注册）：`pr_view` / `pr_diff` / `pr_checks` / `run_logs`（失败 job 日志） | 只读 |
+| `checkpoint` | 标记探索起点（`goal`）；之后可用 `rewind` 把这段探索从模型上下文里替换掉 | 只读 |
+| `rewind` | 用 `report` 替换 checkpoint 之后的探索上下文；只影响请求投影，磁盘 transcript 保留全量历史 | 只读 |
 | `todo` | 会话级任务清单（phases / 按内容寻址 / 9 个 op）；状态写 `<session>.todo.json`，不碰工作区（plan/`--read-only` 下也会写这个会话 sidecar） | 只读 |
 
 每个工具还声明一个能力级（`AgentTool.approval = "read" | "write" | "exec"`）：

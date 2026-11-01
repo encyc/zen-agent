@@ -327,11 +327,17 @@ async def run_headless(
     else:
         session = Session(unique_session_path())
     if tools is None:
+        from zenagent.app.rewind import RewindState, build_checkpoint_tools
         from zenagent.tools.github import build_github_tool
 
         github_tool = build_github_tool()
         if github_tool is not None:
             tool_list.append(github_tool)
+        rewind_state = RewindState()
+        agent_holder: dict = {}
+        tool_list.extend(
+            build_checkpoint_tools(lambda: agent_holder.get("agent"), rewind_state)
+        )
         tool_list.append(build_todo_tool(session.path))
         tool_list.append(
             build_task_tool(
@@ -347,6 +353,11 @@ async def run_headless(
         )
 
     guard = ContextGuard(model.context_window)
+
+    async def transform_context(messages):
+        projected = rewind_state.transform(messages) if tools is None else messages
+        return await guard.transform(projected)
+
     agent = _build_agent(
         model,
         api_key,
@@ -354,13 +365,15 @@ async def run_headless(
         gate,
         stream_fn=stream_fn,
         tools=tool_list,
-        transform_context=guard.transform,
+        transform_context=transform_context,
         max_turns=max_turns,
         max_cost=max_cost,
         retries=retries,
         context_files=context_files,
         extra_prompt=extra_prompt,
     )
+    if tools is None:
+        agent_holder["agent"] = agent
     # Wire the spill sink after the build seam so tests that replace
     # ``_build_agent`` keep working; the loop reads it when a run starts.
     agent.artifact_sink = build_artifact_sink(session.path)

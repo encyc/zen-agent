@@ -24,6 +24,7 @@ from zenagent.app.modes import (
     resolve_mode,
 )
 from zenagent.app.permissions import PermissionGate, build_permission_gate
+from zenagent.app.rewind import RewindState, build_checkpoint_tools
 from zenagent.app.safety import GuardPolicy
 from zenagent.app.support import (
     api_key_for,
@@ -142,6 +143,8 @@ class Runtime:
         self._base_tools: list = []
         #: Desired set + activation policy for the model-visible tool list.
         self.tool_registry = ToolRegistry()
+        #: Checkpoint/rewind markers (context projection; transcript stays intact).
+        self.rewind = RewindState()
         self._skill_entries = ""
         self._extension_prompt = ""
         self._extension_tools: list = []
@@ -159,6 +162,8 @@ class Runtime:
     @session.setter
     def session(self, session: Session) -> None:
         self._session = session
+        # A new transcript invalidates checkpoint/rewind indexes.
+        self.rewind.clear()
         # Artifacts belong to the session in context. Hooking the assignment
         # (not just switch_session) keeps the TUI's retry/compaction paths,
         # which set ``runtime.session`` directly, spilling to the right place.
@@ -365,7 +370,7 @@ class Runtime:
             session_id=session_id_for(model),
             stream_fn=stream_fn,
             before_tool_call=gate.before_tool_call,
-            transform_context=runtime.guard.transform,
+            transform_context=runtime._transform_context,
             max_turns=options.max_turns,
             max_cost=options.max_cost,
             retries=options.retries,
@@ -461,6 +466,10 @@ class Runtime:
         self.prompt_report = rendered
         return rendered.text
 
+    async def _transform_context(self, messages: list) -> list:
+        """Per-request context projection: an armed rewind, then overflow pruning."""
+        return await self.guard.transform(self.rewind.transform(messages))
+
     def _recompose(self) -> None:
         """Rebuild the tool list and prompt from the current discovery results.
 
@@ -473,6 +482,7 @@ class Runtime:
         prompt's skill index and ``agent.tools`` from drifting apart.
         """
         tools = list(ALL_TOOLS)
+        tools.extend(build_checkpoint_tools(lambda: getattr(self, "agent", None), self.rewind))
         github_tool = build_github_tool()
         if github_tool is not None:
             tools.append(github_tool)
