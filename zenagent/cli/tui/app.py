@@ -1295,7 +1295,7 @@ class ZenAgentApp(App):
             self._exit_subagent_view(restore_focus=False)
         for log in self.query(TranscriptView):
             log.reset()
-        self.chat.reload_transcript()
+        self.chat.reload_transcript(drop_pending=True)
         self._refresh_status()
 
     async def _modal_result(self, screen):

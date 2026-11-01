@@ -325,6 +325,21 @@ class ChatController:
         self._notify()
         return cleared
 
+    def drop_pending(self) -> int:
+        """Discard pending messages, leaving one notice when anything went.
+
+        Used when the conversation itself changes (session switch, undo, fork,
+        retry): queued text written for the old transcript must not be sent into
+        the new one.
+        """
+        cleared = self.clear_pending()
+        if cleared:
+            self._notices.append(
+                TranscriptNotice("info", t("notice.pending_dropped", n=cleared))
+            )
+            self._notify()
+        return cleared
+
     def clear_follow_ups(self) -> None:
         """Backwards-compatible alias for :meth:`clear_pending`."""
         self.clear_pending()
@@ -472,8 +487,15 @@ class ChatController:
         self._notify()
         return text
 
-    def reload_transcript(self) -> None:
-        """Rebuild views from the current agent messages (after a session switch)."""
+    def reload_transcript(self, *, drop_pending: bool = False) -> None:
+        """Rebuild views from the current agent messages (after a session switch).
+
+        ``drop_pending`` also discards anything queued for the old conversation:
+        callers that replace or rewind the transcript pass it, compaction does
+        not (queued turns still belong to the same session).
+        """
+        if drop_pending:
+            self.drop_pending()
         self._builder.load(self.runtime.agent.messages)
         # Switching sessions/compaction changes the sidecar the HUD reads and
         # starts a fresh subagent-cost accounting bucket.
@@ -484,6 +506,7 @@ class ChatController:
         self._notify()
 
     def clear(self) -> None:
+        self.drop_pending()
         self.runtime.agent.reset()
         self._builder.reset()
         self._reset_subagent_state()
@@ -505,6 +528,7 @@ class ChatController:
         """
         if self._running:
             return None
+        self.drop_pending()
         old_path = self.runtime.session.path
         prepared = prepare_retry(self.runtime.agent, self.runtime.session)
         if prepared is None:

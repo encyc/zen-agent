@@ -461,7 +461,7 @@ async def _undo(services: AppServices, argument: str) -> CommandResult:
     if result is None:
         return CommandResult(message=t("cmdmsg.nothing_to_undo"))
     dropped, path = result
-    services.chat.reload_transcript()
+    services.chat.reload_transcript(drop_pending=True)
     return CommandResult(
         message=t("cmdmsg.undone", count=dropped, path=path.name),
         reset_transcript=True,
@@ -484,7 +484,7 @@ async def _retry(services: AppServices, argument: str) -> CommandResult:
 @_command("new")
 async def _new(services: AppServices, argument: str) -> CommandResult:
     path = await services.sessions.new()
-    services.chat.reload_transcript()
+    services.chat.reload_transcript(drop_pending=True)
     return CommandResult(
         message=t("cmdmsg.new_session", path=path.name), reset_transcript=True
     )
@@ -493,7 +493,7 @@ async def _new(services: AppServices, argument: str) -> CommandResult:
 @_command("fork")
 async def _fork(services: AppServices, argument: str) -> CommandResult:
     path = await services.sessions.fork()
-    services.chat.reload_transcript()
+    services.chat.reload_transcript(drop_pending=True)
     return CommandResult(
         message=t("cmdmsg.forked", path=path.name), reset_transcript=True
     )

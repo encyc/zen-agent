@@ -346,6 +346,7 @@ CATALOG: dict[str, str] = {
     "notice.compacted": "compacted · {tokens:,} prompt tokens → summary session",
     "notice.run_failed": "the run failed",
     "notice.auto_compaction_failed": "auto-compaction failed: {error}",
+    "notice.pending_dropped": "dropped {n} pending messages (session changed)",
     "perm.risk_outside": "⚠ outside workspace: {target}",
     "perm.risk_protected": "⚠ protected path: {target}",
     "perm.risk_destructive": "⚠ destructive command: {reason}",

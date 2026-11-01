@@ -428,3 +428,36 @@ async def test_continuation_runs_before_auto_compaction(runtime_factory, monkeyp
     await chat.wait_for_idle()
 
     assert compacted == [[]], "compaction must wait until the pending lanes are empty"
+
+
+async def test_session_switch_drops_pending_with_a_notice(runtime_factory):
+    runtime = await runtime_factory(stream_fn=text_stream())
+    chat = ChatController(runtime)
+    chat.queue_follow_up("leftover")
+
+    assert chat.drop_pending() == 1
+    assert chat.status.pending == []
+    notices = chat.take_notices()
+    assert notices and "pending messages" in notices[-1].text
+
+
+async def test_clear_drops_pending(runtime_factory):
+    runtime = await runtime_factory(stream_fn=text_stream())
+    chat = ChatController(runtime)
+    chat.queue_follow_up("leftover")
+
+    chat.clear()
+
+    assert chat.status.pending == []
+
+
+async def test_reload_transcript_keeps_pending_by_default(runtime_factory):
+    runtime = await runtime_factory(stream_fn=text_stream())
+    chat = ChatController(runtime)
+    chat.queue_follow_up("keep me")
+
+    chat.reload_transcript()
+    assert [p.text for p in chat.status.pending] == ["keep me"]
+
+    chat.reload_transcript(drop_pending=True)
+    assert chat.status.pending == []

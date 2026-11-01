@@ -345,6 +345,7 @@ CATALOG: dict[str, str] = {
     "notice.compacted": "已压缩 · {tokens:,} prompt token → 摘要会话",
     "notice.run_failed": "运行失败",
     "notice.auto_compaction_failed": "自动压缩失败：{error}",
+    "notice.pending_dropped": "已丢弃 {n} 条待发消息（会话已切换）",
     "perm.risk_outside": "⚠ 项目外路径：{target}",
     "perm.risk_protected": "⚠ 受保护路径：{target}",
     "perm.risk_destructive": "⚠ 破坏性命令：{reason}",
