@@ -11,6 +11,8 @@
 ├── skills/<name>/SKILL.md        # 用户级 skills
 ├── commands/<name>.md            # 用户级提示词模板
 ├── sessions/*.jsonl              # legacy 会话（只追加）
+├── projects/<key>/sessions/      # 按项目隔离的会话
+├── projects/<key>/backups/       # 按项目的写入快照（/restore 用）
 ├── logs/crash-*.log              # 崩溃日志
 ├── history                       # REPL 历史
 └── metrics.jsonl                 # （--metrics 指定时）
@@ -117,6 +119,8 @@ deny = ["git_push"]                           # 追加到全局 deny；不能移
 | `extensions` | 追加：全局在前、项目在后，都保留；相对路径按**各自配置文件所在目录**解析 |
 | `[tools] allow` | 追加并去重保序（全局 + 项目） |
 | `[tools] deny` | 并集去重保序；项目层只能加严，**不能放宽**全局 deny |
+| `[safety]` | **仅全局层**；项目层出现即报错（仓库不能给自己开权限） |
+| `[backup]` | **仅全局层**；同上 |
 
 规则：
 
@@ -125,6 +129,27 @@ deny = ["git_push"]                           # 追加到全局 deny；不能移
 - 密钥**不能**写进 config.toml，只能通过 `api_key_env` 指环境变量（值来自 env 或
   `~/.zenagent/settings.json`）。
 - **项目层会进 git**：只放可共享配置，不要放密钥、账号、个人绝对路径。
+
+### [safety] 与 [backup]（仅全局层）
+
+```toml
+[safety]
+allow_outside = ["~/scratch", "/tmp/work"]  # 允许写 workspace 之外的这些路径
+allow_destructive = false                   # 放行破坏性 shell 命令
+allow_protected = false                     # 放行受保护凭据路径
+
+[backup]
+enabled = true
+max_file_bytes = 2097152                    # 单文件超过 2 MiB 不存内容
+keep_runs = 50                              # 每个项目保留最近 50 次 run 的快照
+```
+
+- 这两个表的值会放宽安全边界，所以**只认全局层**：项目层（会进 git）出现
+  `[safety]` / `[backup]` 时启动即报错，并提示把配置移到 `~/.zenagent/config.toml`。
+- `allow_outside` 的相对路径按配置文件所在目录解析，`~` 展开；目录条目覆盖其下所有路径。
+- CLI 的 `--allow-outside PATH` / `--allow-destructive` / `--allow-protected` 与配置取并集
+  （flag 只能加、不能减）。
+- `[backup] enabled = false` 时文件工具不再写快照，`/restore` 会提示不可用。
 
 ## mcp.json（全局层 + 项目层）
 
@@ -158,12 +183,16 @@ deny = ["git_push"]                           # 追加到全局 deny；不能移
 1. 内置 catalog（`zenagent/catalog.yaml`）
 2. `~/.zenagent/config.toml`（全局层）的 provider 覆盖 / 自定义 provider（覆盖内置会 warning）
 3. `<项目根>/.zenagent/config.toml`（项目层）：标量/表覆盖，列表追加或并集（见上表）
-4. CLI 参数（`-m`、`--thinking`、`--yes` 等）最高
+4. CLI 参数（`-m`、`--thinking`、`--yes`、`--allow-outside` 等）最高
 
 ## 源码对照
 
 - 解析与校验：`zenagent/config.py::load_user_config`、`_merge_user_configs`、`apply_user_config`、`_parse_custom_providers`
-- 目录路径：`config_path`、`zenagent/project.py::find_project_root`/`project_config_path`/`project_mcp_path`、
+- 目录路径：`config_path`、`zenagent/project.py::find_project_root`/`project_config_path`/`project_mcp_path`/
+  `project_backups_dir`、
   `zenagent/agent/session.py::sessions_dir`、`zenagent/skills.py::default_skill_roots`、
   `zenagent/templates.py::default_template_roots`、`zenagent/mcp/config.py`、`zenagent/cli/keybindings.py::keybindings_path`
-- 对应测试：`tests/test_config.py`、`tests/test_catalog.py`、`tests/test_project.py`、`tests/test_skills.py`、`tests/test_templates.py`
+- 安全相关解析：`zenagent/config.py`（`[safety]`/`[backup]` 与项目层限制）、
+  `zenagent/app/journal.py::load_backup_policy`
+- 对应测试：`tests/test_config.py`、`tests/test_catalog.py`、`tests/test_project.py`、`tests/test_journal.py`、
+  `tests/test_skills.py`、`tests/test_templates.py`

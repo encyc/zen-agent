@@ -368,6 +368,7 @@ CATALOG: dict[str, str] = {
     "cmd.repl.session": "显示本会话的模型、上下文与花费",
     "cmd.repl.tools": "列出模型可调用的工具",
     "cmd.repl.compact": "把对话压缩进一个新会话",
+    "cmd.repl.restore": "恢复上一次运行改动的文件",
     "cmd.repl.undo": "把上一轮撤回进新会话文件",
     "cmd.repl.retry": "重跑上一轮（新会话文件）",
     "cmd.repl.image": "为下一条提示附加图片（/image <path>）",

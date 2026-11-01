@@ -54,28 +54,78 @@ async def execute(tool_call_id, args, abort, on_update=None) -> ToolResultAgent
 工具才按工具名记；有自然目标但参数为空时不会退化成工具级放行。审批框会显示这次
 "always" 实际授权的目标。
 
+## 路径围栏与风险确认
+
+写类工具的 `path` 先 `expanduser()`（`~`）再 `resolve()`（跟随符号链接），然后按
+workspace 判定；workspace = 项目根（最近 `.git`，否则 cwd，与 project 规则一致）。
+
+| 风险 | 触发 | 交互式 | headless |
+|---|---|---|---|
+| `outside` | 解析后不在 workspace 内 | 弹确认，带 `⚠ outside workspace` | 拒绝，提示 `--allow-outside PATH` |
+| `protected` | 目标是 `~/.zenagent/**`、`~/.ssh`、`~/.aws`、`~/.config/gcloud`、`~/.kube`、`~/.docker/config.json`、`~/.git-credentials`、`~/.netrc`、`~/.npmrc`、`~/.pypirc` 或 `id_rsa*`/`id_dsa*`/`id_ecdsa*`/`id_ed25519*`/`*.p12`/`*.pfx` | 弹确认，带 `⚠ protected path` | 拒绝，提示 `--allow-protected` |
+| `destructive` | bash 命中破坏性命令（见下节） | 弹确认，带 `⚠ destructive command` | 拒绝，提示 `--allow-destructive` |
+
+- `/tmp` 与系统临时目录默认放行，避免临时文件也弹窗。
+- **full / `--yes` 不会自动放行 confirm 级风险**：它们只表示"普通写/执行不用问"。
+- `[tools] allow` 与工具级 always 不能绕过风险判定；能放行的只有：目标的会话级 always、
+  `--allow-outside PATH` / `--allow-destructive` / `--allow-protected`、
+  `[safety]` 全局配置里的对应项。
+- 项目内 `.env` 等日常文件不受保护（改 `.env` 是正常开发）；受保护清单在 `zenagent/app/safety.py`，
+  按调用时的 `HOME` 解析（便于测试与容器）。
+- 配置放行项**只允许写在全局层**：项目层出现 `[safety]` 会启动即报错，避免仓库给自己开权限。
+- bash 的破坏性识别是 **best-effort**：命令内先 `cd`、变量拼接、子 shell 无法可靠判断；
+  真正的兜底要等部署层隔离。
+
+## 快照与 /restore
+
+每次成功的 `write_file` / `edit_file` 在写入前把旧内容存进**项目级**快照日志：
+
+```
+~/.zenagent/projects/<project-key>/backups/
+  manifest.jsonl                  # 每条：run / turn / path / after sha256 / 是否跳过
+  blobs/<sha256[:2]>/<sha256>     # 旧内容，按内容寻址去重；目录 0700、文件 0600
+```
+
+- 恢复单位是**一次 run**（一次用户 prompt 触发的整段执行，含中间多个工具轮次）；
+  `/restore` 恢复最近一次，`/restore list` 列最近 10 次，`/restore <n>` 恢复列表第 n 次。
+- 恢复前校验当前文件哈希等于 agent 写后的哈希：**用户之后手动改过的文件会跳过并报告**，
+  不覆盖；没有 force 选项。
+- 单文件超过 `[backup] max_file_bytes`（默认 2 MiB）时只记一条"跳过"，工具结果里会写明该文件不可恢复。
+- bash 的 `rm`/`mv` 不在快照范围内；只有文件工具的写入有快照。
+- `/undo` 只回退会话记录，`/restore` 只回退文件。完整回退一次操作：先 `/restore`，再 `/undo`。
+
 ## 权限判定顺序
 
 `PermissionGate.check(tool_name, args, tool=None)`（`zenagent/app/permissions.py`，
 `zenagent/cli/permissions.py` 是兼容导入）。`tool` 为解析后的 `AgentTool`
 时，其 `approval` 声明优先；`tool=None`（直接按名字调用）时退回
-`READ_ONLY_TOOLS` 名表：
+`READ_ONLY_TOOLS` 名表。
+
+`check()` 先调用 `assess()` 得到三档判定（`allow` / `confirm` / `refuse`）：
 
 ```
-危险命令？        ── 是 ──> 拒绝（除非 --allow-dangerous）
-   │否
-deny 模式命中？    ── 是 ──> 拒绝（原因里带命中的 pattern）
-   │否
---read-only？      ── 是且非只读工具 ──> 拒绝
-   │否
-allow 模式命中？   ── 是 ──> 允许（不再询问）
-   │否
-工具声明 read / 名表只读？ ── 是 ──> 允许
-   │否
---yes 或交互确认？ ── 是 ──> 允许
-   │否
-拒绝
+assess()（固定顺序）
+灾难命令          ──> refuse（除非 --allow-dangerous）
+deny 模式命中      ──> refuse
+plan / --read-only ──> refuse（非只读工具）
+破坏性 bash 命令   ──> confirm(destructive)
+受保护路径写入     ──> confirm(protected)
+workspace 外写入   ──> confirm(outside)
+其余               ──> allow
 ```
+
+`confirm` 的处理：
+
+```
+目标已在会话内被 always 放行 / CLI、全局配置显式放行？ ── 是 ──> 允许
+   │否
+交互式前端？ ── 是 ──> 确认（REPL 提示 / TUI 审批框，带风险标签）
+   │否
+拒绝（原因里点名需要的 flag）
+```
+
+`allow` 时继续旧流程：allow 模式 → 放行；只读工具 → 放行；目标已授权 → 放行；
+full / `--yes` → 放行；交互式 → 确认；否则拒绝。
 
 关键点：
 
@@ -85,6 +135,7 @@ allow 模式命中？   ── 是 ──> 允许（不再询问）
    MCP 里声明了 `readOnlyHint` 的工具也放行，其余 MCP 工具仍拒绝。
 3. 拒绝不是异常：工具调用收到 `is_error=True` 的结果，模型能看到原因并调整。
 4. 交互模式下 REPL 会问 `allow? [y/N]`；headless 没有交互，默认拒绝。
+5. `full` / `--yes` 只会自动放行 `allow` 档；越界、凭据、破坏性命令仍走上面的 `confirm` 分支。
 
 ## 工具结果的形状
 
@@ -104,23 +155,33 @@ ToolResultAgent(
 - 所有结果（含 MCP/扩展）在写回前统一过内核结果预算：单行 >2000 字符中间截断，
   文本 >40 KB 保留头尾并附截断提示；详见[工具内核](../internals/tools-internals.md)。
 
-## 危险命令
+## 危险命令与破坏性命令
 
-`zenagent/tools/bash.py` 会拒绝：
+bash 命令分两档，都在权限门里判定：
 
-- `rm -rf /`、`rm -rf /*` 等根路径删除；
-- `curl … | sh` 一类「下载即执行」；
-- fork bomb 形态；
-- 其他明显破坏性模式。
+**灾难级**（`dangerous_command_reason`）：根路径递归删除、fork bomb、`mkfs`、`dd` 写块设备、
+`chmod -R 777 /`、关机/重启。默认直接拒绝，`--yes` 也不放行；只有显式 `--allow-dangerous` 放行。
 
-拦截发生在权限门之前（permission gate 里 `dangerous_command_reason`），`--yes` 不放行，
-只有显式 `--allow-dangerous` 才允许。
+**破坏性**（`destructive_command_reason`）：`git reset --hard`、`git clean -fdx`、
+`git checkout -- .`、`git restore .`、`git stash drop|clear`、`git push --force`、`sudo …`、
+`curl|wget … | sh`、解析后落在项目外/祖先目录的 `rm -rf`（`rm -rf ./build` 不触发）、
+`find -delete` / `-exec rm`、`truncate -s 0 …`、`shred …`、`dd of=<文件>`。
+交互式会弹确认（full 模式也一样）；非交互拒绝并提示 `--allow-destructive`
+（`--allow-dangerous` 同样覆盖这一档）。
+
+两条判定分别在 `zenagent/app/permissions.py` 与 `zenagent/app/safety.py`；命令解析是启发式，
+不是 shell 隔离。
 
 ## 源码对照
 
 - 工具实现：`zenagent/tools/{fs,bash,search,web}.py`，清单 `zenagent/tools/__init__.py::ALL_TOOLS`
-- 权限：`zenagent/app/permissions.py::PermissionGate`（`policy_refusal`/`check`）、`PermissionBroker`、
+- 权限：`zenagent/app/permissions.py::PermissionGate`（`assess`/`check`）、`PermissionBroker`、
   `zenagent/app/modes.py`（`resolve_mode`/`mode_prompt_note`）、`READ_ONLY_TOOLS`、`dangerous_command_reason`
+- 风险模型：`zenagent/app/safety.py`（`GuardPolicy`、`Verdict`、`classify_write_path`、
+  `destructive_command_reason`）
+- 快照与恢复：`zenagent/app/journal.py`（`SnapshotJournal`）、`zenagent/app/restore.py`
+  （`/restore` 命令核心）、`zenagent/project.py::project_backups_dir`
+- 对应测试：`tests/test_safety.py`、`test_journal.py`、`test_restore.py`
 - 校验：`zenagent/agent/validate.py::validate_arguments`
 - 执行与错误隔离：`zenagent/agent/loop.py`（工具 round）
 - 对应测试：`tests/test_tools_fs.py`、`test_tools_bash.py`、`test_tools_search.py`、`test_tools_web.py`、

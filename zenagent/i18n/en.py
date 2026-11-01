@@ -369,6 +369,7 @@ CATALOG: dict[str, str] = {
     "cmd.repl.session": "show model, context and spend for this session",
     "cmd.repl.tools": "list the tools the model can call",
     "cmd.repl.compact": "summarize the conversation into a fresh session",
+    "cmd.repl.restore": "restore files changed by the last run",
     "cmd.repl.undo": "drop the last turn into a fresh session file",
     "cmd.repl.retry": "re-run the last turn (new session file)",
     "cmd.repl.image": "attach an image for the next prompt (/image <path>)",

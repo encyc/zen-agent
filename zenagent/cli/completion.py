@@ -33,6 +33,7 @@ SLASH_COMMANDS: dict[str, str] = {
     "/tools": "cmd.repl.tools",
     "/compact": "cmd.repl.compact",
     "/undo": "cmd.repl.undo",
+    "/restore": "cmd.repl.restore",
     "/retry": "cmd.repl.retry",
     "/image": "cmd.repl.image",
     "/images": "cmd.repl.images",

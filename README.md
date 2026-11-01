@@ -87,6 +87,14 @@ tools without asking; catastrophic commands still need `--allow-dangerous`).
 switches mid-session. Session display names come from the first question; rename
 with `/rename <name>` (or `r` in the TUI session picker).
 
+Write guards are independent of the mode: full/`--yes` never auto-approve a
+write outside the project root, a write to a credential store
+(`~/.zenagent`, `~/.ssh`, …) or a destructive shell command. Interactive runs
+confirm them; headless runs refuse and name the flag
+(`--allow-outside PATH`, `--allow-protected`, `--allow-destructive`). Every
+successful write is snapshotted per project; `/restore` puts the last run's
+files back and skips anything you edited afterwards.
+
 ### Diagnostics
 
 ```bash
@@ -139,6 +147,7 @@ app layer (MCP, skills, sessions), use `Runtime` + `ChatController` — see
 | `/mode [plan\|ask\|full]` | show or switch the runtime permission mode |
 | `/compact` | summarize the session into a new session file |
 | `/undo` | drop the last turn (writes a new session file) |
+| `/restore [list\|n]` | restore files changed by the last run (or list recent runs) |
 | `/sessions [all]` | list this project's sessions (or all projects) |
 | `/rename <name>` | rename the current session |
 | `/fork <n>` | branch a new session at user message n |
@@ -185,6 +194,17 @@ extensions = ["~/work/my-extension.py"]
 [tools]
 allow = ["read_*", "grep"]     # never ask for these
 deny = ["write_file"]          # always refuse
+
+# global layer only (a project-layer [safety]/[backup] is rejected)
+[safety]
+allow_outside = ["~/scratch"]  # writes allowed outside the workspace
+allow_destructive = false
+allow_protected = false
+
+[backup]
+enabled = true
+max_file_bytes = 2097152       # larger files are not snapshotted
+keep_runs = 50
 ```
 
 Themes: `~/.zenagent/keybindings.json` (`{"newline": "escape,enter"}`) and
@@ -256,7 +276,9 @@ fallback), `web_search` (provider chain), `fetch` (URL → readable text), `wait
 (structured questions to the user; TUI dialog / REPL prompt / graceful headless
 degrade), `task` (read-only subagent delegation with its own transcript and cost)
 and artifact spill for oversized tool results. `bash` supports `async` background
-jobs; job results are collected with `wait`.
+jobs; job results are collected with `wait`. Write tools are fenced to the project
+root by default (outside/protected writes need confirmation); successful writes
+are recorded in a project-scoped snapshot log and can be put back with `/restore`.
 
 ## Tests
 
@@ -313,9 +335,12 @@ and recorded live captures are the gate (`docs/testing.md`). Implemented:
 interactive REPL + TUI, MCP, skills/templates/extensions, RPC/SDK,
 export/usage/telemetry, four protocol adapters, runtime modes
 (`plan`/`ask`/`full`), session display names + rename, and TUI session
-management (new/fork/delete/export/rename). The TUI sidebar (`ctrl+b`) is a
+management (new/fork/delete/export/rename), hand-slip guardrails (workspace fence,
+protected paths, destructive-command confirmations, write snapshots + `/restore`).
+The TUI sidebar (`ctrl+b`) is a
 drag-resizable work panel: the full todo checklist, running subagents and
 background jobs (click one for its log), plus a context-composition section
 with a per-slice breakdown overlay. A subagent row opens its read-only
 transcript, which survives `--resume`.
-Not yet: OS-level sandboxing.
+Not yet: OS-level sandboxing. The fence and snapshots protect against agent
+mistakes, not against malicious repositories or prompt injection (threat model #2).

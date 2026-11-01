@@ -3,6 +3,46 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+**Hand-slip guardrails: workspace fence, protected paths, destructive-command confirmations, and project-scoped write snapshots with `/restore`.**
+
+### Added
+
+- **Workspace fence**: `write_file`/`edit_file` paths are classified after `~` expansion and
+  symlink resolution; writes outside the project root need confirmation interactively and are
+  refused headless unless `--allow-outside PATH` (repeatable, also `[safety] allow_outside`).
+  The system temp directory stays allowed by default.
+- **Protected paths**: writes to `~/.zenagent/**`, `~/.ssh`, `~/.aws`, gcloud/kube/docker
+  credential stores and private-key filename patterns need confirmation; refused headless
+  unless `--allow-protected`.
+- **Destructive-command tier**: `git reset --hard`, `git clean -fdx`, `git checkout -- .`,
+  `git stash drop|clear`, `git push --force`, `sudo …`, `curl … | sh`, recursive `rm` outside the
+  workspace, `find -delete`, `truncate -s 0`, `shred`, `dd of=<file>` now need confirmation.
+  This also fixes the long-documented but unimplemented `curl … | sh` detection.
+- **Write snapshots + `/restore`**: every successful `write_file`/`edit_file` records the previous
+  bytes under `~/.zenagent/projects/<key>/backups/`; `/restore`, `/restore list` and
+  `/restore <n>` put a run's files back and skip files the user changed afterwards. Works in
+  the TUI and the REPL; headless runs are journaled too (no restore surface).
+- **TUI approval dialog**: risk badges (`outside workspace` / `protected path` /
+  `destructive command`) and a bounded diff preview for write/edit calls.
+- **`~` expansion** in filesystem tool paths (previously the tool wrote a literal `~/…`
+  directory while the permission gate expanded it).
+- `[safety]` and `[backup]` config sections (global layer only; the project layer rejects them).
+
+### Changed
+
+- `full` mode and `--yes` no longer auto-approve confirm-level risks: outside/protected writes
+  and destructive commands get a confirmation (interactive) or a refusal naming the flag
+  (non-interactive).
+- Headless runs now write snapshots unless `[backup] enabled = false`.
+- `/undo` still only rewinds the transcript; `/restore` is the file-level counterpart.
+
+### Tests
+
+Offline suite covers the risk matrix, journal/restore semantics, config layering, approval UI and
+command wiring; `bash scripts/check.sh` is the gate.
+
 ## v0.5.0 — 2026-10-31
 
 **Two appearances and a bilingual interface: dark/light themes on one colour-token source, and en/zh UI text with live switching.**
