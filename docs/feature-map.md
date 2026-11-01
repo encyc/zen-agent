@@ -77,6 +77,7 @@
 | 子代理转录：sidecar 持久化 + 只读查看 + resume 回看 | `agent/subagents.py`、`tools/task.py`、`app/chat.py`、`cli/tui/{widgets/subagent_banner.py,app.py}` | `test_subagents_store.py`、`test_task.py`、`test_app_chat.py`、`test_tui_subagent_view.py`、`test_tui_subagent_resume.py` | 同上 |
 | 会话操作（new/fork/delete/export/rename） | `screens/modals.py::SessionPicker`、`cli/tui/app.py` | `test_tui_sessions.py` | 同上 |
 | 收尾（窄屏/退出摘要） | `widgets/status_bar.py`、`app.py` | `test_tui_polish.py` | 同上 |
+| P1/P2 收尾：read 分组、plan review、hotkeys/usage/MCP 向导、todo 编辑、剪贴板/外部编辑器、ctrl+shift+o/alt+l | `widgets/rows.py::ReadGroup`、`screens/modals.py::{PlanReview,HotkeysSheet,UsageDashboard,McpAdd,TodoEditor}`、`widgets/clipboard.py`、`app.py` | `test_tui_chat.py`、`test_tui_controls.py`、`test_tui_tool_card_families.py` | [TUI](guide/tui.md) |
 
 ## 6. CLI / REPL
 

@@ -100,6 +100,7 @@ async def test_click_on_a_markdown_block_is_harmless(runtime_factory):
 
 
 async def test_clicking_a_tool_card_toggles_it(chat_app_with_one_tool):
+    from zenagent.cli.tui.widgets.rows import ReadGroup
     from zenagent.cli.tui.widgets.tool_card import ToolCard
 
     app = chat_app_with_one_tool
@@ -109,9 +110,15 @@ async def test_clicking_a_tool_card_toggles_it(chat_app_with_one_tool):
         await app.chat.wait_for_idle()
         await pilot.pause()
         await pilot.pause()
+        # Consecutive reads live in a collapsed group: open it, then click a card.
+        group = app.query(ReadGroup).first()
+        assert group.collapsed is True
+        await pilot.click(group)
+        await pilot.pause()
+        assert group.collapsed is False
+
         card = app.query(ToolCard).first()
         assert card.collapsed is True
-
         await pilot.click(card)
         await pilot.pause()
         assert card.collapsed is False

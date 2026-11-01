@@ -296,7 +296,11 @@ class ReadGroup(Vertical):
             card.display = not self.collapsed
         self._refresh()
 
-    def on_click(self) -> None:
+    def on_click(self, event=None) -> None:
+        # Clicks on a child card belong to that card (expand/diff), not the group.
+        widget = getattr(event, "widget", None)
+        if widget is not None and widget not in (self, self._header):
+            return
         self.action_toggle()
 
 

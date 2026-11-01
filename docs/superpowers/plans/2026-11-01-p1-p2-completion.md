@@ -3,7 +3,7 @@
 > **For agentic workers:** 逐任务执行；每个任务先写失败测试（RED），再实现（GREEN），跑定向测试，最后 `bash scripts/check.sh` 全量闸门。任务用 `- [ ]` 跟踪。
 > **状态**：2026-11-01 制定；基线 `d5f1dcf`（v0.5.1），分支 `feat/p1-p2-completion`。
 > **来源**：2026-11-01 全量代码核查（09/10/12 三份调研文档已过时，以核查结果为准）。
-> **执行进度（round 1，HEAD 见分支）**：M1（T1–T5）、M2（T6–T8）、T9/T10/T11 完成；T12 完成专用卡与 warning 级（连续 read 分组留待后续）、T13（plan review）、T17（内核小项）、T14（github 只读子集）完成；M4（T14–T17）全部完成；T12 尾巴（连续 read 分组）完成。下一步 M5（命令批/浮层批/dock 交互/todo 编辑）→ M6。全量测试 1803 passed。
+> **执行进度（完成，2026-11-01）**：M1–M6 全部完成。P1 十二项、P2 八项均落地；少量子项按 §0 的“明确不做”原则记为 N 并附理由（`/restart`、session tree、settings 全屏中心、多根目录的工具级 cwd）。闸门：`scripts/check.sh` 1872 passed / 1 skipped（真实 pyright 集成测试按环境 skip），`scripts/release-check.sh` PASS（构建 wheel/sdist + 两种安装验证）。分支 `feat/p1-p2-completion`，20 个提交，73 文件 +5873/−137。
 > **Goal**：把 2026-11-01 报告里的 P1、P2 项全部排期并实现，交付一个可合并的 worktree。
 
 ## Global Constraints
@@ -132,10 +132,10 @@ browser/computer、debug/DAP、IDA、security_scan、tts/generate_image、eval �
 
 #### T9 · TUI 模板/扩展命令 + REPL 命令补齐
 
-- [ ] TUI `on_prompt_input_submitted` 支持 `/name args` 模板展开与扩展注册命令（与 REPL 同一解析器）。
-- [ ] REPL 补 `/pin` `/new` `/settings` `/search` `/doctor`；TUI 补 `/import`。
-- [ ] 抽出共享命令表或把 REPL 接到 `app/commands.py`（二选一，优先接共享注册表）。
-- [ ] 测试：`tests/test_tui_usability.py`、`tests/test_repl_logic.py` 覆盖新增命令与模板展开。
+- [x] TUI `on_prompt_input_submitted` 支持 `/name args` 模板展开与扩展注册命令（与 REPL 同一解析器）。
+- [x] REPL 补 `/pin` `/new` `/settings` `/search` `/doctor`；TUI 补 `/import`。
+- [x] 抽出共享命令表或把 REPL 接到 `app/commands.py`（二选一，优先接共享注册表）。
+- [x] 测试：`tests/test_tui_usability.py`、`tests/test_repl_logic.py` 覆盖新增命令与模板展开。
 
 #### T10 · Ctrl+G 外部编辑器
 
@@ -190,18 +190,18 @@ browser/computer、debug/DAP、IDA、security_scan、tts/generate_image、eval �
 
 - [x] `/jobs`（列表 + kill）、`/shake`（tools/images/thinking，新会话文件）、`/btw`（旁路问答，不进 transcript）、`/copy`（剪贴板）、`/add-dir` `/remove-dir` `/dirs`、`/fresh`（重置显示状态）、`/handoff`（compact + 交接 md）、`/trace`（报告 trace 路径）。
 - [x] 测试：`tests/test_app_commands.py`、`tests/test_repl_logic.py`。
-- [ ] 未做（记录理由）：`/restart`（需要进程 supervisor，TUI 内重启不安全）；多根目录目前只记录/展示，工具 cwd 解析仍以单根为准（`/add-dir` 不改变安全围栏）。
+- **N（记录理由）**：`/restart`（需要进程 supervisor，TUI 内重启不安全）；多根目录目前只记录/展示，工具 cwd 解析仍以单根为准（`/add-dir` 不改变安全围栏）。
 
 #### T19 · 浮层批
 
 - [x] hotkeys sheet（`HotkeysSheet`，`/hotkeys`）、usage dashboard（`UsageDashboard`，当前会话 + 近 50 个会话聚合）、MCP add 向导（`McpAdd`，写 `~/.zenagent/mcp.json`，原子 0600）。
 - [x] 测试：`tests/test_tui_controls.py`、`tests/test_mcp_client.py`。
-- [ ] 未做（记录理由）：session tree（当前会话是线性 JSONL，没有消息树模型，先做会引入非 append-only 语义）；settings 全屏中心（现有 `/settings` palette 已覆盖全部可调项，全屏只是外观）。
+- **N（记录理由）**：session tree（当前会话是线性 JSONL，没有消息树模型，先做会引入非 append-only 语义）；settings 全屏中心（现有 `/settings` palette 已覆盖全部可调项，全屏只是外观）。
 
 #### T20 · dock/交互
 
-- [ ] 菜单重复请求 focus 已开浮层；浮层内 Esc 三层（清搜索→退子视图→关面板）；`tools.toggleVisibility`（Ctrl+Shift+O）；`display.reset`（Alt+L）；模型反向循环键（与 T5 合并）。
-- [ ] 测试：`tests/test_tui_controls.py`。
+- [x] 菜单重复请求 focus 已开浮层；浮层内 Esc 三层（清搜索→退子视图→关面板）；`tools.toggleVisibility`（Ctrl+Shift+O）；`display.reset`（Alt+L）；模型反向循环键（与 T5 合并）。
+- [x] 测试：`tests/test_tui_controls.py`。
 
 #### T21 · todo 用户编辑
 
@@ -212,11 +212,11 @@ browser/computer、debug/DAP、IDA、security_scan、tts/generate_image、eval �
 
 #### T22 · 闸门与文档
 
-- [ ] `bash scripts/check.sh` 全绿；`bash scripts/release-check.sh --skip-build` 通过。
-- [ ] 更新 `docs/feature-map.md`、`docs/guide/tui.md`、`docs/guide/tools-permissions.md`、`docs/guide/cli.md`、`README.md`（Tools/Status 段）。
-- [ ] `CHANGELOG.md` Unreleased 段完整记录。
-- [ ] 09/10/12 三份调研文档加“历史基线”指向本计划与 2026-11-01 核查结论。
-- [ ] 汇总提交（或每任务提交 + 最终 merge commit）。
+- [x] `bash scripts/check.sh` 全绿（1872 passed, 1 skipped）；`bash scripts/release-check.sh` 全量通过（构建 wheel/sdist + 两种安装验证；`--skip-build` 需要已有 dist，故用全量）。
+- [x] 更新 `docs/feature-map.md`、`docs/guide/tui.md`、`docs/guide/tools-permissions.md`、`docs/guide/cli.md`、`README.md`（Tools/Status 段）。
+- [x] `CHANGELOG.md` Unreleased 段完整记录。
+- [x] 09/10/12 三份调研文档加“历史基线”指向本计划与 2026-11-01 核查结论。
+- [x] 汇总提交（或每任务提交 + 最终 merge commit）。
 
 ---
 

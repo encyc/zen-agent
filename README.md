@@ -158,6 +158,20 @@ app layer (MCP, skills, sessions), use `Runtime` + `ChatController` — see
 | `/reload` | re-discover skills, templates, extensions |
 | `/theme <name>` | `default` / `mono` / `solarized` / a JSON file |
 | `/hotkeys` | show active keybindings |
+| `/pin [on\|off]` | pin/unpin the current session |
+| `/new` | start a new session |
+| `/settings` | show model, prefs and paths |
+| `/search [query]` | web search, or show the provider |
+| `/doctor` | run environment checks |
+| `/todo` | print the session todo list |
+| `/jobs [kill <id>]` | list or kill background jobs |
+| `/copy [text]` | copy to the system clipboard |
+| `/btw <question>` | ask a side question without touching the transcript |
+| `/shake [tools\|images\|thinking\|all]` | drop heavy content into a new session |
+| `/handoff` | write a handoff markdown, then compact |
+| `/add-dir` `/remove-dir` `/dirs` | track extra workspace roots |
+| `/fresh` | reset display state |
+| `/trace` | show the trace path (when started with `--trace`) |
 
 Command arguments complete too (Tab): `/mode ` → plan/ask/full, `/thinking ` → levels,
 `/model ` → catalog ids. In the TUI the same values appear as you type, and a bare
@@ -267,18 +281,25 @@ extra.
 ## Tools
 
 `read_file` (paged: 400 lines per call by default, `offset`/`limit` for the next
-page), `write_file` (refuses writing back a truncated read page),
-`edit_file` (exactly-one-match replacement), `list_dir`, `bash` (merged output,
-30 KB head+tail truncation, process-group kill on timeout/abort, non-interactive
-environment, optional `cwd`), `glob`, `grep` (ripgrep when available, Python
-fallback), `web_search` (provider chain), `fetch` (URL → readable text), `wait`
-(background-job results), `todo` (session-scoped checklist with a TUI HUD), `ask`
-(structured questions to the user; TUI dialog / REPL prompt / graceful headless
-degrade), `task` (read-only subagent delegation with its own transcript and cost)
-and artifact spill for oversized tool results. `bash` supports `async` background
-jobs; job results are collected with `wait`. Write tools are fenced to the project
-root by default (outside/protected writes need confirmation); successful writes
-are recorded in a project-scoped snapshot log and can be put back with `/restore`.
+page, `line_numbers` for inspection), `write_file` (refuses writing back a
+truncated read page, preserves the executable bit), `edit_file`
+(exactly-one-match replacement, `replace_all`), `list_dir`, `bash` (merged
+output, 30 KB head+tail truncation, process-group kill on timeout/abort,
+non-interactive environment, optional `cwd`), `glob` (root `.gitignore` aware,
+`sort=mtime`), `grep` (ripgrep when available, Python fallback), `web_search`
+(provider chain), `fetch` (URL → readable text), `wait` (background-job
+results), `todo` (session-scoped checklist with a TUI HUD and `/todo` editor),
+`ask` (structured questions to the user; TUI dialog / REPL prompt / graceful
+headless degrade), `task` (read-only subagent delegation with its own transcript
+and cost), `checkpoint`/`rewind` (the model compacts its own exploration into a
+report), `lsp` (diagnostics/symbols/references/definition/rename through
+pyright or typescript-language-server), and `github` (read-only `gh` ops; only
+registered when `gh` is installed). Oversized results spill to the session
+`artifacts/` directory. `bash` supports `async` background jobs; job results are
+collected with `wait` and managed with `/jobs`. Write tools are fenced to the
+project root by default (outside/protected writes need confirmation); successful
+writes are recorded in a project-scoped snapshot log and can be put back with
+`/restore`.
 
 ## Tests
 
@@ -341,6 +362,10 @@ The TUI sidebar (`ctrl+b`) is a
 drag-resizable work panel: the full todo checklist, running subagents and
 background jobs (click one for its log), plus a context-composition section
 with a per-slice breakdown overlay. A subagent row opens its read-only
-transcript, which survives `--resume`.
+transcript, which survives `--resume`. The P1/P2 completion slice (see
+`docs/superpowers/plans/2026-11-01-p1-p2-completion.md`) added the tool
+registry, LSP/GitHub/checkpoint-rewind tools, `/plan-review`, `/hotkeys`,
+`/usage`, `/mcp add`, the `/todo` editor, read-file grouping, clipboard/editor
+keys, and the command batch listed above.
 Not yet: OS-level sandboxing. The fence and snapshots protect against agent
 mistakes, not against malicious repositories or prompt injection (threat model #2).

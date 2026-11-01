@@ -5,10 +5,27 @@ matches the release tag; older history is in the repository tags and commits.
 
 ## Unreleased — P1/P2 completion
 
-Plan: `docs/superpowers/plans/2026-11-01-p1-p2-completion.md`.
+Plan: `docs/superpowers/plans/2026-11-01-p1-p2-completion.md` (M1–M6). Executed on
+`feat/p1-p2-completion`; `bash scripts/check.sh` is the gate.
 
-### Added
+### Added — tools
 
+- **`checkpoint` / `rewind`**: the model marks an exploration, then replaces it
+  with a report. Implemented as a request projection (`Runtime._transform_context`)
+  so the transcript on disk stays append-only; session changes clear stale
+  markers.
+- **`lsp`**: stdio JSON-RPC client (Content-Length framing, server→client request
+  answers, diagnostics wait) exposing diagnostics/symbols/references/definition
+  plus a rename that returns the workspace edit without writing. Servers
+  (pyright, typescript-language-server) are discovered on PATH; a missing server
+  is a per-action error, not a disappearing tool.
+- **`github`** (conditional): `pr_view` / `pr_diff` / `pr_checks` / `run_logs`
+  through the `gh` CLI, read tier, registered only when `gh` exists.
+- **`read_file` `line_numbers`**, **`glob` gitignore filtering** (root
+  `.gitignore`, `!negation`, `include_ignored` opt-out) and **`sort=mtime`**;
+  `write_file`/`edit_file` preserve the executable bit (regression-tested).
+- **MCP call-level reconnect**: a transport failure drops the client, reconnects
+  once and replays the call once; JSON-RPC errors and timeouts are never retried.
 - **Tool registry with `hidden` / `default_inactive`** (`agent/registry.py`):
   the kernel declares visibility, the assembly layer decides it; hot reload
   (`/reload`, MCP late connections, extension changes) goes through
@@ -17,23 +34,54 @@ Plan: `docs/superpowers/plans/2026-11-01-p1-p2-completion.md`.
   `after_tool_call` receive a `ToolContext` (call id, resolved tool, cwd,
   approval tier, timeout); a before hook may rewrite arguments, which are
   re-validated against the schema without touching the transcript.
-- **MCP call-level reconnect**: a transport failure drops the client,
-  reconnects once and replays the call once; JSON-RPC errors and timeouts are
-  never retried.
-- **Running-tool progress outside the TUI**: the REPL paints a throttled
-  in-place progress line; RPC events carry a bounded `partial_result` tail.
+- **Responses adapter** now fits `max_output_tokens` to the context window like
+  the other three adapters (it could 400 on a long prompt).
+
+### Added — TUI
+
+- **`/plan-review`**: read-only plan overlay; `a` approves and switches to
+  `full`, `k`/`esc` keeps planning.
+- **`/hotkeys`**, **`/usage`**, **`/mcp add`**, **`/todo`** overlays: binding
+  sheet, usage dashboard (current session + recent-session aggregate), MCP add
+  wizard (atomic `mcp.json` write, 0600, then reconnect), and an editable todo
+  list sharing the model tool's sidecar.
+- **Consecutive `read_file` cards fold** into one expandable `read_group`.
+- **Per-family tool-card heads** for task/todo/ask/wait/web_search/fetch/list_dir;
+  `NoticeRow` gained a warning level.
 - **Status band**: real git branch + staged/modified/untracked counts (cached
   3s, degrades to hidden outside a repository), `cache_read` / `cache_write`
   segments; `n queued` now survives width degradation.
-- **TUI keys**: `f5`/`alt+r` retry, `shift+ctrl+p` reverse model cycle,
-  `alt+shift+p` plan toggle.
-- **Responses adapter** now fits `max_output_tokens` to the context window like
-  the other three adapters (it could 400 on a long prompt).
+- **Keys**: `f5`/`alt+r` retry, `shift+ctrl+p` reverse model cycle,
+  `alt+shift+p` plan toggle, `ctrl+g` external editor, `ctrl+v` clipboard
+  (image path attaches, text inserts), `ctrl+shift+o` show/hide tool cards,
+  `alt+l` display reset.
+- **Esc layering** in palettes (clear search, then close) and menu re-request
+  focuses the open panel instead of stacking.
+- **Image lines** in user turns render as their own dim row.
+
+### Added — CLI / app
+
+- **REPL**: running-tool progress line; `/pin` `/new` `/settings` `/search`
+  `/doctor` `/todo` `/jobs` `/copy` `/btw` `/shake` `/handoff` `/add-dir`
+  `/remove-dir` `/dirs` `/fresh` `/trace`.
+- **TUI**: prompt-template and extension-command submissions; `/import`;
+  `ctrl+g` editor and `ctrl+v` clipboard.
+- **`/jobs`** lists/kills background jobs (`JobManager.kill`); **`/shake`**
+  drops tool results/images/thinking into a new session file; **`/btw`** asks a
+  throwaway side question; **`/copy`** uses the system clipboard; **`/handoff`**
+  writes a handoff markdown then compacts; **`/add-dir`** `/remove-dir` `/dirs`
+  track extra roots; **`/fresh`** resets display state.
+- RPC events carry a bounded `partial_result` tail; headless documents that it
+  ignores progress updates on purpose.
 
 ### Fixed
 
 - `RunStatus.git_branch` was dead code: the status band advertised a git
   segment that never rendered.
+- The 3-arg `after_tool_call` hook no longer crashes on an unknown tool (the
+  context carries `tool=None`).
+- Doc drift: tool counts, REPL command lists, provider adapter count and the
+  `git` segment description are corrected in README/guides/feature-map.
 
 ## v0.5.1 — 2026-11-01
 
