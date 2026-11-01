@@ -1,6 +1,6 @@
 # TUI 待发队列与插话设计（2026-11-01）
 
-状态：待审批
+状态：已实现（分支 `feat/tui-pending-queue`，计划见 `docs/superpowers/plans/2026-11-01-tui-pending-queue.md`）
 作者：Lead（与用户讨论后整理）
 基线：main `86f32ea`（hand-slip guardrails 之后）
 

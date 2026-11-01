@@ -61,6 +61,27 @@ command wiring; `bash scripts/check.sh` is the gate. Replay-safety projection, t
 and provider-error text are covered by `tests/test_history_replay.py` plus additions to the
 adapter and transport suites.
 
+### TUI pending queue and steering
+
+**Mid-run input now has a visible home above the composer and can be promoted into the running turn without waiting for the run to end.**
+
+- **Pending band**: messages typed while a run is in flight render in a dock band between
+  the status line and the prompt — `Queued · n` for follow-ups that send after this run,
+  `Steering · n` for input injected at the next step boundary. Rows are clipped, newlines
+  fold to `↵`, more than six message rows collapse into `… n more`, and the band hides
+  itself when both lanes are empty. The status-band counters and the sidebar runtime row stay.
+- **Steering without interrupting**: `ctrl+s` with a draft steers the running turn; with an
+  empty composer it promotes the newest queued message instead. Clicking a queued row in the
+  band promotes it too; steering rows are read-only (the steering channel is text-only, so a
+  queued message with images reports that it still waits for the run to end).
+- **`ctrl+x` clears both lanes** (queue and steering) instead of only follow-ups.
+- **No stranded steering**: a steer typed after the last step boundary now continues the run
+  so the model answers it at the next request; when the run ended in error or was
+  interrupted, the undelivered text becomes a visible queue entry instead of hanging
+  invisibly, and it no longer gets spliced behind the next prompt.
+- **Pending doesn't cross conversations**: session switch, `/new`, `/undo`, `/fork` and
+  `/retry` drop pending messages with a one-line notice; compaction keeps them (same session).
+
 ## v0.5.0 — 2026-10-31
 
 **Two appearances and a bilingual interface: dark/light themes on one colour-token source, and en/zh UI text with live switching.**

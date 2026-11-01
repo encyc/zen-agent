@@ -67,6 +67,7 @@
 | Textual 外壳、状态栏、输入 | `cli/tui/{app,run}.py`、`widgets/{status_bar,prompt_input}.py` | `test_tui_skeleton.py` | [TUI](guide/tui.md) |
 | 富渲染（markdown/工具卡/usage） | `widgets/{chat_log,tool_card}.py` | `test_tui_chat.py` | 同上 |
 | 队列/steer/中断 | `app.py`、`app/chat.py` | `test_tui_controls.py` | 同上 |
+| 待发区与插话：输入框上方排队/插话 band、点击/Ctrl+S 升格、滞留插话续跑、跨会话丢弃 | `app/{views,chat}.py`、`cli/tui/widgets/pending_band.py`、`cli/tui/app.py`、`agent/agent.py` | `test_app_pending.py`、`test_tui_pending_band.py`、`test_tui_controls.py` | [TUI](guide/tui.md) |
 | 模型/会话选择器、命令面板 | `screens/modals.py` | `test_tui_pickers.py` | 同上 |
 | 工作面板侧栏（Todo/Subagent/Jobs）+ 后台活提示条 | `widgets/{sidebar,work_strip}.py`、`app.py` | `test_tui_sidebar.py`、`test_tui_layout.py` | [TUI](guide/tui.md) |
 | todo 只读浮层（HUD/侧栏点击、命令面板入口） | `screens/todo_list.py`、`widgets/todo_hud.py` | `test_tui_todo.py` | 同上 |
