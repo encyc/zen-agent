@@ -60,8 +60,12 @@ def test_sniff_compat_deepseek_host_returns_deepseek_dialect():
 # ------------------------------------------------------------- load_catalog()
 
 
-def test_load_catalog_returns_three_providers_in_file_order():
-    assert list(load_catalog()) == ["zai-coding-cn", "deepseek", "opencode-go"]
+def test_load_catalog_keeps_the_hand_tuned_providers_first_in_file_order():
+    # The hand-tuned providers stay first (find_model's first-wins rule depends
+    # on it); pi-ai synced providers are appended after them.
+    names = list(load_catalog())
+    assert names[:3] == ["zai-coding-cn", "deepseek", "opencode-go"]
+    assert len(names) >= 3
 
 
 def test_find_model_glm_53_is_zai_dialect_and_first_provider_wins():

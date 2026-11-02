@@ -14,15 +14,15 @@ def test_missing_keys_are_reported():
 
 
 def test_all_keys_present_passes_those_rows():
-    checks = collect_checks(
-        env={
-            "ZAI_CODING_CN_API_KEY": "x",
-            "DEEPSEEK_API_KEY": "x",
-            "OPENCODE_API_KEY": "x",
-        }
-    )
+    # Set the env var of every catalog provider, so "all keys present" stays a
+    # real assertion no matter how many providers the packaged catalog ships.
+    from zenagent.providers.catalog import load_catalog
+
+    env = {p.api_key_env: "x" for p in load_catalog().values()}
+    checks = collect_checks(env=env)
     key_rows = [check for check in checks if check.name.startswith("key:")]
     assert key_rows and all(check.ok for check in key_rows)
+    assert len(key_rows) == len(load_catalog())
 
 
 def test_broken_config_is_reported(monkeypatch):
