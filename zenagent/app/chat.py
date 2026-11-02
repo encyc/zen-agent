@@ -744,6 +744,7 @@ def _subagent_view(card: ToolCallView, *, meta=None, has_transcript=False) -> Su
         cost=cost,
         tokens=tokens,
         has_transcript=has_transcript,
+        transcript_truncated=bool(meta is not None and meta.truncated),
     )
 
 

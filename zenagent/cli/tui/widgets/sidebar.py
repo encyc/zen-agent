@@ -368,6 +368,8 @@ class Sidebar(VerticalScroll):
         for view in status.subagents[:MAX_SUBAGENT_ROWS]:
             mark = _SUBAGENT_MARKS.get(view.status, "•")
             label = f"{mark} {view.name} {_seconds(view.duration_ms / 1000)}"
+            if view.transcript_truncated:
+                label += t("tui.sidebar.transcript_cut")
             style = palette.STATE_COLORS.get(view.status, palette.TEXT)
             subagents.append((view.call_id, Text(fit(label), style=style)))
         self._section("subagent").set_rows(subagents)

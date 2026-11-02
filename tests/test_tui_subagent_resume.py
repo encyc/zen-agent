@@ -128,3 +128,46 @@ async def test_interrupted_transcript_is_still_readable(runtime_factory):
         assert entry.has_transcript is True
         views = app2.chat.subagent_transcript("tc_task")
         assert views
+
+
+async def test_truncated_sidecar_is_marked_in_the_row_and_banner(runtime_factory):
+    from zenagent.agent.subagents import task_dir
+    from zenagent.i18n import t
+
+    runtime = await runtime_factory(stream_fn=TaskCallingStream())
+    app = ZenAgentApp(runtime)
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        await app.chat.submit("delegate this")
+        await app.chat.wait_for_idle()
+        session_path = runtime.session.path
+
+    # Simulate the per-file cap: the sidecar was cut and marked, the run is ok.
+    sidecar = task_dir(session_path) / "tc_task.jsonl"
+    with sidecar.open("a", encoding="utf-8") as handle:
+        handle.write('{"type": "truncated"}\n')
+
+    resumed = await runtime_factory(stream_fn=TaskCallingStream(), resume=session_path)
+    app2 = ZenAgentApp(resumed)
+    async with app2.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        app2._refresh_status()
+        await pilot.press("ctrl+b")
+        await pilot.pause()
+
+        [entry] = app2.chat.status.subagents
+        assert entry.status == "ok"
+        assert entry.transcript_truncated is True
+
+        row = next(
+            row
+            for row in app2.query_one(Sidebar).query(SidebarRow)
+            if row.key == entry.call_id
+        )
+        assert t("tui.sidebar.transcript_cut") in row.plain
+
+        await pilot.click(row)
+        await pilot.pause()
+
+        banner = app2.query_one(SubagentBanner)
+        assert t("tui.subagent.transcript_truncated") in banner.plain

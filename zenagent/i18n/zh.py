@@ -61,6 +61,7 @@ CATALOG: dict[str, str] = {
     "tui.subagent.label": "子代理：",
     "tui.subagent.readonly": "只读 · esc 返回",
     "tui.subagent.done": "完成",
+    "tui.subagent.transcript_truncated": "转录已截断",
     # TUI：工作面板分区
     "tui.sidebar.session": "会话",
     "tui.sidebar.model": "模型",
@@ -68,6 +69,7 @@ CATALOG: dict[str, str] = {
     "tui.sidebar.context": "上下文",
     "tui.sidebar.todo": "待办",
     "tui.sidebar.subagent": "子代理",
+    "tui.sidebar.transcript_cut": "［截］",
     "tui.sidebar.jobs": "后台任务",
     "tui.sidebar.messages.one": "{n} 条消息",
     "tui.sidebar.messages.other": "{n} 条消息",

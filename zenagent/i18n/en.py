@@ -62,6 +62,7 @@ CATALOG: dict[str, str] = {
     "tui.subagent.label": "subagent: ",
     "tui.subagent.readonly": "read-only · esc to return",
     "tui.subagent.done": "done",
+    "tui.subagent.transcript_truncated": "transcript truncated",
     # TUI: work panel sections
     "tui.sidebar.session": "Session",
     "tui.sidebar.model": "Model",
@@ -69,6 +70,7 @@ CATALOG: dict[str, str] = {
     "tui.sidebar.context": "Context",
     "tui.sidebar.todo": "Todo",
     "tui.sidebar.subagent": "Subagent",
+    "tui.sidebar.transcript_cut": " [cut]",
     "tui.sidebar.jobs": "Jobs",
     "tui.sidebar.messages.one": "{n} message",
     "tui.sidebar.messages.other": "{n} messages",
