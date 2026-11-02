@@ -778,6 +778,12 @@ def main(argv: list[str] | None = None) -> int:
             )
         return 0
     if not args.prompt:
+        if args.json:
+            print(
+                "zenagent: --json is only meaningful with -p/--prompt",
+                file=sys.stderr,
+            )
+            return 1
         if sys.stdout.isatty() and not args.no_tui:
             from zenagent.app.permissions import PermissionBroker
             from zenagent.app.runtime import Runtime, RuntimeOptions

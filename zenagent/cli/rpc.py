@@ -169,6 +169,16 @@ class RpcServer:
     def running(self) -> bool:
         return self._task is not None and not self._task.done()
 
+    @property
+    def busy(self) -> bool:
+        """True while a run owns the agent, however it was started.
+
+        ``prompt`` owns ``_task``; ``session op=retry`` and queued follow-ups
+        start runs on the ChatController instead, so ``running`` alone would
+        misreport the server as idle.
+        """
+        return self.running or self.agent.is_streaming
+
     # -- approval round-trip ------------------------------------------------
 
     async def confirm(self, tool_name: str, arguments: dict, verdict=None) -> str:
@@ -264,14 +274,16 @@ class RpcServer:
             if not isinstance(text, str) or not text.strip():
                 self._send({"type": "error", "id": request_id, "message": "prompt needs text"})
                 return True
-            if self.running:
+            if self.busy:
                 self._send({"type": "error", "id": request_id, "message": "busy"})
                 return True
             self._text = []
             self._task = asyncio.create_task(self._run_prompt(text, request_id))
             return True
         if kind == "cancel":
-            if self.running:
+            # A run may have been started by a retry session op or a queued
+            # follow-up, in which case ``_task`` is None but the agent is busy.
+            if self.busy:
                 self.agent.abort()
                 self._send({"type": "result", "id": request_id, "ok": True, "cancelled": True})
             else:
@@ -317,8 +329,7 @@ class RpcServer:
             await self._session(request, request_id)
             return True
         if kind == "command":
-            await self._command(request, request_id)
-            return True
+            return await self._command(request, request_id)
         self._send({"type": "error", "id": request_id, "message": f"unknown type: {kind}"})
         return True
 
@@ -327,7 +338,7 @@ class RpcServer:
             "type": "result",
             "id": request_id,
             "ok": True,
-            "running": self.running,
+            "running": self.busy,
             "messages": len(self.agent.messages),
             "model": self.agent.model.id,
             "usage": _usage(self.agent),
@@ -482,6 +493,8 @@ class RpcServer:
                 self.chat.reload_transcript(drop_pending=True)
             return {"path": str(path)}
         if op == "undo":
+            if self.busy:
+                raise RuntimeError("busy: cancel the run before undoing")
             result = self.sessions.undo()
             if result is None:
                 return {"dropped": 0, "path": None}
@@ -490,6 +503,8 @@ class RpcServer:
                 self.chat.reload_transcript(drop_pending=True)
             return {"dropped": dropped, "path": str(path)}
         if op == "delete":
+            if self.busy:
+                raise RuntimeError("busy: cancel the run before deleting a session")
             target = request.get("path")
             if not isinstance(target, str) or not target.strip():
                 raise ValueError("delete needs path")
@@ -516,26 +531,27 @@ class RpcServer:
             return {"path": str(exported)}
         raise ValueError(f"unknown session op: {op}")
 
-    async def _command(self, request: dict, request_id) -> None:
+    async def _command(self, request: dict, request_id) -> bool:
+        """Dispatch one slash command; False means ``quit`` asked to shut down."""
         name = request.get("name")
         if not isinstance(name, str) or not name.strip():
             self._send({"type": "error", "id": request_id, "message": "command needs name"})
-            return
+            return True
         if self.commands is None:
             self._send(
                 {"type": "error", "id": request_id, "message": "commands need a runtime"}
             )
-            return
+            return True
         if self.commands.get(name) is None:
             self._send(
                 {"type": "error", "id": request_id, "message": f"unknown command: {name}"}
             )
-            return
+            return True
         try:
             result = await self.commands.dispatch(name, str(request.get("argument") or ""))
         except Exception as exc:  # noqa: BLE001 - a command must not kill the server
             self._send({"type": "error", "id": request_id, "message": str(exc)})
-            return
+            return True
         applied_model = None
         if result.model and self.models is not None:
             switch = self.models.switch(result.model)
@@ -558,11 +574,18 @@ class RpcServer:
         )
         if result.quit:
             self._closed = True
+            return False
+        return True
 
     async def _shutdown(self) -> None:
         if self.running:
             self.agent.abort()
             await asyncio.gather(self._task, return_exceptions=True)
+        elif self.agent.is_streaming:
+            # A retry/queued run owns a ChatController task, not ``_task``.
+            self.agent.abort()
+        if self.chat is not None:
+            await self.chat.wait_for_idle()
 
 
 async def _stdin_line() -> str | None:

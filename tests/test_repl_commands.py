@@ -318,3 +318,80 @@ async def test_repl_retry_reruns_without_duplicating_the_prompt(isolated_session
             if type(message).__name__ == "UserMessage"
         ]
         assert len(users) == 1 and users[0].content == "hello"
+
+
+def test_every_command_screen_has_a_text_rendering(services):
+    """No TUI screen may silently do nothing in the REPL."""
+    import inspect
+    import re
+
+    from zenagent.app import commands as commands_module
+    from zenagent.app.commands import CommandResult
+
+    screens = set(re.findall(r'screen="([a-z-]+)"', inspect.getsource(commands_module)))
+    assert screens
+    for screen in sorted(screens):
+        lines: list[str] = []
+        assert _render(services, CommandResult(screen=screen), lines) is None
+        if screen in {
+            "model-picker",
+            "mode-picker",
+            "thinking-picker",
+            "theme-picker",
+            "language-picker",
+            "session-picker",
+            "session-picker-all",
+            "hotkeys",
+            "todo-edit",
+            "settings",
+            "plan-review",
+        }:
+            assert lines, screen
+
+
+async def test_repl_trace_flag_reports_the_path(isolated_sessions, tmp_path):
+    trace = tmp_path / "trace.jsonl"
+    lines: list[str] = []
+    code = await repl(
+        "glm-5.3",
+        stream_fn=scripted_stream(),
+        api_key="k",
+        trace=trace,
+        input_fn=scripted_input("/trace", "/exit"),
+        print_fn=lines.append,
+    )
+    assert code == 0
+    assert str(trace) in "\n".join(lines)
+
+
+async def test_repl_undo_continues_in_a_new_session(isolated_sessions):
+    from zenagent.agent.session import Session
+
+    lines: list[str] = []
+    code = await repl(
+        "glm-5.3",
+        stream_fn=scripted_stream("first", "second"),
+        api_key="k",
+        input_fn=scripted_input("hello", "/undo", "again", "/exit"),
+        print_fn=lines.append,
+    )
+    assert code == 0
+    files = list(isolated_sessions.glob("*.jsonl"))
+    assert len(files) >= 2, "undo writes the truncated transcript to a new file"
+    containing_again = [
+        path
+        for path in files
+        if any(
+            getattr(message, "content", None) == "again"
+            for message in Session(path).load()
+        )
+    ]
+    assert containing_again, "the post-undo turn must persist somewhere"
+    # The new file is the continuation: it never carries the undone prompt.
+    assert all(
+        not any(
+            getattr(message, "content", None) == "hello"
+            for message in Session(path).load()
+        )
+        for path in containing_again
+    )

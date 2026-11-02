@@ -273,15 +273,18 @@ async def test_command_request_dispatches_slash_commands(runtime_factory):
         [
             {"type": "command", "id": "c1", "name": "tools"},
             {"type": "command", "id": "c2", "name": "mode", "argument": "plan"},
-            {"type": "command", "id": "c3", "name": "quit"},
             {"type": "command", "id": "c4", "name": "nope"},
+            {"type": "command", "id": "c3", "name": "quit"},
+            {"type": "status", "id": "never"},
         ],
     )
     messages = {message["id"]: message for message in decode(writes)}
     assert "read_file" in messages["c1"]["message"]
     assert runtime.mode == "plan"
-    assert messages["c3"]["quit"] is True
     assert messages["c4"]["type"] == "error"
+    assert messages["c3"]["quit"] is True
+    # `/quit` shuts the server down: the request after it is never read.
+    assert "never" not in messages
 
 
 async def test_prompt_runs_through_the_chat_controller(runtime_factory):
@@ -329,3 +332,76 @@ def test_rpc_flags_forward_to_runtime_options(monkeypatch, tmp_path):
     assert str(options.metrics) == str(metrics)
     assert options.retries == 2
     assert options.mcp is False
+
+
+async def slow_stream(delay: float = 0.2, text: str = "slow"):
+    async def stream(model, messages, tools, options):
+        partial = AssistantMessage(
+            content=[],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="pending",
+            timestamp=int(time.time()),
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        await asyncio.sleep(delay)
+        block = TextContent(text=text)
+        partial.content.append(block)
+        yield AssistantEvent(
+            type="text_delta", partial=partial, content_index=0, delta=text
+        )
+        partial.stop_reason = "stop"
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    return stream
+
+
+async def test_cancel_aborts_a_run_started_by_a_session_retry(runtime_factory):
+    runtime, server, writes, queue = await build(
+        runtime_factory, stream_fn=await slow_stream()
+    )
+    runtime.agent.replace_messages(
+        [
+            UserMessage(content="hello", timestamp=1),
+            AssistantMessage(
+                content=[TextContent(text="hi")],
+                provider="p",
+                model="m",
+                usage=Usage(),
+                stop_reason="stop",
+                timestamp=2,
+            ),
+        ]
+    )
+    await server._handle_line(
+        json.dumps({"type": "session", "id": "r", "op": "retry"})
+    )
+    await asyncio.sleep(0.05)
+    assert server.busy is True
+    await server._handle_line(json.dumps({"type": "cancel", "id": "c"}))
+    payload = next(message for message in decode(writes) if message.get("id") == "c")
+    assert payload["cancelled"] is True
+    await server.chat.wait_for_idle()
+    assert server.agent.is_streaming is False
+
+
+async def test_mutating_session_ops_are_rejected_while_a_run_is_active(
+    runtime_factory,
+):
+    runtime, server, writes, queue = await build(
+        runtime_factory, stream_fn=await slow_stream()
+    )
+    runtime.agent.replace_messages([UserMessage(content="hello", timestamp=1)])
+    await server._handle_line(
+        json.dumps({"type": "prompt", "id": "p", "text": "hi"})
+    )
+    await asyncio.sleep(0.05)
+    await server._handle_line(
+        json.dumps({"type": "session", "id": "u", "op": "undo"})
+    )
+    payload = next(message for message in decode(writes) if message.get("id") == "u")
+    assert payload["type"] == "error"
+    assert "busy" in payload["message"]
+    server.agent.abort()
+    await asyncio.gather(server._task, return_exceptions=True)

@@ -1029,3 +1029,9 @@ def test_tui_image_on_a_non_vision_model_fails(monkeypatch, tmp_path, capsys):
 
     assert cli_main.main(["--image", str(_png(tmp_path))]) == 1
     assert "does not accept images" in capsys.readouterr().err
+
+
+def test_json_without_a_prompt_is_rejected(monkeypatch, capsys):
+    _tui_stdout(monkeypatch)
+    assert cli_main.main(["--json"]) == 1
+    assert "--json is only meaningful with -p/--prompt" in capsys.readouterr().err
