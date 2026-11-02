@@ -690,7 +690,7 @@ git commit -m "docs: record the frontend alignment and the RPC v2 protocol"
   - P2：RPC v2（审批往返、steer、tools/model/mode/usage、session、command、完整 flag 集）；
     v1 请求形状不变，`tests/test_rpc.py` 原样通过，新增 `tests/test_rpc_v2.py`。
   - P3：TUI `--thinking/--trace/--metrics/--no-auto-compact/--image` 生效；`/trace` 显示路径。
-- 门禁：`bash scripts/check.sh` → 见收尾提交（全绿），`uv run pytest -q` 1888 passed。
+- 门禁：`bash scripts/check.sh` → lint 全绿 + `1894 passed`（最终提交 `8f2f8b0` 之后）。
 - 过程 Ruling：Task 7+8 合并实现（注册表的 retry/compact 拥有 run，拆开会留下坏中间态）；
   Task 9–11 因暂存合并在同一提交落地，各自测试套件独立通过。
 

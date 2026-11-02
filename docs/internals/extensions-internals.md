@@ -46,8 +46,9 @@ api.on(event_type, callback)         # 订阅 AgentEvent
 
 - headless（`cli/main.py`）：工具并入 `tool_list`；prompt 片段并入 `extra_prompt`；
   hooks 在 Agent 创建后订阅，异常被捕获并打印。
-- REPL（`cli/repl.py`）：额外把命令表交给 `handle_slash`（未知命令时先查扩展），
-  补全表合并命令；`/reload` 重新发现（hooks 不重复订阅，避免副作用翻倍）。
+- REPL（`cli/repl.py`）：先查共享 `CommandRegistry`，未命中再查扩展命令表，
+  补全表合并两者；`/reload` 调 `Runtime.reconcile_async()` 重新发现（hooks 由
+  Runtime 统一替换，不重复订阅，避免副作用翻倍）。TUI 走同一张注册表。
 - Agent 事件流是唯一的观察面：扩展不能阻止事件、不能改 run 结果。
 
 ## 安全边界
