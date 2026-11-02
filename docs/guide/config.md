@@ -130,6 +130,27 @@ deny = ["git_push"]                           # 追加到全局 deny；不能移
   `~/.zenagent/settings.json`）。
 - **项目层会进 git**：只放可共享配置，不要放密钥、账号、个人绝对路径。
 
+### [task]（仅全局层）
+
+子代理（`task` 工具）的预算，全部是正整数，默认值如下：
+
+```toml
+[task]
+max_turns = 300                   # 子代理的模型轮次上限，超了就被截断
+keep_transcripts = 64             # 每个会话保留的 sidecar 转录条数
+max_transcript_bytes = 33554432   # 保留转录的总字节数（32 MiB）
+max_transcript_file_bytes = 8388608  # 单条转录超过 8 MiB 就截断并标记
+```
+
+- **仅全局层**：和 `[safety]` / `[backup]` 同规则，项目层出现 `[task]` 启动即报错——被检出的仓库
+  不能给自己调大预算。
+- `max_turns` 是**子代理**的轮次上限，与主循环的 `AgentConfig.max_turns`（`--max-turns`，内建兜底
+  100 轮）是两套。超限不是错误：父模型收到的是
+  `status="truncated" reason="max_turns" turns="N"`，看到的是一个被截断的结果。
+- 四个键都会在加载时校验：0、负数、布尔值、非整数都会报错并指出 `task.<key>`。
+- 调大 `max_turns` 只放宽轮次，不放宽别的预算：工具结果仍是统一 40 KB、子代理仍只有一个只读工具集
+  （见[工具与权限](tools-permissions.md)）。
+
 ### [safety] 与 [backup]（仅全局层）
 
 ```toml
