@@ -174,3 +174,26 @@ async def test_thinking_row_is_not_duplicated_when_it_arrives_mid_stream(runtime
         await app.chat.wait_for_idle()
         await pilot.pause()
         assert len(app.query(ThinkingRow)) == 1
+
+
+def test_usage_row_plain_returns_the_rendered_tail():
+    """Regression: usage rows must not read Textual's removed ``renderable``."""
+    from zenagent.app.views import RunStatus
+    from zenagent.cli.tui.widgets.rows import UsageRow
+    from zenagent.i18n import t
+
+    status = RunStatus(
+        model_id="test-model",
+        thinking=None,
+        running=False,
+        input_tokens=1200,
+        output_tokens=34,
+        cost=0.0031,
+    )
+
+    row = UsageRow(status)
+
+    assert t("tui.rows.done") in row.plain
+    assert t("tui.rows.in", n=1200) in row.plain
+    assert t("tui.rows.out", n=34) in row.plain
+    assert "$0.0031" in row.plain
