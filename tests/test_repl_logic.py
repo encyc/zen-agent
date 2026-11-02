@@ -11,8 +11,7 @@ import pytest
 
 import zenagent.agent.session as session_module
 import zenagent.cli.repl as repl_module
-from zenagent.agent import Agent
-from zenagent.cli.repl import handle_slash, repl, split_input
+from zenagent.cli.repl import repl, split_input
 from zenagent.config import UserConfig
 from zenagent.events import AssistantEvent
 from zenagent.providers.catalog import Model
@@ -47,7 +46,7 @@ def model() -> Model:
 def scripted_stream(delay: float = 0.0, *turns):
     class Stream:
         def __init__(self) -> None:
-            self.turns = [list(t) for t in turns]
+            self.turns = list(turns)
             self.requests: list[list] = []
 
         async def __call__(self, model_, messages, tools, options):
@@ -109,57 +108,6 @@ def test_split_input_prompt_and_commands():
 # ---------------------------------------------------------------------------
 
 
-async def test_slash_exit_signals_the_repl_to_stop(capsys):
-    agent = Agent(model(), "s", api_key="k")
-    assert await handle_slash(agent, "exit", "") == "exit"
-
-
-async def test_slash_model_switches_and_reports(capsys, monkeypatch):
-    monkeypatch.setenv("DEEPSEEK_API_KEY", "deep-key")
-    agent = Agent(model(), "s", api_key="k")
-    await handle_slash(agent, "model", "")
-    assert "glm-5.3" in capsys.readouterr().out
-
-    await handle_slash(agent, "model", "deepseek-flash")
-    assert agent.model.id == "deepseek-flash"
-    assert "deepseek-flash" in capsys.readouterr().out
-
-
-async def test_slash_model_rejects_unknown_id(capsys):
-    agent = Agent(model(), "s", api_key="k")
-    await handle_slash(agent, "model", "nope")
-    assert agent.model.id == "glm-5.3"
-    assert "unknown model" in capsys.readouterr().out
-
-
-async def test_slash_thinking_validates_levels(capsys):
-    agent = Agent(model(), "s", api_key="k")
-    await handle_slash(agent, "thinking", "high")
-    assert agent.thinking == "high"
-
-    await handle_slash(agent, "thinking", "banana")
-    assert agent.thinking == "high"  # unchanged
-    assert "usage:" in capsys.readouterr().out
-
-
-async def test_slash_clear_resets_the_transcript(capsys):
-    agent = Agent(model(), "s", api_key="k")
-    agent.replace_messages([__import__("zenagent.types", fromlist=["UserMessage"]).UserMessage(content="x", timestamp=1)])
-    await handle_slash(agent, "clear", "")
-    assert agent.messages == []
-
-
-async def test_unknown_slash_command_is_reported(capsys):
-    agent = Agent(model(), "s", api_key="k")
-    await handle_slash(agent, "banana", "")
-    assert "unknown command" in capsys.readouterr().out
-
-
-# ---------------------------------------------------------------------------
-# REPL loop
-# ---------------------------------------------------------------------------
-
-
 async def test_repl_smoke_two_turns_then_exit(isolated_sessions):
     stream = scripted_stream(0.0, "first answer", "second answer")
     code = await repl(
@@ -214,11 +162,17 @@ async def test_typing_while_running_steers_instead_of_stacking(isolated_sessions
         api_key="k",
     )
     assert code == 0
-    assert len(stream.requests) == 2
-    second_request_texts = [
-        m.content for m in stream.requests[1] if hasattr(m, "content") and isinstance(m.content, str)
+    # Steering is delivered at the next step boundary; because the first run
+    # ended before it landed, ChatController continues the turn to deliver it,
+    # then the next typed prompt starts a third request.
+    assert len(stream.requests) == 3
+    request_texts = [
+        m.content
+        for request in stream.requests
+        for m in request
+        if hasattr(m, "content") and isinstance(m.content, str)
     ]
-    assert "please also check logs" in second_request_texts
+    assert "please also check logs" in request_texts
 
 
 async def test_unknown_model_returns_one():
@@ -240,103 +194,6 @@ async def test_missing_key_returns_one(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-async def test_slash_sessions_lists_and_marks_the_current(isolated_sessions, capsys):
-    from zenagent.agent.session import Session
-    from zenagent.types import UserMessage
-
-    isolated_sessions.mkdir(parents=True)
-    current = Session(isolated_sessions / "current.jsonl")
-    current.append(UserMessage(content="hello", timestamp=1))
-    Session(isolated_sessions / "other.jsonl").append(UserMessage(content="x", timestamp=1))
-
-    agent = Agent(model(), "s", api_key="k")
-    await handle_slash(agent, "sessions", "", session=current)
-    out = capsys.readouterr().out
-    assert "current.jsonl" in out and "other.jsonl" in out
-    assert "*" in out
-
-
-async def test_slash_fork_switches_the_transcript(isolated_sessions, capsys):
-    from zenagent.agent.session import Session
-    from zenagent.types import AssistantMessage, TextContent, Usage, UserMessage
-
-    isolated_sessions.mkdir(parents=True)
-    session = Session(isolated_sessions / "s.jsonl")
-    session.append(UserMessage(content="first", timestamp=1))
-    session.append(AssistantMessage(content=[TextContent(text="a1")], provider="p",
-                                    model="m", usage=Usage(), stop_reason="stop", timestamp=2))
-    session.append(UserMessage(content="second", timestamp=3))
-
-    switched: list[Session] = []
-    agent = Agent(model(), "s", api_key="k")
-    await handle_slash(
-        agent, "fork", "2", session=session, switch_session=switched.append
-    )
-    assert switched, "fork must switch the active session"
-    assert [m.content for m in agent.messages if isinstance(m, UserMessage)] == ["first", "second"]
-
-
-async def test_slash_fork_rejects_bad_arguments(isolated_sessions, capsys):
-    from zenagent.agent.session import Session
-
-    isolated_sessions.mkdir(parents=True)
-    session = Session(isolated_sessions / "s.jsonl")
-    agent = Agent(model(), "s", api_key="k")
-    await handle_slash(agent, "fork", "x", session=session)
-    assert "usage: /fork" in capsys.readouterr().out
-
-
-async def test_slash_import_loads_a_session(isolated_sessions, capsys):
-    from zenagent.agent.session import Session
-    from zenagent.types import UserMessage
-
-    isolated_sessions.mkdir(parents=True)
-    path = isolated_sessions / "imported.jsonl"
-    Session(path).append(UserMessage(content="from disk", timestamp=1))
-
-    switched: list[Session] = []
-    agent = Agent(model(), "s", api_key="k")
-    await handle_slash(
-        agent, "import", str(path), switch_session=switched.append
-    )
-    assert [m.content for m in agent.messages] == ["from disk"]
-    assert switched and switched[0].path == path
-
-
-async def test_slash_undo_drops_the_last_turn_into_a_new_file(isolated_sessions, capsys):
-    from zenagent.agent.session import Session
-    from zenagent.types import AssistantMessage, TextContent, Usage, UserMessage
-
-    isolated_sessions.mkdir(parents=True)
-    session = Session(isolated_sessions / "s.jsonl")
-    session.append(UserMessage(content="q1", timestamp=1))
-    session.append(AssistantMessage(content=[TextContent(text="a1")], provider="p",
-                                    model="m", usage=Usage(), stop_reason="stop", timestamp=2))
-    session.append(UserMessage(content="q2", timestamp=3))
-    session.append(AssistantMessage(content=[TextContent(text="a2")], provider="p",
-                                    model="m", usage=Usage(), stop_reason="stop", timestamp=4))
-    before = session.path.read_bytes()
-
-    switched: list[Session] = []
-    agent = Agent(model(), "s", api_key="k")
-    agent.replace_messages(session.load())
-    await handle_slash(agent, "undo", "", session=session, switch_session=switched.append)
-
-    assert [m.content for m in agent.messages if isinstance(m, UserMessage)] == ["q1"]
-    assert switched and switched[0].path != session.path
-    assert session.path.read_bytes() == before  # original untouched
-    assert "undid" in capsys.readouterr().out
-
-
-async def test_slash_undo_with_nothing_to_drop(isolated_sessions, capsys):
-    from zenagent.agent.session import Session
-
-    isolated_sessions.mkdir(parents=True)
-    agent = Agent(model(), "s", api_key="k")
-    await handle_slash(agent, "undo", "", session=Session(isolated_sessions / "s.jsonl"))
-    assert "nothing to undo" in capsys.readouterr().out
-
-
 async def test_repl_prints_a_status_line_after_each_run(isolated_sessions):
     lines: list[str] = []
     code = await repl(
@@ -348,53 +205,6 @@ async def test_repl_prints_a_status_line_after_each_run(isolated_sessions):
     )
     assert code == 0
     assert any("msgs" in line and "ctx" in line for line in lines), lines
-
-
-async def test_slash_session_prints_state(isolated_sessions, capsys):
-    agent = Agent(model(), "s", api_key="k")
-    await handle_slash(agent, "session", "")
-    out = capsys.readouterr().out
-    assert "glm-5.3" in out and "msgs" in out
-
-
-def vision_model() -> Model:
-    m = model()
-    m.supports_vision = True
-    return m
-
-
-async def test_slash_image_attaches_only_for_vision_models(tmp_path, capsys):
-    image = tmp_path / "pic.png"
-    image.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8)
-
-    non_vision = Agent(model(), "s", api_key="k")
-    await handle_slash(non_vision, "image", str(image), images=[])
-    assert "does not accept images" in capsys.readouterr().out
-
-    pending: list = []
-    vision = Agent(vision_model(), "s", api_key="k")
-    await handle_slash(vision, "image", str(image), images=pending)
-    assert len(pending) == 1 and pending[0].mime_type == "image/png"
-    assert "attached" in capsys.readouterr().out
-
-
-async def test_slash_images_lists_and_clears(tmp_path, capsys):
-    from zenagent.attachments import read_image_argument
-
-    image = tmp_path / "pic.png"
-    image.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8)
-    pending = [read_image_argument(image)]
-    agent = Agent(vision_model(), "s", api_key="k")
-
-    await handle_slash(agent, "images", "", images=pending)
-    assert "image/png" in capsys.readouterr().out
-    await handle_slash(agent, "images", "clear", images=pending)
-    assert pending == []
-
-
-# ---------------------------------------------------------------------------
-# S2-T3: late MCP server becomes usable in the same session
-# ---------------------------------------------------------------------------
 
 
 async def test_repl_reconnects_a_late_mcp_server(tmp_path, isolated_sessions):
@@ -444,106 +254,6 @@ async def test_repl_reconnects_a_late_mcp_server(tmp_path, isolated_sessions):
     joined = "\n".join(lines)
     assert "mcp: tools updated" in joined
     assert "flaky: connected" in joined
-
-
-async def test_slash_skills_lists_them(tmp_path, monkeypatch, capsys):
-    # `/skills` prints the disk truth, so the skill has to exist on disk: the
-    # loaded list only decides whether a "changed on disk" hint is needed.
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("HOME", str(tmp_path))
-    skill_dir = tmp_path / ".zenagent" / "skills" / "deploy"
-    skill_dir.mkdir(parents=True)
-    (skill_dir / "SKILL.md").write_text(
-        "---\nname: deploy\ndescription: ship it\n---\nbody\n", encoding="utf-8"
-    )
-    agent = Agent(model(), "s", api_key="k")
-
-    await handle_slash(agent, "skills", "", skill_list=[])
-
-    out = capsys.readouterr().out
-    assert "- deploy: ship it" in out
-
-
-async def test_slash_skills_with_none_configured(tmp_path, monkeypatch, capsys):
-    # Discovery reads the project root and ~/.zenagent/skills: point both at the
-    # tmpdir so a developer's own skill library cannot appear in the output.
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("HOME", str(tmp_path))
-    agent = Agent(model(), "s", api_key="k")
-    await handle_slash(agent, "skills", "", skill_list=[])
-    assert "no skills found" in capsys.readouterr().out
-
-
-async def test_slash_skills_shows_what_is_on_disk_and_names_what_is_pending(
-    tmp_path, monkeypatch, capsys
-):
-    """The REPL rescan is display-only: the hint says `/reload` applies it."""
-    from zenagent.skills import discover_skills
-
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("HOME", str(tmp_path))
-    skill_dir = tmp_path / ".zenagent" / "skills" / "late"
-    skill_dir.mkdir(parents=True)
-    (skill_dir / "SKILL.md").write_text(
-        "---\nname: late\ndescription: on disk only\n---\nbody\n", encoding="utf-8"
-    )
-    agent = Agent(model(), "s", api_key="k")
-
-    # Nothing loaded yet: the disk truth is still listed, and the hint names it.
-    await handle_slash(agent, "skills", "", skill_list=[])
-    out = capsys.readouterr().out
-    assert "- late: on disk only" in out
-    assert "changed on disk (late)" in out and "/reload" in out
-
-    # Once `/reload` has adopted it, there is nothing left to warn about.
-    loaded, _ = discover_skills([tmp_path / ".zenagent" / "skills"])
-    await handle_slash(agent, "skills", "", skill_list=loaded)
-    assert "changed on disk" not in capsys.readouterr().out
-
-
-async def test_slash_skills_reports_when_discovery_is_disabled(
-    tmp_path, monkeypatch, capsys
-):
-    """`--no-skills` means the model never gets them: say so, do not rescan."""
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("HOME", str(tmp_path))
-    skill_dir = tmp_path / ".zenagent" / "skills" / "late"
-    skill_dir.mkdir(parents=True)
-    (skill_dir / "SKILL.md").write_text(
-        "---\nname: late\ndescription: on disk only\n---\nbody\n", encoding="utf-8"
-    )
-    agent = Agent(model(), "s", api_key="k")
-
-    await handle_slash(agent, "skills", "", skill_list=[], skills_enabled=False)
-
-    out = capsys.readouterr().out
-    assert "disabled" in out and "--no-skills" in out
-    assert "late" not in out, "a disabled session must not advertise disk skills"
-
-
-async def test_slash_skills_without_a_loaded_list_does_not_crash(
-    tmp_path, monkeypatch, capsys
-):
-    """`skill_list` defaults to None for callers that do not track discovery."""
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("HOME", str(tmp_path))
-    skill_dir = tmp_path / ".zenagent" / "skills" / "late"
-    skill_dir.mkdir(parents=True)
-    (skill_dir / "SKILL.md").write_text(
-        "---\nname: late\ndescription: on disk only\n---\nbody\n", encoding="utf-8"
-    )
-    agent = Agent(model(), "s", api_key="k")
-
-    await handle_slash(agent, "skills", "")
-
-    out = capsys.readouterr().out
-    assert "- late: on disk only" in out
-    assert "changed on disk" not in out, "nothing loaded, nothing to diff against"
-
-
-# ---------------------------------------------------------------------------
-# S2-T8: /reload
-# ---------------------------------------------------------------------------
 
 
 async def test_reload_discovers_skills_added_mid_session(tmp_path, monkeypatch):
@@ -615,116 +325,6 @@ async def test_slash_theme_switches_and_reports(isolated_sessions):
     )
     assert code == 0
     assert any("theme -> mono" in line for line in lines)
-
-
-async def test_slash_theme_rejects_unknown_names():
-    from zenagent.agent import Agent
-    from zenagent.cli.repl import handle_slash
-
-    agent = Agent.__new__(Agent)
-    lines: list[str] = []
-
-    def set_theme(spec: str) -> None:
-        lines.append(f"switch:{spec}")
-
-    await handle_slash(
-        agent, "theme", "mono", print_fn=lambda *a, **k: lines.append("x"), set_theme=set_theme
-    )
-    assert "switch:mono" in lines
-    lines.clear()
-    await handle_slash(agent, "theme", "", print_fn=lambda *a, **k: lines.append("".join(str(x) for x in a)), set_theme=set_theme)
-    assert any("usage: /theme" in line for line in lines)
-
-
-async def test_slash_hotkeys_lists_bindings(capsys):
-    from zenagent.agent import Agent
-    from zenagent.cli.keybindings import DEFAULT_KEYBINDINGS
-    from zenagent.cli.repl import handle_slash
-
-    agent = Agent.__new__(Agent)
-    await handle_slash(agent, "hotkeys", "", keybindings=DEFAULT_KEYBINDINGS)
-    out = capsys.readouterr().out
-    assert "newline" in out and "escape,enter" in out
-
-
-async def test_mode_slash_calls_the_mode_setter():
-    printed: list[str] = []
-
-    def set_mode(argument: str) -> str:
-        assert argument == "plan"
-        return "mode: plan (read-only planning)"
-
-    result = await handle_slash(
-        None, "mode", "plan", print_fn=printed.append, set_mode=set_mode
-    )
-    assert result is None
-    assert printed == ["mode: plan (read-only planning)"]
-
-
-async def test_mode_slash_prints_validation_errors():
-    printed: list[str] = []
-
-    def set_mode(argument: str) -> str:
-        raise ValueError(f"unknown mode: {argument!r} (choose plan|ask|full)")
-
-    await handle_slash(
-        None, "mode", "yolo", print_fn=printed.append, set_mode=set_mode
-    )
-    assert printed and "unknown mode" in printed[0]
-
-
-async def test_rename_slash_sets_the_current_session_title(tmp_path, monkeypatch):
-    import zenagent.agent.session as session_module
-    from zenagent.agent.session import Session
-
-    monkeypatch.setattr(session_module, "sessions_dir", lambda: tmp_path)
-    session = Session(tmp_path / "s.jsonl")
-    printed: list[str] = []
-
-    await handle_slash(
-        None, "rename", "fix the login bug", print_fn=printed.append, session=session
-    )
-
-    assert printed and "fix the login bug" in printed[0]
-    assert session_module.session_title(session.path) == "fix the login bug"
-
-
-async def test_sessions_slash_shows_titles_before_filenames(tmp_path, monkeypatch):
-    import zenagent.cli.repl as repl_module
-    from zenagent.agent.session import SessionInfo
-
-    info = SessionInfo(
-        path=tmp_path / "20260101-000000.jsonl",
-        mtime=1.0,
-        messages=3,
-        title="fix the login bug",
-    )
-    monkeypatch.setattr(repl_module, "list_sessions", lambda **kwargs: [info])
-    printed: list[str] = []
-
-    await handle_slash(None, "sessions", "", print_fn=printed.append)
-
-    line = printed[0]
-    assert line.index("fix the login bug") < line.index("20260101-000000")
-
-
-async def test_thinking_slash_without_argument_shows_levels_without_changing_state():
-    from zenagent.providers.catalog import find_model, load_catalog
-
-    agent = Agent(
-        model=find_model(load_catalog(), "glm-5.3"),
-        system_prompt="s",
-        api_key="test-key",
-    )
-    agent.thinking = "high"
-    printed: list[str] = []
-
-    await handle_slash(agent, "thinking", "", print_fn=printed.append)
-
-    assert agent.thinking == "high"
-    assert printed and "high" in printed[0]
-    for level in ("off", "low", "medium", "high", "max"):
-        assert level in printed[0]
 
 
 async def test_slash_tools_lists_the_tool_set(isolated_sessions, capsys):
@@ -858,27 +458,6 @@ async def test_repl_injects_an_embedded_skill_token(
     assert "EMBEDDED BODY" in injected
 
 
-async def test_slash_restore_uses_the_shared_command_core():
-    lines: list[str] = []
-
-    result = await handle_slash(
-        None,
-        "restore",
-        "list",
-        print_fn=lines.append,
-        restore=lambda argument: f"restored:{argument}",
-    )
-    assert result is None
-    assert lines == ["restored:list"]
-
-
-async def test_slash_restore_without_a_journal_explains():
-    lines: list[str] = []
-    result = await handle_slash(None, "restore", "", print_fn=lines.append)
-    assert result is None
-    assert lines and "unavailable" in lines[0].lower()
-
-
 def test_repl_paints_tool_progress_in_place_on_a_tty(capsys):
     """A running bash call must show its latest line without spamming the log."""
     from rich.console import Console
@@ -927,180 +506,6 @@ def test_repl_does_not_paint_progress_without_a_terminal(capsys):
         )
     )
     assert capsys.readouterr().out == ""
-
-
-async def test_slash_pin_toggles_the_pins_sidecar(isolated_sessions, capsys):
-    import json
-
-    from zenagent.agent.session import Session
-
-    isolated_sessions.mkdir(parents=True, exist_ok=True)
-    path = isolated_sessions / "20260101-000000.jsonl"
-    path.write_text("")
-    agent = Agent(model(), "s", api_key="k")
-
-    await handle_slash(agent, "pin", "", session=Session(path))
-    assert "pinned:" in capsys.readouterr().out
-    assert json.loads((isolated_sessions / ".pins.json").read_text()) == [path.name]
-
-    await handle_slash(agent, "pin", "off", session=Session(path))
-    assert "unpinned:" in capsys.readouterr().out
-    assert json.loads((isolated_sessions / ".pins.json").read_text()) == []
-
-
-async def test_slash_new_switches_to_a_fresh_session(isolated_sessions, capsys):
-    agent = Agent(model(), "s", api_key="k")
-    switched = []
-    await handle_slash(agent, "new", "", switch_session=switched.append)
-    assert switched and switched[0].path.parent == isolated_sessions
-    assert agent.messages == []
-    assert "new session" in capsys.readouterr().out
-
-
-async def test_slash_settings_prints_model_and_paths(isolated_sessions, capsys):
-    agent = Agent(model(), "s", api_key="k")
-    await handle_slash(agent, "settings", "")
-    out = capsys.readouterr().out
-    assert agent.model.id in out
-    assert "config" in out and "sessions" in out
-
-
-async def test_slash_search_without_query_reports_the_provider(capsys, monkeypatch):
-    from zenagent.tools.web import registry
-
-    monkeypatch.setattr(registry, "default_provider", lambda: "tavily")
-    agent = Agent(model(), "s", api_key="k")
-    await handle_slash(agent, "search", "")
-    assert "tavily" in capsys.readouterr().out
-
-
-async def test_slash_doctor_runs_the_checks(capsys, monkeypatch):
-    from zenagent.cli import doctor
-
-    async def fake_doctor(print_fn=print):
-        print_fn("ok   demo  fine")
-        return 0
-
-    monkeypatch.setattr(doctor, "run_doctor", fake_doctor)
-    agent = Agent(model(), "s", api_key="k")
-    await handle_slash(agent, "doctor", "")
-    assert "demo" in capsys.readouterr().out
-
-
-async def test_slash_dirs_tracks_extra_roots(tmp_path, capsys):
-    agent = Agent(model(), "s", api_key="k")
-    extra = tmp_path / "extra"
-    extra.mkdir()
-    dirs: list = []
-    await handle_slash(agent, "add-dir", str(extra), extra_dirs=dirs)
-    assert dirs == [extra.resolve()]
-    await handle_slash(agent, "dirs", "", extra_dirs=dirs)
-    out = capsys.readouterr().out
-    assert str(extra) in out
-
-
-async def test_slash_btw_requires_a_question(capsys):
-    agent = Agent(model(), "s", api_key="k")
-    await handle_slash(agent, "btw", "")
-    assert "usage" in capsys.readouterr().out
-
-
-async def test_slash_shake_rejects_unknown_kind(capsys):
-    agent = Agent(model(), "s", api_key="k")
-    await handle_slash(agent, "shake", "everything")
-    assert "usage" in capsys.readouterr().out
-
-
-async def test_slash_trace_reports_disabled(capsys):
-    agent = Agent(model(), "s", api_key="k")
-    await handle_slash(agent, "trace", "")
-    assert "not enabled" in capsys.readouterr().out
-
-
-async def test_slash_todo_prints_the_session_list(isolated_sessions, capsys):
-    from zenagent.agent.session import Session
-    from zenagent.tools.todo import save_todo_phases
-
-    path = isolated_sessions / "20260101-000000.jsonl"
-    isolated_sessions.mkdir(parents=True, exist_ok=True)
-    path.write_text("")
-    save_todo_phases(path, [{"name": "Tasks", "tasks": [{"content": "write docs", "status": "pending"}]}])
-
-    agent = Agent(model(), "s", api_key="k")
-    await handle_slash(agent, "todo", "", session=Session(path))
-    out = capsys.readouterr().out
-    assert "write docs" in out and "pending" in out
-
-
-# ---------------------------------------------------------------------------
-# P0: /compact must continue in the summary session
-# ---------------------------------------------------------------------------
-
-
-async def test_slash_compact_switches_the_repl_to_the_summary_session(
-    isolated_sessions,
-):
-    from zenagent.types import UserMessage
-
-    async def summary_stream(model_, messages, tools, options):
-        partial = AssistantMessage(
-            content=[TextContent(text="摘要正文")],
-            provider="test",
-            model="m",
-            usage=Usage(),
-            stop_reason="stop",
-            timestamp=int(time.time()),
-        )
-        yield AssistantEvent(type="done", partial=partial, reason="stop")
-
-    agent = Agent(model(), "s", api_key="k", stream_fn=summary_stream)
-    agent.replace_messages([UserMessage(content="hi", timestamp=1)])
-    switched = []
-
-    await handle_slash(
-        agent,
-        "compact",
-        "",
-        print_fn=lambda *a, **k: None,
-        switch_session=switched.append,
-    )
-
-    assert switched, "compact must hand the new session to the REPL"
-    assert switched[0].path.name.endswith("-compact.jsonl")
-    assert switched[0].path.is_file()
-
-
-async def test_slash_model_uses_the_provided_catalog(monkeypatch, capsys):
-    from dataclasses import replace
-
-    from zenagent.providers.catalog import load_catalog
-
-    monkeypatch.setenv("DEEPSEEK_API_KEY", "deep-key")
-    catalog = load_catalog()
-    custom = replace(catalog["deepseek"].models[0], id="custom-x")
-    catalog["deepseek"].models.append(custom)
-    agent = Agent(model(), "s", api_key="k")
-
-    await handle_slash(agent, "model", "custom-x", catalog=catalog)
-
-    assert agent.model.id == "custom-x"
-    assert agent.api_key == "deep-key"
-    assert "custom-x" in capsys.readouterr().out
-
-
-async def test_slash_model_rejects_a_keyless_model(monkeypatch, capsys):
-    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
-    agent = Agent(model(), "s", api_key="k")
-
-    await handle_slash(agent, "model", "deepseek-flash")
-
-    assert agent.model.id == "glm-5.3"
-    assert "no API key" in capsys.readouterr().out
-
-
-# ---------------------------------------------------------------------------
-# P0: REPL startup flags
-# ---------------------------------------------------------------------------
 
 
 async def test_repl_forwards_the_thinking_flag(isolated_sessions):

@@ -61,23 +61,30 @@ def test_runtime_warns_on_a_cross_project_session(tmp_path, monkeypatch):
     assert any("belongs to project" in warning for warning in runtime.warnings)
 
 
-async def test_repl_sessions_all_labels_each_project(monkeypatch):
-    import zenagent.cli.repl as repl_module
-    from zenagent.cli.repl import handle_slash
+def test_repl_sessions_all_labels_each_project():
+    from zenagent.app.sessions import SessionEntry
+    from zenagent.cli.repl import _render_sessions
 
-    info = SessionInfo(
-        path=Path("/tmp/s.jsonl"), mtime=1.0, messages=2, title="fix bug", project="app"
+    entry = SessionEntry(
+        path=Path("/tmp/s.jsonl"),
+        created=1.0,
+        messages=2,
+        size=10,
+        title="fix bug",
+        project="app",
     )
     captured: dict = {}
 
-    def fake_list(**kwargs):
-        captured.update(kwargs)
-        return [info]
+    class FakeSessions:
+        def entries(self, *, scope="project"):
+            captured["scope"] = scope
+            return [entry]
 
-    monkeypatch.setattr(repl_module, "list_sessions", fake_list)
+    class FakeServices:
+        sessions = FakeSessions()
+
     printed: list[str] = []
-
-    await handle_slash(None, "sessions", "all", print_fn=printed.append)
+    _render_sessions(FakeServices(), printed.append, "all")
 
     assert captured.get("scope") == "all"
     assert "[app]" in printed[0]

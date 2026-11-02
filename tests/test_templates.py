@@ -120,21 +120,21 @@ def test_repl_slash_command_expands_a_template(tmp_path, monkeypatch):
     assert user_message.content == "Review src/x.py with care."
 
 
-def test_repl_help_lists_templates():
-    from zenagent.agent import Agent
-    from zenagent.cli.repl import handle_slash
+async def test_repl_help_lists_templates(services):
+    from zenagent.app.commands import build_default_commands
+    from zenagent.cli.repl import render_help
 
-    agent = Agent.__new__(Agent)  # handle_slash only needs attributes for /help
     lines: list[str] = []
-    asyncio.run(
-        handle_slash(
-            agent,
-            "help",
-            "",
-            print_fn=lambda *a, **k: lines.append("".join(str(x) for x in a)),
-            template_list=[
-                PromptTemplate(name="review", description="Review a file", path=Path("/x"), body="")
-            ],
-        )
+    render_help(
+        build_default_commands(services),
+        [
+            PromptTemplate(
+                name="review",
+                description="Review a file",
+                path=Path("/x"),
+                body="",
+            )
+        ],
+        lines.append,
     )
     assert any("/review" in line for line in lines)

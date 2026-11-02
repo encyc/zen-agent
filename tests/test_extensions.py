@@ -3,7 +3,7 @@
 import asyncio
 
 from zenagent.agent import Agent
-from zenagent.cli.repl import handle_slash
+from zenagent.cli.repl import repl
 from zenagent.extensions import load_extensions
 
 GOOD = '''
@@ -89,17 +89,37 @@ def test_missing_extension_file_warns(tmp_path):
     assert loaded.warnings and "not found" in loaded.warnings[0]
 
 
-async def test_extension_command_runs_via_repl(tmp_path):
-    loaded = load_extensions([write(tmp_path, "good.py", GOOD)])
-    agent = Agent.__new__(Agent)
-    lines: list[str] = []
-    await handle_slash(
-        agent,
-        "hello",
-        "bob",
-        print_fn=lambda *a, **k: lines.append("".join(str(x) for x in a)),
-        extension_commands=loaded.commands,
+async def test_extension_command_runs_via_repl(tmp_path, monkeypatch):
+    import zenagent.agent.session as session_module
+    import zenagent.cli.repl as repl_module
+    from zenagent.config import UserConfig
+
+    monkeypatch.setattr(repl_module, "load_user_config", lambda: UserConfig())
+    monkeypatch.setattr(
+        "zenagent.app.runtime.load_user_config",
+        lambda *args, **kwargs: UserConfig(),
     )
+    monkeypatch.setattr(
+        session_module, "sessions_dir", lambda: tmp_path / "sessions"
+    )
+
+    async def stream(model_, messages, tools, options):
+        return
+        yield  # pragma: no cover - no prompt is sent
+
+    async def read():
+        return "/hello bob" if not lines else "/exit"
+
+    lines: list[str] = []
+    code = await repl(
+        "glm-5.3",
+        stream_fn=stream,
+        api_key="k",
+        input_fn=read,
+        print_fn=lines.append,
+        extension_paths=[str(write(tmp_path, "good.py", GOOD))],
+    )
+    assert code == 0
     assert any("hello bob" in line for line in lines)
 
 

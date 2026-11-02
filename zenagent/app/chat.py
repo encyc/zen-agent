@@ -121,6 +121,15 @@ class ChatController:
         return Path(session.path) if session is not None else None
 
     @property
+    def busy(self) -> bool:
+        """True while a run or an automatic compaction owns the agent.
+
+        ``submit`` sets the task synchronously, so a frontend can tell "busy"
+        apart from "the run has not started its first await yet".
+        """
+        return self._task is not None or self._compacting
+
+    @property
     def status(self) -> RunStatus:
         agent = self.runtime.agent
         usage = usage_total(agent.messages)

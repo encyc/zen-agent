@@ -21,30 +21,23 @@ from pathlib import Path
 
 from rich.console import Console
 
-from zenagent.agent import Agent
 from zenagent.agent.session import (
-    Session,
-    list_sessions,
-    session_title,
     sessions_dir,
-    set_session_title,
-    truncate_last_turn,
-    unique_session_path,
 )
 from zenagent.app.appearance import THEME_CHOICES
-from zenagent.app.compact import compact, maybe_auto_compact
+from zenagent.app.chat import ChatController
+from zenagent.app.commands import AppServices, build_default_commands
+from zenagent.app.models import ModelManager
 from zenagent.app.modes import describe_modes
 from zenagent.app.permissions import build_permission_gate
-from zenagent.app.restore import run_restore_command
-from zenagent.app.retry import prepare_retry
 from zenagent.app.runtime import Runtime, RuntimeOptions
 from zenagent.app.safety import GuardPolicy
+from zenagent.app.sessions import SessionManager
 from zenagent.app.skill_commands import build_skill_submission
-from zenagent.app.support import api_key_for, describe_tools
+from zenagent.app.support import api_key_for
 from zenagent.attachments import read_image_argument
 from zenagent.cli.completion import (
     ReplCompleter,
-    help_text,
     slash_commands,
 )
 from zenagent.cli.keybindings import build_key_bindings, load_keybindings
@@ -64,16 +57,13 @@ from zenagent.cli.theme import (
 from zenagent.config import config_path, load_user_config
 from zenagent.events import AgentEvent
 from zenagent.i18n import LANGUAGE_CHOICES, resolve_language, set_locale, t
-from zenagent.providers.catalog import load_catalog
 from zenagent.providers.registry import StreamFn
-from zenagent.skills import default_skill_roots, discover_skills
 from zenagent.templates import expand
 from zenagent.tools.ask import set_ask_handler
-from zenagent.types import ImageContent, TextContent
+from zenagent.types import ImageContent
 
 __all__ = [
     "THINKING_LEVELS",
-    "handle_slash",
     "repl",
     "split_input",
 ]
@@ -96,630 +86,157 @@ def split_input(line: str) -> tuple[str, str]:
     return "", stripped
 
 
-async def handle_slash(
-    agent: Agent,
-    command: str,
-    argument: str,
+def _render_sessions(services, print_fn: PrintFn, scope: str) -> None:
+    """The text form of the TUI's session picker."""
+    entries = services.sessions.entries(scope=scope)
+    if not entries:
+        print_fn(t("repl.no_sessions"))
+        if scope == "project":
+            print_fn(t("repl.sessions_hint"))
+        return
+    for position, entry in enumerate(entries, start=1):
+        mark = "*" if entry.current else " "
+        label = (
+            f"[{entry.project or t('repl.legacy_project')}] "
+            if scope == "all"
+            else ""
+        )
+        title = entry.title or t("repl.empty_title")
+        print_fn(
+            t(
+                "repl.session_row",
+                mark=mark,
+                position=position,
+                label=label,
+                title=title,
+                messages=entry.messages,
+                path=entry.path.name,
+            )
+        )
+
+
+def _render_todo(services, print_fn: PrintFn) -> None:
+    rows = [
+        f"[{task.get('status', 'pending')}] {task.get('content', '')}"
+        for phase in services.chat.todos
+        for task in (phase.get("tasks") or [])
+        if isinstance(task, dict)
+    ]
+    print_fn("\n".join(rows) if rows else t("cmdmsg.todo_empty"))
+
+
+def _render_settings(services, print_fn: PrintFn) -> None:
+    from zenagent import settings as settings_store
+
+    prefs = settings_store.describe()["prefs"]
+    print_fn(t("repl.settings_header"))
+    for key, value in (
+        (t("repl.settings.model"), services.runtime.agent.model.id),
+        (t("repl.settings.thinking"), services.runtime.agent.thinking or "off"),
+        (t("repl.settings.theme"), str(prefs.get("theme", "auto"))),
+        (t("repl.settings.language"), str(prefs.get("language", "auto"))),
+    ):
+        print_fn(t("repl.settings_row", key=key, value=value))
+    print_fn(
+        t(
+            "repl.settings_paths",
+            config=config_path(),
+            settings=settings_store.settings_path(),
+            sessions=sessions_dir(),
+        )
+    )
+
+
+def render_command_result(
+    result,
     *,
-    print_fn: PrintFn = print,
-    guard=None,
-    session_path: Path | None = None,
-    session: Session | None = None,
-    switch_session=None,
-    images: list[ImageContent] | None = None,
-    mcp_manager=None,
-    refresh_mcp=None,
-    skill_list=None,
-    skills_enabled: bool = True,
-    template_list=None,
-    extension_commands=None,
-    reload_runtime=None,
-    set_theme=None,
-    set_language=None,
-    keybindings=None,
-    set_mode=None,
-    restore=None,
-    extra_dirs: list[str] | None = None,
-    trace_path: str | None = None,
-    catalog=None,
+    name: str,
+    services,
+    print_fn: PrintFn,
+    keybindings: dict[str, str] | None,
+    set_theme,
+    set_language,
 ) -> str | None:
-    """Run one slash command; returns ``"exit"`` when the REPL should stop."""
-    if command in ("exit", "quit"):
+    """Render one ``CommandResult`` as terminal text; ``"exit"`` means stop.
+
+    The TUI turns these results into pickers and overlays. The REPL has no
+    widgets, so every screen gets a text form instead of silently doing
+    nothing: a picker prints its current value, a list prints its rows.
+    """
+    if result.quit:
         return "exit"
-    if command == "restore":
-        if restore is None:
-            print_fn(t("cmdmsg.restore_unavailable"))
-            return None
-        print_fn(restore(argument))
-        return None
-    if command in ("help", "?"):
-        print_fn(help_text())
-        if template_list:
-            print_fn(t("repl.templates_header"))
-            for template in template_list:
-                print_fn(
-                    t(
-                        "repl.template_row",
-                        name=template.name,
-                        description=template.description,
-                    )
-                )
-        return None
-    if command == "mode":
-        if set_mode is None:
-            print_fn(t("repl.mode_unavailable"))
-            return None
-        try:
-            print_fn(set_mode(argument))
-        except ValueError as exc:
-            print_fn(t("repl.mode_error", error=exc))
-        return None
-    if command == "rename":
-        if session is None:
-            print_fn(t("repl.rename_unavailable"))
-            return None
-        requested = argument.strip()
-        if not requested:
-            print_fn(
-                t("repl.session_name", name=session_title(session.path))
-            )
-            return None
-        try:
-            stored = set_session_title(session.path, requested)
-        except ValueError as exc:
-            print_fn(t("repl.rename_error", error=exc))
+    if result.model:
+        switch = services.models.switch(result.model)
+        if switch.ok:
+            print_fn(t("repl.model_switch", model=services.models.current()))
         else:
-            print_fn(t("repl.renamed", name=stored))
-        return None
-    if command == "clear":
-        agent.reset()
-        print_fn(t("repl.cleared"))
-        return None
-    if command == "model":
-        if not argument:
-            print_fn(t("repl.current_model", model=agent.model.id))
-            return None
-        from zenagent.app.models import apply_model_switch
+            print_fn(switch.reason or t("repl.unknown_model", model=result.model))
+    if result.appearance:
+        set_theme(result.appearance)
+    if result.language:
+        set_language(result.language)
+    if result.message:
+        print_fn(result.message)
 
-        result = apply_model_switch(
-            agent,
-            catalog if catalog is not None else load_catalog(),
-            guard,
-            argument,
+    screen = result.screen
+    if screen == "model-picker":
+        print_fn(t("repl.current_model", model=services.models.current()))
+    elif screen == "mode-picker":
+        print_fn(
+            t("cmdmsg.mode_set", mode=services.runtime.mode, modes=describe_modes())
         )
-        if result.ok:
-            print_fn(t("repl.model_switch", model=agent.model.id))
-        elif result.reason and result.reason.startswith("unknown model"):
-            print_fn(t("repl.unknown_model", model=argument))
+    elif screen == "thinking-picker":
+        print_fn(
+            t("repl.thinking_info", level=services.runtime.agent.thinking or "off")
+        )
+    elif screen == "theme-picker":
+        print_fn(t("repl.theme_usage"))
+    elif screen == "language-picker":
+        print_fn(t("repl.lang_usage"))
+    elif screen == "session-picker":
+        _render_sessions(services, print_fn, "project")
+    elif screen == "session-picker-all":
+        _render_sessions(services, print_fn, "all")
+    elif screen == "hotkeys":
+        if keybindings:
+            for action, key in sorted(keybindings.items()):
+                print_fn(f"{action}: {key}")
         else:
-            print_fn(result.reason or t("repl.unknown_model", model=argument))
-        return None
-    if command == "thinking":
-        if not argument:
-            print_fn(
-                t(
-                    "repl.thinking_info", level=agent.thinking or "off"
-                )
-            )
-            return None
-        level = argument
-        if level not in THINKING_LEVELS:
-            print_fn(t("repl.thinking_usage"))
-            return None
-        agent.thinking = level
-        print_fn(t("repl.thinking_set", level=level))
-        return None
-    if command == "sessions":
-        scope = "all" if argument.strip().lower() == "all" else "project"
-        infos = list_sessions(scope=scope)
-        if not infos:
-            print_fn(t("repl.no_sessions"))
-            if scope == "project":
-                print_fn(t("repl.sessions_hint"))
-            return None
-        current = session.path if session is not None else None
-        for position, info in enumerate(infos, start=1):
-            mark = "*" if info.path == current else " "
-            label = (
-                f"[{info.project or t('repl.legacy_project')}] "
-                if scope == "all"
-                else ""
-            )
-            title = info.title or t("repl.empty_title")
-            print_fn(
-                t(
-                    "repl.session_row",
-                    mark=mark,
-                    position=position,
-                    label=label,
-                    title=title,
-                    messages=info.messages,
-                    path=info.path.name,
-                )
-            )
-        return None
-    if command == "fork":
-        if session is None:
-            print_fn(t("repl.fork_unavailable"))
-            return None
-        try:
-            index = int(argument)
-        except ValueError:
-            print_fn(t("repl.fork_usage"))
-            return None
-        try:
-            forked_path = session.fork_at(index)
-        except ValueError as exc:
-            print_fn(str(exc))
-            return None
-        forked = Session(forked_path)
-        agent.replace_messages(forked.load())
-        if switch_session is not None:
-            switch_session(forked)
-        print_fn(t("repl.forked", index=index, path=forked_path.name))
-        return None
-    if command == "import":
-        if not argument:
-            print_fn(t("repl.import_usage"))
-            return None
-        imported_path = Path(argument).expanduser()
-        if not imported_path.is_file():
-            print_fn(t("repl.no_such_session", path=imported_path))
-            return None
-        imported = Session(imported_path)
-        messages = imported.load()
-        for warning in imported.warnings:
-            print_fn(warning)
-        agent.replace_messages(messages)
-        if switch_session is not None:
-            switch_session(imported)
-        print_fn(
-            t(
-                "repl.imported",
-                count=len(messages),
-                path=imported_path.name,
-            )
-        )
-        return None
-    if command == "undo":
-        if agent.is_streaming:
-            print_fn(t("repl.cannot_undo"))
-            return None
-        truncated = truncate_last_turn(agent.messages)
-        dropped = len(agent.messages) - len(truncated)
-        if dropped == 0:
-            print_fn(t("repl.nothing_to_undo"))
-            return None
-        agent.replace_messages(truncated)
-        if session is not None:
-            new_path = session.rewrite(truncated)
-            if switch_session is not None:
-                switch_session(Session(new_path))
-            print_fn(
-                t("repl.undone_path", count=dropped, path=new_path.name)
-            )
-        else:
-            print_fn(t("repl.undone", count=dropped))
-        return None
-    if command == "session":
-        print_fn(
-            status_line(
-                model_id=agent.model.id,
-                thinking=agent.thinking,
-                messages=len(agent.messages),
-                usage=aggregate_usage(agent.messages),
-                context_window=agent.model.context_window,
-            )
-        )
-        if session_path is not None:
-            print_fn(t("repl.session_path", path=session_path))
-        return None
-    if command == "image":
-        if images is None:
-            print_fn(t("repl.images_unavailable"))
-            return None
-        if not agent.model.supports_vision:
-            print_fn(
-                t("repl.model_no_images", model=agent.model.id)
-            )
-            return None
-        if not argument:
-            print_fn(t("repl.image_usage"))
-            return None
-        try:
-            block = read_image_argument(Path(argument).expanduser())
-        except ValueError as exc:
-            print_fn(str(exc))
-            return None
-        images.append(block)
-        print_fn(
-            t(
-                "repl.image_attached",
-                path=argument,
-                mime=block.mime_type,
-            )
-        )
-        return None
-    if command == "images":
-        if argument == "clear":
-            if images is not None:
-                images.clear()
-            print_fn(t("repl.images_cleared"))
-            return None
-        if not images:
-            print_fn(t("repl.no_images"))
-            return None
-        for position, block in enumerate(images, start=1):
-            print_fn(
-                t(
-                    "repl.image_row",
-                    position=position,
-                    mime=block.mime_type,
-                    chars=len(block.data),
-                )
-            )
-        return None
-    if command == "theme":
-        if set_theme is None:
-            print_fn(t("repl.themes_unavailable"))
-            return None
-        if not argument:
-            print_fn(t("repl.theme_usage"))
-            return None
-        set_theme(argument)
-        return None
-    if command == "lang":
-        if set_language is None:
-            print_fn(t("repl.lang_unavailable"))
-            return None
-        if not argument:
-            print_fn(t("repl.lang_usage"))
-            return None
-        set_language(argument)
-        return None
-    if command == "hotkeys":
-        if not keybindings:
             print_fn(t("repl.no_keybindings"))
-            return None
-        for action, key in sorted(keybindings.items()):
-            print_fn(f"{action}: {key}")
-        return None
-    if command == "reload":
-        if reload_runtime is None:
-            print_fn(t("repl.reload_unavailable"))
-            return None
-        await reload_runtime()
-        return None
-    if command == "skills":
-        # Rescan for display only. The REPL's discovery is monolithic (skills,
-        # templates and extensions in one pass), so adopting here would mean
-        # re-executing extension files inside a display command; `/reload`
-        # remains the operation that applies changes. Showing the disk truth and
-        # naming what is pending is the honest middle: the list is never stale,
-        # and the hint says how to make the model see it.
-        if not skills_enabled:
-            print_fn(t("repl.skills_disabled"))
-            return None
-        fresh, _warnings = discover_skills(default_skill_roots(Path.cwd()))
-        if not fresh:
-            print_fn(t("repl.no_skills"))
-            return None
-        for skill in fresh:
-            print_fn(
-                t(
-                    "repl.skill_row",
-                    name=skill.name,
-                    description=skill.description,
-                )
-            )
-
-        # ``skill_list`` is None for callers that do not track what the agent
-        # loaded; without it there is nothing to diff against, so no hint.
-        if skill_list is not None:
-            def signature(skills):
-                return {
-                    (skill.name, skill.description, skill.body) for skill in skills
-                }
-
-            pending = sorted(
-                {item[0] for item in signature(fresh) ^ signature(skill_list)}
-            )
-            if pending:
-                print_fn(
-                    t("repl.changed_on_disk", names=", ".join(pending))
-                )
-        return None
-    if command == "mcp":
-        if mcp_manager is None:
-            print_fn(t("repl.no_mcp"))
-            return None
-        if argument.startswith("retry") and refresh_mcp is not None:
-            await refresh_mcp(force=True)
-        for status in mcp_manager.status():
-            if status.state == "connected":
-                print_fn(
-                    t(
-                        "repl.mcp_connected",
-                        name=status.name,
-                        count=len(status.tools),
-                    )
-                )
-            else:
-                print_fn(
-                    t(
-                        "repl.mcp_failed",
-                        name=status.name,
-                        error=status.error or t("repl.unknown_error"),
-                    )
-                )
-        return None
-    if command == "tools":
-        print_fn(describe_tools(agent.tools))
-        return None
-    if command == "pin":
-        if session is None:
-            print_fn(t("repl.pin_unavailable"))
-            return None
-        requested = argument.strip().lower()
-        if requested not in ("", "on", "off"):
-            print_fn(t("repl.pin_usage"))
-            return None
-        from zenagent.agent.session import read_session_pins, set_session_pin
-
-        pinned_now = session.path.name in read_session_pins(session.path.parent)
-        target = {"on": True, "off": False}.get(requested, not pinned_now)
-        try:
-            state = set_session_pin(session.path, target)
-        except ValueError as exc:
-            print_fn(str(exc))
-            return None
-        print_fn(
-            t(
-                "repl.pinned" if state else "repl.unpinned",
-                name=session_title(session.path),
-            )
-        )
-        return None
-    if command == "new":
-        if switch_session is None:
-            print_fn(t("repl.new_unavailable"))
-            return None
-        fresh = Session(unique_session_path())
-        agent.replace_messages([])
-        switch_session(fresh)
-        print_fn(t("repl.new_session", path=fresh.path.name))
-        return None
-    if command == "settings":
-        from zenagent import settings as settings_store
-
-        prefs = settings_store.describe()["prefs"]
-        print_fn(t("repl.settings_header"))
-        for key, value in (
-            (t("repl.settings.model"), agent.model.id),
-            (t("repl.settings.thinking"), agent.thinking or "off"),
-            (t("repl.settings.theme"), str(prefs.get("theme", "auto"))),
-            (t("repl.settings.language"), str(prefs.get("language", "auto"))),
-        ):
-            print_fn(t("repl.settings_row", key=key, value=value))
-        print_fn(
-            t(
-                "repl.settings_paths",
-                config=config_path(),
-                settings=settings_store.settings_path(),
-                sessions=sessions_dir(),
-            )
-        )
-        return None
-    if command == "search":
-        from zenagent.tools.web import format_results, run_search
-        from zenagent.tools.web.registry import default_provider
-
-        query = argument.strip()
-        if not query or query in ("settings", "provider", "status"):
-            print_fn(
-                t(
-                    "cmdmsg.search_provider_info",
-                    provider=default_provider() or "auto",
-                )
-            )
-            return None
-        result = await run_search(query, limit=5)
-        print_fn(format_results(result))
-        return None
-    if command == "doctor":
-        from zenagent.cli.doctor import run_doctor
-
-        await run_doctor(print_fn=print_fn)
-        return None
-    if command == "compact":
-        try:
-            path = await compact(agent)
-        except Exception as exc:  # noqa: BLE001 - report, keep the REPL alive
-            print_fn(t("repl.compaction_failed", error=exc))
-        else:
-            # The summary is the continuation: persist subsequent turns to the
-            # new file, or they would be appended to the pre-compaction one.
-            if switch_session is not None:
-                switch_session(Session(path))
-            print_fn(t("repl.compacted", path=path.name))
-        return None
-
-    if command == "todo":
-        from zenagent.tools.todo import load_todo_phases
-
-        phases = load_todo_phases(session.path if session is not None else None)
-        rows = [
-            f"[{task.get('status', 'pending')}] {task.get('content', '')}"
-            for phase in phases
-            for task in (phase.get("tasks") or [])
-            if isinstance(task, dict)
-        ]
-        if not rows:
-            print_fn(t("cmdmsg.todo_empty"))
-            return None
-        print_fn("\n".join(rows))
-        return None
-    if command == "jobs":
-        from zenagent.tools.jobs import UnknownJobError, get_job_manager
-
-        manager = get_job_manager()
-        raw = argument.strip()
-        if raw.startswith("kill"):
-            job_id = raw[len("kill") :].strip()
-            if not job_id:
-                print_fn(t("cmdmsg.jobs_usage"))
-                return None
-            try:
-                job = await manager.kill(job_id)
-            except UnknownJobError as exc:
-                print_fn(str(exc))
-                return None
-            print_fn(t("cmdmsg.job_killed", id=job.id))
-            return None
-        jobs = manager.list()
-        if not jobs:
-            print_fn(t("cmdmsg.no_jobs"))
-            return None
-        for job in jobs:
-            print_fn(
-                t(
-                    "cmdmsg.jobs_row",
-                    id=job.id,
-                    status=job.status,
-                    command=job.command[:70],
-                )
-            )
-        return None
-    if command == "copy":
-        from zenagent.cli.tui.clipboard import write_clipboard_text
-        from zenagent.types import AssistantMessage
-
-        text = argument.strip()
-        if not text:
-            for message in reversed(agent.messages):
-                if not isinstance(message, AssistantMessage):
-                    continue
-                text = "".join(
-                    block.text
-                    for block in message.content
-                    if isinstance(block, TextContent)
-                ).strip()
-                if text:
-                    break
-        if not text:
-            print_fn(t("cmdmsg.copy_empty"))
-            return None
-        print_fn(
-            t("cmdmsg.copied") if write_clipboard_text(text) else t("cmdmsg.copy_failed")
-        )
-        return None
-    if command == "btw":
-        from zenagent.app.btw import ask_side_question
-
-        if not argument.strip():
-            print_fn(t("cmdmsg.btw_usage"))
-            return None
-        try:
-            answer = await ask_side_question(agent, argument)
-        except (ValueError, RuntimeError) as exc:
-            print_fn(str(exc))
-            return None
-        print_fn(answer)
-        return None
-    if command == "shake":
-        from zenagent.app.shake import KINDS, shake
-
-        raw = argument.strip().lower()
-        if raw in ("", "all"):
-            kinds = set(KINDS)
-        elif raw in KINDS:
-            kinds = {raw}
-        else:
-            print_fn(t("cmdmsg.shake_usage"))
-            return None
-        try:
-            changed, new_session = shake(agent, kinds)
-        except ValueError as exc:
-            print_fn(str(exc))
-            return None
-        if switch_session is not None:
-            switch_session(new_session)
-        print_fn(t("cmdmsg.shaken", count=changed, path=new_session.path.name))
-        return None
-    if command == "handoff":
-        from zenagent.app.compact import compact as compact_session
-
-        try:
-            path = await compact_session(agent)
-        except (ValueError, RuntimeError) as exc:
-            print_fn(str(exc))
-            return None
-        summary = "\n".join(
-            block.text
-            for message in agent.messages
-            for block in getattr(message, "content", [])
-            if isinstance(block, TextContent)
-        ).strip()
-        document = Path.cwd() / f"handoff-{time.strftime('%Y%m%d-%H%M%S')}.md"
-        try:
-            document.write_text(f"# Handoff\n\n{summary}\n", encoding="utf-8")
-        except OSError as exc:
-            print_fn(str(exc))
-            return None
-        if switch_session is not None:
-            switch_session(Session(path))
-        print_fn(t("cmdmsg.handoff", path=document.name))
-        return None
-    if command in ("add-dir", "remove-dir", "dirs"):
-        if extra_dirs is None:
-            print_fn(t("cmdmsg.dirs_usage"))
-            return None
-        if command == "dirs":
-            print_fn(
-                t(
-                    "cmdmsg.dirs",
-                    dirs="\n".join([str(Path.cwd()), *(str(d) for d in extra_dirs)]),
-                )
-            )
-            return None
-        raw = argument.strip()
-        if not raw:
-            print_fn(t("cmdmsg.dirs_usage"))
-            return None
-        path = Path(raw).expanduser().resolve()
-        if command == "add-dir":
-            if not path.is_dir():
-                print_fn(t("cmdmsg.dir_missing", path=path))
-                return None
-            if path not in extra_dirs:
-                extra_dirs.append(path)
-            print_fn(t("cmdmsg.dir_added", path=path))
-            return None
-        if path in extra_dirs:
-            extra_dirs.remove(path)
-            print_fn(t("cmdmsg.dir_removed", path=path))
-            return None
-        print_fn(t("cmdmsg.dir_missing", path=path))
-        return None
-    if command == "fresh":
-        print_fn(t("cmdmsg.fresh"))
-        return None
-    if command == "trace":
-        if not trace_path:
-            print_fn(t("cmdmsg.trace_off"))
-            return None
-        print_fn(t("cmdmsg.trace_path", path=trace_path))
-        return None
-    if extension_commands and command in extension_commands:
-        handler = extension_commands[command].handler
-        result = handler(agent, argument)
-        if inspect.isawaitable(result):
-            result = await result
-        if result:
-            print_fn(str(result))
-        return None
-    print_fn(t("repl.unknown_command", command=command))
+    elif screen == "todo-edit":
+        _render_todo(services, print_fn)
+    elif screen == "settings":
+        _render_settings(services, print_fn)
+    elif screen == "plan-review":
+        plan = services.chat.last_assistant_text()
+        print_fn(plan if plan else t("cmdmsg.no_plan"))
+        if plan:
+            print_fn(t("repl.plan_review_hint"))
     return None
+
+
+def render_help(commands, template_list, print_fn: PrintFn) -> None:
+    """The REPL's ``/help``: the shared registry plus prompt templates."""
+    entries = [(f"/{command.name}", command.description) for command in commands.names()]
+    width = max(len(name) for name, _ in entries)
+    rows = [f"  {name:<{width}}  {description}" for name, description in entries]
+    print_fn(
+        t("repl.help.header")
+        + "\n"
+        + "\n".join(rows)
+        + "\n"
+        + t("repl.help.footer")
+    )
+    if template_list:
+        print_fn(t("repl.templates_header"))
+        for template in template_list:
+            print_fn(
+                t(
+                    "repl.template_row",
+                    name=template.name,
+                    description=template.description,
+                )
+            )
 
 
 class _EventPrinter:
@@ -960,7 +477,6 @@ async def repl(
         print(f"zenagent: {warning}", file=sys.stderr)
 
     agent = runtime.agent
-    guard = runtime.guard
     mcp_manager = runtime.mcp
     skill_list = list(runtime.skills)
     template_list = list(runtime.templates)
@@ -1089,13 +605,99 @@ async def repl(
         settings.set_pref("language", normalized)
         print_fn(t("repl.lang_set", code=code))
 
-    pending_images: list[ImageContent] = list(initial_images)
+    chat = ChatController(runtime)
+    services = AppServices(
+        runtime=runtime,
+        chat=chat,
+        models=ModelManager(runtime),
+        sessions=SessionManager(runtime),
+    )
+    commands = build_default_commands(services)
+    for block in initial_images:
+        chat.attach_image(block)
 
-    def switch_session(new_session: Session) -> None:
-        # Session-scoped side effects (artifact sink, todo/task binding, rewind
-        # reset) live on the Runtime session setter; callers have already
-        # replaced the agent messages before switching.
-        runtime.session = new_session
+    def print_help() -> None:
+        render_help(commands, template_list, print_fn)
+
+    async def dispatch_slash(name: str, argument: str) -> str | None:
+        """Run one slash command through the shared registry."""
+        nonlocal skill_list, template_list, template_by_name, extension_commands
+        if name in ("exit", "quit"):
+            return "exit"
+        if name == "theme" and argument.strip():
+            # The REPL keeps its legacy theme names (`mono`, `solarized`, a JSON
+            # path); the shared command only knows auto/dark/light.
+            set_theme(argument)
+            return None
+        if name == "doctor":
+            # The TUI only points at `zen doctor`; the REPL can run it inline.
+            from zenagent.cli.doctor import run_doctor
+
+            await run_doctor(print_fn=print_fn)
+            return None
+        if name == "mcp" and argument.strip().lower().startswith("retry"):
+            before = [tool.name for tool in agent.tools]
+            for note in await runtime.refresh_mcp(force=True):
+                print_fn(f"mcp: {note}")
+            if [tool.name for tool in agent.tools] != before:
+                print_fn(f"mcp: tools updated ({len(agent.tools)} available)")
+            if runtime.mcp is not None:
+                for status in runtime.mcp.status():
+                    if status.state == "connected":
+                        print_fn(
+                            t(
+                                "repl.mcp_connected",
+                                name=status.name,
+                                count=len(status.tools),
+                            )
+                        )
+                    else:
+                        print_fn(
+                            t(
+                                "repl.mcp_failed",
+                                name=status.name,
+                                error=status.error or t("repl.unknown_error"),
+                            )
+                        )
+            return None
+        if commands.get(name) is None:
+            extension = (extension_commands or {}).get(name)
+            if extension is not None:
+                result = extension.handler(agent, argument)
+                if inspect.isawaitable(result):
+                    result = await result
+                if result:
+                    print_fn(str(result))
+                return None
+            print_fn(t("repl.unknown_command", command=name))
+            return None
+        result = await commands.dispatch(name, argument)
+        if result.show_help:
+            print_help()
+            return None
+        outcome = render_command_result(
+            result,
+            name=name,
+            services=services,
+            print_fn=print_fn,
+            keybindings=active_keybindings,
+            set_theme=set_theme,
+            set_language=set_language,
+        )
+        if name == "reload":
+            skill_list = list(runtime.skills)
+            template_list = list(runtime.templates)
+            template_by_name = {template.name: template for template in template_list}
+            extension_commands = dict(runtime.extension_commands)
+            print_fn(
+                t(
+                    "repl.reloaded",
+                    tools=len(agent.tools),
+                    skills=len(skill_list),
+                    templates=len(template_list),
+                )
+            )
+        return outcome
 
     def on_event(event: AgentEvent) -> None:
         printer(event)
@@ -1113,11 +715,13 @@ async def repl(
     read = input_fn or _make_default_reader(
         completion=completion,
         keybindings=active_keybindings,
+        extra_commands={
+            f"/{command.name}": command.description for command in commands.names()
+        },
         extra_values={"/model": model_values},
         typed_provider=typed_commands,
         skill_provider=skill_provider,
     )
-    run_task: asyncio.Task | None = None
     #: Only one reader may own stdin: the REPL's steering reader and the ask
     #: handler would otherwise steal each other's lines during a run.
     input_lock = asyncio.Lock()
@@ -1204,26 +808,27 @@ async def repl(
         ask_active.clear()
         return answers
 
+    was_busy = [False]
+
     async def reap() -> None:
-        """Clear a finished run so the next line is treated as a new prompt."""
-        nonlocal run_task
-        if run_task is not None and run_task.done():
-            await asyncio.gather(run_task, return_exceptions=True)
-            run_task = None
-            if auto_compact:
-                compacted = await maybe_auto_compact(agent, print_fn=print_fn)
-                if compacted is not None:
-                    switch_session(Session(compacted))
-            print_fn(
-                status_line(
-                    model_id=agent.model.id,
-                    thinking=agent.thinking,
-                    messages=len(agent.messages),
-                    usage=aggregate_usage(agent.messages),
-                    context_window=agent.model.context_window,
-                    session_name=runtime.session.path.name,
-                )
+        """Print the status line once the current run (if any) finishes."""
+        if chat.busy:
+            was_busy[0] = True
+            return
+        if not was_busy[0]:
+            return
+        await chat.wait_for_idle()
+        was_busy[0] = False
+        print_fn(
+            status_line(
+                model_id=agent.model.id,
+                thinking=agent.thinking,
+                messages=len(agent.messages),
+                usage=aggregate_usage(agent.messages),
+                context_window=agent.model.context_window,
+                session_name=runtime.session.path.name,
             )
+        )
 
     set_ask_handler(ask_user)
     try:
@@ -1240,9 +845,9 @@ async def repl(
                     else:
                         line = await read()
             except (EOFError, KeyboardInterrupt):
-                if run_task is not None:
-                    agent.abort()
-                    await asyncio.gather(run_task, return_exceptions=True)
+                if chat.busy:
+                    chat.abort()
+                    await chat.wait_for_idle()
                 print_fn("")
                 return 0
             if line is None:
@@ -1272,85 +877,26 @@ async def repl(
                     skill_prompt = resolution.submission.prompt
                     prompt_text = skill_prompt
                     command = ""
-            if command == "retry":
-                # Retry is a loop-level command: it truncates the session and
-                # turns the recovered prompt into this iteration's input.
-                prepared = (
-                    None
-                    if run_task is not None
-                    else prepare_retry(agent, runtime.session)
-                )
-                if prepared is None:
-                    print_fn(t("repl.retry_nothing"))
-                    continue
-                prompt_text, new_session = prepared
-                switch_session(new_session)
-                command = ""
             if command:
-                if (
-                    await handle_slash(
-                        agent,
-                        command,
-                        argument,
-                        print_fn=print_fn,
-                        guard=guard,
-                        session_path=runtime.session.path,
-                        session=runtime.session,
-                        switch_session=switch_session,
-                        images=pending_images,
-                        mcp_manager=mcp_manager,
-                        refresh_mcp=refresh_mcp,
-                        skill_list=skill_list,
-                        skills_enabled=skills,
-                        template_list=template_list,
-                        extension_commands=extension_commands,
-                        reload_runtime=reload_runtime,
-                        set_theme=set_theme,
-                        set_language=set_language,
-                        keybindings=active_keybindings,
-                        set_mode=set_mode,
-                        restore=lambda argument: run_restore_command(
-                            runtime.journal,
-                            argument,
-                            running=agent.is_streaming,
-                        ),
-                        extra_dirs=runtime.extra_dirs,
-                        trace_path=runtime.trace_path,
-                        catalog=runtime.catalog,
-                    )
-                    == "exit"
-                ):
-                    if run_task is not None:
-                        agent.abort()
-                        await asyncio.gather(run_task, return_exceptions=True)
+                if await dispatch_slash(command, argument) == "exit":
+                    chat.abort()
+                    await chat.wait_for_idle()
                     return 0
                 continue
 
-            if run_task is not None:
+            if chat.busy:
                 # A run is still going: this line steers it instead of stacking.
-                agent.steer(
-                    skill_prompt if skill_prompt is not None else line.strip()
-                )
+                chat.steer(skill_prompt if skill_prompt is not None else line.strip())
                 continue
 
-            await refresh_mcp()
-            if pending_images:
-                if not agent.model.supports_vision:
-                    print_fn(
-                        t("repl.images_unsupported", model=agent.model.id)
-                    )
-                    continue
-                run_task = asyncio.create_task(
-                    agent.prompt(prompt_text, images=list(pending_images))
-                )
-                pending_images.clear()
-            else:
-                run_task = asyncio.create_task(agent.prompt(prompt_text))
+            try:
+                await runtime.refresh_mcp()
+            except RuntimeError:
+                pass
+            await chat.submit(prompt_text)
     finally:
         set_ask_handler(None)
-        if run_task is not None:
-            agent.abort()
-            await asyncio.gather(run_task, return_exceptions=True)
+        if chat.busy:
+            chat.abort()
+            await chat.wait_for_idle()
         await runtime.close()
-        if mcp_manager is not None:
-            await mcp_manager.close()

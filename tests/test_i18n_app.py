@@ -108,8 +108,9 @@ def test_repl_command_table_follows_locale():
         i18n.set_locale("en")
 
 
-async def test_repl_slash_lang_switches_locale():
-    from zenagent.cli.repl import handle_slash
+async def test_repl_slash_lang_switches_locale(services):
+    from zenagent.app.commands import CommandResult
+    from zenagent.cli.repl import render_command_result
 
     calls: list[str] = []
 
@@ -117,11 +118,13 @@ async def test_repl_slash_lang_switches_locale():
         i18n.set_locale(spec)
         calls.append(spec)
 
-    await handle_slash(
-        object(),
-        "lang",
-        "zh",
+    render_command_result(
+        CommandResult(language="zh"),
+        name="lang",
+        services=services,
         print_fn=lambda *a, **k: None,
+        keybindings={},
+        set_theme=lambda spec: None,
         set_language=fake_set_language,
     )
     assert i18n.active_locale() == "zh"

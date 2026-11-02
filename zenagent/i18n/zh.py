@@ -468,6 +468,7 @@ CATALOG: dict[str, str] = {
     "cmd.repl.import": "载入会话文件并继续（/import <path>）",
     # REPL：输出
     "repl.help.header": "命令：",
+    "repl.plan_review_hint": "输入 /mode full 批准该计划，或继续规划。",
     "repl.help.footer": "agent 运行期间，你输入的每一行都会作为插话排队。",
     "repl.templates_header": "\n提示词模板：",
     "repl.template_row": "  /{name}  {description}",

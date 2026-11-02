@@ -469,6 +469,7 @@ CATALOG: dict[str, str] = {
     "cmd.repl.import": "load a session file and continue it (/import <path>)",
     # REPL: messages
     "repl.help.header": "commands:",
+    "repl.plan_review_hint": "type /mode full to approve this plan, or keep planning.",
     "repl.help.footer": "while the agent is working, any line you type is queued as steering input.",
     "repl.templates_header": "\nprompt templates:",
     "repl.template_row": "  /{name}  {description}",

@@ -54,14 +54,13 @@ from zenagent.prompts import (
 from zenagent.providers.catalog import ProviderConfig, load_catalog
 from zenagent.providers.limits import estimate_text_tokens
 from zenagent.providers.registry import StreamFn
-from zenagent.telemetry import MetricsRecorder, append_metrics
-from zenagent.trace import TraceRecorder
 from zenagent.skills import (
     build_skill_tool,
     default_skill_roots,
     discover_skills,
     format_skill_entries,
 )
+from zenagent.telemetry import MetricsRecorder, append_metrics
 from zenagent.templates import (
     PromptTemplate,
     default_template_roots,
@@ -77,6 +76,7 @@ from zenagent.tools.todo import (
     load_todo_phases,
     save_todo_phases,
 )
+from zenagent.trace import TraceRecorder
 
 __all__ = ["Runtime", "RuntimeOptions"]
 
