@@ -64,10 +64,11 @@ def test_real_build_agent_composes_the_prompt() -> None:
     assert "Available tools: read_file" in agent.system_prompt
 
 
-def test_repl_compose_prompt_is_compose_based() -> None:
-    from zenagent.cli.repl import _compose_prompt
+async def test_repl_prompt_comes_from_the_runtime(runtime_factory) -> None:
     from zenagent.tools.fs import READ_FILE
 
-    prompt = _compose_prompt([READ_FILE], context_files=False, extra_text="EXT")
-    assert prompt.endswith("\n\nEXT")
+    runtime = await runtime_factory(tools=[READ_FILE])
+
+    prompt = runtime.agent.system_prompt
     assert "Available tools: read_file" in prompt
+    assert "todo" not in prompt

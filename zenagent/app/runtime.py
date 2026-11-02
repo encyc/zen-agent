@@ -745,7 +745,7 @@ class Runtime:
 
             await release_job_manager()
 
-    async def refresh_mcp(self) -> None:
+    async def refresh_mcp(self, *, force: bool = False) -> list[str]:
         """Reconnect failed MCP servers and swap refreshed tools into the agent.
 
         Rebuilt through :meth:`_recompose` rather than appended to
@@ -757,12 +757,14 @@ class Runtime:
         under a request the model already composed.
         """
         if self.mcp is None:
-            return
+            return []
         if hasattr(self, "agent") and self.agent.is_streaming:
             raise RuntimeError("cannot refresh tools while the agent is working")
-        for warning in await self.mcp.retry_failed():
+        notes = await self.mcp.retry_failed(force=force)
+        for warning in notes:
             self._note(warning)
         self._recompose()
+        return notes
 
     async def switch_session(
         self, path: Path | None, *, carry_todos: bool = False

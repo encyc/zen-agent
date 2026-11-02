@@ -24,6 +24,10 @@ from zenagent.types import AssistantMessage, Cost, TextContent, Usage
 def isolate_user_config(monkeypatch):
     """Tests must not read the developer's real ~/.zenagent/config.toml."""
     monkeypatch.setattr(repl_module, "load_user_config", lambda: UserConfig())
+    monkeypatch.setattr(
+        "zenagent.app.runtime.load_user_config",
+        lambda *args, **kwargs: UserConfig(),
+    )
 
 
 def model() -> Model:
@@ -547,6 +551,10 @@ async def test_reload_discovers_skills_added_mid_session(tmp_path, monkeypatch):
     from zenagent.config import UserConfig
 
     monkeypatch.setattr(repl_module, "load_user_config", lambda: UserConfig())
+    monkeypatch.setattr(
+        "zenagent.app.runtime.load_user_config",
+        lambda *args, **kwargs: UserConfig(),
+    )
     monkeypatch.setenv("HOME", str(tmp_path))  # don't discover the developer's global skills
     monkeypatch.chdir(tmp_path)
     # Discovery also reads ~/.zenagent/skills: point HOME at the tmpdir so the
@@ -983,9 +991,9 @@ async def test_slash_dirs_tracks_extra_roots(tmp_path, capsys):
     agent = Agent(model(), "s", api_key="k")
     extra = tmp_path / "extra"
     extra.mkdir()
-    dirs: list[str] = []
+    dirs: list = []
     await handle_slash(agent, "add-dir", str(extra), extra_dirs=dirs)
-    assert dirs == [str(extra)]
+    assert dirs == [extra.resolve()]
     await handle_slash(agent, "dirs", "", extra_dirs=dirs)
     out = capsys.readouterr().out
     assert str(extra) in out
@@ -1164,3 +1172,66 @@ async def test_repl_rejects_startup_images_for_a_non_vision_model(isolated_sessi
 
     assert code == 1
     assert "does not accept images" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# P1: the REPL runs on the shared Runtime
+# ---------------------------------------------------------------------------
+
+
+async def test_repl_exposes_the_tools_the_tui_has(isolated_sessions):
+    seen: list[str] = []
+
+    async def stream(model_, messages, tools, options):
+        seen.extend(tool.name for tool in tools)
+        partial = AssistantMessage(
+            content=[TextContent(text="ok")], provider="test", model="m",
+            usage=Usage(), stop_reason="stop", timestamp=int(time.time()),
+        )
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    code = await repl(
+        "glm-5.3",
+        stream_fn=stream,
+        input_fn=scripted_input("hi", "/exit"),
+        print_fn=lambda *a, **k: None,
+        api_key="k",
+    )
+
+    assert code == 0
+    for name in ("checkpoint", "rewind", "lsp", "todo", "task", "read_skill"):
+        assert name in seen, name
+
+
+async def test_repl_resume_loads_the_runtime_session(isolated_sessions):
+    from zenagent.agent.session import Session, unique_session_path
+    from zenagent.types import UserMessage
+
+    prior = Session(unique_session_path())
+    prior.append(UserMessage(content="earlier question", timestamp=1))
+    seen: list = []
+
+    async def stream(model_, messages, tools, options):
+        seen.append(messages)
+        partial = AssistantMessage(
+            content=[TextContent(text="ok")], provider="test", model="m",
+            usage=Usage(), stop_reason="stop", timestamp=int(time.time()),
+        )
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    code = await repl(
+        "glm-5.3",
+        resume=prior.path,
+        stream_fn=stream,
+        input_fn=scripted_input("follow-up", "/exit"),
+        print_fn=lambda *a, **k: None,
+        api_key="k",
+    )
+
+    assert code == 0
+    texts = [
+        message.content
+        for message in seen[0]
+        if isinstance(message, UserMessage)
+    ]
+    assert "earlier question" in texts
