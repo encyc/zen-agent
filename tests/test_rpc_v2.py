@@ -358,7 +358,7 @@ async def slow_stream(delay: float = 0.2, text: str = "slow"):
 
 
 async def test_cancel_aborts_a_run_started_by_a_session_retry(runtime_factory):
-    runtime, server, writes, queue = await build(
+    runtime, server, writes, _queue = await build(
         runtime_factory, stream_fn=await slow_stream()
     )
     runtime.agent.replace_messages(
@@ -389,7 +389,7 @@ async def test_cancel_aborts_a_run_started_by_a_session_retry(runtime_factory):
 async def test_mutating_session_ops_are_rejected_while_a_run_is_active(
     runtime_factory,
 ):
-    runtime, server, writes, queue = await build(
+    runtime, server, writes, _queue = await build(
         runtime_factory, stream_fn=await slow_stream()
     )
     runtime.agent.replace_messages([UserMessage(content="hello", timestamp=1)])
