@@ -18,3 +18,6 @@ dist/
 .codegraph/
 
 docs/za/
+
+# agent worktrees
+.worktrees/
