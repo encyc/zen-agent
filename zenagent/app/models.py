@@ -66,21 +66,37 @@ class ModelManager:
         return self.runtime.agent.model.id
 
     def switch(self, model_id: str) -> SwitchResult:
-        try:
-            model = find_model(self.runtime.catalog, model_id)
-        except KeyError:
-            return SwitchResult(False, f"unknown model: {model_id}")
-        api_key = api_key_for(self.runtime.catalog, model)
-        if not api_key:
-            return SwitchResult(
-                False, f"no API key for {model.provider}/{model.id}"
-            )
-        agent = self.runtime.agent
-        agent.model = model
-        agent.api_key = api_key
-        agent.thinking = (
-            "off" if not model.reasoning else (agent.thinking or "high")
+        return apply_model_switch(
+            self.runtime.agent, self.runtime.catalog, self.runtime.guard, model_id
         )
-        agent.session_id = session_id_for(model)
-        self.runtime.guard.context_window = model.context_window
-        return SwitchResult(True)
+
+
+def apply_model_switch(
+    agent, catalog, guard, model_id: str
+) -> SwitchResult:
+    """Switch one agent to ``model_id`` with every side effect, frontend-agnostic.
+
+    The REPL used to assign ``agent.model`` alone, which left the old provider's
+    API key in place (a cross-provider switch then authenticated with the wrong
+    key), skipped the thinking reset and the per-model session id, and could not
+    resolve models the user defined in ``config.toml``. Both frontends go
+    through here so a switch cannot mean two different things.
+    """
+    try:
+        model = find_model(catalog, model_id)
+    except KeyError:
+        return SwitchResult(False, f"unknown model: {model_id}")
+    api_key = api_key_for(catalog, model)
+    if not api_key:
+        return SwitchResult(
+            False, f"no API key for {model.provider}/{model.id}"
+        )
+    agent.model = model
+    agent.api_key = api_key
+    agent.thinking = (
+        "off" if not model.reasoning else (agent.thinking or "high")
+    )
+    agent.session_id = session_id_for(model)
+    if guard is not None:
+        guard.context_window = model.context_window
+    return SwitchResult(True)

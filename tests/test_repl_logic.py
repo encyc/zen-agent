@@ -110,7 +110,8 @@ async def test_slash_exit_signals_the_repl_to_stop(capsys):
     assert await handle_slash(agent, "exit", "") == "exit"
 
 
-async def test_slash_model_switches_and_reports(capsys):
+async def test_slash_model_switches_and_reports(capsys, monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "deep-key")
     agent = Agent(model(), "s", api_key="k")
     await handle_slash(agent, "model", "")
     assert "glm-5.3" in capsys.readouterr().out
@@ -1059,3 +1060,31 @@ async def test_slash_compact_switches_the_repl_to_the_summary_session(
     assert switched, "compact must hand the new session to the REPL"
     assert switched[0].path.name.endswith("-compact.jsonl")
     assert switched[0].path.is_file()
+
+
+async def test_slash_model_uses_the_provided_catalog(monkeypatch, capsys):
+    from dataclasses import replace
+
+    from zenagent.providers.catalog import load_catalog
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "deep-key")
+    catalog = load_catalog()
+    custom = replace(catalog["deepseek"].models[0], id="custom-x")
+    catalog["deepseek"].models.append(custom)
+    agent = Agent(model(), "s", api_key="k")
+
+    await handle_slash(agent, "model", "custom-x", catalog=catalog)
+
+    assert agent.model.id == "custom-x"
+    assert agent.api_key == "deep-key"
+    assert "custom-x" in capsys.readouterr().out
+
+
+async def test_slash_model_rejects_a_keyless_model(monkeypatch, capsys):
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    agent = Agent(model(), "s", api_key="k")
+
+    await handle_slash(agent, "model", "deepseek-flash")
+
+    assert agent.model.id == "glm-5.3"
+    assert "no API key" in capsys.readouterr().out

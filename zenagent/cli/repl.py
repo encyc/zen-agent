@@ -151,6 +151,7 @@ async def handle_slash(
     restore=None,
     extra_dirs: list[str] | None = None,
     trace_path: str | None = None,
+    catalog=None,
 ) -> str | None:
     """Run one slash command; returns ``"exit"`` when the REPL should stop."""
     if command in ("exit", "quit"):
@@ -208,14 +209,20 @@ async def handle_slash(
         if not argument:
             print_fn(t("repl.current_model", model=agent.model.id))
             return None
-        try:
-            agent.model = find_model(load_catalog(), argument)
-        except KeyError:
+        from zenagent.app.models import apply_model_switch
+
+        result = apply_model_switch(
+            agent,
+            catalog if catalog is not None else load_catalog(),
+            guard,
+            argument,
+        )
+        if result.ok:
+            print_fn(t("repl.model_switch", model=agent.model.id))
+        elif result.reason and result.reason.startswith("unknown model"):
             print_fn(t("repl.unknown_model", model=argument))
         else:
-            if guard is not None:
-                guard.context_window = agent.model.context_window
-            print_fn(t("repl.model_switch", model=agent.model.id))
+            print_fn(result.reason or t("repl.unknown_model", model=argument))
         return None
     if command == "thinking":
         if not argument:
@@ -1502,6 +1509,7 @@ async def repl(
                         ),
                         extra_dirs=extra_dirs,
                         trace_path=trace,
+                        catalog=catalog,
                     )
                     == "exit"
                 ):
