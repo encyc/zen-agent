@@ -3,6 +3,32 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## v0.6.5 — 2026-11-02
+
+**子代理预算可配置：`[task]` 配置段、截断原因回传、转录截断可见。**
+
+### Added
+
+- **`[task]` 配置段**（`zenagent/config.py`，与 `[safety]`/`[backup]` 一样仅全局层生效）：
+  `max_turns`（默认 30，替换原先硬编码的 12）、`keep_transcripts`（64）、
+  `max_transcript_bytes`（32 MiB）、`max_transcript_file_bytes`（8 MiB）。
+  统一在 `Runtime.bootstrap` 读取并注入 `task` 工具，TUI / REPL / RPC 同时生效；
+  README 补充配置示例。
+- **截断 envelope 自带原因**（`zenagent/tools/task.py`）：`status="truncated"` 现在带
+  `reason="max_turns|max_cost"` 与 `turns="N"`，并追加 partial-output 说明，父模型不再
+  自己脑补成「上下文撑爆」；子代理 system prompt 会声明轮数预算。
+- **TUI 标出被截断的转录**：`SubagentView.transcript_truncated` 来自落盘的
+  `SubagentMeta.truncated`，子代理横幅显示「转录已截断」、侧栏行显示「［截］」，
+  不再静默变短（中英双语）。
+
+### Fixed
+
+- `SubagentStore._prune` 不再可能删掉刚写完的最新转录：`max_transcript_bytes` 与
+  `max_transcript_file_bytes` 做跨字段校验（总预算至少容纳一份转录），prune 永远保留
+  最新一份。
+- `zenagent rpc` 忽略 `[task]` 的问题随 0.6.4 的 Runtime 装配一并消失（RPC 现在经
+  `Runtime.bootstrap`，与 TUI/REPL 共用同一处接线）。
+
 ## v0.6.4 — 2026-11-02
 
 **前端对齐：REPL / RPC 与 TUI 共享同一套 app 层，RPC 协议升级到 v2。**
