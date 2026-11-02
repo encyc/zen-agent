@@ -191,6 +191,25 @@ def _usage_and_counts(messages: list[Message]) -> tuple[dict, int]:
     return usage, len(messages)
 
 
+def _read_images(model, images) -> list[ImageContent] | None:
+    """Load ``--image`` paths; None (after a stderr line) means the run cannot start."""
+    blocks: list[ImageContent] = []
+    for image_path in images or []:
+        if not model.supports_vision:
+            print(
+                f"zenagent: {model.id} does not accept images "
+                "(pick a vision-capable model)",
+                file=sys.stderr,
+            )
+            return None
+        try:
+            blocks.append(read_image_argument(Path(image_path)))
+        except ValueError as exc:
+            print(f"zenagent: {exc}", file=sys.stderr)
+            return None
+    return blocks
+
+
 async def run_headless(
     prompt: str,
     model_id: str | None = None,
@@ -239,20 +258,9 @@ async def run_headless(
         print(f"zenagent: missing API key for {model.id} (set {env_name})", file=sys.stderr)
         return 1
 
-    image_blocks: list[ImageContent] = []
-    for image_path in images or []:
-        if not model.supports_vision:
-            print(
-                f"zenagent: {model.id} does not accept images "
-                "(pick a vision-capable model)",
-                file=sys.stderr,
-            )
-            return 1
-        try:
-            image_blocks.append(read_image_argument(image_path))
-        except ValueError as exc:
-            print(f"zenagent: {exc}", file=sys.stderr)
-            return 1
+    image_blocks = _read_images(model, images)
+    if image_blocks is None:
+        return 1
 
     if thinking is None:
         thinking = "high" if model.reasoning else "off"
@@ -797,6 +805,10 @@ def main(argv: list[str] | None = None) -> int:
                 retries=args.retries,
                 max_turns=args.max_turns,
                 max_cost=args.max_cost,
+                thinking=args.thinking,
+                trace=args.trace,
+                metrics=args.metrics,
+                auto_compact=not args.no_auto_compact,
             )
 
             tui_config = load_user_config()
@@ -827,7 +839,15 @@ def main(argv: list[str] | None = None) -> int:
                     options, gate=broker, allow_missing_key=True
                 )
                 try:
-                    app = ZenAgentApp(runtime, theme=args.theme, language=args.lang)
+                    image_blocks = _read_images(runtime.agent.model, args.images)
+                    if image_blocks is None:
+                        return 1
+                    app = ZenAgentApp(
+                        runtime,
+                        theme=args.theme,
+                        language=args.lang,
+                        images=image_blocks,
+                    )
                     broker.set_confirm(app.request_tool_approval)
                     await app.run_async()
                     if app.exit_summary:

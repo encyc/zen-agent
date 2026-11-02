@@ -2,6 +2,17 @@
 
 Designed for embedding (editors, desktop shells, tests): stdout carries protocol
 only, every line parses as JSON, and logs stay on stderr.
+
+Protocol v2 (v1 messages keep their shape):
+
+    requests  prompt, cancel, status, shutdown, steer, tools, model, mode,
+              usage, approval, session, command
+    responses {"type":"result"|"error", "id": ..., ...}
+    events    {"type":"event","event":{...}} plus ``approval_request`` events
+
+A server built with a Runtime exposes sessions, MCP/skills tools, commands and
+an interactive approval round-trip. A server built from a bare Agent keeps the
+v1 surface and answers the newer requests with an error.
 """
 
 from __future__ import annotations
@@ -11,6 +22,7 @@ import asyncio
 import json
 import sys
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 
 from zenagent.agent import Agent
 from zenagent.events import AgentEvent
@@ -25,6 +37,8 @@ WriteLine = Callable[[str], None]
 _PARTIAL_RESULT_CHARS = 4000
 #: Bound for one JSON-encoded tool argument blob in an event.
 _ARGS_CHARS = 4000
+#: Default approval timeout, matching the TUI modal.
+_APPROVAL_TIMEOUT_S = 120.0
 
 
 def _text_of(result) -> str:
@@ -98,18 +112,48 @@ def _usage(agent: Agent) -> dict:
 class RpcServer:
     """Reads requests, streams agent events, writes one result per request."""
 
-    def __init__(self, agent: Agent, read_line: ReadLine, write_line: WriteLine) -> None:
-        self.agent = agent
+    def __init__(
+        self,
+        agent: Agent | None = None,
+        read_line: ReadLine | None = None,
+        write_line: WriteLine | None = None,
+        *,
+        runtime=None,
+        chat=None,
+        models=None,
+        sessions=None,
+        commands=None,
+        approval_timeout_s: float = _APPROVAL_TIMEOUT_S,
+    ) -> None:
+        self.runtime = runtime
+        self._agent = agent
+        self.chat = chat
+        self.models = models
+        self.sessions = sessions
+        self.commands = commands
+        self.approval_timeout_s = approval_timeout_s
         self._read_line = read_line
         self._write_line = write_line
         self._task: asyncio.Task | None = None
         self._text: list[str] = []
+        self._approvals: dict[str, asyncio.Future] = {}
+        self._approval_seq = 0
+        self._closed = False
         self.agent.subscribe(self._on_event)
 
     # -- wire ---------------------------------------------------------------
 
+    @property
+    def agent(self) -> Agent:
+        if self.runtime is not None:
+            return self.runtime.agent
+        if self._agent is None:  # pragma: no cover - construction guard
+            raise RuntimeError("RpcServer needs an agent or a runtime")
+        return self._agent
+
     def _send(self, payload: dict) -> None:
-        self._write_line(json.dumps(payload, ensure_ascii=False))
+        if self._write_line is not None:
+            self._write_line(json.dumps(payload, ensure_ascii=False))
 
     def _on_event(self, event: AgentEvent) -> None:
         if (
@@ -125,6 +169,66 @@ class RpcServer:
     def running(self) -> bool:
         return self._task is not None and not self._task.done()
 
+    # -- approval round-trip ------------------------------------------------
+
+    async def confirm(self, tool_name: str, arguments: dict, verdict=None) -> str:
+        """Ask the client to approve one tool call; ``deny`` on timeout."""
+        request_id = f"a{self._approval_seq}"
+        self._approval_seq += 1
+        try:
+            args = json.dumps(arguments, ensure_ascii=False, default=str)[
+                :_ARGS_CHARS
+            ]
+        except (TypeError, ValueError):  # pragma: no cover - defensive
+            args = str(arguments)[:_ARGS_CHARS]
+        event: dict = {
+            "type": "approval_request",
+            "request_id": request_id,
+            "tool_name": tool_name,
+            "args": args,
+        }
+        if verdict is not None:
+            event["kind"] = verdict.kind
+            event["risk"] = verdict.risk
+            event["target"] = verdict.target
+            event["reason"] = verdict.reason
+        self._send({"type": "event", "event": event})
+
+        future: asyncio.Future = asyncio.get_running_loop().create_future()
+        self._approvals[request_id] = future
+        try:
+            return await asyncio.wait_for(future, self.approval_timeout_s)
+        except TimeoutError:
+            return "deny"
+        finally:
+            self._approvals.pop(request_id, None)
+
+    def _resolve_approval(self, request: dict) -> bool:
+        request_id = request.get("request_id")
+        decision = request.get("decision")
+        if decision not in ("allow", "always", "deny"):
+            self._send(
+                {
+                    "type": "error",
+                    "id": request.get("id"),
+                    "message": "decision must be allow|always|deny",
+                }
+            )
+            return True
+        future = self._approvals.get(str(request_id))
+        if future is None or future.done():
+            self._send(
+                {
+                    "type": "error",
+                    "id": request.get("id"),
+                    "message": f"no pending approval: {request_id}",
+                }
+            )
+            return True
+        future.set_result(decision)
+        self._send({"type": "result", "id": request.get("id"), "ok": True})
+        return True
+
     # -- loop ---------------------------------------------------------------
 
     async def run(self) -> int:
@@ -135,13 +239,13 @@ class RpcServer:
             line = line.strip()
             if not line:
                 continue
-            if not self._handle_line(line):
+            if not await self._handle_line(line):
                 await self._shutdown()
                 return 0
         await self._shutdown()
         return 0
 
-    def _handle_line(self, line: str) -> bool:
+    async def _handle_line(self, line: str) -> bool:
         """Handle one request line; False means shutdown."""
         try:
             request = json.loads(line)
@@ -174,39 +278,286 @@ class RpcServer:
                 self._send({"type": "result", "id": request_id, "ok": True, "cancelled": False})
             return True
         if kind == "status":
+            self._send(self._status_result(request_id))
+            return True
+        if kind == "shutdown":
+            self._send({"type": "result", "id": request_id, "ok": True})
+            return False
+        if kind == "steer":
+            return self._steer(request, request_id)
+        if kind == "tools":
             self._send(
                 {
                     "type": "result",
                     "id": request_id,
                     "ok": True,
-                    "running": self.running,
-                    "messages": len(self.agent.messages),
-                    "model": self.agent.model.id,
+                    "tools": [
+                        {
+                            "name": tool.name,
+                            "description": tool.description,
+                            "approval": getattr(tool, "approval", "exec"),
+                        }
+                        for tool in self.agent.tools
+                    ],
                 }
             )
             return True
-        if kind == "shutdown":
-            self._send({"type": "result", "id": request_id, "ok": True})
-            return False
+        if kind == "model":
+            return self._model(request, request_id)
+        if kind == "mode":
+            return self._mode(request, request_id)
+        if kind == "usage":
+            self._send(
+                {"type": "result", "id": request_id, "ok": True, "usage": _usage(self.agent)}
+            )
+            return True
+        if kind == "approval":
+            return self._resolve_approval(request)
+        if kind == "session":
+            await self._session(request, request_id)
+            return True
+        if kind == "command":
+            await self._command(request, request_id)
+            return True
         self._send({"type": "error", "id": request_id, "message": f"unknown type: {kind}"})
         return True
 
+    def _status_result(self, request_id) -> dict:
+        payload = {
+            "type": "result",
+            "id": request_id,
+            "ok": True,
+            "running": self.running,
+            "messages": len(self.agent.messages),
+            "model": self.agent.model.id,
+            "usage": _usage(self.agent),
+            "termination": self.agent.termination,
+        }
+        if self.runtime is not None:
+            payload["session"] = str(self.runtime.session.path)
+            payload["mode"] = self.runtime.mode
+            payload["tools"] = len(self.agent.tools)
+        if self.chat is not None:
+            status = self.chat.status
+            payload["busy"] = self.chat.busy
+            payload["follow_ups"] = status.follow_ups
+            payload["steering"] = status.steering
+            payload["cost"] = status.cost
+        return payload
+
+    def _steer(self, request: dict, request_id) -> bool:
+        text = request.get("text")
+        if not isinstance(text, str) or not text.strip():
+            self._send({"type": "error", "id": request_id, "message": "steer needs text"})
+            return True
+        if self.chat is not None:
+            self.chat.steer(text)
+        else:
+            self.agent.steer(text)
+        self._send({"type": "result", "id": request_id, "ok": True})
+        return True
+
+    def _model(self, request: dict, request_id) -> bool:
+        model_id = request.get("model_id")
+        if not isinstance(model_id, str) or not model_id.strip():
+            self._send({"type": "error", "id": request_id, "message": "model needs model_id"})
+            return True
+        if self.models is None:
+            self._send(
+                {"type": "error", "id": request_id, "message": "model switching needs a runtime"}
+            )
+            return True
+        result = self.models.switch(model_id)
+        self._send(
+            {
+                "type": "result",
+                "id": request_id,
+                "ok": result.ok,
+                "model": self.agent.model.id,
+                "reason": result.reason,
+            }
+        )
+        return True
+
+    def _mode(self, request: dict, request_id) -> bool:
+        mode = request.get("mode")
+        if self.runtime is None:
+            self._send(
+                {"type": "error", "id": request_id, "message": "mode switching needs a runtime"}
+            )
+            return True
+        try:
+            applied = self.runtime.set_mode(str(mode or ""))
+        except ValueError as exc:
+            self._send({"type": "result", "id": request_id, "ok": False, "reason": str(exc)})
+            return True
+        self._send({"type": "result", "id": request_id, "ok": True, "mode": applied})
+        return True
+
+    # -- run ----------------------------------------------------------------
+
     async def _run_prompt(self, text: str, request_id) -> None:
         try:
-            await self.agent.prompt(text)
+            if self.chat is not None:
+                await self.chat.submit(text)
+                await self.chat.wait_for_idle()
+            else:
+                await self.agent.prompt(text)
         except Exception as exc:  # noqa: BLE001 - report, never kill the server
             self._send({"type": "error", "id": request_id, "message": str(exc)})
             return
+        payload = {
+            "type": "result",
+            "id": request_id,
+            "ok": True,
+            "text": "".join(self._text).strip(),
+            "usage": _usage(self.agent),
+            "termination": self.agent.termination,
+        }
+        if self.runtime is not None:
+            payload["session"] = str(self.runtime.session.path)
+        self._send(payload)
+
+    # -- sessions and commands ---------------------------------------------
+
+    async def _session(self, request: dict, request_id) -> None:
+        op = request.get("op")
+        try:
+            result = await self._session_op(op, request)
+        except Exception as exc:  # noqa: BLE001 - a bad session op is a result, not a crash
+            self._send({"type": "error", "id": request_id, "message": str(exc)})
+            return
+        self._send({"type": "result", "id": request_id, "ok": True, **(result or {})})
+
+    async def _session_op(self, op: str, request: dict) -> dict:
+        if self.runtime is None or self.sessions is None:
+            raise RuntimeError("session requests need a runtime")
+        if op == "current":
+            path = self.runtime.session.path
+            return {"path": str(path), "name": path.stem}
+        if op == "list":
+            scope = "all" if request.get("scope") == "all" else "project"
+            return {
+                "scope": scope,
+                "sessions": [
+                    {
+                        "path": str(entry.path),
+                        "name": entry.path.stem,
+                        "title": entry.title,
+                        "project": entry.project,
+                        "messages": entry.messages,
+                        "current": entry.current,
+                        "pinned": entry.pinned,
+                    }
+                    for entry in self.sessions.entries(scope=scope)
+                ],
+            }
+        if op == "new":
+            path = await self.sessions.new()
+            if self.chat is not None:
+                self.chat.reload_transcript(drop_pending=True)
+            return {"path": str(path)}
+        if op == "fork":
+            path = await self.sessions.fork()
+            if self.chat is not None:
+                self.chat.reload_transcript(drop_pending=True)
+            return {"path": str(path)}
+        if op == "resume":
+            target = request.get("path")
+            if not isinstance(target, str) or not target.strip():
+                raise ValueError("resume needs path")
+            await self.sessions.resume(Path(target))
+            if self.chat is not None:
+                self.chat.reload_transcript(drop_pending=True)
+            return {"path": str(self.runtime.session.path)}
+        if op == "import":
+            target = request.get("path")
+            if not isinstance(target, str) or not target.strip():
+                raise ValueError("import needs path")
+            path = Path(target).expanduser()
+            if not path.is_file():
+                raise ValueError(f"no such session: {path}")
+            await self.runtime.switch_session(path)
+            if self.chat is not None:
+                self.chat.reload_transcript(drop_pending=True)
+            return {"path": str(path)}
+        if op == "undo":
+            result = self.sessions.undo()
+            if result is None:
+                return {"dropped": 0, "path": None}
+            dropped, path = result
+            if self.chat is not None:
+                self.chat.reload_transcript(drop_pending=True)
+            return {"dropped": dropped, "path": str(path)}
+        if op == "delete":
+            target = request.get("path")
+            if not isinstance(target, str) or not target.strip():
+                raise ValueError("delete needs path")
+            trashed = self.sessions.delete(Path(target))
+            return {"path": str(trashed)}
+        if op == "compact":
+            if self.chat is None:
+                raise RuntimeError("compaction needs a runtime")
+            notice = await self.chat.compact_now()
+            if notice is None:
+                return {"compacted": False}
+            return {"compacted": True, "path": str(self.runtime.session.path)}
+        if op == "retry":
+            if self.chat is None:
+                raise RuntimeError("retry needs a runtime")
+            text = self.chat.retry()
+            if text is None:
+                return {"retried": False}
+            return {"retried": True, "text": text}
+        if op == "export":
+            fmt = request.get("format") or "md"
+            target = request.get("path") or self.runtime.session.path
+            exported = self.sessions.export(Path(target), fmt)
+            return {"path": str(exported)}
+        raise ValueError(f"unknown session op: {op}")
+
+    async def _command(self, request: dict, request_id) -> None:
+        name = request.get("name")
+        if not isinstance(name, str) or not name.strip():
+            self._send({"type": "error", "id": request_id, "message": "command needs name"})
+            return
+        if self.commands is None:
+            self._send(
+                {"type": "error", "id": request_id, "message": "commands need a runtime"}
+            )
+            return
+        if self.commands.get(name) is None:
+            self._send(
+                {"type": "error", "id": request_id, "message": f"unknown command: {name}"}
+            )
+            return
+        try:
+            result = await self.commands.dispatch(name, str(request.get("argument") or ""))
+        except Exception as exc:  # noqa: BLE001 - a command must not kill the server
+            self._send({"type": "error", "id": request_id, "message": str(exc)})
+            return
+        applied_model = None
+        if result.model and self.models is not None:
+            switch = self.models.switch(result.model)
+            applied_model = self.agent.model.id if switch.ok else None
         self._send(
             {
                 "type": "result",
                 "id": request_id,
                 "ok": True,
-                "text": "".join(self._text).strip(),
-                "usage": _usage(self.agent),
-                "termination": self.agent.termination,
+                "command": name,
+                "message": result.message,
+                "screen": result.screen,
+                "show_help": result.show_help,
+                "reset_transcript": result.reset_transcript,
+                "quit": result.quit,
+                "appearance": result.appearance,
+                "language": result.language,
+                "model": applied_model,
             }
         )
+        if result.quit:
+            self._closed = True
 
     async def _shutdown(self) -> None:
         if self.running:
@@ -225,54 +576,117 @@ def _stdout_line(text: str) -> None:
 
 
 async def _run(args) -> int:
-    from zenagent.app.permissions import build_permission_gate
-    from zenagent.cli.main import _api_key_for, _build_agent, resolve_model
-    from zenagent.config import apply_user_config, load_user_config
-    from zenagent.providers.catalog import load_catalog
-    from zenagent.tools import ALL_TOOLS
-    from zenagent.tools.github import build_github_tool
-    from zenagent.tools.lsp import build_lsp_tool
-    from zenagent.tools.task import build_task_tool
-    from zenagent.tools.todo import build_todo_tool
+    from zenagent.app.chat import ChatController
+    from zenagent.app.commands import AppServices, build_default_commands
+    from zenagent.app.models import ModelManager
+    from zenagent.app.permissions import PermissionBroker, build_permission_gate
+    from zenagent.app.runtime import Runtime, RuntimeOptions
+    from zenagent.app.sessions import SessionManager
 
-    user_config = load_user_config()
-    catalog = apply_user_config(load_catalog(), user_config)
-    model = resolve_model(catalog, args.model)
-    api_key = _api_key_for(catalog, model)
-    gate = build_permission_gate(assume_yes=args.yes, interactive=False)
-    agent = _build_agent(
-        model,
-        api_key,
-        "off" if not model.reasoning else "high",
-        gate,
-        tools=[
-            *list(ALL_TOOLS),
-            *([build_github_tool()] if build_github_tool() is not None else []),
-            build_lsp_tool(),
-            build_todo_tool(None),
-            build_task_tool(
-                model=model,
-                base_tools=list(ALL_TOOLS),
-                api_key=api_key,
-                thinking="off" if not model.reasoning else "high",
-                max_cost=args.max_cost,
-                session_path=None,
-            ),
-        ],
+    broker = PermissionBroker.wrap(
+        build_permission_gate(
+            assume_yes=args.yes,
+            interactive=False,
+            allow_dangerous=args.allow_dangerous,
+            mode=args.mode,
+            read_only=args.read_only,
+        )
+    )
+    options = RuntimeOptions(
+        model_id=args.model,
+        thinking=args.thinking,
+        resume=args.resume,
+        mcp=not args.no_mcp,
+        mcp_file=Path(args.mcp_file) if args.mcp_file else None,
+        mcp_servers=args.mcp_servers,
+        skills=not args.no_skills,
+        context_files=not args.no_context_files,
+        read_only=args.read_only,
+        allow_dangerous=args.allow_dangerous,
+        allow_outside=args.allow_outside or [],
+        allow_destructive=args.allow_destructive,
+        allow_protected=args.allow_protected,
+        mode=args.mode,
+        retries=args.retries,
         max_turns=args.max_turns,
         max_cost=args.max_cost,
+        trace=args.trace,
+        metrics=args.metrics,
     )
-    server = RpcServer(agent, _stdin_line, _stdout_line)
-    return await server.run()
+    try:
+        runtime = await Runtime.bootstrap(options, gate=broker, allow_missing_key=False)
+    except KeyError as exc:
+        print(f"zenagent: unknown model: {exc}", file=sys.stderr)
+        return 2
+    except (RuntimeError, LookupError) as exc:
+        print(f"zenagent: {exc}", file=sys.stderr)
+        return 2
+    for warning in runtime.warnings:
+        print(f"zenagent: {warning}", file=sys.stderr)
+
+    chat = ChatController(runtime)
+    services = AppServices(
+        runtime=runtime,
+        chat=chat,
+        models=ModelManager(runtime),
+        sessions=SessionManager(runtime),
+    )
+    server = RpcServer(
+        runtime=runtime,
+        read_line=_stdin_line,
+        write_line=_stdout_line,
+        chat=chat,
+        models=services.models,
+        sessions=services.sessions,
+        commands=build_default_commands(services),
+    )
+    broker.set_confirm(server.confirm)
+    try:
+        return await server.run()
+    finally:
+        await runtime.close()
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="zenagent rpc", description=__doc__.splitlines()[0])
     parser.add_argument("-m", "--model", help="model id")
     parser.add_argument("--yes", action="store_true", help="approve non-read tools")
+    parser.add_argument("--mode", help="runtime mode: plan|ask|full")
+    parser.add_argument("--read-only", action="store_true", help="refuse write tools")
+    parser.add_argument("--thinking", help="reasoning level")
     parser.add_argument("--max-turns", type=int)
     parser.add_argument("--max-cost", type=float)
+    parser.add_argument("--retries", type=int, default=0)
+    parser.add_argument("--resume", nargs="?", const="latest", help="resume a session")
+    parser.add_argument("--no-mcp", action="store_true", help="do not connect MCP servers")
+    parser.add_argument("--mcp-file", help="MCP config file")
+    parser.add_argument(
+        "--mcp-server", action="append", dest="mcp_servers", help="only this MCP server"
+    )
+    parser.add_argument("--no-skills", action="store_true", help="do not load skills")
+    parser.add_argument(
+        "--no-context-files", action="store_true", help="do not read AGENTS.md"
+    )
+    parser.add_argument("--trace", metavar="PATH", help="write a JSONL trace")
+    parser.add_argument("--metrics", metavar="PATH", help="append per-run metrics")
+    parser.add_argument("--cwd", metavar="PATH", help="working directory")
+    parser.add_argument(
+        "--allow-dangerous", action="store_true", help="allow catastrophic commands"
+    )
+    parser.add_argument(
+        "--allow-outside", action="append", dest="allow_outside", metavar="PATH"
+    )
+    parser.add_argument("--allow-destructive", action="store_true")
+    parser.add_argument("--allow-protected", action="store_true")
     args = parser.parse_args(argv)
+    if args.cwd:
+        import os
+
+        target = Path(args.cwd).expanduser()
+        if not target.is_dir():
+            print(f"zenagent: --cwd is not a directory: {target}", file=sys.stderr)
+            return 1
+        os.chdir(target.resolve())
     try:
         return asyncio.run(_run(args))
     except KeyboardInterrupt:

@@ -79,3 +79,17 @@ async def test_clicking_a_chip_removes_the_attachment(tmp_path, fake_runtime):
 
         assert app.chat.attachments == []
         assert app.query_one(AttachmentChips).display is False
+
+
+async def test_app_attaches_images_passed_at_launch(tmp_path, runtime_factory):
+    from zenagent.attachments import read_image_argument
+
+    path = tmp_path / "launch.png"
+    path.write_bytes(PNG)
+    block = read_image_argument(path)
+    runtime = await runtime_factory(stream_fn=recording_stream([]))
+
+    app = ZenAgentApp(runtime, images=[block])
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        assert app.chat.attachments == [block]

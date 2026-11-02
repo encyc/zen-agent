@@ -120,8 +120,11 @@ class ZenAgentApp(App):
         history_path: Path | None = None,
         theme: str | None = None,
         language: str | None = None,
+        images: list | None = None,
     ) -> None:
         super().__init__()
+        #: ``--image`` blocks attached before the first turn.
+        self._initial_images = list(images or [])
         # Resolve and register the appearance before the first paint, so a
         # light terminal never flashes the dark palette on startup.
         appearance_warnings: list[str] = []
@@ -346,6 +349,8 @@ class ZenAgentApp(App):
         # A resumed session already has messages: build the transcript views
         # before the first paint, or history (and its subagent rows) is blank.
         self.chat.reload_transcript()
+        for block in self._initial_images:
+            self.chat.attach_image(block)
         self._refresh_status()
         self.query_one(PromptInput).focus()
         self._start_update_check()

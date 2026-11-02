@@ -896,3 +896,136 @@ def test_repl_launch_forwards_thinking_metrics_and_images(monkeypatch, tmp_path)
     assert captured["thinking"] == "low"
     assert str(captured["metrics"]) == str(metrics)
     assert [str(p) for p in captured["images"]] == [str(image)]
+
+
+def _tui_stdout(monkeypatch):
+    import io
+
+    class FakeStdout(io.StringIO):
+        def isatty(self):
+            return True
+
+    monkeypatch.setattr(cli_main.sys, "stdout", FakeStdout())
+
+
+def test_tui_forwards_thinking_trace_metrics_and_auto_compact(monkeypatch, tmp_path):
+    from zenagent.app.runtime import Runtime
+
+    _tui_stdout(monkeypatch)
+    monkeypatch.setattr(cli_main, "_missing_extra", lambda *modules: None)
+    captured: dict = {}
+
+    async def fake_bootstrap(cls, options, **kwargs):
+        captured["options"] = options
+        raise RuntimeError("stop here")
+
+    monkeypatch.setattr(Runtime, "bootstrap", classmethod(fake_bootstrap))
+    trace = tmp_path / "t.jsonl"
+    metrics = tmp_path / "m.jsonl"
+
+    code = cli_main.main(
+        [
+            "--thinking", "low",
+            "--trace", str(trace),
+            "--metrics", str(metrics),
+            "--no-auto-compact",
+        ]
+    )
+
+    assert code == 2
+    options = captured["options"]
+    assert options.thinking == "low"
+    assert str(options.trace) == str(trace)
+    assert str(options.metrics) == str(metrics)
+    assert options.auto_compact is False
+
+
+def test_tui_launch_attaches_image_flags(monkeypatch, tmp_path):
+    from zenagent.app.runtime import Runtime
+
+    _tui_stdout(monkeypatch)
+    monkeypatch.setattr(cli_main, "_missing_extra", lambda *modules: None)
+    captured: dict = {}
+
+    class FakeAgent:
+        from zenagent.providers.catalog import Model
+        from zenagent.providers.compat import CompatFlags
+        from zenagent.types import Cost
+
+        model = Model(
+            id="deepseek-flash",
+            provider="deepseek",
+            api="openai-completions",
+            base_url="https://x/v1",
+            context_window=1000,
+            max_tokens=100,
+            reasoning=True,
+            supports_vision=True,
+            cost=Cost(),
+            compat=CompatFlags(),
+        )
+
+    class FakeRuntime:
+        agent = FakeAgent()
+
+        async def close(self):
+            return None
+
+    async def fake_bootstrap(cls, options, **kwargs):
+        return FakeRuntime()
+
+    class FakeApp:
+        exit_summary = None
+
+        def __init__(self, runtime, *, theme=None, language=None, images=None):
+            captured["images"] = images
+
+        def request_tool_approval(self, *args, **kwargs):
+            return "deny"
+
+        async def run_async(self):
+            return None
+
+    monkeypatch.setattr(Runtime, "bootstrap", classmethod(fake_bootstrap))
+    monkeypatch.setattr(cli_main, "_tui_app_class", lambda: FakeApp)
+
+    assert cli_main.main(["--image", str(_png(tmp_path))]) == 0
+    assert len(captured["images"]) == 1
+
+
+def test_tui_image_on_a_non_vision_model_fails(monkeypatch, tmp_path, capsys):
+    from zenagent.app.runtime import Runtime
+    from zenagent.providers.catalog import Model
+    from zenagent.providers.compat import CompatFlags
+    from zenagent.types import Cost
+
+    _tui_stdout(monkeypatch)
+    monkeypatch.setattr(cli_main, "_missing_extra", lambda *modules: None)
+
+    class FakeAgent:
+        model = Model(
+            id="glm-5.3",
+            provider="zai-coding-cn",
+            api="openai-completions",
+            base_url="https://x/v1",
+            context_window=1000,
+            max_tokens=100,
+            reasoning=False,
+            supports_vision=False,
+            cost=Cost(),
+            compat=CompatFlags(),
+        )
+
+    class FakeRuntime:
+        agent = FakeAgent()
+
+        async def close(self):
+            return None
+
+    async def fake_bootstrap(cls, options, **kwargs):
+        return FakeRuntime()
+
+    monkeypatch.setattr(Runtime, "bootstrap", classmethod(fake_bootstrap))
+
+    assert cli_main.main(["--image", str(_png(tmp_path))]) == 1
+    assert "does not accept images" in capsys.readouterr().err
