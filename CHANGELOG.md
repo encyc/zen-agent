@@ -3,6 +3,19 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## v0.7.2 — 2026-11-02
+
+### Changed
+
+- **The default subagent turn budget is 300, not 30**
+  (`zenagent/config.py::DEFAULT_TASK_MAX_TURNS`). Long read-only
+  investigations — sweeping a repo, cross-checking a dozen files — were
+  running out of turns and coming back `[cut]` (`status="truncated"`,
+  `reason="max_turns"`) before they could report. 300 leaves room for them while
+  the parent run keeps its own 100-turn cap (`_MAX_TURNS`). `[task].max_turns`
+  still overrides it, and the transcript/cost/40 KB-result budgets are
+  unchanged, so a wider turn budget does not widen any other one.
+
 ## v0.7.1 — 2026-11-02
 
 ### Changed
