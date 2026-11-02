@@ -638,6 +638,29 @@ async def _urls(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(message="\n".join(rows))
 
 
+@_command("open")
+async def _open(services: AppServices, argument: str) -> CommandResult:
+    """Open link <n> of the last answer in the default browser."""
+    import webbrowser
+
+    index = parse_index(argument)
+    if index is None or index < 1:
+        return CommandResult(message=t("cmdmsg.url_usage"))
+    links = extract_links(services.chat.last_assistant_text())
+    if not links:
+        return CommandResult(message=t("cmdmsg.urls_empty"))
+    if index > len(links):
+        return CommandResult(message=t("cmdmsg.url_index_invalid", count=len(links)))
+    url = links[index - 1]
+    try:
+        opened = webbrowser.open(url)
+    except Exception:  # noqa: BLE001 - a missing browser must not kill the TUI
+        opened = False
+    if not opened:
+        return CommandResult(message=t("cmdmsg.url_open_failed", url=url))
+    return CommandResult(message=t("cmdmsg.url_opened", url=url))
+
+
 @_command("shake")
 async def _shake(services: AppServices, argument: str) -> CommandResult:
     """Drop one class of heavy content without summarizing (tools/images/thinking)."""
@@ -793,6 +816,7 @@ def build_default_commands(services: AppServices) -> CommandRegistry:
         _jobs,
         _copy,
         _urls,
+        _open,
         _shake,
         _btw,
         _add_dir,

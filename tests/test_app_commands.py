@@ -278,6 +278,7 @@ async def test_todo_command_opens_the_editor(services):
 async def services_with_answer(runtime_factory, answer):
     """AppServices whose chat has already answered once with `answer`."""
     from conftest import sequenced_stream
+
     from zenagent.app.chat import ChatController
     from zenagent.app.commands import AppServices
     from zenagent.app.models import ModelManager
@@ -358,3 +359,34 @@ async def test_copy_index_zero_never_copies_the_digit(services, monkeypatch):
     result = await build_default_commands(services).dispatch("copy", "0")
     assert copied == []
     assert result.message is not None
+
+
+async def test_open_command_opens_the_indexed_link(runtime_factory, monkeypatch):
+    import webbrowser
+
+    opened: list[str] = []
+    monkeypatch.setattr(webbrowser, "open", lambda url, *a, **kw: opened.append(url) or True)
+    services = await services_with_answer(runtime_factory, "见 https://example.com/docs 。")
+    result = await build_default_commands(services).dispatch("open", "1")
+    assert opened == ["https://example.com/docs"]
+    assert result.message is not None
+
+
+async def test_open_command_survives_a_refusing_browser(runtime_factory, monkeypatch):
+    """`webbrowser.open` false or raising must not tear the app down."""
+    import webbrowser
+
+    def boom(url, *args, **kwargs):
+        raise OSError("no browser")
+
+    monkeypatch.setattr(webbrowser, "open", boom)
+    from zenagent.i18n import t
+
+    services = await services_with_answer(runtime_factory, "见 https://example.com/x 。")
+    result = await build_default_commands(services).dispatch("open", "1")
+    assert result.message == t("cmdmsg.url_open_failed", url="https://example.com/x")
+
+
+async def test_open_command_without_an_index_prints_usage(services):
+    result = await build_default_commands(services).dispatch("open", "")
+    assert result.message is not None and "/urls" in result.message

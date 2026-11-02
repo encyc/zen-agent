@@ -44,6 +44,7 @@ SLASH_COMMANDS: dict[str, str] = {
     "/jobs": "cmd.jobs.description",
     "/copy": "cmd.copy.description",
     "/urls": "cmd.urls.description",
+    "/open": "cmd.open.description",
     "/btw": "cmd.btw.description",
     "/shake": "cmd.shake.description",
     "/handoff": "cmd.handoff.description",

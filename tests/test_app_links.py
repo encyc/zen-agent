@@ -14,7 +14,7 @@ def test_extracts_a_url_from_a_fenced_code_block():
 
 
 def test_extracts_markdown_link_targets_and_bare_urls():
-    text = f"见 [文档](https://example.com/docs) 和 https://example.org/bare 。"
+    text = "见 [文档](https://example.com/docs) 和 https://example.org/bare 。"
     assert extract_links(text) == ["https://example.com/docs", "https://example.org/bare"]
 
 
