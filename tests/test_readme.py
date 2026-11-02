@@ -15,7 +15,7 @@ BLOB = "https://github.com/encyc/zen-agent/blob/main/"
 
 def test_readme_is_a_landing_page_with_four_parts():
     assert len(TEXT.splitlines()) <= 130
-    headings = re.findall(r"^## .+$", TEXT, re.M)
+    headings = re.findall(r"^## .+$", TEXT, re.MULTILINE)
     assert headings == SECTIONS
 
 

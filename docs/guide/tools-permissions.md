@@ -22,6 +22,8 @@
 | `checkpoint` | 标记探索起点（`goal`）；之后可用 `rewind` 把这段探索从模型上下文里替换掉 | 只读 |
 | `rewind` | 用 `report` 替换 checkpoint 之后的探索上下文；只影响请求投影，磁盘 transcript 保留全量历史 | 只读 |
 | `todo` | 会话级任务清单（phases / 按内容寻址 / 9 个 op）；状态写 `<session>.todo.json`，不碰工作区（plan/`--read-only` 下也会写这个会话 sidecar） | 只读 |
+| `memory` | 读一条项目记忆（4-hex id）或按关键字检索，内容来自 `<项目根>/.zenagent/memory/` | 只读，免确认 |
+| `memory_write` | 新增/更新/删除项目记忆（决策与原因、约定、反复踩的坑）；每次改动追加进 journal | 需确认 |
 
 每个工具还声明一个能力级（`AgentTool.approval = "read" | "write" | "exec"`）：
 权限门读声明决定「plan 是否放行 / 是否需要确认」，而不是维护一份硬编码工具名表；

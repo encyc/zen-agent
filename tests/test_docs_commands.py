@@ -32,6 +32,6 @@ def test_every_registered_command_is_documented():
 
 
 def test_doc_never_repeats_a_command_row():
-    rows = re.findall(r"^\| `/([a-z][a-z-]*)", DOC.read_text(encoding="utf-8"), re.M)
+    rows = re.findall(r"^\| `/([a-z][a-z-]*)", DOC.read_text(encoding="utf-8"), re.MULTILINE)
     duplicates = sorted({name for name in rows if rows.count(name) > 1})
     assert not duplicates, f"duplicate command rows: {duplicates}"
