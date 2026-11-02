@@ -122,3 +122,31 @@ def test_format_memory_index_orders_truncates_and_sanitizes(tmp_path):
     data_lines = [line for line in index.splitlines() if line.startswith("- ")]
     assert len(data_lines) == 64
     assert "memory search" in index
+
+
+def test_index_skips_non_hex_stems_and_ignores_frontmatter_id(tmp_path):
+    from zenagent.agent.memory_store import format_memory_index
+
+    store = MemoryStore(tmp_path)
+    entry = store.write_entry(title="正规", body="b", source="s")
+    # 手放的非 4-hex 文件：索引不能展示工具读不到的条目
+    stray = tmp_path / MEMORY_DIR / "entries" / "notes.md"
+    stray.write_text("id: ../../evil\ntitle: 手放\n\nbody\n", encoding="utf-8")
+    # frontmatter 里伪造的 id 不能盖过文件名
+    forged = tmp_path / MEMORY_DIR / "entries" / f"{entry.id}.md"
+    forged.write_text("id: 9999\ntitle: 正规\n\nbody\n", encoding="utf-8")
+
+    index = format_memory_index(store)
+    assert "notes" not in index and "9999" not in index and "evil" not in index
+    assert f"- {entry.id} 正规" in index
+    assert store.read_entry(entry.id).id == entry.id  # 文件名为准
+    assert store.read_entry("notes") is None  # 非 hex stem 不可读
+
+
+def test_delete_carries_reason_and_session(tmp_path):
+    store = MemoryStore(tmp_path)
+    entry = store.write_entry(title="t", body="b", source="s")
+    assert store.delete_entry(entry.id, reason="过期", session="sess-9")
+    event = store.read_journal()[-1]
+    assert event["op"] == "delete" and event["reason"] == "过期"
+    assert event["session"] == "sess-9"

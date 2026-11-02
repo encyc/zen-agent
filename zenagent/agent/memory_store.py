@@ -57,6 +57,34 @@ def _now() -> str:
     return datetime.now(UTC).strftime(_NOW)
 
 
+_LAST_TS: str = ""
+
+
+def _next_timestamp() -> str:
+    """Second-granular timestamp, monotonic within this process.
+
+    Two entries written in the same wall-clock second must still order
+    deterministically ("newest first" in the index), so the timestamp is
+    bumped by one second when the clock has not moved yet. A one-second
+    skew on a rapid write burst is invisible in practice; without this the
+    index order degenerates to id order on every same-second pair.
+    """
+    global _LAST_TS
+    candidate = _now()
+    if candidate <= _LAST_TS:
+        candidate = _bump(_LAST_TS)
+    _LAST_TS = candidate
+    return candidate
+
+
+def _bump(stamp: str) -> str:
+    from datetime import datetime as _dt
+    from datetime import timedelta as _td
+
+    parsed = _dt.strptime(stamp, _NOW).replace(tzinfo=UTC)
+    return (parsed + _td(seconds=1)).strftime(_NOW)
+
+
 def _parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
     """Split leading ``key: value`` lines (stopped by a blank line) from body.
 
@@ -107,6 +135,8 @@ class MemoryStore:
     # -- entries -----------------------------------------------------------
 
     def read_entry(self, entry_id: str) -> MemoryEntry | None:
+        if not _ID_RE.fullmatch(entry_id):
+            return None  # only addressable ids exist for the store
         path = self.entry_path(entry_id)
         try:
             raw = path.read_bytes()
@@ -120,7 +150,9 @@ class MemoryStore:
             mtime = _now()
         if fields:
             return MemoryEntry(
-                id=str(fields.get("id", entry_id)),
+                # The filename stem is authoritative: a hand-edited frontmatter
+                # id must not override the path the tools address entries by.
+                id=entry_id,
                 title=_single_line(str(fields.get("title", "")), MAX_TITLE_CHARS)
                 or "(untitled)",
                 body=body.strip(),
@@ -142,10 +174,13 @@ class MemoryStore:
     def list_entries(self) -> list[MemoryEntry]:
         if not self.entries_dir.is_dir():
             return []
+        # Only well-formed entry files: a stem the tools cannot address
+        # (memory read/update/delete require 4-hex) must never reach the
+        # prompt index — it would advertise an entry no tool can open.
         entries = [
             entry
             for path in sorted(self.entries_dir.glob("*.md"))
-            if (entry := self.read_entry(path.stem)) is not None
+            if _ID_RE.fullmatch(path.stem) and (entry := self.read_entry(path.stem)) is not None
         ]
         return entries
 
@@ -159,7 +194,7 @@ class MemoryStore:
         session: str | None = None,
     ) -> MemoryEntry:
         entry_id = self.new_id()
-        now = _now()
+        now = _next_timestamp()
         entry = MemoryEntry(
             id=entry_id,
             title=_single_line(title, MAX_TITLE_CHARS) or "(untitled)",
@@ -192,7 +227,7 @@ class MemoryStore:
             or current.title,
             body=body if body is not None else current.body,
             created=current.created,
-            updated=_now(),
+            updated=_next_timestamp(),
             source=current.source,
         )
         self._write_atomically(self.entry_path(entry_id), self._render(entry))
@@ -264,12 +299,16 @@ class MemoryStore:
             matches.append((entry, _single_line(excerpt, 120)))
         return matches
 
-    def delete_entry(self, entry_id: str) -> bool:
+    def delete_entry(
+        self, entry_id: str, *, reason: str = "", session: str | None = None
+    ) -> bool:
+        if not _ID_RE.fullmatch(entry_id):
+            return False
         try:
             self.entry_path(entry_id).unlink()
         except OSError:
             return False
-        self.journal("delete", entry_id)
+        self.journal("delete", entry_id, reason=reason, session=session)
         return True
 
     # -- prompt index ------------------------------------------------------
@@ -281,14 +320,10 @@ class MemoryStore:
         prompt budget stays constant as the library grows; entries beyond the
         cap stay reachable through ``memory search``.
         """
-        def sort_key(entry: MemoryEntry) -> tuple[float, str]:
-            # updated is second-granular; the file mtime breaks same-second
-            # ties so "newest first" is reliable for rapid consecutive writes.
-            try:
-                mtime = self.entry_path(entry.id).stat().st_mtime
-            except OSError:
-                mtime = 0.0
-            return (mtime, entry.id)
+        def sort_key(entry: MemoryEntry) -> tuple[str, str]:
+            # The frontmatter `updated` is the semantic key and survives
+            # git clone/checkout/stash (file mtime does not).
+            return (entry.updated, entry.id)
 
         entries = sorted(self.list_entries(), key=sort_key, reverse=True)
         lines = [

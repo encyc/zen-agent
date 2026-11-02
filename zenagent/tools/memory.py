@@ -153,7 +153,11 @@ async def _write_tool(
             f"updated {entry.id}  {entry.title}", action=action, id=entry.id
         )
     # action == "delete"
-    if not store.delete_entry(entry_id):
+    if not store.delete_entry(
+        entry_id,
+        reason=str(args.get("reason") or ""),
+        session=session_id,
+    ):
         return _text(f"entry {entry_id} not found", is_error=True)
     return _text(f"deleted {entry_id}", action=action, id=entry_id)
 
