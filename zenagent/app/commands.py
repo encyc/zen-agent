@@ -10,6 +10,7 @@ from pathlib import Path
 from zenagent.agent.session import Session, session_title
 from zenagent.app.appearance import THEME_CHOICES
 from zenagent.app.chat import ChatController
+from zenagent.app.links import extract_links
 from zenagent.app.models import ModelManager
 from zenagent.app.modes import describe_modes
 from zenagent.app.restore import run_restore_command
@@ -603,6 +604,26 @@ async def _copy(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(message=t("cmdmsg.copy_failed"))
 
 
+#: `/urls` preview width; copying goes through `/copy <n>` and is never clipped.
+URL_PREVIEW_CHARS = 80
+
+
+@_command("urls")
+async def _urls(services: AppServices, argument: str) -> CommandResult:
+    """List the links of the last answer, numbered for `/copy` and `/open`."""
+    links = extract_links(services.chat.last_assistant_text())
+    if not links:
+        return CommandResult(message=t("cmdmsg.urls_empty"))
+    rows = []
+    for index, url in enumerate(links, start=1):
+        if len(url) <= URL_PREVIEW_CHARS:
+            preview = url
+        else:
+            preview = url[: URL_PREVIEW_CHARS - 1] + "…"
+        rows.append(t("cmdmsg.urls_row", index=index, preview=preview, length=len(url)))
+    return CommandResult(message="\n".join(rows))
+
+
 @_command("shake")
 async def _shake(services: AppServices, argument: str) -> CommandResult:
     """Drop one class of heavy content without summarizing (tools/images/thinking)."""
@@ -757,6 +778,7 @@ def build_default_commands(services: AppServices) -> CommandRegistry:
         _lang,
         _jobs,
         _copy,
+        _urls,
         _shake,
         _btw,
         _add_dir,

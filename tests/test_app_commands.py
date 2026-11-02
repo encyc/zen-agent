@@ -273,3 +273,37 @@ async def test_todo_command_opens_the_editor(services):
     registry = build_default_commands(services)
     result = await registry.dispatch("todo", "")
     assert result.screen == "todo-edit"
+
+
+async def services_with_answer(runtime_factory, answer):
+    """AppServices whose chat has already answered once with `answer`."""
+    from conftest import sequenced_stream
+    from zenagent.app.chat import ChatController
+    from zenagent.app.commands import AppServices
+    from zenagent.app.models import ModelManager
+    from zenagent.app.sessions import SessionManager
+
+    runtime = await runtime_factory(stream_fn=sequenced_stream([answer]))
+    chat = ChatController(runtime)
+    await chat.submit("hi")
+    await chat.wait_for_idle()
+    return AppServices(runtime=runtime, chat=chat,
+                       models=ModelManager(runtime), sessions=SessionManager(runtime))
+
+
+async def test_urls_command_numbers_links_from_the_last_answer(runtime_factory):
+    answer = (
+        "先起回调：\n\n```\nhttps://metabase.example.cn/oauth/authorize?"
+        "response_type=code&redirect_uri=http%3A%2F%2F127.0.0.1%3A8971%2Fcallback\n```\n"
+        "文档见 [docs](https://example.com/docs)。\n"
+    )
+    services = await services_with_answer(runtime_factory, answer)
+    result = await build_default_commands(services).dispatch("urls", "")
+    assert result.message is not None
+    assert "1. https://metabase.example.cn/oauth/authorize" in result.message
+    assert "2. https://example.com/docs" in result.message
+
+
+async def test_urls_command_reports_when_the_answer_has_no_links(services):
+    result = await build_default_commands(services).dispatch("urls", "")
+    assert result.message == "no links in the last answer"
