@@ -26,8 +26,14 @@ NEW_PROVIDERS = {
 def test_new_provider_loads_with_expected_adapter_and_model_count(provider_id):
     adapter, count = NEW_PROVIDERS[provider_id]
     provider = load_catalog()[provider_id]
-    assert provider.adapter == adapter
-    assert len(provider.models) == count
+    assert provider.adapter == adapter, (
+        f"{provider_id}: expected adapter {adapter!r}, got {provider.adapter!r}"
+    )
+    assert len(provider.models) == count, (
+        f"{provider_id}: expected {count} models, got {len(provider.models)}. "
+        "If the pi-ai source was re-synced, update this table (and the provider's "
+        "catalog entry) deliberately -- do not just match the new number."
+    )
 
 
 def test_every_catalog_model_uses_a_registered_adapter():
