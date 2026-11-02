@@ -3,7 +3,7 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased
+## v0.6.4 — 2026-11-02
 
 **前端对齐：REPL / RPC 与 TUI 共享同一套 app 层，RPC 协议升级到 v2。**
 
