@@ -233,3 +233,92 @@ async def test_bootstrap_carries_guard_policy_options(runtime_factory, tmp_path)
     assert str(tmp_path / "outside") in allow_outside
     assert runtime.gate.policy.allow_destructive
     assert runtime.gate.policy.allow_protected
+
+
+def _echo_stream():
+    import time
+
+    from zenagent.events import AssistantEvent
+    from zenagent.types import AssistantMessage, TextContent, Usage
+
+    async def stream(model, messages, tools, options):
+        partial = AssistantMessage(
+            content=[TextContent(text="ok")],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="pending",
+            timestamp=int(time.time()),
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        partial.stop_reason = "stop"
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    return stream
+
+
+async def test_runtime_writes_trace_and_metrics(runtime_factory, tmp_path):
+    trace = tmp_path / "trace.jsonl"
+    metrics = tmp_path / "metrics.jsonl"
+    runtime = await runtime_factory(
+        stream_fn=_echo_stream(), trace=trace, metrics=metrics
+    )
+
+    await runtime.agent.prompt("hi")
+
+    assert trace.read_text(encoding="utf-8").strip()
+    assert metrics.read_text(encoding="utf-8").strip()
+    assert runtime.trace_path == str(trace)
+
+
+async def test_runtime_auto_compact_is_configurable(runtime_factory):
+    runtime = await runtime_factory(auto_compact=False)
+    assert runtime.auto_compact is False
+
+
+async def test_bootstrap_accepts_an_api_key_override(app_env, monkeypatch):
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    options = RuntimeOptions(
+        mcp=False, skills=False, templates=False, api_key="override-key"
+    )
+
+    runtime = await Runtime.bootstrap(options)
+
+    try:
+        assert runtime.agent.api_key == "override-key"
+    finally:
+        await runtime.close()
+
+
+async def test_custom_tools_override_the_composed_tool_set(runtime_factory):
+    from zenagent.tools.fs import READ_FILE
+
+    runtime = await runtime_factory(tools=[READ_FILE])
+
+    assert [tool.name for tool in runtime.agent.tools] == ["read_file"]
+
+
+async def test_mcp_manager_receives_the_retry_interval(runtime_factory, monkeypatch):
+    captured: dict = {}
+
+    class FakeManager:
+        def __init__(self, configs, retry_interval_s=10.0):
+            captured["interval"] = retry_interval_s
+
+        async def start(self):
+            return []
+
+        def tool_defs(self):
+            return []
+
+        async def close(self):
+            return None
+
+    monkeypatch.setattr("zenagent.app.runtime.McpManager", FakeManager)
+    monkeypatch.setattr(
+        "zenagent.app.runtime.load_mcp_config", lambda *a, **k: {"srv": object()}
+    )
+
+    await runtime_factory(mcp=True, mcp_retry_interval_s=0.25)
+
+    assert captured["interval"] == 0.25

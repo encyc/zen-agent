@@ -54,6 +54,8 @@ from zenagent.prompts import (
 from zenagent.providers.catalog import ProviderConfig, load_catalog
 from zenagent.providers.limits import estimate_text_tokens
 from zenagent.providers.registry import StreamFn
+from zenagent.telemetry import MetricsRecorder, append_metrics
+from zenagent.trace import TraceRecorder
 from zenagent.skills import (
     build_skill_tool,
     default_skill_roots,
@@ -104,6 +106,18 @@ class RuntimeOptions:
     retries: int = 0
     max_turns: int | None = None
     max_cost: float | None = None
+    #: Explicit key override (REPL/SDK embedders); skips the catalog lookup.
+    api_key: str | None = None
+    #: JSONL trace of turns/tool calls (``--trace``).
+    trace: Path | str | None = None
+    #: Per-run metrics JSONL (``--metrics``).
+    metrics: Path | None = None
+    #: Automatic compaction toggle (``--no-auto-compact``).
+    auto_compact: bool = True
+    #: Explicit tool list (embedding/test seam); ``None`` = compose the default.
+    tools: list | None = None
+    #: Retry cadence for late MCP servers.
+    mcp_retry_interval_s: float = 10.0
 
 
 class Runtime:
@@ -150,6 +164,15 @@ class Runtime:
         self.extra_dirs: list[Path] = []
         #: JSONL trace path when the frontend started with --trace.
         self.trace_path: str | None = None
+        #: JSONL trace recorder; closed by :meth:`close`.
+        self.tracer: TraceRecorder | None = None
+        #: Automatic compaction toggle read by ChatController.
+        self.auto_compact = True
+        #: Per-run metrics JSONL and its live recorder.
+        self.metrics_path: Path | None = None
+        self._metrics_recorder: MetricsRecorder | None = None
+        #: Explicit tool list (embedding/test seam); ``None`` = compose.
+        self._custom_tools: list | None = None
         self._skill_entries = ""
         self._extension_prompt = ""
         self._extension_tools: list = []
@@ -259,7 +282,7 @@ class Runtime:
             runtime.catalog, options.model_id or runtime.user_config.default_model
         )
         runtime.model = model
-        api_key = api_key_for(runtime.catalog, model)
+        api_key = options.api_key or api_key_for(runtime.catalog, model)
         if not api_key:
             provider = runtime.catalog.get(model.provider)
             env_name = provider.api_key_env if provider else "the provider's API key"
@@ -314,10 +337,10 @@ class Runtime:
 
         runtime._jobs_acquired = True
         acquire_job_manager()
-        if options.mcp:
+        if options.mcp and options.tools is None:
             runtime.mcp = await runtime._start_mcp(options)
 
-        if options.skills:
+        if options.skills and options.tools is None:
             runtime.skills, warnings = discover_skills(
                 default_skill_roots(Path.cwd())
             )
@@ -343,6 +366,10 @@ class Runtime:
 
         runtime._options = options
         runtime._context_files = options.context_files
+        runtime.auto_compact = options.auto_compact
+        runtime._custom_tools = (
+            list(options.tools) if options.tools is not None else None
+        )
         runtime.guard = ContextGuard(model.context_window)
         thinking = options.thinking
         if thinking is None:
@@ -384,11 +411,21 @@ class Runtime:
         agent.subscribe(runtime.guard.on_event)
         runtime.agent = agent
         runtime._subscribe_hooks()
+        if options.trace:
+            runtime.trace_path = str(options.trace)
+            runtime.tracer = TraceRecorder(options.trace)
+            agent.subscribe(runtime.tracer)
+        if options.metrics:
+            runtime.metrics_path = Path(options.metrics)
+            runtime._start_metrics(agent)
 
         def persist(event) -> None:
-            if event.type == "agent_end" and event.new_messages:
+            if event.type != "agent_end":
+                return
+            if event.new_messages:
                 for message in event.new_messages:
                     runtime.session.append(message)
+            runtime._flush_metrics()
 
         agent.subscribe(persist)
         if runtime.journal is not None:
@@ -410,7 +447,9 @@ class Runtime:
             }
         if not configs:
             return None
-        manager = McpManager(configs)
+        manager = McpManager(
+            configs, retry_interval_s=options.mcp_retry_interval_s
+        )
         self.warnings.extend(f"mcp {warning}" for warning in await manager.start())
         return manager
 
@@ -486,6 +525,16 @@ class Runtime:
         patching the previous list) is what keeps ``read_skill``'s roster, the
         prompt's skill index and ``agent.tools`` from drifting apart.
         """
+        if self._custom_tools is not None:
+            tools = [*self._custom_tools, *self._extension_tools]
+            self._skill_entries = ""
+            self._base_tools = tools
+            self._base_prompt = self._build_prompt(tools)
+            if hasattr(self, "agent"):
+                self.agent.tools = list(tools)
+                self.agent.system_prompt = self._prompt_with_mode()
+            return
+
         tools = list(ALL_TOOLS)
         tools.extend(build_checkpoint_tools(lambda: getattr(self, "agent", None), self.rewind))
         github_tool = build_github_tool()
@@ -667,7 +716,23 @@ class Runtime:
 
     # -- lifecycle ----------------------------------------------------------
 
+    def _start_metrics(self, agent: Agent) -> None:
+        recorder = MetricsRecorder(agent.model.id)
+        self._metrics_recorder = recorder
+        agent.subscribe(recorder)
+
+    def _flush_metrics(self) -> None:
+        """Append one metrics line for the finished run, then re-arm."""
+        recorder, self._metrics_recorder = self._metrics_recorder, None
+        if recorder is None or self.metrics_path is None:
+            return
+        append_metrics(self.metrics_path, recorder.build(self.agent.termination))
+        self._start_metrics(self.agent)
+
     async def close(self) -> None:
+        if self.tracer is not None:
+            tracer, self.tracer = self.tracer, None
+            tracer.close()
         await shutdown_clients()
         if self.mcp is not None:
             manager, self.mcp = self.mcp, None

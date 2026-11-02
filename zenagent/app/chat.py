@@ -654,6 +654,8 @@ class ChatController:
 
     async def _maybe_auto_compact(self) -> None:
         """One automatic compaction; failures become a transcript notice."""
+        if not getattr(self.runtime, "auto_compact", True):
+            return
         if not should_auto_compact(
             self.runtime.guard.last_usage,
             self.runtime.agent.model.context_window,
