@@ -1088,3 +1088,79 @@ async def test_slash_model_rejects_a_keyless_model(monkeypatch, capsys):
 
     assert agent.model.id == "glm-5.3"
     assert "no API key" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# P0: REPL startup flags
+# ---------------------------------------------------------------------------
+
+
+async def test_repl_forwards_the_thinking_flag(isolated_sessions):
+    seen: list = []
+
+    async def stream(model_, messages, tools, options):
+        seen.append(options.thinking)
+        partial = AssistantMessage(
+            content=[TextContent(text="ok")], provider="test", model="m",
+            usage=Usage(), stop_reason="stop", timestamp=int(time.time()),
+        )
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    code = await repl(
+        "glm-5.3",
+        stream_fn=stream,
+        input_fn=scripted_input("hi", "/exit"),
+        print_fn=lambda *a, **k: None,
+        api_key="k",
+        thinking="low",
+    )
+
+    assert code == 0
+    assert seen == ["low"]
+
+
+async def test_repl_attaches_startup_images_to_the_first_prompt(
+    isolated_sessions, tmp_path, monkeypatch
+):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "deep-key")
+    image = tmp_path / "shot.png"
+    image.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8)
+    seen: list = []
+
+    async def stream(model_, messages, tools, options):
+        seen.append(messages)
+        partial = AssistantMessage(
+            content=[TextContent(text="ok")], provider="test", model="m",
+            usage=Usage(), stop_reason="stop", timestamp=int(time.time()),
+        )
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    code = await repl(
+        "deepseek-flash",
+        stream_fn=stream,
+        input_fn=scripted_input("describe", "/exit"),
+        print_fn=lambda *a, **k: None,
+        api_key="k",
+        images=[image],
+    )
+
+    assert code == 0
+    kinds = [type(block).__name__ for block in seen[0][-1].content]
+    assert kinds == ["ImageContent", "TextContent"]
+
+
+async def test_repl_rejects_startup_images_for_a_non_vision_model(isolated_sessions, tmp_path, capsys):
+    image = tmp_path / "shot.png"
+    image.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8)
+
+    code = await repl(
+        "glm-5.3",
+        stream_fn=scripted_stream(),
+        input_fn=scripted_input(),
+        print_fn=lambda *a, **k: None,
+        api_key="k",
+        images=[image],
+    )
+
+    assert code == 1
+    assert "does not accept images" in capsys.readouterr().err

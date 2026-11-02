@@ -870,3 +870,29 @@ async def test_headless_wires_policy_and_journal(monkeypatch, app_env):
     assert gate.policy.allow_destructive and gate.policy.allow_protected
     assert captured["agent"].after_tool_call is not None
     assert project.project_backups_dir().is_dir()
+
+
+def test_repl_launch_forwards_thinking_metrics_and_images(monkeypatch, tmp_path):
+    import zenagent.cli.repl as repl_module
+
+    captured: dict = {}
+
+    async def fake_repl(**kwargs):
+        captured.update(kwargs)
+        return 0
+
+    monkeypatch.setattr(repl_module, "repl", fake_repl)
+    image = _png(tmp_path)
+    metrics = tmp_path / "metrics.jsonl"
+
+    assert cli_main.main(
+        [
+            "--thinking", "low",
+            "--metrics", str(metrics),
+            "--image", str(image),
+        ]
+    ) == 0
+
+    assert captured["thinking"] == "low"
+    assert str(captured["metrics"]) == str(metrics)
+    assert [str(p) for p in captured["images"]] == [str(image)]

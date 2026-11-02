@@ -872,6 +872,9 @@ def main(argv: list[str] | None = None) -> int:
                     theme=args.theme,
                     lang=args.lang,
                     templates=not args.no_templates,
+                    thinking=args.thinking,
+                    metrics=args.metrics,
+                    images=args.images,
                 )
             )
         except KeyboardInterrupt:

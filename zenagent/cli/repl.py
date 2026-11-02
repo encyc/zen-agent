@@ -957,6 +957,8 @@ async def repl(
     theme: str | None = None,
     lang: str | None = None,
     metrics: Path | None = None,
+    thinking: str | None = None,
+    images: list[Path] | None = None,
 ) -> int:
     """Run the interactive loop; returns the process exit code."""
     set_locale(resolve_language(lang, pref=_saved_language()))
@@ -982,6 +984,23 @@ async def repl(
             file=sys.stderr,
         )
         return 1
+
+    if thinking is None:
+        thinking = "high" if model.reasoning else "off"
+    initial_images: list[ImageContent] = []
+    for image_path in images or []:
+        if not model.supports_vision:
+            print(
+                f"zenagent: {model.id} does not accept images "
+                "(pick a vision-capable model)",
+                file=sys.stderr,
+            )
+            return 1
+        try:
+            initial_images.append(read_image_argument(Path(image_path)))
+        except ValueError as exc:
+            print(f"zenagent: {exc}", file=sys.stderr)
+            return 1
 
     model_values = [
         (
@@ -1133,7 +1152,7 @@ async def repl(
         system_prompt=prompt,
         tools=tool_list,
         api_key=key,
-        thinking="high" if model.reasoning else "off",
+        thinking=thinking,
         session_id=session_id_for(model, session.path.stem),
         stream_fn=stream_fn,
         transform_context=guard.transform,
@@ -1251,7 +1270,7 @@ async def repl(
         print_fn(t("repl.lang_set", code=code))
 
     session_box: list[Session] = [session]
-    pending_images: list[ImageContent] = []
+    pending_images: list[ImageContent] = list(initial_images)
 
     def switch_session(new_session: Session) -> None:
         nonlocal artifact_sink
