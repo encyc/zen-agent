@@ -3,6 +3,19 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+### Added
+
+- **`/urls`, `/copy <n>`, `/open <n>`** (`zenagent/app/links.py`): read links out
+  of the transcript verbatim. The rendered transcript clips long tokens (a URL
+  inside a code block loses everything past the right edge) and markdown-it
+  rewrites hrefs before opening them (`%3A%2F%2F` → `://`), so the commands
+  parse the raw markdown text instead: `/urls` numbers the links of the last
+  answer, `/copy <n>` puts link *n* on the clipboard byte-for-byte, `/open <n>`
+  hands it to the default browser. `/copy` keeps its old meanings — no argument
+  copies the last answer, a non-numeric argument copies that literal text.
+
 ## v0.7.0 — 2026-11-02
 
 **Project memory: durable per-project notes the agent can read and write.**
