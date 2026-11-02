@@ -1,5 +1,7 @@
 """Tests for the project memory store (M1: entry read/write/journal)."""
 
+import json
+
 from zenagent.agent.memory_store import (
     MAX_INDEX_ENTRIES,
     MAX_TITLE_CHARS,
@@ -36,6 +38,49 @@ def test_update_rewrites_and_bumps_updated(tmp_path):
     assert updated.title == "t2" and updated.body == "b2"
     assert updated.created == entry.created  # created 不变
     assert store.read_entry(entry.id) == updated
+
+
+def test_journal_events_are_json_lines(tmp_path):
+    store = MemoryStore(tmp_path)
+    entry = store.write_entry(title="t", body="b", source="s")
+    store.update_entry(entry.id, title="t2", reason="fix title", session="sess-1")
+    store.delete_entry(entry.id)
+    lines = (tmp_path / MEMORY_DIR / "journal.jsonl").read_text("utf-8").splitlines()
+    events = [json.loads(line) for line in lines]
+    assert [e["op"] for e in events] == ["add", "update", "delete"]
+    assert events[0]["id"] == entry.id and events[0]["title"] == "t"
+    assert events[1]["reason"] == "fix title" and events[1]["session"] == "sess-1"
+    for event in events:
+        assert set(event) == {"ts", "op", "id", "title", "reason", "session"}
+
+
+def test_truncated_journal_tail_is_tolerated(tmp_path):
+    store = MemoryStore(tmp_path)
+    store.write_entry(title="t", body="b", source="s")
+    journal = tmp_path / MEMORY_DIR / "journal.jsonl"
+    journal.write_text(journal.read_text("utf-8") + '{"ts":"2026", "op":"add", ', "utf-8")
+    assert store.read_journal()  # 不抛异常，尾行残缺被跳过
+
+
+def test_search_matches_title_and_body_case_insensitive(tmp_path):
+    store = MemoryStore(tmp_path)
+    hit = store.write_entry(title="依赖选型", body="用 HTTPX 而非 requests", source="s")
+    store.write_entry(title="无关", body="部署脚本", source="s")
+    matches = store.search("httpx")
+    assert len(matches) == 1
+    entry, excerpt = matches[0]
+    assert entry.id == hit.id and "HTTPX" in excerpt
+    assert store.search("不存在的词") == []
+
+
+def test_delete_entry(tmp_path):
+    store = MemoryStore(tmp_path)
+    entry = store.write_entry(title="t", body="b", source="s")
+    assert store.delete_entry(entry.id) is True
+    assert store.read_entry(entry.id) is None
+    assert store.delete_entry(entry.id) is False  # 幂等
+    events = store.read_journal()
+    assert events[-1]["op"] == "delete" and events[-1]["id"] == entry.id
 
 
 def test_constants():

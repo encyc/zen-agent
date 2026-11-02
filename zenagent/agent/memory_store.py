@@ -14,6 +14,7 @@ Pure stdlib: the kernel (``agent/``) imports this without extra dependencies.
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 import re
 import secrets
@@ -148,7 +149,9 @@ class MemoryStore:
         ]
         return entries
 
-    def write_entry(self, *, title: str, body: str, source: str) -> MemoryEntry:
+    def write_entry(
+        self, *, title: str, body: str, source: str, session: str | None = None
+    ) -> MemoryEntry:
         entry_id = self.new_id()
         now = _now()
         entry = MemoryEntry(
@@ -160,6 +163,7 @@ class MemoryStore:
             source=source,
         )
         self._write_atomically(self.entry_path(entry_id), self._render(entry))
+        self.journal("add", entry_id, title=entry.title, session=session)
         return entry
 
     def update_entry(
@@ -169,6 +173,7 @@ class MemoryStore:
         title: str | None = None,
         body: str | None = None,
         reason: str = "",
+        session: str | None = None,
     ) -> MemoryEntry | None:
         current = self.read_entry(entry_id)
         if current is None:
@@ -185,7 +190,81 @@ class MemoryStore:
             source=current.source,
         )
         self._write_atomically(self.entry_path(entry_id), self._render(entry))
+        self.journal("update", entry_id, title=entry.title, reason=reason, session=session)
         return entry
+
+    # -- journal / search / delete ----------------------------------------
+
+    def journal(
+        self,
+        op: str,
+        entry_id: str,
+        *,
+        title: str | None = None,
+        reason: str = "",
+        session: str | None = None,
+    ) -> None:
+        """Append one change event; a single write keeps concurrent appends line-atomic."""
+        event = {
+            "ts": _now(),
+            "op": op,
+            "id": entry_id,
+            "title": title,
+            "reason": reason,
+            "session": session,
+        }
+        line = json.dumps(event, ensure_ascii=False) + "\n"
+        self.journal_path.parent.mkdir(parents=True, exist_ok=True)
+        handle = os.open(self.journal_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        try:
+            os.write(handle, line.encode("utf-8"))
+        finally:
+            os.close(handle)
+
+    def read_journal(self) -> list[dict]:
+        """Every parseable event; a torn tail line (crash mid-append) is skipped."""
+        try:
+            text = self.journal_path.read_text("utf-8", errors="replace")
+        except OSError:
+            return []
+        events: list[dict] = []
+        for line in text.splitlines():
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(event, dict):
+                events.append(event)
+        return events
+
+    def search(self, query: str) -> list[tuple[MemoryEntry, str]]:
+        """Case-insensitive substring over title+body; (entry, first hit line)."""
+        needle = query.strip().lower()
+        if not needle:
+            return []
+        matches: list[tuple[MemoryEntry, str]] = []
+        for entry in self.list_entries():
+            haystack = f"{entry.title}\n{entry.body}".lower()
+            if needle not in haystack:
+                continue
+            excerpt = next(
+                (
+                    line
+                    for line in (entry.title, *entry.body.splitlines())
+                    if needle in line.lower()
+                ),
+                entry.title,
+            )
+            matches.append((entry, _single_line(excerpt, 120)))
+        return matches
+
+    def delete_entry(self, entry_id: str) -> bool:
+        try:
+            self.entry_path(entry_id).unlink()
+        except OSError:
+            return False
+        self.journal("delete", entry_id)
+        return True
 
     # -- rendering ---------------------------------------------------------
 
