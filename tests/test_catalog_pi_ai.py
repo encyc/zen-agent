@@ -18,6 +18,7 @@ NEW_PROVIDERS = {
     "xiaomi-token-plan-cn": ("anthropic-messages", 5),
     "xiaomi-token-plan-ams": ("anthropic-messages", 5),
     "xiaomi-token-plan-sgp": ("anthropic-messages", 5),
+    "openrouter": ("openai-completions", 82),
 }
 
 

@@ -1060,3 +1060,471 @@ providers:
         supports_vision: true
         cost: {input: 0.4, output: 2, cache_read: 0.08}
 
+  openrouter:
+    # synced from @mariozechner/pi-ai@0.73.1 (2026-11-02)
+    # curated: vendor whitelist, newest generation, no colon variants
+    name: OpenRouter
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    adapter: openai-completions
+    models:
+      anthropic/claude-haiku-4.5:
+        context_window: 200000
+        max_tokens: 64000
+        reasoning: true
+        supports_vision: true
+        cost: {input: 1, output: 5, cache_read: 0.1, cache_write: 1.25}
+      anthropic/claude-opus-4:
+        context_window: 200000
+        max_tokens: 32000
+        reasoning: true
+        supports_vision: true
+        cost: {input: 15, output: 75, cache_read: 1.5, cache_write: 18.75}
+      anthropic/claude-opus-4.1:
+        context_window: 200000
+        max_tokens: 32000
+        reasoning: true
+        supports_vision: true
+        cost: {input: 15, output: 75, cache_read: 1.5, cache_write: 18.75}
+      anthropic/claude-opus-4.5:
+        context_window: 200000
+        max_tokens: 64000
+        reasoning: true
+        supports_vision: true
+        cost: {input: 5, output: 25, cache_read: 0.5, cache_write: 6.25}
+      anthropic/claude-opus-4.6:
+        context_window: 1000000
+        max_tokens: 128000
+        reasoning: true
+        supports_vision: true
+        cost: {input: 5, output: 25, cache_read: 0.5, cache_write: 6.25}
+      anthropic/claude-opus-4.7:
+        context_window: 1000000
+        max_tokens: 128000
+        reasoning: true
+        supports_vision: true
+        cost: {input: 5, output: 25, cache_read: 0.5, cache_write: 6.25}
+      anthropic/claude-sonnet-4:
+        context_window: 1000000
+        max_tokens: 64000
+        reasoning: true
+        supports_vision: true
+        cost: {input: 3, output: 15, cache_read: 0.3, cache_write: 3.75}
+      anthropic/claude-sonnet-4.5:
+        context_window: 1000000
+        max_tokens: 64000
+        reasoning: true
+        supports_vision: true
+        cost: {input: 3, output: 15, cache_read: 0.3, cache_write: 3.75}
+      anthropic/claude-sonnet-4.6:
+        context_window: 1000000
+        max_tokens: 128000
+        reasoning: true
+        supports_vision: true
+        cost: {input: 3, output: 15, cache_read: 0.3, cache_write: 3.75}
+      deepseek/deepseek-chat:
+        context_window: 163840
+        max_tokens: 16384
+        reasoning: false
+        cost: {input: 0.32, output: 0.89}
+      deepseek/deepseek-chat-v3.1:
+        context_window: 32768
+        max_tokens: 7168
+        reasoning: true
+        cost: {input: 0.15, output: 0.75}
+      deepseek/deepseek-r1:
+        context_window: 64000
+        max_tokens: 16000
+        reasoning: true
+        cost: {input: 0.7, output: 2.5}
+      deepseek/deepseek-v3.1-terminus:
+        context_window: 163840
+        max_tokens: 32768
+        reasoning: true
+        cost: {input: 0.27, output: 0.95, cache_read: 0.13}
+      deepseek/deepseek-v3.2:
+        context_window: 131072
+        max_tokens: 65536
+        reasoning: true
+        cost: {input: 0.252, output: 0.378, cache_read: 0.0252}
+      deepseek/deepseek-v3.2-exp:
+        context_window: 163840
+        max_tokens: 65536
+        reasoning: true
+        cost: {input: 0.27, output: 0.41}
+      deepseek/deepseek-v4-flash:
+        context_window: 1048576
+        max_tokens: 384000
+        reasoning: true
+        cost: {input: 0.14, output: 0.28, cache_read: 0.0028}
+        compat:
+          thinking_format: deepseek
+          requires_reasoning_content_on_assistant: true
+      deepseek/deepseek-v4-pro:
+        context_window: 1048576
+        max_tokens: 384000
+        reasoning: true
+        cost: {input: 0.435, output: 0.87, cache_read: 0.003625}
+        compat:
+          thinking_format: deepseek
+          requires_reasoning_content_on_assistant: true
+      google/gemma-3-12b-it:
+        context_window: 131072
+        max_tokens: 16384
+        reasoning: false
+        supports_vision: true
+        cost: {input: 0.04, output: 0.13}
+      google/gemma-3-27b-it:
+        context_window: 131072
+        max_tokens: 16384
+        reasoning: false
+        supports_vision: true
+        cost: {input: 0.08, output: 0.16}
+      google/gemma-4-26b-a4b-it:
+        context_window: 262144
+        max_tokens: 4096
+        reasoning: true
+        supports_vision: true
+        cost: {input: 0.06, output: 0.33}
+      google/gemma-4-31b-it:
+        context_window: 262144
+        max_tokens: 16384
+        reasoning: true
+        supports_vision: true
+        cost: {input: 0.13, output: 0.38}
+      minimax/minimax-m1:
+        context_window: 1000000
+        max_tokens: 40000
+        reasoning: true
+        cost: {input: 0.4, output: 2.2}
+      minimax/minimax-m2:
+        context_window: 196608
+        max_tokens: 196608
+        reasoning: true
+        cost: {input: 0.255, output: 1, cache_read: 0.03}
+      minimax/minimax-m2.1:
+        context_window: 196608
+        max_tokens: 196608
+        reasoning: true
+        cost: {input: 0.29, output: 0.95, cache_read: 0.03}
+      minimax/minimax-m2.5:
+        context_window: 196608
+        max_tokens: 131072
+        reasoning: true
+        cost: {input: 0.15, output: 1.15, cache_read: 0.03}
+      minimax/minimax-m2.7:
+        context_window: 196608
+        max_tokens: 4096
+        reasoning: true
+        cost: {input: 0.3, output: 1.2, cache_read: 0.059}
+      moonshotai/kimi-k2:
+        context_window: 131072
+        max_tokens: 32768
+        reasoning: false
+        cost: {input: 0.57, output: 2.3}
+      moonshotai/kimi-k2-thinking:
+        context_window: 262144
+        max_tokens: 262144
+        reasoning: true
+        cost: {input: 0.6, output: 2.5, cache_read: 0.15}
+      moonshotai/kimi-k2.5:
+        context_window: 262144
+        max_tokens: 4096
+        reasoning: true
+        supports_vision: true
+        cost: {input: 0.41, output: 2.06, cache_read: 0.07}
+      moonshotai/kimi-k2.6:
+        context_window: 262144
+        max_tokens: 16384
+        reasoning: true
+        supports_vision: true
+        cost: {input: 0.75, output: 3.5, cache_read: 0.15}
+      openai/gpt-4:
+        context_window: 8191
+        max_tokens: 4096
+        reasoning: false
+        cost: {input: 30, output: 60}
+      openai/gpt-4.1:
+        context_window: 1047576
+        max_tokens: 4096
+        reasoning: false
+        supports_vision: true
+        cost: {input: 2, output: 8, cache_read: 0.5}
+      openai/gpt-4o:
+        context_window: 128000
+        max_tokens: 16384
+        reasoning: false
+        supports_vision: true
+        cost: {input: 2.5, output: 10}
+      openai/gpt-4o-mini:
+        context_window: 128000
+        max_tokens: 16384
+        reasoning: false
+        supports_vision: true
+        cost: {input: 0.15, output: 0.6, cache_read: 0.075}
+      openai/gpt-5:
+        context_window: 400000
+        max_tokens: 128000
+        reasoning: true
+        supports_vision: true
+        cost: {input: 1.25, output: 10, cache_read: 0.125}
+      openai/gpt-5-codex:
+        context_window: 400000
+        max_tokens: 128000
+        reasoning: true
+        supports_vision: true
+        cost: {input: 1.25, output: 10, cache_read: 0.125}
+      openai/gpt-5-mini:
+        context_window: 400000
+        max_tokens: 128000
+        reasoning: true
+        supports_vision: true
+        cost: {input: 0.25, output: 2, cache_read: 0.025}
+      openai/gpt-5-nano:
+        context_window: 400000
+        max_tokens: 4096
+        reasoning: true
+        supports_vision: true
+        cost: {input: 0.05, output: 0.4, cache_read: 0.01}
+      openai/gpt-5-pro:
+        context_window: 400000
+        max_tokens: 128000
+        reasoning: true
+        supports_vision: true
+        cost: {input: 15, output: 120}
+      openai/gpt-5.1:
+        context_window: 400000
+        max_tokens: 128000
+        reasoning: true
+        supports_vision: true
+        cost: {input: 1.25, output: 10, cache_read: 0.13}
+      openai/gpt-5.2:
+        context_window: 400000
+        max_tokens: 128000
+        reasoning: true
+        supports_vision: true
+        cost: {input: 1.75, output: 14, cache_read: 0.175}
+      openai/gpt-5.4:
+        context_window: 1050000
+        max_tokens: 128000
+        reasoning: true
+        supports_vision: true
+        cost: {input: 2.5, output: 15, cache_read: 0.25}
+      openai/gpt-5.5:
+        context_window: 1050000
+        max_tokens: 128000
+        reasoning: true
+        supports_vision: true
+        cost: {input: 5, output: 30, cache_read: 0.5}
+      openai/gpt-audio:
+        context_window: 128000
+        max_tokens: 16384
+        reasoning: false
+        cost: {input: 2.5, output: 10}
+      openai/gpt-audio-mini:
+        context_window: 128000
+        max_tokens: 16384
+        reasoning: false
+        cost: {input: 0.6, output: 2.4}
+      openai/gpt-chat-latest:
+        context_window: 400000
+        max_tokens: 128000
+        reasoning: false
+        supports_vision: true
+        cost: {input: 5, output: 30, cache_read: 0.5}
+      openai/gpt-oss-120b:
+        context_window: 131072
+        max_tokens: 4096
+        reasoning: true
+        cost: {input: 0.039, output: 0.18}
+      openai/gpt-oss-20b:
+        context_window: 131072
+        max_tokens: 131072
+        reasoning: true
+        cost: {input: 0.03, output: 0.14}
+      openai/gpt-oss-safeguard-20b:
+        context_window: 131072
+        max_tokens: 65536
+        reasoning: true
+        cost: {input: 0.075, output: 0.3, cache_read: 0.037}
+      openai/o1:
+        context_window: 200000
+        max_tokens: 100000
+        reasoning: true
+        supports_vision: true
+        cost: {input: 15, output: 60, cache_read: 7.5}
+      openai/o3:
+        context_window: 200000
+        max_tokens: 100000
+        reasoning: true
+        supports_vision: true
+        cost: {input: 2, output: 8, cache_read: 0.5}
+      openai/o3-deep-research:
+        context_window: 200000
+        max_tokens: 100000
+        reasoning: true
+        supports_vision: true
+        cost: {input: 10, output: 40, cache_read: 2.5}
+      openai/o3-mini:
+        context_window: 200000
+        max_tokens: 100000
+        reasoning: true
+        cost: {input: 1.1, output: 4.4, cache_read: 0.55}
+      openai/o3-mini-high:
+        context_window: 200000
+        max_tokens: 100000
+        reasoning: true
+        cost: {input: 1.1, output: 4.4, cache_read: 0.55}
+      openai/o3-pro:
+        context_window: 200000
+        max_tokens: 100000
+        reasoning: true
+        supports_vision: true
+        cost: {input: 20, output: 80}
+      openai/o4-mini:
+        context_window: 200000
+        max_tokens: 100000
+        reasoning: true
+        supports_vision: true
+        cost: {input: 1.1, output: 4.4, cache_read: 0.275}
+      openai/o4-mini-deep-research:
+        context_window: 200000
+        max_tokens: 100000
+        reasoning: true
+        supports_vision: true
+        cost: {input: 2, output: 8, cache_read: 0.5}
+      openai/o4-mini-high:
+        context_window: 200000
+        max_tokens: 100000
+        reasoning: true
+        supports_vision: true
+        cost: {input: 1.1, output: 4.4, cache_read: 0.275}
+      x-ai/grok-3:
+        context_window: 131072
+        max_tokens: 4096
+        reasoning: false
+        cost: {input: 3, output: 15, cache_read: 0.75}
+      x-ai/grok-3-beta:
+        context_window: 131072
+        max_tokens: 4096
+        reasoning: false
+        cost: {input: 3, output: 15, cache_read: 0.75}
+      x-ai/grok-3-mini:
+        context_window: 131072
+        max_tokens: 4096
+        reasoning: true
+        cost: {input: 0.3, output: 0.5, cache_read: 0.075}
+      x-ai/grok-3-mini-beta:
+        context_window: 131072
+        max_tokens: 4096
+        reasoning: true
+        cost: {input: 0.3, output: 0.5, cache_read: 0.075}
+      x-ai/grok-4:
+        context_window: 256000
+        max_tokens: 4096
+        reasoning: true
+        supports_vision: true
+        cost: {input: 3, output: 15, cache_read: 0.75}
+      x-ai/grok-4-fast:
+        context_window: 2000000
+        max_tokens: 30000
+        reasoning: true
+        supports_vision: true
+        cost: {input: 0.2, output: 0.5, cache_read: 0.05}
+      x-ai/grok-4.20:
+        context_window: 2000000
+        max_tokens: 4096
+        reasoning: true
+        supports_vision: true
+        cost: {input: 1.25, output: 2.5, cache_read: 0.2}
+      x-ai/grok-4.3:
+        context_window: 1000000
+        max_tokens: 4096
+        reasoning: true
+        supports_vision: true
+        cost: {input: 1.25, output: 2.5, cache_read: 0.2}
+      x-ai/grok-code-fast-1:
+        context_window: 256000
+        max_tokens: 10000
+        reasoning: true
+        cost: {input: 0.2, output: 1.5, cache_read: 0.02}
+      xiaomi/mimo-v2-flash:
+        context_window: 262144
+        max_tokens: 65536
+        reasoning: true
+        cost: {input: 0.09, output: 0.29, cache_read: 0.045}
+      xiaomi/mimo-v2-omni:
+        context_window: 262144
+        max_tokens: 65536
+        reasoning: true
+        supports_vision: true
+        cost: {input: 0.4, output: 2, cache_read: 0.08}
+      xiaomi/mimo-v2-pro:
+        context_window: 1048576
+        max_tokens: 131072
+        reasoning: true
+        cost: {input: 1, output: 3, cache_read: 0.2}
+      xiaomi/mimo-v2.5:
+        context_window: 1048576
+        max_tokens: 131072
+        reasoning: true
+        supports_vision: true
+        cost: {input: 0.4, output: 2, cache_read: 0.08}
+      xiaomi/mimo-v2.5-pro:
+        context_window: 1048576
+        max_tokens: 131072
+        reasoning: true
+        cost: {input: 1, output: 3, cache_read: 0.2}
+      z-ai/glm-4-32b:
+        context_window: 128000
+        max_tokens: 4096
+        reasoning: false
+        cost: {input: 0.1, output: 0.1}
+      z-ai/glm-4.5:
+        context_window: 131072
+        max_tokens: 98304
+        reasoning: true
+        cost: {input: 0.6, output: 2.2, cache_read: 0.11}
+      z-ai/glm-4.5v:
+        context_window: 65536
+        max_tokens: 16384
+        reasoning: true
+        supports_vision: true
+        cost: {input: 0.6, output: 1.8, cache_read: 0.11}
+      z-ai/glm-4.6:
+        context_window: 204800
+        max_tokens: 204800
+        reasoning: true
+        cost: {input: 0.39, output: 1.9}
+      z-ai/glm-4.6v:
+        context_window: 131072
+        max_tokens: 24000
+        reasoning: true
+        supports_vision: true
+        cost: {input: 0.3, output: 0.9, cache_read: 0.05}
+      z-ai/glm-4.7:
+        context_window: 202752
+        max_tokens: 4096
+        reasoning: true
+        cost: {input: 0.38, output: 1.74}
+      z-ai/glm-5:
+        context_window: 202752
+        max_tokens: 4096
+        reasoning: true
+        cost: {input: 0.6, output: 1.9, cache_read: 0.119}
+      z-ai/glm-5-turbo:
+        context_window: 202752
+        max_tokens: 131072
+        reasoning: true
+        cost: {input: 1.2, output: 4, cache_read: 0.24}
+      z-ai/glm-5.1:
+        context_window: 202752
+        max_tokens: 65535
+        reasoning: true
+        cost: {input: 1.05, output: 3.5, cache_read: 0.525}
+      z-ai/glm-5v-turbo:
+        context_window: 202752
+        max_tokens: 131072
+        reasoning: true
+        supports_vision: true
+        cost: {input: 1.2, output: 4, cache_read: 0.24}
