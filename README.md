@@ -4,6 +4,8 @@
 [![CI](https://github.com/encyc/zen-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/encyc/zen-agent/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/downloads/)
 
+English · [简体中文](https://github.com/encyc/zen-agent/blob/main/README.zh-CN.md)
+
 A coding agent you can read, embed and change: one pure-Python kernel, one
 runtime dependency (`httpx`), four ways to drive it. It reads and edits files,
 runs commands, searches the web, delegates to read-only subagents and keeps a
@@ -58,7 +60,7 @@ an evening, embed in an afternoon, and change without permission.
 - **One kernel, four surfaces.** TUI, REPL, headless (`-p`/`--json`) and `zen rpc`
   (a JSONL protocol) all drive the same runtime the same way.
 - **A GUI is a client, not a rewrite.** The RPC surface already exists, so the
-  planned Tauri app reuses this kernel instead of forking it.
+  planned Tauri app is coming.
 - **Embed it in 30 lines.** `Agent(model=..., tools=..., api_key=...)` plus one
   subscribe callback: your tools, your storage, your event loop.
 - **Extend without restarting.** Skills, prompt templates, extensions, MCP servers
