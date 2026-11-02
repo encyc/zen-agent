@@ -560,6 +560,10 @@ async def handle_slash(
         except Exception as exc:  # noqa: BLE001 - report, keep the REPL alive
             print_fn(t("repl.compaction_failed", error=exc))
         else:
+            # The summary is the continuation: persist subsequent turns to the
+            # new file, or they would be appended to the pre-compaction one.
+            if switch_session is not None:
+                switch_session(Session(path))
             print_fn(t("repl.compacted", path=path.name))
         return None
 

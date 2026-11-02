@@ -1021,3 +1021,41 @@ async def test_slash_todo_prints_the_session_list(isolated_sessions, capsys):
     await handle_slash(agent, "todo", "", session=Session(path))
     out = capsys.readouterr().out
     assert "write docs" in out and "pending" in out
+
+
+# ---------------------------------------------------------------------------
+# P0: /compact must continue in the summary session
+# ---------------------------------------------------------------------------
+
+
+async def test_slash_compact_switches_the_repl_to_the_summary_session(
+    isolated_sessions,
+):
+    from zenagent.types import UserMessage
+
+    async def summary_stream(model_, messages, tools, options):
+        partial = AssistantMessage(
+            content=[TextContent(text="摘要正文")],
+            provider="test",
+            model="m",
+            usage=Usage(),
+            stop_reason="stop",
+            timestamp=int(time.time()),
+        )
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    agent = Agent(model(), "s", api_key="k", stream_fn=summary_stream)
+    agent.replace_messages([UserMessage(content="hi", timestamp=1)])
+    switched = []
+
+    await handle_slash(
+        agent,
+        "compact",
+        "",
+        print_fn=lambda *a, **k: None,
+        switch_session=switched.append,
+    )
+
+    assert switched, "compact must hand the new session to the REPL"
+    assert switched[0].path.name.endswith("-compact.jsonl")
+    assert switched[0].path.is_file()
