@@ -3,6 +3,41 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## v0.7.3 — 2026-11-02
+
+**The README became a landing page, and the project got a license.**
+
+### Changed
+
+- **`README.md` is a landing page now, not a manual** (377 → 109 lines): install and
+  a first run, why this exists, a feature table, and contributing — nothing else.
+  Everything reference-grade moved into `docs/`, which is where the manual lives:
+  the 47-command table is now `docs/guide/commands.md`, the test/release flow is
+  `docs/development.md`, and `docs/guide/config.md` finally documents the `[task]`
+  subagent budget section. A Chinese translation ships as `README.zh-CN.md`; the two
+  link to each other, and both use absolute URLs because PyPI renders `README.md`
+  verbatim as the project page.
+- **Docs gaps filled while moving:** `[task]` (`max_turns`, transcript retention) was
+  only ever described in plan documents, and the `memory` / `memory_write` tools —
+  shipped in 0.7.0 — were missing from the tool table. Both are documented now.
+- **The README's Python claim is pinned to the package**: it said "Requires Python
+  3.15+" while `requires-python` is `>=3.11`, and that wrong floor reached PyPI.
+
+### Added
+
+- **MIT license** (`LICENSE`, plus PEP 639 `license = "MIT"` and `license-files` in
+  `pyproject.toml`), so the metadata and the PyPI sidebar agree.
+- **Two guard tests** keep the split from collapsing again: `tests/test_readme.py`
+  (≤130 lines, exactly four sections, no relative links, links resolve, Python floor
+  matches `pyproject.toml`) and `tests/test_docs_commands.py` (every registered
+  `_command` has a row in `docs/guide/commands.md`, and the README's command count is
+  the real one).
+
+### Fixed
+
+- `pyproject.toml`'s `Changelog` URL pointed at the raw commit list instead of
+  `CHANGELOG.md`.
+
 ## v0.7.2 — 2026-11-02
 
 ### Changed
