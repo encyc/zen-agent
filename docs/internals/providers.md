@@ -39,6 +39,34 @@ async def stream(model, messages, tools, options) -> AsyncIterator[AssistantEven
 `thinking` 用户级取值统一为 `off/low/medium/high/max`（`providers/compat.py::normalize_thinking`），
 `off` 在 loop 里被转成 `None`，线上永远收不到字符串 `"off"`。
 
+### 内置 provider 清单（17 个）
+
+目录按 adapter 分成四族。**新增一个 provider 通常只需加 catalog 条目，不需要写 adapter**——
+只有出现新的 wire 协议时才动 `providers/`：
+
+| adapter | provider |
+|---|---|
+| `openai-completions` | `deepseek`、`zai`、`moonshotai`、`moonshotai-cn`、`xai`、`openrouter`、`opencode-go` |
+| `openai-responses` | `openai` |
+| `anthropic-messages` | `kimi`、`minimax`、`minimax-cn`、`xiaomi`、`xiaomi-token-plan-{cn,ams,sgp}`、`opencode-go` 的 claude 条目 |
+| `google-generative-ai` | `google` |
+
+三条容易踩的事实：
+
+- **`kimi` / `xiaomi` / `minimax` 走 `anthropic-messages`，base_url 不带 `/v1`**。
+  adapter 会补 `/v1/messages`（`anthropic_messages.py`），自己再加 `/v1` 会拼成 `/v1/v1/messages`。
+- **`xai` 走 `openai-completions`**，不是 `openai-responses`（pi-ai 的 provider 工厂写的是
+  responses，但模型条目级 api 是 completions——以条目为准）。
+- **模型 id 不能含冒号**。catalog 解析器按行 `partition(":")` 切 key，带 `:` 的 id（如
+  openrouter 的 `anthropic/claude-3.7-sonnet:thinking`）会被切坏，报出的却是
+  "unexpected indentation"。OpenRouter 的精选因此排除了所有带冒号的变体。
+
+海外站与国内站是**独立的 provider id**（`moonshotai` / `moonshotai-cn`），共用同一个
+`MOONSHOT_API_KEY`；包月套餐端点（`zai-coding-cn`、`xiaomi-token-plan-*`）按量计 0 成本。
+
+目录里 `openai`…`openrouter` 这些段带 `# synced from @mariozechner/pi-ai@0.73.1` 注释，
+是机械同步来的；`zai-coding-cn`、`deepseek`、`opencode-go` 是手工调优的，同步时不要覆盖。
+
 ## 输出 token 拟合（`providers/limits.py`）
 
 Chat Completions 系 request 里 `prompt + max_tokens` 超过上下文窗口会直接 400。四个适配器
@@ -75,10 +103,14 @@ Chat Completions 系 request 里 `prompt + max_tokens` 超过上下文窗口会�
 
 ## 新增一个 provider 的步骤
 
-1. `providers/<name>.py`：实现 `build_params`（纯函数）+ `_events_from_chunks` + `stream`。
-2. `registry.py` 注册 api 名。
-3. `catalog.yaml` 加模型，必要时加 `compat` 开关。
-4. `tests/fixtures/` 放一份真实 SSE 回放，写测试断言请求体与事件序列。
+**先判断是不是新协议**：如果该厂商说的是已支持的四种 wire 协议之一
+（openai-completions / openai-responses / anthropic-messages / google-generative-ai），
+只需第 3 步——加 catalog 条目，不写代码。17 个内置 provider 里有 16 个是这么来的。
+
+1. 只有新协议才需要 `providers/<name>.py`：实现 `build_params`（纯函数）+ `_events_from_chunks` + `stream`。
+2. 新协议才需要在 `registry.py` 注册 api 名。
+3. `catalog.yaml` 加 provider + 模型，必要时加 `compat` 开关。
+4. 新协议才需要 `tests/fixtures/` 的真实 SSE 回放 + 请求体/事件序列断言。
 5. 用 `--trace` 跑真实请求对照。
 
 ## 源码对照

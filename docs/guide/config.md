@@ -201,7 +201,8 @@ keep_runs = 50                              # 每个项目保留最近 50 次 ru
 
 ## 优先级与加载顺序
 
-1. 内置 catalog（`zenagent/catalog.yaml`）
+1. 内置 catalog（`zenagent/catalog.yaml`）——17 个 provider，完整清单见
+   [providers.md](../internals/providers.md#内置-provider-清单17-个)
 2. `~/.zenagent/config.toml`（全局层）的 provider 覆盖 / 自定义 provider（覆盖内置会 warning）
 3. `<项目根>/.zenagent/config.toml`（项目层）：标量/表覆盖，列表追加或并集（见上表）
 4. CLI 参数（`-m`、`--thinking`、`--yes`、`--allow-outside` 等）最高
