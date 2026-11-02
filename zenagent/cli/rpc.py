@@ -23,6 +23,16 @@ WriteLine = Callable[[str], None]
 
 #: How much of a running tool's streamed output an RPC event may carry.
 _PARTIAL_RESULT_CHARS = 4000
+#: Bound for one JSON-encoded tool argument blob in an event.
+_ARGS_CHARS = 4000
+
+
+def _text_of(result) -> str:
+    return "".join(
+        block.text
+        for block in getattr(result, "content", [])
+        if isinstance(block, TextContent)
+    )
 
 
 def serialize_event(event: AgentEvent) -> dict:
@@ -39,16 +49,33 @@ def serialize_event(event: AgentEvent) -> dict:
         payload["assistant_event"] = {"type": assistant_event.type}
         if assistant_event.delta:
             payload["assistant_event"]["delta"] = assistant_event.delta
+    args = getattr(event, "args", None)
+    if args is not None:
+        # JSON text rather than a nested object: one bounded string keeps a
+        # huge tool call from blowing up the line, and the client can parse it.
+        try:
+            payload["args"] = json.dumps(args, ensure_ascii=False, default=str)[
+                :_ARGS_CHARS
+            ]
+        except (TypeError, ValueError):
+            payload["args"] = str(args)[:_ARGS_CHARS]
+    result = getattr(event, "result", None)
+    if result is not None:
+        text = _text_of(result)
+        if text:
+            payload["result_text"] = text[-_PARTIAL_RESULT_CHARS:]
+    duration = getattr(event, "duration_ms", None)
+    if duration is not None:
+        payload["duration_ms"] = duration
+    tool_stats = getattr(event, "tool_stats", None)
+    if tool_stats:
+        payload["tool_stats"] = tool_stats
     partial = getattr(event, "partial_result", None)
     if partial is not None:
         # A running tool's streamed output (bash progress, subagent text). The
         # tail is what an embedding UI can render; the full result follows in
         # ``tool_execution_end``. Never let one update carry unbounded bytes.
-        text = "".join(
-            block.text
-            for block in getattr(partial, "content", [])
-            if isinstance(block, TextContent)
-        )
+        text = _text_of(partial)
         if text:
             payload["partial_result"] = text[-_PARTIAL_RESULT_CHARS:]
     return payload

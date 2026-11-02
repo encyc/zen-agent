@@ -141,3 +141,66 @@ def test_serialize_event_carries_bounded_partial_tool_output():
 
     # a plain event stays unchanged: no stray key
     assert "partial_result" not in serialize_event(AgentEvent(type="turn_start"))
+
+
+def test_serialize_event_carries_tool_args_result_and_duration():
+    from zenagent.agent.loop import ToolResultAgent
+    from zenagent.cli.rpc import serialize_event
+    from zenagent.events import AgentEvent
+
+    start = serialize_event(
+        AgentEvent(
+            type="tool_execution_start",
+            tool_name="bash",
+            tool_call_id="c1",
+            args={"command": "echo hi"},
+        )
+    )
+    assert json.loads(start["args"]) == {"command": "echo hi"}
+
+    end = serialize_event(
+        AgentEvent(
+            type="tool_execution_end",
+            tool_name="bash",
+            tool_call_id="c1",
+            is_error=False,
+            duration_ms=12,
+            result=ToolResultAgent(content=[TextContent(text="hi there")]),
+        )
+    )
+    assert end["duration_ms"] == 12
+    assert end["result_text"] == "hi there"
+
+
+def test_serialize_event_bounds_tool_args_and_results():
+    from zenagent.agent.loop import ToolResultAgent
+    from zenagent.cli.rpc import serialize_event
+    from zenagent.events import AgentEvent
+
+    start = serialize_event(
+        AgentEvent(
+            type="tool_execution_start",
+            tool_name="bash",
+            args={"command": "x" * 10_000},
+        )
+    )
+    assert len(start["args"]) == 4000
+
+    end = serialize_event(
+        AgentEvent(
+            type="tool_execution_end",
+            tool_name="bash",
+            result=ToolResultAgent(content=[TextContent(text="y" * 10_000)]),
+        )
+    )
+    assert len(end["result_text"]) == 4000
+
+
+def test_serialize_event_carries_tool_stats_on_agent_end():
+    from zenagent.cli.rpc import serialize_event
+    from zenagent.events import AgentEvent
+
+    payload = serialize_event(
+        AgentEvent(type="agent_end", tool_stats={"tools": {"bash": {"calls": 1}}})
+    )
+    assert payload["tool_stats"] == {"tools": {"bash": {"calls": 1}}}
