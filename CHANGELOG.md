@@ -5,6 +5,16 @@ matches the release tag; older history is in the repository tags and commits.
 
 ## Unreleased
 
+### Changed
+
+- **Drag-to-select is back on** (`zenagent/cli/tui/app.py::ALLOW_SELECT`): dragging
+  over the transcript selects text, and `ctrl+c` copies the selection instead of
+  clearing the draft (no selection still clears it — the same split omp gives
+  `tui.input.copy`). It had been switched off after a Textual 8.2
+  `Screen._forward_event` crash on Markdown blocks; that crash does not reproduce
+  on the pinned 8.2.8, and `tests/test_tui_selection.py` pins drag, the `ctrl+c`
+  split and dragging during streaming so it cannot come back silently.
+
 ### Added
 
 - **`/urls`, `/copy <n>`, `/open <n>`** (`zenagent/app/links.py`): read links out

@@ -80,10 +80,13 @@ class ZenAgentApp(App):
 
     CSS_PATH = "theme.tcss"
     TITLE = "ZenAgent"
-    # Textual's text selection is the one mouse path that crashed with Markdown
-    # blocks (a Screen._forward_event bug); we never select text, so switch it
-    # off and keep every other mouse event.
-    ALLOW_SELECT = False
+    # Drag-to-select is on: it is the one mouse path an alt-buffer app cannot
+    # inherit from the terminal the way omp does (omp's committed lines live in
+    # the terminal's own scrollback). It was switched off after a Textual 8.2
+    # Screen._forward_event crash on Markdown blocks; that crash no longer
+    # reproduces on the pinned 8.2.8 (tests/test_tui_selection.py pins the
+    # drag, the ctrl+c split and a drag during streaming).
+    ALLOW_SELECT = True
     # omp's chord set (``docs/research/omp-cli-study/01-interaction-hierarchy.md``):
     # Esc interrupts, ctrl+c clears the draft, ctrl+d exits, ctrl+q queues.
     BINDINGS = [  # noqa: RUF012 - Textual class API
@@ -285,8 +288,10 @@ class ZenAgentApp(App):
     #
     # Mouse is supported the way omp supports it: the wheel scrolls the
     # transcript, clicks activate the things that are clickable (tool cards,
-    # the "new output" bar). Text selection stays off (ALLOW_SELECT), which is
-    # what used to crash the Markdown path.
+    # the "new output" bar), and dragging selects text. With a selection live,
+    # ctrl+c copies it (Textual's own binding on the Screen wins over our
+    # clear-draft chord); with no selection it still clears the draft — the same
+    # split omp gives `tui.input.copy`.
 
     WHEEL_ROWS = 3
 

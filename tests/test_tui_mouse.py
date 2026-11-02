@@ -84,7 +84,7 @@ async def test_wheel_up_on_a_short_transcript_keeps_following(runtime_factory):
 
 
 async def test_click_on_a_markdown_block_is_harmless(runtime_factory):
-    """ALLOW_SELECT is off, so the markdown selection crash path is never taken."""
+    """A plain click must not start a selection *or* crash (regression: Textual 8.2)."""
     from conftest import sequenced_stream
 
     runtime = await runtime_factory(stream_fn=sequenced_stream(["hello **world**"]))

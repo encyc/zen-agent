@@ -92,7 +92,7 @@ provider 错误不会进转录区，而是停在 dock 顶部的错误横幅里�
 | `enter` | 发送；run 进行中则进入待发区的**排队** lane（本轮结束后发送） |
 | `shift+enter` | 输入换行 |
 | `esc` | 中断当前 run；**有草稿时不删字**；空闲且草稿为空时，0.6s 内**连按两次**撤销上一轮（等价 `/undo`） |
-| `ctrl+c` | 清空草稿（不退出） |
+| `ctrl+c` | **有选区时复制选区**到剪贴板（草稿保留）；无选区时清空草稿（不退出） |
 | `ctrl+d` | 退出，打印一行会话摘要 |
 | `ctrl+q` | 排队 follow-up：run 中入队，空闲时直接发送 |
 | `alt+up` | 把**最后一条**排队消息取回输入框（dequeue，比清空更常用） |
@@ -116,6 +116,7 @@ provider 错误不会进转录区，而是停在 dock 顶部的错误横幅里�
 | `ctrl+v` | 粘贴剪贴板：内容是本地图片路径则挂载附件，否则按文本插入草稿 |
 | `tab` | 提示/补全列表打开时接受当前候选 |
 | `pageup` / `pagedown` | 转录区上翻/下翻；下翻到底部即恢复自动跟随 |
+| 鼠标拖选 | 选中转录区文本（`ALLOW_SELECT`）；单击链接在浏览器打开；滚轮滚动 3 行 |
 
 > 与 v0.1 的差异：`ctrl+c` 从"中断"改为"清草稿"，中断改为 `esc`；退出从 `ctrl+q`
 > 改为 `ctrl+d`；命令面板从 `ctrl+p` 改为 `ctrl+k`（`ctrl+p` 让给模型循环，跟 omp 一致）。
@@ -238,6 +239,23 @@ Update available: v0.4.0 (you have v0.3.0) · uv tool upgrade zenagent-py
 - 只想跑一次：`zen -p "..."`（headless，不涉及 TUI）。
 - 缺 textual：`uv sync --extra cli`（缺依赖时 `zen` 会直接给出这句提示并以退出码 2 结束）。
 - 状态带少了某项：那是窄屏降级，不是 bug —— 拉宽终端，或按 `ctrl+b` 看侧栏明细。
+
+## 鼠标与链接
+
+转录区支持**拖选**：选中后 `ctrl+c` 复制选区（无选区时 `ctrl+c` 仍清草稿，与 omp 的
+`tui.input.copy` 同一套语义）。这是 alt-buffer 应用必须自己实现的部分——omp 把定稿行
+写进终端 scrollback，选中/复制/点链接都是终端白送的（见
+`docs/research/omp-cli-study/04-transcript-and-tools.md`）。
+
+单击 Markdown 里的链接（含裸 URL，解析器开着 linkify）会用默认浏览器打开。**代码块
+（``` 或 4 空格缩进）里的 URL 不可点击、且会因无法折行被裁掉右半**；要取这类链接用：
+
+- `/urls` —— 编号列出上一条回答里的全部链接（预览 + 原始长度）
+- `/copy <n>` —— 第 n 条按**逐字节原文**复制（不截断、不做百分号解码）
+- `/open <n>` —— 第 n 条交给默认浏览器
+
+这三个命令读的是原始 markdown 文本，所以不受渲染裁切和 `normalizeLink` 解码影响
+（点击路径仍走解析后的 href）。终端自己支持 Shift+拖选绕过应用时，也可以直接用。
 
 ## 设计出处
 

@@ -109,3 +109,19 @@
 - 预览截断宽度（80）可调，不影响复制保真。
 - `/urls --all`、点击路径的解码修复：本轮不做，已记在非目标里。
 - help/README 的命令清单由现有机制生成，不需要手工排版。
+
+## 7. 后续追加（同日，实现并合并之后）
+
+原非目标里写着"不改渲染层、不修点击路径"，但实现完成后对照 `docs/research/omp-cli-study/`
+发现：omp 的选中/复制/点链接全部是终端 scrollback 白送的（`04-transcript-and-tools.md`），
+而 ZenAgent 因为选了 alt-buffer，必须自己实现——这正是 `ALLOW_SELECT = False` 当初被
+关掉后一直没人补回来的原因（`09-zenagent-vs-omp-gap.md` 把它记成 "P2（Textual 鼠标被关）"）。
+
+追加决定（一行代码 + 回归测试）：
+
+- `ALLOW_SELECT = True`：拖选生效；有选区时 `ctrl+c` 复制选区并保留草稿，无选区时仍清草稿
+  （Textual 的 Screen 绑定在有选区时先命中，等价 omp 的 `tui.input.copy`）。
+- 当初关掉它的 Textual 8.2 `Screen._forward_event` 崩溃在锁定的 8.2.8 上复现不出来
+  （跨块拖选、点击、流式中拖选三种路径实测通过），`tests/test_tui_selection.py` 把这三条钉住。
+- `/urls`、`/copy <n>`、`/open <n>` 不因此淘汰：它们拿到的是**逐字节原文**，而点击路径仍走
+  markdown-it 解析后的 href（`%3A%2F%2F` → `://`），代码块里的链接也仍然不可点。
