@@ -29,9 +29,25 @@ API keys are read from the environment, named per provider in
 
 | provider | env var |
 |---|---|
-| `deepseek` | `DEEPSEEK_API_KEY` |
+| `openai` | `OPENAI_API_KEY` |
+| `zai` | `ZAI_API_KEY` |
 | `zai-coding-cn` | `ZAI_CODING_CN_API_KEY` |
+| `deepseek` | `DEEPSEEK_API_KEY` |
+| `kimi` | `KIMI_API_KEY` |
+| `moonshotai`, `moonshotai-cn` | `MOONSHOT_API_KEY` |
+| `minimax` | `MINIMAX_API_KEY` |
+| `minimax-cn` | `MINIMAX_CN_API_KEY` |
+| `google` | `GEMINI_API_KEY` |
+| `xai` | `XAI_API_KEY` |
+| `openrouter` | `OPENROUTER_API_KEY` |
+| `xiaomi` | `XIAOMI_API_KEY` |
+| `xiaomi-token-plan-cn` | `XIAOMI_TOKEN_PLAN_CN_API_KEY` |
+| `xiaomi-token-plan-ams` | `XIAOMI_TOKEN_PLAN_AMS_API_KEY` |
+| `xiaomi-token-plan-sgp` | `XIAOMI_TOKEN_PLAN_SGP_API_KEY` |
 | `opencode-go` | `OPENCODE_API_KEY` |
+
+Overseas and China endpoints are separate providers sharing one key (`moonshotai` /
+`moonshotai-cn`). Token-plan endpoints (`zai-coding-cn`, `xiaomi-token-plan-*`) bill 0.
 
 A `[providers.custom.<id>]` table points the same kernel at any OpenAI-compatible
 endpoint, a local server included — see

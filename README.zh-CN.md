@@ -27,9 +27,25 @@ API key 从环境变量读，变量名按 provider 定义在
 
 | provider | 环境变量 |
 |---|---|
-| `deepseek` | `DEEPSEEK_API_KEY` |
+| `openai` | `OPENAI_API_KEY` |
+| `zai` | `ZAI_API_KEY` |
 | `zai-coding-cn` | `ZAI_CODING_CN_API_KEY` |
+| `deepseek` | `DEEPSEEK_API_KEY` |
+| `kimi` | `KIMI_API_KEY` |
+| `moonshotai`, `moonshotai-cn` | `MOONSHOT_API_KEY` |
+| `minimax` | `MINIMAX_API_KEY` |
+| `minimax-cn` | `MINIMAX_CN_API_KEY` |
+| `google` | `GEMINI_API_KEY` |
+| `xai` | `XAI_API_KEY` |
+| `openrouter` | `OPENROUTER_API_KEY` |
+| `xiaomi` | `XIAOMI_API_KEY` |
+| `xiaomi-token-plan-cn` | `XIAOMI_TOKEN_PLAN_CN_API_KEY` |
+| `xiaomi-token-plan-ams` | `XIAOMI_TOKEN_PLAN_AMS_API_KEY` |
+| `xiaomi-token-plan-sgp` | `XIAOMI_TOKEN_PLAN_SGP_API_KEY` |
 | `opencode-go` | `OPENCODE_API_KEY` |
+
+海外站与国内站是两个 provider，共用同一个 key（`moonshotai` / `moonshotai-cn`）。
+包月套餐端点（`zai-coding-cn`、`xiaomi-token-plan-*`）按量计 0。
 
 配一个 `[providers.custom.<id>]` 表，同一个内核就能指向任何 OpenAI 兼容的 endpoint（本地服务也算）
 ——见[配置](https://github.com/encyc/zen-agent/blob/main/docs/guide/config.md)。
