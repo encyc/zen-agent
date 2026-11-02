@@ -209,7 +209,7 @@ extensions = ["~/work/my-extension.py"]
 allow = ["read_*", "grep"]     # never ask for these
 deny = ["write_file"]          # always refuse
 
-# global layer only (a project-layer [safety]/[backup] is rejected)
+# global layer only (a project-layer [task]/[safety]/[backup] is rejected)
 [safety]
 allow_outside = ["~/scratch"]  # writes allowed outside the workspace
 allow_destructive = false
@@ -219,6 +219,12 @@ allow_protected = false
 enabled = true
 max_file_bytes = 2097152       # larger files are not snapshotted
 keep_runs = 50
+
+[task]
+max_turns = 30                   # subagent model turns before it is cut off
+keep_transcripts = 64            # per-session subagent transcripts retained
+max_transcript_bytes = 33554432  # total bytes of retained transcripts per session
+max_transcript_file_bytes = 8388608  # one transcript past this is cut and marked
 ```
 
 Themes: `~/.zenagent/keybindings.json` (`{"newline": "escape,enter"}`) and
