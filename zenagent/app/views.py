@@ -418,6 +418,8 @@ class TranscriptBuilder:
                 card.status = "error" if event.is_error else "ok"
                 card.result_text = _result_text(event.result)
                 card.details = details
+                diff = details.get("diff")
+                card.diff = diff if isinstance(diff, str) and diff else None
                 card.duration_ms = event.duration_ms
         else:
             return False

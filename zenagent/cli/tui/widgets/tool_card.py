@@ -3,7 +3,9 @@
 Deliberately not a ``Collapsible``: the built-in widget kept its body laid out
 while "collapsed" (a 247-row card). This is omp's *plain tinted* topology --
 a status head, an optional state tint, and the tail of the output -- drawn from
-one ``Text`` so the collapsed height is exactly one row.
+one ``Text``. A collapsed card is one row, except ``write_file``/``edit_file``:
+those preview the change's first lines (``MAX_DIFF_PREVIEW_LINES``) so a file
+mutation reads at a glance instead of only its one-line result sentence.
 """
 
 from __future__ import annotations
@@ -16,10 +18,17 @@ from zenagent.app.views import ToolCallView
 from zenagent.cli.tui import palette
 from zenagent.i18n import t
 
-__all__ = ["MAX_RESULT_LINES", "ToolCard"]
+__all__ = ["MAX_DIFF_PREVIEW_LINES", "MAX_RESULT_LINES", "ToolCard"]
 
 
 MAX_RESULT_LINES = 12
+
+#: Diff body lines previewed under a write/edit card before it is opened. The
+#: card head already names the path, so ``---``/``+++`` heads never enter it.
+MAX_DIFF_PREVIEW_LINES = 5
+
+#: Tools whose collapsed card previews the change (omp's Edit/Create cards).
+_FILE_MUTATION_TOOLS = frozenset({"write_file", "edit_file"})
 
 _STATUS_KEYS = {
     "running": "tui.tool.status_running",
@@ -67,8 +76,29 @@ def _diff_stats(diff: str) -> tuple[int, int]:
     return added, removed
 
 
+def _diff_line_style(line: str) -> str:
+    """Colour one diff row: additions ``OK``, removals ``ERROR``, rest muted."""
+    if line.startswith("+"):
+        return palette.OK
+    if line.startswith("-"):
+        return palette.ERROR
+    return palette.MUTED
+
+
+def _diff_preview_lines(lines: list[str]) -> list[str]:
+    """Rows worth previewing: hunk markers and the source cap are not changes."""
+    return [
+        line
+        for line in lines
+        if not line.startswith("@@") and not line.startswith("... [")
+    ]
+
+
 class ToolCard(Static):
-    """One row while collapsed; the tail of the output when opened."""
+    """A collapsed card is one head row; write/edit add a bounded diff preview.
+
+    Opened, it shows the tail of the result and the whole diff.
+    """
 
     can_focus = True
     BINDINGS = [("enter,space", "toggle_card", "Expand")]  # noqa: RUF012 - Textual class API
@@ -267,6 +297,38 @@ class ToolCard(Static):
 
         return view.args_preview
 
+    def _diff_lines(self) -> list[str]:
+        """Display rows of the applied change, without its ``---``/``+++`` heads.
+
+        The card head already names the path, so repeating the file heads would
+        only spend rows; ``@@`` markers stay for the full view (the compact
+        preview filters them out).
+        """
+        if not self.view.diff:
+            return []
+        lines = self.view.diff.splitlines()
+        start = 1 if lines and lines[0].startswith("--- ") else 0
+        if len(lines) > start and lines[start].startswith("+++ "):
+            start += 1
+        return lines[start:]
+
+    def _append_diff_preview(self, text: Text) -> None:
+        """Add the first lines of a write/edit change under its head row."""
+        if self.view.name not in _FILE_MUTATION_TOOLS:
+            return
+        body = _diff_preview_lines(self._diff_lines())
+        if not body:
+            return
+        budget = max(8, self._width() - 3)  # the three-column body indent
+        for line in body[:MAX_DIFF_PREVIEW_LINES]:
+            text.append("\n   ")
+            text.append(_clip_cells(line, budget), style=_diff_line_style(line))
+        hidden = len(body) - MAX_DIFF_PREVIEW_LINES
+        if hidden > 0:
+            text.append(
+                "\n   " + t("tui.tool.more_diff_lines", n=hidden), style=palette.DIM
+            )
+
     def _renderable(self) -> Text:
         text = self._head()
         if self.collapsed:
@@ -279,6 +341,7 @@ class ToolCard(Static):
                 hint = t("tui.tool.expand_hint")
                 if cell_len(text.plain) + cell_len(hint) <= self._width():
                     text.append(hint, style=palette.DIM)
+            self._append_diff_preview(text)
             return text
 
         lines = (self.view.result_text or "").splitlines()
@@ -297,12 +360,7 @@ class ToolCard(Static):
             else:
                 text.append("\n   " + t("tui.tool.no_output"), style=palette.DIM)
         if self.view.diff:
-            for line in self.view.diff.splitlines():
+            for line in self._diff_lines():
                 text.append("\n   ")
-                style = palette.MUTED
-                if line.startswith("+"):
-                    style = palette.OK
-                elif line.startswith("-"):
-                    style = palette.ERROR
-                text.append(line, style=style)
+                text.append(line, style=_diff_line_style(line))
         return text

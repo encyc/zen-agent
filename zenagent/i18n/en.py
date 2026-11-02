@@ -269,6 +269,7 @@ CATALOG: dict[str, str] = {
     "tui.tool.matches": "{n} matches",
     "tui.tool.expand_hint": "  (enter: expand)",
     "tui.tool.earlier_lines": "   … {n} earlier lines",
+    "tui.tool.more_diff_lines": "   … {n} more diff lines",
     "tui.tool.no_output": "(no output)",
     # TUI: skill chip + prompt
     "tui.skill.label": "skill:",

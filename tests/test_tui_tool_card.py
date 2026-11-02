@@ -4,11 +4,17 @@ omp's plain-tinted card (``04-transcript-and-tools.md`` §2.4) is a status head
 plus the collapse hint; success stays dim rather than turning green, and only
 error/warning spend colour. The result shows its *tail* with an
 ``… N earlier lines`` marker, because the interesting part of tool output is
-the end.
+the end. Write/edit cards are the exception: their collapsed face previews the
+change's first lines, because a file mutation's one-line result sentence says
+nothing about what changed.
 """
 
 from zenagent.app.views import ToolCallView
-from zenagent.cli.tui.widgets.tool_card import MAX_RESULT_LINES, ToolCard
+from zenagent.cli.tui.widgets.tool_card import (
+    MAX_DIFF_PREVIEW_LINES,
+    MAX_RESULT_LINES,
+    ToolCard,
+)
 
 
 def view(**overrides) -> ToolCallView:
@@ -100,8 +106,80 @@ def test_bash_card_shows_the_command_and_exit_code():
 def test_edit_card_shows_diff_stats():
     diff = "--- a/x.py\n+++ b/x.py\n@@\n-old\n+new\n+more\n"
     card = ToolCard(view(name="edit_file", args={"path": "x.py"},
-                        details={"path": "x.py", "diff": diff}))
+                        details={"path": "x.py", "diff": diff}, diff=diff))
     assert "x.py" in card.plain and "+2/-1" in card.plain
+
+
+def diff_of(*body: str) -> str:
+    return "--- a/x.py\n+++ b/x.py\n@@ -1,2 +1,3 @@\n" + "\n".join(body) + "\n"
+
+
+def test_edit_card_previews_the_diff_without_opening():
+    diff = diff_of(" keep", "-old", "+new", "+more")
+    card = ToolCard(view(name="edit_file", args={"path": "x.py"},
+                        details={"path": "x.py", "diff": diff}, diff=diff))
+    # The preview is the card's default face: no key press needed.
+    assert card.collapsed is True
+    text = card.plain
+    assert "-old" in text and "+new" in text
+    # The head already carries the path, so the file heads stay out of the body.
+    assert "--- a/x.py" not in text and "+++ b/x.py" not in text
+
+
+def test_write_card_previews_a_created_file():
+    diff = diff_of("+first", "+second")
+    card = ToolCard(view(name="write_file", args={"path": "new.py"},
+                        details={"path": "new.py", "diff": diff}, diff=diff))
+    assert "+first" in card.plain and "+second" in card.plain
+
+
+def test_diff_preview_keeps_five_body_lines_and_counts_the_rest():
+    body = [f"+line {index}" for index in range(MAX_DIFF_PREVIEW_LINES + 3)]
+    diff = diff_of(*body)
+    card = ToolCard(view(name="edit_file", args={"path": "x.py"},
+                        details={"path": "x.py", "diff": diff}, diff=diff))
+    text = card.plain
+    for line in body[:MAX_DIFF_PREVIEW_LINES]:
+        assert line in text
+    assert body[MAX_DIFF_PREVIEW_LINES] not in text
+    assert f"{len(body) - MAX_DIFF_PREVIEW_LINES} more diff lines" in text
+
+
+def test_expanded_edit_card_shows_the_whole_diff():
+    body = [f"+line {index}" for index in range(MAX_DIFF_PREVIEW_LINES + 3)]
+    diff = diff_of(*body)
+    card = ToolCard(view(name="edit_file", args={"path": "x.py"},
+                        details={"path": "x.py", "diff": diff}, diff=diff))
+    card.set_collapsed(False)
+    text = card.plain
+    assert all(line in text for line in body)
+    assert "more diff lines" not in text
+
+
+def test_only_write_and_edit_preview_their_diff():
+    diff = diff_of("+new")
+    card = ToolCard(view(name="read_file", args={"path": "x.py"},
+                        details={"path": "x.py", "diff": diff}, diff=diff))
+    assert "+new" not in card.plain
+
+
+def test_long_diff_line_is_clipped_in_the_preview():
+    card = ToolCard(view(name="edit_file", args={"path": "x.py"},
+                        details={"path": "x.py"}, diff=diff_of("+" + "x" * 500)))
+    text = card.plain
+    assert "x" * 500 not in text
+    assert "…" in text
+
+
+def test_diff_preview_appears_when_the_result_settles():
+    # A running call has no diff yet; the card must pick it up on refresh.
+    card = ToolCard(view(name="edit_file", args={"path": "x.py"}, status="running",
+                        result_text=""))
+    assert "-old" not in card.plain
+    diff = diff_of("-old", "+new")
+    card.view = view(name="edit_file", args={"path": "x.py"}, status="ok",
+                     details={"path": "x.py", "diff": diff}, diff=diff)
+    assert "-old" in card.plain and "+new" in card.plain
 
 
 def test_read_card_shows_line_count_and_truncation():

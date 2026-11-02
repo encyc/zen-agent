@@ -268,6 +268,7 @@ CATALOG: dict[str, str] = {
     "tui.tool.matches": "{n} 处匹配",
     "tui.tool.expand_hint": "  （enter 展开）",
     "tui.tool.earlier_lines": "   … 更早的 {n} 行",
+    "tui.tool.more_diff_lines": "   … 还有 {n} 行 diff",
     "tui.tool.no_output": "（无输出）",
     # TUI：skill chip 与输入框
     "tui.skill.label": "技能：",

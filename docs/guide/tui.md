@@ -53,6 +53,7 @@ dock 里 `TodoHud` 只有存在 todo 时显示一行（当前 phase / 当前任�
 | assistant 正文 | Markdown，无装饰 |
 | thinking | 推理中一行 `✻ thinking…  <正文首行>  ·  3.2s`（`✻` 高亮、时长每 0.5s 走字）；结束后冻结成 `✻ thinking  <正文首行>  ·  12s`。`enter` 或点击展开；历史回放没有计时信息时只显示首行 |
 | 工具调用 | 一行 `● name args · ok · 19ms`，状态点+底色区分运行/成功/失败，`enter` 或点击展开 |
+| 写/改文件 | `write_file` / `edit_file` 折叠态就多显示 5 行 diff 预览（`+`/`-` 着色；其余行以 `… N more diff lines` 收口），`enter` 展开完整结果与完整 diff。历史回放没有 details，只显示单行 |
 | 工具输出 | 展开后只留**尾部** 12 行，头部显示 `… N earlier lines` |
 | 错误 | 红色点 + 红底卡片；失败的工具自动展开 |
 | 压缩分隔线 | dim 一行 `── compacted · N prompt tokens → summary session ──`，后面跟着摘要 |

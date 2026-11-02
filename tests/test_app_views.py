@@ -304,6 +304,62 @@ def test_transcript_builder_pairs_tool_calls_and_updates_progress():
     assert card.duration_ms == 5
 
 
+def test_transcript_builder_keeps_the_applied_diff_for_the_card():
+    from zenagent.agent.loop import ToolResultAgent
+    from zenagent.app.views import TranscriptBuilder
+    from zenagent.events import AgentEvent
+    from zenagent.types import TextContent
+
+    builder = TranscriptBuilder()
+    builder.apply(
+        AgentEvent(
+            type="tool_execution_start",
+            tool_call_id="t1",
+            tool_name="edit_file",
+            args={"path": "x.py"},
+        )
+    )
+    builder.apply(
+        AgentEvent(
+            type="tool_execution_end",
+            tool_call_id="t1",
+            tool_name="edit_file",
+            args={"path": "x.py"},
+            result=ToolResultAgent(
+                content=[TextContent(text="edited x.py: replaced 1 occurrence")],
+                details={"path": "x.py", "diff": "@@\n-old\n+new"},
+            ),
+            is_error=False,
+            duration_ms=3,
+        )
+    )
+    assert builder.cards["t1"].diff == "@@\n-old\n+new"
+
+    # Only a non-empty string is card material; anything else stays absent.
+    builder.apply(
+        AgentEvent(
+            type="tool_execution_start",
+            tool_call_id="t2",
+            tool_name="edit_file",
+            args={"path": "y.py"},
+        )
+    )
+    builder.apply(
+        AgentEvent(
+            type="tool_execution_end",
+            tool_call_id="t2",
+            tool_name="edit_file",
+            args={"path": "y.py"},
+            result=ToolResultAgent(
+                content=[TextContent(text="edited y.py")], details={"diff": 5}
+            ),
+            is_error=False,
+            duration_ms=3,
+        )
+    )
+    assert builder.cards["t2"].diff is None
+
+
 def test_transcript_builder_ignores_progress_after_the_call_settled():
     from zenagent.agent.loop import ToolResultAgent
     from zenagent.app.views import TranscriptBuilder
