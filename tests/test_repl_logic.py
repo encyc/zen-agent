@@ -584,7 +584,17 @@ async def test_repl_rejects_startup_images_for_a_non_vision_model(isolated_sessi
 # ---------------------------------------------------------------------------
 
 
-async def test_repl_exposes_the_tools_the_tui_has(isolated_sessions):
+async def test_repl_exposes_the_tools_the_tui_has(
+    isolated_sessions, tmp_path, monkeypatch
+):
+    # A project-local skill makes read_skill deterministic: a developer machine
+    # with ~/.zenagent/skills must not be what makes this pass (CI has none).
+    monkeypatch.chdir(tmp_path)
+    skill_dir = tmp_path / ".zenagent" / "skills" / "demo"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: demo\ndescription: demo skill\n---\nbody\n"
+    )
     seen: list[str] = []
 
     async def stream(model_, messages, tools, options):
