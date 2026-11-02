@@ -54,6 +54,36 @@ async def test_run_doctor_success(monkeypatch):
     assert await run_doctor(print_fn=lambda *_: None) == 0
 
 
+def test_missing_keys_for_unconfigured_providers_are_advisory():
+    """A fresh install must not fail doctor just because 17 providers exist."""
+    checks = collect_checks(env={})
+    key_rows = [check for check in checks if check.name.startswith("key:")]
+    assert key_rows
+    # Absent keys are advisory (never fail the run); present keys are plain ok.
+    # A machine may already hold some keys in settings.json, so assert the
+    # implication, not "all rows are advisory".
+    for check in key_rows:
+        if check.ok:
+            assert not check.advisory, check.name
+        else:
+            assert check.advisory, check.name
+            assert "is missing" in check.detail
+
+
+async def test_run_doctor_exits_zero_when_missing_keys_are_only_advisory(monkeypatch):
+    monkeypatch.setattr(
+        "zenagent.cli.doctor.collect_checks",
+        lambda env=None: [
+            Check("a", True, "fine"),
+            Check("key:x", False, "X_API_KEY is missing", advisory=True),
+        ],
+    )
+    printed: list[str] = []
+    assert await run_doctor(print_fn=printed.append) == 0
+    assert any(line.startswith("--") for line in printed)
+    assert not any("FAIL" in line for line in printed)
+
+
 def test_main_routes_the_doctor_subcommand(monkeypatch):
     async def fake_doctor(print_fn=print):
         return 0

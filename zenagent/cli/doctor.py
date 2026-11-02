@@ -25,11 +25,18 @@ __all__ = ["Check", "collect_checks", "run_doctor"]
 
 @dataclass
 class Check:
-    """One diagnostic row."""
+    """One diagnostic row.
+
+    ``advisory`` marks a row that reports a fact without failing the run: a
+    provider the user never configured is expected to have no key, so with a
+    17-provider catalog treating each one as a failure would make ``zen
+    doctor`` permanently red for everyone.
+    """
 
     name: str
     ok: bool
     detail: str
+    advisory: bool = False
 
 
 _PLAINTEXT_KEY = re.compile(r'^\s*[A-Z][A-Z0-9_]*_API_KEY\s*=\s*".+"\s*$', re.MULTILINE)
@@ -115,7 +122,9 @@ def collect_checks(env: Mapping[str, str] | None = None) -> list[Check]:
         stored = settings.get_api_key(provider.api_key_env) or values.get(provider.api_key_env)
         present = bool(stored)
         detail = provider.api_key_env + (" is set" if present else " is missing")
-        checks.append(Check(f"key:{provider.id}", present, detail))
+        # An unconfigured provider is not a broken install: with 17 providers
+        # most keys will always be absent. Advisory, so doctor stays green.
+        checks.append(Check(f"key:{provider.id}", present, detail, advisory=not present))
 
     checks.append(
         Check(
@@ -132,8 +141,9 @@ async def run_doctor(print_fn=print) -> int:
     checks = collect_checks()
     width = max(len(check.name) for check in checks)
     for check in checks:
-        mark = "ok  " if check.ok else "FAIL"
+        mark = "ok  " if check.ok else ("--  " if check.advisory else "FAIL")
         print_fn(f"{mark}  {check.name:<{width}}  {check.detail}")
-    failures = [check for check in checks if not check.ok]
-    print_fn(f"\n{len(checks) - len(failures)}/{len(checks)} checks passed")
+    failures = [check for check in checks if not check.ok and not check.advisory]
+    passed = len(checks) - len(failures)
+    print_fn(f"\n{passed}/{len(checks)} checks passed")
     return 1 if failures else 0
