@@ -14,6 +14,7 @@ from pathlib import Path
 from zenagent import project
 from zenagent.agent import Agent
 from zenagent.agent.artifacts import build_artifact_sink
+from zenagent.agent.memory_store import MemoryStore
 from zenagent.agent.registry import ToolRegistry
 from zenagent.agent.session import Session, latest_session, unique_session_path
 from zenagent.app.journal import attach_journal, journal_for, load_backup_policy
@@ -69,6 +70,7 @@ from zenagent.templates import (
 from zenagent.tools import ALL_TOOLS
 from zenagent.tools.github import build_github_tool
 from zenagent.tools.lsp import build_lsp_tool, shutdown_clients
+from zenagent.tools.memory import build_memory_tool, build_memory_write_tool
 from zenagent.tools.task import build_task_tool
 from zenagent.tools.todo import (
     TodoTool,
@@ -541,6 +543,12 @@ class Runtime:
         if github_tool is not None:
             tools.append(github_tool)
         tools.append(build_lsp_tool())
+        # Project memory: always registered; the tools operate on
+        # <root>/.zenagent/memory/ and an empty library is not an error.
+        memory_root = project.find_project_root(Path.cwd())
+        store = MemoryStore(memory_root)
+        tools.append(build_memory_tool(store))
+        tools.append(build_memory_write_tool(store))
         if self.todo_tool is not None:
             tools.append(self.todo_tool)
         if self.task_tool is not None:

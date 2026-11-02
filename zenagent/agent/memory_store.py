@@ -150,7 +150,13 @@ class MemoryStore:
         return entries
 
     def write_entry(
-        self, *, title: str, body: str, source: str, session: str | None = None
+        self,
+        *,
+        title: str,
+        body: str,
+        source: str,
+        reason: str = "",
+        session: str | None = None,
     ) -> MemoryEntry:
         entry_id = self.new_id()
         now = _now()
@@ -163,7 +169,7 @@ class MemoryStore:
             source=source,
         )
         self._write_atomically(self.entry_path(entry_id), self._render(entry))
-        self.journal("add", entry_id, title=entry.title, session=session)
+        self.journal("add", entry_id, title=entry.title, reason=reason, session=session)
         return entry
 
     def update_entry(
