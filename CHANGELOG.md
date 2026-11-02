@@ -3,6 +3,53 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## v0.7.4 — 2026-11-02
+
+**17 providers out of the box: every mainstream API, no new adapter code.**
+
+### Added
+
+- **14 more providers in the packaged catalog** (3 → 17 providers, 8 → 229
+  models), synced from `@mariozechner/pi-ai@0.73.1`: `openai`, `zai`, `kimi`,
+  `moonshotai` / `moonshotai-cn`, `minimax` / `minimax-cn`, `google`, `xai`,
+  `xiaomi` plus its three token-plan endpoints, and `openrouter`. Overseas and
+  China endpoints are separate provider ids, so a key that only reaches one of
+  them still works; `moonshotai` and `moonshotai-cn` share `MOONSHOT_API_KEY`.
+- **Not one line of adapter code.** Every added provider speaks one of the four
+  protocols already registered, which is why this release is catalog data only:
+  `openai-responses` for `openai`, `anthropic-messages` for `kimi`, `minimax`,
+  `minimax-cn` and `xiaomi` (their base URLs deliberately omit `/v1` — the
+  adapter adds it), `google-generative-ai` for `google`, and
+  `openai-completions` for the rest. `docs/internals/providers.md` now says how
+  to tell a catalog-only addition from one that needs an adapter.
+- **OpenRouter with 82 curated models** rather than all 275: the vendors we
+  mirror directly, newest generation only, and no colon-suffixed variants —
+  the catalog tokenizer splits keys on `:`, so an id like
+  `anthropic/claude-3.7-sonnet:thinking` cannot be expressed at all.
+
+### Fixed
+
+- **`zen doctor` no longer fails on keys you never configured.** With 17
+  providers, treating every absent key as a failure made a fresh install exit 1
+  (it reported 10/10 passed before this release). A missing key now prints `--`
+  and still names the env var, without failing the run; a key that is present
+  but broken still fails.
+- Cost values from the sync are rounded to 10 significant digits:
+  pi-ai's JSON floats arrive as `0.09999999999999999`, which would otherwise
+  show up as noise in the catalog and the UI. The finest real price carried
+  (`0.0028`) is unaffected.
+
+### Tests
+
+- `tests/test_catalog_pi_ai.py` pins the expansion: per-provider adapter and
+  model count, every model on a registered adapter, no colon ids, the
+  hand-tuned `zai-coding-cn` compat surviving a re-sync, and anthropic-style
+  base URLs free of `/v1`. Each guard was mutation-tested (inject a colon id, a
+  `/v1` suffix, a clobbered compat flag, an unregistered adapter, a dropped
+  model) to prove it is not vacuous.
+- Two existing tests hard-coded the catalog's size and now derive it from
+  `load_catalog()`, so adding providers does not break them.
+
 ## v0.7.3 — 2026-11-02
 
 **The README became a landing page, and the project got a license.**
