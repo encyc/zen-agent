@@ -221,7 +221,7 @@ max_file_bytes = 2097152       # larger files are not snapshotted
 keep_runs = 50
 
 [task]
-max_turns = 30                   # subagent model turns before it is cut off
+max_turns = 300                  # subagent model turns before it is cut off
 keep_transcripts = 64            # per-session subagent transcripts retained
 max_transcript_bytes = 33554432  # total bytes of retained transcripts per session
 max_transcript_file_bytes = 8388608  # one transcript past this is cut and marked

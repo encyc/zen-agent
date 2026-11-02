@@ -667,7 +667,7 @@ def test_bad_safety_and_backup_values_are_rejected(tmp_path, snippet, message):
 
 def test_task_section_defaults(tmp_path):
     config = load_user_config(write_config(tmp_path, ""))
-    assert config.task_max_turns == 30
+    assert config.task_max_turns == 300
     assert config.task_keep_transcripts == 64
     assert config.task_max_transcript_bytes == 32 * 1024 * 1024
     assert config.task_max_transcript_file_bytes == 8 * 1024 * 1024

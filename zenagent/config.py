@@ -72,8 +72,9 @@ _DEFAULT_BACKUP_KEEP_RUNS = 50
 _TASK_KEYS = frozenset(
     {"max_turns", "keep_transcripts", "max_transcript_bytes", "max_transcript_file_bytes"}
 )
-#: Default subagent turn budget: enough for a multi-file review, not a loop.
-DEFAULT_TASK_MAX_TURNS = 30
+#: Default subagent turn budget: a long multi-file investigation still fits,
+#: while the main loop's own ``_MAX_TURNS`` (100) keeps the parent bounded.
+DEFAULT_TASK_MAX_TURNS = 300
 #: Default subagent transcripts retained per session.
 DEFAULT_TASK_KEEP_TRANSCRIPTS = 64
 #: Default total bytes of retained subagent transcripts per session.
