@@ -147,8 +147,16 @@ BLOCKS: dict[str, BlockSpec] = {
         budget_chars=40,
         required_vars=("summary",),
     ),
+    "memory_index": BlockSpec(
+        id="memory_index",
+        path="memory_index.md",
+        version=PROMPT_VERSION,
+        cache_class="session",
+        budget_chars=120,
+        required_vars=("entries",),
+        optional=True,
+    ),
 }
-
 #: Assembly order for the base system prompt. Sub-blocks are joined with a
 #: single newline (the v0.4.1 text is line-oriented).
 SYSTEM_BLOCK_ORDER: tuple[str, ...] = (
