@@ -56,3 +56,27 @@ def test_parse_index_rejects_text_and_negative_numbers():
     assert parse_index("hello") is None
     assert parse_index("") is None
     assert parse_index("-1") is None
+
+
+def test_parse_index_rejects_unicode_digits():
+    """`"²".isdigit()` is True but `int("²")` raises — that must not escape."""
+    assert parse_index("²") is None
+
+
+def test_parse_index_survives_a_number_beyond_the_int_digit_limit():
+    assert parse_index("9" * 5000) is None
+
+
+def test_strips_markdown_emphasis_around_a_url():
+    assert extract_links("**https://example.com/a**") == ["https://example.com/a"]
+    assert extract_links("_https://example.com/b_") == ["https://example.com/b"]
+
+
+def test_keeps_apostrophes_inside_a_url():
+    assert extract_links("https://en.wikipedia.org/wiki/O'Brien") == [
+        "https://en.wikipedia.org/wiki/O'Brien"
+    ]
+
+
+def test_strips_a_trailing_table_pipe():
+    assert extract_links("|https://example.com/a|") == ["https://example.com/a"]
