@@ -3,6 +3,36 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## v0.6.3 — 2026-11-02
+
+**TUI fix: the sidebar reorders live rows without taking the app down.**
+
+### Fixed
+
+- **Sidebar row reorder crashed the TUI** (`zenagent/cli/tui/widgets/sidebar.py`):
+  `SidebarSection._sync_order` called `Widget.move_child(row, index)`
+  positionally, but Textual 8 declares
+  `move_child(child, *, before=..., after=...)`. The first in-place reorder of
+  mounted rows — a second subagent starting while the first row was already on
+  screen — raised
+  `TypeError: Widget.move_child() takes 2 positional arguments but 3 were given`
+  and killed the agent. The call now passes `before=index`, and a freshly
+  mounted row is positioned in the same refresh (`mount()` registers a row in
+  the parent's child list before its Mount event) instead of a tick later.
+- **`UsageRow.plain` read the removed `Static.renderable`**
+  (`zenagent/cli/tui/widgets/rows.py`): Textual 8 moved the accessor to
+  `Static.content`. Latent in this release (nothing read the property yet), so
+  it would have surfaced later as an `AttributeError`.
+- **Empty-context placeholder used the English heading**
+  (`zenagent/cli/tui/widgets/sidebar.py`): it looked up `"Context"` instead of
+  the section key, raising `AssertionError` under a zh locale when the context
+  report was empty. It now matches the key, like every other section.
+
+Tests: `test_new_subagent_inserts_above_already_mounted_rows` reproduces the
+crash (TypeError before the fix);
+`test_usage_row_plain_returns_the_rendered_tail` and
+`test_empty_context_placeholder_resolves_under_chinese` pin the other two.
+
 ## v0.6.2 — 2026-11-01
 
 **LSP fix: rename now returns the full cross-file workspace edit.**
