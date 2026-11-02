@@ -312,7 +312,9 @@ class UsageRow(Static):
 
     @property
     def plain(self) -> str:
-        return self.renderable.plain if isinstance(self.renderable, Text) else str(self.renderable)
+        # Textual 8 removed ``Static.renderable``; ``content`` is the accessor.
+        content = self.content
+        return content.plain if isinstance(content, Text) else str(content)
 
 
 def _usage_text(status: RunStatus) -> Text:

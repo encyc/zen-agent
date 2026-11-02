@@ -180,6 +180,62 @@ async def test_subagent_rows_are_ordered_and_updated_in_place(fake_runtime):
         assert "12s" in first_row.plain
 
 
+async def test_new_subagent_inserts_above_already_mounted_rows(fake_runtime):
+    """Regression: reordering mounted rows must not crash the TUI.
+
+    The sidebar repaints every second, so when a second subagent starts the
+    first row is already mounted and the section has to reorder in place. The
+    old call ``_rows_box.move_child(row, index)`` passed the index positionally
+    and Textual 8 declares ``move_child(child, *, before=..., after=...)``; the
+    first such reorder raised TypeError and took the whole app down.
+    """
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        await open_sidebar(app, pilot)
+
+        app.chat._on_event(task_start("t2", "research"))
+        app._refresh_status()
+        await pilot.pause()  # the first row is mounted now
+
+        app.chat._on_event(task_start("t3", "scan"))
+        app._refresh_status()
+        await pilot.pause()
+
+        subagent = section(app, "Subagent")
+        assert [row.key for row in subagent.query(SidebarRow)] == ["t3", "t2"]
+        assert "scan" in rows(app, "Subagent")[0]
+        assert "research" in rows(app, "Subagent")[1]
+
+
+async def test_empty_context_placeholder_resolves_under_chinese(fake_runtime, monkeypatch):
+    """Regression: the placeholder row looked up the English heading "Context"."""
+    from zenagent import i18n
+    from zenagent.app.context import ContextReport
+
+    empty = ContextReport(
+        slices=(), total_tokens=0, window=1_000, measured=False, prompt_tokens=0
+    )
+    monkeypatch.setattr("zenagent.app.chat.build_context_report", lambda *a, **k: empty)
+
+    app = ZenAgentApp(fake_runtime)
+    try:
+        async with app.run_test(size=(140, 40)) as pilot:
+            await pilot.pause()
+            i18n.set_locale("zh")
+            app.query_one(Sidebar).refresh_language()
+            app._refresh_status()
+
+            context = next(
+                section
+                for section in app.query_one(Sidebar).query(SidebarSection)
+                if section.key == "context"
+            )
+            assert context.display is False
+    finally:
+        i18n.set_locale("en")
+
+
 async def test_jobs_section_renders_the_status_snapshot(fake_runtime, monkeypatch):
     class _Running:
         id = "bg_2"

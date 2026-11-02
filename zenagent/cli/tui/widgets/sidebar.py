@@ -189,15 +189,20 @@ class SidebarSection(Vertical):
         self.display = bool(items)
 
     def _sync_order(self, keys: list[str]) -> None:
-        current = [
-            row.key for row in self._rows_box.children if isinstance(row, SidebarRow)
-        ]
-        if current == keys:
+        children = list(self._rows_box.children)
+        if [row.key for row in children if isinstance(row, SidebarRow)] == keys:
             return
         for index, key in enumerate(keys):
             row = self._rows.get(key)
-            if row is not None and row.is_mounted:
-                self._rows_box.move_child(row, index)
+            # ``mount()`` registers the row in ``children`` immediately, before
+            # its Mount event, so a freshly added row can be positioned in the
+            # same refresh instead of waiting for the next one.
+            if row is not None and row in children:
+                # Textual 8 makes ``before``/``after`` keyword-only; passing an
+                # index positionally raises TypeError. ``before=index`` targets
+                # the wanted slot, and walking in display order keeps the
+                # already-placed prefix stable.
+                self._rows_box.move_child(row, before=index)
 
 
 class Sidebar(VerticalScroll):
@@ -329,7 +334,9 @@ class Sidebar(VerticalScroll):
         if report is not None and report.slices:
             self._section("context").set_rows(_context_rows(report, self._content_width))
         else:
-            self._section("Context").set_rows([])
+            # Match the section key, not the (localized) heading: "Context"
+            # only resolves under the English locale.
+            self._section("context").set_rows([])
 
         # Every task is listed inline (one clipped line each, phases as headers);
         # the overlay stays the place where full text is readable.
