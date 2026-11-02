@@ -4,6 +4,16 @@ Every content change bumps `PROMPT_VERSION` (`zenagent/prompts/spec.py`) and get
 one entry here: what changed, why, and the experiment/report that justified it.
 P0 extracted the v0.4.1 text verbatim — no behavior change.
 
+## 2026-11-02.1 — project memory index block
+
+New optional `memory_index` block (after `skills`, before `extensions`): one
+`- <id> <title>` line per project-memory entry, newest first, capped at 64
+with a pointer to `memory search` beyond the cap. Empty library → the block
+disappears entirely (same condition pattern as `context_files`). Bodies never
+enter the prompt. Justification: the project-memory spec
+(`docs/superpowers/specs/2026-11-02-project-memory-design.md` §3, 索引式注入)
+—— agent 需要常驻可见的记忆清单，但记忆全文常驻会随条目数无限吃 prompt 预算。
+
 ## 2026-10-31.1 — P0 extraction (behavior-neutral)
 
 - Moved every fixed prompt string into `zenagent/prompts/blocks/`: system

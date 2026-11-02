@@ -73,9 +73,11 @@ class PromptContext:
     mode: str = "ask"
     context_text: str = ""
     skill_entries: str = ""
+    memory_index: str = ""
     extension_fragments: Sequence[str] = ()
     include_context: bool = True
     include_skills: bool = True
+    include_memory: bool = True
     include_extensions: bool = True
     include_mode: bool = True
     system_override: str | None = None
@@ -164,6 +166,12 @@ def compose_system(ctx: PromptContext) -> RenderedPrompt:
         part = render(read_block("skills", ctx.root), {"entries": ctx.skill_entries})
         text = f"{text}\n\n{part}"
         blocks.append(_block("skills", part))
+    if ctx.include_memory and ctx.memory_index.strip():
+        part = render(
+            read_block("memory_index", ctx.root), {"entries": ctx.memory_index}
+        )
+        text = f"{text}\n\n{part}"
+        blocks.append(_block("memory_index", part))
     if ctx.include_extensions and ctx.extension_fragments:
         part = "\n\n".join(ctx.extension_fragments)
         text = f"{text}\n\n{part}"

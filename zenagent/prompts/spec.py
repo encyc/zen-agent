@@ -24,7 +24,7 @@ __all__ = [
 
 #: Bumped whenever block content changes; recorded in eval reports and the
 #: prompt CHANGELOG.
-PROMPT_VERSION = "2026-10-31.1"
+PROMPT_VERSION = "2026-11-02.1"
 
 CacheClass = Literal["stable", "session", "volatile"]
 
@@ -145,6 +145,15 @@ BLOCKS: dict[str, BlockSpec] = {
         cache_class="volatile",
         budget_chars=40,
         required_vars=("summary",),
+    ),
+    "memory_index": BlockSpec(
+        id="memory_index",
+        path="memory_index.md",
+        version=PROMPT_VERSION,
+        cache_class="session",
+        budget_chars=120,
+        required_vars=("entries",),
+        optional=True,
     ),
 }
 

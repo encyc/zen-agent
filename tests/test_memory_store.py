@@ -95,3 +95,30 @@ def test_constants():
         "updated",
         "source",
     }
+
+
+def test_format_memory_index_orders_truncates_and_sanitizes(tmp_path):
+    from zenagent.agent.memory_store import format_memory_index
+
+    store = MemoryStore(tmp_path)
+    assert format_memory_index(store) == ""  # 空库 → 块消失
+    first = store.write_entry(title="第一条", body="b", source="s")
+    second = store.write_entry(
+        title="带\n换行和一个很长很长很长很长很长很长很长很长很长很长的标题超限测试",
+        body="b",
+        source="s",
+    )
+    index = format_memory_index(store)
+    lines = index.splitlines()
+    assert lines[0].startswith(f"- {second.id} ")  # 最新在前
+    assert lines[1] == f"- {first.id} 第一条"
+    assert "\n" not in lines[0]  # 标题单行化
+    assert all(len(line) <= len(f"- {second.id} ") + 80 for line in lines)
+
+    # 65 条 → 64 行 + search 提示
+    for i in range(63):
+        store.write_entry(title=f"n{i}", body="b", source="s")
+    index = format_memory_index(store)
+    data_lines = [line for line in index.splitlines() if line.startswith("- ")]
+    assert len(data_lines) == 64
+    assert "memory search" in index

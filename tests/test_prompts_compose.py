@@ -63,3 +63,36 @@ def test_optional_parts_keep_their_order() -> None:
     assert text.index("## Project instructions") < text.index("## Skills")
     assert text.index("## Skills") < text.index("EXT-ONE")
     assert text.index("EXT-ONE") < text.index("PLAN MODE:")
+
+
+def test_memory_index_block_renders_when_present() -> None:
+    rendered = compose_system(
+        PromptContext(
+            cwd=CWD,
+            tool_names=(),
+            memory_index="- a3f2 依赖选型\n- b4c1 测试入口",
+        )
+    )
+    assert "## Project memory" in rendered.text
+    assert "- a3f2 依赖选型" in rendered.text
+    assert "- b4c1 测试入口" in rendered.text
+    assert any(block.id == "memory_index" for block in rendered.blocks)
+
+
+def test_memory_index_block_absent_when_empty() -> None:
+    rendered = compose_system(PromptContext(cwd=CWD, tool_names=(), memory_index=""))
+    assert "## Project memory" not in rendered.text
+    assert all(block.id != "memory_index" for block in rendered.blocks)
+
+
+def test_memory_index_comes_after_skills() -> None:
+    rendered = compose_system(
+        PromptContext(
+            cwd=CWD,
+            tool_names=("todo",),
+            skill_entries="- skill-a",
+            memory_index="- a3f2 note",
+        )
+    )
+    ids = [block.id for block in rendered.blocks]
+    assert ids.index("skills") < ids.index("memory_index")

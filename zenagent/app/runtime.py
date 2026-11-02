@@ -14,7 +14,7 @@ from pathlib import Path
 from zenagent import project
 from zenagent.agent import Agent
 from zenagent.agent.artifacts import build_artifact_sink
-from zenagent.agent.memory_store import MemoryStore
+from zenagent.agent.memory_store import MemoryStore, format_memory_index
 from zenagent.agent.registry import ToolRegistry
 from zenagent.agent.session import Session, latest_session, unique_session_path
 from zenagent.app.journal import attach_journal, journal_for, load_backup_policy
@@ -176,6 +176,8 @@ class Runtime:
         #: Explicit tool list (embedding/test seam); ``None`` = compose.
         self._custom_tools: list | None = None
         self._skill_entries = ""
+        #: Project memory library (<root>/.zenagent/memory/); set per-recompose.
+        self.memory_store: MemoryStore | None = None
         self._extension_prompt = ""
         self._extension_tools: list = []
         #: Slash commands contributed by extensions (name → ExtensionCommand).
@@ -496,11 +498,17 @@ class Runtime:
             if self._context_files
             else ""
         )
+        memory_index = (
+            format_memory_index(self.memory_store)
+            if self.memory_store is not None
+            else ""
+        )
         context = PromptContext(
             cwd=Path.cwd(),
             tool_names=tuple(tool.name for tool in tools),
             context_text=context_text,
             skill_entries=self._skill_entries,
+            memory_index=memory_index,
             extension_fragments=(
                 (self._extension_prompt,) if self._extension_prompt else ()
             ),
@@ -545,10 +553,9 @@ class Runtime:
         tools.append(build_lsp_tool())
         # Project memory: always registered; the tools operate on
         # <root>/.zenagent/memory/ and an empty library is not an error.
-        memory_root = project.find_project_root(Path.cwd())
-        store = MemoryStore(memory_root)
-        tools.append(build_memory_tool(store))
-        tools.append(build_memory_write_tool(store))
+        self.memory_store = MemoryStore(project.find_project_root(Path.cwd()))
+        tools.append(build_memory_tool(self.memory_store))
+        tools.append(build_memory_write_tool(self.memory_store))
         if self.todo_tool is not None:
             tools.append(self.todo_tool)
         if self.task_tool is not None:

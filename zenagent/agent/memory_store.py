@@ -29,6 +29,7 @@ __all__ = [
     "MEMORY_DIR",
     "MemoryEntry",
     "MemoryStore",
+    "format_memory_index",
 ]
 
 #: Project-relative directory holding the memory library.
@@ -39,7 +40,6 @@ MAX_INDEX_ENTRIES = 64
 MAX_TITLE_CHARS = 80
 _ID_RE = re.compile(r"^[0-9a-f]{4}$")
 _NOW = "%Y-%m-%dT%H:%M:%S"
-
 
 @dataclass(frozen=True)
 class MemoryEntry:
@@ -272,6 +272,37 @@ class MemoryStore:
         self.journal("delete", entry_id)
         return True
 
+    # -- prompt index ------------------------------------------------------
+
+    def format_index(self) -> str:
+        """One ``- <id> <title>`` line per entry, newest first, capped.
+
+        The system prompt carries this index — never the full text — so the
+        prompt budget stays constant as the library grows; entries beyond the
+        cap stay reachable through ``memory search``.
+        """
+        def sort_key(entry: MemoryEntry) -> tuple[float, str]:
+            # updated is second-granular; the file mtime breaks same-second
+            # ties so "newest first" is reliable for rapid consecutive writes.
+            try:
+                mtime = self.entry_path(entry.id).stat().st_mtime
+            except OSError:
+                mtime = 0.0
+            return (mtime, entry.id)
+
+        entries = sorted(self.list_entries(), key=sort_key, reverse=True)
+        lines = [
+            f"- {entry.id} {entry.title}" for entry in entries[:MAX_INDEX_ENTRIES]
+        ]
+        if not lines:
+            return ""
+        if len(entries) > MAX_INDEX_ENTRIES:
+            lines.append(
+                f"(only the {MAX_INDEX_ENTRIES} most recent entries are listed; "
+                "use memory search for older ones)"
+            )
+        return "\n".join(lines)
+
     # -- rendering ---------------------------------------------------------
 
     @staticmethod
@@ -307,3 +338,8 @@ class MemoryStore:
                 raise
             handle_name = handle.name
         os.replace(handle_name, path)
+
+
+def format_memory_index(store: MemoryStore) -> str:
+    """Module-level wrapper so prompt code does not reach into the class."""
+    return store.format_index()
