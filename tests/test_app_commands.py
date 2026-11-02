@@ -307,3 +307,54 @@ async def test_urls_command_numbers_links_from_the_last_answer(runtime_factory):
 async def test_urls_command_reports_when_the_answer_has_no_links(services):
     result = await build_default_commands(services).dispatch("urls", "")
     assert result.message == "no links in the last answer"
+
+
+async def test_copy_with_an_index_copies_the_url_verbatim(runtime_factory, monkeypatch):
+    copied: list[str] = []
+    monkeypatch.setattr(
+        "zenagent.cli.tui.clipboard.write_clipboard_text",
+        lambda text: copied.append(text) or True,
+    )
+    answer = (
+        "```\nhttps://metabase.example.cn/oauth/authorize?response_type=code"
+        "&redirect_uri=http%3A%2F%2F127.0.0.1%3A8971%2Fcallback\n```\n"
+    )
+    services = await services_with_answer(runtime_factory, answer)
+    result = await build_default_commands(services).dispatch("copy", "1")
+    assert copied and "%3A%2F%2F" in copied[0]
+    assert result.message is not None
+
+
+async def test_copy_keeps_literal_text_when_the_argument_is_not_a_number(services, monkeypatch):
+    copied: list[str] = []
+    monkeypatch.setattr(
+        "zenagent.cli.tui.clipboard.write_clipboard_text",
+        lambda text: copied.append(text) or True,
+    )
+    await build_default_commands(services).dispatch("copy", "hello world")
+    assert copied == ["hello world"]
+
+
+async def test_copy_with_an_out_of_range_index_reports_the_range(runtime_factory):
+    from zenagent.i18n import t
+
+    services = await services_with_answer(runtime_factory, "见 https://example.com/only 。")
+    result = await build_default_commands(services).dispatch("copy", "3")
+    assert result.message == t("cmdmsg.url_index_invalid", count=1)
+
+
+async def test_copy_with_an_index_needs_a_link_in_the_last_answer(services):
+    result = await build_default_commands(services).dispatch("copy", "9")
+    assert result.message == "no links in the last answer"
+
+
+async def test_copy_index_zero_never_copies_the_digit(services, monkeypatch):
+    """`/copy 0` is an index (out of range), never the literal text "0"."""
+    copied: list[str] = []
+    monkeypatch.setattr(
+        "zenagent.cli.tui.clipboard.write_clipboard_text",
+        lambda text: copied.append(text) or True,
+    )
+    result = await build_default_commands(services).dispatch("copy", "0")
+    assert copied == []
+    assert result.message is not None
