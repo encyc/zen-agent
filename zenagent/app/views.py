@@ -222,6 +222,8 @@ class SubagentView:
     tokens: int
     #: False for replayed/missing transcripts: the sidebar row is not clickable.
     has_transcript: bool = False
+    #: True when the persisted transcript was cut by the per-file cap.
+    transcript_truncated: bool = False
 
 
 @dataclass(frozen=True)

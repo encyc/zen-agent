@@ -40,7 +40,13 @@ class SubagentBanner(Static):
     def plain(self) -> str:
         return self._plain
 
-    def show(self, name: str, *, status: str | None = None) -> None:
+    def show(
+        self,
+        name: str,
+        *,
+        status: str | None = None,
+        transcript_truncated: bool = False,
+    ) -> None:
         running = status in (None, "running")
         text = Text()
         text.append("◐ " if running else "✓ ", style=palette.ACCENT if running else palette.OK)
@@ -49,6 +55,8 @@ class SubagentBanner(Static):
         if not running and status:
             label = _status_label(status)
             text.append(f" · {label}", style=palette.MUTED)
+        if transcript_truncated:
+            text.append(f" · {t('tui.subagent.transcript_truncated')}", style=palette.DIM)
         text.append(" · " + t("tui.subagent.readonly"), style=palette.DIM)
         self._plain = text.plain
         self.update(text)

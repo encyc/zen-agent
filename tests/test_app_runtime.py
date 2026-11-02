@@ -322,3 +322,36 @@ async def test_mcp_manager_receives_the_retry_interval(runtime_factory, monkeypa
     await runtime_factory(mcp=True, mcp_retry_interval_s=0.25)
 
     assert captured["interval"] == 0.25
+
+
+async def test_bootstrap_wires_the_task_budget_from_config(
+    runtime_factory, app_env, monkeypatch
+):
+    """Runtime-based frontends (TUI, REPL, RPC) all get ``[task]`` for free."""
+    from zenagent.agent.subagents import SubagentLimits
+    from zenagent.app.runtime import build_task_tool as real_build_task_tool
+    from zenagent.config import UserConfig
+
+    captured: dict = {}
+
+    def capture(**kwargs):
+        captured.update(kwargs)
+        return real_build_task_tool(**kwargs)
+
+    monkeypatch.setattr(
+        "zenagent.app.runtime.load_user_config",
+        lambda *args, **kwargs: UserConfig(
+            default_model="deepseek-flash",
+            task_max_turns=5,
+            task_max_transcript_bytes=4096,
+            task_max_transcript_file_bytes=2048,
+        ),
+    )
+    monkeypatch.setattr("zenagent.app.runtime.build_task_tool", capture)
+
+    await runtime_factory()
+
+    assert captured["max_turns"] == 5
+    assert captured["limits"] == SubagentLimits(
+        keep_transcripts=64, max_total_bytes=4096, max_file_bytes=2048
+    )

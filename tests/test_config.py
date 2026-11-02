@@ -663,3 +663,76 @@ def test_bad_safety_and_backup_values_are_rejected(tmp_path, snippet, message):
     path = write_config(tmp_path, snippet)
     with pytest.raises(ValueError, match=message):
         load_user_config(path)
+
+
+def test_task_section_defaults(tmp_path):
+    config = load_user_config(write_config(tmp_path, ""))
+    assert config.task_max_turns == 30
+    assert config.task_keep_transcripts == 64
+    assert config.task_max_transcript_bytes == 32 * 1024 * 1024
+    assert config.task_max_transcript_file_bytes == 8 * 1024 * 1024
+
+
+def test_task_section_parses_overrides_and_keeps_the_rest(tmp_path):
+    config = load_user_config(
+        write_config(tmp_path, "[task]\nmax_turns = 7\nkeep_transcripts = 3\n")
+    )
+    assert config.task_max_turns == 7
+    assert config.task_keep_transcripts == 3
+    assert config.task_max_transcript_bytes == 32 * 1024 * 1024
+
+
+@pytest.mark.parametrize(
+    "snippet, message",
+    [
+        ("[task]\nmax_turns = 0\n", "task.max_turns"),
+        ("[task]\nkeep_transcripts = -1\n", "task.keep_transcripts"),
+        ("[task]\nmax_transcript_bytes = true\n", "task.max_transcript_bytes"),
+        ("[task]\nmax_transcript_file_bytes = 1.5\n", "task.max_transcript_file_bytes"),
+        ("[task]\nsurprise = 1\n", "unknown keys"),
+        ("task = 1\n", r"\[task\] must be a table"),
+    ],
+)
+def test_bad_task_values_are_rejected(tmp_path, snippet, message):
+    with pytest.raises(ValueError, match=message):
+        load_user_config(write_config(tmp_path, snippet))
+
+
+def test_project_layer_may_not_set_task(tmp_path, monkeypatch):
+    # the global path derives from HOME: never fall through to the developer's
+    # real config, and never accept the section from a checked-out repository
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    project_cfg = tmp_path / "proj" / ".zenagent" / "config.toml"
+    project_cfg.parent.mkdir(parents=True)
+    project_cfg.write_text("[task]\nmax_turns = 99\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"\[task\].*global-only"):
+        load_user_config(cwd=tmp_path / "proj")
+
+
+def test_project_layer_inherits_global_task_values(tmp_path, monkeypatch):
+    repo, _ = stacked_config(
+        tmp_path,
+        monkeypatch,
+        global_text="[task]\nmax_turns = 5\nkeep_transcripts = 2\n",
+        project_text="default_model = 'project-model'\n",
+    )
+
+    config = load_user_config(cwd=repo)
+
+    assert (config.task_max_turns, config.task_keep_transcripts) == (5, 2)
+    assert config.task_max_transcript_bytes == 32 * 1024 * 1024
+
+
+def test_task_total_budget_must_cover_one_transcript(tmp_path):
+    # a total cap below the per-file cap can never retain the transcript the
+    # store just wrote; reject the pair instead of silently pruning it away
+    with pytest.raises(ValueError, match="task.max_transcript_file_bytes"):
+        load_user_config(
+            write_config(
+                tmp_path,
+                "[task]\nmax_transcript_bytes = 1024\nmax_transcript_file_bytes = 8192\n",
+            )
+        )

@@ -361,3 +361,62 @@ async def test_task_tool_rebinds_its_session(tmp_path):
     assert (task_dir(first) / "c1.jsonl").is_file()
     assert (task_dir(second) / "c2.jsonl").is_file()
     assert not (task_dir(second) / "c1.jsonl").exists()
+
+
+async def test_task_tool_applies_configured_max_turns():
+    tool = _tool(ToolCallChildStream(), max_turns=1)
+
+    result = await tool.execute("t1", {"prompt": "go"})
+
+    assert result.details["termination"] == "max_turns"
+    assert 'status="truncated"' in result.content[0].text
+
+
+async def test_task_tool_retains_transcripts_by_its_limits(tmp_path):
+    from zenagent.agent.subagents import SubagentLimits, task_dir
+
+    session = tmp_path / "sessions" / "s.jsonl"
+    tool = _tool(
+        ChildStream("child answer"),
+        session_path=session,
+        limits=SubagentLimits(keep_transcripts=1),
+    )
+
+    await tool.execute("t1", {"prompt": "one"})
+    await tool.execute("t2", {"prompt": "two"})
+
+    assert [path.stem for path in task_dir(session).glob("*.jsonl")] == ["t2"]
+
+
+async def test_truncated_envelope_names_its_reason_and_turns():
+    tool = _tool(ToolCallChildStream(), max_turns=1)
+
+    result = await tool.execute("t1", {"prompt": "go"})
+
+    text = result.content[0].text
+    assert 'status="truncated" reason="max_turns" turns="1"' in text
+    assert "partial output" in text
+    assert result.details["reason"] == "max_turns"
+    assert result.details["turns"] == 1
+
+
+async def test_ok_envelope_has_no_reason_attribute():
+    result = await _tool(ChildStream()).execute("t1", {"prompt": "go"})
+
+    assert "reason=" not in result.content[0].text
+
+
+async def test_child_prompt_declares_its_turn_budget():
+    seen: list[str] = []
+
+    class CapturingStream(ChildStream):
+        async def __call__(self, model, messages, tools, options):
+            seen.append(messages[0].content)
+            async for event in super().__call__(model, messages, tools, options):
+                yield event
+
+    tool = _tool(CapturingStream(), max_turns=7)
+
+    await tool.execute("t1", {"prompt": "go"})
+
+    assert "at most 7 model turns" in seen[0]

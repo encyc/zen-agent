@@ -489,6 +489,9 @@ class ZenAgentApp(App):
                 self.query_one(SubagentBanner).show(
                     entry.name if entry is not None else self._viewing,
                     status=entry.status if entry is not None else None,
+                    transcript_truncated=(
+                        entry.transcript_truncated if entry is not None else False
+                    ),
                 )
         for notice in self.chat.take_notices():
             if notice.kind == "divider":
@@ -589,7 +592,11 @@ class ZenAgentApp(App):
         child.display = True
         self.query_one("#transcript", TranscriptView).display = False
         self.query_one(SubagentBanner).show(
-            name, status=entry.status if entry is not None else None
+            name,
+            status=entry.status if entry is not None else None,
+            transcript_truncated=(
+                entry.transcript_truncated if entry is not None else False
+            ),
         )
         self.query_one(PromptInput).disabled = True
         child.focus()

@@ -65,13 +65,13 @@ def test_read_skill_names_flow_into_block() -> None:
 
 
 def test_task_child_system_prompt_comes_from_block() -> None:
+    from zenagent.prompts import render
     from zenagent.prompts.registry import read_block
 
-    expected = (
-        "You are a read-only research subagent inside a coding agent.\n"
-        "You cannot modify files, run shell commands, or ask the user questions. Work only\n"
-        "on the delegated task and finish with a concise, self-contained answer. Cite\n"
-        "file paths (and line numbers when useful). If the task cannot be completed with\n"
-        "the tools you have, say exactly what is missing instead of guessing."
+    rendered = render(read_block("task_child_system"), {"max_turns": "30"})
+
+    assert rendered.startswith(
+        "You are a read-only research subagent inside a coding agent."
     )
-    assert read_block("task_child_system") == expected
+    assert "at most 30 model turns" in rendered
+    assert "{{max_turns}}" not in rendered

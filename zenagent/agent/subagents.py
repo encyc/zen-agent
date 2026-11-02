@@ -21,14 +21,24 @@ import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
+from zenagent.config import (
+    DEFAULT_TASK_KEEP_TRANSCRIPTS,
+    DEFAULT_TASK_MAX_TRANSCRIPT_BYTES,
+    DEFAULT_TASK_MAX_TRANSCRIPT_FILE_BYTES,
+)
 from zenagent.types import Message, message_from_json
+
+if TYPE_CHECKING:
+    from zenagent.config import UserConfig
 
 __all__ = [
     "MAX_TASK_FILES",
     "MAX_TASK_FILE_BYTES",
     "MAX_TASK_TOTAL_BYTES",
     "TASKS_DIRNAME",
+    "SubagentLimits",
     "SubagentMeta",
     "SubagentStore",
     "carry_task_dir",
@@ -39,12 +49,37 @@ __all__ = [
 #: Directory under the sessions dir that groups every session's transcripts.
 TASKS_DIRNAME = "tasks"
 
-#: Files kept per session before the oldest are pruned.
-MAX_TASK_FILES = 32
-#: Total transcript bytes kept per session before the oldest are pruned.
-MAX_TASK_TOTAL_BYTES = 8 * 1024 * 1024
-#: One transcript is truncated (and marked) past this size.
-MAX_TASK_FILE_BYTES = 2 * 1024 * 1024
+#: Files kept per session before the oldest are pruned (``[task]`` default).
+MAX_TASK_FILES = DEFAULT_TASK_KEEP_TRANSCRIPTS
+#: Total transcript bytes kept per session (``[task]`` default).
+MAX_TASK_TOTAL_BYTES = DEFAULT_TASK_MAX_TRANSCRIPT_BYTES
+#: One transcript is truncated (and marked) past this size (``[task]`` default).
+MAX_TASK_FILE_BYTES = DEFAULT_TASK_MAX_TRANSCRIPT_FILE_BYTES
+
+
+@dataclass(frozen=True)
+class SubagentLimits:
+    """Retention caps for one session's persisted subagent transcripts.
+
+    ``UserConfig.task_*`` is the user-facing source (``[task]`` in
+    ``config.toml``); the store is created per run, so a run resolves these at
+    bootstrap instead of reading module globals that a long-lived process would
+    freeze.
+    """
+
+    keep_transcripts: int = MAX_TASK_FILES
+    max_total_bytes: int = MAX_TASK_TOTAL_BYTES
+    max_file_bytes: int = MAX_TASK_FILE_BYTES
+
+    @classmethod
+    def from_user_config(cls, config: UserConfig) -> SubagentLimits:
+        """Read the three caps off a ``UserConfig`` (``[task]`` section)."""
+        return cls(
+            keep_transcripts=config.task_keep_transcripts,
+            max_total_bytes=config.task_max_transcript_bytes,
+            max_file_bytes=config.task_max_transcript_file_bytes,
+        )
+
 
 #: How much of a file's tail is scanned for the ``end``/``truncated`` markers.
 _TAIL_BYTES = 4096
@@ -110,7 +145,13 @@ class SubagentMeta:
 class SubagentStore:
     """One session's subagent transcripts (memory-only without a session)."""
 
-    def __init__(self, session_path: str | Path | None) -> None:
+    def __init__(
+        self,
+        session_path: str | Path | None,
+        limits: SubagentLimits | None = None,
+    ) -> None:
+        #: Caps resolved at bootstrap from ``[task]``; module constants are the defaults.
+        self._limits = limits or SubagentLimits()
         self._session: Path | None = None
         self._directory: Path | None = None
         self._written: dict[str, int] = {}
@@ -187,7 +228,7 @@ class SubagentStore:
                 json.dumps(message.to_json(), ensure_ascii=False) for message in pending
             ]
             size = path.stat().st_size + sum(len(line) + 1 for line in lines)
-            if size > MAX_TASK_FILE_BYTES:
+            if size > self._limits.max_file_bytes:
                 with path.open("a", encoding="utf-8") as handle:
                     handle.write(json.dumps({"type": "truncated"}) + "\n")
                 self._stopped.add(call_id)
@@ -320,8 +361,11 @@ class SubagentStore:
                 return
             entries = sorted(files, key=lambda path: path.stat().st_mtime_ns)
             total = sum(path.stat().st_size for path in entries)
-            while entries and (
-                len(entries) > MAX_TASK_FILES or total > MAX_TASK_TOTAL_BYTES
+            # Keep at least the newest transcript: deleting the file that was
+            # just written (a tiny total budget) loses the run's only record.
+            while len(entries) > 1 and (
+                len(entries) > self._limits.keep_transcripts
+                or total > self._limits.max_total_bytes
             ):
                 victim = entries.pop(0)
                 total -= victim.stat().st_size

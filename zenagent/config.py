@@ -10,9 +10,10 @@ nearest directory with ``.git``). Scalars and per-provider tables merge with the
 project layer winning; list-shaped keys append (``tools.allow``) or union
 (``tools.deny``, so a project can never widen permissions). Relative
 ``extensions`` paths (and ``safety.allow_outside`` entries) resolve against the
-directory of the file that names them. ``[safety]`` and ``[backup]`` are
-global-only: a project layer that defines either is rejected, so a checked-out
-repository can never grant itself permissions or switch off backups.
+directory of the file that names them. ``[safety]``, ``[backup]`` and
+``[task]`` are global-only: a project layer that defines any of them is
+rejected, so a checked-out repository can never grant itself permissions,
+switch off backups, or raise its own subagent budget and transcript retention.
 
 :func:`naive_overflow_prune` is the automatic last resort before a request goes
 out: it estimates the context level (real ``usage`` when we have it, a char/4
@@ -33,6 +34,10 @@ from zenagent.providers.catalog import ProviderConfig, model_from_mapping
 from zenagent.types import AssistantMessage, Message, Usage
 
 __all__ = [
+    "DEFAULT_TASK_KEEP_TRANSCRIPTS",
+    "DEFAULT_TASK_MAX_TRANSCRIPT_BYTES",
+    "DEFAULT_TASK_MAX_TRANSCRIPT_FILE_BYTES",
+    "DEFAULT_TASK_MAX_TURNS",
     "ContextGuard",
     "UserConfig",
     "apply_user_config",
@@ -62,6 +67,19 @@ _BACKUP_KEYS = frozenset({"enabled", "max_file_bytes", "keep_runs"})
 #: Defaults for a missing ``[backup]`` key.
 _DEFAULT_BACKUP_MAX_FILE_BYTES = 2 * 1024 * 1024
 _DEFAULT_BACKUP_KEEP_RUNS = 50
+
+#: Keys accepted inside ``[task]`` (subagent budgets, global-only).
+_TASK_KEYS = frozenset(
+    {"max_turns", "keep_transcripts", "max_transcript_bytes", "max_transcript_file_bytes"}
+)
+#: Default subagent turn budget: enough for a multi-file review, not a loop.
+DEFAULT_TASK_MAX_TURNS = 30
+#: Default subagent transcripts retained per session.
+DEFAULT_TASK_KEEP_TRANSCRIPTS = 64
+#: Default total bytes of retained subagent transcripts per session.
+DEFAULT_TASK_MAX_TRANSCRIPT_BYTES = 32 * 1024 * 1024
+#: Default per-transcript cap; a larger transcript is cut and marked.
+DEFAULT_TASK_MAX_TRANSCRIPT_FILE_BYTES = 8 * 1024 * 1024
 
 
 def _absolute_path(raw: str, target: Path) -> str:
@@ -151,6 +169,40 @@ def _parse_backup(table: dict, target: Path) -> tuple[bool, int, int]:
     )
 
 
+def _parse_task(table: dict, target: Path) -> tuple[int, int, int, int]:
+    """Parse a ``[task]`` table into ``(max_turns, keep, total_bytes, file_bytes)``."""
+    _unknown_section_keys(table, _TASK_KEYS, "task", target)
+    values = (
+        _positive_int(table, "max_turns", DEFAULT_TASK_MAX_TURNS, "task", target),
+        _positive_int(
+            table, "keep_transcripts", DEFAULT_TASK_KEEP_TRANSCRIPTS, "task", target
+        ),
+        _positive_int(
+            table,
+            "max_transcript_bytes",
+            DEFAULT_TASK_MAX_TRANSCRIPT_BYTES,
+            "task",
+            target,
+        ),
+        _positive_int(
+            table,
+            "max_transcript_file_bytes",
+            DEFAULT_TASK_MAX_TRANSCRIPT_FILE_BYTES,
+            "task",
+            target,
+        ),
+    )
+    if values[3] > values[2]:
+        # A total budget smaller than one transcript would make retention
+        # impossible: the store would either prune the file it just wrote or
+        # keep the first file that lands (transcripts then pile up silently).
+        raise ValueError(
+            f"config {target}: task.max_transcript_file_bytes "
+            f"({values[3]}) must not exceed task.max_transcript_bytes ({values[2]})"
+        )
+    return values
+
+
 def _parse_custom_providers(raw: object, target: Path) -> dict[str, ProviderConfig]:
     """Parse ``[providers.custom.<id>]`` tables into ProviderConfig objects."""
     if not isinstance(raw, dict):
@@ -230,14 +282,23 @@ class UserConfig:
     backup_max_file_bytes: int = _DEFAULT_BACKUP_MAX_FILE_BYTES
     #: number of backup runs kept per project
     backup_keep_runs: int = _DEFAULT_BACKUP_KEEP_RUNS
+    #: ``[task]``: provider requests a subagent may make before it is cut off
+    task_max_turns: int = DEFAULT_TASK_MAX_TURNS
+    #: ``[task]``: subagent transcripts retained per session
+    task_keep_transcripts: int = DEFAULT_TASK_KEEP_TRANSCRIPTS
+    #: ``[task]``: total bytes of retained subagent transcripts per session
+    task_max_transcript_bytes: int = DEFAULT_TASK_MAX_TRANSCRIPT_BYTES
+    #: ``[task]``: one transcript past this is cut and marked truncated
+    task_max_transcript_file_bytes: int = DEFAULT_TASK_MAX_TRANSCRIPT_FILE_BYTES
 
 
 def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfig:
     """Read one config file; a missing file means "use the defaults".
 
     ``project_layer=True`` marks the committable ``<root>/.zenagent/config.toml``
-    layer: it may not set the global-only ``[safety]``/``[backup]`` sections, so
-    a repository can never grant itself permissions.
+    layer: it may not set the global-only ``[safety]``/``[backup]``/``[task]``
+    sections, so a repository can never grant itself permissions or raise its
+    own subagent budgets.
     """
     if not target.is_file():
         return UserConfig()
@@ -246,9 +307,11 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
     except (tomllib.TOMLDecodeError, OSError) as exc:
         raise ValueError(f"cannot read config {target}: {exc}") from exc
 
-    if project_layer and ("safety" in data or "backup" in data):
+    global_only = [name for name in ("safety", "backup", "task") if name in data]
+    if project_layer and global_only:
+        listed = ", ".join(f"[{name}]" for name in global_only)
         raise ValueError(
-            f"config {target}: [safety] and [backup] are global-only; "
+            f"config {target}: {listed} are global-only; "
             f"move them to {config_path()}"
         )
 
@@ -318,6 +381,12 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
     backup_enabled, backup_max_file_bytes, backup_keep_runs = _parse_backup(
         _section_table(data, "backup", target), target
     )
+    (
+        task_max_turns,
+        task_keep_transcripts,
+        task_max_transcript_bytes,
+        task_max_transcript_file_bytes,
+    ) = _parse_task(_section_table(data, "task", target), target)
     return UserConfig(
         default_model=default_model,
         provider_overrides=overrides,
@@ -331,6 +400,10 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
         backup_enabled=backup_enabled,
         backup_max_file_bytes=backup_max_file_bytes,
         backup_keep_runs=backup_keep_runs,
+        task_max_turns=task_max_turns,
+        task_keep_transcripts=task_keep_transcripts,
+        task_max_transcript_bytes=task_max_transcript_bytes,
+        task_max_transcript_file_bytes=task_max_transcript_file_bytes,
     )
 
 
@@ -369,6 +442,10 @@ def _merge_user_configs(base: UserConfig, override: UserConfig) -> UserConfig:
         backup_enabled=base.backup_enabled,
         backup_max_file_bytes=base.backup_max_file_bytes,
         backup_keep_runs=base.backup_keep_runs,
+        task_max_turns=base.task_max_turns,
+        task_keep_transcripts=base.task_keep_transcripts,
+        task_max_transcript_bytes=base.task_max_transcript_bytes,
+        task_max_transcript_file_bytes=base.task_max_transcript_file_bytes,
     )
 
 

@@ -30,6 +30,7 @@ from zenagent.agent.session import (
     list_sessions,
     unique_session_path,
 )
+from zenagent.agent.subagents import SubagentLimits
 from zenagent.app.compact import maybe_auto_compact
 from zenagent.app.journal import attach_journal, journal_for, load_backup_policy
 from zenagent.app.modes import MODES, mode_prompt_note, resolve_mode
@@ -359,6 +360,8 @@ async def run_headless(
                 thinking=thinking,
                 artifact_sink=build_artifact_sink(session.path),
                 max_cost=max_cost,
+                max_turns=user_config.task_max_turns,
+                limits=SubagentLimits.from_user_config(user_config),
                 session_path=session.path,
             )
         )

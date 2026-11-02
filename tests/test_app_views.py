@@ -341,3 +341,38 @@ def test_transcript_builder_ignores_progress_after_the_call_settled():
 
     assert changed is False
     assert builder.cards["t1"].progress == ""
+
+
+def test_subagent_view_defaults_to_a_complete_transcript():
+    view = SubagentView(
+        call_id="c1", name="research", status="ok", duration_ms=1, cost=0.0, tokens=0
+    )
+
+    assert view.transcript_truncated is False
+
+
+def test_subagent_view_carries_the_transcript_truncation_flag():
+    from zenagent.agent.subagents import SubagentMeta
+    from zenagent.app.chat import _subagent_view
+
+    card = ToolCallView(
+        call_id="c1",
+        name="task",
+        args_preview="{}",
+        args={"name": "research", "prompt": "go"},
+    )
+    meta = SubagentMeta(
+        call_id="c1",
+        name="research",
+        model="m",
+        started_at=0.0,
+        status="ok",
+        duration_ms=1,
+        cost=0.0,
+        tokens=0,
+        truncated=True,
+    )
+
+    view = _subagent_view(card, meta=meta, has_transcript=True)
+
+    assert view.transcript_truncated is True

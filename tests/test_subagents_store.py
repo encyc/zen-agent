@@ -11,6 +11,7 @@ import time
 from zenagent.agent.subagents import (
     MAX_TASK_FILE_BYTES,
     MAX_TASK_FILES,
+    SubagentLimits,
     SubagentStore,
     carry_task_dir,
     task_dir,
@@ -220,3 +221,74 @@ def test_final_status_survives_a_body_stopped_by_the_size_cap(tmp_path):
         0.1,
         7,
     )
+
+
+def test_limits_override_the_retention_caps(tmp_path):
+    path = session_file(tmp_path)
+    store = SubagentStore(path, SubagentLimits(keep_transcripts=2))
+
+    for index in range(4):
+        store.begin(f"c{index}", f"task{index}", "m")
+        store.finish(f"c{index}", status="ok", duration_ms=1, cost=0.0, tokens=0)
+        time.sleep(0.005)
+
+    assert {meta.call_id for meta in store.list()} == {"c2", "c3"}
+
+
+def test_limits_override_the_per_file_cap(tmp_path):
+    path = session_file(tmp_path)
+    store = SubagentStore(path, SubagentLimits(max_file_bytes=300))
+
+    store.begin("c1", "research", "m")
+    store.append("c1", messages())  # two JSONL lines, larger than 300 bytes
+    [meta] = store.list()
+    assert meta.truncated is True
+
+    store.finish("c1", status="ok", duration_ms=1, cost=0.0, tokens=0)
+    [meta] = store.list()
+    assert meta.status == "ok", "the footer still records the run result"
+
+
+def test_limits_from_user_config_maps_the_task_fields():
+    from zenagent.config import UserConfig
+
+    limits = SubagentLimits.from_user_config(
+        UserConfig(
+            task_keep_transcripts=3,
+            task_max_transcript_bytes=400,
+            task_max_transcript_file_bytes=200,
+        )
+    )
+
+    assert (
+        limits.keep_transcripts,
+        limits.max_total_bytes,
+        limits.max_file_bytes,
+    ) == (3, 400, 200)
+
+
+def test_prune_never_drops_the_newest_transcript(tmp_path):
+    path = session_file(tmp_path)
+    # total budget smaller than a single transcript: the newest file must stay
+    store = SubagentStore(
+        path, SubagentLimits(max_total_bytes=50, max_file_bytes=4096)
+    )
+
+    store.begin("c1", "research", "m")
+    store.append("c1", messages())
+    store.finish("c1", status="ok", duration_ms=1, cost=0.0, tokens=0)
+
+    assert [meta.call_id for meta in store.list()] == ["c1"]
+    assert store.load("c1") is not None
+
+
+def test_prune_over_the_total_budget_keeps_the_newest(tmp_path):
+    path = session_file(tmp_path)
+    store = SubagentStore(path, SubagentLimits(max_total_bytes=1, max_file_bytes=4096))
+    for index in range(2):
+        store.begin(f"c{index}", f"task{index}", "m")
+        store.append(f"c{index}", messages())
+        store.finish(f"c{index}", status="ok", duration_ms=1, cost=0.0, tokens=0)
+        time.sleep(0.005)
+
+    assert [meta.call_id for meta in store.list()] == ["c1"]
