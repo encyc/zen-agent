@@ -361,7 +361,9 @@ class SubagentStore:
                 return
             entries = sorted(files, key=lambda path: path.stat().st_mtime_ns)
             total = sum(path.stat().st_size for path in entries)
-            while entries and (
+            # Keep at least the newest transcript: deleting the file that was
+            # just written (a tiny total budget) loses the run's only record.
+            while len(entries) > 1 and (
                 len(entries) > self._limits.keep_transcripts
                 or total > self._limits.max_total_bytes
             ):

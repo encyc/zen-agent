@@ -172,7 +172,7 @@ def _parse_backup(table: dict, target: Path) -> tuple[bool, int, int]:
 def _parse_task(table: dict, target: Path) -> tuple[int, int, int, int]:
     """Parse a ``[task]`` table into ``(max_turns, keep, total_bytes, file_bytes)``."""
     _unknown_section_keys(table, _TASK_KEYS, "task", target)
-    return (
+    values = (
         _positive_int(table, "max_turns", DEFAULT_TASK_MAX_TURNS, "task", target),
         _positive_int(
             table, "keep_transcripts", DEFAULT_TASK_KEEP_TRANSCRIPTS, "task", target
@@ -192,6 +192,15 @@ def _parse_task(table: dict, target: Path) -> tuple[int, int, int, int]:
             target,
         ),
     )
+    if values[3] > values[2]:
+        # A total budget smaller than one transcript would make retention
+        # impossible: the store would either prune the file it just wrote or
+        # keep the first file that lands (transcripts then pile up silently).
+        raise ValueError(
+            f"config {target}: task.max_transcript_file_bytes "
+            f"({values[3]}) must not exceed task.max_transcript_bytes ({values[2]})"
+        )
+    return values
 
 
 def _parse_custom_providers(raw: object, target: Path) -> dict[str, ProviderConfig]:

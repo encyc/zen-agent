@@ -724,3 +724,15 @@ def test_project_layer_inherits_global_task_values(tmp_path, monkeypatch):
 
     assert (config.task_max_turns, config.task_keep_transcripts) == (5, 2)
     assert config.task_max_transcript_bytes == 32 * 1024 * 1024
+
+
+def test_task_total_budget_must_cover_one_transcript(tmp_path):
+    # a total cap below the per-file cap can never retain the transcript the
+    # store just wrote; reject the pair instead of silently pruning it away
+    with pytest.raises(ValueError, match="task.max_transcript_file_bytes"):
+        load_user_config(
+            write_config(
+                tmp_path,
+                "[task]\nmax_transcript_bytes = 1024\nmax_transcript_file_bytes = 8192\n",
+            )
+        )

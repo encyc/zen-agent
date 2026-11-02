@@ -141,3 +141,56 @@ def test_serialize_event_carries_bounded_partial_tool_output():
 
     # a plain event stays unchanged: no stray key
     assert "partial_result" not in serialize_event(AgentEvent(type="turn_start"))
+
+
+async def test_rpc_wires_the_task_budget_from_config(monkeypatch):
+    import argparse
+    import types
+
+    from zenagent.agent.subagents import SubagentLimits
+    from zenagent.cli import rpc as rpc_mod
+    from zenagent.config import UserConfig
+
+    captured: dict = {}
+
+    class _FakeServer:
+        def __init__(self, agent, read_line, write_line):
+            captured["agent"] = agent
+
+        async def run(self) -> int:
+            return 0
+
+    monkeypatch.setattr(
+        "zenagent.config.load_user_config",
+        lambda: UserConfig(
+            task_max_turns=5,
+            task_max_transcript_bytes=4096,
+            task_max_transcript_file_bytes=2048,
+        ),
+    )
+    monkeypatch.setattr(
+        "zenagent.config.apply_user_config", lambda catalog, config: catalog
+    )
+    monkeypatch.setattr("zenagent.providers.catalog.load_catalog", dict)
+    monkeypatch.setattr(
+        "zenagent.cli.main.resolve_model",
+        lambda catalog, model_id: types.SimpleNamespace(reasoning=False),
+    )
+    monkeypatch.setattr("zenagent.cli.main._api_key_for", lambda catalog, model: "k")
+    monkeypatch.setattr(
+        "zenagent.cli.main._build_agent", lambda *args, **kwargs: "agent"
+    )
+    monkeypatch.setattr(
+        "zenagent.tools.task.build_task_tool",
+        lambda **kwargs: captured.setdefault("task_tool", kwargs),
+    )
+    monkeypatch.setattr("zenagent.cli.rpc.RpcServer", _FakeServer)
+
+    args = argparse.Namespace(model=None, yes=False, max_cost=None, max_turns=None)
+    assert await rpc_mod._run(args) == 0
+
+    tool = captured["task_tool"]
+    assert tool["max_turns"] == 5
+    assert tool["limits"] == SubagentLimits(
+        keep_transcripts=64, max_total_bytes=4096, max_file_bytes=2048
+    )

@@ -198,6 +198,7 @@ def _stdout_line(text: str) -> None:
 
 
 async def _run(args) -> int:
+    from zenagent.agent.subagents import SubagentLimits
     from zenagent.app.permissions import build_permission_gate
     from zenagent.cli.main import _api_key_for, _build_agent, resolve_model
     from zenagent.config import apply_user_config, load_user_config
@@ -229,6 +230,8 @@ async def _run(args) -> int:
                 api_key=api_key,
                 thinking="off" if not model.reasoning else "high",
                 max_cost=args.max_cost,
+                max_turns=user_config.task_max_turns,
+                limits=SubagentLimits.from_user_config(user_config),
                 session_path=None,
             ),
         ],

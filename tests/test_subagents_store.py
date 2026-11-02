@@ -265,3 +265,30 @@ def test_limits_from_user_config_maps_the_task_fields():
         limits.max_total_bytes,
         limits.max_file_bytes,
     ) == (3, 400, 200)
+
+
+def test_prune_never_drops_the_newest_transcript(tmp_path):
+    path = session_file(tmp_path)
+    # total budget smaller than a single transcript: the newest file must stay
+    store = SubagentStore(
+        path, SubagentLimits(max_total_bytes=50, max_file_bytes=4096)
+    )
+
+    store.begin("c1", "research", "m")
+    store.append("c1", messages())
+    store.finish("c1", status="ok", duration_ms=1, cost=0.0, tokens=0)
+
+    assert [meta.call_id for meta in store.list()] == ["c1"]
+    assert store.load("c1") is not None
+
+
+def test_prune_over_the_total_budget_keeps_the_newest(tmp_path):
+    path = session_file(tmp_path)
+    store = SubagentStore(path, SubagentLimits(max_total_bytes=1, max_file_bytes=4096))
+    for index in range(2):
+        store.begin(f"c{index}", f"task{index}", "m")
+        store.append(f"c{index}", messages())
+        store.finish(f"c{index}", status="ok", duration_ms=1, cost=0.0, tokens=0)
+        time.sleep(0.005)
+
+    assert [meta.call_id for meta in store.list()] == ["c1"]
