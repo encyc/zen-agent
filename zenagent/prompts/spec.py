@@ -156,7 +156,6 @@ BLOCKS: dict[str, BlockSpec] = {
         optional=True,
     ),
 }
-
 #: Assembly order for the base system prompt. Sub-blocks are joined with a
 #: single newline (the v0.4.1 text is line-oriented).
 SYSTEM_BLOCK_ORDER: tuple[str, ...] = (
