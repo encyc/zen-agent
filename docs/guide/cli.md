@@ -108,9 +108,15 @@ zen evals [--model ...] [--filter ...] [--report ...] [--baseline ...]
 - `evals` 转发给 `scripts/eval.py`，支持 `--baseline` 回归对比（有回归 exit 1）。
 - `rpc` 的 stdout 只有协议 JSON；日志去 stderr。
 
-会话内的斜杠命令由前端各自实现但共享登记表：`/help` 列出全部；`/tools` 打印模型当前可调用的
-工具清单（含 MCP、skill 与扩展注册的工具）；`/retry` 重跑上一轮（截断结果写入新会话文件）。
-`/tools`、`/retry`、`/image` 在 TUI 与 REPL 里都可用。
+会话内的斜杠命令由 TUI 与 REPL **共用同一个 `CommandRegistry`**（`app/commands.py`）：
+`/help` 列出全部；`/tools` 打印模型当前可调用的工具清单（含 MCP、skill 与扩展注册的工具）；
+`/retry` 重跑上一轮（截断结果写入新会话文件）。TUI 把命令结果渲染成选择器/浮层，REPL 渲染成
+文本（例如裸 `/sessions` 打印会话列表、裸 `/model` 打印当前模型）。`/usage` `/context`
+`/export` `/plan-review` 在两端都可用。
+
+TUI 与 REPL 的启动 flag 现在都真实生效：`--thinking`、`--trace`、`--metrics`、
+`--no-auto-compact`、`--image` 由 `RuntimeOptions` 统一承载；RPC 也有对应的一组
+（见 [RPC 与 SDK](rpc-sdk.md)）。
 
 ## 环境变量
 

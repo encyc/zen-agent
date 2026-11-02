@@ -84,14 +84,35 @@
 | 功能 | 源码 | 测试 | 文档 |
 |---|---|---|---|
 | 参数解析 / headless / 子命令 | `cli/main.py` | `test_cli.py` | [CLI](guide/cli.md) |
-| REPL 与斜杠命令 | `cli/repl.py` | `test_repl_logic.py` | [CLI](guide/cli.md) |
+| REPL 与斜杠命令（Runtime 装配 + 共享注册表 + 文本降级） | `cli/repl.py`、`app/commands.py` | `test_repl_logic.py`、`test_repl_commands.py` | [CLI](guide/cli.md) |
+| 前端共享运行选项（thinking/trace/metrics/auto-compact/api-key/tools） | `app/runtime.py::RuntimeOptions` | `test_app_runtime.py` | [TUI](guide/tui.md)、[RPC](guide/rpc-sdk.md) |
 | 流式渲染 / diff / 状态行 | `cli/render.py` | `test_render.py` | — |
 | 补全（命令 + 参数值） | `cli/completion.py`、`app/slash_args.py` | `test_completion.py`、`test_slash_args.py` | [CLI](guide/cli.md) |
 | TUI 提示/选择器（值补全 + mode/thinking picker） | `cli/tui/app.py`、`widgets/command_hints.py`、`screens/modals.py::ChoicePicker` | `test_tui_usability.py` | [TUI](guide/tui.md) |
 | 图片输入 | `attachments.py` | `test_images.py` | — |
 | 主题 / 键位 | `cli/theme.py`、`cli/keybindings.py` | `test_theme.py` | — |
 
-REPL 命令：`/help /exit /clear /model /thinking /mode /session /sessions /rename /fork /import /undo /restore /retry /tools /compact /image /images /skills /mcp /reload /theme /lang /hotkeys /pin /new /settings /search /doctor /jobs /copy /btw /shake /handoff /add-dir /remove-dir /dirs /fresh /trace`。
+REPL/TUI 共用同一份命令表（`app/commands.py`，45 条），REPL 额外支持 legacy 主题名：
+`/help /exit /quit /clear /model /thinking /mode /session /sessions /rename /fork /import /undo /restore /retry /tools /compact /image /images /skills /mcp /reload /theme /lang /hotkeys /pin /new /settings /search /doctor /jobs /copy /btw /shake /handoff /add-dir /remove-dir /dirs /fresh /trace /export /usage /context /plan-review /todo`。
+
+REPL 的 screen 类命令（picker/浮层）由 `render_command_result` 渲染成文本，不再静默无输出。
+
+## 6.5 前端能力对照
+
+四个入口共享 `Runtime`/`ChatController`/`CommandRegistry`/`ModelManager`/`SessionManager`
+（`zenagent/app`），差异只在“怎么呈现”：
+
+| 能力 | TUI | REPL | headless `-p` | RPC |
+|---|---|---|---|---|
+| 工具（含 checkpoint/rewind/lsp/github/todo/task/skill） | ✅ | ✅ | ✅ | ✅ |
+| MCP / skills / templates / extensions | ✅ | ✅ | ✅ | ✅ |
+| 会话持久化 / resume / fork / undo / compact / retry | ✅ 浮层 | ✅ 文本 | ⚠️ 仅 resume | ✅ `session` 请求 |
+| 模型切换（key/thinking/session id） | ✅ | ✅ | ✅ 启动参数 | ✅ `model` 请求 |
+| 审批 | ✅ 弹框 | ✅ 终端 y/n/a | ❌ 非交互 | ✅ `approval_request` 往返 |
+| ask 工具 | ✅ 弹框 | ✅ 终端问答 | ❌ 降级 | ❌ 降级 |
+| steering / 排队 | ✅ 双 lane | ✅ 插话 | ❌ | ✅ `steer` |
+| 用量 / context / trace / metrics | ✅ 面板 + flag | ✅ 文本 + flag | ✅ `--json`/flag | ✅ `usage`/flag |
+| 斜杠命令 | ✅ 45 | ✅ 45（文本降级） | ❌ | ✅ `command` 请求 |
 
 ## 7. MCP
 
@@ -117,7 +138,7 @@ REPL 命令：`/help /exit /clear /model /thinking /mode /session /sessions /ren
 
 | 功能 | 源码 | 测试 | 文档 |
 |---|---|---|---|
-| JSONL RPC 服务 | `cli/rpc.py` | `test_rpc.py` | [RPC 与 SDK](guide/rpc-sdk.md) |
+| JSONL RPC 服务（v1 + v2：审批/steer/会话/命令） | `cli/rpc.py` | `test_rpc.py`、`test_rpc_v2.py` | [RPC 与 SDK](guide/rpc-sdk.md) |
 | Python SDK（Agent 直接调用） | `agent/agent.py` | `test_agent_class.py` | 同上 |
 | 可运行示例 | `examples/` | `test_examples.py` | 同上 |
 
@@ -135,7 +156,7 @@ REPL 命令：`/help /exit /clear /model /thinking /mode /session /sessions /ren
 - **MCP 进阶**：OAuth、resources、prompts、sampling、调用级 abort。
 - **telemetry 远端上报**：当前只写本地 JSONL。
 - **OS 级沙箱**：没有容器/权限隔离。现有的是 harness 层护栏（写路径围栏、受保护路径、破坏性命令确认）与项目级写入快照；它们防手滑，不防恶意仓库 / prompt injection。
-- **plan mode 进阶**：当前是「只读 + 计划提示」，没有独立的计划产物/审阅（omp 的 `/plan-review` 未做）。
+- **plan mode 进阶**：`/plan-review` 只是复核最近一次 assistant 文本（`a` 切 full），还没有独立的计划文件/结构化计划产物。
 - **扩展 UI**：扩展只能贡献工具/命令/prompt/hooks，不能改 REPL 界面。
 - **多模态输出**：能读图片，但不能生成图片/音频。
 - **Python 版本**：`requires-python >=3.11`（3.11–3.14 已验证）。

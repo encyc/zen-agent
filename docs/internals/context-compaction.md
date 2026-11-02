@@ -37,7 +37,8 @@ async def transform(self, messages):
 - 触发：每轮结束后，若**上一轮真实 usage** ≥ 窗口 × `AUTO_COMPACT_THRESHOLD`（0.85）。
 - 动作：把当前 transcript 渲染成文本，用一次独立 LLM 调用生成「交接摘要」，
   然后**新建 session 文件**：system 提示 + 一条「# 此前会话摘要」消息。
-- 返回新 session 路径，REPL/headless 切换过去（`switch_session`）。TUI 走 `ChatController.compact_now`：
+- 返回新 session 路径。TUI/REPL 都走 `ChatController.compact_now`（切到新会话，RPC 的
+  `session op=compact` 也是同一路径）；headless 单次运行结束后不会再有消息，只保留新文件。
   切到新会话、重建 transcript，并在转录区挂一条 dim 分隔线
   `── compacted · N prompt tokens → summary session ──`（`TranscriptNotice`）作为可解释性提示。
 - 旧 session 文件字节不变——可审计、可回退。

@@ -173,6 +173,16 @@ provider 错误不会进转录区，而是停在 dock 顶部的错误横幅里�
 - `/mcp add` 打开两字段向导（服务器名 + 命令），保存到 `~/.zenagent/mcp.json`（原子写、0600）并尝试重连；REPL 只提示编辑文件。
 - `/plan-review` 见「运行模式」；`esc` 在浮层里先清搜索、再关面板（Palette 的 Esc 分层）。
 
+## 启动参数
+
+TUI 与 REPL/RPC 共用 `RuntimeOptions`，所以这些启动参数不再静默忽略：
+
+- `--thinking LEVEL`：首轮推理档位（`/thinking` 仍可会话中切）。
+- `--trace PATH`：写 JSONL trace；`/trace` 会显示真实路径。
+- `--metrics PATH`：每次 run 追加一行指标。
+- `--no-auto-compact`：关闭自动压缩（手动 `/compact` 不受影响）。
+- `--image PATH`：启动即挂载图片附件（非 vision 模型会直接报错退出）。
+
 ## 模型管理
 
 `alt+p`（或 `ctrl+k` → `model`，或裸 `/model`）打开选择器：

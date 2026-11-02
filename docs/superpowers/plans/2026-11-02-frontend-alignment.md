@@ -52,7 +52,7 @@
 - Consumes: `handle_slash(..., switch_session=...)` 现有参数；`zenagent.app.compact.compact(agent) -> Path`。
 - Produces: `/compact` 成功后 REPL 的会话指针指向新 `*-compact.jsonl`（后续 `agent_end` 追加写入新文件）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 async def test_slash_compact_switches_the_repl_to_the_summary_session(
@@ -75,22 +75,22 @@ async def test_slash_compact_switches_the_repl_to_the_summary_session(
     assert switched[0].path.is_file()
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `uv run pytest tests/test_repl_logic.py::test_slash_compact_switches_the_repl_to_the_summary_session -q`
 Expected: FAIL（`switched == []`）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `handle_slash` 的 compact 分支在 `compact(agent)` 成功后调用
 `switch_session(Session(path))`（`switch_session is None` 时跳过，与其它命令一致）。
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run: `uv run pytest tests/test_repl_logic.py -q`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add zenagent/cli/repl.py tests/test_repl_logic.py
@@ -112,7 +112,7 @@ git commit -m "fix(repl): switch the session after /compact"
 
 行为要求：成功时同时更新 `agent.model`、`agent.api_key`、`agent.thinking`（非 reasoning 模型置 `"off"`）、`agent.session_id`、`guard.context_window`；无 key 时返回失败原因而不是切过去。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 def test_apply_model_switch_updates_key_thinking_and_session_id():
@@ -127,24 +127,24 @@ async def test_slash_model_uses_the_user_config_catalog(capsys):
     ...
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `uv run pytest tests/test_repl_logic.py -q -k model`
 Expected: FAIL（自定义模型/无 key 行为不满足）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `app/models.py` 抽出函数并让 `ModelManager.switch` 复用；REPL `repl()` 把 `catalog`
 传给 `handle_slash(catalog=...)`，`/model` 分支调用 `apply_model_switch`，
 失败时打印 `SwitchResult.reason`。`handle_slash` 新增关键字参数 `catalog=None`，
 `None` 时回退到 `load_catalog()`（旧调用方兼容）。
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run: `uv run pytest tests/test_repl_logic.py tests/test_app_models.py -q`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add zenagent/app/models.py zenagent/cli/repl.py tests/
@@ -164,7 +164,7 @@ git commit -m "fix(repl): switch models through the shared model manager logic"
 - `repl(..., thinking: str | None = None, images: list[Path] | None = None)`。
 - 语义：`thinking=None` 时保持“reasoning 模型 high，否则 off”；显式值原样传给 `Agent`。`images` 用 `read_image_argument` 校验，非 vision 模型在启动时报错返回 1；合法图片进入首次 prompt 的待发附件。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 async def test_repl_forwards_the_thinking_flag_to_the_agent(isolated_sessions):
@@ -184,23 +184,23 @@ def test_image_flag_on_a_non_vision_model_fails_before_the_repl(monkeypatch, tmp
     ...
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `uv run pytest tests/test_repl_logic.py tests/test_cli.py -q -k "thinking or image or metrics"`
 Expected: FAIL（参数不存在/未转发）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `repl()` 内：`thinking` 传给 `Agent(thinking=...)`；`images` 在构造 agent 前
 `read_image_argument` + `model.supports_vision` 校验，成功后放进 `pending_images`。
 `main.py` REPL 调用补三个 kwarg。
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run: `uv run pytest tests/test_repl_logic.py tests/test_cli.py -q`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add zenagent/cli/repl.py zenagent/cli/main.py tests/
@@ -222,7 +222,7 @@ git commit -m "fix(cli): honor --thinking/--metrics/--image in the REPL"
   - `agent_end`：`tool_stats`（原样，小字典）
 - 既有字段与 v1 行为不变。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 def test_serialize_event_carries_tool_args_result_and_duration():
@@ -242,22 +242,22 @@ def test_serialize_event_bounds_large_payloads():
     ...
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `uv run pytest tests/test_rpc.py -q`
 Expected: FAIL（缺字段）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `serialize_event` 增加常量 `_EVENT_TEXT_CHARS = 4000`；`_text_of(result)` 复用现有
 partial 逻辑；`args` 用 `json.dumps(..., ensure_ascii=False)` 后截断。
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run: `uv run pytest tests/test_rpc.py -q`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add zenagent/cli/rpc.py tests/test_rpc.py
@@ -284,7 +284,7 @@ git commit -m "feat(rpc): carry tool args, results and durations in events"
   - `auto_compact=False` → `ChatController._maybe_auto_compact` 直接返回。
   - `mcp_retry_interval_s` 传给 `McpManager`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 async def test_runtime_writes_trace_and_metrics(runtime_factory, tmp_path):
@@ -302,23 +302,23 @@ async def test_runtime_api_key_override_skips_the_catalog_key(runtime_factory, m
     ...
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `uv run pytest tests/test_app_runtime.py -q`
 Expected: FAIL（未知字段）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 按 Interfaces 改 `RuntimeOptions` 与 `bootstrap`；`Runtime.close` 关闭 tracer；
 metrics 在 `persist` 同一个订阅里处理（`agent_end` 后 append 再重建 recorder）；
 `_recompose` 在 `self._custom_tools is not None` 时用它代替组合结果。
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run: `uv run pytest tests/test_app_runtime.py tests/test_app_chat.py -q`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add zenagent/app/runtime.py zenagent/app/chat.py tests/
@@ -339,7 +339,7 @@ git commit -m "feat(app): carry trace, metrics, auto-compact and api-key options
 
 REPL 保留自己的：`_EventPrinter`、`ask_user`、`set_theme`/`set_language`、`keybindings`、completion、`_make_default_reader`。`reload_runtime` 改为 `await runtime.reconcile_async()`；`refresh_mcp` 改为 `await runtime.refresh_mcp()`；`set_mode` 改为 `runtime.set_mode()` + 重新打印；`switch_session` 改为 `await runtime.switch_session(path)`（`handle_slash` 的回调签名不变，内部适配）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 async def test_repl_exposes_the_new_tools(isolated_sessions):
@@ -356,12 +356,12 @@ async def test_repl_resume_uses_the_runtime_session(isolated_sessions):
     ...
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `uv run pytest tests/test_repl_logic.py -q -k "new_tools or resume"`
 Expected: FAIL（缺工具）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 替换 `repl()` 内约 :954–:1250 的手装逻辑；`handle_slash` 的 `mcp_manager`、
 `skill_list`、`template_list`、`extension_commands`、`reload_runtime`、`refresh_mcp`、
@@ -370,12 +370,12 @@ imports（`McpManager`、`discover_skills`、`discover_templates`、`load_extens
 `build_todo_tool`、`build_task_tool`、`build_artifact_sink`、`journal_for`、
 `attach_journal`、`ContextGuard` 等）。`handle_slash` 的 `guard` 参数传 `runtime.guard`。
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run: `uv run pytest tests/test_repl_logic.py tests/test_cli.py -q`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add zenagent/cli/repl.py tests/
@@ -404,7 +404,7 @@ git commit -m "refactor(repl): assemble the REPL on Runtime"
 - 优先级：模板 → skill 提交 → registry 内建 → 扩展命令 → unknown。
 - 删除 `SLASH_COMMANDS` 作为 REPL 唯一真源：REPL 用 registry 生成补全/帮助表；`completion.SLASH_COMMANDS` 保留给未注入 mapping 的调用方。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 async def test_every_registry_command_is_available_in_the_repl(services):
@@ -421,12 +421,12 @@ async def test_repl_help_lists_every_registry_command(services):
     ...
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `uv run pytest tests/test_repl_commands.py -q`
 Expected: FAIL（模块不存在）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 删除 `handle_slash` 与约 600 行命令分支；实现 `render_command_result`；
 `repl()` 的输入循环改为 `result = await commands.dispatch(name, argument)` 后渲染；
@@ -434,12 +434,12 @@ Expected: FAIL（模块不存在）
 `split_input`/循环/进度/steering 测试，命令行为断言迁移到 `tests/test_repl_commands.py`
 （dispatch + render），会话类行为保留 `repl(...)` 集成测试。
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run: `uv run pytest tests/test_repl_logic.py tests/test_repl_commands.py tests/test_completion.py tests/test_templates.py tests/test_extensions.py tests/test_project_scoping.py -q`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add zenagent/cli/repl.py zenagent/cli/completion.py tests/
@@ -463,7 +463,7 @@ git commit -m "refactor(repl): dispatch slash commands through the shared regist
 - 状态行：run 结束后用 `aggregate_usage(runtime.agent.messages)` 打印，保持现有格式。
 - `metrics`/`trace` 由 Runtime 负责（Task 5），REPL 删除 `MetricsRecorder`/`TraceRecorder` 代码。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 async def test_repl_retry_command_reruns_through_the_controller(isolated_sessions):
@@ -476,22 +476,22 @@ async def test_repl_auto_compact_off_does_not_compact(isolated_sessions):
     ...  # auto_compact=False + 人为把 guard.last_usage 抬高；运行后不出现 *-compact.jsonl
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `uv run pytest tests/test_repl_logic.py -q -k "compact or retry"`
 Expected: FAIL
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 按 Interfaces 改循环；`reap()` 改为 `await chat.wait_for_idle()`（未运行时立即返回）；
 运行结束打印状态行；删除 `pending_images`、`metrics_recorder`、`tracer`、`run_task` 相关旧逻辑。
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run: `uv run pytest tests/test_repl_logic.py tests/test_cli.py -q`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add zenagent/cli/repl.py tests/
@@ -519,7 +519,7 @@ git commit -m "refactor(repl): drive runs through ChatController"
   `{"type":"event","event":{"type":"approval_request","request_id","tool_name","args","verdict"}}` 并等待对应 future（超时 deny，取消时 deny）。
 - `prompt` 有 runtime 时走 `chat.submit` + `chat.wait_for_idle`；无 runtime 时维持 `agent.prompt`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 async def test_steer_request_reaches_the_running_turn(...)
@@ -529,22 +529,22 @@ async def test_tools_request_lists_model_visible_tools(...)
 async def test_model_and_mode_requests(...)
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `uv run pytest tests/test_rpc_v2.py -q`
 Expected: FAIL（未知 type）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 按 Interfaces 改 `RpcServer`；`_run()` 改为 `Runtime.bootstrap` + broker + 管理器；
 `serialize_event` 使用 Task 4 的扩展字段；`_send` 加锁不需要（单事件循环）。
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run: `uv run pytest tests/test_rpc.py tests/test_rpc_v2.py -q`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add zenagent/cli/rpc.py tests/
@@ -566,7 +566,7 @@ git commit -m "feat(rpc): protocol v2 with approvals, steering and runtime contr
 - `zen rpc` flags：`-m/--model`、`--yes`、`--mode`、`--read-only`、`--thinking`、`--max-turns`、`--max-cost`、`--retries`、`--resume`、`--no-mcp`、`--mcp-file`、`--mcp-server`、`--no-skills`、`--no-context-files`、`--trace`、`--metrics`、`--cwd`、`--allow-dangerous`、`--allow-outside`、`--allow-destructive`、`--allow-protected`。
 - 无 key/未知模型：stderr 一行 + exit 2（与 CLI 一致）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 async def test_session_new_and_compact_requests(...)
@@ -576,21 +576,21 @@ def test_rpc_flags_forward_to_runtime_options(monkeypatch, tmp_path):
     ...
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `uv run pytest tests/test_rpc_v2.py -q -k "session or command or flags"`
 Expected: FAIL
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 按 Interfaces 实现；`_run()` 组装 `RuntimeOptions`；错误统一回包。
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run: `uv run pytest tests/test_rpc.py tests/test_rpc_v2.py tests/test_cli.py -q`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add zenagent/cli/rpc.py tests/
@@ -610,7 +610,7 @@ git commit -m "feat(rpc): session and command requests, full CLI flag set"
 - TUI 与 headless/REPL 一致：`--thinking` 传给 `RuntimeOptions.thinking`；`--trace`/`--metrics` 传给 Runtime；`--no-auto-compact` 传给 `auto_compact=False`；`--image` 校验 vision 后作为初始附件。
 - `/trace` 命令显示 `runtime.trace_path`（Runtime 已在 Task 5 设置）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 def test_tui_forwards_thinking_trace_metrics_and_auto_compact(monkeypatch):
@@ -622,23 +622,23 @@ def test_tui_launch_attaches_image_flags(monkeypatch, tmp_path):
 async def test_tui_app_attaches_initial_images(...)
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `uv run pytest tests/test_cli.py tests/test_tui_attachments.py -q -k "flag or initial"`
 Expected: FAIL
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `main.py` TUI 分支补参数与图片校验（复用 headless 的校验逻辑，抽
 `_read_images(model, paths) -> list[ImageContent]` 供两处使用）；`ZenAgentApp`
 接收 `images` 并在 `on_mount` 调 `chat.attach_image`。
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run: `uv run pytest tests/test_cli.py tests/test_tui_attachments.py -q`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add zenagent/cli/main.py zenagent/cli/tui/app.py tests/
@@ -660,17 +660,17 @@ git commit -m "fix(tui): honor --thinking/--trace/--metrics/--no-auto-compact/--
 - Modify: `CHANGELOG.md`（Unreleased 段落）
 - Modify: 本计划（勾选完成项 + 收尾证据）
 
-- [ ] **Step 1: 更新文档与 CHANGELOG**
+- [x] **Step 1: 更新文档与 CHANGELOG**
 
 按 Files 列表逐项修改；命令表/flag 表与代码逐条核对（`/help`、`zen rpc --help`、
 `zen --help`）。
 
-- [ ] **Step 2: 全量门禁**
+- [x] **Step 2: 全量门禁**
 
 Run: `bash scripts/check.sh`
 Expected: `All checks passed!` + `1877+ passed`
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add docs examples CHANGELOG.md
@@ -678,6 +678,21 @@ git commit -m "docs: record the frontend alignment and the RPC v2 protocol"
 ```
 
 ---
+
+## 执行记录（2026-11-02）
+
+- 分支 `feat/frontend-alignment`，基线 `8284ba0`（v0.6.2），`bash scripts/check.sh` 基线 1877 passed。
+- 任务全部完成；关键结果：
+  - P0：`/compact` 切会话（实测 + 回归测试）、`/model` 走 `apply_model_switch`、REPL
+    `--thinking/--metrics/--image`、RPC 事件补 `args/result_text/duration_ms/tool_stats`。
+  - P1：REPL 迁到 `Runtime` + `ChatController` + 共享 `CommandRegistry`；工具集与 TUI 对齐；
+    `test_repl_logic.py` + 新增 `test_repl_commands.py` 覆盖命令/文本降级/会话切换。
+  - P2：RPC v2（审批往返、steer、tools/model/mode/usage、session、command、完整 flag 集）；
+    v1 请求形状不变，`tests/test_rpc.py` 原样通过，新增 `tests/test_rpc_v2.py`。
+  - P3：TUI `--thinking/--trace/--metrics/--no-auto-compact/--image` 生效；`/trace` 显示路径。
+- 门禁：`bash scripts/check.sh` → 见收尾提交（全绿），`uv run pytest -q` 1888 passed。
+- 过程 Ruling：Task 7+8 合并实现（注册表的 retry/compact 拥有 run，拆开会留下坏中间态）；
+  Task 9–11 因暂存合并在同一提交落地，各自测试套件独立通过。
 
 ## 完成标准
 

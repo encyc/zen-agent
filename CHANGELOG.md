@@ -3,6 +3,40 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+**前端对齐：REPL / RPC 与 TUI 共享同一套 app 层，RPC 协议升级到 v2。**
+
+### Added
+
+- **RPC 协议 v2**（`zenagent/cli/rpc.py`）：新增 `steer` / `tools` / `model` /
+  `mode` / `usage` / `approval` / `session` / `command` 请求；`zen rpc` 在
+  `Runtime` 上启动，因此会话持久化、MCP、skills、扩展、审批与 TUI/REPL 一致。
+  `session` 支持 current/list/new/fork/resume/import/undo/delete/compact/retry/export。
+- **交互式审批回传**：`approval_request` 事件 + `approval` 响应组成往返，超时按拒绝；
+  不再只能 `--yes` 全放行或全拒绝。
+- **事件补字段**：`args`（JSON 文本）、`result_text`、`duration_ms`、`tool_stats`
+  进入 RPC 事件，编辑器可以渲染工具参数与结果；所有文本字段 4000 字符有界。
+- **REPL 获得 TUI 的全部命令与工具**：REPL 改由 `Runtime` 装配、共享
+  `CommandRegistry` 分发、`ChatController` 驱动运行；补上 `/context` `/export`
+  `/plan-review` `/usage`，工具集补上 `checkpoint`/`rewind`/`lsp`/`github`。
+- **REPL 启动 flag 生效**：`--thinking` / `--metrics` / `--image`。
+- **TUI 启动 flag 生效**：`--thinking` / `--trace` / `--metrics` /
+  `--no-auto-compact` / `--image`；`/trace` 现在能显示真实路径。
+- `RuntimeOptions` 统一承载 `api_key` / `trace` / `metrics` / `auto_compact` /
+  `tools` / `mcp_retry_interval_s`，所有前端只负责填值。
+
+### Fixed
+
+- REPL `/compact` 之后新消息继续写入旧会话文件；现在会切到 `*-compact.jsonl`。
+- REPL `/model` 用裸 catalog：`config.toml` 里的自定义模型切不过去，跨 provider
+  切换仍带旧 api_key、thinking 与 session id 不更新；现在走共享的
+  `apply_model_switch`（与 TUI 的 `ModelManager` 同一实现）。
+- REPL 的 `/reload` 现在通过 `Runtime.reconcile_async()` 重连 MCP 并重建工具/提示词；
+  `/mcp retry` 保留原来的逐服务状态输出。
+- REPL 驱动运行改走 `ChatController`：自动压缩、滞留插话续跑、`/retry` 的
+  语义与 TUI 一致（插话在下一轮结束前送达，不再滞留到下一次用户输入）。
+
 ## v0.6.2 — 2026-11-01
 
 **LSP fix: rename now returns the full cross-file workspace edit.**

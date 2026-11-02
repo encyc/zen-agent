@@ -90,8 +90,8 @@ class ToolResultAgent:
 - 状态写入 `<session>.todo.json`（mkstemp + fsync + `os.replace` 原子替换）；
   无会话文件时仅内存。`details["phases"]` 是 UI/HUD 的 canonical 快照，
   `summarize_todo`/`coerce_todo_phases` 供控制器复用。
-- 启用面：TUI 走 `Runtime.bootstrap` 注入；headless/REPL 绑定各自 session；
-  RPC 无 JSONL 会话，用内存态。
+- 启用面：TUI/REPL/RPC 都走 `Runtime.bootstrap` 注入并绑定 JSONL 会话（RPC 也有
+  `<session>.todo.json` sidecar）；headless 绑定自己打开的会话。
 
 ### 子代理（`task`）
 
@@ -108,8 +108,9 @@ class ToolResultAgent:
 
 - 静态工具 `ask`（`tools/ask.py`，read 档）：`questions[]`（1–5 题、每题 2–6 选项）。
 - 交互由前端 handler 决定：TUI 在 mount 时注册 `set_ask_handler`（framed DialogScreen，数字键/点击，
-  `multi` 可多选，Esc 取消）；REPL 注册终端问答；headless/RPC 无 handler → 非 error 降级
-  （"continue with the most conservative option"）。
+  `multi` 可多选，Esc 取消）；REPL 注册终端问答；headless/RPC 没有 ask handler → 非 error 降级
+  （"continue with the most conservative option"）。注意工具**审批**不是这条路径：
+  RPC 通过 `approval_request`/`approval` 往返回答 TUI 同款 `PermissionBroker`。
 - 答案返回 `details["answers"]=[{id, selected, custom?}]`：handler 返回的 label 必须属于该题选项，
   单选只保留第一个；等待与 run abort 赛跑（abort 时返回"按最保守选项继续"的非 error 结果）。
   无 free-text "Other"（schema 预留 custom）。
