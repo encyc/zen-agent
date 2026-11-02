@@ -3,6 +3,34 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## v0.7.0 — 2026-11-02
+
+**Project memory: durable per-project notes the agent can read and write.**
+
+### Added
+
+- **`memory` / `memory_write` tools** (`zenagent/tools/memory.py`): the model
+  can now store durable project knowledge — decisions and their WHY, durable
+  conventions, recurring pitfalls — as structured notes. `memory` (read tier)
+  reads one entry or searches by keyword; `memory_write` (write tier) adds,
+  updates or deletes entries. Entry ids are 4-hex and validated, so a crafted
+  id cannot escape `.zenagent/memory/`.
+- **Storage layout** (`zenagent/agent/memory_store.py`): one entry per file
+  under `<project-root>/.zenagent/memory/entries/<id>.md` (minimal
+  frontmatter + free markdown, `cat`/`grep`/git-diff friendly) plus an
+  append-only `journal.jsonl` recording every change (ts/op/id/title/reason/
+  session). Commit the directory to share memory with the team, gitignore it
+  to keep it local — zenagent does not decide for you. Hand-edited files
+  degrade gracefully; non-addressable files never reach the prompt.
+- **System prompt index** (new `memory_index` block): one `- <id> <title>`
+  line per entry, newest first, capped at 64 with a pointer to
+  `memory search` beyond the cap. Empty library → the block disappears
+  entirely; entry bodies never enter the prompt, so the prompt budget stays
+  constant as the library grows. `PROMPT_VERSION` bumped to `2026-11-02.1`.
+- `/memory`, M2 async turn-end summarization and M3 command surfaces are
+  planned follow-ups (spec:
+  `docs/superpowers/specs/2026-11-02-project-memory-design.md`).
+
 ## v0.6.6 — 2026-11-02
 
 **写/改文件工具卡默认预览 diff：折叠态显示 5 行变更，展开看完整 diff。**
