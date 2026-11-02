@@ -3,6 +3,27 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## v0.6.2 — 2026-11-01
+
+**LSP fix: rename now returns the full cross-file workspace edit.**
+
+### Fixed
+
+- **`lsp` rename lost edits** (`zenagent/tools/lsp.py`), two defects found by
+  exercising the tool against a real pyright during the demo:
+  - **Cold-start race**: pyright answers `textDocument/rename` while a freshly
+    opened document is still being analyzed, and the answer then contains only
+    the open file's edits — cross-file renames were silently incomplete. Rename
+    now waits (best effort, ≤8 s) for the document's first
+    `publishDiagnostics`, the analysis-complete signal, before asking.
+  - **Unrendered response shape**: pyright returns `documentChanges` with
+    kind-less `TextDocumentEdit` entries; the formatter only knew
+    `changes` and `kind: rename`, so every pyright rename rendered as
+    "(empty workspace edit)". Both shapes now render, including per-edit lines.
+- Tests: the fake LSP server simulates the race (diagnostics 300 ms after
+  didOpen; partial rename before, full edit after) and a regression test pins
+  the two-file edit; a formatter unit test covers the `TextDocumentEdit` shape.
+
 ## v0.6.1 — 2026-11-01
 
 **Update check: revalidate the PyPI cache every hour instead of once a day.**
