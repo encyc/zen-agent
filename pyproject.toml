@@ -40,7 +40,7 @@ cli = [
 [project.urls]
 Homepage = "https://github.com/encyc/zen-agent"
 Repository = "https://github.com/encyc/zen-agent"
-Changelog = "https://github.com/encyc/zen-agent/commits/main"
+Changelog = "https://github.com/encyc/zen-agent/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["uv_build>=0.11.24,<0.12.0"]

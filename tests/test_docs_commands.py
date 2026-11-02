@@ -12,6 +12,7 @@ SOURCES = (
     ROOT / "zenagent/extensions.py",
 )
 DOC = ROOT / "docs/guide/commands.md"
+README = ROOT / "README.md"
 
 
 def registered_commands() -> set[str]:
@@ -27,11 +28,21 @@ def test_every_registered_command_is_documented():
     names = registered_commands()
     assert len(names) > 40, names  # the scrape itself must not silently break
     text = DOC.read_text(encoding="utf-8")
-    missing = sorted(name for name in names if f"`/{name}" not in text)
+    # A whole row, closing backtick included: a substring test would accept
+    # "`/new" as proof of "/new" when the doc only has "`/new-session`".
+    missing = sorted(
+        name for name in names if not re.search(rf"^\| `/{re.escape(name)}`", text, re.MULTILINE)
+    )
     assert not missing, f"docs/guide/commands.md is missing {missing}"
 
 
 def test_doc_never_repeats_a_command_row():
-    rows = re.findall(r"^\| `/([a-z][a-z-]*)", DOC.read_text(encoding="utf-8"), re.MULTILINE)
+    rows = re.findall(r"^\| `/([a-z][a-z-]*)`", DOC.read_text(encoding="utf-8"), re.MULTILINE)
     duplicates = sorted({name for name in rows if rows.count(name) > 1})
     assert not duplicates, f"duplicate command rows: {duplicates}"
+
+
+def test_readme_states_the_real_command_count():
+    """The landing page advertises a count; adding a command must update it."""
+    count = len(registered_commands())
+    assert f"{count} commands" in README.read_text(encoding="utf-8")

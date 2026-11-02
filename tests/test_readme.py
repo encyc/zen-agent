@@ -32,6 +32,7 @@ def test_readme_python_floor_matches_the_package():
         "requires-python"
     ]
     floor = requires.removeprefix(">=")
-    assert floor == "3.11"
-    assert "3.11" in TEXT
+    # Derive from the package, don't hard-code: the README must advertise the
+    # floor the wheel actually declares, and must not advertise a higher one.
+    assert f"Python **{floor}+**" in TEXT, f"README does not state Python {floor}+"
     assert "3.15+" not in TEXT
