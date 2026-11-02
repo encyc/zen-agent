@@ -386,3 +386,37 @@ async def test_task_tool_retains_transcripts_by_its_limits(tmp_path):
     await tool.execute("t2", {"prompt": "two"})
 
     assert [path.stem for path in task_dir(session).glob("*.jsonl")] == ["t2"]
+
+
+async def test_truncated_envelope_names_its_reason_and_turns():
+    tool = _tool(ToolCallChildStream(), max_turns=1)
+
+    result = await tool.execute("t1", {"prompt": "go"})
+
+    text = result.content[0].text
+    assert 'status="truncated" reason="max_turns" turns="1"' in text
+    assert "partial output" in text
+    assert result.details["reason"] == "max_turns"
+    assert result.details["turns"] == 1
+
+
+async def test_ok_envelope_has_no_reason_attribute():
+    result = await _tool(ChildStream()).execute("t1", {"prompt": "go"})
+
+    assert "reason=" not in result.content[0].text
+
+
+async def test_child_prompt_declares_its_turn_budget():
+    seen: list[str] = []
+
+    class CapturingStream(ChildStream):
+        async def __call__(self, model, messages, tools, options):
+            seen.append(messages[0].content)
+            async for event in super().__call__(model, messages, tools, options):
+                yield event
+
+    tool = _tool(CapturingStream(), max_turns=7)
+
+    await tool.execute("t1", {"prompt": "go"})
+
+    assert "at most 7 model turns" in seen[0]

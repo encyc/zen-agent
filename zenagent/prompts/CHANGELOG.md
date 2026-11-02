@@ -4,6 +4,14 @@ Every content change bumps `PROMPT_VERSION` (`zenagent/prompts/spec.py`) and get
 one entry here: what changed, why, and the experiment/report that justified it.
 P0 extracted the v0.4.1 text verbatim — no behavior change.
 
+## 2026-11-02.1 — subagent turn budget
+
+- `task_child_system` now declares the child's turn budget (`{{max_turns}}`,
+  rendered from `[task].max_turns`) and tells it to return findings before the
+  last turn. Motivated by real runs where three subagents were cut at the old
+  hardcoded 12-turn cap while still "doing a final check"; the parent model then
+  invented a context-overflow explanation for the `status="truncated"` envelope.
+
 ## 2026-10-31.1 — P0 extraction (behavior-neutral)
 
 - Moved every fixed prompt string into `zenagent/prompts/blocks/`: system

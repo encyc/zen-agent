@@ -25,7 +25,7 @@ from zenagent.agent.artifacts import ArtifactSink
 from zenagent.agent.loop import AgentTool, ToolResultAgent
 from zenagent.agent.subagents import SubagentLimits, SubagentStore
 from zenagent.config import DEFAULT_TASK_MAX_TURNS, ContextGuard
-from zenagent.prompts import tool_description
+from zenagent.prompts import render, tool_description
 from zenagent.prompts.registry import read_block
 from zenagent.providers.catalog import Model
 from zenagent.providers.registry import StreamFn
@@ -106,12 +106,25 @@ def _envelope(
     tokens: int,
     output: str,
     error: str,
+    *,
+    reason: str = "",
+    turns: int = 0,
 ) -> str:
     body = (output or error or "(no output)").replace(
         "</task-result>", "&lt;/task-result&gt;"
     )
+    if reason:
+        # The parent model only sees this envelope: say *why* the run stopped,
+        # or it invents an explanation (e.g. "the child blew its context").
+        body += (
+            f"\n\n(partial output: the child stopped at its {reason} budget "
+            f"after {turns} turns; narrow the task and delegate again to continue.)"
+        )
+    attrs = f'name="{name}" status="{status}"'
+    if reason:
+        attrs += f' reason="{reason}" turns="{turns}"'
     return (
-        f'<task-result name="{name}" status="{status}" '
+        f"<task-result {attrs} "
         f'duration_ms="{duration_ms}" cost="${cost:.6f}" tokens="{tokens}">\n'
         f"{body}\n</task-result>"
     )
@@ -272,6 +285,9 @@ def build_task_tool(
         tool for tool in base_tools if tool.name in CHILD_TOOL_NAMES
     ]
     store = SubagentStore(session_path, limits)
+    child_system_prompt = render(
+        read_block("task_child_system"), {"max_turns": str(max_turns)}
+    )
 
     async def execute(
         tool_call_id: str, args: dict, abort=None, on_update=None
@@ -293,7 +309,7 @@ def build_task_tool(
         guard = ContextGuard(live_model.context_window)
         child = Agent(
             model=live_model,
-            system_prompt=read_block("task_child_system"),
+            system_prompt=child_system_prompt,
             tools=list(child_tools),
             api_key=live_key,
             thinking=live_thinking,
@@ -357,7 +373,22 @@ def build_task_tool(
         output = _final_text(child.messages)
         cost, tokens = _child_usage(child.messages)
         error = failure or child.error_message or ""
-        text = _envelope(name, status, duration_ms, cost, tokens, output, error)
+        termination = child.termination or ""
+        reason = termination if status == "truncated" else ""
+        turns = sum(
+            1 for message in child.messages if isinstance(message, AssistantMessage)
+        )
+        text = _envelope(
+            name,
+            status,
+            duration_ms,
+            cost,
+            tokens,
+            output,
+            error,
+            reason=reason,
+            turns=turns,
+        )
         recorder.finish(
             status=status,
             duration_ms=duration_ms,
@@ -374,6 +405,8 @@ def build_task_tool(
                 "tokens": tokens,
                 "model": live_model.id,
                 "termination": child.termination,
+                "reason": reason,
+                "turns": turns,
                 "error": error,
                 # Cost attribution for the parent status/telemetry layer.
                 "subagent_cost": cost,

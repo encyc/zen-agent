@@ -24,7 +24,7 @@ __all__ = [
 
 #: Bumped whenever block content changes; recorded in eval reports and the
 #: prompt CHANGELOG.
-PROMPT_VERSION = "2026-10-31.1"
+PROMPT_VERSION = "2026-11-02.1"
 
 CacheClass = Literal["stable", "session", "volatile"]
 
@@ -137,6 +137,7 @@ BLOCKS: dict[str, BlockSpec] = {
         version=PROMPT_VERSION,
         cache_class="stable",
         budget_chars=600,
+        required_vars=("max_turns",),
     ),
     "compact.result": BlockSpec(
         id="compact.result",
