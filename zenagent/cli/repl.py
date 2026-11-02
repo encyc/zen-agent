@@ -33,6 +33,7 @@ from zenagent.agent.session import (
     truncate_last_turn,
     unique_session_path,
 )
+from zenagent.agent.subagents import SubagentLimits
 from zenagent.app.appearance import THEME_CHOICES
 from zenagent.app.compact import compact, maybe_auto_compact
 from zenagent.app.journal import attach_journal, journal_for, load_backup_policy
@@ -996,6 +997,8 @@ async def repl(
             stream_fn=stream_fn,
             thinking=lambda: agent.thinking,
             max_cost=max_cost,
+            max_turns=user_config.task_max_turns,
+            limits=SubagentLimits.from_user_config(user_config),
             # Read through the current sink so /fork, /compact and /import
             # retarget child artifacts too.
             artifact_sink=lambda tool_name, text: artifact_sink(tool_name, text),

@@ -23,8 +23,8 @@ from pathlib import Path
 from zenagent.agent.agent import Agent
 from zenagent.agent.artifacts import ArtifactSink
 from zenagent.agent.loop import AgentTool, ToolResultAgent
-from zenagent.agent.subagents import SubagentStore
-from zenagent.config import ContextGuard
+from zenagent.agent.subagents import SubagentLimits, SubagentStore
+from zenagent.config import DEFAULT_TASK_MAX_TURNS, ContextGuard
 from zenagent.prompts import tool_description
 from zenagent.prompts.registry import read_block
 from zenagent.providers.catalog import Model
@@ -48,7 +48,8 @@ CHILD_TOOL_NAMES = frozenset(
     {"read_file", "list_dir", "glob", "grep", "web_search", "fetch"}
 )
 
-DEFAULT_TASK_MAX_TURNS = 12
+#: ``DEFAULT_TASK_MAX_TURNS`` is re-exported from ``zenagent.config`` and can be
+#: overridden per run by ``[task].max_turns``; it stays in ``__all__`` below.
 
 _SAFE_NAME = re.compile(r"[^A-Za-z0-9_.-]")
 
@@ -258,17 +259,19 @@ def build_task_tool(
     max_cost: float | None = None,
     artifact_sink: ArtifactSink | None = None,
     session_path: Path | None = None,
+    limits: SubagentLimits | None = None,
 ) -> TaskTool:
     """Build the per-run ``task`` tool (the child uses the parent's model).
 
     ``model``/``api_key``/``thinking`` may be callables: the child must follow
     the parent Agent's live values, or a ``/model`` switch would keep running
-    subagents on the provider selected at bootstrap.
+    subagents on the provider selected at bootstrap. ``max_turns`` and
+    ``limits`` come from ``[task]`` in config.toml (``zenagent.config``).
     """
     child_tools = [
         tool for tool in base_tools if tool.name in CHILD_TOOL_NAMES
     ]
-    store = SubagentStore(session_path)
+    store = SubagentStore(session_path, limits)
 
     async def execute(
         tool_call_id: str, args: dict, abort=None, on_update=None

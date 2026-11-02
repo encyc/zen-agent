@@ -16,6 +16,7 @@ from zenagent.agent import Agent
 from zenagent.agent.artifacts import build_artifact_sink
 from zenagent.agent.registry import ToolRegistry
 from zenagent.agent.session import Session, latest_session, unique_session_path
+from zenagent.agent.subagents import SubagentLimits
 from zenagent.app.journal import attach_journal, journal_for, load_backup_policy
 from zenagent.app.modes import (
     DEFAULT_MODE,
@@ -356,6 +357,9 @@ class Runtime:
             stream_fn=stream_fn,
             thinking=lambda: runtime.agent.thinking,
             max_cost=options.max_cost,
+            # [task]: the child's turn budget and transcript retention caps.
+            max_turns=runtime.user_config.task_max_turns,
+            limits=SubagentLimits.from_user_config(runtime.user_config),
             session_path=runtime.session.path,
             artifact_sink=lambda tool_name, text: (
                 runtime.artifact_sink(tool_name, text)

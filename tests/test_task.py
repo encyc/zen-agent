@@ -361,3 +361,28 @@ async def test_task_tool_rebinds_its_session(tmp_path):
     assert (task_dir(first) / "c1.jsonl").is_file()
     assert (task_dir(second) / "c2.jsonl").is_file()
     assert not (task_dir(second) / "c1.jsonl").exists()
+
+
+async def test_task_tool_applies_configured_max_turns():
+    tool = _tool(ToolCallChildStream(), max_turns=1)
+
+    result = await tool.execute("t1", {"prompt": "go"})
+
+    assert result.details["termination"] == "max_turns"
+    assert 'status="truncated"' in result.content[0].text
+
+
+async def test_task_tool_retains_transcripts_by_its_limits(tmp_path):
+    from zenagent.agent.subagents import SubagentLimits, task_dir
+
+    session = tmp_path / "sessions" / "s.jsonl"
+    tool = _tool(
+        ChildStream("child answer"),
+        session_path=session,
+        limits=SubagentLimits(keep_transcripts=1),
+    )
+
+    await tool.execute("t1", {"prompt": "one"})
+    await tool.execute("t2", {"prompt": "two"})
+
+    assert [path.stem for path in task_dir(session).glob("*.jsonl")] == ["t2"]
