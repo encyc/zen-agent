@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
 
 
 def send(message: dict) -> None:
@@ -35,6 +36,7 @@ def read() -> dict | None:
 
 
 def main() -> None:
+    published: set[str] = set()
     while True:
         message = read()
         if message is None:
@@ -45,23 +47,32 @@ def main() -> None:
 
         if method == "textDocument/didOpen":
             uri = str((params.get("textDocument") or {}).get("uri", ""))
-            send(
-                {
-                    "jsonrpc": "2.0",
-                    "method": "textDocument/publishDiagnostics",
-                    "params": {
-                        "uri": uri,
-                        "diagnostics": [
-                            {
-                                "range": {"start": {"line": 0, "character": 2}},
-                                "severity": 1,
-                                "message": "fake error",
-                                "source": "fake",
-                            }
-                        ],
-                    },
-                }
+            # Simulate a real server: analysis finishes a moment after didOpen;
+            # publishDiagnostics is the client-visible completion signal.
+            timer = threading.Timer(
+                0.3,
+                lambda uri=uri: (
+                    published.add(uri),
+                    send(
+                        {
+                            "jsonrpc": "2.0",
+                            "method": "textDocument/publishDiagnostics",
+                            "params": {
+                                "uri": uri,
+                                "diagnostics": [
+                                    {
+                                        "range": {"start": {"line": 0, "character": 2}},
+                                        "severity": 1,
+                                        "message": "fake error",
+                                        "source": "fake",
+                                    }
+                                ],
+                            },
+                        }
+                    ),
+                ),
             )
+            timer.start()
             continue
         if request_id is None:
             continue
@@ -116,25 +127,53 @@ def main() -> None:
                 }
             )
         elif method == "textDocument/rename":
-            send(
-                {
-                    "jsonrpc": "2.0",
-                    "id": request_id,
-                    "result": {
-                        "changes": {
-                            params["textDocument"]["uri"]: [
+            # Mirror pyright's cold-start race: before analysis completes
+            # (no publishDiagnostics yet) only the open file's edits exist;
+            # afterwards the full cross-file workspace edit is returned.
+            uri = params["textDocument"]["uri"]
+            single = {
+                uri: [
+                    {
+                        "range": {
+                            "start": {"line": 0, "character": 0},
+                            "end": {"line": 0, "character": 3},
+                        },
+                        "newText": params.get("newName", "renamed"),
+                    }
+                ]
+            }
+            if uri in published:
+                other = "file:///other/mod.py"
+                send(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "result": {
+                            # pyright's real shape: TextDocumentEdit entries
+                            # (no "kind") inside documentChanges
+                            "documentChanges": [
                                 {
-                                    "range": {
-                                        "start": {"line": 0, "character": 0},
-                                        "end": {"line": 0, "character": 3},
-                                    },
-                                    "newText": params.get("newName", "renamed"),
-                                }
+                                    "textDocument": {"uri": uri, "version": None},
+                                    "edits": single[uri],
+                                },
+                                {
+                                    "textDocument": {"uri": other, "version": None},
+                                    "edits": [
+                                        {
+                                            "range": {
+                                                "start": {"line": 3, "character": 0},
+                                                "end": {"line": 3, "character": 3},
+                                            },
+                                            "newText": params.get("newName", "renamed"),
+                                        }
+                                    ],
+                                },
                             ]
-                        }
-                    },
-                }
-            )
+                        },
+                    }
+                )
+            else:
+                send({"jsonrpc": "2.0", "id": request_id, "result": {"changes": single}})
         else:
             send({"jsonrpc": "2.0", "id": request_id, "result": None})
 

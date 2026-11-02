@@ -291,6 +291,21 @@ class LspClient:
             return []
         return self._diagnostics.get(uri, [])
 
+    async def wait_analyzed(self, path: Path, timeout: float) -> None:
+        """Wait for the server's first publishDiagnostics for ``path``.
+
+        Some servers (pyright) answer cross-file queries with partial results
+        while analysis of a freshly opened document is still running. The
+        first publishDiagnostics for the document is the completion signal.
+        Best effort: on timeout the caller proceeds with whatever is ready.
+        """
+        uri = _uri(path)
+        if uri in self._diagnostics:
+            return
+        event = self._diagnostic_events.setdefault(uri, asyncio.Event())
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(event.wait(), timeout=timeout)
+
     async def close(self) -> None:
         if self._closed:
             return
@@ -416,7 +431,17 @@ def _format_workspace_edit(edit: dict) -> list[str]:
     document_changes = edit.get("documentChanges")
     if isinstance(document_changes, list):
         for item in document_changes:
-            if isinstance(item, dict) and item.get("kind") == "rename":
+            if not isinstance(item, dict):
+                continue
+            if "edits" in item:  # TextDocumentEdit (pyright's shape, kind-less)
+                uri = str((item.get("textDocument") or {}).get("uri", ""))
+                edits = item.get("edits") or []
+                lines.append(f"{_path_of(uri)}: {len(edits)} edit(s)")
+                for change in edits[:20]:
+                    span = (change.get("range") or {}).get("start") or {}
+                    line = int(span.get("line", 0)) + 1
+                    lines.append(f"  line {line}: → {change.get('newText', '')!r}")
+            elif item.get("kind") == "rename":
                 lines.append(
                     f"rename file: {_path_of(str(item.get('oldUri')))} → "
                     f"{_path_of(str(item.get('newUri')))}"
@@ -510,6 +535,9 @@ async def _lsp(
         new_name = str(args.get("new_name") or "").strip()
         if not new_name:
             return _text("rename needs new_name", is_error=True)
+        # Servers answer rename with partial edits mid-analysis; wait for the
+        # analysis-complete signal so the edit covers every referencing file.
+        await client.wait_analyzed(path, _DIAGNOSTICS_TIMEOUT_S)
         params = dict(position)
         params["newName"] = new_name
         edit = await client.request("textDocument/rename", params)
