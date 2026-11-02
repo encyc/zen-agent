@@ -3,6 +3,24 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## v0.6.6 — 2026-11-02
+
+**写/改文件工具卡默认预览 diff：折叠态显示 5 行变更，展开看完整 diff。**
+
+### Added
+
+- **写/改文件卡默认带 diff 预览**（`zenagent/cli/tui/widgets/tool_card.py`）：
+  `write_file` / `edit_file` 卡片折叠态即渲染前 5 行变更（`+`/`-` 着色、超宽行
+  按终端单元格裁剪，其余行以 `… N more diff lines` 收口），不再只显示一句
+  `edited x.py: replaced 1 occurrence`；`enter` / 点击展开完整结果与完整 diff。
+  新增 `MAX_DIFF_PREVIEW_LINES`，中英双语文案与 `docs/guide/tui.md` 同步。
+- **补齐卡片 diff 数据链路**（`zenagent/app/views.py`）：`tool_execution_end`
+  把 `result.details["diff"]` 写入 `ToolCallView.diff`。该字段此前从未被赋值，
+  所以卡片即使展开也看不到 diff。
+- **测试**：默认预览、5 行上限与折叠计数、展开全量 diff、仅 write/edit 预览、
+  超宽行裁剪、结算后才拿到 diff，以及 view builder 的 diff 接线。历史回放没有
+  `details`（diff 不落盘），历史中的写/改卡仍保持单行。
+
 ## v0.6.5 — 2026-11-02
 
 **子代理预算可配置：`[task]` 配置段、截断原因回传、转录截断可见。**
