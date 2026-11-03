@@ -470,3 +470,30 @@ async def test_extension_command_runs_from_the_composer(fake_runtime):
         await pilot.pause()
     assert calls and calls[0][1] == "world"
     assert calls[0][0] is app.runtime.agent
+
+
+async def test_hint_accept_leaves_prompt_focused_and_bar_settled(fake_runtime):
+    """Accepting the highlighted hint keeps the composer in charge.
+
+    The accept path hands the draft back to the composer and re-derives hint
+    visibility from live state; for a command with no argument vocabulary the
+    end state is a hidden bar and a focused prompt.
+    """
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        prompt = app.query_one(PromptInput)
+        prompt.focus()
+
+        for char in "/cle":
+            await pilot.press(char)
+        await pilot.pause()
+        assert app.query_one(CommandHints).display is True
+
+        await pilot.press("down", "tab")
+        await pilot.pause()
+        assert prompt.text == "/clear "
+        # /clear has no argument values, so the bar settles hidden...
+        assert app.query_one(CommandHints).display is False
+        # ...and the composer keeps focus for the next keystroke.
+        assert prompt.has_focus

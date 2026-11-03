@@ -66,3 +66,5 @@ class HintsMixin:
                 self._hint_start + len(replacement)
             )
         )
+        prompt.focus()
+        hints.hide()
