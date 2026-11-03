@@ -36,6 +36,7 @@ from zenagent.app.views import RunStatus
 from zenagent.cli.tui import palette
 from zenagent.cli.tui.app_parts.appearance import AppearanceMixin
 from zenagent.cli.tui.app_parts.models import ModelsMixin
+from zenagent.cli.tui.app_parts.sessions import SessionsMixin
 from zenagent.cli.tui.app_parts.update_notice import UpdateNoticeMixin
 from zenagent.cli.tui.app_theme import textual_theme, theme_name
 from zenagent.cli.tui.history import PromptHistory
@@ -78,7 +79,9 @@ def _saved_language() -> str | None:
     return settings.get_pref("language")
 
 
-class ZenAgentApp(UpdateNoticeMixin, AppearanceMixin, ModelsMixin, App):
+class ZenAgentApp(
+    UpdateNoticeMixin, AppearanceMixin, ModelsMixin, SessionsMixin, App
+):
     """A single-column chat app; no mouse, no animations."""
 
     CSS_PATH = "theme.tcss"
@@ -955,39 +958,9 @@ class ZenAgentApp(UpdateNoticeMixin, AppearanceMixin, ModelsMixin, App):
         _open_language_picker(self)
 
     def open_settings(self) -> None:
-        from zenagent.cli.tui.screens.modals import SettingsPicker
+        from zenagent.cli.tui.screens.pickers import open_settings as _open_settings
 
-        async def selected(choice: str | None) -> None:
-            if not choice:
-                return
-            if choice == "sidebar":
-                self.action_toggle_sidebar()
-            elif choice == "thinking":
-                self.action_cycle_thinking()
-            elif choice == "theme":
-                self.open_theme_picker()
-            elif choice == "language":
-                self.open_language_picker()
-            elif choice == "model-keys":
-                self.open_model_keys()
-            elif choice == "search-keys":
-                self.open_search_keys()
-            elif choice == "search-provider":
-                self.open_search_provider()
-            else:
-                await self._dispatch_command(choice, "")
-
-        status = self.chat.status
-        self.open_menu(
-            "settings",
-            lambda: SettingsPicker(
-                status.thinking,
-                status.model_id,
-                self._theme_spec,
-                self._language_spec,
-            ),
-            selected,
-        )
+        _open_settings(self)
 
     def open_model_picker(self) -> None:
         from zenagent.cli.tui.screens.providers import (
@@ -1018,237 +991,56 @@ class ZenAgentApp(UpdateNoticeMixin, AppearanceMixin, ModelsMixin, App):
         _open_search_provider(self)
 
     def open_hotkeys(self) -> None:
-        """Read-only key-binding sheet (omp's /hotkeys overlay)."""
-        from zenagent.cli.tui.screens.modals import HotkeysSheet
-        from zenagent.cli.tui.widgets.prompt_input import APP_CHORDS
+        from zenagent.cli.tui.screens.pickers import open_hotkeys as _open_hotkeys
 
-        lines = [f"{key:<16} {description}" for key, _action, description in self.BINDINGS]
-        lines.extend(f"{key:<16} {action}" for key, action in APP_CHORDS.items())
-        self.open_menu("hotkeys", lambda: HotkeysSheet(lines), lambda _result: None)
+        _open_hotkeys(self)
 
     def open_usage_dashboard(self) -> None:
-        """Current-session totals plus the recent-session usage report."""
-        from zenagent.cli.tui.screens.modals import UsageDashboard
-
-        status = self.chat.status
-        lines = [
-            t("tui.usage.current"),
-            (
-                f"  in {status.input_tokens} · out {status.output_tokens} · "
-                f"cache {status.cache_read} · ${status.cost:.4f}"
-            ),
-            f"  context {status.context_used}/{status.context_window}",
-        ]
-        if status.subagent_cost or status.subagent_tokens:
-            lines.append(
-                f"  subagents: ${status.subagent_cost:.4f} · "
-                f"{status.subagent_tokens} tokens"
-            )
-        try:
-            from zenagent.usage import collect_usage, render_report, session_paths
-
-            report = collect_usage(session_paths()[-50:])
-            lines.append("")
-            lines.extend(render_report(report).splitlines())
-        except Exception:  # noqa: BLE001 - the dashboard must never crash the app
-            lines.append(t("tui.usage.unavailable"))
-        self.open_menu(
-            "usage", lambda: UsageDashboard(lines), lambda _result: None
+        from zenagent.cli.tui.screens.pickers import (
+            open_usage_dashboard as _open_usage_dashboard,
         )
+
+        _open_usage_dashboard(self)
 
     def open_mcp_add(self) -> None:
-        """Two-field wizard that appends a stdio server to mcp.json."""
-        from zenagent.cli.tui.screens.modals import McpAdd
+        from zenagent.cli.tui.screens.pickers import open_mcp_add as _open_mcp_add
 
-        async def added(result) -> None:
-            if not result:
-                return
-            import shlex
-
-            from zenagent.mcp.config import save_server
-
-            name, command_text = result
-            try:
-                command = shlex.split(command_text)
-            except ValueError:
-                command = [command_text]
-            try:
-                save_server(name, command)
-            except ValueError as exc:
-                self.notify(t("tui.app.mcp_add_failed", error=exc), timeout=3)
-                return
-            self.notify(t("tui.app.mcp_added", name=name))
-            try:
-                await self.runtime.refresh_mcp()
-            except RuntimeError:
-                pass
-            self._refresh_status()
-
-        self.open_menu("mcp-add", lambda: McpAdd(), added)
+        _open_mcp_add(self)
 
     def open_todo_editor(self) -> None:
-        """Editable todo list; writes the same sidecar the model's tool uses."""
-        from zenagent.cli.tui.screens.modals import TodoEditor
-        from zenagent.tools.todo import save_todo_phases
-
-        async def edited(phases) -> None:
-            if phases is None:
-                return
-            session = getattr(self.runtime, "session", None)
-            if session is None:
-                return
-            try:
-                save_todo_phases(Path(session.path), phases)
-            except OSError as exc:
-                self.notify(t("tui.app.todo_save_failed", error=exc), timeout=3)
-                return
-            self.chat.reload_todos()
-            self._refresh_status()
-
-        self.open_menu(
-            "todo-edit", lambda: TodoEditor(self.chat.todos), edited
+        from zenagent.cli.tui.screens.pickers import (
+            open_todo_editor as _open_todo_editor,
         )
+
+        _open_todo_editor(self)
 
     def open_plan_review(self) -> None:
-        """Read the last plan, then approve (→ full) or keep planning."""
-        from zenagent.cli.tui.screens.modals import PlanReview
+        from zenagent.cli.tui.screens.pickers import (
+            open_plan_review as _open_plan_review,
+        )
 
-        plan = self.chat.last_assistant_text()
-        if not plan:
-            self.notify(t("tui.app.no_plan"), timeout=3)
-            return
-
-        async def reviewed(choice: str | None) -> None:
-            if choice != "approve":
-                return
-            self._mode_before_plan = None
-            self.runtime.set_mode("full")
-            self.notify(t("tui.app.mode_set", mode="full"))
-            self._refresh_status()
-
-        self.open_menu("plan-review", lambda: PlanReview(plan), reviewed)
+        _open_plan_review(self)
 
     def open_mode_picker(self) -> None:
-        from zenagent.app.slash_args import argument_values
-        from zenagent.cli.tui.screens.modals import ChoicePicker
-
-        async def selected(mode: str | None) -> None:
-            if mode:
-                self.runtime.set_mode(mode)
-                self.notify(t("tui.app.mode_set", mode=mode))
-                self._refresh_status()
-
-        self.open_menu(
-            "mode",
-            lambda: ChoicePicker(
-                t("tui.app.mode_header"),
-                argument_values("/mode"),
-                self.runtime.mode,
-            ),
-            selected,
+        from zenagent.cli.tui.screens.pickers import (
+            open_mode_picker as _open_mode_picker,
         )
+
+        _open_mode_picker(self)
 
     def open_thinking_picker(self) -> None:
-        from zenagent.app.slash_args import argument_values
-        from zenagent.cli.tui.screens.modals import ChoicePicker
-
-        agent = self.runtime.agent
-
-        async def selected(level: str | None) -> None:
-            if level:
-                agent.thinking = None if level == "off" else level
-                self.notify(t("tui.app.thinking_set", level=level))
-                self._refresh_status()
-
-        self.open_menu(
-            "thinking",
-            lambda: ChoicePicker(
-                t("tui.app.thinking_header"),
-                argument_values("/thinking"),
-                agent.thinking or "off",
-            ),
-            selected,
+        from zenagent.cli.tui.screens.pickers import (
+            open_thinking_picker as _open_thinking_picker,
         )
+
+        _open_thinking_picker(self)
 
     def open_session_picker(self, scope: str | None = None) -> None:
-        from zenagent.cli.tui.screens.modals import SessionPicker
-
-        self._session_scope = scope or self._session_scope
-        current_scope = self._session_scope
-
-        async def selected(action) -> None:
-            if action is None:
-                return
-            if action.kind == "toggle-scope":
-                other = "project" if current_scope == "all" else "all"
-                self.call_later(self.open_session_picker, other)
-                return
-            # Never await a new modal from inside the dismiss callback: Textual
-            # runs it in the message pump and the modal would deadlock.
-            self.run_worker(self._apply_session_action(action), exclusive=False)
-
-        self.open_menu(
-            "sessions",
-            lambda: SessionPicker(
-                self.sessions.entries(scope=current_scope), scope=current_scope
-            ),
-            selected,
+        from zenagent.cli.tui.screens.pickers import (
+            open_session_picker as _open_session_picker,
         )
 
-    async def _apply_session_action(self, action) -> None:
-        from zenagent.agent.session import session_title
-
-        if action.kind == "resume" and action.path is not None:
-            from zenagent import project
-
-            owner = project.project_key_for_session(action.path)
-            current = project.project_key(project.find_project_root())
-            await self.sessions.resume(action.path)
-            self._reset_after_switch()
-            if owner is not None and owner != current:
-                self.notify(t("tui.app.cross_project"))
-            elif owner is None:
-                self.notify(t("tui.app.legacy_session"))
-            return
-        if action.kind in ("new", "fork"):
-            if action.kind == "new":
-                await self.sessions.new()
-            else:
-                await self.sessions.fork()
-            self._reset_after_switch()
-            return
-        target = action.path or self.sessions.current()
-        if action.kind == "delete":
-            prompt = t("tui.app.delete_confirm", name=target.name)
-            if not await self._confirm(prompt):
-                return
-            was_current = target == self.sessions.current()
-            self.sessions.delete(target)
-            if was_current:
-                self._reset_after_switch()
-            self._refresh_status()
-            self.notify(t("tui.app.session_trashed"))
-        elif action.kind == "export":
-            exported = self.sessions.export(target)
-            self.notify(t("tui.app.exported", path=exported))
-        elif action.kind == "rename":
-            name = await self._prompt_rename(session_title(target))
-            if name is None:
-                return
-            try:
-                stored = self.sessions.rename(target, name)
-            except ValueError as exc:
-                self.notify(str(exc))
-                return
-            self.notify(t("tui.app.renamed", name=stored))
-
-    def _reset_after_switch(self) -> None:
-        if self._viewing is not None:
-            self._exit_subagent_view(restore_focus=False)
-        for log in self.query(TranscriptView):
-            log.reset()
-        self.chat.reload_transcript(drop_pending=True)
-        self._refresh_status()
+        _open_session_picker(self, scope)
 
     async def _modal_result(self, screen):
         """Push a modal and await its dismissed value."""
