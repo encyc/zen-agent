@@ -1331,6 +1331,32 @@ class ZenAgentApp(App):
             "todo-edit", lambda: TodoEditor(self.chat.todos), edited
         )
 
+    def open_memory_manager(self) -> None:
+        from zenagent.cli.tui.screens.memory_manager import MemoryManager
+
+        store = self.runtime.memory_store
+        if store is None:
+            return
+        self.open_menu("memory-manager", lambda: MemoryManager(store), lambda _result: None)
+
+    def open_memory_editor(self, entry_id: str | None = None, *, title_prefill: str = "") -> None:
+        from zenagent.cli.tui.screens.memory_manager import MemoryEditor
+
+        store = self.runtime.memory_store
+        if store is None:
+            return
+        entry = store.read_entry(entry_id) if entry_id else None
+
+        def saved(result) -> None:
+            if result is not None:
+                self.notify(t("cmdmsg.memory_saved", id=result.id, title=result.title), timeout=3)
+
+        self.open_menu(
+            "memory-editor",
+            lambda: MemoryEditor(store, entry, title_prefill=title_prefill),
+            saved,
+        )
+
     def open_plan_review(self) -> None:
         """Read the last plan, then approve (→ zen) or keep planning."""
         from zenagent.cli.tui.screens.modals import PlanReview
@@ -1601,6 +1627,12 @@ class ZenAgentApp(App):
             self.open_mcp_add()
         elif result.screen == "todo-edit":
             self.open_todo_editor()
+        elif result.screen == "memory-manager":
+            self.open_memory_manager()
+        elif result.screen == "memory-add":
+            self.open_memory_editor(title_prefill=result.target or "")
+        elif result.screen == "memory-edit":
+            self.open_memory_editor(result.target)
         elif result.screen == "search-settings":
             self.open_search_provider()
         elif result.show_help:
