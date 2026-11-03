@@ -93,8 +93,8 @@
 | 主题 / 键位 | `cli/theme.py`、`cli/keybindings.py` | `test_theme.py` | — |
 | 会话链接（`/urls`、`/copy <n>`、`/open <n>`） | `app/links.py`、`app/commands.py` | `test_app_links.py`、`test_app_commands.py`、`test_tui_links.py` | — |
 
-REPL/TUI 共用同一份命令表（`app/commands.py`，47 条），REPL 额外支持 legacy 主题名：
-`/help /exit /quit /clear /model /thinking /mode /session /sessions /rename /fork /import /undo /restore /retry /tools /compact /image /images /skills /mcp /reload /theme /lang /hotkeys /pin /new /settings /search /doctor /jobs /copy /urls /open /btw /shake /handoff /add-dir /remove-dir /dirs /fresh /trace /export /usage /context /plan-review /todo`。
+REPL/TUI 共用同一份命令表（`app/commands.py`，48 条），REPL 额外支持 legacy 主题名：
+`/help /exit /quit /clear /model /thinking /mode /session /sessions /rename /fork /import /undo /restore /retry /tools /compact /image /images /skills /mcp /reload /theme /lang /hotkeys /pin /new /settings /search /doctor /jobs /copy /urls /open /btw /shake /handoff /add-dir /remove-dir /dirs /fresh /trace /export /usage /context /plan-review /todo /memory`。
 
 REPL 的 screen 类命令（picker/浮层）由 `render_command_result` 渲染成文本，不再静默无输出。
 

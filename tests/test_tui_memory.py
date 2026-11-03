@@ -8,7 +8,6 @@ from textual.widgets import Input, OptionList, TextArea
 
 from zenagent.agent.memory_store import MemoryStore
 from zenagent.cli.tui.app import ZenAgentApp
-from zenagent.cli.tui.screens.memory_manager import MemoryEditor, MemoryManager
 
 
 def seeded_store(tmp_path, count=2):

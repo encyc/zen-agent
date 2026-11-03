@@ -21,6 +21,7 @@ from pathlib import Path
 
 from rich.console import Console
 
+from zenagent.agent.memory_store import split_title_body
 from zenagent.agent.session import (
     sessions_dir,
 )
@@ -56,7 +57,6 @@ from zenagent.cli.theme import (
     resolve_theme_spec,
 )
 from zenagent.config import config_path, load_user_config
-from zenagent.agent.memory_store import split_title_body
 from zenagent.events import AgentEvent
 from zenagent.i18n import LANGUAGE_CHOICES, resolve_language, set_locale, t
 from zenagent.providers.registry import StreamFn
