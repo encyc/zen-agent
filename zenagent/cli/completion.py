@@ -14,11 +14,19 @@ from pathlib import Path
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.document import Document
 
-from zenagent.app.skill_commands import SKILL_SLASH_PREFIX
+from zenagent.app.skill_commands import SKILL_SLASH_PREFIX, slash_token_at
 from zenagent.app.slash_args import argument_values
 from zenagent.i18n import t
 
-__all__ = ["SLASH_COMMANDS", "ReplCompleter", "help_text", "slash_commands"]
+__all__ = [
+    "SLASH_COMMANDS",
+    "ReplCompleter",
+    "command_matches",
+    "help_text",
+    "hint_context",
+    "skill_matches",
+    "slash_commands",
+]
 
 #: Command → catalog key of its one-line description (drives completion + /help).
 #: Keys are resolved at read time, so /lang switches the table live.
@@ -92,6 +100,137 @@ def help_text() -> str:
         + "\n"
         + t("repl.help.footer")
     )
+
+
+# -- TUI hint matching -------------------------------------------------------
+#
+# The same matching the draft's hint bar uses, as pure functions so the REPL
+# completer and the TUI hints cannot drift apart.
+
+
+def command_matches(commands, token_text: str) -> list[tuple[str, str]]:
+    """Registered slash commands whose name starts with the typed prefix."""
+    needle = token_text[1:].lower()
+    return [
+        (
+            command.name,
+            f"{t('type.command')} · {command.description}",
+        )
+        for command in commands.names()
+        if command.name.startswith(needle)
+    ]
+
+
+def skill_matches(skills, token_text: str) -> list[tuple[str, str]]:
+    """``/skill:<name>`` entries matching a token, bare-prefix with fallback."""
+    skills = [skill for skill in (skills or [])]
+    if not skills:
+        return []
+    if token_text.startswith("/skill:"):
+        needle = token_text[len("/skill:") :].lower()
+        selected = [
+            skill
+            for skill in skills
+            if skill.name.lower().startswith(needle)
+        ]
+    else:
+        needle = token_text[1:].lower()
+        selected = [
+            skill for skill in skills if skill.name.lower().startswith(needle)
+        ]
+        if not selected:
+            selected = [
+                skill
+                for skill in skills
+                if f"skill:{skill.name}".lower().startswith(needle)
+            ]
+    return [
+        (
+            f"skill:{skill.name}",
+            f"{t('type.skill')} · {skill.description}",
+        )
+        for skill in sorted(selected, key=lambda item: item.name)
+    ]
+
+
+def argument_matches(models, commands, name: str, needle: str) -> list[tuple[str, str]]:
+    """A command's argument values; model ids come from the catalog.
+
+    ``needle`` (lowercase) keeps only values with that prefix, so an Enter on
+    the highlighted value stays a no-op instead of switching to a model whose
+    key is missing.
+    """
+    if name == "model":
+        # Enter executes the highlighted value, so the list leads with the
+        # current model and then the usable ones.
+        entries = sorted(
+            models.entries(),
+            key=lambda entry: (not entry.current, not entry.available),
+        )
+        values = [
+            (
+                entry.id,
+                f"{entry.provider} · "
+                + (
+                    t("tui.app.model_ready")
+                    if entry.available
+                    else entry.reason or t("tui.app.model_unavailable")
+                ),
+            )
+            for entry in entries
+        ]
+    else:
+        values = argument_values("/" + name)
+    return [
+        (value, description)
+        for value, description in values
+        if value.lower().startswith(needle)
+    ]
+
+
+def hint_context(
+    commands, skills, models, text: str, cursor: int
+) -> tuple[list[tuple[str, str]], str, int, int, str]:
+    """``(matches, prefix, replace start, replace end, kind)`` for the draft.
+
+    Line-start ``/`` lists commands and skill commands; an embedded ``/``
+    token (mid-sentence) lists only ``/skill:<name>`` entries; after a known
+    command's space we list that command's argument values.
+    """
+    if "\n" in text:
+        return [], "/", 0, 0, "slash"
+    token = slash_token_at(text, cursor)
+    if token is not None:
+        line_prefix = text[token.line_start : token.start].strip()
+        if not line_prefix:
+            if token.text.startswith("/skill:"):
+                matches = skill_matches(skills, token.text)
+            else:
+                matches = [
+                    *command_matches(commands, token.text),
+                    *skill_matches(skills, token.text),
+                ]
+                matches.sort(key=lambda item: item[0])
+            return matches, "/", token.start, token.end, "slash"
+        line = text[token.line_start :].lstrip()
+        if line.startswith("/") and not line.startswith("/skill:"):
+            return [], "/", 0, 0, "slash"
+        return (
+            skill_matches(skills, token.text),
+            "/",
+            token.start,
+            token.end,
+            "slash",
+        )
+
+    if cursor == len(text) and text.startswith("/") and " " in text:
+        head, _, rest = text.partition(" ")
+        name = head[1:].lower()
+        if " " not in rest and commands.get(name) is not None:
+            needle = rest.strip().lower()
+            matches = argument_matches(models, commands, name, needle)
+            return matches, "", len(head) + 1, len(text), "arg"
+    return [], "/", 0, 0, "slash"
 
 
 class ReplCompleter(Completer):

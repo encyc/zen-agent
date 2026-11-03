@@ -31,10 +31,11 @@ from zenagent.app.commands import AppServices, build_default_commands
 from zenagent.app.models import ModelManager
 from zenagent.app.runtime import Runtime
 from zenagent.app.sessions import SessionManager
-from zenagent.app.skill_commands import build_skill_submission, slash_token_at
+from zenagent.app.skill_commands import build_skill_submission
 from zenagent.app.views import RunStatus
 from zenagent.cli.tui import palette
 from zenagent.cli.tui.app_parts.appearance import AppearanceMixin
+from zenagent.cli.tui.app_parts.hints import HintsMixin
 from zenagent.cli.tui.app_parts.models import ModelsMixin
 from zenagent.cli.tui.app_parts.sessions import SessionsMixin
 from zenagent.cli.tui.app_parts.update_notice import UpdateNoticeMixin
@@ -80,7 +81,12 @@ def _saved_language() -> str | None:
 
 
 class ZenAgentApp(
-    UpdateNoticeMixin, AppearanceMixin, ModelsMixin, SessionsMixin, App
+    UpdateNoticeMixin,
+    AppearanceMixin,
+    ModelsMixin,
+    SessionsMixin,
+    HintsMixin,
+    App,
 ):
     """A single-column chat app; no mouse, no animations."""
 
@@ -694,159 +700,6 @@ class ZenAgentApp(
             hints.show(matches, prefix=prefix)
         else:
             hints.hide()
-
-    def _hint_context(
-        self, text: str, cursor: int
-    ) -> tuple[list[tuple[str, str]], str, int, int, str]:
-        """``(matches, prefix, replace start, replace end, kind)`` for the draft.
-
-        Line-start ``/`` lists commands and skill commands; an embedded ``/``
-        token (mid-sentence) lists only ``/skill:<name>`` entries; after a known
-        command's space we list that command's argument values.
-        """
-        if "\n" in text:
-            return [], "/", 0, 0, "slash"
-        token = slash_token_at(text, cursor)
-        if token is not None:
-            line_prefix = text[token.line_start : token.start].strip()
-            if not line_prefix:
-                if token.text.startswith("/skill:"):
-                    matches = self._skill_matches(token.text)
-                else:
-                    matches = [*self._command_matches(token.text), *self._skill_matches(token.text)]
-                    matches.sort(key=lambda item: item[0])
-                return matches, "/", token.start, token.end, "slash"
-            line = text[token.line_start :].lstrip()
-            if line.startswith("/") and not line.startswith("/skill:"):
-                return [], "/", 0, 0, "slash"
-            return (
-                self._skill_matches(token.text),
-                "/",
-                token.start,
-                token.end,
-                "slash",
-            )
-
-        if cursor == len(text) and text.startswith("/") and " " in text:
-            head, _, rest = text.partition(" ")
-            name = head[1:].lower()
-            if " " not in rest and self.commands.get(name) is not None:
-                needle = rest.strip().lower()
-                matches = [
-                    (value, description)
-                    for value, description in self._argument_values(name)
-                    if value.lower().startswith(needle)
-                ]
-                return matches, "", len(head) + 1, len(text), "arg"
-        return [], "/", 0, 0, "slash"
-
-    def _command_matches(self, token_text: str) -> list[tuple[str, str]]:
-        needle = token_text[1:].lower()
-        return [
-            (
-                command.name,
-                f"{t('type.command')} · {command.description}",
-            )
-            for command in self.commands.names()
-            if command.name.startswith(needle)
-        ]
-
-    def _skill_matches(self, token_text: str) -> list[tuple[str, str]]:
-        skills = [skill for skill in (self.runtime.skills or [])]
-        if not skills:
-            return []
-        if token_text.startswith("/skill:"):
-            needle = token_text[len("/skill:") :].lower()
-            selected = [
-                skill
-                for skill in skills
-                if skill.name.lower().startswith(needle)
-            ]
-        else:
-            needle = token_text[1:].lower()
-            selected = [
-                skill for skill in skills if skill.name.lower().startswith(needle)
-            ]
-            if not selected:
-                selected = [
-                    skill
-                    for skill in skills
-                    if f"skill:{skill.name}".lower().startswith(needle)
-                ]
-        return [
-            (
-                f"skill:{skill.name}",
-                f"{t('type.skill')} · {skill.description}",
-            )
-            for skill in sorted(selected, key=lambda item: item.name)
-        ]
-
-    def _argument_values(self, name: str) -> list[tuple[str, str]]:
-        """Fixed vocabulary from the shared table; model ids come from the catalog."""
-        from zenagent.app.slash_args import argument_values
-
-        if name == "model":
-            # Enter executes the highlighted value, so the list leads with the
-            # current model and then the usable ones: a blind Enter is a no-op
-            # instead of a switch to a model whose key is missing.
-            entries = sorted(
-                self.models.entries(),
-                key=lambda entry: (not entry.current, not entry.available),
-            )
-            return [
-                (
-                    entry.id,
-                    f"{entry.provider} · "
-                    + (
-                        t("tui.app.model_ready")
-                        if entry.available
-                        else entry.reason or t("tui.app.model_unavailable")
-                    ),
-                )
-                for entry in entries
-            ]
-        return argument_values("/" + name)
-
-    def action_hint_next(self) -> None:
-        if self.command_hints:
-            self.command_hints.move(1)
-
-    def action_hint_prev(self) -> None:
-        if self.command_hints:
-            self.command_hints.move(-1)
-
-    def action_hint_dismiss(self) -> None:
-        if self.command_hints:
-            self.command_hints.hide()
-
-    def action_hint_accept(self) -> None:
-        hints = self.command_hints
-        if hints is None or not hints.active:
-            return
-        selected = hints.selected
-        if not selected:
-            return
-        prompt = self.query_one(PromptInput)
-        draft = prompt.text
-        if self._hint_kind == "arg":
-            # Argument values replace the typed value and keep the old shape.
-            replacement = f"{selected} "
-            tail = ""
-        else:
-            # Slash entries may be completed mid-sentence: replace only the
-            # token, keep the prose before and after it.
-            replacement = f"/{selected} "
-            tail = draft[self._hint_end :]
-        new_text = draft[: self._hint_start] + replacement + tail
-        prompt.clear()
-        prompt.insert(new_text)
-        prompt.move_cursor(
-            prompt.document.get_location_from_index(
-                self._hint_start + len(replacement)
-            )
-        )
-        prompt.focus()
-        hints.hide()
 
     def action_scroll_up(self) -> None:
         for transcript in self.query(TranscriptView):
