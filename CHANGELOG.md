@@ -3,6 +3,28 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## v0.7.6 — 2026-11-03
+
+**`/memory` becomes a manager for the project memory library.**
+
+### Added
+
+- **`/memory` command** (TUI panel + REPL text forms, one shared command
+  layer). Bare `/memory` opens the project-memory panel in the TUI
+  (`a` add · `e` edit · `x` delete with confirm · `esc` close; every action
+  re-reads the store, so notes the model writes underneath stay visible).
+  The REPL renders the same intents as text: bare `/memory` prints the
+  index, `/memory <id>` prints one entry in full, `/memory rm <id>` deletes,
+  and `/memory add [title]` / `/memory edit <id>` hand a `title:`+body draft
+  to `$VISUAL`/`$EDITOR` (no editor configured → a clear message, nothing
+  written). All UI writes go through `MemoryStore` with `source="ui"` and a
+  journal entry — the model's `memory` tools see the same files.
+- **`split_title_body`** in the memory kernel: `title: X\n\nbody` parses to
+  `(X, body)`; text without a leading title line stays all body and the
+  store coerces the title to `(untitled)` — never a crash.
+- Slash-command completion entry (`/memory`) and `zenagent.cli.editor`
+  (`run_editor`) for line-based frontends.
+
 ## v0.7.5 — 2026-11-03
 
 **Three permission modes: `plan` / `ask` / `zen` — `full` is gone.**
