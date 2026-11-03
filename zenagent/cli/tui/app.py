@@ -17,7 +17,6 @@ from pathlib import Path
 
 from textual.app import App
 from textual.containers import Horizontal, Vertical
-from textual.events import MouseScrollDown, MouseScrollUp
 
 from zenagent.app.appearance import APPEARANCES, resolve_theme
 from zenagent.app.chat import ChatController
@@ -36,6 +35,7 @@ from zenagent.cli.tui.app_parts.models import ModelsMixin
 from zenagent.cli.tui.app_parts.queue import DOUBLE_ESCAPE_SECONDS, QueueActionsMixin
 from zenagent.cli.tui.app_parts.sessions import SessionsMixin
 from zenagent.cli.tui.app_parts.update_notice import UpdateNoticeMixin
+from zenagent.cli.tui.app_parts.views import ViewActionsMixin
 from zenagent.cli.tui.app_theme import textual_theme, theme_name
 from zenagent.cli.tui.history import PromptHistory
 from zenagent.cli.tui.widgets.attachments import AttachmentChips
@@ -83,6 +83,7 @@ class ZenAgentApp(
     QueueActionsMixin,
     DraftsMixin,
     DisplayMixin,
+    ViewActionsMixin,
     App,
 ):
     """A single-column chat app; no mouse, no animations."""
@@ -310,16 +311,6 @@ class ZenAgentApp(
     MAX_SIDEBAR_WIDTH = 60
     MAIN_COLUMN_MIN = 30
 
-    def _on_mouse_scroll_up(self, event: MouseScrollUp) -> None:
-        self._scroll_chat(-self.WHEEL_ROWS)
-
-    def _on_mouse_scroll_down(self, event: MouseScrollDown) -> None:
-        self._scroll_chat(self.WHEEL_ROWS)
-
-    def _scroll_chat(self, rows: int) -> None:
-        for transcript in self.query(TranscriptView):
-            transcript.scroll_lines(rows)
-
     def compose(self):
         with Horizontal(id="root"):
             with Vertical(id="main-column"):
@@ -489,67 +480,7 @@ class ZenAgentApp(
 
     # -- job log -------------------------------------------------------------
 
-    def show_job_log(self, job_id: str) -> None:
-        """Open a job's bounded output; a retired job only gets a notice."""
-        from zenagent.cli.tui.screens.job_log import JobLogScreen
-
-        view = self.chat.job_log(job_id)
-        if view is None:
-            self.notify(t("tui.app.job_gone", id=job_id))
-            return
-        screen = JobLogScreen(view)
-        self._job_log_screen = screen
-        self.push_screen(screen, self._job_log_closed)
-
-    def _job_log_closed(self, _result=None) -> None:
-        self._job_log_screen = None
-        self.query_one(PromptInput).focus()
-
     # -- subagent view -------------------------------------------------------
-
-    def enter_subagent_view(self, call_id: str) -> None:
-        """Swap the main area to the child transcript (read-only)."""
-        views = self.chat.subagent_transcript(call_id)
-        if views is None:
-            self.notify(t("tui.app.no_subagent_transcript"))
-            return
-        name = next(
-            (
-                view.name
-                for view in self.chat.status.subagents
-                if view.call_id == call_id
-            ),
-            call_id,
-        )
-        entry = next(
-            (view for view in self.chat.status.subagents if view.call_id == call_id),
-            None,
-        )
-        self._viewing = call_id
-        child = self.query_one("#subagent-transcript", TranscriptView)
-        child.reset()
-        child.sync(views, self.chat.status)
-        child.display = True
-        self.query_one("#transcript", TranscriptView).display = False
-        self.query_one(SubagentBanner).show(
-            name,
-            status=entry.status if entry is not None else None,
-            transcript_truncated=(
-                entry.transcript_truncated if entry is not None else False
-            ),
-        )
-        self.query_one(PromptInput).disabled = True
-        child.focus()
-
-    def _exit_subagent_view(self, *, restore_focus: bool = True) -> None:
-        self._viewing = None
-        self.query_one(SubagentBanner).hide()
-        self.query_one("#subagent-transcript", TranscriptView).display = False
-        self.query_one("#transcript", TranscriptView).display = True
-        prompt = self.query_one(PromptInput)
-        prompt.disabled = False
-        if restore_focus:
-            prompt.focus()
 
     # -- sidebar width -------------------------------------------------------
 
@@ -652,27 +583,6 @@ class ZenAgentApp(
             hints.show(matches, prefix=prefix)
         else:
             hints.hide()
-
-    def action_scroll_up(self) -> None:
-        for transcript in self.query(TranscriptView):
-            transcript.scroll_pages(-1)
-
-    def action_scroll_down(self) -> None:
-        for transcript in self.query(TranscriptView):
-            transcript.scroll_pages(1)
-
-    def on_transcript_view_pending_changed(
-        self, message: TranscriptView.PendingChanged
-    ) -> None:
-        bar = self.query_one(NewContentBar)
-        if message.pending:
-            bar.show_marker()
-        else:
-            bar.hide_marker()
-
-    def action_jump_to_bottom(self) -> None:
-        for transcript in self.query(TranscriptView):
-            transcript.scroll_to_bottom()
 
     def on_prompt_input_resized(self, message: PromptInput.Resized) -> None:
         for gutter in self.query(PromptGutter):
