@@ -46,7 +46,7 @@ from zenagent.cli.tui.widgets.pending_band import PendingBand
 from zenagent.cli.tui.widgets.prompt_gutter import PromptGutter
 from zenagent.cli.tui.widgets.prompt_input import PromptInput
 from zenagent.cli.tui.widgets.sidebar import NARROW_WIDTH, Sidebar
-from zenagent.cli.tui.widgets.sidebar_resize import SidebarResizeHandle
+from zenagent.cli.tui.widgets.sidebar_resize import SidebarResize, SidebarResizeHandle
 from zenagent.cli.tui.widgets.status_band import StatusBand
 from zenagent.cli.tui.widgets.subagent_banner import SubagentBanner
 from zenagent.cli.tui.widgets.todo_hud import TodoHud
@@ -186,8 +186,7 @@ class ZenAgentApp(
         #: Mode to return to when alt+shift+p leaves plan (None = ask).
         self._mode_before_plan: str | None = None
         #: Drag-resized sidebar width (process-local; 26 at every launch).
-        self._sidebar_width = self.DEFAULT_SIDEBAR_WIDTH
-        self._sidebar_resizing = False
+        self._sidebar_resize = SidebarResize(self)
         #: 1s poll while background jobs/subagents are live (else none).
         self._work_timer = None
         #: ``task`` call id whose read-only transcript is on screen.
@@ -453,7 +452,7 @@ class ZenAgentApp(
                 self._job_log_screen.set_view(view)
         for sidebar in self.query(Sidebar):
             sidebar.refresh_contents(
-                self.chat, self.models, width=self._sidebar_width
+                self.chat, self.models, width=self.sidebar_width
             )
         self._sync_chrome(status)
         self._sync_work_timer(status)
@@ -557,41 +556,22 @@ class ZenAgentApp(
     @property
     def sidebar_width(self) -> int:
         """The current sidebar width (clamped to the bounds above)."""
-        return self._sidebar_width
+        return self._sidebar_resize.width
 
     def begin_sidebar_resize(self) -> None:
-        """Mouse-down on the handle; the move handler owns the actual updates."""
-        self._sidebar_resizing = True
+        self._sidebar_resize.begin()
 
     def end_sidebar_resize(self) -> None:
-        self._sidebar_resizing = False
+        self._sidebar_resize.end()
 
     def resize_sidebar(self, screen_x: int) -> None:
-        """Anchor the sidebar's left edge at ``screen_x`` (the right edge is fixed)."""
-        width = self.size.width - int(screen_x)
-        room = self.size.width - self.MAIN_COLUMN_MIN
-        self._sidebar_width = max(
-            self.MIN_SIDEBAR_WIDTH,
-            min(self.MAX_SIDEBAR_WIDTH, room, width),
-        )
-        self._apply_sidebar_width()
-        # Dragging changes the dock column: re-degrade the status segments on
-        # the next coalesced repaint instead of leaving the old layout on screen.
-        self._on_change()
+        self._sidebar_resize.resize(screen_x)
 
     def _band_width(self) -> int:
-        """Width the dock actually has: the terminal minus the sidebar chrome.
-
-        Segment degradation must use this, not ``size.width``: with the sidebar
-        open the dock is narrower, and dragging changes it.
-        """
-        if self._sidebar_open and self.size.width >= NARROW_WIDTH:
-            return max(20, self.size.width - self._sidebar_width - 1)
-        return self.size.width
+        return self._sidebar_resize.band_width
 
     def _apply_sidebar_width(self) -> None:
-        for sidebar in self.query(Sidebar):
-            sidebar.styles.width = self._sidebar_width
+        self._sidebar_resize.apply()
 
     # -- chrome -------------------------------------------------------------
 
