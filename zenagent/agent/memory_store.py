@@ -30,6 +30,7 @@ __all__ = [
     "MemoryEntry",
     "MemoryStore",
     "format_memory_index",
+    "split_title_body",
 ]
 
 #: Project-relative directory holding the memory library.
@@ -101,6 +102,12 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
             return {}, text  # not frontmatter after all
         fields[key.strip()] = value.strip()
     return fields, ""
+
+
+def split_title_body(text: str) -> tuple[str, str]:
+    """`title: X\n\nbody` → ("X", "body"); no leading title line → ("", text)."""
+    fields, body = _parse_frontmatter(text)
+    return fields.get("title", ""), body
 
 
 def _single_line(text: str, limit: int) -> str:
