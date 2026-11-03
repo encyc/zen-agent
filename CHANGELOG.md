@@ -3,6 +3,32 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## v0.7.5 — 2026-11-03
+
+**Three permission modes: `plan` / `ask` / `zen` — `full` is gone.**
+
+### Removed
+
+- **`full` mode is gone; `zen` replaces it.** The mode vocabulary is now
+  `plan / ask / zen`: plan is read-only, ask confirms every write/execute
+  (risk tiers included), and zen runs everything without asking — destructive
+  commands (`git reset --hard`, `sudo …`), protected credential paths and
+  writes outside the workspace included, headless runs too. The old `full`
+  ("ordinary work automatic, risky actions still confirm") sat between ask and
+  zen with a semantics that was hard to explain and backed by best-effort
+  shell heuristics; if you want "ask but quieter", stay in `ask` and relax
+  individual tiers via `--allow-*` flags or the `[safety]` config.
+  `--mode full` is now an unknown-mode error; `/mode full` in a session
+  reports the same.
+
+### Changed
+
+- **`--yes` now maps to `zen`** (it used to map to `full`). Headless scripts
+  keep working, but note the widened meaning: destructive commands and
+  outside/protected writes that headless `--yes` runs used to refuse now
+  execute. The system prompt in zen tells the model to act instead of asking
+  permission, and `/plan-review` approval switches to `zen` (was `full`).
+
 ## v0.7.4 — 2026-11-02
 
 **17 providers out of the box: every mainstream API, no new adapter code.**
