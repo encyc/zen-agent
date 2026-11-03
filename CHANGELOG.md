@@ -3,13 +3,15 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased
+## v0.7.7 — 2026-11-03
 
 - Refactor: `ZenAgentApp` (TUI) split from 1,903 lines into per-concern mixins
-  (`cli/tui/app_parts/`), picker flows (`cli/tui/screens/`), and a guarded
-  `SCREEN_OPENERS` registry; `ChatController` state and `Runtime` metrics follow.
-  No behavior change; the full suite (2,054 tests) and every doc guard stay
-  green. `app.py`: 1,903 → 715 lines.
+  (`cli/tui/app_parts/`), picker flows (`cli/tui/screens/`), a `SidebarResize`
+  state object, and a guarded `SCREEN_OPENERS` registry; `ChatController`
+  sheds three state objects (`PendingQueue`, `Attachments`, `SubagentTracker`)
+  and `Runtime` its metrics (`MetricsSession`). No behavior change; the full
+  suite (2,054 tests) and every doc guard stay green. `app.py`:
+  1,903 → 715 lines.
 ## v0.7.6 — 2026-11-03
 
 **`/memory` becomes a manager for the project memory library.**

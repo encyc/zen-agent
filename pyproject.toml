@@ -1,6 +1,6 @@
 [project]
 name = "zenagent-py"
-version = "0.7.6"
+version = "0.7.7"
 description = "A minimal, Pythonic coding agent: streaming LLM client, async-generator agent loop, and terminal harness."
 readme = "README.md"
 license = "MIT"
