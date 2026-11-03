@@ -212,7 +212,7 @@ class Runtime:
 
     @property
     def mode(self) -> str:
-        """The active plan/ask/full mode."""
+        """The active plan/ask/zen mode."""
         return self._mode
 
     def set_mode(self, mode: str) -> str:

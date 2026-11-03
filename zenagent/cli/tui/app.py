@@ -1332,7 +1332,7 @@ class ZenAgentApp(App):
         )
 
     def open_plan_review(self) -> None:
-        """Read the last plan, then approve (→ full) or keep planning."""
+        """Read the last plan, then approve (→ zen) or keep planning."""
         from zenagent.cli.tui.screens.modals import PlanReview
 
         plan = self.chat.last_assistant_text()
@@ -1344,8 +1344,8 @@ class ZenAgentApp(App):
             if choice != "approve":
                 return
             self._mode_before_plan = None
-            self.runtime.set_mode("full")
-            self.notify(t("tui.app.mode_set", mode="full"))
+            self.runtime.set_mode("zen")
+            self.notify(t("tui.app.mode_set", mode="zen"))
             self._refresh_status()
 
         self.open_menu("plan-review", lambda: PlanReview(plan), reviewed)

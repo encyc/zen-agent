@@ -1,4 +1,4 @@
-"""Runtime permission modes: ``plan`` / ``ask`` / ``full``.
+"""Runtime permission modes: ``plan`` / ``ask`` / ``zen``.
 
 The kernel has no permission concept on purpose (pi's philosophy); the mode is
 harness policy. Keeping the vocabulary in one UI-agnostic module means the CLI,
@@ -7,9 +7,12 @@ REPL and TUI all resolve and display the same three words.
 - ``plan``: read-only. Mutating tools are refused; the prompt tells the model to
   investigate and propose a plan instead of executing it.
 - ``ask``: mutating tools need an interactive confirmation (REPL prompt, TUI
-  modal). Non-interactive runs deny, as before.
-- ``full``: mutating tools run without asking. Catastrophic shell commands and
-  explicit deny patterns still win.
+  modal). Non-interactive runs deny, as before. The three confirmable risk
+  tiers (destructive command, protected path, outside workspace) confirm here
+  too, and catastrophic shell commands / explicit deny patterns still win.
+- ``zen``: no confirmations at all. The risk tiers run instead of asking,
+  headless runs included. Only policy stays: catastrophic shell commands still
+  refuse (``--allow-dangerous`` lifts that too) and explicit deny patterns win.
 """
 
 from __future__ import annotations
@@ -27,7 +30,7 @@ __all__ = [
 ]
 
 #: The three supported modes, in escalation order.
-MODES: tuple[str, str, str] = ("plan", "ask", "full")
+MODES: tuple[str, str, str] = ("plan", "ask", "zen")
 
 #: The default when neither a flag nor an explicit mode says otherwise.
 DEFAULT_MODE = "ask"
@@ -50,7 +53,7 @@ def resolve_mode(
     """Resolve the effective mode from the explicit flag and legacy switches.
 
     Precedence: ``--mode`` wins; then ``--read-only`` (plan) and ``--yes``
-    (full) for backward compatibility; otherwise ``ask``.
+    (zen) for backward compatibility; otherwise ``ask``.
     """
     if explicit is not None:
         mode = normalize_mode(explicit)
@@ -60,15 +63,18 @@ def resolve_mode(
     if read_only:
         return "plan"
     if assume_yes:
-        return "full"
+        return "zen"
     return DEFAULT_MODE
 
 
 def mode_prompt_note(mode: str) -> str:
     """Extra system-prompt paragraph for the mode, or ``""`` when none."""
-    if normalize_mode(mode) != "plan":
-        return ""
-    return read_block("plan_mode")
+    normalized = normalize_mode(mode)
+    if normalized == "plan":
+        return read_block("plan_mode")
+    if normalized == "zen":
+        return read_block("zen_mode")
+    return ""
 
 
 def describe_modes() -> str:

@@ -184,10 +184,11 @@ def compose_system(ctx: PromptContext) -> RenderedPrompt:
                 tokens=_block_tokens(part),
             )
         )
-    if ctx.include_mode and ctx.mode == "plan":
-        part = read_block("plan_mode", ctx.root)
+    if ctx.include_mode and ctx.mode in ("plan", "zen"):
+        block_id = f"{ctx.mode}_mode"
+        part = read_block(block_id, ctx.root)
         text = f"{text}\n\n{part}"
-        blocks.append(_block("plan_mode", part))
+        blocks.append(_block(block_id, part))
     return RenderedPrompt(text=text, blocks=tuple(blocks), version=PROMPT_VERSION)
 
 

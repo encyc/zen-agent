@@ -344,17 +344,17 @@ async def test_ctrl_v_pastes_plain_text_into_the_draft(picker_app, monkeypatch):
         assert prompt.text == "pasted words"
 
 
-async def test_plan_review_approve_switches_to_full(picker_app, monkeypatch):
+async def test_plan_review_approve_switches_to_zen(picker_app, monkeypatch):
     app = picker_app
     monkeypatch.setattr(app.chat, "last_assistant_text", lambda: "1. do X")
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
-        assert app.runtime.mode != "full"
+        assert app.runtime.mode != "zen"
         app.open_plan_review()
         await pilot.pause()
         await pilot.press("a")
         await pilot.pause()
-        assert app.runtime.mode == "full"
+        assert app.runtime.mode == "zen"
 
 
 async def test_plan_review_keep_leaves_the_mode_alone(picker_app, monkeypatch):
@@ -377,7 +377,7 @@ async def test_plan_review_without_a_plan_does_not_open(picker_app, monkeypatch)
         await pilot.pause()
         app.open_plan_review()
         await pilot.pause()
-        assert app.runtime.mode != "full"
+        assert app.runtime.mode != "zen"
 
 
 async def test_escape_clears_the_picker_search_before_closing(picker_app):

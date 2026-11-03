@@ -75,9 +75,9 @@ def test_help_text_is_generated_from_the_command_table():
 
 def test_mode_arguments_are_completed():
     completer = ReplCompleter(base_dir=Path("/tmp"))
-    assert complete(completer, "/mode ") == ["plan", "ask", "full"]
+    assert complete(completer, "/mode ") == ["plan", "ask", "zen"]
     assert complete(completer, "/mode p") == ["plan"]
-    assert complete(completer, "/mode f") == ["full"]
+    assert complete(completer, "/mode z") == ["zen"]
 
 
 def test_thinking_arguments_are_completed():
@@ -154,7 +154,10 @@ def test_typed_commands_carry_a_type_label():
 def test_builtin_commands_are_tagged_as_command():
     completer = ReplCompleter(base_dir=Path("/tmp"))
     items = dict(complete_items(completer, "/mo"))
-    assert items["/mode"] == "command · set runtime mode: plan|ask|full (plan = read-only)"
+    assert (
+        items["/mode"]
+        == "command · set runtime mode: plan|ask|zen (plan = read-only)"
+    )
 
 
 def test_mid_sentence_slash_offers_only_skills():

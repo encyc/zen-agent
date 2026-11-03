@@ -27,7 +27,7 @@ allowed, reason = await gate.check(tool_name, args)
 ```
 assess(): 灾难命令 > deny > plan/--read-only > destructive confirm > protected confirm > outside confirm > allow
 confirm: 会话级目标授权 / CLI、全局配置放行 > 交互确认 > 拒绝（带 flag 提示）
-allow:  allow 模式 > 只读工具 > 目标授权 > full/--yes > 交互确认 > 拒绝
+allow:  zen 模式 > 只读工具 > 目标授权 > --yes > 交互确认 > 拒绝
 ```
 
 关键设计：
@@ -51,7 +51,8 @@ allow:  allow 模式 > 只读工具 > 目标授权 > full/--yes > 交互确认 >
 
 关键不变量：
 
-- **full / `--yes` 不自动放行 confirm 档**——模式表达的是"普通工具不用问"，不是"允许越界"。
+- **只有 zen（或 `--yes`，它映射 zen）自动放行 confirm 档**；ask 模式下模式表达的是
+  "普通工具要确认"，越界/凭据/破坏性同样要确认，想少问哪一类用 `--allow-*` 或 `[safety]` 配置。
 - `[tools] allow` 与工具级 always 不能绕过风险判定；只有目标精确的会话级 always 或显式 flag 可以。
 - 风险判定是启发式（尤其 bash），不构成隔离；它防的是手滑，不防恶意内容。
 

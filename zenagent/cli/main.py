@@ -505,7 +505,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="reasoning level (default: high for reasoning models, off otherwise; max when supported)",
     )
     parser.add_argument(
-        "--yes", action="store_true", help="allow write/execute tools without asking"
+        "--yes", action="store_true", help="run everything without asking (zen mode)"
     )
     parser.add_argument(
         "--read-only",
@@ -522,7 +522,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--mode",
         choices=MODES,
         default=None,
-        help="runtime permission mode: plan (read-only) | ask (confirm) | full (automatic)",
+        help="runtime permission mode: plan (read-only) | ask (confirm) | "
+        "zen (fully automatic, no confirmations)",
     )
     parser.add_argument(
         "--allow-dangerous",

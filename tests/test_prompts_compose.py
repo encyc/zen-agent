@@ -48,6 +48,14 @@ def test_plan_note_only_in_plan_mode() -> None:
     assert "PLAN MODE:" in plan
 
 
+def test_zen_note_only_in_zen_mode() -> None:
+    ask = compose_system(PromptContext(cwd=CWD, tool_names=(), mode="ask")).text
+    zen = compose_system(PromptContext(cwd=CWD, tool_names=(), mode="zen")).text
+    assert "ZEN MODE:" not in ask
+    assert zen.startswith(ask)
+    assert "ZEN MODE:" in zen
+
+
 def test_optional_parts_keep_their_order() -> None:
     rendered = compose_system(
         PromptContext(

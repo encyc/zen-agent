@@ -8,7 +8,7 @@ def values(command: str, prefix: str = "") -> list[str]:
     return [value for value, _ in argument_values(command, prefix)]
 
 
-def test_mode_values_are_the_three_modes_in_order():
+def test_mode_values_are_all_modes_in_order():
     assert values("/mode") == list(MODES)
     assert values("/mode", "p") == ["plan"]
     assert values("/mode", "P") == ["plan"]
@@ -28,7 +28,8 @@ def test_theme_values_match_the_appearance_choices():
 
 
 def test_argument_filter_is_case_insensitive():
-    assert values("/mode", "F") == ["full"]
+    assert values("/mode", "P") == ["plan"]
+    assert values("/mode", "z") == ["zen"]
 
 
 def test_commands_without_argument_values_return_nothing():

@@ -45,18 +45,18 @@ async def execute(tool_call_id, args, abort, on_update=None) -> ToolResultAgent
 - `on_update`：流式部分结果（bash 用它推送运行中输出，TUI 工具卡实时显示）。
 - 返回值里 `content` 给模型，`details` 给 UI/日志。
 
-## 运行模式（plan / ask / full）
+## 运行模式（plan / ask / zen）
 
-启动由 `--mode` 决定（`--yes`→full、`--read-only`→plan 只是兼容映射，显式 `--mode` 优先）；
+启动由 `--mode` 决定（`--yes`→zen、`--read-only`→plan 只是兼容映射，显式 `--mode` 优先）；
 会话中 `/mode` 切换，下一次工具调用立即生效；TUI 状态带显示当前模式。
 
 | 模式 | 写/执行工具 | 说明 |
 |---|---|---|
 | `plan` | 拒绝 | 只读调研；system prompt 要求先调研并给出计划 |
 | `ask` | 需确认 | REPL 终端 `[y/n/a]`；TUI 审批框（y/a/n，120s 超时=拒绝）；headless 默认拒绝 |
-| `full` | 自动放行 | 危险命令仍需 `--allow-dangerous`；`[tools] deny` 永远优先 |
+| `zen` | 全部放行 | **任何操作都不再确认**（含 destructive / protected / outside，headless 同样放行）；灾难命令仍拒绝（`--allow-dangerous` 可再放行）；`[tools] deny` 永远优先；system prompt 会告诉模型直接执行、不要请示 |
 
-优先级：危险命令、`[tools] deny`、plan、`--read-only` 属于**策略层**，优先于 full 和会话内
+优先级：危险命令、`[tools] deny`、plan、`--read-only` 属于**策略层**，优先于 zen 和会话内
 "always allow"。`PermissionBroker` 先跑 `PermissionGate.policy_refusal`，只有 ask 才弹确认。
 
 **"always" 的记忆粒度是目标，不是工具**：文件类工具按解析后的路径记
@@ -73,15 +73,16 @@ workspace 判定；workspace = 项目根（最近 `.git`，否则 cwd，与 proj
 
 | 风险 | 触发 | 交互式 | headless |
 |---|---|---|---|
-| `outside` | 解析后不在 workspace 内 | 弹确认，带 `⚠ outside workspace` | 拒绝，提示 `--allow-outside PATH` |
-| `protected` | 目标是 `~/.zenagent/**`、`~/.ssh`、`~/.aws`、`~/.config/gcloud`、`~/.kube`、`~/.docker/config.json`、`~/.git-credentials`、`~/.netrc`、`~/.npmrc`、`~/.pypirc` 或 `id_rsa*`/`id_dsa*`/`id_ecdsa*`/`id_ed25519*`/`*.p12`/`*.pfx` | 弹确认，带 `⚠ protected path` | 拒绝，提示 `--allow-protected` |
-| `destructive` | bash 命中破坏性命令（见下节） | 弹确认，带 `⚠ destructive command` | 拒绝，提示 `--allow-destructive` |
+| `outside` | 解析后不在 workspace 内 | 弹确认，带 `⚠ outside workspace`（zen 不弹） | 拒绝，提示 `--allow-outside PATH`（zen 放行） |
+| `protected` | 目标是 `~/.zenagent/**`、`~/.ssh`、`~/.aws`、`~/.config/gcloud`、`~/.kube`、`~/.docker/config.json`、`~/.git-credentials`、`~/.netrc`、`~/.npmrc`、`~/.pypirc` 或 `id_rsa*`/`id_dsa*`/`id_ecdsa*`/`id_ed25519*`/`*.p12`/`*.pfx` | 弹确认，带 `⚠ protected path`（zen 不弹） | 拒绝，提示 `--allow-protected`（zen 放行） |
+| `destructive` | bash 命中破坏性命令（见下节） | 弹确认，带 `⚠ destructive command`（zen 不弹） | 拒绝，提示 `--allow-destructive`（zen 放行） |
 
 - `/tmp` 与系统临时目录默认放行，避免临时文件也弹窗。
-- **full / `--yes` 不会自动放行 confirm 级风险**：它们只表示"普通写/执行不用问"。
+- **ask / `--yes` 之外，confirm 级风险只有 zen 会放行**：`--yes` 只是等价于 `--mode zen` 的
+  兼容写法；想留在 ask 又少弹某类确认，用单项放行（见下一条）。
 - `[tools] allow` 与工具级 always 不能绕过风险判定；能放行的只有：目标的会话级 always、
   `--allow-outside PATH` / `--allow-destructive` / `--allow-protected`、
-  `[safety]` 全局配置里的对应项。
+  `[safety]` 全局配置里的对应项、以及 zen 模式本身。
 - 项目内 `.env` 等日常文件不受保护（改 `.env` 是正常开发）；受保护清单在 `zenagent/app/safety.py`，
   按调用时的 `HOME` 解析（便于测试与容器）。
 - 配置放行项**只允许写在全局层**：项目层出现 `[safety]` 会启动即报错，避免仓库给自己开权限。
@@ -137,17 +138,19 @@ workspace 外写入   ──> confirm(outside)
 ```
 
 `allow` 时继续旧流程：allow 模式 → 放行；只读工具 → 放行；目标已授权 → 放行；
-full / `--yes` → 放行；交互式 → 确认；否则拒绝。
+zen / `--yes` → 放行；交互式 → 确认；否则拒绝。
 
 关键点：
 
-1. **allowlist 救不了危险命令**：`allow = ["*"]` 也不能放行 `rm -rf /`。
+1. **allowlist 救不了危险命令**：`allow = ["*"]` 也不能放行 `rm -rf /`（zen 也不行，
+   只有 `--allow-dangerous` 可以）。
 2. `--read-only` 下，`write_file`、`bash` 等写/执行工具全拒；
    `read_file/grep/glob/list_dir/web_search/fetch/read_skill` 放行；
    MCP 里声明了 `readOnlyHint` 的工具也放行，其余 MCP 工具仍拒绝。
 3. 拒绝不是异常：工具调用收到 `is_error=True` 的结果，模型能看到原因并调整。
 4. 交互模式下 REPL 会问 `allow? [y/N]`；headless 没有交互，默认拒绝。
-5. `full` / `--yes` 只会自动放行 `allow` 档；越界、凭据、破坏性命令仍走上面的 `confirm` 分支。
+5. `ask` 是唯一会确认的档：普通写/执行和三类风险都走 `confirm`；`zen` 在 `assess()`
+   里直接把 `confirm` 档降级为 `allow`，只剩策略层的拒绝。
 
 ## 工具结果的形状
 
@@ -178,7 +181,7 @@ bash 命令分两档，都在权限门里判定：
 `git checkout -- .`、`git restore .`、`git stash drop|clear`、`git push --force`、`sudo …`、
 `curl|wget … | sh`、解析后落在项目外/祖先目录的 `rm -rf`（`rm -rf ./build` 不触发）、
 `find -delete` / `-exec rm`、`truncate -s 0 …`、`shred …`、`dd of=<文件>`。
-交互式会弹确认（full 模式也一样）；非交互拒绝并提示 `--allow-destructive`
+ask 模式弹确认；zen 直接放行；非交互 ask 拒绝并提示 `--allow-destructive`
 （`--allow-dangerous` 同样覆盖这一档）。
 
 两条判定分别在 `zenagent/app/permissions.py` 与 `zenagent/app/safety.py`；命令解析是启发式，

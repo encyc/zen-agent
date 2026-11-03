@@ -538,7 +538,7 @@ async def _settings(services: AppServices, argument: str) -> CommandResult:
 
 @_command("plan-review")
 async def _plan_review(services: AppServices, argument: str) -> CommandResult:
-    """Review the plan the model produced in plan mode (approve → full)."""
+    """Review the plan the model produced in plan mode (approve → zen)."""
     plan = services.chat.last_assistant_text()
     if not plan:
         return CommandResult(message=t("cmdmsg.no_plan"))
