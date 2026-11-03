@@ -409,7 +409,7 @@ def test_subagent_view_defaults_to_a_complete_transcript():
 
 def test_subagent_view_carries_the_transcript_truncation_flag():
     from zenagent.agent.subagents import SubagentMeta
-    from zenagent.app.chat import _subagent_view
+    from zenagent.app.subagent_tracker import _subagent_view
 
     card = ToolCallView(
         call_id="c1",
