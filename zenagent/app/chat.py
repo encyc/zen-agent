@@ -5,13 +5,13 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
 from pathlib import Path
 
 from zenagent.agent.subagents import carry_task_dir
 from zenagent.app.compact import compact, should_auto_compact
 from zenagent.app.context import build_context_report
 from zenagent.app.git import git_status
+from zenagent.app.pending import PendingQueue
 from zenagent.app.retry import prepare_retry
 from zenagent.app.runtime import Runtime
 from zenagent.app.subagent_tracker import SubagentTracker
@@ -40,14 +40,6 @@ from zenagent.types import ImageContent
 __all__ = ["ChatController"]
 
 
-@dataclass
-class _PendingItem:
-    """One pending message plus the images that travel with it."""
-
-    message: PendingMessage
-    images: list[ImageContent] = field(default_factory=list)
-
-
 class ChatController:
     """Drives the agent and exposes snapshots a frontend can render."""
 
@@ -61,8 +53,7 @@ class ChatController:
         self._subagents = SubagentTracker(self._notify)
         #: Pending user input, in creation order: ``queue`` entries wait for the
         #: run to end, ``steer`` entries are injected at the next step boundary.
-        self._pending: list[_PendingItem] = []
-        self._next_pending_id = 1
+        self._pending_queue = PendingQueue()
         self._task: asyncio.Task | None = None
         self._running = False
         #: True while an automatic compaction runs: the controller stays busy
@@ -149,11 +140,9 @@ class ChatController:
             cost=usage.cost.total,
             context_used=context_used,
             context_window=agent.model.context_window,
-            follow_ups=sum(
-                1 for item in self._pending if item.message.lane == "queue"
-            ),
+            follow_ups=self._pending_queue.count("queue"),
             steering=agent.pending_steering,
-            pending=[item.message for item in self._pending],
+            pending=self._pending_queue.items,
             session_name=Path(self.runtime.session.path).stem,
             cwd=str(Path.cwd()),
             mode=self.runtime.mode,
@@ -273,18 +262,17 @@ class ChatController:
         blocks = list(images if images is not None else self._attachments)
         if images is None:
             self._attachments.clear()
-        self._add_pending(text, blocks, "queue")
+        self._pending_queue.queue(text, blocks)
         self._notify()
 
     def clear_pending(self) -> int:
         """Drop every pending message (both lanes); returns how many went."""
-        cleared = len(self._pending)
+        cleared = self._pending_queue.clear()
         if not cleared:
             return 0
         # Undelivered steering also lives on the agent; reclaim it or it would
         # be injected into the next run's first request after the user cleared.
         self.runtime.agent.take_steering()
-        self._pending.clear()
         self._notify()
         return cleared
 
@@ -313,16 +301,14 @@ class ChatController:
         omp's dequeue semantics: the last thing you queued is the one you most
         likely want to edit, so pop from the end. Returns ``None`` when empty.
         """
-        for index in range(len(self._pending) - 1, -1, -1):
-            item = self._pending[index]
-            if item.message.lane != "queue":
-                continue
-            del self._pending[index]
-            if item.images:
-                self._attachments[:0] = item.images  # back into the composer
-            self._notify()
-            return item.message.text
-        return None
+        taken = self._pending_queue.dequeue_latest()
+        if taken is None:
+            return None
+        text, images = taken
+        if images:
+            self._attachments[:0] = images  # back into the composer
+        self._notify()
+        return text
 
     def _add_pending(
         self,
@@ -331,24 +317,7 @@ class ChatController:
         lane: PendingLane,
     ) -> PendingMessage:
         """Append one pending entry and return its view-model snapshot."""
-        blocks = list(images or [])
-        message = PendingMessage(
-            id=self._next_pending_id,
-            lane=lane,
-            text=text,
-            images=len(blocks),
-            created_at=time.time(),
-        )
-        self._next_pending_id += 1
-        self._pending.append(_PendingItem(message=message, images=blocks))
-        return message
-
-    def _take_next_queue_item(self) -> _PendingItem | None:
-        """Pop the oldest queue-lane entry (the next turn), if any."""
-        for index, item in enumerate(self._pending):
-            if item.message.lane == "queue":
-                return self._pending.pop(index)
-        return None
+        return self._pending_queue.add(text, images, lane)
 
     def steer(self, text: str) -> None:
         """Deliver ``text`` at the running turn's next step boundary.
@@ -372,17 +341,14 @@ class ChatController:
         text-only), ``"not_running"`` (no step boundary to inject at), or
         ``"missing"`` (unknown id, or already steering).
         """
-        item = next(
-            (item for item in self._pending if item.message.id == pending_id),
-            None,
-        )
+        item = self._pending_queue.find(pending_id)
         if item is None or item.message.lane != "queue":
             return "missing"
         if item.images:
             return "blocked_images"
         if not self.runtime.agent.is_streaming:
             return "not_running"
-        self._pending.remove(item)
+        self._pending_queue.remove(item)
         self._add_pending(item.message.text, [], "steer")
         self.runtime.agent.steer(item.message.text)
         self._notify()
@@ -560,7 +526,7 @@ class ChatController:
             # Stay busy (running=True, task set) through the summarizer call so
             # a submit during compaction queues instead of racing it. Queued
             # turns go first: compress only between bursts (Review Focus #1).
-            if termination != "aborted" and not self._pending:
+            if termination != "aborted" and not self._pending_queue.items:
                 await self._maybe_auto_compact()
             self._running = False
             self._task = None
@@ -571,7 +537,7 @@ class ChatController:
                 # Only a normal finish auto-drains the queue. An error/cap
                 # ending leaves the pending rows visible and the banner up;
                 # the user decides when to run again (Review Focus #4).
-                item = self._take_next_queue_item()
+                item = self._pending_queue.take_next_queue_item()
                 if item is not None:
                     self._task = asyncio.create_task(
                         self._run(item.message.text, item.images)
@@ -582,9 +548,7 @@ class ChatController:
         texts = self.runtime.agent.take_steering()
         if not texts:
             return
-        self._pending = [
-            item for item in self._pending if item.message.lane != "steer"
-        ]
+        self._pending_queue.remove_lane("steer")
         for text in texts:
             self._add_pending(text, [], "queue")
         self._notify()
@@ -634,12 +598,11 @@ class ChatController:
                 self._todos = coerce_todo_phases(details.get("phases"))
         # The loop drains steering before yielding the injected user message, so
         # an empty agent queue means every mirror entry has been delivered.
-        if self.runtime.agent.pending_steering == 0 and any(
-            item.message.lane == "steer" for item in self._pending
+        if (
+            self.runtime.agent.pending_steering == 0
+            and self._pending_queue.count("steer")
         ):
-            self._pending = [
-                item for item in self._pending if item.message.lane != "steer"
-            ]
+            self._pending_queue.remove_lane("steer")
             changed = True
         if changed:
             self._notify()

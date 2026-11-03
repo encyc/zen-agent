@@ -500,3 +500,64 @@ async def test_manual_compaction_keeps_pending(runtime_factory):
     await chat.compact_now()
 
     assert [p.text for p in chat.status.pending] == ["keep me"]
+
+
+# -- PendingQueue unit contract (extracted state object) ---------------------
+
+
+def test_queue_add_clear_and_lane_counts():
+    from zenagent.app.pending import PendingQueue
+
+    queue = PendingQueue()
+    message = queue.queue("hello", [])
+    assert message.lane == "queue"
+    assert message.id == 1
+    queue.queue("again", [])
+    assert [m.text for m in queue.items] == ["hello", "again"]
+    assert queue.count("queue") == 2
+    assert queue.count("steer") == 0
+
+    assert queue.clear() == 2
+    assert queue.items == []
+    assert queue.clear() == 0
+
+
+def test_dequeue_latest_pops_the_last_queue_entry_with_images():
+    from zenagent.app.pending import PendingQueue
+
+    queue = PendingQueue()
+    images = [ImageContent(data="a", mime_type="image/png")]
+    queue.queue("first", [])
+    queue.queue("second", images)
+    taken = queue.dequeue_latest()
+    assert taken == ("second", images)
+    # The earliest entry survives; ids keep increasing across dequeues.
+    assert [m.text for m in queue.items] == ["first"]
+    assert queue.queue("third", []).id == 3
+    assert queue.dequeue_latest() == ("third", [])
+
+
+def test_take_next_queue_item_is_oldest_first_and_lane_scoped():
+    from zenagent.app.pending import PendingQueue
+
+    queue = PendingQueue()
+    queue.queue("q1", [])
+    queue.add("s1", [], "steer")
+    queue.queue("q2", [])
+    item = queue.take_next_queue_item()
+    assert item is not None and item.message.text == "q1"
+    queue.remove_lane("steer")
+    assert queue.count("steer") == 0
+    assert queue.count("queue") == 1
+
+
+def test_find_and_remove_by_id():
+    from zenagent.app.pending import PendingQueue
+
+    queue = PendingQueue()
+    message = queue.queue("q1", [])
+    found = queue.find(message.id)
+    assert found is not None and found.message.text == "q1"
+    queue.remove(found)
+    assert queue.items == []
+    assert queue.find(message.id) is None
