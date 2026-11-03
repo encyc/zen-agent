@@ -19,6 +19,7 @@ from zenagent.agent.registry import ToolRegistry
 from zenagent.agent.session import Session, latest_session, unique_session_path
 from zenagent.agent.subagents import SubagentLimits
 from zenagent.app.journal import attach_journal, journal_for, load_backup_policy
+from zenagent.app.metrics import MetricsSession
 from zenagent.app.modes import (
     DEFAULT_MODE,
     mode_prompt_note,
@@ -62,7 +63,6 @@ from zenagent.skills import (
     discover_skills,
     format_skill_entries,
 )
-from zenagent.telemetry import MetricsRecorder, append_metrics
 from zenagent.templates import (
     PromptTemplate,
     default_template_roots,
@@ -173,7 +173,7 @@ class Runtime:
         self.auto_compact = True
         #: Per-run metrics JSONL and its live recorder.
         self.metrics_path: Path | None = None
-        self._metrics_recorder: MetricsRecorder | None = None
+        self._metrics: MetricsSession | None = None
         #: Explicit tool list (embedding/test seam); ``None`` = compose.
         self._custom_tools: list | None = None
         self._skill_entries = ""
@@ -425,7 +425,8 @@ class Runtime:
             agent.subscribe(runtime.tracer)
         if options.metrics:
             runtime.metrics_path = Path(options.metrics)
-            runtime._start_metrics(agent)
+            runtime._metrics = MetricsSession(runtime.metrics_path)
+            runtime._metrics.start(agent)
 
         def persist(event) -> None:
             if event.type != "agent_end":
@@ -433,7 +434,8 @@ class Runtime:
             if event.new_messages:
                 for message in event.new_messages:
                     runtime.session.append(message)
-            runtime._flush_metrics()
+            if runtime._metrics is not None:
+                runtime._metrics.flush(runtime.agent)
 
         agent.subscribe(persist)
         if runtime.journal is not None:
@@ -734,19 +736,6 @@ class Runtime:
         return notes or ["nothing changed"]
 
     # -- lifecycle ----------------------------------------------------------
-
-    def _start_metrics(self, agent: Agent) -> None:
-        recorder = MetricsRecorder(agent.model.id)
-        self._metrics_recorder = recorder
-        agent.subscribe(recorder)
-
-    def _flush_metrics(self) -> None:
-        """Append one metrics line for the finished run, then re-arm."""
-        recorder, self._metrics_recorder = self._metrics_recorder, None
-        if recorder is None or self.metrics_path is None:
-            return
-        append_metrics(self.metrics_path, recorder.build(self.agent.termination))
-        self._start_metrics(self.agent)
 
     async def close(self) -> None:
         if self.tracer is not None:

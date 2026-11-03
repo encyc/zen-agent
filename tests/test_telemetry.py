@@ -112,3 +112,37 @@ def test_metrics_recorder_records_subagent_cost_from_task_results():
     metrics = recorder.build("stop")
     assert metrics.subagent_cost == 0.04
     assert metrics.subagent_tokens == 2468
+
+
+def test_metrics_session_appends_one_line_per_run_and_re_arms(tmp_path):
+    from zenagent.app.metrics import MetricsSession
+
+    class _StubAgent:
+        def __init__(self):
+            self.model = type("M", (), {"id": "m"})()
+            self.termination = "stop"
+            self.subscribers: list = []
+
+        def subscribe(self, sub):
+            self.subscribers.append(sub)
+
+    path = tmp_path / "metrics.jsonl"
+    session = MetricsSession(path)
+    agent = _StubAgent()
+    session.start(agent)
+    assert agent.subscribers, "start must subscribe the recorder"
+    session.flush(agent)
+    assert path.read_text().count("\n") == 1
+    # flush re-arms: a second run appends a second line without a new session.
+    assert agent.subscribers, "flush must re-arm a fresh recorder"
+    session.flush(agent)
+    assert path.read_text().count("\n") == 2
+
+
+def test_metrics_session_flush_without_start_is_a_noop(tmp_path):
+    from zenagent.app.metrics import MetricsSession
+
+    path = tmp_path / "metrics.jsonl"
+    session = MetricsSession(path)
+    session.flush(type("A", (), {"termination": "stop"})())
+    assert not path.exists()
