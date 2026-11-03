@@ -34,6 +34,7 @@ from zenagent.app.sessions import SessionManager
 from zenagent.app.skill_commands import build_skill_submission, slash_token_at
 from zenagent.app.views import RunStatus
 from zenagent.cli.tui import palette
+from zenagent.cli.tui.app_parts.appearance import AppearanceMixin
 from zenagent.cli.tui.app_parts.update_notice import UpdateNoticeMixin
 from zenagent.cli.tui.app_theme import textual_theme, theme_name
 from zenagent.cli.tui.history import PromptHistory
@@ -76,7 +77,7 @@ def _saved_language() -> str | None:
     return settings.get_pref("language")
 
 
-class ZenAgentApp(UpdateNoticeMixin, App):
+class ZenAgentApp(UpdateNoticeMixin, AppearanceMixin, App):
     """A single-column chat app; no mouse, no animations."""
 
     CSS_PATH = "theme.tcss"
@@ -394,24 +395,6 @@ class ZenAgentApp(UpdateNoticeMixin, App):
 
         set_ask_handler(None)
         set_subagent_observer(None)
-
-    def _announce_language_warnings(self) -> None:
-        """Report a rejected language pref without stopping the app."""
-        warnings, self._language_warnings = self._language_warnings, []
-        if not warnings:
-            return
-        transcript = self.query_one(TranscriptView)
-        for warning in warnings:
-            transcript.append_notice(f"language: {warning}", warning=True)
-
-    def _announce_appearance_warnings(self) -> None:
-        """Report a rejected theme pref without stopping the app."""
-        warnings, self._appearance_warnings = self._appearance_warnings, []
-        if not warnings:
-            return
-        transcript = self.query_one(TranscriptView)
-        for warning in warnings:
-            transcript.append_notice(f"theme: {warning}", warning=True)
 
     def _announce_missing_key(self) -> None:
         """A keyless first launch still opens; the banner says where to paste one."""
@@ -958,70 +941,12 @@ class ZenAgentApp(UpdateNoticeMixin, App):
                     f"  /{command.name}  {command.description}"
                 )
 
-    def set_appearance(self, spec: str) -> str:
-        """Switch the palette to ``spec`` (auto|dark|light); persist known values."""
-        from zenagent import settings
-        from zenagent.app.appearance import THEME_CHOICES
-
-        normalized = (spec or "").strip().lower()
-        self._apply_appearance(resolve_theme(normalized))
-        if normalized in THEME_CHOICES:
-            settings.set_pref("theme", normalized)
-            self._theme_spec = normalized
-        return theme_name(self._appearance)
-
-    def _apply_appearance(self, appearance) -> None:
-        palette.bind(appearance)
-        self._appearance = appearance
-        self.theme = theme_name(appearance)
-        self._repaint_rich()
-
-    def _repaint_rich(self) -> None:
-        """Rebuild the text that carries literal colours (not CSS variables).
-
-        A theme switch repaints stylesheet-driven widgets on its own, but the
-        transcript rows and status band embed Rich styles from ``palette``, so
-        they are rebuilt from the current views instead.
-        """
-        for log in self.query(TranscriptView):
-            log.reset()
-        self._refresh_status()
-
     def open_theme_picker(self) -> None:
-        from zenagent.app.slash_args import argument_values
-        from zenagent.cli.tui.screens.modals import ChoicePicker
-
-        async def selected(value: str | None) -> None:
-            if not value:
-                return
-            self.set_appearance(value)
-            self.notify(t("tui.app.theme_set", value=value), timeout=3)
-
-        self.open_menu(
-            "theme",
-            lambda: ChoicePicker(
-                t("tui.app.theme_header"),
-                argument_values("/theme"),
-                self._theme_spec,
-            ),
-            selected,
+        from zenagent.cli.tui.screens.appearance import (
+            open_theme_picker as _open_theme_picker,
         )
 
-    def set_language(self, spec: str) -> str:
-        """Switch the interface language (auto|en|zh) and rebuild the chrome."""
-        from zenagent import settings
-
-        normalized = (spec or "").strip().lower()
-        code = resolve_language(normalized)
-        set_locale(code)
-        if normalized in LANGUAGE_CHOICES:
-            settings.set_pref("language", normalized)
-            self._language_spec = normalized
-        self._rebuild_commands()
-        for sidebar in self.query(Sidebar):
-            sidebar.refresh_language()
-        self._repaint_rich()
-        return code
+        _open_theme_picker(self)
 
     def _rebuild_commands(self) -> None:
         """Describe commands in the active language (registry text is resolved)."""
@@ -1035,24 +960,11 @@ class ZenAgentApp(UpdateNoticeMixin, App):
         )
 
     def open_language_picker(self) -> None:
-        from zenagent.app.slash_args import argument_values
-        from zenagent.cli.tui.screens.modals import ChoicePicker
-
-        async def selected(value: str | None) -> None:
-            if not value:
-                return
-            self.set_language(value)
-            self.notify(t("tui.app.language_set", value=value), timeout=3)
-
-        self.open_menu(
-            "language",
-            lambda: ChoicePicker(
-                t("tui.app.language_header"),
-                argument_values("/lang"),
-                self._language_spec,
-            ),
-            selected,
+        from zenagent.cli.tui.screens.appearance import (
+            open_language_picker as _open_language_picker,
         )
+
+        _open_language_picker(self)
 
     def open_settings(self) -> None:
         from zenagent.cli.tui.screens.modals import SettingsPicker
