@@ -449,40 +449,14 @@ class ZenAgentApp(
         self._sync_work_timer(status)
 
     def action_show_todo_list(self) -> None:
-        """Open the read-only checklist behind the one-line HUD summary."""
-        from zenagent.cli.tui.screens.todo_list import TodoListScreen
+        from zenagent.cli.tui.screens.info import show_todo_list
 
-        phases = self.chat.todos
-        if not phases:
-            self.notify(t("tui.app.no_todo"))
-            return
-
-        def restore_focus(_result=None) -> None:
-            self.query_one(PromptInput).focus()
-
-        self.push_screen(TodoListScreen(phases), restore_focus)
-
-    # -- context -------------------------------------------------------------
+        show_todo_list(self)
 
     def action_show_context_breakdown(self) -> None:
-        """Open the full context split (sidebar row click / palette caller)."""
-        from zenagent.cli.tui.screens.context_breakdown import ContextBreakdownScreen
+        from zenagent.cli.tui.screens.info import show_context_breakdown
 
-        report = self.chat.status.context
-        if report is None:
-            self.notify(t("tui.app.no_context"))
-            return
-
-        def restore_focus(_result=None) -> None:
-            self.query_one(PromptInput).focus()
-
-        self.push_screen(ContextBreakdownScreen(report), restore_focus)
-
-    # -- job log -------------------------------------------------------------
-
-    # -- subagent view -------------------------------------------------------
-
-    # -- sidebar width -------------------------------------------------------
+        show_context_breakdown(self)
 
     @property
     def sidebar_width(self) -> int:

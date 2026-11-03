@@ -3,6 +3,14 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+- Refactor: `ZenAgentApp` (TUI) split from 1,903 lines into per-concern mixins
+  (`cli/tui/app_parts/`), picker flows (`cli/tui/screens/`), and a guarded
+  `SCREEN_OPENERS` registry; `ChatController` state and `Runtime` metrics follow.
+  No behavior change; the full suite (2,016 tests) and every doc guard stay
+  green. `app.py`: 1,903 → 715 lines.
+
 ## v0.7.4 — 2026-11-02
 
 **17 providers out of the box: every mainstream API, no new adapter code.**
