@@ -12,7 +12,7 @@ import pytest
 
 import zenagent.agent.session as session_module
 import zenagent.cli.repl as repl_module
-from zenagent.app.commands import build_default_commands
+from zenagent.app.commands import CommandResult, build_default_commands
 from zenagent.cli.repl import render_command_result, render_help, repl
 from zenagent.config import UserConfig
 from zenagent.events import AssistantEvent
@@ -395,3 +395,73 @@ async def test_repl_undo_continues_in_a_new_session(isolated_sessions):
         )
         for path in containing_again
     )
+
+
+async def memory_services(runtime_factory, tmp_path):
+    """Same helper as tests/test_app_commands.py: store on an empty tmp library."""
+    from tests.test_app_commands import memory_services as base
+    return await base(runtime_factory, tmp_path)
+
+
+async def test_memory_manager_screen_renders_index_lines(runtime_factory, tmp_path):
+    services = await memory_services(runtime_factory, tmp_path)
+    entry = services.runtime.memory_store.write_entry(title="选型", body="B", source="test")
+    lines: list[str] = []
+    _render(services, CommandResult(screen="memory-manager"), lines)
+    assert any(entry.id in line and "选型" in line for line in lines)
+
+
+async def test_memory_manager_screen_empty_library_prints_empty_message(runtime_factory, tmp_path):
+    services = await memory_services(runtime_factory, tmp_path)
+    lines: list[str] = []
+    _render(services, CommandResult(screen="memory-manager"), lines)
+    assert any("no memory notes" in line for line in lines)
+
+
+async def test_memory_add_screen_runs_editor_and_saves_ui_entry(runtime_factory, tmp_path, monkeypatch):
+    services = await memory_services(runtime_factory, tmp_path)
+    monkeypatch.setattr(repl_module, "run_editor",
+                        lambda initial: "title: 新条目\n\n正文内容")
+    lines: list[str] = []
+    _render(services, CommandResult(screen="memory-add", target="新条目"), lines)
+    saved = services.runtime.memory_store.list_entries()
+    assert len(saved) == 1 and saved[0].title == "新条目" and saved[0].source == "ui"
+    assert saved[0].body == "正文内容"
+
+
+async def test_memory_add_screen_without_editor_writes_nothing(runtime_factory, tmp_path, monkeypatch):
+    services = await memory_services(runtime_factory, tmp_path)
+    monkeypatch.setattr(repl_module, "run_editor", lambda initial: None)
+    lines: list[str] = []
+    _render(services, CommandResult(screen="memory-add", target=""), lines)
+    assert services.runtime.memory_store.list_entries() == []
+    assert any("$VISUAL" in line for line in lines)
+
+
+async def test_memory_edit_screen_updates_existing_entry(runtime_factory, tmp_path, monkeypatch):
+    services = await memory_services(runtime_factory, tmp_path)
+    entry = services.runtime.memory_store.write_entry(title="旧", body="旧正文", source="agent")
+    monkeypatch.setattr(repl_module, "run_editor",
+                        lambda initial: "title: 新标题\n\n新正文")
+    lines: list[str] = []
+    _render(services, CommandResult(screen="memory-edit", target=entry.id), lines)
+    updated = services.runtime.memory_store.read_entry(entry.id)
+    assert updated.title == "新标题" and updated.body == "新正文"
+    assert updated.source == "agent"  # update keeps the original source
+
+
+def test_run_editor_roundtrip_through_env_editor(tmp_path, monkeypatch):
+    script = tmp_path / "fake-editor.sh"
+    script.write_text('#!/bin/sh\nprintf "appended" >> "$1"\n')
+    script.chmod(0o755)
+    monkeypatch.setenv("EDITOR", str(script))
+    monkeypatch.delenv("VISUAL", raising=False)
+    from zenagent.cli.editor import run_editor
+    assert run_editor("title: t\n\n").endswith("appended")
+
+
+def test_run_editor_without_env_returns_none(monkeypatch):
+    monkeypatch.delenv("VISUAL", raising=False)
+    monkeypatch.delenv("EDITOR", raising=False)
+    from zenagent.cli.editor import run_editor
+    assert run_editor("x") is None

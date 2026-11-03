@@ -40,4 +40,7 @@ def test_known_screen_keys_are_pinned():
         "mcp-add",
         "todo-edit",
         "search-settings",
+        "memory-manager",
+        "memory-add",
+        "memory-edit",
     } <= set(ZenAgentApp.SCREEN_OPENERS)

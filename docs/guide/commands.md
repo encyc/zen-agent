@@ -43,8 +43,8 @@ TUI 与 REPL **共用同一个** `CommandRegistry`（`zenagent/app/commands.py`�
 |---|---|
 | `/model` | 浏览并切换模型（下一轮生效） |
 | `/thinking` | 查看或设置推理等级：`off`｜`low`｜`medium`｜`high`｜`max` |
-| `/mode` | 设置运行模式：`plan`｜`ask`｜`full` |
-| `/plan-review` | 复核 plan 模式下产出的计划，批准后切到 `full` |
+| `/mode` | 设置运行模式：`plan`｜`ask`｜`zen` |
+| `/plan-review` | 复核 plan 模式下产出的计划，批准后切到 `zen` |
 | `/lang` | 设置界面语言：`auto`｜`en`｜`zh` |
 | `/theme` | 设置配色主题：`auto`｜`dark`｜`light`，或 JSON 文件路径 |
 
@@ -80,6 +80,7 @@ TUI 与 REPL **共用同一个** `CommandRegistry`（`zenagent/app/commands.py`�
 | `/usage` | 本会话的 token 与花费总计 |
 | `/context` | 上下文窗口占用情况 |
 | `/todo` | 打开可编辑的 todo 列表 |
+| `/memory` | 查看与编辑项目记忆库（TUI 面板 / REPL 文本） |
 | `/jobs` | 列出后台作业，或 `/jobs kill <id>` 终止一个 |
 | `/hotkeys` | 显示当前键位 |
 | `/trace` | 显示 trace 文件路径（启动时带 `--trace` 才有） |

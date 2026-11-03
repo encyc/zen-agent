@@ -8,8 +8,55 @@ matches the release tag; older history is in the repository tags and commits.
 - Refactor: `ZenAgentApp` (TUI) split from 1,903 lines into per-concern mixins
   (`cli/tui/app_parts/`), picker flows (`cli/tui/screens/`), and a guarded
   `SCREEN_OPENERS` registry; `ChatController` state and `Runtime` metrics follow.
-  No behavior change; the full suite (2,016 tests) and every doc guard stay
+  No behavior change; the full suite (2,054 tests) and every doc guard stay
   green. `app.py`: 1,903 → 715 lines.
+## v0.7.6 — 2026-11-03
+
+**`/memory` becomes a manager for the project memory library.**
+
+### Added
+
+- **`/memory` command** (TUI panel + REPL text forms, one shared command
+  layer). Bare `/memory` opens the project-memory panel in the TUI
+  (`a` add · `e` edit · `x` delete with confirm · `esc` close; every action
+  re-reads the store, so notes the model writes underneath stay visible).
+  The REPL renders the same intents as text: bare `/memory` prints the
+  index, `/memory <id>` prints one entry in full, `/memory rm <id>` deletes,
+  and `/memory add [title]` / `/memory edit <id>` hand a `title:`+body draft
+  to `$VISUAL`/`$EDITOR` (no editor configured → a clear message, nothing
+  written). All UI writes go through `MemoryStore` with `source="ui"` and a
+  journal entry — the model's `memory` tools see the same files.
+- **`split_title_body`** in the memory kernel: `title: X\n\nbody` parses to
+  `(X, body)`; text without a leading title line stays all body and the
+  store coerces the title to `(untitled)` — never a crash.
+- Slash-command completion entry (`/memory`) and `zenagent.cli.editor`
+  (`run_editor`) for line-based frontends.
+
+## v0.7.5 — 2026-11-03
+
+**Three permission modes: `plan` / `ask` / `zen` — `full` is gone.**
+
+### Removed
+
+- **`full` mode is gone; `zen` replaces it.** The mode vocabulary is now
+  `plan / ask / zen`: plan is read-only, ask confirms every write/execute
+  (risk tiers included), and zen runs everything without asking — destructive
+  commands (`git reset --hard`, `sudo …`), protected credential paths and
+  writes outside the workspace included, headless runs too. The old `full`
+  ("ordinary work automatic, risky actions still confirm") sat between ask and
+  zen with a semantics that was hard to explain and backed by best-effort
+  shell heuristics; if you want "ask but quieter", stay in `ask` and relax
+  individual tiers via `--allow-*` flags or the `[safety]` config.
+  `--mode full` is now an unknown-mode error; `/mode full` in a session
+  reports the same.
+
+### Changed
+
+- **`--yes` now maps to `zen`** (it used to map to `full`). Headless scripts
+  keep working, but note the widened meaning: destructive commands and
+  outside/protected writes that headless `--yes` runs used to refuse now
+  execute. The system prompt in zen tells the model to act instead of asking
+  permission, and `/plan-review` approval switches to `zen` (was `full`).
 
 ## v0.7.4 — 2026-11-02
 

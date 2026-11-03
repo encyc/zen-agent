@@ -49,6 +49,7 @@ SLASH_COMMANDS: dict[str, str] = {
     "/search": "cmd.repl.search",
     "/doctor": "cmd.repl.doctor",
     "/todo": "cmd.todo.description",
+    "/memory": "cmd.memory.description",
     "/jobs": "cmd.jobs.description",
     "/copy": "cmd.copy.description",
     "/urls": "cmd.urls.description",

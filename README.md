@@ -94,7 +94,7 @@ an evening, embed in an afternoon, and change without permission.
 | **A small kernel** | Five layers whose dependencies point strictly down; each layer is replaceable on its own | [architecture](https://github.com/encyc/zen-agent/blob/main/docs/architecture.md) |
 | **Four surfaces** | TUI (transcript, tool cards, sidebar), REPL, headless one-shot, RPC/SDK | [CLI](https://github.com/encyc/zen-agent/blob/main/docs/guide/cli.md) · [TUI](https://github.com/encyc/zen-agent/blob/main/docs/guide/tui.md) |
 | **Built-in tools** | files, bash with background jobs, grep/glob, web search + fetch, subagents, todo, project memory, LSP, GitHub, checkpoint/rewind (`github` registers only when `gh` is installed) | [tools](https://github.com/encyc/zen-agent/blob/main/docs/guide/tools-permissions.md) |
-| **47 commands** | one slash-command surface shared by the TUI and the REPL, with Tab completion | [commands](https://github.com/encyc/zen-agent/blob/main/docs/guide/commands.md) |
+| **48 commands** | one slash-command surface shared by the TUI and the REPL, with Tab completion | [commands](https://github.com/encyc/zen-agent/blob/main/docs/guide/commands.md) |
 | **Extend it** | skills, templates, extensions, MCP servers, custom providers — all file-driven | [extensions](https://github.com/encyc/zen-agent/blob/main/docs/guide/extensions.md) · [MCP](https://github.com/encyc/zen-agent/blob/main/docs/guide/mcp.md) |
 | **Embed it** | `Agent` + `subscribe` in Python; `zen rpc` for every other language | [RPC & SDK](https://github.com/encyc/zen-agent/blob/main/docs/guide/rpc-sdk.md) |
 
@@ -113,7 +113,7 @@ Where to read next:
 | | |
 |---|---|
 | [Architecture](https://github.com/encyc/zen-agent/blob/main/docs/architecture.md) | The five layers and what one request touches |
-| [Slash commands](https://github.com/encyc/zen-agent/blob/main/docs/guide/commands.md) | All 47 commands |
+| [Slash commands](https://github.com/encyc/zen-agent/blob/main/docs/guide/commands.md) | All 48 commands |
 | [Configuration](https://github.com/encyc/zen-agent/blob/main/docs/guide/config.md) | `config.toml`, providers, budgets |
 | [Contracts](https://github.com/encyc/zen-agent/blob/main/docs/reference/contracts.md) | The invariants the kernel is built on |
 | [Development](https://github.com/encyc/zen-agent/blob/main/docs/development.md) | Gates, packaging check, releasing |

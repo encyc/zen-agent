@@ -36,7 +36,16 @@ class CommandsMixin:
         "mcp-add": "open_mcp_add",
         "todo-edit": "open_todo_editor",
         "search-settings": "open_search_provider",
+        "memory-manager": "open_memory_manager",
+        "memory-add": "open_memory_add",
+        "memory-edit": "open_memory_edit",
     }
+
+    #: Screens whose opener consumes ``result.target`` (the entry id to edit,
+    #: or the title prefill for a new one).
+    SCREEN_ARG_KEYS: ClassVar[frozenset[str]] = frozenset(
+        {"memory-add", "memory-edit"}
+    )
 
     def get_system_commands(self, screen):
         from textual.app import SystemCommand
@@ -90,6 +99,8 @@ class CommandsMixin:
                 method("all")
             elif result.screen == "session-picker":
                 method("project")
+            elif result.screen in self.SCREEN_ARG_KEYS:
+                method(result.target)
             else:
                 method()
         elif result.show_help:

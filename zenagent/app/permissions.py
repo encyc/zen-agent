@@ -4,10 +4,15 @@ The kernel has no permission concept on purpose (pi's philosophy): confirmation
 is the harness's job. This gate classifies tools and asks the user only for the
 classes that can change the machine.
 
-Reading tools pass straight through; write/execute tools require either
-``--yes``, a previous "always allow" answer for that tool in this session, or an
-interactive confirmation. In a non-interactive run without ``--yes`` they are
-denied with an explanatory reason, which the model sees as an is_error result.
+Reading tools pass straight through; write/execute tools require either zen
+mode or ``--yes``, a previous "always allow" answer for that tool in this
+session, or an interactive confirmation. In a non-interactive run without
+``--yes`` they are denied with an explanatory reason, which the model sees as
+an is_error result.
+
+``zen`` is the top rung: even the confirmable risk tiers (destructive command,
+protected path, outside workspace) run instead of asking. Policy — catastrophic
+commands, explicit deny patterns, plan mode — still refuses.
 """
 
 from __future__ import annotations
@@ -286,11 +291,14 @@ class PermissionGate:
             return Verdict(
                 "refuse",
                 f"tool {tool_name!r} is blocked by plan mode (read-only); "
-                "switch to /mode ask or /mode full to execute",
+                "switch to /mode ask or /mode zen to execute",
             )
         if self.read_only and not read_only:
             return Verdict("refuse", f"tool {tool_name!r} is blocked by --read-only")
-        if tool_name == "bash" and not self.allow_dangerous:
+        # zen is the "never ask" rung: the three confirmable risk tiers below
+        # run instead of asking. Everything above is policy and still wins.
+        confirm_risks = self.mode != "zen"
+        if confirm_risks and tool_name == "bash" and not self.allow_dangerous:
             # --allow-dangerous is the single escape hatch for catastrophic
             # *and* destructive shell commands; asking for it twice would be
             # a trap for scripted runs.
@@ -311,14 +319,14 @@ class PermissionGate:
                     scope, resolved = classify_write_path(raw, self.policy)
                 except (OSError, RuntimeError) as exc:
                     return Verdict("refuse", f"cannot resolve {raw!r}: {exc}")
-                if scope == "protected":
+                if confirm_risks and scope == "protected":
                     return Verdict(
                         "confirm",
                         f"{resolved} is a protected credential path",
                         risk="protected",
                         target=tool_target(tool_name, args),
                     )
-                if scope == "outside":
+                if confirm_risks and scope == "outside":
                     return Verdict(
                         "confirm",
                         f"{resolved} is outside the workspace "
@@ -357,7 +365,7 @@ class PermissionGate:
         if target_is_granted(tool_name, args, self._always_allowed):
             return True, ""
         if (
-            self.mode == "full"
+            self.mode == "zen"
             or self.assume_yes
             or tool_name in self._always_allowed
         ):
@@ -501,8 +509,9 @@ class PermissionBroker:
         if verdict.kind == "refuse":
             return {"block": True, "reason": verdict.reason}
         if verdict.kind == "confirm":
-            # full mode is the explicit "don't ask me to run ordinary work"
-            # branch, not a licence to leave the workspace or destroy state.
+            # Only ask mode reaches here: zen already downgraded these tiers to
+            # allow inside assess(), and the refuse tiers returned above. Risky
+            # actions still confirm; ordinary ones were already allowed.
             risk_target = verdict.target or target
             if risk_target is not None and risk_target in self._risk_targets:
                 return None
@@ -523,7 +532,7 @@ class PermissionBroker:
             return None
         if matches_any(self._gate.allow, name) is not None:
             return None
-        if self._gate.mode == "full":
+        if self._gate.mode == "zen":
             return None
         if self._confirm is None:
             return {"block": True, "reason": f"tool {name!r} requires approval"}

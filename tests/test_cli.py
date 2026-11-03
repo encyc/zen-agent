@@ -799,13 +799,13 @@ def _capture_gate_for(monkeypatch, argv):
 
 
 def test_mode_flag_reaches_the_permission_gate(monkeypatch):
-    gate = _capture_gate_for(monkeypatch, ["-p", "hi", "--mode", "full"])
-    assert gate.mode == "full"
+    gate = _capture_gate_for(monkeypatch, ["-p", "hi", "--mode", "zen"])
+    assert gate.mode == "zen"
 
 
-def test_yes_maps_to_full_mode(monkeypatch):
+def test_yes_maps_to_zen_mode(monkeypatch):
     gate = _capture_gate_for(monkeypatch, ["-p", "hi", "--yes"])
-    assert gate.mode == "full"
+    assert gate.mode == "zen"
 
 
 def test_default_mode_is_ask(monkeypatch):

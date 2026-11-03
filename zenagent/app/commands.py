@@ -53,6 +53,8 @@ class CommandResult:
     #: When set, the frontend switches models (the picker and the argument path
     #: share one implementation, so both heal the same state).
     model: str | None = None
+    #: Screen payload: "memory-edit" carries the entry id, "memory-add" the title prefill.
+    target: str | None = None
 
 
 @dataclass
@@ -531,6 +533,38 @@ async def _todo(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(screen="todo-edit")
 
 
+@_command("memory")
+async def _memory(services: AppServices, argument: str) -> CommandResult:
+    """Manage project memory notes: panel in the TUI, text forms in the REPL."""
+    store = services.runtime.memory_store
+    argument = argument.strip()
+    parts = argument.split()
+    if not parts:
+        return CommandResult(screen="memory-manager")
+    head, rest = parts[0], parts[1:]
+    if head == "add":
+        return CommandResult(screen="memory-add", target=argument.partition("add")[2].strip())
+    if head == "edit" and rest:
+        entry = store.read_entry(rest[0]) if store else None
+        if entry is None:
+            return CommandResult(message=t("cmdmsg.memory_not_found", id=rest[0]))
+        return CommandResult(screen="memory-edit", target=entry.id)
+    if head == "rm" and rest:
+        entry = store.read_entry(rest[0]) if store else None
+        if entry is None:
+            return CommandResult(message=t("cmdmsg.memory_not_found", id=rest[0]))
+        store.delete_entry(rest[0], reason="ui delete (/memory rm)")
+        return CommandResult(
+            message=t("cmdmsg.memory_deleted", id=rest[0], title=entry.title)
+        )
+    entry = store.read_entry(head) if store else None
+    if entry is None:
+        return CommandResult(message=t("cmdmsg.memory_usage"))
+    header = t("cmdmsg.memory_header", id=entry.id, title=entry.title,
+               updated=entry.updated, source=entry.source)
+    return CommandResult(message=f"{header}\n\n{entry.body}")
+
+
 @_command("settings")
 async def _settings(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(screen="settings")
@@ -538,7 +572,7 @@ async def _settings(services: AppServices, argument: str) -> CommandResult:
 
 @_command("plan-review")
 async def _plan_review(services: AppServices, argument: str) -> CommandResult:
-    """Review the plan the model produced in plan mode (approve → full)."""
+    """Review the plan the model produced in plan mode (approve → zen)."""
     plan = services.chat.last_assistant_text()
     if not plan:
         return CommandResult(message=t("cmdmsg.no_plan"))
@@ -807,6 +841,7 @@ def build_default_commands(services: AppServices) -> CommandRegistry:
         _settings,
         _plan_review,
         _todo,
+        _memory,
         _undo,
         _restore,
         _retry,

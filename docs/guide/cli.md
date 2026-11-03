@@ -29,7 +29,7 @@ zen -p "analyze" --read-only --trace run.jsonl --cwd /path/to/project
 
 行为要点：
 
-- 默认是 `ask` 模式：写文件/bash 需要确认；headless 下没有交互，所以要么 `--mode full`/`--yes`，
+- 默认是 `ask` 模式：写文件/bash 需要确认；headless 下没有交互，所以要么 `--mode zen`/`--yes`，
   要么用 `[tools] allow` 放行，要么 `--read-only`/`--mode plan` 只读。
 - `--json` 时 stdout 只有一段 JSON（文本、工具调用、用量、termination），适合被脚本消费。
 - 会话仍然会写盘（`~/.zenagent/sessions/`），除非你另有 HOME。
@@ -42,8 +42,8 @@ zen -p "analyze" --read-only --trace run.jsonl --cwd /path/to/project
 | `-p/--prompt` | headless 单次运行 |
 | `-m/--model` | 模型 id（catalog 或配置里的自定义模型） |
 | `--thinking` | `off/low/medium/high/max` |
-| `--mode` | `plan` / `ask` / `full`（默认 ask；`--yes`≈full，`--read-only`≈plan） |
-| `--yes` | 自动批准需要确认的工具（等价 `--mode full`） |
+| `--mode` | `plan` / `ask` / `zen`（默认 ask；`--yes`≈zen，`--read-only`≈plan） |
+| `--yes` | 任何操作都不再确认（等价 `--mode zen`） |
 | `--read-only` | 拒绝所有非只读工具（含未声明 `readOnlyHint` 的 MCP；等价 `--mode plan`） |
 | `--allow-dangerous` | 允许 `rm -rf` 等危险命令（`--yes` 也不够） |
 | `--max-turns` / `--max-cost` | 硬上限；超限终止并记录在 termination |
@@ -72,21 +72,23 @@ zen -p "analyze" --read-only --trace run.jsonl --cwd /path/to/project
 
 ## 参数值补全
 
-REPL 里命令参数也能补全（`Tab`）：`/mode ` → `plan` / `ask` / `full`，`/thinking ` →
+REPL 里命令参数也能补全（`Tab`）：`/mode ` → `plan` / `ask` / `zen`，`/thinking ` →
 `off` / `low` / `medium` / `high` / `max`，`/theme ` → `auto` / `dark` / `light`，`/lang ` → `auto` / `en` / `zh`，`/model ` → 当前 catalog
 里的模型 id（带 ready / no key 标记）。值表在 `zenagent/app/slash_args.py`，TUI 与 REPL 共用。
 
-## 运行模式（plan / ask / full）
+## 运行模式（plan / ask / zen）
 
-`--mode plan|ask|full` 选择启动模式；显式 `--mode` 优先于 `--yes` / `--read-only`，
-后两者只是兼容映射（`--yes` → full，`--read-only` → plan），都不传则 `ask`。
+`--mode plan|ask|zen` 选择启动模式；显式 `--mode` 优先于 `--yes` / `--read-only`，
+后两者只是兼容映射（`--yes` → zen，`--read-only` → plan），都不传则 `ask`。
 
 - **plan**：只读。写/执行工具（含未声明只读的 MCP 工具）被拒绝；`web_search`/`fetch`
   与声明 `readOnlyHint` 的 MCP 工具可联网调研。system prompt 要求模型先调研并给出计划。
 - **ask**：写/执行需要确认。REPL 在终端问 `[y/n/a]`；TUI 弹审批框（Allow / Allow for
   session / Deny，120 秒无响应视为 Deny）；headless 无交互，默认拒绝，需显式放行。
-- **full**：写/执行直接放行。危险命令（`rm -rf /` 等）仍需 `--allow-dangerous`；
-  `[tools] deny` 规则与危险命令策略**永远优先**于 full 和会话内 "always allow"。
+- **zen**：全部放行、不弹任何确认——破坏性命令（`git reset --hard`、`sudo …`）、凭证路径、
+  workspace 外写入都直接执行，headless 同样放行；system prompt 会告诉模型直接执行、不要请示。
+  仅灾难命令仍拒绝（`--allow-dangerous` 可再放行），`[tools] deny` 永远优先。
+  风险分级详见[工具与权限](tools-permissions.md)。
 
 会话中可随时用 `/mode` 切换，下一次工具调用立即生效；TUI 状态带会显示当前模式。
 

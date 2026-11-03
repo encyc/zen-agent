@@ -35,7 +35,7 @@
 | 权限门（deny/allow/read-only/危险命令） | `app/permissions.py` | `test_permissions.py` | 同上 |
 | 风险判定与路径围栏（workspace / protected / destructive） | `app/safety.py`、`app/permissions.py::assess` | `test_safety.py`、`test_permissions.py` | 同上 |
 | 写入快照与 `/restore` | `app/journal.py`、`app/restore.py`、`project.py::project_backups_dir` | `test_journal.py`、`test_restore.py` | 同上 |
-| 运行模式 plan/ask/full | `app/modes.py`、`app/permissions.py` | `test_modes.py` | 同上 |
+| 运行模式 plan/ask/zen | `app/modes.py`、`app/permissions.py` | `test_modes.py` | 同上 |
 | 交互审批（TUI 弹窗/超时/会话授权） | `app/permissions.py::PermissionBroker`、`cli/tui/screens/modals.py::ToolApproval` | `test_app_permissions.py`、`test_tui_approval.py` | 同上 |
 | 参数校验 | `agent/validate.py` | `test_validate.py` | [工具内核](internals/tools-internals.md) |
 
@@ -93,8 +93,8 @@
 | 主题 / 键位 | `cli/theme.py`、`cli/keybindings.py` | `test_theme.py` | — |
 | 会话链接（`/urls`、`/copy <n>`、`/open <n>`） | `app/links.py`、`app/commands.py` | `test_app_links.py`、`test_app_commands.py`、`test_tui_links.py` | — |
 
-REPL/TUI 共用同一份命令表（`app/commands.py`，47 条），REPL 额外支持 legacy 主题名：
-`/help /exit /quit /clear /model /thinking /mode /session /sessions /rename /fork /import /undo /restore /retry /tools /compact /image /images /skills /mcp /reload /theme /lang /hotkeys /pin /new /settings /search /doctor /jobs /copy /urls /open /btw /shake /handoff /add-dir /remove-dir /dirs /fresh /trace /export /usage /context /plan-review /todo`。
+REPL/TUI 共用同一份命令表（`app/commands.py`，48 条），REPL 额外支持 legacy 主题名：
+`/help /exit /quit /clear /model /thinking /mode /session /sessions /rename /fork /import /undo /restore /retry /tools /compact /image /images /skills /mcp /reload /theme /lang /hotkeys /pin /new /settings /search /doctor /jobs /copy /urls /open /btw /shake /handoff /add-dir /remove-dir /dirs /fresh /trace /export /usage /context /plan-review /todo /memory`。
 
 REPL 的 screen 类命令（picker/浮层）由 `render_command_result` 渲染成文本，不再静默无输出。
 
@@ -157,7 +157,7 @@ REPL 的 screen 类命令（picker/浮层）由 `render_command_result` 渲染�
 - **MCP 进阶**：OAuth、resources、prompts、sampling、调用级 abort。
 - **telemetry 远端上报**：当前只写本地 JSONL。
 - **OS 级沙箱**：没有容器/权限隔离。现有的是 harness 层护栏（写路径围栏、受保护路径、破坏性命令确认）与项目级写入快照；它们防手滑，不防恶意仓库 / prompt injection。
-- **plan mode 进阶**：`/plan-review` 只是复核最近一次 assistant 文本（`a` 切 full），还没有独立的计划文件/结构化计划产物。
+- **plan mode 进阶**：`/plan-review` 只是复核最近一次 assistant 文本（`a` 切 zen），还没有独立的计划文件/结构化计划产物。
 - **扩展 UI**：扩展只能贡献工具/命令/prompt/hooks，不能改 REPL 界面。
 - **多模态输出**：能读图片，但不能生成图片/音频。
 - **Python 版本**：`requires-python >=3.11`（3.11–3.14 已验证）。

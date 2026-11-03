@@ -438,18 +438,6 @@ async def test_outside_write_is_refused_with_flag_hint(tmp_path):
     assert "--allow-outside" in reason
 
 
-async def test_full_mode_does_not_bypass_outside_write(tmp_path):
-    gate = build_permission_gate(
-        interactive=False,
-        assume_yes=True,
-        mode="full",
-        policy=GuardPolicy(workspace=tmp_path),
-    )
-    assert (
-        await gate.check("write_file", {"path": "/etc/hosts", "content": "x"})
-    )[0] is False
-
-
 async def test_tools_allow_cannot_bypass_risk(tmp_path):
     gate = build_permission_gate(
         interactive=False,
@@ -504,7 +492,6 @@ async def test_destructive_bash_requires_confirmation(tmp_path):
     gate = build_permission_gate(
         interactive=False,
         assume_yes=True,
-        mode="full",
         policy=GuardPolicy(workspace=tmp_path),
     )
     allowed, reason = await gate.check("bash", {"command": "git reset --hard"})
@@ -515,8 +502,7 @@ async def test_destructive_bash_requires_confirmation(tmp_path):
 async def test_destructive_bash_is_quiet_for_build_dir(tmp_path):
     gate = build_permission_gate(
         interactive=False,
-        assume_yes=True,
-        mode="full",
+        mode="zen",
         policy=GuardPolicy(workspace=tmp_path),
     )
     assert (await gate.check("bash", {"command": "rm -rf ./build"}))[0] is True

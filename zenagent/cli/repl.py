@@ -21,6 +21,7 @@ from pathlib import Path
 
 from rich.console import Console
 
+from zenagent.agent.memory_store import split_title_body
 from zenagent.agent.session import (
     sessions_dir,
 )
@@ -40,6 +41,7 @@ from zenagent.cli.completion import (
     ReplCompleter,
     slash_commands,
 )
+from zenagent.cli.editor import run_editor
 from zenagent.cli.keybindings import build_key_bindings, load_keybindings
 from zenagent.cli.render import (
     aggregate_usage,
@@ -125,6 +127,36 @@ def _render_todo(services, print_fn: PrintFn) -> None:
     print_fn("\n".join(rows) if rows else t("cmdmsg.todo_empty"))
 
 
+def _render_memory_index(services, print_fn: PrintFn) -> None:
+    store = services.runtime.memory_store
+    entries = store.list_entries() if store else []
+    if not entries:
+        print_fn(t("cmdmsg.memory_empty"))
+        return
+    for entry in entries:
+        print_fn(f"{entry.id}  {entry.title}  {entry.updated}")
+
+
+def _memory_editor_flow(services, entry_id: str | None, title_prefill: str, print_fn: PrintFn) -> None:
+    store = services.runtime.memory_store
+    entry = store.read_entry(entry_id) if (store and entry_id) else None
+    if entry_id and entry is None:
+        print_fn(t("cmdmsg.memory_not_found", id=entry_id))
+        return
+    initial = f"title: {entry.title if entry else title_prefill}\n\n{entry.body if entry else ''}"
+    text = run_editor(initial)
+    if text is None:
+        print_fn(t("repl.no_editor"))
+        return
+    title, body = split_title_body(text)
+    saved = (
+        store.update_entry(entry.id, title=title, body=body, reason="ui edit")
+        if entry
+        else store.write_entry(title=title, body=body, source="ui", reason="ui edit")
+    )
+    print_fn(t("cmdmsg.memory_saved", id=saved.id, title=saved.title))
+
+
 def _render_settings(services, print_fn: PrintFn) -> None:
     from zenagent import settings as settings_store
 
@@ -205,6 +237,12 @@ def render_command_result(
             print_fn(t("repl.no_keybindings"))
     elif screen == "todo-edit":
         _render_todo(services, print_fn)
+    elif screen == "memory-manager":
+        _render_memory_index(services, print_fn)
+    elif screen == "memory-add":
+        _memory_editor_flow(services, None, result.target or "", print_fn)
+    elif screen == "memory-edit":
+        _memory_editor_flow(services, result.target, "", print_fn)
     elif screen == "settings":
         _render_settings(services, print_fn)
     elif screen == "plan-review":

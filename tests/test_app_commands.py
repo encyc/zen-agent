@@ -390,3 +390,66 @@ async def test_open_command_survives_a_refusing_browser(runtime_factory, monkeyp
 async def test_open_command_without_an_index_prints_usage(services):
     result = await build_default_commands(services).dispatch("open", "")
     assert result.message is not None and "/urls" in result.message
+
+
+async def memory_services(runtime_factory, tmp_path):
+    """AppServices whose memory store points at an empty tmp library."""
+    from zenagent.agent.memory_store import MemoryStore
+    from zenagent.app.chat import ChatController
+    from zenagent.app.commands import AppServices
+    from zenagent.app.models import ModelManager
+    from zenagent.app.sessions import SessionManager
+
+    runtime = await runtime_factory()
+    runtime.memory_store = MemoryStore(tmp_path)
+    return AppServices(runtime=runtime, chat=ChatController(runtime),
+                       models=ModelManager(runtime), sessions=SessionManager(runtime))
+
+
+async def test_memory_bare_returns_manager_screen(runtime_factory, tmp_path):
+    services = await memory_services(runtime_factory, tmp_path)
+    result = await build_default_commands(services).dispatch("memory", "")
+    assert result.screen == "memory-manager"
+
+
+async def test_memory_add_keeps_spaced_title_prefill(runtime_factory, tmp_path):
+    services = await memory_services(runtime_factory, tmp_path)
+    result = await build_default_commands(services).dispatch("memory", "add 选型 原则")
+    assert result.screen == "memory-add"
+    assert result.target == "选型 原则"
+
+
+async def test_memory_edit_missing_entry_is_a_message_not_a_screen(runtime_factory, tmp_path):
+    services = await memory_services(runtime_factory, tmp_path)
+    result = await build_default_commands(services).dispatch("memory", "edit beef")
+    assert result.screen is None
+    assert "beef" in result.message
+
+
+async def test_memory_edit_existing_returns_screen_with_id(runtime_factory, tmp_path):
+    services = await memory_services(runtime_factory, tmp_path)
+    entry = services.runtime.memory_store.write_entry(title="T", body="B", source="test")
+    result = await build_default_commands(services).dispatch("memory", f"edit {entry.id}")
+    assert result.screen == "memory-edit"
+    assert result.target == entry.id
+
+
+async def test_memory_rm_deletes_and_reports_journal(runtime_factory, tmp_path):
+    services = await memory_services(runtime_factory, tmp_path)
+    entry = services.runtime.memory_store.write_entry(title="T", body="B", source="test")
+    result = await build_default_commands(services).dispatch("memory", f"rm {entry.id}")
+    assert "deleted" in result.message
+    assert services.runtime.memory_store.read_entry(entry.id) is None
+
+
+async def test_memory_id_shows_full_entry(runtime_factory, tmp_path):
+    services = await memory_services(runtime_factory, tmp_path)
+    entry = services.runtime.memory_store.write_entry(title="标题", body="正文", source="test")
+    result = await build_default_commands(services).dispatch("memory", entry.id)
+    assert "标题" in result.message and "正文" in result.message
+
+
+async def test_memory_unknown_argument_shows_usage(runtime_factory, tmp_path):
+    services = await memory_services(runtime_factory, tmp_path)
+    result = await build_default_commands(services).dispatch("memory", "nonsense")
+    assert "usage" in result.message

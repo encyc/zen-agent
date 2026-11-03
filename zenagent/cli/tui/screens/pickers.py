@@ -146,7 +146,7 @@ def open_todo_editor(app: App) -> None:
 
 
 def open_plan_review(app: App) -> None:
-    """Read the last plan, then approve (→ full) or keep planning."""
+    """Read the last plan, then approve (→ zen) or keep planning."""
     plan = app.chat.last_assistant_text()
     if not plan:
         app.notify(t("tui.app.no_plan"), timeout=3)
@@ -156,8 +156,8 @@ def open_plan_review(app: App) -> None:
         if choice != "approve":
             return
         app._mode_before_plan = None
-        app.runtime.set_mode("full")
-        app.notify(t("tui.app.mode_set", mode="full"))
+        app.runtime.set_mode("zen")
+        app.notify(t("tui.app.mode_set", mode="zen"))
         app._refresh_status()
 
     app.open_menu("plan-review", lambda: PlanReview(plan), reviewed)
@@ -222,4 +222,39 @@ def open_session_picker(app: App, scope: str | None = None) -> None:
             app.sessions.entries(scope=current_scope), scope=current_scope
         ),
         selected,
+    )
+
+
+def open_memory_manager(app: App) -> None:
+    from zenagent.cli.tui.screens.memory_manager import MemoryManager
+
+    store = app.runtime.memory_store
+    if store is None:
+        return
+    app.open_menu(
+        "memory-manager", lambda: MemoryManager(store), lambda _result: None
+    )
+
+
+def open_memory_editor(
+    app: App, entry_id: str | None = None, *, title_prefill: str = ""
+) -> None:
+    from zenagent.cli.tui.screens.memory_manager import MemoryEditor
+
+    store = app.runtime.memory_store
+    if store is None:
+        return
+    entry = store.read_entry(entry_id) if entry_id else None
+
+    def saved(result) -> None:
+        if result is not None:
+            app.notify(
+                t("cmdmsg.memory_saved", id=result.id, title=result.title),
+                timeout=3,
+            )
+
+    app.open_menu(
+        "memory-editor",
+        lambda: MemoryEditor(store, entry, title_prefill=title_prefill),
+        saved,
     )

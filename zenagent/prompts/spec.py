@@ -98,6 +98,14 @@ BLOCKS: dict[str, BlockSpec] = {
         budget_chars=700,
         optional=True,
     ),
+    "zen_mode": BlockSpec(
+        id="zen_mode",
+        path="zen_mode.md",
+        version=PROMPT_VERSION,
+        cache_class="session",
+        budget_chars=700,
+        optional=True,
+    ),
     "context_files": BlockSpec(
         id="context_files",
         path="context_files.md",

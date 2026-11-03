@@ -673,8 +673,8 @@ async def _run(args) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="zenagent rpc", description=__doc__.splitlines()[0])
     parser.add_argument("-m", "--model", help="model id")
-    parser.add_argument("--yes", action="store_true", help="approve non-read tools")
-    parser.add_argument("--mode", help="runtime mode: plan|ask|full")
+    parser.add_argument("--yes", action="store_true", help="run everything without asking (zen mode)")
+    parser.add_argument("--mode", help="runtime mode: plan|ask|zen")
     parser.add_argument("--read-only", action="store_true", help="refuse write tools")
     parser.add_argument("--thinking", help="reasoning level")
     parser.add_argument("--max-turns", type=int)

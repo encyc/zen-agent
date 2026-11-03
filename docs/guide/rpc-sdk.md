@@ -3,7 +3,7 @@
 ## RPC 模式（编辑器/桌面壳嵌入）
 
 ```bash
-zen rpc [--model ID] [--yes] [--mode plan|ask|full] [--read-only]
+zen rpc [--model ID] [--yes] [--mode plan|ask|zen] [--read-only]
         [--thinking LEVEL] [--max-turns N] [--max-cost X] [--retries N]
         [--resume [SESSION]] [--no-mcp] [--mcp-file PATH] [--mcp-server NAME]
         [--no-skills] [--no-context-files] [--trace PATH] [--metrics PATH]
@@ -25,7 +25,7 @@ zen rpc [--model ID] [--yes] [--mode plan|ask|full] [--read-only]
 | `steer` | `text` | 插话；空闲时进入 follow-up 排队 |
 | `tools` | — | 模型可见工具 `[{name, description, approval}]` |
 | `model` | `model_id` | 切模型（key / thinking / session id / 窗口一起更新） |
-| `mode` | `mode` | `plan` / `ask` / `full` |
+| `mode` | `mode` | `plan` / `ask` / `zen` |
 | `usage` | — | tokens / cache / cost 汇总 |
 | `approval` | `request_id`, `decision` | 回答 `approval_request`：`allow` / `always` / `deny` |
 | `session` | `op`, `path?`, `scope?`, `format?` | `current` / `list` / `new` / `fork` / `resume` / `import` / `undo` / `delete` / `compact` / `retry` / `export` |

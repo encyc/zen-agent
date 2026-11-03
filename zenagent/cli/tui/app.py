@@ -57,8 +57,6 @@ from zenagent.i18n import LANGUAGE_CHOICES, resolve_language, set_locale, t
 
 __all__ = ["DOUBLE_ESCAPE_SECONDS", "ZenAgentApp"]
 
-
-
 def _saved_theme() -> str | None:
     """The persisted ``theme`` preference, read lazily (tests patch settings)."""
     from zenagent import settings
@@ -670,6 +668,30 @@ class ZenAgentApp(
         )
 
         _open_plan_review(self)
+
+    def open_memory_manager(self) -> None:
+        from zenagent.cli.tui.screens.pickers import (
+            open_memory_manager as _open_memory_manager,
+        )
+
+        _open_memory_manager(self)
+
+    def open_memory_editor(
+        self, entry_id: str | None = None, *, title_prefill: str = ""
+    ) -> None:
+        from zenagent.cli.tui.screens.pickers import (
+            open_memory_editor as _open_memory_editor,
+        )
+
+        _open_memory_editor(self, entry_id, title_prefill=title_prefill)
+
+    def open_memory_add(self, target: str | None) -> None:
+        """``/memory add <title>``: the target is the title prefill."""
+        self.open_memory_editor(title_prefill=target or "")
+
+    def open_memory_edit(self, target: str | None) -> None:
+        """``/memory edit <id>``: the target is the entry id."""
+        self.open_memory_editor(target)
 
     def open_mode_picker(self) -> None:
         from zenagent.cli.tui.screens.pickers import (

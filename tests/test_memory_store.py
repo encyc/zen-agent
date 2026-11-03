@@ -8,6 +8,7 @@ from zenagent.agent.memory_store import (
     MEMORY_DIR,
     MemoryEntry,
     MemoryStore,
+    split_title_body,
 )
 
 
@@ -150,3 +151,15 @@ def test_delete_carries_reason_and_session(tmp_path):
     event = store.read_journal()[-1]
     assert event["op"] == "delete" and event["reason"] == "过期"
     assert event["session"] == "sess-9"
+
+
+def test_split_title_body_separates_title_and_body():
+    assert split_title_body("title: 选型\n\n正文第一行\n第二行") == ("选型", "正文第一行\n第二行")
+
+
+def test_split_title_body_without_title_line_returns_whole_text():
+    assert split_title_body("没有标题行\n\n正文") == ("", "没有标题行\n\n正文")
+
+
+def test_split_title_body_title_only_yields_empty_body():
+    assert split_title_body("title: 只有标题") == ("只有标题", "")
