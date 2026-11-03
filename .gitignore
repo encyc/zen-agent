@@ -21,3 +21,5 @@ docs/za/
 
 # agent worktrees
 .worktrees/
+
+.zenagent/memory/
