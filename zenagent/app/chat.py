@@ -8,6 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from zenagent.agent.subagents import carry_task_dir
+from zenagent.app.attachments_state import Attachments
 from zenagent.app.compact import compact, should_auto_compact
 from zenagent.app.context import build_context_report
 from zenagent.app.git import git_status
@@ -68,7 +69,7 @@ class ChatController:
         #: frontend drains on refresh.
         self._notices: list[TranscriptNotice] = []
         #: Images attached with /image that will ride along with the next prompt.
-        self._attachments: list[ImageContent] = []
+        self._attachments = Attachments()
         #: Latest canonical todo phases (``details["phases"]`` shape) for the
         #: HUD. Seeded from the current session's sidecar so resume/start shows
         #: the list before the first tool call of the restored transcript.
@@ -223,34 +224,27 @@ class ChatController:
         ``images`` overrides the pending attachment list; otherwise whatever was
         attached with ``/image`` rides along and is cleared once the run starts.
         """
+        pending = self._attachments.take(images)
         if self._running or self._compacting:
-            pending = list(images if images is not None else self._attachments)
-            if images is None:
-                self._attachments.clear()
             self.queue_follow_up(text, pending)
             return
-        pending = list(images if images is not None else self._attachments)
-        if images is None:
-            self._attachments.clear()
         self._task = asyncio.create_task(self._run(text, pending))
 
     @property
     def attachments(self) -> list[ImageContent]:
         """Pending images attached but not yet sent."""
-        return list(self._attachments)
+        return self._attachments.all()
 
     def attach_image(self, block: ImageContent) -> None:
-        self._attachments.append(block)
+        self._attachments.add(block)
         self._notify()
 
     def remove_attachment(self, index: int) -> None:
-        if 0 <= index < len(self._attachments):
-            del self._attachments[index]
+        if self._attachments.remove(index):
             self._notify()
 
     def clear_attachments(self) -> None:
-        if self._attachments:
-            self._attachments.clear()
+        if self._attachments.clear():
             self._notify()
 
     def queue_follow_up(
@@ -259,9 +253,7 @@ class ChatController:
         """Queue a follow-up; ``images=None`` takes the pending attachments."""
         if not text.strip():
             return
-        blocks = list(images if images is not None else self._attachments)
-        if images is None:
-            self._attachments.clear()
+        blocks = self._attachments.take(images)
         self._pending_queue.queue(text, blocks)
         self._notify()
 
@@ -306,7 +298,7 @@ class ChatController:
             return None
         text, images = taken
         if images:
-            self._attachments[:0] = images  # back into the composer
+            self._attachments.prepend(images)  # back into the composer
         self._notify()
         return text
 
@@ -437,7 +429,7 @@ class ChatController:
         self.runtime.agent.reset()
         self._builder.reset()
         self._subagents.reset()
-        self._attachments.clear()
+        self._attachments.clear()  # always drops, notify fires below
         todo_tool = getattr(self.runtime, "todo_tool", None)
         if todo_tool is not None:
             todo_tool.clear()
