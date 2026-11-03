@@ -19,6 +19,7 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
+from typing import ClassVar
 
 from textual.app import App
 from textual.containers import Horizontal, Vertical
@@ -114,6 +115,27 @@ class ZenAgentApp(App):
         ("ctrl+x", "clear_queue", "Clear queue"),
         ("alt+up", "dequeue", "Dequeue"),
     ]
+
+    #: ``CommandResult.screen`` → the App method that opens it. Pinned from
+    #: both ends by ``tests/test_tui_screen_registry.py``: the keys must equal
+    #: the ``screen=`` literals in ``zenagent/app/commands.py``.
+    SCREEN_OPENERS: ClassVar[dict[str, str]] = {
+        "model-picker": "open_model_picker",
+        "session-picker": "open_session_picker",
+        "session-picker-all": "open_session_picker",
+        "mode-picker": "open_mode_picker",
+        "thinking-picker": "open_thinking_picker",
+        "theme-picker": "open_theme_picker",
+        "language-picker": "open_language_picker",
+        "settings": "open_settings",
+        "plan-review": "open_plan_review",
+        "display-reset": "action_display_reset",
+        "hotkeys": "open_hotkeys",
+        "usage-dashboard": "open_usage_dashboard",
+        "mcp-add": "open_mcp_add",
+        "todo-edit": "open_todo_editor",
+        "search-settings": "open_search_provider",
+    }
 
     def __init__(
         self,
@@ -1573,36 +1595,17 @@ class ZenAgentApp(App):
             # `/model <id>` (or Enter on a value hint) switches directly; only a
             # bare `/model` reaches the picker branch below.
             self._apply_model(result.model)
-        if result.screen == "model-picker":
-            self.open_model_picker()
-        elif result.screen == "session-picker":
-            self.open_session_picker("project")
-        elif result.screen == "session-picker-all":
-            self.open_session_picker("all")
-        elif result.screen == "mode-picker":
-            self.open_mode_picker()
-        elif result.screen == "thinking-picker":
-            self.open_thinking_picker()
-        elif result.screen == "theme-picker":
-            self.open_theme_picker()
-        elif result.screen == "language-picker":
-            self.open_language_picker()
-        elif result.screen == "settings":
-            self.open_settings()
-        elif result.screen == "plan-review":
-            self.open_plan_review()
-        elif result.screen == "display-reset":
-            self.action_display_reset()
-        elif result.screen == "hotkeys":
-            self.open_hotkeys()
-        elif result.screen == "usage-dashboard":
-            self.open_usage_dashboard()
-        elif result.screen == "mcp-add":
-            self.open_mcp_add()
-        elif result.screen == "todo-edit":
-            self.open_todo_editor()
-        elif result.screen == "search-settings":
-            self.open_search_provider()
+        opener = self.SCREEN_OPENERS.get(result.screen or "")
+        if opener is not None:
+            method = getattr(self, opener)
+            # The two session-picker keys share one opener; the registry key
+            # carries the scope a bare `/sessions` vs `/sessions all` means.
+            if result.screen == "session-picker-all":
+                method("all")
+            elif result.screen == "session-picker":
+                method("project")
+            else:
+                method()
         elif result.show_help:
             self._show_help()
         elif result.reset_transcript:
