@@ -198,6 +198,7 @@ async def test_abort_returns_promptly_and_leaves_the_job_running():
 
 def _task_tool(stream):
     from test_task import _model, _tools
+
     from zenagent.tools.task import build_task_tool
 
     return build_task_tool(
@@ -274,6 +275,7 @@ async def test_wait_task_abort_keeps_child_running():
     import asyncio
 
     from test_task import SlowStream
+
     from zenagent.events import AbortToken
 
     task_id = await dispatch_async(SlowStream(delay=0.3))

@@ -794,7 +794,7 @@ async def test_async_freezes_mode_and_tools_at_dispatch():
     live["mode"] = "ask"
     live["tools"] = []
 
-    run = await get_task_manager().wait(result.details["task_id"], timeout_s=5)
+    await get_task_manager().wait(result.details["task_id"], timeout_s=5)
     assert stream.tools_seen == [["read_file", "grep", "write_file", "bash"]]
     await get_task_manager().close()
 
