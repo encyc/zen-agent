@@ -47,10 +47,10 @@ def _catalog() -> dict[str, ProviderConfig]:
     }
 
 
-def test_bare_id_resolves_to_first_provider(monkeypatch):
+def test_unique_bare_id_resolves(monkeypatch):
     monkeypatch.setenv("ZAI_API_KEY", "k")
-    model, key = resolve_task_model(_catalog(), "glm-5.3")
-    assert model.provider == "zai"  # first provider defining the id wins
+    model, key = resolve_task_model(_catalog(), "glm-5.3-flash")
+    assert model.provider == "zai"
     assert key == "k"
 
 
@@ -75,4 +75,13 @@ def test_missing_api_key_names_the_env_var(monkeypatch):
     monkeypatch.delenv("ZAI_API_KEY", raising=False)
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     with pytest.raises(ValueError, match="ZAI_API_KEY"):
+        resolve_task_model(_catalog(), "zai/glm-5.3")
+
+
+def test_ambiguous_bare_id_errors_listing_qualified_forms(monkeypatch):
+    monkeypatch.setenv("ZAI_API_KEY", "k")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "d")
+    with pytest.raises(ValueError) as exc_info:
         resolve_task_model(_catalog(), "glm-5.3")
+    message = str(exc_info.value)
+    assert "zai/glm-5.3" in message and "deepseek/glm-5.3" in message

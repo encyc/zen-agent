@@ -36,10 +36,7 @@ from zenagent.app.journal import attach_journal, journal_for, load_backup_policy
 from zenagent.app.modes import MODES, mode_prompt_note, resolve_mode
 from zenagent.app.permissions import PermissionGate, build_permission_gate
 from zenagent.app.safety import GuardPolicy
-from zenagent.app.support import (
-    api_key_for as _api_key_for,
-    resolve_task_model,
-)
+from zenagent.app.support import api_key_for as _api_key_for
 from zenagent.app.support import (
     resolve_model,
     resolve_task_model,

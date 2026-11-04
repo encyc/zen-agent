@@ -929,3 +929,24 @@ async def test_task_model_missing_key_fails_fast_naming_env():
 
     assert result.is_error
     assert "ZAI_API_KEY" in result.content[0].text
+
+
+def test_task_manager_error_run_carries_status_details():
+    async def main():
+        from zenagent.tools.task import get_task_manager
+
+        manager = get_task_manager()
+
+        def factory():
+            async def run():
+                raise RuntimeError("boom")
+
+            return run()
+
+        run = manager.start("call-1", "T", "m", factory)
+        done = await manager.wait(run.task_id, timeout_s=5)
+        assert done.status == "error"
+        assert done.details.get("status") == "error"
+        assert "boom" in done.envelope
+
+    asyncio.run(main())

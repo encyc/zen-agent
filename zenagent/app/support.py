@@ -91,12 +91,18 @@ def resolve_task_model(
         if model is None:
             raise ValueError(f"provider {provider_id!r} has no model {model_id!r}")
     else:
-        try:
-            model = find_model(catalog, raw)
-        except KeyError as exc:
+        matches = [m for c in catalog.values() for m in c.models if m.id == raw]
+        if not matches:
             raise ValueError(
-                f"{exc.args[0]}; use provider/model form (see /models)"
-            ) from exc
+                f"model {raw!r} is not in the catalog; "
+                "use provider/model form (see /models)"
+            )
+        if len(matches) > 1:
+            options = ", ".join(f"{m.provider}/{m.id}" for m in matches)
+            raise ValueError(
+                f"model id {raw!r} is ambiguous ({options}); use provider/model form"
+            )
+        model = matches[0]
     key = api_key_for(catalog, model)
     if not key:
         provider = catalog.get(model.provider)

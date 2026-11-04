@@ -292,3 +292,18 @@ async def test_wait_task_abort_keeps_child_running():
 
     collected = await WAIT.execute("w2", {"job_id": task_id}, None)
     assert collected.details["status"] == "ok"
+
+
+async def test_wait_repeat_collection_does_not_reforward_spend():
+    """Re-waiting a collected task is encouraged — but spend counts once."""
+    from test_task import SlowStream
+
+    task_id = await dispatch_async(SlowStream(delay=0.01))
+    first = await WAIT.execute("w1", {"job_id": task_id}, None)
+    second = await WAIT.execute("w2", {"job_id": task_id}, None)
+
+    assert first.details.get("subagent_cost") is not None
+    assert "subagent_cost" not in second.details
+    assert "subagent_tokens" not in second.details
+    # The envelope text itself stays identical (idempotent re-read).
+    assert first.content[0].text == second.content[0].text

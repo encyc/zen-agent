@@ -17,9 +17,10 @@ plan: `docs/superpowers/plans/2026-11-04-async-parallel-subagents.md`.
   child's toolset/mode/model; the child is pinned to its own transcript
   store, so compaction/undo/fork/clear never interrupt it (process-level
   lifetime, like bash jobs). ESC only affects synchronous children.
-- **Per-dispatch `model`** (`id` or `provider/id`, resolved from the runtime
-  catalog with the same first-provider-wins rule as `/model`; missing API
-  key fails fast naming the env var).
+- **Per-dispatch `model`** (`id` or `provider/id`; an ambiguous bare id
+  errors listing the qualified forms; missing API key fails fast naming the
+  env var). Known limitation: `files_touched` sees write/edit calls only —
+  writes through bash are invisible to the manifest.
 - **Worker contract.** Envelopes now carry `files_touched` (extracted from
   the child's own write/edit calls, not self-reported); the child prompt
   adds file-scope discipline, a changed-code test requirement and ~10-turn

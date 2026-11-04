@@ -269,6 +269,10 @@ class TaskRun:
     status: str = "running"
     envelope: str = ""
     details: dict = field(default_factory=dict)
+    #: Spend keys (subagent_cost/subagent_tokens) are forwarded to the hooks
+    #: on the FIRST collection only; a re-wait re-reads the envelope text but
+    #: must not double-count the run into the HUD or the parent's max_cost.
+    spend_reported: bool = False
     _done: asyncio.Event = field(default_factory=asyncio.Event)
     _task: asyncio.Task | None = None
 
@@ -366,6 +370,7 @@ class TaskManager:
         except Exception as exc:  # noqa: BLE001 - a child crash must not kill the manager
             run.status = "error"
             run.envelope = f"{type(exc).__name__}: {exc}"
+            run.details = {"status": "error"}
         else:
             run.status = "ok"
             run.envelope = envelope
