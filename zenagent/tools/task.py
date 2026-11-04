@@ -36,7 +36,7 @@ from zenagent.prompts import render, tool_description
 from zenagent.prompts.registry import read_block
 from zenagent.providers.catalog import Model
 from zenagent.providers.registry import StreamFn
-from zenagent.types import AssistantMessage, TextContent
+from zenagent.types import AssistantMessage, TextContent, ToolCall
 
 __all__ = [
     "TASK_RUN_RETENTION",
@@ -122,6 +122,33 @@ def _child_usage(messages) -> tuple[float, int]:
         )
         cost += usage.cost.total
     return cost, tokens
+
+
+#: Tools whose ``path`` argument means "this file's content changed on disk".
+#: bash-side writes are invisible here by design: shell commands are not
+#: statically attributable to files (a known, documented limitation).
+_WRITING_TOOLS = ("write_file", "edit_file")
+
+
+def _files_touched(messages) -> list[str]:
+    """Paths the child wrote, deduplicated in first-touched order.
+
+    Extracted from the child's own tool calls — not self-reported — so the
+    manifest stays honest even when the summary text embellishes.
+    """
+    seen: dict[str, None] = {}
+    for message in messages:
+        if not isinstance(message, AssistantMessage):
+            continue
+        for block in message.content:
+            if (
+                isinstance(block, ToolCall)
+                and block.name in _WRITING_TOOLS
+            ):
+                path = (block.arguments or {}).get("path")
+                if isinstance(path, str) and path:
+                    seen.setdefault(path)
+    return list(seen)
 
 
 def _status_for(child: Agent) -> str:
@@ -605,6 +632,7 @@ def build_task_tool(
             "reason": reason,
             "turns": turns,
             "error": error,
+            "files_touched": _files_touched(child.messages),
             # Cost attribution for the parent status/telemetry layer.
             "subagent_cost": cost,
             "subagent_tokens": tokens,

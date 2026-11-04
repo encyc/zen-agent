@@ -13,6 +13,7 @@ from zenagent.types import (
     AssistantMessage,
     Cost,
     TextContent,
+    ToolCall,
     Usage,
 )
 
@@ -812,3 +813,55 @@ async def test_async_detaches_from_abort_token():
     assert run.details["status"] == "ok"
     assert "slow answer" in run.envelope
     await get_task_manager().close()
+
+
+# --- files_touched manifest ---------------------------------------------------
+
+
+class WritingChildStream(ChildStream):
+    """Final message carries tool calls (write/edit) plus the answer text."""
+
+    def __init__(self, calls):
+        super().__init__("patched")
+        self.calls = calls
+
+    async def __call__(self, model, messages, tools, options):
+        partial = AssistantMessage(
+            content=[],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="pending",
+            timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        partial.content = [
+            ToolCall(id=f"c{i}", name=tool_name, arguments={"path": path})
+            for i, (tool_name, path) in enumerate(self.calls)
+        ] + [TextContent(self.text)]
+        partial.usage = self.usage
+        partial.stop_reason = "stop"
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+
+async def test_envelope_details_carry_files_touched():
+    stream = WritingChildStream(
+        [
+            ("write_file", "/tmp/a.py"),
+            ("read_file", "/tmp/b.py"),
+            ("edit_file", "/tmp/a.py"),
+        ]
+    )
+    tool = _tool(stream)
+
+    result = await tool.execute("t1", {"prompt": "go"})
+
+    assert result.details["files_touched"] == ["/tmp/a.py"]
+
+
+async def test_files_touched_empty_for_readonly_child():
+    tool = _tool(ChildStream())
+
+    result = await tool.execute("t1", {"prompt": "go"})
+
+    assert result.details["files_touched"] == []
