@@ -189,3 +189,106 @@ async def test_abort_returns_promptly_and_leaves_the_job_running():
     # Aborting a wait must not kill the background job.
     assert get_job_manager().snapshot(job_id).status == "running"
 
+
+
+# ---------------------------------------------------------------------------
+# background task children (task_N ids)
+# ---------------------------------------------------------------------------
+
+
+def _task_tool(stream):
+    from test_task import _model, _tools
+    from zenagent.tools.task import build_task_tool
+
+    return build_task_tool(
+        model=_model(), api_key="k", stream_fn=stream, base_tools=_tools()
+    )
+
+
+@pytest.fixture(autouse=True)
+async def clean_task_manager():
+    from zenagent.tools.task import close_task_manager
+
+    yield
+    await close_task_manager()
+
+
+async def dispatch_async(stream, name="Research"):
+    tool = _task_tool(stream)
+    result = await tool.execute("t1", {"prompt": "go", "name": name, "async": True})
+    assert not result.is_error, result.content[0].text
+    return result.details["task_id"]
+
+
+async def test_wait_collects_task_envelope():
+    from test_task import SlowStream
+
+    task_id = await dispatch_async(SlowStream(delay=0.05))
+
+    result = await WAIT.execute("w1", {"job_id": task_id}, None)
+
+    assert not result.is_error
+    assert "<task-result" in result.content[0].text
+    assert result.details["task_id"] == task_id
+    assert result.details["status"] == "ok"
+    assert result.details["subagent_tokens"] > 0
+    assert "subagent_cost" in result.details
+
+
+async def test_wait_unknown_task_id_lists_known():
+    from test_task import SlowStream
+
+    known_id = await dispatch_async(SlowStream(delay=0.01))
+    await WAIT.execute("w1", {"job_id": known_id}, None)
+
+    result = await WAIT.execute("w2", {"job_id": "task_nope"}, None)
+
+    assert result.is_error
+    assert "unknown task id" in result.content[0].text
+    assert known_id in result.details.get("known_task_ids", [])
+
+
+async def test_wait_task_idempotent():
+    from test_task import SlowStream
+
+    task_id = await dispatch_async(SlowStream(delay=0.01))
+    first = await WAIT.execute("w1", {"job_id": task_id}, None)
+    second = await WAIT.execute("w2", {"job_id": task_id}, None)
+
+    assert first.content[0].text == second.content[0].text
+
+
+async def test_wait_task_timeout_reports_running():
+    from test_task import SlowStream
+
+    task_id = await dispatch_async(SlowStream(delay=2.0))
+
+    result = await WAIT.execute("w1", {"job_id": task_id, "timeout_s": 1}, None)
+
+    assert not result.is_error
+    assert "still running" in result.content[0].text
+    assert result.details["status"] == "running"
+
+
+async def test_wait_task_abort_keeps_child_running():
+    import asyncio
+
+    from test_task import SlowStream
+    from zenagent.events import AbortToken
+
+    task_id = await dispatch_async(SlowStream(delay=0.3))
+    abort = AbortToken()
+
+    async def trigger():
+        await asyncio.sleep(0.05)
+        abort.abort()
+
+    trigger_task = asyncio.create_task(trigger())
+    result = await WAIT.execute("w1", {"job_id": task_id, "timeout_s": 10}, abort)
+    await trigger_task
+
+    assert result.details.get("aborted") is True
+    assert "keep running" in result.content[0].text
+
+    collected = await WAIT.execute("w2", {"job_id": task_id}, None)
+    assert collected.details["status"] == "ok"

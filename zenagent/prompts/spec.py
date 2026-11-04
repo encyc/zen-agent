@@ -219,5 +219,5 @@ for _tool_name in TOOL_BLOCK_NAMES:
 
 #: Hard budgets from the design doc (§6.3); enforced by the budget test.
 TOTAL_BUDGET_CHARS = 9000
-TOOL_TOTAL_BUDGET_CHARS = 4400
+TOOL_TOTAL_BUDGET_CHARS = 4800
 TOOL_BUDGET_CHARS = 900

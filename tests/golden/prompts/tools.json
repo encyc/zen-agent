@@ -44,8 +44,8 @@
     "text": "Track progress on a multi-step task with a phased checklist. Use it when the work has 3+ steps, call it in the same response as your plan, and keep it current: start a task before working on it, mark it done when it is (or drop it), and block it with a one-line reason when you cannot proceed. Tasks are addressed by their exact content, never by generated IDs. Phases run in order and the in-progress pointer advances automatically. One op per call: init replaces the list; start/done/drop/block/unblock take a task (done/drop/block/unblock also accept a phase, and default to every task); rm removes a task or clears a phase; append adds tasks to a phase; view is a read-only checklist. A failed call changes nothing."
   },
   "wait": {
-    "chars": 233,
-    "text": "Wait for a background bash job started with bash async: true and return its status, exit code and output. Without job_id it waits for any running job. On timeout it returns a still-running snapshot, so call wait again for the result."
+    "chars": 321,
+    "text": "Wait for a background job and return its result. job_id accepts bash job ids (bg_N, from bash async: true) and task ids (task_N, from task async: true — the child's full report envelope). Without job_id it waits for any running bash job. On timeout it returns a still-running snapshot, so call wait again for the result.\n"
   },
   "web_search": {
     "chars": 629,

@@ -18,6 +18,7 @@ from zenagent.tools.jobs import (
     UnknownJobError,
     get_job_manager,
 )
+from zenagent.tools.task import UnknownTaskError, get_task_manager
 from zenagent.types import TextContent
 
 __all__ = ["DEFAULT_WAIT_TIMEOUT_S", "MAX_WAIT_TIMEOUT_S", "WAIT"]
@@ -111,6 +112,65 @@ async def _wait_for_result(
     return await wait_task, False
 
 
+async def _wait_task(task_id: str, timeout_s: float, abort) -> ToolResultAgent:
+    """Collect a background ``task`` child (``task_N`` ids from async dispatch).
+
+    Children keep running across waits, aborts and session switches: a wait
+    only observes — the same contract as bash jobs. A completed run answers
+    immediately and stays waitable until retention prunes it.
+    """
+    manager = get_task_manager()
+    wait_task = asyncio.create_task(manager.wait(task_id, timeout_s=timeout_s))
+    if abort is None:
+        run = await wait_task
+    else:
+        abort_watch = asyncio.create_task(abort.wait())
+        aborted = False
+        try:
+            done, _ = await asyncio.wait(
+                {wait_task, abort_watch}, return_when=asyncio.FIRST_COMPLETED
+            )
+            aborted = abort_watch in done and wait_task not in done
+        finally:
+            abort_watch.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await abort_watch
+            if not wait_task.done():
+                wait_task.cancel()
+        if aborted:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await wait_task
+            known = ", ".join(manager.ids()) or "none"
+            return _text(
+                "aborted while waiting: background tasks keep running; call wait "
+                f"again to collect the result (known tasks: {known})",
+                aborted=True,
+                task_ids=manager.ids(),
+            )
+        run = await wait_task
+    if run.status == "running":
+        return _text(
+            f"task {run.task_id} still running after {timeout_s:g}s: {run.name}\n"
+            f"call wait again with job_id={run.task_id!r} for the result",
+            task_id=run.task_id,
+            name=run.name,
+            status="running",
+        )
+    # The full envelope text plus the run's details: subagent_cost/tokens ride
+    # along here so spend accounting and telemetry see background children.
+    return _text(run.envelope, task_id=run.task_id, **run.details)
+
+
+def _task_unknown(exc: UnknownTaskError) -> ToolResultAgent:
+    known = ", ".join(exc.known) if exc.known else "none"
+    return _text(
+        f"unknown task id {exc.task_id!r}; known tasks: {known}",
+        is_error=True,
+        task_id=exc.task_id,
+        known_task_ids=list(exc.known),
+    )
+
+
 async def _wait(
     tool_call_id: str, args: dict, abort, on_update=None
 ) -> ToolResultAgent:
@@ -128,6 +188,12 @@ async def _wait(
     job_id = args.get("job_id")
     if job_id is not None:
         job_id = str(job_id).strip() or None
+
+    if job_id is not None and job_id.startswith("task_"):
+        try:
+            return await _wait_task(job_id, timeout_s, abort)
+        except UnknownTaskError as exc:
+            return _task_unknown(exc)
 
     manager = get_job_manager()
     try:

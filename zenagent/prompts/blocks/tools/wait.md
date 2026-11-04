@@ -1,1 +1,1 @@
-Wait for a background bash job started with bash async: true and return its status, exit code and output. Without job_id it waits for any running job. On timeout it returns a still-running snapshot, so call wait again for the result.
+Wait for a background job and return its result. job_id accepts bash job ids (bg_N, from bash async: true) and task ids (task_N, from task async: true — the child's full report envelope). Without job_id it waits for any running bash job. On timeout it returns a still-running snapshot, so call wait again for the result.
