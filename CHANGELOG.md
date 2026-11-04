@@ -3,7 +3,7 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased
+## v0.7.8 — 2026-11-04
 
 **Subagents grow up: the child mirrors the parent's capability, and runaway
 runs stop burning tokens for nothing.** Motivated by a session-log audit
