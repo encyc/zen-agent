@@ -508,6 +508,7 @@ def build_task_tool(
     timeout_s: int = DEFAULT_TASK_TIMEOUT_S,
     live_tools: Callable[[], Sequence[AgentTool]] | None = None,
     mode: str | Callable[[], str | None] | None = None,
+    resolve_model: Callable[[str], tuple[Model, str]] | None = None,
     artifact_sink: ArtifactSink | None = None,
     session_path: Path | None = None,
     limits: SubagentLimits | None = None,
@@ -519,7 +520,10 @@ def build_task_tool(
     subagents on the provider selected at bootstrap. ``live_tools`` and
     ``mode`` are the same kind of live getter: the child's toolset is resolved
     per dispatch from the parent's current active set and permission mode, so
-    MCP refreshes and ``/mode`` switches apply to the next spawn. ``max_turns``,
+    MCP refreshes and ``/mode`` switches apply to the next spawn. A ``model``
+    argument resolves through ``resolve_model`` (catalog + api key) and, when
+    present, overrides the parent's model for that child — thinking follows
+    the resolved model's ``reasoning`` flag. ``max_turns``,
     ``timeout_s`` and ``limits`` come from ``[task]`` in config.toml
     (``zenagent.config``); ``timeout_s <= 0`` disables the wall-clock watchdog.
     """
@@ -659,6 +663,27 @@ def build_task_tool(
         live_model = _live(model)
         live_key = _live(api_key)
         live_thinking = _live(thinking)
+        model_arg = str(args.get("model") or "").strip()
+        if model_arg:
+            # Per-dispatch override: fail fast before any child runs, and let
+            # thinking follow the resolved model, not the parent session's.
+            if resolve_model is None:
+                return ToolResultAgent(
+                    content=[TextContent(
+                        text="the model parameter is not available in this build"
+                    )],
+                    is_error=True,
+                    error_kind="invalid_arguments",
+                )
+            try:
+                live_model, live_key = resolve_model(model_arg)
+            except ValueError as exc:
+                return ToolResultAgent(
+                    content=[TextContent(text=str(exc))],
+                    is_error=True,
+                    error_kind="invalid_arguments",
+                )
+            live_thinking = "high" if live_model.reasoning else "off"
         available = _live(live_tools) if live_tools is not None else base_tools
         zen = (_live(mode) or "") == "zen"
         child_tools = [tool for tool in available if child_allowed(tool, zen=zen)]
@@ -798,6 +823,13 @@ def build_task_tool(
                     "description": (
                         "Dispatch in the background and return a task id at once; "
                         "collect the envelope later with the wait tool."
+                    ),
+                },
+                "model": {
+                    "type": "string",
+                    "description": (
+                        "Model for this child (bare id or provider/id); "
+                        "defaults to this session's model."
                     ),
                 },
             },

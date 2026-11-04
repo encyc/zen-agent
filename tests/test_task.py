@@ -865,3 +865,67 @@ async def test_files_touched_empty_for_readonly_child():
     result = await tool.execute("t1", {"prompt": "go"})
 
     assert result.details["files_touched"] == []
+
+
+# --- per-dispatch model parameter ---------------------------------------------
+
+
+async def test_task_model_arg_resolves_provider_model():
+    second = _model()
+    second.id = "second-model"
+    second.provider = "other"
+    stream = ChildStream()
+    tool = build_task_tool(
+        model=_model(),
+        api_key="k",
+        stream_fn=stream,
+        base_tools=_tools(),
+        resolve_model=lambda raw: (second, "other-key"),
+    )
+
+    result = await tool.execute("t1", {"prompt": "go", "model": "other/second-model"})
+
+    assert not result.is_error
+    assert stream.models_seen == ["second-model"]
+    assert result.details["model"] == "second-model"
+
+
+async def test_task_model_arg_unknown_fails_fast_without_running_a_child():
+    def resolver(raw):
+        raise ValueError("unknown model 'nope'; use provider/model form")
+
+    stream = ChildStream()
+    tool = build_task_tool(
+        model=_model(),
+        api_key="k",
+        stream_fn=stream,
+        base_tools=_tools(),
+        resolve_model=resolver,
+    )
+
+    result = await tool.execute("t1", {"prompt": "go", "model": "nope"})
+
+    assert result.is_error
+    assert result.error_kind == "invalid_arguments"
+    assert "use provider/model form" in result.content[0].text
+    assert stream.tools_seen == []
+
+
+async def test_task_model_missing_key_fails_fast_naming_env():
+    def resolver(raw):
+        raise ValueError(
+            "model 'glm-5.3' needs provider 'zai' api key: set ZAI_API_KEY"
+        )
+
+    tool = build_task_tool(
+        model=_model(),
+        api_key="k",
+        stream_fn=ChildStream(),
+        base_tools=_tools(),
+        resolve_model=resolver,
+    )
+
+    result = await tool.execute("t1", {"prompt": "go", "model": "glm-5.3"})
+
+    assert result.is_error
+    assert "ZAI_API_KEY" in result.content[0].text

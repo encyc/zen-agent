@@ -66,6 +66,46 @@ def api_key_for(catalog: dict[str, ProviderConfig], model: Model) -> str | None:
     # Settings (set inside the app) win over the environment; see zenagent.settings.
     return settings.get_api_key(provider.api_key_env)
 
+def resolve_task_model(
+    catalog: dict[str, ProviderConfig], raw: str
+) -> tuple[Model, str]:
+    """Resolve a ``task`` ``model`` argument to ``(model, api_key)``.
+
+    Accepts ``provider/model-id`` or a bare model id — the same lookup
+    ``/model`` uses (the first provider defining the id wins, so a bare id
+    is never ambiguous, and ``provider/id`` is the escape hatch). Raises
+    ``ValueError`` with a hint naming the missing environment variable when
+    the model, provider or its API key is absent — the task tool turns that
+    into a fail-fast error envelope before any child runs.
+    """
+    raw = raw.strip()
+    if "/" in raw:
+        provider_id, _, model_id = raw.partition("/")
+        provider = catalog.get(provider_id)
+        if provider is None:
+            raise ValueError(
+                f"unknown provider {provider_id!r}; "
+                f"catalog has: {', '.join(sorted(catalog))}"
+            )
+        model = next((m for m in provider.models if m.id == model_id), None)
+        if model is None:
+            raise ValueError(f"provider {provider_id!r} has no model {model_id!r}")
+    else:
+        try:
+            model = find_model(catalog, raw)
+        except KeyError as exc:
+            raise ValueError(
+                f"{exc.args[0]}; use provider/model form (see /models)"
+            ) from exc
+    key = api_key_for(catalog, model)
+    if not key:
+        provider = catalog.get(model.provider)
+        env = provider.api_key_env if provider else "the provider's key"
+        raise ValueError(
+            f"model {model.id!r} needs provider {model.provider!r} api key: set {env}"
+        )
+    return model, key
+
 
 def session_id_for(model: Model, provided: str | None = None) -> str | None:
     """OpenCode's gateway routes on a session id; other providers do not care."""

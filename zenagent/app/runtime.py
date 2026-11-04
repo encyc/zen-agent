@@ -32,6 +32,7 @@ from zenagent.app.safety import GuardPolicy
 from zenagent.app.support import (
     api_key_for,
     resolve_model,
+    resolve_task_model,
     session_id_for,
 )
 from zenagent.config import (
@@ -390,6 +391,7 @@ class Runtime:
             thinking=lambda: runtime.agent.thinking,
             live_tools=lambda: runtime.tool_registry.active(),
             mode=lambda: runtime.mode,
+            resolve_model=lambda raw: resolve_task_model(runtime.catalog, raw),
             max_cost=(
                 runtime.user_config.task_max_cost
                 if runtime.user_config.task_max_cost is not None

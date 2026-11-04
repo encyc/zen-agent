@@ -365,6 +365,7 @@ async def test_bootstrap_wires_the_task_budget_from_config(
     assert captured["timeout_s"] == 120
     assert captured["max_cost"] == 1.5  # [task].max_cost wins over the session cap
     assert callable(captured["live_tools"]) and callable(captured["mode"])
+    assert callable(captured["resolve_model"])
     assert captured["limits"] == SubagentLimits(
         keep_transcripts=64, max_total_bytes=4096, max_file_bytes=2048
     )

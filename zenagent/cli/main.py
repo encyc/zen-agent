@@ -38,9 +38,11 @@ from zenagent.app.permissions import PermissionGate, build_permission_gate
 from zenagent.app.safety import GuardPolicy
 from zenagent.app.support import (
     api_key_for as _api_key_for,
+    resolve_task_model,
 )
 from zenagent.app.support import (
     resolve_model,
+    resolve_task_model,
     session_id_for,
 )
 from zenagent.attachments import read_image_argument
@@ -360,6 +362,7 @@ async def run_headless(
                 thinking=thinking,
                 live_tools=lambda: tool_list,
                 mode=resolved_mode,
+                resolve_model=lambda raw: resolve_task_model(catalog, raw),
                 artifact_sink=build_artifact_sink(session.path),
                 max_cost=(
                     user_config.task_max_cost
