@@ -3,7 +3,7 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased
+## v0.7.9 — 2026-11-04
 
 **Subagents go async: parallel background children with a worker contract.**
 Spec: `docs/superpowers/specs/2026-11-04-async-parallel-subagents-design.md`;
