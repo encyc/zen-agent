@@ -3,6 +3,45 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+**Subagents go async: parallel background children with a worker contract.**
+Spec: `docs/superpowers/specs/2026-11-04-async-parallel-subagents-design.md`;
+plan: `docs/superpowers/plans/2026-11-04-async-parallel-subagents.md`.
+
+### Added
+
+- **Async dispatch.** `task` gains `async: true` (mirrors `bash async`): the
+  call returns a `task_N` id at once and the child runs as a background
+  coroutine; `wait` collects the full envelope later. Dispatch freezes the
+  child's toolset/mode/model; the child is pinned to its own transcript
+  store, so compaction/undo/fork/clear never interrupt it (process-level
+  lifetime, like bash jobs). ESC only affects synchronous children.
+- **Per-dispatch `model`** (`id` or `provider/id`, resolved from the runtime
+  catalog with the same first-provider-wins rule as `/model`; missing API
+  key fails fast naming the env var).
+- **Worker contract.** Envelopes now carry `files_touched` (extracted from
+  the child's own write/edit calls, not self-reported); the child prompt
+  adds file-scope discipline, a changed-code test requirement and ~10-turn
+  checkpoints. Dispatch guidance: parallel workers own disjoint files; the
+  parent re-runs the full suite after collecting them (one worker's green is
+  invalidated by its siblings' edits).
+- **`wait` collects tasks** (`task_N` ids), forwarding `subagent_cost`/
+  `subagent_tokens` so background spend lands in the HUD and telemetry.
+
+### Fixed
+
+- Background children showed as `interrupted` in the sidebar for their whole
+  run; they now show `running` (the TaskManager's in-flight set is the
+  source of truth) and their spend is counted when `wait` collects them.
+
+### Changed
+
+- Prompt version 2026-11-04.1: worker contract in `task_child_system`,
+  async/model/join-verify guidance in `tool.task` and `tool_policy`,
+  task-id collection in `tool.wait`.
+- `TOOL_TOTAL_BUDGET_CHARS` 4400 → 4800 (two tools gained real semantics).
+
 ## v0.7.8 — 2026-11-04
 
 **Subagents grow up: the child mirrors the parent's capability, and runaway

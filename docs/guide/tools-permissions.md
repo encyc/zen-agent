@@ -9,8 +9,8 @@
 | `edit_file` | 唯一匹配替换（old→new）；`replace_all` 可替换全部匹配 | 需确认 |
 | `list_dir` | 列目录（标记目录/文件） | 只读 |
 | `bash` | 执行命令（非交互环境、`cwd`、`async` 后台作业），禁止危险模式 | 需确认 |
-| `wait` | 等待 `bash async` 启动的后台作业并取回结果（只读、串行） | 只读 |
-| `task` | 把自包含子任务交给子代理（独立上下文/转录与成本，深度 1）；子代理的工具面跟随会话权限模式——zen 继承主 Agent 激活工具（黑名单除外），其他模式只读；父上下文只收 `<task-result>` envelope | 只读，免确认 |
+| `wait` | 等待后台作业并取回结果：`bg_N`（`bash async`）与 `task_N`（`task async`，返回完整子代理信封与花费）（只读、串行） | 只读 |
+| `task` | 把自包含子任务交给子代理（独立上下文/转录与成本，深度 1）；子代理的工具面跟随会话权限模式——zen 继承主 Agent 激活工具（黑名单除外），其他模式只读；`async: true` 立即返回 `task_N` 任务号后台并发跑，`model` 为该子代理指定模型（裸 id 或 `provider/id`）；worker 信封带 `files_touched` 清单；父上下文只收 `<task-result>` envelope | 只读，免确认 |
 | `ask` | 向用户发起结构化提问（1–5 题、每题 2–6 个选项，`header`/`multi`/`recommended` 可选）；只有当前端注册了交互 handler 时才弹对话框，否则降级为「按最保守选项继续」 | 只读，免确认 |
 | `glob` | 按模式找文件；`limit`（默认 500）、`include_hidden`（.git 永远跳过）、默认跳过根 `.gitignore` 命中的路径（`include_ignored` 可关）、`sort=path|mtime` | 只读 |
 | `grep` | 正则搜内容（忽略二进制/大文件）；按文件分页：每页 20 个文件 × 每文件 20 条，`skip` 续页 | 只读 |
