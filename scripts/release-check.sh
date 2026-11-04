@@ -15,7 +15,8 @@
 #
 # It covers what actually broke in past releases: `zen --version` missing, a dead
 # module shipped inside the wheel, a stray tracked file shipped in the sdist, and
-# an sdist that could not be installed by anyone but the author.
+# an sdist that could not be installed by anyone but the author. Lint (ruff) is
+# gated here too: style errors must never ride a release tag into CI red.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -81,6 +82,18 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
   else
     note "HEAD is not tagged v$VERSION yet (expected before a release)"
   fi
+fi
+
+# ------------------------------------------------------------------ 1b. lint
+step "lint"
+
+# Same gate scripts/check.sh runs, so a style error can no longer ride a
+# release tag: the 0.7.9 CI failures were exactly this gap.
+if lint_out="$(uv run ruff check . 2>&1)"; then
+  ok "ruff: all checks passed"
+else
+  printf '%s\n' "$lint_out"
+  die "ruff check failed — fix the lint errors before tagging"
 fi
 
 # ------------------------------------------------------------------ 2. build
