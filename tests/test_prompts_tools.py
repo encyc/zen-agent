@@ -68,10 +68,13 @@ def test_task_child_system_prompt_comes_from_block() -> None:
     from zenagent.prompts import render
     from zenagent.prompts.registry import read_block
 
-    rendered = render(read_block("task_child_system"), {"max_turns": "30"})
-
-    assert rendered.startswith(
-        "You are a read-only research subagent inside a coding agent."
+    rendered = render(
+        read_block("task_child_system"),
+        {"max_turns": "30", "child_tools": "read_file, grep"},
     )
+
+    assert rendered.startswith("You are a delegated subagent inside a coding agent")
+    assert "Your tools: read_file, grep." in rendered
+    assert "checkpoint" in rendered  # budget-cut runs must still return output
     assert "at most 30 model turns" in rendered
-    assert "{{max_turns}}" not in rendered
+    assert "{{max_turns}}" not in rendered and "{{child_tools}}" not in rendered

@@ -28,16 +28,16 @@
     "text": "List one directory level, marking directories and file sizes."
   },
   "read_file": {
-    "chars": 315,
-    "text": "Read a UTF-8 text file. Binary files are refused. Returns whole small files; at most 400 lines per call by default (hard cap 2000). A truncated result reports the exact offset for the next page. Set line_numbers=true to prefix each line with its 1-based number (for inspection only; never write numbered text back)."
+    "chars": 316,
+    "text": "Read a UTF-8 text file. Binary files are refused. Returns whole small files; at most 1000 lines per call by default (hard cap 5000). A truncated result reports the exact offset for the next page. Set line_numbers=true to prefix each line with its 1-based number (for inspection only; never write numbered text back)."
   },
   "read_skill": {
     "chars": 86,
     "text": "Load a skill's instructions by name before following it. Available skills: alpha, beta"
   },
   "task": {
-    "chars": 323,
-    "text": "Delegate a self-contained research job to a read-only subagent. The child has read_file/list_dir/glob/grep/web_search/fetch but cannot edit files, run commands, or ask questions. Use it for independent investigation whose intermediate steps you do not need in this transcript; pass a self-contained prompt and a short name."
+    "chars": 423,
+    "text": "Delegate a self-contained job to a subagent that returns only a final report. Its tools mirror this session's permission mode (read-only outside zen). Before dispatch: confirm every file you reference exists; if the child lacks a tool you have (e.g. shell), precompute the artifact — write the diff to a file and pass the path — and state the output contract. Use it for work whose intermediate steps you do not need here.\n"
   },
   "todo": {
     "chars": 719,

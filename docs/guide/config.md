@@ -132,11 +132,13 @@ deny = ["git_push"]                           # 追加到全局 deny；不能移
 
 ### [task]（仅全局层）
 
-子代理（`task` 工具）的预算，全部是正整数，默认值如下：
+子代理（`task` 工具）的预算，默认值如下：
 
 ```toml
 [task]
 max_turns = 300                   # 子代理的模型轮次上限，超了就被截断
+timeout_s = 900                   # 子代理的墙钟预算（秒），0 = 关闭看门狗
+max_cost = 2.5                    # 子代理的花费上限（美元）；省略 = 不单独设限
 keep_transcripts = 64             # 每个会话保留的 sidecar 转录条数
 max_transcript_bytes = 33554432   # 保留转录的总字节数（32 MiB）
 max_transcript_file_bytes = 8388608  # 单条转录超过 8 MiB 就截断并标记
@@ -147,9 +149,14 @@ max_transcript_file_bytes = 8388608  # 单条转录超过 8 MiB 就截断并标�
 - `max_turns` 是**子代理**的轮次上限，与主循环的 `AgentConfig.max_turns`（`--max-turns`，内建兜底
   100 轮）是两套。超限不是错误：父模型收到的是
   `status="truncated" reason="max_turns" turns="N"`，看到的是一个被截断的结果。
-- 四个键都会在加载时校验：0、负数、布尔值、非整数都会报错并指出 `task.<key>`。
-- 调大 `max_turns` 只放宽轮次，不放宽别的预算：工具结果仍是统一 40 KB、子代理仍只有一个只读工具集
-  （见[工具与权限](tools-permissions.md)）。
+- `timeout_s` 是墙钟保险丝：到点后子代理被温和中止（wind down），信封报
+  `status="truncated" reason="timeout"`。默认 900 秒是防失控的宽松值，不是工作上限；`0` 关闭。
+- `max_cost` 是单个子代理运行的花费上限，独立于会话级 `--max-cost`；设置了就**优先于**会话级值，
+  省略则透传会话级值（也没有时即不设限）。超限的信封 `reason="max_cost"`。
+- 各键都会在加载时校验：负数、布尔值、类型不符都会报错并指出 `task.<key>`；`timeout_s` 接受 0
+  （关闭），其余必须是正数。
+- 子代理的工具面跟随会话权限模式：zen 模式继承主 Agent 的激活工具集（黑名单除外），其他模式只拿
+  只读工具（见[工具与权限](tools-permissions.md)）。
 
 ### [safety] 与 [backup]（仅全局层）
 

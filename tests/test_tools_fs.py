@@ -352,18 +352,20 @@ async def test_huge_diff_is_truncated():
     assert len(diff.splitlines()) <= MAX_DIFF_LINES + 1
 
 
-async def test_write_refuses_a_short_401_line_page_even_though_it_is_longer_with_the_footer():
+async def test_write_refuses_a_short_page_one_line_past_the_default():
     """The canonical near-boundary case: footer makes the page *longer* on disk."""
     from pathlib import Path
 
+    from zenagent.tools.fs import DEFAULT_READ_LIMIT
 
-    Path("near.txt").write_text("\n".join("x" for _ in range(401)))
+    lines = DEFAULT_READ_LIMIT + 1
+    Path("near.txt").write_text("\n".join("x" for _ in range(lines)))
     read = await call(READ_FILE, path="near.txt")
     assert READ_TRUNCATION_MARKER in read.content[0].text
 
     result = await call(WRITE_FILE, path="near.txt", content=read.content[0].text)
     assert result.is_error
-    assert len(Path("near.txt").read_text().splitlines()) == 401
+    assert len(Path("near.txt").read_text().splitlines()) == lines
 
 
 async def test_write_refuses_a_budget_truncated_whole_file_projection():

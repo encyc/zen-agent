@@ -3,6 +3,41 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+**Subagents grow up: the child mirrors the parent's capability, and runaway
+runs stop burning tokens for nothing.** Motivated by a session-log audit
+(12 dispatched runs, 67% failed; 95% of all subagent tokens evaporated in
+no-output runs).
+
+### Added
+
+- **Mode-following child toolset.** The child's tool ceiling is now the
+  parent's current permission mode: in zen it sees the parent's active tools
+  (live-resolved per dispatch, MCP and `read_skill` included) minus a small
+  denylist (`task`, `ask`, `wait`, `todo`, `rewind`, `memory*`, `checkpoint*`);
+  every other mode stays read-only. The hardcoded six-tool allowlist is gone.
+- **`[task].timeout_s`** (default 900, `0` disables): a wall-clock watchdog
+  aborts a runaway child child-side; the envelope reports
+  `status="truncated" reason="timeout"`.
+- **`[task].max_cost`**: a per-run spend cap for children, overriding the
+  session's `--max-cost` when set (envelope `reason="max_cost"`).
+- **Checkpoint discipline** in the child system prompt: post a short findings
+  checkpoint every ~10 turns, so a budget-cut run still returns usable output;
+  changed code must be tested and the results included.
+
+### Changed
+
+- **Partial-output rescue.** When a child is cut off before its final message,
+  the envelope now carries the newest earlier assistant text (usually the
+  checkpoint) instead of `(no output)`.
+- **Dispatch checklist** in the parent-facing `task` description and tool
+  policy: confirm referenced files exist, precompute artifacts the child
+  cannot produce (write a diff to a file, pass the path), state the output
+  contract. Prompt version bumped to 2026-11-03.1.
+- **`read_file` pages widened**: default 400 → 1000 lines, hard cap
+  2000 → 5000 — page size trades cheap context for the scarcest budget (turns).
+
 ## v0.7.7 — 2026-11-03
 
 - Refactor: `ZenAgentApp` (TUI) split from 1,903 lines into per-concern mixins

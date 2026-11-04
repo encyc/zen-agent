@@ -668,6 +668,8 @@ def test_bad_safety_and_backup_values_are_rejected(tmp_path, snippet, message):
 def test_task_section_defaults(tmp_path):
     config = load_user_config(write_config(tmp_path, ""))
     assert config.task_max_turns == 300
+    assert config.task_timeout_s == 900
+    assert config.task_max_cost is None
     assert config.task_keep_transcripts == 64
     assert config.task_max_transcript_bytes == 32 * 1024 * 1024
     assert config.task_max_transcript_file_bytes == 8 * 1024 * 1024
@@ -675,9 +677,14 @@ def test_task_section_defaults(tmp_path):
 
 def test_task_section_parses_overrides_and_keeps_the_rest(tmp_path):
     config = load_user_config(
-        write_config(tmp_path, "[task]\nmax_turns = 7\nkeep_transcripts = 3\n")
+        write_config(
+            tmp_path,
+            "[task]\nmax_turns = 7\ntimeout_s = 0\nmax_cost = 2.5\nkeep_transcripts = 3\n",
+        )
     )
     assert config.task_max_turns == 7
+    assert config.task_timeout_s == 0  # 0 disables the wall-clock watchdog
+    assert config.task_max_cost == 2.5
     assert config.task_keep_transcripts == 3
     assert config.task_max_transcript_bytes == 32 * 1024 * 1024
 
@@ -686,6 +693,10 @@ def test_task_section_parses_overrides_and_keeps_the_rest(tmp_path):
     "snippet, message",
     [
         ("[task]\nmax_turns = 0\n", "task.max_turns"),
+        ("[task]\ntimeout_s = -1\n", "task.timeout_s"),
+        ("[task]\ntimeout_s = 1.5\n", "task.timeout_s"),
+        ("[task]\nmax_cost = 0\n", "task.max_cost"),
+        ("[task]\nmax_cost = true\n", "task.max_cost"),
         ("[task]\nkeep_transcripts = -1\n", "task.keep_transcripts"),
         ("[task]\nmax_transcript_bytes = true\n", "task.max_transcript_bytes"),
         ("[task]\nmax_transcript_file_bytes = 1.5\n", "task.max_transcript_file_bytes"),

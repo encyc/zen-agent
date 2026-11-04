@@ -35,9 +35,11 @@ from zenagent.types import AssistantMessage, Message, Usage
 
 __all__ = [
     "DEFAULT_TASK_KEEP_TRANSCRIPTS",
+    "DEFAULT_TASK_MAX_COST",
     "DEFAULT_TASK_MAX_TRANSCRIPT_BYTES",
     "DEFAULT_TASK_MAX_TRANSCRIPT_FILE_BYTES",
     "DEFAULT_TASK_MAX_TURNS",
+    "DEFAULT_TASK_TIMEOUT_S",
     "ContextGuard",
     "UserConfig",
     "apply_user_config",
@@ -70,11 +72,24 @@ _DEFAULT_BACKUP_KEEP_RUNS = 50
 
 #: Keys accepted inside ``[task]`` (subagent budgets, global-only).
 _TASK_KEYS = frozenset(
-    {"max_turns", "keep_transcripts", "max_transcript_bytes", "max_transcript_file_bytes"}
+    {
+        "max_turns",
+        "timeout_s",
+        "max_cost",
+        "keep_transcripts",
+        "max_transcript_bytes",
+        "max_transcript_file_bytes",
+    }
 )
 #: Default subagent turn budget: a long multi-file investigation still fits,
 #: while the main loop's own ``_MAX_TURNS`` (100) keeps the parent bounded.
 DEFAULT_TASK_MAX_TURNS = 300
+#: Default subagent wall-clock budget, in seconds: a loose fuse against the
+#: runaway no-output runs observed in session audits, not a working ceiling.
+#: 0 disables the watchdog.
+DEFAULT_TASK_TIMEOUT_S = 900
+#: Default subagent spend cap (None = no cap beyond the session's own).
+DEFAULT_TASK_MAX_COST: float | None = None
 #: Default subagent transcripts retained per session.
 DEFAULT_TASK_KEEP_TRANSCRIPTS = 64
 #: Default total bytes of retained subagent transcripts per session.
@@ -170,11 +185,32 @@ def _parse_backup(table: dict, target: Path) -> tuple[bool, int, int]:
     )
 
 
-def _parse_task(table: dict, target: Path) -> tuple[int, int, int, int]:
-    """Parse a ``[task]`` table into ``(max_turns, keep, total_bytes, file_bytes)``."""
+def _positive_float_or_none(
+    table: dict, key: str, default: float | None, section: str, target: Path
+) -> float | None:
+    value = table.get(key, default)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+        raise ValueError(f"config {target}: {section}.{key} must be a positive number")
+    return float(value)
+
+
+def _parse_task(
+    table: dict, target: Path
+) -> tuple[int, int, float | None, int, int, int]:
+    """Parse a ``[task]`` table into the subagent budget fields."""
     _unknown_section_keys(table, _TASK_KEYS, "task", target)
+    timeout_s = table.get("timeout_s", DEFAULT_TASK_TIMEOUT_S)
+    if isinstance(timeout_s, bool) or not isinstance(timeout_s, int) or timeout_s < 0:
+        # 0 disables the wall-clock watchdog; anything negative is a typo.
+        raise ValueError(f"config {target}: task.timeout_s must be a non-negative integer")
     values = (
         _positive_int(table, "max_turns", DEFAULT_TASK_MAX_TURNS, "task", target),
+        timeout_s,
+        _positive_float_or_none(
+            table, "max_cost", DEFAULT_TASK_MAX_COST, "task", target
+        ),
         _positive_int(
             table, "keep_transcripts", DEFAULT_TASK_KEEP_TRANSCRIPTS, "task", target
         ),
@@ -193,13 +229,13 @@ def _parse_task(table: dict, target: Path) -> tuple[int, int, int, int]:
             target,
         ),
     )
-    if values[3] > values[2]:
+    if values[5] > values[4]:
         # A total budget smaller than one transcript would make retention
         # impossible: the store would either prune the file it just wrote or
         # keep the first file that lands (transcripts then pile up silently).
         raise ValueError(
             f"config {target}: task.max_transcript_file_bytes "
-            f"({values[3]}) must not exceed task.max_transcript_bytes ({values[2]})"
+            f"({values[5]}) must not exceed task.max_transcript_bytes ({values[4]})"
         )
     return values
 
@@ -285,6 +321,10 @@ class UserConfig:
     backup_keep_runs: int = _DEFAULT_BACKUP_KEEP_RUNS
     #: ``[task]``: provider requests a subagent may make before it is cut off
     task_max_turns: int = DEFAULT_TASK_MAX_TURNS
+    #: ``[task]``: wall-clock budget per subagent run, in seconds (0 = no watchdog)
+    task_timeout_s: int = DEFAULT_TASK_TIMEOUT_S
+    #: ``[task]``: spend cap per subagent run (None = uncapped)
+    task_max_cost: float | None = DEFAULT_TASK_MAX_COST
     #: ``[task]``: subagent transcripts retained per session
     task_keep_transcripts: int = DEFAULT_TASK_KEEP_TRANSCRIPTS
     #: ``[task]``: total bytes of retained subagent transcripts per session
@@ -384,6 +424,8 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
     )
     (
         task_max_turns,
+        task_timeout_s,
+        task_max_cost,
         task_keep_transcripts,
         task_max_transcript_bytes,
         task_max_transcript_file_bytes,
@@ -402,6 +444,8 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
         backup_max_file_bytes=backup_max_file_bytes,
         backup_keep_runs=backup_keep_runs,
         task_max_turns=task_max_turns,
+        task_timeout_s=task_timeout_s,
+        task_max_cost=task_max_cost,
         task_keep_transcripts=task_keep_transcripts,
         task_max_transcript_bytes=task_max_transcript_bytes,
         task_max_transcript_file_bytes=task_max_transcript_file_bytes,
@@ -444,6 +488,8 @@ def _merge_user_configs(base: UserConfig, override: UserConfig) -> UserConfig:
         backup_max_file_bytes=base.backup_max_file_bytes,
         backup_keep_runs=base.backup_keep_runs,
         task_max_turns=base.task_max_turns,
+        task_timeout_s=base.task_timeout_s,
+        task_max_cost=base.task_max_cost,
         task_keep_transcripts=base.task_keep_transcripts,
         task_max_transcript_bytes=base.task_max_transcript_bytes,
         task_max_transcript_file_bytes=base.task_max_transcript_file_bytes,

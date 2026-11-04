@@ -132,6 +132,124 @@ async def test_child_only_gets_read_only_tools_and_never_task_itself():
     assert "task" not in child_tools
 
 
+async def test_zen_child_mirrors_the_parent_but_never_the_denylist():
+    stream = ChildStream()
+    tools = _tools() + [
+        _read_tool(name)
+        for name in ("task", "ask", "wait", "todo", "memory", "memory_write", "checkpoint", "rewind")
+    ]
+    tool = build_task_tool(
+        model=_model(),
+        api_key="k",
+        stream_fn=stream,
+        base_tools=tools,
+        mode="zen",
+    )
+
+    await tool.execute("t1", {"prompt": "go"})
+
+    child_tools = set(stream.tools_seen[0])
+    assert {"read_file", "grep", "write_file", "bash"} <= child_tools
+    assert not child_tools & {
+        "task", "ask", "wait", "todo", "memory", "memory_write", "checkpoint", "rewind",
+    }
+
+
+async def test_child_tools_follow_live_roster_and_mode_per_dispatch():
+    stream = ChildStream()
+    live = {"tools": _tools(), "mode": "zen"}
+    tool = build_task_tool(
+        model=_model(),
+        api_key="k",
+        stream_fn=stream,
+        base_tools=[],
+        live_tools=lambda: live["tools"],
+        mode=lambda: live["mode"],
+    )
+
+    await tool.execute("t1", {"prompt": "go"})
+    live["mode"] = "ask"
+    await tool.execute("t2", {"prompt": "go"})
+
+    assert "write_file" in stream.tools_seen[0]  # zen: parent's writers delegate
+    assert "write_file" not in stream.tools_seen[1]  # ask: read-only child
+    assert "bash" not in stream.tools_seen[1]
+
+
+async def test_child_system_prompt_names_its_tools():
+    seen: list[str] = []
+
+    class CapturingStream(ChildStream):
+        async def __call__(self, model, messages, tools, options):
+            seen.append(messages[0].content)
+            async for event in super().__call__(model, messages, tools, options):
+                yield event
+
+    tool = _tool(CapturingStream())
+
+    await tool.execute("t1", {"prompt": "go"})
+
+    # Non-zen dispatch: only the read tools the child may actually use.
+    assert "Your tools: read_file, grep." in seen[0]
+    assert "{{child_tools}}" not in seen[0]
+
+
+async def test_timeout_watchdog_truncates_a_runaway_child():
+    class SlowStream:
+        """Honours abort like a real adapter but never finishes on its own."""
+
+        async def __call__(self, model, messages, tools, options):
+            partial = AssistantMessage(
+                content=[],
+                provider="p",
+                model="m",
+                usage=Usage(),
+                stop_reason="pending",
+                timestamp=0,
+            )
+            yield AssistantEvent(type="start", partial=partial)
+            await options.abort.wait()
+            partial.stop_reason = "aborted"
+            yield AssistantEvent(type="error", partial=partial, reason="aborted")
+
+    tool = _tool(SlowStream(), timeout_s=1)
+
+    result = await asyncio.wait_for(
+        tool.execute("t1", {"prompt": "go"}), timeout=10
+    )
+
+    assert result.details["status"] == "truncated"
+    assert result.details["reason"] == "timeout"
+    assert 'reason="timeout"' in result.content[0].text
+    # A watchdog stop is a budget outcome, not a user abort: the envelope must
+    # not read as if the user interrupted the child.
+    assert result.details["termination"] == "aborted"
+
+
+def test_final_text_rescues_an_earlier_checkpoint():
+    from zenagent.tools.task import _final_text
+
+    def message(*blocks):
+        return AssistantMessage(
+            content=list(blocks),
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="stop",
+            timestamp=0,
+        )
+
+    # Final turn is a textless tool call cut off by the budget; the newest
+    # earlier text (a checkpoint) is what the parent should still receive.
+    messages = [
+        message(TextContent("checkpoint: found the bug in a.py")),
+        message(),
+    ]
+    assert _final_text(messages) == "checkpoint: found the bug in a.py"
+    assert _final_text([message()]) == ""
+    assert _final_text([]) == ""
+
+
 async def test_empty_prompt_is_rejected_without_running_a_child():
     stream = ChildStream()
     tool = _tool(stream)

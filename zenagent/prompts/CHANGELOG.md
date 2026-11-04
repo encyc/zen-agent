@@ -4,6 +4,26 @@ Every content change bumps `PROMPT_VERSION` (`zenagent/prompts/spec.py`) and get
 one entry here: what changed, why, and the experiment/report that justified it.
 P0 extracted the v0.4.1 text verbatim — no behavior change.
 
+## 2026-11-03.1 — super child: mode-following toolset, dispatch checklist, checkpoints
+
+- `task_child_system` rewritten for the mode-following child: the fixed
+  "read-only research" identity became a delegated-subagent identity whose
+  capability line is dynamic (`{{child_tools}}`, rendered from the parent's
+  active set filtered by the session's permission mode). Adds two behaviors
+  observed missing in session audits (12 dispatched runs, 67% failed): post a
+  short checkpoint every ~10 turns so a budget-cut run still returns usable
+  output, and run the relevant tests when you changed code. Justified by the
+  2026-11-03 subagent audit: 5 of 8 failures ended `(no output)` after burning
+  ~95% of all subagent tokens.
+- `tool.task` description now states the mode-following capability and a
+  pre-dispatch checklist (confirm referenced files exist; precompute artifacts
+  the child cannot produce — write a diff to a file and pass the path; state
+  the output contract). Motivated by FM1/FM4 of the same audit: dispatch
+  prompts assumed a shell the child never had, and one hallucinated file
+  reference sent three reviewers looking for a document that was never written.
+- `system.tool_policy` gains one delegation bullet carrying the same checklist
+  into the parent's standing instructions.
+
 ## 2026-11-02.1 — subagent turn budget
 
 - `task_child_system` now declares the child's turn budget (`{{max_turns}}`,

@@ -35,11 +35,13 @@ __all__ = [
     "WRITE_FILE",
 ]
 
-#: Lines returned by ``read_file`` per call when the model does not say.
-DEFAULT_READ_LIMIT = 400
+#: Lines returned by ``read_file`` per call when the model does not say. One
+#: turn buys a whole typical file: page size trades cheap context for the
+#: scarcest budget (turns), and 1M-context models do not need the old 400.
+DEFAULT_READ_LIMIT = 1000
 
 #: Hard cap for a single ``read_file`` call (the model may ask for less).
-MAX_READ_LIMIT = 2000
+MAX_READ_LIMIT = 5000
 
 #: Backwards-compatible alias: the old "lines before truncation" constant.
 MAX_READ_LINES = MAX_READ_LIMIT

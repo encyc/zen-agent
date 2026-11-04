@@ -180,12 +180,20 @@ async def test_runtime_exposes_a_read_only_task_tool(runtime_factory):
     task = tools["task"]
     assert task.approval == "read"
     assert task.execution_mode == "sequential"
-    # The child tool set is the read-only allowlist, never the parent's writers.
+    # Outside zen the child tool set is the parent's read tools minus the
+    # denylist; time travel and session state never reach the child.
     from zenagent.tools.task import child_tool_names
 
     child = child_tool_names(list(runtime._base_tools))
-    assert child <= {"read_file", "list_dir", "glob", "grep", "web_search", "fetch"}
+    assert child <= {name for name, tool in tools.items() if tool.approval == "read"}
+    assert not child & {"task", "ask", "wait", "todo", "rewind"}
     assert "write_file" not in child and "bash" not in child
+    assert "memory" not in child and "checkpoint" not in child
+    # In zen the child mirrors the parent's active set (minus the denylist).
+    zen_child = child_tool_names(list(runtime._base_tools), zen=True)
+    assert "write_file" in zen_child and "bash" in zen_child
+    assert not zen_child & {"task", "ask", "wait", "todo", "rewind"}
+    assert "memory" not in zen_child and "checkpoint" not in zen_child
 
 
 async def test_switching_sessions_rebinds_the_task_tool(runtime_factory):
@@ -343,6 +351,8 @@ async def test_bootstrap_wires_the_task_budget_from_config(
         lambda *args, **kwargs: UserConfig(
             default_model="deepseek-flash",
             task_max_turns=5,
+            task_timeout_s=120,
+            task_max_cost=1.5,
             task_max_transcript_bytes=4096,
             task_max_transcript_file_bytes=2048,
         ),
@@ -352,6 +362,9 @@ async def test_bootstrap_wires_the_task_budget_from_config(
     await runtime_factory()
 
     assert captured["max_turns"] == 5
+    assert captured["timeout_s"] == 120
+    assert captured["max_cost"] == 1.5  # [task].max_cost wins over the session cap
+    assert callable(captured["live_tools"]) and callable(captured["mode"])
     assert captured["limits"] == SubagentLimits(
         keep_transcripts=64, max_total_bytes=4096, max_file_bytes=2048
     )

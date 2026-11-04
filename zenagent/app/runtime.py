@@ -379,17 +379,25 @@ class Runtime:
         thinking = options.thinking
         if thinking is None:
             thinking = "high" if model.reasoning else "off"
-        # The task tool spawns read-only child agents; the child inherits the
-        # parent's model/stream and follows the session artifact sink.
+        # The task tool spawns child agents; the child inherits the parent's
+        # model/stream, follows the session artifact sink, and mirrors the
+        # parent's live tool set and permission mode at each dispatch.
         runtime.task_tool = build_task_tool(
             model=lambda: runtime.agent.model,
             base_tools=list(ALL_TOOLS),
             api_key=lambda: runtime.agent.api_key,
             stream_fn=stream_fn,
             thinking=lambda: runtime.agent.thinking,
-            max_cost=options.max_cost,
-            # [task]: the child's turn budget and transcript retention caps.
+            live_tools=lambda: runtime.tool_registry.active(),
+            mode=lambda: runtime.mode,
+            max_cost=(
+                runtime.user_config.task_max_cost
+                if runtime.user_config.task_max_cost is not None
+                else options.max_cost
+            ),
+            # [task]: the child's budgets and transcript retention caps.
             max_turns=runtime.user_config.task_max_turns,
+            timeout_s=runtime.user_config.task_timeout_s,
             limits=SubagentLimits.from_user_config(runtime.user_config),
             session_path=runtime.session.path,
             artifact_sink=lambda tool_name, text: (

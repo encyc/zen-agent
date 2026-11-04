@@ -1,13 +1,18 @@
-"""The ``task`` tool: delegate a self-contained, read-only job to a child agent.
+"""The ``task`` tool: delegate a self-contained job to a child agent.
 
 Why a child ``Agent`` instead of more tool calls in the parent transcript: the
 sub-run's intermediate reads/searches are noise the parent does not need. The
 child owns its own transcript and context guard, the parent only receives the
 final envelope (plus token/cost accounting).
 
+The child's capability ceiling is the parent's current permission mode: in zen
+it sees the parent's active tools minus a small denylist; in every other mode
+it is read-only. Identity is never inherited — the child gets a dedicated
+system prompt and reports to the parent; it cannot reach the user.
+
 Deliberately the *minimal* slice of omp's task tool: synchronous single spawn,
-read-only children, no worktrees, no async jobs, no structured-output schemas,
-no recursion (the child never gets ``task`` back). Those are v0.5+ features.
+no worktrees, no async jobs, no structured-output schemas, no recursion (the
+child never gets ``task`` back). Those are v0.5+ features.
 """
 
 from __future__ import annotations
@@ -24,7 +29,7 @@ from zenagent.agent.agent import Agent
 from zenagent.agent.artifacts import ArtifactSink
 from zenagent.agent.loop import AgentTool, ToolResultAgent
 from zenagent.agent.subagents import SubagentLimits, SubagentStore
-from zenagent.config import DEFAULT_TASK_MAX_TURNS, ContextGuard
+from zenagent.config import DEFAULT_TASK_MAX_TURNS, DEFAULT_TASK_TIMEOUT_S, ContextGuard
 from zenagent.prompts import render, tool_description
 from zenagent.prompts.registry import read_block
 from zenagent.providers.catalog import Model
@@ -32,21 +37,43 @@ from zenagent.providers.registry import StreamFn
 from zenagent.types import AssistantMessage, TextContent
 
 __all__ = [
-    "CHILD_TOOL_NAMES",
     "DEFAULT_TASK_MAX_TURNS",
     "SubagentObserver",
     "TaskTool",
     "build_task_tool",
+    "child_allowed",
     "child_tool_names",
     "get_subagent_observer",
     "set_subagent_observer",
 ]
 
-#: Tools a read-only child may use. An allowlist (not "everything read-tier")
-#: keeps stateful/interactive read tools (todo/ask/wait/read_skill) out.
-CHILD_TOOL_NAMES = frozenset(
-    {"read_file", "list_dir", "glob", "grep", "web_search", "fetch"}
-)
+#: Tools a child may never see, whatever the parent's mode: ``task`` (no
+#: recursion), ``ask`` (the child has no user channel), ``wait`` (the parent
+#: owns background jobs), ``todo`` and the ``memory`` family (shared session
+#: state the child must not write behind the parent's back), ``checkpoint``/
+#: ``rewind`` (time travel over the parent's transcript is the parent's call).
+_CHILD_TOOL_DENYLIST = frozenset({"task", "ask", "wait", "todo", "rewind"})
+_CHILD_TOOL_DENY_PREFIXES = ("memory", "checkpoint")
+
+
+def child_allowed(tool: AgentTool, *, zen: bool) -> bool:
+    """Whether a child may see ``tool`` under the parent's permission mode.
+
+    Zen parents delegate their full active set (minus the denylist); every
+    other mode delegates read tools only. The child is not a second user: it
+    never exceeds what the session it was born in allows.
+    """
+    if tool.name in _CHILD_TOOL_DENYLIST:
+        return False
+    if tool.name.startswith(_CHILD_TOOL_DENY_PREFIXES):
+        return False
+    return zen or tool.approval == "read"
+
+
+def child_tool_names(base_tools: Sequence[AgentTool], *, zen: bool = False) -> set[str]:
+    """Names of the tools a child may see from ``base_tools`` under ``zen``."""
+    return {tool.name for tool in base_tools if child_allowed(tool, zen=zen)}
+
 
 #: ``DEFAULT_TASK_MAX_TURNS`` is re-exported from ``zenagent.config`` and can be
 #: overridden per run by ``[task].max_turns``; it stays in ``__all__`` below.
@@ -54,19 +81,21 @@ CHILD_TOOL_NAMES = frozenset(
 _SAFE_NAME = re.compile(r"[^A-Za-z0-9_.-]")
 
 
-def child_tool_names(base_tools: Sequence[AgentTool]) -> set[str]:
-    """Names of the base tools a read-only child is allowed to see."""
-    return {tool.name for tool in base_tools} & CHILD_TOOL_NAMES
-
-
 def _final_text(messages) -> str:
+    # The last assistant message may be textless — a tool call cut off by the
+    # turn/timeout budget. Fall back to the newest earlier text (often a
+    # checkpoint the child wrote for exactly this case) so a truncated run
+    # still returns something usable instead of "(no output)".
     for message in reversed(messages):
-        if isinstance(message, AssistantMessage):
-            return "\n".join(
-                block.text
-                for block in message.content
-                if isinstance(block, TextContent) and block.text
-            ).strip()
+        if not isinstance(message, AssistantMessage):
+            continue
+        text = "\n".join(
+            block.text
+            for block in message.content
+            if isinstance(block, TextContent) and block.text
+        ).strip()
+        if text:
+            return text
     return ""
 
 
@@ -270,6 +299,9 @@ def build_task_tool(
     thinking: str | Callable[[], str | None] | None = None,
     max_turns: int = DEFAULT_TASK_MAX_TURNS,
     max_cost: float | None = None,
+    timeout_s: int = DEFAULT_TASK_TIMEOUT_S,
+    live_tools: Callable[[], Sequence[AgentTool]] | None = None,
+    mode: str | Callable[[], str | None] | None = None,
     artifact_sink: ArtifactSink | None = None,
     session_path: Path | None = None,
     limits: SubagentLimits | None = None,
@@ -278,16 +310,14 @@ def build_task_tool(
 
     ``model``/``api_key``/``thinking`` may be callables: the child must follow
     the parent Agent's live values, or a ``/model`` switch would keep running
-    subagents on the provider selected at bootstrap. ``max_turns`` and
-    ``limits`` come from ``[task]`` in config.toml (``zenagent.config``).
+    subagents on the provider selected at bootstrap. ``live_tools`` and
+    ``mode`` are the same kind of live getter: the child's toolset is resolved
+    per dispatch from the parent's current active set and permission mode, so
+    MCP refreshes and ``/mode`` switches apply to the next spawn. ``max_turns``,
+    ``timeout_s`` and ``limits`` come from ``[task]`` in config.toml
+    (``zenagent.config``); ``timeout_s <= 0`` disables the wall-clock watchdog.
     """
-    child_tools = [
-        tool for tool in base_tools if tool.name in CHILD_TOOL_NAMES
-    ]
     store = SubagentStore(session_path, limits)
-    child_system_prompt = render(
-        read_block("task_child_system"), {"max_turns": str(max_turns)}
-    )
 
     async def execute(
         tool_call_id: str, args: dict, abort=None, on_update=None
@@ -305,6 +335,16 @@ def build_task_tool(
         live_model = _live(model)
         live_key = _live(api_key)
         live_thinking = _live(thinking)
+        available = _live(live_tools) if live_tools is not None else base_tools
+        zen = (_live(mode) or "") == "zen"
+        child_tools = [tool for tool in available if child_allowed(tool, zen=zen)]
+        child_system_prompt = render(
+            read_block("task_child_system"),
+            {
+                "max_turns": str(max_turns),
+                "child_tools": ", ".join(tool.name for tool in child_tools) or "(none)",
+            },
+        )
 
         guard = ContextGuard(live_model.context_window)
         child = Agent(
@@ -344,6 +384,22 @@ def build_task_tool(
 
             abort_task = asyncio.create_task(watch_abort())
 
+        # Wall-clock watchdog: the loop-level tool timeout would cancel this
+        # coroutine and drop the transcript's final status, so the budget is
+        # enforced child-side — abort() lets the child wind down and still
+        # write its end line. A loose fuse against runaway no-output runs.
+        timed_out = False
+        timeout_task: asyncio.Task | None = None
+        if timeout_s and timeout_s > 0:
+
+            async def watch_timeout() -> None:
+                nonlocal timed_out
+                await asyncio.sleep(timeout_s)
+                timed_out = True
+                child.abort()
+
+            timeout_task = asyncio.create_task(watch_timeout())
+
         recorder = _TaskRecorder(
             store=store,
             call_id=tool_call_id,
@@ -361,20 +417,27 @@ def build_task_tool(
         except Exception as exc:  # noqa: BLE001 - a child crash must not kill the parent
             failure = f"{type(exc).__name__}: {exc}"
         finally:
-            if abort_task is not None:
-                abort_task.cancel()
-                with contextlib.suppress(asyncio.CancelledError, Exception):
-                    await abort_task
+            for task in (abort_task, timeout_task):
+                if task is not None:
+                    task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError, Exception):
+                        await task
 
         duration_ms = round((time.monotonic() - started) * 1000)
         status = _status_for(child)
+        if timed_out and status == "aborted":
+            # The watchdog fired, not the user: a budget outcome, not an
+            # interrupt. The envelope must say which budget and why.
+            status = "truncated"
         if failure and status == "ok":
             status = "error"
         output = _final_text(child.messages)
         cost, tokens = _child_usage(child.messages)
         error = failure or child.error_message or ""
         termination = child.termination or ""
-        reason = termination if status == "truncated" else ""
+        reason = ""
+        if status == "truncated":
+            reason = "timeout" if timed_out else termination
         turns = sum(
             1 for message in child.messages if isinstance(message, AssistantMessage)
         )

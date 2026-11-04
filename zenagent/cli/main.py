@@ -358,9 +358,16 @@ async def run_headless(
                 api_key=api_key,
                 stream_fn=stream_fn,
                 thinking=thinking,
+                live_tools=lambda: tool_list,
+                mode=resolved_mode,
                 artifact_sink=build_artifact_sink(session.path),
-                max_cost=max_cost,
+                max_cost=(
+                    user_config.task_max_cost
+                    if user_config.task_max_cost is not None
+                    else max_cost
+                ),
                 max_turns=user_config.task_max_turns,
+                timeout_s=user_config.task_timeout_s,
                 limits=SubagentLimits.from_user_config(user_config),
                 session_path=session.path,
             )
