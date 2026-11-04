@@ -96,15 +96,35 @@ def task_dir(session_path: str | Path) -> Path:
     return path.parent / TASKS_DIRNAME / path.stem
 
 
-def carry_task_dir(old_session: str | Path, new_session: str | Path) -> None:
-    """Copy a session's transcripts to its continuation (fork/undo/retry)."""
+def carry_task_dir(
+    old_session: str | Path,
+    new_session: str | Path,
+    *,
+    skip: set[str] | None = None,
+) -> None:
+    """Copy a session's transcripts to its continuation (fork/undo/retry).
+
+    Transcripts whose call id is in ``skip`` stay behind: a background child
+    is pinned to the old session's store and still appending to them, so a
+    copy would be a stale half-written snapshot it will never add to again.
+    """
     source = task_dir(old_session)
     if not source.is_dir():
         return
+    skip_stems = skip or set()
     try:
         target = task_dir(new_session)
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(source, target, dirs_exist_ok=True)
+
+        def _skip_inflight(_dir: str, files: list[str]) -> list[str]:
+            return [
+                name
+                for name in files
+                if name.endswith(".jsonl")
+                and name[: -len(".jsonl")] in skip_stems
+            ]
+
+        shutil.copytree(source, target, dirs_exist_ok=True, ignore=_skip_inflight)
     except OSError:
         return
 

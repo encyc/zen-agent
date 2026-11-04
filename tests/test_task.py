@@ -670,3 +670,145 @@ def test_task_manager_retention_keeps_last_32():
             raise AssertionError("oldest completed run should have been pruned")
 
     asyncio.run(main())
+
+
+# --- async dispatch: background children -------------------------------------
+
+
+class SlowStream(ChildStream):
+    """ChildStream that takes ``delay`` seconds to finish."""
+
+    def __init__(self, text="slow answer", delay=0.25):
+        super().__init__(text)
+        self.delay = delay
+
+    async def __call__(self, model, messages, tools, options):
+        self.tools_seen.append([tool.name for tool in tools])
+        partial = AssistantMessage(
+            content=[],
+            provider="p",
+            model="m",
+            usage=self.usage,
+            stop_reason="pending",
+            timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        await asyncio.sleep(self.delay)
+        partial.content = [TextContent(self.text)]
+        partial.stop_reason = "stop"
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+
+async def test_async_dispatch_returns_immediately_with_task_id():
+    import time as _time
+
+    from zenagent.tools.task import get_task_manager
+
+    stream = SlowStream(delay=0.5)
+    tool = _tool(stream)
+    started = _time.monotonic()
+
+    result = await tool.execute("t1", {"prompt": "go", "async": True})
+    elapsed = _time.monotonic() - started
+
+    assert elapsed < 0.2, f"async dispatch blocked for {elapsed:.2f}s"
+    assert not result.is_error
+    assert "dispatched" in result.content[0].text
+    assert 'wait with job_id="' in result.content[0].text
+    assert result.details["dispatched"] is True
+    assert result.details["task_id"].startswith("task_")
+    task_id = result.details["task_id"]
+    run = await get_task_manager().wait(task_id, timeout_s=5)
+    assert "<task-result" in run.envelope and "slow answer" in run.envelope
+    assert run.details["status"] == "ok"
+    await get_task_manager().close()
+
+
+async def test_async_child_completes_in_background_and_writes_transcript_end_line(
+    tmp_path,
+):
+    from zenagent.agent.subagents import SubagentStore
+    from zenagent.tools.task import get_task_manager
+
+    session = tmp_path / "s.jsonl"
+    tool = build_task_tool(
+        model=_model(),
+        api_key="k",
+        stream_fn=SlowStream(delay=0.1),
+        base_tools=_tools(),
+        session_path=session,
+    )
+    result = await tool.execute("t1", {"prompt": "go", "async": True})
+    run = await get_task_manager().wait(result.details["task_id"], timeout_s=5)
+
+    metas = {m.call_id: m for m in SubagentStore(session).list()}
+    assert metas["t1"].status == run.details["status"] == "ok"
+    assert metas["t1"].tokens > 0
+    await get_task_manager().close()
+
+
+async def test_async_child_survives_session_rebind(tmp_path):
+    from zenagent.agent.subagents import carry_task_dir, task_dir
+    from zenagent.tools.task import get_task_manager
+
+    old = tmp_path / "old.jsonl"
+    new = tmp_path / "new.jsonl"
+    tool = build_task_tool(
+        model=_model(),
+        api_key="k",
+        stream_fn=SlowStream(delay=0.15),
+        base_tools=_tools(),
+        session_path=old,
+    )
+    result = await tool.execute("t1", {"prompt": "go", "async": True})
+    task_id = result.details["task_id"]
+
+    tool.bind_session(new)
+    carry_task_dir(old, new, skip=get_task_manager().running_call_ids())
+    assert not (task_dir(new) / "t1.jsonl").exists()
+
+    run = await get_task_manager().wait(task_id, timeout_s=5)
+    assert run.details["status"] == "ok"
+    body = (task_dir(old) / "t1.jsonl").read_text()
+    assert body.count('"type": "end"') == 1
+    assert body.count("slow answer") == 1  # no replayed duplication
+    await get_task_manager().close()
+
+
+async def test_async_freezes_mode_and_tools_at_dispatch():
+    from zenagent.tools.task import get_task_manager
+
+    stream = SlowStream(delay=0.15)
+    live = {"tools": _tools(), "mode": "zen"}
+    tool = build_task_tool(
+        model=_model(),
+        api_key="k",
+        stream_fn=stream,
+        base_tools=[],
+        live_tools=lambda: live["tools"],
+        mode=lambda: live["mode"],
+    )
+
+    result = await tool.execute("t1", {"prompt": "go", "async": True})
+    live["mode"] = "ask"
+    live["tools"] = []
+
+    run = await get_task_manager().wait(result.details["task_id"], timeout_s=5)
+    assert stream.tools_seen == [["read_file", "grep", "write_file", "bash"]]
+    await get_task_manager().close()
+
+
+async def test_async_detaches_from_abort_token():
+    from zenagent.tools.task import get_task_manager
+
+    stream = SlowStream(delay=0.15)
+    tool = _tool(stream)
+    abort = AbortToken()
+
+    result = await tool.execute("t1", {"prompt": "go", "async": True}, abort)
+    abort.abort()
+
+    run = await get_task_manager().wait(result.details["task_id"], timeout_s=5)
+    assert run.details["status"] == "ok"
+    assert "slow answer" in run.envelope
+    await get_task_manager().close()

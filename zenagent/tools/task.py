@@ -497,72 +497,30 @@ def build_task_tool(
     (``zenagent.config``); ``timeout_s <= 0`` disables the wall-clock watchdog.
     """
     store = SubagentStore(session_path, limits)
+    #: Current session path (bind_session rebinds it); a background child
+    #: pins its own store at dispatch, so later rebinds never touch it.
+    session_cell = {"path": session_path}
 
-    async def execute(
-        tool_call_id: str, args: dict, abort=None, on_update=None
-    ) -> ToolResultAgent:
-        prompt = str(args.get("prompt") or "").strip()
-        if not prompt:
-            return ToolResultAgent(
-                content=[TextContent(text="prompt is required and must not be empty")],
-                is_error=True,
-                error_kind="invalid_arguments",
-            )
-        raw_name = str(args.get("name") or "task").strip() or "task"
-        name = _SAFE_NAME.sub("_", raw_name)[:32]
-        started = time.monotonic()
-        live_model = _live(model)
-        live_key = _live(api_key)
-        live_thinking = _live(thinking)
-        available = _live(live_tools) if live_tools is not None else base_tools
-        zen = (_live(mode) or "") == "zen"
-        child_tools = [tool for tool in available if child_allowed(tool, zen=zen)]
-        child_system_prompt = render(
-            read_block("task_child_system"),
-            {
-                "max_turns": str(max_turns),
-                "child_tools": ", ".join(tool.name for tool in child_tools) or "(none)",
-            },
-        )
+    def _bind_session(path) -> None:
+        session_cell["path"] = path
+        store.bind_session(path)
 
-        guard = ContextGuard(live_model.context_window)
-        child = Agent(
-            model=live_model,
-            system_prompt=child_system_prompt,
-            tools=list(child_tools),
-            api_key=live_key,
-            thinking=live_thinking,
-            stream_fn=stream_fn,
-            transform_context=guard.transform,
-            max_turns=max_turns,
-            max_cost=max_cost,
-            artifact_sink=artifact_sink,
-        )
-        child.subscribe(guard.on_event)
+    async def _run_child(
+        *,
+        child: Agent,
+        prompt_body: str,
+        name: str,
+        call_id: str,
+        store: SubagentStore,
+        started: float,
+        timeout_s: int,
+        on_update,
+    ) -> tuple[str, dict]:
+        """Shared dispatch body: watchdog, recorder, prompt, envelope.
 
-        abort_task: asyncio.Task | None = None
-        if abort is not None:
-            if abort.aborted:
-                return ToolResultAgent(
-                    content=[TextContent(
-                        text=_envelope(name, "aborted", 0, 0.0, 0, "", "aborted before start")
-                    )],
-                    details={
-                        "name": name,
-                        "status": "aborted",
-                        "duration_ms": 0,
-                        "cost": 0.0,
-                        "tokens": 0,
-                        "model": live_model.id,
-                    },
-                )
-
-            async def watch_abort() -> None:
-                await abort.wait()
-                child.abort()
-
-            abort_task = asyncio.create_task(watch_abort())
-
+        Returns ``(envelope_text, details)`` — the same tuple the TaskManager
+        stores for background runs.
+        """
         # Wall-clock watchdog: the loop-level tool timeout would cancel this
         # coroutine and drop the transcript's final status, so the budget is
         # enforced child-side — abort() lets the child wind down and still
@@ -581,9 +539,9 @@ def build_task_tool(
 
         recorder = _TaskRecorder(
             store=store,
-            call_id=tool_call_id,
+            call_id=call_id,
             name=name,
-            model=live_model.id,
+            model=child.model.id,
             messages=lambda: child.messages,
             on_update=on_update,
         )
@@ -592,15 +550,14 @@ def build_task_tool(
 
         failure = ""
         try:
-            await child.prompt(f"[task: {name}]\n{prompt}")
+            await child.prompt(prompt_body)
         except Exception as exc:  # noqa: BLE001 - a child crash must not kill the parent
             failure = f"{type(exc).__name__}: {exc}"
         finally:
-            for task in (abort_task, timeout_task):
-                if task is not None:
-                    task.cancel()
-                    with contextlib.suppress(asyncio.CancelledError, Exception):
-                        await task
+            if timeout_task is not None:
+                timeout_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await timeout_task
 
         duration_ms = round((time.monotonic() - started) * 1000)
         status = _status_for(child)
@@ -637,24 +594,162 @@ def build_task_tool(
             cost=cost,
             tokens=tokens,
         )
-        return ToolResultAgent(
-            content=[TextContent(text=text)],
-            details={
-                "name": name,
-                "status": status,
-                "duration_ms": duration_ms,
-                "cost": cost,
-                "tokens": tokens,
-                "model": live_model.id,
-                "termination": child.termination,
-                "reason": reason,
-                "turns": turns,
-                "error": error,
-                # Cost attribution for the parent status/telemetry layer.
-                "subagent_cost": cost,
-                "subagent_tokens": tokens,
+        details = {
+            "name": name,
+            "status": status,
+            "duration_ms": duration_ms,
+            "cost": cost,
+            "tokens": tokens,
+            "model": child.model.id,
+            "termination": child.termination,
+            "reason": reason,
+            "turns": turns,
+            "error": error,
+            # Cost attribution for the parent status/telemetry layer.
+            "subagent_cost": cost,
+            "subagent_tokens": tokens,
+        }
+        return text, details
+
+    async def execute(
+        tool_call_id: str, args: dict, abort=None, on_update=None
+    ) -> ToolResultAgent:
+        prompt = str(args.get("prompt") or "").strip()
+        if not prompt:
+            return ToolResultAgent(
+                content=[TextContent(text="prompt is required and must not be empty")],
+                is_error=True,
+                error_kind="invalid_arguments",
+            )
+        raw_name = str(args.get("name") or "task").strip() or "task"
+        name = _SAFE_NAME.sub("_", raw_name)[:32]
+        async_flag = bool(args.get("async"))
+        prompt_body = f"[task: {name}]\n{prompt}"
+        started = time.monotonic()
+        # Freeze at dispatch: live values resolve HERE, once — a background
+        # child keeps this toolset/mode/model even if the session moves on.
+        live_model = _live(model)
+        live_key = _live(api_key)
+        live_thinking = _live(thinking)
+        available = _live(live_tools) if live_tools is not None else base_tools
+        zen = (_live(mode) or "") == "zen"
+        child_tools = [tool for tool in available if child_allowed(tool, zen=zen)]
+        child_system_prompt = render(
+            read_block("task_child_system"),
+            {
+                "max_turns": str(max_turns),
+                "child_tools": ", ".join(tool.name for tool in child_tools) or "(none)",
             },
         )
+
+        def _construct() -> Agent:
+            guard = ContextGuard(live_model.context_window)
+            child = Agent(
+                model=live_model,
+                system_prompt=child_system_prompt,
+                tools=list(child_tools),
+                api_key=live_key,
+                thinking=live_thinking,
+                stream_fn=stream_fn,
+                transform_context=guard.transform,
+                max_turns=max_turns,
+                max_cost=max_cost,
+                artifact_sink=artifact_sink,
+            )
+            child.subscribe(guard.on_event)
+            return child
+
+        if async_flag:
+            if abort is not None and abort.aborted:
+                return ToolResultAgent(
+                    content=[TextContent(
+                        text=_envelope(name, "aborted", 0, 0.0, 0, "", "aborted before start")
+                    )],
+                    details={
+                        "name": name,
+                        "status": "aborted",
+                        "duration_ms": 0,
+                        "cost": 0.0,
+                        "tokens": 0,
+                        "model": live_model.id,
+                    },
+                )
+            # The dispatch call returns at once, so its abort token never
+            # binds the child: background runs are session-scoped, like bash
+            # jobs. An already-aborted token refuses the dispatch above.
+            child = _construct()
+            run = get_task_manager().start(
+                tool_call_id,
+                name,
+                live_model.id,
+                lambda: _run_child(
+                    child=child,
+                    prompt_body=prompt_body,
+                    name=name,
+                    call_id=tool_call_id,
+                    store=SubagentStore(session_cell["path"], limits),
+                    started=started,
+                    timeout_s=timeout_s,
+                    on_update=on_update,
+                ),
+            )
+            text = (
+                f"task {run.task_id} dispatched ({name}); call wait with "
+                f'job_id="{run.task_id}" to collect the envelope.'
+            )
+            return ToolResultAgent(
+                content=[TextContent(text=text)],
+                details={
+                    "task_id": run.task_id,
+                    "name": name,
+                    "dispatched": True,
+                    "model": live_model.id,
+                },
+            )
+
+        child = _construct()
+
+        abort_task: asyncio.Task | None = None
+        if abort is not None:
+            if abort.aborted:
+                return ToolResultAgent(
+                    content=[TextContent(
+                        text=_envelope(name, "aborted", 0, 0.0, 0, "", "aborted before start")
+                    )],
+                    details={
+                        "name": name,
+                        "status": "aborted",
+                        "duration_ms": 0,
+                        "cost": 0.0,
+                        "tokens": 0,
+                        "model": live_model.id,
+                    },
+                )
+
+            async def watch_abort() -> None:
+                await abort.wait()
+                child.abort()
+
+            abort_task = asyncio.create_task(watch_abort())
+
+        try:
+            text, details = await _run_child(
+                child=child,
+                prompt_body=prompt_body,
+                name=name,
+                call_id=tool_call_id,
+                store=store,
+                started=started,
+                timeout_s=timeout_s,
+                on_update=on_update,
+            )
+        finally:
+            if abort_task is not None:
+                abort_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await abort_task
+
+        return ToolResultAgent(content=[TextContent(text=text)], details=details)
 
     return TaskTool(
         name="task",
@@ -670,11 +765,18 @@ def build_task_tool(
                     "type": "string",
                     "description": "Short CamelCase label for the child (default task).",
                 },
+                "async": {
+                    "type": "boolean",
+                    "description": (
+                        "Dispatch in the background and return a task id at once; "
+                        "collect the envelope later with the wait tool."
+                    ),
+                },
             },
             "required": ["prompt"],
         },
         execution_mode="sequential",
         approval="read",
         execute=execute,
-        bind_session=store.bind_session,
+        bind_session=_bind_session,
     )

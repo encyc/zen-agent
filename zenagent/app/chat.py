@@ -41,6 +41,13 @@ from zenagent.types import ImageContent
 __all__ = ["ChatController"]
 
 
+def _inflight_task_ids() -> set[str]:
+    """Call ids of background children still running (they pin their store)."""
+    from zenagent.tools.task import get_task_manager
+
+    return get_task_manager().running_call_ids()
+
+
 class ChatController:
     """Drives the agent and exposes snapshots a frontend can render."""
 
@@ -399,7 +406,7 @@ class ChatController:
         old_path = self.runtime.session.path
         path = await compact(self.runtime.agent)
         # Compaction continues the same work: keep its subagent transcripts.
-        carry_task_dir(old_path, path)
+        carry_task_dir(old_path, path, skip=_inflight_task_ids())
         # Compaction continues the same work: carry the todo checklist over.
         await self.runtime.switch_session(path, carry_todos=True)
         self.reload_transcript()
@@ -451,7 +458,7 @@ class ChatController:
         if prepared is None:
             return None
         text, new_session = prepared
-        carry_task_dir(old_path, new_session.path)
+        carry_task_dir(old_path, new_session.path, skip=_inflight_task_ids())
         self.runtime.session = new_session
         todo_tool = getattr(self.runtime, "todo_tool", None)
         if todo_tool is not None:

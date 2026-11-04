@@ -33,6 +33,13 @@ from zenagent.i18n import t
 __all__ = ["SessionEntry", "SessionManager", "adopt_legacy_session"]
 
 
+def _inflight_task_ids() -> set[str]:
+    """Call ids of background children still running (they pin their store)."""
+    from zenagent.tools.task import get_task_manager
+
+    return get_task_manager().running_call_ids()
+
+
 def _same_directory(one: Path, two: Path) -> bool:
     try:
         return Path(one).expanduser().resolve() == Path(two).expanduser().resolve()
@@ -197,7 +204,7 @@ class SessionManager:
         for message in messages:
             target.append(message)
         # Historical subagent transcripts follow the history they describe.
-        carry_task_dir(source, target.path)
+        carry_task_dir(source, target.path, skip=_inflight_task_ids())
         await self.runtime.switch_session(target.path)
         return target.path
 
@@ -221,7 +228,7 @@ class SessionManager:
         source = self.current()
         new_path = Session(source).rewrite(truncated)
         # The truncated history keeps its subagent transcripts.
-        carry_task_dir(source, new_path)
+        carry_task_dir(source, new_path, skip=_inflight_task_ids())
         self.runtime.session = Session(new_path)
         return dropped, new_path
 
