@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 
 from zenagent.agent.subagents import SubagentStore
@@ -131,6 +132,16 @@ class SubagentTracker:
         persisted = self._disk_metas
         running: list[SubagentView] = []
         finished: list[SubagentView] = []
+        # A dispatched-but-unfinished background child confuses the disk meta:
+        # its transcript has a header but no end line, which reads as
+        # "interrupted". The TaskManager's in-flight set is the truth. No
+        # running loop means no manager and no background children.
+        from zenagent.tools.task import get_task_manager
+
+        try:
+            inflight = get_task_manager().running_call_ids()
+        except RuntimeError:  # pragma: no cover - sync callers, no loop
+            inflight = set()
         for card in reversed(cards):
             if card.name != "task":
                 continue
@@ -140,6 +151,8 @@ class SubagentTracker:
                 meta=meta,
                 has_transcript=card.call_id in self._builders or meta is not None,
             )
+            if card.call_id in inflight and view.status != "running":
+                view = replace(view, status="running")
             (running if view.status == "running" else finished).append(view)
         # The live elapsed is computed per call: caching the views would freeze
         # a running subagent's clock between tool events.

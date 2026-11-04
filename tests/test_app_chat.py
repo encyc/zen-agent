@@ -807,3 +807,53 @@ async def test_status_carries_git_facts(runtime_factory, monkeypatch):
     status = chat.status
     assert status.git_branch == "main"
     assert (status.git_staged, status.git_dirty, status.git_untracked) == (1, 2, 3)
+
+
+async def test_wait_result_cost_is_surfaced_in_run_status(runtime_factory):
+    from zenagent.agent.loop import ToolResultAgent
+    from zenagent.app.chat import ChatController
+    from zenagent.events import AgentEvent
+    from zenagent.types import TextContent
+
+    runtime = await runtime_factory()
+    chat = ChatController(runtime)
+    collected = ToolResultAgent(
+        content=[TextContent(text="<task-result …>")],
+        details={"subagent_cost": 0.07, "subagent_tokens": 900},
+    )
+    chat._on_event(
+        AgentEvent(
+            type="tool_execution_end",
+            tool_call_id="w1",
+            tool_name="wait",
+            result=collected,
+        )
+    )
+    status = chat.status
+    assert status.subagent_cost == 0.07
+    assert status.subagent_tokens == 900
+
+
+async def test_task_dispatch_result_adds_no_spend(runtime_factory):
+    from zenagent.agent.loop import ToolResultAgent
+    from zenagent.app.chat import ChatController
+    from zenagent.events import AgentEvent
+    from zenagent.types import TextContent
+
+    runtime = await runtime_factory()
+    chat = ChatController(runtime)
+    dispatched = ToolResultAgent(
+        content=[TextContent(text="task task_1 dispatched (Research); …")],
+        details={"task_id": "task_1", "name": "Research", "dispatched": True},
+    )
+    chat._on_event(
+        AgentEvent(
+            type="tool_execution_end",
+            tool_call_id="t1",
+            tool_name="task",
+            result=dispatched,
+        )
+    )
+    status = chat.status
+    assert status.subagent_cost == 0.0
+    assert status.subagent_tokens == 0

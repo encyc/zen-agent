@@ -61,3 +61,52 @@ def test_notify_fires_on_start_and_end():
     tracker.on_event("call-1", "start", {"name": "x"})
     tracker.on_event("call-1", "end", {"status": "ok"})
     assert calls == ["n", "n"]
+
+
+def test_tracker_shows_running_for_inflight_background_task(tmp_path):
+    import asyncio
+
+    from zenagent.agent.subagents import SubagentStore
+    from zenagent.app.subagent_tracker import SubagentTracker
+    from zenagent.tools.task import close_task_manager, get_task_manager
+
+    async def scenario():
+        # A background child pinned to this session has written only the
+        # transcript header so far: the disk meta reads "interrupted", but the
+        # TaskManager knows the run is alive and the row must say running.
+        session = tmp_path / "s.jsonl"
+        SubagentStore(session).begin("call-1", "Research", "m")
+
+        manager = get_task_manager()
+        gate = asyncio.Event()
+
+        def factory():
+            async def run():
+                await gate.wait()
+                return "e", {}
+
+            return run
+
+        run = manager.start("call-1", "Research", "m", factory)
+
+        tracker = SubagentTracker(notify=lambda: None)
+        tracker.on_event("call-1", "start", {"name": "Research"})
+        card = _task_card(status="ok")  # the dispatch call itself has completed
+        views = tracker.views([card], session_path=session)
+        assert [v.status for v in views] == ["running"]
+
+        gate.set()
+        await manager.wait(run.task_id, timeout_s=5)
+        # The recorder's finish hook writes the end line and emits the end
+        # event to the tracker — same contract as the sync path.
+        SubagentStore(session).finish(
+            "call-1", status="ok", duration_ms=5, cost=0.0, tokens=5
+        )
+        tracker.on_event(
+            "call-1", "end", {"status": "ok", "duration_ms": 5, "cost": 0.0, "tokens": 5}
+        )
+        views = tracker.views([card], session_path=session)
+        assert [v.status for v in views] == ["ok"]
+        await close_task_manager()
+
+    asyncio.run(scenario())

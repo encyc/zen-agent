@@ -586,7 +586,7 @@ class ChatController:
             self._subagents.invalidate_disk()
         if event.type == "tool_execution_end":
             details = dict(getattr(event.result, "details", None) or {})
-            if event.tool_name == "task" and "subagent_cost" in details:
+            if event.tool_name in ("task", "wait") and "subagent_cost" in details:
                 self._subagents.add_spend(
                     float(details.get("subagent_cost") or 0.0),
                     int(details.get("subagent_tokens") or 0),
