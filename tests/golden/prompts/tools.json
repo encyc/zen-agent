@@ -36,8 +36,8 @@
     "text": "Load a skill's instructions by name before following it. Available skills: alpha, beta"
   },
   "task": {
-    "chars": 423,
-    "text": "Delegate a self-contained job to a subagent that returns only a final report. Its tools mirror this session's permission mode (read-only outside zen). Before dispatch: confirm every file you reference exists; if the child lacks a tool you have (e.g. shell), precompute the artifact — write the diff to a file and pass the path — and state the output contract. Use it for work whose intermediate steps you do not need here.\n"
+    "chars": 532,
+    "text": "Delegate a self-contained job to a subagent that returns only a final report. Its tools mirror this session's permission mode (read-only outside zen). async: true returns a task id at once — collect later with wait; model picks the child's model (id or provider/id). Before dispatch: confirm every file you reference exists; precompute what the child lacks (write the diff to a file); parallel workers must not share files; state the output contract. After collecting workers, re-run the full test suite yourself before continuing.\n"
   },
   "todo": {
     "chars": 719,

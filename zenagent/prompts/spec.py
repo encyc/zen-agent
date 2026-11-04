@@ -24,7 +24,7 @@ __all__ = [
 
 #: Bumped whenever block content changes; recorded in eval reports and the
 #: prompt CHANGELOG.
-PROMPT_VERSION = "2026-11-03.1"
+PROMPT_VERSION = "2026-11-04.1"
 
 CacheClass = Literal["stable", "session", "volatile"]
 
@@ -144,7 +144,7 @@ BLOCKS: dict[str, BlockSpec] = {
         path="task_child_system.md",
         version=PROMPT_VERSION,
         cache_class="stable",
-        budget_chars=900,
+        budget_chars=1100,
         required_vars=("max_turns", "child_tools"),
     ),
     "compact.result": BlockSpec(

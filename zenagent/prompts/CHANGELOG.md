@@ -4,6 +4,24 @@ Every content change bumps `PROMPT_VERSION` (`zenagent/prompts/spec.py`) and get
 one entry here: what changed, why, and the experiment/report that justified it.
 P0 extracted the v0.4.1 text verbatim — no behavior change.
 
+## 2026-11-04.1 — async parallel subagents: worker contract and dispatch semantics
+
+- `task_child_system` gains the worker contract: stay inside the file scope
+  the prompt declares (parallel siblings share the tree), list created or
+  changed files in the report, and keep the checkpoint discipline. The
+  structured `files_touched` manifest in the envelope is extracted from the
+  child's own write/edit calls, so the report list and the manifest
+  cross-check. Justified by the 2026-11-04 async-parallel subagents spec
+  (shared-tree safety = planning discipline + manifest + parent re-verify).
+- `tool.task` documents the new dispatch surface: `async: true` (task id now,
+  envelope via `wait`), `model` (bare id or provider/id), the disjoint-file
+  rule for parallel workers, and the join-then-verify rule — the parent
+  re-runs the full suite after collecting workers, because one worker's green
+  is invalidated by its siblings' edits.
+- `tool.wait` documents task-id collection (`task_N`).
+- `system.tool_policy` carries the disjoint-file and join-verify rules into
+  the parent's standing instructions.
+
 ## 2026-11-03.1 — super child: mode-following toolset, dispatch checklist, checkpoints
 
 - `task_child_system` rewritten for the mode-following child: the fixed
