@@ -912,6 +912,9 @@ def main(argv: list[str] | None = None) -> int:
                     thinking=args.thinking,
                     metrics=args.metrics,
                     images=args.images,
+                    max_turns=args.max_turns,
+                    max_cost=args.max_cost,
+                    retries=args.retries,
                 )
             )
         except KeyboardInterrupt:

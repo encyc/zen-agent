@@ -898,6 +898,27 @@ def test_repl_launch_forwards_thinking_metrics_and_images(monkeypatch, tmp_path)
     assert [str(p) for p in captured["images"]] == [str(image)]
 
 
+def test_repl_launch_forwards_budget_flags(monkeypatch):
+    """--max-turns/--max-cost/--retries must reach the REPL like the TUI."""
+    import zenagent.cli.repl as repl_module
+
+    captured: dict = {}
+
+    async def fake_repl(**kwargs):
+        captured.update(kwargs)
+        return 0
+
+    monkeypatch.setattr(repl_module, "repl", fake_repl)
+
+    assert cli_main.main(
+        ["--no-tui", "--max-turns", "3", "--max-cost", "0.5", "--retries", "2"]
+    ) == 0
+
+    assert captured["max_turns"] == 3
+    assert captured["max_cost"] == 0.5
+    assert captured["retries"] == 2
+
+
 def _tui_stdout(monkeypatch):
     import io
 
