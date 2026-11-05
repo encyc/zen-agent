@@ -4,6 +4,18 @@ Every content change bumps `PROMPT_VERSION` (`zenagent/prompts/spec.py`) and get
 one entry here: what changed, why, and the experiment/report that justified it.
 P0 extracted the v0.4.1 text verbatim — no behavior change.
 
+## 2026-11-05.1 — review dispatch contract: no test runs, chunk large diffs
+
+- `tool.task` and `system.tool_policy` carry the review-dispatch rules that
+  real timeout evidence demanded (order-monitor 2026-11-04: a review child
+  faithfully ran cargo test + vitest per the old template and was cut by the
+  900s watchdog at 1.9M tokens; the re-dispatch without test runs finished):
+  reviews receive the implementer's test results and never run suites
+  themselves, and diffs over ~600 lines are split into per-file-group
+  reviews whose findings the parent merges. Verified-by-reading stays the
+  reviewer's job; verified-by-running is the implementer's and the parent's
+  join gate.
+
 ## 2026-11-04.1 — async parallel subagents: worker contract and dispatch semantics
 
 - `task_child_system` gains the worker contract: stay inside the file scope

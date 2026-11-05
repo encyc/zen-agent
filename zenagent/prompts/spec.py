@@ -24,7 +24,7 @@ __all__ = [
 
 #: Bumped whenever block content changes; recorded in eval reports and the
 #: prompt CHANGELOG.
-PROMPT_VERSION = "2026-11-04.1"
+PROMPT_VERSION = "2026-11-05.1"
 
 CacheClass = Literal["stable", "session", "volatile"]
 
