@@ -323,6 +323,10 @@ def test_rpc_flags_forward_to_runtime_options(monkeypatch, tmp_path):
             "--metrics", str(metrics),
             "--retries", "2",
             "--no-mcp",
+            "--no-skills",
+            "--no-templates",
+            "--no-auto-compact",
+            "--extension", str(tmp_path / "ext.py"),
         ]
     )
 
@@ -334,6 +338,12 @@ def test_rpc_flags_forward_to_runtime_options(monkeypatch, tmp_path):
     assert str(options.metrics) == str(metrics)
     assert options.retries == 2
     assert options.mcp is False
+    assert options.skills is False
+    assert options.templates is False
+    assert options.auto_compact is False
+    assert [str(path) for path in options.extension_paths] == [
+        str(tmp_path / "ext.py")
+    ]
 
 
 async def slow_stream(delay: float = 0.2, text: str = "slow"):
@@ -502,3 +512,194 @@ def test_rpc_cli_serves_the_documented_smoke_client(monkeypatch, app_env):
     assert by_id["1"]["type"] == "result"
     assert by_id["1"]["mode"] == "ask"
     assert by_id["2"]["ok"] is True
+
+
+def test_serialize_event_keeps_the_final_message_and_tool_details():
+    """The projection must carry data the TUI/REPL consume (P1 event loss)."""
+    from zenagent.cli.rpc import serialize_event
+    from zenagent.events import AgentEvent, AssistantEvent
+    from zenagent.types import AssistantMessage, TextContent, Usage
+
+    message = AssistantMessage(
+        content=[TextContent(text="final answer")],
+        provider="p",
+        model="m",
+        usage=Usage(),
+        stop_reason="stop",
+        timestamp=1,
+    )
+    payload = serialize_event(AgentEvent(type="message_end", message=message))
+    assert payload["message"]["role"] == "assistant"
+    assert payload["message"]["text"] == "final answer"
+    assert payload["message"]["stop_reason"] == "stop"
+
+    from types import SimpleNamespace
+
+    result = SimpleNamespace(
+        content=[TextContent(text="ok")],
+        details={"diff": "-a\n+b", "exit_code": 0},
+    )
+    payload = serialize_event(
+        AgentEvent(type="tool_execution_end", tool_name="edit_file", result=result)
+    )
+    assert json.loads(payload["details"]) == {"diff": "-a\n+b", "exit_code": 0}
+
+    failed = AssistantMessage(
+        content=[],
+        provider="p",
+        model="m",
+        usage=Usage(),
+        stop_reason="error",
+        timestamp=1,
+        error_message="provider exploded",
+    )
+    payload = serialize_event(
+        AgentEvent(
+            type="message_update",
+            assistant_event=AssistantEvent(type="error", partial=failed, reason="error"),
+        )
+    )
+    assert payload["assistant_event"]["error"] == "provider exploded"
+
+
+async def test_prompt_failure_is_reported_with_its_error_text(runtime_factory):
+    from zenagent.events import AssistantEvent
+    from zenagent.types import AssistantMessage, TextContent, Usage
+
+    async def failing_stream(model, messages, tools, options):
+        partial = AssistantMessage(
+            content=[TextContent(text="")],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="error",
+            timestamp=0,
+            error_message="provider exploded",
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        yield AssistantEvent(type="error", partial=partial, reason="error")
+
+    _runtime, server, writes, _queue = await build(
+        runtime_factory, stream_fn=failing_stream
+    )
+    await server._handle_line(json.dumps({"type": "prompt", "id": "p", "text": "hi"}))
+    await server._task
+
+    payload = next(message for message in decode(writes) if message.get("id") == "p")
+    assert payload["ok"] is False
+    assert payload["termination"] == "error"
+    assert "provider exploded" in payload["error"]
+
+
+async def test_prompt_text_falls_back_to_the_final_message(runtime_factory):
+    """Providers that skip text_delta still yield the canonical answer."""
+    from zenagent.events import AssistantEvent
+    from zenagent.types import AssistantMessage, TextContent, Usage
+
+    async def end_only_stream(model, messages, tools, options):
+        partial = AssistantMessage(
+            content=[TextContent(text="canonical answer")],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="stop",
+            timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    _runtime, server, writes, _queue = await build(
+        runtime_factory, stream_fn=end_only_stream
+    )
+    await server._handle_line(json.dumps({"type": "prompt", "id": "p", "text": "hi"}))
+    await server._task
+
+    payload = next(message for message in decode(writes) if message.get("id") == "p")
+    assert payload["ok"] is True
+    assert payload["text"] == "canonical answer"
+
+
+async def test_command_result_forwards_the_screen_target(runtime_factory):
+    """Screen commands carry a payload (memory-edit's entry id) to the client."""
+    from zenagent.app.commands import CommandResult
+
+    _runtime, server, writes, _queue = await build(runtime_factory)
+
+    class StubCommands:
+        def get(self, name):
+            return object()
+
+        async def dispatch(self, name, argument):
+            return CommandResult(screen="memory-edit", target="2431")
+
+    server.commands = StubCommands()
+    await server._handle_line(
+        json.dumps(
+            {"type": "command", "id": "c", "name": "memory", "argument": "edit 2431"}
+        )
+    )
+
+    payload = next(message for message in decode(writes) if message.get("id") == "c")
+    assert payload["screen"] == "memory-edit"
+    assert payload["target"] == "2431"
+
+
+async def test_status_reports_context_thinking_and_work_state(runtime_factory):
+    _runtime, server, writes, _queue = await build(runtime_factory)
+    await server._handle_line(json.dumps({"type": "status", "id": "s"}))
+
+    payload = decode(writes)[0]
+    assert payload["ok"] is True
+    assert payload["thinking"] is not None
+    assert payload["context_window"] > 0
+    assert payload["context_used"] == 0
+    assert payload["todos"] == []
+    assert payload["follow_ups"] == 0
+    assert payload["subagents"] == []
+    assert payload["jobs"] == []
+    assert payload["pending"] == []
+
+
+def _png(tmp_path):
+    path = tmp_path / "shot.png"
+    path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8)
+    return path
+
+
+async def test_prompt_accepts_image_paths(runtime_factory, tmp_path):
+    from zenagent.types import ImageContent, UserMessage
+
+    _runtime, server, writes, _queue = await build(runtime_factory)
+    await server._handle_line(
+        json.dumps(
+            {
+                "type": "prompt",
+                "id": "p",
+                "text": "look at this",
+                "images": [str(_png(tmp_path))],
+            }
+        )
+    )
+    await server._task
+
+    user = next(m for m in server.agent.messages if isinstance(m, UserMessage))
+    assert isinstance(user.content, list)
+    assert any(isinstance(block, ImageContent) for block in user.content)
+    payload = next(message for message in decode(writes) if message.get("id") == "p")
+    assert payload["ok"] is True
+
+
+async def test_prompt_rejects_an_image_it_cannot_read(runtime_factory, tmp_path):
+    bad = tmp_path / "not-an-image.txt"
+    bad.write_text("nope", encoding="utf-8")
+
+    _runtime, server, writes, _queue = await build(runtime_factory)
+    await server._handle_line(
+        json.dumps(
+            {"type": "prompt", "id": "p", "text": "look", "images": [str(bad)]}
+        )
+    )
+
+    payload = next(message for message in decode(writes) if message.get("id") == "p")
+    assert payload["type"] == "error"
+    assert "does not look like" in payload["message"]

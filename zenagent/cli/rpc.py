@@ -22,11 +22,17 @@ import asyncio
 import json
 import sys
 from collections.abc import Awaitable, Callable
+from dataclasses import asdict
 from pathlib import Path
 
 from zenagent.agent import Agent
 from zenagent.events import AgentEvent
-from zenagent.types import AssistantMessage, TextContent
+from zenagent.types import (
+    AssistantMessage,
+    TextContent,
+    ToolResultMessage,
+    UserMessage,
+)
 
 __all__ = ["RpcServer", "main", "serialize_event"]
 
@@ -49,6 +55,41 @@ def _text_of(result) -> str:
     )
 
 
+def _message_text(message) -> str:
+    return _text_of(message)
+
+
+def _message_projection(message) -> dict:
+    """A bounded, client-friendly view of one message (never the raw object)."""
+    if isinstance(message, AssistantMessage):
+        role = "assistant"
+    elif isinstance(message, ToolResultMessage):
+        role = "toolResult"
+    elif isinstance(message, UserMessage):
+        role = "user"
+    else:
+        role = "message"
+    payload: dict = {"role": role, "text": _message_text(message)[-_PARTIAL_RESULT_CHARS:]}
+    stop_reason = getattr(message, "stop_reason", None)
+    if stop_reason:
+        payload["stop_reason"] = stop_reason
+    tool_name = getattr(message, "tool_name", None)
+    if tool_name:
+        payload["tool_name"] = tool_name
+    is_error = getattr(message, "is_error", None)
+    if is_error is not None:
+        payload["is_error"] = is_error
+    return payload
+
+
+def _bounded_json(value) -> str:
+    """One bounded JSON string: a huge blob cannot blow up a protocol line."""
+    try:
+        return json.dumps(value, ensure_ascii=False, default=str)[:_ARGS_CHARS]
+    except (TypeError, ValueError):
+        return str(value)[:_ARGS_CHARS]
+
+
 def serialize_event(event: AgentEvent) -> dict:
     """A small, stable projection of an AgentEvent (no prompts, no key material)."""
     payload: dict = {"type": event.type}
@@ -63,21 +104,35 @@ def serialize_event(event: AgentEvent) -> dict:
         payload["assistant_event"] = {"type": assistant_event.type}
         if assistant_event.delta:
             payload["assistant_event"]["delta"] = assistant_event.delta
+        if assistant_event.type == "error":
+            error = getattr(assistant_event.partial, "error_message", None)
+            if error:
+                payload["assistant_event"]["error"] = str(error)[:_PARTIAL_RESULT_CHARS]
+    message = getattr(event, "message", None)
+    if message is not None:
+        # The canonical turn content: clients that do not reassemble deltas
+        # (or providers that only send the terminal message) still get it.
+        payload["message"] = _message_projection(message)
+    new_messages = getattr(event, "new_messages", None)
+    if new_messages:
+        payload["new_messages"] = [
+            _message_projection(item) for item in new_messages[:20]
+        ]
     args = getattr(event, "args", None)
     if args is not None:
         # JSON text rather than a nested object: one bounded string keeps a
         # huge tool call from blowing up the line, and the client can parse it.
-        try:
-            payload["args"] = json.dumps(args, ensure_ascii=False, default=str)[
-                :_ARGS_CHARS
-            ]
-        except (TypeError, ValueError):
-            payload["args"] = str(args)[:_ARGS_CHARS]
+        payload["args"] = _bounded_json(args)
     result = getattr(event, "result", None)
     if result is not None:
         text = _text_of(result)
         if text:
             payload["result_text"] = text[-_PARTIAL_RESULT_CHARS:]
+        details = getattr(result, "details", None)
+        if details:
+            # Structured tool data (diff, exit_code, task_id, todo phases,
+            # subagent cost/tokens, ...) the TUI cards and HUD render.
+            payload["details"] = _bounded_json(details)
     duration = getattr(event, "duration_ms", None)
     if duration is not None:
         payload["duration_ms"] = duration
@@ -153,7 +208,7 @@ class RpcServer:
 
     def _send(self, payload: dict) -> None:
         if self._write_line is not None:
-            self._write_line(json.dumps(payload, ensure_ascii=False))
+            self._write_line(json.dumps(payload, ensure_ascii=False, default=str))
 
     def _on_event(self, event: AgentEvent) -> None:
         if (
@@ -164,6 +219,21 @@ class RpcServer:
         ):
             self._text.append(event.assistant_event.delta)
         self._send({"type": "event", "event": serialize_event(event)})
+
+    def _final_text(self) -> str:
+        """The run's answer: streamed deltas, else the canonical final message.
+
+        Deltas are the happy path, but a provider (or a buffered retry path)
+        may only publish the terminal message; the TUI canonicalizes from
+        ``message_end`` for exactly that reason.
+        """
+        text = "".join(self._text).strip()
+        if text:
+            return text
+        for message in reversed(self.agent.messages):
+            if isinstance(message, AssistantMessage):
+                return _message_text(message).strip()
+        return ""
 
     @property
     def running(self) -> bool:
@@ -274,11 +344,19 @@ class RpcServer:
             if not isinstance(text, str) or not text.strip():
                 self._send({"type": "error", "id": request_id, "message": "prompt needs text"})
                 return True
+            images, image_error = self._read_prompt_images(request.get("images"))
+            if image_error is not None:
+                self._send(
+                    {"type": "error", "id": request_id, "message": image_error}
+                )
+                return True
             if self.busy:
                 self._send({"type": "error", "id": request_id, "message": "busy"})
                 return True
             self._text = []
-            self._task = asyncio.create_task(self._run_prompt(text, request_id))
+            self._task = asyncio.create_task(
+                self._run_prompt(text, request_id, images)
+            )
             return True
         if kind == "cancel":
             # A run may have been started by a retry session op or a queued
@@ -354,6 +432,22 @@ class RpcServer:
             payload["follow_ups"] = status.follow_ups
             payload["steering"] = status.steering
             payload["cost"] = status.cost
+            # The reducer the TUI renders: context composition, thinking,
+            # todos, live jobs/subagents and the pending lanes. A client that
+            # only reads `status` no longer has to guess.
+            payload["thinking"] = status.thinking
+            payload["context_used"] = status.context_used
+            payload["context_window"] = status.context_window
+            payload["cache_hit_ratio"] = status.cache_hit_ratio
+            payload["turn_ms"] = status.turn_ms
+            payload["todos"] = status.todos
+            payload["last_error"] = status.last_error
+            payload["pending"] = [asdict(item) for item in status.pending]
+            payload["jobs"] = [asdict(view) for view in status.jobs]
+            payload["subagents"] = [asdict(view) for view in status.subagents]
+            payload["active_subagent"] = status.active_subagent
+            payload["subagent_cost"] = status.subagent_cost
+            payload["subagent_tokens"] = status.subagent_tokens
         return payload
 
     def _steer(self, request: dict, request_id) -> bool:
@@ -407,24 +501,49 @@ class RpcServer:
 
     # -- run ----------------------------------------------------------------
 
-    async def _run_prompt(self, text: str, request_id) -> None:
+    def _read_prompt_images(self, raw) -> tuple[list | None, str | None]:
+        """Load ``prompt.images`` paths; (blocks, None) or (None, error)."""
+        if raw is None:
+            return None, None
+        if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
+            return None, "images must be a list of file paths"
+        from zenagent.attachments import read_image_argument
+
+        if not self.agent.model.supports_vision:
+            return None, f"{self.agent.model.id} does not accept images"
+        blocks = []
+        for path in raw:
+            try:
+                blocks.append(read_image_argument(Path(path)))
+            except ValueError as exc:
+                return None, str(exc)
+        return blocks, None
+
+    async def _run_prompt(self, text: str, request_id, images=None) -> None:
         try:
             if self.chat is not None:
-                await self.chat.submit(text)
+                await self.chat.submit(text, images=images)
                 await self.chat.wait_for_idle()
             else:
-                await self.agent.prompt(text)
+                await self.agent.prompt(text, images=images)
         except Exception as exc:  # noqa: BLE001 - report, never kill the server
             self._send({"type": "error", "id": request_id, "message": str(exc)})
             return
+        termination = self.agent.termination
+        error = self.agent.error_message
+        ok = error is None and termination in ("stop", "tool_terminate")
         payload = {
             "type": "result",
             "id": request_id,
-            "ok": True,
-            "text": "".join(self._text).strip(),
+            "ok": ok,
+            "text": self._final_text(),
             "usage": _usage(self.agent),
-            "termination": self.agent.termination,
+            "termination": termination,
         }
+        if error is not None:
+            payload["error"] = error
+        elif not ok:
+            payload["error"] = f"run stopped early ({termination})"
         if self.runtime is not None:
             payload["session"] = str(self.runtime.session.path)
         self._send(payload)
@@ -556,6 +675,12 @@ class RpcServer:
         if result.model and self.models is not None:
             switch = self.models.switch(result.model)
             applied_model = self.agent.model.id if switch.ok else None
+        if result.language:
+            # Mirror TUI/REPL: the server's own subsequent messages (command
+            # results, approval reasons, notices) follow the requested locale.
+            from zenagent.i18n import set_locale
+
+            set_locale(result.language)
         self._send(
             {
                 "type": "result",
@@ -564,6 +689,7 @@ class RpcServer:
                 "command": name,
                 "message": result.message,
                 "screen": result.screen,
+                "target": result.target,
                 "show_help": result.show_help,
                 "reset_transcript": result.reset_transcript,
                 "quit": result.quit,
@@ -644,7 +770,10 @@ async def _run(args) -> int:
         mcp_file=Path(args.mcp_file) if args.mcp_file else None,
         mcp_servers=args.mcp_servers,
         skills=not args.no_skills,
+        templates=not args.no_templates,
+        extension_paths=args.extension_paths or [],
         context_files=not args.no_context_files,
+        auto_compact=not args.no_auto_compact,
         read_only=args.read_only,
         allow_dangerous=args.allow_dangerous,
         allow_outside=args.allow_outside or [],
@@ -716,6 +845,19 @@ def main(argv: list[str] | None = None) -> int:
         "--mcp-server", action="append", dest="mcp_servers", help="only this MCP server"
     )
     parser.add_argument("--no-skills", action="store_true", help="do not load skills")
+    parser.add_argument(
+        "--no-templates", action="store_true", help="do not load prompt templates"
+    )
+    parser.add_argument(
+        "--no-auto-compact", action="store_true", help="never compact automatically"
+    )
+    parser.add_argument(
+        "--extension",
+        action="append",
+        dest="extension_paths",
+        metavar="PATH",
+        help="load an extension module (repeatable)",
+    )
     parser.add_argument(
         "--no-context-files", action="store_true", help="do not read AGENTS.md"
     )
