@@ -377,6 +377,7 @@ CATALOG: dict[str, str] = {
     "cmdmsg.memory_deleted": "deleted {id} ({title}) — recorded in journal",
     "cmdmsg.memory_saved": "saved memory {id} ({title})",
     "cmdmsg.memory_header": "{id} · {title} · updated {updated} · source {source}",
+    "repl.run_error": "zenagent: run failed: {error}",
     "repl.no_editor": "$VISUAL/$EDITOR is not set; cannot open the editor",
     "tui.dialog.memory_manager": "project memory ({count})",
     "tui.dialog.memory_hint": "a add · e edit · x delete · esc close",

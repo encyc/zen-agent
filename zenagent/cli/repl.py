@@ -857,6 +857,15 @@ async def repl(
             return
         await chat.wait_for_idle()
         was_busy[0] = False
+        # Out-of-band lines (auto-compaction dividers) and provider failures
+        # are part of the run's outcome: the TUI renders them in the transcript
+        # and the error banner; the REPL must not swallow them.
+        for notice in chat.take_notices():
+            print_fn(notice.text)
+        error = chat.status.last_error
+        if error:
+            chat.clear_last_error()
+            print_fn(t("repl.run_error", error=error))
         print_fn(
             status_line(
                 model_id=agent.model.id,

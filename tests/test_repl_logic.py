@@ -650,3 +650,39 @@ async def test_repl_resume_loads_the_runtime_session(isolated_sessions):
         if isinstance(message, UserMessage)
     ]
     assert "earlier question" in texts
+
+
+def erroring_stream(message: str = "provider exploded"):
+    async def stream(model_, messages, tools, options):
+        partial = AssistantMessage(
+            content=[],
+            provider="test",
+            model="m",
+            usage=Usage(),
+            stop_reason="error",
+            timestamp=int(time.time()),
+            error_message=message,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        yield AssistantEvent(type="error", partial=partial, reason="error")
+
+    return stream
+
+
+async def test_repl_prints_the_provider_error_after_a_failed_run(isolated_sessions):
+    """A failed turn must not end with only a neutral status line."""
+    printed: list[str] = []
+
+    def print_fn(*args, **kwargs):
+        printed.append(" ".join(str(arg) for arg in args))
+
+    code = await repl(
+        "glm-5.3",
+        stream_fn=erroring_stream(),
+        input_fn=scripted_input("hi", "", "/exit", settle=0.2),
+        print_fn=print_fn,
+        api_key="k",
+    )
+
+    assert code == 0
+    assert any("provider exploded" in line for line in printed)

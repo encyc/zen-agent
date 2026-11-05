@@ -376,6 +376,7 @@ CATALOG: dict[str, str] = {
     "cmdmsg.memory_deleted": "已删除 {id}（{title}）— journal 已记录",
     "cmdmsg.memory_saved": "已保存记忆 {id}（{title}）",
     "cmdmsg.memory_header": "{id} · {title} · 更新于 {updated} · 来源 {source}",
+    "repl.run_error": "zenagent: 运行失败：{error}",
     "repl.no_editor": "未设置 $VISUAL/$EDITOR，无法打开编辑器",
     "tui.dialog.memory_manager": "项目记忆库（{count}）",
     "tui.dialog.memory_hint": "a 新增 · e 编辑 · x 删除 · esc 关闭",
