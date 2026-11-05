@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import io
 import json
 import os
@@ -21,9 +22,11 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from zenagent import __version__
+from zenagent import __version__, project
 from zenagent.agent import Agent
 from zenagent.agent.artifacts import build_artifact_sink
+from zenagent.agent.memory_store import MemoryStore, format_memory_index
+from zenagent.agent.registry import ToolRegistry
 from zenagent.agent.session import (
     Session,
     latest_session,
@@ -56,7 +59,8 @@ from zenagent.extensions import load_extensions
 from zenagent.i18n import LANGUAGE_CHOICES
 from zenagent.mcp.config import load_mcp_config
 from zenagent.mcp.manager import McpManager
-from zenagent.prompts import PromptContext, compose_system
+from zenagent.prompts import PromptContext, compose_system, render
+from zenagent.prompts.registry import read_block
 from zenagent.providers.catalog import Model, load_catalog
 from zenagent.providers.registry import StreamFn
 from zenagent.skills import (
@@ -67,6 +71,9 @@ from zenagent.skills import (
 )
 from zenagent.telemetry import MetricsRecorder, append_metrics
 from zenagent.tools import ALL_TOOLS
+from zenagent.tools.jobs import close_job_manager
+from zenagent.tools.lsp import build_lsp_tool, shutdown_clients
+from zenagent.tools.memory import build_memory_tool, build_memory_write_tool
 from zenagent.tools.task import build_task_tool
 from zenagent.tools.todo import build_todo_tool
 from zenagent.trace import TraceRecorder
@@ -317,9 +324,25 @@ async def run_headless(
             tool_list = [*tool_list, *loaded_extensions.tools]
         extension_prompt = loaded_extensions.prompt_text
 
+    # Project memory, wired exactly like Runtime._recompose: the store is the
+    # project root (an empty library is not an error), the index feeds the
+    # "## Project memory" block. Custom tools skip it, as in the Runtime.
+    memory_store = MemoryStore(project.find_project_root(Path.cwd()))
+    memory_index = format_memory_index(memory_store) if tools is None else ""
+    memory_block = (
+        render(read_block("memory_index"), {"entries": memory_index})
+        if memory_index.strip()
+        else ""
+    )
+
     extra_prompt = "\n\n".join(
         part
-        for part in (skills_index, extension_prompt, mode_prompt_note(resolved_mode))
+        for part in (
+            skills_index,
+            memory_block,
+            extension_prompt,
+            mode_prompt_note(resolved_mode),
+        )
         if part
     )
     # Open the session before the agent is built: the todo tool is per-session
@@ -343,12 +366,16 @@ async def run_headless(
             tool_list.append(github_tool)
         rewind_state = RewindState()
         agent_holder: dict = {}
-        from zenagent.tools.lsp import build_lsp_tool
 
         tool_list.append(build_lsp_tool())
         tool_list.extend(
             build_checkpoint_tools(lambda: agent_holder.get("agent"), rewind_state)
         )
+        # Same position as Runtime._recompose: after checkpoint/rewind, github
+        # and lsp, before todo/task.
+        tool_list.append(build_memory_tool(memory_store))
+        tool_list.append(build_memory_write_tool(memory_store))
+        tool_registry = ToolRegistry()
         tool_list.append(build_todo_tool(session.path))
         tool_list.append(
             build_task_tool(
@@ -357,7 +384,7 @@ async def run_headless(
                 api_key=api_key,
                 stream_fn=stream_fn,
                 thinking=thinking,
-                live_tools=lambda: tool_list,
+                live_tools=tool_registry.active,
                 mode=resolved_mode,
                 resolve_model=lambda raw: resolve_task_model(catalog, raw),
                 artifact_sink=build_artifact_sink(session.path),
@@ -372,6 +399,11 @@ async def run_headless(
                 session_path=session.path,
             )
         )
+        # ``hidden``/``default_inactive`` are assembly policy, not kernel flags:
+        # a headless run must not hand the model a tool the other fronts hide.
+        # Registration order is preserved, so the prompt roster stays stable.
+        tool_registry.reconcile(tool_list)
+        tool_list = tool_registry.active()
 
     guard = ContextGuard(model.context_window)
 
@@ -447,6 +479,13 @@ async def run_headless(
     finally:
         if mcp_manager is not None:
             await mcp_manager.close()
+        # Process-scoped resources outlive the agent: release the cached LSP
+        # clients and kill this run's background bash jobs, as Runtime.close
+        # does. Teardown must never turn a finished run into a failure.
+        with contextlib.suppress(Exception):
+            await shutdown_clients()
+        with contextlib.suppress(Exception):
+            await close_job_manager()
         if metrics_recorder is not None:
             append_metrics(metrics, metrics_recorder.build(agent.termination))
 
