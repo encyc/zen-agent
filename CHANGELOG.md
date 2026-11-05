@@ -45,6 +45,21 @@ frontends already had, and headless `-p` stops assembling a second-class agent.*
   `--no-auto-compact` and `--extension` are plumbed into `RuntimeOptions` like
   the other frontends.
 
+### Changed
+
+- **Review dispatch contract (prompt version 2026-11-05.1).** `tool.task` and
+  the tool policy now tell the parent to hand reviewers the implementer's
+  test results and never let a review run suites itself, and to split diffs
+  over ~600 lines into per-file-group reviews whose findings the parent
+  merges. Evidence: a reviewer faithfully running `cargo test` + `vitest`
+  per the old template was cut by the 900s watchdog at 1.9M tokens; the same
+  review without test runs finished. Verified-by-reading stays the
+  reviewer's job; verified-by-running belongs to the implementer and the
+  parent's join gate. Prompt goldens regenerated; no runtime behavior change.
+- **`release-check.sh` gates ruff.** Style errors can no longer ride a
+  release tag into CI red — the 0.7.9 CI failures were exactly this gap
+  (lint errors shipped in the tagged tree while the publish gate passed).
+
 ## v0.7.9 — 2026-11-04
 
 **Subagents go async: parallel background children with a worker contract.**
