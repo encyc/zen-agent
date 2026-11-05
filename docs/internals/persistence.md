@@ -2,7 +2,8 @@
 
 ## 会话文件（`agent/session.py`）
 
-格式：一行一个 JSON（消息），`~/.zenagent/sessions/<prefix>-<时间戳>.jsonl`。
+格式：一行一个 JSON（消息），`~/.zenagent/projects/<slug>-<hash8>/sessions/<YYYYmmdd-HHMMSS>[-<prefix>].jsonl`
+（升级前的 legacy 目录是扁平的 `~/.zenagent/sessions/`，只读保留）。
 
 ```python
 class Session:

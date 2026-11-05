@@ -31,9 +31,14 @@ zen -p "analyze" --read-only --trace run.jsonl --cwd /path/to/project
 
 - 默认是 `ask` 模式：写文件/bash 需要确认；headless 下没有交互，所以要么 `--mode zen`/`--yes`，
   要么用 `[tools] allow` 放行，要么 `--read-only`/`--mode plan` 只读。
-- `--json` 时 stdout 只有一段 JSON（文本、工具调用、用量、termination），适合被脚本消费。
-- 会话仍然会写盘（`~/.zenagent/sessions/`），除非你另有 HOME。
-- 退出码：0 成功；1 用法/参数错误；2 缺少 key 或模型未知；130 Ctrl+C。
+- `--json` 时 stdout 只有一段 JSON：`ok`、`text`、`usage`、`messages`、`error`、`termination`，
+  没有工具调用列表（要看逐次工具调用用 `--trace`），适合被脚本消费。
+- 会话仍然会写盘（`~/.zenagent/projects/<slug>-<hash8>/sessions/`，项目作用域见
+  [项目作用域](projects.md)），除非你另有 HOME。
+- 退出码：0 成功；1 运行期错误——缺 key、模型未知、provider 失败、`--json` 不带 `-p`、
+  `-p` 与 `--list-sessions` 同用、`--cwd` 不存在，以及 REPL/headless 的 Ctrl+C；
+  2 用法错误（argparse 未知参数/非法 choices）、缺 CLI extras、TUI 启动失败；
+  `zen rpc` 的 Ctrl+C 是 130，RPC 启动期缺 key/模型未知是 2。
 
 ## 参数一览
 
@@ -49,7 +54,7 @@ zen -p "analyze" --read-only --trace run.jsonl --cwd /path/to/project
 | `--max-turns` / `--max-cost` | 硬上限；超限终止并记录在 termination |
 | `--retries` | provider 瞬时错误的额外重试次数（默认 0）。启用后每次尝试先缓冲，**关闭 token 流式**（文本在调用结束时出现） |
 | `--resume [SESSION]` | 继续会话（缺省 `latest`，只续当前项目） |
-| `--list-sessions` | 列出当前项目的会话 |
+| `--list-sessions` | 列出当前项目的会话（不能与 `-p` 同用） |
 | `--all-projects` | 配合 `--list-sessions` 列出所有项目与 legacy |
 | `--session`? | 无此参数；用 `--resume` 或 REPL 的 `/session` |
 | `--cwd` | 运行前切换工作目录（工具相对路径基于它） |
@@ -106,7 +111,8 @@ zen evals [--model ...] [--filter ...] [--report ...] [--baseline ...]
 ```
 
 - `export` 缺省导出 latest，默认写会话旁边。
-- `usage` 扫描 `~/.zenagent/sessions`，按模型聚合 tokens/cost/cache。
+- `usage` 扫描当前项目与所有已知项目的会话目录（含 legacy 的 `~/.zenagent/sessions`），
+  按模型聚合 tokens/cost/cache。
 - `evals` 转发给 `scripts/eval.py`，支持 `--baseline` 回归对比（有回归 exit 1）。
 - `rpc` 的 stdout 只有协议 JSON；日志去 stderr。
 
@@ -117,8 +123,11 @@ zen evals [--model ...] [--filter ...] [--report ...] [--baseline ...]
 `/export` `/plan-review` 在两端都可用。
 
 TUI 与 REPL 的启动 flag 现在都真实生效：`--thinking`、`--trace`、`--metrics`、
-`--no-auto-compact`、`--image` 由 `RuntimeOptions` 统一承载；RPC 也有对应的一组
-（见 [RPC 与 SDK](rpc-sdk.md)）。
+`--no-auto-compact`、`--image` 由 `RuntimeOptions` 统一承载；REPL 也会转发
+`--max-turns`/`--max-cost`/`--retries`。RPC 有对应的一组（thinking/trace/metrics/
+no-auto-compact/no-templates/extension），但没有 `--theme`/`--image`——图片走
+`prompt.images`（见 [RPC 与 SDK](rpc-sdk.md)）。headless `-p` 不走 `RuntimeOptions`
+——它自己装配 Agent，这些 flag 由 `run_headless` 的参数直接承载。
 
 ## 环境变量
 

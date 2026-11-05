@@ -6,21 +6,28 @@
 zen rpc [--model ID] [--yes] [--mode plan|ask|zen] [--read-only]
         [--thinking LEVEL] [--max-turns N] [--max-cost X] [--retries N]
         [--resume [SESSION]] [--no-mcp] [--mcp-file PATH] [--mcp-server NAME]
-        [--no-skills] [--no-context-files] [--trace PATH] [--metrics PATH]
+        [--no-skills] [--no-templates] [--no-auto-compact] [--extension PATH]
+        [--no-context-files] [--trace PATH] [--metrics PATH]
         [--cwd PATH] [--allow-dangerous] [--allow-outside PATH]
         [--allow-destructive] [--allow-protected]
 ```
 
+`--mode`/`--thinking` 是 argparse choices，非法值由 argparse 以退出码 2 拒绝；不传
+`--mode` 时按 `--read-only`（plan）/`--yes`（zen）/默认 ask 解析，与 TUI/REPL/headless
+同一套 `resolve_mode`。启动期模型未知或缺少 API key 打一行 stderr 后以 2 退出，
+`--cwd` 不是目录是 1，Ctrl+C 是 130。没有 `--theme`/`--image`：图片走 `prompt.images`。
+
 协议：**一行一个 JSON**；stdout 只写协议，日志走 stderr。服务器在 `Runtime` 上启动，
-所以会话持久化、MCP、skills、扩展、工具集和审批与 TUI/REPL 是同一套实现。
+所以会话持久化、MCP、skills、扩展、工具集和审批与 TUI/REPL 是同一套实现（headless `-p`
+例外，它自己装配 Agent，见[功能地图](../feature-map.md) §6.5）。
 
 ### 请求
 
 | type | 字段 | 作用 |
 |---|---|---|
-| `prompt` | `text` | 跑一轮；运行中再发返回 `busy` |
+| `prompt` | `text`, `images?` | 跑一轮；`images` 是图片路径列表（同 `--image` 的校验：非 vision 模型/坏文件报 `error`）。运行中再发返回 `error`（`message: "busy"`） |
 | `cancel` | — | abort 当前 run |
-| `status` | — | running / messages / model / session / mode / tools / usage / busy / follow_ups / steering / cost |
+| `status` | — | running / busy / messages / model / session / mode / tools / usage / termination / follow_ups / steering / cost，以及 TUI reducer 字段：thinking / context_used / context_window / cache_hit_ratio / turn_ms / todos / last_error / pending / jobs / subagents / active_subagent / subagent_cost / subagent_tokens |
 | `shutdown` | — | 等运行中的 run abort 后退出 |
 | `steer` | `text` | 插话；空闲时进入 follow-up 排队 |
 | `tools` | — | 模型可见工具 `[{name, description, approval}]` |
@@ -29,14 +36,19 @@ zen rpc [--model ID] [--yes] [--mode plan|ask|zen] [--read-only]
 | `usage` | — | tokens / cache / cost 汇总 |
 | `approval` | `request_id`, `decision` | 回答 `approval_request`：`allow` / `always` / `deny` |
 | `session` | `op`, `path?`, `scope?`, `format?` | `current` / `list` / `new` / `fork` / `resume` / `import` / `undo` / `delete` / `compact` / `retry` / `export` |
-| `command` | `name`, `argument?` | 跑斜杠命令，返回 `message` / `screen` / `show_help` / `reset_transcript` / `quit` / `appearance` / `language` / `model` |
+| `command` | `name`, `argument?` | 跑**内置**斜杠命令（48 条；模板与扩展命令只在 TUI/REPL 可用），返回 `message` / `screen` / `target` / `show_help` / `reset_transcript` / `quit` / `appearance` / `language` / `model`；`/lang` 会在服务器侧生效 |
 
 ### 响应与事件
 
-- `result` / `error` 与 v1 形状一致（v1 请求的行为不变）。
-- `event`：`serialize_event` 的投影，新增 `args`（JSON 文本）、`result_text`、
-  `duration_ms`、`tool_stats`；`partial_result` 仍是有界尾段。所有文本字段上限
-  4000 字符。
+- `result` / `error` 的既有键与 v1 形状一致；v2 只做**增量字段**，v1 客户端忽略未知键即可。
+- `prompt` 的 `result`：`ok`（provider 失败或提前终止时为 `false`）、`text`（流式 delta；
+  provider 只发终止消息时回退到该条 assistant 消息）、`usage`、`termination`、`error`
+  （`ok:false` 时的原因），有 Runtime 时再带 `session`。
+- `event`：`serialize_event` 的投影，带 `message` / `new_messages`（最多 20 条的
+  bounded 投影）、`args`（JSON 文本）、`result_text`、工具 `details`（diff/exit_code/
+  task_id/todo phases/子代理花费等结构化字段）、`duration_ms`、`tool_stats`，以及
+  assistant 失败时的 `assistant_event.error`；`partial_result` 仍是有界尾段。所有文本
+  字段上限 4000 字符。
 - `approval_request`（服务器发起的事件）：
   `{"type":"event","event":{"type":"approval_request","request_id":"a0","tool_name":"bash","args":"{\"command\":\"ls\"}","kind":"confirm","risk":null,"target":null,"reason":"..."}}`，
   客户端用 `approval` 请求回答；默认 120 秒无响应按 `deny` 处理。
@@ -58,9 +70,11 @@ p.stdin.write(json.dumps({"type":"shutdown","id":"2"}) + "\n"); p.stdin.flush()
 ### 常用请求示例
 
 ```json
+{"type":"prompt","id":"p1","text":"what is in this picture?","images":["shot.png"]}
 {"type":"session","id":"s1","op":"new"}
 {"type":"session","id":"s2","op":"list","scope":"all"}
 {"type":"command","id":"c1","name":"mode","argument":"plan"}
+{"type":"command","id":"c2","name":"lang","argument":"zh"}
 {"type":"tools","id":"t1"}
 {"type":"model","id":"m1","model_id":"deepseek-flash"}
 ```

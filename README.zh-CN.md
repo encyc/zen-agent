@@ -87,7 +87,7 @@ TUI 每小时最多查一次 PyPI，有新版本时安静打一行；`-p`/`--jso
 | **一个小的内核** | 五层依赖严格向下；每一层都能单独换掉 | [架构](https://github.com/encyc/zen-agent/blob/main/docs/architecture.md) |
 | **四个入口** | TUI（转录、工具卡、侧栏）、REPL、headless 一次性调用、RPC/SDK | [CLI](https://github.com/encyc/zen-agent/blob/main/docs/guide/cli.md) · [TUI](https://github.com/encyc/zen-agent/blob/main/docs/guide/tui.md) |
 | **内置工具** | 文件读写、带后台作业的 bash、grep/glob、联网搜索 + 抓取、子代理、待办、项目记忆、LSP、GitHub、checkpoint/rewind（`github` 只在装了 `gh` 时注册） | [工具与权限](https://github.com/encyc/zen-agent/blob/main/docs/guide/tools-permissions.md) |
-| **47 条命令** | TUI 与 REPL 共用同一套斜杠命令，支持 Tab 补全 | [斜杠命令](https://github.com/encyc/zen-agent/blob/main/docs/guide/commands.md) |
+| **48 条命令** | TUI 与 REPL 共用同一套斜杠命令，支持 Tab 补全 | [斜杠命令](https://github.com/encyc/zen-agent/blob/main/docs/guide/commands.md) |
 | **可扩展** | skills、模板、扩展、MCP server、自定义 provider —— 全是文件驱动 | [扩展](https://github.com/encyc/zen-agent/blob/main/docs/guide/extensions.md) · [MCP](https://github.com/encyc/zen-agent/blob/main/docs/guide/mcp.md) |
 | **可嵌入** | Python 里用 `Agent` + `subscribe`；其它语言用 `zen rpc` | [RPC 与 SDK](https://github.com/encyc/zen-agent/blob/main/docs/guide/rpc-sdk.md) |
 
@@ -106,7 +106,7 @@ bash scripts/check.sh    # 唯一门禁：sync + ruff + pytest（CI 跑的完全
 | | |
 |---|---|
 | [架构总览](https://github.com/encyc/zen-agent/blob/main/docs/architecture.md) | 五层依赖，以及一次请求会碰到什么 |
-| [斜杠命令](https://github.com/encyc/zen-agent/blob/main/docs/guide/commands.md) | 全部 47 条命令 |
+| [斜杠命令](https://github.com/encyc/zen-agent/blob/main/docs/guide/commands.md) | 全部 48 条命令 |
 | [配置与目录](https://github.com/encyc/zen-agent/blob/main/docs/guide/config.md) | `config.toml`、provider、预算 |
 | [核心契约](https://github.com/encyc/zen-agent/blob/main/docs/reference/contracts.md) | 内核赖以成立的不变量 |
 | [开发与发版](https://github.com/encyc/zen-agent/blob/main/docs/development.md) | 门禁、打包检查、发版流程 |

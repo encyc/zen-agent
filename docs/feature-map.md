@@ -100,20 +100,36 @@ REPL 的 screen 类命令（picker/浮层）由 `render_command_result` 渲染�
 
 ## 6.5 前端能力对照
 
-四个入口共享 `Runtime`/`ChatController`/`CommandRegistry`/`ModelManager`/`SessionManager`
-（`zenagent/app`），差异只在“怎么呈现”：
+TUI / REPL / RPC 三个入口共享 `Runtime`/`ChatController`/`CommandRegistry`/`ModelManager`/
+`SessionManager`（`zenagent/app`），差异只在“怎么呈现”。headless `-p` 是例外：它不走 app 层，
+而是在 `cli/main.py::run_headless` 里用 `_build_agent` 自己装配 `Agent` + `Session`，能力与
+前三者对齐（同一批工具、同一份 prompt 块、同一套 `ToolRegistry` 过滤与进程级收尾），但没有
+`ChatController`，所以审批往返、ask、steering、排队、斜杠命令按设计缺席。
 
 | 能力 | TUI | REPL | headless `-p` | RPC |
 |---|---|---|---|---|
-| 工具（含 checkpoint/rewind/lsp/github/todo/task/skill） | ✅ | ✅ | ✅ | ✅ |
-| MCP / skills / templates / extensions | ✅ | ✅ | ✅ | ✅ |
+| 工具（含 checkpoint/rewind/lsp/github/todo/task/skill/memory） | ✅ | ✅ | ✅ | ✅ |
+| MCP / skills / extensions（工具 + prompt + hooks） | ✅ | ✅ | ✅ | ✅ |
+| 项目记忆（`memory`/`memory_write` + `## Project memory` 提示块） | ✅ 面板 | ✅ 文本 | ✅（无 UI） | ✅ |
+| 图片输入 | ✅ `--image` / `/image` / 粘贴 | ✅ `--image` / `/image` | ✅ `--image` | ✅ `prompt.images` |
+| 模板（`.zenagent/commands` 的 `/name args`） | ✅ | ✅ | ❌ 不加载 | ⚠️ 加载但不展开 |
+| 扩展命令（`register_command`） | ✅ | ✅ | ❌ | ❌ `command` 只派发内置命令 |
 | 会话持久化 / resume / fork / undo / compact / retry | ✅ 浮层 | ✅ 文本 | ⚠️ 仅 resume | ✅ `session` 请求 |
 | 模型切换（key/thinking/session id） | ✅ | ✅ | ✅ 启动参数 | ✅ `model` 请求 |
-| 审批 | ✅ 弹框 | ✅ 终端 y/n/a | ❌ 非交互 | ✅ `approval_request` 往返 |
+| 审批 | ✅ 弹框 | ✅ 终端 y/n/a | ❌ 非交互（ask 下拒绝） | ✅ `approval_request` 往返 |
 | ask 工具 | ✅ 弹框 | ✅ 终端问答 | ❌ 降级 | ❌ 降级 |
 | steering / 排队 | ✅ 双 lane | ✅ 插话 | ❌ | ✅ `steer` |
-| 用量 / context / trace / metrics | ✅ 面板 + flag | ✅ 文本 + flag | ✅ `--json`/flag | ✅ `usage`/flag |
-| 斜杠命令 | ✅ 45 | ✅ 45（文本降级） | ❌ | ✅ `command` 请求 |
+| 异步子代理（`task` + `async` / `wait`） | ✅ 工具 + 侧栏实时状态 | ✅ 工具（文本） | ✅ 工具（无 UI） | ✅ 工具（事件 `details`） |
+| 用量 / context / trace / metrics | ✅ 面板 + flag | ✅ 文本 + flag | ✅ `--json` / flag | ✅ `usage` / flag |
+| 斜杠命令 | ✅ 48 | ✅ 48（文本降级） | ❌ | ✅ 48 内置（`command` 请求） |
+
+RPC 的事件与状态数据最全：`event` 带 `message`/`new_messages`/工具 `details`/assistant `error`，
+`status` 直接携带 TUI 同源 reducer 的 thinking、context 占用、todos、pending、jobs、subagents
+与子代理花费；headless 只有 `--json` 的 `ok`/`text`/`usage`/`messages`/`error`/`termination`。
+
+模板展开（`/name args`）与扩展命令在 TUI、REPL 都有，RPC 的 `command` 请求只派发内置命令；
+TUI 的侧栏（todo/subagent/jobs/context）、job 日志浮层、子代理转录查看器是 TUI 独有的呈现，
+见 [TUI](guide/tui.md)。REPL 额外保留 legacy 主题名（如 `/theme solarized`）。
 
 ## 7. MCP
 

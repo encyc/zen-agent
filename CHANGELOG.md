@@ -3,6 +3,48 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+**Frontend alignment: RPC and the REPL stop dropping capabilities the other
+frontends already had, and headless `-p` stops assembling a second-class agent.**
+
+### Fixed
+
+- **RPC starts without `--mode`.** `zen rpc` (the documented invocation) used to
+  crash at startup with `unknown mode: None`; the mode is now resolved like the
+  other frontends (`--mode`, then `--read-only`→plan, then `--yes`→zen),
+  `[tools]`/`[safety]` and the guard flags reach the permission gate, and
+  `--mode`/`--thinking` are argparse choices (invalid values exit 2 instead of
+  tracebacking).
+- **RPC reports turn failures.** `prompt` results were always `ok:true`; a
+  provider failure now returns `ok:false` plus the `error` text, and `text`
+  falls back to the final assistant message when a provider publishes no
+  deltas.
+- **REPL honours the budget flags.** `--max-turns`/`--max-cost`/`--retries` were
+  accepted by argparse and dropped in the REPL branch; they are now forwarded
+  to `RuntimeOptions` like the TUI's. A failed turn also prints the provider
+  error and any drained `ChatController` notices instead of ending on a
+  neutral status line.
+- **Headless `-p` matches the Runtime fronts.** Project `memory`/`memory_write`
+  tools and the `## Project memory` prompt block, `ToolRegistry`
+  `hidden`/`default_inactive` filtering, and the run's `finally` now releases
+  cached LSP clients and background bash jobs (previously left to process exit).
+- **`-p` and `--list-sessions` no longer silently ignore each other**: the
+  combination is rejected with exit 1 instead of printing the session list and
+  dropping the prompt.
+
+### Added
+
+- **RPC event and status richness.** Events carry bounded `message`/
+  `new_messages` projections, tool `details` and the assistant `error`; `status`
+  carries the TUI's reducer fields (thinking, context used/window, cache hit
+  ratio, todos, pending lanes, jobs, subagents, subagent spend and tokens);
+  `command` results carry `target` and `/lang` applies server-side.
+- **RPC images and runtime flags.** `prompt` accepts `images: [path, ...]`
+  (vision-checked, same loader as `--image`); `--no-templates`,
+  `--no-auto-compact` and `--extension` are plumbed into `RuntimeOptions` like
+  the other frontends.
+
 ## v0.7.9 — 2026-11-04
 
 **Subagents go async: parallel background children with a worker contract.**
