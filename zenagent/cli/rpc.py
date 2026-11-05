@@ -602,17 +602,38 @@ async def _run(args) -> int:
     from zenagent.app.chat import ChatController
     from zenagent.app.commands import AppServices, build_default_commands
     from zenagent.app.models import ModelManager
+    from zenagent.app.modes import resolve_mode
     from zenagent.app.permissions import PermissionBroker, build_permission_gate
     from zenagent.app.runtime import Runtime, RuntimeOptions
+    from zenagent.app.safety import GuardPolicy
     from zenagent.app.sessions import SessionManager
+    from zenagent.config import load_user_config
 
+    # Resolve the mode exactly like the other frontends: an explicit --mode
+    # wins, then --read-only (plan), then --yes (zen). Passing the raw
+    # ``args.mode`` (None when the flag is omitted) into the gate used to
+    # raise "unknown mode: None" for every documented ``zen rpc`` invocation.
+    user_config = load_user_config()
+    mode = resolve_mode(
+        explicit=args.mode, assume_yes=args.yes, read_only=args.read_only
+    )
+    policy = GuardPolicy.from_config(
+        user_config,
+        cwd=Path.cwd(),
+        allow_outside=args.allow_outside or [],
+        allow_destructive=args.allow_destructive,
+        allow_protected=args.allow_protected,
+    )
     broker = PermissionBroker.wrap(
         build_permission_gate(
             assume_yes=args.yes,
             interactive=False,
             allow_dangerous=args.allow_dangerous,
-            mode=args.mode,
+            allow=user_config.tool_allow,
+            deny=user_config.tool_deny,
+            mode=mode,
             read_only=args.read_only,
+            policy=policy,
         )
     )
     options = RuntimeOptions(
@@ -629,7 +650,7 @@ async def _run(args) -> int:
         allow_outside=args.allow_outside or [],
         allow_destructive=args.allow_destructive,
         allow_protected=args.allow_protected,
-        mode=args.mode,
+        mode=mode,
         retries=args.retries,
         max_turns=args.max_turns,
         max_cost=args.max_cost,
@@ -637,7 +658,12 @@ async def _run(args) -> int:
         metrics=args.metrics,
     )
     try:
-        runtime = await Runtime.bootstrap(options, gate=broker, allow_missing_key=False)
+        runtime = await Runtime.bootstrap(
+            options,
+            gate=broker,
+            assume_yes=args.yes,
+            allow_missing_key=False,
+        )
     except KeyError as exc:
         print(f"zenagent: unknown model: {exc}", file=sys.stderr)
         return 2
@@ -671,12 +697,15 @@ async def _run(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from zenagent.app.modes import MODES
+    from zenagent.cli.main import THINKING_CHOICES
+
     parser = argparse.ArgumentParser(prog="zenagent rpc", description=__doc__.splitlines()[0])
     parser.add_argument("-m", "--model", help="model id")
     parser.add_argument("--yes", action="store_true", help="run everything without asking (zen mode)")
-    parser.add_argument("--mode", help="runtime mode: plan|ask|zen")
+    parser.add_argument("--mode", choices=MODES, help="runtime mode: plan|ask|zen")
     parser.add_argument("--read-only", action="store_true", help="refuse write tools")
-    parser.add_argument("--thinking", help="reasoning level")
+    parser.add_argument("--thinking", choices=THINKING_CHOICES, help="reasoning level")
     parser.add_argument("--max-turns", type=int)
     parser.add_argument("--max-cost", type=float)
     parser.add_argument("--retries", type=int, default=0)
@@ -714,6 +743,12 @@ def main(argv: list[str] | None = None) -> int:
         return asyncio.run(_run(args))
     except KeyboardInterrupt:
         return 130
+    except ValueError as exc:
+        # A bad programmatic value (e.g. an invalid mode supplied by an
+        # embedder rather than through argparse choices) must be a clean
+        # stderr line + exit 2, not a traceback.
+        print(f"zenagent: {exc}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

@@ -4,6 +4,8 @@ import asyncio
 import json
 import time
 
+import pytest
+
 from zenagent.app.chat import ChatController
 from zenagent.app.commands import AppServices, build_default_commands
 from zenagent.app.models import ModelManager
@@ -405,3 +407,98 @@ async def test_mutating_session_ops_are_rejected_while_a_run_is_active(
     assert "busy" in payload["message"]
     server.agent.abort()
     await asyncio.gather(server._task, return_exceptions=True)
+
+
+def test_rpc_cli_starts_without_an_explicit_mode(monkeypatch):
+    """`zen rpc` (the documented invocation) must build a gate, not crash."""
+    from zenagent.app.runtime import Runtime
+    from zenagent.cli import rpc as rpc_module
+
+    captured: dict = {}
+
+    async def fake_bootstrap(cls, options, **kwargs):
+        captured.update(options=options, **kwargs)
+        raise RuntimeError("stop here")
+
+    monkeypatch.setattr(Runtime, "bootstrap", classmethod(fake_bootstrap))
+
+    code = rpc_module.main([])
+
+    assert code == 2
+    assert captured["options"].mode == "ask"
+    assert captured["assume_yes"] is False
+    assert captured["gate"].mode == "ask"
+
+
+def test_rpc_cli_yes_resolves_to_zen_and_builds_the_guard_policy(
+    monkeypatch, tmp_path
+):
+    """`--yes` maps to zen, and the guard flags reach the gate's policy."""
+    from zenagent.app.runtime import Runtime
+    from zenagent.cli import rpc as rpc_module
+
+    captured: dict = {}
+
+    async def fake_bootstrap(cls, options, **kwargs):
+        captured.update(options=options, **kwargs)
+        raise RuntimeError("stop here")
+
+    monkeypatch.setattr(Runtime, "bootstrap", classmethod(fake_bootstrap))
+    outside = tmp_path / "outside"
+    outside.mkdir()
+
+    code = rpc_module.main(
+        [
+            "--yes",
+            "--allow-outside",
+            str(outside),
+            "--allow-destructive",
+            "--allow-protected",
+        ]
+    )
+
+    assert code == 2
+    assert captured["options"].mode == "zen"
+    assert captured["assume_yes"] is True
+    gate = captured["gate"]
+    assert gate.mode == "zen"
+    policy = gate._gate.policy  # the broker wraps the real gate
+    assert str(outside.resolve()) in [str(path) for path in policy.allow_outside]
+    assert policy.allow_destructive is True
+    assert policy.allow_protected is True
+
+
+def test_rpc_cli_rejects_an_unknown_mode_without_a_traceback(monkeypatch):
+    from zenagent.cli import rpc as rpc_module
+
+    with pytest.raises(SystemExit) as excinfo:
+        rpc_module.main(["--mode", "bogus"])
+    assert excinfo.value.code == 2
+
+
+def test_rpc_cli_serves_the_documented_smoke_client(monkeypatch, app_env):
+    """The one-liner from docs/guide/cli.md: ``printf ... | zen rpc``."""
+    from zenagent.cli import rpc as rpc_module
+
+    requests = [
+        '{"type":"status","id":"1"}',
+        '{"type":"shutdown","id":"2"}',
+    ]
+    outputs: list[dict] = []
+
+    async def fake_read_line():
+        if requests:
+            return requests.pop(0)
+        return None
+
+    def fake_write_line(text: str) -> None:
+        outputs.append(json.loads(text))
+
+    monkeypatch.setattr(rpc_module, "_stdin_line", fake_read_line)
+    monkeypatch.setattr(rpc_module, "_stdout_line", fake_write_line)
+
+    assert rpc_module.main(["--no-mcp", "--no-skills"]) == 0
+    by_id = {message.get("id"): message for message in outputs}
+    assert by_id["1"]["type"] == "result"
+    assert by_id["1"]["mode"] == "ask"
+    assert by_id["2"]["ok"] is True
