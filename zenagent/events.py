@@ -79,6 +79,12 @@ class AgentEvent:
     #: Per-run tool summary, attached to ``agent_end``:
     #: ``{"tools": {name: {"calls", "errors", "ms"}}}``.
     tool_stats: dict | None = None
+    #: Provider requests made this run, attached to ``agent_end`` (also 0 when
+    #: the run ended before the first request, e.g. an early abort).
+    turns: int | None = None
+    #: Why the run ended (``"stop"``, ``"max_turns"``, ``"aborted"``, ...),
+    #: attached to ``agent_end``; mirrors ``AgentState.termination``.
+    termination: str | None = None
 
 
 class Aborted(Exception):

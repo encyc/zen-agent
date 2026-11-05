@@ -200,7 +200,7 @@ class SessionManager:
         self._touch_project_meta()
         source = self.current()
         messages = Session(source).load()
-        target = Session(unique_session_path("fork"))
+        target = Session(unique_session_path("fork"), derived_from=source.stem)
         for message in messages:
             target.append(message)
         # Historical subagent transcripts follow the history they describe.

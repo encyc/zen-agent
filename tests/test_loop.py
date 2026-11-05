@@ -1606,3 +1606,28 @@ async def test_after_tool_call_context_tolerates_an_unknown_tool():
     end = events[types_of(events).index("tool_execution_end")]
     assert end.is_error is True
     assert seen == {"tool": None, "approval": "exec"}
+
+
+# ---------------------------------------------------------------------------
+# agent_end carries the run's request count (side-channel run records)
+# ---------------------------------------------------------------------------
+
+
+async def test_agent_end_carries_turn_count():
+    stream = ScriptedStream(
+        [
+            [call_tool("c1", "echo", {"x": 1}), finish("tool_use")],
+            [say("done"), finish("stop")],
+        ]
+    )
+    tool = make_tool("echo", lambda call_id, args, abort, on_update: ToolResultAgent(content=[TextContent("ok")]))
+    state = AgentState()
+    events = await run("hi", state, make_config(stream, tools=[tool]))
+    assert events[-1].type == "agent_end"
+    assert events[-1].turns == 2
+
+
+async def test_agent_end_turns_is_one_for_a_plain_answer():
+    stream = ScriptedStream([[say("Hello"), finish("stop")]])
+    events = await run("hi", AgentState(), make_config(stream))
+    assert events[-1].turns == 1

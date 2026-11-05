@@ -189,6 +189,9 @@ class AgentConfig:
     max_cost: float | None = None
     #: Extra attempts for transient assistant-call failures (0 -> no retry).
     retries: int = 0
+    #: Observer for swallowed retry attempts:
+    #: ``on_retry(message, attempt, max_retries, delay_s)`` before each backoff.
+    on_retry: Callable[[AssistantMessage, int, int, float], None] | None = None
     #: Optional artifact spill sink for oversized tool results: called as
     #: ``sink(tool_name, full_text)`` and returns the saved path (or None when
     #: spilling failed). None keeps the plain truncation behavior.
@@ -643,6 +646,7 @@ async def agent_loop(
                 tool_defs,
                 options,
                 retries=config.retries,
+                on_retry=config.on_retry,
             ):
                 if not saw_message_start:
                     saw_message_start = True
@@ -806,4 +810,6 @@ async def agent_loop(
             type="agent_end",
             new_messages=new_messages,
             tool_stats={"tools": tool_stats} if tool_stats else None,
+            turns=turns,
+            termination=termination,
         )

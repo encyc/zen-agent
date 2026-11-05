@@ -81,6 +81,7 @@ async def stream_with_retry(
     retries: int = 0,
     base_delay: float = 0.5,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    on_retry: Callable[[AssistantMessage, int, int, float], None] | None = None,
 ) -> AsyncIterator[AssistantEvent]:
     """Drive ``safe_stream`` and retry transient terminal failures.
 
@@ -89,6 +90,12 @@ async def stream_with_retry(
     possible: a failed attempt's events must not leak duplicate partial output
     to the UI, which is why enabling retries defers the text to the end of the
     attempt.
+
+    ``on_retry(message, attempt, max_retries, delay_s)`` fires just before each
+    backoff sleep — the failed attempt's terminal message, the upcoming attempt
+    number, the configured cap and the computed delay. A swallowed attempt is
+    otherwise invisible to every observer (the session side-channel recorder
+    uses this to persist dsh-style retry records).
     """
     if retries <= 0:
         async for event in safe_stream(stream_fn, model, messages, tools, options):
@@ -116,7 +123,13 @@ async def stream_with_retry(
             return
 
         attempt += 1
-        await sleep(base_delay * (2 ** (attempt - 1)))
+        delay = base_delay * (2 ** (attempt - 1))
+        if on_retry is not None:
+            try:
+                on_retry(terminal.partial, attempt, retries, delay)
+            except Exception:  # noqa: BLE001 - an observer must not kill the retry
+                pass
+        await sleep(delay)
         if abort is not None and abort.aborted:
             # Cancelled while backing off: surface the failure, do not retry.
             for event in buffered:

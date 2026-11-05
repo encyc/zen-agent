@@ -1,6 +1,7 @@
 """Session persistence tests: round trip, torn tail, latest-session ordering."""
 
 
+import json
 from pathlib import Path
 
 import pytest
@@ -52,7 +53,8 @@ async def test_append_then_load_round_trips( tmp_path ):
 
     loaded = Session(path).load()
     assert loaded == original
-    assert path.read_text().count("\n") == 3
+    # one header record + three message lines
+    assert path.read_text().count("\n") == 4
 
 
 async def test_torn_tail_is_skipped_with_a_warning(tmp_path):
@@ -611,3 +613,114 @@ def test_set_session_pin_rejects_missing_file(tmp_path):
 
     with pytest.raises(ValueError):
         set_session_pin(tmp_path / "nope.jsonl", True)
+
+
+# ---------------------------------------------------------------------------
+# Side-channel records: session header, append_meta, tolerant loading
+# ---------------------------------------------------------------------------
+
+
+async def test_first_append_writes_session_header(tmp_path):
+    path = tmp_path / "s.jsonl"
+    session = Session(path)
+    session.append(user("hello"))
+    session.append(assistant("hi"))
+
+    first_line = json.loads(path.read_text().splitlines()[0])
+    assert first_line["type"] == "session"
+    assert first_line["id"] == "s"
+    assert isinstance(first_line["createdAt"], int)
+    assert first_line["app"] == "zenagent"
+    assert first_line["appVersion"]
+    assert first_line["cwd"]
+
+    reloaded = Session(path)
+    messages = reloaded.load()
+    assert [m.content for m in messages if isinstance(m, UserMessage)] == ["hello"]
+    assert reloaded.warnings == [], "side-channel records must never warn"
+    assert reloaded.header is not None
+    assert reloaded.header["type"] == "session"
+
+
+async def test_header_written_once_and_never_on_resume(tmp_path):
+    path = tmp_path / "s.jsonl"
+    Session(path).append(user("one"))
+    Session(path).append(user("two"))
+    lines = path.read_text().splitlines()
+    assert sum(1 for line in lines if json.loads(line).get("type") == "session") == 1
+
+    # A legacy file with messages but no header keeps working unchanged.
+    legacy = tmp_path / "legacy.jsonl"
+    legacy.write_text(json.dumps(user("old").to_json()) + "\n")
+    Session(legacy).append(user("new"))
+    legacy_lines = legacy.read_text().splitlines()
+    assert len(legacy_lines) == 2
+    assert all(json.loads(line).get("role") for line in legacy_lines)
+    assert Session(legacy).load()[0].content == "old"
+
+
+async def test_append_meta_records_are_collected_not_messages(tmp_path):
+    path = tmp_path / "s.jsonl"
+    session = Session(path)
+    session.append(user("hello"))
+    session.append_meta({"type": "run_end", "termination": "stop", "turns": 3})
+
+    lines = [json.loads(line) for line in path.read_text().splitlines()]
+    assert [record.get("type") for record in lines] == ["session", None, "run_end"]
+    assert lines[2]["termination"] == "stop"
+    assert isinstance(lines[2]["timestamp"], int)
+
+    reloaded = Session(path)
+    messages = reloaded.load()
+    assert len(messages) == 1
+    assert reloaded.warnings == []
+    assert [record["type"] for record in reloaded.records] == ["session", "run_end"]
+    assert reloaded.header["type"] == "session"
+
+
+async def test_append_meta_is_timestamped_and_header_leads(tmp_path):
+    path = tmp_path / "s.jsonl"
+    session = Session(path)
+    session.append_meta({"type": "mode", "mode": "plan"})
+    lines = [json.loads(line) for line in path.read_text().splitlines()]
+    assert [record["type"] for record in lines] == ["session", "mode"]
+    assert isinstance(lines[1]["timestamp"], int)
+
+
+async def test_append_meta_swallows_os_errors(tmp_path):
+    directory = tmp_path / "s.jsonl"
+    directory.mkdir()  # a directory where the file should be
+    session = Session(directory)
+    session.append_meta({"type": "run_end", "termination": "stop"})  # no raise
+    with pytest.raises(OSError):
+        session.append(user("boom"))  # message append still fails loudly
+
+
+async def test_derived_from_records_provenance(tmp_path):
+    path = tmp_path / "s.jsonl"
+    session = Session(path)
+    session.append(user("one"))
+    session.append(user("two"))
+
+    rewritten = Session(session.rewrite([user("one")]))
+    rewritten.load()
+    assert rewritten.header["derivedFrom"] == "s"
+
+    forked_path = session.fork_at(1)
+    forked = Session(forked_path)
+    forked.load()
+    assert forked.header["derivedFrom"] == "s"
+    assert forked.header["id"] == forked_path.stem
+
+    fresh = Session(tmp_path / "fresh.jsonl")
+    fresh.append(user("x"))
+    fresh.load()
+    assert "derivedFrom" not in fresh.header
+
+
+async def test_side_channel_line_without_type_warns_like_before(tmp_path):
+    path = tmp_path / "s.jsonl"
+    path.write_text('{"role": "assistant"}\n')
+    reloaded = Session(path)
+    reloaded.load()
+    assert reloaded.warnings, "role-bearing garbage still warns"

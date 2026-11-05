@@ -89,6 +89,7 @@ class Agent:
         max_cost: float | None = None,
         retries: int = 0,
         artifact_sink: Callable[[str, str], Path | None] | None = None,
+        on_retry: Callable[[AssistantMessage, int, int, float], None] | None = None,
     ) -> None:
         self.model = model
         self.system_prompt = system_prompt
@@ -103,6 +104,9 @@ class Agent:
         self.max_turns = max_turns
         self.max_cost = max_cost
         self.retries = retries
+        #: Retry observer (``(message, attempt, max_retries, delay_s)``), wired
+        #: by the app layer to the session's side-channel recorder.
+        self.on_retry = on_retry
         #: Oversized tool results spill here (``(tool_name, full_text) -> path``).
         self.artifact_sink = artifact_sink
 
@@ -225,6 +229,7 @@ class Agent:
             max_cost=self.max_cost,
             retries=self.retries,
             artifact_sink=self.artifact_sink,
+            on_retry=self.on_retry,
         )
 
     async def _drain_steering(self) -> list[Message]:

@@ -56,8 +56,8 @@ class Scripted:
             yield AssistantEvent(type="error", partial=assistant(error=outcome), reason="error")
 
 
-async def collect(stream_fn, options, retries, sleep=None):
-    kwargs = {"retries": retries}
+async def collect(stream_fn, options, retries, sleep=None, **extra):
+    kwargs = {"retries": retries, **extra}
     if sleep is not None:
         kwargs["sleep"] = sleep
     return [
@@ -172,3 +172,38 @@ async def test_enabled_retries_still_buffer_an_attempt():
     assert (await pending).type == "start"
     rest = [event async for event in events]
     assert [event.type for event in rest] == ["done"]
+
+
+async def _null_sleep(_delay: float) -> None:
+    """No real backoff in tests."""
+    return
+
+
+async def test_on_retry_reports_each_attempt_before_backoff():
+    retries_seen = []
+
+    def on_retry(message, attempt, max_retries, delay):
+        retries_seen.append((message.error_message, attempt, max_retries, round(delay, 3)))
+
+    collected = await collect(
+        Scripted(["timeout", "connection reset", "done"]),
+        StreamOptions(),
+        retries=3,
+        sleep=_null_sleep,
+        on_retry=on_retry,
+    )
+    assert collected[-1].reason == "stop"
+    assert retries_seen == [
+        ("timeout", 1, 3, 0.5),
+        ("connection reset", 2, 3, 1.0),
+    ]
+
+
+async def test_on_retry_not_called_without_a_retry():
+    retries_seen = []
+    collected = await collect(
+        Scripted(["done"]), StreamOptions(), retries=2, sleep=_null_sleep,
+        on_retry=lambda *args: retries_seen.append(args),
+    )
+    assert collected[-1].reason == "stop"
+    assert retries_seen == []

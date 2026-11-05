@@ -1,8 +1,13 @@
 """JSONL session persistence: one message per line, resilient to a torn tail.
 
-The on-disk format *is* ``Message.to_json()`` — there is no extra schema, so a
-session file can be inspected with ``jq`` or replayed by any other consumer of
-the data model.
+The transcript lines *are* ``Message.to_json()`` — a session file can be
+inspected with ``jq`` or replayed by any other consumer of the data model.
+Alongside the messages, the file may carry side-channel records: top-level
+JSON objects with a string ``"type"`` and no ``"role"`` key (the session
+header, run boundaries, retry notes, mode changes). A line with a ``"role"``
+key is always a message, whatever else it carries. Consumers that only want
+the conversation ignore the records; :meth:`Session.load` collects them into
+``records``/``header`` instead of reporting them as unreadable lines.
 
 Loading is deliberately forgiving: a process killed mid-write leaves a partial
 final line, and losing a session because of it would be worse than dropping one
@@ -14,11 +19,12 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from zenagent import project
+from zenagent import __version__, project
 from zenagent.types import Message, UserMessage, message_from_json
 
 __all__ = [
@@ -55,6 +61,10 @@ _MARKDOWN_PREFIX_CHARS = "#>-*+`"
 
 #: The two listing scopes: the current project, or every project plus legacy.
 _SCOPES = ("project", "all")
+
+#: Schema version of the side-channel record envelope (the ``session`` header's
+#: ``version`` field); message lines are untouched by it.
+RECORD_VERSION = 1
 
 
 def sessions_dir() -> Path:
@@ -316,22 +326,81 @@ class Session:
 
     ``warnings`` collects notes about skipped lines during :meth:`load`.
     ``messages`` is the cached view; it is kept in sync by :meth:`append`.
+    ``derived_from`` is the filename stem of the source session for forked,
+    rewritten and compacted copies; it lands in the header record.
     """
 
     path: Path
     warnings: list[str] = field(default_factory=list)
+    derived_from: str = ""
+    #: Side-channel records from the last :meth:`load` (header first).
+    records: list[dict] = field(default_factory=list, repr=False, compare=False)
+    #: The ``session`` header record from the last :meth:`load`, if any.
+    header: dict | None = field(default=None, repr=False, compare=False)
+    _header_ensured: bool = field(default=False, repr=False, compare=False)
     _messages: list[Message] | None = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         self.path = Path(self.path)
 
+    # -- side-channel records ----------------------------------------------
+
+    def _ensure_header(self) -> None:
+        """Write the ``session`` header once, before the file's first line.
+
+        Only a new or empty file gets one: resumed and legacy files keep their
+        bytes untouched, so a header always describes the file it opens (and a
+        legacy file never grows a mid-file header).
+        """
+        if self._header_ensured:
+            return
+        self._header_ensured = True
+        try:
+            if self.path.exists() and self.path.stat().st_size > 0:
+                return
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            record = {
+                "type": "session",
+                "version": RECORD_VERSION,
+                "id": self.path.stem,
+                "createdAt": int(time.time()),
+                "cwd": os.getcwd(),
+                "app": "zenagent",
+                "appVersion": __version__,
+            }
+            if self.derived_from:
+                record["derivedFrom"] = self.derived_from
+            self._write_line(record)
+        except OSError:
+            self._header_ensured = False  # retry on the next append
+            raise
+
+    def _write_line(self, payload: dict) -> None:
+        with self.path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, ensure_ascii=False))
+            handle.write("\n")
+            handle.flush()
+
+    def append_meta(self, record: dict) -> None:
+        """Append one side-channel record; metadata must never kill a run.
+
+        The record is stamped with ``timestamp`` unless it carries one, and
+        ``OSError`` is swallowed: a full disk or an unwritable directory must
+        not abort the run over auxiliary metadata (message appends still fail
+        loudly). A first record on a new file writes the session header first.
+        """
+        try:
+            self._ensure_header()
+            payload = {"timestamp": int(time.time()), **record}
+            self._write_line(payload)
+        except OSError:
+            return
+
     def append(self, message: Message) -> None:
         """Append one message as a JSON line and flush it immediately."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(message.to_json(), ensure_ascii=False))
-            handle.write("\n")
-            handle.flush()
+        self._ensure_header()
+        self._write_line(message.to_json())
         if self._messages is not None:
             self._messages.append(message)
 
@@ -339,6 +408,8 @@ class Session:
         """Read the transcript, skipping unreadable (e.g. torn) lines."""
         messages: list[Message] = []
         self.warnings = []
+        self.records = []
+        self.header = None
         if not self.path.is_file():
             self._messages = messages
             return messages
@@ -348,9 +419,25 @@ class Session:
             if not line:
                 continue
             try:
-                messages.append(message_from_json(json.loads(line)))
-            except (ValueError, TypeError) as exc:
+                record = json.loads(line)
+            except ValueError as exc:
                 # Review Focus #5: a torn tail must never crash --resume.
+                self.warnings.append(
+                    f"{self.path.name}:{lineno}: skipped unreadable line ({exc})"
+                )
+                continue
+            if isinstance(record, dict) and "role" not in record and isinstance(
+                record.get("type"), str
+            ):
+                # Side-channel record: collected, never a message, never a
+                # warning. ``role`` always wins if a line carries both.
+                self.records.append(record)
+                if record["type"] == "session" and self.header is None:
+                    self.header = record
+                continue
+            try:
+                messages.append(message_from_json(record))
+            except (ValueError, TypeError) as exc:
                 self.warnings.append(
                     f"{self.path.name}:{lineno}: skipped unreadable line ({exc})"
                 )
@@ -396,14 +483,14 @@ class Session:
                 f"fork index {index} out of range (1..{len(user_positions)})"
             )
         prefix = messages[: user_positions[index - 1] + 1]
-        forked = Session(unique_session_path(f"fork{index}"))
+        forked = Session(unique_session_path(f"fork{index}"), derived_from=self.path.stem)
         for message in prefix:
             forked.append(message)
         return forked.path
 
     def rewrite(self, messages: list[Message]) -> Path:
         """Write ``messages`` to a *new* session file and return its path."""
-        rewritten = Session(unique_session_path("rewrite"))
+        rewritten = Session(unique_session_path("rewrite"), derived_from=self.path.stem)
         for message in messages:
             rewritten.append(message)
         return rewritten.path

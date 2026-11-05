@@ -242,10 +242,10 @@ async def test_submit_during_auto_compaction_is_queued_not_lost(
     started = asyncio.Event()
     release = asyncio.Event()
 
-    async def slow_compact(agent, stream_fn=None):
+    async def slow_compact(agent, stream_fn=None, derived_from=""):
         started.set()
         await release.wait()
-        return await real_compact(agent, stream_fn)
+        return await real_compact(agent, stream_fn, derived_from)
 
     monkeypatch.setattr(chat_module, "compact", slow_compact)
     calls = {"n": 0}
