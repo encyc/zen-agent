@@ -811,6 +811,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"zenagent: unknown command: {args.command} (try: doctor)", file=sys.stderr)
         return 1
     if args.list_sessions:
+        if args.prompt:
+            print(
+                "zenagent: --list-sessions cannot be combined with -p/--prompt",
+                file=sys.stderr,
+            )
+            return 1
         scope = "all" if args.all_projects else "project"
         infos = list_sessions(scope=scope)
         if not infos:

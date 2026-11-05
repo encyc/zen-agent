@@ -1056,3 +1056,9 @@ def test_json_without_a_prompt_is_rejected(monkeypatch, capsys):
     _tui_stdout(monkeypatch)
     assert cli_main.main(["--json"]) == 1
     assert "--json is only meaningful with -p/--prompt" in capsys.readouterr().err
+
+
+def test_list_sessions_with_a_prompt_is_rejected(capsys):
+    """-p must not be silently ignored by the list-sessions exit path."""
+    assert cli_main.main(["-p", "hi", "--list-sessions"]) == 1
+    assert "--list-sessions cannot be combined with -p/--prompt" in capsys.readouterr().err
