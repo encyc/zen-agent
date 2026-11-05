@@ -44,6 +44,18 @@ frontends already had, and headless `-p` stops assembling a second-class agent.*
   (vision-checked, same loader as `--image`); `--no-templates`,
   `--no-auto-compact` and `--extension` are plumbed into `RuntimeOptions` like
   the other frontends.
+- **Session side-channel records.** Session files gain dsh-style auxiliary
+  records between the message lines (top-level objects with a `type` and no
+  `role`): a `session` header on every new file (id/createdAt/cwd/app
+  version, `derivedFrom` for fork/undo/compact/shake copies), `run_start`/
+  `run_end` per run (termination reason, request count, duration, terminal
+  error detail — previously an aborted run just stopped mid-file), `retry`
+  records for transient provider failures that message-level retry swallowed
+  invisibly, and `mode` records for bootstrap mode and `/mode` switches.
+  `Session.load` collects them into `records`/`header` without warnings;
+  export/usage/listing consumers are untouched, and record writes are
+  best-effort (`append_meta` swallows I/O errors) so observability can never
+  kill a run.
 
 ## v0.7.9 — 2026-11-04
 

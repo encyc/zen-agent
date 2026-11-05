@@ -708,7 +708,10 @@ async def _shake(services: AppServices, argument: str) -> CommandResult:
     else:
         return CommandResult(message=t("cmdmsg.shake_usage"))
     try:
-        changed, session = shake(services.runtime.agent, kinds)
+        changed, session = shake(
+            services.runtime.agent, kinds,
+            derived_from=services.runtime.session.path.stem,
+        )
     except ValueError as exc:
         return CommandResult(message=str(exc))
     services.runtime.session = session
@@ -779,7 +782,7 @@ async def _handoff(services: AppServices, argument: str) -> CommandResult:
 
     agent = services.runtime.agent
     try:
-        path = await compact(agent)
+        path = await compact(agent, derived_from=services.runtime.session.path.stem)
     except (ValueError, RuntimeError) as exc:
         return CommandResult(message=str(exc))
     summary = "\n".join(

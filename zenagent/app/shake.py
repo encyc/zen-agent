@@ -56,7 +56,9 @@ def _strip_thinking(message):
     return replace(message, content=kept), removed
 
 
-def shake(agent: Agent, kinds: set[str]) -> tuple[int, Session]:
+def shake(
+    agent: Agent, kinds: set[str], derived_from: str = ""
+) -> tuple[int, Session]:
     """Rewrite the transcript without the selected content classes.
 
     Returns ``(changed_messages, new_session)``. The agent is switched to the
@@ -77,7 +79,7 @@ def shake(agent: Agent, kinds: set[str]) -> tuple[int, Session]:
             message, removed = _strip_thinking(message)
             changed += removed
         new_messages.append(message)
-    session = Session(unique_session_path("shake"))
+    session = Session(unique_session_path("shake"), derived_from=derived_from)
     for message in new_messages:
         session.append(message)
     agent.replace_messages(new_messages)

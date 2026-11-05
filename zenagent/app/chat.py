@@ -404,7 +404,7 @@ class ChatController:
             return None
         before = self._before_tokens()
         old_path = self.runtime.session.path
-        path = await compact(self.runtime.agent)
+        path = await compact(self.runtime.agent, derived_from=old_path.stem)
         # Compaction continues the same work: keep its subagent transcripts.
         carry_task_dir(old_path, path, skip=_inflight_task_ids())
         # Compaction continues the same work: carry the todo checklist over.

@@ -104,7 +104,9 @@ async def maybe_auto_compact(
     return path
 
 
-async def compact(agent: Agent, stream_fn: StreamFn | None = None) -> Path:
+async def compact(
+    agent: Agent, stream_fn: StreamFn | None = None, derived_from: str = ""
+) -> Path:
     """Replace the transcript with a summary; returns the new session path.
 
     Raises ``ValueError`` when there is nothing to compact and ``RuntimeError``
@@ -141,7 +143,7 @@ async def compact(agent: Agent, stream_fn: StreamFn | None = None) -> Path:
     message = UserMessage(
         content=compact_result(summary.strip()), timestamp=int(time.time())
     )
-    session = Session(unique_session_path("compact"))
+    session = Session(unique_session_path("compact"), derived_from=derived_from)
     session.append(message)
     agent.replace_messages([message])
     return session.path

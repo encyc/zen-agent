@@ -20,6 +20,11 @@ from zenagent.agent.session import Session, latest_session, unique_session_path
 from zenagent.agent.subagents import SubagentLimits
 from zenagent.app.journal import attach_journal, journal_for, load_backup_policy
 from zenagent.app.metrics import MetricsSession
+from zenagent.app.session_meta import (
+    SessionMetaRecorder,
+    make_retry_recorder,
+    mode_record,
+)
 from zenagent.app.modes import (
     DEFAULT_MODE,
     mode_prompt_note,
@@ -222,6 +227,9 @@ class Runtime:
         if normalized is None:
             raise ValueError(t("mode.unknown", mode=mode))
         self._mode = normalized
+        # Side-channel: mode governs what tools may do, so the session keeps
+        # an audit line for every switch.
+        self.session.append_meta(mode_record(normalized))
         if self.gate is not None and hasattr(self.gate, "set_mode"):
             self.gate.set_mode(normalized)
         if hasattr(self, "agent") and self._base_prompt:
@@ -448,6 +456,13 @@ class Runtime:
                 runtime._metrics.flush(runtime.agent)
 
         agent.subscribe(persist)
+        # Side-channel records: run boundaries land after the run's messages
+        # (this subscriber order), retries and mode changes wherever they
+        # happen. Best-effort by contract — append_meta swallows failures.
+        meta_recorder = SessionMetaRecorder(lambda: runtime.session)
+        agent.subscribe(meta_recorder)
+        agent.on_retry = make_retry_recorder(lambda: runtime.session)
+        runtime.session.append_meta(mode_record(runtime._mode))
         if runtime.journal is not None:
             attach_journal(agent, runtime.journal)
         if runtime.session.messages:
