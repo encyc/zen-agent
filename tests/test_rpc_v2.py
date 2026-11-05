@@ -703,3 +703,41 @@ async def test_prompt_rejects_an_image_it_cannot_read(runtime_factory, tmp_path)
     payload = next(message for message in decode(writes) if message.get("id") == "p")
     assert payload["type"] == "error"
     assert "does not look like" in payload["message"]
+
+
+async def test_deleting_the_current_session_resets_the_controller(runtime_factory):
+    from zenagent.types import UserMessage
+
+    runtime, server, writes, _queue = await build(runtime_factory)
+    runtime.session.append(UserMessage(content="hello", timestamp=1))
+    server.agent.replace_messages([UserMessage(content="hello", timestamp=1)])
+    server.chat.reload_transcript()
+    assert server.chat.transcript
+
+    await server._handle_line(
+        json.dumps(
+            {
+                "type": "session",
+                "id": "d",
+                "op": "delete",
+                "path": str(runtime.session.path),
+            }
+        )
+    )
+
+    payload = next(message for message in decode(writes) if message.get("id") == "d")
+    assert payload["ok"] is True
+    assert server.agent.messages == []
+    assert server.chat.transcript == []
+
+
+async def test_shutdown_denies_pending_approvals(runtime_factory):
+    """EOF with an unanswered approval_request must not stall for the timeout."""
+    _runtime, server, _writes, _queue = await build(runtime_factory)
+    future = asyncio.get_running_loop().create_future()
+    server._approvals["a0"] = future
+
+    await server._shutdown()
+
+    assert future.done() is True
+    assert future.result() == "deny"

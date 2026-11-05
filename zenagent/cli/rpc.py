@@ -628,6 +628,8 @@ class RpcServer:
             if not isinstance(target, str) or not target.strip():
                 raise ValueError("delete needs path")
             trashed = self.sessions.delete(Path(target))
+            if self.chat is not None:
+                self.chat.reload_transcript(drop_pending=True)
             return {"path": str(trashed)}
         if op == "compact":
             if self.chat is None:
@@ -704,6 +706,12 @@ class RpcServer:
         return True
 
     async def _shutdown(self) -> None:
+        # A client that disconnects mid-approval will never answer: deny the
+        # outstanding requests first so the run cannot stall for the full
+        # approval timeout during shutdown.
+        for future in list(self._approvals.values()):
+            if not future.done():
+                future.set_result("deny")
         if self.running:
             self.agent.abort()
             await asyncio.gather(self._task, return_exceptions=True)
