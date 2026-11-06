@@ -317,7 +317,7 @@ async def test_external_editor_without_a_configured_editor_notifies(
 async def test_ctrl_v_attaches_an_image_path_from_the_clipboard(
     picker_app, monkeypatch, tmp_path
 ):
-    from zenagent.cli.tui import clipboard
+    from zenagent.app import clipboard
 
     image = tmp_path / "shot.png"
     image.write_bytes(b"\x89PNG\r\n\x1a\n" + b"x" * 32)
@@ -332,7 +332,7 @@ async def test_ctrl_v_attaches_an_image_path_from_the_clipboard(
 
 
 async def test_ctrl_v_pastes_plain_text_into_the_draft(picker_app, monkeypatch):
-    from zenagent.cli.tui import clipboard
+    from zenagent.app import clipboard
 
     monkeypatch.setattr(clipboard, "read_clipboard_text", lambda: "pasted words")
     app = picker_app

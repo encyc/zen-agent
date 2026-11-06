@@ -14,7 +14,7 @@ ANSWER = (
 async def test_urls_then_copy_round_trips_the_clipped_url(runtime_factory, monkeypatch):
     copied: list[str] = []
     monkeypatch.setattr(
-        "zenagent.cli.tui.clipboard.write_clipboard_text",
+        "zenagent.app.clipboard.write_clipboard_text",
         lambda text: copied.append(text) or True,
     )
     runtime = await runtime_factory(stream_fn=sequenced_stream([ANSWER]))
