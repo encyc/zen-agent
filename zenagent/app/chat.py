@@ -382,6 +382,11 @@ class ChatController:
         self._notices = []
         return notices
 
+    @property
+    def notices_snapshot(self) -> list[TranscriptNotice]:
+        """Read-only copy of the pending notices; draining is the caller's call."""
+        return list(self._notices)
+
     def _before_tokens(self) -> int:
         last = self.runtime.guard.last_usage
         if last is not None:

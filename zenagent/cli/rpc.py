@@ -392,6 +392,15 @@ class RpcServer:
                 }
             )
             return True
+        if kind == "models":
+            self._send(self._models_result(request_id))
+            return True
+        if kind == "commands":
+            self._send(self._commands_result(request_id))
+            return True
+        if kind == "transcript":
+            self._send(self._transcript_result(request_id))
+            return True
         if kind == "model":
             return self._model(request, request_id)
         if kind == "mode":
@@ -461,6 +470,46 @@ class RpcServer:
             self.agent.steer(text)
         self._send({"type": "result", "id": request_id, "ok": True})
         return True
+
+    def _transcript_result(self, request_id) -> dict:
+        """The current transcript as view models (the TUI reducer's output).
+
+        A GUI that resumes or switches sessions has no event journal to replay:
+        this snapshot is its baseline, and live events then apply on top of it.
+        """
+        from dataclasses import asdict
+
+        views: list = []
+        notices: list = []
+        if self.chat is not None:
+            views = [asdict(view) for view in self.chat.transcript]
+            notices = [asdict(notice) for notice in self.chat.notices_snapshot]
+        return {
+            "type": "result",
+            "id": request_id,
+            "ok": True,
+            "transcript": views,
+            "notices": notices,
+        }
+
+    def _models_result(self, request_id) -> dict:
+        """The model catalog the TUI picker renders from, over the wire."""
+        entries = []
+        if self.models is not None:
+            from dataclasses import asdict
+
+            entries = [asdict(entry) for entry in self.models.entries()]
+        return {"type": "result", "id": request_id, "ok": True, "models": entries}
+
+    def _commands_result(self, request_id) -> dict:
+        """The built-in slash-command catalog (name + description)."""
+        catalog = []
+        if self.commands is not None:
+            catalog = [
+                {"name": command.name, "description": command.description}
+                for command in self.commands.names()
+            ]
+        return {"type": "result", "id": request_id, "ok": True, "commands": catalog}
 
     def _model(self, request: dict, request_id) -> bool:
         model_id = request.get("model_id")

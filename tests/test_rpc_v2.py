@@ -105,6 +105,27 @@ async def test_tools_request_lists_model_visible_tools(runtime_factory):
     assert {"read_file", "bash", "todo", "task"} <= tools
 
 
+async def test_snapshot_verbs_match_the_in_process_catalogs(runtime_factory):
+    """Embedders get the picker/command catalogs and transcript without a replay."""
+    _runtime, server, writes, queue = await build(runtime_factory)
+    await run_lines(
+        server,
+        queue,
+        [
+            {"type": "commands", "id": "c"},
+            {"type": "models", "id": "m"},
+            {"type": "transcript", "id": "t"},
+        ],
+    )
+    results = {message["id"]: message for message in decode(writes)}
+    commands = {entry["name"]: entry["description"] for entry in results["c"]["commands"]}
+    assert {"help", "tools"} <= commands.keys()
+    assert all(commands.values())
+    assert results["m"]["models"] and "id" in results["m"]["models"][0]
+    assert results["t"]["transcript"] == []
+    assert results["t"]["notices"] == []
+
+
 async def test_mode_and_model_requests_switch_the_runtime(runtime_factory, app_env):
     _runtime, server, writes, queue = await build(runtime_factory)
     await run_lines(
