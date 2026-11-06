@@ -10,6 +10,7 @@ import { useAppStore } from '../../state/appStore'
 import { useApprovalStore, useComposerStore, useStatusStore, useCatalogStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
 import { ApprovalTakeover } from '../approval/ApprovalPanel'
+import { pickImagePaths } from './pickImages'
 import { TodoDock, PendingDock, ContextMeter } from './Docks'
 import { ModelMenu, ModeMenu, ThinkingMenu } from './Menus'
 import { ChevronDownIcon, FileIcon, PlusIcon, SendArrowUpIcon, StopIcon, XIcon } from '../icons'
@@ -44,7 +45,6 @@ export function InputBar() {
   const [slashIndex, setSlashIndex] = useState(0)
   const textRef = useRef<HTMLTextAreaElement | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const empty = draft.trim() === '' && images.length === 0
   const isSlash = draft.startsWith('/') && !draft.includes('\n')
@@ -209,24 +209,17 @@ export function InputBar() {
                   type="button"
                   className={css.add}
                   aria-label={t('composer.attach')}
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => {
+                    void pickImagePaths()
+                      .then((paths) => {
+                        if (paths.length > 0) addImages(paths)
+                      })
+                      .catch(() => {})
+                  }}
                 >
                   <PlusIcon size={14} />
                 </button>
               </Tooltip>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/gif,image/webp"
-                multiple
-                hidden
-                onChange={(event) => {
-                  // The webview cannot hand out real paths; route picks through
-                  // the dialog plugin in a follow-up. Drag-drop is the primary
-                  // path (it carries absolute paths).
-                  event.target.value = ''
-                }}
-              />
               <div className={css.modes}>
                 <ModeChip mode={mode} onOpen={() => setMenu({ kind: 'mode' })} />
                 <ThinkingChip thinking={thinking} onOpen={() => setMenu({ kind: 'thinking' })} />
