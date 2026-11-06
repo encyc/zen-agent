@@ -34,13 +34,19 @@ _STATUS_KEYS = {
     "running": "tui.tool.status_running",
     "ok": "tui.tool.status_ok",
     "error": "tui.tool.status_error",
+    "interrupted": "tui.tool.status_interrupted",
 }
 
 
 def _status_label(status: str) -> str:
     key = _STATUS_KEYS.get(status)
     return t(key) if key else status
-_STATUS_DOT = {"running": ("◐", palette.ACCENT), "ok": ("●", palette.MUTED), "error": ("●", palette.ERROR)}
+_STATUS_DOT = {
+    "running": ("◐", palette.ACCENT),
+    "ok": ("●", palette.MUTED),
+    "error": ("●", palette.ERROR),
+    "interrupted": ("●", palette.MUTED),
+}
 
 
 def _first_line(value: object) -> str:

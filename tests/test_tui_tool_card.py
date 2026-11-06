@@ -219,3 +219,8 @@ def test_cjk_progress_is_clipped_by_cell_width():
     progress = "正在编译并链接整个工程" * 8  # wide glyphs: chars != cells
     card = ToolCard(view(status="running", result_text="", progress=progress))
     assert cell_len(card.plain) <= card._width()
+
+
+def test_interrupted_card_has_a_label():
+    text = ToolCard(view(status="interrupted", result_text="")).plain
+    assert "interrupted" in text

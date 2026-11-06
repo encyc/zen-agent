@@ -445,3 +445,161 @@ def test_steering_and_timestamp_are_projected_onto_user_views():
         (10, False),
         (11, True),
     ]
+
+
+def test_view_ids_are_reload_deterministic():
+    messages = [
+        UserMessage(content="go", timestamp=1),
+        AssistantMessage(
+            content=[
+                TextContent(text="reading"),
+                ToolCall(id="c1", name="read_file", arguments={}),
+            ],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="tool_use",
+            timestamp=2,
+        ),
+        ToolResultMessage(
+            tool_call_id="c1",
+            tool_name="read_file",
+            content=[TextContent(text="ok")],
+            is_error=False,
+            timestamp=3,
+        ),
+    ]
+    first = messages_to_views(messages)
+    second = messages_to_views(messages)
+    assert [view.id for view in first] == ["v1", "v2", "v3"]
+    assert [view.id for view in second] == [view.id for view in first]
+
+
+def test_assistant_metadata_is_projected_into_the_view():
+    assistant = AssistantMessage(
+        content=[TextContent(text="hi")],
+        provider="anthropic",
+        model="claude-x",
+        usage=Usage(input=3, output=2),
+        stop_reason="stop",
+        timestamp=7,
+        duration_ms=42,
+    )
+    (view,) = messages_to_views([assistant])
+    assert view.id == "v1"
+    assert (view.timestamp, view.model, view.provider, view.duration_ms) == (
+        7,
+        "claude-x",
+        "anthropic",
+        42,
+    )
+    assert view.usage is assistant.usage
+
+
+def test_unpaired_tool_call_is_interrupted():
+    assistant = AssistantMessage(
+        content=[ToolCall(id="c1", name="bash", arguments={})],
+        provider="p",
+        model="m",
+        usage=Usage(),
+        stop_reason="tool_use",
+        timestamp=2,
+    )
+    (card,) = messages_to_views([assistant])
+    assert isinstance(card, ToolCallView)
+    assert card.status == "interrupted"
+
+
+def test_builder_drops_an_empty_assistant_row_at_message_end():
+    from zenagent.app.views import TranscriptBuilder
+    from zenagent.events import AgentEvent
+
+    empty = AssistantMessage(
+        content=[],
+        provider="p",
+        model="m",
+        usage=Usage(),
+        stop_reason="tool_use",
+        timestamp=2,
+    )
+    builder = TranscriptBuilder()
+    builder.apply(AgentEvent(type="message_start", message=empty))
+    builder.apply(AgentEvent(type="message_end", message=empty))
+    assert builder.views == []
+
+
+def test_builder_keeps_a_thinking_only_row():
+    from zenagent.app.views import TranscriptBuilder
+    from zenagent.events import AgentEvent
+
+    thinking = AssistantMessage(
+        content=[ThinkingContent(thinking="hmm")],
+        provider="p",
+        model="m",
+        usage=Usage(),
+        stop_reason="stop",
+        timestamp=2,
+    )
+    builder = TranscriptBuilder()
+    builder.apply(AgentEvent(type="message_start", message=thinking))
+    builder.apply(AgentEvent(type="message_end", message=thinking))
+    assert [view.thinking for view in builder.views] == ["hmm"]
+
+
+def test_builder_finalize_drops_empty_row_and_interrupts_running_cards():
+    from zenagent.app.views import TranscriptBuilder
+    from zenagent.events import AgentEvent
+
+    empty = AssistantMessage(
+        content=[],
+        provider="p",
+        model="m",
+        usage=Usage(),
+        stop_reason="pending",
+        timestamp=2,
+    )
+    builder = TranscriptBuilder()
+    builder.apply(AgentEvent(type="message_start", message=empty))
+    builder.apply(
+        AgentEvent(
+            type="tool_execution_start",
+            tool_call_id="c1",
+            tool_name="bash",
+            args={"command": "sleep 9"},
+        )
+    )
+    builder.finalize()
+    assert [view.id for view in builder.views] == ["v2"]
+    assert builder.cards["c1"].status == "interrupted"
+
+
+def test_builder_ids_keep_positions_when_an_empty_row_is_dropped():
+    from zenagent.app.views import TranscriptBuilder
+    from zenagent.events import AgentEvent
+
+    empty = AssistantMessage(
+        content=[],
+        provider="p",
+        model="m",
+        usage=Usage(),
+        stop_reason="tool_use",
+        timestamp=2,
+    )
+    builder = TranscriptBuilder()
+    builder.apply(
+        AgentEvent(
+            type="message_start",
+            message=UserMessage(content="hi", timestamp=1),
+        )
+    )
+    builder.apply(AgentEvent(type="message_start", message=empty))
+    builder.apply(AgentEvent(type="message_end", message=empty))
+    builder.apply(
+        AgentEvent(
+            type="tool_execution_start",
+            tool_call_id="c1",
+            tool_name="bash",
+            args={},
+        )
+    )
+    assert [view.id for view in builder.views] == ["v1", "v3"]

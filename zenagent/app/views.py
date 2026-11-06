@@ -68,6 +68,14 @@ class MessageView:
     timestamp: int = 0
     #: True when the user message arrived through the steering channel.
     steering: bool = False
+    #: Stable row identity inside one append-only session (``v{n}``); a
+    #: rewrite/fork/compact starts a new id space.
+    id: str = ""
+    #: Assistant metadata (empty/None for user and skill rows).
+    model: str = ""
+    provider: str = ""
+    usage: Usage | None = None
+    duration_ms: int | None = None
 
 
 def user_view(
@@ -95,10 +103,12 @@ class ToolCallView:
     name: str
     args_preview: str
     args: dict = field(default_factory=dict)
+    #: Stable row identity inside one append-only session (``v{n}``).
+    id: str = ""
     #: Structured tool-result data for UI rendering only (never persisted or sent
     #: to the model); empty on history replay, which keeps cards generic.
     details: dict = field(default_factory=dict)
-    status: Literal["running", "ok", "error"] = "running"
+    status: Literal["running", "ok", "error", "interrupted"] = "running"
     #: Last non-empty streamed output line while the tool is running
     #: (``tool_execution_update``); empty when the tool emits no progress.
     progress: str = ""
@@ -265,6 +275,7 @@ def messages_to_views(messages: list[Message]) -> list[MessageView | ToolCallVie
     """Convert stored messages into view models, pairing calls with results."""
     views: list[MessageView | ToolCallView] = []
     cards: dict[str, ToolCallView] = {}
+    paired: set[str] = set()
 
     for message in messages:
         if isinstance(message, UserMessage):
@@ -293,6 +304,11 @@ def messages_to_views(messages: list[Message]) -> list[MessageView | ToolCallVie
                         kind="assistant",
                         text=text,
                         thinking=thinking or None,
+                        timestamp=message.timestamp,
+                        model=message.model,
+                        provider=message.provider,
+                        usage=message.usage,
+                        duration_ms=message.duration_ms,
                     )
                 )
             for block in message.content:
@@ -310,10 +326,16 @@ def messages_to_views(messages: list[Message]) -> list[MessageView | ToolCallVie
             card = cards.get(message.tool_call_id)
             if card is None:
                 continue  # orphan result from a compacted/torn history
+            paired.add(message.tool_call_id)
             card.result_text = _text_of(message.content)
             card.is_error = message.is_error
             card.status = "error" if message.is_error else "ok"
 
+    for call_id, card in cards.items():
+        if call_id not in paired and card.status == "running":
+            card.status = "interrupted"
+    for position, view in enumerate(views, start=1):
+        view.id = f"v{position}"
     return views
 
 
@@ -371,6 +393,7 @@ class TranscriptBuilder:
         self.views: list[MessageView | ToolCallView] = []
         self.cards: dict[str, ToolCallView] = {}
         self.current: MessageView | None = None
+        self._next_id = 1
 
     # -- lifecycle ----------------------------------------------------------
 
@@ -378,6 +401,7 @@ class TranscriptBuilder:
         self.views.clear()
         self.cards.clear()
         self.current = None
+        self._next_id = 1
 
     def load(self, messages: list[Message]) -> None:
         """Start over from a stored transcript (session switch / resume)."""
@@ -386,12 +410,24 @@ class TranscriptBuilder:
             view.call_id: view for view in self.views if isinstance(view, ToolCallView)
         }
         self.current = None
+        self._next_id = len(self.views) + 1
 
     def finalize(self) -> None:
         """Close a live row left behind by an abort or provider error."""
         if self.current is not None:
-            self._finish_thinking(self.current)
+            view = self.current
+            self._finish_thinking(view)
+            if not view.text and not view.thinking:
+                self.views[:] = [item for item in self.views if item is not view]
             self.current = None
+        for card in self.cards.values():
+            if card.status == "running":
+                card.status = "interrupted"
+
+    def _append(self, view: MessageView | ToolCallView) -> None:
+        view.id = f"v{self._next_id}"
+        self._next_id += 1
+        self.views.append(view)
 
     # -- events -------------------------------------------------------------
 
@@ -413,7 +449,7 @@ class TranscriptBuilder:
                 started_at=time.monotonic(),
             )
             self.cards[card.call_id] = card
-            self.views.append(card)
+            self._append(card)
         elif event.type == "tool_execution_update":
             card = self.cards.get(event.tool_call_id or "")
             if (
@@ -442,7 +478,7 @@ class TranscriptBuilder:
 
     def _message_start(self, message) -> None:
         if isinstance(message, UserMessage):
-            self.views.append(
+            self._append(
                 user_view(
                     _user_text(message),
                     timestamp=message.timestamp,
@@ -451,7 +487,16 @@ class TranscriptBuilder:
             )
         elif isinstance(message, AssistantMessage):
             self.current = MessageView(kind="assistant", text="")
-            self.views.append(self.current)
+            self._apply_metadata(self.current, message)
+            self._append(self.current)
+
+    @staticmethod
+    def _apply_metadata(view: MessageView, message: AssistantMessage) -> None:
+        view.timestamp = message.timestamp
+        view.model = message.model
+        view.provider = message.provider
+        view.usage = message.usage
+        view.duration_ms = message.duration_ms
 
     def _message_end(self, message: AssistantMessage) -> None:
         if self.current is None:
@@ -463,6 +508,9 @@ class TranscriptBuilder:
         # deliver the whole text in the terminal message only.
         self.current.text = _assistant_text(message)
         self.current.thinking = _assistant_thinking(message) or self.current.thinking
+        self._apply_metadata(self.current, message)
+        if not self.current.text and not self.current.thinking:
+            self.views[:] = [view for view in self.views if view is not self.current]
         self.current = None
 
     def _assistant_event(self, assistant_event) -> None:
@@ -482,7 +530,7 @@ class TranscriptBuilder:
                 if not assistant_event.delta:
                     return
                 self.current = MessageView(kind="assistant", text="")
-                self.views.append(self.current)
+                self._append(self.current)
             # The answer starting is what ends the reasoning block.
             self._finish_thinking(self.current)
             if assistant_event.delta:
