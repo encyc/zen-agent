@@ -19,6 +19,7 @@ import {
 } from '../icons'
 import { StateDot, TextShimmer } from '../primitives'
 import { formatDuration } from '../format'
+import { toolCue } from '../toolState'
 import { CopyAction } from './TurnActions'
 import css from './ToolRowView.module.css'
 
@@ -108,6 +109,7 @@ export function ToolRowView({ node }: { node: ToolNode }) {
   const t = useT()
   const [open, setOpen] = useState(false)
   const running = node.state === 'running'
+  const cue = toolCue(node.state)
   const summary = running && node.progress ? node.progress : summaryFor(node)
   const expandable = !running
   const hasDiff = node.diff !== null
@@ -145,19 +147,19 @@ export function ToolRowView({ node }: { node: ToolNode }) {
             <span className={css.removed}>-{diff.removed}</span>
           </span>
         )}
-        {node.state === 'running' ? (
+        {cue.kind === 'running' ? (
           <StateDot state="running" size={7} />
-        ) : node.state === 'error' ? (
+        ) : cue.kind === 'failed' ? (
           <span className={css.errorCue}>
             <WarningIcon size={12} />
-            <span>{t('tool.failed')}</span>
+            <span>{t(cue.label)}</span>
           </span>
-        ) : node.state === 'interrupted' ? (
+        ) : cue.kind === 'stopped' ? (
           <span className={css.interruptedCue}>
             {node.durationMs !== null && node.durationMs !== undefined && (
               <span>{formatDuration(node.durationMs)}</span>
             )}
-            <span>{t('tool.stopped')}</span>
+            <span>{t(cue.label)}</span>
           </span>
         ) : (
           <span className={css.okCue}>

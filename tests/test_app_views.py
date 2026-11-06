@@ -113,9 +113,7 @@ def test_messages_to_views_hides_the_loop_guard_notice():
 def test_user_view_recognises_an_injected_skill_message():
     from zenagent.app.views import user_view
 
-    view = user_view(
-        "[skill:pdf-report] review this\n\n[IMPORTANT: x]\nDo the thing."
-    )
+    view = user_view("[skill:pdf-report] review this\n\n[IMPORTANT: x]\nDo the thing.")
     assert view.kind == "skill"
     assert view.text == "pdf-report"
     assert view.skill_args == "review this"
@@ -701,3 +699,49 @@ def test_last_tool_end_record_wins():
         ],
     )
     assert builder.cards["c1"].duration_ms == 2
+
+
+def test_a_stored_timed_out_command_replays_as_timed_out():
+    """The card must not turn back into "ok" when the transcript is reloaded."""
+    from zenagent.app.views import messages_to_views
+    from zenagent.types import (
+        AssistantMessage,
+        ToolCall,
+        ToolResultMessage,
+        Usage,
+    )
+
+    call = ToolCall(id="t1", name="bash", arguments={"command": "sleep 5"})
+    messages = [
+        AssistantMessage(
+            content=[call],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="tool_use",
+            timestamp=1,
+        ),
+        ToolResultMessage(
+            tool_call_id="t1",
+            tool_name="bash",
+            content="exit code: -9",
+            is_error=False,
+            timestamp=2,
+        ),
+    ]
+    records = [
+        {
+            "type": "tool_end",
+            "timestamp": 3,
+            "call_id": "t1",
+            "tool_name": "bash",
+            "duration_ms": 5000,
+            "is_error": False,
+            "details": {"timed_out": True, "exit_code": -9},
+        }
+    ]
+
+    views = messages_to_views(messages, records)
+    card = views[-1]
+    assert card.status == "timed_out"
+    assert card.duration_ms == 5000

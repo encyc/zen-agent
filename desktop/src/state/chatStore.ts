@@ -55,7 +55,9 @@ export interface ToolNode {
   name: string
   argsPreview: string
   args: Record<string, unknown>
-  state: 'running' | 'ok' | 'error' | 'interrupted'
+  /** `timed_out`/`interrupted` are stopped calls: `is_error` stays false for
+   * them (command failure is information), so the cue reads `state`. */
+  state: 'running' | 'ok' | 'error' | 'interrupted' | 'timed_out'
   progress: string
   resultText: string
   isError: boolean

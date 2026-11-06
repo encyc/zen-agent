@@ -146,8 +146,12 @@ async def test_consecutive_reads_fold_into_one_group(runtime_factory):
 
     async def stream(model, messages, tools, options):
         partial = AssistantMessage(
-            content=[], provider="p", model="m", usage=Usage(),
-            stop_reason="pending", timestamp=0,
+            content=[],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="pending",
+            timestamp=0,
         )
         yield AssistantEvent(type="start", partial=partial)
         from zenagent.types import ToolResultMessage
@@ -167,10 +171,16 @@ async def test_consecutive_reads_fold_into_one_group(runtime_factory):
         partial.content = list(calls)
         for index, call in enumerate(calls):
             yield AssistantEvent(
-                type="toolcall_start", partial=partial, content_index=index, tool_call=call
+                type="toolcall_start",
+                partial=partial,
+                content_index=index,
+                tool_call=call,
             )
             yield AssistantEvent(
-                type="toolcall_end", partial=partial, content_index=index, tool_call=call
+                type="toolcall_end",
+                partial=partial,
+                content_index=index,
+                tool_call=call,
             )
         partial.stop_reason = "tool_use"
         yield AssistantEvent(type="done", partial=partial, reason="tool_use")
@@ -197,3 +207,30 @@ async def test_consecutive_reads_fold_into_one_group(runtime_factory):
         await pilot.pause()
         assert group.collapsed is False
         assert group.cards[0].display is True
+
+
+async def test_a_timed_out_tool_card_is_not_drawn_as_ok(runtime_factory):
+    """The card head must say what happened, not "done" (see bash.py's contract)."""
+    from zenagent.app.views import ToolCallView
+    from zenagent.cli.tui.widgets.tool_card import ToolCard
+
+    view = ToolCallView(
+        call_id="t1",
+        name="bash",
+        args_preview='{"command": "sleep 5"}',
+        status="timed_out",
+        details={"timed_out": True, "exit_code": -9},
+        duration_ms=120_000,
+    )
+    app = ZenAgentApp(await runtime_factory())
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        card = ToolCard(view)
+        await app.mount(card)
+        await pilot.pause()
+        head = card.plain.splitlines()[0]
+        assert "timed out" in head
+        assert "ok" not in head.split("·")[-1]
+        assert card.has_class("-error"), (
+            "a killed command must not look like a clean run"
+        )

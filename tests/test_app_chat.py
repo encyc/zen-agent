@@ -275,11 +275,15 @@ async def test_submit_during_auto_compaction_is_queued_not_lost(
         for message in runtime.agent.messages
         if message.to_json()["role"] == "user"
     ]
-    assert any("second" in str(prompt) for prompt in prompts), "the queued turn must run"
+    assert any("second" in str(prompt) for prompt in prompts), (
+        "the queued turn must run"
+    )
     assert chat.status.follow_ups == 0
 
 
-async def test_auto_compaction_waits_for_queued_follow_ups(runtime_factory, monkeypatch):
+async def test_auto_compaction_waits_for_queued_follow_ups(
+    runtime_factory, monkeypatch
+):
     import zenagent.app.chat as chat_module
 
     gate = asyncio.Event()
@@ -394,7 +398,9 @@ async def test_context_usage_follows_the_transcript_not_a_stale_guard(runtime_fa
     """Undo/retry truncate the transcript while the guard keeps the old usage;
     the newest assistant turn is the request that sized the context, not the
     sum of every turn (or a turn that was just removed)."""
-    runtime = await runtime_factory()  # deepseek-flash: OpenAI-style input includes cache
+    runtime = (
+        await runtime_factory()
+    )  # deepseek-flash: OpenAI-style input includes cache
     runtime.agent.replace_messages(
         [
             UserMessage(content="one", timestamp=1),
@@ -586,7 +592,9 @@ async def test_status_exposes_background_jobs(runtime_factory, monkeypatch):
     assert views[1].duration_ms == 120
 
 
-async def test_status_jobs_degrades_to_empty_without_a_loop(runtime_factory, monkeypatch):
+async def test_status_jobs_degrades_to_empty_without_a_loop(
+    runtime_factory, monkeypatch
+):
     runtime = await runtime_factory()
     chat = ChatController(runtime)
 
@@ -736,7 +744,13 @@ async def test_subagent_events_build_a_live_read_only_transcript(runtime_factory
     chat.on_subagent_event(
         "c1",
         "end",
-        {"name": "research", "status": "ok", "duration_ms": 1000, "cost": 0.01, "tokens": 9},
+        {
+            "name": "research",
+            "status": "ok",
+            "duration_ms": 1000,
+            "cost": 0.01,
+            "tokens": 9,
+        },
     )
     from zenagent.agent.loop import ToolResultAgent
     from zenagent.types import TextContent
@@ -842,7 +856,9 @@ async def test_status_exposes_a_context_composition_report(runtime_factory):
     report = chat.status.context
 
     assert report is not None
-    assert report.total_tokens == report.prompt_tokens, "no usage yet: total is the estimate"
+    assert report.total_tokens == report.prompt_tokens, (
+        "no usage yet: total is the estimate"
+    )
     assert report.window == runtime.agent.model.context_window
     assert report.measured is False, "no provider usage yet"
     ids = {item.id for item in report.slices}
@@ -1019,3 +1035,106 @@ async def test_retry_hydrates_surviving_cards_from_records(runtime_factory):
 
     assert chat._builder.cards["c1"].duration_ms == 9
     assert chat._builder.cards["c1"].diff == "+x"
+def _bash_end(details: dict, *, is_error: bool = False):
+    from zenagent.agent.loop import ToolResultAgent
+    from zenagent.events import AgentEvent
+    from zenagent.types import TextContent
+
+    return AgentEvent(
+        type="tool_execution_end",
+        tool_call_id="t1",
+        tool_name="bash",
+        args={"command": "sleep 5"},
+        result=ToolResultAgent(
+            content=[TextContent(text="exit code: -9")], details=details
+        ),
+        is_error=is_error,
+        duration_ms=5,
+    )
+
+
+async def test_a_timed_out_command_is_not_shown_as_ok(runtime_factory):
+    """The model contract keeps ``is_error`` False; the card must not claim ok."""
+    from zenagent.app.views import ToolCallView
+    from zenagent.events import AgentEvent
+
+    runtime = await runtime_factory()
+    chat = ChatController(runtime)
+    chat._on_event(
+        AgentEvent(
+            type="tool_execution_start",
+            tool_call_id="t1",
+            tool_name="bash",
+            args={"command": "sleep 5"},
+        )
+    )
+    chat._on_event(_bash_end({"timed_out": True, "exit_code": -9}))
+
+    card = chat.transcript[-1]
+    assert isinstance(card, ToolCallView)
+    assert card.status == "timed_out"
+    assert card.is_error is False, "the model still sees an ordinary result"
+
+
+async def test_an_aborted_command_is_shown_as_interrupted(runtime_factory):
+    from zenagent.app.views import ToolCallView
+    from zenagent.events import AgentEvent
+
+    runtime = await runtime_factory()
+    chat = ChatController(runtime)
+    chat._on_event(
+        AgentEvent(
+            type="tool_execution_start",
+            tool_call_id="t1",
+            tool_name="bash",
+            args={"command": "sleep 5"},
+        )
+    )
+    chat._on_event(_bash_end({"aborted": True, "exit_code": -9}))
+
+    card = chat.transcript[-1]
+    assert isinstance(card, ToolCallView)
+    assert card.status == "interrupted"
+
+
+async def test_a_command_killed_by_a_signal_is_shown_as_interrupted(runtime_factory):
+    from zenagent.app.views import ToolCallView
+    from zenagent.events import AgentEvent
+
+    runtime = await runtime_factory()
+    chat = ChatController(runtime)
+    chat._on_event(
+        AgentEvent(
+            type="tool_execution_start",
+            tool_call_id="t1",
+            tool_name="bash",
+            args={"command": "sleep 5"},
+        )
+    )
+    chat._on_event(_bash_end({"exit_code": -9}))
+
+    card = chat.transcript[-1]
+    assert isinstance(card, ToolCallView)
+    assert card.status == "interrupted"
+
+
+async def test_a_plain_non_zero_exit_still_settles_as_ok(runtime_factory):
+    """`grep` exiting 1 is information, not a failure (bash.py's contract)."""
+    from zenagent.app.views import ToolCallView
+    from zenagent.events import AgentEvent
+
+    runtime = await runtime_factory()
+    chat = ChatController(runtime)
+    chat._on_event(
+        AgentEvent(
+            type="tool_execution_start",
+            tool_call_id="t1",
+            tool_name="grep",
+            args={"pattern": "x"},
+        )
+    )
+    chat._on_event(_bash_end({"exit_code": 1}))
+
+    card = chat.transcript[-1]
+    assert isinstance(card, ToolCallView)
+    assert card.status == "ok"

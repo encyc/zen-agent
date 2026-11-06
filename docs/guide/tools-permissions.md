@@ -166,6 +166,12 @@ ToolResultAgent(
 - 参数解析失败：`is_error=True`，内容为 "arguments are not valid JSON"。
 - schema 校验失败：`is_error=True`，错误里带字段路径（`arguments.text: expected string`）。
 - 工具抛异常：loop 捕获，`is_error=True`，异常文本截断到 500 字符。
+- **命令退出码不改变 `is_error`**：`bash` 非零退出、超时、被中止都返回普通结果
+  （正文里写 `exit code: N`，带 `timed_out`/`aborted` 的 details），模型看到的是信息而不是错误。
+  界面上则由 `views.settle_tool_status()` 从 details 推出**展示状态**：
+  `timed_out`（超时被杀）、`interrupted`（中途被中止，或外部信号导致负退出码）、
+  `error`（真正的工具错误）、其余 `ok`——所以 `grep` 退出 1 仍然显示为正常结果，
+  而 `exit code: -9 … [timed out after 120s]` 不会再画成一个绿点。
 - 并行执行时，所有结果按 assistant 请求顺序写回，`id` 一一对应。
 - 所有结果（含 MCP/扩展）在写回前统一过内核结果预算：单行 >2000 字符中间截断，
   文本 >40 KB 保留头尾并附截断提示；详见[工具内核](../internals/tools-internals.md)。
