@@ -106,7 +106,9 @@ def _click_at(x: int, y: int) -> events.MouseDown:
     )
 
 
-async def test_a_click_on_a_block_being_rebuilt_is_dropped(runtime_factory):
+async def test_a_click_on_a_block_being_rebuilt_is_dropped(
+    runtime_factory, monkeypatch
+):
     """Markdown.update detaches every block before the compositor catches up.
 
     Textual's ``Screen._forward_event`` reads ``container.region`` off
@@ -114,6 +116,12 @@ async def test_a_click_on_a_block_being_rebuilt_is_dropped(runtime_factory):
     ``None.region``; the AttributeError escaped ``App.on_event`` and took the
     whole app down mid-stream. A detached target has nothing to click, so the
     event is dropped instead of forwarded.
+
+    The window is one layout turn: ``remove()`` detaches the paragraph, the
+    compositor keeps its geometry until the next layout. Whether that layout has
+    run by the time the removal's awaitable returns is message ordering, not
+    behaviour (it does on CI's 3.14, it does not here), so the hit test — the one
+    thing the click path consults — is pinned instead of raced.
     """
     app = await _answered_app(runtime_factory)
     async with app.run_test(size=(100, 30)) as pilot:
@@ -126,11 +134,12 @@ async def test_a_click_on_a_block_being_rebuilt_is_dropped(runtime_factory):
         paragraph = block.query("MarkdownParagraph").first()
         x, y = paragraph.region.x + 1, paragraph.region.y
         await block.query("MarkdownBlock").remove()
+        assert paragraph.parent is None, "the block is gone"
 
-        # The exact state Markdown.update leaves open: the block is detached,
-        # the compositor map still points at it.
-        stale, _ = app.screen.get_widget_and_offset_at(x, y)
-        assert stale is paragraph and stale.parent is None
+        hit = app.screen.get_widget_and_offset_at
+        monkeypatch.setattr(
+            app.screen, "get_widget_and_offset_at", lambda *_: (paragraph, hit(x, y)[1])
+        )
 
         event = _click_at(x, y)
         await app.on_event(event)
