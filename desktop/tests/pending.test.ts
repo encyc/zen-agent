@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { canDequeuePending, canPromotePending, nextDraft } from '../src/state/pending.ts'
+import {
+  canDequeuePending,
+  canPromotePending,
+  nextDraft,
+  queuedNewestFirst,
+} from '../src/state/pending.ts'
 import type { PendingMessage } from '../src/rpc/types.ts'
 
 const queued = (id: number, images = 0): PendingMessage => ({
@@ -28,4 +33,17 @@ test('dequeue is offered for the latest queued item only when it has no images',
 test('a taken-back message appends to the draft instead of replacing it', () => {
   assert.equal(nextDraft('', 'taken'), 'taken')
   assert.equal(nextDraft('draft', 'taken'), 'draft\ntaken')
+})
+
+test('the queue headline is the newest entry, matching dequeue', () => {
+  const items = [queued(1), { ...queued(2), lane: 'steer' } as PendingMessage, queued(3)]
+  assert.deepEqual(
+    queuedNewestFirst(items).map((item) => item.id),
+    [3, 1],
+  )
+  assert.deepEqual(
+    items.map((item) => item.id),
+    [1, 2, 3],
+    'the pending snapshot must not be reversed in place',
+  )
 })

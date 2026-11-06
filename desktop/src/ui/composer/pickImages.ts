@@ -1,8 +1,8 @@
 import { invoke } from '@tauri-apps/api/core'
 
-export const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']
+export const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp']
 
-const IMAGE_RE = /\.(png|jpe?g|gif|webp|bmp)$/i
+const IMAGE_RE = /\.(png|jpe?g|gif|webp)$/i
 
 export function imagePathsFromSelection(selection: string | string[] | null): string[] {
   if (selection === null) return []

@@ -15,6 +15,7 @@ from zenagent.cli.rpc import RpcServer, serialize_event
 from zenagent.events import AgentEvent, AssistantEvent
 from zenagent.types import (
     AssistantMessage,
+    ImageContent,
     TextContent,
     Usage,
     UserMessage,
@@ -920,3 +921,70 @@ async def test_session_promote_requires_an_id(runtime_factory):
     payload = decode(writes)[0]
     assert payload["type"] == "error"
     assert payload["message"] == "promote needs pending_id"
+
+
+async def test_session_pending_ops_need_a_chat(runtime_factory):
+    runtime, server, writes, queue = await build(runtime_factory)
+    bare = RpcServer(
+        runtime=runtime,
+        read_line=server._read_line,
+        write_line=writes.append,
+        chat=None,
+        sessions=server.sessions,
+    )
+    await run_lines(
+        bare,
+        queue,
+        [
+            {"type": "session", "id": "p", "op": "promote", "pending_id": 1},
+            {"type": "session", "id": "d", "op": "dequeue"},
+            {"type": "session", "id": "c", "op": "clear_pending"},
+        ],
+    )
+    results = {message["id"]: message for message in decode(writes)}
+    assert results["p"]["type"] == "error"
+    assert results["p"]["message"] == "promote needs a runtime"
+    assert results["d"]["type"] == "error"
+    assert results["d"]["message"] == "dequeue needs a runtime"
+    assert results["c"]["type"] == "error"
+    assert results["c"]["message"] == "clear_pending needs a runtime"
+
+
+async def test_session_promote_rejects_images(runtime_factory):
+    runtime, server, writes, _queue = await build(
+        runtime_factory, stream_fn=await slow_stream()
+    )
+    runtime.agent.replace_messages([UserMessage(content="hello", timestamp=1)])
+    await server._handle_line(json.dumps({"type": "prompt", "id": "p", "text": "hi"}))
+    await asyncio.sleep(0.05)
+    server.chat.attach_image(ImageContent(data="aGk=", mime_type="image/png"))
+    server.chat.queue_follow_up("with a screenshot")
+    pending_id = next(
+        item.id for item in server.chat.status.pending if item.lane == "queue"
+    )
+    await server._handle_line(
+        json.dumps({
+            "type": "session",
+            "id": "m",
+            "op": "promote",
+            "pending_id": pending_id,
+        })
+    )
+    payload = next(message for message in decode(writes) if message.get("id") == "m")
+    assert payload["ok"] is True
+    assert payload["outcome"] == "blocked_images"
+    assert [(item.lane, item.images) for item in server.chat.status.pending] == [
+        ("queue", 1)
+    ]
+    server.agent.abort()
+    await asyncio.gather(server._task, return_exceptions=True)
+
+
+async def test_session_dequeue_when_empty_reports_nothing(runtime_factory):
+    _runtime, server, writes, queue = await build(runtime_factory)
+    await run_lines(server, queue, [{"type": "session", "id": "d", "op": "dequeue"}])
+    payload = decode(writes)[0]
+    assert payload["ok"] is True
+    assert payload["dequeued"] is False
+    assert payload["text"] is None
+    assert server.chat.status.pending == []

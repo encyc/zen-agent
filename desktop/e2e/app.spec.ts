@@ -99,11 +99,19 @@ function installBridge(state: BridgeState) {
         switch (payload.op) {
           case 'list':
             return sessions(payload.id)
-          case 'promote':
-            state.pending = state.pending.filter(
-              (item) => item.id !== payload.pending_id,
+          case 'promote': {
+            const target = state.pending.find((item) => item.id === payload.pending_id)
+            if (target === undefined) {
+              return { type: 'result', id: payload.id, ok: true, outcome: 'missing' }
+            }
+            const nextId = Math.max(0, ...state.pending.map((item) => item.id)) + 1
+            state.pending = state.pending.map((item) =>
+              item.id === payload.pending_id
+                ? { ...item, id: nextId, lane: 'steer' as Lane }
+                : item,
             )
             return { type: 'result', id: payload.id, ok: true, outcome: 'ok' }
+          }
           case 'dequeue': {
             let index = -1
             for (let position = state.pending.length - 1; position >= 0; position -= 1) {
@@ -213,17 +221,23 @@ test('a queued message can be promoted to steering', async ({ page }) => {
       ),
     )
     .toBe(true)
-  await expect(page.getByText('把测试补上')).toBeHidden()
+  await expect(page.locator('[data-lane="queue"]')).toBeHidden()
+  await expect(
+    page.locator('[data-lane="steer"]').getByText('把测试补上'),
+  ).toBeVisible()
 })
 
-test('dequeue puts the latest queued text back into the composer', async ({ page }) => {
+test('dequeue takes back the newest queued text the dock headlines', async ({ page }) => {
   await boot(page, initialState())
   await setPending(page, [
-    { id: 8, lane: 'queue', text: '取回我', images: 0, created_at: 2 },
+    { id: 8, lane: 'queue', text: '第一条', images: 0, created_at: 2 },
+    { id: 9, lane: 'queue', text: '取回我', images: 0, created_at: 3 },
   ])
   await expect(page.getByText('取回我')).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByText('第一条')).toBeHidden()
   await page.getByRole('button', { name: '取回' }).click()
   await expect(page.locator('textarea')).toHaveValue('取回我')
+  await expect(page.getByText('第一条')).toBeVisible()
 })
 
 test('clearing drops the pending dock', async ({ page }) => {
@@ -232,9 +246,9 @@ test('clearing drops the pending dock', async ({ page }) => {
     { id: 9, lane: 'queue', text: '第一条', images: 0, created_at: 3 },
     { id: 10, lane: 'queue', text: '第二条', images: 0, created_at: 4 },
   ])
-  await expect(page.getByText('第一条')).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByText('第二条')).toBeVisible({ timeout: 10_000 })
   await page.getByRole('button', { name: '清空' }).click()
-  await expect(page.getByText('第一条')).toBeHidden()
+  await expect(page.getByText('第二条')).toBeHidden()
   await expect
     .poll(() =>
       page.evaluate(() =>

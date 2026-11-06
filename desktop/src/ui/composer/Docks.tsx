@@ -4,7 +4,11 @@
 import { useState } from 'react'
 import clsx from 'clsx'
 import { useAppStore } from '../../state/appStore'
-import { canDequeuePending, canPromotePending } from '../../state/pending'
+import {
+  canDequeuePending,
+  canPromotePending,
+  queuedNewestFirst,
+} from '../../state/pending'
 import { useStatusStore } from '../../state/stores'
 import type { PendingMessage } from '../../rpc/types'
 import { useT } from '../../i18n/locale'
@@ -70,9 +74,9 @@ export function PendingDock() {
   const dequeuePending = useAppStore((state) => state.dequeuePending)
   const clearPending = useAppStore((state) => state.clearPending)
   if (pending.length === 0) return null
-  const queued = pending.filter((item) => item.lane === 'queue')
+  const queued = queuedNewestFirst(pending)
   const steering = pending.filter((item) => item.lane === 'steer')
-  const firstQueued = queued[0]
+  const headlineQueued = queued[0]
   return (
     <div className={css.pendingDock}>
       {steering.length > 0 && (
@@ -89,8 +93,8 @@ export function PendingDock() {
           label={t('composer.queue')}
           items={queued}
           onPromote={
-            firstQueued !== undefined && canPromotePending(firstQueued, running)
-              ? () => void promotePending(firstQueued.id)
+            headlineQueued !== undefined && canPromotePending(headlineQueued, running)
+              ? () => void promotePending(headlineQueued.id)
               : undefined
           }
           onDequeue={canDequeuePending(pending) ? () => void dequeuePending() : undefined}

@@ -13,3 +13,7 @@ test('a single selection and a cancelled dialog are both handled', () => {
   assert.deepEqual(imagePathsFromSelection('/tmp/a.webp'), ['/tmp/a.webp'])
   assert.deepEqual(imagePathsFromSelection(null), [])
 })
+
+test('drops bmp because the backend cannot read it', () => {
+  assert.deepEqual(imagePathsFromSelection(['/tmp/a.bmp', '/tmp/b.png']), ['/tmp/b.png'])
+})
