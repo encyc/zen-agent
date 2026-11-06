@@ -4,6 +4,7 @@
 
 import { useMemo, useState, type MouseEvent } from 'react'
 import { useAppStore } from '../state/appStore'
+import { canForkSession } from '../state/sessionSelectors'
 import { useSessionStore, useSettingsStore } from '../state/stores'
 import { useT } from '../i18n/locale'
 import { Tooltip } from './primitives'
@@ -87,7 +88,11 @@ export function Sidebar(props: { onCollapse(): void }) {
             current={session.path === currentPath}
             pinned
             onOpen={() => void resumeSession(session.path)}
-            onFork={() => void forkSession()}
+            onFork={
+              canForkSession(currentPath, session.path)
+                ? () => void forkSession()
+                : undefined
+            }
             onDelete={() => void deleteSession(session.path)}
           />
         ))}
@@ -106,7 +111,11 @@ export function Sidebar(props: { onCollapse(): void }) {
             current={session.path === currentPath}
             pinned={false}
             onOpen={() => void resumeSession(session.path)}
-            onFork={() => void forkSession()}
+            onFork={
+              canForkSession(currentPath, session.path)
+                ? () => void forkSession()
+                : undefined
+            }
             onDelete={() => void deleteSession(session.path)}
           />
         ))}
@@ -133,7 +142,7 @@ function SessionRow(props: {
   current: boolean
   pinned: boolean
   onOpen(): void
-  onFork(): void
+  onFork?: () => void
   onDelete(): void
 }) {
   const t = useT()
@@ -180,9 +189,18 @@ function SessionRow(props: {
         <span className={css.sessionPin}><PinIcon size={11} /></span>
       )}
       <div className={css.sessionActions}>
-        <button type="button" aria-label={t('session.fork')} onClick={(event) => { event.stopPropagation(); props.onFork() }}>
-          <ForkIcon size={12} />
-        </button>
+        {props.onFork !== undefined && (
+          <button
+            type="button"
+            aria-label={t('session.fork')}
+            onClick={(event) => {
+              event.stopPropagation()
+              props.onFork?.()
+            }}
+          >
+            <ForkIcon size={12} />
+          </button>
+        )}
         <button type="button" aria-label={t('session.delete')} onClick={confirmDelete}>
           <TrashIcon size={12} />
         </button>
