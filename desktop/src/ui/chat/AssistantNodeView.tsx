@@ -27,10 +27,7 @@ export function AssistantNodeView({
   const t = useT()
   const html = useMarkdown(node.text, { copy: t('chat.copy'), copied: t('chat.copied') })
   const hasThinking = node.thinking !== null && node.thinking.trim() !== ''
-  const meta = [
-    node.model,
-    node.durationMs !== null ? formatDuration(node.durationMs) : '',
-  ].filter((part) => part !== '')
+  const duration = node.durationMs !== null ? formatDuration(node.durationMs) : ''
 
   // Code blocks are injected markup, so their copy buttons are handled by
   // delegation rather than a React listener per block.
@@ -71,8 +68,8 @@ export function AssistantNodeView({
           dangerouslySetInnerHTML={{ __html: html }}
         />
       )}
-      {meta.length > 0 && !node.streaming && (
-        <div className={css.meta}>{meta.join(' · ')}</div>
+      {duration !== '' && !node.streaming && (
+        <div className={css.meta}>{duration}</div>
       )}
       {!node.streaming && (
         <TurnActions text={node.text} canRetry={canRetry} onRetry={onRetry} />

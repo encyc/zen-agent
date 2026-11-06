@@ -861,6 +861,52 @@ async def test_transcript_views_carry_ids_and_assistant_metadata(runtime_factory
     assert view["timestamp"] == 7
 
 
+async def test_subagent_transcript_returns_the_live_child_conversation(
+    runtime_factory,
+):
+    _runtime, server, writes, queue = await build(runtime_factory)
+    chat = server.chat
+    chat.on_subagent_event("c1", "start", {"name": "Researcher", "model": "m"})
+    prompt = UserMessage(content="find the timeout", timestamp=1)
+    answer = AssistantMessage(
+        content=[TextContent(text="it is in the gateway")],
+        provider="p",
+        model="m",
+        usage=Usage(),
+        stop_reason="stop",
+        timestamp=2,
+    )
+    for message in (prompt, answer):
+        chat.on_subagent_event(
+            "c1", "event", {"event": AgentEvent(type="message_start", message=message)}
+        )
+    chat.on_subagent_event(
+        "c1", "event", {"event": AgentEvent(type="message_end", message=answer)}
+    )
+
+    await run_lines(
+        server,
+        queue,
+        [
+            {"type": "subagent_transcript", "id": "s1", "call_id": "c1"},
+            {"type": "subagent_transcript", "id": "s2", "call_id": "gone"},
+            {"type": "subagent_transcript", "id": "s3"},
+        ],
+    )
+    payloads = {message["id"]: message for message in decode(writes)}
+
+    assert payloads["s1"]["available"] is True
+    assert [view["kind"] for view in payloads["s1"]["transcript"]] == [
+        "user",
+        "assistant",
+    ]
+    assert payloads["s1"]["transcript"][0]["text"] == "find the timeout"
+    assert payloads["s1"]["transcript"][1]["text"] == "it is in the gateway"
+    assert payloads["s2"]["available"] is False
+    assert payloads["s2"]["transcript"] == []
+    assert payloads["s3"]["type"] == "error"
+
+
 async def test_session_list_carries_created_updated_model_and_lineage(runtime_factory):
     runtime, server, writes, queue = await build(runtime_factory)
     runtime.session.append(UserMessage(content="hello", timestamp=1))

@@ -406,6 +406,19 @@ class RpcServer:
         if kind == "transcript":
             self._send(self._transcript_result(request_id))
             return True
+        if kind == "subagent_transcript":
+            call_id = request.get("call_id")
+            if not isinstance(call_id, str) or not call_id.strip():
+                self._send(
+                    {
+                        "type": "error",
+                        "id": request_id,
+                        "message": "subagent_transcript needs call_id",
+                    }
+                )
+                return True
+            self._send(self._subagent_transcript_result(request_id, call_id))
+            return True
         if kind == "model":
             return self._model(request, request_id)
         if kind == "mode":
@@ -514,6 +527,26 @@ class RpcServer:
             "transcript": views,
             "notices": notices,
             "compactions": compactions,
+        }
+
+    def _subagent_transcript_result(self, request_id, call_id: str) -> dict:
+        """One ``task`` child's conversation, live buffer or persisted sidecar.
+
+        ``available`` is false when neither exists (an old session whose
+        sidecar is gone), so the client can say so instead of showing an
+        empty conversation.
+        """
+        from dataclasses import asdict
+
+        transcript = (
+            self.chat.subagent_transcript(call_id) if self.chat is not None else None
+        )
+        return {
+            "type": "result",
+            "id": request_id,
+            "ok": True,
+            "available": transcript is not None,
+            "transcript": [asdict(view) for view in transcript or []],
         }
 
     def _models_result(self, request_id) -> dict:

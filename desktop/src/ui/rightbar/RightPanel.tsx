@@ -4,7 +4,7 @@
 
 import { useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { useChatStore } from '../../state/chatStore'
-import { useStatusStore } from '../../state/stores'
+import { useStatusStore, useWorkPanelStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
 import {
   RIGHTBAR_DEFAULT,
@@ -12,11 +12,17 @@ import {
   RIGHTBAR_MIN,
   clampWidth,
 } from '../columns'
-import { ActivityIcon, ChevronDownIcon, ChevronRightIcon, FileIcon, XIcon } from '../icons'
+import {
+  ActivityIcon,
+  BotIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  FileIcon,
+  XIcon,
+} from '../icons'
 import { collectFileChanges, fileBasename } from './review'
+import { SubagentTranscript } from './SubagentTranscript'
 import css from './RightPanel.module.css'
-
-type Tab = 'review' | 'context'
 
 export interface RightPanelProps {
   width: number
@@ -39,7 +45,16 @@ export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
   const t = useT()
   const status = useStatusStore((state) => state.status)
   const nodes = useChatStore((state) => state.nodes)
-  const [tab, setTab] = useState<Tab>('review')
+  const tab = useWorkPanelStore((state) => state.tab)
+  const subagent = useWorkPanelStore((state) => state.subagent)
+  const showTab = useWorkPanelStore((state) => state.showTab)
+  const openSubagent = useWorkPanelStore((state) => state.openSubagent)
+  const closeSubagent = useWorkPanelStore((state) => state.closeSubagent)
+  const subagentName =
+    subagent === null
+      ? ''
+      : status?.subagents?.find((entry) => entry.call_id === subagent.callId)?.name ||
+        subagent.name
   const [openPath, setOpenPath] = useState<string | null>(null)
   const drag = useRef<DragState | null>(null)
 
@@ -126,7 +141,7 @@ export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
             role="tab"
             aria-selected={tab === 'review'}
             className={css.tab}
-            onClick={() => setTab('review')}
+            onClick={() => showTab('review')}
           >
             <FileIcon size={13} />
             <span>{t('panel.review')}</span>
@@ -136,11 +151,38 @@ export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
             role="tab"
             aria-selected={tab === 'context'}
             className={css.tab}
-            onClick={() => setTab('context')}
+            onClick={() => showTab('context')}
           >
             <ActivityIcon size={13} />
             <span>{t('panel.context')}</span>
           </button>
+          {subagent !== null && (
+            <div
+              className={css.subagentTab}
+              data-active={tab === 'subagent' || undefined}
+              role="presentation"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === 'subagent'}
+                className={css.tab}
+                title={subagentName}
+                onClick={() => openSubagent(subagent)}
+              >
+                <BotIcon size={13} />
+                <span className={css.tabLabel}>{subagentName}</span>
+              </button>
+              <button
+                type="button"
+                className={css.tabClose}
+                aria-label={t('panel.subagentClose')}
+                onClick={closeSubagent}
+              >
+                <XIcon size={11} />
+              </button>
+            </div>
+          )}
         </div>
         <button
           type="button"
@@ -151,8 +193,14 @@ export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
           <XIcon size={13} />
         </button>
       </div>
-      <div className={css.body} data-selectable>
-        {tab === 'review' ? (
+      <div
+        className={css.body}
+        data-selectable
+        data-embed={tab === 'subagent' && subagent !== null ? '' : undefined}
+      >
+        {tab === 'subagent' && subagent !== null ? (
+          <SubagentTranscript target={subagent} />
+        ) : tab === 'review' ? (
           changes.length === 0 ? (
             <p className={css.empty}>{t('panel.reviewEmpty')}</p>
           ) : (

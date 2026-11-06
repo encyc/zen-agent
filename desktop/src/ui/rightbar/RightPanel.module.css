@@ -82,6 +82,7 @@ html[data-work-panel-resizing] * {
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
+  min-width: 0;
 }
 
 .tab:hover {
@@ -97,6 +98,49 @@ html[data-work-panel-resizing] * {
 .tab:focus-visible {
   outline: 2px solid color-mix(in oklab, var(--dsw-alias-state-business-primary) 40%, transparent);
   outline-offset: -2px;
+}
+
+/* The live subagent target owns a tab of its own; the wrapper carries the
+ * selected/hover plate so the inner tab and its close X read as one chip. */
+.subagentTab {
+  display: inline-flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  align-items: center;
+  padding-right: 2px;
+  border-radius: var(--dsw-radius-sm);
+}
+
+.subagentTab[data-active] {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.subagentTab[data-active] .tab {
+  color: var(--dsw-alias-label-primary);
+}
+
+.tabLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tabClose {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.tabClose:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
 }
 
 .close {
@@ -122,6 +166,12 @@ html[data-work-panel-resizing] * {
   min-height: 0;
   overflow-y: auto;
   padding: 12px;
+}
+
+/* The subagent transcript owns its own scroll area and status band. */
+.body[data-embed] {
+  overflow: hidden;
+  padding: 0;
 }
 
 .empty {

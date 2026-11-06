@@ -260,6 +260,16 @@ export interface TranscriptResult {
   compactions?: CompactionRecord[]
 }
 
+/** One task child's conversation (`subagent_transcript`). `available` is false
+ * when neither the live buffer nor a persisted sidecar exists. */
+export interface SubagentTranscriptResult {
+  type: 'result'
+  id: string
+  ok: true
+  available: boolean
+  transcript: (MessageView | ToolCallView)[]
+}
+
 // ---- event frames -----------------------------------------------------------
 
 /** assistant_event payloads inside message_update (provider deltas). */

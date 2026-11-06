@@ -5,6 +5,7 @@
 import { useMemo, useState } from 'react'
 import clsx from 'clsx'
 import type { ToolNode } from '../../state/chatStore'
+import { useWorkPanelStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
 import {
   ActivityIcon,
@@ -13,6 +14,7 @@ import {
   ChevronRightIcon,
   FileIcon,
   ListTodoIcon,
+  PanelRightIcon,
   SearchIcon,
   TerminalIcon,
   WarningIcon,
@@ -111,7 +113,14 @@ export function ToolRowView({ node }: { node: ToolNode }) {
   const running = node.state === 'running'
   const cue = toolCue(node.state)
   const summary = running && node.progress ? node.progress : summaryFor(node)
-  const expandable = !running
+  const isTask = node.name === 'task'
+  const taskName =
+    typeof node.args.name === 'string' && node.args.name.trim() !== ''
+      ? node.args.name
+      : 'task'
+  // A task row is a door to the work panel, not an inline IN/OUT card: the
+  // child's conversation is too wide for the folded process body.
+  const expandable = !running && !isTask
   const hasDiff = node.diff !== null
   const diff = useMemo(() => (hasDiff ? parseDiff(node.diff ?? '') : null), [hasDiff, node.diff])
   const output = node.resultText
@@ -126,10 +135,18 @@ export function ToolRowView({ node }: { node: ToolNode }) {
       <button
         type="button"
         className={css.row}
+        title={isTask ? t('panel.openSubagent') : undefined}
         onClick={() => {
+          if (isTask) {
+            useWorkPanelStore.getState().openSubagent({
+              callId: node.callId,
+              name: taskName,
+            })
+            return
+          }
           if (expandable) setOpen((value) => !value)
         }}
-        aria-expanded={open}
+        aria-expanded={isTask ? undefined : open}
       >
         <span className={css.chevron}>
           {expandable ? <ChevronRightIcon size={10} /> : null}
@@ -145,6 +162,11 @@ export function ToolRowView({ node }: { node: ToolNode }) {
           <span className={clsx(css.suffix, css.diffStat)}>
             <span className={css.added}>+{diff.added}</span>{' '}
             <span className={css.removed}>-{diff.removed}</span>
+          </span>
+        )}
+        {isTask && (
+          <span className={css.panelHint} aria-hidden>
+            <PanelRightIcon size={12} />
           </span>
         )}
         {cue.kind === 'running' ? (

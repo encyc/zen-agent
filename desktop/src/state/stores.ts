@@ -183,6 +183,41 @@ export const usePaletteStore = create<PaletteState>((set) => ({
   setQuery: (query) => set({ query }),
 }))
 
+// ---- work panel -------------------------------------------------------------
+
+export type WorkPanelTab = 'review' | 'context' | 'subagent'
+
+export interface SubagentPanelTarget {
+  callId: string
+  name: string
+}
+
+interface WorkPanelState {
+  open: boolean
+  tab: WorkPanelTab
+  subagent: SubagentPanelTarget | null
+  openPanel(): void
+  closePanel(): void
+  showTab(tab: 'review' | 'context'): void
+  openSubagent(target: SubagentPanelTarget): void
+  closeSubagent(): void
+}
+
+export const useWorkPanelStore = create<WorkPanelState>((set) => ({
+  open: false,
+  tab: 'review',
+  subagent: null,
+  openPanel: () => set({ open: true }),
+  closePanel: () => set({ open: false }),
+  showTab: (tab) => set({ tab }),
+  openSubagent: (subagent) => set({ open: true, tab: 'subagent', subagent }),
+  closeSubagent: () =>
+    set((state) => ({
+      subagent: null,
+      tab: state.tab === 'subagent' ? 'review' : state.tab,
+    })),
+}))
+
 // ---- catalogs ---------------------------------------------------------------
 
 interface CatalogState {

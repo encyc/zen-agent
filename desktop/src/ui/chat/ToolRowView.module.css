@@ -89,6 +89,17 @@
   color: var(--dsw-alias-file-diff-deleted-marker);
 }
 
+.panelHint {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.row:hover .panelHint {
+  color: var(--dsw-alias-label-secondary);
+}
+
 .okCue {
   display: inline-flex;
   align-items: center;

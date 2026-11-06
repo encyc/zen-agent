@@ -26,6 +26,8 @@ interface BridgeState {
   noCurrent?: boolean
   projectSessions?: number
   transcript?: Record<string, unknown>[]
+  subagents?: Record<string, unknown>[]
+  subagentTranscripts?: Record<string, unknown[]>
   todos?: Record<string, unknown>[]
   tools?: { name: string; description: string; approval: string }[]
   thinking?: string | null
@@ -132,6 +134,7 @@ function installBridge(state: BridgeState) {
           mode: 'zen',
           thinking: state.thinking ?? 'high',
           pending: state.pending,
+          subagents: state.subagents ?? [],
           todos: state.todos ?? [],
           context_used: 32000,
           context_window: 128000,
@@ -157,6 +160,16 @@ function installBridge(state: BridgeState) {
           notices: [],
           compactions: [],
         }
+      case 'subagent_transcript': {
+        const transcript = state.subagentTranscripts?.[String(payload.call_id ?? '')]
+        return {
+          type: 'result',
+          id: payload.id,
+          ok: true,
+          available: transcript !== undefined,
+          transcript: transcript ?? [],
+        }
+      }
       case 'models':
         return { type: 'result', id: payload.id, ok: true, models: state.models ?? [] }
       case 'tools':
@@ -510,6 +523,82 @@ test('the work panel opens on review and switches to context', async ({ page }) 
   await expect(page.locator('[data-work-panel]')).toHaveCount(0)
 })
 
+test('a task row opens the subagent conversation in the work panel', async ({ page }) => {
+  await boot(
+    page,
+    initialState({
+      running: false,
+      transcript: [
+        { kind: 'user', id: 'u1', text: 'delegate', timestamp: 1 },
+        {
+          id: 't1',
+          call_id: 'c1',
+          name: 'task',
+          args_preview: '{"name":"Researcher"}',
+          args: { name: 'Researcher', prompt: 'find x' },
+          status: 'ok',
+          result_text: 'done',
+          duration_ms: 1200,
+        },
+        { kind: 'assistant', id: 'a1', text: 'handled', timestamp: 2 },
+      ],
+      subagents: [
+        {
+          call_id: 'c1',
+          name: 'Researcher',
+          status: 'ok',
+          duration_ms: 1200,
+          cost: 0.0021,
+          tokens: 1500,
+          has_transcript: true,
+          transcript_truncated: false,
+        },
+      ],
+      subagentTranscripts: {
+        c1: [
+          { kind: 'user', text: 'find x', timestamp: 1 },
+          {
+            id: 'ct1',
+            call_id: 'ct1',
+            name: 'bash',
+            args_preview: '{"command":"rg timeout"}',
+            args: { command: 'rg timeout' },
+            status: 'ok',
+            result_text: 'gateway.py:42',
+            duration_ms: 30,
+          },
+          { kind: 'assistant', text: 'Found it in gateway.py', timestamp: 2 },
+        ],
+      },
+    }),
+  )
+  const task = page.locator('[data-tool="task"] button')
+  await expect(task).toHaveAttribute('title', '打开子智能体过程')
+  await task.click()
+
+  const panel = page.locator('[data-work-panel]')
+  await expect(panel.getByRole('tab', { name: /Researcher/ })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  const transcript = page.getByTestId('subagent-transcript')
+  await expect(transcript).toContainText('find x')
+  await expect(transcript).toContainText('Found it in gateway.py')
+  await transcript.locator('[data-tool="bash"] button').click()
+  await expect(transcript).toContainText('gateway.py:42')
+  await expect(transcript).toContainText('已完成')
+  await expect(transcript).toContainText('1.5k tok')
+  // The parent row stays one line: the conversation lives in the panel only.
+  await expect(page.locator('[data-tool="task"] pre')).toHaveCount(0)
+
+  await page.getByRole('button', { name: '关闭子智能体' }).click()
+  await expect(panel.getByRole('tab', { name: /Researcher/ })).toHaveCount(0)
+  await expect(panel.getByRole('tab', { name: '审核' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+})
+
 test('hovering the context ring shows the composition card', async ({ page }) => {
   await boot(page, initialState())
   const card = page.getByTestId('context-card')
@@ -699,7 +788,7 @@ test('the topbar shows the project crumb and renames the current session inline'
     .toBe(true)
 })
 
-test('a settled turn folds its tool steps into one process row', async ({ page }) => {
+test('a settled turn keeps its tool steps expanded by default', async ({ page }) => {
   await boot(
     page,
     initialState({
@@ -732,9 +821,11 @@ test('a settled turn folds its tool steps into one process row', async ({ page }
   )
   const fold = page.getByRole('button', { name: /已处理.*步骤/ })
   await expect(fold).toBeVisible()
-  await expect(fold).toHaveAttribute('aria-expanded', 'false')
-  await fold.click()
+  await expect(fold).toHaveAttribute('aria-expanded', 'true')
   await expect(page.getByText('read_file')).toBeVisible()
+  await fold.click()
+  await expect(fold).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.getByText('read_file')).toHaveCount(0)
 })
 
 test('a long transcript mounts a bounded window and reveals earlier turns on demand', async ({

@@ -1,7 +1,7 @@
-/** One turn's tool steps folded behind a single process row: the settled fold
- * stays collapsed, the live one opens so work in flight remains visible. */
+/** One turn's tool steps folded behind a single process row. Expanded by
+ * default so the work a turn did is visible; the reader can fold it away. */
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { ToolNode } from '../../state/chatStore'
 import { useT } from '../../i18n/locale'
 import { formatDuration } from '../format'
@@ -17,11 +17,7 @@ export interface TurnProcessProps {
 
 export function TurnProcess({ tools, durationMs, running }: TurnProcessProps) {
   const t = useT()
-  const [open, setOpen] = useState(running)
-
-  useEffect(() => {
-    setOpen(running)
-  }, [running])
+  const [open, setOpen] = useState(true)
 
   const label = running
     ? t('turn.running', { steps: tools.length })

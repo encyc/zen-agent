@@ -8,6 +8,7 @@ import {
   useApprovalStore,
   usePaletteStore,
   useSettingsStore,
+  useWorkPanelStore,
 } from './state/stores'
 import { useT } from './i18n/locale'
 import { AppFrame } from './ui/AppFrame'
@@ -55,7 +56,7 @@ export function App() {
   const autoConnected = useRef(false)
 
   const [sidebarWidth, setSidebarWidth] = useState(() => loadWidth(SIDEBAR_KEY, SIDEBAR_DEFAULT))
-  const [rightbarOpen, setRightbarOpen] = useState(false)
+  const rightbarOpen = useWorkPanelStore((state) => state.open)
   const [rightbarWidth, setRightbarWidth] = useState(() => loadWidth(RIGHTBAR_KEY, RIGHTBAR_DEFAULT))
   const dockRef = useRef<HTMLDivElement | null>(null)
 
@@ -206,7 +207,7 @@ export function App() {
             setRightbarWidth(width)
             persistWidth(RIGHTBAR_KEY, width)
           }}
-          onClose={() => setRightbarOpen(false)}
+          onClose={() => useWorkPanelStore.getState().closePanel()}
         />
       }
     >
@@ -226,7 +227,11 @@ export function App() {
         aria-label={t('panel.open')}
         aria-expanded={rightbarOpen}
         data-active={rightbarOpen || undefined}
-        onClick={() => setRightbarOpen((value) => !value)}
+        onClick={() => {
+          const panel = useWorkPanelStore.getState()
+          if (panel.open) panel.closePanel()
+          else panel.openPanel()
+        }}
       >
         <PanelRightIcon size={15} />
       </button>

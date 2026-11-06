@@ -209,6 +209,15 @@ function viewToNode(view: MessageView | ToolCallView, cards: Record<string, stri
   return node
 }
 
+/** Snapshot views → render nodes, without touching the live session state.
+ * The subagent panel reads one child's transcript through the same mapping. */
+export function nodesFromViews(views: (MessageView | ToolCallView)[]): ChatNode[] {
+  const cards: Record<string, string> = {}
+  return views
+    .map((view) => viewToNode(view, cards))
+    .filter((node): node is ChatNode => node !== null)
+}
+
 export const useChatStore = create<ChatState>((set, get) => ({
   nodes: [],
   cards: {},
