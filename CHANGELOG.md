@@ -3,11 +3,12 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased
+## v0.8.2 — 2026-11-06
 
-**The desktop app became installable: six signed-off bundles (macOS, Windows,
-Linux × x86_64/arm64), each carrying its own frozen `zen` runtime, plus
-in-app updates.**
+**The desktop app became installable: six bundles (macOS, Windows, Linux ×
+x86_64/arm64), each carrying its own frozen `zen` runtime, with signed in-app
+updates. The right rail grew into a work panel, the model can ask structured
+questions mid-run, and long transcripts stream in a bounded window.**
 
 ### Added
 
@@ -29,6 +30,29 @@ in-app updates.**
   TUI notice: cached for an hour, silent on failure, one notice per version,
   switchable in Settings (and by `ZENAGENT_NO_UPDATE_CHECK`). Installing is
   blocked while a turn runs or an approval waits, since it restarts the app.
+- **The model can ask questions mid-run.** A new `ask` round-trip beside
+  approvals: an `ask_request` event carries the questions, the client answers
+  with `{"type": "ask", "request_id", "answers"}`, and the server separates
+  picked labels from free-form text into `selected`/`custom` so the tool sees
+  both. The desktop renders it as a composer takeover card with per-request
+  drafts, and drops the card when the run is cancelled.
+- **A work panel instead of a single right rail**: rendered review diffs, a
+  read-only workspace file viewer, worktree switching, and a task's subagent
+  transcript. The new `zenagent/app/workspace.py` keeps every path scoped to
+  the project root and degrades to a small error rather than raising into the
+  RPC loop.
+- **A todo checklist above the composer**: the status phases flatten into one
+  progress header with the current step, expanding into the full list.
+- **Conversation settings**: thinking visibility and folding, the context
+  readout, and Enter-to-send.
+
+### Changed
+
+- **Long transcripts stream smoothly.** The chat mounted every row and
+  re-rendered all of them on each delta; it now mounts a trailing window (15
+  rows on the first commit, 60 steady state, +40 per reveal) with viewport
+  anchoring, and grows when the reader scrolls to the top. The minimap spans
+  the whole loaded session.
 
 ## v0.8.1 — 2026-11-06
 
