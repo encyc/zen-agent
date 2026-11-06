@@ -103,9 +103,12 @@ def adopt_legacy_session(path: Path, *, cwd: Path | None = None) -> Path:
 @dataclass
 class SessionEntry:
     path: Path
-    created: float
+    updated_at: float
     messages: int
     size: int
+    created_at: float = 0.0
+    model: str = ""
+    derived_from: str = ""
     current: bool = False
     title: str = ""
     project: str = ""
@@ -149,9 +152,12 @@ class SessionManager:
             entries.append(
                 SessionEntry(
                     path=info.path,
-                    created=info.mtime,
+                    updated_at=info.mtime,
                     messages=info.messages,
                     size=size,
+                    created_at=info.created_at,
+                    model=info.model,
+                    derived_from=info.derived_from,
                     current=info.path == current,
                     title=info.title,
                     project=info.project,

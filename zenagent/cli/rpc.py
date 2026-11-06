@@ -646,6 +646,10 @@ class RpcServer:
                         "messages": entry.messages,
                         "current": entry.current,
                         "pinned": entry.pinned,
+                        "created_at": entry.created_at,
+                        "updated_at": entry.updated_at,
+                        "model": entry.model,
+                        "derived_from": entry.derived_from,
                     }
                     for entry in self.sessions.entries(scope=scope)
                 ],

@@ -14,7 +14,7 @@ from zenagent.agent.session import (
     set_session_title,
 )
 from zenagent.app.sessions import SessionManager, adopt_legacy_session
-from zenagent.types import UserMessage
+from zenagent.types import AssistantMessage, TextContent, Usage, UserMessage
 
 
 async def test_fork_copies_messages_and_switches(session_runtime):
@@ -362,3 +362,29 @@ async def test_fork_carries_tool_end_records_for_copied_calls(session_runtime):
         "session",
         "tool_end",
     ]
+
+
+async def test_entries_expose_creation_update_model_and_lineage(session_runtime):
+    runtime = session_runtime
+    manager = SessionManager(runtime)
+    runtime.session.append(UserMessage(content="hello", timestamp=1))
+    runtime.session.append(
+        AssistantMessage(
+            content=[TextContent(text="hi")],
+            provider="p",
+            model="deepseek-chat",
+            usage=Usage(),
+            stop_reason="stop",
+            timestamp=2,
+        )
+    )
+    entry = next(item for item in manager.entries() if item.path == manager.current())
+
+    assert entry.created_at > 0
+    assert entry.updated_at == entry.path.stat().st_mtime
+    assert entry.model == "deepseek-chat"
+    assert entry.derived_from == ""
+
+    forked = await manager.fork()
+    forked_entry = next(item for item in manager.entries() if item.path == forked)
+    assert forked_entry.derived_from == entry.path.stem

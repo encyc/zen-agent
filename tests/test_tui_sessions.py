@@ -130,7 +130,7 @@ def test_session_picker_all_scope_labels_the_project():
     entries = [
         SessionEntry(
             path=Path("/tmp/sessions/20260101-000000.jsonl"),
-            created=1.0,
+            updated_at=1.0,
             messages=2,
             size=10,
             current=False,

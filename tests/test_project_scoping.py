@@ -67,7 +67,7 @@ def test_repl_sessions_all_labels_each_project():
 
     entry = SessionEntry(
         path=Path("/tmp/s.jsonl"),
-        created=1.0,
+        updated_at=1.0,
         messages=2,
         size=10,
         title="fix bug",

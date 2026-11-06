@@ -120,7 +120,7 @@ class SessionPicker(PaletteScreen[SessionAction]):
                         "tui.picker.messages_note",
                         n=entry.messages,
                         time=time.strftime(
-                            "%m-%d %H:%M", time.localtime(entry.created)
+                            "%m-%d %H:%M", time.localtime(entry.updated_at)
                         ),
                     ),
                     selected=entry.current,

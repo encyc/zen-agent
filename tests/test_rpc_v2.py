@@ -3,6 +3,7 @@
 import asyncio
 import json
 import time
+from pathlib import Path
 
 import pytest
 
@@ -842,3 +843,26 @@ async def test_transcript_views_carry_ids_and_assistant_metadata(runtime_factory
     assert view["model"] == "deepseek-chat"
     assert view["duration_ms"] == 42
     assert view["timestamp"] == 7
+
+
+async def test_session_list_carries_created_updated_model_and_lineage(runtime_factory):
+    runtime, server, writes, queue = await build(runtime_factory)
+    runtime.session.append(UserMessage(content="hello", timestamp=1))
+    runtime.session.append(
+        AssistantMessage(
+            content=[TextContent(text="hi")],
+            provider="p",
+            model="deepseek-chat",
+            usage=Usage(),
+            stop_reason="stop",
+            timestamp=2,
+        )
+    )
+
+    await run_lines(server, queue, [{"type": "session", "id": "l", "op": "list"}])
+
+    entry = decode(writes)[0]["sessions"][0]
+    assert entry["created_at"] > 0
+    assert entry["updated_at"] == Path(entry["path"]).stat().st_mtime
+    assert entry["model"] == "deepseek-chat"
+    assert entry["derived_from"] == ""

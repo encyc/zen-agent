@@ -324,6 +324,12 @@ class SessionInfo:
     messages: int
     title: str
     project: str = ""
+    #: Header ``createdAt``, or mtime for legacy files without a header.
+    created_at: float = 0.0
+    #: Provider model id of the last assistant message; empty when none.
+    model: str = ""
+    #: Header ``derivedFrom``; empty for an original session.
+    derived_from: str = ""
 
 
 @dataclass
@@ -465,11 +471,33 @@ class Session:
         overrides = (
             read_session_titles(self.path.parent) if titles is None else titles
         )
+        mtime = self.path.stat().st_mtime
+        created_at = mtime
+        if self.header is not None:
+            raw = self.header.get("createdAt")
+            if isinstance(raw, (int, float)):
+                created_at = float(raw)
+        model = next(
+            (
+                message.model
+                for message in reversed(messages)
+                if isinstance(message, AssistantMessage)
+            ),
+            "",
+        )
+        derived_from = ""
+        if self.header is not None:
+            raw = self.header.get("derivedFrom")
+            if isinstance(raw, str):
+                derived_from = raw
         return SessionInfo(
             path=self.path,
-            mtime=self.path.stat().st_mtime,
+            mtime=mtime,
             messages=len(messages),
             title=overrides.get(self.path.name) or _title_from_messages(messages),
+            created_at=created_at,
+            model=model,
+            derived_from=derived_from,
         )
 
     def fork_at(self, index: int) -> Path:

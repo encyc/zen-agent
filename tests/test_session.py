@@ -826,3 +826,28 @@ def test_rewrite_carries_records_for_kept_calls(isolated_sessions):
         "tool_end",
         "compaction",
     ]
+
+
+def test_read_info_uses_header_creation_model_and_lineage(isolated_sessions):
+    session = Session(isolated_sessions / "s.jsonl", derived_from="parent")
+    session.append(user("hi"))
+    session.append(assistant("hello"))
+
+    info = session.read_info(titles={})
+
+    assert info.created_at == session.header["createdAt"]
+    assert info.model == "m"
+    assert info.derived_from == "parent"
+    assert info.mtime == session.path.stat().st_mtime
+
+
+def test_read_info_falls_back_to_mtime_without_a_header(isolated_sessions):
+    path = isolated_sessions / "legacy.jsonl"
+    isolated_sessions.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(user("hi").to_json()) + "\n", encoding="utf-8")
+
+    info = Session(path).read_info(titles={})
+
+    assert info.created_at == info.mtime
+    assert info.model == ""
+    assert info.derived_from == ""
