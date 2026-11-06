@@ -10,6 +10,7 @@
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
@@ -55,6 +56,24 @@ pub struct StartOptions {
 #[derive(Serialize)]
 pub struct StartReport {
     pub pid: u32,
+}
+
+/// Why `rpc_start` could not run the CLI. `runtime_missing` is the one the UI
+/// turns into a "no runtime" card; the JSON keys are camelCase for the webview.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartError {
+    pub code: &'static str,
+    pub bin: String,
+    pub os_error: String,
+}
+
+/// What the shell found when asked where the runtime is (Settings → diagnostics).
+#[derive(Serialize)]
+pub struct RuntimeProbe {
+    pub resolved: Option<String>,
+    pub exists: bool,
+    pub version: Option<String>,
 }
 
 /// One pending send: registered before the request hits stdin so an answer
@@ -135,9 +154,43 @@ fn dev_checkout_bin() -> Option<String> {
         .then(|| candidate.to_string_lossy().into_owned())
 }
 
+/// The sidecar Tauri bundles sits next to the shell's own executable: macOS
+/// keeps it in `Contents/MacOS/`, deb/AppImage put both in `usr/bin/`, and the
+/// Windows installers drop it beside `ZenAgent.exe`.
+fn exe_sibling_name() -> &'static str {
+    if cfg!(windows) {
+        "zen.exe"
+    } else {
+        "zen"
+    }
+}
+
+/// The directory holding this executable, where the bundled sidecar sits.
+fn exe_dir() -> Option<PathBuf> {
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(Path::to_path_buf))
+}
+
+/// Every place a CLI can plausibly live, in priority order: the bundled
+/// sidecar first (the shipped app must run its own runtime), then the usual
+/// user-local prefixes because a GUI app inherits launchd's minimal PATH.
+pub fn candidate_paths(bin: &str, exe_dir: Option<&Path>, home: Option<&str>) -> Vec<String> {
+    let mut paths = Vec::new();
+    if let Some(dir) = exe_dir {
+        paths.push(dir.join(bin).to_string_lossy().into_owned());
+    }
+    if let Some(home) = home {
+        paths.push(format!("{home}/.local/bin/{bin}"));
+    }
+    paths.push(format!("/opt/homebrew/bin/{bin}"));
+    paths.push(format!("/usr/local/bin/{bin}"));
+    paths
+}
+
 /// Resolve the CLI binary: the `ZEN_DESKTOP_BIN` override wins, then an
-/// explicit path, then (in dev) the checkout's venv, then a bare name searched
-/// in the usual user-local prefixes because GUI apps inherit a minimal PATH.
+/// explicit path, then the bundled sidecar beside this executable, then (in
+/// dev) the checkout's venv, then the user-local prefixes.
 fn resolve_bin(bin: &str) -> String {
     if let Ok(override_bin) = std::env::var("ZEN_DESKTOP_BIN") {
         if !override_bin.trim().is_empty() {
@@ -147,22 +200,23 @@ fn resolve_bin(bin: &str) -> String {
     if bin.contains('/') {
         return bin.to_string();
     }
+    let exe_dir = exe_dir();
+    let home = std::env::var("HOME").ok();
+    let candidates = candidate_paths(exe_sibling_name(), exe_dir.as_deref(), home.as_deref());
+    let sibling = exe_dir.is_some();
+    if sibling {
+        if let Some(first) = candidates.first() {
+            if Path::new(first).is_file() {
+                return first.clone();
+            }
+        }
+    }
     if let Some(dev_bin) = dev_checkout_bin() {
         return dev_bin;
     }
-    for prefix in ["", "/opt/homebrew/bin/", "/usr/local/bin/"] {
-        let candidate = format!("{prefix}{bin}");
-        let expanded = if candidate.starts_with('/') {
-            candidate
-        } else {
-            match std::env::var("HOME") {
-                Ok(home) => format!("{home}/.local/bin/{bin}"),
-                Err(_) => continue,
-            }
-        };
-        let path = std::path::Path::new(&expanded);
-        if path.is_file() {
-            return expanded;
+    for candidate in candidates.iter().skip(if sibling { 1 } else { 0 }) {
+        if Path::new(candidate).is_file() {
+            return candidate.clone();
         }
     }
     bin.to_string()
@@ -199,12 +253,32 @@ fn login_shell_env() -> HashMap<String, String> {
     map
 }
 
+/// Classify a spawn failure. A bundled runtime that is present but will not
+/// run (wrong architecture, no execute bit, missing interpreter) is the same
+/// user-visible problem as a missing one: the app has no agent.
+fn runtime_problem(
+    kind: std::io::ErrorKind,
+    raw_os_error: Option<i32>,
+    sibling_exists: bool,
+) -> &'static str {
+    let unusable = matches!(
+        kind,
+        std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied
+    ) || matches!(raw_os_error, Some(8) | Some(86) | Some(193))
+        || sibling_exists;
+    if unusable {
+        "runtime_missing"
+    } else {
+        "spawn_failed"
+    }
+}
+
 #[tauri::command]
 pub fn rpc_start(
     app: AppHandle,
     state: State<'_, RpcState>,
     options: StartOptions,
-) -> Result<StartReport, String> {
+) -> Result<StartReport, StartError> {
     let mut slot = state.proc.lock().unwrap();
     if let Some(existing) = slot.take() {
         stop_proc(&existing);
@@ -222,22 +296,38 @@ pub fn rpc_start(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    let mut child = command
-        .spawn()
-        .map_err(|error| format!("failed to start {bin} rpc: {error}"))?;
+    let sibling_exists =
+        exe_dir().map(|dir| dir.join(exe_sibling_name()).is_file()).unwrap_or(false);
+    let mut child = command.spawn().map_err(|error| StartError {
+        code: runtime_problem(error.kind(), error.raw_os_error(), sibling_exists),
+        bin: bin.clone(),
+        os_error: error.to_string(),
+    })?;
     let pid = child.id();
     let stdin = child
         .stdin
         .take()
-        .ok_or_else(|| "no stdin handle".to_string())?;
+        .ok_or_else(|| StartError {
+            code: "spawn_failed",
+            bin: bin.clone(),
+            os_error: "no stdin handle".to_string(),
+        })?;
     let stdout = child
         .stdout
         .take()
-        .ok_or_else(|| "no stdout handle".to_string())?;
+        .ok_or_else(|| StartError {
+            code: "spawn_failed",
+            bin: bin.clone(),
+            os_error: "no stdout handle".to_string(),
+        })?;
     let stderr = child
         .stderr
         .take()
-        .ok_or_else(|| "no stderr handle".to_string())?;
+        .ok_or_else(|| StartError {
+            code: "spawn_failed",
+            bin: bin.clone(),
+            os_error: "no stderr handle".to_string(),
+        })?;
 
     let pending: Pending = Arc::new(Mutex::new(HashMap::new()));
     let alive = Arc::new(AtomicBool::new(true));
@@ -387,10 +477,149 @@ pub fn rpc_stop(state: State<'_, RpcState>) -> Result<(), String> {
 }
 
 /// Best-effort teardown on app exit.
+/// Can this install replace itself? The Tauri updater only handles AppImages
+/// on Linux: a .deb comes from a package manager, so the UI links there instead
+/// of offering a restart that can only fail.
+#[tauri::command]
+pub fn updates_self_updatable() -> bool {
+    if cfg!(target_os = "linux") {
+        return std::env::var("APPIMAGE")
+            .map(|value| !value.trim().is_empty())
+            .unwrap_or(false);
+    }
+    true
+}
+
+/// Restart the shell after an update installed itself. The child `zen rpc`
+/// dies with the process, so the new bundle and its sidecar start together.
+#[tauri::command]
+pub fn relaunch_app(app: AppHandle) {
+    app.restart();
+}
+
+/// True when the environment asks every zen frontend to stop checking for
+/// updates. Kept alongside the settings switch: either one silences it.
+#[tauri::command]
+pub fn updates_disabled_by_env() -> bool {
+    let value = std::env::var("ZENAGENT_NO_UPDATE_CHECK").unwrap_or_default();
+    matches!(value.trim().to_lowercase().as_str(), "1" | "true" | "yes")
+}
+
+/// Ask the binary its version, but never let a wedged runtime freeze the UI:
+/// the probe runs on the screen the user presses "Retry" on.
+fn version_of(bin: String) -> Option<String> {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    thread::spawn(move || {
+        let output = Command::new(&bin).arg("--version").output().ok();
+        let _ = sender.send(output);
+    });
+    receiver
+        .recv_timeout(Duration::from_secs(2))
+        .ok()
+        .flatten()
+        .filter(|output| output.status.success())
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+        .filter(|text| !text.is_empty())
+}
+
+/// Where the shell would look for the runtime, and what it reports there.
+/// Settings shows this so a user can tell a missing sidecar from a broken one.
+#[tauri::command]
+pub async fn runtime_probe() -> RuntimeProbe {
+    let resolved = resolve_bin("zen");
+    let exists = Path::new(&resolved).is_file();
+    let version = if exists {
+        version_of(resolved.clone())
+    } else {
+        None
+    };
+    RuntimeProbe {
+        resolved: Some(resolved),
+        exists,
+        version,
+    }
+}
+
 pub fn kill_all(state: &RpcState) {
     if let Some(proc) = state.proc.lock().unwrap().take() {
         proc.alive.store(false, Ordering::SeqCst);
         let mut child = proc.child.lock().unwrap();
         kill_quiet(&mut child);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn candidate_paths_puts_the_executable_sibling_first() {
+        let paths = candidate_paths(
+            "zen",
+            Some(Path::new("/Applications/ZenAgent.app/Contents/MacOS")),
+            Some("/Users/u"),
+        );
+        assert_eq!(paths[0], "/Applications/ZenAgent.app/Contents/MacOS/zen");
+        assert_eq!(paths[1], "/Users/u/.local/bin/zen");
+        assert_eq!(paths[2], "/opt/homebrew/bin/zen");
+        assert_eq!(paths[3], "/usr/local/bin/zen");
+    }
+
+    #[test]
+    fn candidate_paths_skips_what_it_does_not_know() {
+        assert_eq!(
+            candidate_paths("zen", None, None),
+            vec!["/opt/homebrew/bin/zen", "/usr/local/bin/zen"]
+        );
+    }
+
+    #[test]
+    fn candidate_paths_keeps_the_windows_extension() {
+        let paths = candidate_paths("zen.exe", Some(Path::new("C:\\Zen")), None);
+        assert!(paths[0].contains("Zen"));
+        assert!(paths[0].ends_with("zen.exe"));
+    }
+}
+
+#[cfg(test)]
+mod runtime_tests {
+    use super::*;
+
+    #[test]
+    fn a_runtime_that_cannot_exec_reads_as_missing_not_as_a_random_failure() {
+        // Nothing there at all.
+        assert_eq!(
+            runtime_problem(std::io::ErrorKind::NotFound, None, false),
+            "runtime_missing"
+        );
+        // There, but not executable.
+        assert_eq!(
+            runtime_problem(std::io::ErrorKind::PermissionDenied, Some(13), true),
+            "runtime_missing"
+        );
+        // Wrong architecture: ENOEXEC on Linux, EBADARCH on macOS, 193 on Windows.
+        assert_eq!(
+            runtime_problem(std::io::ErrorKind::Other, Some(8), true),
+            "runtime_missing"
+        );
+        assert_eq!(
+            runtime_problem(std::io::ErrorKind::Other, Some(86), true),
+            "runtime_missing"
+        );
+        assert_eq!(
+            runtime_problem(std::io::ErrorKind::Other, Some(193), true),
+            "runtime_missing"
+        );
+        // The sidecar is present but the spawn failed for another reason: still
+        // "this runtime does not work", never a bare exit screen.
+        assert_eq!(
+            runtime_problem(std::io::ErrorKind::Other, Some(24), true),
+            "runtime_missing"
+        );
+        // A PATH lookup for a CLI nothing shipped: a plain spawn failure.
+        assert_eq!(
+            runtime_problem(std::io::ErrorKind::Other, Some(24), false),
+            "spawn_failed"
+        );
     }
 }

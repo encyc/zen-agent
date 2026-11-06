@@ -1,0 +1,210 @@
+name: desktop-release
+
+# Six installers, one per platform/architecture, each carrying its own frozen
+# `zen` runtime. The desktop app is only a shell: without the sidecar it has no
+# agent at all, so the runtime ships inside the bundle instead of being
+# something the user is expected to install separately.
+#
+# A tag push publishes to the GitHub Release; a manual run is a dry run that
+# only uploads installers to the run page. PyPI (`publish.yml`) is unaffected:
+# the same tag still ships the CLI to pip/uv users.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # PyInstaller cannot cross-compile, so every leg runs on its own
+          # architecture. macos-13 is retired; macos-15-intel is the current
+          # x86_64 macOS image.
+          - { os: macos-15, target: aarch64-apple-darwin, bundles: app,dmg }
+          - { os: macos-15-intel, target: x86_64-apple-darwin, bundles: app,dmg }
+          - { os: ubuntu-24.04, target: x86_64-unknown-linux-gnu, bundles: appimage,deb }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, bundles: appimage,deb }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, bundles: nsis }
+          - { os: windows-11-arm, target: aarch64-pc-windows-msvc, bundles: nsis }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: desktop/pnpm-lock.yaml
+
+      - name: Install Tauri Linux dependencies
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf
+
+      - run: pnpm install --frozen-lockfile
+        working-directory: desktop
+
+      # The sidecar is built first: tauri-build fails the whole build when
+      # `binaries/zen-<triple>` is missing, and the smoke check inside the
+      # script is what catches a bundle that lost catalog.yaml or the prompt
+      # blocks (a frozen zen answers --version either way).
+      - name: Freeze the zen sidecar
+        run: uv run python scripts/build-sidecar.py --target ${{ matrix.target }}
+
+      - name: Tag must match the project version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          version="$(sed -n 's/^version = "\([^"]*\)"$/\1/p' pyproject.toml | head -n 1)"
+          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match pyproject ${version}" >&2
+            exit 1
+          fi
+          # The installer reports tauri.conf's version at runtime; a stale one
+          # would make clients re-offer the same update forever.
+          uv run python scripts/sync-desktop-version.py --check
+
+      # `createUpdaterArtifacts` fails the build outright when no signing key is
+      # present, so it is only switched on by the leg that can actually sign.
+      - name: Decide the bundler arguments
+        id: signer
+        shell: bash
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -n "$KEY" ]; then
+            echo "enabled=1" >> "$GITHUB_OUTPUT"
+            echo 'extra=--config {"bundle":{"createUpdaterArtifacts":true}}' >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=" >> "$GITHUB_OUTPUT"
+            echo "extra=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: desktop
+          tauriScript: pnpm tauri
+          # An empty tagName keeps a manual run a dry run: it builds, uploads
+          # nothing to the release, and never touches `latest.json`.
+          tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+          releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && format('ZenAgent {0}', github.ref_name) || '' }}
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: false
+          args: >-
+            --target ${{ matrix.target }}
+            --bundles ${{ matrix.bundles }}
+            --config src-tauri/tauri.release.conf.json
+            ${{ steps.signer.outputs.extra }}
+
+      # One fragment per leg; the `latest` job merges them. Letting six parallel
+      # legs each write latest.json loses platforms to the last writer.
+      - name: Write the updater fragment
+        if: startsWith(github.ref, 'refs/tags/v') && steps.signer.outputs.enabled == '1'
+        shell: bash
+        run: |
+          uv run python .github/scripts/updater-fragment.py \
+            --target "${{ matrix.target }}" \
+            --tag "${GITHUB_REF_NAME}" \
+            --bundle-dir "desktop/src-tauri/target/${{ matrix.target }}/release/bundle" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --out fragment.json
+
+      - uses: actions/upload-artifact@v4
+        if: startsWith(github.ref, 'refs/tags/v') && steps.signer.outputs.enabled == '1'
+        with:
+          name: updater-${{ matrix.target }}
+          path: fragment.json
+          if-no-files-found: error
+
+      - name: Upload installers for a dry run
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: zenagent-desktop-${{ matrix.target }}
+          path: |
+            desktop/src-tauri/target/**/release/bundle/dmg/*.dmg
+            desktop/src-tauri/target/**/release/bundle/macos/*.app
+            desktop/src-tauri/target/**/release/bundle/nsis/*.exe
+            desktop/src-tauri/target/**/release/bundle/appimage/*.AppImage
+            desktop/src-tauri/target/**/release/bundle/deb/*.deb
+          if-no-files-found: error
+
+  latest:
+    name: latest.json
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+    steps:
+      - uses: actions/download-artifact@v4
+        if: env.KEY != ''
+        with:
+          pattern: updater-*
+          path: fragments
+          merge-multiple: true
+
+      - name: Merge the fragments into latest.json
+        if: env.KEY != ''
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import datetime, json, os, pathlib
+
+          fragments = [json.loads(path.read_text()) for path in pathlib.Path("fragments").glob("*.json")]
+          platforms = {item["platform"]: {"signature": item["signature"], "url": item["url"]} for item in fragments}
+          expected = {"darwin-aarch64", "darwin-x86_64", "linux-aarch64", "linux-x86_64", "windows-aarch64", "windows-x86_64"}
+          missing = sorted(expected - set(platforms))
+          if missing:
+              raise SystemExit(f"latest.json would lose these platforms: {missing}")
+          version = os.environ["GITHUB_REF_NAME"].lstrip("v")
+          payload = {
+              "version": version,
+              "pub_date": datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "platforms": platforms,
+          }
+          pathlib.Path("latest.json").write_text(json.dumps(payload, indent=2) + "\n")
+          print(json.dumps(sorted(platforms)))
+          PY
+          gh release upload "${GITHUB_REF_NAME}" latest.json --clobber
+
+      # Without a key there is nothing to sign, so the release ships installers
+      # only. Say so in the notes rather than leaving users waiting for a badge.
+      - name: Note that this release cannot self-update
+        if: env.KEY == ''
+        shell: bash
+        run: |
+          gh release view "${GITHUB_REF_NAME}" --json body --jq .body > body.md
+          printf '\n\n> This build carries no update signature, so in-app updates are off for it.\n' >> body.md
+          gh release edit "${GITHUB_REF_NAME}" --notes-file body.md

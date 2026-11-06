@@ -644,3 +644,11 @@
     width: 100%;
   }
 }
+
+/* About tab: manual update check next to the version line. */
+.aboutCheck {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}

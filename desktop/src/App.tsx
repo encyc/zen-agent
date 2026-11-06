@@ -2,6 +2,7 @@
  * exit banner). Keyboard: Cmd/Ctrl+B toggles the sidebar, like dsh. */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { invoke } from '@tauri-apps/api/core'
 import { defaultProjectCwd, lastProjectCwd, useAppStore } from './state/appStore'
 import {
   clampFontScale,
@@ -19,8 +20,11 @@ import { RightPanel } from './ui/rightbar/RightPanel'
 import { SettingsPage } from './ui/pages/SettingsPage'
 import { ToolsPage } from './ui/pages/ToolsPage'
 import { restoreChatState } from './ui/pages/navigation'
+import { isRuntimeMissing, type RuntimeProbe } from './state/startFailure.ts'
 import { ConversationTopbar } from './ui/ConversationTopbar'
 import { NoticeBanner } from './ui/NoticeBanner'
+import { UpdateBanner } from './ui/UpdateBanner'
+import { useUpdateStore } from './state/updateStore'
 import { CommandPalette } from './ui/palette/CommandPalette'
 import { SIDEBAR_DEFAULT, RIGHTBAR_DEFAULT, clampChatWidth } from './ui/columns'
 import { PanelRightIcon } from './ui/icons'
@@ -50,6 +54,7 @@ export function App() {
   const fontScale = useSettingsStore((state) => state.fontScale)
   const view = useSettingsStore((state) => state.view)
   const previousView = useRef(view)
+  const updateChecked = useRef(false)
   // The shell opens straight into a chat: the last project, else the user's
   // home folder, else zen's own cwd. There is no idle welcome surface.
   const [lastCwd] = useState(lastProjectCwd)
@@ -111,6 +116,14 @@ export function App() {
       await connect(undefined, cwd)
     })()
   }, [connection, lastCwd, connect])
+
+  // One update check per launch, five seconds after the shell is usable: the
+  // cached answer shows immediately, the network answer arrives later.
+  useEffect(() => {
+    if (connection !== 'ready' || updateChecked.current) return
+    updateChecked.current = true
+    void useUpdateStore.getState().start()
+  }, [connection])
 
   // The composer floats over the center column; publish its real height so
   // the transcript reserves exactly that much and nothing is covered.
@@ -217,6 +230,7 @@ export function App() {
         onNewSession={() => void useAppStore.getState().newSession()}
       />
       <NoticeBanner />
+      <UpdateBanner />
       <ChatView />
       <div ref={dockRef} className={css.composerDock} data-shell-composer>
         <InputBar />
@@ -255,7 +269,11 @@ function ExitScreen({ onRestart }: { onRestart(): void }) {
   const t = useT()
   const exitCode = useAppStore((state) => state.exitCode)
   const stderrTail = useAppStore((state) => state.stderrTail)
+  const startFailure = useAppStore((state) => state.startFailure)
   const tail = stderrTail.slice(-6).join('\n')
+  if (isRuntimeMissing(startFailure) && startFailure !== null) {
+    return <RuntimeScreen failure={startFailure} onRestart={onRestart} />
+  }
   return (
     <div className={css.bootScreen}>
       <div className={css.exitCard}>
@@ -264,6 +282,58 @@ function ExitScreen({ onRestart }: { onRestart(): void }) {
         <button type="button" className={css.exitButton} onClick={onRestart}>
           {t('connection.restart')}
         </button>
+      </div>
+    </div>
+  )
+}
+
+/** The bundled runtime is gone (or not executable): say which binary, where it
+ * was looked for, and offer the diagnostics instead of a raw spawn error. */
+function RuntimeScreen({ failure, onRestart }: { failure: { bin: string; osError: string }; onRestart(): void }) {
+  const t = useT()
+  const [probe, setProbe] = useState<RuntimeProbe | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    let live = true
+    void invoke<RuntimeProbe>('runtime_probe')
+      .then((result) => {
+        if (live) setProbe(result)
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [])
+
+  const diagnostics = [
+    `bin: ${failure.bin}`,
+    `os: ${failure.osError}`,
+    probe?.resolved != null ? `resolved: ${probe.resolved}` : 'resolved: (unknown)',
+    probe !== null ? `exists: ${probe.exists}` : 'exists: (unknown)',
+    probe?.version != null ? `version: ${probe.version}` : 'version: (unknown)',
+  ].join('\n')
+
+  const copy = () => {
+    void navigator.clipboard
+      .writeText(diagnostics)
+      .then(() => setCopied(true))
+      .catch(() => setCopied(false))
+  }
+
+  return (
+    <div className={css.bootScreen}>
+      <div className={css.exitCard}>
+        <div className={css.exitTitle}>{t('connection.runtimeMissing')}</div>
+        <pre className={css.exitTail}>{diagnostics}</pre>
+        <div className={css.exitActions}>
+          <button type="button" className={css.exitButton} onClick={copy}>
+            {copied ? t('connection.copied') : t('connection.copyDiagnostics')}
+          </button>
+          <button type="button" className={css.exitButton} onClick={onRestart}>
+            {t('connection.restart')}
+          </button>
+        </div>
       </div>
     </div>
   )

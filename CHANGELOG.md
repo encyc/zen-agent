@@ -3,6 +3,33 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+**The desktop app became installable: six signed-off bundles (macOS, Windows,
+Linux × x86_64/arm64), each carrying its own frozen `zen` runtime, plus
+in-app updates.**
+
+### Added
+
+- **Downloadable desktop builds.** `.github/workflows/desktop-release.yml`
+  freezes the CLI with PyInstaller on each platform's own architecture and
+  bundles it as a Tauri sidecar (`zen-<triple>`), then publishes `.dmg`,
+  NSIS `.exe`, `.AppImage` and `.deb` on the GitHub Release for a `v*` tag.
+  `scripts/build-sidecar.py` smoke-tests the frozen binary by running
+  `zen rpc` with no provider key: reaching `missing API key for <model>`
+  proves `catalog.yaml` and the prompt blocks survived packing, which
+  `--version` alone does not.
+- **The shell runs its bundled runtime first.** `resolve_bin` now looks beside
+  its own executable before any PATH lookup, so an installed app never
+  silently borrows a different `zen`.
+- **A "no runtime" screen instead of a spawn error.** `rpc_start` returns a
+  structured `runtime_missing` reason and the exit screen shows the resolved
+  path, the OS error and a copy-diagnostics button.
+- **In-app updates** (`tauri-plugin-updater`), with the same politeness as the
+  TUI notice: cached for an hour, silent on failure, one notice per version,
+  switchable in Settings (and by `ZENAGENT_NO_UPDATE_CHECK`). Installing is
+  blocked while a turn runs or an approval waits, since it restarts the app.
+
 ## v0.8.1 — 2026-11-06
 
 **Architecture review follow-through: a truncated tool call can no longer be

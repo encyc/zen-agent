@@ -20,6 +20,7 @@ import {
   type ThemeMode,
 } from '../../state/stores'
 import { useT } from '../../i18n/locale'
+import { useUpdateStore } from '../../state/updateStore'
 import {
   CHAT_WIDTH_DEFAULT,
   CHAT_WIDTH_MAX,
@@ -210,6 +211,43 @@ function Segmented<T extends string>(props: {
   )
 }
 
+/** Manual check: ignores the cache and says what happened, unlike the silent
+ * boot check. Install still goes through the banner. */
+function UpdateCheckButton() {
+  const t = useT()
+  const [result, setResult] = useState<'latest' | 'available' | 'failed' | null>(null)
+  const [running, setRunning] = useState(false)
+  return (
+    <div className={css.aboutCheck}>
+      <button
+        type="button"
+        className={css.reset}
+        disabled={running}
+        onClick={() => {
+          setRunning(true)
+          setResult(null)
+          void useUpdateStore
+            .getState()
+            .checkNow()
+            .then((outcome) => setResult(outcome))
+            .finally(() => setRunning(false))
+        }}
+      >
+        {running ? t('update.checking') : t('update.check')}
+      </button>
+      {result !== null && (
+        <span className={css.value}>
+          {result === 'latest'
+            ? t('update.latest')
+            : result === 'available'
+              ? t('update.available', { version: useUpdateStore.getState().cache?.latest ?? '' })
+              : t('update.checkFailed')}
+        </span>
+      )}
+    </div>
+  )
+}
+
 function Switch(props: { checked: boolean; label: string; onChange(checked: boolean): void }) {
   return (
     <button
@@ -232,11 +270,13 @@ export function SettingsPage() {
   const fontScale = useSettingsStore((state) => state.fontScale)
   const chatWidth = useSettingsStore((state) => state.chatWidth)
   const sessionTime = useSettingsStore((state) => state.sessionTime)
+  const updateChecks = useSettingsStore((state) => state.updateChecks)
   const setTheme = useSettingsStore((state) => state.setTheme)
   const setLocale = useSettingsStore((state) => state.setLocale)
   const setFontScale = useSettingsStore((state) => state.setFontScale)
   const setChatWidth = useSettingsStore((state) => state.setChatWidth)
   const setSessionTime = useSettingsStore((state) => state.setSessionTime)
+  const setUpdateChecks = useSettingsStore((state) => state.setUpdateChecks)
   const setView = useSettingsStore((state) => state.setView)
 
   const [tab, setTab] = useState<Tab>('appearance')
@@ -412,6 +452,15 @@ export function SettingsPage() {
                     onChange={setSessionTime}
                   />
                 </Row>
+                {__UPDATE_ENABLED__ && (
+                  <Row title={t('update.toggle')} detail={t('update.toggleHint')}>
+                    <Switch
+                      checked={updateChecks}
+                      label={t('update.toggle')}
+                      onChange={setUpdateChecks}
+                    />
+                  </Row>
+                )}
                 <Row title={t('settings.chatWidth')} detail={t('settings.chatWidthHint')}>
                   <div className={css.widthControl}>
                     <div className={css.sliderRow}>
@@ -445,6 +494,7 @@ export function SettingsPage() {
               <div className={css.aboutVersion}>
                 {t('settings.aboutVersion', { version: __APP_VERSION__ })}
               </div>
+              {__UPDATE_ENABLED__ && <UpdateCheckButton />}
             </div>
           )}
         </div>

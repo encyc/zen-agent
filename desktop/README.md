@@ -25,6 +25,39 @@ desktop/
     └── src/rpc.rs  process lifecycle, pending-request correlation, events
 ```
 
+## Install
+
+Download the file for your platform from the
+[releases page](https://github.com/encyc/zen-agent/releases):
+
+| Platform | File |
+|---|---|
+| macOS (Apple silicon) | `ZenAgent_<version>_aarch64.dmg` |
+| macOS (Intel) | `ZenAgent_<version>_x64.dmg` |
+| Windows (x64 / arm64) | `ZenAgent_<version>_<arch>-setup.exe` |
+| Linux (x64 / arm64) | `.AppImage` (portable) or `.deb` |
+
+Every installer carries its own `zen` runtime, so nothing else has to be
+installed — the app you download is the whole agent. That also means the
+runtime cannot be upgraded on its own: the shell and its sidecar always change
+version together.
+
+The builds are **not signed or notarized** yet:
+
+- **macOS**: the first launch is blocked by Gatekeeper. Right-click the app →
+  *Open*, or run `xattr -dr com.apple.quarantine /Applications/ZenAgent.app`.
+- **Windows**: SmartScreen shows "Windows protected your PC" → *More info* →
+  *Run anyway*.
+
+Updates are checked in the background after launch (cached for an hour, silent
+on failure) and can be turned off in Settings → Conversation. When a new
+version exists, a banner above the chat offers *Update and restart*; it stays
+disabled while a turn is running or an approval is waiting, because installing
+restarts the app. The `.deb` cannot self-update — download the new package.
+
+Only builds published with an update signature can self-update; a release whose
+notes say "no update signature" must be downloaded manually.
+
 ## Architecture mapping (dsh → this app)
 
 | dsh concept | Here |
@@ -60,10 +93,22 @@ cd src-tauri && cargo check
 ```
 
 The child binary is resolved as: `$ZEN_DESKTOP_BIN` → explicit `bin` option →
-(debug builds) the checkout's `.venv/bin/zen` → `$PATH` → `~/.local/bin`,
-`/opt/homebrew/bin`, `/usr/local/bin`. A plain `pnpm tauri dev` therefore runs
-the working-tree CLI, which carries the `transcript` / `models` / `commands`
-RPC methods this frontend needs; set `ZEN_DESKTOP_BIN` to override it.
+**the `zen` sitting next to this executable** (the bundled sidecar) → (debug
+builds) the checkout's `.venv/bin/zen` → `~/.local/bin`, `/opt/homebrew/bin`,
+`/usr/local/bin` → `$PATH`. A plain `pnpm tauri dev` therefore runs the
+working-tree CLI, which carries the `transcript` / `models` / `commands` RPC
+methods this frontend needs; set `ZEN_DESKTOP_BIN` to override it.
+
+`cargo check` and `pnpm tauri dev` never need the sidecar: the
+`bundle.externalBin` entry lives in `src-tauri/tauri.release.conf.json`, which
+only the release workflow passes. Building a real installer locally means
+building the runtime first:
+
+```bash
+uv run python scripts/build-sidecar.py          # -> src-tauri/binaries/zen-<triple>
+cd desktop
+pnpm tauri build --config src-tauri/tauri.release.conf.json
+```
 
 The default child flags are `--mode ask --no-mcp` (compatible with released
 zen binaries); the mode chip switches plan/ask/zen at runtime. GUI apps
