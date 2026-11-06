@@ -3,7 +3,7 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## v0.8.2 — 2026-11-06
+## v0.8.3 — 2026-11-06
 
 **The desktop app became installable: six bundles (macOS, Windows, Linux ×
 x86_64/arm64), each carrying its own frozen `zen` runtime, with signed in-app
@@ -46,8 +46,22 @@ questions mid-run, and long transcripts stream in a bounded window.**
 - **Conversation settings**: thinking visibility and folding, the context
   readout, and Enter-to-send.
 
+### Fixed
+
+- **File browsing works on Python 3.11 and 3.12 again.** The workspace listing
+  used `Path.is_dir(follow_symlinks=...)`, which only exists on 3.13+; it now
+  inspects `lstat` itself, so a symlinked directory still reads as a file
+  without leaving the workspace.
+- **Updater fragments point at the file the updater downloads.** Tauri v2
+  publishes the `.app.tar.gz` on macOS but the `.AppImage` and the NSIS
+  `-setup.exe` themselves on Linux and Windows; the fragment script looked for
+  tar/zip wrappers and exited 3 on four of six legs.
+
 ### Changed
 
+- **New logo.** A single yin-yang mark (`assets/logo.png`, cropped to
+  `desktop/app-icon.png`) replaces the old icon set; every platform icon is
+  regenerated from it with `tauri icon`.
 - **Long transcripts stream smoothly.** The chat mounted every row and
   re-rendered all of them on each delta; it now mounts a trailing window (15
   rows on the first commit, 60 steady state, +40 per reveal) with viewport
