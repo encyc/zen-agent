@@ -19,7 +19,13 @@ from zenagent.agent.session import (
     session_title,
     set_session_title,
 )
-from zenagent.types import AssistantMessage, TextContent, Usage, UserMessage
+from zenagent.types import (
+    AssistantMessage,
+    TextContent,
+    Usage,
+    UserMessage,
+    message_from_json,
+)
 
 
 def user(text: str, timestamp: int = 1) -> UserMessage:
@@ -724,3 +730,22 @@ async def test_side_channel_line_without_type_warns_like_before(tmp_path):
     reloaded = Session(path)
     reloaded.load()
     assert reloaded.warnings, "role-bearing garbage still warns"
+
+
+def test_plain_user_message_json_has_no_steering_key():
+    assert user("hello").to_json() == {
+        "role": "user",
+        "content": "hello",
+        "timestamp": 1,
+    }
+
+
+def test_steering_round_trips_and_only_true_serializes():
+    message = UserMessage(content="nudge", timestamp=1, steering=True)
+    assert message.to_json()["steering"] is True
+    assert message_from_json(message.to_json()) == message
+
+    stored = message_from_json(
+        {"role": "user", "content": "x", "timestamp": 1, "steering": "yes"}
+    )
+    assert stored.steering is False

@@ -56,6 +56,9 @@ def _text_of(result) -> str:
 
 
 def _message_text(message) -> str:
+    content = getattr(message, "content", None)
+    if isinstance(content, str):
+        return content
     return _text_of(message)
 
 
@@ -79,6 +82,8 @@ def _message_projection(message) -> dict:
     is_error = getattr(message, "is_error", None)
     if is_error is not None:
         payload["is_error"] = is_error
+    if getattr(message, "steering", False):
+        payload["steering"] = True
     return payload
 
 

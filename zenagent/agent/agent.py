@@ -238,7 +238,13 @@ class Agent:
             return []
         lines = self._steering
         self._steering = []
-        return [UserMessage(content="\n".join(lines), timestamp=int(time.time()))]
+        return [
+            UserMessage(
+                content="\n".join(lines),
+                timestamp=int(time.time()),
+                steering=True,
+            )
+        ]
 
     async def _dispatch(self, event: AgentEvent) -> None:
         """Deliver one event to every listener, serially, isolating failures."""

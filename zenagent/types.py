@@ -139,13 +139,19 @@ class SystemMessage:
 class UserMessage:
     content: str | list[TextContent | ImageContent]
     timestamp: int
+    #: True when the loop delivered this through the steering channel
+    #: (provenance for the file and the UI; adapters never read it).
+    steering: bool = False
 
     def to_json(self) -> dict:
         if isinstance(self.content, str):
             content: str | list[dict] = self.content
         else:
             content = [block.to_json() for block in self.content]
-        return {"role": "user", "content": content, "timestamp": self.timestamp}
+        payload = {"role": "user", "content": content, "timestamp": self.timestamp}
+        if self.steering:
+            payload["steering"] = True
+        return payload
 
 
 @dataclass
@@ -317,6 +323,7 @@ def message_from_json(d: dict) -> Message:
         return UserMessage(
             content=content,
             timestamp=_require(d, "timestamp", "user message"),
+            steering=d.get("steering") is True,
         )
     if role == "assistant":
         return AssistantMessage(

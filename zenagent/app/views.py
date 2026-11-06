@@ -63,9 +63,16 @@ class MessageView:
     thinking_started_at: float | None = None
     #: Finished reasoning seconds for this turn; None when timing is unknown.
     thinking_seconds: float | None = None
+    #: Epoch seconds of the stored message; 0 for a live row with no
+    #: canonical message yet.
+    timestamp: int = 0
+    #: True when the user message arrived through the steering channel.
+    steering: bool = False
 
 
-def user_view(text: str) -> MessageView:
+def user_view(
+    text: str, *, timestamp: int = 0, steering: bool = False
+) -> MessageView:
     """A user turn, or the compact view of an injected ``/skill:`` message."""
     display = parse_skill_display(text)
     if display is not None:
@@ -74,8 +81,10 @@ def user_view(text: str) -> MessageView:
             text=display.name,
             skill_args=display.args,
             skill_body=display.body,
+            timestamp=timestamp,
+            steering=steering,
         )
-    return MessageView(kind="user", text=text)
+    return MessageView(kind="user", text=text, timestamp=timestamp, steering=steering)
 
 
 @dataclass
@@ -266,7 +275,11 @@ def messages_to_views(messages: list[Message]) -> list[MessageView | ToolCallVie
             )
             if text.startswith(LOOP_GUARD_PREFIX):
                 continue  # synthetic model-only corrective, not a user turn
-            views.append(user_view(text))
+            views.append(
+                user_view(
+                    text, timestamp=message.timestamp, steering=message.steering
+                )
+            )
         elif isinstance(message, AssistantMessage):
             text = _text_of(message.content)
             thinking = "\n".join(
@@ -429,7 +442,13 @@ class TranscriptBuilder:
 
     def _message_start(self, message) -> None:
         if isinstance(message, UserMessage):
-            self.views.append(user_view(_user_text(message)))
+            self.views.append(
+                user_view(
+                    _user_text(message),
+                    timestamp=message.timestamp,
+                    steering=message.steering,
+                )
+            )
         elif isinstance(message, AssistantMessage):
             self.current = MessageView(kind="assistant", text="")
             self.views.append(self.current)

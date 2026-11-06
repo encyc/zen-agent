@@ -271,3 +271,15 @@ async def test_compact_records_derived_from(runtime_factory, app_env, monkeypatc
     reloaded = Session(path)
     reloaded.load()
     assert reloaded.header["derivedFrom"] == source_stem
+
+
+async def test_delivered_steering_aggregates_and_marks_the_message(session_runtime):
+    agent = session_runtime.agent
+    agent.steer("first")
+    agent.steer("second")
+
+    (message,) = await agent._drain_steering()
+
+    assert isinstance(message, UserMessage)
+    assert message.content == "first\nsecond"
+    assert message.steering is True

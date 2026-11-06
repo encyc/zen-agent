@@ -10,8 +10,8 @@ from zenagent.app.chat import ChatController
 from zenagent.app.commands import AppServices, build_default_commands
 from zenagent.app.models import ModelManager
 from zenagent.app.sessions import SessionManager
-from zenagent.cli.rpc import RpcServer
-from zenagent.events import AssistantEvent
+from zenagent.cli.rpc import RpcServer, serialize_event
+from zenagent.events import AgentEvent, AssistantEvent
 from zenagent.types import (
     AssistantMessage,
     TextContent,
@@ -538,7 +538,7 @@ def test_rpc_cli_serves_the_documented_smoke_client(monkeypatch, app_env):
 def test_serialize_event_keeps_the_final_message_and_tool_details():
     """The projection must carry data the TUI/REPL consume (P1 event loss)."""
     from zenagent.cli.rpc import serialize_event
-    from zenagent.events import AgentEvent, AssistantEvent
+    from zenagent.events import AssistantEvent
     from zenagent.types import AssistantMessage, TextContent, Usage
 
     message = AssistantMessage(
@@ -762,3 +762,22 @@ async def test_shutdown_denies_pending_approvals(runtime_factory):
 
     assert future.done() is True
     assert future.result() == "deny"
+
+
+def test_serialize_event_carries_user_text_and_steering():
+    plain = serialize_event(
+        AgentEvent(
+            type="message_start",
+            message=UserMessage(content="hello", timestamp=1),
+        )
+    )
+    assert plain["message"] == {"role": "user", "text": "hello"}
+
+    steered = serialize_event(
+        AgentEvent(
+            type="message_start",
+            message=UserMessage(content="nudge", timestamp=1, steering=True),
+        )
+    )
+    assert steered["message"]["text"] == "nudge"
+    assert steered["message"]["steering"] is True

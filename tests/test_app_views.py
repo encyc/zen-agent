@@ -432,3 +432,16 @@ def test_subagent_view_carries_the_transcript_truncation_flag():
     view = _subagent_view(card, meta=meta, has_transcript=True)
 
     assert view.transcript_truncated is True
+
+
+def test_steering_and_timestamp_are_projected_onto_user_views():
+    views = messages_to_views(
+        [
+            UserMessage(content="ask", timestamp=10),
+            UserMessage(content="nudge", timestamp=11, steering=True),
+        ]
+    )
+    assert [(view.timestamp, view.steering) for view in views] == [
+        (10, False),
+        (11, True),
+    ]
