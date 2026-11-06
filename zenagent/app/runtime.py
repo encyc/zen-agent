@@ -331,6 +331,7 @@ class Runtime:
                 allow=runtime.user_config.tool_allow,
                 deny=runtime.user_config.tool_deny,
                 mode=mode,
+                read_only=options.read_only,
                 policy=policy,
             )
         elif hasattr(gate, "set_mode"):

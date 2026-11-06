@@ -166,7 +166,7 @@ def test_fork_at_copies_the_prefix_without_touching_the_source(isolated_sessions
         session.append(message)
     before = original.read_bytes()
 
-    forked_path = session.fork_at(2)  # include the 2nd user message
+    forked_path = session.fork_at(2, keep=records.keep_for_rewrite())  # include the 2nd user message
 
     assert original.read_bytes() == before  # immutable source
     forked = Session(forked_path).load()
@@ -181,7 +181,7 @@ def test_fork_at_rejects_an_out_of_range_index(isolated_sessions):
     session.append(user("only"))
     for bad in (0, -1, 2):
         try:
-            session.fork_at(bad)
+            session.fork_at(bad, keep=records.keep_for_rewrite())
         except ValueError as exc:
             assert "out of range" in str(exc)
         else:  # pragma: no cover
@@ -194,7 +194,7 @@ def test_rewrite_writes_a_new_file(isolated_sessions):
     for message in [user("keep"), assistant("kept")]:
         session.append(message)
 
-    new_path = session.rewrite([user("only")])
+    new_path = session.rewrite([user("only")], keep=records.keep_for_rewrite())
     assert new_path != session.path
     assert Session(new_path).load()[0].content == "only"
     assert len(session.load()) == 2  # source untouched
@@ -392,7 +392,7 @@ def test_fork_at_does_not_inherit_the_source_title(isolated_sessions):
     source = _write_session(isolated_sessions, "chat.jsonl", ["hello"])
     set_session_title(source, "Source name")
 
-    forked = Session(source).fork_at(1)
+    forked = Session(source).fork_at(1, keep=records.keep_for_rewrite())
 
     assert forked.name != source.name
     assert session_title(forked) == "hello"
@@ -403,7 +403,7 @@ def test_rewrite_does_not_inherit_the_source_title(isolated_sessions):
     source = _write_session(isolated_sessions, "chat.jsonl", ["hello"])
     set_session_title(source, "Source name")
 
-    rewritten = Session(source).rewrite([user("fresh start")])
+    rewritten = Session(source).rewrite([user("fresh start")], keep=records.keep_for_rewrite())
 
     assert session_title(rewritten) == "fresh start"
 
@@ -710,11 +710,11 @@ async def test_derived_from_records_provenance(tmp_path):
     session.append(user("one"))
     session.append(user("two"))
 
-    rewritten = Session(session.rewrite([user("one")]))
+    rewritten = Session(session.rewrite([user("one")], keep=records.keep_for_rewrite()))
     rewritten.load()
     assert rewritten.header["derivedFrom"] == "s"
 
-    forked_path = session.fork_at(1)
+    forked_path = session.fork_at(1, keep=records.keep_for_rewrite())
     forked = Session(forked_path)
     forked.load()
     assert forked.header["derivedFrom"] == "s"
@@ -931,3 +931,12 @@ def test_side_channel_records_round_trip(isolated_sessions):
 
     carried = reloaded.carry_records(messages, keep=records.keep_for_rewrite())
     assert [record["type"] for record in carried] == ["tool_end", "compaction"]
+
+
+def test_rewrite_and_fork_at_require_the_keep_predicate():
+    """``keep`` is mandatory: the kernel must not silently carry everything."""
+    import inspect
+
+    for method in (Session.rewrite, Session.fork_at):
+        parameter = inspect.signature(method).parameters["keep"]
+        assert parameter.default is inspect.Parameter.empty

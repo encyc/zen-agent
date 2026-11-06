@@ -415,3 +415,14 @@ async def test_runtime_writes_tool_end_without_a_chat_controller(runtime_factory
     assert [record["call_id"] for record in tool_ends] == ["c1"]
     assert tool_ends[0]["tool_name"] == "read_file"
     assert isinstance(tool_ends[0].get("duration_ms"), int)
+
+
+async def test_bootstrap_honours_read_only_even_in_zen_mode(runtime_factory):
+    """``-p --mode zen --read-only`` must still refuse writes."""
+    runtime = await runtime_factory(mode="zen", read_only=True)
+
+    assert runtime.gate.read_only is True
+    verdict = await runtime.gate.before_tool_call(
+        "write_file", {"path": "blocked.txt", "content": "x"}
+    )
+    assert verdict is not None and verdict.get("block") is True

@@ -512,7 +512,7 @@ class Session:
             derived_from=derived_from,
         )
 
-    def fork_at(self, index: int, *, keep: Callable[[dict], bool] | None = None) -> Path:
+    def fork_at(self, index: int, *, keep: Callable[[dict], bool]) -> Path:
         """Copy the transcript up to (and including) user message ``index``.
 
         ``index`` is 1-based over user messages. The new file is written; this
@@ -537,7 +537,7 @@ class Session:
         return forked.path
 
     def rewrite(
-        self, messages: list[Message], *, keep: Callable[[dict], bool] | None = None
+        self, messages: list[Message], *, keep: Callable[[dict], bool]
     ) -> Path:
         """Write ``messages`` to a *new* session file and return its path."""
         rewritten = Session(unique_session_path("rewrite"), derived_from=self.path.stem)

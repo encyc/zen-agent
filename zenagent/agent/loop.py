@@ -64,12 +64,14 @@ from zenagent.types import (
 )
 
 __all__ = [
+    "LOOP_GUARD_PREFIX",
     "AgentConfig",
     "AgentState",
     "AgentTool",
     "ToolContext",
     "ToolResultAgent",
     "agent_loop",
+    "is_loop_guard_message",
 ]
 
 #: Cap for exception text smuggled into tool results (matches safe_stream).

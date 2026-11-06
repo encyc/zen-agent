@@ -23,7 +23,7 @@ import json
 import shutil
 
 from zenagent.agent.loop import AgentTool, ToolResultAgent
-from zenagent.tools._result import text_result
+from zenagent.tools._result import clip, text_result
 
 __all__ = ["GITHUB", "build_github_tool", "github_available"]
 
@@ -101,12 +101,6 @@ def _format_pr_view(text: str) -> str:
     return "\n".join(row for row in rows if row.strip())
 
 
-def _clip(text: str) -> tuple[str, bool]:
-    if len(text) <= MAX_OUTPUT_CHARS:
-        return text, False
-    return text[:MAX_OUTPUT_CHARS] + "\n… (truncated)", True
-
-
 async def _github(
     tool_call_id: str, args: dict, abort, on_update=None
 ) -> ToolResultAgent:
@@ -147,7 +141,7 @@ async def _github(
             op=op,
         )
     body = _format_pr_view(out) if op == "pr_view" else out
-    body, truncated = _clip(body or "(no output)")
+    body, truncated = clip(body or "(no output)", MAX_OUTPUT_CHARS)
     return text_result(body, op=op, truncated=truncated)
 
 

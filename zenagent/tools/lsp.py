@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from zenagent.agent.loop import AgentTool, ToolResultAgent
-from zenagent.tools._result import text_result
+from zenagent.tools._result import clip, text_result
 
 __all__ = [
     "LSP",
@@ -107,12 +107,6 @@ def _workspace_root(path: Path) -> Path:
         if any((parent / marker).is_file() for marker in markers):
             return parent
     return path.parent
-
-
-def _clip(body: str) -> tuple[str, bool]:
-    if len(body) <= _MAX_OUTPUT_CHARS:
-        return body, False
-    return body[:_MAX_OUTPUT_CHARS] + "\n… (truncated)", True
 
 
 class LspClient:
@@ -490,7 +484,7 @@ async def _lsp(
                     action=action,
                     count=0,
                 )
-            body, truncated = _clip("\n".join(lines))
+            body, truncated = clip("\n".join(lines), _MAX_OUTPUT_CHARS)
             return text_result(body, action=action, count=len(lines), truncated=truncated)
 
         position = {
@@ -506,7 +500,7 @@ async def _lsp(
             })
             lines = _format_symbols(result or [])
             body = "\n".join(lines) or "no symbols"
-            body, truncated = _clip(body)
+            body, truncated = clip(body, _MAX_OUTPUT_CHARS)
             return text_result(body, action=action, count=len(lines), truncated=truncated)
 
         if action in ("references", "definition"):
@@ -522,7 +516,7 @@ async def _lsp(
             locations = result if isinstance(result, list) else ([result] if result else [])
             lines = [_format_location(item) for item in locations if isinstance(item, dict)]
             body = "\n".join(lines) or "no locations"
-            body, truncated = _clip(body)
+            body, truncated = clip(body, _MAX_OUTPUT_CHARS)
             return text_result(body, action=action, count=len(lines), truncated=truncated)
 
         # rename: return the proposed edit; applying it stays the model's job.
@@ -536,7 +530,7 @@ async def _lsp(
         params["newName"] = new_name
         edit = await client.request("textDocument/rename", params)
         lines = _format_workspace_edit(edit or {})
-        body, truncated = _clip("\n".join(lines))
+        body, truncated = clip("\n".join(lines), _MAX_OUTPUT_CHARS)
         return text_result(body, action=action, count=len(lines), truncated=truncated)
     except TimeoutError as exc:
         return text_result(f"{action} timed out: {exc}", is_error=True)

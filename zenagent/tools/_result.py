@@ -24,7 +24,13 @@ def text_result(text: str, *, is_error: bool = False, **details) -> ToolResultAg
 
 
 def clip(text: str, limit: int) -> tuple[str, bool]:
-    """Cut ``text`` to ``limit`` characters, saying so the same way everywhere."""
+    """Cut ``text`` to ``limit`` characters, saying so the same way everywhere.
+
+    A body that already ends with the notice (a tool that clipped upstream, or a
+    caller clipping twice) is cut without adding a second one.
+    """
     if len(text) <= limit:
         return text, False
+    if text.endswith(TRUNCATION_NOTICE):
+        return text[:limit], True
     return text[:limit] + TRUNCATION_NOTICE, True

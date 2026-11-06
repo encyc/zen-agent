@@ -15,7 +15,7 @@ from pathlib import Path
 
 from zenagent.agent.loop import AgentTool, ToolResultAgent
 from zenagent.agent.memory_store import MemoryStore
-from zenagent.tools._result import text_result
+from zenagent.tools._result import clip, text_result
 
 __all__ = ["build_memory_tool", "build_memory_write_tool"]
 
@@ -40,12 +40,6 @@ _WRITE_USAGE_POLICY = (
     "chatty state; always fill reason so the journal explains the change. "
     "Every change is appended to .zenagent/memory/journal.jsonl."
 )
-
-
-def _clip(body: str) -> str:
-    if len(body) <= _MAX_OUTPUT_CHARS:
-        return body
-    return body[:_MAX_OUTPUT_CHARS] + "\n… (truncated)"
 
 
 def _store(root: Path | None) -> MemoryStore | None:
@@ -84,7 +78,7 @@ async def _read_tool(
             for entry, excerpt in matches
         ]
         return text_result(
-            _clip("\n".join(lines)), action=action, count=len(matches)
+            clip("\n".join(lines), _MAX_OUTPUT_CHARS)[0], action=action, count=len(matches)
         )
     # action == "read"
     entry_id = str(args.get("id") or "").strip()
@@ -95,7 +89,9 @@ async def _read_tool(
         # An absent entry is an empty result, not a failure (empty library).
         return text_result(f"entry {entry_id} not found (empty library?)", action=action, count=0)
     header = f"{entry.id}  {entry.title}\n(updated {entry.updated}, source {entry.source or '-'})"
-    return text_result(_clip(f"{header}\n\n{entry.body}"), action=action, count=1)
+    return text_result(
+        clip(f"{header}\n\n{entry.body}", _MAX_OUTPUT_CHARS)[0], action=action, count=1
+    )
 
 
 async def _write_tool(

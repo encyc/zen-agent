@@ -934,3 +934,25 @@ async def test_retry_hydrates_surviving_cards_from_records(runtime_factory):
 
     assert chat._builder.cards["c1"].duration_ms == 9
     assert chat._builder.cards["c1"].diff == "+x"
+
+
+async def test_interactive_front_writes_exactly_one_tool_end(runtime_factory):
+    """The runtime listener owns the record: a chat controller must not double it."""
+    from conftest import tool_then_text_stream
+
+    from zenagent.agent.session import Session
+
+    runtime = await runtime_factory(stream_fn=tool_then_text_stream())
+    chat = ChatController(runtime)
+
+    await chat.submit("read the readme")
+    await chat.wait_for_idle()
+
+    session = Session(runtime.session.path)
+    session.load()
+    call_ids = [
+        record["call_id"]
+        for record in session.records
+        if record.get("type") == "tool_end"
+    ]
+    assert call_ids == ["c1"], "one record per call, written once"

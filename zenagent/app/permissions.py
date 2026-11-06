@@ -293,8 +293,16 @@ class PermissionGate:
         return normalized
 
     def set_mode(self, mode: str) -> None:
-        """Switch the runtime mode; the next tool call sees it immediately."""
+        """Switch the runtime mode; the next tool call sees it immediately.
+
+        An explicit mode switch also lifts ``--read-only``: the flag decides how
+        the session starts, and the user asking for a writable mode in-session
+        is a deliberate override (it is what the frontends did before the flag
+        reached the gate at all).
+        """
         self.mode = self._validated_mode(mode)
+        if self.mode != "plan":
+            self.read_only = False
 
     def assess(self, tool_name: str, args: dict, tool=None) -> Verdict:
         """Classify a call as allow, confirm (with a risk label) or refuse.
