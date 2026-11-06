@@ -3,8 +3,10 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { retryableNodeId, useChatStore, type ChatNode } from '../../state/chatStore'
-import { useAppStore } from '../../state/appStore'
+import { loadRecentProjects, useAppStore } from '../../state/appStore'
+import { useSessionStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
+import { HomeHero, pickProjectFolder } from '../HomeHero'
 import { UserMessage, SkillMessage } from './MessageItem'
 import { AssistantNodeView } from './AssistantNodeView'
 import { ToolRowView } from './ToolRowView'
@@ -16,6 +18,11 @@ export function ChatView() {
   const nodes = useChatStore((state) => state.nodes)
   const revision = useChatStore((state) => state.revision)
   const busy = useAppStore((state) => state.busy)
+  const project = useSessionStore(
+    (state) => state.sessions.find((session) => session.path === state.currentPath)?.project ?? null,
+  )
+  const t = useT()
+  const [recents] = useState(loadRecentProjects)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const tailRef = useRef<HTMLDivElement | null>(null)
   const [follow, setFollow] = useState(true)
@@ -41,6 +48,16 @@ export function ChatView() {
     tailRef.current?.scrollIntoView({ block: 'end' })
   }, [revision, follow])
 
+  const switchProject = async (path: string) => {
+    if (!window.confirm(t('home.switchConfirm', { path }))) return
+    await useAppStore.getState().disconnect()
+    await useAppStore.getState().connect(undefined, path)
+  }
+  const pickAndSwitchProject = async () => {
+    const path = await pickProjectFolder()
+    if (path !== null) await switchProject(path)
+  }
+
   const isEmpty = nodes.length === 0
   // Regenerate re-runs the last turn; `/retry` already owns the transcript
   // reset and session refresh, so the action reuses that command.
@@ -52,7 +69,16 @@ export function ChatView() {
     <div className={css.root}>
       <div className={css.scroll} ref={scrollerRef}>
         {isEmpty ? (
-          <EmptyHero />
+          <div className={css.emptyHost}>
+            <HomeHero
+              connected
+              projectName={project}
+              recents={recents}
+              onPickFolder={() => void pickAndSwitchProject()}
+              onUseCurrent={() => undefined}
+              onOpenRecent={(path) => void switchProject(path)}
+            />
+          </div>
         ) : (
           <div className={css.flow}>
             {nodes.map((node) => (
@@ -127,30 +153,5 @@ function RunningRow() {
       <span className={css.runningDot} aria-hidden />
       <span className={css.runningLabel}>{t('status.running')}</span>
     </div>
-  )
-}
-
-function EmptyHero() {
-  const t = useT()
-  return (
-    <div className={css.hero}>
-      <div className={css.heroMark}>
-        <HeroMark />
-      </div>
-      <h1 className={css.heroTitle}>{t('chat.empty.title')}</h1>
-      <p className={css.heroBody}>{t('chat.empty.body')}</p>
-    </div>
-  )
-}
-
-function HeroMark() {
-  return (
-    <svg width="40" height="40" viewBox="0 0 18 18" fill="none" aria-hidden>
-      <rect x="1" y="1" width="16" height="16" rx="4.5" fill="var(--dsw-alias-state-business-primary)" opacity="0.16" />
-      <path
-        d="M9 4.2 10.3 7.7 13.8 9l-3.5 1.3L9 13.8 7.7 10.3 4.2 9l3.5-1.3Z"
-        fill="var(--dsw-alias-state-business-primary)"
-      />
-    </svg>
   )
 }

@@ -1,8 +1,8 @@
 /** App shell: theme presenter, connection gate (welcome → boot → frame →
  * exit banner). Keyboard: Cmd/Ctrl+B toggles the sidebar, like dsh. */
 
-import { useCallback, useEffect, useState } from 'react'
-import { useAppStore } from './state/appStore'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { lastProjectCwd, useAppStore } from './state/appStore'
 import { useApprovalStore, usePaletteStore, useSettingsStore } from './state/stores'
 import { useT } from './i18n/locale'
 import { AppFrame } from './ui/AppFrame'
@@ -38,6 +38,10 @@ export function App() {
   const collapsed = useSettingsStore((state) => state.sidebarCollapsed)
   const setCollapsed = useSettingsStore((state) => state.setSidebarCollapsed)
   const theme = useSettingsStore((state) => state.theme)
+  // A returning user goes straight back to the last project; only the idle
+  // host asks for a folder when no run has ever succeeded.
+  const [lastCwd] = useState(lastProjectCwd)
+  const autoConnected = useRef(false)
 
   const [sidebarWidth, setSidebarWidth] = useState(() => loadWidth(SIDEBAR_KEY, SIDEBAR_DEFAULT))
   const [rightbarOpen, setRightbarOpen] = useState(false)
@@ -62,6 +66,12 @@ export function App() {
     const platform = navigator.userAgent.includes('Mac') ? 'darwin' : navigator.userAgent.includes('Win') ? 'windows' : 'linux'
     document.documentElement.dataset.platform = platform
   }, [])
+
+  useEffect(() => {
+    if (connection !== 'idle' || lastCwd === '' || autoConnected.current) return
+    autoConnected.current = true
+    void connect(undefined, lastCwd)
+  }, [connection, lastCwd, connect])
 
   const persistWidth = useCallback((key: string, value: number) => {
     try {
@@ -96,6 +106,7 @@ export function App() {
   }, [collapsed, setCollapsed])
 
   if (connection === 'idle') {
+    if (lastCwd !== '') return <BootScreen />
     // No explicit args: the app store owns the version-compatible defaults.
     return <WelcomeScreen onStart={(cwd) => void connect(undefined, cwd)} />
   }
@@ -105,7 +116,13 @@ export function App() {
   }
 
   if (connection === 'exited') {
-    return <ExitScreen onRestart={() => void useAppStore.getState().connect()} />
+    return (
+      <ExitScreen
+        onRestart={() =>
+          void useAppStore.getState().connect(undefined, lastCwd === '' ? undefined : lastCwd)
+        }
+      />
+    )
   }
 
   return (

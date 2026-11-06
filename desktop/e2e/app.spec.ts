@@ -253,10 +253,15 @@ function initialState(overrides: Partial<BridgeState> = {}): BridgeState {
   }
 }
 
+async function startInCurrentDirectory(page: Page) {
+  await page.getByRole('button', { name: '切换项目' }).click()
+  await page.getByRole('menuitem', { name: '用当前目录启动' }).click()
+}
+
 async function boot(page: Page, state: BridgeState) {
   await page.addInitScript(installBridge, state)
   await page.goto('/')
-  await page.getByRole('button', { name: '用当前目录启动' }).click()
+  await startInCurrentDirectory(page)
   await expect(page.locator('[data-topbar-title]')).toHaveText(state.title)
 }
 
@@ -267,6 +272,15 @@ async function setPending(page: Page, items: PendingItemMock[]) {
 }
 
 const paletteKey = process.platform === 'darwin' ? 'Meta+k' : 'Control+k'
+
+test('a returning user lands on the home hero and auto-connects', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('zen.last.cwd', '/work'))
+  await page.addInitScript(installBridge, initialState())
+  await page.goto('/')
+  await expect(page.getByRole('heading', { level: 1, name: /ZenAgent/ })).toBeVisible()
+  await expect(page.locator('[data-shell-composer]')).toBeVisible()
+  await expect(page.locator('[data-home-hero]')).toBeVisible()
+})
 
 test('the shell keeps the sidebar full height and docks the composer inside the center column', async ({
   page,
@@ -536,7 +550,7 @@ test('escaping a row menu neither cancels the run nor traps the keyboard', async
 test('an unknown current project leaves every listed session disabled', async ({ page }) => {
   await page.addInitScript(installBridge, initialState({ noCurrent: true }))
   await page.goto('/')
-  await page.getByRole('button', { name: '用当前目录启动' }).click()
+  await startInCurrentDirectory(page)
   await expect(page.locator('[data-session-path="/sessions/a.jsonl"]')).toBeVisible()
   await expect(page.locator('[data-session-path="/sessions/a.jsonl"]')).toHaveAttribute('aria-disabled', 'true')
   await expect(page.locator('[data-session-path="/sessions/b.jsonl"]')).toHaveAttribute('aria-disabled', 'true')

@@ -23,6 +23,42 @@ export type ConnectionState = 'idle' | 'starting' | 'ready' | 'exited'
 
 export type ExportFormat = 'md' | 'html'
 
+const LAST_CWD_KEY = 'zen.last.cwd'
+const RECENTS_KEY = 'zen.recent.projects'
+
+export interface RecentProject {
+  path: string
+  at: number
+}
+
+export function loadRecentProjects(): RecentProject[] {
+  try {
+    const raw = localStorage.getItem(RECENTS_KEY)
+    const parsed = raw === null ? [] : (JSON.parse(raw) as RecentProject[])
+    return Array.isArray(parsed) ? parsed.slice(0, 8) : []
+  } catch {
+    return []
+  }
+}
+
+function rememberProject(path: string): void {
+  if (path === '') return
+  const next = [{ path, at: Date.now() }, ...loadRecentProjects().filter((item) => item.path !== path)]
+  try {
+    localStorage.setItem(RECENTS_KEY, JSON.stringify(next.slice(0, 8)))
+  } catch {
+    // ignore
+  }
+}
+
+export function lastProjectCwd(): string {
+  try {
+    return localStorage.getItem(LAST_CWD_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
 interface AppState {
   connection: ConnectionState
   exitCode: number | null
@@ -111,6 +147,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       // `--mode ask` keeps old released zen binaries happy (they crash without
       // an explicit mode) and is the safe default; the mode chip switches later.
       const pid = await rpc.start({ bin, cwd, args: args ?? ['--mode', 'ask', '--no-mcp'] })
+      try {
+        localStorage.setItem(LAST_CWD_KEY, cwd ?? '')
+      } catch {
+        // ignore
+      }
+      if (cwd !== undefined && cwd !== '') rememberProject(cwd)
       set({ connection: 'ready', pid })
       await get().refreshTranscript()
       await get().refreshStatus()
