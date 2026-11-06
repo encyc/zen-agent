@@ -10,14 +10,19 @@ import {
   useApprovalStore,
   useCatalogStore,
   useComposerStore,
+  useNoticeStore,
   useSessionStore,
   useSettingsStore,
   useStatusStore,
 } from './stores'
 import { useChatStore } from './chatStore'
 import { nextDraft } from './pending'
+import { frameError } from '../rpc/frames'
+import type { SessionScope } from './sessionGroups'
 
 export type ConnectionState = 'idle' | 'starting' | 'ready' | 'exited'
+
+export type ExportFormat = 'md' | 'html'
 
 interface AppState {
   connection: ConnectionState
@@ -29,7 +34,7 @@ interface AppState {
   disconnect(): Promise<void>
   client(): RpcClient
   refreshStatus(): Promise<void>
-  refreshSessions(): Promise<void>
+  refreshSessions(scope?: SessionScope): Promise<void>
   refreshCatalog(): Promise<void>
   refreshTranscript(): Promise<void>
   submit(): Promise<void>
@@ -44,6 +49,10 @@ interface AppState {
   forkSession(): Promise<void>
   resumeSession(path: string): Promise<void>
   deleteSession(path: string): Promise<void>
+  renameSession(title: string): Promise<void>
+  togglePin(pinned: boolean): Promise<void>
+  importSession(path: string): Promise<boolean>
+  exportSession(format: ExportFormat): Promise<string | null>
   promotePending(id: number): Promise<void>
   dequeuePending(): Promise<void>
   clearPending(): Promise<void>
@@ -144,10 +153,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       })
   },
 
-  refreshSessions() {
+  refreshSessions(scope) {
+    const effective = scope ?? useSessionStore.getState().scope
     return get()
       .client()
-      .send({ type: 'session', op: 'list' })
+      .send({ type: 'session', op: 'list', scope: effective })
       .then((frame) => {
         if (frame.type === 'result' && frame.ok) {
           const sessions = (frame.sessions ?? []) as { path: string; current: boolean }[]
@@ -320,63 +330,95 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   async newSession() {
-    try {
-      await get().client().send({ type: 'session', op: 'new' })
-    } catch {
-      return
-    }
-    await refreshAfterSessionChange(get)
+    await runSessionOp(get, { type: 'session', op: 'new' }, () => refreshAfterSessionChange(get))
   },
 
   async forkSession() {
-    try {
-      await get().client().send({ type: 'session', op: 'fork' })
-    } catch {
-      return
-    }
-    await refreshAfterSessionChange(get)
+    await runSessionOp(get, { type: 'session', op: 'fork' }, () => refreshAfterSessionChange(get))
   },
 
   async resumeSession(path) {
-    try {
-      await get().client().send({ type: 'session', op: 'resume', path })
-    } catch {
-      return
-    }
-    await refreshAfterSessionChange(get)
+    await runSessionOp(get, { type: 'session', op: 'resume', path }, () =>
+      refreshAfterSessionChange(get),
+    )
   },
 
   async deleteSession(path) {
+    await runSessionOp(get, { type: 'session', op: 'delete', path }, () =>
+      refreshAfterSessionChange(get),
+    )
+  },
+
+  async renameSession(title) {
+    await runSessionCommand(get, 'rename', title)
+    await get().refreshSessions()
+  },
+
+  async togglePin(pinned) {
+    await runSessionCommand(get, 'pin', pinned ? 'off' : 'on')
+    await get().refreshSessions()
+  },
+
+  async importSession(path) {
+    let frame: Record<string, unknown>
     try {
-      await get().client().send({ type: 'session', op: 'delete', path })
-    } catch {
-      return
+      frame = await get().client().send({ type: 'session', op: 'import', path })
+    } catch (error) {
+      showActionError(error)
+      return false
+    }
+    const error = frameError(frame)
+    if (error !== null) {
+      showActionError(error)
+      return false
     }
     await refreshAfterSessionChange(get)
+    return true
+  },
+
+  async exportSession(format) {
+    const source = useSessionStore.getState().currentPath
+    if (source === null) {
+      showActionError('no current session to export')
+      return null
+    }
+    let frame: Record<string, unknown>
+    try {
+      frame = await get().client().send({ type: 'session', op: 'export', path: source, format })
+    } catch (error) {
+      showActionError(error)
+      return null
+    }
+    const error = frameError(frame)
+    if (error !== null) {
+      showActionError(error)
+      return null
+    }
+    return typeof frame.path === 'string' ? frame.path : null
   },
 
   async promotePending(id) {
-    try {
-      await get().client().send({ type: 'session', op: 'promote', pending_id: id })
-    } catch {
-      return
-    }
-    await get().refreshStatus()
+    await runSessionOp(
+      get,
+      { type: 'session', op: 'promote', pending_id: id },
+      () => get().refreshStatus(),
+    )
   },
 
   async dequeuePending() {
     let frame: Record<string, unknown>
     try {
       frame = await get().client().send({ type: 'session', op: 'dequeue' })
-    } catch {
+    } catch (error) {
+      showActionError(error)
       return
     }
-    if (
-      frame.type === 'result' &&
-      frame.ok &&
-      frame.dequeued === true &&
-      typeof frame.text === 'string'
-    ) {
+    const error = frameError(frame)
+    if (error !== null) {
+      showActionError(error)
+      return
+    }
+    if (frame.dequeued === true && typeof frame.text === 'string') {
       const composer = useComposerStore.getState()
       composer.setDraft(nextDraft(composer.draft, frame.text))
     }
@@ -384,33 +426,73 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   async clearPending() {
-    try {
-      await get().client().send({ type: 'session', op: 'clear_pending' })
-    } catch {
-      return
-    }
-    await get().refreshStatus()
+    await runSessionOp(get, { type: 'session', op: 'clear_pending' }, () =>
+      get().refreshStatus(),
+    )
   },
 
   async compactNow() {
-    try {
-      await get().client().send({ type: 'session', op: 'compact' })
-    } catch {
-      return
-    }
-    await get().refreshTranscript()
-    await get().refreshStatus()
+    await runSessionOp(get, { type: 'session', op: 'compact' }, async () => {
+      await get().refreshTranscript()
+      await get().refreshStatus()
+    })
   },
 
   async undoLast() {
-    try {
-      await get().client().send({ type: 'session', op: 'undo' })
-    } catch {
-      return
-    }
-    await refreshAfterSessionChange(get)
+    await runSessionOp(get, { type: 'session', op: 'undo' }, () =>
+      refreshAfterSessionChange(get),
+    )
   },
 }))
+
+async function runSessionOp(
+  get: () => AppState,
+  payload: Record<string, unknown>,
+  after: () => Promise<void> | void,
+): Promise<void> {
+  let frame: Record<string, unknown>
+  try {
+    frame = await get().client().send(payload)
+  } catch (error) {
+    showActionError(error)
+    return
+  }
+  const error = frameError(frame)
+  if (error !== null) {
+    showActionError(error)
+    return
+  }
+  await after()
+}
+
+async function runSessionCommand(
+  get: () => AppState,
+  name: string,
+  argument: string,
+): Promise<void> {
+  let frame: Record<string, unknown>
+  try {
+    frame = await get().client().send({ type: 'command', name, argument })
+  } catch (error) {
+    showActionError(error)
+    return
+  }
+  const error = frameError(frame)
+  if (error !== null) {
+    showActionError(error)
+    return
+  }
+  if (typeof frame.message === 'string' && frame.message !== '') {
+    useNoticeStore.getState().show({ kind: 'info', text: frame.message })
+  }
+}
+
+function showActionError(value: unknown): void {
+  useNoticeStore.getState().show({
+    kind: 'error',
+    text: value instanceof Error ? value.message : String(value),
+  })
+}
 
 async function refreshAfterSessionChange(get: () => AppState): Promise<void> {
   await get().refreshTranscript()
