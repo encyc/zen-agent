@@ -722,6 +722,22 @@ class RpcServer:
             target = request.get("path") or self.runtime.session.path
             exported = self.sessions.export(Path(target), fmt)
             return {"path": str(exported)}
+        if op == "promote":
+            if self.chat is None:
+                raise RuntimeError("promote needs a runtime")
+            pending_id = request.get("pending_id")
+            if not isinstance(pending_id, int):
+                raise ValueError("promote needs pending_id")
+            return {"outcome": self.chat.promote(pending_id)}
+        if op == "dequeue":
+            if self.chat is None:
+                raise RuntimeError("dequeue needs a runtime")
+            text = self.chat.dequeue_follow_up()
+            return {"dequeued": text is not None, "text": text}
+        if op == "clear_pending":
+            if self.chat is None:
+                raise RuntimeError("clear_pending needs a runtime")
+            return {"cleared": self.chat.clear_pending()}
         raise ValueError(f"unknown session op: {op}")
 
     async def _command(self, request: dict, request_id) -> bool:

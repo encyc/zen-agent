@@ -866,3 +866,57 @@ async def test_session_list_carries_created_updated_model_and_lineage(runtime_fa
     assert entry["updated_at"] == Path(entry["path"]).stat().st_mtime
     assert entry["model"] == "deepseek-chat"
     assert entry["derived_from"] == ""
+
+
+async def test_session_pending_ops_dequeue_and_clear(runtime_factory):
+    _runtime, server, writes, queue = await build(runtime_factory)
+    server.chat.queue_follow_up("first")
+    server.chat.queue_follow_up("second")
+    await run_lines(
+        server,
+        queue,
+        [
+            {"type": "session", "id": "d", "op": "dequeue"},
+            {"type": "session", "id": "c", "op": "clear_pending"},
+        ],
+    )
+    results = {message["id"]: message for message in decode(writes)}
+    assert results["d"]["ok"] is True
+    assert results["d"]["dequeued"] is True
+    assert results["d"]["text"] == "second"
+    assert results["c"]["cleared"] == 1
+
+
+async def test_session_promote_moves_a_queued_item_to_steering(runtime_factory):
+    runtime, server, writes, _queue = await build(
+        runtime_factory, stream_fn=await slow_stream()
+    )
+    runtime.agent.replace_messages([UserMessage(content="hello", timestamp=1)])
+    await server._handle_line(json.dumps({"type": "prompt", "id": "p", "text": "hi"}))
+    await asyncio.sleep(0.05)
+    server.chat.queue_follow_up("promote me")
+    pending_id = next(
+        item.id for item in server.chat.status.pending if item.lane == "queue"
+    )
+    await server._handle_line(
+        json.dumps({
+            "type": "session",
+            "id": "m",
+            "op": "promote",
+            "pending_id": pending_id,
+        })
+    )
+    payload = next(message for message in decode(writes) if message.get("id") == "m")
+    assert payload["ok"] is True
+    assert payload["outcome"] == "ok"
+    assert [item.lane for item in server.chat.status.pending] == ["steer"]
+    server.agent.abort()
+    await asyncio.gather(server._task, return_exceptions=True)
+
+
+async def test_session_promote_requires_an_id(runtime_factory):
+    _runtime, server, writes, queue = await build(runtime_factory)
+    await run_lines(server, queue, [{"type": "session", "id": "m", "op": "promote"}])
+    payload = decode(writes)[0]
+    assert payload["type"] == "error"
+    assert payload["message"] == "promote needs pending_id"

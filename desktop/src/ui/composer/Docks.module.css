@@ -113,6 +113,20 @@
   text-overflow: ellipsis;
 }
 
+.pendingAction {
+  flex: none;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.pendingAction:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
 .contextMeter {
   display: inline-flex;
   align-items: center;

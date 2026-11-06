@@ -98,7 +98,7 @@ git commit -m "fix(desktop): only offer fork on the current session"
 - Modify: `desktop/src/ui/composer/Docks.module.css`
 
 **Interfaces:**
-- Produces (RPC): `{"type":"session","op":"promote","id":<int>}` → `{outcome: "ok"|"blocked_images"|"not_running"|"missing"}`; `{"op":"dequeue"}` → `{dequeued: boolean, text: string|null}`; `{"op":"clear_pending"}` → `{cleared: number}`.
+- Produces (RPC): `{"type":"session","op":"promote","pending_id":<int>}` → `{outcome: "ok"|"blocked_images"|"not_running"|"missing"}`; `{"op":"dequeue"}` → `{dequeued: boolean, text: string|null}`; `{"op":"clear_pending"}` → `{cleared: number}`.
 - Produces (frontend): `canPromotePending(item, running)`, `canDequeuePending(items)`, `nextDraft(previous, taken)`; store actions `promotePending(id)`, `dequeuePending()`, `clearPending()`.
 
 - [ ] **Step 1: Write the failing backend tests**
@@ -137,7 +137,12 @@ async def test_session_promote_moves_a_queued_item_to_steering(runtime_factory):
         item.id for item in server.chat.status.pending if item.lane == "queue"
     )
     await server._handle_line(
-        json.dumps({"type": "session", "id": "m", "op": "promote", "id": pending_id})
+        json.dumps({
+            "type": "session",
+            "id": "m",
+            "op": "promote",
+            "pending_id": pending_id,
+        })
     )
     payload = next(message for message in decode(writes) if message.get("id") == "m")
     assert payload["ok"] is True
@@ -152,7 +157,7 @@ async def test_session_promote_requires_an_id(runtime_factory):
     await run_lines(server, queue, [{"type": "session", "id": "m", "op": "promote"}])
     payload = decode(writes)[0]
     assert payload["type"] == "error"
-    assert payload["message"] == "promote needs id"
+    assert payload["message"] == "promote needs pending_id"
 ```
 
 - [ ] **Step 2: Run backend tests to verify they fail**
@@ -168,9 +173,9 @@ Insert before the `raise ValueError(f"unknown session op: {op}")` in `_session_o
         if op == "promote":
             if self.chat is None:
                 raise RuntimeError("promote needs a runtime")
-            pending_id = request.get("id")
+            pending_id = request.get("pending_id")
             if not isinstance(pending_id, int):
-                raise ValueError("promote needs id")
+                raise ValueError("promote needs pending_id")
             return {"outcome": self.chat.promote(pending_id)}
         if op == "dequeue":
             if self.chat is None:
@@ -257,7 +262,7 @@ In `appStore.ts`, add the three signatures after `deleteSession` and implement n
 ```ts
   async promotePending(id) {
     try {
-      await get().client().send({ type: 'session', op: 'promote', id })
+      await get().client().send({ type: 'session', op: 'promote', pending_id: id })
     } catch {
       return
     }

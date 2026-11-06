@@ -15,6 +15,7 @@ import {
   useStatusStore,
 } from './stores'
 import { useChatStore } from './chatStore'
+import { nextDraft } from './pending'
 
 export type ConnectionState = 'idle' | 'starting' | 'ready' | 'exited'
 
@@ -43,6 +44,9 @@ interface AppState {
   forkSession(): Promise<void>
   resumeSession(path: string): Promise<void>
   deleteSession(path: string): Promise<void>
+  promotePending(id: number): Promise<void>
+  dequeuePending(): Promise<void>
+  clearPending(): Promise<void>
   compactNow(): Promise<void>
   undoLast(): Promise<void>
 }
@@ -349,6 +353,43 @@ export const useAppStore = create<AppState>((set, get) => ({
       return
     }
     await refreshAfterSessionChange(get)
+  },
+
+  async promotePending(id) {
+    try {
+      await get().client().send({ type: 'session', op: 'promote', pending_id: id })
+    } catch {
+      return
+    }
+    await get().refreshStatus()
+  },
+
+  async dequeuePending() {
+    let frame: Record<string, unknown>
+    try {
+      frame = await get().client().send({ type: 'session', op: 'dequeue' })
+    } catch {
+      return
+    }
+    if (
+      frame.type === 'result' &&
+      frame.ok &&
+      frame.dequeued === true &&
+      typeof frame.text === 'string'
+    ) {
+      const composer = useComposerStore.getState()
+      composer.setDraft(nextDraft(composer.draft, frame.text))
+    }
+    await get().refreshStatus()
+  },
+
+  async clearPending() {
+    try {
+      await get().client().send({ type: 'session', op: 'clear_pending' })
+    } catch {
+      return
+    }
+    await get().refreshStatus()
   },
 
   async compactNow() {

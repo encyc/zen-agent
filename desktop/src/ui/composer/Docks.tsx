@@ -3,7 +3,10 @@
 
 import { useState } from 'react'
 import clsx from 'clsx'
+import { useAppStore } from '../../state/appStore'
+import { canDequeuePending, canPromotePending } from '../../state/pending'
 import { useStatusStore } from '../../state/stores'
+import type { PendingMessage } from '../../rpc/types'
 import { useT } from '../../i18n/locale'
 import { ChevronDownIcon, ListTodoIcon } from '../icons'
 import { StateDot } from '../primitives'
@@ -62,16 +65,37 @@ export function TodoDock() {
 export function PendingDock() {
   const t = useT()
   const pending = useStatusStore((state) => state.status?.pending ?? NO_PENDING)
+  const running = useStatusStore((state) => state.status?.running ?? false)
+  const promotePending = useAppStore((state) => state.promotePending)
+  const dequeuePending = useAppStore((state) => state.dequeuePending)
+  const clearPending = useAppStore((state) => state.clearPending)
   if (pending.length === 0) return null
   const queued = pending.filter((item) => item.lane === 'queue')
   const steering = pending.filter((item) => item.lane === 'steer')
+  const firstQueued = queued[0]
   return (
     <div className={css.pendingDock}>
       {steering.length > 0 && (
-        <PendingGroup lane="steer" label={t('composer.steering')} items={steering} />
+        <PendingGroup
+          lane="steer"
+          label={t('composer.steering')}
+          items={steering}
+          onClear={() => void clearPending()}
+        />
       )}
       {queued.length > 0 && (
-        <PendingGroup lane="queue" label={t('composer.queue')} items={queued} />
+        <PendingGroup
+          lane="queue"
+          label={t('composer.queue')}
+          items={queued}
+          onPromote={
+            firstQueued !== undefined && canPromotePending(firstQueued, running)
+              ? () => void promotePending(firstQueued.id)
+              : undefined
+          }
+          onDequeue={canDequeuePending(pending) ? () => void dequeuePending() : undefined}
+          onClear={() => void clearPending()}
+        />
       )}
     </div>
   )
@@ -81,15 +105,37 @@ function PendingGroup({
   lane,
   label,
   items,
+  onPromote,
+  onDequeue,
+  onClear,
 }: {
   lane: string
   label: string
-  items: { id: number; text: string }[]
+  items: PendingMessage[]
+  onPromote?: () => void
+  onDequeue?: () => void
+  onClear?: () => void
 }) {
+  const t = useT()
   return (
     <div className={css.pendingGroup} data-lane={lane}>
       <span className={css.pendingLabel}>{label} · {items.length}</span>
       <span className={css.pendingText}>{items[0]?.text ?? ''}</span>
+      {onPromote !== undefined && (
+        <button type="button" className={css.pendingAction} onClick={onPromote}>
+          {t('queue.promote')}
+        </button>
+      )}
+      {onDequeue !== undefined && (
+        <button type="button" className={css.pendingAction} onClick={onDequeue}>
+          {t('queue.dequeue')}
+        </button>
+      )}
+      {onClear !== undefined && (
+        <button type="button" className={css.pendingAction} onClick={onClear}>
+          {t('queue.clear')}
+        </button>
+      )}
     </div>
   )
 }
