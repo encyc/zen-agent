@@ -1,117 +1,229 @@
-/** Right dock: the session inspector — usage, context, todos, jobs and
- * subagents (what the zen TUI sidebar renders, as a dsh-style right rail). */
+/** Work panel — pi's docked right rail: a 46px header with review/context
+ * tabs, a close control and a resizable left edge. The old session inspector
+ * (todos, jobs, subagents, errors) is gone; those live in the docks. */
 
-import { useStatusStore, useSessionStore } from '../../state/stores'
-import { useAppStore } from '../../state/appStore'
+import { useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
+import { useChatStore } from '../../state/chatStore'
+import { useStatusStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
-import { StateDot } from '../primitives'
+import {
+  RIGHTBAR_DEFAULT,
+  RIGHTBAR_MAX_RATIO,
+  RIGHTBAR_MIN,
+  clampWidth,
+} from '../columns'
+import { ActivityIcon, ChevronDownIcon, ChevronRightIcon, FileIcon, XIcon } from '../icons'
+import { collectFileChanges, fileBasename } from './review'
 import css from './RightPanel.module.css'
 
-export function RightPanel() {
+type Tab = 'review' | 'context'
+
+export interface RightPanelProps {
+  width: number
+  onWidth(width: number): void
+  onClose(): void
+}
+
+interface DragState {
+  pointerId: number
+  startX: number
+  startWidth: number
+  frame: number
+}
+
+function clampPanel(px: number): number {
+  return clampWidth(px, RIGHTBAR_MIN, Math.max(RIGHTBAR_MIN, window.innerWidth * RIGHTBAR_MAX_RATIO))
+}
+
+export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
   const t = useT()
   const status = useStatusStore((state) => state.status)
-  const sessions = useSessionStore((state) => state.sessions)
-  const currentPath = useSessionStore((state) => state.currentPath)
-  if (status === null) return <div className={css.root} />
-  const current = sessions.find((session) => session.path === currentPath)
-  const title = current?.title || current?.name || t('sidebar.sessions')
-  const usage = status.usage
-  const contextUsed = status.context_used ?? 0
-  const contextWindow = status.context_window ?? 0
-  const jobs = status.jobs ?? []
-  const subagents = status.subagents ?? []
-  const todos = status.todos ?? []
+  const nodes = useChatStore((state) => state.nodes)
+  const [tab, setTab] = useState<Tab>('review')
+  const [openPath, setOpenPath] = useState<string | null>(null)
+  const drag = useRef<DragState | null>(null)
+
+  const changes = useMemo(() => collectFileChanges(nodes), [nodes])
+
+  const stopDrag = () => {
+    const state = drag.current
+    if (state === null) return
+    if (state.frame !== 0) cancelAnimationFrame(state.frame)
+    drag.current = null
+    document.documentElement.removeAttribute('data-work-panel-resizing')
+  }
+
+  const start = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.currentTarget.focus({ preventScroll: true })
+    drag.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startWidth: width,
+      frame: 0,
+    }
+    document.documentElement.setAttribute('data-work-panel-resizing', 'true')
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  const move = (event: PointerEvent<HTMLDivElement>) => {
+    const state = drag.current
+    if (state === null || state.pointerId !== event.pointerId) return
+    const next = clampPanel(state.startWidth + (state.startX - event.clientX))
+    if (state.frame !== 0) cancelAnimationFrame(state.frame)
+    state.frame = requestAnimationFrame(() => {
+      state.frame = 0
+      if (drag.current === state) onWidth(next)
+    })
+  }
+
+  const keyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const step = event.shiftKey ? 32 : 16
+    let next: number | null = null
+    if (event.key === 'ArrowLeft') next = width + step
+    else if (event.key === 'ArrowRight') next = width - step
+    else if (event.key === 'Home') next = RIGHTBAR_DEFAULT
+    if (next === null) return
+    event.preventDefault()
+    onWidth(clampPanel(next))
+  }
+
+  const usage = status?.usage ?? { input: 0, output: 0, cache_read: 0, cache_write: 0, cost: 0 }
+  const contextUsed = status?.context_used ?? 0
+  const contextWindow = status?.context_window ?? 0
 
   return (
-    <div className={css.root} data-selectable>
+    <div className={css.root} data-work-panel data-tab={tab}>
+      <div
+        className={css.resize}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label={t('chat.resizeWidth')}
+        aria-valuemin={RIGHTBAR_MIN}
+        aria-valuenow={width}
+        tabIndex={0}
+        onPointerDown={start}
+        onPointerMove={move}
+        onPointerUp={(event) => {
+          if (drag.current?.pointerId !== event.pointerId) return
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId)
+          }
+          stopDrag()
+        }}
+        onPointerCancel={(event) => {
+          if (drag.current?.pointerId !== event.pointerId) return
+          stopDrag()
+        }}
+        onDoubleClick={() => onWidth(RIGHTBAR_DEFAULT)}
+        onKeyDown={keyDown}
+      />
       <div className={css.header}>
-        <span className={css.headerTitle}>{title}</span>
-        <StateDot state={status.running ? 'running' : 'idle'} size={7} />
+        <div className={css.tabs} role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'review'}
+            className={css.tab}
+            onClick={() => setTab('review')}
+          >
+            <FileIcon size={13} />
+            <span>{t('panel.review')}</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'context'}
+            className={css.tab}
+            onClick={() => setTab('context')}
+          >
+            <ActivityIcon size={13} />
+            <span>{t('panel.context')}</span>
+          </button>
+        </div>
+        <button
+          type="button"
+          className={css.close}
+          aria-label={t('panel.close')}
+          onClick={onClose}
+        >
+          <XIcon size={13} />
+        </button>
       </div>
-
-      <Section title={t('usage.context')}>
-        <Row label={t('usage.context')} value={`${formatCount(contextUsed)} / ${formatCount(contextWindow)}`} />
-        <Row label="cache" value={status.cache_hit_ratio !== null && status.cache_hit_ratio !== undefined ? `${Math.round(status.cache_hit_ratio * 100)}%` : '—'} />
-        <Row label={t('usage.turn')} value={status.turn_ms !== null && status.turn_ms !== undefined && status.turn_ms > 0 ? formatDuration(status.turn_ms) : '—'} />
-      </Section>
-
-      <Section title={t('usage.tokens')}>
-        <Row label="in / out" value={`${formatCount(usage.input)} / ${formatCount(usage.output)}`} />
-        <Row label="cache r/w" value={`${formatCount(usage.cache_read)} / ${formatCount(usage.cache_write)}`} />
-        <Row label={t('usage.cost')} value={`$${usage.cost.toFixed(4)}`} />
-        {(status.subagent_cost ?? 0) > 0 && (
-          <Row label="subagents" value={`$${(status.subagent_cost ?? 0).toFixed(4)} · ${formatCount(status.subagent_tokens ?? 0)}`} />
+      <div className={css.body} data-selectable>
+        {tab === 'review' ? (
+          changes.length === 0 ? (
+            <p className={css.empty}>{t('panel.reviewEmpty')}</p>
+          ) : (
+            <ul className={css.files}>
+              {changes.map((change) => {
+                const open = openPath === change.path
+                return (
+                  <li key={change.path} className={css.file}>
+                    <button
+                      type="button"
+                      className={css.fileRow}
+                      aria-expanded={open}
+                      title={change.path}
+                      onClick={() => setOpenPath(open ? null : change.path)}
+                    >
+                      <span className={css.chevron} data-open={open || undefined}>
+                        {open ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
+                      </span>
+                      <span className={css.fileName}>{fileBasename(change.path)}</span>
+                      <span className={css.additions}>+{change.additions}</span>
+                      <span className={css.removals}>-{change.removals}</span>
+                    </button>
+                    {open && <pre className={css.diff}>{change.diffs.join('\n')}</pre>}
+                  </li>
+                )
+              })}
+            </ul>
+          )
+        ) : (
+          <div className={css.rows}>
+            <div className={css.row} data-testid="context-used">
+              <span className={css.rowLabel}>{t('usage.context')}</span>
+              <span className={css.rowValue}>
+                {formatCount(contextUsed)} / {formatCount(contextWindow)}
+              </span>
+            </div>
+            <div className={css.row}>
+              <span className={css.rowLabel}>{t('panel.cacheHit')}</span>
+              <span className={css.rowValue}>
+                {status?.cache_hit_ratio !== null && status?.cache_hit_ratio !== undefined
+                  ? `${Math.round(status.cache_hit_ratio * 100)}%`
+                  : '—'}
+              </span>
+            </div>
+            <div className={css.row}>
+              <span className={css.rowLabel}>{t('usage.turn')}</span>
+              <span className={css.rowValue}>
+                {status?.turn_ms !== null && status?.turn_ms !== undefined && status.turn_ms > 0
+                  ? formatDuration(status.turn_ms)
+                  : '—'}
+              </span>
+            </div>
+            <div className={css.row}>
+              <span className={css.rowLabel}>{t('panel.tokensInOut')}</span>
+              <span className={css.rowValue}>
+                {formatCount(usage.input)} / {formatCount(usage.output)}
+              </span>
+            </div>
+            <div className={css.row}>
+              <span className={css.rowLabel}>{t('panel.cacheRW')}</span>
+              <span className={css.rowValue}>
+                {formatCount(usage.cache_read)} / {formatCount(usage.cache_write)}
+              </span>
+            </div>
+            <div className={css.row}>
+              <span className={css.rowLabel}>{t('usage.cost')}</span>
+              <span className={css.rowValue}>${usage.cost.toFixed(4)}</span>
+            </div>
+          </div>
         )}
-      </Section>
-
-      {todos.length > 0 && (
-        <Section title={t('status.todos')}>
-          {todos.map((todo, index) => (
-            <div key={index} className={css.todoRow}>
-              <StateDot
-                state={todo.status === 'completed' ? 'ok' : todo.status === 'in_progress' ? 'running' : 'idle'}
-                size={7}
-              />
-              <span className={css.todoText}>{String(todo.text ?? todo.description ?? '')}</span>
-            </div>
-          ))}
-        </Section>
-      )}
-
-      {jobs.length > 0 && (
-        <Section title={t('status.jobs')}>
-          {jobs.slice(0, 8).map((job) => (
-            <button
-              key={job.id}
-              type="button"
-              className={css.jobRow}
-              onClick={() => void useAppStore.getState().runCommand('jobs', job.id)}
-            >
-              <StateDot state={job.status === 'running' ? 'running' : job.status === 'ok' ? 'ok' : 'error'} size={7} />
-              <span className={css.jobCommand}>{job.command}</span>
-            </button>
-          ))}
-        </Section>
-      )}
-
-      {subagents.length > 0 && (
-        <Section title={t('status.subagents')}>
-          {subagents.slice(0, 8).map((subagent) => (
-            <div key={subagent.call_id} className={css.jobRow}>
-              <StateDot
-                state={subagent.status === 'running' ? 'running' : subagent.status === 'ok' ? 'ok' : 'error'}
-                size={7}
-              />
-              <span className={css.jobCommand}>{subagent.name}</span>
-              <span className={css.jobMeta}>{formatCount(subagent.tokens)} tok</span>
-            </div>
-          ))}
-        </Section>
-      )}
-
-      {status.last_error !== '' && status.last_error !== undefined && (
-        <Section title={t('status.error')}>
-          <div className={css.errorText}>{status.last_error}</div>
-        </Section>
-      )}
-    </div>
-  )
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className={css.section}>
-      <div className={css.sectionTitle}>{title}</div>
-      {children}
-    </div>
-  )
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className={css.row}>
-      <span className={css.rowLabel}>{label}</span>
-      <span className={css.rowValue}>{value}</span>
+      </div>
     </div>
   )
 }

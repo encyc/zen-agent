@@ -170,12 +170,17 @@ export function App() {
       onSidebarToggle={() => setCollapsed(true)}
       rightbarOpen={rightbarOpen}
       rightbarWidth={rightbarWidth}
-      onRightbarWidth={(width) => {
-        setRightbarWidth(width)
-        persistWidth(RIGHTBAR_KEY, width)
-      }}
       sidebar={<Sidebar onCollapse={() => setCollapsed(true)} />}
-      rightbar={<RightPanel />}
+      rightbar={
+        <RightPanel
+          width={rightbarWidth}
+          onWidth={(width) => {
+            setRightbarWidth(width)
+            persistWidth(RIGHTBAR_KEY, width)
+          }}
+          onClose={() => setRightbarOpen(false)}
+        />
+      }
     >
       <ConversationTopbar
         collapsed={collapsed}
@@ -190,7 +195,7 @@ export function App() {
       <button
         type="button"
         className={css.workPanelToggle}
-        aria-label={t('topbar.inspector')}
+        aria-label={t('panel.open')}
         aria-expanded={rightbarOpen}
         data-active={rightbarOpen || undefined}
         onClick={() => setRightbarOpen((value) => !value)}

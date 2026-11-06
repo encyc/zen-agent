@@ -6,8 +6,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   CENTER_MIN,
-  RIGHTBAR_MAX_RATIO,
-  RIGHTBAR_MIN,
   SIDEBAR_DEFAULT,
   SIDEBAR_MIN,
   computeColumns,
@@ -22,7 +20,6 @@ interface AppFrameProps {
   onSidebarToggle(): void
   rightbarOpen: boolean
   rightbarWidth: number
-  onRightbarWidth(width: number): void
   sidebar: ReactNode
   rightbar: ReactNode
   children: ReactNode
@@ -52,7 +49,6 @@ export function AppFrame(props: AppFrameProps) {
   // Drag handles: pointer capture + rAF throttled deltas, frozen base.
   const [dragging, setDragging] = useState(false)
   const sidebarBase = useRef(0)
-  const rightbarBase = useRef(0)
   const frame = useRef<number | null>(null)
 
   const endDrag = useCallback(() => {
@@ -81,24 +77,6 @@ export function AppFrame(props: AppFrameProps) {
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [cols.sidebar, props.onSidebarWidth, viewport],
-  )
-
-  const rightbarDrag = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>, start: boolean) => {
-      if (start) {
-        rightbarBase.current = cols.rightbar
-        setDragging(true)
-        return
-      }
-      const dx = rightbarBase.current - event.clientX
-      if (frame.current !== null) cancelAnimationFrame(frame.current)
-      frame.current = requestAnimationFrame(() => {
-        frame.current = null
-        props.onRightbarWidth(Math.max(RIGHTBAR_MIN, Math.min(viewport * RIGHTBAR_MAX_RATIO, rightbarBase.current + dx)))
-      })
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cols.rightbar, props.onRightbarWidth, viewport],
   )
 
   return (
@@ -131,24 +109,6 @@ export function AppFrame(props: AppFrameProps) {
           }}
           onPointerMove={(event) => {
             if (event.currentTarget.hasPointerCapture(event.pointerId)) sidebarDrag(event, false)
-          }}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
-        />
-      )}
-      {cols.rightbar > 0 && (
-        <div
-          className={css.handle}
-          data-side="rightbar"
-          style={{ left: viewport - cols.rightbar }}
-          onPointerDown={(event) => {
-            if (event.button !== 0) return
-            event.preventDefault()
-            event.currentTarget.setPointerCapture(event.pointerId)
-            rightbarDrag(event, true)
-          }}
-          onPointerMove={(event) => {
-            if (event.currentTarget.hasPointerCapture(event.pointerId)) rightbarDrag(event, false)
           }}
           onPointerUp={endDrag}
           onPointerCancel={endDrag}

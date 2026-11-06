@@ -399,6 +399,36 @@ test('an approval stacks above a still-mounted composer', async ({ page }) => {
   )
 })
 
+test('the work panel opens on review and switches to context', async ({ page }) => {
+  await boot(
+    page,
+    initialState({
+      transcript: [
+        {
+          id: 't1',
+          call_id: 'c1',
+          name: 'edit_file',
+          args_preview: '{"path":"/src/a.ts"}',
+          args: { path: '/src/a.ts' },
+          status: 'ok',
+          diff: ['@@ -1,2 +1,2 @@', ' keep', '-old', '+new'].join('\n'),
+        },
+      ],
+    }),
+  )
+  await page.getByRole('button', { name: '打开工作面板' }).click()
+  await expect(page.getByRole('tab', { name: '审核' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('[data-work-panel]').getByText('a.ts', { exact: true })).toBeVisible()
+  const file = page.locator('[data-work-panel]').getByRole('button', { name: /^a\.ts/ })
+  await file.click()
+  await expect(file).toHaveAttribute('aria-expanded', 'true')
+  await expect(page.locator('[data-work-panel] pre')).toContainText('+new')
+  await page.getByRole('tab', { name: '上下文' }).click()
+  await expect(page.getByTestId('context-used')).toBeVisible()
+  await page.getByRole('button', { name: '关闭工作面板' }).click()
+  await expect(page.locator('[data-work-panel]')).toHaveCount(0)
+})
+
 test('the shell keeps the sidebar full height and docks the composer inside the center column', async ({
   page,
 }) => {
