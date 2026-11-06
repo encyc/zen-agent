@@ -287,6 +287,7 @@ interface SettingsState {
   chatWidth: number
   fontScale: number
   sessionTime: boolean
+  updateChecks: boolean
   view: AppView
   setTheme(theme: ThemeMode): void
   setLocale(locale: Locale): void
@@ -294,6 +295,7 @@ interface SettingsState {
   setChatWidth(width: number): void
   setFontScale(scale: number): void
   setSessionTime(enabled: boolean): void
+  setUpdateChecks(enabled: boolean): void
   setView(view: AppView): void
 }
 
@@ -321,6 +323,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   chatWidth: load('zen.chat.width', CHAT_WIDTH_DEFAULT),
   fontScale: clampFontScale(load('zen.fontScale', FONT_SCALE_DEFAULT)),
   sessionTime: load('zen.sidebar.sessionTime', true),
+  updateChecks: load('zen.update.checks', true),
   view: 'chat',
   setTheme: (theme) => {
     persist('zen.theme', theme)
@@ -346,6 +349,10 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setSessionTime: (sessionTime) => {
     persist('zen.sidebar.sessionTime', sessionTime)
     set({ sessionTime })
+  },
+  setUpdateChecks: (updateChecks) => {
+    persist('zen.update.checks', updateChecks)
+    set({ updateChecks })
   },
   setView: (view) => set({ view }),
 }))

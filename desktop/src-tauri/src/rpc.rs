@@ -457,6 +457,14 @@ pub fn rpc_stop(state: State<'_, RpcState>) -> Result<(), String> {
 }
 
 /// Best-effort teardown on app exit.
+/// True when the environment asks every zen frontend to stop checking for
+/// updates. Kept alongside the settings switch: either one silences it.
+#[tauri::command]
+pub fn updates_disabled_by_env() -> bool {
+    let value = std::env::var("ZENAGENT_NO_UPDATE_CHECK").unwrap_or_default();
+    matches!(value.trim().to_lowercase().as_str(), "1" | "true" | "yes")
+}
+
 /// Where the shell would look for the runtime, and what it reports there.
 /// Settings shows this so a user can tell a missing sidecar from a broken one.
 #[tauri::command]
