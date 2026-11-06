@@ -2,7 +2,6 @@
 
 import asyncio
 
-from zenagent.agent import Agent
 from zenagent.cli.repl import repl
 from zenagent.extensions import load_extensions
 
@@ -160,16 +159,11 @@ def register(api):
 ''',
     )
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
-    monkeypatch.setattr(cli_main, "load_user_config", lambda *a, **k: UserConfig())
+    monkeypatch.setattr(
+        "zenagent.app.runtime.load_user_config", lambda *a, **k: UserConfig()
+    )
 
     captured: dict = {}
-
-    def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
-              session_id=None, transform_context=None, max_turns=None,
-              max_cost=None, retries=0, context_files=True, extra_prompt=""):
-        captured["tools"] = [tool.name for tool in (tools or [])]
-        captured["extra"] = extra_prompt
-        return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=fake)
 
     async def fake(model, messages, tools, options):
         partial = AssistantMessage(
@@ -178,8 +172,17 @@ def register(api):
         )
         yield AssistantEvent(type="done", partial=partial, reason="stop")
 
-    monkeypatch.setattr(cli_main, "_build_agent", build)
+    real_bootstrap = cli_main._bootstrap
+
+    async def bootstrap(options, **kwargs):
+        kwargs["stream_fn"] = fake
+        runtime = await real_bootstrap(options, **kwargs)
+        captured["tools"] = [tool.name for tool in runtime.agent.tools]
+        captured["prompt"] = runtime.agent.system_prompt
+        return runtime
+
+    monkeypatch.setattr(cli_main, "_bootstrap", bootstrap)
     assert cli_main.main(["-p", "hi", "--extension", str(extension)]) == 0
     assert "ext_tool" in captured["tools"]
-    assert "FROM EXTENSION" in captured["extra"]
+    assert "FROM EXTENSION" in captured["prompt"]
     assert sentinel.exists()

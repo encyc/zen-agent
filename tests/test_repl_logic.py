@@ -936,7 +936,7 @@ async def test_eof_during_approval_denies_instead_of_exiting(
             return "hi"
         raise EOFError
 
-    code, requests = await _drive(
+    code, _requests = await _drive(
         tmp_path, printed, reader, tool_call_stream(write_call())
     )
     assert code == 0

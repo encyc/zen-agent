@@ -1,7 +1,8 @@
 """Headless CLI tests: model resolution, streaming output, permission gate.
 
 The network is replaced by a fake ``stream_fn`` injected through the
-``_build_agent`` seam, so ``main()`` itself is exercised end to end.
+``_bootstrap`` seam, so ``main()`` itself is exercised end to end while the
+assembly under test stays the shared :class:`Runtime.bootstrap` path.
 """
 
 import io
@@ -10,18 +11,21 @@ import time
 import pytest
 
 import zenagent.cli.main as cli_main
+from zenagent.cli.permissions import READ_ONLY_TOOLS, PermissionGate
 from zenagent.config import UserConfig
+from zenagent.events import AssistantEvent
+from zenagent.providers.catalog import load_catalog
+from zenagent.types import AssistantMessage, TextContent, ToolCall, Usage
 
 
 @pytest.fixture(autouse=True)
 def isolate_user_config(monkeypatch):
     """Tests must not read the developer's real ~/.zenagent/config.toml."""
     monkeypatch.setattr(cli_main, "load_user_config", lambda: UserConfig())
-from zenagent.agent import Agent
-from zenagent.cli.permissions import READ_ONLY_TOOLS, PermissionGate
-from zenagent.events import AssistantEvent
-from zenagent.providers.catalog import load_catalog
-from zenagent.types import AssistantMessage, TextContent, ToolCall, Usage
+    # Assembly moved into the Runtime, so that is where the config is read.
+    monkeypatch.setattr(
+        "zenagent.app.runtime.load_user_config", lambda *a, **k: UserConfig()
+    )
 
 
 def fake_stream(text: str = "Hello from fake"):
@@ -84,48 +88,42 @@ def test_resolve_model_rejects_unknown_id():
 
 
 # ---------------------------------------------------------------------------
-# main() end to end (fake stream via the _build_agent seam)
+# main() end to end (fake stream via the _bootstrap seam)
 # ---------------------------------------------------------------------------
 
 
-def _patch_agent(monkeypatch, stream, captured: dict):
-    """Replace _build_agent with one that injects ``stream``, recording args."""
+def _patch_bootstrap(monkeypatch, stream, captured: dict, on_built=None):
+    """Wrap the assembly seam: inject ``stream``, keep the Runtime it built.
 
-    def build(
-        model,
-        api_key,
-        thinking,
-        gate,
-        stream_fn=None,
-        tools=None,
-        session_id=None,
-        transform_context=None,
-        max_turns=None,
-        max_cost=None,
-        retries=0, context_files=True,
-        extra_prompt="",
-    ):
-        captured.update(model=model, thinking=thinking, gate=gate, tools=tools)
-        agent = Agent(
-            model=model,
-            system_prompt="test",
-            api_key=api_key,
-            thinking=thinking,
-            stream_fn=stream,
-            before_tool_call=gate.before_tool_call,
-            max_turns=max_turns,
-            max_cost=max_cost,
+    Only the network is replaced. Catalog resolution, policy, tools, session
+    and teardown run for real, so a flag that stops reaching the Runtime fails
+    here instead of failing against a hand-built Agent.
+    """
+    real_bootstrap = cli_main._bootstrap
+
+    async def bootstrap(options, **kwargs):
+        kwargs["stream_fn"] = stream
+        runtime = await real_bootstrap(options, **kwargs)
+        captured.update(
+            options=options,
+            runtime=runtime,
+            agent=runtime.agent,
+            model=runtime.model,
+            thinking=runtime.agent.thinking,
+            gate=runtime.gate,
+            tools=runtime.agent.tools,
         )
-        captured["agent"] = agent
-        return agent
+        if on_built is not None:
+            on_built(runtime)
+        return runtime
 
-    monkeypatch.setattr(cli_main, "_build_agent", build)
+    monkeypatch.setattr(cli_main, "_bootstrap", bootstrap)
 
 
 def test_main_headless_streams_text_and_returns_zero(monkeypatch, capsys):
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
     captured: dict = {}
-    _patch_agent(monkeypatch, fake_stream("Hello from fake"), captured)
+    _patch_bootstrap(monkeypatch, fake_stream("Hello from fake"), captured)
 
     assert cli_main.main(["-p", "hi"]) == 0
     out = capsys.readouterr().out
@@ -138,7 +136,7 @@ def test_main_headless_streams_text_and_returns_zero(monkeypatch, capsys):
 def test_thinking_flag_is_forwarded(monkeypatch):
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
     captured: dict = {}
-    _patch_agent(monkeypatch, fake_stream(), captured)
+    _patch_bootstrap(monkeypatch, fake_stream(), captured)
 
     assert cli_main.main(["-p", "hi", "--thinking", "off"]) == 0
     assert captured["thinking"] == "off"
@@ -148,7 +146,7 @@ def test_thinking_flag_is_forwarded(monkeypatch):
 
 def test_main_returns_one_and_reports_error(monkeypatch, capsys):
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
-    _patch_agent(monkeypatch, failing_stream("provider exploded"), {})
+    _patch_bootstrap(monkeypatch, failing_stream("provider exploded"), {})
 
     assert cli_main.main(["-p", "hi"]) == 1
     captured = capsys.readouterr()
@@ -159,7 +157,7 @@ def test_missing_api_key_is_a_clean_error(monkeypatch, capsys):
     monkeypatch.delenv("ZAI_CODING_CN_API_KEY", raising=False)
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     monkeypatch.delenv("OPENCODE_API_KEY", raising=False)
-    _patch_agent(monkeypatch, fake_stream(), {})
+    _patch_bootstrap(monkeypatch, fake_stream(), {})
 
     assert cli_main.main(["-p", "hi"]) == 1
     err = capsys.readouterr().err
@@ -169,7 +167,7 @@ def test_missing_api_key_is_a_clean_error(monkeypatch, capsys):
 
 def test_json_output_has_documented_fields(monkeypatch, capsys):
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
-    _patch_agent(monkeypatch, fake_stream("json text"), {})
+    _patch_bootstrap(monkeypatch, fake_stream("json text"), {})
 
     assert cli_main.main(["-p", "hi", "--json"]) == 0
     import json
@@ -283,10 +281,11 @@ def test_config_default_model_is_used(monkeypatch):
     from zenagent.config import UserConfig
 
     monkeypatch.setattr(
-        cli_main, "load_user_config", lambda: UserConfig(default_model="deepseek-flash")
+        "zenagent.app.runtime.load_user_config",
+        lambda *a, **k: UserConfig(default_model="deepseek-flash"),
     )
     captured: dict = {}
-    _patch_agent(monkeypatch, fake_stream(), captured)
+    _patch_bootstrap(monkeypatch, fake_stream(), captured)
 
     assert cli_main.main(["-p", "hi"]) == 0
     assert captured["model"].id == "deepseek-flash"
@@ -302,35 +301,13 @@ def test_headless_resume_loads_the_previous_transcript(monkeypatch, tmp_path):
     path = tmp_path / "s.jsonl"
     Session(path).append(UserMessage(content="earlier question", timestamp=1))
 
-    built: dict = {}
-
-    def build(
-        model,
-        api_key,
-        thinking,
-        gate,
-        stream_fn=None,
-        tools=None,
-        session_id=None,
-        transform_context=None,
-        max_turns=None,
-        max_cost=None,
-        retries=0, context_files=True,
-        extra_prompt="",
-    ):
-        agent = Agent(
-            model=model,
-            system_prompt="s",
-            api_key=api_key,
-            stream_fn=fake_stream("resumed ok"),
-        )
-        built["agent"] = agent
-        return agent
-
-    monkeypatch.setattr(cli_main, "_build_agent", build)
+    captured: dict = {}
+    _patch_bootstrap(monkeypatch, fake_stream("resumed ok"), captured)
 
     assert cli_main.main(["-p", "next question", "--resume", str(path)]) == 0
-    texts = [m.content for m in built["agent"].messages if isinstance(m, UserMessage)]
+    texts = [
+        m.content for m in captured["agent"].messages if isinstance(m, UserMessage)
+    ]
     assert "earlier question" in texts
 
 
@@ -340,7 +317,7 @@ def test_headless_run_persists_a_session(monkeypatch, tmp_path):
 
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
     monkeypatch.setattr(session_module, "sessions_dir", lambda: tmp_path)
-    _patch_agent(monkeypatch, fake_stream("persisted"), {})
+    _patch_bootstrap(monkeypatch, fake_stream("persisted"), {})
 
     assert cli_main.main(["-p", "hi"]) == 0
     files = list(tmp_path.glob("*.jsonl"))
@@ -378,33 +355,17 @@ def looping_tool_stream(tool_name: str = "ghost"):
 def test_guardrail_flags_reach_the_agent(monkeypatch):
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
     captured: dict = {}
+    _patch_bootstrap(monkeypatch, fake_stream(), captured)
 
-    def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
-              session_id=None, transform_context=None, max_turns=None, max_cost=None,
-              retries=0, context_files=True, extra_prompt=""):
-        captured.update(max_turns=max_turns, max_cost=max_cost)
-        return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=fake_stream())
-
-    monkeypatch.setattr(cli_main, "_build_agent", build)
     assert cli_main.main(["-p", "hi", "--max-turns", "3", "--max-cost", "0.25"]) == 0
-    assert captured == {"max_turns": 3, "max_cost": 0.25}
+    agent = captured["agent"]
+    assert (agent.max_turns, agent.max_cost) == (3, 0.25)
 
 
 def test_max_turns_exhaustion_exits_one(monkeypatch, capsys):
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
+    _patch_bootstrap(monkeypatch, looping_tool_stream(), {})
 
-    def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
-              session_id=None, transform_context=None, max_turns=None, max_cost=None,
-              retries=0, context_files=True, extra_prompt=""):
-        return Agent(
-            model=model,
-            system_prompt="s",
-            api_key=api_key,
-            stream_fn=looping_tool_stream(),
-            max_turns=max_turns,
-        )
-
-    monkeypatch.setattr(cli_main, "_build_agent", build)
     assert cli_main.main(["-p", "hi", "--max-turns", "1"]) == 1
     err = capsys.readouterr().err
     assert "stopped early (max_turns)" in err
@@ -414,7 +375,7 @@ def test_json_reports_termination(monkeypatch, capsys):
     import json
 
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
-    _patch_agent(monkeypatch, fake_stream("ok"), {})
+    _patch_bootstrap(monkeypatch, fake_stream("ok"), {})
     assert cli_main.main(["-p", "hi", "--json"]) == 0
     payload = json.loads(capsys.readouterr().out.strip())
     assert payload["termination"] == "stop"
@@ -458,14 +419,8 @@ def test_image_flag_attaches_blocks_to_the_user_message(monkeypatch, tmp_path):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
     stream = recording_stream()
     captured: dict = {}
+    _patch_bootstrap(monkeypatch, stream, captured)
 
-    def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
-              session_id=None, transform_context=None, max_turns=None,
-              max_cost=None, retries=0, context_files=True, extra_prompt=""):
-        captured["model"] = model
-        return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=stream)
-
-    monkeypatch.setattr(cli_main, "_build_agent", build)
     assert cli_main.main(["-p", "what is this?", "-m", "deepseek-flash",
                           "--image", str(_png(tmp_path))]) == 0
 
@@ -479,13 +434,8 @@ def test_image_flag_attaches_blocks_to_the_user_message(monkeypatch, tmp_path):
 def test_image_on_a_non_vision_model_fails_before_any_request(monkeypatch, tmp_path, capsys):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
     stream = recording_stream()
+    _patch_bootstrap(monkeypatch, stream, {})
 
-    def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
-              session_id=None, transform_context=None, max_turns=None,
-              max_cost=None, retries=0, context_files=True, extra_prompt=""):
-        return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=stream)
-
-    monkeypatch.setattr(cli_main, "_build_agent", build)
     assert cli_main.main(["-p", "hi", "-m", "deepseek-v4-pro",
                           "--image", str(_png(tmp_path))]) == 1
     assert stream.requests == []  # no round trip wasted
@@ -496,9 +446,29 @@ def test_invalid_image_file_is_reported(monkeypatch, tmp_path, capsys):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
     bad = tmp_path / "not-an-image.png"
     bad.write_text("hello")
-    _patch_agent(monkeypatch, fake_stream(), {})
+    _patch_bootstrap(monkeypatch, fake_stream(), {})
     assert cli_main.main(["-p", "hi", "-m", "deepseek-flash", "--image", str(bad)]) == 1
     assert "does not look like" in capsys.readouterr().err
+
+
+def test_missing_image_file_fails_before_the_session_is_created(
+    monkeypatch, tmp_path, capsys
+):
+    """A typo'd path is a pre-assembly failure: no Runtime, no session file."""
+    import zenagent.agent.session as session_module
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setattr(session_module, "sessions_dir", lambda: tmp_path)
+    captured: dict = {}
+    _patch_bootstrap(monkeypatch, fake_stream(), captured)
+
+    missing = tmp_path / "absent.png"
+    code = cli_main.main(["-p", "hi", "-m", "deepseek-flash", "--image", str(missing)])
+
+    assert code == 1
+    assert "no such file" in capsys.readouterr().err
+    assert "runtime" not in captured
+    assert list(tmp_path.glob("*.jsonl")) == []
 
 
 # ---------------------------------------------------------------------------
@@ -512,13 +482,10 @@ def test_cwd_flag_changes_the_working_directory(monkeypatch, tmp_path):
 
     seen: dict = {}
 
-    def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
-              session_id=None, transform_context=None, max_turns=None,
-              max_cost=None, retries=0, context_files=True, extra_prompt=""):
+    def record_cwd(runtime):
         seen["cwd"] = os.getcwd()
-        return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=fake_stream())
 
-    monkeypatch.setattr(cli_main, "_build_agent", build)
+    _patch_bootstrap(monkeypatch, fake_stream(), {}, on_built=record_cwd)
     original = os.getcwd()
     try:
         assert cli_main.main(["-p", "hi", "--cwd", str(tmp_path)]) == 0
@@ -529,7 +496,7 @@ def test_cwd_flag_changes_the_working_directory(monkeypatch, tmp_path):
 
 def test_bad_cwd_is_rejected(monkeypatch, tmp_path, capsys):
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
-    _patch_agent(monkeypatch, fake_stream(), {})
+    _patch_bootstrap(monkeypatch, fake_stream(), {})
     assert cli_main.main(["-p", "hi", "--cwd", str(tmp_path / "missing")]) == 1
     assert "not a directory" in capsys.readouterr().err
 
@@ -538,7 +505,7 @@ def test_trace_flag_writes_jsonl(monkeypatch, tmp_path):
     import json
 
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
-    _patch_agent(monkeypatch, looping_tool_stream(), {})
+    _patch_bootstrap(monkeypatch, looping_tool_stream(), {})
     trace_path = tmp_path / "run.jsonl"
 
     assert cli_main.main(["-p", "hi", "--max-turns", "1", "--trace", str(trace_path),
@@ -584,7 +551,7 @@ def test_headless_survives_a_down_mcp_server(monkeypatch, tmp_path, capsys):
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
     flaky = str(_Path(__file__).resolve().parent / "fixtures" / "mcp_flaky_server.py")
     config = _mcp_config(tmp_path, flaky, {"MCP_READY_FILE": str(tmp_path / "never")})
-    _patch_agent(monkeypatch, fake_stream("ok"), {})
+    _patch_bootstrap(monkeypatch, fake_stream("ok"), {})
 
     assert cli_main.main(["-p", "hi", "--mcp-file", str(config)]) == 0
     assert "mcp flaky" in capsys.readouterr().err
@@ -597,8 +564,8 @@ def test_no_mcp_flag_never_constructs_a_manager(monkeypatch):
     def explode(*args, **kwargs):
         raise AssertionError("McpManager must not be constructed with --no-mcp")
 
-    monkeypatch.setattr(cli_main, "McpManager", explode)
-    _patch_agent(monkeypatch, fake_stream("ok"), {})
+    monkeypatch.setattr("zenagent.app.runtime.McpManager", explode)
+    _patch_bootstrap(monkeypatch, fake_stream("ok"), {})
     assert cli_main.main(["-p", "hi", "--no-mcp"]) == 0
 
 
@@ -632,8 +599,8 @@ def test_mcp_server_filter_selects_only_named_servers(monkeypatch, tmp_path):
         async def close(self):
             return None
 
-    monkeypatch.setattr(cli_main, "McpManager", FakeManager)
-    _patch_agent(monkeypatch, fake_stream("ok"), {})
+    monkeypatch.setattr("zenagent.app.runtime.McpManager", FakeManager)
+    _patch_bootstrap(monkeypatch, fake_stream("ok"), {})
 
     assert cli_main.main(["-p", "hi", "--mcp-file", str(config),
                           "--mcp-server", "beta"]) == 0
@@ -654,18 +621,12 @@ def test_skills_are_injected_into_tools_and_prompt(monkeypatch, tmp_path):
     )
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
     captured: dict = {}
+    _patch_bootstrap(monkeypatch, fake_stream(), captured)
 
-    def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
-              session_id=None, transform_context=None, max_turns=None,
-              max_cost=None, retries=0, context_files=True, extra_prompt=""):
-        captured["tools"] = [tool.name for tool in (tools or [])]
-        captured["extra"] = extra_prompt
-        return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=fake_stream())
-
-    monkeypatch.setattr(cli_main, "_build_agent", build)
     assert cli_main.main(["-p", "hi"]) == 0
-    assert "read_skill" in captured["tools"]
-    assert "demo" in captured["extra"]
+    names = [tool.name for tool in captured["tools"]]
+    assert "read_skill" in names
+    assert "demo" in captured["agent"].system_prompt
 
 
 def test_no_skills_flag_disables_discovery(monkeypatch, tmp_path):
@@ -675,18 +636,12 @@ def test_no_skills_flag_disables_discovery(monkeypatch, tmp_path):
     (skill_dir / "SKILL.md").write_text("---\nname: demo\ndescription: d\n---\n")
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
     captured: dict = {}
+    _patch_bootstrap(monkeypatch, fake_stream(), captured)
 
-    def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
-              session_id=None, transform_context=None, max_turns=None,
-              max_cost=None, retries=0, context_files=True, extra_prompt=""):
-        captured["tools"] = [tool.name for tool in (tools or [])]
-        captured["extra"] = extra_prompt
-        return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=fake_stream())
-
-    monkeypatch.setattr(cli_main, "_build_agent", build)
     assert cli_main.main(["-p", "hi", "--no-skills"]) == 0
-    assert "read_skill" not in captured["tools"]
-    assert captured["extra"] == ""
+    names = [tool.name for tool in captured["tools"]]
+    assert "read_skill" not in names
+    assert "## Skills" not in captured["agent"].system_prompt
 
 
 def test_custom_provider_from_config_is_used(monkeypatch, tmp_path):
@@ -709,19 +664,12 @@ def test_custom_provider_from_config_is_used(monkeypatch, tmp_path):
     )
     monkeypatch.setenv("LOCAL_API_KEY", "test-key")
     monkeypatch.setattr(
-        cli_main,
-        "load_user_config",
+        "zenagent.app.runtime.load_user_config",
         lambda *a, **k: UserConfig(default_model="my-model", custom_providers={"local": provider}),
     )
     captured: dict = {}
+    _patch_bootstrap(monkeypatch, fake_stream(), captured)
 
-    def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
-              session_id=None, transform_context=None, max_turns=None,
-              max_cost=None, retries=0, context_files=True, extra_prompt=""):
-        captured["model"] = model
-        return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=fake_stream())
-
-    monkeypatch.setattr(cli_main, "_build_agent", build)
     assert cli_main.main(["-p", "hi"]) == 0
     assert captured["model"].id == "my-model"
     assert captured["model"].provider == "local"
@@ -732,19 +680,12 @@ def test_policy_flags_reach_the_permission_gate(monkeypatch):
 
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
     monkeypatch.setattr(
-        cli_main,
-        "load_user_config",
-        lambda: UserConfig(tool_allow=["read_*"], tool_deny=["bash"]),
+        "zenagent.app.runtime.load_user_config",
+        lambda *a, **k: UserConfig(tool_allow=["read_*"], tool_deny=["bash"]),
     )
     captured: dict = {}
+    _patch_bootstrap(monkeypatch, fake_stream(), captured)
 
-    def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
-              session_id=None, transform_context=None, max_turns=None,
-              max_cost=None, retries=0, context_files=True, extra_prompt=""):
-        captured["gate"] = gate
-        return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=fake_stream())
-
-    monkeypatch.setattr(cli_main, "_build_agent", build)
     assert cli_main.main(["-p", "hi", "--read-only"]) == 0
     gate = captured["gate"]
     assert gate.mode == "plan"
@@ -784,16 +725,11 @@ def _capture_gate_for(monkeypatch, argv):
     from zenagent.config import UserConfig
 
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
-    monkeypatch.setattr(cli_main, "load_user_config", lambda: UserConfig())
+    monkeypatch.setattr(
+        "zenagent.app.runtime.load_user_config", lambda *a, **k: UserConfig()
+    )
     captured: dict = {}
-
-    def build(model, api_key, thinking, gate, stream_fn=None, tools=None,
-              session_id=None, transform_context=None, max_turns=None,
-              max_cost=None, retries=0, context_files=True, extra_prompt=""):
-        captured["gate"] = gate
-        return Agent(model=model, system_prompt="s", api_key=api_key, stream_fn=fake_stream())
-
-    monkeypatch.setattr(cli_main, "_build_agent", build)
+    _patch_bootstrap(monkeypatch, fake_stream(), captured)
     assert cli_main.main(argv) == 0
     return captured["gate"]
 
@@ -824,7 +760,7 @@ def test_unknown_mode_is_rejected(monkeypatch):
 def test_headless_exposes_the_task_tool(monkeypatch, capsys):
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
     captured: dict = {}
-    _patch_agent(monkeypatch, fake_stream("ok"), captured)
+    _patch_bootstrap(monkeypatch, fake_stream("ok"), captured)
     assert cli_main.main(["-p", "hi"]) == 0
     names = [tool.name for tool in captured["tools"]]
     assert "task" in names
@@ -854,7 +790,7 @@ async def test_headless_wires_policy_and_journal(monkeypatch, app_env):
 
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
     captured: dict = {}
-    _patch_agent(monkeypatch, fake_stream("ok"), captured)
+    _patch_bootstrap(monkeypatch, fake_stream("ok"), captured)
 
     code = await cli_main.run_headless(
         "hi",

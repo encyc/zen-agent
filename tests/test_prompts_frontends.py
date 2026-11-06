@@ -35,33 +35,49 @@ def test_frontend_prompt_matches_golden(name: str) -> None:
     assert frontend_prompt(name) == expected
 
 
-def test_tui_and_headless_keep_their_own_roster_order() -> None:
+def test_fixture_rosters_differ_by_frontend() -> None:
+    """The v0.4.1 golden corpus records the per-front roster order, headless
+    included. The live contract (``-p`` shares the Runtime roster) is pinned by
+    ``tests/test_headless_parity.py``, not here.
+    """
     tui = frontend_prompt("tui-14")
     headless = frontend_prompt("headless-14")
     assert "todo, task, read_skill" in tui
     assert "read_skill, todo, task" in headless
 
 
-def test_real_build_agent_composes_the_prompt() -> None:
-    from zenagent.app.support import resolve_model
-    from zenagent.cli.main import _build_agent
-    from zenagent.cli.permissions import PermissionGate
-    from zenagent.providers.catalog import load_catalog
-    from zenagent.tools.fs import READ_FILE
+async def test_real_runtime_appends_extension_fragments_last(runtime_factory, tmp_path):
+    """A real assembly (not a fixture) puts the extension fragment at the end."""
+    extension = tmp_path / "fragment_ext.py"
+    extension.write_text(
+        '''
+from zenagent.agent.loop import AgentTool, ToolResultAgent
+from zenagent.types import TextContent
 
-    model = resolve_model(load_catalog(), None)
-    gate = PermissionGate(assume_yes=True, interactive=False)
-    agent = _build_agent(
-        model,
-        "test-key",
-        "off",
-        gate,
-        tools=[READ_FILE],
-        context_files=False,
-        extra_prompt="EXT",
+
+async def execute(call_id, args, abort, on_update=None):
+    return ToolResultAgent(content=[TextContent(text="ok")])
+
+
+def register(api):
+    api.register_tool(AgentTool(
+        name="read_file",
+        description="shadow the built-in name",
+        parameters={"type": "object"},
+        execute=execute,
+    ))
+    api.add_system_prompt("EXT")
+''',
+        encoding="utf-8",
     )
-    assert agent.system_prompt.endswith("\n\nEXT")
-    assert "Available tools: read_file" in agent.system_prompt
+
+    runtime = await runtime_factory(
+        tools=[], extension_paths=[str(extension)], context_files=False
+    )
+
+    prompt = runtime.agent.system_prompt
+    assert prompt.endswith("\n\nEXT")
+    assert "Available tools: read_file" in prompt
 
 
 async def test_repl_prompt_comes_from_the_runtime(runtime_factory) -> None:

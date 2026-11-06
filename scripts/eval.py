@@ -49,8 +49,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
 from zenagent.agent import Agent
+from zenagent.app.support import api_key_for, resolve_model, session_id_for
 from zenagent.attachments import read_image_argument
-from zenagent.cli.main import _api_key_for, resolve_model, session_id_for
 from zenagent.cli.permissions import PermissionGate
 from zenagent.config import ContextGuard, apply_user_config, load_user_config
 from zenagent.context_files import (
@@ -482,7 +482,7 @@ async def run_cases(args) -> int:
     except KeyError as exc:
         print(f"unknown model: {exc}", file=sys.stderr)
         return 2
-    api_key = _api_key_for(catalog, model)
+    api_key = api_key_for(catalog, model)
     if not api_key:
         print(f"missing API key for {model.id}", file=sys.stderr)
         return 2

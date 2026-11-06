@@ -22,61 +22,22 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from zenagent import __version__, project
-from zenagent.agent import Agent
-from zenagent.agent.artifacts import build_artifact_sink
-from zenagent.agent.memory_store import MemoryStore, format_memory_index
-from zenagent.agent.registry import ToolRegistry
-from zenagent.agent.session import (
-    Session,
-    latest_session,
-    list_sessions,
-    unique_session_path,
-)
-from zenagent.agent.subagents import SubagentLimits
+from zenagent import __version__
+from zenagent.agent.session import list_sessions
 from zenagent.app.compact import maybe_auto_compact
-from zenagent.app.journal import attach_journal, journal_for, load_backup_policy
-from zenagent.app.modes import MODES, mode_prompt_note, resolve_mode
-from zenagent.app.permissions import PermissionGate, build_permission_gate
+from zenagent.app.modes import MODES, resolve_mode
+from zenagent.app.permissions import PermissionBroker, build_permission_gate
+from zenagent.app.runtime import Runtime, RuntimeOptions
 from zenagent.app.safety import GuardPolicy
-from zenagent.app.support import api_key_for as _api_key_for
-from zenagent.app.support import (
-    resolve_model,
-    resolve_task_model,
-    session_id_for,
-)
+from zenagent.app.support import resolve_model
 from zenagent.attachments import read_image_argument
 from zenagent.cli.doctor import run_doctor
 from zenagent.cli.exportcmd import run_export
 from zenagent.cli.usagecmd import run_usage
-from zenagent.config import ContextGuard, apply_user_config, load_user_config
-from zenagent.context_files import (
-    discover_context_files,
-    load_context_files,
-)
+from zenagent.config import load_user_config
 from zenagent.events import AgentEvent
-from zenagent.extensions import load_extensions
 from zenagent.i18n import LANGUAGE_CHOICES
-from zenagent.mcp.config import load_mcp_config
-from zenagent.mcp.manager import McpManager
-from zenagent.prompts import PromptContext, compose_system, render
-from zenagent.prompts.registry import read_block
-from zenagent.providers.catalog import Model, load_catalog
 from zenagent.providers.registry import StreamFn
-from zenagent.skills import (
-    build_skill_tool,
-    default_skill_roots,
-    discover_skills,
-    skills_prompt_index,
-)
-from zenagent.telemetry import MetricsRecorder, append_metrics
-from zenagent.tools import ALL_TOOLS
-from zenagent.tools.jobs import close_job_manager
-from zenagent.tools.lsp import build_lsp_tool, shutdown_clients
-from zenagent.tools.memory import build_memory_tool, build_memory_write_tool
-from zenagent.tools.task import build_task_tool
-from zenagent.tools.todo import build_todo_tool
-from zenagent.trace import TraceRecorder
 from zenagent.types import AssistantMessage, ImageContent, Message
 
 __all__ = ["build_parser", "main", "resolve_model", "run_headless"]
@@ -84,52 +45,11 @@ __all__ = ["build_parser", "main", "resolve_model", "run_headless"]
 THINKING_CHOICES = ("off", "low", "medium", "high", "max")
 
 
-def _build_agent(
-    model: Model,
-    api_key: str,
-    thinking: str | None,
-    gate: PermissionGate,
-    stream_fn: StreamFn | None = None,
-    tools: list | None = None,
-    session_id: str | None = None,
-    transform_context=None,
-    max_turns: int | None = None,
-    max_cost: float | None = None,
-    retries: int = 0,
-    context_files: bool = True,
-    extra_prompt: str = "",
-) -> Agent:
-    """Construct the run's Agent (a seam for tests to inject a fake stream)."""
-    tool_list = list(ALL_TOOLS if tools is None else tools)
-    context_text = (
-        load_context_files(discover_context_files(Path.cwd()))
-        if context_files
-        else ""
-    )
-    prompt_context = PromptContext(
-        cwd=Path.cwd(),
-        tool_names=tuple(tool.name for tool in tool_list),
-        context_text=context_text,
-        extension_fragments=(extra_prompt,) if extra_prompt else (),
-        include_context=context_files,
-        include_skills=False,
-        include_mode=False,
-    )
-    prompt = compose_system(prompt_context).text
-    return Agent(
-        model=model,
-        system_prompt=prompt,
-        tools=tool_list,
-        api_key=api_key,
-        thinking=thinking,
-        session_id=session_id_for(model, session_id),
-        stream_fn=stream_fn,
-        before_tool_call=gate.before_tool_call,
-        transform_context=transform_context,
-        max_turns=max_turns,
-        max_cost=max_cost,
-        retries=retries,
-    )
+#: The assembly seam: headless delegates to ``Runtime.bootstrap`` — the same
+#: catalog → policy → gate → tools → session wiring the TUI, REPL and RPC use —
+#: instead of re-wiring them here. Tests wrap this alias to inject a fake
+#: stream and capture the built runtime.
+_bootstrap = Runtime.bootstrap
 
 
 @dataclass
@@ -247,228 +167,73 @@ async def run_headless(
     read_only: bool = False,
     mode: str | None = None,
 ) -> int:
-    """Run one prompt to completion; returns the process exit code."""
-    user_config = load_user_config()
-    config_warnings: list[str] = []
-    catalog = apply_user_config(load_catalog(), user_config, config_warnings)
-    for warning in config_warnings:
-        print(f"zenagent: {warning}", file=sys.stderr)
+    """Run one prompt to completion; returns the process exit code.
+
+    Assembly is delegated to :meth:`Runtime.bootstrap`, so the one-shot run
+    shares the Runtime's policy, tool registry, memory, subagents and session
+    wiring (and its catalog/model resolution, which raises ``KeyError`` for an
+    unknown model and ``RuntimeError`` for a missing key). This wrapper keeps
+    only the headless output contract: image loading, streaming/JSON printing,
+    post-run auto-compaction, stderr diagnostics and the exit code.
+    """
+    # A typo'd image path fails before assembly: bootstrapping first would
+    # leave an empty session file behind, which shows up in --list-sessions.
+    for image_path in images or []:
+        if not Path(image_path).is_file():
+            print(
+                f"zenagent: cannot read image {image_path}: no such file",
+                file=sys.stderr,
+            )
+            return 1
+
+    options = RuntimeOptions(
+        model_id=model_id,
+        thinking=thinking,
+        resume=resume,
+        mcp=mcp,
+        mcp_file=Path(mcp_file) if mcp_file else None,
+        mcp_servers=mcp_servers,
+        skills=skills,
+        # Nothing in a one-shot run expands prompt templates (they are a
+        # slash-command surface), so discovery is skipped like before.
+        templates=False,
+        extension_paths=list(extension_paths or []),
+        context_files=context_files,
+        read_only=read_only,
+        allow_dangerous=allow_dangerous,
+        allow_outside=list(allow_outside or []),
+        allow_destructive=allow_destructive,
+        allow_protected=allow_protected,
+        mode=mode,
+        retries=retries,
+        max_turns=max_turns,
+        max_cost=max_cost,
+        trace=trace,
+        metrics=Path(metrics) if metrics else None,
+        auto_compact=auto_compact,
+        tools=tools,
+    )
     try:
-        model = resolve_model(catalog, model_id or user_config.default_model)
+        runtime = await _bootstrap(
+            options, stream_fn=stream_fn, assume_yes=assume_yes, allow_missing_key=False
+        )
     except KeyError as exc:
         print(f"zenagent: unknown model: {exc}", file=sys.stderr)
         return 1
-    api_key = _api_key_for(catalog, model)
-    if not api_key:
-        provider = catalog.get(model.provider)
-        env_name = provider.api_key_env if provider else "the provider's API key"
-        print(f"zenagent: missing API key for {model.id} (set {env_name})", file=sys.stderr)
+    except (RuntimeError, LookupError) as exc:
+        print(f"zenagent: {exc}", file=sys.stderr)
         return 1
+    for warning in runtime.warnings:
+        print(f"zenagent: {warning}", file=sys.stderr)
 
-    image_blocks = _read_images(model, images)
+    agent = runtime.agent
+    image_blocks = _read_images(agent.model, images)
     if image_blocks is None:
+        await runtime.close()
         return 1
-
-    if thinking is None:
-        thinking = "high" if model.reasoning else "off"
-    resolved_mode = resolve_mode(
-        explicit=mode, assume_yes=assume_yes, read_only=read_only
-    )
-    policy = GuardPolicy.from_config(
-        user_config,
-        cwd=Path.cwd(),
-        allow_outside=allow_outside or [],
-        allow_destructive=allow_destructive,
-        allow_protected=allow_protected,
-    )
-    gate = build_permission_gate(
-        assume_yes=assume_yes,
-        interactive=False,
-        allow_dangerous=allow_dangerous,
-        allow=user_config.tool_allow,
-        deny=user_config.tool_deny,
-        mode=resolved_mode,
-        policy=policy,
-    )
-    tool_list = list(ALL_TOOLS if tools is None else tools)
-    mcp_manager: McpManager | None = None
-    if mcp and tools is None:
-        configs = load_mcp_config(Path(mcp_file) if mcp_file else None)
-        if mcp_servers:
-            configs = {
-                name: config for name, config in configs.items() if name in mcp_servers
-            }
-        if configs:
-            mcp_manager = McpManager(configs)
-            for warning in await mcp_manager.start():
-                print(f"zenagent: mcp {warning}", file=sys.stderr)
-            tool_list = [*tool_list, *mcp_manager.tool_defs()]
-
-    skills_index = ""
-    if skills and tools is None:
-        discovered, skill_warnings = discover_skills(default_skill_roots(Path.cwd()))
-        for warning in skill_warnings:
-            print(f"zenagent: skills {warning}", file=sys.stderr)
-        if discovered:
-            tool_list = [*tool_list, build_skill_tool(discovered)]
-            skills_index = skills_prompt_index(discovered)
-
-    extension_prompt = ""
-    loaded_extensions = None
-    extension_files = [*user_config.extensions, *(extension_paths or [])]
-    if extension_files:
-        loaded_extensions = load_extensions(extension_files)
-        for warning in loaded_extensions.warnings:
-            print(f"zenagent: extension {warning}", file=sys.stderr)
-        if loaded_extensions.tools:
-            tool_list = [*tool_list, *loaded_extensions.tools]
-        extension_prompt = loaded_extensions.prompt_text
-
-    # Project memory, wired exactly like Runtime._recompose: the store is the
-    # project root (an empty library is not an error), the index feeds the
-    # "## Project memory" block. Custom tools skip it, as in the Runtime.
-    memory_store = MemoryStore(project.find_project_root(Path.cwd()))
-    memory_index = format_memory_index(memory_store) if tools is None else ""
-    memory_block = (
-        render(read_block("memory_index"), {"entries": memory_index})
-        if memory_index.strip()
-        else ""
-    )
-
-    extra_prompt = "\n\n".join(
-        part
-        for part in (
-            skills_index,
-            memory_block,
-            extension_prompt,
-            mode_prompt_note(resolved_mode),
-        )
-        if part
-    )
-    # Open the session before the agent is built: the todo tool is per-session
-    # state bound to a sidecar next to the JSONL, and oversized tool results
-    # spill next to the same session.
-    if resume is not None:
-        path = latest_session() if resume == "latest" else Path(resume)
-        if path is not None and path.is_file():
-            session = Session(path)
-        else:
-            print(f"zenagent: no session to resume ({resume})", file=sys.stderr)
-            session = Session(unique_session_path())
-    else:
-        session = Session(unique_session_path())
-    if tools is None:
-        from zenagent.app.rewind import RewindState, build_checkpoint_tools
-        from zenagent.tools.github import build_github_tool
-
-        github_tool = build_github_tool()
-        if github_tool is not None:
-            tool_list.append(github_tool)
-        rewind_state = RewindState()
-        agent_holder: dict = {}
-
-        tool_list.append(build_lsp_tool())
-        tool_list.extend(
-            build_checkpoint_tools(lambda: agent_holder.get("agent"), rewind_state)
-        )
-        # Same position as Runtime._recompose: after checkpoint/rewind, github
-        # and lsp, before todo/task.
-        tool_list.append(build_memory_tool(memory_store))
-        tool_list.append(build_memory_write_tool(memory_store))
-        tool_registry = ToolRegistry()
-        tool_list.append(build_todo_tool(session.path))
-        tool_list.append(
-            build_task_tool(
-                model=model,
-                base_tools=list(ALL_TOOLS),
-                api_key=api_key,
-                stream_fn=stream_fn,
-                thinking=thinking,
-                live_tools=tool_registry.active,
-                mode=resolved_mode,
-                resolve_model=lambda raw: resolve_task_model(catalog, raw),
-                artifact_sink=build_artifact_sink(session.path),
-                max_cost=(
-                    user_config.task_max_cost
-                    if user_config.task_max_cost is not None
-                    else max_cost
-                ),
-                max_turns=user_config.task_max_turns,
-                timeout_s=user_config.task_timeout_s,
-                limits=SubagentLimits.from_user_config(user_config),
-                session_path=session.path,
-            )
-        )
-        # ``hidden``/``default_inactive`` are assembly policy, not kernel flags:
-        # a headless run must not hand the model a tool the other fronts hide.
-        # Registration order is preserved, so the prompt roster stays stable.
-        tool_registry.reconcile(tool_list)
-        tool_list = tool_registry.active()
-
-    guard = ContextGuard(model.context_window)
-
-    async def transform_context(messages):
-        projected = rewind_state.transform(messages) if tools is None else messages
-        return await guard.transform(projected)
-
-    agent = _build_agent(
-        model,
-        api_key,
-        thinking,
-        gate,
-        stream_fn=stream_fn,
-        tools=tool_list,
-        transform_context=transform_context,
-        max_turns=max_turns,
-        max_cost=max_cost,
-        retries=retries,
-        context_files=context_files,
-        extra_prompt=extra_prompt,
-    )
-    if tools is None:
-        agent_holder["agent"] = agent
-    # Wire the spill sink after the build seam so tests that replace
-    # ``_build_agent`` keep working; the loop reads it when a run starts.
-    agent.artifact_sink = build_artifact_sink(session.path)
-    journal = journal_for(session.path, load_backup_policy(user_config))
-    if journal is not None:
-        attach_journal(agent, journal)
-
-    if resume is not None:
-        loaded = session.load()
-        if loaded:
-            agent.replace_messages(loaded)
-        for warning in session.warnings:
-            print(f"zenagent: {warning}", file=sys.stderr)
-
-    def persist(event: AgentEvent) -> None:
-        if event.type == "agent_end" and event.new_messages:
-            for message in event.new_messages:
-                session.append(message)
 
     # --json must not stream plain text; collect it into a buffer instead.
     printer = _PlainOutput(out=io.StringIO() if json_output else None)
-    if loaded_extensions is not None:
-        for event_type, callbacks in loaded_extensions.hooks.items():
-            def hook(event: AgentEvent, _type=event_type, _callbacks=callbacks) -> None:
-                if event.type != _type:
-                    return
-                for callback in _callbacks:
-                    try:
-                        callback(event)
-                    except Exception as exc:  # noqa: BLE001 - a hook must not kill the run
-                        print(f"zenagent: extension hook failed: {exc}", file=sys.stderr)
-
-            agent.subscribe(hook)
-
-    metrics_recorder = MetricsRecorder(model.id) if metrics else None
-    if metrics_recorder is not None:
-        agent.subscribe(metrics_recorder)
-    tracer = TraceRecorder(trace) if trace else None
-    if tracer is not None:
-        agent.subscribe(tracer)
-    agent.subscribe(guard.on_event)
-    agent.subscribe(persist)
     agent.subscribe(printer)
     try:
         await agent.prompt(prompt, images=image_blocks or None)
@@ -477,17 +242,11 @@ async def run_headless(
                 agent, print_fn=lambda message: print(message, file=sys.stderr)
             )
     finally:
-        if mcp_manager is not None:
-            await mcp_manager.close()
-        # Process-scoped resources outlive the agent: release the cached LSP
-        # clients and kill this run's background bash jobs, as Runtime.close
-        # does. Teardown must never turn a finished run into a failure.
+        # Runtime.close releases MCP, the cached LSP clients and this run's
+        # background bash jobs, closes the tracer and flushes metrics. Teardown
+        # must never turn a finished run into a failure.
         with contextlib.suppress(Exception):
-            await shutdown_clients()
-        with contextlib.suppress(Exception):
-            await close_job_manager()
-        if metrics_recorder is not None:
-            append_metrics(metrics, metrics_recorder.build(agent.termination))
+            await runtime.close()
 
     ok = agent.error_message is None and agent.termination in ("stop", "tool_terminate")
     if json_output:
@@ -512,8 +271,6 @@ async def run_headless(
             f"zenagent: run stopped early ({agent.termination})",
             file=sys.stderr,
         )
-    if tracer is not None:
-        tracer.close()
     return 0 if ok else 1
 
 
@@ -841,9 +598,6 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 1
         if sys.stdout.isatty() and not args.no_tui:
-            from zenagent.app.permissions import PermissionBroker
-            from zenagent.app.runtime import Runtime, RuntimeOptions
-
             missing = _missing_extra("textual", "rich")
             if missing:
                 return _missing_extras("TUI", missing)

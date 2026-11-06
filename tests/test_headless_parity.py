@@ -1,11 +1,14 @@
 """Frontend parity: the headless one-shot run must match the Runtime fronts.
 
-``zen -p`` assembles its own agent in ``zenagent/cli/main.py`` instead of going
-through :class:`zenagent.app.runtime.Runtime`. Three behaviours used to drift
-and are pinned here:
+``zen -p`` is assembled by :class:`zenagent.app.runtime.Runtime` like every
+other frontend; what is headless-specific is the option set it hands bootstrap
+and the output contract around it. Four behaviours used to drift and are pinned
+here:
 
 * project memory -- the ``memory``/``memory_write`` tools and the
   ``## Project memory`` prompt block;
+* prompt composition -- the skills -> memory -> extension order and the
+  byte-equality with a plain Runtime bootstrap on the same discovery results;
 * tool policy -- ``ToolRegistry``'s ``hidden``/``default_inactive`` filtering;
 * lifecycle -- the run's ``finally`` releases cached LSP clients and kills
   background bash jobs, the way ``Runtime.close()`` does.
@@ -34,7 +37,9 @@ ROSTER_PLACEHOLDER = "Available tools: <roster>"
 @pytest.fixture(autouse=True)
 def isolate_user_config(monkeypatch):
     """Tests must not read the developer's real ~/.zenagent/config.toml."""
-    monkeypatch.setattr(cli_main, "load_user_config", lambda: UserConfig())
+    monkeypatch.setattr(
+        "zenagent.app.runtime.load_user_config", lambda *a, **k: UserConfig()
+    )
 
 
 @pytest.fixture
@@ -69,19 +74,19 @@ def fake_stream(text: str = "ok"):
     return stream
 
 
-def _record_real_agent(monkeypatch, captured: dict) -> None:
-    """Wrap the real ``_build_agent`` seam and keep the Agent it returned."""
+def _record_real_runtime(monkeypatch, captured: dict) -> None:
+    """Wrap the real assembly seam and keep the Runtime the run built."""
 
-    real_build = cli_main._build_agent
+    real_bootstrap = cli_main._bootstrap
 
-    def build(*args, **kwargs):
-        agent = real_build(*args, **kwargs)
-        captured["agent"] = agent
-        captured["tools"] = [tool.name for tool in agent.tools]
-        captured["extra_prompt"] = kwargs.get("extra_prompt", "")
-        return agent
+    async def bootstrap(options, **kwargs):
+        runtime = await real_bootstrap(options, **kwargs)
+        captured["runtime"] = runtime
+        captured["agent"] = runtime.agent
+        captured["tools"] = [tool.name for tool in runtime.agent.tools]
+        return runtime
 
-    monkeypatch.setattr(cli_main, "_build_agent", build)
+    monkeypatch.setattr(cli_main, "_bootstrap", bootstrap)
 
 
 async def _run_headless(**overrides):
@@ -110,7 +115,7 @@ async def test_default_assembly_matches_the_runtime_prompt(
     )
 
     captured: dict = {}
-    _record_real_agent(monkeypatch, captured)
+    _record_real_runtime(monkeypatch, captured)
     assert await _run_headless() == 0
     agent = captured["agent"]
 
@@ -167,7 +172,7 @@ def register(api):
     )
 
     captured: dict = {}
-    _record_real_agent(monkeypatch, captured)
+    _record_real_runtime(monkeypatch, captured)
     assert (
         await _run_headless(skills=True, extension_paths=[str(extension)]) == 0
     )
@@ -194,7 +199,7 @@ async def test_empty_memory_library_adds_no_block(
     """The memory wiring mirrors Runtime: no hits means no prompt noise."""
     monkeypatch.chdir(tmp_path)
     captured: dict = {}
-    _record_real_agent(monkeypatch, captured)
+    _record_real_runtime(monkeypatch, captured)
     assert await _run_headless() == 0
     assert "memory" in captured["tools"]
     assert "## Project memory" not in captured["agent"].system_prompt
@@ -211,7 +216,7 @@ async def test_custom_tools_skip_memory_like_the_runtime(
     store = MemoryStore(project.find_project_root(Path.cwd()))
     store.write_entry(title="Note", body="body", source="test")
     captured: dict = {}
-    _record_real_agent(monkeypatch, captured)
+    _record_real_runtime(monkeypatch, captured)
     assert await _run_headless(tools=[READ_FILE]) == 0
     assert captured["tools"] == ["read_file"]
     assert "## Project memory" not in captured["agent"].system_prompt
@@ -222,18 +227,26 @@ async def test_teardown_releases_lsp_clients_and_background_jobs(
 ):
     """Both process-scoped resources are closed once, after the run."""
     monkeypatch.chdir(tmp_path)
+    from zenagent.tools import jobs as jobs_module
+
     calls: list[str] = []
+    real_release_job_manager = jobs_module.release_job_manager
 
     async def fake_shutdown_clients() -> None:
         calls.append("lsp")
 
-    async def fake_close_job_manager() -> None:
+    async def fake_release_job_manager() -> None:
         calls.append("jobs")
+        # Call through: the refcount is process-wide, and a stubbed release
+        # would leave the manager acquired for every later test.
+        await real_release_job_manager()
 
-    monkeypatch.setattr(cli_main, "shutdown_clients", fake_shutdown_clients)
-    monkeypatch.setattr(cli_main, "close_job_manager", fake_close_job_manager)
+    monkeypatch.setattr("zenagent.app.runtime.shutdown_clients", fake_shutdown_clients)
+    monkeypatch.setattr(
+        "zenagent.tools.jobs.release_job_manager", fake_release_job_manager
+    )
     captured: dict = {}
-    _record_real_agent(monkeypatch, captured)
+    _record_real_runtime(monkeypatch, captured)
 
     assert await _run_headless() == 0
     # Same order as Runtime.close: LSP first, then the job manager.
@@ -249,13 +262,23 @@ async def test_teardown_failure_does_not_fail_the_run(
     async def broken_shutdown_clients() -> None:
         raise RuntimeError("lsp teardown exploded")
 
-    async def broken_close_job_manager() -> None:
+    async def broken_release_job_manager() -> None:
         raise RuntimeError("job teardown exploded")
 
-    monkeypatch.setattr(cli_main, "shutdown_clients", broken_shutdown_clients)
-    monkeypatch.setattr(cli_main, "close_job_manager", broken_close_job_manager)
+    def no_acquire():
+        # A teardown that never completes would otherwise leak the process-wide
+        # job-manager refcount into the next test.
+        return None
+
+    monkeypatch.setattr("zenagent.tools.jobs.acquire_job_manager", no_acquire)
+    monkeypatch.setattr(
+        "zenagent.app.runtime.shutdown_clients", broken_shutdown_clients
+    )
+    monkeypatch.setattr(
+        "zenagent.tools.jobs.release_job_manager", broken_release_job_manager
+    )
     captured: dict = {}
-    _record_real_agent(monkeypatch, captured)
+    _record_real_runtime(monkeypatch, captured)
 
     assert await _run_headless() == 0
     assert captured["agent"].termination == "stop"
@@ -304,7 +327,7 @@ async def test_hidden_and_inactive_extension_tools_are_filtered(
     extension.write_text(EXTENSION, encoding="utf-8")
 
     captured: dict = {}
-    _record_real_agent(monkeypatch, captured)
+    _record_real_runtime(monkeypatch, captured)
     assert await _run_headless(extension_paths=[str(extension)]) == 0
 
     tools = captured["tools"]

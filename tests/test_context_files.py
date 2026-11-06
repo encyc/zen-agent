@@ -78,21 +78,14 @@ def test_system_prompt_appends_context_only_when_present():
     assert merged == "base\n\n## Project instructions\nrules"
 
 
-def test_build_agent_injects_agents_md(tmp_path, monkeypatch):
-    import zenagent.cli.main as cli_main
-    from zenagent.cli.permissions import PermissionGate
-    from zenagent.providers.catalog import find_model, load_catalog
-
+async def test_runtime_injects_agents_md(tmp_path, monkeypatch, runtime_factory):
+    """Context files are assembled by the shared Runtime, like every front."""
     make_repo(tmp_path)
     monkeypatch.chdir(tmp_path / "pkg")
-    model = find_model(load_catalog(), "deepseek-flash")
-    gate = PermissionGate(assume_yes=True)
 
-    with_context = cli_main._build_agent(model, api_key="k", thinking=None, gate=gate)
-    assert "root rules" in with_context.system_prompt
-    assert "pkg rules" in with_context.system_prompt
+    runtime = await runtime_factory()
+    assert "root rules" in runtime.agent.system_prompt
+    assert "pkg rules" in runtime.agent.system_prompt
 
-    without = cli_main._build_agent(
-        model, api_key="k", thinking=None, gate=gate, context_files=False
-    )
-    assert "root rules" not in without.system_prompt
+    without = await runtime_factory(context_files=False)
+    assert "root rules" not in without.agent.system_prompt

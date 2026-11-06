@@ -2,6 +2,7 @@
 
 import os
 import stat
+import sys
 
 import pytest
 
@@ -36,7 +37,11 @@ def fake_gh(tmp_path, monkeypatch):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     script = bin_dir / "gh"
-    script.write_text(FAKE_GH)
+    # ``env python`` is not portable (PEP 394): a venv or macOS shell may only
+    # have python3, so pin the shebang to the interpreter running the tests.
+    script.write_text(
+        FAKE_GH.replace("#!/usr/bin/env python", f"#!{sys.executable}", 1)
+    )
     script.chmod(script.stat().st_mode | stat.S_IEXEC)
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
     return bin_dir

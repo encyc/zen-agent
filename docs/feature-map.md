@@ -100,11 +100,11 @@ REPL 的 screen 类命令（picker/浮层）由 `render_command_result` 渲染�
 
 ## 6.5 前端能力对照
 
-TUI / REPL / RPC 三个入口共享 `Runtime`/`ChatController`/`CommandRegistry`/`ModelManager`/
-`SessionManager`（`zenagent/app`），差异只在“怎么呈现”。headless `-p` 是例外：它不走 app 层，
-而是在 `cli/main.py::run_headless` 里用 `_build_agent` 自己装配 `Agent` + `Session`，能力与
-前三者对齐（同一批工具、同一份 prompt 块、同一套 `ToolRegistry` 过滤与进程级收尾），但没有
-`ChatController`，所以审批往返、ask、steering、排队、斜杠命令按设计缺席。
+四个入口都由 `Runtime.bootstrap` 装配，共享 `Runtime`/`CommandRegistry`/`ModelManager`/
+`SessionManager`（`zenagent/app`），差异只在“怎么呈现”。headless `-p` 也走 `Runtime` 与
+`RuntimeOptions`，只保留自己的输出契约（`-p` 文本 / `--json` / 自动压缩 / 退出码）；它没有
+`ChatController` 与 UI，所以审批往返、ask、steering、排队、斜杠命令按设计缺席。TUI / REPL /
+RPC 在前三者之上再共享 `ChatController`。
 
 | 能力 | TUI | REPL | headless `-p` | RPC |
 |---|---|---|---|---|
