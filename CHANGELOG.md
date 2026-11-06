@@ -12,6 +12,20 @@ the layering and the documentation honest.**
 
 ### Fixed
 
+- **A killed command no longer reads as a clean run.** `bash` keeps `is_error`
+  false for a non-zero exit, a timeout and an abort — that is the model's
+  contract (command failure is information) — but the tool card settled as
+  `ok` for all of them, so `exit code: -9 … [timed out after 120s; process
+  group killed]` drew the same green dot as a clean run and the detail only
+  showed up when expanded. `views.settle_tool_status()` now derives the
+  *presentation* status from the result details: `timed_out` when the deadline
+  fired, `interrupted` when the call was stopped mid-flight (an abort, or a
+  signal from outside — both leave a negative exit code), `error` for a real
+  tool error, `ok` otherwise, so `grep` exiting 1 still reads as an ordinary
+  result. The live builder and history replay (via the stored `tool_end`
+  record) share it, and both frontends render it: the TUI card labels and tints
+  a timed-out command as failed, and the desktop row says "Timed out" instead
+  of showing the check mark.
 - **An unused launch leaves no session file behind.** Bootstrap writes the
   session header and the starting `mode` record eagerly, so every `zen` launch
   put an `(empty)` row in the listings even when nothing was said. `Runtime`

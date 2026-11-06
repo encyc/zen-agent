@@ -221,8 +221,9 @@ export interface ToolCallView {
   args_preview: string
   args: Record<string, unknown>
   details: Record<string, unknown>
-  /** `interrupted`: the call has no result because the session was reloaded. */
-  status: 'running' | 'ok' | 'error' | 'interrupted'
+  /** `interrupted`: stopped mid-flight or missing a result (reloaded session);
+   * `timed_out`: the tool's deadline killed it. Both keep `is_error` false. */
+  status: 'running' | 'ok' | 'error' | 'interrupted' | 'timed_out'
   progress: string
   result_text: string
   is_error: boolean

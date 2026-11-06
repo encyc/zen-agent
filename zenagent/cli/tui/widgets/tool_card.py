@@ -35,17 +35,25 @@ _STATUS_KEYS = {
     "ok": "tui.tool.status_ok",
     "error": "tui.tool.status_error",
     "interrupted": "tui.tool.status_interrupted",
+    "timed_out": "tui.tool.status_timed_out",
 }
+
+#: Statuses that borrow another card tint: a timed-out command is a failure
+#: even though the model-facing result stays an ordinary one.
+_TINT_STATUS = {"timed_out": "error"}
 
 
 def _status_label(status: str) -> str:
     key = _STATUS_KEYS.get(status)
     return t(key) if key else status
+
+
 _STATUS_DOT = {
     "running": ("◐", palette.ACCENT),
     "ok": ("●", palette.MUTED),
     "error": ("●", palette.ERROR),
     "interrupted": ("●", palette.MUTED),
+    "timed_out": ("●", palette.ERROR),
 }
 
 
@@ -121,7 +129,7 @@ class ToolCard(Static):
     # -- state --------------------------------------------------------------
 
     def _tint_class(self) -> str:
-        return f"tool-card -{self.view.status}"
+        return f"tool-card -{_TINT_STATUS.get(self.view.status, self.view.status)}"
 
     def set_collapsed(self, collapsed: bool) -> None:
         self.collapsed = collapsed
@@ -208,7 +216,14 @@ class ToolCard(Static):
 
         if name == "edit_file":
             added, removed = _diff_stats(str(details.get("diff") or ""))
-            parts = [value for value in (path, f"⟨+{added}/-{removed}⟩" if details.get("diff") else "") if value]
+            parts = [
+                value
+                for value in (
+                    path,
+                    f"⟨+{added}/-{removed}⟩" if details.get("diff") else "",
+                )
+                if value
+            ]
             return "  ·  ".join(parts)
 
         if name == "write_file":
@@ -257,9 +272,7 @@ class ToolCard(Static):
             phases = details.get("phases") or {}
             total = sum(
                 len(phase.get("tasks") or [])
-                for phase in (
-                    phases.values() if isinstance(phases, dict) else phases
-                )
+                for phase in (phases.values() if isinstance(phases, dict) else phases)
                 if isinstance(phase, dict)
             )
             parts = [str(op or "")]

@@ -265,6 +265,7 @@ CATALOG: dict[str, str] = {
     "tui.tool.status_ok": "ok",
     "tui.tool.status_error": "failed",
     "tui.tool.status_interrupted": "interrupted",
+    "tui.tool.status_timed_out": "timed out",
     "tui.tool.exit": "exit {code}",
     "tui.tool.truncated": "truncated",
     "tui.tool.lines": "{n} lines",

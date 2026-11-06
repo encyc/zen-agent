@@ -42,6 +42,7 @@ __all__ = [
     "job_views",
     "last_request_usage",
     "messages_to_views",
+    "settle_tool_status",
     "sort_jobs",
     "usage_total",
     "user_view",
@@ -80,9 +81,7 @@ class MessageView:
     duration_ms: int | None = None
 
 
-def user_view(
-    text: str, *, timestamp: int = 0, steering: bool = False
-) -> MessageView:
+def user_view(text: str, *, timestamp: int = 0, steering: bool = False) -> MessageView:
     """A user turn, or the compact view of an injected ``/skill:`` message."""
     display = parse_skill_display(text)
     if display is not None:
@@ -110,7 +109,7 @@ class ToolCallView:
     #: Structured tool-result data for UI rendering only (never persisted or sent
     #: to the model); empty on history replay, which keeps cards generic.
     details: dict = field(default_factory=dict)
-    status: Literal["running", "ok", "error", "interrupted"] = "running"
+    status: Literal["running", "ok", "error", "interrupted", "timed_out"] = "running"
     #: Last non-empty streamed output line while the tool is running
     #: (``tool_execution_update``); empty when the tool emits no progress.
     progress: str = ""
@@ -285,13 +284,34 @@ def _text_of(content) -> str:
     return "\n".join(part for part in parts if part)
 
 
+def settle_tool_status(is_error: bool, details: dict | None) -> str:
+    """The status a finished call shows, from its result.
+
+    ``is_error`` stays False for a command that exits non-zero or gets killed
+    (``bash.py``'s contract: command failure is information, not an agent
+    error), so the *card* would claim ``ok`` for a command that timed out or was
+    stopped mid-flight. A killed process is reported as ``timed_out`` when the
+    deadline did it and ``interrupted`` when it was stopped otherwise (an abort,
+    or a signal from outside — both leave a negative exit code).
+    """
+    if is_error:
+        return "error"
+    details = details or {}
+    exit_code = details.get("exit_code")
+    if details.get("timed_out"):
+        return "timed_out"
+    if details.get("aborted"):
+        return "interrupted"
+    if isinstance(exit_code, int) and exit_code < 0:
+        return "interrupted"
+    return "ok"
+
+
 def _apply_tool_records(
     views: list[MessageView | ToolCallView], records: list[dict] | None
 ) -> None:
     """Hydrate cards from ``tool_end`` records; unknown calls are ignored."""
-    cards = {
-        view.call_id: view for view in views if isinstance(view, ToolCallView)
-    }
+    cards = {view.call_id: view for view in views if isinstance(view, ToolCallView)}
     for record in records or ():
         if not is_tool_end(record):
             continue
@@ -306,6 +326,7 @@ def _apply_tool_records(
             card.details = dict(details)
             diff = details.get("diff")
             card.diff = diff if isinstance(diff, str) and diff else None
+            card.status = settle_tool_status(card.is_error, card.details)
 
 
 def messages_to_views(
@@ -326,9 +347,7 @@ def messages_to_views(
             if text.startswith(LOOP_GUARD_PREFIX):
                 continue  # synthetic model-only corrective, not a user turn
             views.append(
-                user_view(
-                    text, timestamp=message.timestamp, steering=message.steering
-                )
+                user_view(text, timestamp=message.timestamp, steering=message.steering)
             )
         elif isinstance(message, AssistantMessage):
             text = _text_of(message.content)
@@ -368,7 +387,7 @@ def messages_to_views(
             paired.add(message.tool_call_id)
             card.result_text = _text_of(message.content)
             card.is_error = message.is_error
-            card.status = "error" if message.is_error else "ok"
+            card.status = settle_tool_status(message.is_error, card.details)
 
     for call_id, card in cards.items():
         if call_id not in paired and card.status == "running":
@@ -456,9 +475,7 @@ class TranscriptBuilder:
         self.current = None
         self._next_id = 1
 
-    def load(
-        self, messages: list[Message], records: list[dict] | None = None
-    ) -> None:
+    def load(self, messages: list[Message], records: list[dict] | None = None) -> None:
         """Start over from a stored transcript (session switch / resume)."""
         self.views = messages_to_views(messages, records)
         self.cards = {
@@ -492,7 +509,9 @@ class TranscriptBuilder:
             self._message_start(event.message)
         elif event.type == "message_update" and event.assistant_event is not None:
             self._assistant_event(event.assistant_event)
-        elif event.type == "message_end" and isinstance(event.message, AssistantMessage):
+        elif event.type == "message_end" and isinstance(
+            event.message, AssistantMessage
+        ):
             self._message_end(event.message)
         elif event.type == "tool_execution_start":
             card = ToolCallView(
@@ -507,11 +526,7 @@ class TranscriptBuilder:
             self._append(card)
         elif event.type == "tool_execution_update":
             card = self.cards.get(event.tool_call_id or "")
-            if (
-                card is None
-                or card.status != "running"
-                or event.partial_result is None
-            ):
+            if card is None or card.status != "running" or event.partial_result is None:
                 return False
             card.progress = _progress_line(event.partial_result)
         elif event.type == "tool_execution_end":
@@ -519,7 +534,7 @@ class TranscriptBuilder:
             details = dict(getattr(event.result, "details", None) or {})
             if card is not None:
                 card.is_error = bool(event.is_error)
-                card.status = "error" if event.is_error else "ok"
+                card.status = settle_tool_status(card.is_error, details)
                 card.result_text = _result_text(event.result)
                 card.details = details
                 diff = details.get("diff")

@@ -264,6 +264,7 @@ CATALOG: dict[str, str] = {
     "tui.tool.status_ok": "完成",
     "tui.tool.status_error": "失败",
     "tui.tool.status_interrupted": "已中断",
+    "tui.tool.status_timed_out": "超时",
     "tui.tool.exit": "退出码 {code}",
     "tui.tool.truncated": "已截断",
     "tui.tool.lines": "{n} 行",
