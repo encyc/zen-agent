@@ -32,6 +32,14 @@ frontends already had, and headless `-p` stops assembling a second-class agent.*
 - **`-p` and `--list-sessions` no longer silently ignore each other**: the
   combination is rejected with exit 1 instead of printing the session list and
   dropping the prompt.
+- **A typo'd `--image` path fails before assembly.** The one-shot run used to
+  check it after the Runtime was built, so the refused run left an empty session
+  file behind for `--list-sessions` to render as `(empty)`. Content and vision
+  checks still need the model, so they stay where they were.
+- **`zen evals` no longer ImportErrors.** `scripts/eval.py` imported
+  `_api_key_for`/`session_id_for` from the CLI module that the assembly
+  delegation emptied; it reads them from `zenagent.app.support` now, which is
+  where the Runtime reads them too.
 
 ### Added
 
@@ -44,6 +52,12 @@ frontends already had, and headless `-p` stops assembling a second-class agent.*
   (vision-checked, same loader as `--image`); `--no-templates`,
   `--no-auto-compact` and `--extension` are plumbed into `RuntimeOptions` like
   the other frontends.
+- **RPC snapshot verbs for embedders.** `transcript`, `models` and `commands`
+  return what the TUI reads in-process: the reducer's view models plus the
+  pending notices (the baseline a GUI applies live events on after a resume or
+  a session switch), the catalog behind the model picker, and the slash-command
+  catalog with descriptions. Purely additive to the v1 message shape;
+  `ChatController.notices_snapshot` exposes the queue without draining it.
 - **Session side-channel records.** Session files gain dsh-style auxiliary
   records between the message lines (top-level objects with a `type` and no
   `role`): a `session` header on every new file (id/createdAt/cwd/app
@@ -59,6 +73,21 @@ frontends already had, and headless `-p` stops assembling a second-class agent.*
 
 ### Changed
 
+- **Headless `-p` is assembled by the Runtime.** `run_headless` no longer builds
+  its own agent: it validates the image paths, constructs `RuntimeOptions` and
+  calls `Runtime.bootstrap`, keeping only the output contract (`-p` text,
+  `--json`, auto-compaction, exit code) and a guarded `runtime.close()`. The
+  parallel `_build_agent` path (~330 lines) is gone, so session side-channel
+  records, journal/backups, the job-manager refcount, `hidden`/
+  `default_inactive` tool filtering and the guard policy now come from the same
+  assembly as the TUI/REPL/RPC. The ~40 tests that pinned `_build_agent` moved
+  to a pass-through `cli_main._bootstrap` seam, so they still assert against the
+  real Runtime; `tests/test_headless_parity.py` pins the option set the `-p`
+  front is allowed to differ in.
+- **The test gate is deterministic.** `tests/test_tools_github.py`'s fake `gh`
+  now uses `sys.executable` instead of a bare `python` (absent on machines with
+  only `python3`), and a committed RUF059 in `tests/test_repl_logic.py` no
+  longer fails `scripts/check.sh` at `HEAD`.
 - **Review dispatch contract (prompt version 2026-11-05.1).** `tool.task` and
   the tool policy now tell the parent to hand reviewers the implementer's
   test results and never let a review run suites itself, and to split diffs
