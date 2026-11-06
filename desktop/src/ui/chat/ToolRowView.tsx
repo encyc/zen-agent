@@ -19,6 +19,7 @@ import {
 } from '../icons'
 import { StateDot, TextShimmer } from '../primitives'
 import { formatDuration } from '../format'
+import { CopyAction } from './TurnActions'
 import css from './ToolRowView.module.css'
 
 const DIFF_MAX_LINES = 400
@@ -170,29 +171,41 @@ export function ToolRowView({ node }: { node: ToolNode }) {
       {open && (
         <div className={css.bodyWrap}>
           {diff !== null && (
-            <div className={css.diffBlock} data-selectable>
-              {diff.lines.map((line, index) => (
-                <div key={index} className={css.diffLine} data-kind={line.kind}>
-                  <span className={css.diffMarker}>
-                    {line.kind === 'add' ? '+' : line.kind === 'del' ? '-' : ''}
-                  </span>
-                  <span className={css.diffText}>{line.text || ' '}</span>
-                </div>
-              ))}
-              {diff.truncated && <div className={css.diffLine}>…</div>}
+            <div className={css.diffWrap}>
+              <div className={css.blockHead}>
+                <span className={css.ioLabel}>{t('tool.diff')}</span>
+                <CopyAction text={node.diff ?? ''} />
+              </div>
+              <div className={css.diffBlock} data-selectable>
+                {diff.lines.map((line, index) => (
+                  <div key={index} className={css.diffLine} data-kind={line.kind}>
+                    <span className={css.diffMarker}>
+                      {line.kind === 'add' ? '+' : line.kind === 'del' ? '-' : ''}
+                    </span>
+                    <span className={css.diffText}>{line.text || ' '}</span>
+                  </div>
+                ))}
+                {diff.truncated && <div className={css.diffLine}>…</div>}
+              </div>
             </div>
           )}
           {!hasDiff && (
             <div className={css.ioCard} data-selectable>
               {Object.keys(node.args).length > 0 && (
                 <div className={css.ioSection}>
-                  <span className={css.ioLabel}>{t('tool.input')}</span>
+                  <div className={css.blockHead}>
+                    <span className={css.ioLabel}>{t('tool.input')}</span>
+                    <CopyAction text={formatArgs(node.args)} />
+                  </div>
                   <pre className={css.ioText}>{formatArgs(node.args)}</pre>
                 </div>
               )}
               {output !== '' && (
                 <div className={css.ioSection}>
-                  <span className={css.ioLabel}>{t('tool.output')}</span>
+                  <div className={css.blockHead}>
+                    <span className={css.ioLabel}>{t('tool.output')}</span>
+                    <CopyAction text={output} />
+                  </div>
                   <pre className={css.ioText} data-error={node.isError || undefined}>
                     {output}
                   </pre>

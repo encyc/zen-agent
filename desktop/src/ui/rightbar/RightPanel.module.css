@@ -7,12 +7,23 @@
 }
 
 .header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   font-size: 13px;
   font-weight: 600;
   color: var(--dsw-alias-label-primary);
   padding-bottom: 8px;
   border-bottom: 1px solid var(--dsw-alias-border-l1);
   margin-bottom: 12px;
+}
+
+.headerTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .section {

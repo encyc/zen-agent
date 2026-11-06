@@ -131,6 +131,20 @@
   min-width: 0;
 }
 
+.diffWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.blockHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 18px;
+}
+
 .diffBlock {
   border-radius: var(--dsw-radius-sm);
   background: var(--dsw-alias-markdown-code-block);

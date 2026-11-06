@@ -1,7 +1,7 @@
 /** Right dock: the session inspector — usage, context, todos, jobs and
  * subagents (what the zen TUI sidebar renders, as a dsh-style right rail). */
 
-import { useStatusStore } from '../../state/stores'
+import { useStatusStore, useSessionStore } from '../../state/stores'
 import { useAppStore } from '../../state/appStore'
 import { useT } from '../../i18n/locale'
 import { StateDot } from '../primitives'
@@ -10,7 +10,11 @@ import css from './RightPanel.module.css'
 export function RightPanel() {
   const t = useT()
   const status = useStatusStore((state) => state.status)
+  const sessions = useSessionStore((state) => state.sessions)
+  const currentPath = useSessionStore((state) => state.currentPath)
   if (status === null) return <div className={css.root} />
+  const current = sessions.find((session) => session.path === currentPath)
+  const title = current?.title || current?.name || t('sidebar.sessions')
   const usage = status.usage
   const contextUsed = status.context_used ?? 0
   const contextWindow = status.context_window ?? 0
@@ -20,7 +24,10 @@ export function RightPanel() {
 
   return (
     <div className={css.root} data-selectable>
-      <div className={css.header}>{t('status.idle' /* placeholder for a future title */)}</div>
+      <div className={css.header}>
+        <span className={css.headerTitle}>{title}</span>
+        <StateDot state={status.running ? 'running' : 'idle'} size={7} />
+      </div>
 
       <Section title={t('usage.context')}>
         <Row label={t('usage.context')} value={`${formatCount(contextUsed)} / ${formatCount(contextWindow)}`} />

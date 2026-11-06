@@ -23,7 +23,7 @@ function useCopy() {
   return { copied, copy }
 }
 
-function CopyAction({ text }: { text: string }) {
+export function CopyAction({ text }: { text: string }) {
   const t = useT()
   const { copied, copy } = useCopy()
   const label = copied ? t('chat.copied') : t('chat.copy')
