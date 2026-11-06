@@ -31,8 +31,6 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-import json
-import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
@@ -40,6 +38,17 @@ from pathlib import Path
 
 from zenagent.agent.result_budget import apply_result_budget
 from zenagent.agent.timeouts import effective_timeout
+
+__all__ = ["LOOP_GUARD_PREFIX", "is_loop_guard_message"]
+
+from zenagent.agent.guard import (
+    LOOP_GUARD_PREFIX,
+    LOOP_GUARD_TEXT,
+    LOOP_GUARD_THRESHOLD,
+    calls_signature,
+    is_loop_guard_message,
+    is_poll_call,
+)
 from zenagent.agent.validate import validate_arguments
 from zenagent.events import AbortToken, AgentEvent
 from zenagent.providers.catalog import Model
@@ -515,48 +524,6 @@ async def _run_tool_batch(
 
 
 #: Consecutive identical tool rounds before the loop injects a corrective notice.
-_LOOP_GUARD_THRESHOLD = 5
-
-#: Prefix of the synthetic, non-persisted corrective message (the UI filters it).
-LOOP_GUARD_PREFIX = "[tool-loop guard]"
-
-_LOOP_GUARD_TEXT = (
-    LOOP_GUARD_PREFIX + " The same tool call has repeated {n} times with identical "
-    "arguments and produced no new progress. Stop repeating it: change the "
-    "arguments, use a different tool, or explain to the user what is blocking you."
-)
-
-#: Commands that are legitimate to repeat: they observe a changing state.
-_POLL_COMMAND = re.compile(r"^\s*(sleep|wait|tail|ps|pgrep|top|jobs)\b")
-
-
-def is_loop_guard_message(message: object) -> bool:
-    """Whether ``message`` is the synthetic loop-guard corrective."""
-    return isinstance(message, UserMessage) and str(
-        getattr(message, "content", "")
-    ).startswith(LOOP_GUARD_PREFIX)
-
-
-def _is_poll_call(call: ToolCall) -> bool:
-    """Whether this call is a pure wait/observe poll (exempt from the guard)."""
-    if call.name == "wait":
-        # Waiting for a background job is exactly the legitimate long poll.
-        return True
-    if call.name != "bash":
-        return False
-    return bool(_POLL_COMMAND.match(str(call.arguments.get("command", ""))))
-
-
-def _calls_signature(calls: list[ToolCall]) -> tuple:
-    """Stable signature of a tool batch, for detecting identical repeats."""
-    return tuple(
-        sorted(
-            (call.name, json.dumps(call.arguments, sort_keys=True, default=str))
-            for call in calls
-        )
-    )
-
-
 async def agent_loop(
     prompt: str | list[TextContent | ImageContent] | None,
     state: AgentState,
@@ -770,8 +737,8 @@ async def agent_loop(
             # Cross-turn loop guard: a model repeating the same call(s) with
             # identical arguments is stuck. Inject one corrective message per
             # run (as a user-role notice) instead of burning max_turns.
-            signature = _calls_signature(calls)
-            poll_like = all(_is_poll_call(call) for call in calls)
+            signature = calls_signature(calls)
+            poll_like = all(is_poll_call(call) for call in calls)
             if poll_like:
                 repeat_streak = 0
             elif signature == last_signature:
@@ -779,10 +746,10 @@ async def agent_loop(
             else:
                 last_signature = signature
                 repeat_streak = 1
-            if repeat_streak >= _LOOP_GUARD_THRESHOLD and not guard_injected:
+            if repeat_streak >= LOOP_GUARD_THRESHOLD and not guard_injected:
                 guard_injected = True
                 notice = UserMessage(
-                    content=_LOOP_GUARD_TEXT.format(n=repeat_streak),
+                    content=LOOP_GUARD_TEXT.format(n=repeat_streak),
                     timestamp=int(time.time()),
                 )
                 # Model-facing only: appended to the request context but NOT to
