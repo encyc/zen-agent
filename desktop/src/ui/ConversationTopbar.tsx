@@ -4,9 +4,10 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../state/appStore'
-import { useSessionStore } from '../state/stores'
+import { usePaletteStore, useSessionStore } from '../state/stores'
 import { useT } from '../i18n/locale'
-import { MoreIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, PlusIcon } from './icons'
+import { MoreIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, PlusIcon, SearchIcon } from './icons'
+import { Tooltip } from './primitives'
 import css from './ConversationTopbar.module.css'
 
 interface ConversationTopbarProps {
@@ -117,6 +118,16 @@ export function ConversationTopbar(props: ConversationTopbarProps) {
         </button>
       )}
       <div className={css.spacer} data-tauri-drag-region />
+      <Tooltip label="⌘K">
+        <button
+          type="button"
+          className={css.button}
+          aria-label={t('topbar.search')}
+          onClick={() => usePaletteStore.getState().openPalette()}
+        >
+          <SearchIcon size={15} />
+        </button>
+      </Tooltip>
       <button
         type="button"
         className={css.button}

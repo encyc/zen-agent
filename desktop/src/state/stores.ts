@@ -65,6 +65,24 @@ export const useNoticeStore = create<NoticeState>((set) => ({
   dismiss: () => set({ notice: null }),
 }))
 
+// ---- command palette -------------------------------------------------------
+
+interface PaletteState {
+  open: boolean
+  query: string
+  openPalette(): void
+  closePalette(): void
+  setQuery(query: string): void
+}
+
+export const usePaletteStore = create<PaletteState>((set) => ({
+  open: false,
+  query: '',
+  openPalette: () => set({ open: true, query: '' }),
+  closePalette: () => set({ open: false, query: '' }),
+  setQuery: (query) => set({ query }),
+}))
+
 // ---- catalogs ---------------------------------------------------------------
 
 interface CatalogState {

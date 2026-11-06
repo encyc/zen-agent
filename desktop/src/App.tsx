@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useAppStore } from './state/appStore'
-import { useApprovalStore, useSettingsStore } from './state/stores'
+import { useApprovalStore, usePaletteStore, useSettingsStore } from './state/stores'
 import { useT } from './i18n/locale'
 import { AppFrame } from './ui/AppFrame'
 import { Sidebar } from './ui/Sidebar'
@@ -13,6 +13,7 @@ import { RightPanel } from './ui/rightbar/RightPanel'
 import { WelcomeScreen } from './ui/WelcomeScreen'
 import { ConversationTopbar } from './ui/ConversationTopbar'
 import { NoticeBanner } from './ui/NoticeBanner'
+import { CommandPalette } from './ui/palette/CommandPalette'
 import { SIDEBAR_DEFAULT } from './ui/columns'
 import css from './App.module.css'
 
@@ -77,6 +78,12 @@ export function App() {
         event.preventDefault()
         setCollapsed(!collapsed)
       }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        usePaletteStore.getState().openPalette()
+      }
+      // While the palette is open it owns Enter and Escape.
+      if (usePaletteStore.getState().open) return
       if (event.key === 'Escape' && useAppStore.getState().busy) {
         if (useApprovalStore.getState().queue.length > 0) return
         void useAppStore.getState().cancel()
@@ -100,7 +107,8 @@ export function App() {
   }
 
   return (
-    <AppFrame
+    <>
+      <AppFrame
       sidebarOpen={!collapsed}
       sidebarWidth={sidebarWidth}
       onSidebarWidth={(width) => {
@@ -127,7 +135,9 @@ export function App() {
       />
       <NoticeBanner />
       <ChatView />
-    </AppFrame>
+      </AppFrame>
+      <CommandPalette />
+    </>
   )
 }
 

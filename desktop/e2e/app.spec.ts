@@ -114,7 +114,16 @@ function installBridge(state: BridgeState) {
       case 'models':
         return { type: 'result', id: payload.id, ok: true, models: [] }
       case 'commands':
-        return { type: 'result', id: payload.id, ok: true, commands: [] }
+        return {
+          type: 'result',
+          id: payload.id,
+          ok: true,
+          commands: [
+            { name: 'compact', description: 'Compact context' },
+            { name: 'rename', description: 'Rename session' },
+            { name: 'quit', description: 'Quit' },
+          ],
+        }
       case 'command':
         if (payload.name === 'rename') state.title = String(payload.argument ?? '')
         return { type: 'result', id: payload.id, ok: true }
@@ -233,6 +242,8 @@ async function setPending(page: Page, items: PendingItemMock[]) {
     window.__ZEN_E2E__.pending = pending
   }, items)
 }
+
+const paletteKey = process.platform === 'darwin' ? 'Meta+k' : 'Control+k'
 
 test('the topbar shows the project and renames the current session inline', async ({ page }) => {
   await boot(page, initialState())
@@ -480,4 +491,70 @@ test('the native picker adds images and drops other files', async ({ page }) => 
   await page.getByRole('button', { name: '添加图片' }).click()
   await expect(page.getByText('a.png')).toBeVisible()
   await expect(page.getByText('b.txt')).toHaveCount(0)
+})
+
+test('the palette opens with the keyboard and resumes a matching session', async ({ page }) => {
+  await boot(page, initialState())
+  await page.keyboard.press(paletteKey)
+  const dialog = page.getByRole('dialog', { name: '搜索' })
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole('combobox').fill('另一个会话')
+  await page.getByRole('option', { name: /另一个会话/ }).click()
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__ZEN_E2E__.calls.some(
+          (call) => call.type === 'session' && call.op === 'resume' && call.path === '/sessions/b.jsonl',
+        ),
+      ),
+    )
+    .toBe(true)
+  await expect(dialog).toBeHidden()
+})
+
+test('palette commands run bare or insert their prefix', async ({ page }) => {
+  await boot(page, initialState())
+  await page.keyboard.press(paletteKey)
+  await page.getByRole('dialog').getByRole('combobox').fill('compact')
+  await page.keyboard.press('Enter')
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__ZEN_E2E__.calls.some(
+          (call) => call.type === 'command' && call.name === 'compact' && call.argument === '',
+        ),
+      ),
+    )
+    .toBe(true)
+
+  await page.keyboard.press(paletteKey)
+  await page.getByRole('dialog').getByRole('combobox').fill('rename')
+  await page.keyboard.press('Enter')
+  await expect(page.locator('textarea')).toHaveValue('/rename ')
+
+  await page.keyboard.press(paletteKey)
+  await page.getByRole('dialog').getByRole('combobox').fill('quit')
+  await expect(page.getByRole('option', { name: /quit|Quit/ })).toHaveCount(0)
+})
+
+test('a cross-project palette result is disabled and Enter does nothing', async ({ page }) => {
+  await boot(page, initialState())
+  await page.getByRole('button', { name: '全部' }).click()
+  await page.keyboard.press(paletteKey)
+  const input = page.getByRole('dialog').getByRole('combobox')
+  await input.fill('另一个项目')
+  const option = page.getByRole('option', { name: /另一个项目/ })
+  await expect(option).toHaveAttribute('aria-disabled', 'true')
+  // aria-disabled options are unclickable under Playwright's actionability check.
+  await option.click({ force: true })
+  await page.keyboard.press('Enter')
+  assert.equal(
+    await page.evaluate(() =>
+      window.__ZEN_E2E__.calls.some((call) => call.type === 'session' && call.op === 'resume'),
+    ),
+    false,
+  )
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).toBeHidden()
 })
