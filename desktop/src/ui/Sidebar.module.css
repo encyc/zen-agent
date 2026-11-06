@@ -416,6 +416,15 @@ html[data-platform='darwin'] .brand {
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
+.menuItem:disabled {
+  color: var(--dsw-alias-label-dimmed);
+  cursor: default;
+}
+
+.menuItem:disabled:hover {
+  background: transparent;
+}
+
 .menuItemDanger {
   color: var(--dsw-alias-state-error-primary);
 }

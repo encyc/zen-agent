@@ -285,9 +285,13 @@ test('the shell keeps the sidebar full height and docks the composer inside the 
   assert.ok(composer.y + composer.height <= center.y + center.height + 1)
 })
 
-test('the topbar shows the project and renames the current session inline', async ({ page }) => {
+test('the topbar shows the project crumb and renames the current session inline', async ({
+  page,
+}) => {
   await boot(page, initialState())
-  await expect(page.locator('[data-topbar-project]')).toHaveText('p')
+  await expect(page.locator('[data-topbar-project]')).toContainText('p')
+  await expect(page.locator('[data-topbar-project] svg')).toBeVisible()
+  await expect(page.locator('[data-topbar-sep]')).toHaveText('/')
   await page.getByRole('button', { name: '重命名会话标题' }).click()
   const input = page.getByRole('textbox', { name: '会话标题' })
   await input.fill('新的标题')
@@ -305,9 +309,9 @@ test('the topbar shows the project and renames the current session inline', asyn
     .toBe(true)
 })
 
-test('the topbar menu runs undo and compact through the session op', async ({ page }) => {
+test('the current row menu runs undo and compact through the session op', async ({ page }) => {
   await boot(page, initialState({ running: false }))
-  await page.locator('[data-topbar-menu]').click()
+  await page.locator('[data-session-path="/sessions/a.jsonl"] [data-action="menu"]').click()
   await page.getByRole('menuitem', { name: '撤销上一轮' }).click()
   await expect
     .poll(() =>
@@ -316,7 +320,7 @@ test('the topbar menu runs undo and compact through the session op', async ({ pa
       ),
     )
     .toBe(true)
-  await page.locator('[data-topbar-menu]').click()
+  await page.locator('[data-session-path="/sessions/a.jsonl"] [data-action="menu"]').click()
   await page.getByRole('menuitem', { name: '压缩上下文' }).click()
   await expect
     .poll(() =>

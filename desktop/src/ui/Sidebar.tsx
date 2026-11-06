@@ -55,6 +55,8 @@ export function Sidebar(props: { onCollapse(): void }) {
   const deleteSession = useAppStore((state) => state.deleteSession)
   const forkSession = useAppStore((state) => state.forkSession)
   const resumeSession = useAppStore((state) => state.resumeSession)
+  const undoLast = useAppStore((state) => state.undoLast)
+  const compactNow = useAppStore((state) => state.compactNow)
   const busy = useAppStore((state) => state.busy)
   const pending = useStatusStore((state) => currentPending(state.status).length)
   const [query, setQuery] = useState('')
@@ -346,6 +348,30 @@ export function Sidebar(props: { onCollapse(): void }) {
                   }}
                 >
                   {menuSession.pinned ? t('session.unpin') : t('session.pin')}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={css.menuItem}
+                  disabled={busy}
+                  onClick={() => {
+                    setMenu(null)
+                    void undoLast()
+                  }}
+                >
+                  {t('session.undo')}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={css.menuItem}
+                  disabled={busy}
+                  onClick={() => {
+                    setMenu(null)
+                    void compactNow()
+                  }}
+                >
+                  {t('session.compact')}
                 </button>
                 {canForkSession(currentPath, menuSession.path) && (
                   <button

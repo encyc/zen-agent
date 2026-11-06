@@ -2,87 +2,160 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: var(--ds-topbar-height);
-  /* Reserves the fixed work-panel toggle's seat so it never covers the menu. */
+  justify-content: space-between;
+  gap: 8px;
+  height: var(--ds-toolbar-height);
+  /* Reserves the fixed work-panel toggle's seat so it never covers the
+     actions; the collapsed sidebar keeps the traffic-light inset. */
   padding: 0 36px 0 12px;
   flex: none;
   z-index: 5;
+  --ct-lead-inset: 12px;
+  transition: padding-left var(--ds-transition-duration) var(--ds-ease-in-out);
 }
 
-/* The collapsed sidebar no longer seats the traffic lights, so the bar does. */
-html[data-platform='darwin'] .root[data-collapsed] {
-  padding-left: 78px;
+html[data-platform='darwin'] .root {
+  --ct-lead-inset: 88px;
 }
 
-.project {
-  flex: none;
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--ds-font-11);
-  line-height: var(--ds-font-11-5);
-  color: var(--dsw-alias-label-tertiary);
+/* The expanded sidebar owns the traffic lights and its own collapse control;
+   the conversation bar only reserves the seat once the dock is gone. */
+.root[data-collapsed] {
+  padding-left: calc(var(--ct-lead-inset) + 36px);
 }
 
-.titleButton {
+.left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Out of flow so the title lane keeps one offset at every animation frame;
+   only the button's own opacity and left edge move with the sidebar. */
+.lead {
+  position: absolute;
+  left: calc(var(--ct-lead-inset) - 36px);
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    left var(--ds-transition-duration-fast) var(--ds-ease-in-out),
+    opacity var(--ds-transition-duration-fast) var(--ds-ease-in-out);
+}
+
+.root[data-collapsed] .lead {
+  left: var(--ct-lead-inset);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.titleWrap {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex: 1 1 auto;
   min-width: 0;
-  max-width: 420px;
-  padding: 3px 6px;
-  border: none;
-  border-radius: var(--ds-radius-6);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.project {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 auto;
+  min-width: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--ds-font-11);
+  line-height: var(--ds-font-11-5);
+  white-space: nowrap;
+}
+
+.project > svg {
+  flex: 0 0 auto;
+}
+
+.projectName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sep {
+  flex: 0 0 auto;
+  color: var(--dsw-alias-border-l3);
+  font-size: var(--ds-font-11);
+  line-height: var(--ds-font-11-5);
+}
+
+.titleHeading {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--ds-font-13);
+  font-weight: 500;
+  line-height: var(--ds-font-13-5);
+}
+
+/* Click-to-edit: paints and measures exactly like the plain title so the
+   ellipsis stays on the text and nothing shifts when editing starts. */
+.titleButton {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
   background: transparent;
   color: var(--dsw-alias-label-primary);
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   cursor: text;
 }
 
-.titleButton:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.titleText {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--ds-font-13);
-  font-weight: 500;
-}
-
-.titlePencil {
-  flex: none;
-  color: var(--dsw-alias-label-tertiary);
-  opacity: 0;
-}
-
-.titleButton:hover .titlePencil,
-.titleButton:focus-visible .titlePencil {
-  opacity: 1;
+/* The title lane clips its children, so a ring would vanish; underline instead. */
+.titleButton:focus-visible {
+  outline: none;
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--dsw-alias-state-business-primary);
 }
 
 .titleInput {
-  min-width: 120px;
-  max-width: 420px;
-  padding: 3px 6px;
-  border: 1px solid var(--dsw-alias-border-l3);
-  border-radius: var(--ds-radius-6);
-  background: var(--dsw-specific-input-major);
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  appearance: none;
+  background: transparent;
   color: var(--dsw-alias-label-primary);
   font-family: inherit;
   font-size: var(--ds-font-13);
   font-weight: 500;
-  outline: none;
+  line-height: var(--ds-font-13-5);
 }
 
-.titleInput:focus {
-  border-color: var(--dsw-alias-label-tertiary);
-}
-
-.spacer {
-  flex: 1;
+.right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  justify-content: flex-end;
 }
 
 .button {
@@ -102,68 +175,4 @@ html[data-platform='darwin'] .root[data-collapsed] {
 .button:hover {
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
-}
-
-.button[data-active] {
-  color: var(--dsw-alias-state-business-primary);
-}
-
-.dot {
-  position: absolute;
-  right: 4px;
-  bottom: 4px;
-  width: 6px;
-  height: 6px;
-  border-radius: var(--ds-radius-full);
-  background: var(--dsw-alias-state-idle-primary);
-}
-
-.dot[data-on] {
-  background: var(--dsw-alias-state-business-primary);
-  animation: dot-pulse 1s ease-in-out infinite alternate;
-}
-
-@keyframes dot-pulse {
-  from { opacity: 0.35; }
-  to { opacity: 1; }
-}
-
-.menuAnchor {
-  position: relative;
-  flex: none;
-}
-
-.menu {
-  position: absolute;
-  top: 32px;
-  right: 0;
-  min-width: 168px;
-  padding: 4px;
-  display: flex;
-  flex-direction: column;
-  border-radius: var(--ds-radius-10);
-  background: var(--dsw-specific-menu);
-  box-shadow: var(--dsw-elevation-prominent);
-  z-index: 20;
-}
-
-.menuItem {
-  padding: 7px 10px;
-  border: none;
-  border-radius: var(--ds-radius-6);
-  background: transparent;
-  color: var(--dsw-alias-label-primary);
-  font-family: inherit;
-  font-size: var(--ds-font-12-5);
-  text-align: left;
-  cursor: pointer;
-}
-
-.menuItem:hover:not(:disabled) {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.menuItem:disabled {
-  color: var(--dsw-alias-label-dimmed);
-  cursor: default;
 }
