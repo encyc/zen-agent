@@ -247,7 +247,7 @@ test('clearing drops the pending dock', async ({ page }) => {
     { id: 10, lane: 'queue', text: '第二条', images: 0, created_at: 4 },
   ])
   await expect(page.getByText('第二条')).toBeVisible({ timeout: 10_000 })
-  await page.getByRole('button', { name: '清空' }).click()
+  await page.getByRole('button', { name: '清空全部' }).click()
   await expect(page.getByText('第二条')).toBeHidden()
   await expect
     .poll(() =>
