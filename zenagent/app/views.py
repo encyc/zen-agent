@@ -10,6 +10,7 @@ from typing import Literal
 
 from zenagent.agent.loop import LOOP_GUARD_PREFIX
 from zenagent.app.context import ContextReport
+from zenagent.app.records import is_tool_end
 from zenagent.app.skill_commands import parse_skill_display
 from zenagent.events import AgentEvent
 from zenagent.types import (
@@ -282,7 +283,7 @@ def _apply_tool_records(
         view.call_id: view for view in views if isinstance(view, ToolCallView)
     }
     for record in records or ():
-        if record.get("type") != "tool_end":
+        if not is_tool_end(record):
             continue
         card = cards.get(record.get("call_id"))
         if card is None:

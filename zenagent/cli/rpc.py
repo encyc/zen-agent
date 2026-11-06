@@ -484,6 +484,8 @@ class RpcServer:
         """
         from dataclasses import asdict
 
+        from zenagent.app import records
+
         views: list = []
         notices: list = []
         compactions: list[dict] = []
@@ -492,9 +494,7 @@ class RpcServer:
             if session is not None:
                 session.ensure_loaded()
                 compactions = [
-                    record
-                    for record in session.records
-                    if record.get("type") == "compaction"
+                    record for record in session.records if records.is_compaction(record)
                 ]
             views = [asdict(view) for view in self.chat.transcript]
             notices = [

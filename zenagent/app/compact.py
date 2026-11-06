@@ -12,6 +12,7 @@ from pathlib import Path
 
 from zenagent.agent import Agent
 from zenagent.agent.session import Session, unique_session_path
+from zenagent.app import records
 from zenagent.prompts import compact_result, compose_compact
 from zenagent.providers.openai_completions import StreamOptions
 from zenagent.providers.registry import StreamFn, safe_stream, stream_fn_for
@@ -157,14 +158,7 @@ async def compact(
     if carry_from is not None:
         for record in carry_from.carry_records([message]):
             session.append_meta(record)
-    session.append_meta(
-        {
-            "type": "compaction",
-            "tokensBefore": int(tokens_before),
-            "derivedFrom": derived_from,
-            "reason": reason,
-        }
-    )
+    session.append_meta(records.compaction(tokens_before, derived_from, reason))
     session.append(message)
     agent.replace_messages([message])
     return session.path

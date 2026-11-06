@@ -9,6 +9,7 @@ from pathlib import Path
 
 from zenagent.agent.session import Session
 from zenagent.agent.subagents import carry_task_dir
+from zenagent.app import records
 from zenagent.app.attachments_state import Attachments
 from zenagent.app.compact import compact, should_auto_compact
 from zenagent.app.context import build_context_report
@@ -425,7 +426,7 @@ class ChatController:
         self.reload_transcript()
         text = t("notice.compacted", tokens=before)
         self._notices.append(
-            TranscriptNotice("divider", text, source="compaction")
+            TranscriptNotice("divider", text, source=records.COMPACTION)
         )
         self._notify()
         return text
