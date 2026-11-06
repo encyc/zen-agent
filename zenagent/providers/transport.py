@@ -24,6 +24,7 @@ from collections.abc import AsyncIterable, AsyncIterator
 import httpx
 
 from zenagent.events import Aborted, AbortToken
+from zenagent.http_client import async_client
 from zenagent.types import Cost, Usage
 
 __all__ = [
@@ -117,7 +118,7 @@ def should_retry(status: int | None, exc: Exception | None) -> bool:
 
 def default_client() -> httpx.AsyncClient:
     """Client with streaming-appropriate timeouts (connect 10s, read 300s)."""
-    return httpx.AsyncClient(
+    return async_client(
         timeout=httpx.Timeout(connect=10.0, read=300.0, write=10.0, pool=10.0),
     )
 

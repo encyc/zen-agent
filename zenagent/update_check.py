@@ -28,6 +28,8 @@ from pathlib import Path
 
 import httpx
 
+from zenagent.http_client import async_client
+
 __all__ = [
     "CACHE_TTL_S",
     "PYPI_URL",
@@ -210,7 +212,7 @@ async def fetch_latest(
 ) -> str | None:
     """The version PyPI publishes, or ``None`` when it cannot be read."""
     try:
-        async with httpx.AsyncClient(
+        async with async_client(
             timeout=timeout_s,
             transport=transport,
             headers={"User-Agent": "zenagent update-check"},

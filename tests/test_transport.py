@@ -6,6 +6,7 @@ exercised through ``httpx.MockTransport``.
 
 import asyncio
 import json
+import os
 
 import httpx
 import pytest
@@ -376,6 +377,15 @@ async def test_default_client_streaming_timeouts():
     client = default_client()
     assert client.timeout.connect == 10.0
     assert client.timeout.read == 300.0
+    await client.aclose()
+
+
+async def test_default_client_survives_bracketed_ipv6_no_proxy(monkeypatch):
+    """A shell that exports NO_PROXY with ``[::1]`` must not break startup."""
+    monkeypatch.setenv("NO_PROXY", "localhost,127.0.0.1,[::1],::1")
+    monkeypatch.setenv("no_proxy", "localhost,127.0.0.1,[::1],::1")
+    client = default_client()
+    assert "localhost" in os.environ["NO_PROXY"]  # restored untouched
     await client.aclose()
 
 

@@ -6,6 +6,8 @@ import os
 
 import httpx
 
+from zenagent.http_client import async_client
+
 __all__ = ["get", "post", "timeout"]
 
 USER_AGENT = "zenagent/0.1 (+https://github.com/encyc/zen-agent)"
@@ -21,7 +23,7 @@ def timeout() -> httpx.Timeout:
 
 
 def _client() -> httpx.AsyncClient:
-    return httpx.AsyncClient(
+    return async_client(
         timeout=timeout(), headers={"User-Agent": USER_AGENT}, follow_redirects=True
     )
 

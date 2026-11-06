@@ -24,6 +24,8 @@ from typing import Any, Protocol, Self
 
 import httpx
 
+from zenagent.http_client import async_client
+
 __all__ = [
     "DEFAULT_PROTOCOL_VERSION",
     "HttpTransport",
@@ -282,7 +284,7 @@ class HttpTransport:
 
     async def start(self) -> None:
         if self._client is None:
-            self._client = httpx.AsyncClient(timeout=httpx.Timeout(self._timeout_s))
+            self._client = async_client(timeout=httpx.Timeout(self._timeout_s))
 
     def _request_headers(self) -> dict[str, str]:
         headers = dict(self.headers)
