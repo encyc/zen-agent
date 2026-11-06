@@ -156,7 +156,9 @@ async def compact(
     )
     session = Session(unique_session_path("compact"), derived_from=derived_from)
     if carry_from is not None:
-        for record in carry_from.carry_records([message]):
+        for record in carry_from.carry_records(
+            [message], keep=records.keep_for_rewrite()
+        ):
             session.append_meta(record)
     session.append_meta(records.compaction(tokens_before, derived_from, reason))
     session.append(message)

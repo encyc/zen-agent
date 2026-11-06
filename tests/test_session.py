@@ -19,6 +19,7 @@ from zenagent.agent.session import (
     session_title,
     set_session_title,
 )
+from zenagent.app import records
 from zenagent.types import (
     AssistantMessage,
     TextContent,
@@ -789,7 +790,7 @@ def test_carry_records_keeps_live_calls_and_compactions(isolated_sessions):
     source.append_meta({"type": "compaction", "tokensBefore": 10})
     source.append_meta({"type": "run_start"})
 
-    carried = source.carry_records(messages)
+    carried = source.carry_records(messages, keep=records.keep_for_rewrite())
 
     assert [(record["type"], record.get("call_id")) for record in carried] == [
         ("tool_end", "c1"),
@@ -805,7 +806,9 @@ def test_carry_records_can_skip_tool_end(isolated_sessions):
     source.append_meta({"type": "tool_end", "call_id": "c1", "duration_ms": 5})
     source.append_meta({"type": "compaction", "tokensBefore": 10})
 
-    carried = source.carry_records(messages, tool_end=False)
+    carried = source.carry_records(
+        messages, keep=records.keep_for_rewrite(keep_tool_end=False)
+    )
 
     assert [record["type"] for record in carried] == ["compaction"]
 
@@ -818,7 +821,7 @@ def test_rewrite_carries_records_for_kept_calls(isolated_sessions):
     source.append_meta({"type": "tool_end", "call_id": "c1", "duration_ms": 5})
     source.append_meta({"type": "compaction", "tokensBefore": 10})
 
-    reloaded = Session(source.rewrite(messages))
+    reloaded = Session(source.rewrite(messages, keep=records.keep_for_rewrite()))
     reloaded.load()
 
     assert [record["type"] for record in reloaded.records] == [
@@ -861,6 +864,70 @@ def test_carry_records_sees_records_appended_after_load(isolated_sessions):
     source.load()
     source.append_meta({"type": "tool_end", "call_id": "c1", "duration_ms": 5})
 
-    carried = source.carry_records(messages)
+    carried = source.carry_records(messages, keep=records.keep_for_rewrite())
 
     assert [record["type"] for record in carried] == ["tool_end"]
+
+
+def test_carry_records_default_carries_structurally(isolated_sessions):
+    """Without a predicate the kernel only applies the call-id rule."""
+    source = Session(isolated_sessions / "source.jsonl")
+    messages = [user("go"), assistant_call("c1")]
+    for message in messages:
+        source.append(message)
+    source.append_meta({"type": "tool_end", "call_id": "c1"})
+    source.append_meta({"type": "tool_end", "call_id": "gone"})
+    source.append_meta({"type": "compaction", "tokensBefore": 10})
+    source.append_meta({"type": "run_start"})
+    source.append_meta({"type": "future-kind"})
+
+    carried = source.carry_records(messages)
+
+    assert [(record["type"], record.get("call_id")) for record in carried] == [
+        ("tool_end", "c1"),
+        ("compaction", None),
+        ("run_start", None),
+        ("future-kind", None),
+    ]
+
+
+def test_kernel_does_not_know_record_kinds():
+    """The record vocabulary belongs to app/; agent/ must not name a kind."""
+    kernel = Path(__file__).resolve().parent.parent / "zenagent" / "agent"
+    literals = ("tool_end", "compaction", "run_start", "run_end", "retry", "mode")
+    offenders = []
+    for source in kernel.rglob("*.py"):
+        text = source.read_text()
+        for kind in literals:
+            if f'"{kind}"' in text:
+                offenders.append(f"{source.name}: {kind}")
+    assert offenders == []
+
+
+def test_side_channel_records_round_trip(isolated_sessions):
+    """Every kind this build writes survives a reload; rewrite keeps the two
+    kinds that still describe the transcript and drops the run-scoped ones."""
+    session = Session(isolated_sessions / "records.jsonl")
+    messages = [user("go"), assistant_call("c1")]
+    for message in messages:
+        session.append(message)
+    for record in (
+        records.run_start(),
+        records.tool_end("c1", "read_file", 5, False, None),
+        records.retry(attempt=1, max_retries=2, delay_ms=100, error="503", model="m"),
+        records.mode("plan"),
+        records.compaction(10, "parent", "auto"),
+        records.run_end(termination="stop", turns=1),
+        {"type": "future-kind", "payload": 1},
+    ):
+        session.append_meta(record)
+
+    reloaded = Session(session.path)
+    reloaded.load()
+    kinds = [record["type"] for record in reloaded.records]
+    assert kinds == ["session", *[kind for kind in (
+        "run_start", "tool_end", "retry", "mode", "compaction", "run_end", "future-kind"
+    )]]
+
+    carried = reloaded.carry_records(messages, keep=records.keep_for_rewrite())
+    assert [record["type"] for record in carried] == ["tool_end", "compaction"]

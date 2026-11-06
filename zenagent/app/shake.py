@@ -12,6 +12,7 @@ from dataclasses import replace
 
 from zenagent.agent import Agent
 from zenagent.agent.session import Session, unique_session_path
+from zenagent.app import records
 from zenagent.types import (
     AssistantMessage,
     ImageContent,
@@ -88,7 +89,8 @@ def shake(
         session.append(message)
     if source is not None:
         for record in source.carry_records(
-            new_messages, tool_end="tools" not in kinds
+            new_messages,
+            keep=records.keep_for_rewrite(keep_tool_end="tools" not in kinds),
         ):
             session.append_meta(record)
     agent.replace_messages(new_messages)
