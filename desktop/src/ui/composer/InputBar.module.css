@@ -3,6 +3,7 @@
   flex-direction: column;
   align-items: center;
   gap: 8px;
+  width: min(100%, var(--ds-chat-content-width));
   padding: 0 0 4px;
   flex: none;
 }

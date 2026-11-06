@@ -456,6 +456,23 @@ test('the shell keeps the sidebar full height and docks the composer inside the 
   assert.ok(composer.y + composer.height <= center.y + center.height + 1)
 })
 
+test('the composer plate spans the transcript band', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 })
+  await boot(
+    page,
+    initialState({
+      transcript: [{ kind: 'user', id: 'u1', text: '对齐宽度', timestamp: 1 }],
+    }),
+  )
+  const plate = await page.locator('[data-composer-plate]').boundingBox()
+  const flow = await page.locator('[data-chat-flow]').boundingBox()
+  assert.ok(plate !== null && flow !== null)
+  assert.ok(
+    Math.abs(plate.width - flow.width) <= 1,
+    `plate ${plate.width} vs flow ${flow.width}`,
+  )
+})
+
 test('the topbar shows the project crumb and renames the current session inline', async ({
   page,
 }) => {
