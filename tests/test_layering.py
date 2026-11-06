@@ -22,6 +22,8 @@ def _imports(path: Path) -> list[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
             found.append(node.module)
+            if node.module == "zenagent":
+                found.extend(f"zenagent.{alias.name}" for alias in node.names)
         elif isinstance(node, ast.Import):
             found.extend(alias.name for alias in node.names)
     return found
@@ -54,5 +56,18 @@ def test_app_is_ui_and_cli_free():
         for module in _imports(path):
             root = module.split(".")[0]
             if root in FORBIDDEN_IN_APP or module.startswith(FORBIDDEN_PREFIX_IN_APP):
+                violations.append(f"{path.relative_to(ROOT)}: {module}")
+    assert violations == []
+
+
+def test_only_the_cli_package_imports_the_cli_package():
+    """Everything below ``cli/`` must stay free of the harness."""
+    violations = []
+    for path in ROOT.rglob("*.py"):
+        parts = path.relative_to(ROOT).parts
+        if parts[0] == "cli":
+            continue
+        for module in _imports(path):
+            if module == "zenagent.cli" or module.startswith("zenagent.cli."):
                 violations.append(f"{path.relative_to(ROOT)}: {module}")
     assert violations == []

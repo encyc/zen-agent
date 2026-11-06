@@ -1,4 +1,4 @@
-"""Crash logs and a redacted diagnostics report.
+"""Crash logs: one file per uncaught exception, never containing secrets.
 
 A crash log is written only for an uncaught exception, and never contains
 environment values or credentials — writing secrets to disk is worse than no log.
@@ -15,7 +15,6 @@ from pathlib import Path
 from zenagent import __version__
 
 __all__ = [
-    "collect_report",
     "crash_log_dir",
     "install_excepthook",
     "write_crash_log",
@@ -74,23 +73,3 @@ def install_excepthook(directory: Path | None = None) -> Path:
     sys.excepthook = _hook
     _installed = True
     return target
-
-
-def collect_report() -> str:
-    """Doctor checks plus environment facts, with no credential values."""
-    from zenagent.cli.doctor import collect_checks
-    from zenagent.config import config_path
-
-    lines = [
-        "zenagent diagnostics",
-        f"version: {__version__}",
-        f"python: {sys.version.split()[0]}",
-        f"platform: {platform.platform()}",
-        f"cwd: {Path.cwd()}",
-        f"config: {config_path()}",
-        "",
-    ]
-    for check in collect_checks():
-        state = "ok  " if check.ok else "FAIL"
-        lines.append(f"{state} {check.name}: {check.detail}")
-    return "\n".join(lines) + "\n"

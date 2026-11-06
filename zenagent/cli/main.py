@@ -554,7 +554,7 @@ def main(argv: list[str] | None = None) -> int:
         return run_export(args.session, args.format, args.output)
     if args.command == "doctor":
         if args.report:
-            from zenagent.crash import collect_report
+            from zenagent.cli.doctor import collect_report
 
             report = collect_report()
             if args.report_out:

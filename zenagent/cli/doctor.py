@@ -8,19 +8,21 @@ sessions writable, terminal interactive.
 from __future__ import annotations
 
 import os
+import platform
 import re
 import stat
 import sys
 import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 
 from zenagent import __version__, project, settings
 from zenagent.agent.session import sessions_dir
 from zenagent.config import UserConfig, apply_user_config, config_path, load_user_config
 from zenagent.providers.catalog import load_catalog
 
-__all__ = ["Check", "collect_checks", "run_doctor"]
+__all__ = ["Check", "collect_checks", "collect_report", "run_doctor"]
 
 
 @dataclass
@@ -147,3 +149,20 @@ async def run_doctor(print_fn=print) -> int:
     passed = len(checks) - len(failures)
     print_fn(f"\n{passed}/{len(checks)} checks passed")
     return 1 if failures else 0
+
+
+def collect_report() -> str:
+    """Doctor checks plus environment facts, with no credential values."""
+    lines = [
+        "zenagent diagnostics",
+        f"version: {__version__}",
+        f"python: {sys.version.split()[0]}",
+        f"platform: {platform.platform()}",
+        f"cwd: {Path.cwd()}",
+        f"config: {config_path()}",
+        "",
+    ]
+    for check in collect_checks():
+        state = "ok  " if check.ok else "FAIL"
+        lines.append(f"{state} {check.name}: {check.detail}")
+    return "\n".join(lines) + "\n"

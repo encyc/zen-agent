@@ -1,7 +1,7 @@
 """doctor: local checks only, exit code reflects failures."""
 
 import zenagent.cli.main as cli_main
-from zenagent.cli.doctor import Check, collect_checks, run_doctor
+from zenagent.cli.doctor import Check, collect_checks, collect_report, run_doctor
 
 
 def test_missing_keys_are_reported():
@@ -162,3 +162,17 @@ def test_provider_key_checks_read_the_settings_store(tmp_path, monkeypatch):
 
     checks = {check.name: check for check in doctor.collect_checks(env={})}
     assert checks["key:deepseek"].ok, "a key stored by /settings counts"
+
+
+def test_report_never_leaks_credential_values(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-super-secret")
+    monkeypatch.setattr(
+        "zenagent.cli.doctor.collect_checks",
+        lambda env=None: [
+            type("C", (), {"name": "key:deepseek", "ok": True, "detail": "DEEPSEEK_API_KEY is set"})()
+        ],
+    )
+    report = collect_report()
+    assert "sk-super-secret" not in report
+    assert "DEEPSEEK_API_KEY is set" in report
+    assert "zenagent diagnostics" in report
