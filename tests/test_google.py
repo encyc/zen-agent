@@ -89,3 +89,11 @@ async def test_toolcall_fixture_emits_a_complete_tool_call():
     call = final.content[0]
     assert isinstance(call, ToolCall)
     assert call.name == "get_weather" and call.arguments == {"city": "Beijing"}
+
+
+async def test_truncated_toolcall_reports_length_not_tool_use():
+    events = await _events("google-truncated-toolcall.txt")
+    final = events[-1].partial
+    assert events[-1].reason == "length"
+    assert final.stop_reason == "length"
+    assert isinstance(final.content[0], ToolCall)
