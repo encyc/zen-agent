@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useAppStore } from '../state/appStore'
-import { canForkSession } from '../state/sessionSelectors'
+import { canForkSession, isCrossProject } from '../state/sessionSelectors'
 import {
   currentPending,
   useNoticeStore,
@@ -59,6 +59,7 @@ export function Sidebar(props: { onCollapse(): void }) {
   const [armed, setArmed] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
 
   const { pinned, groups } = useMemo(
     () => sessionGroups(sessions, scope, query),
@@ -80,18 +81,20 @@ export function Sidebar(props: { onCollapse(): void }) {
   const openMenu = (event: MouseEvent<HTMLButtonElement>, path: string) => {
     event.stopPropagation()
     if (menu?.path === path) {
-      setMenu(null)
+      closeMenu()
       return
     }
+    triggerRef.current = event.currentTarget
     const rect = event.currentTarget.getBoundingClientRect()
     // Open leftward: a right-aligned panel would cover the next rows' triggers.
     const left = Math.max(8, rect.left - 176 - 4)
     setMenu({ path, left, top: rect.bottom + 4 })
   }
 
-  const closeMenu = () => {
+  const closeMenu = (restoreFocus = false) => {
     setMenu(null)
     setArmed(null)
+    if (restoreFocus) triggerRef.current?.focus()
   }
 
   const commitRename = (path: string, title: string) => {
@@ -113,6 +116,7 @@ export function Sidebar(props: { onCollapse(): void }) {
 
   useEffect(() => {
     if (menu === null) return
+    menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus()
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node
       if (menuRef.current?.contains(target)) return
@@ -124,16 +128,19 @@ export function Sidebar(props: { onCollapse(): void }) {
       }
       closeMenu()
     }
+    // Capture phase: App's document listener would otherwise cancel the run
+    // before this menu sees the Escape.
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
-      closeMenu()
+      closeMenu(true)
+      event.stopPropagation()
       event.stopImmediatePropagation()
     }
     document.addEventListener('pointerdown', onPointerDown)
-    document.addEventListener('keydown', onKeyDown)
+    document.addEventListener('keydown', onKeyDown, true)
     return () => {
       document.removeEventListener('pointerdown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('keydown', onKeyDown, true)
     }
   }, [menu])
 
@@ -150,10 +157,11 @@ export function Sidebar(props: { onCollapse(): void }) {
       scope={scope}
       current={session.path === currentPath}
       pinned={session.pinned === true}
-      crossProject={session.path !== currentPath && currentProject !== null && session.project !== currentProject}
+      crossProject={isCrossProject(session.path, session.project, currentPath, currentProject)}
       busy={busy}
       pending={session.path === currentPath ? pending : 0}
       editing={editing === session.path}
+      menuOpen={menu?.path === session.path}
       onOpen={() => void resumeSession(session.path)}
       onMenu={(event) => openMenu(event, session.path)}
       onRename={(title) => commitRename(session.path, title)}
@@ -248,6 +256,23 @@ export function Sidebar(props: { onCollapse(): void }) {
             className={css.menu}
             role="menu"
             style={{ left: menu.left, top: menu.top }}
+            onKeyDown={(event) => {
+              if (event.key === 'Tab') {
+                event.preventDefault()
+                closeMenu(true)
+                return
+              }
+              if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+              event.preventDefault()
+              const items = [
+                ...(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []),
+              ]
+              if (items.length === 0) return
+              const from = items.indexOf(document.activeElement as HTMLButtonElement)
+              const next =
+                (from + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+              items[next]?.focus()
+            }}
           >
             {menuSession.path === currentPath && (
               <>
@@ -334,6 +359,7 @@ function SessionRow(props: {
   busy: boolean
   pending: number
   editing: boolean
+  menuOpen: boolean
   onOpen(): void
   onMenu(event: MouseEvent<HTMLButtonElement>): void
   onRename(title: string): void
@@ -405,6 +431,7 @@ function SessionRow(props: {
         data-action="menu"
         aria-label={t('sidebar.actions')}
         aria-haspopup="menu"
+        aria-expanded={props.menuOpen}
         onClick={props.onMenu}
       >
         <MoreIcon size={13} />
@@ -476,13 +503,14 @@ function Footer() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       setExportOpen(false)
+      event.stopPropagation()
       event.stopImmediatePropagation()
     }
     document.addEventListener('pointerdown', onPointerDown)
-    document.addEventListener('keydown', onKeyDown)
+    document.addEventListener('keydown', onKeyDown, true)
     return () => {
       document.removeEventListener('pointerdown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('keydown', onKeyDown, true)
     }
   }, [exportOpen])
 

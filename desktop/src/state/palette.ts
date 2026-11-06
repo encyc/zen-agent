@@ -70,7 +70,8 @@ export function paletteResults(
     .sort(newerFirst)
     .map((session) => ({
       session,
-      disabled: currentProject !== null && session.project !== currentProject,
+      // Fail closed: with no known current project, nothing is provably openable.
+      disabled: currentProject === null || session.project !== currentProject,
     }))
   const commandHits = commands
     .filter((command) => COMMAND_POLICY[command.name] !== undefined)

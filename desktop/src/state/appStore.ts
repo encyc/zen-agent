@@ -480,10 +480,6 @@ async function runSessionCommand(
   const error = frameError(frame)
   if (error !== null) {
     showActionError(error)
-    return
-  }
-  if (typeof frame.message === 'string' && frame.message !== '') {
-    useNoticeStore.getState().show({ kind: 'info', text: frame.message })
   }
 }
 

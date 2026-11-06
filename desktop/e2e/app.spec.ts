@@ -22,6 +22,7 @@ interface BridgeState {
   dialogSelection: string | string[] | null
   title: string
   failExport?: boolean
+  noCurrent?: boolean
 }
 
 declare global {
@@ -47,7 +48,7 @@ function installBridge(state: BridgeState) {
         title: state.title,
         project: 'p',
         messages: 4,
-        current: true,
+        current: state.noCurrent !== true,
         pinned: false,
         created_at: 1,
         updated_at: 2,
@@ -126,7 +127,12 @@ function installBridge(state: BridgeState) {
         }
       case 'command':
         if (payload.name === 'rename') state.title = String(payload.argument ?? '')
-        return { type: 'result', id: payload.id, ok: true }
+        return {
+          type: 'result',
+          id: payload.id,
+          ok: true,
+          ...(payload.name === 'rename' ? { message: '已重命名' } : {}),
+        }
       case 'session':
         switch (payload.op) {
           case 'list':
@@ -253,6 +259,7 @@ test('the topbar shows the project and renames the current session inline', asyn
   await input.fill('新的标题')
   await input.press('Enter')
   await expect(page.locator('[data-topbar-title]')).toHaveText('新的标题')
+  await expect(page.getByRole('alert')).toHaveCount(0)
   await expect
     .poll(() =>
       page.evaluate(() =>
@@ -426,6 +433,47 @@ test('fork is only offered on the current session row', async ({ page }) => {
   await expect(page.getByRole('menuitem', { name: '从此分叉' })).toHaveCount(1)
   await page.locator('[data-session-path="/sessions/b.jsonl"] [data-action="menu"]').click()
   await expect(page.getByRole('menuitem', { name: '从此分叉' })).toHaveCount(0)
+})
+
+test('escaping a row menu neither cancels the run nor traps the keyboard', async ({ page }) => {
+  await boot(page, initialState())
+  const trigger = page.locator('[data-session-path="/sessions/a.jsonl"] [data-action="menu"]')
+  await trigger.focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('menuitem', { name: '重命名' })).toBeFocused()
+  await page.keyboard.press('ArrowDown')
+  await expect(page.getByRole('menuitem', { name: '置顶' })).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('menu')).toHaveCount(0)
+  await expect(trigger).toBeFocused()
+  assert.equal(
+    await page.evaluate(() =>
+      window.__ZEN_E2E__.calls.some((call) => call.type === 'cancel'),
+    ),
+    false,
+  )
+
+  await page.getByRole('button', { name: '导出会话' }).click()
+  await expect(page.getByRole('menuitem', { name: '导出为 HTML' })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('menu')).toHaveCount(0)
+  assert.equal(
+    await page.evaluate(() =>
+      window.__ZEN_E2E__.calls.some((call) => call.type === 'cancel'),
+    ),
+    false,
+  )
+})
+
+test('an unknown current project leaves every listed session disabled', async ({ page }) => {
+  await page.addInitScript(installBridge, initialState({ noCurrent: true }))
+  await page.goto('/')
+  await page.getByRole('button', { name: '用当前目录启动' }).click()
+  await expect(page.locator('[data-session-path="/sessions/a.jsonl"]')).toBeVisible()
+  await page.getByRole('button', { name: '全部' }).click()
+  await expect(page.locator('[data-session-path="/sessions/a.jsonl"]')).toHaveAttribute('aria-disabled', 'true')
+  await expect(page.locator('[data-session-path="/sessions/b.jsonl"]')).toHaveAttribute('aria-disabled', 'true')
+  await expect(page.locator('[data-session-path="/sessions/c.jsonl"]')).toHaveAttribute('aria-disabled', 'true')
 })
 
 test('a queued message can be promoted to steering', async ({ page }) => {

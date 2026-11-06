@@ -46,6 +46,19 @@ test('sessions match title/name/project and are disabled off-project', () => {
   ])
 })
 
+test('an unknown current project disables every session hit', () => {
+  const hits = paletteResults(
+    [make('/s/a.jsonl'), make('/s/b.jsonl', { project: 'beta' })],
+    [],
+    '',
+    null,
+  )
+  assert.deepEqual(hits.sessions.map((hit) => [hit.session.path, hit.disabled]), [
+    ['/s/a.jsonl', true],
+    ['/s/b.jsonl', true],
+  ])
+})
+
 test('only allowlisted commands surface, with run/insert modes', () => {
   const hits = paletteResults([], commands, '', 'alpha')
   assert.deepEqual(hits.commands.map((hit) => [hit.name, hit.mode]), [
