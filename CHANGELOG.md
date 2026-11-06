@@ -3,7 +3,7 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased
+## v0.8.0 — 2026-11-06
 
 **Frontend alignment: RPC and the REPL stop dropping capabilities the other
 frontends already had, and headless `-p` stops assembling a second-class agent.**
