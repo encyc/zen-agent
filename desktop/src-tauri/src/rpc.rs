@@ -308,7 +308,7 @@ pub fn rpc_start(
                     fail_all_pending(&pending, "the zen rpc process exited");
                     let _ = app.emit(
                         "rpc:exit",
-                        serde_json::json!({ "code": status.code() }),
+                        serde_json::json!({ "code": status.code(), "pid": pid }),
                     );
                     break;
                 }
