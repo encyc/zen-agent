@@ -603,3 +603,101 @@ def test_builder_ids_keep_positions_when_an_empty_row_is_dropped():
         )
     )
     assert [view.id for view in builder.views] == ["v1", "v3"]
+
+
+def test_load_hydrates_cards_from_tool_end_records():
+    from zenagent.app.views import TranscriptBuilder
+
+    messages = [
+        UserMessage(content="go", timestamp=1),
+        AssistantMessage(
+            content=[ToolCall(id="c1", name="edit_file", arguments={})],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="tool_use",
+            timestamp=2,
+        ),
+        ToolResultMessage(
+            tool_call_id="c1",
+            tool_name="edit_file",
+            content=[TextContent(text="edited")],
+            is_error=False,
+            timestamp=3,
+        ),
+    ]
+    records = [
+        {
+            "type": "tool_end",
+            "call_id": "c1",
+            "duration_ms": 812,
+            "details": {"diff": "+x", "exit_code": 0},
+        }
+    ]
+    builder = TranscriptBuilder()
+    builder.load(messages, records)
+    card = builder.cards["c1"]
+    assert (card.status, card.duration_ms, card.diff) == ("ok", 812, "+x")
+    assert card.details["exit_code"] == 0
+
+
+def test_orphan_and_unknown_records_are_ignored():
+    from zenagent.app.views import TranscriptBuilder
+
+    messages = [
+        AssistantMessage(
+            content=[ToolCall(id="c1", name="bash", arguments={})],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="tool_use",
+            timestamp=2,
+        ),
+        ToolResultMessage(
+            tool_call_id="c1",
+            tool_name="bash",
+            content=[TextContent(text="ok")],
+            is_error=False,
+            timestamp=3,
+        ),
+    ]
+    builder = TranscriptBuilder()
+    builder.load(
+        messages,
+        [
+            {"type": "tool_end", "call_id": "gone", "duration_ms": 1},
+            {"type": "future_record"},
+        ],
+    )
+    assert builder.cards["c1"].duration_ms is None
+
+
+def test_last_tool_end_record_wins():
+    from zenagent.app.views import TranscriptBuilder
+
+    messages = [
+        AssistantMessage(
+            content=[ToolCall(id="c1", name="bash", arguments={})],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="tool_use",
+            timestamp=2,
+        ),
+        ToolResultMessage(
+            tool_call_id="c1",
+            tool_name="bash",
+            content=[TextContent(text="ok")],
+            is_error=False,
+            timestamp=3,
+        ),
+    ]
+    builder = TranscriptBuilder()
+    builder.load(
+        messages,
+        [
+            {"type": "tool_end", "call_id": "c1", "duration_ms": 1},
+            {"type": "tool_end", "call_id": "c1", "duration_ms": 2},
+        ],
+    )
+    assert builder.cards["c1"].duration_ms == 2

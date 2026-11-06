@@ -711,6 +711,7 @@ async def _shake(services: AppServices, argument: str) -> CommandResult:
         changed, session = shake(
             services.runtime.agent, kinds,
             derived_from=services.runtime.session.path.stem,
+            source=services.runtime.session,
         )
     except ValueError as exc:
         return CommandResult(message=str(exc))

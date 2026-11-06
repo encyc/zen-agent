@@ -57,7 +57,11 @@ def _strip_thinking(message):
 
 
 def shake(
-    agent: Agent, kinds: set[str], derived_from: str = ""
+    agent: Agent,
+    kinds: set[str],
+    derived_from: str = "",
+    *,
+    source: Session | None = None,
 ) -> tuple[int, Session]:
     """Rewrite the transcript without the selected content classes.
 
@@ -82,5 +86,10 @@ def shake(
     session = Session(unique_session_path("shake"), derived_from=derived_from)
     for message in new_messages:
         session.append(message)
+    if source is not None:
+        for record in source.carry_records(
+            new_messages, tool_end="tools" not in kinds
+        ):
+            session.append_meta(record)
     agent.replace_messages(new_messages)
     return changed, session

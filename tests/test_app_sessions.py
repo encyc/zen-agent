@@ -315,3 +315,50 @@ async def test_delete_trashes_subagent_transcripts(session_runtime):
 
     assert not task_dir(path).exists()
     assert (path.parent / ".trash" / f"{path.stem}.tasks").is_dir()
+
+
+async def test_fork_carries_tool_end_records_for_copied_calls(session_runtime):
+    from zenagent.agent.session import Session
+    from zenagent.types import (
+        AssistantMessage,
+        TextContent,
+        ToolCall,
+        ToolResultMessage,
+        Usage,
+        UserMessage,
+    )
+
+    runtime = session_runtime
+    manager = SessionManager(runtime)
+    runtime.session.append(UserMessage(content="go", timestamp=1))
+    runtime.session.append(
+        AssistantMessage(
+            content=[ToolCall(id="c1", name="read_file", arguments={})],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="tool_use",
+            timestamp=2,
+        )
+    )
+    runtime.session.append(
+        ToolResultMessage(
+            tool_call_id="c1",
+            tool_name="read_file",
+            content=[TextContent(text="ok")],
+            is_error=False,
+            timestamp=3,
+        )
+    )
+    runtime.session.append_meta(
+        {"type": "tool_end", "call_id": "c1", "duration_ms": 9}
+    )
+
+    await manager.fork()
+
+    reloaded = Session(manager.current())
+    reloaded.load()
+    assert [record["type"] for record in reloaded.records] == [
+        "session",
+        "tool_end",
+    ]

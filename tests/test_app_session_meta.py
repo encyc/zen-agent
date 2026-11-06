@@ -11,9 +11,12 @@ from conftest import text_stream
 
 from zenagent.agent.session import Session
 from zenagent.app.session_meta import (
+    TOOL_DETAILS_LIMIT,
+    TOOL_DIFF_MAX_LINES,
     SessionMetaRecorder,
     make_retry_recorder,
     mode_record,
+    tool_end_record,
 )
 from zenagent.events import AgentEvent, AssistantEvent
 from zenagent.types import (
@@ -283,3 +286,44 @@ async def test_delivered_steering_aggregates_and_marks_the_message(session_runti
     assert isinstance(message, UserMessage)
     assert message.content == "first\nsecond"
     assert message.steering is True
+
+
+def test_tool_end_record_shape():
+    record = tool_end_record(
+        "c1", "edit_file", 812, False, {"diff": "+x", "exit_code": 0}
+    )
+    assert record == {
+        "type": "tool_end",
+        "call_id": "c1",
+        "tool_name": "edit_file",
+        "duration_ms": 812,
+        "is_error": False,
+        "details": {"diff": "+x", "exit_code": 0},
+    }
+
+
+def test_tool_end_record_truncates_a_long_diff():
+    diff = "\n".join(f"+line {index}" for index in range(TOOL_DIFF_MAX_LINES + 50))
+    record = tool_end_record(
+        "c1", "edit_file", 1, False, {"diff": diff, "exit_code": 0}
+    )
+    details = record["details"]
+    assert details["diff"].count("\n") == TOOL_DIFF_MAX_LINES - 1
+    assert details["diff_truncated"] is True
+    assert details["exit_code"] == 0
+
+
+def test_tool_end_record_caps_serialized_details():
+    details = {"blob": "x" * (TOOL_DETAILS_LIMIT * 2), "exit_code": 0}
+    record = tool_end_record("c1", "bash", 1, False, details)
+    assert len(json.dumps(record["details"], ensure_ascii=False)) <= TOOL_DETAILS_LIMIT
+    assert record["details"]["details_truncated"] is True
+
+
+def test_tool_end_record_omits_empty_details():
+    assert tool_end_record("c1", "bash", None, False, None) == {
+        "type": "tool_end",
+        "call_id": "c1",
+        "tool_name": "bash",
+        "is_error": False,
+    }

@@ -857,3 +857,31 @@ async def test_task_dispatch_result_adds_no_spend(runtime_factory):
     status = chat.status
     assert status.subagent_cost == 0.0
     assert status.subagent_tokens == 0
+
+
+async def test_tool_completion_writes_a_tool_end_record(runtime_factory):
+    from zenagent.agent.loop import ToolResultAgent
+    from zenagent.agent.session import Session
+    from zenagent.events import AgentEvent
+
+    runtime = await runtime_factory()
+    chat = ChatController(runtime)
+    chat._on_event(
+        AgentEvent(
+            type="tool_execution_end",
+            tool_call_id="c1",
+            tool_name="bash",
+            result=ToolResultAgent(
+                content=[TextContent(text="done")], details={"exit_code": 0}
+            ),
+            is_error=False,
+            duration_ms=12,
+        )
+    )
+
+    session = Session(runtime.session.path)
+    session.load()
+    record = [item for item in session.records if item["type"] == "tool_end"][-1]
+    assert record["call_id"] == "c1"
+    assert record["duration_ms"] == 12
+    assert record["details"] == {"exit_code": 0}

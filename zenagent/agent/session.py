@@ -25,7 +25,13 @@ from datetime import datetime
 from pathlib import Path
 
 from zenagent import __version__, project
-from zenagent.types import Message, UserMessage, message_from_json
+from zenagent.types import (
+    AssistantMessage,
+    Message,
+    ToolCall,
+    UserMessage,
+    message_from_json,
+)
 
 __all__ = [
     "Session",
@@ -486,6 +492,8 @@ class Session:
         forked = Session(unique_session_path(f"fork{index}"), derived_from=self.path.stem)
         for message in prefix:
             forked.append(message)
+        for record in self.carry_records(prefix):
+            forked.append_meta(record)
         return forked.path
 
     def rewrite(self, messages: list[Message]) -> Path:
@@ -493,7 +501,42 @@ class Session:
         rewritten = Session(unique_session_path("rewrite"), derived_from=self.path.stem)
         for message in messages:
             rewritten.append(message)
+        for record in self.carry_records(messages):
+            rewritten.append_meta(record)
         return rewritten.path
+
+    def ensure_loaded(self) -> None:
+        """Read records/header from disk once, like the messages cache."""
+        if self._messages is None:
+            self.load()
+
+    def carry_records(
+        self, messages: list[Message], *, tool_end: bool = True
+    ) -> list[dict]:
+        """Records that still describe ``messages`` after a rewrite.
+
+        ``tool_end`` records follow the call ids still present; ``compaction``
+        records always travel. Run boundaries, retries and mode changes are
+        dropped: a truncated file must not claim events whose messages are gone.
+        """
+        self.ensure_loaded()
+        call_ids = {
+            block.id
+            for message in messages
+            if isinstance(message, AssistantMessage)
+            for block in message.content
+            if isinstance(block, ToolCall)
+        }
+        carried: list[dict] = []
+        for record in self.records:
+            kind = record.get("type")
+            if kind == "compaction" or (
+                tool_end
+                and kind == "tool_end"
+                and record.get("call_id") in call_ids
+            ):
+                carried.append(record)
+        return carried
 
     @property
     def messages(self) -> list[Message]:

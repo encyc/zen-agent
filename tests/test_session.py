@@ -22,6 +22,7 @@ from zenagent.agent.session import (
 from zenagent.types import (
     AssistantMessage,
     TextContent,
+    ToolCall,
     Usage,
     UserMessage,
     message_from_json,
@@ -749,3 +750,79 @@ def test_steering_round_trips_and_only_true_serializes():
         {"role": "user", "content": "x", "timestamp": 1, "steering": "yes"}
     )
     assert stored.steering is False
+
+
+def assistant_call(call_id: str = "c1") -> AssistantMessage:
+    return AssistantMessage(
+        content=[ToolCall(id=call_id, name="read_file", arguments={})],
+        provider="test",
+        model="m",
+        usage=Usage(),
+        stop_reason="tool_use",
+        timestamp=2,
+    )
+
+
+def test_records_survive_load(isolated_sessions):
+    session = Session(isolated_sessions / "s.jsonl")
+    session.append(user("hi"))
+    session.append_meta({"type": "tool_end", "call_id": "c1", "duration_ms": 5})
+    session.append_meta({"type": "compaction", "tokensBefore": 10})
+
+    loaded = Session(session.path)
+    loaded.load()
+
+    assert [record["type"] for record in loaded.records] == [
+        "session",
+        "tool_end",
+        "compaction",
+    ]
+
+
+def test_carry_records_keeps_live_calls_and_compactions(isolated_sessions):
+    source = Session(isolated_sessions / "source.jsonl")
+    messages = [user("go"), assistant_call("c1")]
+    for message in messages:
+        source.append(message)
+    source.append_meta({"type": "tool_end", "call_id": "c1", "duration_ms": 5})
+    source.append_meta({"type": "tool_end", "call_id": "gone", "duration_ms": 6})
+    source.append_meta({"type": "compaction", "tokensBefore": 10})
+    source.append_meta({"type": "run_start"})
+
+    carried = source.carry_records(messages)
+
+    assert [(record["type"], record.get("call_id")) for record in carried] == [
+        ("tool_end", "c1"),
+        ("compaction", None),
+    ]
+
+
+def test_carry_records_can_skip_tool_end(isolated_sessions):
+    source = Session(isolated_sessions / "source.jsonl")
+    messages = [user("go"), assistant_call("c1")]
+    for message in messages:
+        source.append(message)
+    source.append_meta({"type": "tool_end", "call_id": "c1", "duration_ms": 5})
+    source.append_meta({"type": "compaction", "tokensBefore": 10})
+
+    carried = source.carry_records(messages, tool_end=False)
+
+    assert [record["type"] for record in carried] == ["compaction"]
+
+
+def test_rewrite_carries_records_for_kept_calls(isolated_sessions):
+    source = Session(isolated_sessions / "source.jsonl")
+    messages = [user("go"), assistant_call("c1")]
+    for message in messages:
+        source.append(message)
+    source.append_meta({"type": "tool_end", "call_id": "c1", "duration_ms": 5})
+    source.append_meta({"type": "compaction", "tokensBefore": 10})
+
+    reloaded = Session(source.rewrite(messages))
+    reloaded.load()
+
+    assert [record["type"] for record in reloaded.records] == [
+        "session",
+        "tool_end",
+        "compaction",
+    ]

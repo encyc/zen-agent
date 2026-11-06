@@ -271,7 +271,32 @@ def _text_of(content) -> str:
     return "\n".join(part for part in parts if part)
 
 
-def messages_to_views(messages: list[Message]) -> list[MessageView | ToolCallView]:
+def _apply_tool_records(
+    views: list[MessageView | ToolCallView], records: list[dict] | None
+) -> None:
+    """Hydrate cards from ``tool_end`` records; unknown calls are ignored."""
+    cards = {
+        view.call_id: view for view in views if isinstance(view, ToolCallView)
+    }
+    for record in records or ():
+        if record.get("type") != "tool_end":
+            continue
+        card = cards.get(record.get("call_id"))
+        if card is None:
+            continue
+        duration = record.get("duration_ms")
+        if isinstance(duration, int):
+            card.duration_ms = duration
+        details = record.get("details")
+        if isinstance(details, dict):
+            card.details = dict(details)
+            diff = details.get("diff")
+            card.diff = diff if isinstance(diff, str) and diff else None
+
+
+def messages_to_views(
+    messages: list[Message], records: list[dict] | None = None
+) -> list[MessageView | ToolCallView]:
     """Convert stored messages into view models, pairing calls with results."""
     views: list[MessageView | ToolCallView] = []
     cards: dict[str, ToolCallView] = {}
@@ -334,6 +359,7 @@ def messages_to_views(messages: list[Message]) -> list[MessageView | ToolCallVie
     for call_id, card in cards.items():
         if call_id not in paired and card.status == "running":
             card.status = "interrupted"
+    _apply_tool_records(views, records)
     for position, view in enumerate(views, start=1):
         view.id = f"v{position}"
     return views
@@ -403,9 +429,11 @@ class TranscriptBuilder:
         self.current = None
         self._next_id = 1
 
-    def load(self, messages: list[Message]) -> None:
+    def load(
+        self, messages: list[Message], records: list[dict] | None = None
+    ) -> None:
         """Start over from a stored transcript (session switch / resume)."""
-        self.views = messages_to_views(messages)
+        self.views = messages_to_views(messages, records)
         self.cards = {
             view.call_id: view for view in self.views if isinstance(view, ToolCallView)
         }

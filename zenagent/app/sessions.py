@@ -199,10 +199,13 @@ class SessionManager:
         """Copy the current transcript into a new session and switch to it."""
         self._touch_project_meta()
         source = self.current()
-        messages = Session(source).load()
+        source_session = Session(source)
+        messages = source_session.load()
         target = Session(unique_session_path("fork"), derived_from=source.stem)
         for message in messages:
             target.append(message)
+        for record in source_session.carry_records(messages):
+            target.append_meta(record)
         # Historical subagent transcripts follow the history they describe.
         carry_task_dir(source, target.path, skip=_inflight_task_ids())
         await self.runtime.switch_session(target.path)

@@ -12,6 +12,7 @@ failures, so observability can never abort a run.
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Callable
 
@@ -20,10 +21,75 @@ from zenagent.events import AgentEvent
 from zenagent.types import AssistantMessage, Message
 
 __all__ = [
+    "TOOL_DETAILS_LIMIT",
+    "TOOL_DIFF_MAX_LINES",
     "SessionMetaRecorder",
     "make_retry_recorder",
     "mode_record",
+    "tool_end_record",
 ]
+
+#: Serialized cap for one ``tool_end`` record's ``details`` (UI-only payload).
+TOOL_DETAILS_LIMIT = 16_384
+
+#: Line cap for a stored diff before it is written to the session file.
+TOOL_DIFF_MAX_LINES = 400
+
+
+def _json_size(value: object) -> int:
+    return len(json.dumps(value, ensure_ascii=False, default=str))
+
+
+def _bound_details(details: dict | None) -> dict:
+    """Bound a tool's UI details: diff line cap, then a serialized size cap."""
+    data = dict(details or {})
+    diff = data.get("diff")
+    if isinstance(diff, str):
+        lines = diff.splitlines()
+        if len(lines) > TOOL_DIFF_MAX_LINES:
+            data["diff"] = "\n".join(lines[:TOOL_DIFF_MAX_LINES])
+            data["diff_truncated"] = True
+    while _json_size(data) > TOOL_DETAILS_LIMIT and data:
+        if "diff" in data:
+            data.pop("diff")
+            data["diff_truncated"] = True
+            continue
+        key = max(
+            (
+                name
+                for name in data
+                if name not in ("diff_truncated", "details_truncated")
+            ),
+            key=lambda name: _json_size(data[name]),
+            default=None,
+        )
+        if key is None:
+            break
+        data.pop(key)
+        data["details_truncated"] = True
+    return data
+
+
+def tool_end_record(
+    call_id: str,
+    tool_name: str,
+    duration_ms: int | None,
+    is_error: bool,
+    details: dict | None,
+) -> dict:
+    """One ``tool_end`` record; ``append_meta`` stamps the timestamp."""
+    record = {
+        "type": "tool_end",
+        "call_id": call_id,
+        "tool_name": tool_name,
+        "is_error": bool(is_error),
+    }
+    if duration_ms is not None:
+        record["duration_ms"] = int(duration_ms)
+    bounded = _bound_details(details)
+    if bounded:
+        record["details"] = bounded
+    return record
 
 
 def _terminal_detail(messages: list[Message] | None) -> str | None:

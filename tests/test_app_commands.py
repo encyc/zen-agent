@@ -453,3 +453,47 @@ async def test_memory_unknown_argument_shows_usage(runtime_factory, tmp_path):
     services = await memory_services(runtime_factory, tmp_path)
     result = await build_default_commands(services).dispatch("memory", "nonsense")
     assert "usage" in result.message
+
+
+async def test_shake_tools_does_not_carry_tool_end_records(services):
+    from zenagent.agent.session import Session
+    from zenagent.types import (
+        AssistantMessage,
+        TextContent,
+        ToolCall,
+        ToolResultMessage,
+        Usage,
+        UserMessage,
+    )
+
+    runtime = services.runtime
+    messages = [
+        UserMessage(content="go", timestamp=1),
+        AssistantMessage(
+            content=[ToolCall(id="c1", name="bash", arguments={})],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="tool_use",
+            timestamp=2,
+        ),
+        ToolResultMessage(
+            tool_call_id="c1",
+            tool_name="bash",
+            content=[TextContent(text="lots of output")],
+            is_error=False,
+            timestamp=3,
+        ),
+    ]
+    runtime.agent.replace_messages(messages)
+    for message in messages:
+        runtime.session.append(message)
+    runtime.session.append_meta(
+        {"type": "tool_end", "call_id": "c1", "details": {"diff": "+x"}}
+    )
+
+    await build_default_commands(services).dispatch("shake", "tools")
+
+    reloaded = Session(runtime.session.path)
+    reloaded.load()
+    assert not [item for item in reloaded.records if item["type"] == "tool_end"]
