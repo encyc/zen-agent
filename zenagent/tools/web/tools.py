@@ -9,12 +9,12 @@ import httpx
 
 from zenagent.agent.loop import AgentTool, ToolResultAgent
 from zenagent.prompts import tool_description
+from zenagent.tools._result import text_result
 from zenagent.tools.web import net
 from zenagent.tools.web.providers import LABELS
 from zenagent.tools.web.query import parse_query
 from zenagent.tools.web.registry import default_chain
 from zenagent.tools.web.types import SearchRequest
-from zenagent.types import TextContent
 
 __all__ = [
     "FETCH",
@@ -57,12 +57,6 @@ _BLOCK_BOUNDARY = re.compile(
 )
 
 
-def _text(body: str, *, is_error: bool = False, **details) -> ToolResultAgent:
-    return ToolResultAgent(
-        content=[TextContent(text=body)], details=details, is_error=is_error
-    )
-
-
 def format_results(result) -> str:
     if not result.ok:
         return f"web search failed — {result.failure_summary}"
@@ -88,16 +82,16 @@ async def run_search(query: str, *, limit: int = MAX_RESULTS, recency: str | Non
 async def _web_search(tool_call_id: str, args: dict, abort, on_update=None) -> ToolResultAgent:
     query = str(args.get("query", "")).strip()
     if not query:
-        return _text("query is required", is_error=True)
+        return text_result("query is required", is_error=True)
     recency = args.get("recency")
     if recency not in (None, *RECENCY_VALUES):
-        return _text(f"recency must be one of {', '.join(RECENCY_VALUES)}", is_error=True)
+        return text_result(f"recency must be one of {', '.join(RECENCY_VALUES)}", is_error=True)
     try:
         limit = int(args.get("limit") or MAX_RESULTS)
     except (TypeError, ValueError):
         limit = MAX_RESULTS
     result = await run_search(query, limit=max(1, min(limit, MAX_RESULTS)), recency=recency)
-    return _text(
+    return text_result(
         format_results(result),
         provider=result.provider,
         results=len(result.results),
@@ -155,14 +149,14 @@ def _clamp_fetch_timeout(raw) -> float | None:
 async def _fetch(tool_call_id: str, args: dict, abort, on_update=None) -> ToolResultAgent:
     url = str(args.get("url", "")).strip()
     if not url.startswith(("http://", "https://")):
-        return _text("url must start with http:// or https://", is_error=True)
+        return text_result("url must start with http:// or https://", is_error=True)
     timeout_s = _clamp_fetch_timeout(args.get("timeout_s"))
     kwargs = {} if timeout_s is None else {"timeout": timeout_s}
     try:
         response = await net.get(url, **kwargs)
         response.raise_for_status()
     except (httpx.HTTPError, OSError, UnicodeDecodeError) as exc:
-        return _text(f"fetch failed: {exc}", is_error=True)
+        return text_result(f"fetch failed: {exc}", is_error=True)
 
     content_type = response.headers.get("content-type", "")
     body = response.text
@@ -174,7 +168,7 @@ async def _fetch(tool_call_id: str, args: dict, abort, on_update=None) -> ToolRe
     if truncated:
         text = text[:MAX_FETCH_CHARS] + "\n… (truncated)"
     header = f"fetched {url} ({response.status_code}, {len(response.content)} bytes)"
-    return _text(
+    return text_result(
         f"{header}\n\n{text}",
         url=url,
         truncated=truncated,

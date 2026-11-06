@@ -31,11 +31,13 @@ StreamFn = Callable[[Model, list[Message], list[ToolDef], StreamOptions],
 - 被权限门 veto → `is_error=True`，内容为拒绝原因，`execute` 不会被调用；
 - 返回的 `content` 是**唯一**发给模型的内容；`details` 只给 UI/日志。
 
-所以 loop 里没有任何 `try/except` 包裹工具执行——这是有意为之。
+工具执行本身（`zenagent/agent/tool_exec.py`）是唯一的 `try/except` 位置：超时与工具异常
+都在那里降级成 is_error 结果。loop 层因此不需要再包——这是有意为之。
 
 ## 4. StopReason 不被护栏改写
 
-`StopReason = Literal["stop","length","tool_use","error","aborted"]`（`types.py`）。
+`StopReason = Literal["stop","length","tool_use","error","aborted","pending"]`（`types.py`；
+`pending` 是流式过程中的进行态，适配器必须给它一个终态）。
 `max_turns` / `max_cost` / 上下文压缩等「策略性终止」**不修改** assistant 消息的 `stop_reason`，
 而是记录在 `AgentState.termination` / `Agent.termination`：
 
@@ -54,7 +56,8 @@ StreamFn = Callable[[Model, list[Message], list[ToolDef], StreamOptions],
 - `Session` 只追加 JSONL 行；`/undo` 用 `truncate_last_turn` 重写文件但保留旧内容到新文件？
   —— 实际做法见 [持久化](../internals/persistence.md)：不可逆操作（压缩、`/undo`、`/fork`）
   总是**写新 session 文件**，旧文件字节不变。
-- `--resume` 只是读取；不修改原文件。
+- `--resume` 只读取消息，但启动时会追加一条 `mode` 记录（侧信道记录见
+  [持久化](../internals/persistence.md)），消息行本身不改。
 
 ## 7. 配置与密钥
 

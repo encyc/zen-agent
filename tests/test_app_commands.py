@@ -201,7 +201,7 @@ async def test_add_dir_rejects_a_missing_path(services, tmp_path):
 
 
 async def test_copy_uses_the_clipboard(services, monkeypatch):
-    from zenagent.cli.tui import clipboard
+    from zenagent.app import clipboard
 
     copied: list[str] = []
     monkeypatch.setattr(clipboard, "write_clipboard_text", lambda text: copied.append(text) or True)
@@ -212,7 +212,7 @@ async def test_copy_uses_the_clipboard(services, monkeypatch):
 
 
 async def test_copy_reports_a_missing_clipboard(services, monkeypatch):
-    from zenagent.cli.tui import clipboard
+    from zenagent.app import clipboard
 
     monkeypatch.setattr(clipboard, "write_clipboard_text", lambda text: False)
     registry = build_default_commands(services)
@@ -313,7 +313,7 @@ async def test_urls_command_reports_when_the_answer_has_no_links(services):
 async def test_copy_with_an_index_copies_the_url_verbatim(runtime_factory, monkeypatch):
     copied: list[str] = []
     monkeypatch.setattr(
-        "zenagent.cli.tui.clipboard.write_clipboard_text",
+        "zenagent.app.clipboard.write_clipboard_text",
         lambda text: copied.append(text) or True,
     )
     answer = (
@@ -329,7 +329,7 @@ async def test_copy_with_an_index_copies_the_url_verbatim(runtime_factory, monke
 async def test_copy_keeps_literal_text_when_the_argument_is_not_a_number(services, monkeypatch):
     copied: list[str] = []
     monkeypatch.setattr(
-        "zenagent.cli.tui.clipboard.write_clipboard_text",
+        "zenagent.app.clipboard.write_clipboard_text",
         lambda text: copied.append(text) or True,
     )
     await build_default_commands(services).dispatch("copy", "hello world")
@@ -353,7 +353,7 @@ async def test_copy_index_zero_never_copies_the_digit(services, monkeypatch):
     """`/copy 0` is an index (out of range), never the literal text "0"."""
     copied: list[str] = []
     monkeypatch.setattr(
-        "zenagent.cli.tui.clipboard.write_clipboard_text",
+        "zenagent.app.clipboard.write_clipboard_text",
         lambda text: copied.append(text) or True,
     )
     result = await build_default_commands(services).dispatch("copy", "0")

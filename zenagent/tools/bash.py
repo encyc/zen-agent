@@ -29,6 +29,7 @@ from pathlib import Path
 from zenagent.agent.loop import AgentTool, ToolResultAgent
 from zenagent.events import AbortToken
 from zenagent.prompts import tool_description
+from zenagent.tools._result import text_result
 from zenagent.tools.jobs import (
     DEFAULT_JOB_TIMEOUT_S,
     MAX_JOB_TIMEOUT_S,
@@ -59,12 +60,6 @@ _UPDATE_BYTES = 4096
 _UPDATE_INTERVAL_S = 0.5
 
 
-def _text(text: str, *, is_error: bool = False, **details) -> ToolResultAgent:
-    return ToolResultAgent(
-        content=[TextContent(text=text)], details=details, is_error=is_error
-    )
-
-
 async def _background(
     command: str, args: dict, cwd: Path
 ) -> ToolResultAgent:
@@ -75,7 +70,7 @@ async def _background(
             DEFAULT_JOB_TIMEOUT_S if raw_timeout is None else float(raw_timeout)
         )
     except (TypeError, ValueError):
-        return _text(
+        return text_result(
             f"timeout_s must be a number (got {raw_timeout!r})", is_error=True
         )
     timeout_s = min(max(timeout_s, MIN_JOB_TIMEOUT_S), MAX_JOB_TIMEOUT_S)
@@ -84,8 +79,8 @@ async def _background(
             command, cwd=cwd, timeout_s=timeout_s
         )
     except (ShellError, JobStartError) as exc:
-        return _text(str(exc), is_error=True)
-    return _text(
+        return text_result(str(exc), is_error=True)
+    return text_result(
         f"started background job {job.id} (running): {command}",
         job_id=job.id,
         status="running",
@@ -101,10 +96,10 @@ async def _bash(
     if is_async is None:
         is_async = False
     if not isinstance(is_async, bool):
-        return _text("async must be a boolean", is_error=True)
+        return text_result("async must be a boolean", is_error=True)
     cwd = resolve_cwd(args.get("cwd"))
     if isinstance(cwd, str):
-        return _text(cwd, is_error=True)
+        return text_result(cwd, is_error=True)
     if is_async:
         return await _background(command, args, cwd)
     timeout_s = float(args.get("timeout_s") or 120.0)
@@ -113,9 +108,9 @@ async def _bash(
     try:
         proc = await spawn_shell_process(command, cwd=cwd, env=command_env())
     except ShellError as exc:
-        return _text(str(exc), is_error=True)
+        return text_result(str(exc), is_error=True)
     except OSError as exc:
-        return _text(f"cannot start command: {exc}", is_error=True)
+        return text_result(f"cannot start command: {exc}", is_error=True)
 
     assert proc.stdout is not None
     buffer = OutputBuffer()
@@ -195,7 +190,7 @@ async def _bash(
     if notes:
         text += "\n[" + "; ".join(notes) + "]"
 
-    return _text(
+    return text_result(
         text,
         exit_code=exit_code,
         timed_out=timed_out,

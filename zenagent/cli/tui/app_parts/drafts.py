@@ -116,8 +116,8 @@ class DraftsMixin:
         through the same channel as ``/image``; anything else is inserted into
         the draft as text.
         """
+        from zenagent.app.clipboard import read_clipboard_text
         from zenagent.attachments import read_image_argument
-        from zenagent.cli.tui.clipboard import read_clipboard_text
 
         text = read_clipboard_text()
         if not text:

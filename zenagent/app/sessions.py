@@ -26,6 +26,7 @@ from zenagent.agent.session import (
     unique_session_path,
 )
 from zenagent.agent.subagents import carry_task_dir, trash_task_dir
+from zenagent.app import records
 from zenagent.app.runtime import Runtime
 from zenagent.export import export_session
 from zenagent.i18n import t
@@ -210,7 +211,9 @@ class SessionManager:
         target = Session(unique_session_path("fork"), derived_from=source.stem)
         for message in messages:
             target.append(message)
-        for record in source_session.carry_records(messages):
+        for record in source_session.carry_records(
+            messages, keep=records.keep_for_rewrite()
+        ):
             target.append_meta(record)
         # Historical subagent transcripts follow the history they describe.
         carry_task_dir(source, target.path, skip=_inflight_task_ids())
@@ -235,7 +238,9 @@ class SessionManager:
             return None
         self.runtime.agent.replace_messages(truncated)
         source = self.current()
-        new_path = Session(source).rewrite(truncated)
+        new_path = Session(source).rewrite(
+            truncated, keep=records.keep_for_rewrite()
+        )
         # The truncated history keeps its subagent transcripts.
         carry_task_dir(source, new_path, skip=_inflight_task_ids())
         self.runtime.session = Session(new_path)

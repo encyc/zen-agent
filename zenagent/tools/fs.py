@@ -21,7 +21,7 @@ from pathlib import Path
 from zenagent.agent.loop import AgentTool, ToolResultAgent
 from zenagent.agent.result_budget import LINE_TRUNCATION_MARKER
 from zenagent.prompts import tool_description
-from zenagent.types import TextContent
+from zenagent.tools._result import text_result
 
 __all__ = [
     "DEFAULT_READ_LIMIT",
@@ -136,12 +136,6 @@ def unified_diff(
     return "\n".join(lines)
 
 
-def _text(text: str, *, is_error: bool = False, **details) -> ToolResultAgent:
-    return ToolResultAgent(
-        content=[TextContent(text=text)], details=details, is_error=is_error
-    )
-
-
 def _tool(
     name: str,
     description: str,
@@ -175,14 +169,14 @@ async def _read_file(
     try:
         data = path.read_bytes()
     except FileNotFoundError:
-        return _text(f"file not found: {path}", is_error=True)
+        return text_result(f"file not found: {path}", is_error=True)
     except IsADirectoryError:
-        return _text(f"not a file (it is a directory): {path}", is_error=True)
+        return text_result(f"not a file (it is a directory): {path}", is_error=True)
     except OSError as exc:
-        return _text(f"cannot read {path}: {exc}", is_error=True)
+        return text_result(f"cannot read {path}: {exc}", is_error=True)
 
     if _looks_binary(data):
-        return _text(
+        return text_result(
             f"refusing to read {path}: it looks binary "
             f"({len(data)} bytes, NUL byte in the first {_BINARY_SNIFF_BYTES})",
             is_error=True,
@@ -190,7 +184,7 @@ async def _read_file(
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError as exc:
-        return _text(f"refusing to read {path}: not valid UTF-8 ({exc})", is_error=True)
+        return text_result(f"refusing to read {path}: not valid UTF-8 ({exc})", is_error=True)
 
     lines = text.splitlines()
     total = len(lines)
@@ -200,22 +194,22 @@ async def _read_file(
             DEFAULT_READ_LIMIT if args.get("limit") is None else int(args["limit"])
         )
     except (TypeError, ValueError):
-        return _text("offset and limit must be integers", is_error=True)
+        return text_result("offset and limit must be integers", is_error=True)
     if offset < 0:
-        return _text(
+        return text_result(
             f"offset must be >= 0 (got {offset}); it is a 0-based line index",
             is_error=True,
         )
     if limit <= 0:
-        return _text(f"limit must be >= 1 (got {limit})", is_error=True)
+        return text_result(f"limit must be >= 1 (got {limit})", is_error=True)
     limit = min(limit, MAX_READ_LIMIT)
 
     if total == 0 and offset == 0:
-        return _text(
+        return text_result(
             "", total_lines=0, offset=offset, limit=limit, truncated=False
         )
     if offset >= total:
-        return _text(
+        return text_result(
             f"offset {offset} is past EOF: {path} has {total} line(s) "
             f"(valid offsets: 0-{max(total - 1, 0)})",
             is_error=True,
@@ -248,11 +242,11 @@ async def _read_file(
     # newline); paged reads are line slices.
     if offset == 0 and end == total:
         if not numbered:
-            return _text(text, **details)
+            return text_result(text, **details)
         body = render(0)
         if text.endswith("\n"):
             body += "\n"
-        return _text(body, **details)
+        return text_result(body, **details)
 
     body = render(offset)
     if end < total:
@@ -260,7 +254,7 @@ async def _read_file(
             f"\n\n{READ_TRUNCATION_MARKER} showing lines {offset + 1}-{end} of "
             f"{total} lines; call read_file with offset={end} for the next page]"
         )
-    return _text(body, **details)
+    return text_result(body, **details)
 
 
 #: Footer ``read_file`` appends to a truncated page (anchored at end of text).
@@ -313,7 +307,7 @@ async def _write_file(
     body_bytes = len(body.encode("utf-8"))
     previous_bytes = len(previous.encode("utf-8"))
     if previous_bytes and projected and body_bytes < previous_bytes:
-        return _text(
+        return text_result(
             f"refusing to write {path}: the content is a truncated read_file "
             "projection (page footer, budget or line truncation) and its body "
             f"is shorter than the file on disk ({body_bytes} < "
@@ -335,12 +329,12 @@ async def _write_file(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(payload.encode("utf-8"))
     except OSError as exc:
-        return _text(f"cannot write {path}: {exc}", is_error=True)
+        return text_result(f"cannot write {path}: {exc}", is_error=True)
     diff = unified_diff(str(path), previous, payload)
     notice = ""
     if payload != content:
         notice = " (kept the existing file's CRLF/BOM convention)"
-    return _text(
+    return text_result(
         f"wrote {len(content)} characters to {path}{notice}",
         path=str(path),
         diff=diff,
@@ -357,20 +351,20 @@ async def _edit_file(
     if replace_all is None:
         replace_all = False
     if not isinstance(replace_all, bool):
-        return _text("replace_all must be a boolean", is_error=True)
+        return text_result("replace_all must be a boolean", is_error=True)
     if not old:
-        return _text("old_string must not be empty", is_error=True)
+        return text_result("old_string must not be empty", is_error=True)
 
     try:
         raw = path.read_bytes()
     except FileNotFoundError:
-        return _text(f"file not found: {path}", is_error=True)
+        return text_result(f"file not found: {path}", is_error=True)
     except OSError as exc:
-        return _text(f"cannot read {path}: {exc}", is_error=True)
+        return text_result(f"cannot read {path}: {exc}", is_error=True)
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError as exc:
-        return _text(f"cannot read {path}: {exc}", is_error=True)
+        return text_result(f"cannot read {path}: {exc}", is_error=True)
 
     # Match newline-insensitively: a model editing a CRLF file often supplies
     # LF-only old_string/new_string, and an LF file may receive CRLF text.
@@ -386,14 +380,14 @@ async def _edit_file(
 
     matches = searchable.count(target)
     if matches == 0:
-        return _text(
+        return text_result(
             f"old_string not found in {path}; nothing changed. Include more "
             "surrounding context.",
             is_error=True,
             matches=0,
         )
     if matches > 1 and not replace_all:
-        return _text(
+        return text_result(
             f"old_string matches {matches} times in {path}; it must be unique. "
             "Include more surrounding context; nothing changed.",
             is_error=True,
@@ -412,11 +406,11 @@ async def _edit_file(
     try:
         path.write_bytes(updated.encode("utf-8"))
     except OSError as exc:
-        return _text(f"cannot write {path}: {exc}", is_error=True)
+        return text_result(f"cannot write {path}: {exc}", is_error=True)
     diff = unified_diff(str(path), text, updated)
     count = matches if replace_all else 1
     noun = "occurrence" if count == 1 else "occurrences"
-    return _text(
+    return text_result(
         f"edited {path}: replaced {count} {noun}",
         path=str(path),
         diff=diff,
@@ -439,11 +433,11 @@ async def _list_dir(
     try:
         entries = sorted(path.iterdir(), key=lambda entry: (not entry.is_dir(), entry.name))
     except FileNotFoundError:
-        return _text(f"directory not found: {path}", is_error=True)
+        return text_result(f"directory not found: {path}", is_error=True)
     except NotADirectoryError:
-        return _text(f"not a directory: {path}", is_error=True)
+        return text_result(f"not a directory: {path}", is_error=True)
     except OSError as exc:
-        return _text(f"cannot list {path}: {exc}", is_error=True)
+        return text_result(f"cannot list {path}: {exc}", is_error=True)
 
     rows: list[str] = [f"{path.resolve()} ({len(entries)} entries)"]
     shown = entries[:MAX_LIST_ENTRIES]
@@ -457,7 +451,7 @@ async def _list_dir(
             rows.append(f"?  {entry.name}  (unreadable)")
     if len(entries) > len(shown):
         rows.append(f"... {len(entries) - len(shown)} more entries not shown")
-    return _text("\n".join(rows), entries=len(entries))
+    return text_result("\n".join(rows), entries=len(entries))
 
 
 READ_FILE = _tool(

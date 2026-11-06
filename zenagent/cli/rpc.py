@@ -462,6 +462,10 @@ class RpcServer:
             payload["active_subagent"] = status.active_subagent
             payload["subagent_cost"] = status.subagent_cost
             payload["subagent_tokens"] = status.subagent_tokens
+            # The complete snapshot (every RunStatus field, nested dataclasses
+            # included) so a client never has to guess which keys were
+            # remembered. The flat keys above stay for older clients.
+            payload["status"] = status.to_wire()
         return payload
 
     def _steer(self, request: dict, request_id) -> bool:
@@ -484,6 +488,8 @@ class RpcServer:
         """
         from dataclasses import asdict
 
+        from zenagent.app import records
+
         views: list = []
         notices: list = []
         compactions: list[dict] = []
@@ -492,9 +498,7 @@ class RpcServer:
             if session is not None:
                 session.ensure_loaded()
                 compactions = [
-                    record
-                    for record in session.records
-                    if record.get("type") == "compaction"
+                    record for record in session.records if records.is_compaction(record)
                 ]
             views = [asdict(view) for view in self.chat.transcript]
             notices = [
@@ -809,9 +813,7 @@ async def _run(args) -> int:
     from zenagent.app.commands import AppServices, build_default_commands
     from zenagent.app.models import ModelManager
     from zenagent.app.modes import resolve_mode
-    from zenagent.app.permissions import PermissionBroker, build_permission_gate
     from zenagent.app.runtime import Runtime, RuntimeOptions
-    from zenagent.app.safety import GuardPolicy
     from zenagent.app.sessions import SessionManager
     from zenagent.config import load_user_config
 
@@ -823,24 +825,17 @@ async def _run(args) -> int:
     mode = resolve_mode(
         explicit=args.mode, assume_yes=args.yes, read_only=args.read_only
     )
-    policy = GuardPolicy.from_config(
-        user_config,
-        cwd=Path.cwd(),
+    from zenagent.app.permissions import build_broker_for
+
+    broker = build_broker_for(
+        user_config=user_config,
+        mode=mode,
+        read_only=args.read_only,
+        assume_yes=args.yes,
+        allow_dangerous=args.allow_dangerous,
         allow_outside=args.allow_outside or [],
         allow_destructive=args.allow_destructive,
         allow_protected=args.allow_protected,
-    )
-    broker = PermissionBroker.wrap(
-        build_permission_gate(
-            assume_yes=args.yes,
-            interactive=False,
-            allow_dangerous=args.allow_dangerous,
-            allow=user_config.tool_allow,
-            deny=user_config.tool_deny,
-            mode=mode,
-            read_only=args.read_only,
-            policy=policy,
-        )
     )
     options = RuntimeOptions(
         model_id=args.model,

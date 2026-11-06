@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from zenagent.agent.session import Session, session_title
+from zenagent.app import clipboard
 from zenagent.app.appearance import THEME_CHOICES
 from zenagent.app.chat import ChatController
 from zenagent.app.links import extract_links, parse_index
@@ -628,8 +629,6 @@ async def _jobs(services: AppServices, argument: str) -> CommandResult:
 @_command("copy")
 async def _copy(services: AppServices, argument: str) -> CommandResult:
     """Copy the argument (or the last answer, or link <n> of it) to the clipboard."""
-    from zenagent.cli.tui.clipboard import write_clipboard_text
-
     # A bare number is a link index (`/urls` numbers them); anything else keeps
     # the old "copy this text" meaning, and no argument means the last answer.
     index = parse_index(argument)
@@ -640,14 +639,14 @@ async def _copy(services: AppServices, argument: str) -> CommandResult:
         if not 1 <= index <= len(links):
             return CommandResult(message=t("cmdmsg.url_index_invalid", count=len(links)))
         link = links[index - 1]
-        if write_clipboard_text(link):
+        if clipboard.write_clipboard_text(link):
             return CommandResult(message=t("cmdmsg.url_copied", url=link))
         return CommandResult(message=t("cmdmsg.copy_failed"))
 
     text = argument.strip() or services.chat.last_assistant_text()
     if not text:
         return CommandResult(message=t("cmdmsg.copy_empty"))
-    if write_clipboard_text(text):
+    if clipboard.write_clipboard_text(text):
         return CommandResult(message=t("cmdmsg.copied"))
     return CommandResult(message=t("cmdmsg.copy_failed"))
 

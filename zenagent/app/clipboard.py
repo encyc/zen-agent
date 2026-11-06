@@ -1,4 +1,4 @@
-"""Best-effort clipboard text reader for the TUI (stdlib only, no deps).
+"""Best-effort clipboard text reader (stdlib only, no deps).
 
 Ctrl+V is only useful if the app can ask the OS what the clipboard holds; every
 supported platform ships a tiny tool for it (macOS ``pbpaste``, Wayland

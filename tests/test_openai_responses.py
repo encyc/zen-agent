@@ -94,3 +94,19 @@ async def test_toolcall_fixture_assembles_arguments():
     assert isinstance(call, ToolCall)
     assert call.name == "get_weather" and call.arguments == {"city": "Beijing"}
     assert call.arguments_error is None
+
+
+async def test_incomplete_turn_with_calls_reports_length():
+    events = await _events("openai-responses-incomplete-toolcall.txt")
+    final = events[-1].partial
+    assert events[-1].reason == "length"
+    assert final.stop_reason == "length"
+    assert isinstance(final.content[0], ToolCall)
+
+
+async def test_incomplete_event_with_calls_reports_length():
+    events = await _events("openai-responses-incomplete-event.txt")
+    final = events[-1].partial
+    assert events[-1].reason == "length"
+    assert final.stop_reason == "length"
+    assert isinstance(final.content[0], ToolCall)

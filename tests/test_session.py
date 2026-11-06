@@ -19,6 +19,7 @@ from zenagent.agent.session import (
     session_title,
     set_session_title,
 )
+from zenagent.app import records
 from zenagent.types import (
     AssistantMessage,
     TextContent,
@@ -165,7 +166,7 @@ def test_fork_at_copies_the_prefix_without_touching_the_source(isolated_sessions
         session.append(message)
     before = original.read_bytes()
 
-    forked_path = session.fork_at(2)  # include the 2nd user message
+    forked_path = session.fork_at(2, keep=records.keep_for_rewrite())  # include the 2nd user message
 
     assert original.read_bytes() == before  # immutable source
     forked = Session(forked_path).load()
@@ -180,7 +181,7 @@ def test_fork_at_rejects_an_out_of_range_index(isolated_sessions):
     session.append(user("only"))
     for bad in (0, -1, 2):
         try:
-            session.fork_at(bad)
+            session.fork_at(bad, keep=records.keep_for_rewrite())
         except ValueError as exc:
             assert "out of range" in str(exc)
         else:  # pragma: no cover
@@ -193,7 +194,7 @@ def test_rewrite_writes_a_new_file(isolated_sessions):
     for message in [user("keep"), assistant("kept")]:
         session.append(message)
 
-    new_path = session.rewrite([user("only")])
+    new_path = session.rewrite([user("only")], keep=records.keep_for_rewrite())
     assert new_path != session.path
     assert Session(new_path).load()[0].content == "only"
     assert len(session.load()) == 2  # source untouched
@@ -391,7 +392,7 @@ def test_fork_at_does_not_inherit_the_source_title(isolated_sessions):
     source = _write_session(isolated_sessions, "chat.jsonl", ["hello"])
     set_session_title(source, "Source name")
 
-    forked = Session(source).fork_at(1)
+    forked = Session(source).fork_at(1, keep=records.keep_for_rewrite())
 
     assert forked.name != source.name
     assert session_title(forked) == "hello"
@@ -402,7 +403,7 @@ def test_rewrite_does_not_inherit_the_source_title(isolated_sessions):
     source = _write_session(isolated_sessions, "chat.jsonl", ["hello"])
     set_session_title(source, "Source name")
 
-    rewritten = Session(source).rewrite([user("fresh start")])
+    rewritten = Session(source).rewrite([user("fresh start")], keep=records.keep_for_rewrite())
 
     assert session_title(rewritten) == "fresh start"
 
@@ -709,11 +710,11 @@ async def test_derived_from_records_provenance(tmp_path):
     session.append(user("one"))
     session.append(user("two"))
 
-    rewritten = Session(session.rewrite([user("one")]))
+    rewritten = Session(session.rewrite([user("one")], keep=records.keep_for_rewrite()))
     rewritten.load()
     assert rewritten.header["derivedFrom"] == "s"
 
-    forked_path = session.fork_at(1)
+    forked_path = session.fork_at(1, keep=records.keep_for_rewrite())
     forked = Session(forked_path)
     forked.load()
     assert forked.header["derivedFrom"] == "s"
@@ -789,7 +790,7 @@ def test_carry_records_keeps_live_calls_and_compactions(isolated_sessions):
     source.append_meta({"type": "compaction", "tokensBefore": 10})
     source.append_meta({"type": "run_start"})
 
-    carried = source.carry_records(messages)
+    carried = source.carry_records(messages, keep=records.keep_for_rewrite())
 
     assert [(record["type"], record.get("call_id")) for record in carried] == [
         ("tool_end", "c1"),
@@ -805,7 +806,9 @@ def test_carry_records_can_skip_tool_end(isolated_sessions):
     source.append_meta({"type": "tool_end", "call_id": "c1", "duration_ms": 5})
     source.append_meta({"type": "compaction", "tokensBefore": 10})
 
-    carried = source.carry_records(messages, tool_end=False)
+    carried = source.carry_records(
+        messages, keep=records.keep_for_rewrite(keep_tool_end=False)
+    )
 
     assert [record["type"] for record in carried] == ["compaction"]
 
@@ -818,7 +821,7 @@ def test_rewrite_carries_records_for_kept_calls(isolated_sessions):
     source.append_meta({"type": "tool_end", "call_id": "c1", "duration_ms": 5})
     source.append_meta({"type": "compaction", "tokensBefore": 10})
 
-    reloaded = Session(source.rewrite(messages))
+    reloaded = Session(source.rewrite(messages, keep=records.keep_for_rewrite()))
     reloaded.load()
 
     assert [record["type"] for record in reloaded.records] == [
@@ -861,6 +864,79 @@ def test_carry_records_sees_records_appended_after_load(isolated_sessions):
     source.load()
     source.append_meta({"type": "tool_end", "call_id": "c1", "duration_ms": 5})
 
-    carried = source.carry_records(messages)
+    carried = source.carry_records(messages, keep=records.keep_for_rewrite())
 
     assert [record["type"] for record in carried] == ["tool_end"]
+
+
+def test_carry_records_default_carries_structurally(isolated_sessions):
+    """Without a predicate the kernel only applies the call-id rule."""
+    source = Session(isolated_sessions / "source.jsonl")
+    messages = [user("go"), assistant_call("c1")]
+    for message in messages:
+        source.append(message)
+    source.append_meta({"type": "tool_end", "call_id": "c1"})
+    source.append_meta({"type": "tool_end", "call_id": "gone"})
+    source.append_meta({"type": "compaction", "tokensBefore": 10})
+    source.append_meta({"type": "run_start"})
+    source.append_meta({"type": "future-kind"})
+
+    carried = source.carry_records(messages)
+
+    assert [(record["type"], record.get("call_id")) for record in carried] == [
+        ("tool_end", "c1"),
+        ("compaction", None),
+        ("run_start", None),
+        ("future-kind", None),
+    ]
+
+
+def test_kernel_does_not_know_record_kinds():
+    """The record vocabulary belongs to app/; agent/ must not name a kind."""
+    kernel = Path(__file__).resolve().parent.parent / "zenagent" / "agent"
+    literals = ("tool_end", "compaction", "run_start", "run_end", "retry", "mode")
+    offenders = []
+    for source in kernel.rglob("*.py"):
+        text = source.read_text()
+        for kind in literals:
+            if f'"{kind}"' in text:
+                offenders.append(f"{source.name}: {kind}")
+    assert offenders == []
+
+
+def test_side_channel_records_round_trip(isolated_sessions):
+    """Every kind this build writes survives a reload; rewrite keeps the two
+    kinds that still describe the transcript and drops the run-scoped ones."""
+    session = Session(isolated_sessions / "records.jsonl")
+    messages = [user("go"), assistant_call("c1")]
+    for message in messages:
+        session.append(message)
+    for record in (
+        records.run_start(),
+        records.tool_end("c1", "read_file", 5, False, None),
+        records.retry(attempt=1, max_retries=2, delay_ms=100, error="503", model="m"),
+        records.mode("plan"),
+        records.compaction(10, "parent", "auto"),
+        records.run_end(termination="stop", turns=1),
+        {"type": "future-kind", "payload": 1},
+    ):
+        session.append_meta(record)
+
+    reloaded = Session(session.path)
+    reloaded.load()
+    kinds = [record["type"] for record in reloaded.records]
+    assert kinds == ["session", *[kind for kind in (
+        "run_start", "tool_end", "retry", "mode", "compaction", "run_end", "future-kind"
+    )]]
+
+    carried = reloaded.carry_records(messages, keep=records.keep_for_rewrite())
+    assert [record["type"] for record in carried] == ["tool_end", "compaction"]
+
+
+def test_rewrite_and_fork_at_require_the_keep_predicate():
+    """``keep`` is mandatory: the kernel must not silently carry everything."""
+    import inspect
+
+    for method in (Session.rewrite, Session.fork_at):
+        parameter = inspect.signature(method).parameters["keep"]
+        assert parameter.default is inspect.Parameter.empty

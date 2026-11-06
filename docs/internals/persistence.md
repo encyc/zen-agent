@@ -2,8 +2,11 @@
 
 ## 会话文件（`agent/session.py`）
 
-格式：一行一个 JSON（消息），`~/.zenagent/projects/<slug>-<hash8>/sessions/<YYYYmmdd-HHMMSS>[-<prefix>].jsonl`
+格式：一行一个 JSON（消息或记录），`~/.zenagent/projects/<slug>-<hash8>/sessions/<YYYYmmdd-HHMMSS>[-<prefix>].jsonl`
 （升级前的 legacy 目录是扁平的 `~/.zenagent/sessions/`，只读保留）。
+
+文件第一行是**信封**（`{"type": "session", "version": 1, ...}`，`RECORD_VERSION = 1`），
+之后每一行要么是一条消息（带 `role`），要么是一条**侧信道记录**（带 `type`，扁平、无 `role`）。
 
 ```python
 class Session:
@@ -14,6 +17,22 @@ class Session:
     def fork_at(self, index) -> Path     # 写新文件
     def rewrite(self, messages) -> Path  # 写新文件
 ```
+
+侧信道记录（词汇表在 `app/records.py`，由 `Session.append_meta` 写入，写失败被吞掉，
+观测性永不打断 run）：
+
+| 记录 | 谁写 | 谁读 | 用途 |
+|---|---|---|---|
+| `run_start` / `run_end` | `SessionMetaRecorder`（Runtime 订阅者） | 无 UI 消费者（事后剖解 CLI 用） | 每轮从哪开始、为何结束（终止原因/轮数/耗时/最后错误） |
+| `retry` | `make_retry_recorder`（`on_retry`） | 同上 | 被吞掉的瞬时失败与退避 |
+| `mode` | `Runtime.bootstrap` / `/mode` | 同上 | 会话运行过的权限模式 |
+| `tool_end` | `SessionMetaRecorder`（**Runtime**，不是 UI 控制器） | `app/views.py`、`cli/rpc.py` 快照 | 工具卡片重放：耗时、错误、有界 details（16 384 字符 / diff 400 行） |
+| `compaction` | `app/compact.py` | `app/views.py`、`cli/rpc.py` 快照 | 恢复后重画分隔线一次 |
+
+重写（`/undo`、`/fork`、`/compact`、`/shake`、重试）会写新文件，并按
+`records.keep_for_rewrite()` 决定哪些记录跟随：`compaction` 总是跟随，`tool_end` 跟随仍存在的
+`call_id`；run 边界、重试、mode 与未知类型丢弃。内核只应用**结构**规则（带 `call_id` 的记录跟着
+仍存活的调用走）并跳过信封行，不认识任何记录种类。
 
 不变量：
 

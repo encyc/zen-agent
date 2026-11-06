@@ -331,6 +331,7 @@ class Runtime:
                 allow=runtime.user_config.tool_allow,
                 deny=runtime.user_config.tool_deny,
                 mode=mode,
+                read_only=options.read_only,
                 policy=policy,
             )
         elif hasattr(gate, "set_mode"):
@@ -416,6 +417,10 @@ class Runtime:
                 if runtime.artifact_sink is not None
                 else None
             ),
+            # The child is not a second user: its tool calls go through the
+            # same gate as the parent's, so deny/catastrophic-command policy
+            # holds inside subagents.
+            before_tool_call=gate.before_tool_call,
         )
         runtime._recompose()
         prompt = runtime._prompt_with_mode()

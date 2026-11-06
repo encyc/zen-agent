@@ -12,11 +12,11 @@ failures, so observability can never abort a run.
 
 from __future__ import annotations
 
-import json
 import time
 from collections.abc import Callable
 
 from zenagent.agent.session import Session
+from zenagent.app import records
 from zenagent.events import AgentEvent
 from zenagent.types import AssistantMessage, Message
 
@@ -29,67 +29,12 @@ __all__ = [
     "tool_end_record",
 ]
 
-#: Serialized cap for one ``tool_end`` record's ``details`` (UI-only payload).
-TOOL_DETAILS_LIMIT = 16_384
-
-#: Line cap for a stored diff before it is written to the session file.
-TOOL_DIFF_MAX_LINES = 400
-
-
-def _json_size(value: object) -> int:
-    return len(json.dumps(value, ensure_ascii=False, default=str))
-
-
-def _bound_details(details: dict | None) -> dict:
-    """Bound a tool's UI details: diff line cap, then a serialized size cap."""
-    data = dict(details or {})
-    diff = data.get("diff")
-    if isinstance(diff, str):
-        lines = diff.splitlines()
-        if len(lines) > TOOL_DIFF_MAX_LINES:
-            data["diff"] = "\n".join(lines[:TOOL_DIFF_MAX_LINES])
-            data["diff_truncated"] = True
-    while _json_size(data) > TOOL_DETAILS_LIMIT and data:
-        if "diff" in data:
-            data.pop("diff")
-            data["diff_truncated"] = True
-            continue
-        key = max(
-            (
-                name
-                for name in data
-                if name not in ("diff_truncated", "details_truncated")
-            ),
-            key=lambda name: _json_size(data[name]),
-            default=None,
-        )
-        if key is None:
-            break
-        data.pop(key)
-        data["details_truncated"] = True
-    return data
-
-
-def tool_end_record(
-    call_id: str,
-    tool_name: str,
-    duration_ms: int | None,
-    is_error: bool,
-    details: dict | None,
-) -> dict:
-    """One ``tool_end`` record; ``append_meta`` stamps the timestamp."""
-    record = {
-        "type": "tool_end",
-        "call_id": call_id,
-        "tool_name": tool_name,
-        "is_error": bool(is_error),
-    }
-    if duration_ms is not None:
-        record["duration_ms"] = int(duration_ms)
-    bounded = _bound_details(details)
-    if bounded:
-        record["details"] = bounded
-    return record
+#: Re-exported so existing imports keep working; the vocabulary lives in
+#: :mod:`zenagent.app.records`.
+TOOL_DETAILS_LIMIT = records.TOOL_DETAILS_LIMIT
+TOOL_DIFF_MAX_LINES = records.TOOL_DIFF_MAX_LINES
+tool_end_record = records.tool_end
+mode_record = records.mode
 
 
 def _terminal_detail(messages: list[Message] | None) -> str | None:
@@ -101,7 +46,7 @@ def _terminal_detail(messages: list[Message] | None) -> str | None:
 
 
 class SessionMetaRecorder:
-    """Agent listener persisting ``run_start``/``run_end`` records.
+    """Agent listener persisting run boundaries and ``tool_end`` records.
 
     The session is read through ``get_session`` at each event so session
     switches (new/fork/undo) are followed, mirroring how the runtime's own
@@ -113,22 +58,37 @@ class SessionMetaRecorder:
         self._started_at: float | None = None
 
     def __call__(self, event: AgentEvent) -> None:
-        if event.type == "agent_start":
+        if event.type == "tool_execution_end" and event.tool_call_id:
+            # The card's duration, error flag and bounded details are the same
+            # facts after a resume, so the runtime persists them for every
+            # frontend — ``zen -p`` never builds a ChatController.
+            details = dict(getattr(event.result, "details", None) or {})
+            self._get_session().append_meta(
+                records.tool_end(
+                    event.tool_call_id,
+                    event.tool_name or "",
+                    event.duration_ms,
+                    bool(event.is_error),
+                    details,
+                )
+            )
+        elif event.type == "agent_start":
             self._started_at = time.monotonic()
-            self._get_session().append_meta({"type": "run_start"})
+            self._get_session().append_meta(records.run_start())
         elif event.type == "agent_end":
             started, self._started_at = self._started_at, None
-            record: dict = {
-                "type": "run_end",
-                "termination": event.termination,
-                "turns": event.turns,
-            }
-            if started is not None:
-                record["duration_ms"] = round((time.monotonic() - started) * 1000)
-            detail = _terminal_detail(event.new_messages)
-            if detail:
-                record["detail"] = detail
-            self._get_session().append_meta(record)
+            self._get_session().append_meta(
+                records.run_end(
+                    termination=event.termination,
+                    turns=event.turns,
+                    duration_ms=(
+                        None
+                        if started is None
+                        else round((time.monotonic() - started) * 1000)
+                    ),
+                    detail=_terminal_detail(event.new_messages),
+                )
+            )
 
 
 def make_retry_recorder(
@@ -138,19 +98,13 @@ def make_retry_recorder(
 
     def on_retry(message: AssistantMessage, attempt: int, max_retries: int, delay_s: float) -> None:
         get_session().append_meta(
-            {
-                "type": "retry",
-                "attempt": attempt,
-                "max_retries": max_retries,
-                "delay_ms": round(delay_s * 1000),
-                "error": message.error_message or "",
-                "model": message.model,
-            }
+            records.retry(
+                attempt=attempt,
+                max_retries=max_retries,
+                delay_ms=round(delay_s * 1000),
+                error=message.error_message or "",
+                model=message.model,
+            )
         )
 
     return on_retry
-
-
-def mode_record(mode: str) -> dict:
-    """One ``mode`` record: the permission mode a session runs under."""
-    return {"type": "mode", "mode": mode}

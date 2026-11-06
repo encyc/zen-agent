@@ -517,6 +517,7 @@ def build_task_tool(
     artifact_sink: ArtifactSink | None = None,
     session_path: Path | None = None,
     limits: SubagentLimits | None = None,
+    before_tool_call: Callable | None = None,
 ) -> TaskTool:
     """Build the per-run ``task`` tool (the child uses the parent's model).
 
@@ -531,6 +532,10 @@ def build_task_tool(
     the resolved model's ``reasoning`` flag. ``max_turns``,
     ``timeout_s`` and ``limits`` come from ``[task]`` in config.toml
     (``zenagent.config``); ``timeout_s <= 0`` disables the wall-clock watchdog.
+    ``before_tool_call`` is the parent's harness gate: every child tool call
+    consults it, so deny patterns and command policy reach subagents too
+    (``None`` means no gate). A child has no user channel, so the gate can only
+    allow or refuse there — it never prompts.
     """
     store = SubagentStore(session_path, limits)
     #: Current session path (bind_session rebinds it); a background child
@@ -713,6 +718,7 @@ def build_task_tool(
                 max_turns=max_turns,
                 max_cost=max_cost,
                 artifact_sink=artifact_sink,
+                before_tool_call=before_tool_call,
             )
             child.subscribe(guard.on_event)
             return child

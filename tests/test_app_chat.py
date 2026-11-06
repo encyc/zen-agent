@@ -859,34 +859,6 @@ async def test_task_dispatch_result_adds_no_spend(runtime_factory):
     assert status.subagent_tokens == 0
 
 
-async def test_tool_completion_writes_a_tool_end_record(runtime_factory):
-    from zenagent.agent.loop import ToolResultAgent
-    from zenagent.agent.session import Session
-    from zenagent.events import AgentEvent
-
-    runtime = await runtime_factory()
-    chat = ChatController(runtime)
-    chat._on_event(
-        AgentEvent(
-            type="tool_execution_end",
-            tool_call_id="c1",
-            tool_name="bash",
-            result=ToolResultAgent(
-                content=[TextContent(text="done")], details={"exit_code": 0}
-            ),
-            is_error=False,
-            duration_ms=12,
-        )
-    )
-
-    session = Session(runtime.session.path)
-    session.load()
-    record = [item for item in session.records if item["type"] == "tool_end"][-1]
-    assert record["call_id"] == "c1"
-    assert record["duration_ms"] == 12
-    assert record["details"] == {"exit_code": 0}
-
-
 async def test_compact_now_sources_the_divider_and_persists_tokens(runtime_factory):
     from conftest import text_stream
 
@@ -962,3 +934,25 @@ async def test_retry_hydrates_surviving_cards_from_records(runtime_factory):
 
     assert chat._builder.cards["c1"].duration_ms == 9
     assert chat._builder.cards["c1"].diff == "+x"
+
+
+async def test_interactive_front_writes_exactly_one_tool_end(runtime_factory):
+    """The runtime listener owns the record: a chat controller must not double it."""
+    from conftest import tool_then_text_stream
+
+    from zenagent.agent.session import Session
+
+    runtime = await runtime_factory(stream_fn=tool_then_text_stream())
+    chat = ChatController(runtime)
+
+    await chat.submit("read the readme")
+    await chat.wait_for_idle()
+
+    session = Session(runtime.session.path)
+    session.load()
+    call_ids = [
+        record["call_id"]
+        for record in session.records
+        if record.get("type") == "tool_end"
+    ]
+    assert call_ids == ["c1"], "one record per call, written once"

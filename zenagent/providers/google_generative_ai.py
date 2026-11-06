@@ -207,7 +207,12 @@ async def _events_from_chunks(
                 stop_reason = _STOP_REASONS.get(reason, "stop")
 
     has_calls = any(isinstance(block, ToolCall) for block in partial.content)
-    partial.stop_reason = "tool_use" if has_calls else stop_reason
+    # ``length`` must survive: the loop refuses to execute a truncated call
+    # (contracts §5), so only a provider-declared stop may become ``tool_use``.
+    if stop_reason == "stop" and has_calls:
+        partial.stop_reason = "tool_use"
+    else:
+        partial.stop_reason = stop_reason
     if error_message is not None:
         partial.error_message = error_message
     yield AssistantEvent(

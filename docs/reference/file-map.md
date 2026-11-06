@@ -41,9 +41,24 @@
 | 想改什么 | 文件 |
 |---|---|
 | 参数解析、headless、子命令 | `zenagent/cli/main.py` |
-| REPL 主循环、斜杠命令 | `zenagent/cli/repl.py` |
+| REPL 主循环 | `zenagent/cli/repl.py` |
+| 斜杠命令注册表（48 条） | `zenagent/app/commands.py` |
+
+## 应用层（`app/`）
+
+| 想改什么 | 文件 |
+|---|---|
+| 一次 run 的装配（catalog→model→tools→MCP→skills→agent→session） | `zenagent/app/runtime.py`（`Runtime.bootstrap`） |
+| 运行状态、待发队列、压缩触发 | `zenagent/app/chat.py` |
+| 命令注册表与 `/command` 语义 | `zenagent/app/commands.py` |
+| 视图模型（transcript 快照、`RunStatus`、`to_wire()`） | `zenagent/app/views.py` |
+| 会话记录词汇表（`tool_end`/`compaction`/…） | `zenagent/app/records.py` |
+| 会话列表/切换/分叉/撤销 | `zenagent/app/sessions.py` |
+| 权限与风险分级 | `zenagent/app/permissions.py`、`zenagent/app/safety.py` |
+| 运行模式（plan/ask/zen） | `zenagent/app/modes.py` |
+| 写入前快照与 `/restore` | `zenagent/app/journal.py`、`zenagent/app/restore.py` |
 | 流式渲染、状态行、diff | `zenagent/cli/render.py` |
-| 权限门 | `zenagent/cli/permissions.py` |
+| 权限门 | `zenagent/app/permissions.py`（`PermissionGate`/`PermissionBroker`/`build_broker_for`；`cli/permissions.py` 只是兼容 shim） |
 | 上下文压缩 | `zenagent/app/compact.py`（+ `zenagent/config.py::ContextGuard`） |
 | 自动补全 | `zenagent/cli/completion.py` |
 | `doctor` | `zenagent/cli/doctor.py` |

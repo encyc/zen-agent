@@ -369,3 +369,60 @@ async def test_bootstrap_wires_the_task_budget_from_config(
     assert captured["limits"] == SubagentLimits(
         keep_transcripts=64, max_total_bytes=4096, max_file_bytes=2048
     )
+
+
+async def test_bootstrap_hands_the_permission_gate_to_the_task_tool(
+    runtime_factory, app_env, monkeypatch
+):
+    """A child agent consults the same gate as its parent (no policy bypass)."""
+    from zenagent.app.permissions import PermissionBroker
+    from zenagent.app.runtime import Runtime, RuntimeOptions
+    from zenagent.app.runtime import build_task_tool as real_build_task_tool
+
+    captured: dict = {}
+
+    def capture(**kwargs):
+        captured.update(kwargs)
+        return real_build_task_tool(**kwargs)
+
+    monkeypatch.setattr("zenagent.app.runtime.build_task_tool", capture)
+
+    runtime = await runtime_factory()
+    assert captured["before_tool_call"] == runtime.gate.before_tool_call
+
+    broker = PermissionBroker.wrap(runtime.gate)
+    brokered = await Runtime.bootstrap(
+        RuntimeOptions(mcp=False, skills=False, templates=False), gate=broker
+    )
+    try:
+        assert captured["before_tool_call"] == broker.before_tool_call
+        assert brokered.gate is broker
+    finally:
+        await brokered.close()
+
+
+async def test_runtime_writes_tool_end_without_a_chat_controller(runtime_factory):
+    """``zen -p`` never builds a ChatController: the runtime owns the record."""
+    from conftest import tool_then_text_stream
+
+    runtime = await runtime_factory(stream_fn=tool_then_text_stream())
+
+    await runtime.agent.prompt("read the readme")
+
+    session = runtime.session
+    session.ensure_loaded()
+    tool_ends = [record for record in session.records if record.get("type") == "tool_end"]
+    assert [record["call_id"] for record in tool_ends] == ["c1"]
+    assert tool_ends[0]["tool_name"] == "read_file"
+    assert isinstance(tool_ends[0].get("duration_ms"), int)
+
+
+async def test_bootstrap_honours_read_only_even_in_zen_mode(runtime_factory):
+    """``-p --mode zen --read-only`` must still refuse writes."""
+    runtime = await runtime_factory(mode="zen", read_only=True)
+
+    assert runtime.gate.read_only is True
+    verdict = await runtime.gate.before_tool_call(
+        "write_file", {"path": "blocked.txt", "content": "x"}
+    )
+    assert verdict is not None and verdict.get("block") is True

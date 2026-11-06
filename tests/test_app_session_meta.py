@@ -327,3 +327,44 @@ def test_tool_end_record_omits_empty_details():
         "tool_name": "bash",
         "is_error": False,
     }
+
+
+def test_retry_recorder_writes_the_side_channel_shape():
+    store = FakeStore()
+    recorder = make_retry_recorder(lambda: store)
+    recorder(AssistantMessage(
+        content=[], provider="p", model="deepseek-flash", usage=Usage(),
+        stop_reason="error", timestamp=0, error_message="503",
+    ), 2, 3, 0.5)
+
+    record = store.records[-1]
+    assert record["type"] == "retry"
+    assert record["attempt"] == 2 and record["max_retries"] == 3
+    assert record["delay_ms"] == 500 and record["model"] == "deepseek-flash"
+    assert record["error"] == "503"
+
+
+def test_recorder_persists_tool_end():
+    from zenagent.agent.loop import ToolResultAgent
+
+    store = FakeStore()
+    recorder = SessionMetaRecorder(lambda: store)
+    recorder(AgentEvent(
+        type="tool_execution_end",
+        tool_call_id="c1",
+        tool_name="bash",
+        result=ToolResultAgent(content=[TextContent(text="done")], details={"exit_code": 0}),
+        is_error=False,
+        duration_ms=12,
+    ))
+
+    record = dict(store.records[-1])
+    record.pop("timestamp", None)
+    assert record == {
+        "type": "tool_end",
+        "call_id": "c1",
+        "tool_name": "bash",
+        "is_error": False,
+        "duration_ms": 12,
+        "details": {"exit_code": 0},
+    }

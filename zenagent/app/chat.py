@@ -9,6 +9,7 @@ from pathlib import Path
 
 from zenagent.agent.session import Session
 from zenagent.agent.subagents import carry_task_dir
+from zenagent.app import records
 from zenagent.app.attachments_state import Attachments
 from zenagent.app.compact import compact, should_auto_compact
 from zenagent.app.context import build_context_report
@@ -16,7 +17,6 @@ from zenagent.app.git import git_status
 from zenagent.app.pending import PendingQueue
 from zenagent.app.retry import prepare_retry
 from zenagent.app.runtime import Runtime
-from zenagent.app.session_meta import tool_end_record
 from zenagent.app.subagent_tracker import SubagentTracker
 from zenagent.app.support import cache_hit_ratio
 from zenagent.app.views import (
@@ -425,7 +425,7 @@ class ChatController:
         self.reload_transcript()
         text = t("notice.compacted", tokens=before)
         self._notices.append(
-            TranscriptNotice("divider", text, source="compaction")
+            TranscriptNotice("divider", text, source=records.COMPACTION)
         )
         self._notify()
         return text
@@ -605,17 +605,9 @@ class ChatController:
         ):
             self._subagents.invalidate_disk()
         if event.type == "tool_execution_end":
+            # The ``tool_end`` record is the runtime's (so headless sessions
+            # carry it too); here we only fold the same event into view state.
             details = dict(getattr(event.result, "details", None) or {})
-            if event.tool_call_id:
-                self.runtime.session.append_meta(
-                    tool_end_record(
-                        event.tool_call_id,
-                        event.tool_name or "",
-                        event.duration_ms,
-                        bool(event.is_error),
-                        details,
-                    )
-                )
             if event.tool_name in ("task", "wait") and "subagent_cost" in details:
                 self._subagents.add_spend(
                     float(details.get("subagent_cost") or 0.0),

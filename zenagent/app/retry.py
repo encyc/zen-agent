@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from zenagent.agent import Agent
 from zenagent.agent.session import Session, truncate_last_turn
+from zenagent.app import records
 from zenagent.types import ImageContent, TextContent, UserMessage
 
 __all__ = ["prepare_retry", "user_text"]
@@ -54,5 +55,7 @@ def prepare_retry(agent: Agent, session: Session) -> tuple[str, Session] | None:
 
     truncated = truncate_last_turn(messages)
     agent.replace_messages(truncated)
-    new_path = Session(session.path).rewrite(truncated)
+    new_path = Session(session.path).rewrite(
+        truncated, keep=records.keep_for_rewrite()
+    )
     return text, Session(new_path)

@@ -13,13 +13,13 @@ import contextlib
 
 from zenagent.agent.loop import AgentTool, ToolResultAgent
 from zenagent.prompts import tool_description
+from zenagent.tools._result import text_result
 from zenagent.tools.jobs import (
     Job,
     UnknownJobError,
     get_job_manager,
 )
 from zenagent.tools.task import UnknownTaskError, get_task_manager
-from zenagent.types import TextContent
 
 __all__ = ["DEFAULT_WAIT_TIMEOUT_S", "MAX_WAIT_TIMEOUT_S", "WAIT"]
 
@@ -28,12 +28,6 @@ DEFAULT_WAIT_TIMEOUT_S = 120.0
 #: Bounds ``timeout_s`` is clamped to.
 MIN_WAIT_TIMEOUT_S = 1.0
 MAX_WAIT_TIMEOUT_S = 600.0
-
-
-def _text(text: str, *, is_error: bool = False, **details) -> ToolResultAgent:
-    return ToolResultAgent(
-        content=[TextContent(text=text)], details=details, is_error=is_error
-    )
 
 
 def _details(job: Job) -> dict:
@@ -141,7 +135,7 @@ async def _wait_task(task_id: str, timeout_s: float, abort) -> ToolResultAgent:
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await wait_task
             known = ", ".join(manager.ids()) or "none"
-            return _text(
+            return text_result(
                 "aborted while waiting: background tasks keep running; call wait "
                 f"again to collect the result (known tasks: {known})",
                 aborted=True,
@@ -149,7 +143,7 @@ async def _wait_task(task_id: str, timeout_s: float, abort) -> ToolResultAgent:
             )
         run = await wait_task
     if run.status == "running":
-        return _text(
+        return text_result(
             f"task {run.task_id} still running after {timeout_s:g}s: {run.name}\n"
             f"call wait again with job_id={run.task_id!r} for the result",
             task_id=run.task_id,
@@ -166,12 +160,12 @@ async def _wait_task(task_id: str, timeout_s: float, abort) -> ToolResultAgent:
         details.pop("subagent_tokens", None)
     else:
         run.spend_reported = True
-    return _text(run.envelope, task_id=run.task_id, **details)
+    return text_result(run.envelope, task_id=run.task_id, **details)
 
 
 def _task_unknown(exc: UnknownTaskError) -> ToolResultAgent:
     known = ", ".join(exc.known) if exc.known else "none"
-    return _text(
+    return text_result(
         f"unknown task id {exc.task_id!r}; known tasks: {known}",
         is_error=True,
         task_id=exc.task_id,
@@ -188,7 +182,7 @@ async def _wait(
             DEFAULT_WAIT_TIMEOUT_S if raw_timeout is None else float(raw_timeout)
         )
     except (TypeError, ValueError):
-        return _text(
+        return text_result(
             f"timeout_s must be a number (got {raw_timeout!r})", is_error=True
         )
     timeout_s = min(max(timeout_s, MIN_WAIT_TIMEOUT_S), MAX_WAIT_TIMEOUT_S)
@@ -210,7 +204,7 @@ async def _wait(
         )
     except UnknownJobError as exc:
         known = ", ".join(exc.known) if exc.known else "none"
-        return _text(
+        return text_result(
             f"unknown job id {exc.job_id!r}; known jobs: {known}",
             is_error=True,
             job_id=exc.job_id,
@@ -218,19 +212,19 @@ async def _wait(
         )
     if aborted:
         known = ", ".join(manager.ids()) or "none"
-        return _text(
+        return text_result(
             "aborted while waiting: background jobs keep running; call wait "
             f"again to collect the result (known jobs: {known})",
             aborted=True,
             job_ids=manager.ids(),
         )
     if job is None:
-        return _text(
+        return text_result(
             "nothing to wait for: no background jobs are running or finished"
         )
     if job.running:
-        return _text(_render_running(job, timeout_s), **_details(job))
-    return _text(_render_final(job), **_details(job))
+        return text_result(_render_running(job, timeout_s), **_details(job))
+    return text_result(_render_final(job), **_details(job))
 
 
 WAIT = AgentTool(

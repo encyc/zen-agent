@@ -563,3 +563,16 @@ async def test_assess_returns_verdict_kinds(tmp_path):
     assert gate.assess("read_file", {"path": "x"}).kind == "allow"
     verdict = gate.assess("write_file", {"path": "/etc/hosts"})
     assert verdict.kind == "confirm" and verdict.risk == "outside"
+
+
+def test_an_explicit_mode_switch_lifts_read_only():
+    """``--read-only`` decides the startup mode; an in-session /mode overrides it."""
+    from zenagent.app.permissions import PermissionGate
+
+    gate = PermissionGate(mode="plan", read_only=True)
+    assert gate.read_only is True
+
+    gate.set_mode("zen")
+
+    assert gate.read_only is False
+    assert gate.mode == "zen"

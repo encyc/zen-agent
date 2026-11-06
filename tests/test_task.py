@@ -14,6 +14,7 @@ from zenagent.types import (
     Cost,
     TextContent,
     ToolCall,
+    ToolResultMessage,
     Usage,
 )
 
@@ -950,3 +951,55 @@ def test_task_manager_error_run_carries_status_details():
         assert "boom" in done.envelope
 
     asyncio.run(main())
+
+
+class BashCallingStream:
+    """Fake child stream: one ``bash`` call, then a plain text answer."""
+
+    def __init__(self) -> None:
+        self.requests: list[list] = []
+
+    async def __call__(self, model, messages, tools, options):
+        self.requests.append(list(messages))
+        partial = AssistantMessage(
+            content=[], provider="p", model="m", usage=Usage(),
+            stop_reason="pending", timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        if len(self.requests) == 1:
+            call = ToolCall(id="c1", name="bash", arguments={"command": "rm -rf /"})
+            partial.content = [call]
+            partial.stop_reason = "tool_use"
+            yield AssistantEvent(type="toolcall_start", partial=partial, content_index=0, tool_call=call)
+            yield AssistantEvent(type="toolcall_end", partial=partial, content_index=0, tool_call=call)
+            yield AssistantEvent(type="done", partial=partial, reason="tool_use")
+            return
+        partial.content = [TextContent("done")]
+        partial.stop_reason = "stop"
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+
+async def test_child_tool_calls_go_through_the_parent_gate():
+    stream = BashCallingStream()
+    seen: list[str] = []
+
+    async def gate(tool_call, arguments, tool=None):
+        seen.append(tool_call.name)
+        return {"block": True, "reason": "denied by policy"}
+
+    tool = build_task_tool(
+        model=_model(),
+        api_key="k",
+        stream_fn=stream,
+        base_tools=_tools(),
+        mode="zen",
+        before_tool_call=gate,
+    )
+
+    await tool.execute("t1", {"prompt": "go"})
+
+    assert seen == ["bash"], "the child must consult the parent's gate"
+    results = [m for m in stream.requests[1] if isinstance(m, ToolResultMessage)]
+    assert results and results[-1].is_error
+    assert "denied by policy" in results[-1].content[0].text
+    assert "wrote" not in results[-1].content[0].text  # execute never ran

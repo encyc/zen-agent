@@ -26,9 +26,8 @@ from zenagent import __version__
 from zenagent.agent.session import list_sessions
 from zenagent.app.compact import maybe_auto_compact
 from zenagent.app.modes import MODES, resolve_mode
-from zenagent.app.permissions import PermissionBroker, build_permission_gate
+from zenagent.app.permissions import build_broker_for
 from zenagent.app.runtime import Runtime, RuntimeOptions
-from zenagent.app.safety import GuardPolicy
 from zenagent.app.support import resolve_model
 from zenagent.attachments import read_image_argument
 from zenagent.cli.doctor import run_doctor
@@ -554,7 +553,7 @@ def main(argv: list[str] | None = None) -> int:
         return run_export(args.session, args.format, args.output)
     if args.command == "doctor":
         if args.report:
-            from zenagent.crash import collect_report
+            from zenagent.cli.doctor import collect_report
 
             report = collect_report()
             if args.report_out:
@@ -627,24 +626,14 @@ def main(argv: list[str] | None = None) -> int:
                 auto_compact=not args.no_auto_compact,
             )
 
-            tui_config = load_user_config()
-            tui_policy = GuardPolicy.from_config(
-                tui_config,
-                cwd=Path.cwd(),
+            broker = build_broker_for(
+                user_config=load_user_config(),
+                mode=mode,
+                read_only=args.read_only,
+                allow_dangerous=args.allow_dangerous,
                 allow_outside=args.allow_outside or [],
                 allow_destructive=args.allow_destructive,
                 allow_protected=args.allow_protected,
-            )
-            broker = PermissionBroker.wrap(
-                build_permission_gate(
-                    assume_yes=False,
-                    interactive=False,
-                    allow_dangerous=args.allow_dangerous,
-                    allow=tui_config.tool_allow,
-                    deny=tui_config.tool_deny,
-                    mode=mode,
-                    policy=tui_policy,
-                )
             )
 
             async def run_tui_session() -> int:

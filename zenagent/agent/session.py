@@ -20,6 +20,7 @@ import json
 import os
 import tempfile
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -71,6 +72,10 @@ _SCOPES = ("project", "all")
 #: Schema version of the side-channel record envelope (the ``session`` header's
 #: ``version`` field); message lines are untouched by it.
 RECORD_VERSION = 1
+
+#: The file envelope line every session file opens with (the kernel owns the
+#: format; the side-channel vocabulary belongs to ``zenagent.app.records``).
+HEADER_TYPE = "session"
 
 
 def sessions_dir() -> Path:
@@ -372,7 +377,7 @@ class Session:
                 return
             self.path.parent.mkdir(parents=True, exist_ok=True)
             record = {
-                "type": "session",
+                "type": HEADER_TYPE,
                 "version": RECORD_VERSION,
                 "id": self.path.stem,
                 "createdAt": int(time.time()),
@@ -507,7 +512,7 @@ class Session:
             derived_from=derived_from,
         )
 
-    def fork_at(self, index: int) -> Path:
+    def fork_at(self, index: int, *, keep: Callable[[dict], bool]) -> Path:
         """Copy the transcript up to (and including) user message ``index``.
 
         ``index`` is 1-based over user messages. The new file is written; this
@@ -527,16 +532,18 @@ class Session:
         forked = Session(unique_session_path(f"fork{index}"), derived_from=self.path.stem)
         for message in prefix:
             forked.append(message)
-        for record in self.carry_records(prefix):
+        for record in self.carry_records(prefix, keep=keep):
             forked.append_meta(record)
         return forked.path
 
-    def rewrite(self, messages: list[Message]) -> Path:
+    def rewrite(
+        self, messages: list[Message], *, keep: Callable[[dict], bool]
+    ) -> Path:
         """Write ``messages`` to a *new* session file and return its path."""
         rewritten = Session(unique_session_path("rewrite"), derived_from=self.path.stem)
         for message in messages:
             rewritten.append(message)
-        for record in self.carry_records(messages):
+        for record in self.carry_records(messages, keep=keep):
             rewritten.append_meta(record)
         return rewritten.path
 
@@ -546,13 +553,15 @@ class Session:
             self.load()
 
     def carry_records(
-        self, messages: list[Message], *, tool_end: bool = True
+        self, messages: list[Message], *, keep: Callable[[dict], bool] | None = None
     ) -> list[dict]:
         """Records that still describe ``messages`` after a rewrite.
 
-        ``tool_end`` records follow the call ids still present; ``compaction``
-        records always travel. Run boundaries, retries and mode changes are
-        dropped: a truncated file must not claim events whose messages are gone.
+        The kernel applies one rule it can justify without knowing any record
+        kind: a record carrying a ``call_id`` follows the calls that still
+        exist. ``keep`` (:func:`zenagent.app.records.keep_for_rewrite`) is the
+        harness's own filter — which kinds travel is policy, and it lives next
+        to the builders. ``None`` keeps every structurally valid record.
         """
         self.ensure_loaded()
         call_ids = {
@@ -564,13 +573,14 @@ class Session:
         }
         carried: list[dict] = []
         for record in self.records:
-            kind = record.get("type")
-            if kind == "compaction" or (
-                tool_end
-                and kind == "tool_end"
-                and record.get("call_id") in call_ids
-            ):
-                carried.append(record)
+            if record.get("type") == HEADER_TYPE:
+                continue  # a rewritten file writes its own header
+            if keep is not None and not keep(record):
+                continue
+            call_id = record.get("call_id")
+            if call_id is not None and call_id not in call_ids:
+                continue
+            carried.append(record)
         return carried
 
     @property

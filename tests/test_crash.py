@@ -1,4 +1,4 @@
-"""Crash logs and the redacted diagnostics report."""
+"""Crash logs: one file per uncaught exception, never containing secrets."""
 
 import sys
 
@@ -29,17 +29,3 @@ def test_install_excepthook_is_idempotent(tmp_path):
     finally:
         sys.excepthook = original
         crash._installed = False
-
-
-def test_report_never_leaks_credential_values(tmp_path, monkeypatch):
-    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-super-secret")
-    monkeypatch.setattr(
-        "zenagent.cli.doctor.collect_checks",
-        lambda env=None: [
-            type("C", (), {"name": "key:deepseek", "ok": True, "detail": "DEEPSEEK_API_KEY is set"})()
-        ],
-    )
-    report = crash.collect_report()
-    assert "sk-super-secret" not in report
-    assert "DEEPSEEK_API_KEY is set" in report
-    assert "zenagent diagnostics" in report

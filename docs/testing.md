@@ -20,7 +20,7 @@
 `--python 3.13` 换解释器。手动触发 publish workflow 只做 dry run，只有推 `v*`
 tag 才会真的上传。
 
-## 测试布局（约 697 条）
+## 测试布局（条数以 `uv run pytest --collect-only -q | tail -1` 为准）
 
 | 文件 | 覆盖 |
 |---|---|
@@ -86,7 +86,7 @@ fake stream 的最小形态见 `examples/custom_tool.py`。
 
 ## 当前结果
 
-- 单元/集成：697 passed（3.11 / 3.14；CI 跑 ubuntu + macos），ruff clean。
+- 单元/集成：全绿（3.11 / 3.14；CI 跑 ubuntu + macos），ruff clean；条数见 `pytest --collect-only`。
 - 行为评测：18/18（3 repeats，$0.014，120k tokens）。
 
 ## 已知未覆盖
