@@ -3,6 +3,23 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+### Fixed
+
+- **An unused launch leaves no session file behind.** Bootstrap writes the
+  session header and the starting `mode` record eagerly, so every `zen` launch
+  put an `(empty)` row in the listings even when nothing was said. `Runtime`
+  now remembers which session files this process created and `close()` removes
+  the ones no message ever landed in — a launch that is opened and closed, one
+  that only changed the permission mode, and one whose run was interrupted
+  before the first message was persisted. Abandoned files count too: starting
+  fresh and then switching to another session does not orphan the first. Empty
+  files are unlinked rather than moved to `.trash/` (trashing would keep the
+  junk), a resumed file is never removed even when it is empty, and the TUI's
+  exit summary says "session not saved" instead of printing a path that is
+  about to disappear.
+
 ## v0.8.0 — 2026-11-06
 
 **Frontend alignment: RPC and the REPL stop dropping capabilities the other

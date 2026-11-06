@@ -258,7 +258,7 @@ class SessionManager:
         target.replace(destination)
         trash_task_dir(target, trash)
         if self.runtime.session.path == target:
-            self.runtime.session = Session(unique_session_path())
+            self.runtime.use_new_session()
             self.runtime.agent.replace_messages([])
         return destination
 

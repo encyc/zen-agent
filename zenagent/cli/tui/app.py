@@ -283,8 +283,15 @@ class ZenAgentApp(
     def action_quit_app(self) -> None:
         status = self.chat.status
         session = getattr(self.runtime.session, "path", None)
+        # A launch that said nothing leaves no file behind (Runtime.close), so
+        # the summary must not advertise a path that is about to be removed.
+        key = (
+            "tui.app.exit_summary_unsaved"
+            if self.runtime.unused_session
+            else "tui.app.exit_summary"
+        )
         self.exit_summary = t(
-            "tui.app.exit_summary",
+            key,
             path=session,
             input=status.input_tokens,
             output=status.output_tokens,

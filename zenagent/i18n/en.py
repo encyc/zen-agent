@@ -216,6 +216,7 @@ CATALOG: dict[str, str] = {
     "tui.jobs.truncated": "[output truncated: the job exceeded the capture budget]",
     # TUI: app notifications and chrome
     "tui.app.exit_summary": "session: {path} · {input} in / {output} out · ${cost}",
+    "tui.app.exit_summary_unsaved": "no messages — session not saved · {input} in / {output} out · ${cost}",
     "tui.app.approval_timeout": "approval timed out; denied",
     "tui.app.no_api_key": "no API key for {model} — /settings → Model API keys, or set {env} and restart",
     "tui.app.no_todo": "no todo list in this session",

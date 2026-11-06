@@ -109,6 +109,59 @@ async def test_switch_session_without_carry_starts_empty(runtime_factory, tmp_pa
     assert load_todo_phases(new_path) == []
 
 
+async def test_switch_session_restores_the_last_request_usage(runtime_factory):
+    """Compaction and context math read the guard, so a resume must reseed it
+    from the loaded transcript instead of leaving the last request unknown."""
+    from zenagent.agent.session import Session, unique_session_path
+    from zenagent.app.chat import ChatController
+    from zenagent.types import AssistantMessage, TextContent, Usage
+
+    runtime = await runtime_factory()
+    path = unique_session_path()
+    Session(path).append(
+        AssistantMessage(
+            content=[TextContent(text="hi")],
+            provider="p",
+            model="m",
+            usage=Usage(input=900, output=30, cache_read=800),
+            stop_reason="stop",
+            timestamp=1,
+        )
+    )
+
+    await runtime.switch_session(path)
+
+    assert runtime.guard.last_usage is not None
+    assert runtime.guard.last_usage.input == 900
+    assert ChatController(runtime).status.context_used == 930
+
+
+async def test_bootstrap_resume_seeds_the_last_request_usage(runtime_factory):
+    """``--resume`` loads the transcript before any live request; the guard
+    must start from that transcript too."""
+    from zenagent.agent.session import Session, unique_session_path
+    from zenagent.app.chat import ChatController
+    from zenagent.types import AssistantMessage, TextContent, Usage
+
+    path = unique_session_path()
+    Session(path).append(
+        AssistantMessage(
+            content=[TextContent(text="hi")],
+            provider="p",
+            model="m",
+            usage=Usage(input=900, output=30, cache_read=800),
+            stop_reason="stop",
+            timestamp=1,
+        )
+    )
+
+    runtime = await runtime_factory(resume=path)
+
+    assert runtime.guard.last_usage is not None
+    assert runtime.guard.last_usage.input == 900
+    assert ChatController(runtime).status.context_used == 930
+
+
 async def test_two_runtimes_share_the_job_manager_until_the_last_closes(runtime_factory):
     from zenagent.tools.jobs import get_job_manager
 
@@ -369,3 +422,75 @@ async def test_bootstrap_wires_the_task_budget_from_config(
     assert captured["limits"] == SubagentLimits(
         keep_transcripts=64, max_total_bytes=4096, max_file_bytes=2048
     )
+
+
+async def test_an_unused_session_leaves_no_file_behind(runtime_factory):
+    """Bootstrap writes the header eagerly; a launch with no conversation is not
+    a transcript, so close removes the file instead of trashing it."""
+    runtime = await runtime_factory()
+    path = runtime.session.path
+    assert path.is_file(), "the header plus the starting mode record are on disk"
+
+    await runtime.close()
+
+    assert not path.exists()
+
+
+async def test_a_session_with_a_message_is_kept(runtime_factory):
+    from zenagent.types import UserMessage
+
+    runtime = await runtime_factory()
+    runtime.session.append(UserMessage(content="hello", timestamp=1))
+    path = runtime.session.path
+
+    await runtime.close()
+
+    assert path.is_file()
+
+
+async def test_a_resumed_empty_session_is_not_deleted(runtime_factory):
+    """Files that existed before this process are never ours to remove."""
+    from zenagent.agent.session import Session, unique_session_path
+
+    path = unique_session_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("", encoding="utf-8")
+
+    runtime = await runtime_factory(resume=path)
+    await runtime.close()
+
+    assert path.is_file()
+    assert Session(path).messages == []
+
+
+async def test_deleting_the_current_session_starts_a_droppable_one(runtime_factory):
+    """/delete attaches a fresh session; quitting right after must not add a file."""
+    from zenagent.app.sessions import SessionManager
+
+    runtime = await runtime_factory()
+    manager = SessionManager(runtime)
+    doomed = runtime.session.path
+    manager.delete(doomed)
+
+    fresh = runtime.session.path
+    await runtime.close()
+
+    assert not fresh.exists()
+
+
+async def test_an_abandoned_empty_session_is_dropped_too(runtime_factory):
+    """Starting fresh, then resuming another session, must not orphan the first."""
+    from zenagent.agent.session import Session, unique_session_path
+    from zenagent.types import UserMessage
+
+    other = unique_session_path()
+    Session(other).append(UserMessage(content="kept", timestamp=1))
+
+    runtime = await runtime_factory()
+    abandoned = runtime.session.path
+    await runtime.switch_session(other)
+
+    await runtime.close()
+
+    assert not abandoned.exists(), "the launch's own empty file goes away"
+    assert other.is_file(), "a session with a message is never touched"
