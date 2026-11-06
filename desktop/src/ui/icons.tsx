@@ -24,6 +24,14 @@ function base(size: number | undefined, className: string | undefined, style: CS
   }
 }
 
+function base24(size: number | undefined, className: string | undefined, style: CSSProperties | undefined) {
+  return {
+    ...base(size, className, style),
+    viewBox: '0 0 24 24',
+    strokeWidth: 1.75,
+  }
+}
+
 export function PlusIcon(props: IconProps) {
   return (
     <svg {...base(props.size, props.className, props.style)}>
@@ -297,11 +305,24 @@ export function ArrowLeftIcon(props: IconProps) {
   )
 }
 
-export function GearIcon(props: IconProps) {
+/** lucide's Settings cog: a notched gear that cannot be read as the theme sun. */
+export function SettingsIcon(props: IconProps) {
   return (
-    <svg {...base(props.size, props.className, props.style)}>
-      <circle cx="8" cy="8" r="2.2" />
-      <path d="M8 2.2v1.4M8 12.4v1.4M2.2 8h1.4M12.4 8h1.4M3.9 3.9l1 1M11.1 11.1l1 1M12.1 3.9l-1 1M4.9 11.1l-1 1" />
+    <svg {...base24(props.size, props.className, props.style)}>
+      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  )
+}
+
+export function PaletteIcon(props: IconProps) {
+  return (
+    <svg {...base24(props.size, props.className, props.style)}>
+      <circle cx="13.5" cy="6.5" r=".5" fill="currentColor" />
+      <circle cx="17.5" cy="10.5" r=".5" fill="currentColor" />
+      <circle cx="8.5" cy="7.5" r=".5" fill="currentColor" />
+      <circle cx="6.5" cy="12.5" r=".5" fill="currentColor" />
+      <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" />
     </svg>
   )
 }

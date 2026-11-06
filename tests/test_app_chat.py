@@ -390,6 +390,63 @@ async def test_cache_hit_ratio_uses_provider_usage_semantics(runtime_factory):
     assert chat.status.cache_hit_ratio == pytest.approx(0.75)
 
 
+async def test_context_usage_follows_the_transcript_not_a_stale_guard(runtime_factory):
+    """Undo/retry truncate the transcript while the guard keeps the old usage;
+    the newest assistant turn is the request that sized the context, not the
+    sum of every turn (or a turn that was just removed)."""
+    runtime = await runtime_factory()  # deepseek-flash: OpenAI-style input includes cache
+    runtime.agent.replace_messages(
+        [
+            UserMessage(content="one", timestamp=1),
+            AssistantMessage(
+                content=[TextContent(text="a")],
+                provider="p",
+                model="m",
+                usage=Usage(input=500, output=50, cache_read=400),
+                stop_reason="stop",
+                timestamp=2,
+            ),
+            UserMessage(content="two", timestamp=3),
+            AssistantMessage(
+                content=[TextContent(text="b")],
+                provider="p",
+                model="m",
+                usage=Usage(input=900, output=30, cache_read=800),
+                stop_reason="stop",
+                timestamp=4,
+            ),
+        ]
+    )
+    runtime.guard.last_usage = Usage(input=999_999)
+    chat = ChatController(runtime)
+
+    assert chat.status.context_used == 930
+    assert chat.status.input_tokens == 1400, "session totals stay cumulative"
+
+
+async def test_context_usage_counts_anthropic_cache_buckets(runtime_factory):
+    """Anthropic reports uncached input separately; the prompt also holds the
+    cache read/write buckets, so occupancy must add them back."""
+    runtime = await runtime_factory()
+    runtime.agent.model.api = "anthropic-messages"
+    runtime.agent.replace_messages(
+        [
+            UserMessage(content="hi", timestamp=1),
+            AssistantMessage(
+                content=[TextContent(text="ok")],
+                provider="p",
+                model="m",
+                usage=Usage(input=100, output=20, cache_read=700, cache_write=180),
+                stop_reason="stop",
+                timestamp=2,
+            ),
+        ]
+    )
+    chat = ChatController(runtime)
+
+    assert chat.status.context_used == 1000
+
+
 async def test_tool_update_events_populate_card_progress(runtime_factory):
     """bash streams partial output; the controller must expose it on the card."""
     from zenagent.agent.loop import ToolResultAgent

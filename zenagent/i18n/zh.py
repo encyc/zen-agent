@@ -215,6 +215,7 @@ CATALOG: dict[str, str] = {
     "tui.jobs.truncated": "[输出已截断：超出捕获预算]",
     # TUI：应用通知与界面
     "tui.app.exit_summary": "会话：{path} · 入 {input} / 出 {output} · ${cost}",
+    "tui.app.exit_summary_unsaved": "没有消息 —— 会话未保存 · 入 {input} / 出 {output} · ${cost}",
     "tui.app.approval_timeout": "审批超时，已拒绝",
     "tui.app.no_api_key": "模型 {model} 没有 API key —— /settings → 模型 API key，或设置 {env} 后重启",
     "tui.app.no_todo": "本会话没有 todo 列表",

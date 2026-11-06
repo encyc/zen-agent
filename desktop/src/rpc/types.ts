@@ -72,6 +72,27 @@ export interface SubagentView {
   transcript_truncated: boolean
 }
 
+/** One component of the context (chars exact, tokens estimated). */
+export interface ContextSlice {
+  id: string
+  label: string
+  chars: number
+  tokens: number
+  /** Share of the model window, 0-100. */
+  pct: number
+}
+
+/** Context composition from `build_context_report`; slices partition the
+ * prompt, while the total is provider-measured when `measured` is true. */
+export interface ContextReport {
+  slices: ContextSlice[]
+  total_tokens: number
+  window: number
+  measured: boolean
+  prompt_tokens: number
+  free_tokens: number
+}
+
 export interface StatusResult {
   type: 'result'
   id: string
@@ -91,6 +112,7 @@ export interface StatusResult {
   thinking?: string | null
   context_used?: number | null
   context_window?: number | null
+  context?: ContextReport | null
   cache_hit_ratio?: number | null
   turn_ms?: number | null
   todos?: TodoPhase[]
@@ -129,6 +151,9 @@ export interface SessionSummary {
   name: string
   title: string
   project: string
+  /** Canonical project root recorded in the project meta; empty for legacy
+   * sessions kept outside a project directory. */
+  project_path?: string
   messages: number
   current: boolean
   pinned: boolean

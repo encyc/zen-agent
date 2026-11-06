@@ -452,6 +452,7 @@ class RpcServer:
             payload["thinking"] = status.thinking
             payload["context_used"] = status.context_used
             payload["context_window"] = status.context_window
+            payload["context"] = asdict(status.context)
             payload["cache_hit_ratio"] = status.cache_hit_ratio
             payload["turn_ms"] = status.turn_ms
             payload["todos"] = status.todos

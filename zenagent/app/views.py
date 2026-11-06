@@ -40,6 +40,7 @@ __all__ = [
     "TranscriptNotice",
     "args_preview",
     "job_views",
+    "last_request_usage",
     "messages_to_views",
     "sort_jobs",
     "usage_total",
@@ -396,6 +397,19 @@ def job_views(jobs: Iterable[object]) -> list[JobView]:
 def sort_jobs(views: list[JobView]) -> list[JobView]:
     """Running jobs first, then the most recently started finished ones."""
     return sorted(views, key=lambda view: (view.status != "running", -view.started_at))
+
+
+def last_request_usage(messages: list[Message]) -> Usage | None:
+    """Usage of the newest assistant message: the last real model request.
+
+    A transcript alone can size the context (a resumed session has no live
+    guard usage yet); summing every turn would report the session's spend, not
+    what the next request carries.
+    """
+    for message in reversed(messages):
+        if isinstance(message, AssistantMessage):
+            return message.usage
+    return None
 
 
 def usage_total(messages: list[Message]) -> Usage:

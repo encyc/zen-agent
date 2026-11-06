@@ -1,6 +1,6 @@
 /** ⌘K overlay: fuzzy-free substring search over the loaded session list and
- * the allowlisted slash commands. Sessions from other projects are visible in
- * all scope but cannot be resumed from this process (it is cwd-bound). */
+ * the allowlisted slash commands. Resuming a session from another project
+ * switches the runtime there first via the app store. */
 
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
 import { useAppStore } from '../../state/appStore'
@@ -24,14 +24,13 @@ export function CommandPalette() {
   const sessions = useSessionStore((state) => state.sessions)
   const currentPath = useSessionStore((state) => state.currentPath)
   const commands = useCatalogStore((state) => state.commands)
-  const resumeSession = useAppStore((state) => state.resumeSession)
+  const openSession = useAppStore((state) => state.openSession)
   const runCommand = useAppStore((state) => state.runCommand)
   const [active, setActive] = useState(-1)
 
-  const currentProject = sessions.find((session) => session.path === currentPath)?.project ?? null
   const results = useMemo(
-    () => paletteResults(sessions, commands, query, currentProject),
-    [sessions, commands, query, currentProject],
+    () => paletteResults(sessions, commands, query, currentPath),
+    [sessions, commands, query, currentPath],
   )
   const flat = useMemo<Option[]>(
     () => [
@@ -51,7 +50,7 @@ export function CommandPalette() {
     if (option.kind === 'session') {
       if (option.disabled) return
       close()
-      if (option.hit.session.path !== currentPath) void resumeSession(option.hit.session.path)
+      if (option.hit.session.path !== currentPath) void openSession(option.hit.session.path)
       return
     }
     close()
@@ -107,7 +106,7 @@ export function CommandPalette() {
             <span className={css.optionSub}>
               {[session.project, session.model].filter((part) => part !== undefined && part !== '').join(' · ')}
             </span>
-            {disabled && <span className={css.optionHint}>{t('palette.crossProject')}</span>}
+            {disabled && <span className={css.optionHint}>{t('palette.blockedSession')}</span>}
           </span>
         </button>
       )

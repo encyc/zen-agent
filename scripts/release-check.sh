@@ -64,6 +64,12 @@ MODULE_VERSION="$(sed -n 's/^__version__ = "\([^"]*\)"$/\1/p' zenagent/__init__.
   die "pyproject.toml says $VERSION but zenagent/__init__.py says ${MODULE_VERSION:-<none>}"
 ok "pyproject.toml = zenagent/__init__.py = $VERSION"
 
+# The desktop shell ships in lockstep with the Python package.
+if ! python3 scripts/sync-desktop-version.py --check; then
+  die "desktop manifests drift from pyproject.toml — run: python3 scripts/sync-desktop-version.py"
+fi
+ok "desktop manifests (package.json, tauri.conf.json, Cargo.*) = $VERSION"
+
 TAG_STATE="untracked"
 if git rev-parse --git-dir >/dev/null 2>&1; then
   TAG_STATE="missing"

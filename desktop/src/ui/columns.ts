@@ -16,7 +16,6 @@ export const SIDEBAR_DEFAULT = 275
 export function sidebarMax(viewport: number): number {
   return Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, viewport - 320))
 }
-export const SIDEBAR_COLLAPSED = 56
 export const SIDEBAR_AUTO_COLLAPSE = 1024
 export const RIGHTBAR_MIN = 244
 export const RIGHTBAR_DEFAULT = 360
@@ -39,9 +38,10 @@ export function computeColumns(
   viewport: number,
   sidebar: number,
   rightbar: number,
-  collapsedWidth = SIDEBAR_COLLAPSED,
 ): Columns {
-  const s = sidebar === 0 ? collapsedWidth : clampWidth(sidebar, SIDEBAR_MIN, sidebarMax(viewport))
+  // A collapsed sidebar owns no column at all: pi unmounts the rail and gives
+  // the center the full width, so there is no residual strip to click past.
+  const s = sidebar === 0 ? 0 : clampWidth(sidebar, SIDEBAR_MIN, sidebarMax(viewport))
   const available = viewport - s - CENTER_MIN
   const r =
     rightbar === 0 || available < RIGHTBAR_MIN

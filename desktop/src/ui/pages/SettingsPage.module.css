@@ -1,147 +1,646 @@
-.page {
+/* Settings follows pi's full-window two-pane anatomy: a 275px destination
+ * rail (search, grouped directory, pinned back control) and a scrolling
+ * content column whose rows are single-decision tiles. */
+
+.shell {
+  --settings-nav-width: 275px;
+  position: relative;
   display: flex;
-  flex-direction: column;
+  width: 100%;
   height: 100%;
-  background: var(--dsw-alias-bg-layer-1);
+  min-height: 0;
+  background: var(--dsw-alias-bg-base);
   color: var(--dsw-alias-label-primary);
 }
 
-.header {
+/* The band starts where the rail ends so the content and its top strip read
+ * as one surface; it is also the window's drag handle (overlay titlebar). */
+.titlebar {
+  position: absolute;
+  left: var(--settings-nav-width);
+  right: 0;
+  top: 0;
+  z-index: 10;
+  height: var(--ds-toolbar-height);
+  background: var(--dsw-alias-bg-base);
+}
+
+/* ---- destination rail ------------------------------------------------------ */
+
+.nav {
+  display: flex;
+  width: var(--settings-nav-width);
+  flex: 0 0 var(--settings-nav-width);
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--dsw-specific-sidebar-fill);
+}
+
+/* Traffic-light clearance plus the rail's own control grid. */
+.navTop {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 8px;
+  padding: 48px 12px 6px;
+}
+
+.searchWrap {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex: none;
-  height: var(--ds-toolbar-height);
-  padding: 0 16px;
-  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+.searchWrap > svg {
+  position: absolute;
+  left: 11px;
+  color: var(--dsw-alias-label-tertiary);
+  pointer-events: none;
+}
+
+.search {
+  width: 100%;
+  height: 32px;
+  border: 0;
+  border-radius: var(--ds-radius-full);
+  background: var(--dsw-specific-selector);
+  color: var(--dsw-alias-label-primary);
+  padding: 0 12px 0 30px;
+  font-family: inherit;
+  font-size: var(--ds-font-13);
+  outline: none;
+}
+
+.search::placeholder {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.search:focus {
+  box-shadow: 0 0 0 2px var(--dsw-alias-interactive-bg-active);
+}
+
+.navScroll {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  overflow: auto;
+  padding: 14px 10px 24px;
+}
+
+.navGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.navGroupLabel {
+  padding: 0 10px 6px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--ds-font-11-5);
+  font-weight: var(--font-weight-600, 600);
+  letter-spacing: 0.04em;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.navEmpty {
+  padding: 12px 10px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--ds-font-12-5);
+}
+
+.navItem {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: var(--ds-radius-12);
+  padding: 7px 10px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-family: inherit;
+  font-size: var(--ds-font-13);
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--ds-transition-duration-fast) var(--ds-ease-in-out),
+    color var(--ds-transition-duration-fast) var(--ds-ease-in-out);
+}
+
+.navItem:hover {
+  background: var(--dsw-specific-sidebar-nav-item-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.navItem[data-active] {
+  background: color-mix(in oklab, var(--ds-accent) 12%, var(--dsw-specific-sidebar-nav-item-active));
+  color: var(--dsw-alias-label-primary);
+}
+
+.navIcon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.9;
+}
+
+.navItem[data-active] .navIcon {
+  color: var(--ds-accent);
+  opacity: 1;
+}
+
+.navLabel {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Pinned to the foot of the rail, on the same line as the shell's footer. */
+.navFooter {
+  display: flex;
+  min-height: 40px;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 7px 12px 8px;
 }
 
 .back {
-  display: flex;
+  display: inline-flex;
+  width: fit-content;
+  height: 32px;
   align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 8px;
-  border: none;
-  border-radius: var(--dsw-radius-sm);
+  gap: 2px;
+  border: 0;
+  border-radius: var(--ds-radius-8);
+  padding: 0 8px 0 4px;
   background: transparent;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-family: inherit;
+  font-size: var(--ds-font-13);
+  line-height: 1.2;
   cursor: pointer;
+  transition:
+    background var(--ds-transition-duration-fast) var(--ds-ease-in-out),
+    color var(--ds-transition-duration-fast) var(--ds-ease-in-out);
 }
 
 .back:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--dsw-specific-sidebar-nav-item-hover);
   color: var(--dsw-alias-label-primary);
 }
 
-.title {
-  margin: 0;
-  font-size: var(--ds-font-14);
-  font-weight: 600;
-}
+/* ---- content column -------------------------------------------------------- */
 
-.version {
-  margin-left: auto;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: var(--ds-font-11);
-}
-
-.body {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+.content {
+  min-width: 0;
+  flex: 1;
   overflow: auto;
-  width: min(100%, 720px);
-  margin: 0 auto;
-  padding: 24px 20px 40px;
+  padding: calc(var(--ds-toolbar-height) + 8px) 48px 56px 40px;
+  background: var(--dsw-alias-bg-base);
 }
 
-.section {
+.contentInner {
+  width: 100%;
+  margin: 0;
+}
+
+/* pi's destination entrance: opacity only, no fill, so it never leaves a
+ * stacking context behind that would trap fixed children. */
+.contentEnter {
+  animation: settings-enter var(--ds-transition-duration) var(--ds-ease-in-out);
+}
+
+@keyframes settings-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .contentEnter {
+    animation-duration: 0.01ms;
+  }
+}
+
+.pageHeader {
   display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 28px;
+}
+
+.pageIcon {
+  display: inline-flex;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--ds-radius-14);
+  background: color-mix(
+    in oklab,
+    var(--ds-accent) 14%,
+    color-mix(in oklab, var(--dsw-alias-label-primary) 3.5%, transparent)
+  );
+  color: var(--ds-accent);
+}
+
+.pageHeading {
+  display: flex;
+  min-width: 0;
   flex-direction: column;
-  gap: 10px;
-  padding: 16px;
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: var(--ds-radius-12);
-  background: var(--dsw-alias-bg-layer-2);
+  gap: 2px;
+}
+
+.pageSubtitle {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--ds-font-13-5);
+  line-height: 1.45;
 }
 
 .sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin: 0;
-  color: var(--dsw-alias-label-secondary);
-  font-size: var(--ds-font-12);
+  color: var(--dsw-alias-label-primary);
+  font-size: var(--ds-font-28);
+  font-weight: 560;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cardBlock {
+  margin-bottom: 28px;
+}
+
+/* Heading line plus its optional caption; the gap below the headline belongs
+ * to the block, not the heading. */
+.cardHeadline {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 10px;
+}
+
+.cardHeading {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: var(--ds-font-13-5);
   font-weight: 600;
 }
 
-.segmented {
-  display: flex;
-  gap: 4px;
-  align-self: flex-start;
-  padding: 3px;
-  border-radius: var(--ds-radius-8);
-  background: var(--dsw-alias-bg-layer-3);
+.cardCaption {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--ds-font-12-5);
+  line-height: 1.45;
 }
 
-.segment {
-  min-width: 72px;
-  height: 28px;
-  padding: 0 12px;
-  border: none;
-  border-radius: var(--ds-radius-6);
-  background: transparent;
+/* Rows are their own tiles; the 6px gap replaces a dividing hairline. */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border-radius: var(--ds-radius-14);
+  padding: 14px 16px;
+  background: color-mix(in oklab, var(--dsw-alias-label-primary) 3.5%, transparent);
+}
+
+.rowCopy {
+  min-width: 0;
+  flex: 1;
+}
+
+.rowTitle {
+  color: var(--dsw-alias-label-primary);
+  font-size: var(--ds-font-13-5);
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+/* pi's row detail: the setting's live meaning, kept secondary to its title. */
+.rowDetail {
+  margin-top: 3px;
   color: var(--dsw-alias-label-secondary);
   font-size: var(--ds-font-12);
+  line-height: 1.45;
+}
+
+.rowControl {
+  display: flex;
+  min-width: 0;
+  max-width: 240px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+/* ---- controls -------------------------------------------------------------- */
+
+.picker {
+  position: relative;
+  width: max-content;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.pickerTrigger {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  min-width: 0;
+  height: 32px;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: var(--ds-radius-full);
+  padding: 0 10px;
+  background: var(--dsw-alias-button-elevated-fill);
+  box-shadow: var(--dsw-elevation-panel);
+  color: var(--dsw-alias-label-primary);
+  font-family: inherit;
+  font-size: var(--ds-font-13);
   cursor: pointer;
 }
 
-.segment[aria-pressed='true'] {
-  background: var(--dsw-alias-bg-layer-1);
+.pickerTrigger:hover {
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+}
+
+.pickerTrigger > svg {
+  flex: 0 0 auto;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.pickerLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Matches pi's picker menu: 240px wide, capped by the viewport, a hairline
+ * frame and the prominent elevation. */
+.pickerMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  display: flex;
+  width: min(240px, calc(100vw - 48px));
+  max-height: min(420px, calc(100vh - 160px));
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--ds-radius-16);
+  padding: 4px;
+  background: var(--dsw-specific-menu);
+  box-shadow: var(--dsw-elevation-prominent);
+  backdrop-filter: var(--dsw-menu-backdrop-filter);
+}
+
+.pickerOption {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 0;
+  border-radius: var(--ds-radius-8);
+  padding: 7px 10px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-family: inherit;
+  font-size: var(--ds-font-12-5);
+  text-align: left;
+  cursor: pointer;
+}
+
+.pickerOption:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.pickerOption > svg {
+  flex: 0 0 auto;
+  color: var(--dsw-alias-label-primary);
+}
+
+.segment {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: var(--ds-radius-full);
+  padding: 2px;
+  background: color-mix(in oklab, var(--dsw-alias-label-primary) 6%, transparent);
+}
+
+.segmentItem {
+  border: 0;
+  border-radius: var(--ds-radius-full);
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-family: inherit;
+  font-size: var(--ds-font-12-5);
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.segmentItem:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.segmentItem[aria-pressed='true'] {
+  background: var(--dsw-alias-button-elevated-fill);
   color: var(--dsw-alias-label-primary);
   box-shadow: var(--dsw-elevation-panel);
 }
 
-.switchRow,
-.labelRow {
+.fontSize {
+  display: flex;
+  min-width: 180px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.fontSize .segment {
+  width: 100%;
+}
+
+.fontSize .segmentItem {
+  flex: 1 0 auto;
+  padding-inline: 8px;
+}
+
+.sliderRow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
 }
 
-.label {
-  font-size: var(--ds-font-13);
-}
-
-.value {
-  color: var(--dsw-alias-label-tertiary);
-  font-size: var(--ds-font-12);
-  font-variant-numeric: tabular-nums;
-}
-
-.hint {
-  margin: 0;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: var(--ds-font-11);
-}
-
-.range {
-  width: 100%;
+.sliderRow input[type='range'] {
+  min-width: 0;
+  flex: 1;
   accent-color: var(--dsw-alias-state-business-primary);
 }
 
+.value {
+  min-width: 3em;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--ds-font-12);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.widthControl {
+  display: flex;
+  width: 240px;
+  max-width: 100%;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
 .reset {
-  align-self: flex-start;
   height: 26px;
-  padding: 0 10px;
-  border: 1px solid var(--dsw-alias-border-l1);
+  border: 0;
   border-radius: var(--ds-radius-6);
+  padding: 0 8px;
   background: transparent;
   color: var(--dsw-alias-label-secondary);
-  font-size: var(--ds-font-11);
+  font-family: inherit;
+  font-size: var(--ds-font-11-5);
   cursor: pointer;
 }
 
 .reset:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
+}
+
+.switch {
+  position: relative;
+  width: 32px;
+  height: 20px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: var(--ds-radius-full);
+  padding: 0;
+  background: color-mix(in oklab, var(--dsw-alias-label-primary) 10%, transparent);
+  cursor: pointer;
+  transition: background var(--ds-transition-duration-fast) var(--ds-ease-in-out);
+}
+
+.switch:hover {
+  background: color-mix(in oklab, var(--dsw-alias-label-primary) 18%, transparent);
+}
+
+.switch[aria-checked='true'] {
+  background: var(--ds-accent);
+}
+
+.switch[aria-checked='true']:hover {
+  background: var(--ds-accent-hover);
+}
+
+.switch:focus-visible {
+  outline: 2px solid var(--ds-accent);
+  outline-offset: 2px;
+}
+
+.switchThumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--ds-radius-full);
+  background: var(--dsw-alias-switch-thumb);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.16);
+  transition: transform var(--ds-transition-duration-fast) var(--ds-ease-in-out);
+}
+
+.switch[aria-checked='true'] .switchThumb {
+  transform: translateX(12px);
+}
+
+/* About opens with pi's centred hero: name over version, no card chrome. */
+.aboutHero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 26px 16px 8px;
+  text-align: center;
+}
+
+.aboutName {
+  color: var(--dsw-alias-label-primary);
+  font-size: var(--ds-font-18);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.aboutVersion {
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code);
+  font-size: var(--ds-font-13);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.45;
+}
+
+@media (max-width: 720px) {
+  .shell {
+    --settings-nav-width: 220px;
+  }
+
+  .content {
+    padding: calc(var(--ds-toolbar-height) + 8px) 24px 40px 20px;
+  }
+
+  .row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .rowControl {
+    max-width: none;
+    justify-content: flex-start;
+  }
+
+  .widthControl {
+    width: 100%;
+  }
 }

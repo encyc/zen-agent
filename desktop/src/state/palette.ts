@@ -58,7 +58,7 @@ export function paletteResults(
   sessions: SessionSummary[],
   commands: CommandEntry[],
   query: string,
-  currentProject: string | null,
+  currentPath: string | null,
 ): PaletteResults {
   const needle = query.trim().toLowerCase()
   const sessionHits = sessions
@@ -70,8 +70,9 @@ export function paletteResults(
     .sort(newerFirst)
     .map((session) => ({
       session,
-      // Fail closed: with no known current project, nothing is provably openable.
-      disabled: currentProject === null || session.project !== currentProject,
+      // A recorded project root can be opened by restarting the runtime
+      // there; sessions without one stay discovery-only.
+      disabled: session.path !== currentPath && (session.project_path ?? '') === '',
     }))
   const commandHits = commands
     .filter((command) => COMMAND_POLICY[command.name] !== undefined)

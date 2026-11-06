@@ -18,7 +18,7 @@ from zenagent.app.pending import PendingQueue
 from zenagent.app.retry import prepare_retry
 from zenagent.app.runtime import Runtime
 from zenagent.app.subagent_tracker import SubagentTracker
-from zenagent.app.support import cache_hit_ratio
+from zenagent.app.support import cache_hit_ratio, context_occupancy
 from zenagent.app.views import (
     JobLogView,
     JobView,
@@ -31,6 +31,7 @@ from zenagent.app.views import (
     TranscriptBuilder,
     TranscriptNotice,
     job_views,
+    last_request_usage,
     sort_jobs,
     usage_total,
 )
@@ -129,9 +130,11 @@ class ChatController:
     def status(self) -> RunStatus:
         agent = self.runtime.agent
         usage = usage_total(agent.messages)
-        last = self.runtime.guard.last_usage
+        # Occupancy is the last request, not the session total: the newest
+        # assistant turn is already inside the prompt the next request sends.
+        last = last_request_usage(agent.messages)
         context_used = (
-            last.input + last.output if last is not None else usage.input + usage.output
+            context_occupancy(last, agent.model.api) if last is not None else 0
         )
         subagents = self._subagent_views()
         git = git_status(Path.cwd())
@@ -390,9 +393,9 @@ class ChatController:
         return list(self._notices)
 
     def _before_tokens(self) -> int:
-        last = self.runtime.guard.last_usage
+        last = last_request_usage(self.runtime.agent.messages)
         if last is not None:
-            return last.input + last.cache_read
+            return context_occupancy(last, self.runtime.agent.model.api)
         usage = usage_total(self.runtime.agent.messages)
         return usage.input + usage.output
 

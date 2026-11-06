@@ -41,6 +41,7 @@ from zenagent.app.support import (
     resolve_task_model,
     session_id_for,
 )
+from zenagent.app.views import last_request_usage
 from zenagent.config import (
     ContextGuard,
     UserConfig,
@@ -158,6 +159,9 @@ class Runtime:
         self.artifact_sink: Callable[[str, str], Path | None] | None = None
         #: Whether bootstrap acquired a background-job-manager reference.
         self._jobs_acquired = False
+        #: Session files this process opened fresh (nothing was resumed). An
+        #: unused one is removed at close instead of left in the listings.
+        self._created_sessions: set[Path] = set()
         #: Per-session task/subagent tool (read-only children share this model).
         self.task_tool = None
         self._mode: str = DEFAULT_MODE
@@ -473,6 +477,9 @@ class Runtime:
             attach_journal(agent, runtime.journal)
         if runtime.session.messages:
             agent.replace_messages(runtime.session.messages)
+            # The resumed transcript sizes the next prompt; without this the
+            # guard only knows estimates until the first new request lands.
+            runtime.guard.last_usage = last_request_usage(runtime.session.messages)
         runtime.warnings.extend(
             f"session {warning}" for warning in runtime.session.warnings
         )
@@ -502,7 +509,19 @@ class Runtime:
                 return Session(Path(path))
             self.warnings.append(t("runtime.no_resume", resume=resume))
         self._touch_project()
-        return Session(unique_session_path())
+        return self.use_new_session()
+
+    def use_new_session(self) -> Session:
+        """Attach a fresh session file and remember that this process made it.
+
+        Frontends that start a new conversation (bootstrap, /new, deleting the
+        current session) go through here, which is what lets :meth:`close`
+        remove the file when nothing was ever written to it -- including files
+        abandoned by switching to another session later in the same process.
+        """
+        self.session = Session(unique_session_path())
+        self._created_sessions.add(self.session.path)
+        return self.session
 
     def _touch_project(self) -> None:
         """Record the project root/last_used; never fail a run over metadata."""
@@ -781,6 +800,35 @@ class Runtime:
             from zenagent.tools.jobs import release_job_manager
 
             await release_job_manager()
+        self._drop_unused_session()
+
+    @property
+    def unused_session(self) -> bool:
+        """True when close() will remove the session in context (nothing written)."""
+        return (
+            self.session.path in self._created_sessions and not self.session.messages
+        )
+
+    def _drop_unused_session(self) -> None:
+        """Leave no file behind for a launch that produced no conversation.
+
+        Bootstrap writes the session header (plus the starting mode record)
+        eagerly, so every launch used to leave an ``(empty)`` row in the
+        listings. A file this process created and never appended a message to is
+        not a transcript: remove it rather than moving it to ``.trash`` (trashing
+        it would keep the junk, just somewhere else). A resumed session is never
+        ours to remove, even when it is empty.
+        """
+        for path in list(self._created_sessions):
+            try:
+                if path == self.session.path:
+                    empty = not self.session.messages
+                else:
+                    empty = not Session(path).messages
+                if empty:
+                    path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     async def refresh_mcp(self, *, force: bool = False) -> list[str]:
         """Reconnect failed MCP servers and swap refreshed tools into the agent.
@@ -824,8 +872,9 @@ class Runtime:
             session = Session(path)
         else:
             self._touch_project()
-            session = Session(unique_session_path())
-        self.agent.replace_messages(session.load())
+            session = self.use_new_session()
+        messages = session.load()
+        self.agent.replace_messages(messages)
         self.session = session
         if self.todo_tool is not None:
             if carried:
@@ -833,4 +882,6 @@ class Runtime:
             # Todo state follows the session: the sidecar next to the file now
             # in context is the one the HUD shows (and the tool updates).
             self.todo_tool.bind_session(session.path)
-        self.guard.last_usage = None
+        # Reseed from the loaded transcript: the last assistant turn is the
+        # request that sized the context, and compaction/pruning read it.
+        self.guard.last_usage = last_request_usage(messages)

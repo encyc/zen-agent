@@ -44,7 +44,7 @@ html[data-platform='darwin'] .brand {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--dsw-font-family-brand);
-  font-size: 14px;
+  font-size: var(--ds-font-14);
   font-weight: 600;
   letter-spacing: 0.01em;
   color: var(--dsw-alias-label-primary);
@@ -77,13 +77,43 @@ html[data-platform='darwin'] .brand {
   flex: none;
 }
 
+.sectionToggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  margin-left: -4px;
+  padding: 0 4px;
+  border: none;
+  border-radius: var(--ds-radius-4);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sectionToggle:hover {
+  background: var(--dsw-specific-sidebar-nav-item-hover);
+}
+
+.sectionChevron {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  transition: transform 120ms ease;
+}
+
+.sectionChevron[data-collapsed] {
+  transform: rotate(-90deg);
+}
+
 .sectionLabel {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: var(--ds-font-11);
   line-height: 14px;
   color: var(--dsw-alias-label-caption);
 }
@@ -139,7 +169,7 @@ html[data-platform='darwin'] .brand {
   border-radius: var(--dsw-radius-sm);
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
-  font-size: 12px;
+  font-size: var(--ds-font-12);
   outline: none;
 }
 
@@ -157,7 +187,7 @@ html[data-platform='darwin'] .brand {
 
 .sectionEmpty {
   padding: 4px 8px 8px;
-  font-size: 11px;
+  font-size: var(--ds-font-11);
   line-height: 14px;
   color: var(--dsw-alias-label-caption);
 }
@@ -191,7 +221,7 @@ html[data-platform='darwin'] .brand {
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--ds-font-12);
   cursor: pointer;
 }
 
@@ -273,7 +303,7 @@ html[data-platform='darwin'] .brand {
   background: transparent;
   color: var(--dsw-alias-label-caption);
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--ds-font-11);
   cursor: pointer;
 }
 
@@ -302,12 +332,12 @@ html[data-platform='darwin'] .brand {
   color: var(--dsw-alias-label-primary);
 }
 
-.sessionRow[data-cross] {
+.sessionRow[data-blocked] {
   cursor: default;
   opacity: 0.5;
 }
 
-.sessionRow[data-cross]:hover {
+.sessionRow[data-blocked]:hover {
   background: transparent;
 }
 
@@ -330,7 +360,7 @@ html[data-platform='darwin'] .brand {
 }
 
 .sessionTitle {
-  font-size: 13px;
+  font-size: var(--ds-font-13);
   line-height: 17px;
   font-weight: 500;
   color: var(--dsw-alias-label-primary);
@@ -340,7 +370,7 @@ html[data-platform='darwin'] .brand {
 }
 
 .sessionSub {
-  font-size: 11px;
+  font-size: var(--ds-font-11);
   line-height: 14px;
   color: var(--dsw-alias-label-caption);
   white-space: nowrap;
@@ -368,7 +398,7 @@ html[data-platform='darwin'] .brand {
 
 .sessionPending {
   flex: none;
-  font-size: 10.5px;
+  font-size: var(--ds-font-10-5);
   line-height: 14px;
   padding: 0 6px;
   border-radius: var(--ds-radius-full);
@@ -384,7 +414,7 @@ html[data-platform='darwin'] .brand {
   border-radius: var(--ds-radius-4);
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
-  font-size: 13px;
+  font-size: var(--ds-font-13);
   font-weight: 500;
   outline: 1px solid var(--dsw-alias-border-l4);
 }
@@ -438,7 +468,7 @@ html[data-platform='darwin'] .brand {
   border-radius: var(--ds-radius-4);
   background: transparent;
   color: var(--dsw-alias-label-primary);
-  font-size: 12px;
+  font-size: var(--ds-font-12);
   text-align: left;
   cursor: pointer;
 }
@@ -468,7 +498,7 @@ html[data-platform='darwin'] .brand {
   gap: 8px;
   padding: 32px 12px;
   color: var(--dsw-alias-label-caption);
-  font-size: 12px;
+  font-size: var(--ds-font-12);
 }
 
 .footer {
@@ -476,6 +506,8 @@ html[data-platform='darwin'] .brand {
   align-items: center;
   justify-content: space-between;
   gap: 4px;
+  /* Pin the icon row when the scrollable project list is folded away. */
+  margin-top: auto;
   flex: none;
   height: var(--ds-sidebar-footer-height);
   border-top: 1px solid var(--dsw-alias-border-l1);

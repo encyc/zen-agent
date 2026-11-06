@@ -118,6 +118,25 @@ test('a registered project attaches its path to the matching session group', () 
   )
 })
 
+test('a session-only project group keeps its root from the session entries', () => {
+  const sessions = [make('/s/b.jsonl', 1, { project: 'beta', project_path: '/w/beta' })]
+  assert.deepEqual(mergeProjects(sessionSections(sessions, '').projects, [], ''), [
+    { project: 'beta', path: '/w/beta', sessions },
+  ])
+})
+
+test('a registered project path wins over the session-recorded root', () => {
+  const sessions = [make('/s/b.jsonl', 1, { project: 'beta', project_path: '/w/old' })]
+  assert.deepEqual(
+    mergeProjects(
+      sessionSections(sessions, '').projects,
+      [{ path: '/w/beta', name: 'beta', at: 1 }],
+      '',
+    ),
+    [{ project: 'beta', path: '/w/beta', sessions }],
+  )
+})
+
 test('project names come from the last path segment', () => {
   assert.equal(projectName('/Users/me/work/zen-agent/'), 'zen-agent')
   assert.equal(projectName('C:\\work\\alpha'), 'alpha')

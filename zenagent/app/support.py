@@ -13,6 +13,7 @@ from zenagent.types import Usage
 __all__ = [
     "api_key_for",
     "cache_hit_ratio",
+    "context_occupancy",
     "describe_tools",
     "resolve_model",
     "session_id_for",
@@ -118,6 +119,21 @@ def session_id_for(model: Model, provided: str | None = None) -> str | None:
     if provided:
         return provided
     return uuid.uuid4().hex if model.provider == "opencode-go" else None
+
+
+def context_occupancy(usage: Usage, api: str) -> int:
+    """Tokens the next request carries, sized by the last request's usage.
+
+    ``Usage.input`` is the prompt total on OpenAI-style and Gemini dialects
+    (cached tokens included), but the uncached remainder on Anthropic, where
+    the cache buckets are reported separately. The assistant's output joins
+    the transcript too, so it counts as occupancy. One request only: earlier
+    turns are already inside that prompt, and adding them counts the session.
+    """
+    prompt = usage.input
+    if api == "anthropic-messages":
+        prompt += usage.cache_read + usage.cache_write
+    return prompt + usage.output
 
 
 def cache_hit_ratio(usage: Usage, api: str) -> float | None:

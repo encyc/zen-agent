@@ -3,14 +3,33 @@
 from zenagent.cli.tui.widgets.status_band import StatusBand
 
 
-async def test_quit_records_session_summary(polish_app):
+async def test_quit_without_saying_anything_reports_no_session(polish_app):
+    """The file is dropped at close, so the summary must not print its path."""
     app = polish_app
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         await pilot.press("ctrl+d")
         await pilot.pause()
     assert app.exit_summary is not None
+    assert "not saved" in app.exit_summary and "$" in app.exit_summary
+    assert str(app.runtime.session.path) not in app.exit_summary
+
+
+async def test_quit_records_session_summary(polish_app):
+    from conftest import sequenced_stream
+
+    app = polish_app
+    app.runtime.stream_fn = sequenced_stream(["an answer"])
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await app.chat.submit("hi")
+        await app.chat.wait_for_idle()
+        await pilot.pause()
+        await pilot.press("ctrl+d")
+        await pilot.pause()
+    assert app.exit_summary is not None
     assert "session:" in app.exit_summary and "$" in app.exit_summary
+    assert str(app.runtime.session.path) in app.exit_summary
 
 
 async def test_narrow_band_drops_facts_before_identity(polish_app):

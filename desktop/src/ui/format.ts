@@ -7,6 +7,23 @@ export function formatDuration(ms: number): string {
   return `${minutes}m${Math.round((ms % 60000) / 1000)}s`
 }
 
+/** Compact token count for dense UI (`999`, `1.2K`, `1.05M`). */
+export function formatCompactTokens(tokens: number): string {
+  if (tokens < 1_000) return String(tokens)
+  const thousands = tokens / 1_000
+  // Rounding can push a K mantissa to 1000 (999,999 -> 1000K), which reads as
+  // a scale error. Promote those to the M scale instead.
+  if (Number(thousands.toFixed(1)) < 1_000) {
+    return `${trimFraction(thousands.toFixed(1))}K`
+  }
+  return `${trimFraction((tokens / 1_000_000).toFixed(2))}M`
+}
+
+function trimFraction(value: string): string {
+  if (!value.includes('.')) return value
+  return value.replace(/0+$/, '').replace(/\.$/, '')
+}
+
 /** Epoch seconds → a relative label ("3m ago", "昨天"), empty when unknown. */
 export function formatAge(epochSeconds: number | undefined, locale: 'zh' | 'en'): string {
   if (!epochSeconds) return ''

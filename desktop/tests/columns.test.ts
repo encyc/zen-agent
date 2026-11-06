@@ -29,8 +29,10 @@ test('sidebar parity defaults, clamps and viewport cap', () => {
   assert.equal(computeColumns(500, 900, 0).sidebar, 240)
 })
 
-test('collapsed width and the rightbar solve are unchanged', () => {
-  assert.equal(computeColumns(1280, 0, 0).sidebar, 56)
+test('a collapsed sidebar removes the column entirely', () => {
+  const collapsed = computeColumns(1280, 0, 0)
+  assert.equal(collapsed.sidebar, 0)
+  assert.equal(collapsed.center, 1280)
   const cols = computeColumns(1280, 275, 380)
   assert.equal(cols.sidebar, 275)
   assert.equal(cols.rightbar, 380)

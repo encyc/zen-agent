@@ -5,7 +5,7 @@
   height: 100%;
   min-height: 0;
   background: var(--dsw-alias-bg-base);
-  font-size: 12px;
+  font-size: var(--ds-font-12);
 }
 
 /* pi's dock edge: a quiet 10px strip straddling the panel's left border. */
@@ -78,7 +78,7 @@ html[data-work-panel-resizing] * {
   border-radius: var(--dsw-radius-sm);
   background: transparent;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12.5px;
+  font-size: var(--ds-font-12-5);
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
@@ -127,7 +127,7 @@ html[data-work-panel-resizing] * {
 .empty {
   margin: 4px 2px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+  font-size: var(--ds-font-12);
   line-height: 18px;
 }
 
@@ -151,7 +151,7 @@ html[data-work-panel-resizing] * {
   border-radius: var(--dsw-radius-sm);
   background: transparent;
   color: var(--dsw-alias-label-primary);
-  font-size: 12px;
+  font-size: var(--ds-font-12);
   cursor: pointer;
   text-align: left;
 }
@@ -178,14 +178,14 @@ html[data-work-panel-resizing] * {
   flex: none;
   color: var(--dsw-alias-state-success-primary);
   font-family: var(--ds-font-family-code);
-  font-size: 11px;
+  font-size: var(--ds-font-11);
 }
 
 .removals {
   flex: none;
   color: var(--dsw-alias-state-error-primary);
   font-family: var(--ds-font-family-code);
-  font-size: 11px;
+  font-size: var(--ds-font-11);
 }
 
 .diff {
@@ -222,5 +222,5 @@ html[data-work-panel-resizing] * {
 .rowValue {
   color: var(--dsw-alias-label-primary);
   font-family: var(--ds-font-family-code);
-  font-size: 11.5px;
+  font-size: var(--ds-font-11-5);
 }

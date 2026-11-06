@@ -4,7 +4,12 @@
 
 - 位置：`~/.zenagent/projects/<项目key>/sessions/<时间戳>.jsonl`（按项目隔离；项目根=最近 `.git`）。
 - 一行一个消息（user/assistant/tool result），**只追加**，不做原地修改。
-- 每次启动新会话都会建新文件；`--resume latest` 只续**当前项目**最新会话，`--resume PATH` 可显式续任意会话。
+- 每次启动新会话都会建新文件（`session` 头记录与起始 `mode` 记录在 bootstrap 就落盘）；
+  `--resume latest` 只续**当前项目**最新会话，`--resume PATH` 可显式续任意会话。
+- **退出时，本次进程新建而一条消息都没写进去的会话文件会被删除**：打开就关、只切了权限模式、
+  run 被打断而消息没落盘、或者新建后又切到别的会话，都不留文件（空文件不是 transcript，
+  所以直接删，而不是丢进 `.trash/`——那里会继续占盘）。`--resume` 进来的文件永不由进程删除，
+  即使它本身是空的；`.trash/` 仍然只用于 `/delete` 有内容的会话。
 - 默认视图只含当前项目；`/sessions all`、TUI picker 的 `tab`、`zen sessions list --all` 才列出全部项目。
 - 列表条目带 `created_at`（header 的 `createdAt`，legacy 文件回退到 mtime）、`updated_at`
   （当前 mtime，即最后活动时间）、`model`（最后一条 assistant 消息的模型）和 `derived_from`

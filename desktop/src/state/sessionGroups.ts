@@ -47,7 +47,12 @@ export function mergeProjects(
         group.project.toLowerCase().includes(needle) ||
         group.sessions.some((session) => matches(session, needle)),
     )
-    .map((group) => ({ ...group, path: null }))
+    .map((group) => ({
+      ...group,
+      path:
+        group.sessions.find((session) => (session.project_path ?? '') !== '')?.project_path ??
+        null,
+    }))
   const byName = new Map(merged.map((group) => [group.project, group]))
   for (const entry of entries) {
     const existing = byName.get(entry.name)
