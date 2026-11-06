@@ -104,3 +104,21 @@ def test_find_project_root_accepts_a_file(tmp_path):
     target = repo / "noted.md"
     target.write_text("x")
     assert project.find_project_root(target) == repo.resolve()
+
+
+def test_project_root_for_a_sessions_dir(tmp_path):
+    repo = make_repo(tmp_path / "app")
+    project.write_project_meta(root=repo)
+    sessions = project.project_sessions_dir(root=repo)
+    assert project.project_root_for_sessions_dir(sessions) == str(repo.resolve())
+    # The legacy flat directory has no meta.json: no recorded root.
+    assert project.project_root_for_sessions_dir(project.legacy_sessions_dir()) == ""
+
+
+def test_project_root_for_a_sessions_dir_ignores_a_broken_meta(tmp_path):
+    repo = make_repo(tmp_path / "app")
+    meta = project.project_dir(root=repo) / "meta.json"
+    meta.parent.mkdir(parents=True)
+    meta.write_text("{not json", encoding="utf-8")
+    sessions = project.project_sessions_dir(root=repo)
+    assert project.project_root_for_sessions_dir(sessions) == ""

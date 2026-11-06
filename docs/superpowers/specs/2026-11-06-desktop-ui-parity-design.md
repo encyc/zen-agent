@@ -53,7 +53,7 @@ This project closes that gap in four vertical slices. Each slice delivers the vi
 | Palette | ⌘K search sessions + commands | `session op=list`, `commands` | Client-side search over title/name + command names |
 | Session rename | inline any row | `/rename` current only | Current row + topbar only |
 | Session pin | any row | `/pin` current only | Current row only; pinned group already renders |
-| Session scope | project/all | `session op=list {scope}` | Full for listing and search; cross-project rows are not resumable |
+| Session scope | project/all | `session op=list {scope}` | Full for listing and search; a recorded project root lets a row restart the runtime there, then resume |
 | Import/export | dialogs | `session op=import/export` | Open an external file / export md or html; no adoption into a project |
 | Undo/compact | menu actions | `session op=undo/compact` | Full, wire the dead store actions |
 | Delete | armed two-step | `session op=delete` | Armed confirm client-side |
@@ -101,7 +101,7 @@ CSS Modules stay; no Tailwind. Component CSS consumes parity tokens and the shar
 
 **Session actions.** Rename via `command {name:'rename', argument}`; pin toggles via `command {name:'pin', argument:'on'|'off'}`; import uses the native open dialog then `session op=import`; export uses the native save dialog then `session op=export`; undo and compact are topbar menu actions; delete is a two-step armed row action. All errors surface in the existing error banner, never a silent catch.
 
-**⌘K palette.** One overlay with a query field and two result groups: sessions (client-side match over title/name/project) and commands. A same-project session resumes on Enter; a cross-project session is listed with its project tag and is disabled with a hint. Commands follow an allowlist policy: zero-argument, non-destructive commands run directly; commands that need arguments insert `/name ` into the composer instead of running bare; destructive or screen-only commands (`quit`, `exit`, `clear`, `settings`, `sessions`, `model`, `mode`, `theme`, `lang`, `thinking`) are excluded. Arrow keys move, Enter activates, Esc closes. No server search, no terminal screens.
+**⌘K palette.** One overlay with a query field and two result groups: sessions (client-side match over title/name/project) and commands. A session with a recorded project root resumes on Enter; when that root differs from the active project the runtime restarts there first (pi's `selectSession → activateProject`). Only legacy rows with no recorded root are listed and disabled with a hint. Commands follow an allowlist policy: zero-argument, non-destructive commands run directly; commands that need arguments insert `/name ` into the composer instead of running bare; destructive or screen-only commands (`quit`, `exit`, `clear`, `settings`, `sessions`, `model`, `mode`, `theme`, `lang`, `thinking`) are excluded. Arrow keys move, Enter activates, Esc closes. No server search, no terminal screens.
 
 **Tests.** Unit tests for grouping, scope filtering, sort order (pinned first, then updated desc), palette matching, and armed-delete state. E2E using the existing fake bridge: palette opens and resumes a session, rename calls the command with the typed title, pin calls `pin on`, delete needs two clicks, scope toggle sends `scope:'all'`. Build stays green.
 
@@ -177,7 +177,7 @@ CSS Modules stay; no Tailwind. Component CSS consumes parity tokens and the shar
 - Preferences and palette are client-only.
 - Rename/pin are exposed only where the RPC supports them.
 - Terminal screens (`screen/target/show_help`) remain unrendered.
-- All-scope sessions are discovery-only; cross-project resume is disabled because the RPC cannot switch the process cwd without a restart and exposes no project root.
+- All-scope sessions carry `project_path`; opening one in another project restarts the cwd-bound runtime at that root before resuming. Legacy rows with no recorded root stay discovery-only.
 - Import opens a transcript file; it is not an adoption flow.
 - The palette runs only allowlisted zero-argument commands; argument commands insert their prefix into the composer.
 - Thinking is folded per assistant node, not per row; assistant text is never collapsed, and history omits thinking duration.

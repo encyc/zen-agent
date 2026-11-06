@@ -643,6 +643,7 @@ class RpcServer:
                         "name": entry.path.stem,
                         "title": entry.title,
                         "project": entry.project,
+                        "project_path": entry.project_path,
                         "messages": entry.messages,
                         "current": entry.current,
                         "pinned": entry.pinned,

@@ -867,6 +867,7 @@ async def test_session_list_carries_created_updated_model_and_lineage(runtime_fa
     assert entry["updated_at"] == Path(entry["path"]).stat().st_mtime
     assert entry["model"] == "deepseek-chat"
     assert entry["derived_from"] == ""
+    assert isinstance(entry["project_path"], str)
 
 
 async def test_session_pending_ops_dequeue_and_clear(runtime_factory):
