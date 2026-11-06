@@ -210,7 +210,7 @@
   border: none;
   border-radius: 999px;
   background: var(--dsw-alias-button-info-fill);
-  color: #fff;
+  color: var(--dsw-alias-label-primary-foreground);
   cursor: pointer;
   transition: background-color 100ms ease;
   transform: translateY(-2px);

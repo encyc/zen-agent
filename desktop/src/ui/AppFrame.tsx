@@ -8,9 +8,10 @@ import {
   CENTER_MIN,
   RIGHTBAR_MAX_RATIO,
   RIGHTBAR_MIN,
-  SIDEBAR_MAX,
+  SIDEBAR_DEFAULT,
   SIDEBAR_MIN,
   computeColumns,
+  sidebarMax,
 } from './columns'
 import css from './AppFrame.module.css'
 
@@ -45,7 +46,7 @@ export function AppFrame(props: AppFrameProps) {
   }, [])
 
   const sidebarCollapsed = props.sidebarOpen === false
-  const sidebarPreference = sidebarCollapsed ? 0 : props.sidebarWidth || 280
+  const sidebarPreference = sidebarCollapsed ? 0 : props.sidebarWidth || SIDEBAR_DEFAULT
   const rightbarPreference = props.rightbarOpen ? props.rightbarWidth || 380 : 0
   const cols = computeColumns(viewport, sidebarPreference, rightbarPreference)
 
@@ -74,11 +75,13 @@ export function AppFrame(props: AppFrameProps) {
       if (frame.current !== null) cancelAnimationFrame(frame.current)
       frame.current = requestAnimationFrame(() => {
         frame.current = null
-        props.onSidebarWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, sidebarBase.current + dx)))
+        props.onSidebarWidth(
+          Math.min(sidebarMax(viewport), Math.max(SIDEBAR_MIN, sidebarBase.current + dx)),
+        )
       })
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cols.sidebar, props.onSidebarWidth],
+    [cols.sidebar, props.onSidebarWidth, viewport],
   )
 
   const rightbarDrag = useCallback(

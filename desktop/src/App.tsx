@@ -12,6 +12,7 @@ import { InputBar } from './ui/composer/InputBar'
 import { RightPanel } from './ui/rightbar/RightPanel'
 import { WelcomeScreen } from './ui/WelcomeScreen'
 import { PanelLeftIcon } from './ui/icons'
+import { SIDEBAR_DEFAULT } from './ui/columns'
 import css from './App.module.css'
 
 const SIDEBAR_KEY = 'zen.sidebar.width'
@@ -34,7 +35,7 @@ export function App() {
   const setCollapsed = useSettingsStore((state) => state.setSidebarCollapsed)
   const theme = useSettingsStore((state) => state.theme)
 
-  const [sidebarWidth, setSidebarWidth] = useState(() => loadWidth(SIDEBAR_KEY, 280))
+  const [sidebarWidth, setSidebarWidth] = useState(() => loadWidth(SIDEBAR_KEY, SIDEBAR_DEFAULT))
   const [rightbarOpen, setRightbarOpen] = useState(false)
   const [rightbarWidth, setRightbarWidth] = useState(() => loadWidth(RIGHTBAR_KEY, 380))
 

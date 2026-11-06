@@ -71,7 +71,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, BoundarySt
               border: 'none',
               borderRadius: 8,
               background: 'var(--dsw-alias-button-info-fill, #4176e6)',
-              color: '#fff',
+              color: 'var(--dsw-alias-label-primary-foreground)',
               fontSize: 13,
               fontWeight: 500,
               cursor: 'pointer',

@@ -4,8 +4,41 @@
  * dsh names so component CSS reads the same way. */
 
 :root {
-  --dsh-font-family-text-default: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
-    'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  /* Parity layer — values measured from pi-desktop's rendered shell.
+     Components keep using --dsw-*; this block is the single tuning point. */
+  --ds-font-scale: 1;
+  --ds-font-family-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --ds-accent: var(--dsw-static-neutral-bluish-1000);
+  --ds-accent-hover: var(--dsw-static-neutral-bluish-800);
+  --ds-font-10-5: calc(10.5px * var(--ds-font-scale));
+  --ds-font-11: calc(11px * var(--ds-font-scale));
+  --ds-font-11-5: calc(11.5px * var(--ds-font-scale));
+  --ds-font-12: calc(12px * var(--ds-font-scale));
+  --ds-font-12-5: calc(12.5px * var(--ds-font-scale));
+  --ds-font-13: calc(13px * var(--ds-font-scale));
+  --ds-font-13-5: calc(13.5px * var(--ds-font-scale));
+  --ds-font-14: calc(14px * var(--ds-font-scale));
+  --ds-font-15: calc(15px * var(--ds-font-scale));
+  --ds-font-16: calc(16px * var(--ds-font-scale));
+  --ds-font-18: calc(18px * var(--ds-font-scale));
+  --ds-font-20: calc(20px * var(--ds-font-scale));
+  --ds-font-28: calc(28px * var(--ds-font-scale));
+  --ds-radius-4: 4px;
+  --ds-radius-6: 6px;
+  --ds-radius-8: 8px;
+  --ds-radius-10: 10px;
+  --ds-radius-12: 12px;
+  --ds-radius-14: 14px;
+  --ds-radius-16: 16px;
+  --ds-radius-18: 18px;
+  --ds-radius-20: 20px;
+  --ds-radius-24: 24px;
+  --ds-radius-full: 999px;
+  --ds-chat-content-width: 760px;
+  --ds-topbar-height: 40px;
+  --ds-composer-radius: 20px;
+
+  --dsh-font-family-text-default: var(--ds-font-family-sans);
   --dsw-font-family: var(--dsh-font-family-text-default);
   --dsw-font-family-brand: 'Montserrat', var(--dsh-font-family-text-default);
   --dsh-font-family-code-default: 'SF Mono', 'JetBrains Mono', 'Fira Code', Consolas,
@@ -15,12 +48,12 @@
   --ds-transition-duration: 0.2s;
   --ds-transition-duration-fast: 0.1s;
   --ds-transition-duration-slow: 0.3s;
-  --dsw-radius-xs: 4px;
-  --dsw-radius-sm: 8px;
-  --dsw-radius-md: 12px;
-  --dsw-radius-lg: 16px;
-  --dsw-radius-xl: 20px;
-  --dsw-radius-panel: 28px;
+  --dsw-radius-xs: var(--ds-radius-4);
+  --dsw-radius-sm: var(--ds-radius-8);
+  --dsw-radius-md: var(--ds-radius-12);
+  --dsw-radius-lg: var(--ds-radius-16);
+  --dsw-radius-xl: var(--ds-radius-20);
+  --dsw-radius-panel: var(--ds-radius-24);
 
   --dsh-content-font-size: 14px;
 }
@@ -129,8 +162,8 @@ body {
   --dsw-alias-button-ghost-active-border: var(--dsw-static-neutral-bluish-500);
   --dsw-alias-button-ghost-active-fill: var(--dsw-static-neutral-bluish-100);
   --dsw-alias-button-ghost-active-hover: var(--dsw-static-neutral-bluish-150);
-  --dsw-alias-button-info-fill: var(--dsw-static-deepseek-500);
-  --dsw-alias-button-info-hover: var(--dsw-static-deepseek-400);
+  --dsw-alias-button-info-fill: var(--ds-accent);
+  --dsw-alias-button-info-hover: var(--ds-accent-hover);
   --dsw-alias-button-primary-dimmed: var(--dsw-static-neutral-bluish-100);
   --dsw-alias-button-primary-fill: var(--dsw-alias-brand-primary);
   --dsw-alias-button-primary-hover: var(--dsw-static-neutral-bluish-750);
@@ -156,7 +189,7 @@ body {
   --dsw-alias-markdown-inline-code: var(--dsw-static-neutral-50);
   --dsw-alias-scrollbar-bg-l1: var(--dsw-static-neutral-200);
   --dsw-alias-scrollbar-hover-l1: var(--dsw-static-neutral-300);
-  --dsw-alias-state-business-primary: var(--dsw-static-deepseek-500);
+  --dsw-alias-state-business-primary: var(--ds-accent);
   --dsw-alias-state-business-tertiary: var(--dsw-static-deepseek-100);
   --dsw-alias-code-diff-added: var(--dsw-static-green-500-a08);
   --dsw-alias-code-diff-deleted: var(--dsw-static-red-600-a08);
@@ -191,7 +224,7 @@ body {
   --dsw-specific-menu: var(--dsw-menu-surface-fill);
   --dsw-specific-selector: var(--dsw-static-neutral-bluish-60);
   --dsw-specific-sidebar-fill: var(--dsw-static-neutral-bluish-50);
-  --dsw-specific-sidebar-nav-item-active-accent: var(--dsw-static-deepseek-100);
+  --dsw-specific-sidebar-nav-item-active-accent: var(--dsw-static-neutral-bluish-100);
   --dsw-specific-sidebar-nav-item-active: var(--dsw-static-neutral-bluish-100);
   --dsw-specific-sidebar-nav-item-hover: var(--dsw-static-neutral-bluish-75);
   --dsw-specific-tip: var(--dsw-static-neutral-bluish-60);
@@ -201,6 +234,8 @@ body {
 
 body[data-ds-dark-theme] {
   /* ---- alias layer: dark ----------------------------------------------- */
+  --ds-accent: var(--dsw-static-neutral-bluish-00);
+  --ds-accent-hover: var(--dsw-static-neutral-bluish-100);
   --dsw-alias-bg-base: var(--dsw-static-neutral-bluish-950);
   --dsw-alias-bg-layer-1: var(--dsw-static-neutral-bluish-875);
   --dsw-alias-bg-layer-2: var(--dsw-static-neutral-bluish-850);
@@ -225,8 +260,8 @@ body[data-ds-dark-theme] {
   --dsw-alias-button-ghost-active-border: var(--dsw-static-neutral-bluish-600);
   --dsw-alias-button-ghost-active-fill: var(--dsw-static-neutral-bluish-750);
   --dsw-alias-button-ghost-active-hover: var(--dsw-static-neutral-bluish-700);
-  --dsw-alias-button-info-fill: var(--dsw-static-deepseek-400);
-  --dsw-alias-button-info-hover: var(--dsw-static-deepseek-500);
+  --dsw-alias-button-info-fill: var(--ds-accent);
+  --dsw-alias-button-info-hover: var(--ds-accent-hover);
   --dsw-alias-button-primary-dimmed: var(--dsw-static-neutral-bluish-750);
   --dsw-alias-button-primary-fill: var(--dsw-alias-brand-primary);
   --dsw-alias-button-primary-hover: var(--dsw-static-neutral-bluish-100);
@@ -252,7 +287,7 @@ body[data-ds-dark-theme] {
   --dsw-alias-markdown-inline-code: var(--dsw-static-neutral-800);
   --dsw-alias-scrollbar-bg-l1: var(--dsw-static-neutral-700);
   --dsw-alias-scrollbar-hover-l1: var(--dsw-static-neutral-600);
-  --dsw-alias-state-business-primary: var(--dsw-static-deepseek-400);
+  --dsw-alias-state-business-primary: var(--ds-accent);
   --dsw-alias-state-business-tertiary: var(--dsw-static-deepseek-800);
   --dsw-alias-code-diff-added: var(--dsw-static-green-500-a12);
   --dsw-alias-code-diff-deleted: var(--dsw-static-red-400-a12);
@@ -359,8 +394,8 @@ body {
 
 body {
   /* dsh publishes the conversation content axis; 748px is its default. */
-  --dsh-chat-content-width: 748px;
-  --dsh-composer-card-max-width: 748px;
+  --dsh-chat-content-width: var(--ds-chat-content-width);
+  --dsh-composer-card-max-width: var(--ds-chat-content-width);
   --dsh-composer-text-max-height: 360px;
   --dsh-composer-side-clearance: 32px;
 }
