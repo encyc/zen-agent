@@ -32,6 +32,9 @@ interface BridgeState {
   tools?: { name: string; description: string; approval: string }[]
   thinking?: string | null
   models?: Record<string, unknown>[]
+  fsEntries?: Record<string, Record<string, unknown>[]>
+  fsFiles?: Record<string, Record<string, unknown>>
+  worktrees?: Record<string, unknown>
 }
 
 declare global {
@@ -254,6 +257,46 @@ function installBridge(state: BridgeState) {
           }
           default:
             return { type: 'result', id: payload.id, ok: true }
+        }
+      case 'fs_list': {
+        const path = String(payload.path ?? '')
+        return {
+          type: 'result',
+          id: payload.id,
+          ok: true,
+          path,
+          entries: state.fsEntries?.[path] ?? [],
+          truncated: false,
+        }
+      }
+      case 'fs_read': {
+        const file = state.fsFiles?.[String(payload.path ?? '')]
+        if (file === undefined) return { type: 'error', message: 'not found' }
+        return { type: 'result', id: payload.id, ok: true, file }
+      }
+      case 'git_worktrees':
+        return {
+          type: 'result',
+          id: payload.id,
+          ok: true,
+          worktree: state.worktrees ?? {
+            root: '/work/p',
+            is_repo: true,
+            is_worktree: false,
+            main: '/work/p',
+            branch: 'main',
+            worktrees: [
+              {
+                path: '/work/p',
+                head: 'abc12345',
+                branch: 'main',
+                bare: false,
+                detached: false,
+                current: true,
+              },
+            ],
+            status: { branch: 'main', staged: 0, dirty: 0, untracked: 0, clean: true },
+          },
         }
       default:
         return { type: 'result', id: payload.id, ok: true }
@@ -586,7 +629,7 @@ test('the ask card collects answers and resolves the blocked tool call', async (
   )
 })
 
-test('the work panel opens on review and switches to context', async ({ page }) => {
+test('the work panel renders review hunks and opens the files tab', async ({ page }) => {
   await boot(
     page,
     initialState({
@@ -601,17 +644,92 @@ test('the work panel opens on review and switches to context', async ({ page }) 
           diff: ['@@ -1,2 +1,2 @@', ' keep', '-old', '+new'].join('\n'),
         },
       ],
+      fsEntries: {
+        '': [
+          { name: 'src', path: 'src', kind: 'dir', size: 0, hidden: false },
+          { name: 'README.md', path: 'README.md', kind: 'file', size: 12, hidden: false },
+        ],
+        src: [
+          { name: 'a.ts', path: 'src/a.ts', kind: 'file', size: 20, hidden: false },
+        ],
+      },
+      fsFiles: {
+        'src/a.ts': {
+          path: 'src/a.ts',
+          kind: 'text',
+          size: 20,
+          text: 'const a = 1\nexport { a }\n',
+          total_lines: 2,
+          truncated: false,
+        },
+      },
     }),
   )
   await page.getByRole('button', { name: '打开工作面板' }).click()
-  await expect(page.getByRole('tab', { name: '审核' })).toHaveAttribute('aria-selected', 'true')
-  await expect(page.locator('[data-work-panel]').getByText('a.ts', { exact: true })).toBeVisible()
-  const file = page.locator('[data-work-panel]').getByRole('button', { name: /^a\.ts/ })
-  await file.click()
-  await expect(file).toHaveAttribute('aria-expanded', 'true')
-  await expect(page.locator('[data-work-panel] pre')).toContainText('+new')
-  await page.getByRole('tab', { name: '上下文' }).click()
-  await expect(page.getByTestId('context-used')).toBeVisible()
+  const panel = page.locator('[data-work-panel]')
+  await expect(panel.getByRole('tab', { name: '审核' })).toHaveAttribute('aria-selected', 'true')
+  await expect(panel).toContainText('a.ts')
+  await expect(panel).toContainText('@@ -1,2 +1,2 @@')
+  await expect(panel.locator('[data-kind="add"]')).toContainText('new')
+  await expect(panel.locator('[data-kind="del"]')).toContainText('old')
+
+  await page.getByRole('button', { name: '打开工作面板标签' }).click()
+  await panel.getByRole('menuitem', { name: '文件' }).click()
+  await expect(panel.getByRole('tab', { name: '文件' })).toHaveAttribute('aria-selected', 'true')
+  await panel.getByRole('button', { name: 'src' }).click()
+  await panel.getByRole('button', { name: 'a.ts' }).click()
+  await expect(panel).toContainText('export { a }')
+  await expect(panel.locator('[data-line="2"]')).toBeVisible()
+  await panel.getByRole('button', { name: '返回文件列表' }).click()
+  await expect(panel.getByRole('button', { name: 'README.md' })).toBeVisible()
+
+  await page.getByRole('button', { name: '关闭 文件' }).click()
+  await expect(panel.getByRole('tab', { name: '文件' })).toHaveCount(0)
+  await expect(panel.getByRole('tab', { name: '审核' })).toHaveAttribute('aria-selected', 'true')
+})
+
+test('the worktree tab lists worktrees and marks the current one', async ({ page }) => {
+  await boot(
+    page,
+    initialState({
+      worktrees: {
+        root: '/work/p',
+        is_repo: true,
+        is_worktree: false,
+        main: '/work/p',
+        branch: 'main',
+        worktrees: [
+          {
+            path: '/work/p',
+            head: 'abc12345',
+            branch: 'main',
+            bare: false,
+            detached: false,
+            current: true,
+          },
+          {
+            path: '/work/p-feature',
+            head: 'def67890',
+            branch: 'feature',
+            bare: false,
+            detached: false,
+            current: false,
+          },
+        ],
+        status: { branch: 'main', staged: 0, dirty: 2, untracked: 1, clean: false },
+      },
+    }),
+  )
+  await page.getByRole('button', { name: '打开工作面板' }).click()
+  const panel = page.locator('[data-work-panel]')
+  await page.getByRole('button', { name: '打开工作面板标签' }).click()
+  await panel.getByRole('menuitem', { name: '工作树' }).click()
+  await expect(panel.getByRole('tab', { name: '工作树' })).toHaveAttribute('aria-selected', 'true')
+  await expect(panel).toContainText('feature')
+  await expect(panel).toContainText('/work/p-feature')
+  await expect(panel).toContainText('当前')
+  await expect(panel).toContainText('3 个未提交变更')
+  await expect(panel.getByRole('button', { name: '切换' })).toHaveCount(1)
   await page.getByRole('button', { name: '关闭工作面板' }).click()
   await expect(page.locator('[data-work-panel]')).toHaveCount(0)
 })
@@ -684,7 +802,7 @@ test('a task row opens the subagent conversation in the work panel', async ({ pa
   // The parent row stays one line: the conversation lives in the panel only.
   await expect(page.locator('[data-tool="task"] pre')).toHaveCount(0)
 
-  await page.getByRole('button', { name: '关闭子智能体' }).click()
+  await page.getByRole('button', { name: '关闭 Researcher' }).click()
   await expect(panel.getByRole('tab', { name: /Researcher/ })).toHaveCount(0)
   await expect(panel.getByRole('tab', { name: '审核' })).toHaveAttribute(
     'aria-selected',
@@ -1415,6 +1533,71 @@ test('settings and tools replace the shell and return to chat', async ({ page })
   await expect(page.getByText('Read a file')).toBeVisible()
   await page.getByRole('button', { name: '返回' }).click()
   await expect(page.locator('[data-shell-composer]')).toBeVisible()
+})
+
+test('thinking settings unfold and hide settled reasoning', async ({ page }) => {
+  await boot(
+    page,
+    initialState({
+      running: false,
+      transcript: [
+        { kind: 'user', id: 'u1', text: 'explain', timestamp: 1 },
+        {
+          kind: 'assistant',
+          id: 'a1',
+          text: 'answer',
+          thinking: 'check the logs\nverify the timeout',
+          timestamp: 2,
+        },
+      ],
+    }),
+  )
+  await expect(page.getByTestId('thinking-row')).toBeVisible()
+  await expect(page.getByTestId('thinking-body')).toHaveCount(0)
+
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '对话' }).click()
+  await page.getByRole('switch', { name: '已完成思考自动收起' }).click()
+  await page.getByRole('button', { name: '返回' }).click()
+  await expect(page.getByTestId('thinking-body')).toContainText('check the logs')
+
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '对话' }).click()
+  await page.getByRole('switch', { name: '显示思考' }).click()
+  await page.getByRole('button', { name: '返回' }).click()
+  await expect(page.getByTestId('thinking-row')).toHaveCount(0)
+})
+
+test('the context ring can lead with the used share', async ({ page }) => {
+  await boot(page, initialState())
+  const meter = page.getByTestId('context-meter')
+  await expect(meter).toContainText('75%')
+
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '对话' }).click()
+  await page.getByRole('button', { name: '已用' }).click()
+  await page.getByRole('button', { name: '返回' }).click()
+  await expect(meter).toContainText('25%')
+})
+
+test('Enter only sends when the setting allows it', async ({ page }) => {
+  const submitKey = process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter'
+  await boot(page, initialState({ running: false }))
+  const input = page.locator('[data-composer-plate] textarea')
+  await input.fill('hello')
+  await input.press('Enter')
+  await expect(input).toHaveValue('')
+
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '对话' }).click()
+  await page.getByRole('switch', { name: '回车发送' }).click()
+  await page.getByRole('button', { name: '返回' }).click()
+
+  await input.fill('hello')
+  await input.press('Enter')
+  await expect(input).toHaveValue('hello\n')
+  await input.press(submitKey)
+  await expect(input).toHaveValue('')
 })
 
 test('the session and project sections collapse independently and persist', async ({ page }) => {

@@ -187,37 +187,77 @@ export const usePaletteStore = create<PaletteState>((set) => ({
 
 // ---- work panel -------------------------------------------------------------
 
-export type WorkPanelTab = 'review' | 'context' | 'subagent'
+export type WorkPanelTabKind = 'review' | 'files' | 'worktree' | 'subagent'
+
+export interface WorkPanelTab {
+  id: string
+  kind: WorkPanelTabKind
+  callId?: string
+  name?: string
+}
 
 export interface SubagentPanelTarget {
   callId: string
   name: string
 }
 
+const REVIEW_TAB: WorkPanelTab = { id: 'review', kind: 'review' }
+
 interface WorkPanelState {
   open: boolean
-  tab: WorkPanelTab
-  subagent: SubagentPanelTarget | null
+  tabs: WorkPanelTab[]
+  activeId: string
   openPanel(): void
   closePanel(): void
-  showTab(tab: 'review' | 'context'): void
+  showTab(kind: 'review' | 'files' | 'worktree'): void
+  activate(id: string): void
   openSubagent(target: SubagentPanelTarget): void
-  closeSubagent(): void
+  closeTab(id: string): void
+}
+
+function withTab(tabs: WorkPanelTab[], tab: WorkPanelTab): WorkPanelTab[] {
+  return tabs.some((entry) => entry.id === tab.id) ? tabs : [...tabs, tab]
 }
 
 export const useWorkPanelStore = create<WorkPanelState>((set) => ({
   open: false,
-  tab: 'review',
-  subagent: null,
+  tabs: [REVIEW_TAB],
+  activeId: REVIEW_TAB.id,
   openPanel: () => set({ open: true }),
   closePanel: () => set({ open: false }),
-  showTab: (tab) => set({ tab }),
-  openSubagent: (subagent) => set({ open: true, tab: 'subagent', subagent }),
-  closeSubagent: () =>
+  showTab: (kind) =>
     set((state) => ({
-      subagent: null,
-      tab: state.tab === 'subagent' ? 'review' : state.tab,
+      open: true,
+      tabs: withTab(state.tabs, { id: kind, kind }),
+      activeId: kind,
     })),
+  activate: (id) =>
+    set((state) =>
+      state.tabs.some((tab) => tab.id === id) ? { open: true, activeId: id } : state,
+    ),
+  openSubagent: (target) =>
+    set((state) => {
+      const id = `subagent:${target.callId}`
+      return {
+        open: true,
+        tabs: withTab(state.tabs, {
+          id,
+          kind: 'subagent',
+          callId: target.callId,
+          name: target.name,
+        }),
+        activeId: id,
+      }
+    }),
+  closeTab: (id) =>
+    set((state) => {
+      if (id === REVIEW_TAB.id) return state
+      const tabs = state.tabs.filter((tab) => tab.id !== id)
+      return {
+        tabs,
+        activeId: state.activeId === id ? REVIEW_TAB.id : state.activeId,
+      }
+    }),
 }))
 
 // ---- catalogs ---------------------------------------------------------------
@@ -350,6 +390,8 @@ export const FONT_SCALE_MIN = 0.9
 export const FONT_SCALE_MAX = 1.2
 export const FONT_SCALE_DEFAULT = 1
 
+export type ContextUsageDisplay = 'remaining' | 'used'
+
 export function clampFontScale(value: number): number {
   if (!Number.isFinite(value)) return FONT_SCALE_DEFAULT
   const clamped = Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, value))
@@ -364,6 +406,10 @@ interface SettingsState {
   fontScale: number
   sessionTime: boolean
   updateChecks: boolean
+  showThinking: boolean
+  autoCollapseThinking: boolean
+  contextUsageDisplay: ContextUsageDisplay
+  enterToSend: boolean
   view: AppView
   setTheme(theme: ThemeMode): void
   setLocale(locale: Locale): void
@@ -372,6 +418,10 @@ interface SettingsState {
   setFontScale(scale: number): void
   setSessionTime(enabled: boolean): void
   setUpdateChecks(enabled: boolean): void
+  setShowThinking(enabled: boolean): void
+  setAutoCollapseThinking(enabled: boolean): void
+  setContextUsageDisplay(display: ContextUsageDisplay): void
+  setEnterToSend(enabled: boolean): void
   setView(view: AppView): void
 }
 
@@ -400,6 +450,12 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   fontScale: clampFontScale(load('zen.fontScale', FONT_SCALE_DEFAULT)),
   sessionTime: load('zen.sidebar.sessionTime', true),
   updateChecks: load('zen.update.checks', true),
+  showThinking: load('zen.chat.showThinking', true),
+  autoCollapseThinking: load('zen.chat.autoCollapseThinking', true),
+  contextUsageDisplay: load<ContextUsageDisplay>('zen.context.display', 'remaining') === 'used'
+    ? 'used'
+    : 'remaining',
+  enterToSend: load('zen.composer.enterToSend', true),
   view: 'chat',
   setTheme: (theme) => {
     persist('zen.theme', theme)
@@ -429,6 +485,22 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setUpdateChecks: (updateChecks) => {
     persist('zen.update.checks', updateChecks)
     set({ updateChecks })
+  },
+  setShowThinking: (showThinking) => {
+    persist('zen.chat.showThinking', showThinking)
+    set({ showThinking })
+  },
+  setAutoCollapseThinking: (autoCollapseThinking) => {
+    persist('zen.chat.autoCollapseThinking', autoCollapseThinking)
+    set({ autoCollapseThinking })
+  },
+  setContextUsageDisplay: (contextUsageDisplay) => {
+    persist('zen.context.display', contextUsageDisplay)
+    set({ contextUsageDisplay })
+  },
+  setEnterToSend: (enterToSend) => {
+    persist('zen.composer.enterToSend', enterToSend)
+    set({ enterToSend })
   },
   setView: (view) => set({ view }),
 }))

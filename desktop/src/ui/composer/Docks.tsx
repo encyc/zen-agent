@@ -9,11 +9,12 @@ import {
   canPromotePending,
   queuedNewestFirst,
 } from '../../state/pending'
-import { useStatusStore } from '../../state/stores'
+import { useSettingsStore, useStatusStore } from '../../state/stores'
 import type { PendingMessage } from '../../rpc/types'
 import { useT } from '../../i18n/locale'
 import { formatCompactTokens } from '../format'
 import { CheckIcon, ChevronDownIcon } from '../icons'
+import { contextMeterView } from './contextUsage'
 import { flattenTodos, todoProgress, type TodoStatus, type TodoTask } from './todos'
 import css from './Docks.module.css'
 
@@ -217,6 +218,7 @@ const CONTEXT_CLOSE_DELAY_MS = 120
 export function ContextMeter() {
   const t = useT()
   const status = useStatusStore((state) => state.status)
+  const usageDisplay = useSettingsStore((state) => state.contextUsageDisplay)
   const [open, setOpen] = useState(false)
   const closeTimer = useRef<number | null>(null)
   const cardId = useId()
@@ -232,11 +234,12 @@ export function ContextMeter() {
   )
 
   if (used === null || window_ === null || window_ <= 0 || used <= 0) return null
-  const ratio = Math.min(1, used / window_)
+  const usedRatio = Math.min(1, used / window_)
   // pi colors capacity by what is left, so the warning keeps one meaning even
-  // though the trigger leads with the used figure.
-  const level = ratio >= 0.9 ? 'critical' : ratio >= 0.75 ? 'warning' : 'normal'
-  const percent = Math.round(ratio * 100)
+  // though the trigger's leading figure is configurable.
+  const level = usedRatio >= 0.9 ? 'critical' : usedRatio >= 0.75 ? 'warning' : 'normal'
+  const percent = Math.round(usedRatio * 100)
+  const display = contextMeterView(usedRatio, usageDisplay)
   const openCard = () => {
     if (closeTimer.current !== null) window.clearTimeout(closeTimer.current)
     closeTimer.current = null
@@ -267,6 +270,7 @@ export function ContextMeter() {
       <span
         className={css.contextMeter}
         data-level={level}
+        data-display={usageDisplay}
         data-testid="context-meter"
         tabIndex={0}
         aria-describedby={open && report !== null ? cardId : undefined}
@@ -280,10 +284,10 @@ export function ContextMeter() {
             cy="12"
             r={CONTEXT_RING_RADIUS}
             strokeDasharray={CONTEXT_RING_CIRCUMFERENCE}
-            strokeDashoffset={CONTEXT_RING_CIRCUMFERENCE * (1 - ratio)}
+            strokeDashoffset={CONTEXT_RING_CIRCUMFERENCE * (1 - display.ratio)}
           />
         </svg>
-        <span className={css.contextValue}>{percent}%</span>
+        <span className={css.contextValue}>{display.percent}%</span>
       </span>
       {open && report !== null && (
         <div className={css.contextCard} id={cardId} role="tooltip" data-testid="context-card">

@@ -270,6 +270,65 @@ export interface SubagentTranscriptResult {
   transcript: (MessageView | ToolCallView)[]
 }
 
+// ---- workspace ---------------------------------------------------------------
+
+export interface WorkspaceEntry {
+  name: string
+  /** Slash path relative to the project root. */
+  path: string
+  kind: 'dir' | 'file'
+  size: number
+  hidden: boolean
+}
+
+export interface FsListResult {
+  type: 'result'
+  id: string
+  ok: true
+  path: string
+  entries: WorkspaceEntry[]
+  truncated: boolean
+}
+
+export type WorkspaceFile =
+  | { path: string; kind: 'text'; size: number; text: string; total_lines: number; truncated: boolean }
+  | { path: string; kind: 'binary'; size: number }
+  | { path: string; kind: 'image'; mime: string; size: number; data_url: string }
+  | { path: string; kind: 'tooLarge'; size: number }
+
+export interface FsReadResult {
+  type: 'result'
+  id: string
+  ok: true
+  file: WorkspaceFile
+}
+
+export interface WorktreeEntry {
+  path: string
+  head: string
+  branch: string
+  bare: boolean
+  detached: boolean
+  current: boolean
+}
+
+export interface WorktreeOverview {
+  root: string
+  is_repo: boolean
+  is_worktree: boolean
+  main: string
+  branch: string
+  worktrees: WorktreeEntry[]
+  status: { branch: string; staged: number; dirty: number; untracked: number; clean: boolean } | null
+}
+
+export interface GitWorktreesResult {
+  type: 'result'
+  id: string
+  ok: true
+  worktree: WorktreeOverview
+}
+
 // ---- ask -------------------------------------------------------------------
 
 export interface AskOption {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { collectFileChanges } from '../src/ui/rightbar/review.ts'
+import { collectFileChanges, parseDiffHunks } from '../src/ui/rightbar/review.ts'
 import type { ChatNode, ToolNode } from '../src/state/chatStore.ts'
 
 function tool(id: string, path: string, diff: string | null): ChatNode {
@@ -55,5 +55,50 @@ test('review ignores tools without a diff and falls back to details.path', () =>
   assert.deepEqual(
     changes.map((change) => [change.path, change.additions]),
     [['/src/c.ts', 1]],
+  )
+})
+
+test('review parses unified hunks and tracks both line numbers', () => {
+  const hunks = parseDiffHunks(
+    [
+      '--- a/src/a.ts',
+      '+++ b/src/a.ts',
+      '@@ -3,3 +3,4 @@ export function run',
+      ' keep',
+      '-old',
+      '+new',
+      '+extra',
+      ' tail',
+    ].join('\n'),
+  )
+  assert.equal(hunks.length, 1)
+  assert.equal(hunks[0].header, '@@ -3,3 +3,4 @@ export function run')
+  assert.deepEqual(
+    hunks[0].lines.map((line) => [line.kind, line.text, line.oldNo, line.newNo]),
+    [
+      ['ctx', 'keep', 3, 3],
+      ['del', 'old', 4, null],
+      ['add', 'new', null, 4],
+      ['add', 'extra', null, 5],
+      ['ctx', 'tail', 5, 6],
+    ],
+  )
+})
+
+test('review splits multiple hunks and keeps a hunkless diff readable', () => {
+  const hunks = parseDiffHunks(
+    ['@@ -1 +1 @@', '-a', '+b', '@@ -9,2 +9,2 @@', '-c', '+d'].join('\n'),
+  )
+  assert.equal(hunks.length, 2)
+  assert.equal(hunks[1].header, '@@ -9,2 +9,2 @@')
+
+  const loose = parseDiffHunks(['-gone', '+fresh'].join('\n'))
+  assert.equal(loose.length, 1)
+  assert.deepEqual(
+    loose[0].lines.map((line) => [line.kind, line.oldNo, line.newNo]),
+    [
+      ['del', null, null],
+      ['add', null, null],
+    ],
   )
 })

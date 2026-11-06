@@ -23,6 +23,29 @@ test('settings carry pi defaults and the shell view', () => {
   useSettingsStore.getState().setView('chat')
 })
 
+test('conversation presentation settings carry pi defaults', () => {
+  const settings = useSettingsStore.getState()
+  assert.equal(settings.showThinking, true)
+  assert.equal(settings.autoCollapseThinking, true)
+  assert.equal(settings.contextUsageDisplay, 'remaining')
+  assert.equal(settings.enterToSend, true)
+
+  settings.setShowThinking(false)
+  settings.setAutoCollapseThinking(false)
+  settings.setContextUsageDisplay('used')
+  settings.setEnterToSend(false)
+  const next = useSettingsStore.getState()
+  assert.equal(next.showThinking, false)
+  assert.equal(next.autoCollapseThinking, false)
+  assert.equal(next.contextUsageDisplay, 'used')
+  assert.equal(next.enterToSend, false)
+
+  next.setShowThinking(true)
+  next.setAutoCollapseThinking(true)
+  next.setContextUsageDisplay('remaining')
+  next.setEnterToSend(true)
+})
+
 test('showing a notice records a notification', () => {
   useNotificationStore.setState({ items: [], unread: 0 })
   useNoticeStore.setState({ notice: null })

@@ -334,6 +334,11 @@
   background: color-mix(in oklab, var(--dsw-alias-label-primary) 3.5%, transparent);
 }
 
+/* A row that exists only because the row above it is on indents one step. */
+.rowNested {
+  margin-inline-start: 20px;
+}
+
 .rowCopy {
   min-width: 0;
   flex: 1;

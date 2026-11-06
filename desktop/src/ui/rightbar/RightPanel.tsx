@@ -1,9 +1,8 @@
-/** Work panel — pi's docked right rail: a 46px header with review/context
- * tabs, a close control and a resizable left edge. The old session inspector
- * (todos, jobs, subagents, errors) is gone; those live in the docks. */
+/** Work panel — pi's docked right rail: a 46px tab strip with review, files,
+ * worktree and per-subagent tabs, a launcher for the tool tabs, a close
+ * control and a resizable left edge. */
 
-import { useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
-import { useChatStore } from '../../state/chatStore'
+import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { useStatusStore, useWorkPanelStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
 import {
@@ -13,15 +12,17 @@ import {
   clampWidth,
 } from '../columns'
 import {
-  ActivityIcon,
   BotIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
+  BranchIcon,
   FileIcon,
+  FolderIcon,
+  PlusIcon,
   XIcon,
 } from '../icons'
-import { collectFileChanges, fileBasename } from './review'
+import { FilesPanel } from './FilesPanel'
+import { ReviewPanel } from './ReviewPanel'
 import { SubagentTranscript } from './SubagentTranscript'
+import { WorktreePanel } from './WorktreePanel'
 import css from './RightPanel.module.css'
 
 export interface RightPanelProps {
@@ -37,6 +38,12 @@ interface DragState {
   frame: number
 }
 
+const TOOL_TABS = [
+  { kind: 'review', label: 'panel.review', Icon: FileIcon },
+  { kind: 'files', label: 'panel.files', Icon: FolderIcon },
+  { kind: 'worktree', label: 'panel.worktree', Icon: BranchIcon },
+] as const
+
 function clampPanel(px: number): number {
   return clampWidth(px, RIGHTBAR_MIN, Math.max(RIGHTBAR_MIN, window.innerWidth * RIGHTBAR_MAX_RATIO))
 }
@@ -44,21 +51,40 @@ function clampPanel(px: number): number {
 export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
   const t = useT()
   const status = useStatusStore((state) => state.status)
-  const nodes = useChatStore((state) => state.nodes)
-  const tab = useWorkPanelStore((state) => state.tab)
-  const subagent = useWorkPanelStore((state) => state.subagent)
+  const tabs = useWorkPanelStore((state) => state.tabs)
+  const activeId = useWorkPanelStore((state) => state.activeId)
   const showTab = useWorkPanelStore((state) => state.showTab)
-  const openSubagent = useWorkPanelStore((state) => state.openSubagent)
-  const closeSubagent = useWorkPanelStore((state) => state.closeSubagent)
-  const subagentName =
-    subagent === null
-      ? ''
-      : status?.subagents?.find((entry) => entry.call_id === subagent.callId)?.name ||
-        subagent.name
-  const [openPath, setOpenPath] = useState<string | null>(null)
+  const activate = useWorkPanelStore((state) => state.activate)
+  const closeTab = useWorkPanelStore((state) => state.closeTab)
+  const [launcher, setLauncher] = useState(false)
+  const launcherRef = useRef<HTMLDivElement | null>(null)
   const drag = useRef<DragState | null>(null)
 
-  const changes = useMemo(() => collectFileChanges(nodes), [nodes])
+  useEffect(() => {
+    if (!launcher) return
+    const close = (event: MouseEvent) => {
+      if (!launcherRef.current?.contains(event.target as Node)) setLauncher(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [launcher])
+
+  const activeTab = tabs.find((tab) => tab.id === activeId) ?? tabs[0]
+  const subagentName = (callId: string | undefined, fallback: string | undefined) =>
+    status?.subagents?.find((entry) => entry.call_id === callId)?.name ||
+    fallback ||
+    t('panel.subagent')
+
+  const labelFor = (tab: (typeof tabs)[number]): string => {
+    if (tab.kind === 'subagent') return subagentName(tab.callId, tab.name)
+    const tool = TOOL_TABS.find((entry) => entry.kind === tab.kind)
+    return tool === undefined ? tab.kind : t(tool.label)
+  }
+
+  const iconFor = (kind: string) => {
+    const tool = TOOL_TABS.find((entry) => entry.kind === kind)
+    return tool?.Icon ?? BotIcon
+  }
 
   const stopDrag = () => {
     const state = drag.current
@@ -104,12 +130,8 @@ export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
     onWidth(clampPanel(next))
   }
 
-  const usage = status?.usage ?? { input: 0, output: 0, cache_read: 0, cache_write: 0, cost: 0 }
-  const contextUsed = status?.context_used ?? 0
-  const contextWindow = status?.context_window ?? 0
-
   return (
-    <div className={css.root} data-work-panel data-tab={tab}>
+    <div className={css.root} data-work-panel data-tab={activeTab?.kind ?? 'review'}>
       <div
         className={css.resize}
         role="separator"
@@ -136,51 +158,82 @@ export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
       />
       <div className={css.header}>
         <div className={css.tabs} role="tablist">
+          {tabs.map((tab) => {
+            const Icon = iconFor(tab.kind)
+            const label = labelFor(tab)
+            const selected = tab.id === activeTab?.id
+            const pinned = tab.id === 'review'
+            return (
+              <div
+                key={tab.id}
+                className={pinned ? css.pinnedTab : css.subagentTab}
+                data-active={selected || undefined}
+                role="presentation"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  className={css.tab}
+                  title={label}
+                  onClick={() => activate(tab.id)}
+                >
+                  <Icon size={13} />
+                  <span className={css.tabLabel}>{label}</span>
+                </button>
+                {!pinned && (
+                  <button
+                    type="button"
+                    className={css.tabClose}
+                    aria-label={t('panel.closeTab', { name: label })}
+                    title={t('panel.closeTab', { name: label })}
+                    onClick={() => closeTab(tab.id)}
+                  >
+                    <XIcon size={11} />
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+        <div
+          className={css.launcherWrap}
+          ref={launcherRef}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') setLauncher(false)
+          }}
+        >
           <button
             type="button"
-            role="tab"
-            aria-selected={tab === 'review'}
-            className={css.tab}
-            onClick={() => showTab('review')}
+            className={css.iconButton}
+            aria-label={t('panel.launcher')}
+            title={t('panel.launcher')}
+            aria-expanded={launcher}
+            onClick={() => setLauncher((value) => !value)}
           >
-            <FileIcon size={13} />
-            <span>{t('panel.review')}</span>
+            <PlusIcon size={14} />
           </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'context'}
-            className={css.tab}
-            onClick={() => showTab('context')}
-          >
-            <ActivityIcon size={13} />
-            <span>{t('panel.context')}</span>
-          </button>
-          {subagent !== null && (
-            <div
-              className={css.subagentTab}
-              data-active={tab === 'subagent' || undefined}
-              role="presentation"
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={tab === 'subagent'}
-                className={css.tab}
-                title={subagentName}
-                onClick={() => openSubagent(subagent)}
-              >
-                <BotIcon size={13} />
-                <span className={css.tabLabel}>{subagentName}</span>
-              </button>
-              <button
-                type="button"
-                className={css.tabClose}
-                aria-label={t('panel.subagentClose')}
-                onClick={closeSubagent}
-              >
-                <XIcon size={11} />
-              </button>
+          {launcher && (
+            <div className={css.launcher} role="menu">
+              {TOOL_TABS.map(({ kind, label, Icon }) => (
+                <button
+                  key={kind}
+                  type="button"
+                  role="menuitem"
+                  className={css.launcherRow}
+                  data-launcher-item={kind}
+                  onClick={() => {
+                    showTab(kind)
+                    setLauncher(false)
+                  }}
+                >
+                  <Icon size={13} />
+                  <span>{t(label)}</span>
+                  {tabs.some((entry) => entry.id === kind) && (
+                    <span className={css.launcherOpen} />
+                  )}
+                </button>
+              ))}
             </div>
           )}
         </div>
@@ -193,97 +246,21 @@ export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
           <XIcon size={13} />
         </button>
       </div>
-      <div
-        className={css.body}
-        data-selectable
-        data-embed={tab === 'subagent' && subagent !== null ? '' : undefined}
-      >
-        {tab === 'subagent' && subagent !== null ? (
-          <SubagentTranscript target={subagent} />
-        ) : tab === 'review' ? (
-          changes.length === 0 ? (
-            <p className={css.empty}>{t('panel.reviewEmpty')}</p>
-          ) : (
-            <ul className={css.files}>
-              {changes.map((change) => {
-                const open = openPath === change.path
-                return (
-                  <li key={change.path} className={css.file}>
-                    <button
-                      type="button"
-                      className={css.fileRow}
-                      aria-expanded={open}
-                      title={change.path}
-                      onClick={() => setOpenPath(open ? null : change.path)}
-                    >
-                      <span className={css.chevron} data-open={open || undefined}>
-                        {open ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
-                      </span>
-                      <span className={css.fileName}>{fileBasename(change.path)}</span>
-                      <span className={css.additions}>+{change.additions}</span>
-                      <span className={css.removals}>-{change.removals}</span>
-                    </button>
-                    {open && <pre className={css.diff}>{change.diffs.join('\n')}</pre>}
-                  </li>
-                )
-              })}
-            </ul>
-          )
+      <div className={css.body} data-selectable data-embed="">
+        {activeTab?.kind === 'subagent' ? (
+          <SubagentTranscript
+            target={{ callId: activeTab.callId ?? '', name: activeTab.name ?? '' }}
+          />
+        ) : activeTab?.kind === 'files' ? (
+          <FilesPanel />
+        ) : activeTab?.kind === 'worktree' ? (
+          <WorktreePanel />
         ) : (
-          <div className={css.rows}>
-            <div className={css.row} data-testid="context-used">
-              <span className={css.rowLabel}>{t('usage.context')}</span>
-              <span className={css.rowValue}>
-                {formatCount(contextUsed)} / {formatCount(contextWindow)}
-              </span>
-            </div>
-            <div className={css.row}>
-              <span className={css.rowLabel}>{t('panel.cacheHit')}</span>
-              <span className={css.rowValue}>
-                {status?.cache_hit_ratio !== null && status?.cache_hit_ratio !== undefined
-                  ? `${Math.round(status.cache_hit_ratio * 100)}%`
-                  : '—'}
-              </span>
-            </div>
-            <div className={css.row}>
-              <span className={css.rowLabel}>{t('usage.turn')}</span>
-              <span className={css.rowValue}>
-                {status?.turn_ms !== null && status?.turn_ms !== undefined && status.turn_ms > 0
-                  ? formatDuration(status.turn_ms)
-                  : '—'}
-              </span>
-            </div>
-            <div className={css.row}>
-              <span className={css.rowLabel}>{t('panel.tokensInOut')}</span>
-              <span className={css.rowValue}>
-                {formatCount(usage.input)} / {formatCount(usage.output)}
-              </span>
-            </div>
-            <div className={css.row}>
-              <span className={css.rowLabel}>{t('panel.cacheRW')}</span>
-              <span className={css.rowValue}>
-                {formatCount(usage.cache_read)} / {formatCount(usage.cache_write)}
-              </span>
-            </div>
-            <div className={css.row}>
-              <span className={css.rowLabel}>{t('usage.cost')}</span>
-              <span className={css.rowValue}>${usage.cost.toFixed(4)}</span>
-            </div>
+          <div className={css.reviewWrap}>
+            <ReviewPanel />
           </div>
         )}
       </div>
     </div>
   )
-}
-
-function formatCount(value: number | null | undefined): string {
-  if (value === null || value === undefined) return '0'
-  if (value >= 1000) return `${(value / 1000).toFixed(1)}k`
-  return String(value)
-}
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
-  return `${Math.floor(ms / 60000)}m`
 }

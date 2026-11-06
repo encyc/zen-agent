@@ -1171,3 +1171,43 @@ async def test_status_carries_the_complete_run_status(runtime_factory):
     # The fields the hand-written projection used to drop:
     assert "git_branch" in status and "context" in status
     assert "turn_output_tokens" in status and "session_name" in status
+
+
+async def test_fs_requests_read_the_project_directory(runtime_factory, tmp_path, monkeypatch):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.ts").write_text("export const value = 1\n", encoding="utf-8")
+    (tmp_path / "README.md").write_text("# demo\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    _runtime, server, writes, queue = await build(runtime_factory)
+    await run_lines(
+        server,
+        queue,
+        [
+            {"type": "fs_list", "id": "l", "path": ""},
+            {"type": "fs_read", "id": "r", "path": "src/main.ts"},
+        ],
+    )
+    results = {message["id"]: message for message in decode(writes)}
+    assert {"src", "README.md"} <= {entry["name"] for entry in results["l"]["entries"]}
+    assert results["r"]["file"]["kind"] == "text"
+    assert results["r"]["file"]["total_lines"] == 1
+    assert results["r"]["file"]["text"] == "export const value = 1\n"
+
+
+async def test_fs_requests_reject_paths_outside_the_project(runtime_factory, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _runtime, server, writes, queue = await build(runtime_factory)
+    await run_lines(server, queue, [{"type": "fs_read", "id": "r", "path": "../secret"}])
+    payload = decode(writes)[0]
+    assert payload["type"] == "error"
+    assert "escapes the workspace" in payload["message"]
+
+
+async def test_git_worktrees_reports_a_non_repository(runtime_factory, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _runtime, server, writes, queue = await build(runtime_factory)
+    await run_lines(server, queue, [{"type": "git_worktrees", "id": "g"}])
+    worktree = decode(writes)[0]["worktree"]
+    assert worktree["is_repo"] is False
+    assert worktree["worktrees"] == []

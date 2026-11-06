@@ -6,7 +6,9 @@ only, every line parses as JSON, and logs stay on stderr.
 Protocol v2 (v1 messages keep their shape):
 
     requests  prompt, cancel, status, shutdown, steer, tools, model, mode,
-              usage, approval, ask, session, command
+              usage, approval, ask, session, command, transcript,
+              subagent_transcript, models, commands, fs_list, fs_read,
+              git_worktrees
     responses {"type":"result"|"error", "id": ..., ...}
     events    {"type":"event","event":{...}} plus ``approval_request`` and
               ``ask_request`` events
@@ -27,6 +29,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from zenagent.agent import Agent
+from zenagent.app.workspace import list_directory, read_file, worktree_overview
 from zenagent.events import AgentEvent
 from zenagent.types import (
     AssistantMessage,
@@ -545,7 +548,45 @@ class RpcServer:
             return True
         if kind == "command":
             return await self._command(request, request_id)
+        if kind == "fs_list":
+            return self._fs_request(request, request_id, "list")
+        if kind == "fs_read":
+            return self._fs_request(request, request_id, "read")
+        if kind == "git_worktrees":
+            self._send(
+                {
+                    "type": "result",
+                    "id": request_id,
+                    "ok": True,
+                    "worktree": worktree_overview(Path.cwd()),
+                }
+            )
+            return True
         self._send({"type": "error", "id": request_id, "message": f"unknown type: {kind}"})
+        return True
+
+    def _fs_request(self, request: dict, request_id, op: str) -> bool:
+        path = request.get("path", "")
+        if not isinstance(path, str):
+            self._send(
+                {"type": "error", "id": request_id, "message": f"fs_{op} needs a path"}
+            )
+            return True
+        try:
+            if op == "list":
+                payload = list_directory(Path.cwd(), path)
+            else:
+                payload = {"file": read_file(Path.cwd(), path)}
+        except (OSError, ValueError) as exc:
+            self._send(
+                {
+                    "type": "error",
+                    "id": request_id,
+                    "message": f"{op} failed: {exc}",
+                }
+            )
+            return True
+        self._send({"type": "result", "id": request_id, "ok": True, **payload})
         return True
 
     def _status_result(self, request_id) -> dict:

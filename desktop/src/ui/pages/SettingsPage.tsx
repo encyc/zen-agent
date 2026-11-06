@@ -11,6 +11,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import clsx from 'clsx'
 import {
   FONT_SCALE_MAX,
   FONT_SCALE_MIN,
@@ -65,7 +66,14 @@ const NAV_ITEMS: NavItem[] = [
     hintKey: 'settings.conversationHint',
     icon: <ChatIcon size={14} />,
     group: 'preferences',
-    keywords: ['settings.sessionTime', 'settings.chatWidth'],
+    keywords: [
+      'settings.sessionTime',
+      'settings.chatWidth',
+      'settings.showThinking',
+      'settings.autoCollapseThinking',
+      'settings.contextUsageDisplay',
+      'settings.enterToSend',
+    ],
   },
   {
     id: 'about',
@@ -100,9 +108,14 @@ const FONT_PRESETS = [
   { scale: FONT_SCALE_MAX, labelKey: 'settings.fontSizeXl' },
 ]
 
-function Row(props: { title: string; detail?: string; children: ReactNode }) {
+function Row(props: {
+  title: string
+  detail?: string
+  nested?: boolean
+  children: ReactNode
+}) {
   return (
-    <div className={css.row}>
+    <div className={clsx(css.row, props.nested && css.rowNested)}>
       <div className={css.rowCopy}>
         <div className={css.rowTitle}>{props.title}</div>
         {props.detail ? <div className={css.rowDetail}>{props.detail}</div> : null}
@@ -271,12 +284,20 @@ export function SettingsPage() {
   const chatWidth = useSettingsStore((state) => state.chatWidth)
   const sessionTime = useSettingsStore((state) => state.sessionTime)
   const updateChecks = useSettingsStore((state) => state.updateChecks)
+  const showThinking = useSettingsStore((state) => state.showThinking)
+  const autoCollapseThinking = useSettingsStore((state) => state.autoCollapseThinking)
+  const contextUsageDisplay = useSettingsStore((state) => state.contextUsageDisplay)
+  const enterToSend = useSettingsStore((state) => state.enterToSend)
   const setTheme = useSettingsStore((state) => state.setTheme)
   const setLocale = useSettingsStore((state) => state.setLocale)
   const setFontScale = useSettingsStore((state) => state.setFontScale)
   const setChatWidth = useSettingsStore((state) => state.setChatWidth)
   const setSessionTime = useSettingsStore((state) => state.setSessionTime)
   const setUpdateChecks = useSettingsStore((state) => state.setUpdateChecks)
+  const setShowThinking = useSettingsStore((state) => state.setShowThinking)
+  const setAutoCollapseThinking = useSettingsStore((state) => state.setAutoCollapseThinking)
+  const setContextUsageDisplay = useSettingsStore((state) => state.setContextUsageDisplay)
+  const setEnterToSend = useSettingsStore((state) => state.setEnterToSend)
   const setView = useSettingsStore((state) => state.setView)
 
   const [tab, setTab] = useState<Tab>('appearance')
@@ -452,6 +473,43 @@ export function SettingsPage() {
                     onChange={setSessionTime}
                   />
                 </Row>
+                <Row title={t('settings.showThinking')} detail={t('settings.showThinkingHint')}>
+                  <Switch
+                    checked={showThinking}
+                    label={t('settings.showThinking')}
+                    onChange={setShowThinking}
+                  />
+                </Row>
+                {showThinking && (
+                  <Row
+                    nested
+                    title={t('settings.autoCollapseThinking')}
+                    detail={t('settings.autoCollapseThinkingHint')}
+                  >
+                    <Switch
+                      checked={autoCollapseThinking}
+                      label={t('settings.autoCollapseThinking')}
+                      onChange={setAutoCollapseThinking}
+                    />
+                  </Row>
+                )}
+                <Row
+                  title={t('settings.contextUsageDisplay')}
+                  detail={t('settings.contextUsageDisplayHint')}
+                >
+                  <Segmented
+                    value={contextUsageDisplay}
+                    label={t('settings.contextUsageDisplay')}
+                    options={[
+                      {
+                        value: 'remaining',
+                        label: t('settings.contextUsageDisplayRemaining'),
+                      },
+                      { value: 'used', label: t('settings.contextUsageDisplayUsed') },
+                    ]}
+                    onChange={setContextUsageDisplay}
+                  />
+                </Row>
                 {__UPDATE_ENABLED__ && (
                   <Row title={t('update.toggle')} detail={t('update.toggleHint')}>
                     <Switch
@@ -483,6 +541,15 @@ export function SettingsPage() {
                       {t('settings.reset')}
                     </button>
                   </div>
+                </Row>
+              </Card>
+              <Card title={t('settings.chatInput')}>
+                <Row title={t('settings.enterToSend')} detail={t('settings.enterToSendHint')}>
+                  <Switch
+                    checked={enterToSend}
+                    label={t('settings.enterToSend')}
+                    onChange={setEnterToSend}
+                  />
                 </Row>
               </Card>
             </div>

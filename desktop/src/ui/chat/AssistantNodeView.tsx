@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState, type MouseEvent } from 'react'
 import clsx from 'clsx'
 import type { AssistantNode } from '../../state/chatStore'
+import { useSettingsStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
 import { copyText } from '../clipboard'
 import { ChevronRightIcon, SparkIcon } from '../icons'
@@ -25,6 +26,8 @@ export function AssistantNodeView({
   anchor?: string
 }) {
   const t = useT()
+  const showThinking = useSettingsStore((state) => state.showThinking)
+  const autoCollapseThinking = useSettingsStore((state) => state.autoCollapseThinking)
   const html = useMarkdown(node.text, { copy: t('chat.copy'), copied: t('chat.copied') })
   const hasThinking = node.thinking !== null && node.thinking.trim() !== ''
   const duration = node.durationMs !== null ? formatDuration(node.durationMs) : ''
@@ -54,12 +57,15 @@ export function AssistantNodeView({
       data-turn-row
       data-minimap-id={anchor}
     >
-      {hasThinking && (
+      {showThinking && hasThinking ? (
         <ThinkingRow
           text={node.thinking ?? ''}
           running={node.thinkingRunning}
+          autoCollapse={autoCollapseThinking}
         />
-      )}
+      ) : node.thinkingRunning ? (
+        <ThinkingLive />
+      ) : null}
       {node.text !== '' && (
         <div
           className={css.markdown}
@@ -78,16 +84,24 @@ export function AssistantNodeView({
   )
 }
 
-function ThinkingRow({ text, running }: { text: string; running: boolean }) {
+function ThinkingRow({
+  text,
+  running,
+  autoCollapse,
+}: {
+  text: string
+  running: boolean
+  autoCollapse: boolean
+}) {
   const t = useT()
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(running || !autoCollapse)
   const summary = useMemo(() => firstLine(text) || t('thinking.label'), [text, t])
-  // Open automatically while a reasoning block streams, close when done.
+  // A live row stays open; a settled row follows the preference.
   useEffect(() => {
-    if (running) setOpen(true)
-  }, [running])
+    setOpen(running || !autoCollapse)
+  }, [running, autoCollapse])
   return (
-    <div className={css.thinking} data-open={open || undefined}>
+    <div className={css.thinking} data-open={open || undefined} data-testid="thinking-row">
       <button
         type="button"
         className={css.thinkingHead}
@@ -108,10 +122,27 @@ function ThinkingRow({ text, running }: { text: string; running: boolean }) {
         </span>
       </button>
       {open && (
-        <div className={css.thinkingBody} data-selectable>
+        <div className={css.thinkingBody} data-selectable data-testid="thinking-body">
           {text}
         </div>
       )}
+    </div>
+  )
+}
+
+/** Hidden reasoning keeps a live indicator, but no settled excerpts. */
+function ThinkingLive() {
+  const t = useT()
+  return (
+    <div className={css.thinking} data-testid="thinking-live" role="status">
+      <span className={css.thinkingHead}>
+        <span className={css.thinkingTitle}>
+          <TextShimmer>{t('thinking.label')}…</TextShimmer>
+        </span>
+        <span className={css.thinkingIcon} aria-hidden>
+          <SparkIcon size={11} />
+        </span>
+      </span>
     </div>
   )
 }

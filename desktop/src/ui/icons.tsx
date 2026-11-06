@@ -186,6 +186,17 @@ export function FolderIcon(props: IconProps) {
   )
 }
 
+export function BranchIcon(props: IconProps) {
+  return (
+    <svg {...base(props.size, props.className, props.style)}>
+      <circle cx="4.5" cy="3.5" r="1.5" />
+      <circle cx="4.5" cy="12.5" r="1.5" />
+      <circle cx="11.5" cy="5.5" r="1.5" />
+      <path d="M4.5 5v6M6 5.5h2.5A3 3 0 0 1 11.5 8v1.5" />
+    </svg>
+  )
+}
+
 export function WarningIcon(props: IconProps) {
   return (
     <svg {...base(props.size, props.className, props.style)}>

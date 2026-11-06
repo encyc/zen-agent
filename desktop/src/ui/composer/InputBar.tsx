@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { listen } from '@tauri-apps/api/event'
 import { useAppStore } from '../../state/appStore'
-import { useApprovalStore, useAskStore, useComposerStore, useStatusStore, useCatalogStore } from '../../state/stores'
+import { useApprovalStore, useAskStore, useComposerStore, useSettingsStore, useStatusStore, useCatalogStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
 import { ApprovalPanel } from '../approval/ApprovalPanel'
 import { AskCard } from '../ask/AskCard'
@@ -41,6 +41,7 @@ export function InputBar() {
   const addImages = useComposerStore((state) => state.addImages)
   const removeImage = useComposerStore((state) => state.removeImage)
   const commands = useCatalogStore((state) => state.commands)
+  const enterToSend = useSettingsStore((state) => state.enterToSend)
   const approvalCount = useApprovalStore((state) => state.queue.length)
   const askCount = useAskStore((state) => state.queue.length)
 
@@ -124,7 +125,12 @@ export function InputBar() {
         return
       }
     }
-    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+    if (
+      event.key === 'Enter' &&
+      !event.shiftKey &&
+      !event.nativeEvent.isComposing &&
+      (enterToSend || event.metaKey || event.ctrlKey)
+    ) {
       event.preventDefault()
       doSubmit()
       return
