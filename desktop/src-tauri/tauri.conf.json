@@ -36,5 +36,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/encyc/zen-agent/releases/latest/download/latest.json"
+      ],
+      "pubkey": ""
+    }
   }
 }

@@ -457,6 +457,13 @@ pub fn rpc_stop(state: State<'_, RpcState>) -> Result<(), String> {
 }
 
 /// Best-effort teardown on app exit.
+/// Restart the shell after an update installed itself. The child `zen rpc`
+/// dies with the process, so the new bundle and its sidecar start together.
+#[tauri::command]
+pub fn relaunch_app(app: AppHandle) {
+    app.restart();
+}
+
 /// True when the environment asks every zen frontend to stop checking for
 /// updates. Kept alongside the settings switch: either one silences it.
 #[tauri::command]

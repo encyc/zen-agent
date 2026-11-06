@@ -22,6 +22,8 @@ import { restoreChatState } from './ui/pages/navigation'
 import { isRuntimeMissing, type RuntimeProbe } from './state/startFailure.ts'
 import { ConversationTopbar } from './ui/ConversationTopbar'
 import { NoticeBanner } from './ui/NoticeBanner'
+import { UpdateBanner } from './ui/UpdateBanner'
+import { useUpdateStore } from './state/updateStore'
 import { CommandPalette } from './ui/palette/CommandPalette'
 import { SIDEBAR_DEFAULT, RIGHTBAR_DEFAULT, clampChatWidth } from './ui/columns'
 import { PanelRightIcon } from './ui/icons'
@@ -51,6 +53,7 @@ export function App() {
   const fontScale = useSettingsStore((state) => state.fontScale)
   const view = useSettingsStore((state) => state.view)
   const previousView = useRef(view)
+  const updateChecked = useRef(false)
   // The shell opens straight into a chat: the last project, else the user's
   // home folder, else zen's own cwd. There is no idle welcome surface.
   const [lastCwd] = useState(lastProjectCwd)
@@ -112,6 +115,14 @@ export function App() {
       await connect(undefined, cwd)
     })()
   }, [connection, lastCwd, connect])
+
+  // One update check per launch, five seconds after the shell is usable: the
+  // cached answer shows immediately, the network answer arrives later.
+  useEffect(() => {
+    if (connection !== 'ready' || updateChecked.current) return
+    updateChecked.current = true
+    void useUpdateStore.getState().start()
+  }, [connection])
 
   // The composer floats over the center column; publish its real height so
   // the transcript reserves exactly that much and nothing is covered.
@@ -218,6 +229,7 @@ export function App() {
         onNewSession={() => void useAppStore.getState().newSession()}
       />
       <NoticeBanner />
+      <UpdateBanner />
       <ChatView />
       <div ref={dockRef} className={css.composerDock} data-shell-composer>
         <InputBar />

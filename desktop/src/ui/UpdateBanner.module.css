@@ -1,0 +1,17 @@
+/* The update banner reuses NoticeBanner's shell; only the action differs. */
+
+.action {
+  flex: none;
+  height: 22px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-state-business-primary);
+  color: var(--dsw-alias-label-inverse, #fff);
+  font-size: var(--ds-font-12);
+  cursor: pointer;
+}
+
+.action:hover {
+  filter: brightness(1.05);
+}
