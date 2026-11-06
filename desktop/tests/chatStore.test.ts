@@ -3,7 +3,7 @@
 
 import { beforeEach, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { useChatStore } from '../src/state/chatStore.ts'
+import { retryableNodeId, useChatStore } from '../src/state/chatStore.ts'
 import type { TranscriptResult } from '../src/rpc/types.ts'
 
 const empty: TranscriptResult = {
@@ -171,4 +171,41 @@ test('finalize interrupts abandoned cards and drops an empty streaming row', () 
     ['tool'],
   )
   assert.equal(nodes[0].kind === 'tool' && nodes[0].state, 'interrupted')
+})
+
+test('retryableNodeId targets the last settled assistant turn', () => {
+  useChatStore.getState().applyEvent({
+    type: 'message_start',
+    message: { role: 'user', text: 'go' },
+  })
+  useChatStore.getState().applyEvent({
+    type: 'message_start',
+    message: { role: 'assistant', text: '' },
+  })
+  useChatStore.getState().applyEvent({
+    type: 'message_update',
+    assistant_event: { type: 'text_delta', delta: 'answer' },
+  })
+  useChatStore.getState().applyEvent({
+    type: 'message_end',
+    message: { role: 'assistant', text: 'answer' },
+  })
+
+  const nodes = useChatStore.getState().nodes
+  const assistant = nodes.find((node) => node.kind === 'assistant')
+  assert.equal(retryableNodeId(nodes), assistant?.id ?? null)
+})
+
+test('retryableNodeId ignores a streaming or empty turn', () => {
+  useChatStore.getState().applyEvent({
+    type: 'message_start',
+    message: { role: 'assistant', text: '' },
+  })
+  useChatStore.getState().applyEvent({
+    type: 'message_update',
+    assistant_event: { type: 'text_delta', delta: 'partial' },
+  })
+
+  assert.equal(retryableNodeId(useChatStore.getState().nodes), null)
+  assert.equal(retryableNodeId([]), null)
 })

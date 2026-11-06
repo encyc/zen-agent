@@ -99,6 +99,18 @@ export type ChatNode =
   | CommandNode
   | UsageNode
 
+/** The last assistant turn, when it is settled and carries answer text — the
+ * one turn a regenerate action may target. */
+export function retryableNodeId(nodes: ChatNode[]): string | null {
+  for (let index = nodes.length - 1; index >= 0; index -= 1) {
+    const node = nodes[index]
+    if (node.kind !== 'assistant') continue
+    if (node.streaming || node.text.trim() === '') return null
+    return node.id
+  }
+  return null
+}
+
 interface ChatState {
   nodes: ChatNode[]
   /** call_id → tool node id, mirroring TranscriptBuilder.cards. */

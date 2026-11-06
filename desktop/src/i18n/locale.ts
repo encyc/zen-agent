@@ -80,6 +80,9 @@ const zh: Dict = {
   'thinking.label': '思考',
   'chat.empty.title': '开始一个新任务',
   'chat.empty.body': '输入任务、粘贴需求，或输入 / 查看内置命令。',
+  'chat.copy': '复制',
+  'chat.copied': '已复制',
+  'chat.regenerate': '重新生成',
   'compaction.divider': '上下文已压缩',
 }
 
@@ -157,6 +160,9 @@ const en: Dict = {
   'thinking.label': 'Thinking',
   'chat.empty.title': 'Start a new task',
   'chat.empty.body': 'Describe the task, paste requirements, or type / for built-in commands.',
+  'chat.copy': 'Copy',
+  'chat.copied': 'Copied',
+  'chat.regenerate': 'Regenerate',
   'compaction.divider': 'Context compacted',
 }
 

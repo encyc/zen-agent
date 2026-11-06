@@ -2,7 +2,7 @@
  * the empty-state hero — the dsh ChatView shape. */
 
 import { useEffect, useRef, useState } from 'react'
-import { useChatStore, type ChatNode } from '../../state/chatStore'
+import { retryableNodeId, useChatStore, type ChatNode } from '../../state/chatStore'
 import { useAppStore } from '../../state/appStore'
 import { useT } from '../../i18n/locale'
 import { UserMessage, SkillMessage } from './MessageItem'
@@ -42,6 +42,11 @@ export function ChatView() {
   }, [revision, follow])
 
   const isEmpty = nodes.length === 0
+  // Regenerate re-runs the last turn; `/retry` already owns the transcript
+  // reset and session refresh, so the action reuses that command.
+  const retryId = retryableNodeId(nodes)
+  const canRetry = !busy && retryId !== null
+  const onRetry = () => void useAppStore.getState().runCommand('retry', '')
 
   return (
     <div className={css.root}>
@@ -51,7 +56,12 @@ export function ChatView() {
         ) : (
           <div className={css.flow}>
             {nodes.map((node) => (
-              <NodeSeat key={node.id} node={node} />
+              <NodeSeat
+                key={node.id}
+                node={node}
+                retryable={canRetry && node.id === retryId}
+                onRetry={onRetry}
+              />
             ))}
             {busy && <RunningRow />}
           </div>
@@ -75,14 +85,22 @@ export function ChatView() {
   )
 }
 
-function NodeSeat({ node }: { node: ChatNode }) {
+function NodeSeat({
+  node,
+  retryable,
+  onRetry,
+}: {
+  node: ChatNode
+  retryable: boolean
+  onRetry(): void
+}) {
   switch (node.kind) {
     case 'user':
       return <UserMessage text={node.text} steering={node.steering} />
     case 'skill':
       return <SkillMessage name={node.name} args={node.args} body={node.body} />
     case 'assistant':
-      return <AssistantNodeView node={node} />
+      return <AssistantNodeView node={node} canRetry={retryable} onRetry={onRetry} />
     case 'tool':
       return <ToolRowView node={node} />
     case 'notice':

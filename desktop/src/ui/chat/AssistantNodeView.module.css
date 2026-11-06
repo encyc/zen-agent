@@ -156,6 +156,72 @@
   line-height: 19px;
 }
 
+/* Fenced code carries a head strip with the language and a copy affordance
+ * (the injected markup comes from markdown.ts, so these are global classes). */
+.markdown :global(.md-code-block) {
+  margin: 8px 0;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-markdown-code-block);
+  overflow: hidden;
+}
+
+.markdown :global(.md-code-block) pre {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.markdown :global(.md-code-head) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 26px;
+  padding: 0 6px 0 12px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 3%, transparent);
+}
+
+.markdown :global(.md-code-lang) {
+  font-size: 10.5px;
+  line-height: 15px;
+  letter-spacing: 0.02em;
+  color: var(--dsw-alias-label-caption);
+}
+
+.markdown :global(.md-code-copy) {
+  padding: 2px 6px;
+  border: none;
+  border-radius: var(--dsw-radius-xs);
+  background: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10.5px;
+  line-height: 15px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.markdown :global(.md-code-copy)::after {
+  content: attr(data-copy-label);
+}
+
+.markdown :global(.md-code-copy[data-copied])::after {
+  content: attr(data-copied-label);
+}
+
+.markdown :global(.md-code-block:hover) :global(.md-code-copy),
+.markdown :global(.md-code-block:focus-within) :global(.md-code-copy),
+.markdown :global(.md-code-copy[data-copied]) {
+  opacity: 1;
+}
+
+.markdown :global(.md-code-copy:hover) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
 .markdown blockquote {
   margin: 8px 0;
   padding: 2px 12px;

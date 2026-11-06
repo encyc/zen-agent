@@ -1,19 +1,18 @@
 /** User bubble (right-aligned, dsh bubble tokens) and the /skill command turn. */
 
-import { useMemo } from 'react'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
 import { useT } from '../../i18n/locale'
+import { TurnActions } from './TurnActions'
 import css from './MessageItem.module.css'
 
 export function UserMessage({ text, steering = false }: { text: string; steering?: boolean }) {
   const t = useT()
   return (
-    <div className={css.userRow}>
+    <div className={css.userRow} data-turn-row>
       {steering && <span className={css.steerChip}>{t('message.steering')}</span>}
       <div className={css.bubble} data-selectable data-steering={steering || undefined}>
         {text}
       </div>
+      <TurnActions text={text} align="end" />
     </div>
   )
 }
@@ -42,17 +41,3 @@ export function SkillMessage({
   )
 }
 
-/** Markdown renderer shared by assistant turns. GFM via marked; model output is
- * untrusted, so raw HTML and javascript: URLs are stripped before injection. */
-export function renderMarkdown(text: string): string {
-  const html = marked.parse(text, {
-    async: false,
-    gfm: true,
-    breaks: false,
-  })
-  return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } })
-}
-
-export function useMarkdown(text: string): string {
-  return useMemo(() => renderMarkdown(text), [text])
-}

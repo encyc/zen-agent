@@ -243,3 +243,21 @@ export function ArrowDownIcon(props: IconProps) {
     </svg>
   )
 }
+
+export function CopyIcon(props: IconProps) {
+  return (
+    <svg {...base(props.size, props.className, props.style)}>
+      <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
+      <path d="M3.5 10.5A1.5 1.5 0 0 1 2.5 9V3.5A1.5 1.5 0 0 1 4 2h5.5a1.5 1.5 0 0 1 1.5 1.5" />
+    </svg>
+  )
+}
+
+export function RefreshIcon(props: IconProps) {
+  return (
+    <svg {...base(props.size, props.className, props.style)}>
+      <path d="M13.2 6.2A5.4 5.4 0 1 0 13.5 9" />
+      <path d="M13.5 2.5v3.7H9.8" />
+    </svg>
+  )
+}
