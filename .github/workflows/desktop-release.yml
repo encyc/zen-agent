@@ -85,6 +85,9 @@ jobs:
             echo "tag ${GITHUB_REF_NAME} does not match pyproject ${version}" >&2
             exit 1
           fi
+          # The installer reports tauri.conf's version at runtime; a stale one
+          # would make clients re-offer the same update forever.
+          uv run python scripts/sync-desktop-version.py --check
 
       # `createUpdaterArtifacts` fails the build outright when no signing key is
       # present, so it is only switched on by the leg that can actually sign.
@@ -166,6 +169,7 @@ jobs:
       KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
     steps:
       - uses: actions/download-artifact@v4
+        if: env.KEY != ''
         with:
           pattern: updater-*
           path: fragments
@@ -180,6 +184,10 @@ jobs:
 
           fragments = [json.loads(path.read_text()) for path in pathlib.Path("fragments").glob("*.json")]
           platforms = {item["platform"]: {"signature": item["signature"], "url": item["url"]} for item in fragments}
+          expected = {"darwin-aarch64", "darwin-x86_64", "linux-aarch64", "linux-x86_64", "windows-aarch64", "windows-x86_64"}
+          missing = sorted(expected - set(platforms))
+          if missing:
+              raise SystemExit(f"latest.json would lose these platforms: {missing}")
           version = os.environ["GITHUB_REF_NAME"].lstrip("v")
           payload = {
               "version": version,

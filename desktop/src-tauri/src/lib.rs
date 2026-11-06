@@ -28,6 +28,7 @@ pub fn run() {
             rpc::runtime_probe,
             rpc::updates_disabled_by_env,
             rpc::relaunch_app,
+            rpc::updates_self_updatable,
         ]);
     if updater_configured {
         builder = builder.plugin(tauri_plugin_updater::Builder::new().build());

@@ -11,10 +11,14 @@ import { XIcon } from './icons'
 import css from './NoticeBanner.module.css'
 import own from './UpdateBanner.module.css'
 
+const RELEASES = 'https://github.com/encyc/zen-agent/releases/latest'
+
 export function UpdateBanner() {
   const t = useT()
   const cache = useUpdateStore((state) => state.cache)
   const phase = useUpdateStore((state) => state.phase)
+  const message = useUpdateStore((state) => state.message)
+  const selfUpdatable = useUpdateStore((state) => state.selfUpdatable)
   const install = useUpdateStore((state) => state.install)
   const dismiss = useUpdateStore((state) => state.dismiss)
   const busy = useAppStore((state) => state.busy)
@@ -28,6 +32,7 @@ export function UpdateBanner() {
     busy,
     pendingApprovals,
     phase,
+    selfUpdatable,
   })
   if (banner.kind === 'hidden') return null
 
@@ -39,15 +44,32 @@ export function UpdateBanner() {
         ? t('update.blocked', { version })
         : banner.kind === 'installing'
           ? t('update.installing', { version })
-          : t('update.failed')
+          : banner.kind === 'manual'
+            ? t('update.manual', { version })
+            : t('update.failed')
 
   return (
     <div className={css.root} data-kind={banner.kind === 'failed' ? 'error' : 'info'} role="status">
       <span className={css.text}>{text}</span>
+      {banner.kind === 'failed' && message !== null && <span className={own.detail}>{message}</span>}
       {banner.kind === 'available' && (
-        <button type="button" className={own.action} onClick={() => void install()}>
+        <button
+          type="button"
+          className={own.action}
+          onClick={() => void install({ busy, pendingApprovals })}
+        >
           {t('update.install')}
         </button>
+      )}
+      {banner.kind === 'manual' && (
+        <a className={own.action} href={RELEASES} target="_blank" rel="noreferrer">
+          {t('update.download')}
+        </a>
+      )}
+      {banner.kind === 'failed' && (
+        <a className={own.action} href={RELEASES} target="_blank" rel="noreferrer">
+          {t('update.download')}
+        </a>
       )}
       <button
         type="button"

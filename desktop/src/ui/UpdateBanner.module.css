@@ -15,3 +15,18 @@
 .action:hover {
   filter: brightness(1.05);
 }
+
+.detail {
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.75;
+}
+
+a.action {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}

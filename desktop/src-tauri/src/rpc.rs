@@ -10,7 +10,7 @@
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
@@ -165,6 +165,13 @@ fn exe_sibling_name() -> &'static str {
     }
 }
 
+/// The directory holding this executable, where the bundled sidecar sits.
+fn exe_dir() -> Option<PathBuf> {
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(Path::to_path_buf))
+}
+
 /// Every place a CLI can plausibly live, in priority order: the bundled
 /// sidecar first (the shipped app must run its own runtime), then the usual
 /// user-local prefixes because a GUI app inherits launchd's minimal PATH.
@@ -193,9 +200,7 @@ fn resolve_bin(bin: &str) -> String {
     if bin.contains('/') {
         return bin.to_string();
     }
-    let exe_dir = std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(Path::to_path_buf));
+    let exe_dir = exe_dir();
     let home = std::env::var("HOME").ok();
     let candidates = candidate_paths(exe_sibling_name(), exe_dir.as_deref(), home.as_deref());
     let sibling = exe_dir.is_some();
@@ -248,6 +253,26 @@ fn login_shell_env() -> HashMap<String, String> {
     map
 }
 
+/// Classify a spawn failure. A bundled runtime that is present but will not
+/// run (wrong architecture, no execute bit, missing interpreter) is the same
+/// user-visible problem as a missing one: the app has no agent.
+fn runtime_problem(
+    kind: std::io::ErrorKind,
+    raw_os_error: Option<i32>,
+    sibling_exists: bool,
+) -> &'static str {
+    let unusable = matches!(
+        kind,
+        std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied
+    ) || matches!(raw_os_error, Some(8) | Some(86) | Some(193))
+        || sibling_exists;
+    if unusable {
+        "runtime_missing"
+    } else {
+        "spawn_failed"
+    }
+}
+
 #[tauri::command]
 pub fn rpc_start(
     app: AppHandle,
@@ -271,15 +296,10 @@ pub fn rpc_start(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
+    let sibling_exists =
+        exe_dir().map(|dir| dir.join(exe_sibling_name()).is_file()).unwrap_or(false);
     let mut child = command.spawn().map_err(|error| StartError {
-        code: if matches!(
-            error.kind(),
-            std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied
-        ) {
-            "runtime_missing"
-        } else {
-            "spawn_failed"
-        },
+        code: runtime_problem(error.kind(), error.raw_os_error(), sibling_exists),
         bin: bin.clone(),
         os_error: error.to_string(),
     })?;
@@ -457,6 +477,19 @@ pub fn rpc_stop(state: State<'_, RpcState>) -> Result<(), String> {
 }
 
 /// Best-effort teardown on app exit.
+/// Can this install replace itself? The Tauri updater only handles AppImages
+/// on Linux: a .deb comes from a package manager, so the UI links there instead
+/// of offering a restart that can only fail.
+#[tauri::command]
+pub fn updates_self_updatable() -> bool {
+    if cfg!(target_os = "linux") {
+        return std::env::var("APPIMAGE")
+            .map(|value| !value.trim().is_empty())
+            .unwrap_or(false);
+    }
+    true
+}
+
 /// Restart the shell after an update installed itself. The child `zen rpc`
 /// dies with the process, so the new bundle and its sidecar start together.
 #[tauri::command]
@@ -472,20 +505,31 @@ pub fn updates_disabled_by_env() -> bool {
     matches!(value.trim().to_lowercase().as_str(), "1" | "true" | "yes")
 }
 
+/// Ask the binary its version, but never let a wedged runtime freeze the UI:
+/// the probe runs on the screen the user presses "Retry" on.
+fn version_of(bin: String) -> Option<String> {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    thread::spawn(move || {
+        let output = Command::new(&bin).arg("--version").output().ok();
+        let _ = sender.send(output);
+    });
+    receiver
+        .recv_timeout(Duration::from_secs(2))
+        .ok()
+        .flatten()
+        .filter(|output| output.status.success())
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+        .filter(|text| !text.is_empty())
+}
+
 /// Where the shell would look for the runtime, and what it reports there.
 /// Settings shows this so a user can tell a missing sidecar from a broken one.
 #[tauri::command]
-pub fn runtime_probe() -> RuntimeProbe {
+pub async fn runtime_probe() -> RuntimeProbe {
     let resolved = resolve_bin("zen");
     let exists = Path::new(&resolved).is_file();
     let version = if exists {
-        Command::new(&resolved)
-            .arg("--version")
-            .output()
-            .ok()
-            .filter(|output| output.status.success())
-            .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
-            .filter(|text| !text.is_empty())
+        version_of(resolved.clone())
     } else {
         None
     };
@@ -534,5 +578,48 @@ mod tests {
         let paths = candidate_paths("zen.exe", Some(Path::new("C:\\Zen")), None);
         assert!(paths[0].contains("Zen"));
         assert!(paths[0].ends_with("zen.exe"));
+    }
+}
+
+#[cfg(test)]
+mod runtime_tests {
+    use super::*;
+
+    #[test]
+    fn a_runtime_that_cannot_exec_reads_as_missing_not_as_a_random_failure() {
+        // Nothing there at all.
+        assert_eq!(
+            runtime_problem(std::io::ErrorKind::NotFound, None, false),
+            "runtime_missing"
+        );
+        // There, but not executable.
+        assert_eq!(
+            runtime_problem(std::io::ErrorKind::PermissionDenied, Some(13), true),
+            "runtime_missing"
+        );
+        // Wrong architecture: ENOEXEC on Linux, EBADARCH on macOS, 193 on Windows.
+        assert_eq!(
+            runtime_problem(std::io::ErrorKind::Other, Some(8), true),
+            "runtime_missing"
+        );
+        assert_eq!(
+            runtime_problem(std::io::ErrorKind::Other, Some(86), true),
+            "runtime_missing"
+        );
+        assert_eq!(
+            runtime_problem(std::io::ErrorKind::Other, Some(193), true),
+            "runtime_missing"
+        );
+        // The sidecar is present but the spawn failed for another reason: still
+        // "this runtime does not work", never a bare exit screen.
+        assert_eq!(
+            runtime_problem(std::io::ErrorKind::Other, Some(24), true),
+            "runtime_missing"
+        );
+        // A PATH lookup for a CLI nothing shipped: a plain spawn failure.
+        assert_eq!(
+            runtime_problem(std::io::ErrorKind::Other, Some(24), false),
+            "spawn_failed"
+        );
     }
 }

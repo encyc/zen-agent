@@ -4,7 +4,13 @@
 
 import { invoke } from '@tauri-apps/api/core'
 import { create } from 'zustand'
-import { cacheIsFresh, shouldOffer, type UpdateCache, type UpdatePhase } from './update.ts'
+import {
+  cacheAfterFailure,
+  cacheIsFresh,
+  shouldOffer,
+  type UpdateCache,
+  type UpdatePhase,
+} from './update.ts'
 import { useSettingsStore } from './stores.ts'
 
 const CACHE_KEY = 'zen.update.cache'
@@ -56,10 +62,22 @@ interface UpdateState {
   message: string | null
   /** Deferred install handle from the last successful check. */
   pending: unknown
+  /** False when this install cannot be replaced in place (a .deb). */
+  selfUpdatable: boolean
   start(): Promise<void>
-  checkNow(): Promise<'latest' | 'available' | 'failed'>
-  install(): Promise<void>
+  /** `boot` keeps a failure silent (an unasked-for check must not nag every
+   * launch) and still stamps the TTL; `manual` reports the failure. */
+  checkNow(mode?: 'boot' | 'manual'): Promise<'latest' | 'available' | 'failed'>
+  install(guard?: { busy?: boolean; pendingApprovals?: number }): Promise<void>
   dismiss(): void
+}
+
+async function selfUpdatable(): Promise<boolean> {
+  try {
+    return await invoke<boolean>('updates_self_updatable')
+  } catch {
+    return true
+  }
 }
 
 async function envDisabled(): Promise<boolean> {
@@ -75,6 +93,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
   phase: 'idle',
   message: null,
   pending: null,
+  selfUpdatable: true,
 
   async start() {
     // A build without an updater public key cannot verify a release, so the
@@ -95,13 +114,14 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
       cache,
       phase: cache !== null && shouldOffer(cache, current) ? 'available' : 'idle',
     })
+    set({ selfUpdatable: await selfUpdatable() })
     if (decision === 'network') {
       await new Promise((resolve) => setTimeout(resolve, BOOT_DELAY_MS))
-      await get().checkNow()
+      await get().checkNow('boot')
     }
   },
 
-  async checkNow() {
+  async checkNow(mode: 'boot' | 'manual' = 'manual') {
     const current = __APP_VERSION__
     set({ phase: 'checking', message: null })
     try {
@@ -121,12 +141,23 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
       })
       return update === null ? 'latest' : 'available'
     } catch (error) {
-      set({ phase: 'failed', message: error instanceof Error ? error.message : String(error) })
+      const message = error instanceof Error ? error.message : String(error)
+      if (mode === 'boot') {
+        const cache = cacheAfterFailure(readCache(), Date.now(), current)
+        writeCache(cache)
+        set({ cache, phase: 'idle', message })
+      } else {
+        set({ phase: 'failed', message })
+      }
       return 'failed'
     }
   },
 
-  async install() {
+  async install(guard: { busy?: boolean; pendingApprovals?: number } = {}) {
+    // Restarting mid-turn drops the run and any pending approval; the banner
+    // hides the button, and this keeps a stale click from slipping through.
+    if (!get().selfUpdatable) return
+    if (guard.busy === true || (guard.pendingApprovals ?? 0) > 0) return
     const pending = get().pending as
       | { downloadAndInstall(onEvent?: (event: unknown) => void): Promise<void> }
       | null

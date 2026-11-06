@@ -18,6 +18,8 @@ export type UpdatePhase = 'idle' | 'checking' | 'available' | 'installing' | 'fa
 export type UpdateBanner =
   | { kind: 'hidden' }
   | { kind: 'available'; version: string }
+  /** The running install cannot replace itself (a .deb): link to the download. */
+  | { kind: 'manual'; version: string }
   | { kind: 'blocked'; version: string }
   | { kind: 'installing'; version: string }
   | { kind: 'failed'; message: string }
@@ -55,6 +57,20 @@ export function cacheIsFresh(cache: UpdateCache, now: number): boolean {
   return now - cache.checkedAt < UPDATE_TTL_MS
 }
 
+/** A failed lookup still counts as a look: the TTL keeps an offline machine
+ * from paying the same timeout on every launch. */
+export function cacheAfterFailure(
+  cache: UpdateCache | null,
+  now: number,
+  current: string,
+): UpdateCache {
+  return {
+    checkedAt: now,
+    latest: cache?.latest ?? current,
+    notified: cache?.notified ?? null,
+  }
+}
+
 /** Installing restarts the app, so never offer it mid-turn or over an approval. */
 export function bannerFor(input: {
   cache: UpdateCache | null
@@ -63,15 +79,24 @@ export function bannerFor(input: {
   busy: boolean
   pendingApprovals: number
   phase: UpdatePhase
+  /** False when this install cannot be replaced in place (e.g. a .deb). */
+  selfUpdatable?: boolean
 }): UpdateBanner {
   const offer =
     input.cache !== null && shouldOffer(input.cache, input.current) ? input.cache.latest : null
   if (input.phase === 'installing') {
     return offer === null ? { kind: 'hidden' } : { kind: 'installing', version: offer }
   }
+  // The switch wins over a failed check: turning updates off must silence the
+  // error too, or a user who opted out keeps seeing it.
+  if (!input.enabled) return { kind: 'hidden' }
   if (input.phase === 'failed') return { kind: 'failed', message: 'update.failed' }
-  if (!input.enabled || offer === null) return { kind: 'hidden' }
+  if (offer === null) return { kind: 'hidden' }
   if (input.busy || input.pendingApprovals > 0) return { kind: 'blocked', version: offer }
-  if (input.phase === 'available') return { kind: 'available', version: offer }
+  if (input.phase === 'available') {
+    return input.selfUpdatable === false
+      ? { kind: 'manual', version: offer }
+      : { kind: 'available', version: offer }
+  }
   return { kind: 'hidden' }
 }
