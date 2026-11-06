@@ -6,15 +6,13 @@ import { useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../state/appStore'
 import { usePaletteStore, useSessionStore } from '../state/stores'
 import { useT } from '../i18n/locale'
-import { MoreIcon, PanelLeftIcon, PanelRightIcon, PencilIcon, PlusIcon, SearchIcon } from './icons'
+import { MoreIcon, PanelLeftIcon, PencilIcon, PlusIcon, SearchIcon } from './icons'
 import { Tooltip } from './primitives'
 import css from './ConversationTopbar.module.css'
 
 interface ConversationTopbarProps {
   collapsed: boolean
   onExpandSidebar(): void
-  onToggleInspector(): void
-  inspectorOpen: boolean
   onNewSession(): void
 }
 
@@ -177,16 +175,6 @@ export function ConversationTopbar(props: ConversationTopbarProps) {
           </div>
         )}
       </div>
-      <button
-        type="button"
-        className={css.button}
-        onClick={props.onToggleInspector}
-        aria-label={t('topbar.inspector')}
-        data-active={props.inspectorOpen || undefined}
-      >
-        <PanelRightIcon size={15} />
-        <span className={css.dot} data-on={busy || undefined} />
-      </button>
     </div>
   )
 }

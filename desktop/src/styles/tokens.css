@@ -35,8 +35,12 @@
   --ds-radius-24: 24px;
   --ds-radius-full: 999px;
   --ds-chat-content-width: 760px;
-  --ds-topbar-height: 40px;
+  --ds-chat-composer-width: 768px;
+  --ds-toolbar-height: 46px;
+  --ds-topbar-height: var(--ds-toolbar-height);
+  --ds-sidebar-footer-height: 40px;
   --ds-composer-radius: 20px;
+  --ds-shadow-composer: 0 3px 7.5px #0000000a, 0 0 20px #0000000d;
 
   --dsh-font-family-text-default: var(--ds-font-family-sans);
   --dsw-font-family: var(--dsh-font-family-text-default);

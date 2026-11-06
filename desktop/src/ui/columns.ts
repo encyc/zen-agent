@@ -7,7 +7,7 @@ export interface Columns {
   rightbar: number
 }
 
-export const CENTER_MIN = 400
+export const CENTER_MIN = 450
 export const SIDEBAR_MIN = 240
 export const SIDEBAR_MAX = 520
 export const SIDEBAR_DEFAULT = 275
@@ -18,7 +18,8 @@ export function sidebarMax(viewport: number): number {
 }
 export const SIDEBAR_COLLAPSED = 56
 export const SIDEBAR_AUTO_COLLAPSE = 1024
-export const RIGHTBAR_MIN = 300
+export const RIGHTBAR_MIN = 244
+export const RIGHTBAR_DEFAULT = 360
 export const RIGHTBAR_MAX_RATIO = 0.7
 export const RIGHTBAR_DEFAULT_RATIO = 0.45
 

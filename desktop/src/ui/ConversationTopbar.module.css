@@ -4,7 +4,8 @@
   align-items: center;
   gap: 6px;
   height: var(--ds-topbar-height);
-  padding: 0 12px;
+  /* Reserves the fixed work-panel toggle's seat so it never covers the menu. */
+  padding: 0 36px 0 12px;
   flex: none;
   z-index: 5;
 }

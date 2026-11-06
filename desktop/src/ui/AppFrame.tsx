@@ -25,7 +25,6 @@ interface AppFrameProps {
   onRightbarWidth(width: number): void
   sidebar: ReactNode
   rightbar: ReactNode
-  bottom?: ReactNode
   children: ReactNode
 }
 
@@ -115,11 +114,10 @@ export function AppFrame(props: AppFrameProps) {
       data-dragging={dragging || undefined}
     >
       <div className={css.sidebarCol}>{props.sidebar}</div>
-      <div className={css.centerCol}>{props.children}</div>
+      <div className={css.centerCol} data-shell-center>
+        {props.children}
+      </div>
       {cols.rightbar > 0 && <div className={css.rightbarCol}>{props.rightbar}</div>}
-      {props.bottom !== undefined && (
-        <div className={css.bottomRow} data-shell-bottom>{props.bottom}</div>
-      )}
       {!sidebarCollapsed && (
         <div
           className={css.handle}

@@ -18,8 +18,12 @@ test('the parity layer carries the pi font stack, ramp, radii and the 760px band
   }
   assert.match(css, /--ds-radius-full:\s*999px;/)
   assert.match(css, /--ds-chat-content-width:\s*760px;/)
-  assert.match(css, /--ds-topbar-height:\s*40px;/)
+  assert.match(css, /--ds-toolbar-height:\s*46px;/)
+  assert.match(css, /--ds-topbar-height:\s*var\(--ds-toolbar-height\);/)
+  assert.match(css, /--ds-sidebar-footer-height:\s*40px;/)
+  assert.match(css, /--ds-chat-composer-width:\s*768px;/)
   assert.match(css, /--ds-composer-radius:\s*20px;/)
+  assert.match(css, /--ds-shadow-composer:/)
   assert.match(css, /--dsh-chat-content-width:\s*var\(--ds-chat-content-width\);/)
   assert.match(css, /--dsh-composer-card-max-width:\s*var\(--ds-chat-content-width\);/)
   assert.match(css, /--dsw-radius-xl:\s*var\(--ds-radius-20\);/)

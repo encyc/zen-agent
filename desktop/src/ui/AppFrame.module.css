@@ -34,10 +34,6 @@
   border-left: 1px solid var(--dsw-alias-border-l1);
 }
 
-.bottomRow {
-  grid-column: 1 / -1;
-}
-
 /* Hover-reveal drag handles between the columns. */
 .handle {
   position: absolute;

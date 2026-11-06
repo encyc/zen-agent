@@ -251,6 +251,23 @@ async function setPending(page: Page, items: PendingItemMock[]) {
 
 const paletteKey = process.platform === 'darwin' ? 'Meta+k' : 'Control+k'
 
+test('the shell keeps the sidebar full height and docks the composer inside the center column', async ({
+  page,
+}) => {
+  await boot(page, initialState())
+  const sidebar = await page.locator('[data-shell-sidebar]').boundingBox()
+  const viewport = page.viewportSize()
+  assert.ok(sidebar !== null && viewport !== null)
+  assert.equal(Math.round(sidebar.height), viewport.height)
+  assert.equal(Math.round(sidebar.y), 0)
+  const composer = await page.locator('[data-shell-composer]').boundingBox()
+  const center = await page.locator('[data-shell-center]').boundingBox()
+  assert.ok(composer !== null && center !== null)
+  assert.ok(composer.x >= center.x)
+  assert.ok(composer.x + composer.width <= center.x + center.width + 1)
+  assert.ok(composer.y + composer.height <= center.y + center.height + 1)
+})
+
 test('the topbar shows the project and renames the current session inline', async ({ page }) => {
   await boot(page, initialState())
   await expect(page.locator('[data-topbar-project]')).toHaveText('p')

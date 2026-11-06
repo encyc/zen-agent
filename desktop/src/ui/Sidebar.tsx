@@ -170,7 +170,7 @@ export function Sidebar(props: { onCollapse(): void }) {
   )
 
   return (
-    <div className={css.root}>
+    <div className={css.root} data-shell-sidebar>
       <div className={css.brandRow} data-tauri-drag-region>
         <div className={css.brandMark} aria-hidden>
           <SparkMark />

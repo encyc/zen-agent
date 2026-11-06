@@ -14,7 +14,8 @@ import { WelcomeScreen } from './ui/WelcomeScreen'
 import { ConversationTopbar } from './ui/ConversationTopbar'
 import { NoticeBanner } from './ui/NoticeBanner'
 import { CommandPalette } from './ui/palette/CommandPalette'
-import { SIDEBAR_DEFAULT } from './ui/columns'
+import { SIDEBAR_DEFAULT, RIGHTBAR_DEFAULT } from './ui/columns'
+import { PanelRightIcon } from './ui/icons'
 import css from './App.module.css'
 
 const SIDEBAR_KEY = 'zen.sidebar.width'
@@ -31,6 +32,7 @@ function loadWidth(key: string, fallback: number): number {
 }
 
 export function App() {
+  const t = useT()
   const connection = useAppStore((state) => state.connection)
   const connect = useAppStore((state) => state.connect)
   const collapsed = useSettingsStore((state) => state.sidebarCollapsed)
@@ -39,7 +41,7 @@ export function App() {
 
   const [sidebarWidth, setSidebarWidth] = useState(() => loadWidth(SIDEBAR_KEY, SIDEBAR_DEFAULT))
   const [rightbarOpen, setRightbarOpen] = useState(false)
-  const [rightbarWidth, setRightbarWidth] = useState(() => loadWidth(RIGHTBAR_KEY, 380))
+  const [rightbarWidth, setRightbarWidth] = useState(() => loadWidth(RIGHTBAR_KEY, RIGHTBAR_DEFAULT))
 
   // Theme presenter: write the snapshot to the DOM, outside React (dsh pattern).
   useEffect(() => {
@@ -124,17 +126,27 @@ export function App() {
       }}
       sidebar={<Sidebar onCollapse={() => setCollapsed(true)} />}
       rightbar={<RightPanel />}
-      bottom={<InputBar />}
     >
       <ConversationTopbar
         collapsed={collapsed}
         onExpandSidebar={() => setCollapsed(false)}
-        onToggleInspector={() => setRightbarOpen((value) => !value)}
-        inspectorOpen={rightbarOpen}
         onNewSession={() => void useAppStore.getState().newSession()}
       />
       <NoticeBanner />
       <ChatView />
+      <div className={css.composerDock} data-shell-composer>
+        <InputBar />
+      </div>
+      <button
+        type="button"
+        className={css.workPanelToggle}
+        aria-label={t('topbar.inspector')}
+        aria-expanded={rightbarOpen}
+        data-active={rightbarOpen || undefined}
+        onClick={() => setRightbarOpen((value) => !value)}
+      >
+        <PanelRightIcon size={15} />
+      </button>
       </AppFrame>
       <CommandPalette />
     </>
