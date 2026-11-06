@@ -228,6 +228,38 @@ html[data-platform='darwin'] .brand {
   background: var(--dsw-alias-state-business-primary);
 }
 
+.projectActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 4px;
+  flex: none;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.projectHeader:hover .projectActions,
+.projectHeader:focus-within .projectActions {
+  opacity: 1;
+}
+
+.projectAction {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: var(--ds-radius-4);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.projectAction:hover {
+  background: var(--dsw-specific-sidebar-nav-item-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
 .projectBody {
   padding-bottom: 2px;
 }

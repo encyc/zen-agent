@@ -452,7 +452,12 @@ A `ResizeObserver` on the dock writes `--composer-dock-height` to the main pane;
 
 - [ ] **Step 4: Apply pi's plate values**
 
-Plate `min(100%, 768px)`, radius 20, composer shadow, input padding `10px 12px 0`, min 3lh / max 7lh, toolbar `4px 8px 8px`, chips 20px, send 28px always mounted with 18% opacity when disabled, mode chip fixed 96px. Queued rows: radius 12, padding `7px 8px 7px 12px`, accent priority inset.
+Plate `min(100%, var(--ds-chat-content-width))` — the same band variable the
+transcript uses, so the plate scales with the width handles; remove `InputBar`'s
+own 32px side padding, which currently narrows the plate a second time. Composer
+min 3lh / max 7lh, toolbar `4px 8px 8px`, chips 20px, send 28px always mounted
+with 18% opacity when disabled, mode chip fixed 96px. Queued rows: radius 12,
+padding `7px 8px 7px 12px`, accent priority inset.
 
 - [ ] **Step 5: Move approval above the plate**
 
@@ -466,37 +471,51 @@ Run: `cd desktop && pnpm test && pnpm build && pnpm e2e`. Commit `feat(desktop):
 
 ### Task 8: Work panel chrome
 
+**Context:** second-pass change request. The right rail becomes pi's work panel,
+not a permanent session inspector. The current todos/jobs/subagents/errors
+dashboard is removed from the rail.
+
 **Files:**
 - Modify: `desktop/src/ui/rightbar/RightPanel.tsx`, `RightPanel.module.css`
 - Modify: `desktop/src/App.tsx`, `desktop/src/AppFrame.tsx`, `AppFrame.module.css`
-- Modify: `desktop/src/ui/columns.ts`
+- Modify: `desktop/src/ui/columns.ts`, `desktop/src/i18n/locale.ts`
 - Test: `desktop/e2e/app.spec.ts`
 
 **Interfaces:**
-- Consumes: `status`, `sessions`, current path.
-- Produces: 46px header with tabs `检查器` / `上下文`; resize handle; panel min 244 / default 360; center floor 450 (Task 1).
+- Consumes: `status`, transcript nodes (`diff` strings on tool nodes), current path.
+- Produces: 46px header with a tab strip (`审核`, `上下文`), close control, resize handle; panel min 244 / default 360; center floor 450 (Task 1).
 
 - [ ] **Step 1: Write the failing e2e**
 
 ```ts
-await page.getByRole('button', { name: '打开检查器' }).click()
-await expect(page.getByRole('tab', { name: '上下文' })).toBeVisible()
+await page.getByRole('button', { name: '打开工作面板' }).click()
+await expect(page.getByRole('tab', { name: '审核' })).toBeVisible()
 await page.getByRole('tab', { name: '上下文' }).click()
-await expect(page.getByText('上下文')).toBeVisible()
+await expect(page.getByTestId('context-used')).toBeVisible()
 ```
 
 - [ ] **Step 2: Run to watch it fail**
 
-Run: `cd desktop && pnpm e2e --grep "inspector"`
+Run: `cd desktop && pnpm e2e --grep "work panel"`
 Expected: FAIL — no tabs.
 
 - [ ] **Step 3: Implement the panel chrome**
 
-Header 46px with tabs (28px high), close/collapse control, and the existing sections split: `检查器` = todos/jobs/subagents/errors; `上下文` = usage/context/tokens. Resize handle at `left:-5px`, width 10px, pointer + keyboard arrows; double-click resets to 360.
+46px header on `--dsw-alias-bg-dock` with 28px tabs, label+icon, close button;
+body scrolls. Resize handle at `left:-5px`, width 10px, pointer + keyboard
+arrows; double-click resets to 360. Toggle button becomes `打开工作面板` with
+`aria-expanded`.
 
-- [ ] **Step 4: Gate and commit**
+- [ ] **Step 4: Build the two tabs**
 
-Run: `cd desktop && pnpm test && pnpm build && pnpm e2e`. Commit `feat(desktop): pi work panel chrome`.
+`审核` aggregates `diff` payloads from transcript tool nodes per file (turns
+grouped, added/removed counts, expandable code block, empty state). `上下文`
+shows context used/window, cache hit ratio, turn time, tokens in/out and cost
+from `status`. Remove the old header/todo/job/subagent/error sections.
+
+- [ ] **Step 5: Gate and commit**
+
+Run: `cd desktop && pnpm test && pnpm build && pnpm e2e`. Commit `feat(desktop): pi work panel`.
 
 ---
 
@@ -563,6 +582,88 @@ await expect(page.getByText('read_file')).toBeVisible()
 - [ ] **Step 7: Gates and commit**
 
 Run: `cd desktop && pnpm test && pnpm build && pnpm e2e`. Commit `feat(desktop): pi footer surfaces`.
+
+---
+
+### Task 11: Direct start and the project rail
+
+**Context:** second-pass change request. The first screen is the chat shell, not
+a welcome hero; the sidebar owns creating and forgetting projects instead of
+only grouping whatever sessions the RPC returns.
+
+**Files:**
+- Modify: `desktop/src/App.tsx`
+- Modify: `desktop/src/state/appStore.ts`, `desktop/src/state/stores.ts`, `desktop/src/state/sessionGroups.ts`
+- Modify: `desktop/src/ui/Sidebar.tsx`, `Sidebar.module.css`, `HomeHero.tsx`
+- Delete: `desktop/src/ui/WelcomeScreen.tsx`, `WelcomeScreen.module.css`
+- Test: `desktop/tests/sessionGroups.test.ts`, `desktop/e2e/app.spec.ts`
+
+**Interfaces:**
+- Produces: `ProjectEntry { path: string; name: string; at: number }`; `projectName(path: string): string`; `mergeProjects(groups: SessionGroup[], entries: ProjectEntry[], query: string): SidebarProjectGroup[]` where `SidebarProjectGroup = SessionGroup & { path: string | null }`; `useProjectStore` with `projects`, `addProject(path)`, `removeProject(path)` persisted at `zen.projects` (migrates `zen.recent.projects` once).
+- Produces: `defaultProjectCwd(): Promise<string | undefined>` using `@tauri-apps/api/path` `homeDir()`.
+- Consumes: `pickProjectFolder`, `connect`, `disconnect`, `newSession`.
+
+- [ ] **Step 1: Write the failing merge tests**
+
+```ts
+assert.deepEqual(
+  mergeProjects([{ project: 'beta', sessions: [] }], [{ path: '/w/alpha', name: 'alpha', at: 1 }], ''),
+  [{ project: 'beta', sessions: [], path: null }, { project: 'alpha', sessions: [], path: '/w/alpha' }],
+)
+assert.deepEqual(mergeProjects([{ project: 'beta', sessions: [] }], [{ path: '/w/alpha', name: 'alpha', at: 1 }], 'al'), [
+  { project: 'alpha', sessions: [], path: '/w/alpha' },
+])
+```
+
+- [ ] **Step 2: Run to watch it fail**
+
+Run: `cd desktop && pnpm test tests/sessionGroups.test.ts`
+Expected: FAIL — `mergeProjects` is not exported.
+
+- [ ] **Step 3: Implement the project store and merge**
+
+`useProjectStore` persists `{ path, name, at }[]` under `zen.projects`, dedupes by
+path, newest first, capped at 8. `addProject` derives `name` from the last path
+segment. Migration: when `zen.projects` is absent, map `zen.recent.projects`
+entries through `projectName`. `mergeProjects` attaches a registered path to the
+matching session group (by project name) and appends session-less registered
+projects that match the query.
+
+- [ ] **Step 4: Start directly in the chat shell**
+
+On idle mount, connect to `lastProjectCwd()` when set, else `await defaultProjectCwd()`,
+else `undefined` (zen's own cwd). Delete the WelcomeScreen branch and component.
+Drop the hero's idle-only branch and `onUseCurrent` prop; the empty transcript
+still renders the hero with the project switcher.
+
+- [ ] **Step 5: Add the project rail controls**
+
+`项目` section header gets a `+` (`aria-label 新建项目`) that picks a folder,
+registers it, and switches the host to it. Each project header gets two hover
+controls: `+` (`在 {name} 中新建会话`) and `×` (`从项目列表移除 {name}`, list only,
+never files). A registered project with no sessions shows `该项目还没有会话`.
+
+- [ ] **Step 6: e2e for direct start and project creation**
+
+```ts
+test('a first launch goes straight into the chat shell', async ({ page }) => {
+  await page.addInitScript(installBridge, initialState())
+  await page.goto('/')
+  await expect(page.locator('[data-shell-composer]')).toBeVisible()
+  await expect.poll(() => page.evaluate(() => window.__ZEN_E2E__.starts[0]?.cwd)).toBe('/Users/e2e')
+})
+test('a new project joins the rail and can be removed', async ({ page }) => {
+  await boot(page, initialState({ running: false, dialogSelection: '/work/newproj' }))
+  await page.getByRole('button', { name: '新建项目' }).click()
+  await expect(page.locator('[data-sidebar-project-group="newproj"]')).toBeVisible()
+  await page.locator('[data-sidebar-project-group="newproj"] [data-remove-project]').click()
+  await expect(page.locator('[data-sidebar-project-group="newproj"]')).toHaveCount(0)
+})
+```
+
+- [ ] **Step 7: Gates and commit**
+
+Run: `cd desktop && pnpm test && pnpm build && pnpm e2e`. Commit `feat(desktop): direct start and project rail`.
 
 ---
 

@@ -4,8 +4,8 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { retryableNodeId, useChatStore, type ChatNode, type ToolNode, type UserNode } from '../../state/chatStore'
 import { groupTurns, type ChatTurn } from '../../state/turns'
-import { loadRecentProjects, useAppStore } from '../../state/appStore'
-import { useSessionStore, useSettingsStore } from '../../state/stores'
+import { useAppStore } from '../../state/appStore'
+import { useProjectStore, useSessionStore, useSettingsStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
 import { HomeHero, pickProjectFolder } from '../HomeHero'
 import { clampChatWidth } from '../columns'
@@ -26,7 +26,7 @@ export function ChatView() {
     (state) => state.sessions.find((session) => session.path === state.currentPath)?.project ?? null,
   )
   const t = useT()
-  const [recents] = useState(loadRecentProjects)
+  const recents = useProjectStore((state) => state.projects)
   const chatWidth = useSettingsStore((state) => state.chatWidth)
   const setChatWidth = useSettingsStore((state) => state.setChatWidth)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
@@ -104,11 +104,9 @@ export function ChatView() {
         {isEmpty ? (
           <div className={css.emptyHost}>
             <HomeHero
-              connected
               projectName={project}
               recents={recents}
               onPickFolder={() => void pickAndSwitchProject()}
-              onUseCurrent={() => undefined}
               onOpenRecent={(path) => void switchProject(path)}
             />
           </div>

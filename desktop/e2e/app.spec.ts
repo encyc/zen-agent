@@ -19,6 +19,7 @@ interface BridgeState {
   running: boolean
   pending: PendingItemMock[]
   calls: Record<string, unknown>[]
+  starts: { cwd?: string | null }[]
   dialogSelection: string | string[] | null
   title: string
   failExport?: boolean
@@ -224,9 +225,14 @@ function installBridge(state: BridgeState) {
     ) {
       if (cmd === 'plugin:event|listen') return nextEvent++
       if (cmd === 'plugin:event|unlisten') return null
-      if (cmd === 'rpc_start') return { pid: 4242 }
+      if (cmd === 'rpc_start') {
+        const options = (args.options ?? {}) as { cwd?: string | null }
+        state.starts.push({ cwd: options.cwd ?? null })
+        return { pid: 4242 }
+      }
       if (cmd === 'rpc_stop') return null
       if (cmd === 'plugin:dialog|open') return state.dialogSelection
+      if (cmd === 'plugin:path|resolve_directory') return '/Users/e2e'
       if (cmd === 'rpc_send') {
         const payload = args.payload ?? {}
         state.calls.push(payload)
@@ -248,21 +254,16 @@ function initialState(overrides: Partial<BridgeState> = {}): BridgeState {
     running: true,
     pending: [],
     calls: [],
+    starts: [],
     dialogSelection: null,
     title: '修复登录超时',
     ...overrides,
   }
 }
 
-async function startInCurrentDirectory(page: Page) {
-  await page.getByRole('button', { name: '切换项目' }).click()
-  await page.getByRole('menuitem', { name: '用当前目录启动' }).click()
-}
-
 async function boot(page: Page, state: BridgeState) {
   await page.addInitScript(installBridge, state)
   await page.goto('/')
-  await startInCurrentDirectory(page)
   await expect(page.locator('[data-topbar-title]')).toHaveText(state.title)
 }
 
@@ -281,6 +282,24 @@ test('a returning user lands on the home hero and auto-connects', async ({ page 
   await expect(page.getByRole('heading', { level: 1, name: /ZenAgent/ })).toBeVisible()
   await expect(page.locator('[data-shell-composer]')).toBeVisible()
   await expect(page.locator('[data-home-hero]')).toBeVisible()
+})
+
+test('a first launch goes straight into the chat shell', async ({ page }) => {
+  await page.addInitScript(installBridge, initialState())
+  await page.goto('/')
+  await expect(page.locator('[data-shell-composer]')).toBeVisible()
+  await expect
+    .poll(() => page.evaluate(() => window.__ZEN_E2E__.starts[0]?.cwd))
+    .toBe('/Users/e2e')
+})
+
+test('a new project joins the rail and can be removed', async ({ page }) => {
+  await boot(page, initialState({ running: false, dialogSelection: '/work/newproj' }))
+  await page.getByRole('button', { name: '新建项目' }).click()
+  await expect(page.locator('[data-sidebar-project-group="newproj"]')).toBeVisible()
+  await expect.poll(() => page.evaluate(() => window.__ZEN_E2E__.starts.length)).toBe(2)
+  await page.locator('[data-sidebar-project-group="newproj"] [data-remove-project]').click()
+  await expect(page.locator('[data-sidebar-project-group="newproj"]')).toHaveCount(0)
 })
 
 test('the shell keeps the sidebar full height and docks the composer inside the center column', async ({
@@ -616,7 +635,6 @@ test('escaping a row menu neither cancels the run nor traps the keyboard', async
 test('an unknown current project leaves every listed session disabled', async ({ page }) => {
   await page.addInitScript(installBridge, initialState({ noCurrent: true }))
   await page.goto('/')
-  await startInCurrentDirectory(page)
   await expect(page.locator('[data-session-path="/sessions/a.jsonl"]')).toBeVisible()
   await expect(page.locator('[data-session-path="/sessions/a.jsonl"]')).toHaveAttribute('aria-disabled', 'true')
   await expect(page.locator('[data-session-path="/sessions/b.jsonl"]')).toHaveAttribute('aria-disabled', 'true')

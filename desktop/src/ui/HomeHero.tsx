@@ -1,6 +1,5 @@
-/** Home hero: the empty-conversation surface shared by the idle welcome screen
- * and an empty connected transcript. The headline embeds a project switcher;
- * three onboarding tips stay until dismissed. */
+/** Home hero: the empty-conversation surface of the chat shell. The headline
+ * embeds a project switcher; three onboarding tips stay until dismissed. */
 
 import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
@@ -16,11 +15,9 @@ export interface RecentProject {
 }
 
 export interface HomeHeroProps {
-  connected: boolean
   projectName: string | null
   recents: RecentProject[]
   onPickFolder(): void
-  onUseCurrent(): void
   onOpenRecent(path: string): void
 }
 
@@ -95,7 +92,7 @@ export function HomeHero(props: HomeHeroProps) {
         <HeroMark />
       </div>
       <h1 className={css.headline}>
-        {props.connected ? t('home.titleInProjectBefore') : t('home.titleIdleBefore')}
+        {t('home.titleInProjectBefore')}
         <span className={css.projectAnchor} ref={anchorRef}>
           <button
             type="button"
@@ -109,7 +106,7 @@ export function HomeHero(props: HomeHeroProps) {
           </button>
           {menuOpen && (
             <div ref={menuRef} className={css.menu} role="menu">
-              {props.connected && props.projectName !== null && (
+              {props.projectName !== null && (
                 <div className={css.currentProject}>
                   {t('home.currentProject')} · {props.projectName}
                 </div>
@@ -137,20 +134,10 @@ export function HomeHero(props: HomeHeroProps) {
                 <FolderIcon size={13} />
                 <span>{t('home.openOther')}</span>
               </button>
-              {!props.connected && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={css.menuItem}
-                  onClick={() => choose(props.onUseCurrent)}
-                >
-                  {t('home.useCurrent')}
-                </button>
-              )}
             </div>
           )}
         </span>
-        {props.connected ? t('home.titleInProjectAfter') : t('home.titleIdleAfter')}
+        {t('home.titleInProjectAfter')}
       </h1>
       {tips && (
         <div className={css.tips} data-home-tips>

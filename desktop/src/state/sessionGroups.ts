@@ -15,6 +15,58 @@ export interface SidebarSections {
   projects: SessionGroup[]
 }
 
+export interface ProjectEntry {
+  path: string
+  name: string
+  at: number
+}
+
+export interface SidebarProjectGroup extends SessionGroup {
+  /** Registered project folder, or null for a session-only group. */
+  path: string | null
+}
+
+export function projectName(path: string): string {
+  const parts = path.split(/[/\\]/).filter(Boolean)
+  return parts[parts.length - 1] ?? path
+}
+
+/** Attaches registered folders to their session groups and keeps empty
+ * registered projects in the rail so a folder can be opened before it has any
+ * sessions. */
+export function mergeProjects(
+  groups: SessionGroup[],
+  entries: ProjectEntry[],
+  query: string,
+): SidebarProjectGroup[] {
+  const needle = query.trim().toLowerCase()
+  const merged: SidebarProjectGroup[] = groups
+    .filter(
+      (group) =>
+        needle === '' ||
+        group.project.toLowerCase().includes(needle) ||
+        group.sessions.some((session) => matches(session, needle)),
+    )
+    .map((group) => ({ ...group, path: null }))
+  const byName = new Map(merged.map((group) => [group.project, group]))
+  for (const entry of entries) {
+    const existing = byName.get(entry.name)
+    if (existing !== undefined) {
+      existing.path = entry.path
+      continue
+    }
+    if (needle !== '' && !entry.name.toLowerCase().includes(needle)) continue
+    const group: SidebarProjectGroup = {
+      project: entry.name,
+      path: entry.path,
+      sessions: [],
+    }
+    byName.set(entry.name, group)
+    merged.push(group)
+  }
+  return merged
+}
+
 export function compareSessions(a: SessionSummary, b: SessionSummary): number {
   const byUpdated = (b.updated_at ?? 0) - (a.updated_at ?? 0)
   return byUpdated !== 0 ? byUpdated : a.path.localeCompare(b.path)

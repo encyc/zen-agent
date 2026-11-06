@@ -3,6 +3,7 @@
 
 import { create } from 'zustand'
 import { CHAT_WIDTH_DEFAULT } from '../ui/columns'
+import { projectName } from './sessionGroups'
 import type {
   CommandEntry,
   ModelEntry,
@@ -47,6 +48,67 @@ export const useSessionStore = create<SessionState>((set) => ({
         : [...state.collapsedProjects, project]
       persist('zen.sidebar.projects', collapsedProjects)
       return { collapsedProjects }
+    }),
+}))
+
+// ---- projects ---------------------------------------------------------------
+
+export interface ProjectEntry {
+  path: string
+  name: string
+  at: number
+}
+
+const PROJECTS_KEY = 'zen.projects'
+const LEGACY_RECENTS_KEY = 'zen.recent.projects'
+
+/** Reads the registered rail; a pre-rail install migrates its recent folders
+ * once, so the first launch after the upgrade keeps its history. */
+function loadProjects(): ProjectEntry[] {
+  try {
+    const raw = localStorage.getItem(PROJECTS_KEY)
+    if (raw !== null) {
+      const parsed = JSON.parse(raw) as ProjectEntry[]
+      return Array.isArray(parsed) ? parsed.slice(0, 8) : []
+    }
+    const legacy = localStorage.getItem(LEGACY_RECENTS_KEY)
+    const parsed = legacy === null ? [] : (JSON.parse(legacy) as { path: string; at: number }[])
+    const migrated = Array.isArray(parsed)
+      ? parsed
+          .slice(0, 8)
+          .map((item) => ({ path: item.path, name: projectName(item.path), at: item.at }))
+      : []
+    persist(PROJECTS_KEY, migrated)
+    return migrated
+  } catch {
+    return []
+  }
+}
+
+interface ProjectState {
+  projects: ProjectEntry[]
+  addProject(path: string): void
+  removeProject(path: string): void
+}
+
+export const useProjectStore = create<ProjectState>((set) => ({
+  projects: loadProjects(),
+  addProject: (path) => {
+    if (path === '') return
+    set((state) => {
+      const next = [
+        { path, name: projectName(path), at: Date.now() },
+        ...state.projects.filter((project) => project.path !== path),
+      ].slice(0, 8)
+      persist(PROJECTS_KEY, next)
+      return { projects: next }
+    })
+  },
+  removeProject: (path) =>
+    set((state) => {
+      const next = state.projects.filter((project) => project.path !== path)
+      persist(PROJECTS_KEY, next)
+      return { projects: next }
     }),
 }))
 

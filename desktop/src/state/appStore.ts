@@ -4,6 +4,7 @@
  * and Esc cancels. */
 
 import { create } from 'zustand'
+import { homeDir } from '@tauri-apps/api/path'
 import { RpcClient } from '../rpc/client'
 import type { CompactionRecord, Mode, ServerFrame, StatusResult } from '../rpc/types'
 import {
@@ -11,6 +12,7 @@ import {
   useCatalogStore,
   useComposerStore,
   useNoticeStore,
+  useProjectStore,
   useSessionStore,
   useSettingsStore,
   useStatusStore,
@@ -24,30 +26,15 @@ export type ConnectionState = 'idle' | 'starting' | 'ready' | 'exited'
 export type ExportFormat = 'md' | 'html'
 
 const LAST_CWD_KEY = 'zen.last.cwd'
-const RECENTS_KEY = 'zen.recent.projects'
 
-export interface RecentProject {
-  path: string
-  at: number
-}
-
-export function loadRecentProjects(): RecentProject[] {
+/** First-launch host: the user's home folder, so the chat shell can start
+ * without a project picker. `undefined` falls through to zen's own cwd. */
+export async function defaultProjectCwd(): Promise<string | undefined> {
   try {
-    const raw = localStorage.getItem(RECENTS_KEY)
-    const parsed = raw === null ? [] : (JSON.parse(raw) as RecentProject[])
-    return Array.isArray(parsed) ? parsed.slice(0, 8) : []
+    const home = await homeDir()
+    return home === '' ? undefined : home
   } catch {
-    return []
-  }
-}
-
-function rememberProject(path: string): void {
-  if (path === '') return
-  const next = [{ path, at: Date.now() }, ...loadRecentProjects().filter((item) => item.path !== path)]
-  try {
-    localStorage.setItem(RECENTS_KEY, JSON.stringify(next.slice(0, 8)))
-  } catch {
-    // ignore
+    return undefined
   }
 }
 
@@ -152,7 +139,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       } catch {
         // ignore
       }
-      if (cwd !== undefined && cwd !== '') rememberProject(cwd)
+      if (cwd !== undefined && cwd !== '') useProjectStore.getState().addProject(cwd)
       set({ connection: 'ready', pid })
       await get().refreshTranscript()
       await get().refreshStatus()

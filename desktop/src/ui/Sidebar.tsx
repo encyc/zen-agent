@@ -5,16 +5,22 @@
 
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { useAppStore } from '../state/appStore'
+import { lastProjectCwd, useAppStore } from '../state/appStore'
 import { canForkSession, isCrossProject } from '../state/sessionSelectors'
 import {
   currentPending,
   useNoticeStore,
+  useProjectStore,
   useSessionStore,
   useSettingsStore,
   useStatusStore,
 } from '../state/stores'
-import { PROJECT_PAGE_SIZE, sessionSections, type SessionGroup } from '../state/sessionGroups'
+import {
+  PROJECT_PAGE_SIZE,
+  mergeProjects,
+  sessionSections,
+  type SidebarProjectGroup,
+} from '../state/sessionGroups'
 import { armDelete, deleteArmed } from '../state/armedDelete'
 import { useT } from '../i18n/locale'
 import type { SessionSummary } from '../rpc/types'
@@ -32,8 +38,10 @@ import {
   PinIcon,
   PlusIcon,
   SunIcon,
+  XIcon,
 } from './icons'
 import { formatAge } from './format'
+import { pickProjectFolder } from './HomeHero'
 import { pickSessionFileToOpen } from './sessions/fileDialog'
 import css from './Sidebar.module.css'
 
@@ -49,6 +57,12 @@ export function Sidebar(props: { onCollapse(): void }) {
   const currentPath = useSessionStore((state) => state.currentPath)
   const collapsedProjects = useSessionStore((state) => state.collapsedProjects)
   const toggleProject = useSessionStore((state) => state.toggleProject)
+  const projectEntries = useProjectStore((state) => state.projects)
+  const addProject = useProjectStore((state) => state.addProject)
+  const removeProject = useProjectStore((state) => state.removeProject)
+  const connect = useAppStore((state) => state.connect)
+  const disconnect = useAppStore((state) => state.disconnect)
+  const newSession = useAppStore((state) => state.newSession)
   const refreshSessions = useAppStore((state) => state.refreshSessions)
   const renameSession = useAppStore((state) => state.renameSession)
   const togglePin = useAppStore((state) => state.togglePin)
@@ -67,10 +81,14 @@ export function Sidebar(props: { onCollapse(): void }) {
   const menuRef = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
 
-  const { pinned, standalone, projects } = useMemo(
-    () => sessionSections(sessions, query),
-    [sessions, query],
-  )
+  const { pinned, standalone, projects } = useMemo(() => {
+    const sections = sessionSections(sessions, query)
+    return {
+      pinned: sections.pinned,
+      standalone: sections.standalone,
+      projects: mergeProjects(sections.projects, projectEntries, query),
+    }
+  }, [sessions, query, projectEntries])
   const current = sessions.find((session) => session.path === currentPath) ?? null
   const currentProject = current?.project ?? null
   const menuSession = menu === null ? null : sessions.find((session) => session.path === menu.path) ?? null
@@ -171,7 +189,25 @@ export function Sidebar(props: { onCollapse(): void }) {
     />
   )
 
-  const renderProject = (group: SessionGroup) => {
+  const openProject = async (path: string) => {
+    if (lastProjectCwd() === path) return
+    await disconnect()
+    await connect(undefined, path)
+  }
+
+  const createProject = async () => {
+    const path = await pickProjectFolder()
+    if (path === null) return
+    addProject(path)
+    await openProject(path)
+  }
+
+  const newSessionIn = async (path: string) => {
+    await openProject(path)
+    await newSession()
+  }
+
+  const renderProject = (group: SidebarProjectGroup) => {
     const collapsed = collapsedProjects.includes(group.project)
     const expanded = expandedProjects.includes(group.project)
     const rows = expanded ? group.sessions : group.sessions.slice(0, PROJECT_PAGE_SIZE)
@@ -205,6 +241,28 @@ export function Sidebar(props: { onCollapse(): void }) {
               <span className={css.projectActiveDot} title={t('sidebar.projectActive')} />
             )}
           </button>
+          {group.path !== null && (
+            <span className={css.projectActions}>
+              <button
+                type="button"
+                className={css.projectAction}
+                data-new-session
+                aria-label={t('sidebar.newInProject', { name: group.project })}
+                onClick={() => void newSessionIn(group.path as string)}
+              >
+                <PlusIcon size={12} />
+              </button>
+              <button
+                type="button"
+                className={css.projectAction}
+                data-remove-project
+                aria-label={t('sidebar.removeProject', { name: group.project })}
+                onClick={() => removeProject(group.path as string)}
+              >
+                <XIcon size={12} />
+              </button>
+            </span>
+          )}
         </div>
         <div
           className={css.projectBody}
@@ -213,6 +271,9 @@ export function Sidebar(props: { onCollapse(): void }) {
           {...(collapsed ? ({ inert: '' } as Record<string, string>) : {})}
         >
           {rows.map((session) => renderRow(session))}
+          {rows.length === 0 && (
+            <div className={css.sectionEmpty}>{t('sidebar.projectEmpty')}</div>
+          )}
           {hidden > 0 && (
             <button
               type="button"
@@ -287,6 +348,16 @@ export function Sidebar(props: { onCollapse(): void }) {
 
       <div className={css.sectionToolbar} data-sidebar-section="projects">
         <span className={css.sectionLabel}>{t('sidebar.projects')}</span>
+        <Tooltip label={t('sidebar.newProject')}>
+          <button
+            type="button"
+            className={css.toolbarButton}
+            aria-label={t('sidebar.newProject')}
+            onClick={() => void createProject()}
+          >
+            <PlusIcon size={13} />
+          </button>
+        </Tooltip>
       </div>
       <div className={css.projectList}>
         {projects.map(renderProject)}

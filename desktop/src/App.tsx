@@ -2,7 +2,7 @@
  * exit banner). Keyboard: Cmd/Ctrl+B toggles the sidebar, like dsh. */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { lastProjectCwd, useAppStore } from './state/appStore'
+import { defaultProjectCwd, lastProjectCwd, useAppStore } from './state/appStore'
 import { useApprovalStore, usePaletteStore, useSettingsStore } from './state/stores'
 import { useT } from './i18n/locale'
 import { AppFrame } from './ui/AppFrame'
@@ -10,7 +10,6 @@ import { Sidebar } from './ui/Sidebar'
 import { ChatView } from './ui/chat/ChatView'
 import { InputBar } from './ui/composer/InputBar'
 import { RightPanel } from './ui/rightbar/RightPanel'
-import { WelcomeScreen } from './ui/WelcomeScreen'
 import { ConversationTopbar } from './ui/ConversationTopbar'
 import { NoticeBanner } from './ui/NoticeBanner'
 import { CommandPalette } from './ui/palette/CommandPalette'
@@ -39,8 +38,8 @@ export function App() {
   const setCollapsed = useSettingsStore((state) => state.setSidebarCollapsed)
   const theme = useSettingsStore((state) => state.theme)
   const chatWidth = useSettingsStore((state) => state.chatWidth)
-  // A returning user goes straight back to the last project; only the idle
-  // host asks for a folder when no run has ever succeeded.
+  // The shell opens straight into a chat: the last project, else the user's
+  // home folder, else zen's own cwd. There is no idle welcome surface.
   const [lastCwd] = useState(lastProjectCwd)
   const autoConnected = useRef(false)
 
@@ -78,9 +77,12 @@ export function App() {
   }, [])
 
   useEffect(() => {
-    if (connection !== 'idle' || lastCwd === '' || autoConnected.current) return
+    if (connection !== 'idle' || autoConnected.current) return
     autoConnected.current = true
-    void connect(undefined, lastCwd)
+    void (async () => {
+      const cwd = lastCwd !== '' ? lastCwd : await defaultProjectCwd()
+      await connect(undefined, cwd)
+    })()
   }, [connection, lastCwd, connect])
 
   const persistWidth = useCallback((key: string, value: number) => {
@@ -116,9 +118,7 @@ export function App() {
   }, [collapsed, setCollapsed])
 
   if (connection === 'idle') {
-    if (lastCwd !== '') return <BootScreen />
-    // No explicit args: the app store owns the version-compatible defaults.
-    return <WelcomeScreen onStart={(cwd) => void connect(undefined, cwd)} />
+    return <BootScreen />
   }
 
   if (connection === 'starting') {
@@ -129,7 +129,10 @@ export function App() {
     return (
       <ExitScreen
         onRestart={() =>
-          void useAppStore.getState().connect(undefined, lastCwd === '' ? undefined : lastCwd)
+          void (async () => {
+            const cwd = lastCwd !== '' ? lastCwd : await defaultProjectCwd()
+            await useAppStore.getState().connect(undefined, cwd)
+          })()
         }
       />
     )

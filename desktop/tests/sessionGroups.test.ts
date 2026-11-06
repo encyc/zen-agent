@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { PROJECT_PAGE_SIZE, sessionSections } from '../src/state/sessionGroups.ts'
+import {
+  PROJECT_PAGE_SIZE,
+  mergeProjects,
+  projectName,
+  sessionSections,
+} from '../src/state/sessionGroups.ts'
 import type { SessionSummary } from '../src/rpc/types.ts'
 
 const make = (path: string, updated: number, extra: Partial<SessionSummary> = {}): SessionSummary => ({
@@ -84,4 +89,36 @@ test('the query filters every section and keeps collapse data intact', () => {
 
 test('the project page size is ten rows', () => {
   assert.equal(PROJECT_PAGE_SIZE, 10)
+})
+
+test('registered projects with no sessions join the rail and follow the query', () => {
+  const groups = [{ project: 'beta', sessions: [make('/s/b.jsonl', 1, { project: 'beta' })] }]
+  const entries = [{ path: '/w/alpha', name: 'alpha', at: 1 }]
+  assert.deepEqual(
+    mergeProjects(groups, entries, ''),
+    [
+      { project: 'beta', path: null, sessions: groups[0].sessions },
+      { project: 'alpha', path: '/w/alpha', sessions: [] },
+    ],
+  )
+  assert.deepEqual(mergeProjects(groups, entries, 'AL'), [
+    { project: 'alpha', path: '/w/alpha', sessions: [] },
+  ])
+})
+
+test('a registered project attaches its path to the matching session group', () => {
+  const sessions = [make('/s/a.jsonl', 1, { project: 'alpha' })]
+  assert.deepEqual(
+    mergeProjects(
+      sessionSections(sessions, '').projects,
+      [{ path: '/w/alpha', name: 'alpha', at: 1 }],
+      '',
+    ),
+    [{ project: 'alpha', path: '/w/alpha', sessions }],
+  )
+})
+
+test('project names come from the last path segment', () => {
+  assert.equal(projectName('/Users/me/work/zen-agent/'), 'zen-agent')
+  assert.equal(projectName('C:\\work\\alpha'), 'alpha')
 })
