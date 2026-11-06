@@ -256,7 +256,9 @@ async def _events_from_chunks(
 
     has_calls = any(isinstance(block, ToolCall) for block in partial.content)
     if partial.stop_reason == "pending":
-        if completed_status == "incomplete" and not has_calls:
+        if completed_status == "incomplete":
+            # Truncation wins over calls: the loop synthesises an is_error
+            # result per call instead of executing a half-parsed one.
             partial.stop_reason = "length"
         else:
             partial.stop_reason = "tool_use" if has_calls else "stop"
