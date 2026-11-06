@@ -399,3 +399,19 @@ async def test_bootstrap_hands_the_permission_gate_to_the_task_tool(
         assert brokered.gate is broker
     finally:
         await brokered.close()
+
+
+async def test_runtime_writes_tool_end_without_a_chat_controller(runtime_factory):
+    """``zen -p`` never builds a ChatController: the runtime owns the record."""
+    from conftest import tool_then_text_stream
+
+    runtime = await runtime_factory(stream_fn=tool_then_text_stream())
+
+    await runtime.agent.prompt("read the readme")
+
+    session = runtime.session
+    session.ensure_loaded()
+    tool_ends = [record for record in session.records if record.get("type") == "tool_end"]
+    assert [record["call_id"] for record in tool_ends] == ["c1"]
+    assert tool_ends[0]["tool_name"] == "read_file"
+    assert isinstance(tool_ends[0].get("duration_ms"), int)
