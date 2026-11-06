@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Literal
 
 from zenagent.agent.loop import LOOP_GUARD_PREFIX
@@ -179,6 +179,15 @@ class RunStatus:
     active_subagent: str | None = None
     #: Context-window composition (measured total, estimated slices).
     context: ContextReport | None = None
+
+    def to_wire(self) -> dict:
+        """The whole snapshot as JSON-ready data.
+
+        Frontends that mirror this over a protocol (the RPC) send *this* rather
+        than re-listing fields: a new field then reaches every client on the
+        commit that adds it, instead of waiting for someone to remember.
+        """
+        return asdict(self)
 
 
 #: Delivery lane of a pending message: ``queue`` waits for the run to end,

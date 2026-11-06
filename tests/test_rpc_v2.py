@@ -866,3 +866,20 @@ async def test_session_list_carries_created_updated_model_and_lineage(runtime_fa
     assert entry["updated_at"] == Path(entry["path"]).stat().st_mtime
     assert entry["model"] == "deepseek-chat"
     assert entry["derived_from"] == ""
+
+
+async def test_status_carries_the_complete_run_status(runtime_factory):
+    """Every RunStatus field ships, so a new field needs no RPC edit."""
+    import dataclasses
+
+    from zenagent.app.views import RunStatus
+
+    _runtime, server, writes, queue = await build(runtime_factory)
+    await run_lines(server, queue, [{"type": "status", "id": "s"}])
+    payload = decode(writes)[0]
+
+    status = payload["status"]
+    assert set(status) == {field.name for field in dataclasses.fields(RunStatus)}
+    # The fields the hand-written projection used to drop:
+    assert "git_branch" in status and "context" in status
+    assert "turn_output_tokens" in status and "session_name" in status
