@@ -16,6 +16,7 @@ import inspect
 import shutil
 import sys
 import time
+from collections import deque
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
@@ -30,7 +31,11 @@ from zenagent.app.chat import ChatController
 from zenagent.app.commands import AppServices, build_default_commands
 from zenagent.app.models import ModelManager
 from zenagent.app.modes import describe_modes
-from zenagent.app.permissions import build_permission_gate
+from zenagent.app.permissions import (
+    PermissionBroker,
+    build_permission_gate,
+    render_approval_prompt,
+)
 from zenagent.app.runtime import Runtime, RuntimeOptions
 from zenagent.app.safety import GuardPolicy
 from zenagent.app.sessions import SessionManager
@@ -466,14 +471,19 @@ async def repl(
         allow_destructive=allow_destructive,
         allow_protected=allow_protected,
     )
+    # The broker owns the interactive surface: approvals travel through the
+    # same single-stdin protocol as every other question (see the interaction
+    # gate below), instead of a blocking input() that fought the steering
+    # reader for stdin and froze the event loop mid-prompt.
     gate = build_permission_gate(
-        interactive=True,
+        interactive=False,
         allow_dangerous=allow_dangerous,
         allow=user_config.tool_allow,
         deny=user_config.tool_deny,
         mode=mode,
         policy=policy,
     )
+    broker = PermissionBroker.wrap(gate)
     options = RuntimeOptions(
         model_id=model_id,
         thinking=thinking,
@@ -503,7 +513,7 @@ async def repl(
     )
     try:
         runtime = await Runtime.bootstrap(
-            options, stream_fn=stream_fn, gate=gate, allow_missing_key=False
+            options, stream_fn=stream_fn, gate=broker, allow_missing_key=False
         )
     except KeyError as exc:
         print("zenagent: " + t("repl.unknown_model", model=exc), file=sys.stderr)
@@ -760,91 +770,152 @@ async def repl(
         typed_provider=typed_commands,
         skill_provider=skill_provider,
     )
-    #: Only one reader may own stdin: the REPL's steering reader and the ask
-    #: handler would otherwise steal each other's lines during a run.
+    #: Only one reader may own stdin. The steering reader parks in ``read()``;
+    #: an interaction that starts mid-run (``ask``, tool approval, a wizard)
+    #: claims the *next* line: the parked reader hands its result over through
+    #: ``pending_lines`` instead of steering with it, and an interaction that
+    #: starts while nothing is parked (inside command dispatch) reads directly.
+    #: Before this protocol the ask handler raced the steering reader for the
+    #: answer line and approvals used a blocking ``input()`` on the loop thread.
     input_lock = asyncio.Lock()
-    ask_active = asyncio.Event()
+    interaction_active = asyncio.Event()
+    parked = [False]
+    pending_lines: deque = deque()
+    interaction_depth = 0
+
+    def _begin_interaction() -> None:
+        nonlocal interaction_depth
+        interaction_depth += 1
+        interaction_active.set()
+
+    def _end_interaction() -> None:
+        nonlocal interaction_depth
+        interaction_depth = max(0, interaction_depth - 1)
+        if interaction_depth == 0:
+            interaction_active.clear()
+
+    async def _interaction_line() -> str:
+        """One line for the active interaction, through the single stdin owner."""
+        if parked[0]:
+            future: asyncio.Future = asyncio.get_running_loop().create_future()
+            pending_lines.append(future)
+            try:
+                line = await future
+            except BaseException:
+                # Cancelled before the line arrived: withdraw the claim so the
+                # steering loop is not left handing a line to nobody.
+                if future in pending_lines:
+                    pending_lines.remove(future)
+                raise
+            if line is None:
+                raise EOFError from None
+            return str(line)
+        async with input_lock:
+            line = await read()
+        if line is None:
+            raise EOFError from None
+        return str(line)
 
     async def ask_user(questions: list[dict]) -> list[dict]:
         """Answer an ``ask`` tool call from the terminal (blank = dismiss)."""
-        ask_active.set()
-        answers: list[dict] = []
-        for index, question in enumerate(questions, start=1):
-            title = (
-                question.get("header")
-                or question.get("id")
-                or t("repl.question_default", index=index)
-            )
-            print_fn(
-                t(
-                    "repl.question_title",
-                    index=index,
-                    total=len(questions),
-                    title=title,
-                    question=question["question"],
+        _begin_interaction()
+        try:
+            answers: list[dict] = []
+            for index, question in enumerate(questions, start=1):
+                title = (
+                    question.get("header")
+                    or question.get("id")
+                    or t("repl.question_default", index=index)
                 )
-            )
-            options = question["options"]
-            for position, option in enumerate(options, start=1):
-                if option.get("description"):
-                    line = t(
-                        "repl.question_option_desc",
-                        position=position,
-                        label=option["label"],
-                        description=option["description"],
+                print_fn(
+                    t(
+                        "repl.question_title",
+                        index=index,
+                        total=len(questions),
+                        title=title,
+                        question=question["question"],
                     )
-                else:
-                    line = t(
-                        "repl.question_option",
-                        position=position,
-                        label=option["label"],
-                    )
-                if option["label"] == question.get("recommended"):
-                    line += t("tui.dialog.recommended_suffix")
-                print_fn(line)
-            print_fn(
-                t(
-                    "repl.answer_hint",
-                    kind=t(
-                        "repl.answer_kind_multi"
-                        if question.get("multi")
-                        else "repl.answer_kind_single"
-                    ),
                 )
-            )
-            while True:
-                try:
-                    async with input_lock:
-                        raw = await read()
-                except (EOFError, KeyboardInterrupt):
-                    ask_active.clear()
-                    return answers
-                parts = [
-                    part
-                    for part in raw.replace(",", " ").split()
-                    if part.strip()
-                ]
-                if not parts:
-                    ask_active.clear()
-                    return answers
-                picks: list[str] = []
-                for part in parts:
+                options = question["options"]
+                for position, option in enumerate(options, start=1):
+                    if option.get("description"):
+                        line = t(
+                            "repl.question_option_desc",
+                            position=position,
+                            label=option["label"],
+                            description=option["description"],
+                        )
+                    else:
+                        line = t(
+                            "repl.question_option",
+                            position=position,
+                            label=option["label"],
+                        )
+                    if option["label"] == question.get("recommended"):
+                        line += t("tui.dialog.recommended_suffix")
+                    print_fn(line)
+                print_fn(
+                    t(
+                        "repl.answer_hint",
+                        kind=t(
+                            "repl.answer_kind_multi"
+                            if question.get("multi")
+                            else "repl.answer_kind_single"
+                        ),
+                    )
+                )
+                while True:
                     try:
-                        value = int(part)
-                    except ValueError:
-                        continue
-                    if 1 <= value <= len(options):
-                        label = options[value - 1]["label"]
-                        if label not in picks:
-                            picks.append(label)
-                if not question.get("multi"):
-                    picks = picks[:1]
-                if picks:
-                    answers.append({"id": question["id"], "selected": picks})
-                    break
-                print_fn(t("repl.invalid_selection"))
-        ask_active.clear()
-        return answers
+                        raw = await _interaction_line()
+                    except (EOFError, KeyboardInterrupt):
+                        return answers
+                    parts = [
+                        part
+                        for part in raw.replace(",", " ").split()
+                        if part.strip()
+                    ]
+                    if not parts:
+                        return answers
+                    picks: list[str] = []
+                    for part in parts:
+                        try:
+                            value = int(part)
+                        except ValueError:
+                            continue
+                        if 1 <= value <= len(options):
+                            label = options[value - 1]["label"]
+                            if label not in picks:
+                                picks.append(label)
+                    if not question.get("multi"):
+                        picks = picks[:1]
+                    if picks:
+                        answers.append({"id": question["id"], "selected": picks})
+                        break
+                    print_fn(t("repl.invalid_selection"))
+            return answers
+        finally:
+            _end_interaction()
+
+    async def confirm_via_stdin(tool_name: str, arguments: dict, verdict=None) -> str:
+        """The broker's approval callback, on the ask question protocol.
+
+        Returns ``"allow" | "always" | "deny"``; EOF/Ctrl+C deny, as the old
+        blocking ``input()`` gate did.
+        """
+        _begin_interaction()
+        try:
+            print_fn(render_approval_prompt(tool_name, arguments, verdict))
+            try:
+                answer = (await _interaction_line()).strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                return "deny"
+            if answer in ("a", "all"):
+                return "always"
+            if answer in ("y", "yes"):
+                return "allow"
+            return "deny"
+        finally:
+            _end_interaction()
 
     was_busy = [False]
 
@@ -878,27 +949,58 @@ async def repl(
         )
 
     set_ask_handler(ask_user)
+    broker.set_confirm(confirm_via_stdin)
     try:
         while True:
             await reap()
-            if ask_active.is_set():
-                # A pending ask (from inside the running agent) owns stdin.
-                await ask_active.wait()
+            if interaction_active.is_set():
+                # A pending interaction (ask, approval, wizard) owns stdin.
+                # Event.wait() on an already-set event does not yield to the
+                # loop — and the interaction usually needs exactly one tick to
+                # consume the answer the steering reader handed over. sleep(0)
+                # provides that tick; only then park until it is done.
+                await asyncio.sleep(0)
+                if interaction_active.is_set():
+                    await interaction_active.wait()
                 continue
+            line = None
+            did_read = False
             try:
                 async with input_lock:
-                    if ask_active.is_set():
+                    if interaction_active.is_set():
                         line = None
                     else:
-                        line = await read()
-            except (EOFError, KeyboardInterrupt):
+                        parked[0] = True
+                        try:
+                            line = await read()
+                        finally:
+                            parked[0] = False
+                        did_read = True
+            except (EOFError, KeyboardInterrupt) as exc:
+                if pending_lines:
+                    # The interrupt landed on a reader that had promised its
+                    # line to an interaction: deny/dismiss that interaction
+                    # instead of tearing down the whole session.
+                    claimant = pending_lines.popleft()
+                    if not claimant.done():
+                        claimant.set_exception(exc)
+                    continue
                 if chat.busy:
                     chat.abort()
                     await chat.wait_for_idle()
                 print_fn("")
                 return 0
+            if did_read and pending_lines:
+                claimant = pending_lines.popleft()
+                if not claimant.done():
+                    claimant.set_result(line)
+                continue
             if line is None:
-                await ask_active.wait()
+                # Same no-yield trap as above: the inner check saw an active
+                # interaction, so give it a tick before parking on it.
+                await asyncio.sleep(0)
+                if interaction_active.is_set():
+                    await interaction_active.wait()
                 continue
 
             await reap()  # the run may have finished while the user was typing
@@ -943,6 +1045,9 @@ async def repl(
             await chat.submit(prompt_text)
     finally:
         set_ask_handler(None)
+        for claimant in pending_lines:
+            if not claimant.done():
+                claimant.cancel()
         if chat.busy:
             chat.abort()
             await chat.wait_for_idle()

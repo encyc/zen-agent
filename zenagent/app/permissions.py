@@ -40,6 +40,7 @@ __all__ = [
     "build_permission_gate",
     "dangerous_command_reason",
     "matches_any",
+    "render_approval_prompt",
     "tool_is_read_only",
     "tool_target",
 ]
@@ -227,6 +228,33 @@ def dangerous_command_reason(command: str) -> str | None:
     return None
 
 
+def render_approval_prompt(
+    tool_name: str, args: dict, verdict: Verdict | None = None
+) -> str:
+    """The text prompt for one tool approval.
+
+    Shared by ``PermissionGate._ask`` and the REPL's broker confirm callback so
+    both interactive surfaces word the question — risk line, legible target and
+    answer options — identically.
+    """
+    target = tool_target(tool_name, args)
+    if target is not None:
+        # Show what the grant will cover (path / command prefix), not just
+        # the argument blob: a one-time path approval must be legible.
+        preview = target.split(":", 1)[1]
+    else:
+        preview = ", ".join(f"{key}={value!r}" for key, value in args.items())
+    if len(preview) > _MAX_ARGS_PREVIEW:
+        preview = preview[:_MAX_ARGS_PREVIEW] + "…"
+    risk_line = ""
+    if verdict is not None and verdict.risk is not None:
+        if verdict.risk == "destructive":
+            risk_line = t("perm.risk_destructive", reason=verdict.reason) + "\n"
+        else:
+            risk_line = t(f"perm.risk_{verdict.risk}", target=preview) + "\n"
+    return risk_line + t("perm.repl_prompt", tool=tool_name, args=preview)
+
+
 class PermissionGate:
     """Decide whether a tool call may run, asking the user when needed."""
 
@@ -382,23 +410,9 @@ class PermissionGate:
         self, tool_name: str, args: dict, verdict: Verdict | None = None
     ) -> tuple[bool, str]:
         target = tool_target(tool_name, args)
-        if target is not None:
-            # Show what the grant will cover (path / command prefix), not just
-            # the argument blob: a one-time path approval must be legible.
-            preview = target.split(":", 1)[1]
-        else:
-            preview = ", ".join(f"{key}={value!r}" for key, value in args.items())
-        if len(preview) > _MAX_ARGS_PREVIEW:
-            preview = preview[:_MAX_ARGS_PREVIEW] + "…"
-        risk_line = ""
-        if verdict is not None and verdict.risk is not None:
-            if verdict.risk == "destructive":
-                risk_line = t("perm.risk_destructive", reason=verdict.reason) + "\n"
-            else:
-                risk_line = t(f"perm.risk_{verdict.risk}", target=preview) + "\n"
         try:
             answer = input(
-                risk_line + t("perm.repl_prompt", tool=tool_name, args=preview)
+                render_approval_prompt(tool_name, args, verdict)
             ).strip().lower()
         except (EOFError, KeyboardInterrupt):
             return False, f"permission denied for {tool_name!r}: no answer"

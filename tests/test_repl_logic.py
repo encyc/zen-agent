@@ -16,7 +16,13 @@ from zenagent.config import UserConfig
 from zenagent.events import AssistantEvent
 from zenagent.providers.catalog import Model
 from zenagent.providers.compat import CompatFlags
-from zenagent.types import AssistantMessage, Cost, TextContent, Usage
+from zenagent.types import (
+    AssistantMessage,
+    Cost,
+    TextContent,
+    ToolCall,
+    Usage,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -686,3 +692,252 @@ async def test_repl_prints_the_provider_error_after_a_failed_run(isolated_sessio
 
     assert code == 0
     assert any("provider exploded" in line for line in printed)
+
+
+# ---------------------------------------------------------------------------
+# Single-stdin protocol: approvals and ask share the steering reader
+# ---------------------------------------------------------------------------
+
+
+def tool_call_stream(*calls: ToolCall, final: str = "done"):
+    """A stream that issues ``calls`` on consecutive turns, then finishes."""
+    pending_calls = list(calls)
+
+    async def stream(model_, messages, tools, options):
+        partial = AssistantMessage(
+            content=[],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="pending",
+            timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        if pending_calls:
+            call = pending_calls.pop(0)
+            partial.content = [call]
+            yield AssistantEvent(
+                type="toolcall_start", partial=partial, content_index=0, tool_call=call
+            )
+            yield AssistantEvent(
+                type="toolcall_end", partial=partial, content_index=0, tool_call=call
+            )
+            partial.stop_reason = "tool_use"
+            yield AssistantEvent(type="done", partial=partial, reason="tool_use")
+            return
+        partial.content = [TextContent(text=final)]
+        partial.stop_reason = "stop"
+        yield AssistantEvent(
+            type="text_delta", partial=partial, content_index=0, delta=final
+        )
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    return stream
+
+
+def write_call(path: str = "approved.txt", call_id: str = "c1") -> ToolCall:
+    return ToolCall(
+        id=call_id, name="write_file", arguments={"path": path, "content": "hello"}
+    )
+
+
+def wait_for_print(marker: str, printed: list[str]):
+    """An awaitable clause: block until ``marker`` appeared in the output."""
+
+    async def _wait() -> None:
+        while not any(marker in line for line in printed):
+            await asyncio.sleep(0.01)
+
+    return _wait
+
+
+async def _drive(tmp_path, printed, reader, stream, mode="ask"):
+    """Run the REPL with stdout capture and count the LLM requests."""
+    seen_requests = [0]
+
+    async def counting_stream(*args, **kwargs):
+        seen_requests[0] += 1
+        async for event in stream(*args, **kwargs):
+            yield event
+
+    def print_fn(*args, **kwargs):
+        printed.append(" ".join(str(arg) for arg in args))
+
+    code = await repl(
+        "glm-5.3",
+        stream_fn=counting_stream,
+        input_fn=reader,
+        print_fn=print_fn,
+        api_key="k",
+        mode=mode,
+    )
+    return code, seen_requests[0]
+
+
+async def test_approval_reads_through_the_injected_input_fn(
+    isolated_sessions, tmp_path, monkeypatch
+):
+    """The approval prompt consumes the next scripted line, like ask does."""
+    monkeypatch.chdir(tmp_path)
+    printed: list[str] = []
+    reads = [0]
+
+    async def reader() -> str:
+        reads[0] += 1
+        if reads[0] == 1:
+            return "hi"
+        if reads[0] == 2:
+            await wait_for_print("allow write_file", printed)()
+            return "y"
+        await wait_for_print("done", printed)()  # the run settled; no race
+        return "/exit"
+
+    code, requests = await _drive(
+        tmp_path, printed, reader, tool_call_stream(write_call())
+    )
+    assert code == 0
+    assert (tmp_path / "approved.txt").read_text() == "hello"
+    # The "y" answer was consumed by the approval, not steered into a new run.
+    assert requests == 2
+    assert any("allow write_file" in line for line in printed)
+
+
+async def test_approval_deny_keeps_the_answer_out_of_the_transcript(
+    isolated_sessions, tmp_path, monkeypatch
+):
+    """'n' denies the write; it must not steer or start a second run."""
+    monkeypatch.chdir(tmp_path)
+    printed: list[str] = []
+    reads = [0]
+
+    async def reader() -> str:
+        reads[0] += 1
+        if reads[0] == 1:
+            return "hi"
+        if reads[0] == 2:
+            await wait_for_print("allow write_file", printed)()
+            return "n"
+        await wait_for_print("done", printed)()  # the run settled; no race
+        return "/exit"
+
+    code, requests = await _drive(
+        tmp_path, printed, reader, tool_call_stream(write_call())
+    )
+    assert code == 0
+    assert not (tmp_path / "approved.txt").exists()
+    assert requests == 2  # the denied call still produced its follow-up turn
+    # The "n" answer never leaked into the transcript as a prompt.
+    from zenagent.agent.session import Session
+    from zenagent.types import UserMessage
+
+    (session_file,) = isolated_sessions.glob("*.jsonl")
+    users = [
+        message
+        for message in Session(session_file).load()
+        if isinstance(message, UserMessage)
+    ]
+    assert len(users) == 1 and users[0].content == "hi"
+
+
+async def test_approval_always_remembers_the_target(
+    isolated_sessions, tmp_path, monkeypatch
+):
+    """'a' grants the exact target; the identical second call never re-asks."""
+    monkeypatch.chdir(tmp_path)
+    printed: list[str] = []
+    reads = [0]
+
+    async def reader() -> str:
+        reads[0] += 1
+        if reads[0] == 1:
+            return "hi"
+        if reads[0] == 2:
+            await wait_for_print("allow write_file", printed)()
+            return "a"
+        await wait_for_print("done", printed)()  # both writes settled
+        return "/exit"
+
+    stream = tool_call_stream(
+        write_call(call_id="c1"), write_call(call_id="c2"), final="done"
+    )
+    code, requests = await _drive(tmp_path, printed, reader, stream)
+    assert code == 0
+    assert requests == 3
+    assert (tmp_path / "approved.txt").read_text() == "hello"
+    # Exactly one approval prompt for two identical writes.
+    approvals = [line for line in printed if "allow write_file" in line]
+    assert len(approvals) == 1
+
+
+async def test_midrun_ask_answer_is_not_stolen_by_steering(
+    isolated_sessions, tmp_path, monkeypatch
+):
+    """The answer typed while a question is up goes to ask, not to steering."""
+    monkeypatch.chdir(tmp_path)
+    printed: list[str] = []
+    reads = [0]
+
+    async def reader() -> str:
+        reads[0] += 1
+        if reads[0] == 1:
+            return "hi"
+        if reads[0] == 2:
+            # Only hand over the answer once the question is on screen: a
+            # parked steering reader returning too early is exactly the old
+            # race.
+            await wait_for_print("pick one", printed)()
+            return "2"
+        await wait_for_print("done", printed)()  # the run settled; no race
+        return "/exit"
+
+    ask_call = ToolCall(
+        id="c1",
+        name="ask",
+        arguments={
+            "questions": [
+                {
+                    "id": "q1",
+                    "question": "pick one",
+                    "options": [{"label": "A"}, {"label": "B"}],
+                }
+            ]
+        },
+    )
+    code, requests = await _drive(
+        tmp_path, printed, reader, tool_call_stream(ask_call, final="done")
+    )
+    assert code == 0
+    assert requests == 2  # the answer line did not become a steering prompt
+    assert any("pick one" in line for line in printed)
+    # The chosen option landed in the ask tool result, not in a second prompt.
+    from zenagent.agent.session import Session
+
+    (session_file,) = isolated_sessions.glob("*.jsonl")
+    ask_results = [
+        message
+        for message in Session(session_file).load()
+        if getattr(message, "tool_name", None) == "ask"
+    ]
+    assert ask_results and not ask_results[0].is_error
+    assert "B" in "".join(block.text for block in ask_results[0].content)
+
+
+async def test_eof_during_approval_denies_instead_of_exiting(
+    isolated_sessions, tmp_path, monkeypatch
+):
+    """EOF while an approval owns the next line denies it and keeps running."""
+    monkeypatch.chdir(tmp_path)
+    printed: list[str] = []
+    reads = [0]
+
+    async def reader() -> str:
+        reads[0] += 1
+        if reads[0] == 1:
+            return "hi"
+        raise EOFError
+
+    code, requests = await _drive(
+        tmp_path, printed, reader, tool_call_stream(write_call())
+    )
+    assert code == 0
+    assert not (tmp_path / "approved.txt").exists()
