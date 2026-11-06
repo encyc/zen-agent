@@ -231,9 +231,16 @@ async def _events_from_chunks(
                         tool_call=call,
                     )
 
-        elif kind == "response.completed":
+        elif kind in ("response.completed", "response.incomplete"):
             response = chunk.get("response") or {}
-            completed_status = str(response.get("status") or "completed")
+            # OpenAI's own stream ends a truncated turn with a distinct
+            # ``response.incomplete`` event; some compatible servers instead
+            # report ``status: "incomplete"`` on ``response.completed"``.
+            completed_status = (
+                "incomplete"
+                if kind == "response.incomplete"
+                else str(response.get("status") or "completed")
+            )
             usage = response.get("usage") or {}
             partial.usage.input = usage.get("input_tokens", 0) or 0
             partial.usage.output = usage.get("output_tokens", 0) or 0
