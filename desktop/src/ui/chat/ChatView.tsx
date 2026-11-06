@@ -124,7 +124,7 @@ export function ChatView() {
             {showRunningRow && <RunningRow />}
           </div>
         )}
-        <div ref={tailRef} className={css.tailPad} />
+        <div ref={tailRef} />
       </div>
       {!isEmpty && (
         <ConversationMinimap nodes={nodes} activeId={activeId} onJump={jumpTo} />

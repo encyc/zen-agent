@@ -26,16 +26,19 @@ interface BridgeState {
   noCurrent?: boolean
   projectSessions?: number
   transcript?: Record<string, unknown>[]
+  todos?: Record<string, unknown>[]
 }
 
 declare global {
   interface Window {
     __ZEN_E2E__: BridgeState
+    __ZEN_E2E_EMIT__(event: string, payload: unknown): void
   }
 }
 
 function installBridge(state: BridgeState) {
   const callbacks = new Map<number, (payload: unknown) => void>()
+  const listeners = new Map<string, ((payload: unknown) => void)[]>()
   let nextCallback = 1
   let nextEvent = 1
 
@@ -121,6 +124,7 @@ function installBridge(state: BridgeState) {
           termination: null,
           mode: 'zen',
           pending: state.pending,
+          todos: state.todos ?? [],
         }
       case 'transcript':
         return {
@@ -223,7 +227,16 @@ function installBridge(state: BridgeState) {
       cmd: string,
       args: Record<string, unknown> & { payload?: Record<string, unknown> },
     ) {
-      if (cmd === 'plugin:event|listen') return nextEvent++
+      if (cmd === 'plugin:event|listen') {
+        const handler = callbacks.get(args.handler as number)
+        if (handler !== undefined) {
+          const event = String(args.event)
+          const list = listeners.get(event) ?? []
+          list.push(handler)
+          listeners.set(event, list)
+        }
+        return nextEvent++
+      }
       if (cmd === 'plugin:event|unlisten') return null
       if (cmd === 'rpc_start') {
         const options = (args.options ?? {}) as { cwd?: string | null }
@@ -247,6 +260,12 @@ function installBridge(state: BridgeState) {
     window as unknown as { __TAURI_EVENT_PLUGIN_INTERNALS__: unknown }
   ).__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener() {} }
   ;(window as unknown as { __ZEN_E2E__: BridgeState }).__ZEN_E2E__ = state
+  ;(window as unknown as { __ZEN_E2E_EMIT__: (event: string, payload: unknown) => void }).__ZEN_E2E_EMIT__ = (
+    event,
+    payload,
+  ) => {
+    for (const handler of listeners.get(event) ?? []) handler(payload)
+  }
 }
 
 function initialState(overrides: Partial<BridgeState> = {}): BridgeState {
@@ -300,6 +319,84 @@ test('a new project joins the rail and can be removed', async ({ page }) => {
   await expect.poll(() => page.evaluate(() => window.__ZEN_E2E__.starts.length)).toBe(2)
   await page.locator('[data-sidebar-project-group="newproj"] [data-remove-project]').click()
   await expect(page.locator('[data-sidebar-project-group="newproj"]')).toHaveCount(0)
+})
+
+test('the composer never covers the last message on a short window', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 })
+  const transcript = Array.from({ length: 10 }, (_, index) => [
+    { kind: 'user', id: `u${index}`, text: `第 ${index} 轮`, timestamp: index * 2 + 1 },
+    { kind: 'assistant', id: `a${index}`, text: '回复 '.repeat(120), timestamp: index * 2 + 2 },
+  ]).flat()
+  await boot(
+    page,
+    initialState({
+      running: false,
+      transcript,
+      todos: Array.from({ length: 14 }, (_, index) => ({
+        text: `待办项 ${index}`,
+        status: 'pending',
+      })),
+    }),
+  )
+  await page.getByRole('button', { name: /待办/ }).click()
+  await expect(page.getByText('待办项 13')).toBeVisible()
+  await expect
+    .poll(async () => {
+      await page
+        .locator('[data-chat-flow]')
+        .evaluate((el) => el.scrollIntoView({ block: 'end' }))
+      return page.evaluate(() => {
+        const rows = document.querySelectorAll<HTMLElement>('[data-minimap-id]')
+        const last = rows[rows.length - 1]
+        const dock = document.querySelector<HTMLElement>('[data-shell-composer]')
+        if (last === undefined || dock === null) return Number.POSITIVE_INFINITY
+        return last.getBoundingClientRect().bottom - dock.getBoundingClientRect().top
+      })
+    })
+    .toBeLessThanOrEqual(1)
+})
+
+test('an approval stacks above a still-mounted composer', async ({ page }) => {
+  await boot(page, initialState())
+  await page.evaluate(() => {
+    window.__ZEN_E2E_EMIT__('rpc:frame', {
+      event: 'rpc:frame',
+      id: 1,
+      payload: {
+        frame: {
+          type: 'event',
+          event: {
+            type: 'approval_request',
+            request_id: 'req-1',
+            tool_name: 'bash',
+            args: '{"command":"git push --force"}',
+            risk: 'high',
+            target: 'bash',
+            reason: '这条命令会改写远端历史',
+          },
+        },
+      },
+    })
+  })
+  const panel = page.locator('[data-approval]')
+  await expect(panel).toContainText('这条命令会改写远端历史')
+  await expect(page.locator('[data-composer-plate] textarea')).toBeVisible()
+  const panelBox = await panel.boundingBox()
+  const plateBox = await page.locator('[data-composer-plate]').boundingBox()
+  assert.ok(panelBox !== null && plateBox !== null)
+  assert.ok(panelBox.y + panelBox.height <= plateBox.y + 0.5)
+  await page.getByRole('button', { name: '拒绝' }).click()
+  await expect(panel).toHaveCount(0)
+  assert.ok(
+    await page.evaluate(() =>
+      window.__ZEN_E2E__.calls.some(
+        (call) =>
+          call.type === 'approval' &&
+          call.request_id === 'req-1' &&
+          call.decision === 'deny',
+      ),
+    ),
+  )
 })
 
 test('the shell keeps the sidebar full height and docks the composer inside the center column', async ({

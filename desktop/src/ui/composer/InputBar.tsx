@@ -9,7 +9,7 @@ import { listen } from '@tauri-apps/api/event'
 import { useAppStore } from '../../state/appStore'
 import { useApprovalStore, useComposerStore, useStatusStore, useCatalogStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
-import { ApprovalTakeover } from '../approval/ApprovalPanel'
+import { ApprovalPanel } from '../approval/ApprovalPanel'
 import { pickImagePaths } from './pickImages'
 import { TodoDock, PendingDock, ContextMeter } from './Docks'
 import { ModelMenu, ModeMenu, ThinkingMenu } from './Menus'
@@ -140,11 +140,10 @@ export function InputBar() {
 
   return (
     <div className={css.root}>
-      {approvalCount > 0 ? (
-        <ApprovalTakeover />
-      ) : (
-        <div className={css.card}>
-          {images.length > 0 && (
+      {approvalCount > 0 && <ApprovalPanel />}
+      <PendingDock />
+      <div className={css.card} data-composer-plate>
+        {images.length > 0 && (
             <div className={css.attachRail}>
               {images.map((image) => (
                 <div key={image.id} className={css.attachChip}>
@@ -277,10 +276,8 @@ export function InputBar() {
             </div>
           )}
         </div>
-      )}
       <div className={css.dock}>
         <TodoDock />
-        <PendingDock />
         <ContextMeter />
       </div>
     </div>
@@ -290,7 +287,7 @@ export function InputBar() {
 function ModeChip({ mode, onOpen }: { mode: string; onOpen(): void }) {
   const t = useT()
   return (
-    <button type="button" className={css.chip} onClick={onOpen}>
+    <button type="button" className={clsx(css.chip, css.modeChip)} onClick={onOpen}>
       <span className={css.chipLabel} data-mode={mode}>{t(`status.mode.${mode}`)}</span>
       <ChevronDownIcon size={11} />
     </button>

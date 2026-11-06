@@ -2,7 +2,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 0 var(--dsh-composer-side-clearance) 4px;
+  gap: 8px;
+  padding: 0 0 4px;
   flex: none;
 }
 
@@ -23,8 +24,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  width: 100%;
-  max-width: var(--dsh-composer-card-max-width);
+  width: min(100%, var(--ds-chat-content-width));
   padding-top: 8px;
   border-radius: var(--dsw-radius-panel);
   background: var(--dsw-specific-input-major);
@@ -47,8 +47,8 @@
 .input {
   box-sizing: border-box;
   width: 100%;
-  min-height: 36px;
-  max-height: 360px;
+  min-height: 3lh;
+  max-height: 7lh;
   padding: 4px 8px 0 14px;
   border: none;
   background: transparent;
@@ -128,8 +128,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 2px 8px 6px;
+  gap: 8px;
+  padding: 4px 8px 8px;
   min-width: 0;
 }
 
@@ -197,6 +197,18 @@
   white-space: nowrap;
 }
 
+.modeChip {
+  width: 96px;
+  flex: none;
+}
+
+.modeChip .chipLabel {
+  flex: 1;
+  min-width: 0;
+  max-width: none;
+  text-align: left;
+}
+
 .chipLabel[data-mode='plan'] {
   color: var(--dsw-alias-state-warn-label);
 }
@@ -205,15 +217,14 @@
   display: grid;
   place-items: center;
   flex: none;
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   border: none;
   border-radius: 999px;
   background: var(--dsw-alias-button-info-fill);
   color: var(--dsw-alias-label-primary-foreground);
   cursor: pointer;
-  transition: background-color 100ms ease;
-  transform: translateY(-2px);
+  transition: background-color 100ms ease, opacity 100ms ease;
 }
 
 .primary:hover:not(:disabled) {
@@ -221,7 +232,7 @@
 }
 
 .primary:disabled {
-  opacity: 0.4;
+  opacity: 0.18;
   cursor: default;
 }
 
@@ -248,8 +259,8 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 28px;
-  padding: 0 8px 0 6px;
+  height: 20px;
+  padding: 0 4px 0 2px;
   border-radius: var(--dsw-radius-sm);
   background: var(--dsw-alias-interactive-bg-hover);
 }
@@ -257,8 +268,8 @@
 .attachThumb {
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   border-radius: 4px;
   background: var(--dsw-alias-interactive-bg-hover-solid);
   color: var(--dsw-alias-label-secondary);

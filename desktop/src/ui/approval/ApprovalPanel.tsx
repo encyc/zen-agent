@@ -1,6 +1,6 @@
-/** Approval takeover — dsh ApprovalPanel: one pending approval replaces the
- * composer. Buttons Allow once / Always / Reject; Enter allows, Esc rejects;
- * risky requests surface target + reason. */
+/** Approval panel — dsh ApprovalPanel: sits above the composer, which stays
+ * mounted and usable. Buttons Allow once / Always / Reject; Enter allows, Esc
+ * rejects; risky requests surface target + reason. */
 
 import { useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../../state/appStore'
@@ -9,7 +9,7 @@ import { useT } from '../../i18n/locale'
 import { StateDot } from '../primitives'
 import css from './ApprovalPanel.module.css'
 
-export function ApprovalTakeover() {
+export function ApprovalPanel() {
   const queue = useApprovalStore((state) => state.queue)
   const approve = useAppStore((state) => state.approve)
   const t = useT()
@@ -65,7 +65,7 @@ export function ApprovalTakeover() {
   }
 
   return (
-    <div className={css.root}>
+    <div className={css.root} data-approval>
       <div className={css.card}>
         <div className={css.strip}>
           <StateDot state="warning" />

@@ -46,6 +46,7 @@ export function App() {
   const [sidebarWidth, setSidebarWidth] = useState(() => loadWidth(SIDEBAR_KEY, SIDEBAR_DEFAULT))
   const [rightbarOpen, setRightbarOpen] = useState(false)
   const [rightbarWidth, setRightbarWidth] = useState(() => loadWidth(RIGHTBAR_KEY, RIGHTBAR_DEFAULT))
+  const dockRef = useRef<HTMLDivElement | null>(null)
 
   // Theme presenter: write the snapshot to the DOM, outside React (dsh pattern).
   useEffect(() => {
@@ -84,6 +85,25 @@ export function App() {
       await connect(undefined, cwd)
     })()
   }, [connection, lastCwd, connect])
+
+  // The composer floats over the center column; publish its real height so
+  // the transcript reserves exactly that much and nothing is covered.
+  useEffect(() => {
+    if (connection !== 'ready') return
+    const dock = dockRef.current
+    const pane = dock?.closest<HTMLElement>('[data-shell-center]')
+    if (dock === null || dock === undefined || pane === null || pane === undefined) return
+    const publish = () => {
+      pane.style.setProperty(
+        '--composer-dock-height',
+        `${Math.round(dock.getBoundingClientRect().height)}px`,
+      )
+    }
+    publish()
+    const observer = new ResizeObserver(publish)
+    observer.observe(dock)
+    return () => observer.disconnect()
+  }, [connection])
 
   const persistWidth = useCallback((key: string, value: number) => {
     try {
@@ -164,7 +184,7 @@ export function App() {
       />
       <NoticeBanner />
       <ChatView />
-      <div className={css.composerDock} data-shell-composer>
+      <div ref={dockRef} className={css.composerDock} data-shell-composer>
         <InputBar />
       </div>
       <button

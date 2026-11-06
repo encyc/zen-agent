@@ -1,6 +1,6 @@
 .host {
   position: absolute;
-  inset: 0 0 calc(var(--composer-reserve) + 16px);
+  inset: 0 0 calc(var(--composer-dock-height, 168px) + 16px);
   z-index: 7;
   pointer-events: none;
 }
