@@ -667,6 +667,21 @@ async def test_command_result_forwards_the_screen_target(runtime_factory):
     assert payload["target"] == "2431"
 
 
+async def test_status_reports_context_composition(runtime_factory):
+    _runtime, server, writes, _queue = await build(runtime_factory)
+    await server._handle_line(json.dumps({"type": "status", "id": "s"}))
+
+    payload = decode(writes)[0]
+    context = payload["context"]
+    assert context["window"] == payload["context_window"]
+    assert context["measured"] is False
+    assert context["total_tokens"] == context["prompt_tokens"]
+    assert context["free_tokens"] == context["window"] - context["total_tokens"]
+    assert {"system", "tools"} <= {item["id"] for item in context["slices"]}
+    for item in context["slices"]:
+        assert {"id", "label", "chars", "tokens", "pct"} <= set(item)
+
+
 async def test_status_reports_context_thinking_and_work_state(runtime_factory):
     _runtime, server, writes, _queue = await build(runtime_factory)
     await server._handle_line(json.dumps({"type": "status", "id": "s"}))
