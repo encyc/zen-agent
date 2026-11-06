@@ -1,0 +1,278 @@
+/* The ask card rides above the composer like the approval panel: same plate,
+ * same width, so it reads as part of the input surface rather than a chat row. */
+
+.root {
+  width: min(100%, var(--ds-chat-content-width));
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--dsw-radius-panel);
+  background: var(--dsw-specific-input-major);
+  box-shadow: var(--dsw-elevation-soft);
+  --dsw-elevation-stroke-color: var(--dsw-alias-border-l2);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 16px 0;
+}
+
+.headerMain {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  margin-left: auto;
+}
+
+.title {
+  font-size: var(--ds-font-12);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.progress {
+  font-size: var(--ds-font-11);
+  color: var(--dsw-alias-label-caption);
+  white-space: nowrap;
+}
+
+.indicators {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.indicator {
+  width: 6px;
+  height: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+  cursor: pointer;
+}
+
+.indicator[data-status='answered'] {
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.indicator[data-status='skipped'] {
+  background: var(--dsw-alias-label-caption);
+}
+
+.indicator[data-current] {
+  box-shadow: 0 0 0 2px
+    color-mix(in oklab, var(--dsw-alias-state-business-primary) 30%, transparent);
+}
+
+.decline {
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-size: var(--ds-font-12);
+  cursor: pointer;
+}
+
+.decline:hover:not(:disabled) {
+  color: var(--dsw-alias-label-primary);
+}
+
+.decline:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 16px 12px;
+}
+
+.question {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: 8px;
+  margin: 0;
+  font-size: var(--ds-font-13-5);
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.questionNumber {
+  font-size: var(--ds-font-11);
+  font-weight: 600;
+  color: var(--dsw-alias-label-caption);
+}
+
+.questionBody {
+  display: block;
+  min-width: 0;
+  max-height: min(208px, 24vh);
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+.questionBody:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}
+
+.questionHeader {
+  margin-right: 6px;
+  font-size: var(--ds-font-11);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.options {
+  display: grid;
+  gap: 6px;
+  max-height: min(208px, 24vh);
+  padding-right: 4px;
+  overflow-y: auto;
+}
+
+.option {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 28px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: var(--ds-font-13);
+  line-height: 20px;
+  text-align: start;
+  cursor: pointer;
+  transition: background-color 100ms ease;
+}
+
+.option:hover,
+.option[data-selected] {
+  background: color-mix(
+    in oklab,
+    var(--dsw-alias-state-business-primary) 14%,
+    var(--dsw-alias-interactive-bg-hover)
+  );
+  color: var(--dsw-alias-label-primary);
+}
+
+.optionCopy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.optionLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.optionDescription {
+  font-size: var(--ds-font-11-5);
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  overflow-wrap: anywhere;
+}
+
+.recommended {
+  padding: 0 5px;
+  border-radius: 999px;
+  background: color-mix(
+    in oklab,
+    var(--dsw-alias-state-business-primary) 14%,
+    transparent
+  );
+  color: var(--dsw-alias-state-business-primary);
+  font-size: var(--ds-font-11);
+  line-height: 15px;
+  white-space: nowrap;
+}
+
+.optionMark {
+  display: grid;
+  width: 15px;
+  height: 15px;
+  flex: none;
+  margin-top: 2px;
+  place-items: center;
+  border-radius: var(--dsw-radius-xs);
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+  color: var(--dsw-alias-state-business-primary);
+  font-size: var(--ds-font-11);
+  line-height: 1;
+}
+
+.option[role='radio'] .optionMark {
+  border-radius: 999px;
+}
+
+.option[data-selected] .optionMark {
+  background: color-mix(
+    in oklab,
+    var(--dsw-alias-state-business-primary) 18%,
+    transparent
+  );
+}
+
+.customInput {
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 2px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: var(--ds-font-13);
+}
+
+.customInput:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px
+    color-mix(in oklab, var(--dsw-alias-state-business-primary) 30%, transparent);
+}
+
+@media (max-width: 560px) {
+  .header {
+    align-items: flex-start;
+  }
+
+  .headerActions {
+    flex: 1 1 auto;
+  }
+}

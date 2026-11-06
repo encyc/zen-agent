@@ -6,9 +6,10 @@ only, every line parses as JSON, and logs stay on stderr.
 Protocol v2 (v1 messages keep their shape):
 
     requests  prompt, cancel, status, shutdown, steer, tools, model, mode,
-              usage, approval, session, command
+              usage, approval, ask, session, command
     responses {"type":"result"|"error", "id": ..., ...}
-    events    {"type":"event","event":{...}} plus ``approval_request`` events
+    events    {"type":"event","event":{...}} plus ``approval_request`` and
+              ``ask_request`` events
 
 A server built with a Runtime exposes sessions, MCP/skills tools, commands and
 an interactive approval round-trip. A server built from a bare Agent keeps the
@@ -93,6 +94,39 @@ def _bounded_json(value) -> str:
         return json.dumps(value, ensure_ascii=False, default=str)[:_ARGS_CHARS]
     except (TypeError, ValueError):
         return str(value)[:_ARGS_CHARS]
+
+
+def _answers_from_selection(questions: list[dict], raw: object) -> list[dict]:
+    """Turn per-question option lists into the ask tool's answer dicts.
+
+    Values that are not one of the question's labels are the card's custom
+    text; the tool keeps them in ``custom`` so the model still sees them.
+    """
+    if not isinstance(raw, list):
+        return []
+    answers: list[dict] = []
+    for index, question in enumerate(questions):
+        if index >= len(raw):
+            break
+        values = raw[index]
+        if not isinstance(values, list):
+            continue
+        labels = [option["label"] for option in question["options"]]
+        selected = [
+            value for value in values if isinstance(value, str) and value in labels
+        ]
+        custom = ", ".join(
+            value
+            for value in values
+            if isinstance(value, str) and value not in labels and value.strip()
+        )
+        if not selected and not custom:
+            continue
+        answer: dict = {"id": question["id"], "selected": selected}
+        if custom:
+            answer["custom"] = custom
+        answers.append(answer)
+    return answers
 
 
 def serialize_event(event: AgentEvent) -> dict:
@@ -198,6 +232,8 @@ class RpcServer:
         self._text: list[str] = []
         self._approvals: dict[str, asyncio.Future] = {}
         self._approval_seq = 0
+        self._asks: dict[str, asyncio.Future] = {}
+        self._ask_seq = 0
         self._closed = False
         self.agent.subscribe(self._on_event)
 
@@ -311,6 +347,78 @@ class RpcServer:
             )
             return True
         future.set_result(decision)
+        self._send({"type": "result", "id": request.get("id"), "ok": True})
+        return True
+
+    # -- ask round-trip -----------------------------------------------------
+
+    async def ask(self, questions: list[dict]) -> list[dict]:
+        """Ask the client the model's structured questions; ``[]`` when dismissed.
+
+        Blocks the tool call exactly like an approval: the read loop keeps
+        serving lines while the client renders the card and answers with
+        ``{"type": "ask", "answers": [["label", ...] | null, ...]}``.
+        """
+        request_id = f"q{self._ask_seq}"
+        self._ask_seq += 1
+        self._send(
+            {
+                "type": "event",
+                "event": {
+                    "type": "ask_request",
+                    "request_id": request_id,
+                    "questions": questions,
+                },
+            }
+        )
+        future: asyncio.Future = asyncio.get_running_loop().create_future()
+        self._asks[request_id] = future
+        try:
+            raw = await future
+        except asyncio.CancelledError:
+            # The run was aborted while the card was open: drop the stale
+            # request instead of leaving a card that answers into the void.
+            self._send(
+                {
+                    "type": "event",
+                    "event": {"type": "ask_cancel", "request_id": request_id},
+                }
+            )
+            raise
+        finally:
+            self._asks.pop(request_id, None)
+        return _answers_from_selection(questions, raw)
+
+    def _resolve_ask(self, request: dict) -> bool:
+        request_id = request.get("request_id")
+        raw = request.get("answers")
+        if not isinstance(raw, list) or not all(
+            item is None
+            or (
+                isinstance(item, list)
+                and all(isinstance(value, str) for value in item)
+            )
+            for item in raw
+        ):
+            self._send(
+                {
+                    "type": "error",
+                    "id": request.get("id"),
+                    "message": "answers must be a list of string lists or null",
+                }
+            )
+            return True
+        future = self._asks.get(str(request_id))
+        if future is None or future.done():
+            self._send(
+                {
+                    "type": "error",
+                    "id": request.get("id"),
+                    "message": f"no pending ask: {request_id}",
+                }
+            )
+            return True
+        future.set_result(raw)
         self._send({"type": "result", "id": request.get("id"), "ok": True})
         return True
 
@@ -430,6 +538,8 @@ class RpcServer:
             return True
         if kind == "approval":
             return self._resolve_approval(request)
+        if kind == "ask":
+            return self._resolve_ask(request)
         if kind == "session":
             await self._session(request, request_id)
             return True
@@ -839,6 +949,9 @@ class RpcServer:
         for future in list(self._approvals.values()):
             if not future.done():
                 future.set_result("deny")
+        for future in list(self._asks.values()):
+            if not future.done():
+                future.set_result([])
         if self.running:
             self.agent.abort()
             await asyncio.gather(self._task, return_exceptions=True)
@@ -945,9 +1058,13 @@ async def _run(args) -> int:
         commands=build_default_commands(services),
     )
     broker.set_confirm(server.confirm)
+    from zenagent.tools.ask import set_ask_handler
+
+    set_ask_handler(server.ask)
     try:
         return await server.run()
     finally:
+        set_ask_handler(None)
         await runtime.close()
 
 

@@ -5,12 +5,14 @@ import { create } from 'zustand'
 import { CHAT_WIDTH_DEFAULT } from '../ui/columns.ts'
 import { projectName } from './sessionGroups.ts'
 import type {
+  AskQuestion,
   CommandEntry,
   ModelEntry,
   PendingMessage,
   SessionSummary,
   StatusResult,
 } from '../rpc/types'
+import type { AskDraft } from './askDraft.ts'
 
 // ---- status ---------------------------------------------------------------
 
@@ -258,6 +260,45 @@ export const useApprovalStore = create<ApprovalState>((set) => ({
   pop: (requestId) =>
     set((state) => ({ queue: state.queue.filter((item) => item.requestId !== requestId) })),
   clear: () => set({ queue: [] }),
+}))
+
+// ---- ask ----------------------------------------------------------------------
+
+export interface PendingAsk {
+  requestId: string
+  questions: AskQuestion[]
+}
+
+interface AskState {
+  queue: PendingAsk[]
+  drafts: Record<string, AskDraft>
+  push(ask: PendingAsk): void
+  pop(requestId: string): void
+  setDraft(requestId: string, draft: AskDraft): void
+  clear(): void
+}
+
+export const useAskStore = create<AskState>((set) => ({
+  queue: [],
+  drafts: {},
+  push: (ask) =>
+    set((state) =>
+      state.queue.some((entry) => entry.requestId === ask.requestId)
+        ? state
+        : { queue: [...state.queue, ask] },
+    ),
+  pop: (requestId) =>
+    set((state) => {
+      const drafts = { ...state.drafts }
+      delete drafts[requestId]
+      return {
+        queue: state.queue.filter((entry) => entry.requestId !== requestId),
+        drafts,
+      }
+    }),
+  setDraft: (requestId, draft) =>
+    set((state) => ({ drafts: { ...state.drafts, [requestId]: draft } })),
+  clear: () => ({ queue: [], drafts: {} }),
 }))
 
 // ---- composer -----------------------------------------------------------------

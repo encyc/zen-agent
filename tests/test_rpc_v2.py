@@ -211,6 +211,98 @@ async def test_approval_for_an_unknown_request_is_an_error(runtime_factory):
     assert decode(writes)[0]["type"] == "error"
 
 
+async def test_ask_round_trip_maps_labels_and_custom_text(runtime_factory):
+    _runtime, server, writes, _queue = await build(runtime_factory)
+    questions = [
+        {
+            "id": "db",
+            "question": "Which store?",
+            "options": [{"label": "SQLite"}, {"label": "Postgres"}],
+            "multi": False,
+            "recommended": "SQLite",
+        },
+        {
+            "id": "scope",
+            "question": "What scope?",
+            "options": [{"label": "Read"}, {"label": "Write"}],
+            "multi": True,
+        },
+    ]
+    task = asyncio.create_task(server.ask(questions))
+    while not any("ask_request" in message for message in writes):
+        await asyncio.sleep(0.01)
+    event = next(
+        json.loads(message)["event"]
+        for message in writes
+        if "ask_request" in message
+    )
+    assert event["questions"] == questions
+
+    await server._handle_line(
+        json.dumps(
+            {
+                "type": "ask",
+                "id": "a1",
+                "request_id": event["request_id"],
+                "answers": [["SQLite"], ["Write", "Audit log"]],
+            }
+        )
+    )
+
+    assert await task == [
+        {"id": "db", "selected": ["SQLite"]},
+        {"id": "scope", "selected": ["Write"], "custom": "Audit log"},
+    ]
+
+
+async def test_ask_decline_returns_no_answers(runtime_factory):
+    _runtime, server, writes, _queue = await build(runtime_factory)
+    questions = [
+        {
+            "id": "db",
+            "question": "Which store?",
+            "options": [{"label": "SQLite"}, {"label": "Postgres"}],
+            "multi": False,
+        }
+    ]
+    task = asyncio.create_task(server.ask(questions))
+    while not any("ask_request" in message for message in writes):
+        await asyncio.sleep(0.01)
+    request_id = next(
+        json.loads(message)["event"]["request_id"]
+        for message in writes
+        if "ask_request" in message
+    )
+
+    await server._handle_line(
+        json.dumps(
+            {
+                "type": "ask",
+                "id": "a1",
+                "request_id": request_id,
+                "answers": [None],
+            }
+        )
+    )
+
+    assert await task == []
+
+
+async def test_ask_for_an_unknown_request_is_an_error(runtime_factory):
+    _runtime, server, writes, _queue = await build(runtime_factory)
+    await server._handle_line(
+        json.dumps(
+            {
+                "type": "ask",
+                "id": "x",
+                "request_id": "missing",
+                "answers": [["A"]],
+            }
+        )
+    )
+    assert decode(writes)[0]["type"] == "error"
+
+
 async def test_session_current_list_and_new(runtime_factory):
     runtime, server, writes, queue = await build(runtime_factory)
     await run_lines(
@@ -779,6 +871,18 @@ async def test_shutdown_denies_pending_approvals(runtime_factory):
 
     assert future.done() is True
     assert future.result() == "deny"
+
+
+async def test_shutdown_dismisses_pending_asks(runtime_factory):
+    """An unanswered ask at EOF reads as dismissed, not a blocked run."""
+    _runtime, server, _writes, _queue = await build(runtime_factory)
+    future = asyncio.get_running_loop().create_future()
+    server._asks["q0"] = future
+
+    await server._shutdown()
+
+    assert future.done() is True
+    assert future.result() == []
 
 
 def test_serialize_event_carries_user_text_and_steering():

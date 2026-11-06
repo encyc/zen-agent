@@ -8,9 +8,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { listen } from '@tauri-apps/api/event'
 import { useAppStore } from '../../state/appStore'
-import { useApprovalStore, useComposerStore, useStatusStore, useCatalogStore } from '../../state/stores'
+import { useApprovalStore, useAskStore, useComposerStore, useStatusStore, useCatalogStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
 import { ApprovalPanel } from '../approval/ApprovalPanel'
+import { AskCard } from '../ask/AskCard'
 import { pickImagePaths } from './pickImages'
 import { TodoDock, PendingDock, ContextMeter } from './Docks'
 import { ModelMenu, ModeMenu } from './Menus'
@@ -41,6 +42,7 @@ export function InputBar() {
   const removeImage = useComposerStore((state) => state.removeImage)
   const commands = useCatalogStore((state) => state.commands)
   const approvalCount = useApprovalStore((state) => state.queue.length)
+  const askCount = useAskStore((state) => state.queue.length)
 
   const [menu, setMenu] = useState<MenuState>({ kind: null })
   const [slashIndex, setSlashIndex] = useState(0)
@@ -142,6 +144,7 @@ export function InputBar() {
   return (
     <div className={css.root}>
       {approvalCount > 0 && <ApprovalPanel />}
+      {askCount > 0 && <AskCard />}
       <PendingDock />
       <TodoDock />
       <div className={css.card} data-composer-plate>

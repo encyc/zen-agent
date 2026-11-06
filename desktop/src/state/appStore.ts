@@ -9,6 +9,7 @@ import { RpcClient } from '../rpc/client'
 import type { CompactionRecord, Mode, ServerFrame, StatusResult } from '../rpc/types'
 import {
   useApprovalStore,
+  useAskStore,
   useCatalogStore,
   useComposerStore,
   useNoticeStore,
@@ -63,6 +64,7 @@ interface AppState {
   steer(text: string): Promise<void>
   cancel(): Promise<void>
   approve(requestId: string, decision: 'allow' | 'always' | 'deny'): Promise<void>
+  resolveAsk(requestId: string, answers: (string[] | null)[]): Promise<void>
   runCommand(name: string, argument: string): Promise<void>
   setModel(modelId: string): Promise<void>
   setMode(mode: Mode): Promise<void>
@@ -114,6 +116,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ connection: 'starting', exitCode: null, stderrTail: [] })
     useChatStore.getState().reset()
     useApprovalStore.getState().clear()
+    useAskStore.getState().clear()
 
     if (!wired) {
       wired = true
@@ -298,6 +301,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       // ignore
     }
     useApprovalStore.getState().pop(requestId)
+    void get().refreshStatus()
+  },
+
+  async resolveAsk(requestId, answers) {
+    try {
+      await get().client().send({ type: 'ask', request_id: requestId, answers })
+    } catch {
+      // The card is dropped either way: the ask tool blocks the run, so a
+      // request that never reached the server has no second chance.
+    }
+    useAskStore.getState().pop(requestId)
     void get().refreshStatus()
   },
 
@@ -545,6 +559,17 @@ async function refreshAfterSessionChange(get: () => AppState): Promise<void> {
 function handleFrame(frame: ServerFrame, handling: FrameHandling): void {
   if (frame.type === 'event') {
     const event = frame.event
+    if (event.type === 'ask_request' && event.request_id) {
+      useAskStore.getState().push({
+        requestId: event.request_id,
+        questions: event.questions ?? [],
+      })
+      return
+    }
+    if (event.type === 'ask_cancel' && event.request_id) {
+      useAskStore.getState().pop(event.request_id)
+      return
+    }
     if (event.type === 'approval_request' && event.request_id) {
       useApprovalStore.getState().push({
         requestId: event.request_id,

@@ -270,6 +270,23 @@ export interface SubagentTranscriptResult {
   transcript: (MessageView | ToolCallView)[]
 }
 
+// ---- ask -------------------------------------------------------------------
+
+export interface AskOption {
+  label: string
+  description?: string
+}
+
+/** One `ask` tool question as validated by zenagent/tools/ask.py. */
+export interface AskQuestion {
+  id: string
+  question: string
+  header?: string
+  options: AskOption[]
+  multi: boolean
+  recommended?: string
+}
+
 // ---- event frames -----------------------------------------------------------
 
 /** assistant_event payloads inside message_update (provider deltas). */
@@ -313,6 +330,8 @@ export interface AgentEventFrame {
     | 'tool_execution_update'
     | 'tool_execution_end'
     | 'approval_request'
+    | 'ask_request'
+    | 'ask_cancel'
   message?: MessageProjection
   assistant_event?: AssistantEvent
   new_messages?: (MessageView | ToolCallView)[]
@@ -325,12 +344,13 @@ export interface AgentEventFrame {
   details?: string
   is_error?: boolean
   duration_ms?: number
-  // approval_request extras
+  // approval_request / ask_request extras
   request_id?: string
   kind?: 'confirm'
   risk?: string | null
   target?: string | null
   reason?: string | null
+  questions?: AskQuestion[]
 }
 
 export interface EventFrame {

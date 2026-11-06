@@ -181,6 +181,8 @@ function installBridge(state: BridgeState) {
             { name: 'read_file', description: 'Read a file', approval: 'read' },
           ],
         }
+      case 'ask':
+        return { type: 'result', id: payload.id, ok: true }
       case 'commands':
         return {
           type: 'result',
@@ -331,6 +333,16 @@ async function boot(page: Page, state: BridgeState) {
   await page.addInitScript(installBridge, state)
   await page.goto('/')
   await expect(page.locator('[data-topbar-title]')).toHaveText(state.title)
+}
+
+async function emitEvent(page: Page, event: Record<string, unknown>) {
+  await page.evaluate((payload) => {
+    window.__ZEN_E2E_EMIT__('rpc:frame', {
+      event: 'rpc:frame',
+      id: 1,
+      payload: { frame: { type: 'event', event: payload } },
+    })
+  }, event)
 }
 
 async function setPending(page: Page, items: PendingItemMock[]) {
@@ -490,6 +502,87 @@ test('an approval stacks above a still-mounted composer', async ({ page }) => {
           call.decision === 'deny',
       ),
     ),
+  )
+})
+
+test('the ask card collects answers and resolves the blocked tool call', async ({ page }) => {
+  await boot(
+    page,
+    initialState({
+      transcript: [
+        { kind: 'user', id: 'u1', text: '帮我选一个数据库', timestamp: 1 },
+      ],
+    }),
+  )
+  await emitEvent(page, {
+    type: 'ask_request',
+    request_id: 'q0',
+    questions: [
+      {
+        id: 'db',
+        question: '用哪个数据库？',
+        header: '数据库',
+        options: [
+          { label: 'SQLite', description: '单文件，零配置' },
+          { label: 'Postgres' },
+        ],
+        multi: false,
+        recommended: 'SQLite',
+      },
+      {
+        id: 'scope',
+        question: '需要哪些能力？',
+        options: [{ label: '读' }, { label: '写' }],
+        multi: true,
+      },
+    ],
+  })
+
+  const card = page.getByTestId('ask-card')
+  await expect(card).toBeVisible()
+  await expect(card).toContainText('1/2')
+  await expect(card).toContainText('推荐')
+  await expect(page.locator('[data-composer-plate] textarea')).toBeVisible()
+
+  await card.getByRole('radio', { name: /SQLite/ }).click()
+  await card.getByRole('button', { name: '下一步' }).click()
+
+  await expect(card).toContainText('2/2')
+  await card.getByRole('checkbox', { name: '读', exact: true }).click()
+  await card.getByRole('checkbox', { name: '写', exact: true }).click()
+  await card.getByRole('checkbox', { name: '其他（自己填写）' }).click()
+  await card.getByPlaceholder('输入你的答案…').fill('审计日志')
+  await card.getByRole('button', { name: '提交' }).click()
+
+  await expect(card).toHaveCount(0)
+  const ask = await page.evaluate(() =>
+    window.__ZEN_E2E__.calls.find((call) => call.type === 'ask'),
+  )
+  assert.equal(ask?.request_id, 'q0')
+  assert.deepEqual(ask?.answers, [['SQLite'], ['读', '写', '审计日志']])
+
+  await emitEvent(page, {
+    type: 'ask_request',
+    request_id: 'q1',
+    questions: [
+      {
+        id: 'continue',
+        question: '继续吗？',
+        options: [{ label: '继续' }, { label: '停止' }],
+        multi: false,
+      },
+    ],
+  })
+  await expect(card).toBeVisible()
+  await card.getByRole('button', { name: '不回答' }).click()
+  await expect(card).toHaveCount(0)
+  assert.deepEqual(
+    await page.evaluate(() =>
+      window.__ZEN_E2E__.calls.find(
+        (call) => call.type === 'ask' && call.request_id === 'q1',
+      )?.answers,
+    ),
+    [null],
   )
 })
 
