@@ -12,6 +12,7 @@ successful assistant message), so retrying cannot replay side effects.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import AsyncIterator, Awaitable, Callable
 
 from zenagent.events import AssistantEvent
@@ -125,10 +126,9 @@ async def stream_with_retry(
         attempt += 1
         delay = base_delay * (2 ** (attempt - 1))
         if on_retry is not None:
-            try:
+            # An observer must not kill the retry (BLE001/S110 by design).
+            with contextlib.suppress(Exception):
                 on_retry(terminal.partial, attempt, retries, delay)
-            except Exception:  # noqa: BLE001 - an observer must not kill the retry
-                pass
         await sleep(delay)
         if abort is not None and abort.aborted:
             # Cancelled while backing off: surface the failure, do not retry.

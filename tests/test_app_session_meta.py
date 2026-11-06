@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 from conftest import text_stream
+
 from zenagent.agent.session import Session
 from zenagent.app.session_meta import (
     SessionMetaRecorder,
@@ -21,7 +22,6 @@ from zenagent.types import (
     Usage,
     UserMessage,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fakes and helpers

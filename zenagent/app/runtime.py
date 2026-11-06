@@ -7,6 +7,7 @@ Nothing in this module imports a UI library or the CLI package.
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -20,11 +21,6 @@ from zenagent.agent.session import Session, latest_session, unique_session_path
 from zenagent.agent.subagents import SubagentLimits
 from zenagent.app.journal import attach_journal, journal_for, load_backup_policy
 from zenagent.app.metrics import MetricsSession
-from zenagent.app.session_meta import (
-    SessionMetaRecorder,
-    make_retry_recorder,
-    mode_record,
-)
 from zenagent.app.modes import (
     DEFAULT_MODE,
     mode_prompt_note,
@@ -34,6 +30,11 @@ from zenagent.app.modes import (
 from zenagent.app.permissions import PermissionGate, build_permission_gate
 from zenagent.app.rewind import RewindState, build_checkpoint_tools
 from zenagent.app.safety import GuardPolicy
+from zenagent.app.session_meta import (
+    SessionMetaRecorder,
+    make_retry_recorder,
+    mode_record,
+)
 from zenagent.app.support import (
     api_key_for,
     resolve_model,
@@ -500,10 +501,8 @@ class Runtime:
 
     def _touch_project(self) -> None:
         """Record the project root/last_used; never fail a run over metadata."""
-        try:
+        with contextlib.suppress(OSError):
             project.write_project_meta()
-        except OSError:
-            pass
 
     def _note_session_scope(self, path: Path) -> None:
         """Warn when a resumed session belongs to another project (or legacy).
