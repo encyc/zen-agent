@@ -917,3 +917,48 @@ async def test_compact_now_sources_the_divider_and_persists_tokens(runtime_facto
     record = next(item for item in session.records if item["type"] == "compaction")
     assert record["reason"] == "manual"
     assert record["tokensBefore"] == 500
+
+
+async def test_retry_hydrates_surviving_cards_from_records(runtime_factory):
+    from zenagent.types import ToolCall, ToolResultMessage
+
+    runtime = await runtime_factory()
+    messages = [
+        UserMessage(content="go", timestamp=1),
+        AssistantMessage(
+            content=[ToolCall(id="c1", name="bash", arguments={})],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="tool_use",
+            timestamp=2,
+        ),
+        ToolResultMessage(
+            tool_call_id="c1",
+            tool_name="bash",
+            content=[TextContent(text="ok")],
+            is_error=False,
+            timestamp=3,
+        ),
+        UserMessage(content="again", timestamp=4),
+    ]
+    runtime.agent.replace_messages(messages)
+    for message in messages:
+        runtime.session.append(message)
+    runtime.session.append_meta(
+        {
+            "type": "tool_end",
+            "call_id": "c1",
+            "duration_ms": 9,
+            "details": {"diff": "+x"},
+        }
+    )
+    chat = ChatController(runtime)
+    chat.reload_transcript()
+    assert chat._builder.cards["c1"].duration_ms == 9
+
+    chat.retry()
+    await chat.wait_for_idle()
+
+    assert chat._builder.cards["c1"].duration_ms == 9
+    assert chat._builder.cards["c1"].diff == "+x"

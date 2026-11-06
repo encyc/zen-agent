@@ -383,6 +383,9 @@ class Session:
             if self.derived_from:
                 record["derivedFrom"] = self.derived_from
             self._write_line(record)
+            if self._messages is not None:
+                self.records.append(record)
+                self.header = record
         except OSError:
             self._header_ensured = False  # retry on the next append
             raise
@@ -405,6 +408,10 @@ class Session:
             self._ensure_header()
             payload = {"timestamp": int(time.time()), **record}
             self._write_line(payload)
+            if self._messages is not None:
+                # Keep the loaded cache truthful for live readers (RPC snapshot,
+                # carry_records); a never-loaded session re-reads from disk.
+                self.records.append(payload)
         except OSError:
             return
 

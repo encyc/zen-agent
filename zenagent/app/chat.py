@@ -483,7 +483,8 @@ class ChatController:
         if todo_tool is not None:
             todo_tool.bind_session(new_session.path)
         self._todos = load_todo_phases(self._session_path())
-        self._builder.load(self.runtime.agent.messages)
+        new_session.ensure_loaded()
+        self._builder.load(self.runtime.agent.messages, list(new_session.records))
         self._subagents.clear_transcripts()
         self._task = asyncio.create_task(self._run(text))
         self._notify()

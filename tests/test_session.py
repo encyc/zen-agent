@@ -851,3 +851,16 @@ def test_read_info_falls_back_to_mtime_without_a_header(isolated_sessions):
     assert info.created_at == info.mtime
     assert info.model == ""
     assert info.derived_from == ""
+
+
+def test_carry_records_sees_records_appended_after_load(isolated_sessions):
+    source = Session(isolated_sessions / "s.jsonl")
+    messages = [user("go"), assistant_call("c1")]
+    for message in messages:
+        source.append(message)
+    source.load()
+    source.append_meta({"type": "tool_end", "call_id": "c1", "duration_ms": 5})
+
+    carried = source.carry_records(messages)
+
+    assert [record["type"] for record in carried] == ["tool_end"]
