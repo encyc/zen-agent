@@ -1,0 +1,91 @@
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0;
+}
+
+.dividerLine {
+  flex: 1;
+  height: 1px;
+  background: var(--dsw-alias-border-l2);
+}
+
+.dividerText {
+  flex: none;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--dsw-alias-label-caption);
+}
+
+.infoRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 8px;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* ---- command card ---------------------------------------------------------- */
+
+.commandCard {
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-interactive-bg-hover);
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.commandHead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.commandGlyph {
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.commandName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+.commandArg {
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+  overflow-wrap: anywhere;
+}
+
+.commandMessage {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+  white-space: pre-wrap;
+}
+
+/* ---- usage row --------------------------------------------------------------- */
+
+.usageRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-caption);
+}
+
+.usageLabel {
+  font-weight: 600;
+}
+
+.usageParts {
+  font-family: var(--ds-font-family-code);
+}

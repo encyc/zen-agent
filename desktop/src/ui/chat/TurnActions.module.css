@@ -1,0 +1,46 @@
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 24px;
+  padding-top: 2px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.actions[data-align='end'] {
+  justify-content: flex-end;
+}
+
+:global([data-turn-row]:hover) .actions,
+:global([data-turn-row]:focus-within) .actions,
+.actions:focus-within {
+  opacity: 1;
+}
+
+.action {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: none;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.action:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.action:active {
+  transform: scale(0.96);
+}
+
+.action:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 1px;
+}

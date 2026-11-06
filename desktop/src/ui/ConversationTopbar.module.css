@@ -1,0 +1,178 @@
+.root {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: var(--ds-toolbar-height);
+  /* Reserves the fixed work-panel toggle's seat so it never covers the
+     actions; the collapsed sidebar keeps the traffic-light inset. */
+  padding: 0 36px 0 12px;
+  flex: none;
+  z-index: 5;
+  --ct-lead-inset: 12px;
+  transition: padding-left var(--ds-transition-duration) var(--ds-ease-in-out);
+}
+
+html[data-platform='darwin'] .root {
+  --ct-lead-inset: 88px;
+}
+
+/* The expanded sidebar owns the traffic lights and its own collapse control;
+   the conversation bar only reserves the seat once the dock is gone. */
+.root[data-collapsed] {
+  padding-left: calc(var(--ct-lead-inset) + 36px);
+}
+
+.left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Out of flow so the title lane keeps one offset at every animation frame;
+   only the button's own opacity and left edge move with the sidebar. */
+.lead {
+  position: absolute;
+  left: calc(var(--ct-lead-inset) - 36px);
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    left var(--ds-transition-duration-fast) var(--ds-ease-in-out),
+    opacity var(--ds-transition-duration-fast) var(--ds-ease-in-out);
+}
+
+.root[data-collapsed] .lead {
+  left: var(--ct-lead-inset);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.titleWrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.project {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 auto;
+  min-width: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--ds-font-11);
+  line-height: var(--ds-font-11-5);
+  white-space: nowrap;
+}
+
+.project > svg {
+  flex: 0 0 auto;
+}
+
+.projectName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sep {
+  flex: 0 0 auto;
+  color: var(--dsw-alias-border-l3);
+  font-size: var(--ds-font-11);
+  line-height: var(--ds-font-11-5);
+}
+
+.titleHeading {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--ds-font-13);
+  font-weight: 500;
+  line-height: var(--ds-font-13-5);
+}
+
+/* Click-to-edit: paints and measures exactly like the plain title so the
+   ellipsis stays on the text and nothing shifts when editing starts. */
+.titleButton {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
+}
+
+/* The title lane clips its children, so a ring would vanish; underline instead. */
+.titleButton:focus-visible {
+  outline: none;
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--dsw-alias-state-business-primary);
+}
+
+.titleInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  appearance: none;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-family: inherit;
+  font-size: var(--ds-font-13);
+  font-weight: 500;
+  line-height: var(--ds-font-13-5);
+}
+
+.right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+}
+
+.button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--ds-radius-6);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.button:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}

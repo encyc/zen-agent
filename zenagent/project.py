@@ -41,6 +41,7 @@ __all__ = [
     "project_key",
     "project_key_for_session",
     "project_mcp_path",
+    "project_root_for_sessions_dir",
     "project_sessions_dir",
     "projects_root",
     "write_project_meta",
@@ -133,11 +134,8 @@ def _meta_path(root: Path | str | None = None, cwd: Path | str | None = None) ->
     return project_dir(cwd, root=root) / "meta.json"
 
 
-def load_project_meta(
-    cwd: Path | str | None = None, *, root: Path | str | None = None
-) -> ProjectMeta | None:
-    """Read ``meta.json``; missing/corrupt metadata means "unknown"."""
-    target = _meta_path(root=root, cwd=cwd)
+def _read_meta(target: Path) -> ProjectMeta | None:
+    """Parse one ``meta.json``; missing/corrupt metadata means "unknown"."""
     try:
         data = json.loads(target.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -153,6 +151,23 @@ def load_project_meta(
         name=name_value if isinstance(name_value, str) else Path(root_value).name,
         last_used=str(data.get("last_used") or ""),
     )
+
+
+def load_project_meta(
+    cwd: Path | str | None = None, *, root: Path | str | None = None
+) -> ProjectMeta | None:
+    """Read ``meta.json``; missing/corrupt metadata means "unknown"."""
+    return _read_meta(_meta_path(root=root, cwd=cwd))
+
+
+def project_root_for_sessions_dir(session_dir: Path | str) -> str:
+    """Canonical root recorded beside a sessions directory (``""`` when unknown).
+
+    ``meta.json`` sits in the project state directory, next to ``sessions/``;
+    the legacy flat directory has none, which reads as "root not recorded".
+    """
+    meta = _read_meta(Path(session_dir).parent / "meta.json")
+    return meta.root if meta is not None else ""
 
 
 def write_project_meta(

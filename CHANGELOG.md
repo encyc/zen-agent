@@ -169,6 +169,134 @@ frontends already had, and headless `-p` stops assembling a second-class agent.*
   release tag into CI red — the 0.7.9 CI failures were exactly this gap
   (lint errors shipped in the tagged tree while the publish gate passed).
 
+## v0.8.0 — 2026-11-06
+
+**Frontend alignment: RPC and the REPL stop dropping capabilities the other
+frontends already had, and headless `-p` stops assembling a second-class agent.**
+
+### Fixed
+
+- **Clicking the transcript while it streams no longer kills the TUI.** With
+  `ALLOW_SELECT` on, a MouseDown/MouseMove that landed on a Markdown block
+  during a rebuild died in Textual's `Screen._forward_event`
+  (`AttributeError: 'NoneType' object has no attribute 'region'`) and took the
+  app down. `Markdown.update` removes every block before mounting the
+  replacements inside one `batch_update`, so the compositor keeps answering hit
+  tests with the removed `MarkdownParagraph` (its `parent` is already `None`)
+  for one event-loop turn. `ZenAgentApp.on_event` now drops pointer events whose
+  target is detached — there is nothing to click — and `test_tui_selection.py`
+  pins the window.
+- **Streaming answers append instead of rebuilding the document.** Every text
+  delta called `Markdown.update`, which re-parsed the whole answer (in an
+  executor) and re-mounted every block: O(document) per delta, and the window
+  the crash above lives in. The transcript's assistant widget is now a
+  `StreamingMarkdown` (`zenagent/cli/tui/widgets/markdown_stream.py`) that uses
+  Textual's incremental `Markdown.append`: only the uncommitted tail is parsed
+  and the last block is updated in place, so the paragraph (and an open code
+  fence) the user is looking at keeps its widget. One pump renders the newest
+  text, so a burst of deltas collapses into one append, and a canonical rewrite
+  (retry, session switch, provider-corrected text) falls back to a full update.
+  Text that arrives before the widget finished mounting waits for the mount
+  instead of being dropped, `tests/test_tui_markdown_stream.py` pins the append,
+  the rewrite, the coalescing, a streamed fence and the pre-mount case.
+- **RPC starts without `--mode`.** `zen rpc` (the documented invocation) used to
+  crash at startup with `unknown mode: None`; the mode is now resolved like the
+  other frontends (`--mode`, then `--read-only`→plan, then `--yes`→zen),
+  `[tools]`/`[safety]` and the guard flags reach the permission gate, and
+  `--mode`/`--thinking` are argparse choices (invalid values exit 2 instead of
+  tracebacking).
+- **RPC reports turn failures.** `prompt` results were always `ok:true`; a
+  provider failure now returns `ok:false` plus the `error` text, and `text`
+  falls back to the final assistant message when a provider publishes no
+  deltas.
+- **REPL honours the budget flags.** `--max-turns`/`--max-cost`/`--retries` were
+  accepted by argparse and dropped in the REPL branch; they are now forwarded
+  to `RuntimeOptions` like the TUI's. A failed turn also prints the provider
+  error and any drained `ChatController` notices instead of ending on a
+  neutral status line.
+- **Headless `-p` matches the Runtime fronts.** Project `memory`/`memory_write`
+  tools and the `## Project memory` prompt block, `ToolRegistry`
+  `hidden`/`default_inactive` filtering, and the run's `finally` now releases
+  cached LSP clients and background bash jobs (previously left to process exit).
+- **`-p` and `--list-sessions` no longer silently ignore each other**: the
+  combination is rejected with exit 1 instead of printing the session list and
+  dropping the prompt.
+- **A typo'd `--image` path fails before assembly.** The one-shot run used to
+  check it after the Runtime was built, so the refused run left an empty session
+  file behind for `--list-sessions` to render as `(empty)`. Content and vision
+  checks still need the model, so they stay where they were.
+- **`zen evals` no longer ImportErrors.** `scripts/eval.py` imported
+  `_api_key_for`/`session_id_for` from the CLI module that the assembly
+  delegation emptied; it reads them from `zenagent.app.support` now, which is
+  where the Runtime reads them too.
+
+### Added
+
+- **RPC event and status richness.** Events carry bounded `message`/
+  `new_messages` projections, tool `details` and the assistant `error`; `status`
+  carries the TUI's reducer fields (thinking, context used/window, cache hit
+  ratio, todos, pending lanes, jobs, subagents, subagent spend and tokens);
+  `command` results carry `target` and `/lang` applies server-side.
+- **RPC images and runtime flags.** `prompt` accepts `images: [path, ...]`
+  (vision-checked, same loader as `--image`); `--no-templates`,
+  `--no-auto-compact` and `--extension` are plumbed into `RuntimeOptions` like
+  the other frontends.
+- **RPC snapshot verbs for embedders.** `transcript`, `models` and `commands`
+  return what the TUI reads in-process: the reducer's view models plus the
+  pending notices (the baseline a GUI applies live events on after a resume or
+  a session switch), the catalog behind the model picker, and the slash-command
+  catalog with descriptions. Purely additive to the v1 message shape;
+  `ChatController.notices_snapshot` exposes the queue without draining it.
+- **Session side-channel records.** Session files gain dsh-style auxiliary
+  records between the message lines (top-level objects with a `type` and no
+  `role`): a `session` header on every new file (id/createdAt/cwd/app
+  version, `derivedFrom` for fork/undo/compact/shake copies), `run_start`/
+  `run_end` per run (termination reason, request count, duration, terminal
+  error detail — previously an aborted run just stopped mid-file), `retry`
+  records for transient provider failures that message-level retry swallowed
+  invisibly, and `mode` records for bootstrap mode and `/mode` switches.
+  `Session.load` collects them into `records`/`header` without warnings;
+  export/usage/listing consumers are untouched, and record writes are
+  best-effort (`append_meta` swallows I/O errors) so observability can never
+  kill a run.
+- **Session files reconstruct the GUI, not just the conversation.** View snapshots
+  now carry stable `v{n}` ids and the assistant's stored timestamp/model/provider/
+  usage/duration; `tool_end` records keep tool durations and bounded details
+  (including diffs) across resume and rewrite/fork/undo; `compaction` records
+  expose a single divider through `transcript.compactions`; user messages
+  delivered by steering carry `"steering": true`; and `session list` reports
+  `created_at`, `updated_at`, `model` and `derived_from`.
+
+### Changed
+
+- **Headless `-p` is assembled by the Runtime.** `run_headless` no longer builds
+  its own agent: it validates the image paths, constructs `RuntimeOptions` and
+  calls `Runtime.bootstrap`, keeping only the output contract (`-p` text,
+  `--json`, auto-compaction, exit code) and a guarded `runtime.close()`. The
+  parallel `_build_agent` path (~330 lines) is gone, so session side-channel
+  records, journal/backups, the job-manager refcount, `hidden`/
+  `default_inactive` tool filtering and the guard policy now come from the same
+  assembly as the TUI/REPL/RPC. The ~40 tests that pinned `_build_agent` moved
+  to a pass-through `cli_main._bootstrap` seam, so they still assert against the
+  real Runtime; `tests/test_headless_parity.py` pins the option set the `-p`
+  front is allowed to differ in.
+- **The test gate is deterministic.** `tests/test_tools_github.py`'s fake `gh`
+  now uses `sys.executable` instead of a bare `python` (absent on machines with
+  only `python3`), and a committed RUF059 in `tests/test_repl_logic.py` no
+  longer fails `scripts/check.sh` at `HEAD`.
+- **Review dispatch contract (prompt version 2026-11-05.1).** `tool.task` and
+  the tool policy now tell the parent to hand reviewers the implementer's
+  test results and never let a review run suites itself, and to split diffs
+  over ~600 lines into per-file-group reviews whose findings the parent
+  merges. Evidence: a reviewer faithfully running `cargo test` + `vitest`
+  per the old template was cut by the 900s watchdog at 1.9M tokens; the same
+  review without test runs finished. Verified-by-reading stays the
+  reviewer's job; verified-by-running belongs to the implementer and the
+  parent's join gate. Prompt goldens regenerated; no runtime behavior change.
+- **`release-check.sh` gates ruff.** Style errors can no longer ride a
+  release tag into CI red — the 0.7.9 CI failures were exactly this gap
+  (lint errors shipped in the tagged tree while the publish gate passed).
+
 ## v0.7.9 — 2026-11-04
 
 **Subagents go async: parallel background children with a worker contract.**

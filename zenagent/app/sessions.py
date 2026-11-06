@@ -113,6 +113,7 @@ class SessionEntry:
     current: bool = False
     title: str = ""
     project: str = ""
+    project_path: str = ""
     pinned: bool = False
 
 
@@ -142,6 +143,7 @@ class SessionManager:
         current = self.current()
         entries: list[SessionEntry] = []
         pins_by_dir: dict[Path, set[str]] = {}
+        roots_by_dir: dict[Path, str] = {}
         for info in list_sessions(limit=100, scope=scope):
             try:
                 size = info.path.stat().st_size
@@ -150,6 +152,9 @@ class SessionManager:
             directory = info.path.parent
             if directory not in pins_by_dir:
                 pins_by_dir[directory] = read_session_pins(directory)
+                roots_by_dir[directory] = project.project_root_for_sessions_dir(
+                    directory
+                )
             entries.append(
                 SessionEntry(
                     path=info.path,
@@ -162,6 +167,7 @@ class SessionManager:
                     current=info.path == current,
                     title=info.title,
                     project=info.project,
+                    project_path=roots_by_dir[directory],
                     pinned=info.path.name in pins_by_dir[directory],
                 )
             )

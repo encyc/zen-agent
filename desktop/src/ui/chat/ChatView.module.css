@@ -1,0 +1,100 @@
+.root {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  overflow-anchor: none;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 calc(100% - var(--composer-dock-height, 168px) - 16px),
+    transparent calc(100% - var(--composer-dock-height, 168px) + 2px)
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    #000 calc(100% - var(--composer-dock-height, 168px) - 16px),
+    transparent calc(100% - var(--composer-dock-height, 168px) + 2px)
+  );
+}
+
+.flow {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, var(--ds-chat-content-width));
+  margin: 0 auto;
+  padding: 20px 32px calc(var(--composer-dock-height, 168px) + 16px);
+  transition: width var(--ds-transition-duration) var(--ds-ease-in-out);
+}
+
+.flow > * {
+  padding-block: 12px;
+}
+
+:global(html[data-chat-resizing]) .flow {
+  transition: none;
+}
+
+.jump {
+  position: absolute;
+  right: 24px;
+  bottom: calc(var(--composer-dock-height, 168px) + 12px);
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 999px;
+  background: var(--dsw-alias-button-floating-fill);
+  box-shadow: var(--dsw-elevation-panel);
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.jump:hover {
+  background: var(--dsw-alias-button-floating-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.runningRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.runningDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--dsw-alias-state-business-primary);
+  animation: dot-pulse 1s ease-in-out infinite alternate;
+}
+
+@keyframes dot-pulse {
+  from { opacity: 0.35; }
+  to { opacity: 1; }
+}
+
+.runningLabel {
+  font-weight: 500;
+}
+
+/* Empty transcript: the hero centers in the space above the docked composer. */
+.emptyHost {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: 24px 24px 160px;
+}

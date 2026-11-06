@@ -246,10 +246,14 @@ async def test_entries_all_view_labels_each_project(
 
     entries = manager.entries(scope="all")
     labels = {entry.path.name: entry.project for entry in entries}
+    roots = {entry.path.name: entry.project_path for entry in entries}
 
     assert labels[other_session.name] == "beta"
     assert labels[legacy_session.name] == ""
     assert labels[current.name] == "alpha"
+    assert roots[other_session.name] == str(other.resolve())
+    assert roots[current.name] == str((tmp_path / "alpha").resolve())
+    assert roots[legacy_session.name] == ""
 
 
 async def test_pinned_sessions_sort_first(session_runtime):

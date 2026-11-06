@@ -15,6 +15,7 @@ import asyncio
 import inspect
 from pathlib import Path
 
+from textual import events
 from textual.app import App
 from textual.containers import Horizontal, Vertical
 
@@ -91,9 +92,11 @@ class ZenAgentApp(
     # Drag-to-select is on: it is the one mouse path an alt-buffer app cannot
     # inherit from the terminal the way omp does (omp's committed lines live in
     # the terminal's own scrollback). It was switched off after a Textual 8.2
-    # Screen._forward_event crash on Markdown blocks; that crash no longer
-    # reproduces on the pinned 8.2.8 (tests/test_tui_selection.py pins the
-    # drag, the ctrl+c split and a drag during streaming).
+    # Screen._forward_event crash on Markdown blocks; the crash is still in
+    # 8.2.8 (``container.region`` on a block that ``Markdown.update`` has
+    # already removed), so ``on_event`` drops pointer events whose target is
+    # detached. tests/test_tui_selection.py pins that plus the drag, the ctrl+c
+    # split and a drag during streaming.
     ALLOW_SELECT = True
     # omp's chord set (``docs/research/omp-cli-study/01-interaction-hierarchy.md``):
     # Esc interrupts, ctrl+c clears the draft, ctrl+d exits, ctrl+q queues.
@@ -290,7 +293,25 @@ class ZenAgentApp(
         self.exit()
 
     async def on_event(self, event) -> None:
+        # A pointer event can land on a widget that is already being torn down:
+        # Markdown.update removes every block and mounts the replacements inside
+        # one batch_update, so until that batch ends a hit test still answers
+        # with the removed MarkdownParagraph. Textual's selection path then
+        # reads container.region off paragraph.parent (None); the AttributeError
+        # escapes on_event and kills the app mid-stream. A detached target has
+        # nothing to click, so drop the event rather than forward it.
+        if self._pointer_target_is_detached(event):
+            return
         await super().on_event(event)
+
+    def _pointer_target_is_detached(self, event) -> bool:
+        """True for a pointer event whose compositor target has no parent."""
+        if not self.ALLOW_SELECT or not isinstance(
+            event, (events.MouseDown, events.MouseMove)
+        ):
+            return False
+        widget, _ = self.screen.get_widget_and_offset_at(event.x, event.y)
+        return widget is not None and widget.parent is None
 
     # -- pointer ------------------------------------------------------------
     #

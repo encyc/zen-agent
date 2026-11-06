@@ -1,0 +1,119 @@
+/** Three-column shell (dsh AppFrame equivalent): sidebar | center | rightbar
+ * with pointer-capture drag handles and the same column solve. The center
+ * holds the conversation; the right column is a track the status panel asks
+ * for. */
+
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  CENTER_MIN,
+  SIDEBAR_DEFAULT,
+  SIDEBAR_MIN,
+  computeColumns,
+  sidebarMax,
+} from './columns'
+import css from './AppFrame.module.css'
+
+interface AppFrameProps {
+  sidebarOpen: boolean
+  sidebarWidth: number
+  onSidebarWidth(width: number): void
+  onSidebarToggle(): void
+  rightbarOpen: boolean
+  rightbarWidth: number
+  sidebar: ReactNode
+  rightbar: ReactNode
+  children: ReactNode
+}
+
+export function AppFrame(props: AppFrameProps) {
+  const frameRef = useRef<HTMLDivElement | null>(null)
+  const [viewport, setViewport] = useState(() => window.innerWidth)
+
+  useEffect(() => {
+    let raf: number | null = null
+    const observer = new ResizeObserver(() => {
+      raf ??= requestAnimationFrame(() => {
+        raf = null
+        setViewport(frameRef.current?.getBoundingClientRect().width ?? window.innerWidth)
+      })
+    })
+    if (frameRef.current) observer.observe(frameRef.current)
+    return () => observer.disconnect()
+  }, [])
+
+  const sidebarCollapsed = props.sidebarOpen === false
+  const sidebarPreference = sidebarCollapsed ? 0 : props.sidebarWidth || SIDEBAR_DEFAULT
+  const rightbarPreference = props.rightbarOpen ? props.rightbarWidth || 380 : 0
+  const cols = computeColumns(viewport, sidebarPreference, rightbarPreference)
+
+  // Drag handles: pointer capture + rAF throttled deltas, frozen base.
+  const [dragging, setDragging] = useState(false)
+  const sidebarBase = useRef(0)
+  const frame = useRef<number | null>(null)
+
+  const endDrag = useCallback(() => {
+    if (frame.current !== null) {
+      cancelAnimationFrame(frame.current)
+      frame.current = null
+    }
+    setDragging(false)
+  }, [])
+
+  const sidebarDrag = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>, start: boolean) => {
+      if (start) {
+        sidebarBase.current = cols.sidebar
+        setDragging(true)
+        return
+      }
+      const dx = event.clientX - sidebarBase.current
+      if (frame.current !== null) cancelAnimationFrame(frame.current)
+      frame.current = requestAnimationFrame(() => {
+        frame.current = null
+        props.onSidebarWidth(
+          Math.min(sidebarMax(viewport), Math.max(SIDEBAR_MIN, sidebarBase.current + dx)),
+        )
+      })
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cols.sidebar, props.onSidebarWidth, viewport],
+  )
+
+  return (
+    <div
+      ref={frameRef}
+      className={css.frame}
+      style={{
+        gridTemplateColumns: `${cols.sidebar}px minmax(${cols.rightbar === 0 ? 0 : CENTER_MIN}px, 1fr) minmax(0px, ${
+          cols.rightbar === 0 ? 0 : cols.rightbar
+        }px)`,
+      }}
+      data-sidebar-collapsed={sidebarCollapsed || undefined}
+      data-dragging={dragging || undefined}
+    >
+      <div className={css.sidebarCol}>{props.sidebar}</div>
+      <div className={css.centerCol} data-shell-center>
+        {props.children}
+      </div>
+      {cols.rightbar > 0 && <div className={css.rightbarCol}>{props.rightbar}</div>}
+      {!sidebarCollapsed && (
+        <div
+          className={css.handle}
+          data-side="sidebar"
+          style={{ left: cols.sidebar }}
+          onPointerDown={(event) => {
+            if (event.button !== 0) return
+            event.preventDefault()
+            event.currentTarget.setPointerCapture(event.pointerId)
+            sidebarDrag(event, true)
+          }}
+          onPointerMove={(event) => {
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) sidebarDrag(event, false)
+          }}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+        />
+      )}
+    </div>
+  )
+}

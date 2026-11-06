@@ -1,0 +1,228 @@
+.root {
+  min-width: 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 24px;
+  padding: 2px 8px;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12.5px;
+  line-height: 18px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.row:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.chevron {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 10px;
+  color: var(--dsw-alias-label-caption);
+  transition: transform 120ms ease;
+}
+
+.root[data-state='running'] .chevron {
+  visibility: hidden;
+}
+
+.root[data-open] {}
+
+.row[aria-expanded='true'] .chevron {
+  transform: rotate(90deg);
+}
+
+.leading {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.root[data-state='error'] .leading {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.title {
+  flex: none;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+}
+
+.summary {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--ds-font-family-code);
+  font-size: 11.5px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.root[data-state='error'] .summary {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.suffix {
+  flex: none;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--dsw-alias-label-caption);
+}
+
+.diffStat .added {
+  color: var(--dsw-alias-file-diff-added-marker);
+}
+
+.diffStat .removed {
+  color: var(--dsw-alias-file-diff-deleted-marker);
+}
+
+.okCue {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  font-size: 11px;
+  color: var(--dsw-alias-label-caption);
+}
+
+.interruptedCue {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  font-size: 11px;
+  color: var(--dsw-alias-label-caption);
+}
+
+.root[data-state='interrupted'] .leading {
+  opacity: 0.55;
+}
+
+.errorCue {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* ---- body ----------------------------------------------------------------- */
+
+.bodyWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 2px 0 6px 25px;
+  min-width: 0;
+}
+
+.diffWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.blockHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 18px;
+}
+
+.diffBlock {
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-markdown-code-block);
+  border: 1px solid var(--dsw-alias-border-l1);
+  padding: 6px 0;
+  max-height: 420px;
+  overflow: auto;
+  font: var(--dsw-font-markdown-code-block);
+  line-height: 16px;
+}
+
+.diffLine {
+  display: flex;
+  padding: 0 10px;
+  white-space: pre;
+}
+
+.diffLine[data-kind='add'] {
+  background: var(--dsw-alias-code-diff-added);
+  color: var(--dsw-alias-file-diff-added-marker);
+}
+
+.diffLine[data-kind='del'] {
+  background: var(--dsw-alias-code-diff-deleted);
+  color: var(--dsw-alias-file-diff-deleted-marker);
+}
+
+.diffLine[data-kind='meta'] {
+  color: var(--dsw-alias-label-caption);
+}
+
+.diffMarker {
+  flex: none;
+  width: 14px;
+  user-select: none;
+}
+
+.diffText {
+  flex: 1;
+  min-width: 0;
+}
+
+.ioCard {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-markdown-code-block);
+  border: 1px solid var(--dsw-alias-border-l1);
+  padding: 8px 12px;
+  gap: 8px;
+}
+
+.ioSection {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ioLabel {
+  font-size: 10.5px;
+  line-height: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--dsw-alias-label-caption);
+}
+
+.ioText {
+  margin: 0;
+  font: var(--dsw-font-markdown-code-block-small);
+  line-height: 16px;
+  color: var(--dsw-alias-label-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.ioText[data-error] {
+  color: var(--dsw-alias-state-error-primary);
+}
