@@ -1,5 +1,11 @@
 {
   "bundle": {
-    "externalBin": ["binaries/zen"]
+    "externalBin": [
+      "binaries/zen"
+    ],
+    "macOS": {
+      "signingIdentity": "-",
+      "hardenedRuntime": false
+    }
   }
 }

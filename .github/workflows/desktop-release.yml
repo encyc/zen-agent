@@ -126,6 +126,17 @@ jobs:
             --config=src-tauri/tauri.release.conf.json
             ${{ steps.signer.outputs.extra }}
 
+      # Gatekeeper rejected 0.8.3 as "damaged": the bundle carried no signature
+      # of its own, and a hardened runtime refused to dlopen the Python library
+      # the frozen sidecar unpacks. Prove both here, on every macOS leg.
+      - name: Verify the macOS bundle
+        if: startsWith(matrix.os, 'macos')
+        shell: bash
+        run: |
+          app="desktop/src-tauri/target/${{ matrix.target }}/release/bundle/macos/ZenAgent.app"
+          codesign --verify --deep --strict "$app"
+          "$app/Contents/MacOS/zen" --version
+
       # One fragment per leg; the `latest` job merges them. Letting six parallel
       # legs each write latest.json loses platforms to the last writer.
       - name: Write the updater fragment
@@ -137,13 +148,13 @@ jobs:
             --tag "${GITHUB_REF_NAME}" \
             --bundle-dir "desktop/src-tauri/target/${{ matrix.target }}/release/bundle" \
             --repo "${GITHUB_REPOSITORY}" \
-            --out fragment.json
+            --out "fragment-${{ matrix.target }}.json"
 
       - uses: actions/upload-artifact@v4
         if: startsWith(github.ref, 'refs/tags/v') && steps.signer.outputs.enabled == '1'
         with:
           name: updater-${{ matrix.target }}
-          path: fragment.json
+          path: fragment-${{ matrix.target }}.json
           if-no-files-found: error
 
       - name: Upload installers for a dry run

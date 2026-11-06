@@ -1,6 +1,6 @@
 [package]
 name = "zenagent-desktop"
-version = "0.8.3"
+version = "0.8.4"
 description = "ZenAgent desktop shell: drives `zen rpc` and mirrors the dsh interaction architecture"
 edition = "2021"
 

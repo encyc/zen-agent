@@ -3,6 +3,27 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## v0.8.4 — 2026-11-06
+
+**The macOS bundle opens, and the update manifest can actually be built.**
+
+### Fixed
+
+- **Gatekeeper no longer calls the macOS app "damaged".** The bundle shipped
+  with no signature of its own: the main executable carried only its linker
+  signature, which claims a `CodeResources` seal that never existed. Tauri now
+  signs the bundle ad-hoc (`signingIdentity: "-"`). It also sets
+  `hardenedRuntime: false`, because a hardened runtime refuses to `dlopen` the
+  `libpython` that the frozen sidecar unpacks at launch — a signed sidecar that
+  cannot start is worse than the "unidentified developer" prompt it replaced.
+  macOS users still have to right-click → *Open* once (or clear the quarantine
+  flag); only notarization removes that, and it needs a paid certificate.
+- **`latest.json` was never published.** Each leg wrote its fragment to the
+  same `fragment.json`, and the merge step flattened six artifacts into one
+  directory — so five platforms overwrote each other and the aggregation job
+  aborted on its six-platform assertion. Each leg now writes
+  `fragment-<target>.json`.
+
 ## v0.8.3 — 2026-11-06
 
 **The desktop app became installable: six bundles (macOS, Windows, Linux ×
