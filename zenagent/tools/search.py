@@ -22,7 +22,7 @@ from pathlib import Path
 
 from zenagent.agent.loop import AgentTool, ToolResultAgent
 from zenagent.prompts import tool_description
-from zenagent.types import TextContent
+from zenagent.tools._result import text_result
 
 __all__ = [
     "BATCH",
@@ -47,12 +47,6 @@ MAX_GREP_FILES_PER_PAGE = 20
 MAX_GREP_HITS_PER_FILE = 20
 #: A NUL byte in this prefix marks a binary file for the fallback scanner.
 _BINARY_SNIFF = 8192
-
-
-def _text(text: str, *, is_error: bool = False, **details) -> ToolResultAgent:
-    return ToolResultAgent(
-        content=[TextContent(text=text)], details=details, is_error=is_error
-    )
 
 
 class _GrepHits:
@@ -150,13 +144,13 @@ async def _glob(tool_call_id: str, args: dict, abort, on_update=None) -> ToolRes
     pattern = args["pattern"]
     root = Path(args.get("path") or ".")
     if not root.is_dir():
-        return _text(f"not a directory: {root}", is_error=True)
+        return text_result(f"not a directory: {root}", is_error=True)
     try:
         limit = MAX_GLOB_RESULTS if args.get("limit") is None else int(args["limit"])
     except (TypeError, ValueError):
-        return _text("limit must be an integer", is_error=True)
+        return text_result("limit must be an integer", is_error=True)
     if limit <= 0:
-        return _text(f"limit must be >= 1 (got {limit})", is_error=True)
+        return text_result(f"limit must be >= 1 (got {limit})", is_error=True)
     limit = min(limit, MAX_GLOB_LIMIT)
     # A pattern that names a dot segment (".github/**", "**/.env*") asks for
     # hidden paths explicitly; filtering them would report "no matches" for a
@@ -169,7 +163,7 @@ async def _glob(tool_call_id: str, args: dict, abort, on_update=None) -> ToolRes
     rules = [] if include_ignored else _gitignore_rules(root)
     sort = args.get("sort") or "path"
     if sort not in ("path", "mtime"):
-        return _text("sort must be 'path' or 'mtime'", is_error=True)
+        return text_result("sort must be 'path' or 'mtime'", is_error=True)
 
     try:
         found: list[Path] = []
@@ -197,7 +191,7 @@ async def _glob(tool_call_id: str, args: dict, abort, on_update=None) -> ToolRes
             found.sort(key=lambda item: item.as_posix())
         matches = [str(item) for item in found]
     except (ValueError, NotImplementedError, OSError) as exc:
-        return _text(f"invalid glob pattern {pattern!r}: {exc}", is_error=True)
+        return text_result(f"invalid glob pattern {pattern!r}: {exc}", is_error=True)
 
     total = len(matches)
     shown = matches[:limit]
@@ -205,7 +199,7 @@ async def _glob(tool_call_id: str, args: dict, abort, on_update=None) -> ToolRes
     if total > len(shown):
         lines.append(f"... {total - len(shown)} more matches not shown")
     body = "\n".join(lines) if lines else f"no files match {pattern!r} under {root}"
-    return _text(body, matches=total, shown=len(shown), limit=limit)
+    return text_result(body, matches=total, shown=len(shown), limit=limit)
 
 
 def _python_grep(pattern: re.Pattern, root: Path, file_glob: str) -> _GrepHits:
@@ -289,7 +283,7 @@ def _grep_page(
     files = sorted(hits.by_file)
     total_files = len(files)
     if total_files == 0 and skip == 0:
-        return _text(
+        return text_result(
             f"no matches for {pattern_text!r} under {root}",
             matches=0,
             files=0,
@@ -300,7 +294,7 @@ def _grep_page(
             total_files=0,
         )
     if skip >= total_files:
-        return _text(
+        return text_result(
             f"skip={skip} is past the last matching file: only {total_files} "
             f"file(s) have matches for {pattern_text!r} under {root}; nothing "
             "to show (omit skip to search from the first file)",
@@ -339,7 +333,7 @@ def _grep_page(
             f"... [scan stopped at {MAX_GREP_RESULTS} matches; narrow the "
             "pattern to see more]"
         )
-    return _text(
+    return text_result(
         "\n".join(lines),
         matches=hits_shown,
         files=len(page),
@@ -359,21 +353,21 @@ async def _grep(tool_call_id: str, args: dict, abort, on_update=None) -> ToolRes
     if skip is None:
         skip = 0
     if isinstance(skip, bool) or not isinstance(skip, int):
-        return _text(
+        return text_result(
             f"skip must be a non-negative integer (got {skip!r})", is_error=True
         )
     if skip < 0:
-        return _text(
+        return text_result(
             f"skip must be >= 0 (got {skip}); it counts matching files, "
             "not matches",
             is_error=True,
         )
     if not root.exists():
-        return _text(f"path not found: {root}", is_error=True)
+        return text_result(f"path not found: {root}", is_error=True)
     try:
         compiled = re.compile(pattern_text)
     except re.error as exc:
-        return _text(f"invalid regular expression {pattern_text!r}: {exc}", is_error=True)
+        return text_result(f"invalid regular expression {pattern_text!r}: {exc}", is_error=True)
 
     hits = await _rg_grep(pattern_text, root, file_glob)
     engine = "rg"

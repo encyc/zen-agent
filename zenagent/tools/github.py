@@ -23,7 +23,7 @@ import json
 import shutil
 
 from zenagent.agent.loop import AgentTool, ToolResultAgent
-from zenagent.types import TextContent
+from zenagent.tools._result import text_result
 
 __all__ = ["GITHUB", "build_github_tool", "github_available"]
 
@@ -47,12 +47,6 @@ _OPERATIONS = ("pr_view", "pr_diff", "pr_checks", "run_logs")
 def github_available() -> bool:
     """Whether the ``gh`` binary is on PATH (the tool is registered only then)."""
     return shutil.which("gh") is not None
-
-
-def _text(body: str, *, is_error: bool = False, **details) -> ToolResultAgent:
-    return ToolResultAgent(
-        content=[TextContent(text=body)], details=details, is_error=is_error
-    )
 
 
 def _command(op: str, args: dict) -> list[str] | str:
@@ -119,10 +113,10 @@ async def _github(
     op = str(args.get("op") or "").strip()
     command = _command(op, args)
     if isinstance(command, str):
-        return _text(command, is_error=True)
+        return text_result(command, is_error=True)
     gh = shutil.which("gh")
     if gh is None:
-        return _text(
+        return text_result(
             "the `gh` CLI is not installed; install it from https://cli.github.com",
             is_error=True,
         )
@@ -134,7 +128,7 @@ async def _github(
             stderr=asyncio.subprocess.PIPE,
         )
     except OSError as exc:
-        return _text(f"cannot run gh: {exc}", is_error=True)
+        return text_result(f"cannot run gh: {exc}", is_error=True)
     try:
         stdout, stderr = await asyncio.wait_for(
             process.communicate(), timeout=_TIMEOUT_S
@@ -142,19 +136,19 @@ async def _github(
     except TimeoutError:
         process.kill()
         await process.wait()
-        return _text(f"gh {op} timed out after {_TIMEOUT_S:g}s", is_error=True)
+        return text_result(f"gh {op} timed out after {_TIMEOUT_S:g}s", is_error=True)
     out = stdout.decode("utf-8", "replace").strip()
     err = stderr.decode("utf-8", "replace").strip()
     if process.returncode != 0:
         detail = err or out or "no output"
-        return _text(
+        return text_result(
             f"gh {op} failed (exit {process.returncode}): {detail[:2000]}",
             is_error=True,
             op=op,
         )
     body = _format_pr_view(out) if op == "pr_view" else out
     body, truncated = _clip(body or "(no output)")
-    return _text(body, op=op, truncated=truncated)
+    return text_result(body, op=op, truncated=truncated)
 
 
 GITHUB = AgentTool(

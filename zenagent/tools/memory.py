@@ -15,7 +15,7 @@ from pathlib import Path
 
 from zenagent.agent.loop import AgentTool, ToolResultAgent
 from zenagent.agent.memory_store import MemoryStore
-from zenagent.types import TextContent
+from zenagent.tools._result import text_result
 
 __all__ = ["build_memory_tool", "build_memory_write_tool"]
 
@@ -42,12 +42,6 @@ _WRITE_USAGE_POLICY = (
 )
 
 
-def _text(body: str, *, is_error: bool = False, **details) -> ToolResultAgent:
-    return ToolResultAgent(
-        content=[TextContent(text=body)], details=details, is_error=is_error
-    )
-
-
 def _clip(body: str) -> str:
     if len(body) <= _MAX_OUTPUT_CHARS:
         return body
@@ -72,36 +66,36 @@ async def _read_tool(
 ) -> ToolResultAgent:
     action = str(args.get("action") or "").strip()
     if action not in _READ_ACTIONS:
-        return _text(
+        return text_result(
             f"unknown action {action!r}; expected one of {', '.join(_READ_ACTIONS)}",
             is_error=True,
         )
     if action == "search":
         query = str(args.get("query") or "").strip()
         if not query:
-            return _text("query is required for search", is_error=True)
+            return text_result("query is required for search", is_error=True)
         matches = store.search(query)
         if not matches:
-            return _text(
+            return text_result(
                 f"no entries match {query!r}", action=action, count=0
             )
         lines = [
             f"{entry.id}  {entry.title}\n    {excerpt}"
             for entry, excerpt in matches
         ]
-        return _text(
+        return text_result(
             _clip("\n".join(lines)), action=action, count=len(matches)
         )
     # action == "read"
     entry_id = str(args.get("id") or "").strip()
     if not _VALID_ID(entry_id):
-        return _text(f"invalid entry id {entry_id!r} (expected 4 hex chars)", is_error=True)
+        return text_result(f"invalid entry id {entry_id!r} (expected 4 hex chars)", is_error=True)
     entry = store.read_entry(entry_id)
     if entry is None:
         # An absent entry is an empty result, not a failure (empty library).
-        return _text(f"entry {entry_id} not found (empty library?)", action=action, count=0)
+        return text_result(f"entry {entry_id} not found (empty library?)", action=action, count=0)
     header = f"{entry.id}  {entry.title}\n(updated {entry.updated}, source {entry.source or '-'})"
-    return _text(_clip(f"{header}\n\n{entry.body}"), action=action, count=1)
+    return text_result(_clip(f"{header}\n\n{entry.body}"), action=action, count=1)
 
 
 async def _write_tool(
@@ -109,7 +103,7 @@ async def _write_tool(
 ) -> ToolResultAgent:
     action = str(args.get("action") or "").strip()
     if action not in _WRITE_ACTIONS:
-        return _text(
+        return text_result(
             f"unknown action {action!r}; expected one of {', '.join(_WRITE_ACTIONS)}",
             is_error=True,
         )
@@ -119,7 +113,7 @@ async def _write_tool(
         title = str(args.get("title") or "").strip()
         body = str(args.get("body") or "").strip()
         if not title or not body:
-            return _text("add needs title and body", is_error=True)
+            return text_result("add needs title and body", is_error=True)
         entry = store.write_entry(
             title=title,
             body=body,
@@ -127,19 +121,19 @@ async def _write_tool(
             reason=str(args.get("reason") or ""),
             session=session_id,
         )
-        return _text(
+        return text_result(
             f"added {entry.id}  {entry.title}",
             action=action,
             id=entry.id,
         )
     entry_id = str(args.get("id") or "").strip()
     if not _VALID_ID(entry_id):
-        return _text(f"invalid entry id {entry_id!r} (expected 4 hex chars)", is_error=True)
+        return text_result(f"invalid entry id {entry_id!r} (expected 4 hex chars)", is_error=True)
     if action == "update":
         title = args.get("title")
         body = args.get("body")
         if title is None and body is None:
-            return _text("update needs title and/or body", is_error=True)
+            return text_result("update needs title and/or body", is_error=True)
         entry = store.update_entry(
             entry_id,
             title=str(title) if title is not None else None,
@@ -148,8 +142,8 @@ async def _write_tool(
             session=session_id,
         )
         if entry is None:
-            return _text(f"entry {entry_id} not found", is_error=True)
-        return _text(
+            return text_result(f"entry {entry_id} not found", is_error=True)
+        return text_result(
             f"updated {entry.id}  {entry.title}", action=action, id=entry.id
         )
     # action == "delete"
@@ -158,8 +152,8 @@ async def _write_tool(
         reason=str(args.get("reason") or ""),
         session=session_id,
     ):
-        return _text(f"entry {entry_id} not found", is_error=True)
-    return _text(f"deleted {entry_id}", action=action, id=entry_id)
+        return text_result(f"entry {entry_id} not found", is_error=True)
+    return text_result(f"deleted {entry_id}", action=action, id=entry_id)
 
 
 def _VALID_ID(entry_id: str) -> bool:

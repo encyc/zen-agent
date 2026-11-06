@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from zenagent.agent.loop import AgentTool, ToolResultAgent
-from zenagent.types import TextContent
+from zenagent.tools._result import text_result
 
 __all__ = [
     "LSP",
@@ -86,12 +86,6 @@ def server_for(path: Path) -> ServerSpec | None:
 def lsp_available() -> bool:
     """Whether at least one configured server binary is installed."""
     return any(shutil.which(spec.command[0]) for spec in SERVERS)
-
-
-def _text(body: str, *, is_error: bool = False, **details) -> ToolResultAgent:
-    return ToolResultAgent(
-        content=[TextContent(text=body)], details=details, is_error=is_error
-    )
 
 
 def _uri(path: Path) -> str:
@@ -457,24 +451,24 @@ async def _lsp(
 ) -> ToolResultAgent:
     action = str(args.get("action") or "").strip()
     if action not in _OPERATIONS:
-        return _text(
+        return text_result(
             f"unknown action {action!r}; expected one of {', '.join(_OPERATIONS)}",
             is_error=True,
         )
     raw_path = str(args.get("path") or "").strip()
     if not raw_path:
-        return _text("path is required", is_error=True)
+        return text_result("path is required", is_error=True)
     path = Path(raw_path).expanduser().resolve()
     if not path.is_file():
-        return _text(f"file not found: {path}", is_error=True)
+        return text_result(f"file not found: {path}", is_error=True)
     spec = server_for(path)
     if spec is None:
-        return _text(
+        return text_result(
             f"no language server configured for {path.suffix or '(no extension)'}",
             is_error=True,
         )
     if shutil.which(spec.command[0]) is None:
-        return _text(
+        return text_result(
             f"language server {spec.command[0]!r} is not installed; install it to "
             f"use {action} on {path.suffix} files",
             is_error=True,
@@ -484,20 +478,20 @@ async def _lsp(
     try:
         client = await _client_for(spec, root)
     except (OSError, ConnectionError, TimeoutError) as exc:
-        return _text(f"cannot start {spec.name}: {exc}", is_error=True)
+        return text_result(f"cannot start {spec.name}: {exc}", is_error=True)
     try:
         await client.open_document(path)
         if action == "diagnostics":
             diagnostics = await client.wait_diagnostics(path, _DIAGNOSTICS_TIMEOUT_S)
             lines = _format_diagnostics(diagnostics, path)
             if not lines:
-                return _text(
+                return text_result(
                     "no diagnostics (server reported none yet, or the file is clean)",
                     action=action,
                     count=0,
                 )
             body, truncated = _clip("\n".join(lines))
-            return _text(body, action=action, count=len(lines), truncated=truncated)
+            return text_result(body, action=action, count=len(lines), truncated=truncated)
 
         position = {
             "textDocument": {"uri": _uri(path)},
@@ -513,7 +507,7 @@ async def _lsp(
             lines = _format_symbols(result or [])
             body = "\n".join(lines) or "no symbols"
             body, truncated = _clip(body)
-            return _text(body, action=action, count=len(lines), truncated=truncated)
+            return text_result(body, action=action, count=len(lines), truncated=truncated)
 
         if action in ("references", "definition"):
             method = (
@@ -529,12 +523,12 @@ async def _lsp(
             lines = [_format_location(item) for item in locations if isinstance(item, dict)]
             body = "\n".join(lines) or "no locations"
             body, truncated = _clip(body)
-            return _text(body, action=action, count=len(lines), truncated=truncated)
+            return text_result(body, action=action, count=len(lines), truncated=truncated)
 
         # rename: return the proposed edit; applying it stays the model's job.
         new_name = str(args.get("new_name") or "").strip()
         if not new_name:
-            return _text("rename needs new_name", is_error=True)
+            return text_result("rename needs new_name", is_error=True)
         # Servers answer rename with partial edits mid-analysis; wait for the
         # analysis-complete signal so the edit covers every referencing file.
         await client.wait_analyzed(path, _DIAGNOSTICS_TIMEOUT_S)
@@ -543,11 +537,11 @@ async def _lsp(
         edit = await client.request("textDocument/rename", params)
         lines = _format_workspace_edit(edit or {})
         body, truncated = _clip("\n".join(lines))
-        return _text(body, action=action, count=len(lines), truncated=truncated)
+        return text_result(body, action=action, count=len(lines), truncated=truncated)
     except TimeoutError as exc:
-        return _text(f"{action} timed out: {exc}", is_error=True)
+        return text_result(f"{action} timed out: {exc}", is_error=True)
     except (ConnectionError, RuntimeError) as exc:
-        return _text(f"{action} failed: {exc}", is_error=True)
+        return text_result(f"{action} failed: {exc}", is_error=True)
 
 
 LSP = AgentTool(

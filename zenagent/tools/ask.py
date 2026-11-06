@@ -22,7 +22,7 @@ from collections.abc import Awaitable, Callable
 
 from zenagent.agent.loop import AgentTool, ToolResultAgent
 from zenagent.prompts import tool_description
-from zenagent.types import TextContent
+from zenagent.tools._result import text_result
 
 __all__ = [
     "ASK",
@@ -75,12 +75,6 @@ def set_ask_handler(handler: AskHandler | None) -> None:
 def get_ask_handler() -> AskHandler | None:
     """The currently installed frontend handler, if any."""
     return _handler
-
-
-def _text(text: str, *, is_error: bool = False, **details) -> ToolResultAgent:
-    return ToolResultAgent(
-        content=[TextContent(text=text)], details=details, is_error=is_error
-    )
 
 
 def _validate_questions(raw: object) -> tuple[list[dict], str | None]:
@@ -245,11 +239,11 @@ def _format_answers(questions: list[dict], answers: list[dict]) -> str:
 async def _ask(tool_call_id: str, args: dict, abort=None, on_update=None) -> ToolResultAgent:
     questions, problem = _validate_questions(args.get("questions"))
     if problem is not None:
-        return _text(f"invalid ask arguments: {problem}", is_error=True)
+        return text_result(f"invalid ask arguments: {problem}", is_error=True)
 
     handler = get_ask_handler()
     if handler is None:
-        return _text(_NO_UI_TEXT, available=False)
+        return text_result(_NO_UI_TEXT, available=False)
 
     async def _run_handler():
         outcome = handler(questions)
@@ -268,7 +262,7 @@ async def _ask(tool_call_id: str, args: dict, abort=None, on_update=None) -> Too
                 handler_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError, Exception):
                     await handler_task
-                return _text(
+                return text_result(
                     "aborted while waiting for the user's answer; proceed with "
                     "the most conservative option and state the assumption.",
                     available=True,
@@ -276,7 +270,7 @@ async def _ask(tool_call_id: str, args: dict, abort=None, on_update=None) -> Too
                 )
         raw_answers = await handler_task
     except Exception as exc:  # noqa: BLE001 - a UI failure must not kill the run
-        return _text(
+        return text_result(
             f"the interactive UI failed to answer: {type(exc).__name__}: {exc}",
             is_error=True,
             available=True,
@@ -289,8 +283,8 @@ async def _ask(tool_call_id: str, args: dict, abort=None, on_update=None) -> Too
 
     answers = _normalize_answers(raw_answers, questions)
     if not answers:
-        return _text(_DISMISSED_TEXT, available=True, answers=[])
-    return _text(
+        return text_result(_DISMISSED_TEXT, available=True, answers=[])
+    return text_result(
         _format_answers(questions, answers), available=True, answers=answers
     )
 
