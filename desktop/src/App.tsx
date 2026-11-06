@@ -12,6 +12,7 @@ import { InputBar } from './ui/composer/InputBar'
 import { RightPanel } from './ui/rightbar/RightPanel'
 import { WelcomeScreen } from './ui/WelcomeScreen'
 import { ConversationTopbar } from './ui/ConversationTopbar'
+import { NoticeBanner } from './ui/NoticeBanner'
 import { SIDEBAR_DEFAULT } from './ui/columns'
 import css from './App.module.css'
 
@@ -124,6 +125,7 @@ export function App() {
         inspectorOpen={rightbarOpen}
         onNewSession={() => void useAppStore.getState().newSession()}
       />
+      <NoticeBanner />
       <ChatView />
     </AppFrame>
   )

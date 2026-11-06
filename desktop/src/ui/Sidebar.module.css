@@ -81,6 +81,35 @@ html[data-platform='darwin'] .brandRow {
   background: var(--dsw-specific-sidebar-nav-item-active);
 }
 
+.scopeRow {
+  display: flex;
+  gap: 2px;
+  padding: 0 12px 8px;
+  flex: none;
+}
+
+.scopeButton {
+  flex: 1;
+  height: 24px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--ds-radius-4);
+  background: transparent;
+  color: var(--dsw-alias-label-caption);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.scopeButton:hover {
+  background: var(--dsw-specific-sidebar-nav-item-hover);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.scopeButton[aria-pressed='true'] {
+  background: var(--dsw-specific-sidebar-nav-item-active);
+  color: var(--dsw-alias-label-primary);
+}
+
 .searchWrap {
   padding: 0 12px 8px;
   flex: none;
@@ -140,6 +169,15 @@ html[data-platform='darwin'] .brandRow {
   color: var(--dsw-alias-label-primary);
 }
 
+.sessionRow[data-cross] {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.sessionRow[data-cross]:hover {
+  background: transparent;
+}
+
 .sessionIcon {
   display: grid;
   place-items: center;
@@ -189,34 +227,95 @@ html[data-platform='darwin'] .brandRow {
   color: var(--dsw-alias-label-caption);
 }
 
-.sessionActions {
-  display: none;
-  align-items: center;
-  gap: 2px;
+.sessionCue {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
 }
 
-.sessionRow:hover .sessionActions {
-  display: flex;
+.sessionPending {
+  flex: none;
+  font-size: 10.5px;
+  line-height: 14px;
+  padding: 0 6px;
+  border-radius: var(--ds-radius-full);
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-caption);
 }
 
-.sessionActions button {
+.renameInput {
+  width: 100%;
+  height: 20px;
+  padding: 0 4px;
+  border: none;
+  border-radius: var(--ds-radius-4);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 500;
+  outline: 1px solid var(--dsw-alias-border-l4);
+}
+
+.rowMenuTrigger {
   display: grid;
   place-items: center;
   width: 22px;
   height: 22px;
+  flex: none;
   border: none;
   border-radius: var(--dsw-radius-xs);
   background: transparent;
   color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
+  opacity: 0;
 }
 
-.sessionActions button:hover {
+.sessionRow:hover .rowMenuTrigger,
+.sessionRow:focus-within .rowMenuTrigger,
+.rowMenuTrigger:focus-visible {
+  opacity: 1;
+}
+
+.rowMenuTrigger:hover {
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
 }
 
-.sessionActions button:last-child:hover {
+.menu {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  width: 176px;
+  padding: 4px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--ds-radius-8);
+  background: var(--dsw-alias-bg-layer-2);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+}
+
+.menuItem,
+.menuItemDanger {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--ds-radius-4);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menuItem:hover,
+.menuItemDanger:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.menuItemDanger {
   color: var(--dsw-alias-state-error-primary);
 }
 
@@ -231,6 +330,9 @@ html[data-platform='darwin'] .brandRow {
 }
 
 .footer {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   flex: none;
   border-top: 1px solid var(--dsw-alias-border-l1);
   padding: 8px 12px;
@@ -240,7 +342,8 @@ html[data-platform='darwin'] .brandRow {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   height: 28px;
   padding: 0 8px;
   border: none;
@@ -254,4 +357,47 @@ html[data-platform='darwin'] .brandRow {
 .themeButton:hover {
   background: var(--dsw-specific-sidebar-nav-item-hover);
   color: var(--dsw-alias-label-primary);
+}
+
+.footerActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.footerButton {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.footerButton:hover {
+  background: var(--dsw-specific-sidebar-nav-item-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.exportAnchor {
+  position: relative;
+}
+
+.exportMenu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  width: 184px;
+  padding: 4px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--ds-radius-8);
+  background: var(--dsw-alias-bg-layer-2);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
 }

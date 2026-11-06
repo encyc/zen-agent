@@ -2,6 +2,7 @@
  * No `zen` binary and no Rust side are involved: `invoke`/`listen` are faked
  * with the same command and frame shapes the Tauri bridge uses. */
 
+import assert from 'node:assert/strict'
 import { expect, test, type Page } from '@playwright/test'
 
 type Lane = 'queue' | 'steer'
@@ -20,6 +21,7 @@ interface BridgeState {
   calls: Record<string, unknown>[]
   dialogSelection: string | string[] | null
   title: string
+  failExport?: boolean
 }
 
 declare global {
@@ -33,11 +35,11 @@ function installBridge(state: BridgeState) {
   let nextCallback = 1
   let nextEvent = 1
 
-  const sessions = (id: unknown) => ({
+  const sessions = (id: unknown, scope: unknown) => ({
     type: 'result',
     id,
     ok: true,
-    scope: 'project',
+    scope: scope === 'all' ? 'all' : 'project',
     sessions: [
       {
         path: '/sessions/a.jsonl',
@@ -65,6 +67,23 @@ function installBridge(state: BridgeState) {
         model: 'deepseek-flash',
         derived_from: '',
       },
+      ...(scope === 'all'
+        ? [
+            {
+              path: '/sessions/c.jsonl',
+              name: 'c',
+              title: '另一个项目',
+              project: 'q',
+              messages: 1,
+              current: false,
+              pinned: false,
+              created_at: 1,
+              updated_at: 1,
+              model: 'deepseek-flash',
+              derived_from: '',
+            },
+          ]
+        : []),
     ],
   })
 
@@ -102,7 +121,17 @@ function installBridge(state: BridgeState) {
       case 'session':
         switch (payload.op) {
           case 'list':
-            return sessions(payload.id)
+            return sessions(payload.id, payload.scope)
+          case 'export': {
+            if (state.failExport) return { type: 'error', message: '导出失败' }
+            const suffix = payload.format === 'html' ? '.html' : '.md'
+            return {
+              type: 'result',
+              id: payload.id,
+              ok: true,
+              path: String(payload.path).replace(/\.jsonl$/, suffix),
+            }
+          }
           case 'promote': {
             const target = state.pending.find((item) => item.id === payload.pending_id)
             if (target === undefined) {
@@ -246,9 +275,146 @@ test('the topbar menu runs undo and compact through the session op', async ({ pa
     .toBe(true)
 })
 
+test('the all scope groups projects and refuses cross-project opens', async ({ page }) => {
+  await boot(page, initialState())
+  await page.getByRole('button', { name: '全部' }).click()
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__ZEN_E2E__.calls.some((call) => call.type === 'session' && call.op === 'list' && call.scope === 'all'),
+      ),
+    )
+    .toBe(true)
+  await expect(page.locator('[data-project-group="q"]')).toBeVisible()
+  const cross = page.locator('[data-session-path="/sessions/c.jsonl"]')
+  await expect(cross).toHaveAttribute('aria-disabled', 'true')
+  // aria-disabled rows fail Playwright's actionability check; force the pointer.
+  await cross.click({ force: true })
+  assert.equal(
+    await page.evaluate(() =>
+      window.__ZEN_E2E__.calls.some((call) => call.type === 'session' && call.op === 'resume'),
+    ),
+    false,
+  )
+})
+
+test('the current row menu pins and renames; other rows omit both actions', async ({ page }) => {
+  await boot(page, initialState())
+  await page.locator('[data-session-path="/sessions/a.jsonl"] [data-action="menu"]').click()
+  await page.getByRole('menuitem', { name: '置顶' }).click()
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__ZEN_E2E__.calls.some(
+          (call) => call.type === 'command' && call.name === 'pin' && call.argument === 'on',
+        ),
+      ),
+    )
+    .toBe(true)
+
+  await page.locator('[data-session-path="/sessions/a.jsonl"] [data-action="menu"]').click()
+  await page.getByRole('menuitem', { name: '重命名' }).click()
+  const input = page.locator('[data-session-path="/sessions/a.jsonl"] input')
+  await input.fill('行内标题')
+  await input.press('Enter')
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__ZEN_E2E__.calls.some(
+          (call) => call.type === 'command' && call.name === 'rename' && call.argument === '行内标题',
+        ),
+      ),
+    )
+    .toBe(true)
+
+  await page.locator('[data-session-path="/sessions/b.jsonl"] [data-action="menu"]').click()
+  await expect(page.getByRole('menuitem', { name: '置顶' })).toHaveCount(0)
+  await expect(page.getByRole('menuitem', { name: '重命名' })).toHaveCount(0)
+})
+
+test('delete needs two clicks on the same row', async ({ page }) => {
+  await boot(page, initialState())
+  await page.locator('[data-session-path="/sessions/b.jsonl"] [data-action="menu"]').click()
+  await page.getByRole('menuitem', { name: '删除' }).click()
+  assert.equal(
+    await page.evaluate(() =>
+      window.__ZEN_E2E__.calls.some((call) => call.type === 'session' && call.op === 'delete'),
+    ),
+    false,
+  )
+  // A scope switch drops the arm: reopen and the label is plain delete again.
+  await page.getByRole('button', { name: '全部' }).click()
+  await page.getByRole('button', { name: '当前项目' }).click()
+  await page.locator('[data-session-path="/sessions/b.jsonl"] [data-action="menu"]').click()
+  await expect(page.getByRole('menuitem', { name: '删除？' })).toHaveCount(0)
+  await page.getByRole('menuitem', { name: '删除' }).click()
+  await page.getByRole('menuitem', { name: '删除？' }).click()
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__ZEN_E2E__.calls.some(
+          (call) => call.type === 'session' && call.op === 'delete' && call.path === '/sessions/b.jsonl',
+        ),
+      ),
+    )
+    .toBe(true)
+})
+
+test('the footer opens a session file and exports a chosen format', async ({ page }) => {
+  await boot(page, initialState({ dialogSelection: '/tmp/imported.jsonl' }))
+  await page.getByRole('button', { name: '打开会话文件…' }).click()
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__ZEN_E2E__.calls.some(
+          (call) => call.type === 'session' && call.op === 'import' && call.path === '/tmp/imported.jsonl',
+        ),
+      ),
+    )
+    .toBe(true)
+
+  await page.getByRole('button', { name: '导出会话' }).click()
+  await page.getByRole('menuitem', { name: '导出为 HTML' }).click()
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__ZEN_E2E__.calls.some(
+          (call) =>
+            call.type === 'session' &&
+            call.op === 'export' &&
+            call.path === '/sessions/a.jsonl' &&
+            call.format === 'html',
+        ),
+      ),
+    )
+    .toBe(true)
+  await expect(page.getByRole('alert')).toHaveText('已导出到 /sessions/a.html')
+})
+
+test('a failed export surfaces in the notice banner', async ({ page }) => {
+  await boot(page, initialState({ failExport: true }))
+  await page.getByRole('button', { name: '导出会话' }).click()
+  await page.getByRole('menuitem', { name: '导出为 Markdown' }).click()
+  await expect(page.getByRole('alert')).toHaveText('导出失败')
+})
+
+test('a cancelled open dialog sends no import', async ({ page }) => {
+  await boot(page, initialState({ dialogSelection: null }))
+  await page.getByRole('button', { name: '打开会话文件…' }).click()
+  assert.equal(
+    await page.evaluate(() =>
+      window.__ZEN_E2E__.calls.some((call) => call.type === 'session' && call.op === 'import'),
+    ),
+    false,
+  )
+})
+
 test('fork is only offered on the current session row', async ({ page }) => {
   await boot(page, initialState())
-  await expect(page.locator('button[aria-label="从此分叉"]')).toHaveCount(1)
+  await page.locator('[data-session-path="/sessions/a.jsonl"] [data-action="menu"]').click()
+  await expect(page.getByRole('menuitem', { name: '从此分叉' })).toHaveCount(1)
+  await page.locator('[data-session-path="/sessions/b.jsonl"] [data-action="menu"]').click()
+  await expect(page.getByRole('menuitem', { name: '从此分叉' })).toHaveCount(0)
 })
 
 test('a queued message can be promoted to steering', async ({ page }) => {
