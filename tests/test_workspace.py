@@ -135,3 +135,31 @@ def test_worktree_overview_outside_a_repository(tmp_path: Path) -> None:
     assert overview["is_repo"] is False
     assert overview["worktrees"] == []
     assert overview["branch"] == ""
+
+
+def test_a_symlinked_directory_stays_a_file_and_never_crashes(tmp_path, monkeypatch):
+    """`Path.is_dir(follow_symlinks=...)` only exists on Python 3.13+, so the
+    oldest supported interpreter must stay on the portable path: a symlink is
+    inspected as a link, not followed out of the workspace."""
+    import pathlib
+
+    original_is_dir = pathlib.Path.is_dir
+
+    def no_follow_kwarg(self, *args, **kwargs):
+        if "follow_symlinks" in kwargs:
+            raise TypeError(
+                "Path.is_dir() got an unexpected keyword argument 'follow_symlinks'"
+            )
+        return original_is_dir(self)
+
+    monkeypatch.setattr(pathlib.Path, "is_dir", no_follow_kwarg)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("nope", encoding="utf-8")
+    root = tmp_path / "root"
+    root.mkdir()
+    (root / "link").symlink_to(outside, target_is_directory=True)
+
+    listing = list_directory(root, "")
+    entry = next(item for item in listing["entries"] if item["name"] == "link")
+    assert entry["kind"] == "file"

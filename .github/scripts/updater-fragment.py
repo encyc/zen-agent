@@ -25,8 +25,10 @@ from pathlib import Path
 
 __all__ = ["asset_url", "main", "pick_artifact", "platform_key", "write_fragment"]
 
-#: Suffixes Tauri gives the archive an updater downloads, newest formats first.
-UPDATER_ARCHIVES = (".app.tar.gz", ".nsi.zip", ".nsis.zip", ".AppImage.tar.gz")
+#: What the updater actually downloads, per platform, best match first.
+#: Tauri v2 points macOS at the `.app.tar.gz` and Linux/Windows at the
+#: `.AppImage` / NSIS `-setup.exe` themselves, each with a sibling `.sig`.
+UPDATER_ARTIFACTS = (".app.tar.gz", ".AppImage", "-setup.exe")
 #: Matched against the target triple.
 ARCH_KEYS = {
     ("aarch64", "apple-darwin"): "darwin-aarch64",
@@ -48,11 +50,20 @@ def platform_key(triple: str) -> str:
 
 
 def pick_artifact(names: list[str]) -> str | None:
-    """The archive the updater downloads, from the bundle's file names."""
-    for suffix in UPDATER_ARCHIVES:
+    """The file the updater downloads, from the bundle's file names."""
+    for suffix in UPDATER_ARTIFACTS:
         for name in names:
             if name.endswith(suffix):
                 return name
+    return None
+
+
+def find_artifact(bundle_dir: Path) -> Path | None:
+    """The same choice, as a path, so the `.sig` is read from beside it."""
+    for suffix in UPDATER_ARTIFACTS:
+        for path in sorted(bundle_dir.rglob("*")):
+            if path.is_file() and path.name.endswith(suffix):
+                return path
     return None
 
 
@@ -64,20 +75,16 @@ def write_fragment(
     *, target: str, tag: str, bundle_dir: Path, repo: str, out: Path
 ) -> bool:
     """Write the fragment; False when this leg has no signed updater archive."""
-    names = [path.name for path in bundle_dir.rglob("*") if path.is_file()]
-    artifact = pick_artifact(names)
+    artifact = find_artifact(bundle_dir)
     if artifact is None:
         return False
-    signature = bundle_dir / f"{artifact}.sig"
+    signature = artifact.with_name(f"{artifact.name}.sig")
     if not signature.is_file():
-        matches = list(bundle_dir.rglob(f"{artifact}.sig"))
-        if not matches:
-            return False
-        signature = matches[0]
+        return False
     payload = {
         "platform": platform_key(target),
         "signature": signature.read_text(encoding="utf-8").strip(),
-        "url": asset_url(repo, tag, artifact),
+        "url": asset_url(repo, tag, artifact.name),
     }
     out.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return True

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import shutil
+import stat
 import subprocess
 from pathlib import Path
 
@@ -71,11 +72,16 @@ def list_directory(root: Path | str, path: str | None = "") -> dict:
             truncated = True
             break
         try:
-            is_dir = entry.is_dir(follow_symlinks=False)
-            size = 0 if is_dir else entry.stat(follow_symlinks=False).st_size
+            # `lstat` + S_ISDIR: inspect the entry itself rather than following
+            # a link out of the workspace, and stay on Python 3.11 where
+            # `Path.is_dir(follow_symlinks=...)` does not exist yet.
+            info = entry.lstat()
         except OSError:
             is_dir = False
             size = 0
+        else:
+            is_dir = stat.S_ISDIR(info.st_mode)
+            size = 0 if is_dir else info.st_size
         entries.append(
             {
                 "name": entry.name,
