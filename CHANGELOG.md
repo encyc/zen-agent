@@ -5,6 +5,67 @@ matches the release tag; older history is in the repository tags and commits.
 
 ## Unreleased
 
+**Architecture review follow-through: a truncated tool call can no longer be
+executed, subagents answer to the same permission gate as their parent, and the
+harness got the layer it was missing — `zenagent/app/` — with tests that keep
+the layering and the documentation honest.**
+
+### Fixed
+
+- **Truncated tool calls are no longer executed.** Both adapters could report a
+  finished `tool_use` turn whose arguments were cut off, which made the loop's
+  "never execute a truncated call" guard unreachable for them. Google now keeps
+  a `MAX_TOKENS` `length` verdict even when a `functionCall` arrived, and the
+  Responses adapter treats OpenAI's real `response.incomplete` event (and the
+  `status: "incomplete"` some compatible servers send on `response.completed`)
+  as truncation, so the model gets `is_error` results for the partial calls
+  instead of the agent running them.
+- **Subagents go through the permission gate.** `task` built its child `Agent`
+  without a `before_tool_call`, so in zen mode a child saw every tool with no
+  policy: `tool_deny` patterns, the catastrophic-command check and
+  `--read-only` never applied inside a subagent. The parent's gate is now passed
+  into `build_task_tool`, and `--read-only` is honoured by every frontend's gate
+  (only the RPC used to forward it) — an explicit `/mode` still lifts it.
+- **`zen -p` sessions keep tool durations and diffs.** `tool_end` records were
+  written by the TUI's chat controller, so a headless session was missing them;
+  the runtime's own listener writes them now, once per call, for every frontend.
+- **`zen doctor --report` lives with the doctor checks** (`zenagent/cli/doctor.py`);
+  `zenagent/crash.py` writes crash logs and no longer imports the CLI.
+
+### Added
+
+- **The RPC ships the whole status snapshot.** `status` carries the complete
+  `RunStatus` (`status` key, nested context/pending/jobs/subagents included)
+  next to the flat keys it always had; additions reach clients on the commit
+  that makes them instead of waiting for someone to remember the field list.
+- **Three gates that keep the architecture true**: `tests/test_layering.py`
+  (imports point downward; `app/` imports neither `zenagent.cli` nor a UI
+  library — it caught a real `app → cli` import), `tests/test_docs_paths.py`
+  (every `zenagent/*.py` a reference doc cites must exist — it caught a stale
+  `providers/retry.py`), and `tests/test_app_records.py` for the record
+  vocabulary.
+
+### Changed
+
+- **One owner for the session record vocabulary** (`zenagent/app/records.py`:
+  type constants, builders, predicates, `keep_for_rewrite`). The kernel's
+  `carry_records`/`fork_at`/`rewrite` now require a `keep` predicate and know no
+  record kind — only the structural rule that a record carrying a `call_id`
+  follows the calls that still exist — so adding a record type no longer means
+  editing the kernel.
+- **`zenagent/app/` is documented as the application layer**: `architecture.md`
+  draws it, `file-map.md` gains the table, `tools-internals.md` describes the
+  real `task` contract (async dispatch, inherited toolset, child transcripts,
+  the parent gate), and `contracts.md` drops three stale claims (the
+  tool-execution `try/except`, the missing `pending` stop reason, `--resume`
+  never writing).
+- **Entropy reduction, no behaviour change**: tool results and truncation come
+  from `zenagent/tools/_result.py` (nine `_text` and three `_clip` copies
+  collapsed into one helper with one notice), the loop guard moved to
+  `zenagent/agent/guard.py`, tool execution to `zenagent/agent/tool_exec.py`
+  (`agent/loop.py` 815 → 538 lines), and every frontend builds its policy gate +
+  broker through `zenagent/app/permissions.py::build_broker_for`.
+
 **Frontend alignment: RPC and the REPL stop dropping capabilities the other
 frontends already had, and headless `-p` stops assembling a second-class agent.**
 
