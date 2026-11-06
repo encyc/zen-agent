@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import fnmatch
 import re
+from collections.abc import Sequence
 from pathlib import Path
 
 from zenagent.app.modes import DEFAULT_MODE, normalize_mode
@@ -470,6 +471,45 @@ def build_permission_gate(
         mode=mode,
         policy=policy,
     )
+
+
+def build_broker_for(
+    *,
+    user_config,
+    mode: str,
+    read_only: bool = False,
+    assume_yes: bool = False,
+    allow_dangerous: bool = False,
+    allow_outside: Sequence[str] = (),
+    allow_destructive: bool = False,
+    allow_protected: bool = False,
+    cwd: Path | None = None,
+) -> PermissionBroker:
+    """Build the policy + gate + broker every frontend needs, in one place.
+
+    Policy wiring used to be copied into each frontend, which is how the RPC
+    ended up being the only one that forwarded ``read_only``. Frontends now
+    supply only what is genuinely theirs: the mode, the CLI flags and (later)
+    the confirm callback.
+    """
+    policy = GuardPolicy.from_config(
+        user_config,
+        cwd=cwd or Path.cwd(),
+        allow_outside=list(allow_outside),
+        allow_destructive=allow_destructive,
+        allow_protected=allow_protected,
+    )
+    gate = build_permission_gate(
+        assume_yes=assume_yes,
+        interactive=False,
+        allow_dangerous=allow_dangerous,
+        allow=user_config.tool_allow,
+        deny=user_config.tool_deny,
+        mode=mode,
+        read_only=read_only,
+        policy=policy,
+    )
+    return PermissionBroker.wrap(gate)
 
 
 class PermissionBroker:

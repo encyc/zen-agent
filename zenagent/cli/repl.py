@@ -32,12 +32,10 @@ from zenagent.app.commands import AppServices, build_default_commands
 from zenagent.app.models import ModelManager
 from zenagent.app.modes import describe_modes
 from zenagent.app.permissions import (
-    PermissionBroker,
-    build_permission_gate,
+    build_broker_for,
     render_approval_prompt,
 )
 from zenagent.app.runtime import Runtime, RuntimeOptions
-from zenagent.app.safety import GuardPolicy
 from zenagent.app.sessions import SessionManager
 from zenagent.app.skill_commands import build_skill_submission
 from zenagent.app.support import api_key_for
@@ -464,26 +462,19 @@ async def repl(
     """Run the interactive loop; returns the process exit code."""
     set_locale(resolve_language(lang, pref=_saved_language()))
     user_config = load_user_config()
-    policy = GuardPolicy.from_config(
-        user_config,
-        cwd=Path.cwd(),
-        allow_outside=allow_outside or [],
-        allow_destructive=allow_destructive,
-        allow_protected=allow_protected,
-    )
     # The broker owns the interactive surface: approvals travel through the
     # same single-stdin protocol as every other question (see the interaction
     # gate below), instead of a blocking input() that fought the steering
     # reader for stdin and froze the event loop mid-prompt.
-    gate = build_permission_gate(
-        interactive=False,
-        allow_dangerous=allow_dangerous,
-        allow=user_config.tool_allow,
-        deny=user_config.tool_deny,
+    broker = build_broker_for(
+        user_config=user_config,
         mode=mode,
-        policy=policy,
+        read_only=read_only,
+        allow_dangerous=allow_dangerous,
+        allow_outside=allow_outside or [],
+        allow_destructive=allow_destructive,
+        allow_protected=allow_protected,
     )
-    broker = PermissionBroker.wrap(gate)
     options = RuntimeOptions(
         model_id=model_id,
         thinking=thinking,
