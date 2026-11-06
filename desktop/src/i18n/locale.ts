@@ -211,6 +211,15 @@ const zh: Dict = {
   'chat.copied': '已复制',
   'chat.regenerate': '重新生成',
   'chat.showEarlier': '显示更早的 {count} 条',
+  'chat.todo.progress': '已完成 {completed} 个任务（共 {total} 个）',
+  'chat.todo.completed': '已完成 {completed} 个任务（共 {total} 个）',
+  'chat.todo.expand': '展开任务清单',
+  'chat.todo.collapse': '收起任务清单',
+  'chat.todo.status.pending': '待办',
+  'chat.todo.status.in_progress': '进行中',
+  'chat.todo.status.completed': '已完成',
+  'chat.todo.status.abandoned': '已取消',
+  'chat.todo.status.blocked': '阻塞',
   'compaction.divider': '上下文已压缩',
 }
 
@@ -419,6 +428,15 @@ const en: Dict = {
   'chat.copied': 'Copied',
   'chat.regenerate': 'Regenerate',
   'chat.showEarlier': 'Show {count} earlier',
+  'chat.todo.progress': '{completed}/{total} completed',
+  'chat.todo.completed': '{completed}/{total} completed',
+  'chat.todo.expand': 'Expand checklist',
+  'chat.todo.collapse': 'Collapse checklist',
+  'chat.todo.status.pending': 'Pending',
+  'chat.todo.status.in_progress': 'In progress',
+  'chat.todo.status.completed': 'Completed',
+  'chat.todo.status.abandoned': 'Cancelled',
+  'chat.todo.status.blocked': 'Blocked',
   'compaction.divider': 'Context compacted',
 }
 

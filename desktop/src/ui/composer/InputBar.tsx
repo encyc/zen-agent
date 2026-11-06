@@ -1,6 +1,7 @@
 /** The composer capsule (dsh InputBar shape): attachments rail, auto-growing
  * draft surface, control row (attach · mode | context · model+thinking ·
- * send/stop), slash-command menu, pending lanes dock and todo dock below.
+ * send/stop), slash-command menu, plus the pending lanes and todo docks
+ * stacked above the plate.
  * Enter submits; while running it steers; Esc interrupts. */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -142,6 +143,7 @@ export function InputBar() {
     <div className={css.root}>
       {approvalCount > 0 && <ApprovalPanel />}
       <PendingDock />
+      <TodoDock />
       <div className={css.card} data-composer-plate>
         {images.length > 0 && (
             <div className={css.attachRail}>
@@ -276,9 +278,6 @@ export function InputBar() {
             </div>
           </div>
         </div>
-      <div className={css.dock}>
-        <TodoDock />
-      </div>
     </div>
   )
 }

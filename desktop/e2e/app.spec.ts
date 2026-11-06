@@ -367,14 +367,22 @@ test('the composer never covers the last message on a short window', async ({ pa
     initialState({
       running: false,
       transcript,
-      todos: Array.from({ length: 14 }, (_, index) => ({
-        text: `待办项 ${index}`,
-        status: 'pending',
-      })),
+      todos: [
+        {
+          name: 'Tasks',
+          tasks: Array.from({ length: 14 }, (_, index) => ({
+            content: `待办项 ${index}`,
+            status: 'pending',
+          })),
+        },
+      ],
     }),
   )
-  await page.getByRole('button', { name: /待办/ }).click()
-  await expect(page.getByText('待办项 13')).toBeVisible()
+  await page.getByRole('button', { name: '展开任务清单' }).click()
+  await expect(
+    page.getByRole('button', { name: '收起任务清单' }),
+  ).toHaveAttribute('aria-expanded', 'true')
+  await expect(page.getByText('待办项 13')).toHaveCount(1)
   await expect
     .poll(async () => {
       await page
@@ -389,6 +397,44 @@ test('the composer never covers the last message on a short window', async ({ pa
       })
     })
     .toBeLessThanOrEqual(1)
+})
+
+test('the todo dock sits above the composer with progress and an expandable list', async ({ page }) => {
+  await boot(
+    page,
+    initialState({
+      running: true,
+      todos: [
+        {
+          name: 'Tasks',
+          tasks: [
+            { content: '读取会话', status: 'completed' },
+            { content: '重写 todo dock', status: 'in_progress' },
+            { content: '补充 e2e', status: 'pending' },
+          ],
+        },
+      ],
+    }),
+  )
+  const dock = page.locator('[data-todo-dock]')
+  await expect(dock).toContainText('已完成 1 个任务（共 3 个）')
+  await expect(dock).toContainText('重写 todo dock')
+  const dockBox = await dock.boundingBox()
+  const plateBox = await page.locator('[data-composer-plate]').boundingBox()
+  assert.ok(dockBox !== null && plateBox !== null)
+  assert.ok(dockBox.y + dockBox.height <= plateBox.y + 0.5)
+
+  const toggle = page.getByRole('button', { name: '展开任务清单' })
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  await toggle.click()
+  await expect(
+    page.getByRole('button', { name: '收起任务清单' }),
+  ).toHaveAttribute('aria-expanded', 'true')
+  await expect(page.getByText('补充 e2e')).toBeVisible()
+  assert.equal(
+    await page.getByText('读取会话').evaluate((el) => getComputedStyle(el).textDecorationLine),
+    'line-through',
+  )
 })
 
 test('an approval stacks above a still-mounted composer', async ({ page }) => {

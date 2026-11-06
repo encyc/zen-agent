@@ -1,7 +1,7 @@
 /** Composer docks: todo panel, pending lanes (queue/steer), context meter —
  * the dsh composer.dock entries, driven by the status snapshot. */
 
-import { useEffect, useId, useRef, useState } from 'react'
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { useAppStore } from '../../state/appStore'
 import {
@@ -13,8 +13,8 @@ import { useStatusStore } from '../../state/stores'
 import type { PendingMessage } from '../../rpc/types'
 import { useT } from '../../i18n/locale'
 import { formatCompactTokens } from '../format'
-import { ChevronDownIcon, ListTodoIcon } from '../icons'
-import { StateDot } from '../primitives'
+import { CheckIcon, ChevronDownIcon } from '../icons'
+import { flattenTodos, todoProgress, type TodoStatus, type TodoTask } from './todos'
 import css from './Docks.module.css'
 
 // Selectors must return a stable reference: a fresh `[]` fallback makes
@@ -24,45 +24,107 @@ const NO_PENDING: never[] = []
 
 export function TodoDock() {
   const t = useT()
-  const todos = useStatusStore((state) => state.status?.todos ?? NO_TODOS)
-  const [open, setOpen] = useState(false)
-  if (todos.length === 0) return null
-  const inProgress = todos.filter((todo) => todo.status === 'in_progress').length
+  const phases = useStatusStore((state) => state.status?.todos ?? NO_TODOS)
+  const [expanded, setExpanded] = useState(false)
+  const contentId = useId()
+  const tasks = useMemo(() => flattenTodos(phases), [phases])
+  const groups = useMemo(() => {
+    const built: { name: string; tasks: TodoTask[] }[] = []
+    for (const task of tasks) {
+      const tail = built[built.length - 1]
+      if (tail !== undefined && tail.name === task.phase) tail.tasks.push(task)
+      else built.push({ name: task.phase, tasks: [task] })
+    }
+    return built
+  }, [tasks])
+  if (tasks.length === 0) return null
+  const progress = todoProgress(tasks, t)
+  const currentShimmers = !expanded && progress.current !== undefined
+  const showPhase = groups.length > 1
   return (
-    <div className={css.todoDock}>
-      <button type="button" className={css.todoHead} onClick={() => setOpen((value) => !value)}>
-        <ListTodoIcon size={12} />
-        <span>{t('status.todos')}</span>
-        {inProgress > 0 && <StateDot state="running" size={6} />}
-        <span className={css.todoCount}>{todos.length}</span>
-        <span className={clsx(css.todoChevron, open && css.todoChevronOpen)}>
-          <ChevronDownIcon size={11} />
+    <div className={clsx(css.todoDock, expanded && css.todoExpanded)} data-todo-dock>
+      <div className={css.todoHead}>
+        <span className={css.todoSymbol} aria-hidden>
+          {progress.symbol}
         </span>
-      </button>
-      {open && (
-        <div className={css.todoList}>
-          {todos.map((todo, index) => (
-            <div key={index} className={css.todoItem}>
-              <StateDot
-                state={
-                  todo.status === 'completed'
-                    ? 'ok'
-                    : todo.status === 'in_progress'
-                      ? 'running'
-                      : 'idle'
-                }
-                size={7}
-              />
-              <span
-                className={css.todoText}
-                data-done={todo.status === 'completed' || undefined}
-              >
-                {String(todo.text ?? todo.description ?? '')}
-              </span>
-            </div>
-          ))}
+        <div className={css.todoCopy}>
+          <span className={css.todoLabel}>{progress.label}</span>
+          {progress.current !== undefined && (
+            <span
+              className={clsx(css.todoCurrent, currentShimmers && css.todoShimmer)}
+              title={progress.current.content}
+            >
+              {progress.current.content}
+            </span>
+          )}
         </div>
-      )}
+        <button
+          type="button"
+          className={css.todoToggle}
+          aria-label={expanded ? t('chat.todo.collapse') : t('chat.todo.expand')}
+          title={expanded ? t('chat.todo.collapse') : t('chat.todo.expand')}
+          aria-controls={contentId}
+          aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          <ChevronDownIcon size={16} />
+        </button>
+      </div>
+      <div id={contentId} className={css.todoContent} aria-hidden={!expanded}>
+        <div className={css.todoClip}>
+          <div className={css.todoList} role="list" tabIndex={expanded ? 0 : -1}>
+            {groups.map((group, groupIndex) => (
+              <Fragment key={`${groupIndex}:${group.name}`}>
+                {showPhase && (
+                  <div className={css.todoPhase} role="presentation">
+                    {group.name}
+                  </div>
+                )}
+                {group.tasks.map((task, index) => (
+                  <TodoRow
+                    key={`${groupIndex}:${index}:${task.content}`}
+                    task={task}
+                    shimmer={expanded}
+                  />
+                ))}
+              </Fragment>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function statusSymbol(status: TodoStatus): string {
+  switch (status) {
+    case 'in_progress':
+      return '\u2022'
+    case 'abandoned':
+      return '\u2212'
+    case 'blocked':
+      return '!'
+    default:
+      return ''
+  }
+}
+
+/* The header already names the running step while collapsed, and the list
+ * stays mounted behind the disclosure, so the row shimmer is gated on the
+ * list being open or the same text would sweep twice. */
+function TodoRow({ task, shimmer }: { task: TodoTask; shimmer: boolean }) {
+  const t = useT()
+  const label = t(`chat.todo.status.${task.status}`)
+  const working = shimmer && task.status === 'in_progress'
+  return (
+    <div className={css.todoRow} data-status={task.status} role="listitem">
+      <span className={css.todoRowSymbol} role="img" aria-label={label} title={label}>
+        {task.status === 'completed' ? <CheckIcon size={13} /> : statusSymbol(task.status)}
+      </span>
+      <span className={clsx(css.todoRowText, working && css.todoShimmer)} title={task.content}>
+        {task.content}
+      </span>
+      {task.blocker !== '' && <span className={css.todoBlocker}>{task.blocker}</span>}
     </div>
   )
 }
