@@ -369,3 +369,33 @@ async def test_bootstrap_wires_the_task_budget_from_config(
     assert captured["limits"] == SubagentLimits(
         keep_transcripts=64, max_total_bytes=4096, max_file_bytes=2048
     )
+
+
+async def test_bootstrap_hands_the_permission_gate_to_the_task_tool(
+    runtime_factory, app_env, monkeypatch
+):
+    """A child agent consults the same gate as its parent (no policy bypass)."""
+    from zenagent.app.permissions import PermissionBroker
+    from zenagent.app.runtime import Runtime, RuntimeOptions
+    from zenagent.app.runtime import build_task_tool as real_build_task_tool
+
+    captured: dict = {}
+
+    def capture(**kwargs):
+        captured.update(kwargs)
+        return real_build_task_tool(**kwargs)
+
+    monkeypatch.setattr("zenagent.app.runtime.build_task_tool", capture)
+
+    runtime = await runtime_factory()
+    assert captured["before_tool_call"] == runtime.gate.before_tool_call
+
+    broker = PermissionBroker.wrap(runtime.gate)
+    brokered = await Runtime.bootstrap(
+        RuntimeOptions(mcp=False, skills=False, templates=False), gate=broker
+    )
+    try:
+        assert captured["before_tool_call"] == broker.before_tool_call
+        assert brokered.gate is broker
+    finally:
+        await brokered.close()
