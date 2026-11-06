@@ -64,8 +64,8 @@
 
 | 功能 | 源码 | 测试 | 文档 |
 |---|---|---|---|
-| Textual 外壳、状态栏、输入 | `cli/tui/{app,run}.py`、`widgets/{status_bar,prompt_input}.py` | `test_tui_skeleton.py` | [TUI](guide/tui.md) |
-| 富渲染（markdown/工具卡/usage） | `widgets/{chat_log,tool_card}.py` | `test_tui_chat.py` | 同上 |
+| Textual 外壳、状态栏、输入 | `cli/tui/{app,run}.py`、`widgets/{status_band,prompt_input}.py` | `test_tui_skeleton.py` | [TUI](guide/tui.md) |
+| 富渲染（markdown/工具卡/usage） | `widgets/{transcript,rows,tool_card}.py` | `test_tui_chat.py` | 同上 |
 | 队列/steer/中断 | `app.py`、`app/chat.py` | `test_tui_controls.py` | 同上 |
 | 待发区与插话：输入框上方排队/插话 band、点击/Ctrl+S 升格、滞留插话续跑、跨会话丢弃 | `app/{views,chat}.py`、`cli/tui/widgets/pending_band.py`、`cli/tui/app.py`、`agent/agent.py` | `test_app_pending.py`、`test_tui_pending_band.py`、`test_tui_controls.py` | [TUI](guide/tui.md) |
 | 模型/会话选择器、命令面板 | `screens/modals.py` | `test_tui_pickers.py` | 同上 |
@@ -76,8 +76,8 @@
 | 界面语言（i18n）：en/zh catalog、`/lang`/`--lang`/设置面板、TUI+REPL+命令描述翻译、CJK 宽度 | `i18n/{__init__,en,zh}.py`、`cli/tui/{app.py,labels.py,textutil.py}`、`app/{commands,slash_args}.py`、`cli/{repl,completion}.py` | `test_i18n.py`、`test_i18n_tui.py`、`test_i18n_app.py`、`test_completion.py` | [i18n](guide/i18n.md) |
 | 子代理转录：sidecar 持久化 + 只读查看 + resume 回看 | `agent/subagents.py`、`tools/task.py`、`app/chat.py`、`cli/tui/{widgets/subagent_banner.py,app.py}` | `test_subagents_store.py`、`test_task.py`、`test_app_chat.py`、`test_tui_subagent_view.py`、`test_tui_subagent_resume.py` | 同上 |
 | 会话操作（new/fork/delete/export/rename） | `screens/modals.py::SessionPicker`、`cli/tui/app.py` | `test_tui_sessions.py` | 同上 |
-| 收尾（窄屏/退出摘要） | `widgets/status_bar.py`、`app.py` | `test_tui_polish.py` | 同上 |
-| P1/P2 收尾：read 分组、plan review、hotkeys/usage/MCP 向导、todo 编辑、剪贴板/外部编辑器、ctrl+shift+o/alt+l | `widgets/rows.py::ReadGroup`、`screens/modals.py::{PlanReview,HotkeysSheet,UsageDashboard,McpAdd,TodoEditor}`、`widgets/clipboard.py`、`app.py` | `test_tui_chat.py`、`test_tui_controls.py`、`test_tui_tool_card_families.py` | [TUI](guide/tui.md) |
+| 收尾（窄屏/退出摘要） | `widgets/status_band.py`、`app.py` | `test_tui_polish.py` | 同上 |
+| P1/P2 收尾：read 分组、plan review、hotkeys/usage/MCP 向导、todo 编辑、剪贴板/外部编辑器、ctrl+shift+o/alt+l | `widgets/rows.py::ReadGroup`、`screens/modals.py::{PlanReview,HotkeysSheet,UsageDashboard,McpAdd,TodoEditor}`、`app/clipboard.py`、`app.py` | `test_tui_chat.py`、`test_tui_controls.py`、`test_tui_tool_card_families.py` | [TUI](guide/tui.md) |
 
 ## 6. CLI / REPL
 

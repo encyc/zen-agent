@@ -1,11 +1,14 @@
 # 架构总览
 
-## 五层，依赖只向下
+## 六层，依赖只向下
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ cli/        main · repl · render · permissions · rpc         │  交互层
+│ cli/        main · repl · render · rpc · tui                 │  交互层
 │             doctor · export/usage · theme · keybindings      │
+├─────────────────────────────────────────────────────────────┤
+│ app/        runtime（装配）· chat · commands · views          │  应用层
+│             permissions · safety · sessions · records        │  （UI 无关）
 ├─────────────────────────────────────────────────────────────┤
 │ tools/      fs · bash · search（AgentTool 的具体实现）        │  能力层
 ├─────────────────────────────────────────────────────────────┤
@@ -20,7 +23,11 @@
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**规则**：上面只 import 下面，绝不反向。`kernel` 级的 `agent/` 不知道 CLI 存在；`tools/` 不知道
+**规则**：上面只 import 下面，绝不反向（`tests/test_layering.py` 钉住层序，以及
+「`app/` 不 import `zenagent.cli`、不 import argparse/textual/rich/prompt_toolkit」）。
+`app/` 是四个前端（REPL、headless `-p`、JSONL RPC、Textual TUI）共同的装配与状态层：
+`Runtime.bootstrap` 是唯一的装配入口，`ChatController`/`CommandRegistry`/`SessionManager`
+是它们共享的对象。`kernel` 级的 `agent/` 不知道 CLI 存在；`tools/` 不知道
 `agent/` 的循环细节；`providers/` 只认 `StreamFn` 契约。
 
 所有「扩展面」（MCP、skills、templates、extensions、RPC、导出、指标、崩溃日志）都在 `agent/` 之上
@@ -40,7 +47,7 @@ agent_loop(prompt, state, config)      agent/loop.py
    ├─ 组装 request_messages  = [system] + state.messages
    │     └─ transform_context()  （压缩、裁剪；只影响本次请求）
    │
-   ├─ stream_with_retry(stream_fn, …)  providers/retry.py
+   ├─ stream_with_retry(stream_fn, …)  retry.py（message 级重试）
    │     └─ safe_stream()              providers/registry.py
    │           └─ adapter.stream()      providers/{openai,anthropic,…}.py
    │                 └─ transport.post_stream()  httpx + 重试 + 取消
@@ -95,8 +102,9 @@ agent_end 事件
 | `zenagent/agent/agent.py` | 有状态包装 | `Agent`（subscribe/steer/abort/wait_for_idle） |
 | `zenagent/agent/validate.py` | 参数 schema 校验 | `validate_arguments` |
 | `zenagent/agent/session.py` | JSONL 会话持久化 | `Session`、`latest_session`、`truncate_last_turn` |
-| `zenagent/tools/` | 内置工具 | `read_file`/`write_file`/`edit_file`/`list_dir`/`bash`/`glob`/`grep`/`web_search`/`fetch`/`todo`（会话级） |
-| `zenagent/cli/` | 所有交互面 | `main`、`repl`、`PermissionGate`、`RpcServer` |
+| `zenagent/tools/` | 内置工具 | `ALL_TOOLS` = `read_file`/`write_file`/`edit_file`/`list_dir`/`bash`/`wait`/`ask`/`glob`/`grep`/`web_search`/`fetch`；`Runtime` 另外注入 `todo`/`task`/`memory`/`checkpoint`/`lsp`/`github`/skills/MCP |
+| `zenagent/app/` | UI 无关的应用层 | `Runtime`、`ChatController`、`CommandRegistry`、`SessionManager`、`PermissionGate`/`PermissionBroker`、`RunStatus`、`records` |
+| `zenagent/cli/` | 所有交互面 | `main`、`repl`、`rpc`、`tui`（`cli/permissions.py` 只是兼容 shim） |
 | `zenagent/mcp/` | MCP 客户端与生命周期 | `McpClient`、`StdioTransport`、`HttpTransport`、`McpManager` |
 | `zenagent/skills.py` / `templates.py` | 文件即扩展 | `discover_skills`、`build_skill_tool`、`expand` |
 | `zenagent/extensions.py` | Python 扩展 | `ExtensionAPI`、`load_extensions` |

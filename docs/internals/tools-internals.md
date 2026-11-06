@@ -12,6 +12,8 @@ class AgentTool:
     execute: Callable[[str, dict, AbortToken|None, Callable|None], Awaitable[ToolResultAgent]]
     approval: str = "exec"            # 工具声明的能力级：read / write / exec
     timeout_s: float | None = None    # 内核级 deadline（None = 工具自管/无）
+    hidden: bool = False              # 存在但不暴露给模型
+    default_inactive: bool = False    # 需用户激活后才进入 active 集合
 
 @dataclass
 class ToolResultAgent:
@@ -95,14 +97,18 @@ class ToolResultAgent:
 
 ### 子代理（`task`）
 
-- `task(prompt, name?)` 只做**同步单发**：child = 新 `Agent`（同 model/stream、只读工具集
-  `read_file/list_dir/glob/grep/web_search/fetch`、独立 `ContextGuard`、不落 session），
-  父上下文只收到 `<task-result name status duration_ms cost tokens>…</task-result>` envelope。
-- 递归深度 1（child 看不到 `task`）；`approval="read"`、`execution_mode="sequential"`；
-  plan/ask 下可派只读子代理，child 不会弹审批。
+- `task(prompt, name?, async?, model?)`：child = 新 `Agent`（默认同 model/stream，可用 `model`
+  逐次覆盖；独立 `ContextGuard`；转录落在 `<sessions>/tasks/<stem>/<call_id>.jsonl`），
+  父上下文收到 `<task-result name status duration_ms cost tokens>…</task-result>` envelope。
+- 工具集：zen 父代理把**整个 active 集**（减去 denylist：`task`/`ask`/`wait`/`todo`/`rewind`/
+  `memory*`/`checkpoint*`）交给 child；其他模式只给 read 档工具。child 的工具调用经过
+  **父会话的 permission gate**（`Runtime` 把 `gate.before_tool_call` 传进 `build_task_tool`），
+  所以 deny 模式与灾难命令策略在子代理里同样生效。
+- `async: true` 直接把 run 交给进程级 `TaskManager`（`task_N` id），用 `wait` 收集；
+  前台收集前 spend 不计入父 run 的 `max_cost`。
+- 递归深度 1（child 看不到 `task`）；`execution_mode="sequential"`。
 - child 失败/abort 不产生 is_error：envelope 的 `status=error|aborted|truncated` 描述原因；
   `details` 带 `subagent_cost/subagent_tokens`，父的状态带与 telemetry 单独累计。
-- 已知限制：child 的中间事件不流式显示；child 不继承 `todo/skills`；成本只汇总不分模型。
 
 ### 用户提问（`ask`）
 
