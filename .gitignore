@@ -25,3 +25,5 @@ docs/za/
 .zenagent/memory/
 
 .zcode/
+# frozen zen sidecar (built by scripts/build-sidecar.py)
+desktop/src-tauri/binaries/
