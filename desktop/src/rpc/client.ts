@@ -4,6 +4,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import type { ServerFrame } from './types'
+import { startFailureOf } from '../state/startFailure.ts'
 
 export interface StartOptions {
   bin?: string
@@ -38,14 +39,21 @@ export class RpcClient {
         for (const handler of this.exitHandlers) handler(event.payload.code, event.payload.pid)
       })
     }
-    const report = await invoke<{ pid: number }>('rpc_start', {
-      options: {
-        bin: options.bin ?? null,
-        cwd: options.cwd ?? null,
-        args: options.args ?? [],
-      },
-    })
-    return report.pid
+    try {
+      const report = await invoke<{ pid: number }>('rpc_start', {
+        options: {
+          bin: options.bin ?? null,
+          cwd: options.cwd ?? null,
+          args: options.args ?? [],
+        },
+      })
+      return report.pid
+    } catch (error) {
+      // `rpc_start` rejects with a structured reason when the runtime is gone;
+      // anything else keeps travelling as the string it always was.
+      const failure = startFailureOf(error)
+      throw failure ?? error
+    }
   }
 
   async stop(): Promise<void> {

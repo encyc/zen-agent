@@ -108,3 +108,9 @@
 .exitButton:hover {
   background: var(--dsw-alias-button-info-hover);
 }
+
+/* Two actions on the runtime card: copy diagnostics, then retry. */
+.exitActions {
+  display: flex;
+  gap: 8px;
+}

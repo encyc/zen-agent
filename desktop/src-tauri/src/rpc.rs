@@ -58,6 +58,24 @@ pub struct StartReport {
     pub pid: u32,
 }
 
+/// Why `rpc_start` could not run the CLI. `runtime_missing` is the one the UI
+/// turns into a "no runtime" card; the JSON keys are camelCase for the webview.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartError {
+    pub code: &'static str,
+    pub bin: String,
+    pub os_error: String,
+}
+
+/// What the shell found when asked where the runtime is (Settings → diagnostics).
+#[derive(Serialize)]
+pub struct RuntimeProbe {
+    pub resolved: Option<String>,
+    pub exists: bool,
+    pub version: Option<String>,
+}
+
 /// One pending send: registered before the request hits stdin so an answer
 /// racing the write can never miss its receiver.
 struct Guard {
@@ -235,7 +253,7 @@ pub fn rpc_start(
     app: AppHandle,
     state: State<'_, RpcState>,
     options: StartOptions,
-) -> Result<StartReport, String> {
+) -> Result<StartReport, StartError> {
     let mut slot = state.proc.lock().unwrap();
     if let Some(existing) = slot.take() {
         stop_proc(&existing);
@@ -253,22 +271,43 @@ pub fn rpc_start(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    let mut child = command
-        .spawn()
-        .map_err(|error| format!("failed to start {bin} rpc: {error}"))?;
+    let mut child = command.spawn().map_err(|error| StartError {
+        code: if matches!(
+            error.kind(),
+            std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied
+        ) {
+            "runtime_missing"
+        } else {
+            "spawn_failed"
+        },
+        bin: bin.clone(),
+        os_error: error.to_string(),
+    })?;
     let pid = child.id();
     let stdin = child
         .stdin
         .take()
-        .ok_or_else(|| "no stdin handle".to_string())?;
+        .ok_or_else(|| StartError {
+            code: "spawn_failed",
+            bin: bin.clone(),
+            os_error: "no stdin handle".to_string(),
+        })?;
     let stdout = child
         .stdout
         .take()
-        .ok_or_else(|| "no stdout handle".to_string())?;
+        .ok_or_else(|| StartError {
+            code: "spawn_failed",
+            bin: bin.clone(),
+            os_error: "no stdout handle".to_string(),
+        })?;
     let stderr = child
         .stderr
         .take()
-        .ok_or_else(|| "no stderr handle".to_string())?;
+        .ok_or_else(|| StartError {
+            code: "spawn_failed",
+            bin: bin.clone(),
+            os_error: "no stderr handle".to_string(),
+        })?;
 
     let pending: Pending = Arc::new(Mutex::new(HashMap::new()));
     let alive = Arc::new(AtomicBool::new(true));
@@ -418,6 +457,30 @@ pub fn rpc_stop(state: State<'_, RpcState>) -> Result<(), String> {
 }
 
 /// Best-effort teardown on app exit.
+/// Where the shell would look for the runtime, and what it reports there.
+/// Settings shows this so a user can tell a missing sidecar from a broken one.
+#[tauri::command]
+pub fn runtime_probe() -> RuntimeProbe {
+    let resolved = resolve_bin("zen");
+    let exists = Path::new(&resolved).is_file();
+    let version = if exists {
+        Command::new(&resolved)
+            .arg("--version")
+            .output()
+            .ok()
+            .filter(|output| output.status.success())
+            .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+            .filter(|text| !text.is_empty())
+    } else {
+        None
+    };
+    RuntimeProbe {
+        resolved: Some(resolved),
+        exists,
+        version,
+    }
+}
+
 pub fn kill_all(state: &RpcState) {
     if let Some(proc) = state.proc.lock().unwrap().take() {
         proc.alive.store(false, Ordering::SeqCst);

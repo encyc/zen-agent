@@ -12,6 +12,7 @@ pub fn run() {
             rpc::rpc_start,
             rpc::rpc_send,
             rpc::rpc_stop,
+            rpc::runtime_probe,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -3,6 +3,7 @@
  * The prompt/steer split mirrors the TUI composer: Enter while busy steers,
  * and Esc cancels. */
 
+import { startFailureOf, type StartFailure } from './startFailure.ts'
 import { create } from 'zustand'
 import { homeDir } from '@tauri-apps/api/path'
 import { RpcClient } from '../rpc/client'
@@ -50,6 +51,7 @@ interface AppState {
   connection: ConnectionState
   exitCode: number | null
   stderrTail: string[]
+  startFailure: StartFailure | null
   pid: number | null
   busy: boolean
   connect(bin?: string, cwd?: string, args?: string[]): Promise<void>
@@ -101,6 +103,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   connection: 'idle',
   exitCode: null,
   stderrTail: [],
+  startFailure: null,
   pid: null,
   busy: false,
 
@@ -111,7 +114,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async connect(bin, cwd, args) {
     const rpc = get().client()
-    set({ connection: 'starting', exitCode: null, stderrTail: [] })
+    set({ connection: 'starting', exitCode: null, stderrTail: [], startFailure: null })
     useChatStore.getState().reset()
     useApprovalStore.getState().clear()
 
@@ -152,8 +155,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       await get().refreshCatalog()
       pollTimer = setInterval(() => void get().refreshStatus(), 2000)
     } catch (error) {
-      set({ connection: 'exited', exitCode: null })
-      set((state) => ({ stderrTail: [...state.stderrTail, String(error)] }))
+      const failure = startFailureOf(error)
+      set({ connection: 'exited', exitCode: null, startFailure: failure })
+      set((state) => ({
+        stderrTail: [
+          ...state.stderrTail,
+          failure === null ? String(error) : `failed to start ${failure.bin} rpc: ${failure.osError}`,
+        ],
+      }))
     }
   },
 
