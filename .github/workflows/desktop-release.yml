@@ -208,7 +208,7 @@ jobs:
           pathlib.Path("latest.json").write_text(json.dumps(payload, indent=2) + "\n")
           print(json.dumps(sorted(platforms)))
           PY
-          gh release upload "${GITHUB_REF_NAME}" latest.json --clobber
+          gh release upload "${GITHUB_REF_NAME}" latest.json --clobber -R "${GITHUB_REPOSITORY}"
 
       # Without a key there is nothing to sign, so the release ships installers
       # only. Say so in the notes rather than leaving users waiting for a badge.
@@ -216,6 +216,6 @@ jobs:
         if: env.KEY == ''
         shell: bash
         run: |
-          gh release view "${GITHUB_REF_NAME}" --json body --jq .body > body.md
+          gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" --json body --jq .body > body.md
           printf '\n\n> This build carries no update signature, so in-app updates are off for it.\n' >> body.md
-          gh release edit "${GITHUB_REF_NAME}" --notes-file body.md
+          gh release edit "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" --notes-file body.md
