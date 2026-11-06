@@ -32,12 +32,12 @@ jobs:
           # PyInstaller cannot cross-compile, so every leg runs on its own
           # architecture. macos-13 is retired; macos-15-intel is the current
           # x86_64 macOS image.
-          - { os: macos-15, target: aarch64-apple-darwin, bundles: app,dmg }
-          - { os: macos-15-intel, target: x86_64-apple-darwin, bundles: app,dmg }
-          - { os: ubuntu-24.04, target: x86_64-unknown-linux-gnu, bundles: appimage,deb }
-          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, bundles: appimage,deb }
-          - { os: windows-latest, target: x86_64-pc-windows-msvc, bundles: nsis }
-          - { os: windows-11-arm, target: aarch64-pc-windows-msvc, bundles: nsis }
+          - { os: macos-15, target: aarch64-apple-darwin, bundles: "app,dmg" }
+          - { os: macos-15-intel, target: x86_64-apple-darwin, bundles: "app,dmg" }
+          - { os: ubuntu-24.04, target: x86_64-unknown-linux-gnu, bundles: "appimage,deb" }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, bundles: "appimage,deb" }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, bundles: "nsis" }
+          - { os: windows-11-arm, target: aarch64-pc-windows-msvc, bundles: "nsis" }
     steps:
       - uses: actions/checkout@v4
 
@@ -123,7 +123,7 @@ jobs:
           args: >-
             --target ${{ matrix.target }}
             --bundles ${{ matrix.bundles }}
-            --config src-tauri/tauri.release.conf.json
+            --config=src-tauri/tauri.release.conf.json
             ${{ steps.signer.outputs.extra }}
 
       # One fragment per leg; the `latest` job merges them. Letting six parallel
