@@ -15,7 +15,12 @@ export function UserMessage({
 }) {
   const t = useT()
   return (
-    <div className={css.userRow} data-turn-row data-minimap-id={anchor}>
+    <div
+      className={css.userRow}
+      data-turn-row
+      data-minimap-id={anchor}
+      data-minimap-kind="user"
+    >
       {steering && <span className={css.steerChip}>{t('message.steering')}</span>}
       <div className={css.bubble} data-selectable data-steering={steering || undefined}>
         {text}

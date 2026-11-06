@@ -210,6 +210,7 @@ const zh: Dict = {
   'chat.copy': '复制',
   'chat.copied': '已复制',
   'chat.regenerate': '重新生成',
+  'chat.showEarlier': '显示更早的 {count} 条',
   'compaction.divider': '上下文已压缩',
 }
 
@@ -417,6 +418,7 @@ const en: Dict = {
   'chat.copy': 'Copy',
   'chat.copied': 'Copied',
   'chat.regenerate': 'Regenerate',
+  'chat.showEarlier': 'Show {count} earlier',
   'compaction.divider': 'Context compacted',
 }
 

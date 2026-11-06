@@ -1,9 +1,24 @@
 /** Chat transcript view: scroll ownership (follow-tail), node rendering and
  * the empty-state hero — the dsh ChatView shape. */
 
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { retryableNodeId, useChatStore, type ChatNode, type ToolNode, type UserNode } from '../../state/chatStore'
 import { groupTurns, type ChatTurn } from '../../state/turns'
+import {
+  TRANSCRIPT_WINDOW_MIN,
+  growTranscriptWindow,
+  reduceTranscriptWindow,
+  tailWindow,
+} from '../../state/transcriptWindow'
 import { useAppStore } from '../../state/appStore'
 import { useProjectStore, useSessionStore, useSettingsStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
@@ -17,6 +32,18 @@ import { ChatWidthHandles } from './ChatWidthHandles'
 import { NoticeRow, CommandCard, UsageRow } from './AuxRows'
 import { ArrowDownIcon } from '../icons'
 import css from './ChatView.module.css'
+
+/** The rail only cares about user rows; a stream of assistant deltas rebuilds
+ * `nodes` without touching them, so compare identity instead of rebuilding. */
+function sameUserRows(rows: UserNode[], nodes: ChatNode[]): boolean {
+  let index = 0
+  for (const node of nodes) {
+    if (node.kind !== 'user') continue
+    if (rows[index] !== node) return false
+    index += 1
+  }
+  return index === rows.length
+}
 
 export function ChatView() {
   const nodes = useChatStore((state) => state.nodes)
@@ -35,8 +62,106 @@ export function ChatView() {
   const [showJump, setShowJump] = useState(false)
   const [activeId, setActiveId] = useState<string | null>(null)
 
+  // Mounted history is a trailing window over the loaded nodes (D261 parity):
+  // a fast first commit, then the steady-state budget, grown upward on demand.
+  const [windowSize, setWindowSize] = useState(TRANSCRIPT_WINDOW_MIN)
+  const [initialCommit, setInitialCommit] = useState(true)
+  const anchorRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (nodes.length !== 0) return
+    setWindowSize(TRANSCRIPT_WINDOW_MIN)
+    setInitialCommit(true)
+  }, [nodes.length])
+
+  useEffect(() => {
+    if (!initialCommit || nodes.length === 0) return
+    const frame = requestAnimationFrame(() => setInitialCommit(false))
+    return () => cancelAnimationFrame(frame)
+  }, [initialCommit, nodes.length])
+
+  const transcriptWindow = reduceTranscriptWindow({
+    historyLength: nodes.length,
+    windowSize,
+    initialCommit,
+  })
+  const visible = useMemo(
+    () => tailWindow(nodes, transcriptWindow.mounted),
+    [nodes, transcriptWindow.mounted],
+  )
+
+  // The rail spans the whole loaded session, not just the mounted window.
+  const userRowsRef = useRef<UserNode[]>([])
+  if (!sameUserRows(userRowsRef.current, nodes)) {
+    userRowsRef.current = nodes.filter((node): node is UserNode => node.kind === 'user')
+  }
+  const userRows = userRowsRef.current
+
+  const findRow = (id: string) => {
+    const scroller = scrollerRef.current
+    if (scroller === null) return undefined
+    return Array.from(scroller.querySelectorAll<HTMLElement>('[data-minimap-id]')).find(
+      (row) => row.dataset.minimapId === id,
+    )
+  }
+  const scrollToRow = (row: HTMLElement) => {
+    const scroller = scrollerRef.current
+    if (scroller === null) return
+    setFollow(false)
+    scroller.scrollTo({
+      top:
+        scroller.scrollTop +
+        row.getBoundingClientRect().top -
+        scroller.getBoundingClientRect().top -
+        12,
+      behavior: 'smooth',
+    })
+  }
+
+  const growWindow = useCallback(() => {
+    const scroller = scrollerRef.current
+    if (scroller === null) return
+    const grown = growTranscriptWindow(windowSize, nodes.length)
+    if (grown === windowSize) return
+    // Mounting rows above the viewport moves everything the reader is looking
+    // at; hold the distance from the bottom so the content stays put.
+    anchorRef.current = scroller.scrollHeight - scroller.scrollTop
+    setWindowSize(grown)
+  }, [windowSize, nodes.length])
+
+  const pendingJumpRef = useRef<string | null>(null)
+  const mountedRef = useRef(0)
+  useLayoutEffect(() => {
+    const scroller = scrollerRef.current
+    if (scroller === null) return
+    const mounted = transcriptWindow.mounted
+    const previous = mountedRef.current
+    mountedRef.current = mounted
+    if (mounted <= previous) {
+      // A growth that never mounted (or a shorter transcript) has no anchor to
+      // consume; keeping it would displace the next real growth.
+      anchorRef.current = null
+      return
+    }
+    const pending = pendingJumpRef.current
+    if (pending !== null) {
+      pendingJumpRef.current = null
+      anchorRef.current = null
+      const row = findRow(pending)
+      if (row !== undefined) scrollToRow(row)
+      return
+    }
+    if (anchorRef.current !== null) {
+      scroller.scrollTop = scroller.scrollHeight - anchorRef.current
+      anchorRef.current = null
+      return
+    }
+    if (follow) scroller.scrollTop = scroller.scrollHeight
+  }, [transcriptWindow.mounted, follow])
+
   // Follow the tail while the user is at (or near) the bottom; any upward
-  // scroll detaches until they return. Same behavior contract as dsh.
+  // scroll detaches until they return. Reaching the top of the mounted window
+  // mounts the next slice of loaded history instead of letting it strand.
   useEffect(() => {
     const scroller = scrollerRef.current
     if (scroller === null) return
@@ -46,14 +171,15 @@ export function ChatView() {
       setShowJump(distance > 160)
       const anchor = scroller.getBoundingClientRect().top + scroller.clientHeight * 0.3
       let next: string | null = null
-      scroller.querySelectorAll<HTMLElement>('[data-minimap-id]').forEach((row) => {
+      scroller.querySelectorAll<HTMLElement>('[data-minimap-kind="user"]').forEach((row) => {
         if (row.getBoundingClientRect().top <= anchor) next = row.dataset.minimapId ?? null
       })
       setActiveId(next)
+      if (transcriptWindow.bounded && scroller.scrollTop <= 8) growWindow()
     }
     scroller.addEventListener('scroll', onScroll, { passive: true })
     return () => scroller.removeEventListener('scroll', onScroll)
-  }, [])
+  }, [growWindow, transcriptWindow.bounded])
 
   // New content keeps the view pinned when following; else reveal the jump pill.
   useEffect(() => {
@@ -71,32 +197,40 @@ export function ChatView() {
     if (path !== null) await switchProject(path)
   }
   const jumpTo = (id: string) => {
-    const scroller = scrollerRef.current
-    if (scroller === null) return
-    const target = Array.from(scroller.querySelectorAll<HTMLElement>('[data-minimap-id]')).find(
-      (row) => row.dataset.minimapId === id,
-    )
-    if (target === undefined) return
-    setFollow(false)
-    scroller.scrollTo({
-      top:
-        scroller.scrollTop +
-        target.getBoundingClientRect().top -
-        scroller.getBoundingClientRect().top -
-        12,
-      behavior: 'smooth',
-    })
+    const mounted = findRow(id)
+    if (mounted !== undefined) {
+      scrollToRow(mounted)
+      return
+    }
+    const index = nodes.findIndex((node) => node.id === id)
+    if (index < 0) return
+    // The window is a trailing slice, so an older row cannot mount alone: grow
+    // over everything between it and the tail, then land on it after the commit.
+    pendingJumpRef.current = id
+    anchorRef.current = null
+    setWindowSize(Math.max(windowSize, nodes.length - index))
   }
 
   const isEmpty = nodes.length === 0
   // Regenerate re-runs the last turn; `/retry` already owns the transcript
   // reset and session refresh, so the action reuses that command.
-  const retryId = retryableNodeId(nodes)
+  const retryId = retryableNodeId(visible)
   const canRetry = !busy && retryId !== null
   const onRetry = () => void useAppStore.getState().runCommand('retry', '')
-  const turns = groupTurns(nodes, busy)
+  const turns = groupTurns(visible, busy)
   const liveTurn = turns[turns.length - 1]
   const showRunningRow = busy && (liveTurn === undefined || liveTurn.tools.length === 0)
+
+  const revealEarlier = () => {
+    const scroller = scrollerRef.current
+    if (scroller === null) return
+    if (scroller.scrollTop <= 8) {
+      growWindow()
+      return
+    }
+    setFollow(false)
+    scroller.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   return (
     <div className={css.root}>
@@ -112,6 +246,18 @@ export function ChatView() {
           </div>
         ) : (
           <div className={css.flow} data-chat-flow>
+            {transcriptWindow.bounded && (
+              <div className={css.earlierRow}>
+                <button
+                  type="button"
+                  className={css.earlier}
+                  data-earlier
+                  onClick={revealEarlier}
+                >
+                  {t('chat.showEarlier', { count: transcriptWindow.hiddenAbove })}
+                </button>
+              </div>
+            )}
             {turns.map((turn) => (
               <TurnSeat
                 key={turn.id}
@@ -127,7 +273,7 @@ export function ChatView() {
         <div ref={tailRef} />
       </div>
       {!isEmpty && (
-        <ConversationMinimap nodes={nodes} activeId={activeId} onJump={jumpTo} />
+        <ConversationMinimap users={userRows} activeId={activeId} onJump={jumpTo} />
       )}
       <ChatWidthHandles width={clampChatWidth(chatWidth)} onChange={setChatWidth} />
       {showJump && (

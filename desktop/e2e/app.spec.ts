@@ -691,6 +691,37 @@ test('a settled turn folds its tool steps into one process row', async ({ page }
   await expect(page.getByText('read_file')).toBeVisible()
 })
 
+test('a long transcript mounts a bounded window and reveals earlier turns on demand', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 })
+  const transcript = Array.from({ length: 150 }, (_, index) => [
+    { kind: 'user', id: `u${index}`, text: `第 ${index} 轮提问`, timestamp: index * 2 + 1 },
+    { kind: 'assistant', id: `a${index}`, text: `回复 ${index}`, timestamp: index * 2 + 2 },
+  ]).flat()
+  await boot(page, initialState({ running: false, transcript }))
+
+  const rows = page.locator('[data-chat-flow] [data-minimap-id]')
+  const earlier = page.locator('[data-earlier]')
+  const dashes = page.locator('[data-minimap-dash]')
+  await expect(rows).toHaveCount(60)
+  // The rail covers the whole session, including turns not yet mounted.
+  await expect(dashes).toHaveCount(150)
+  await expect(earlier).toHaveText('显示更早的 240 条')
+  // The trailing window keeps the newest turn and drops the oldest rows.
+  await expect(page.locator('[data-minimap-id="a149"]')).toHaveCount(1)
+  await expect(page.locator('[data-minimap-id="u0"]')).toHaveCount(0)
+
+  await earlier.click()
+  await expect(rows).toHaveCount(100)
+  await expect(earlier).toHaveText('显示更早的 200 条')
+
+  // Clicking a dash above the mounted window mounts everything down to it.
+  await dashes.first().click()
+  await expect(rows).toHaveCount(300)
+  await expect(page.locator('[data-minimap-id="u0"]')).toHaveCount(1)
+})
+
 test('the width handles resize the band and the minimap marks each turn', async ({ page }) => {
   await boot(
     page,
@@ -703,6 +734,8 @@ test('the width handles resize the band and the minimap marks each turn', async 
     }),
   )
   await expect(page.locator('[data-minimap-dash]').first()).toBeVisible()
+  // Only the user's own turns get a dash; the assistant reply does not.
+  await expect(page.locator('[data-minimap-dash]')).toHaveCount(1)
   const flow = page.locator('[data-chat-flow]')
   const before = await flow.evaluate((el) => el.getBoundingClientRect().width)
   assert.equal(Math.round(before), 760)
