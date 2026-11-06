@@ -10,6 +10,7 @@
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
+use std::path::Path;
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
@@ -135,9 +136,36 @@ fn dev_checkout_bin() -> Option<String> {
         .then(|| candidate.to_string_lossy().into_owned())
 }
 
+/// The sidecar Tauri bundles sits next to the shell's own executable: macOS
+/// keeps it in `Contents/MacOS/`, deb/AppImage put both in `usr/bin/`, and the
+/// Windows installers drop it beside `ZenAgent.exe`.
+fn exe_sibling_name() -> &'static str {
+    if cfg!(windows) {
+        "zen.exe"
+    } else {
+        "zen"
+    }
+}
+
+/// Every place a CLI can plausibly live, in priority order: the bundled
+/// sidecar first (the shipped app must run its own runtime), then the usual
+/// user-local prefixes because a GUI app inherits launchd's minimal PATH.
+pub fn candidate_paths(bin: &str, exe_dir: Option<&Path>, home: Option<&str>) -> Vec<String> {
+    let mut paths = Vec::new();
+    if let Some(dir) = exe_dir {
+        paths.push(dir.join(bin).to_string_lossy().into_owned());
+    }
+    if let Some(home) = home {
+        paths.push(format!("{home}/.local/bin/{bin}"));
+    }
+    paths.push(format!("/opt/homebrew/bin/{bin}"));
+    paths.push(format!("/usr/local/bin/{bin}"));
+    paths
+}
+
 /// Resolve the CLI binary: the `ZEN_DESKTOP_BIN` override wins, then an
-/// explicit path, then (in dev) the checkout's venv, then a bare name searched
-/// in the usual user-local prefixes because GUI apps inherit a minimal PATH.
+/// explicit path, then the bundled sidecar beside this executable, then (in
+/// dev) the checkout's venv, then the user-local prefixes.
 fn resolve_bin(bin: &str) -> String {
     if let Ok(override_bin) = std::env::var("ZEN_DESKTOP_BIN") {
         if !override_bin.trim().is_empty() {
@@ -147,22 +175,25 @@ fn resolve_bin(bin: &str) -> String {
     if bin.contains('/') {
         return bin.to_string();
     }
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(Path::to_path_buf));
+    let home = std::env::var("HOME").ok();
+    let candidates = candidate_paths(exe_sibling_name(), exe_dir.as_deref(), home.as_deref());
+    let sibling = exe_dir.is_some();
+    if sibling {
+        if let Some(first) = candidates.first() {
+            if Path::new(first).is_file() {
+                return first.clone();
+            }
+        }
+    }
     if let Some(dev_bin) = dev_checkout_bin() {
         return dev_bin;
     }
-    for prefix in ["", "/opt/homebrew/bin/", "/usr/local/bin/"] {
-        let candidate = format!("{prefix}{bin}");
-        let expanded = if candidate.starts_with('/') {
-            candidate
-        } else {
-            match std::env::var("HOME") {
-                Ok(home) => format!("{home}/.local/bin/{bin}"),
-                Err(_) => continue,
-            }
-        };
-        let path = std::path::Path::new(&expanded);
-        if path.is_file() {
-            return expanded;
+    for candidate in candidates.iter().skip(if sibling { 1 } else { 0 }) {
+        if Path::new(candidate).is_file() {
+            return candidate.clone();
         }
     }
     bin.to_string()
@@ -392,5 +423,38 @@ pub fn kill_all(state: &RpcState) {
         proc.alive.store(false, Ordering::SeqCst);
         let mut child = proc.child.lock().unwrap();
         kill_quiet(&mut child);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn candidate_paths_puts_the_executable_sibling_first() {
+        let paths = candidate_paths(
+            "zen",
+            Some(Path::new("/Applications/ZenAgent.app/Contents/MacOS")),
+            Some("/Users/u"),
+        );
+        assert_eq!(paths[0], "/Applications/ZenAgent.app/Contents/MacOS/zen");
+        assert_eq!(paths[1], "/Users/u/.local/bin/zen");
+        assert_eq!(paths[2], "/opt/homebrew/bin/zen");
+        assert_eq!(paths[3], "/usr/local/bin/zen");
+    }
+
+    #[test]
+    fn candidate_paths_skips_what_it_does_not_know() {
+        assert_eq!(
+            candidate_paths("zen", None, None),
+            vec!["/opt/homebrew/bin/zen", "/usr/local/bin/zen"]
+        );
+    }
+
+    #[test]
+    fn candidate_paths_keeps_the_windows_extension() {
+        let paths = candidate_paths("zen.exe", Some(Path::new("C:\\Zen")), None);
+        assert!(paths[0].contains("Zen"));
+        assert!(paths[0].ends_with("zen.exe"));
     }
 }
