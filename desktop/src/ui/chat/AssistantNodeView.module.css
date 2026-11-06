@@ -95,10 +95,12 @@
 /* ---- markdown ------------------------------------------------------------- */
 
 .markdown {
-  font: var(--dsw-font-markdown-base);
+  font-size: var(--dsh-content-font-size, 14px);
+  line-height: 1.6;
   color: var(--dsw-alias-label-primary);
   word-break: break-word;
   user-select: text;
+  text-wrap: pretty;
 }
 
 .markdown h1,

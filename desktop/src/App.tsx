@@ -14,7 +14,7 @@ import { WelcomeScreen } from './ui/WelcomeScreen'
 import { ConversationTopbar } from './ui/ConversationTopbar'
 import { NoticeBanner } from './ui/NoticeBanner'
 import { CommandPalette } from './ui/palette/CommandPalette'
-import { SIDEBAR_DEFAULT, RIGHTBAR_DEFAULT } from './ui/columns'
+import { SIDEBAR_DEFAULT, RIGHTBAR_DEFAULT, clampChatWidth } from './ui/columns'
 import { PanelRightIcon } from './ui/icons'
 import css from './App.module.css'
 
@@ -38,6 +38,7 @@ export function App() {
   const collapsed = useSettingsStore((state) => state.sidebarCollapsed)
   const setCollapsed = useSettingsStore((state) => state.setSidebarCollapsed)
   const theme = useSettingsStore((state) => state.theme)
+  const chatWidth = useSettingsStore((state) => state.chatWidth)
   // A returning user goes straight back to the last project; only the idle
   // host asks for a folder when no run has ever succeeded.
   const [lastCwd] = useState(lastProjectCwd)
@@ -60,6 +61,15 @@ export function App() {
     media.addEventListener('change', apply)
     return () => media.removeEventListener('change', apply)
   }, [theme])
+
+  // The band width is a shell-wide custom property: both the transcript and
+  // the docked composer read it.
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      '--ds-chat-content-width',
+      `${clampChatWidth(chatWidth)}px`,
+    )
+  }, [chatWidth])
 
   // Platform flag (dsh: html[data-platform]) drives macOS chrome adjustments.
   useEffect(() => {

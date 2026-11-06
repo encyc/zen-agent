@@ -23,6 +23,14 @@ export const RIGHTBAR_DEFAULT = 360
 export const RIGHTBAR_MAX_RATIO = 0.7
 export const RIGHTBAR_DEFAULT_RATIO = 0.45
 
+export const CHAT_WIDTH_MIN = 560
+export const CHAT_WIDTH_MAX = 900
+export const CHAT_WIDTH_DEFAULT = 760
+
+export function clampChatWidth(px: number): number {
+  return Number.isFinite(px) ? clampWidth(px, CHAT_WIDTH_MIN, CHAT_WIDTH_MAX) : CHAT_WIDTH_DEFAULT
+}
+
 export function clampWidth(px: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, Math.round(px)))
 }

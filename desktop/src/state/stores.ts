@@ -2,6 +2,7 @@
  * composer draft, settings (theme/locale). */
 
 import { create } from 'zustand'
+import { CHAT_WIDTH_DEFAULT } from '../ui/columns'
 import type {
   CommandEntry,
   ModelEntry,
@@ -176,9 +177,11 @@ interface SettingsState {
   theme: ThemeMode
   locale: Locale
   sidebarCollapsed: boolean
+  chatWidth: number
   setTheme(theme: ThemeMode): void
   setLocale(locale: Locale): void
   setSidebarCollapsed(collapsed: boolean): void
+  setChatWidth(width: number): void
 }
 
 function load<T>(key: string, fallback: T): T {
@@ -202,6 +205,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   theme: load('zen.theme', 'auto' as ThemeMode),
   locale: load('zen.locale', 'zh' as Locale),
   sidebarCollapsed: load('zen.sidebar.collapsed', false),
+  chatWidth: load('zen.chat.width', CHAT_WIDTH_DEFAULT),
   setTheme: (theme) => {
     persist('zen.theme', theme)
     set({ theme })
@@ -213,6 +217,10 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setSidebarCollapsed: (sidebarCollapsed) => {
     persist('zen.sidebar.collapsed', sidebarCollapsed)
     set({ sidebarCollapsed })
+  },
+  setChatWidth: (chatWidth) => {
+    persist('zen.chat.width', chatWidth)
+    set({ chatWidth })
   },
 }))
 

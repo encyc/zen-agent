@@ -1,0 +1,64 @@
+.host {
+  position: absolute;
+  inset: 0 0 calc(var(--composer-reserve) + 16px);
+  z-index: 7;
+  pointer-events: none;
+}
+
+.handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  pointer-events: auto;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.handle[data-side='left'] {
+  left: max(0px, calc((100% - min(100%, var(--ds-chat-content-width))) / 2 - 6px));
+}
+
+.handle[data-side='right'] {
+  right: max(0px, calc((100% - min(100%, var(--ds-chat-content-width))) / 2 - 6px));
+}
+
+.handle::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2px;
+  height: 40px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--dsw-alias-label-primary) 18%, transparent);
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  transition: opacity 100ms ease, height 100ms ease, background 100ms ease;
+}
+
+.handle:hover::before,
+.handle:focus-visible::before {
+  opacity: 1;
+}
+
+.handle:focus-visible {
+  outline: none;
+}
+
+.handle:focus-visible::before {
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--dsw-alias-state-business-primary) 22%, transparent);
+}
+
+html[data-chat-resizing] .handle::before {
+  opacity: 1;
+  height: 56px;
+  background: color-mix(in oklab, var(--dsw-alias-label-primary) 32%, transparent);
+}
+
+html[data-chat-resizing],
+html[data-chat-resizing] * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}

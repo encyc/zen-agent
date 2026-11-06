@@ -5,12 +5,15 @@ import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { retryableNodeId, useChatStore, type ChatNode, type ToolNode, type UserNode } from '../../state/chatStore'
 import { groupTurns, type ChatTurn } from '../../state/turns'
 import { loadRecentProjects, useAppStore } from '../../state/appStore'
-import { useSessionStore } from '../../state/stores'
+import { useSessionStore, useSettingsStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
 import { HomeHero, pickProjectFolder } from '../HomeHero'
+import { clampChatWidth } from '../columns'
 import { UserMessage, SkillMessage } from './MessageItem'
 import { AssistantNodeView } from './AssistantNodeView'
 import { TurnProcess } from './TurnProcess'
+import { ConversationMinimap } from './ConversationMinimap'
+import { ChatWidthHandles } from './ChatWidthHandles'
 import { NoticeRow, CommandCard, UsageRow } from './AuxRows'
 import { ArrowDownIcon } from '../icons'
 import css from './ChatView.module.css'
@@ -24,10 +27,13 @@ export function ChatView() {
   )
   const t = useT()
   const [recents] = useState(loadRecentProjects)
+  const chatWidth = useSettingsStore((state) => state.chatWidth)
+  const setChatWidth = useSettingsStore((state) => state.setChatWidth)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const tailRef = useRef<HTMLDivElement | null>(null)
   const [follow, setFollow] = useState(true)
   const [showJump, setShowJump] = useState(false)
+  const [activeId, setActiveId] = useState<string | null>(null)
 
   // Follow the tail while the user is at (or near) the bottom; any upward
   // scroll detaches until they return. Same behavior contract as dsh.
@@ -38,6 +44,12 @@ export function ChatView() {
       const distance = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
       setFollow(distance < 48)
       setShowJump(distance > 160)
+      const anchor = scroller.getBoundingClientRect().top + scroller.clientHeight * 0.3
+      let next: string | null = null
+      scroller.querySelectorAll<HTMLElement>('[data-minimap-id]').forEach((row) => {
+        if (row.getBoundingClientRect().top <= anchor) next = row.dataset.minimapId ?? null
+      })
+      setActiveId(next)
     }
     scroller.addEventListener('scroll', onScroll, { passive: true })
     return () => scroller.removeEventListener('scroll', onScroll)
@@ -57,6 +69,23 @@ export function ChatView() {
   const pickAndSwitchProject = async () => {
     const path = await pickProjectFolder()
     if (path !== null) await switchProject(path)
+  }
+  const jumpTo = (id: string) => {
+    const scroller = scrollerRef.current
+    if (scroller === null) return
+    const target = Array.from(scroller.querySelectorAll<HTMLElement>('[data-minimap-id]')).find(
+      (row) => row.dataset.minimapId === id,
+    )
+    if (target === undefined) return
+    setFollow(false)
+    scroller.scrollTo({
+      top:
+        scroller.scrollTop +
+        target.getBoundingClientRect().top -
+        scroller.getBoundingClientRect().top -
+        12,
+      behavior: 'smooth',
+    })
   }
 
   const isEmpty = nodes.length === 0
@@ -84,7 +113,7 @@ export function ChatView() {
             />
           </div>
         ) : (
-          <div className={css.flow}>
+          <div className={css.flow} data-chat-flow>
             {turns.map((turn) => (
               <TurnSeat
                 key={turn.id}
@@ -99,6 +128,10 @@ export function ChatView() {
         )}
         <div ref={tailRef} className={css.tailPad} />
       </div>
+      {!isEmpty && (
+        <ConversationMinimap nodes={nodes} activeId={activeId} onJump={jumpTo} />
+      )}
+      <ChatWidthHandles width={clampChatWidth(chatWidth)} onChange={setChatWidth} />
       {showJump && (
         <button
           type="button"
@@ -143,7 +176,12 @@ function TurnSeat({
   }
   if (turn.user !== null) {
     rows.push(
-      <UserMessage key={turn.user.id} text={turn.user.text} steering={turn.user.steering} />,
+      <UserMessage
+        key={turn.user.id}
+        text={turn.user.text}
+        steering={turn.user.steering}
+        anchor={turn.user.id}
+      />,
     )
   }
   for (const node of turn.nodes) {
@@ -156,6 +194,7 @@ function TurnSeat({
       <NodeSeat
         key={node.id}
         node={node}
+        anchor={node.kind === 'assistant' ? node.id : undefined}
         retryable={retryable && node.id === retryId}
         onRetry={onRetry}
       />,
@@ -167,10 +206,12 @@ function TurnSeat({
 
 function NodeSeat({
   node,
+  anchor,
   retryable,
   onRetry,
 }: {
   node: Exclude<ChatNode, ToolNode | UserNode>
+  anchor?: string
   retryable: boolean
   onRetry(): void
 }) {
@@ -178,7 +219,14 @@ function NodeSeat({
     case 'skill':
       return <SkillMessage name={node.name} args={node.args} body={node.body} />
     case 'assistant':
-      return <AssistantNodeView node={node} canRetry={retryable} onRetry={onRetry} />
+      return (
+        <AssistantNodeView
+          node={node}
+          anchor={anchor}
+          canRetry={retryable}
+          onRetry={onRetry}
+        />
+      )
     case 'notice':
       return (
         <NoticeRow

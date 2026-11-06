@@ -17,10 +17,12 @@ export function AssistantNodeView({
   node,
   canRetry = false,
   onRetry,
+  anchor,
 }: {
   node: AssistantNode
   canRetry?: boolean
   onRetry?: () => void
+  anchor?: string
 }) {
   const t = useT()
   const html = useMarkdown(node.text, { copy: t('chat.copy'), copied: t('chat.copied') })
@@ -49,7 +51,12 @@ export function AssistantNodeView({
   }
 
   return (
-    <div className={css.root} data-streaming={node.streaming || undefined} data-turn-row>
+    <div
+      className={css.root}
+      data-streaming={node.streaming || undefined}
+      data-turn-row
+      data-minimap-id={anchor}
+    >
       {hasThinking && (
         <ThinkingRow
           text={node.thinking ?? ''}

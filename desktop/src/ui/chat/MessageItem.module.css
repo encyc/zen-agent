@@ -5,13 +5,17 @@
   gap: 6px;
 }
 
+/* Shrink-wraps to the prompt instead of the band: `max-content` keeps short
+ * turns short, and the flow already owns the 760px reading width. */
 .bubble {
-  max-width: min(calc(var(--dsh-chat-content-width, 748px) * 0.702), 82%);
-  background: var(--dsw-specific-bubble);
-  border-radius: var(--dsw-radius-xl);
-  padding: 10px 16px;
+  width: max-content;
+  max-width: 100%;
+  background: color-mix(in oklab, var(--dsw-alias-label-primary) 8%, transparent);
+  border-radius: var(--ds-radius-18);
+  border-bottom-right-radius: var(--ds-radius-8);
+  padding: 10px 15px;
   font-size: var(--dsh-content-font-size, 14px);
-  line-height: calc(22px + var(--dsh-content-font-delta, 0px));
+  line-height: 1.55;
   color: var(--dsw-alias-label-primary);
   white-space: pre-wrap;
   word-break: break-word;
@@ -35,10 +39,11 @@
 /* ---- /skill turn ---------------------------------------------------------- */
 
 .skillCard {
-  max-width: min(calc(var(--dsh-chat-content-width, 748px) * 0.702), 82%);
-  border-radius: var(--dsw-radius-xl);
-  background: var(--dsw-specific-bubble);
-  padding: 10px 16px;
+  width: max-content;
+  max-width: 100%;
+  border-radius: var(--ds-radius-18);
+  background: color-mix(in oklab, var(--dsw-alias-label-primary) 8%, transparent);
+  padding: 10px 15px;
 }
 
 .skillHead {

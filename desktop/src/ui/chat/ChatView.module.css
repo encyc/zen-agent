@@ -4,6 +4,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  --composer-reserve: 168px;
 }
 
 .scroll {
@@ -11,16 +12,35 @@
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  scrollbar-gutter: stable;
+  overflow-anchor: none;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 calc(100% - var(--composer-reserve) - 16px),
+    transparent calc(100% - var(--composer-reserve) + 2px)
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    #000 calc(100% - var(--composer-reserve) - 16px),
+    transparent calc(100% - var(--composer-reserve) + 2px)
+  );
 }
 
 .flow {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  width: 100%;
-  max-width: var(--dsh-chat-content-width);
+  width: min(100%, var(--ds-chat-content-width));
   margin: 0 auto;
-  padding: 18px 24px 10px;
+  padding: 20px 32px calc(var(--composer-reserve) + 16px);
+  transition: width var(--ds-transition-duration) var(--ds-ease-in-out);
+}
+
+.flow > * {
+  padding-block: 12px;
+}
+
+:global(html[data-chat-resizing]) .flow {
+  transition: none;
 }
 
 .tailPad {
@@ -30,7 +50,7 @@
 .jump {
   position: absolute;
   right: 24px;
-  bottom: 16px;
+  bottom: calc(var(--composer-reserve) + 12px);
   display: grid;
   place-items: center;
   width: 32px;

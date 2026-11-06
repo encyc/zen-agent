@@ -362,6 +362,33 @@ test('a settled turn folds its tool steps into one process row', async ({ page }
   await expect(page.getByText('read_file')).toBeVisible()
 })
 
+test('the width handles resize the band and the minimap marks each turn', async ({ page }) => {
+  await boot(
+    page,
+    initialState({
+      running: false,
+      transcript: [
+        { kind: 'user', id: 'u1', text: 'go', timestamp: 1 },
+        { kind: 'assistant', id: 'a1', text: 'done', timestamp: 2 },
+      ],
+    }),
+  )
+  await expect(page.locator('[data-minimap-dash]').first()).toBeVisible()
+  const flow = page.locator('[data-chat-flow]')
+  const before = await flow.evaluate((el) => el.getBoundingClientRect().width)
+  assert.equal(Math.round(before), 760)
+  const handle = page.locator('[data-chat-width-handles] [data-side="right"]')
+  const box = await handle.boundingBox()
+  assert.ok(box !== null)
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2 - 60, box.y + box.height / 2)
+  await page.mouse.up()
+  const after = await flow.evaluate((el) => el.getBoundingClientRect().width)
+  assert.ok(after < before)
+  await expect(handle).toHaveAttribute('aria-valuenow', String(Math.round(after)))
+})
+
 test('the current row menu runs undo and compact through the session op', async ({ page }) => {
   await boot(page, initialState({ running: false }))
   await page.locator('[data-session-path="/sessions/a.jsonl"] [data-action="menu"]').click()

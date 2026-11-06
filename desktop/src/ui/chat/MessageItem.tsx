@@ -4,10 +4,18 @@ import { useT } from '../../i18n/locale'
 import { TurnActions } from './TurnActions'
 import css from './MessageItem.module.css'
 
-export function UserMessage({ text, steering = false }: { text: string; steering?: boolean }) {
+export function UserMessage({
+  text,
+  steering = false,
+  anchor,
+}: {
+  text: string
+  steering?: boolean
+  anchor?: string
+}) {
   const t = useT()
   return (
-    <div className={css.userRow} data-turn-row>
+    <div className={css.userRow} data-turn-row data-minimap-id={anchor}>
       {steering && <span className={css.steerChip}>{t('message.steering')}</span>}
       <div className={css.bubble} data-selectable data-steering={steering || undefined}>
         {text}
