@@ -6,6 +6,9 @@
 - 一行一个消息（user/assistant/tool result），**只追加**，不做原地修改。
 - 每次启动新会话都会建新文件；`--resume latest` 只续**当前项目**最新会话，`--resume PATH` 可显式续任意会话。
 - 默认视图只含当前项目；`/sessions all`、TUI picker 的 `tab`、`zen sessions list --all` 才列出全部项目。
+- 列表条目带 `created_at`（header 的 `createdAt`，legacy 文件回退到 mtime）、`updated_at`
+  （当前 mtime，即最后活动时间）、`model`（最后一条 assistant 消息的模型）和 `derived_from`
+  （header 的 `derivedFrom`，原创会话为空）。
 - 升级前的扁平 `~/.zenagent/sessions/*.jsonl` 保留为 legacy，只在 all 视图出现；`zen sessions adopt PATH` 可归入当前项目。
 - 旧文件不会被重写：压缩、`/undo`、`/fork` 都**写新文件**，保证历史可审计。
 
@@ -23,6 +26,20 @@
 - `retry`：被消息级重试吞掉的瞬态失败（每次退避前一条）——`attempt`、`max_retries`、
   `delay_ms`、`error`、`model`。不开启 `--retries` 时没有这类记录。
 - `mode`：bootstrap 时的初始权限模式，以及每次 `/mode` 切换——`mode`（zen/plan/ask）。
+- `tool_end`：每次工具调用结束写一条——`call_id`、`tool_name`、`duration_ms`、
+  `is_error`、`details`（`details` 序列化上限 16 KiB；`diff` 先按 400 行截断，
+  仍超限则先丢 `diff`，再逐个丢最大字段，并置 `diff_truncated`/`details_truncated`）。
+  重写/分叉/撤销时只携带“保留消息里仍有该 `call_id`”的记录；`/shake tools`
+  不携带（它本就是要丢掉这些负载）。
+- `compaction`：每次 `/compact`（含自动压缩）在新文件、摘要之前写一条——
+  `tokensBefore`、`derivedFrom`、`reason`（`auto` | `manual`）。RPC `transcript`
+  结果里的 `compactions` 数组按文件顺序返回，GUI 用它画一条且仅一条分隔线；
+  带 `source="compaction"` 的 notice 不出现在快照里。
+- steering：通过 steer 通道送达的用户消息带 `"steering": true`（普通消息不写这个键）；
+  多条 steer 会聚合成一条消息，标记按“送达的消息”计。
+- RPC 视图 id（`v1`、`v2`…）是加载时按顺序生成的，不写入文件；同一文件重复加载
+  得到同样的 id。`messages_to_views`/live builder 对无文本、无 thinking 的 assistant
+  行直接丢弃；没有结果的工具调用显示为 `interrupted`。
 - 加载规则：`Session.load` 把旁路记录收进 `session.records` / `session.header`（首条 `session`
   记录），不算消息也不产生 warning；`zen export`、`zen usage`、列表等消费方照常只看消息。
   写入是尽力而为（`append_meta` 吞掉 I/O 错误），可观测性永远不会弄挂一次运行。

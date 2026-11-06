@@ -70,6 +70,13 @@ frontends already had, and headless `-p` stops assembling a second-class agent.*
   export/usage/listing consumers are untouched, and record writes are
   best-effort (`append_meta` swallows I/O errors) so observability can never
   kill a run.
+- **Session files reconstruct the GUI, not just the conversation.** View snapshots
+  now carry stable `v{n}` ids and the assistant's stored timestamp/model/provider/
+  usage/duration; `tool_end` records keep tool durations and bounded details
+  (including diffs) across resume and rewrite/fork/undo; `compaction` records
+  expose a single divider through `transcript.compactions`; user messages
+  delivered by steering carry `"steering": true`; and `session list` reports
+  `created_at`, `updated_at`, `model` and `derived_from`.
 
 ### Changed
 
