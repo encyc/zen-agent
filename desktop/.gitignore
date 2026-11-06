@@ -4,3 +4,7 @@ src-tauri/target
 src-tauri/gen
 *.tsbuildinfo
 .DS_Store
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
