@@ -1,0 +1,97 @@
+/* Base element chrome: reset, scrollbars, focus ring, platform flag. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--dsw-font-family);
+  font-size: var(--dsh-content-font-size, 14px);
+  color: var(--dsw-alias-label-primary);
+  overflow: hidden;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Transcript prose stays selectable; chrome does not. */
+[data-selectable],
+[data-selectable] * {
+  user-select: text;
+}
+
+button {
+  font-family: inherit;
+}
+
+textarea {
+  font-family: inherit;
+}
+
+code,
+pre,
+kbd {
+  font-family: var(--ds-font-family-code);
+}
+
+/* macOS traffic-light clearance is owned by the sidebar brand row. */
+html[data-platform='darwin'] #root {
+  --dsh-frame-leading-clearance: 40px;
+}
+
+/* ---- scrollbars (dsh scrollbar.css shape) -------------------------------- */
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 5px;
+  background-color: var(--dsw-alias-scrollbar-bg-l1);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  border-width: 2px;
+  background-color: var(--dsw-alias-scrollbar-hover-l1);
+}
+
+::-webkit-scrollbar-corner,
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---- focus ring ---------------------------------------------------------- */
+
+:focus-visible {
+  outline: 1.5px solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+/* ---- window drag regions (Tauri) ------------------------------------------ */
+
+[data-tauri-drag-region] {
+  app-region: drag;
+}
+
+/* Motion restraint, per dsh practice. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

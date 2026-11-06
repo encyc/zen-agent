@@ -1,0 +1,98 @@
+.root {
+  height: 100%;
+  overflow-y: auto;
+  padding: 16px 16px 20px;
+  background: var(--dsw-alias-bg-base);
+  font-size: 12px;
+}
+
+.header {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  margin-bottom: 12px;
+}
+
+.section {
+  margin-bottom: 16px;
+}
+
+.sectionTitle {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-caption);
+  margin-bottom: 6px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.rowLabel {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.rowValue {
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11.5px;
+}
+
+.todoRow,
+.jobRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  border: none;
+  background: none;
+  text-align: left;
+  width: 100%;
+  cursor: default;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.todoText {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 17px;
+}
+
+.jobRow {
+  cursor: pointer;
+  border-radius: var(--dsw-radius-xs);
+}
+
+.jobRow:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.jobCommand {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+}
+
+.jobMeta {
+  flex: none;
+  color: var(--dsw-alias-label-caption);
+  font-size: 10.5px;
+}
+
+.errorText {
+  color: var(--dsw-alias-state-error-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 17px;
+}

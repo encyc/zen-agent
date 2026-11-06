@@ -1,0 +1,141 @@
+.root {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 24px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: min(460px, 100%);
+  padding: 28px 32px;
+  border-radius: var(--dsw-radius-xl);
+  background: var(--dsw-alias-bg-layer-2);
+  box-shadow: var(--dsw-elevation-panel);
+}
+
+.mark {
+  margin-bottom: 4px;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--dsw-font-family-brand);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+.subtitle {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  line-height: 19px;
+  color: var(--dsw-alias-label-tertiary);
+  text-align: center;
+  max-width: 40ch;
+}
+
+.primaryButton,
+.secondaryButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 36px;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.primaryButton {
+  background: var(--dsw-alias-button-info-fill);
+  color: var(--dsw-alias-label-primary-foreground);
+}
+
+.primaryButton:hover {
+  background: var(--dsw-alias-button-info-hover);
+}
+
+.secondaryButton {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.secondaryButton:hover {
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+  color: var(--dsw-alias-label-primary);
+}
+
+.recents {
+  width: 100%;
+  margin-top: 10px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  padding-top: 10px;
+}
+
+.recentsLabel {
+  font-size: 11px;
+  color: var(--dsw-alias-label-caption);
+  margin-bottom: 4px;
+}
+
+.recentRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.recentButton {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.recentButton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.recentPath {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+
+.recentRemove {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: var(--dsw-radius-xs);
+  background: transparent;
+  color: var(--dsw-alias-label-caption);
+  cursor: pointer;
+}
+
+.recentRemove:hover {
+  color: var(--dsw-alias-state-error-primary);
+}
