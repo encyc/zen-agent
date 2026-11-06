@@ -242,10 +242,10 @@ async def test_submit_during_auto_compaction_is_queued_not_lost(
     started = asyncio.Event()
     release = asyncio.Event()
 
-    async def slow_compact(agent, stream_fn=None, derived_from=""):
+    async def slow_compact(agent, stream_fn=None, derived_from="", **kwargs):
         started.set()
         await release.wait()
-        return await real_compact(agent, stream_fn, derived_from)
+        return await real_compact(agent, stream_fn, derived_from, **kwargs)
 
     monkeypatch.setattr(chat_module, "compact", slow_compact)
     calls = {"n": 0}
@@ -885,3 +885,35 @@ async def test_tool_completion_writes_a_tool_end_record(runtime_factory):
     assert record["call_id"] == "c1"
     assert record["duration_ms"] == 12
     assert record["details"] == {"exit_code": 0}
+
+
+async def test_compact_now_sources_the_divider_and_persists_tokens(runtime_factory):
+    from conftest import text_stream
+
+    from zenagent.agent.session import Session
+
+    runtime = await runtime_factory(stream_fn=text_stream("summary"))
+    runtime.agent.replace_messages(
+        [
+            UserMessage(content="long chat", timestamp=1),
+            AssistantMessage(
+                content=[TextContent(text="done")],
+                provider="p",
+                model="m",
+                usage=Usage(input=500),
+                stop_reason="stop",
+                timestamp=2,
+            ),
+        ]
+    )
+    chat = ChatController(runtime)
+
+    notice = await chat.compact_now()
+
+    assert notice
+    assert chat.notices_snapshot[-1].source == "compaction"
+    session = Session(runtime.session.path)
+    session.load()
+    record = next(item for item in session.records if item["type"] == "compaction")
+    assert record["reason"] == "manual"
+    assert record["tokensBefore"] == 500

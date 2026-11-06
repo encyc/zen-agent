@@ -781,3 +781,64 @@ def test_serialize_event_carries_user_text_and_steering():
     )
     assert steered["message"]["text"] == "nudge"
     assert steered["message"]["steering"] is True
+
+
+async def test_transcript_exposes_one_compaction_across_refetches(runtime_factory):
+    runtime, server, writes, queue = await build(runtime_factory)
+    runtime.agent.replace_messages(
+        [
+            UserMessage(content="long chat", timestamp=1),
+            AssistantMessage(
+                content=[TextContent(text="done")],
+                provider="p",
+                model="m",
+                usage=Usage(input=500),
+                stop_reason="stop",
+                timestamp=2,
+            ),
+        ]
+    )
+    await server.chat.compact_now()
+
+    await run_lines(
+        server,
+        queue,
+        [
+            {"type": "transcript", "id": "t1"},
+            {"type": "transcript", "id": "t2"},
+        ],
+    )
+    payloads = {message["id"]: message for message in decode(writes)}
+
+    assert [record["type"] for record in payloads["t1"]["compactions"]] == [
+        "compaction"
+    ]
+    assert payloads["t1"]["notices"] == []
+    assert payloads["t2"]["compactions"] == payloads["t1"]["compactions"]
+    assert payloads["t1"]["transcript"][0]["id"] == "v1"
+
+
+async def test_transcript_views_carry_ids_and_assistant_metadata(runtime_factory):
+    runtime, server, writes, queue = await build(runtime_factory)
+    runtime.agent.replace_messages(
+        [
+            AssistantMessage(
+                content=[TextContent(text="hi")],
+                provider="p",
+                model="deepseek-chat",
+                usage=Usage(input=3, output=2),
+                stop_reason="stop",
+                timestamp=7,
+                duration_ms=42,
+            )
+        ]
+    )
+    server.chat.reload_transcript()
+
+    await run_lines(server, queue, [{"type": "transcript", "id": "t"}])
+
+    view = decode(writes)[0]["transcript"][0]
+    assert view["id"] == "v1"
+    assert view["model"] == "deepseek-chat"
+    assert view["duration_ms"] == 42
+    assert view["timestamp"] == 7

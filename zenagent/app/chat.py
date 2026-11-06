@@ -7,6 +7,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from zenagent.agent.session import Session
 from zenagent.agent.subagents import carry_task_dir
 from zenagent.app.attachments_state import Attachments
 from zenagent.app.compact import compact, should_auto_compact
@@ -410,14 +411,22 @@ class ChatController:
             return None
         before = self._before_tokens()
         old_path = self.runtime.session.path
-        path = await compact(self.runtime.agent, derived_from=old_path.stem)
+        path = await compact(
+            self.runtime.agent,
+            derived_from=old_path.stem,
+            reason="auto" if force else "manual",
+            tokens_before=before,
+            carry_from=Session(old_path),
+        )
         # Compaction continues the same work: keep its subagent transcripts.
         carry_task_dir(old_path, path, skip=_inflight_task_ids())
         # Compaction continues the same work: carry the todo checklist over.
         await self.runtime.switch_session(path, carry_todos=True)
         self.reload_transcript()
         text = t("notice.compacted", tokens=before)
-        self._notices.append(TranscriptNotice("divider", text))
+        self._notices.append(
+            TranscriptNotice("divider", text, source="compaction")
+        )
         self._notify()
         return text
 

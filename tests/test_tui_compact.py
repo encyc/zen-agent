@@ -38,10 +38,10 @@ async def test_auto_compaction_rebuilds_the_transcript_view(runtime_factory, mon
     started = asyncio.Event()
     release = asyncio.Event()
 
-    async def slow_compact(agent, stream_fn=None, derived_from=""):
+    async def slow_compact(agent, stream_fn=None, derived_from="", **kwargs):
         started.set()
         await release.wait()
-        return await real_compact(agent, stream_fn, derived_from)
+        return await real_compact(agent, stream_fn, derived_from, **kwargs)
 
     calls = {"n": 0}
 

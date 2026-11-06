@@ -96,7 +96,7 @@ async def maybe_auto_compact(
     if not should_auto_compact(_last_usage(agent), agent.model.context_window, threshold):
         return None
     try:
-        path = await compact(agent, stream_fn)
+        path = await compact(agent, stream_fn, reason="auto")
     except Exception as exc:  # noqa: BLE001 - automatic path must never break the session
         print_fn(f"auto-compaction failed: {exc}")
         return None
@@ -105,7 +105,13 @@ async def maybe_auto_compact(
 
 
 async def compact(
-    agent: Agent, stream_fn: StreamFn | None = None, derived_from: str = ""
+    agent: Agent,
+    stream_fn: StreamFn | None = None,
+    derived_from: str = "",
+    *,
+    reason: str = "manual",
+    tokens_before: int | None = None,
+    carry_from: Session | None = None,
 ) -> Path:
     """Replace the transcript with a summary; returns the new session path.
 
@@ -114,6 +120,10 @@ async def compact(
     """
     if not agent.messages:
         raise ValueError("nothing to compact: the transcript is empty")
+
+    if tokens_before is None:
+        usage = _last_usage(agent)
+        tokens_before = usage.input + usage.cache_read if usage is not None else 0
 
     transcript = _render_transcript(agent.messages)
     now = int(time.time())
@@ -144,6 +154,17 @@ async def compact(
         content=compact_result(summary.strip()), timestamp=int(time.time())
     )
     session = Session(unique_session_path("compact"), derived_from=derived_from)
+    if carry_from is not None:
+        for record in carry_from.carry_records([message]):
+            session.append_meta(record)
+    session.append_meta(
+        {
+            "type": "compaction",
+            "tokensBefore": int(tokens_before),
+            "derivedFrom": derived_from,
+            "reason": reason,
+        }
+    )
     session.append(message)
     agent.replace_messages([message])
     return session.path

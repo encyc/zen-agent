@@ -486,15 +486,29 @@ class RpcServer:
 
         views: list = []
         notices: list = []
+        compactions: list[dict] = []
         if self.chat is not None:
+            session = getattr(self.runtime, "session", None)
+            if session is not None:
+                session.ensure_loaded()
+                compactions = [
+                    record
+                    for record in session.records
+                    if record.get("type") == "compaction"
+                ]
             views = [asdict(view) for view in self.chat.transcript]
-            notices = [asdict(notice) for notice in self.chat.notices_snapshot]
+            notices = [
+                asdict(notice)
+                for notice in self.chat.notices_snapshot
+                if notice.source != "compaction"
+            ]
         return {
             "type": "result",
             "id": request_id,
             "ok": True,
             "transcript": views,
             "notices": notices,
+            "compactions": compactions,
         }
 
     def _models_result(self, request_id) -> dict:

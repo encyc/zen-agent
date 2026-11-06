@@ -215,3 +215,37 @@ async def test_maybe_auto_compact_skips_while_streaming(isolated_sessions):
 async def test_maybe_auto_compact_skips_an_empty_transcript():
     agent = Agent(model(), "system", api_key="k", stream_fn=summary_stream())
     assert await maybe_auto_compact(agent, print_fn=lambda *_: None) is None
+
+
+async def test_compact_writes_the_compaction_record_before_the_summary(isolated_sessions):
+    import json
+
+    agent = agent_with_history(summary_stream("摘要"))
+
+    path = await compact(
+        agent, derived_from="parent", reason="manual", tokens_before=1234
+    )
+
+    lines = [json.loads(line) for line in path.read_text().splitlines()]
+    assert [line.get("type") for line in lines[:2]] == ["session", "compaction"]
+    assert lines[1]["tokensBefore"] == 1234
+    assert lines[1]["derivedFrom"] == "parent"
+    assert lines[1]["reason"] == "manual"
+    assert lines[2]["role"] == "user"
+
+
+async def test_compact_defaults_tokens_before_to_the_last_usage(isolated_sessions):
+    import json
+
+    agent = agent_with_history(summary_stream("摘要"))
+    agent.messages[-1].usage = Usage(input=900, cache_read=100)
+
+    path = await compact(agent)
+
+    record = next(
+        item
+        for item in (json.loads(line) for line in path.read_text().splitlines())
+        if item.get("type") == "compaction"
+    )
+    assert record["tokensBefore"] == 1000
+    assert record["reason"] == "manual"

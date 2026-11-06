@@ -251,6 +251,9 @@ class TranscriptNotice:
 
     kind: Literal["divider", "info"]
     text: str
+    #: Where the notice came from; ``"compaction"`` notices are persisted as
+    #: records and excluded from the RPC snapshot to avoid a double divider.
+    source: str = ""
 
 
 def args_preview(arguments: dict) -> str:
