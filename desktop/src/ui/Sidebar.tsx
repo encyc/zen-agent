@@ -1,8 +1,9 @@
-/** Left sidebar: brand row (window-drag region), scope switch, session browser
- * and footer actions. Session rows carry the dsh pattern: hover-revealed menu
- * trigger, inline rename and a two-step delete. */
+/** Left sidebar with pi's information architecture: a brand header, a pinned
+ * section, a standalone sessions section with search and file actions, and
+ * collapsible project groups paginated ten rows at a time. Session rows keep
+ * the dsh pattern: hover-revealed menu trigger, inline rename, two-step delete. */
 
-import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useAppStore } from '../state/appStore'
 import { canForkSession, isCrossProject } from '../state/sessionSelectors'
@@ -13,12 +14,14 @@ import {
   useSettingsStore,
   useStatusStore,
 } from '../state/stores'
-import { sessionGroups, type SessionScope } from '../state/sessionGroups'
+import { PROJECT_PAGE_SIZE, sessionSections, type SessionGroup } from '../state/sessionGroups'
 import { armDelete, deleteArmed } from '../state/armedDelete'
 import { useT } from '../i18n/locale'
+import type { SessionSummary } from '../rpc/types'
 import { StateDot, Tooltip } from './primitives'
 import {
   ChatIcon,
+  ChevronDownIcon,
   FileIcon,
   FolderIcon,
   ForkIcon,
@@ -44,8 +47,8 @@ export function Sidebar(props: { onCollapse(): void }) {
   const t = useT()
   const sessions = useSessionStore((state) => state.sessions)
   const currentPath = useSessionStore((state) => state.currentPath)
-  const scope = useSessionStore((state) => state.scope)
-  const setScope = useSessionStore((state) => state.setScope)
+  const collapsedProjects = useSessionStore((state) => state.collapsedProjects)
+  const toggleProject = useSessionStore((state) => state.toggleProject)
   const refreshSessions = useAppStore((state) => state.refreshSessions)
   const renameSession = useAppStore((state) => state.renameSession)
   const togglePin = useAppStore((state) => state.togglePin)
@@ -58,25 +61,22 @@ export function Sidebar(props: { onCollapse(): void }) {
   const [menu, setMenu] = useState<RowMenu | null>(null)
   const [armed, setArmed] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
+  const [expandedProjects, setExpandedProjects] = useState<string[]>([])
   const menuRef = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
 
-  const { pinned, groups } = useMemo(
-    () => sessionGroups(sessions, scope, query),
-    [sessions, scope, query],
+  const { pinned, standalone, projects } = useMemo(
+    () => sessionSections(sessions, query),
+    [sessions, query],
   )
   const current = sessions.find((session) => session.path === currentPath) ?? null
   const currentProject = current?.project ?? null
   const menuSession = menu === null ? null : sessions.find((session) => session.path === menu.path) ?? null
+  const empty = pinned.length === 0 && standalone.length === 0 && projects.length === 0
 
-  const switchScope = (next: SessionScope) => {
-    if (next === scope) return
-    setArmed(null)
-    setEditing(null)
-    setMenu(null)
-    setScope(next)
-    void refreshSessions(next)
-  }
+  useEffect(() => {
+    void refreshSessions()
+  }, [refreshSessions])
 
   const openMenu = (event: MouseEvent<HTMLButtonElement>, path: string) => {
     event.stopPropagation()
@@ -144,7 +144,7 @@ export function Sidebar(props: { onCollapse(): void }) {
     }
   }, [menu])
 
-  const renderRow = (session: (typeof sessions)[number]) => (
+  const renderRow = (session: SessionSummary, showProject = false) => (
     <SessionRow
       key={session.path}
       path={session.path}
@@ -154,7 +154,7 @@ export function Sidebar(props: { onCollapse(): void }) {
       model={session.model}
       project={session.project}
       derivedFrom={session.derived_from}
-      scope={scope}
+      showProject={showProject}
       current={session.path === currentPath}
       pinned={session.pinned === true}
       crossProject={isCrossProject(session.path, session.project, currentPath, currentProject)}
@@ -169,13 +169,73 @@ export function Sidebar(props: { onCollapse(): void }) {
     />
   )
 
+  const renderProject = (group: SessionGroup) => {
+    const collapsed = collapsedProjects.includes(group.project)
+    const expanded = expandedProjects.includes(group.project)
+    const rows = expanded ? group.sessions : group.sessions.slice(0, PROJECT_PAGE_SIZE)
+    const hidden = group.sessions.length - rows.length
+    const active = group.project === currentProject
+    return (
+      <section
+        key={group.project}
+        className={css.projectGroup}
+        data-project-group={group.project}
+        data-sidebar-project-group={group.project}
+        aria-labelledby={`project-${group.project}`}
+      >
+        <div className={css.projectHeader}>
+          <button
+            type="button"
+            id={`project-${group.project}`}
+            className={css.projectToggle}
+            aria-label={t('sidebar.projectGroup', { name: group.project })}
+            aria-expanded={!collapsed}
+            onClick={() => toggleProject(group.project)}
+          >
+            <ChevronDownIcon
+              size={13}
+              className={css.projectChevron}
+              data-collapsed={collapsed || undefined}
+            />
+            <FolderIcon size={13} />
+            <span className={css.projectName}>{group.project}</span>
+            {active && (
+              <span className={css.projectActiveDot} title={t('sidebar.projectActive')} />
+            )}
+          </button>
+        </div>
+        <div
+          className={css.projectBody}
+          hidden={collapsed}
+          aria-hidden={collapsed || undefined}
+          {...(collapsed ? ({ inert: '' } as Record<string, string>) : {})}
+        >
+          {rows.map((session) => renderRow(session))}
+          {hidden > 0 && (
+            <button
+              type="button"
+              className={css.loadMore}
+              onClick={() =>
+                setExpandedProjects((value) =>
+                  value.includes(group.project) ? value : [...value, group.project],
+                )
+              }
+            >
+              {t('sidebar.more', { count: hidden })}
+            </button>
+          )}
+        </div>
+      </section>
+    )
+  }
+
   return (
     <div className={css.root} data-shell-sidebar>
-      <div className={css.brandRow} data-tauri-drag-region>
-        <div className={css.brandMark} aria-hidden>
-          <SparkMark />
-        </div>
-        <div className={css.brandText} data-tauri-drag-region>
+      <div className={css.header} data-tauri-drag-region>
+        <div className={css.brand} data-tauri-drag-region>
+          <div className={css.brandMark} aria-hidden>
+            <SparkMark />
+          </div>
           <span className={css.brandName} data-tauri-drag-region>{t('brand.name')}</span>
         </div>
         <Tooltip label="⌘B">
@@ -190,56 +250,45 @@ export function Sidebar(props: { onCollapse(): void }) {
         </Tooltip>
       </div>
 
-      <div className={css.actions}>
-        <button
-          type="button"
-          className={css.newButton}
-          onClick={() => void useAppStore.getState().newSession()}
-        >
-          <PlusIcon size={14} />
-          <span>{t('sidebar.new')}</span>
-        </button>
-      </div>
+      {pinned.length > 0 && (
+        <section className={css.pinned} data-sidebar-section="pinned" aria-labelledby="pinned-label">
+          <div className={css.sectionToolbar}>
+            <span id="pinned-label" className={css.sectionLabel}>{t('sidebar.pinned')}</span>
+          </div>
+          <div className={css.pinnedList}>{pinned.map((session) => renderRow(session, true))}</div>
+        </section>
+      )}
 
-      <div className={css.scopeRow} role="group">
-        <button
-          type="button"
-          className={css.scopeButton}
-          aria-pressed={scope === 'project'}
-          onClick={() => switchScope('project')}
-        >
-          {t('sidebar.scope.project')}
-        </button>
-        <button
-          type="button"
-          className={css.scopeButton}
-          aria-pressed={scope === 'all'}
-          onClick={() => switchScope('all')}
-        >
-          {t('sidebar.scope.all')}
-        </button>
-      </div>
+      <section className={css.sessions} data-sidebar-section="sessions" aria-labelledby="sessions-label">
+        <div className={css.sectionToolbar}>
+          <span id="sessions-label" className={css.sectionLabel}>{t('sidebar.sessions')}</span>
+          <SessionTools />
+        </div>
+        <div className={css.searchWrap}>
+          <input
+            className={css.search}
+            type="text"
+            placeholder={t('sidebar.search')}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            spellCheck={false}
+          />
+        </div>
+        <div className={css.standaloneList}>
+          {standalone.length > 0 ? (
+            standalone.map((session) => renderRow(session))
+          ) : (
+            <div className={css.sectionEmpty}>{t('sidebar.standalone')}</div>
+          )}
+        </div>
+      </section>
 
-      <div className={css.searchWrap}>
-        <input
-          className={css.search}
-          type="text"
-          placeholder={t('sidebar.search')}
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          spellCheck={false}
-        />
+      <div className={css.sectionToolbar} data-sidebar-section="projects">
+        <span className={css.sectionLabel}>{t('sidebar.projects')}</span>
       </div>
-
-      <div className={css.list} data-selectable={false}>
-        {pinned.length > 0 && <div className={css.groupLabel}>{t('sidebar.pinned')}</div>}
-        {pinned.map(renderRow)}
-        {groups.map((group) => (
-          <Section key={group.project} project={group.project} scope={scope}>
-            {group.sessions.map(renderRow)}
-          </Section>
-        ))}
-        {pinned.length === 0 && groups.length === 0 && (
+      <div className={css.projectList}>
+        {projects.map(renderProject)}
+        {empty && (
           <div className={css.empty}>
             <ChatIcon size={16} />
             <span>{t('sidebar.empty')}</span>
@@ -330,17 +379,104 @@ export function Sidebar(props: { onCollapse(): void }) {
   )
 }
 
-function Section(props: { project: string; scope: SessionScope; children: ReactNode }) {
+function SessionTools() {
   const t = useT()
+  const importSession = useAppStore((state) => state.importSession)
+  const exportSession = useAppStore((state) => state.exportSession)
+  const [exportOpen, setExportOpen] = useState(false)
+  const exportRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!exportOpen) return
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node
+      if (exportRef.current?.contains(target)) return
+      setExportOpen(false)
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setExportOpen(false)
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown, true)
+    }
+  }, [exportOpen])
+
+  const openFile = async () => {
+    const path = await pickSessionFileToOpen()
+    if (path !== null) await importSession(path)
+  }
+
+  const exportAs = async (format: 'md' | 'html') => {
+    setExportOpen(false)
+    const path = await exportSession(format)
+    if (path !== null) {
+      useNoticeStore.getState().show({ kind: 'info', text: t('session.exported', { path }) })
+    }
+  }
+
   return (
-    <>
-      {props.scope === 'all' && (
-        <div className={css.groupLabel} data-project-group={props.project}>
-          {props.project || t('sidebar.sessions')}
-        </div>
-      )}
-      {props.children}
-    </>
+    <div className={css.toolbarActions}>
+      <Tooltip label={t('sidebar.import')}>
+        <button
+          type="button"
+          className={css.toolbarButton}
+          aria-label={t('sidebar.import')}
+          onClick={() => void openFile()}
+        >
+          <FolderIcon size={13} />
+        </button>
+      </Tooltip>
+      <div className={css.exportAnchor} ref={exportRef}>
+        <Tooltip label={t('sidebar.export')}>
+          <button
+            type="button"
+            className={css.toolbarButton}
+            aria-label={t('sidebar.export')}
+            aria-haspopup="menu"
+            aria-expanded={exportOpen}
+            onClick={() => setExportOpen((value) => !value)}
+          >
+            <FileIcon size={13} />
+          </button>
+        </Tooltip>
+        {exportOpen && (
+          <div className={css.exportMenu} role="menu" data-export-menu>
+            <button
+              type="button"
+              role="menuitem"
+              className={css.menuItem}
+              onClick={() => void exportAs('md')}
+            >
+              {t('session.exportMarkdown')}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className={css.menuItem}
+              onClick={() => void exportAs('html')}
+            >
+              {t('session.exportHtml')}
+            </button>
+          </div>
+        )}
+      </div>
+      <Tooltip label={t('sidebar.new')}>
+        <button
+          type="button"
+          className={css.toolbarButton}
+          aria-label={t('sidebar.new')}
+          onClick={() => void useAppStore.getState().newSession()}
+        >
+          <PlusIcon size={14} />
+        </button>
+      </Tooltip>
+    </div>
   )
 }
 
@@ -352,7 +488,7 @@ function SessionRow(props: {
   model?: string
   project?: string
   derivedFrom?: string
-  scope: SessionScope
+  showProject: boolean
   current: boolean
   pinned: boolean
   crossProject: boolean
@@ -372,7 +508,7 @@ function SessionRow(props: {
     : null
   const sub = [
     `${props.messages} ${t('session.messages')}`,
-    props.scope === 'all' ? props.project ?? '' : '',
+    props.showProject ? props.project ?? '' : '',
     props.model ?? '',
     formatAge(props.updatedAt, locale),
   ]
@@ -485,47 +621,9 @@ function Footer() {
   const t = useT()
   const theme = useSettingsStore((state) => state.theme)
   const setTheme = useSettingsStore((state) => state.setTheme)
-  const importSession = useAppStore((state) => state.importSession)
-  const exportSession = useAppStore((state) => state.exportSession)
-  const [exportOpen, setExportOpen] = useState(false)
-  const exportRef = useRef<HTMLDivElement | null>(null)
   const next = theme === 'light' ? 'dark' : theme === 'dark' ? 'auto' : 'light'
   const icon = theme === 'light' ? <SunIcon size={14} /> : theme === 'dark' ? <MoonIcon size={14} /> : <MonitorIcon size={14} />
   const label = theme === 'light' ? t('theme.light') : theme === 'dark' ? t('theme.dark') : t('theme.auto')
-
-  useEffect(() => {
-    if (!exportOpen) return
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node
-      if (exportRef.current?.contains(target)) return
-      setExportOpen(false)
-    }
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      setExportOpen(false)
-      event.stopPropagation()
-      event.stopImmediatePropagation()
-    }
-    document.addEventListener('pointerdown', onPointerDown)
-    document.addEventListener('keydown', onKeyDown, true)
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown, true)
-    }
-  }, [exportOpen])
-
-  const openFile = async () => {
-    const path = await pickSessionFileToOpen()
-    if (path !== null) await importSession(path)
-  }
-
-  const exportAs = async (format: 'md' | 'html') => {
-    setExportOpen(false)
-    const path = await exportSession(format)
-    if (path !== null) {
-      useNoticeStore.getState().show({ kind: 'info', text: t('session.exported', { path }) })
-    }
-  }
 
   return (
     <div className={css.footer}>
@@ -538,52 +636,6 @@ function Footer() {
         {icon}
         <span>{label}</span>
       </button>
-      <div className={css.footerActions}>
-        <Tooltip label={t('sidebar.import')}>
-          <button
-            type="button"
-            className={css.footerButton}
-            aria-label={t('sidebar.import')}
-            onClick={() => void openFile()}
-          >
-            <FolderIcon size={14} />
-          </button>
-        </Tooltip>
-        <div className={css.exportAnchor} ref={exportRef}>
-          <Tooltip label={t('sidebar.export')}>
-            <button
-              type="button"
-              className={css.footerButton}
-              aria-label={t('sidebar.export')}
-              aria-haspopup="menu"
-              aria-expanded={exportOpen}
-              onClick={() => setExportOpen((value) => !value)}
-            >
-              <FileIcon size={14} />
-            </button>
-          </Tooltip>
-          {exportOpen && (
-            <div className={css.exportMenu} role="menu" data-export-menu>
-              <button
-                type="button"
-                role="menuitem"
-                className={css.menuItem}
-                onClick={() => void exportAs('md')}
-              >
-                {t('session.exportMarkdown')}
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                className={css.menuItem}
-                onClick={() => void exportAs('html')}
-              >
-                {t('session.exportHtml')}
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   )
 }

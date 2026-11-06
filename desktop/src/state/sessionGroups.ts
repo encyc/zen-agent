@@ -1,15 +1,18 @@
 import type { SessionSummary } from '../rpc/types'
 
-export type SessionScope = 'project' | 'all'
+/** pi shows this many rows per project before the "load more" row. */
+export const PROJECT_PAGE_SIZE = 10
 
 export interface SessionGroup {
   project: string
   sessions: SessionSummary[]
 }
 
-export interface SessionSections {
+export interface SidebarSections {
   pinned: SessionSummary[]
-  groups: SessionGroup[]
+  /** Sessions outside any project; `project` is `''`. */
+  standalone: SessionSummary[]
+  projects: SessionGroup[]
 }
 
 export function compareSessions(a: SessionSummary, b: SessionSummary): number {
@@ -23,35 +26,32 @@ function matches(session: SessionSummary, query: string): boolean {
   )
 }
 
-export function sessionGroups(
+/** Splits the flat list into pi's three sidebar sections. Pinned rows are
+ * global and never repeat inside a project group. */
+export function sessionSections(
   sessions: SessionSummary[],
-  scope: SessionScope,
   query: string,
-): SessionSections {
+): SidebarSections {
   const needle = query.trim().toLowerCase()
   const visible = sessions.filter((session) => matches(session, needle))
   const pinned = visible.filter((session) => session.pinned).sort(compareSessions)
   const rest = visible.filter((session) => !session.pinned).sort(compareSessions)
-  if (scope === 'project') {
-    return {
-      pinned,
-      groups: rest.length === 0 ? [] : [{ project: rest[0].project ?? '', sessions: rest }],
-    }
-  }
+
+  const standalone = rest.filter((session) => (session.project ?? '') === '')
   const byProject = new Map<string, SessionSummary[]>()
   for (const session of rest) {
     const key = session.project ?? ''
+    if (key === '') continue
     const bucket = byProject.get(key)
     if (bucket === undefined) byProject.set(key, [session])
     else bucket.push(session)
   }
-  const groups = [...byProject.entries()].map(([project, groupSessions]) => ({
-    project,
-    sessions: groupSessions,
-  }))
-  groups.sort((a, b) => {
-    const byUpdated = (b.sessions[0]?.updated_at ?? 0) - (a.sessions[0]?.updated_at ?? 0)
-    return byUpdated !== 0 ? byUpdated : a.project.localeCompare(b.project)
-  })
-  return { pinned, groups }
+  const projects = [...byProject.entries()]
+    .map(([project, groupSessions]) => ({ project, sessions: groupSessions }))
+    .sort((a, b) => {
+      const byUpdated = (b.sessions[0]?.updated_at ?? 0) - (a.sessions[0]?.updated_at ?? 0)
+      return byUpdated !== 0 ? byUpdated : a.project.localeCompare(b.project)
+    })
+
+  return { pinned, standalone, projects }
 }

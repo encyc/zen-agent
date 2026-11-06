@@ -9,7 +9,6 @@ import type {
   SessionSummary,
   StatusResult,
 } from '../rpc/types'
-import type { SessionScope } from './sessionGroups'
 
 // ---- status ---------------------------------------------------------------
 
@@ -28,22 +27,26 @@ export const useStatusStore = create<StatusState>((set) => ({
 interface SessionState {
   sessions: SessionSummary[]
   currentPath: string | null
-  scope: SessionScope
+  collapsedProjects: string[]
   setSessions(sessions: SessionSummary[]): void
   setCurrent(path: string | null): void
-  setScope(scope: SessionScope): void
+  toggleProject(project: string): void
 }
 
 export const useSessionStore = create<SessionState>((set) => ({
   sessions: [],
   currentPath: null,
-  scope: load('zen.sidebar.scope', 'project' as SessionScope),
+  collapsedProjects: load('zen.sidebar.projects', [] as string[]),
   setSessions: (sessions) => set({ sessions }),
   setCurrent: (currentPath) => set({ currentPath }),
-  setScope: (scope) => {
-    persist('zen.sidebar.scope', scope)
-    set({ scope })
-  },
+  toggleProject: (project) =>
+    set((state) => {
+      const collapsedProjects = state.collapsedProjects.includes(project)
+        ? state.collapsedProjects.filter((key) => key !== project)
+        : [...state.collapsedProjects, project]
+      persist('zen.sidebar.projects', collapsedProjects)
+      return { collapsedProjects }
+    }),
 }))
 
 // ---- notices ---------------------------------------------------------------

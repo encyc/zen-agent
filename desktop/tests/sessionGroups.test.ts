@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { sessionGroups } from '../src/state/sessionGroups.ts'
+import { PROJECT_PAGE_SIZE, sessionSections } from '../src/state/sessionGroups.ts'
 import type { SessionSummary } from '../src/rpc/types.ts'
 
 const make = (path: string, updated: number, extra: Partial<SessionSummary> = {}): SessionSummary => ({
@@ -21,53 +21,67 @@ test('query filters title, name and project case-insensitively', () => {
     make('/s/b.jsonl', 2, { title: 'other', name: 'b' }),
     make('/s/c.jsonl', 1, { title: 'other', project: 'Beta' }),
   ]
-  const byTitle = sessionGroups(sessions, 'project', 'LOGIN')
+  const byTitle = sessionSections(sessions, 'LOGIN')
   assert.deepEqual(
-    [...byTitle.pinned, ...byTitle.groups.flatMap((group) => group.sessions)].map((s) => s.path),
+    [...byTitle.pinned, ...byTitle.standalone, ...byTitle.projects.flatMap((g) => g.sessions)].map(
+      (s) => s.path,
+    ),
     ['/s/a.jsonl'],
   )
-  const byProject = sessionGroups(sessions, 'all', 'beta')
+  const byProject = sessionSections(sessions, 'beta')
   assert.deepEqual(
-    byProject.groups.flatMap((group) => group.sessions).map((s) => s.path),
+    byProject.projects.flatMap((group) => group.sessions).map((s) => s.path),
     ['/s/c.jsonl'],
   )
 })
 
-test('pinned rows come first and each list sorts updated desc with a path tie-break', () => {
-  const sections = sessionGroups(
+test('sections split pinned, projectless and project groups', () => {
+  const sections = sessionSections(
     [
-      make('/s/a.jsonl', 1),
-      make('/s/b.jsonl', 5),
-      make('/s/c.jsonl', 5),
-      make('/s/d.jsonl', 2, { pinned: true }),
+      make('/s/a.jsonl', 9, { project: '' }),
+      make('/s/b.jsonl', 8, { project: 'alpha' }),
+      make('/s/c.jsonl', 7, { project: 'beta' }),
+      make('/s/d.jsonl', 6, { project: 'beta', pinned: true }),
     ],
-    'project',
     '',
   )
   assert.deepEqual(sections.pinned.map((s) => s.path), ['/s/d.jsonl'])
-  assert.deepEqual(sections.groups[0].sessions.map((s) => s.path), ['/s/b.jsonl', '/s/c.jsonl', '/s/a.jsonl'])
+  assert.deepEqual(sections.standalone.map((s) => s.path), ['/s/a.jsonl'])
+  assert.deepEqual(sections.projects.map((g) => g.project), ['alpha', 'beta'])
 })
 
-test('project scope collapses to one group; all scope splits groups by newest session', () => {
-  const sessions = [
-    make('/s/a.jsonl', 9, { project: 'alpha' }),
-    make('/s/b.jsonl', 4, { project: 'beta' }),
-    make('/s/c.jsonl', 7, { project: 'beta' }),
-  ]
-  const project = sessionGroups(sessions, 'project', '')
-  assert.deepEqual(project.groups.map((g) => g.project), ['alpha'])
-  assert.deepEqual(project.groups[0].sessions.map((s) => s.path), ['/s/a.jsonl', '/s/c.jsonl', '/s/b.jsonl'])
-
-  const all = sessionGroups(sessions, 'all', '')
-  assert.deepEqual(all.groups.map((g) => g.project), ['alpha', 'beta'])
-  assert.deepEqual(all.groups[1].sessions.map((s) => s.path), ['/s/c.jsonl', '/s/b.jsonl'])
-})
-
-test('sessions without a project group under an empty label and empty groups drop out', () => {
-  const all = sessionGroups([make('/s/a.jsonl', 1, { project: '' })], 'all', '')
-  assert.deepEqual(
-    all.groups.map((group) => [group.project, group.sessions.map((session) => session.path)]),
-    [['', ['/s/a.jsonl']]],
+test('each list sorts updated desc with a path tie-break and groups follow their newest row', () => {
+  const sections = sessionSections(
+    [
+      make('/s/a.jsonl', 1, { project: '' }),
+      make('/s/b.jsonl', 5, { project: 'alpha' }),
+      make('/s/c.jsonl', 5, { project: 'alpha' }),
+      make('/s/d.jsonl', 2, { project: 'beta' }),
+    ],
+    '',
   )
-  assert.deepEqual(sessionGroups([], 'all', ''), { pinned: [], groups: [] })
+  assert.deepEqual(sections.standalone.map((s) => s.path), ['/s/a.jsonl'])
+  assert.deepEqual(
+    sections.projects.map((g) => [g.project, g.sessions.map((s) => s.path)]),
+    [
+      ['alpha', ['/s/b.jsonl', '/s/c.jsonl']],
+      ['beta', ['/s/d.jsonl']],
+    ],
+  )
+})
+
+test('the query filters every section and keeps collapse data intact', () => {
+  const sections = sessionSections(
+    [
+      make('/s/a.jsonl', 9, { project: '', title: 'Fix login' }),
+      make('/s/b.jsonl', 8, { project: 'alpha', title: 'other' }),
+    ],
+    'login',
+  )
+  assert.deepEqual(sections.standalone.map((s) => s.path), ['/s/a.jsonl'])
+  assert.deepEqual(sections.projects, [])
+})
+
+test('the project page size is ten rows', () => {
+  assert.equal(PROJECT_PAGE_SIZE, 10)
 })

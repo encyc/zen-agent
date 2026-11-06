@@ -18,7 +18,6 @@ import {
 import { useChatStore } from './chatStore'
 import { nextDraft } from './pending'
 import { frameError } from '../rpc/frames'
-import type { SessionScope } from './sessionGroups'
 
 export type ConnectionState = 'idle' | 'starting' | 'ready' | 'exited'
 
@@ -34,7 +33,7 @@ interface AppState {
   disconnect(): Promise<void>
   client(): RpcClient
   refreshStatus(): Promise<void>
-  refreshSessions(scope?: SessionScope): Promise<void>
+  refreshSessions(): Promise<void>
   refreshCatalog(): Promise<void>
   refreshTranscript(): Promise<void>
   submit(): Promise<void>
@@ -153,11 +152,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       })
   },
 
-  refreshSessions(scope) {
-    const effective = scope ?? useSessionStore.getState().scope
+  refreshSessions() {
+    // pi lists every project at once; the sidebar sections do the grouping.
     return get()
       .client()
-      .send({ type: 'session', op: 'list', scope: effective })
+      .send({ type: 'session', op: 'list', scope: 'all' })
       .then((frame) => {
         if (frame.type === 'result' && frame.ok) {
           const sessions = (frame.sessions ?? []) as { path: string; current: boolean }[]

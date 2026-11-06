@@ -6,18 +6,31 @@
   border-right: 1px solid var(--dsw-alias-border-l1);
 }
 
-/* Brand row doubles as the macOS traffic-light seat: html.darwin pads it. */
-.brandRow {
+/* The header doubles as the macOS traffic-light seat. pi hides the wordmark
+   on macOS so the lights own the corner; the collapse button stays put. */
+.header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  height: 48px;
+  gap: 8px;
+  height: var(--ds-toolbar-height);
   padding: 0 10px 0 14px;
   flex: none;
 }
 
-html[data-platform='darwin'] .brandRow {
+html[data-platform='darwin'] .header {
   padding-left: 78px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+html[data-platform='darwin'] .brand {
+  display: none;
 }
 
 .brandMark {
@@ -26,12 +39,10 @@ html[data-platform='darwin'] .brandRow {
   flex: none;
 }
 
-.brandText {
-  flex: 1;
-  min-width: 0;
-}
-
 .brandName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--dsw-font-family-brand);
   font-size: 14px;
   font-weight: 600;
@@ -44,6 +55,7 @@ html[data-platform='darwin'] .brandRow {
   place-items: center;
   width: 28px;
   height: 28px;
+  flex: none;
   border: none;
   border-radius: var(--dsw-radius-sm);
   background: transparent;
@@ -56,62 +68,66 @@ html[data-platform='darwin'] .brandRow {
   color: var(--dsw-alias-label-primary);
 }
 
-.actions {
-  padding: 4px 12px 8px;
-  flex: none;
-}
-
-.newButton {
+.sectionToolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
-  height: 32px;
-  padding: 0 10px;
-  border: none;
-  border-radius: var(--dsw-radius-sm);
-  background: var(--dsw-specific-sidebar-nav-item-active-accent);
-  color: var(--dsw-alias-label-primary);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.newButton:hover {
-  background: var(--dsw-specific-sidebar-nav-item-active);
-}
-
-.scopeRow {
-  display: flex;
-  gap: 2px;
-  padding: 0 12px 8px;
+  gap: 4px;
+  min-height: 30px;
+  padding: 4px 12px 2px;
   flex: none;
 }
 
-.scopeButton {
+.sectionLabel {
   flex: 1;
-  height: 24px;
-  padding: 0 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--dsw-alias-label-caption);
+}
+
+.toolbarActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.toolbarButton {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
   border: none;
   border-radius: var(--ds-radius-4);
   background: transparent;
-  color: var(--dsw-alias-label-caption);
-  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
 }
 
-.scopeButton:hover {
+.toolbarButton:hover {
   background: var(--dsw-specific-sidebar-nav-item-hover);
-  color: var(--dsw-alias-label-secondary);
-}
-
-.scopeButton[aria-pressed='true'] {
-  background: var(--dsw-specific-sidebar-nav-item-active);
   color: var(--dsw-alias-label-primary);
 }
 
+.pinned {
+  flex: none;
+}
+
+.pinnedList {
+  max-height: min(233px, 30vh);
+  overflow-y: auto;
+  padding: 0 8px 4px;
+}
+
+.sessions {
+  flex: none;
+}
+
 .searchWrap {
-  padding: 0 12px 8px;
+  padding: 2px 12px 6px;
   flex: none;
 }
 
@@ -135,18 +151,103 @@ html[data-platform='darwin'] .brandRow {
   outline: 1px solid var(--dsw-alias-border-l4);
 }
 
-.list {
+.standaloneList {
+  padding: 0 8px 2px;
+}
+
+.sectionEmpty {
+  padding: 4px 8px 8px;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--dsw-alias-label-caption);
+}
+
+.projectList {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   padding: 0 8px 8px;
 }
 
-.groupLabel {
-  padding: 10px 8px 4px;
-  font-size: 11px;
-  line-height: 14px;
+.projectGroup {
+  margin-bottom: 2px;
+}
+
+.projectHeader {
+  display: flex;
+  align-items: center;
+}
+
+.projectToggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.projectToggle:hover {
+  background: var(--dsw-specific-sidebar-nav-item-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.projectChevron {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  transition: transform 120ms ease;
+}
+
+.projectChevron[data-collapsed] {
+  transform: rotate(-90deg);
+}
+
+.projectName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  font-weight: 500;
+}
+
+.projectActiveDot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--ds-radius-full);
+  background: var(--dsw-alias-state-business-primary);
+}
+
+.projectBody {
+  padding-bottom: 2px;
+}
+
+.loadMore {
+  width: 100%;
+  height: 26px;
+  margin: 2px 0;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
   color: var(--dsw-alias-label-caption);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.loadMore:hover {
+  background: var(--dsw-specific-sidebar-nav-item-hover);
+  color: var(--dsw-alias-label-secondary);
 }
 
 .sessionRow {
@@ -334,8 +435,9 @@ html[data-platform='darwin'] .brandRow {
   align-items: center;
   gap: 4px;
   flex: none;
+  height: var(--ds-sidebar-footer-height);
   border-top: 1px solid var(--dsw-alias-border-l1);
-  padding: 8px 12px;
+  padding: 0 12px;
 }
 
 .themeButton {
@@ -359,30 +461,6 @@ html[data-platform='darwin'] .brandRow {
   color: var(--dsw-alias-label-primary);
 }
 
-.footerActions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex: none;
-}
-
-.footerButton {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: var(--dsw-radius-sm);
-  background: transparent;
-  color: var(--dsw-alias-label-tertiary);
-  cursor: pointer;
-}
-
-.footerButton:hover {
-  background: var(--dsw-specific-sidebar-nav-item-hover);
-  color: var(--dsw-alias-label-primary);
-}
-
 .exportAnchor {
   position: relative;
 }
@@ -390,7 +468,7 @@ html[data-platform='darwin'] .brandRow {
 .exportMenu {
   position: absolute;
   right: 0;
-  bottom: calc(100% + 6px);
+  top: calc(100% + 6px);
   z-index: 30;
   display: flex;
   flex-direction: column;

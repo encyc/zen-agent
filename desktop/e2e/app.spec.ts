@@ -23,6 +23,7 @@ interface BridgeState {
   title: string
   failExport?: boolean
   noCurrent?: boolean
+  projectSessions?: number
 }
 
 declare global {
@@ -68,6 +69,22 @@ function installBridge(state: BridgeState) {
         model: 'deepseek-flash',
         derived_from: '',
       },
+      ...Array.from({ length: Math.max(0, (state.projectSessions ?? 2) - 2) }, (_, index) => {
+        const ordinal = index + 3
+        return {
+          path: `/sessions/p${ordinal}.jsonl`,
+          name: `p${ordinal}`,
+          title: `额外会话 ${ordinal}`,
+          project: 'p',
+          messages: 1,
+          current: false,
+          pinned: false,
+          created_at: 1,
+          updated_at: 1,
+          model: 'deepseek-flash',
+          derived_from: '',
+        }
+      }),
       ...(scope === 'all'
         ? [
             {
@@ -310,9 +327,40 @@ test('the topbar menu runs undo and compact through the session op', async ({ pa
     .toBe(true)
 })
 
-test('the all scope groups projects and refuses cross-project opens', async ({ page }) => {
+test('the sidebar renders pinned, sessions and collapsible project groups', async ({ page }) => {
   await boot(page, initialState())
-  await page.getByRole('button', { name: '全部' }).click()
+  await expect(page.locator('[data-sidebar-section="sessions"]')).toBeVisible()
+  await expect(page.locator('[data-project-group="p"]')).toBeVisible()
+  const header = page.getByRole('button', { name: '项目 p' })
+  await expect(header).toHaveAttribute('aria-expanded', 'true')
+  await header.click()
+  await expect(header).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.locator('[data-session-path="/sessions/b.jsonl"]')).toBeHidden()
+  await header.click()
+  await expect(page.locator('[data-session-path="/sessions/b.jsonl"]')).toBeVisible()
+})
+
+test('a filtered, collapsed project stays collapsed and loads more on demand', async ({ page }) => {
+  await boot(page, initialState({ projectSessions: 12 }))
+  const header = page.getByRole('button', { name: '项目 p' })
+  const visibleRows = page.locator('[data-sidebar-project-group="p"] [data-session-path]:visible')
+  await expect(visibleRows).toHaveCount(10)
+  await expect(page.getByRole('button', { name: '加载更多（2）' })).toBeVisible()
+  await page.getByRole('button', { name: '加载更多（2）' }).click()
+  await expect(visibleRows).toHaveCount(12)
+
+  await header.click()
+  await page.getByPlaceholder('搜索会话').fill('额外会话')
+  await expect(header).toHaveAttribute('aria-expanded', 'false')
+  await expect(visibleRows).toHaveCount(0)
+  await page.getByPlaceholder('搜索会话').fill('')
+  await expect(header).toHaveAttribute('aria-expanded', 'false')
+  await header.click()
+  await expect(visibleRows).toHaveCount(12)
+})
+
+test('the sidebar lists every project and refuses cross-project opens', async ({ page }) => {
+  await boot(page, initialState())
   await expect
     .poll(() =>
       page.evaluate(() =>
@@ -377,9 +425,8 @@ test('delete needs two clicks on the same row', async ({ page }) => {
     ),
     false,
   )
-  // A scope switch drops the arm: reopen and the label is plain delete again.
-  await page.getByRole('button', { name: '全部' }).click()
-  await page.getByRole('button', { name: '当前项目' }).click()
+  // Closing the menu drops the arm: reopen and the label is plain delete again.
+  await page.keyboard.press('Escape')
   await page.locator('[data-session-path="/sessions/b.jsonl"] [data-action="menu"]').click()
   await expect(page.getByRole('menuitem', { name: '删除？' })).toHaveCount(0)
   await page.getByRole('menuitem', { name: '删除' }).click()
@@ -487,7 +534,6 @@ test('an unknown current project leaves every listed session disabled', async ({
   await page.goto('/')
   await page.getByRole('button', { name: '用当前目录启动' }).click()
   await expect(page.locator('[data-session-path="/sessions/a.jsonl"]')).toBeVisible()
-  await page.getByRole('button', { name: '全部' }).click()
   await expect(page.locator('[data-session-path="/sessions/a.jsonl"]')).toHaveAttribute('aria-disabled', 'true')
   await expect(page.locator('[data-session-path="/sessions/b.jsonl"]')).toHaveAttribute('aria-disabled', 'true')
   await expect(page.locator('[data-session-path="/sessions/c.jsonl"]')).toHaveAttribute('aria-disabled', 'true')
@@ -604,7 +650,6 @@ test('palette commands run bare or insert their prefix', async ({ page }) => {
 
 test('a cross-project palette result is disabled and Enter does nothing', async ({ page }) => {
   await boot(page, initialState())
-  await page.getByRole('button', { name: '全部' }).click()
   await page.keyboard.press(paletteKey)
   const input = page.getByRole('dialog').getByRole('combobox')
   await input.fill('另一个项目')
