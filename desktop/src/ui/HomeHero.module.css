@@ -20,12 +20,12 @@
 
 /* Presentation attributes cannot resolve var(); the fill must come from CSS. */
 .mark svg rect {
-  fill: var(--dsw-alias-label-primary);
-  opacity: 0.12;
+  fill: var(--dsw-alias-state-business-primary);
+  opacity: 0.16;
 }
 
 .mark svg path {
-  fill: var(--dsw-alias-label-primary);
+  fill: var(--dsw-alias-state-business-primary);
 }
 
 .headline {

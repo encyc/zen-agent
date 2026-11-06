@@ -8,8 +8,6 @@
      Components keep using --dsw-*; this block is the single tuning point. */
   --ds-font-scale: 1;
   --ds-font-family-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  --ds-accent: var(--dsw-static-neutral-bluish-1000);
-  --ds-accent-hover: var(--dsw-static-neutral-bluish-800);
   --ds-font-10-5: calc(10.5px * var(--ds-font-scale));
   --ds-font-11: calc(11px * var(--ds-font-scale));
   --ds-font-11-5: calc(11.5px * var(--ds-font-scale));
@@ -63,6 +61,11 @@
 }
 
 body {
+  /* The palette these aliases point at lives on body too: resolving the
+     aliases on :root would make every reference invalid at computed time. */
+  --ds-accent: var(--dsw-static-neutral-bluish-1000);
+  --ds-accent-hover: var(--dsw-static-neutral-bluish-800);
+
   /* ---- static palette -------------------------------------------------- */
   --dsw-static-amber-100: rgb(254, 245, 231);
   --dsw-static-amber-400: rgb(247, 173, 49);
