@@ -3,7 +3,7 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased
+## v0.8.1 — 2026-11-06
 
 **Architecture review follow-through: a truncated tool call can no longer be
 executed, subagents answer to the same permission gate as their parent, and the
