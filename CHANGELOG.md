@@ -10,6 +10,29 @@ frontends already had, and headless `-p` stops assembling a second-class agent.*
 
 ### Fixed
 
+- **Clicking the transcript while it streams no longer kills the TUI.** With
+  `ALLOW_SELECT` on, a MouseDown/MouseMove that landed on a Markdown block
+  during a rebuild died in Textual's `Screen._forward_event`
+  (`AttributeError: 'NoneType' object has no attribute 'region'`) and took the
+  app down. `Markdown.update` removes every block before mounting the
+  replacements inside one `batch_update`, so the compositor keeps answering hit
+  tests with the removed `MarkdownParagraph` (its `parent` is already `None`)
+  for one event-loop turn. `ZenAgentApp.on_event` now drops pointer events whose
+  target is detached — there is nothing to click — and `test_tui_selection.py`
+  pins the window.
+- **Streaming answers append instead of rebuilding the document.** Every text
+  delta called `Markdown.update`, which re-parsed the whole answer (in an
+  executor) and re-mounted every block: O(document) per delta, and the window
+  the crash above lives in. The transcript's assistant widget is now a
+  `StreamingMarkdown` (`zenagent/cli/tui/widgets/markdown_stream.py`) that uses
+  Textual's incremental `Markdown.append`: only the uncommitted tail is parsed
+  and the last block is updated in place, so the paragraph (and an open code
+  fence) the user is looking at keeps its widget. One pump renders the newest
+  text, so a burst of deltas collapses into one append, and a canonical rewrite
+  (retry, session switch, provider-corrected text) falls back to a full update.
+  Text that arrives before the widget finished mounting waits for the mount
+  instead of being dropped, `tests/test_tui_markdown_stream.py` pins the append,
+  the rewrite, the coalescing, a streamed fence and the pre-mount case.
 - **RPC starts without `--mode`.** `zen rpc` (the documented invocation) used to
   crash at startup with `unknown mode: None`; the mode is now resolved like the
   other frontends (`--mode`, then `--read-only`→plan, then `--yes`→zen),

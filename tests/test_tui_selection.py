@@ -3,10 +3,13 @@
 `ALLOW_SELECT` is on, so dragging over a Markdown block selects its text and
 `ctrl+c` copies the selection instead of clearing the draft (the same split omp
 gives `tui.input.copy`). These tests pin that, because the switch was off for
-months after a Textual 8.2 crash that no longer reproduces.
+months after a Textual 8.2 crash on Markdown blocks: the crash is still in 8.2.8
+(`Markdown.update` detaches its blocks before the compositor catches up), so
+`ZenAgentApp.on_event` drops pointer events aimed at a detached widget.
 """
 
 from conftest import sequenced_stream
+from textual import events
 
 from zenagent.cli.tui.app import ZenAgentApp
 from zenagent.cli.tui.widgets.prompt_input import PromptInput
@@ -83,6 +86,58 @@ async def test_ctrl_c_without_a_selection_still_clears_the_draft(runtime_factory
         await pilot.pause()
 
         assert prompt.text == "", "no selection means the old clear-draft behaviour"
+
+
+def _click_at(x: int, y: int) -> events.MouseDown:
+    """A MouseDown as the app receives it: no widget, screen coordinates."""
+    return events.MouseDown(
+        widget=None,
+        x=x,
+        y=y,
+        delta_x=0,
+        delta_y=0,
+        button=1,
+        shift=False,
+        meta=False,
+        ctrl=False,
+        screen_x=x,
+        screen_y=y,
+        style=None,
+    )
+
+
+async def test_a_click_on_a_block_being_rebuilt_is_dropped(runtime_factory):
+    """Markdown.update detaches every block before the compositor catches up.
+
+    Textual's ``Screen._forward_event`` reads ``container.region`` off
+    ``paragraph.parent`` on a MouseDown, so a click landing in that window hit
+    ``None.region``; the AttributeError escaped ``App.on_event`` and took the
+    whole app down mid-stream. A detached target has nothing to click, so the
+    event is dropped instead of forwarded.
+    """
+    app = await _answered_app(runtime_factory)
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        await app.chat.submit("hi")
+        await app.chat.wait_for_idle()
+        await pilot.pause()
+
+        block = app.query("Markdown").last()
+        paragraph = block.query("MarkdownParagraph").first()
+        x, y = paragraph.region.x + 1, paragraph.region.y
+        await block.query("MarkdownBlock").remove()
+
+        # The exact state Markdown.update leaves open: the block is detached,
+        # the compositor map still points at it.
+        stale, _ = app.screen.get_widget_and_offset_at(x, y)
+        assert stale is paragraph and stale.parent is None
+
+        event = _click_at(x, y)
+        await app.on_event(event)
+        await pilot.pause()
+
+        assert not event.is_forwarded, "a click on a torn-down block is dropped"
+        assert app.is_running
 
 
 async def test_dragging_while_the_answer_streams_does_not_crash(runtime_factory):

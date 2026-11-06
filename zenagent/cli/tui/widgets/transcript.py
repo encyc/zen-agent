@@ -8,9 +8,9 @@ from __future__ import annotations
 
 from textual.containers import VerticalScroll
 from textual.message import Message
-from textual.widgets import Markdown
 
 from zenagent.app.views import MessageView, RunStatus, ToolCallView
+from zenagent.cli.tui.widgets.markdown_stream import StreamingMarkdown
 from zenagent.cli.tui.widgets.rows import (
     DividerRow,
     NoticeRow,
@@ -46,7 +46,7 @@ class TranscriptView(VerticalScroll):
         super().__init__(id=id)
         self._welcome = welcome
         self._count = 0
-        self._assistant_widgets: list[Markdown] = []
+        self._assistant_widgets: list[StreamingMarkdown] = []
         self._thinking_rows: dict[int, ThinkingRow] = {}
         self._usage_shown = 0
         self._stick = True
@@ -218,9 +218,11 @@ class TranscriptView(VerticalScroll):
             return
         if self._assistant_text.get(slot) != view.text:
             self._assistant_text[slot] = view.text
-            widget = self._assistant_widgets[slot]
-            if widget.is_mounted:
-                widget.update(view.text)
+            # Appends the new tail (a delta is a suffix) instead of re-mounting
+            # the document; a canonical rewrite falls back to a full update
+            # inside the widget, and text that arrives before the mount waits
+            # for it.
+            self._assistant_widgets[slot].stream_text(view.text)
         # Thinking streams (and its timer runs) before the answer text exists,
         # so it is synced independently of the Markdown widget.
         self._sync_thinking(slot, view)
@@ -245,7 +247,7 @@ class TranscriptView(VerticalScroll):
             )
             self._thinking_rows[len(self._assistant_widgets)] = row
             self.mount(row)
-        widget = Markdown(view.text, classes="assistant-message")
+        widget = StreamingMarkdown(view.text, classes="assistant-message")
         self._assistant_widgets.append(widget)
         self.mount(widget)
 
