@@ -24,6 +24,7 @@ interface BridgeState {
   failExport?: boolean
   noCurrent?: boolean
   projectSessions?: number
+  transcript?: Record<string, unknown>[]
 }
 
 declare global {
@@ -125,7 +126,7 @@ function installBridge(state: BridgeState) {
           type: 'result',
           id: payload.id,
           ok: true,
-          transcript: [],
+          transcript: state.transcript ?? [],
           notices: [],
           compactions: [],
         }
@@ -321,6 +322,44 @@ test('the topbar shows the project crumb and renames the current session inline'
       ),
     )
     .toBe(true)
+})
+
+test('a settled turn folds its tool steps into one process row', async ({ page }) => {
+  await boot(
+    page,
+    initialState({
+      running: false,
+      transcript: [
+        { kind: 'user', id: 'u1', text: 'go', timestamp: 1 },
+        { kind: 'assistant', id: 'a1', text: 'done', timestamp: 2, duration_ms: 900 },
+        {
+          id: 't1',
+          call_id: 'c1',
+          name: 'read_file',
+          args_preview: '{"path":"a.ts"}',
+          args: { path: 'a.ts' },
+          status: 'ok',
+          result_text: 'file',
+          duration_ms: 400,
+        },
+        {
+          id: 't2',
+          call_id: 'c2',
+          name: 'bash',
+          args_preview: '{"command":"ls"}',
+          args: { command: 'ls' },
+          status: 'ok',
+          result_text: 'a.ts',
+          duration_ms: 600,
+        },
+      ],
+    }),
+  )
+  const fold = page.getByRole('button', { name: /已处理.*步骤/ })
+  await expect(fold).toBeVisible()
+  await expect(fold).toHaveAttribute('aria-expanded', 'false')
+  await fold.click()
+  await expect(page.getByText('read_file')).toBeVisible()
 })
 
 test('the current row menu runs undo and compact through the session op', async ({ page }) => {
