@@ -16,7 +16,7 @@
     "forceConsistentCasingInFileNames": true,
     "useDefineForClassFields": true,
     "resolveJsonModule": true,
-    "allowImportingTsExtensions": false,
+    "allowImportingTsExtensions": true,
     "noEmit": true,
     "types": ["vite/client"]
   },

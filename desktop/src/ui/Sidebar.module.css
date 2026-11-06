@@ -474,32 +474,41 @@ html[data-platform='darwin'] .brand {
 .footer {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 4px;
   flex: none;
   height: var(--ds-sidebar-footer-height);
   border-top: 1px solid var(--dsw-alias-border-l1);
-  padding: 0 12px;
+  padding: 7px 12px 2px;
 }
 
-.themeButton {
+.footerActions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex: 1;
-  min-width: 0;
+  gap: 2px;
+}
+
+.footerButton {
+  display: grid;
+  place-items: center;
+  width: 28px;
   height: 28px;
-  padding: 0 8px;
   border: none;
   border-radius: var(--dsw-radius-sm);
   background: transparent;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
   cursor: pointer;
 }
 
-.themeButton:hover {
+.footerButton:hover {
   background: var(--dsw-specific-sidebar-nav-item-hover);
   color: var(--dsw-alias-label-primary);
+}
+
+.version {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--ds-font-10-5);
+  font-variant-numeric: tabular-nums;
 }
 
 .exportAnchor {

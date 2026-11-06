@@ -3,13 +3,21 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { defaultProjectCwd, lastProjectCwd, useAppStore } from './state/appStore'
-import { useApprovalStore, usePaletteStore, useSettingsStore } from './state/stores'
+import {
+  clampFontScale,
+  useApprovalStore,
+  usePaletteStore,
+  useSettingsStore,
+} from './state/stores'
 import { useT } from './i18n/locale'
 import { AppFrame } from './ui/AppFrame'
 import { Sidebar } from './ui/Sidebar'
 import { ChatView } from './ui/chat/ChatView'
 import { InputBar } from './ui/composer/InputBar'
 import { RightPanel } from './ui/rightbar/RightPanel'
+import { SettingsPage } from './ui/pages/SettingsPage'
+import { ToolsPage } from './ui/pages/ToolsPage'
+import { restoreChatState } from './ui/pages/navigation'
 import { ConversationTopbar } from './ui/ConversationTopbar'
 import { NoticeBanner } from './ui/NoticeBanner'
 import { CommandPalette } from './ui/palette/CommandPalette'
@@ -38,6 +46,9 @@ export function App() {
   const setCollapsed = useSettingsStore((state) => state.setSidebarCollapsed)
   const theme = useSettingsStore((state) => state.theme)
   const chatWidth = useSettingsStore((state) => state.chatWidth)
+  const fontScale = useSettingsStore((state) => state.fontScale)
+  const view = useSettingsStore((state) => state.view)
+  const previousView = useRef(view)
   // The shell opens straight into a chat: the last project, else the user's
   // home folder, else zen's own cwd. There is no idle welcome surface.
   const [lastCwd] = useState(lastProjectCwd)
@@ -70,6 +81,20 @@ export function App() {
       `${clampChatWidth(chatWidth)}px`,
     )
   }, [chatWidth])
+
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      '--ds-font-scale',
+      String(clampFontScale(fontScale)),
+    )
+  }, [fontScale])
+
+  // Returning from Settings/Tools re-applies the scroll offset and composer
+  // focus captured when the page opened; the chat view itself remounts.
+  useEffect(() => {
+    if (previousView.current !== 'chat' && view === 'chat') restoreChatState()
+    previousView.current = view
+  }, [view])
 
   // Platform flag (dsh: html[data-platform]) drives macOS chrome adjustments.
   useEffect(() => {
@@ -157,6 +182,9 @@ export function App() {
       />
     )
   }
+
+  if (view === 'settings') return <SettingsPage />
+  if (view === 'tools') return <ToolsPage />
 
   return (
     <>

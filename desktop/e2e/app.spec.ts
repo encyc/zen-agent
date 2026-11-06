@@ -27,6 +27,7 @@ interface BridgeState {
   projectSessions?: number
   transcript?: Record<string, unknown>[]
   todos?: Record<string, unknown>[]
+  tools?: { name: string; description: string; approval: string }[]
 }
 
 declare global {
@@ -137,6 +138,15 @@ function installBridge(state: BridgeState) {
         }
       case 'models':
         return { type: 'result', id: payload.id, ok: true, models: [] }
+      case 'tools':
+        return {
+          type: 'result',
+          id: payload.id,
+          ok: true,
+          tools: state.tools ?? [
+            { name: 'read_file', description: 'Read a file', approval: 'read' },
+          ],
+        }
       case 'commands':
         return {
           type: 'result',
@@ -875,6 +885,21 @@ test('palette commands run bare or insert their prefix', async ({ page }) => {
   await page.keyboard.press(paletteKey)
   await page.getByRole('dialog').getByRole('combobox').fill('quit')
   await expect(page.getByRole('option', { name: /quit|Quit/ })).toHaveCount(0)
+})
+
+test('settings and tools replace the shell and return to chat', async ({ page }) => {
+  await boot(page, initialState())
+  await page.getByRole('button', { name: '设置' }).click()
+  await expect(page.getByRole('heading', { name: '设置' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '深色' })).toBeVisible()
+  await page.getByRole('button', { name: '返回' }).click()
+  await expect(page.locator('[data-shell-composer]')).toBeVisible()
+
+  await page.getByRole('button', { name: '工具' }).click()
+  await expect(page.getByText('read_file')).toBeVisible()
+  await expect(page.getByText('Read a file')).toBeVisible()
+  await page.getByRole('button', { name: '返回' }).click()
+  await expect(page.locator('[data-shell-composer]')).toBeVisible()
 })
 
 test('a cross-project palette result is disabled and Enter does nothing', async ({ page }) => {

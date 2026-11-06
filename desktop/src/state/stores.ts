@@ -2,8 +2,8 @@
  * composer draft, settings (theme/locale). */
 
 import { create } from 'zustand'
-import { CHAT_WIDTH_DEFAULT } from '../ui/columns'
-import { projectName } from './sessionGroups'
+import { CHAT_WIDTH_DEFAULT } from '../ui/columns.ts'
+import { projectName } from './sessionGroups.ts'
 import type {
   CommandEntry,
   ModelEntry,
@@ -127,8 +127,42 @@ interface NoticeState {
 
 export const useNoticeStore = create<NoticeState>((set) => ({
   notice: null,
-  show: (notice) => set({ notice }),
+  show: (notice) => {
+    set({ notice })
+    useNotificationStore.getState().push({ tone: notice.kind, text: notice.text })
+  },
   dismiss: () => set({ notice: null }),
+}))
+
+// ---- notifications ---------------------------------------------------------
+
+export interface NotificationItem {
+  id: number
+  tone: 'error' | 'info'
+  text: string
+  at: number
+}
+
+interface NotificationState {
+  items: NotificationItem[]
+  unread: number
+  push(item: { tone: 'error' | 'info'; text: string }): void
+  markRead(): void
+  clear(): void
+}
+
+let notificationSeq = 0
+
+export const useNotificationStore = create<NotificationState>((set) => ({
+  items: [],
+  unread: 0,
+  push: ({ tone, text }) =>
+    set((state) => {
+      const item: NotificationItem = { id: (notificationSeq += 1), tone, text, at: Date.now() }
+      return { items: [item, ...state.items].slice(0, 50), unread: state.unread + 1 }
+    }),
+  markRead: () => set({ unread: 0 }),
+  clear: () => set({ items: [], unread: 0 }),
 }))
 
 // ---- command palette -------------------------------------------------------
@@ -234,16 +268,33 @@ export const useComposerStore = create<ComposerState>((set) => ({
 
 export type ThemeMode = 'light' | 'dark' | 'auto'
 export type Locale = 'en' | 'zh'
+export type AppView = 'chat' | 'settings' | 'tools'
+
+export const FONT_SCALE_MIN = 0.9
+export const FONT_SCALE_MAX = 1.2
+export const FONT_SCALE_DEFAULT = 1
+
+export function clampFontScale(value: number): number {
+  if (!Number.isFinite(value)) return FONT_SCALE_DEFAULT
+  const clamped = Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, value))
+  return Math.round(clamped * 100) / 100
+}
 
 interface SettingsState {
   theme: ThemeMode
   locale: Locale
   sidebarCollapsed: boolean
   chatWidth: number
+  fontScale: number
+  sessionTime: boolean
+  view: AppView
   setTheme(theme: ThemeMode): void
   setLocale(locale: Locale): void
   setSidebarCollapsed(collapsed: boolean): void
   setChatWidth(width: number): void
+  setFontScale(scale: number): void
+  setSessionTime(enabled: boolean): void
+  setView(view: AppView): void
 }
 
 function load<T>(key: string, fallback: T): T {
@@ -268,6 +319,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   locale: load('zen.locale', 'zh' as Locale),
   sidebarCollapsed: load('zen.sidebar.collapsed', false),
   chatWidth: load('zen.chat.width', CHAT_WIDTH_DEFAULT),
+  fontScale: clampFontScale(load('zen.fontScale', FONT_SCALE_DEFAULT)),
+  sessionTime: load('zen.sidebar.sessionTime', true),
+  view: 'chat',
   setTheme: (theme) => {
     persist('zen.theme', theme)
     set({ theme })
@@ -284,6 +338,16 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     persist('zen.chat.width', chatWidth)
     set({ chatWidth })
   },
+  setFontScale: (fontScale) => {
+    const next = clampFontScale(fontScale)
+    persist('zen.fontScale', next)
+    set({ fontScale: next })
+  },
+  setSessionTime: (sessionTime) => {
+    persist('zen.sidebar.sessionTime', sessionTime)
+    set({ sessionTime })
+  },
+  setView: (view) => set({ view }),
 }))
 
 export function currentPending(status: StatusResult | null): PendingMessage[] {

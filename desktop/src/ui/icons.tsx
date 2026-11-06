@@ -288,3 +288,29 @@ export function RefreshIcon(props: IconProps) {
     </svg>
   )
 }
+
+export function ArrowLeftIcon(props: IconProps) {
+  return (
+    <svg {...base(props.size, props.className, props.style)}>
+      <path d="M13 8H3M7.5 3.5 3 8l4.5 4.5" />
+    </svg>
+  )
+}
+
+export function GearIcon(props: IconProps) {
+  return (
+    <svg {...base(props.size, props.className, props.style)}>
+      <circle cx="8" cy="8" r="2.2" />
+      <path d="M8 2.2v1.4M8 12.4v1.4M2.2 8h1.4M12.4 8h1.4M3.9 3.9l1 1M11.1 11.1l1 1M12.1 3.9l-1 1M4.9 11.1l-1 1" />
+    </svg>
+  )
+}
+
+export function BellIcon(props: IconProps) {
+  return (
+    <svg {...base(props.size, props.className, props.style)}>
+      <path d="M4 11.5h8l-1-1.6V7a3 3 0 0 0-6 0v2.9l-1 1.6Z" />
+      <path d="M6.6 13a1.5 1.5 0 0 0 2.8 0" />
+    </svg>
+  )
+}

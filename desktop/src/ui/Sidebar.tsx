@@ -31,16 +31,17 @@ import {
   FileIcon,
   FolderIcon,
   ForkIcon,
-  MoonIcon,
-  MonitorIcon,
+  GearIcon,
   MoreIcon,
   PanelLeftIcon,
   PinIcon,
   PlusIcon,
-  SunIcon,
+  TerminalIcon,
   XIcon,
 } from './icons'
 import { formatAge } from './format'
+import { Notifications } from './Notifications'
+import { captureChatState } from './pages/navigation'
 import { pickProjectFolder } from './HomeHero'
 import { pickSessionFileToOpen } from './sessions/fileDialog'
 import css from './Sidebar.module.css'
@@ -600,6 +601,7 @@ function SessionRow(props: {
 }) {
   const t = useT()
   const locale = useSettingsStore((state) => state.locale)
+  const sessionTime = useSettingsStore((state) => state.sessionTime)
   const lineage = props.derivedFrom
     ? t('session.forkedFrom', { name: props.derivedFrom })
     : null
@@ -607,7 +609,7 @@ function SessionRow(props: {
     `${props.messages} ${t('session.messages')}`,
     props.showProject ? props.project ?? '' : '',
     props.model ?? '',
-    formatAge(props.updatedAt, locale),
+    sessionTime ? formatAge(props.updatedAt, locale) : '',
   ]
     .filter((part) => part !== '')
     .join(' · ')
@@ -716,23 +718,38 @@ function RenameInput(props: {
 
 function Footer() {
   const t = useT()
-  const theme = useSettingsStore((state) => state.theme)
-  const setTheme = useSettingsStore((state) => state.setTheme)
-  const next = theme === 'light' ? 'dark' : theme === 'dark' ? 'auto' : 'light'
-  const icon = theme === 'light' ? <SunIcon size={14} /> : theme === 'dark' ? <MoonIcon size={14} /> : <MonitorIcon size={14} />
-  const label = theme === 'light' ? t('theme.light') : theme === 'dark' ? t('theme.dark') : t('theme.auto')
+  const setView = useSettingsStore((state) => state.setView)
+  const openPage = (view: 'settings' | 'tools') => {
+    captureChatState()
+    setView(view)
+  }
 
   return (
     <div className={css.footer}>
-      <button
-        type="button"
-        className={css.themeButton}
-        onClick={() => setTheme(next)}
-        aria-label={`${t('menu.theme')}: ${label}`}
-      >
-        {icon}
-        <span>{label}</span>
-      </button>
+      <div className={css.footerActions}>
+        <Tooltip label={t('settings.title')}>
+          <button
+            type="button"
+            className={css.footerButton}
+            aria-label={t('settings.title')}
+            onClick={() => openPage('settings')}
+          >
+            <GearIcon size={14} />
+          </button>
+        </Tooltip>
+        <Tooltip label={t('tools.title')}>
+          <button
+            type="button"
+            className={css.footerButton}
+            aria-label={t('tools.title')}
+            onClick={() => openPage('tools')}
+          >
+            <TerminalIcon size={14} />
+          </button>
+        </Tooltip>
+        <Notifications />
+      </div>
+      <span className={css.version}>v{__APP_VERSION__}</span>
     </div>
   )
 }

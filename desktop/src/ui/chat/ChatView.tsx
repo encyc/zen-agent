@@ -100,7 +100,7 @@ export function ChatView() {
 
   return (
     <div className={css.root}>
-      <div className={css.scroll} ref={scrollerRef}>
+      <div className={css.scroll} ref={scrollerRef} data-chat-scroll>
         {isEmpty ? (
           <div className={css.emptyHost}>
             <HomeHero
