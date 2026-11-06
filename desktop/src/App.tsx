@@ -11,7 +11,7 @@ import { ChatView } from './ui/chat/ChatView'
 import { InputBar } from './ui/composer/InputBar'
 import { RightPanel } from './ui/rightbar/RightPanel'
 import { WelcomeScreen } from './ui/WelcomeScreen'
-import { PanelLeftIcon } from './ui/icons'
+import { ConversationTopbar } from './ui/ConversationTopbar'
 import { SIDEBAR_DEFAULT } from './ui/columns'
 import css from './App.module.css'
 
@@ -117,42 +117,15 @@ export function App() {
       rightbar={<RightPanel />}
       bottom={<InputBar />}
     >
-      <TopStrip
-        onExpand={() => setCollapsed(false)}
+      <ConversationTopbar
         collapsed={collapsed}
-        onToggleRight={() => setRightbarOpen((value) => !value)}
-        rightOpen={rightbarOpen}
+        onExpandSidebar={() => setCollapsed(false)}
+        onToggleInspector={() => setRightbarOpen((value) => !value)}
+        inspectorOpen={rightbarOpen}
+        onNewSession={() => void useAppStore.getState().newSession()}
       />
       <ChatView />
     </AppFrame>
-  )
-}
-
-function TopStrip(props: { collapsed: boolean; onExpand(): void; onToggleRight(): void; rightOpen: boolean }) {
-  const busy = useAppStore((state) => state.busy)
-  return (
-    <div className={css.topStrip} data-tauri-drag-region>
-      {props.collapsed && (
-        <button
-          type="button"
-          className={css.topButton}
-          onClick={props.onExpand}
-          aria-label="toggle sidebar"
-        >
-          <PanelLeftIcon size={15} />
-        </button>
-      )}
-      <div className={css.topSpacer} data-tauri-drag-region />
-      <button
-        type="button"
-        className={css.topButton}
-        onClick={props.onToggleRight}
-        aria-label="toggle inspector"
-        data-active={props.rightOpen || undefined}
-      >
-        <span className={css.dot} data-on={busy || undefined} />
-      </button>
-    </div>
   )
 }
 

@@ -1,0 +1,168 @@
+.root {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--ds-topbar-height);
+  padding: 0 12px;
+  flex: none;
+  z-index: 5;
+}
+
+/* The collapsed sidebar no longer seats the traffic lights, so the bar does. */
+html[data-platform='darwin'] .root[data-collapsed] {
+  padding-left: 78px;
+}
+
+.project {
+  flex: none;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--ds-font-11);
+  line-height: var(--ds-font-11-5);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.titleButton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 420px;
+  padding: 3px 6px;
+  border: none;
+  border-radius: var(--ds-radius-6);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  cursor: text;
+}
+
+.titleButton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.titleText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--ds-font-13);
+  font-weight: 500;
+}
+
+.titlePencil {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  opacity: 0;
+}
+
+.titleButton:hover .titlePencil,
+.titleButton:focus-visible .titlePencil {
+  opacity: 1;
+}
+
+.titleInput {
+  min-width: 120px;
+  max-width: 420px;
+  padding: 3px 6px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: var(--ds-radius-6);
+  background: var(--dsw-specific-input-major);
+  color: var(--dsw-alias-label-primary);
+  font-family: inherit;
+  font-size: var(--ds-font-13);
+  font-weight: 500;
+  outline: none;
+}
+
+.titleInput:focus {
+  border-color: var(--dsw-alias-label-tertiary);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--ds-radius-6);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.button:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.button[data-active] {
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.dot {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--ds-radius-full);
+  background: var(--dsw-alias-state-idle-primary);
+}
+
+.dot[data-on] {
+  background: var(--dsw-alias-state-business-primary);
+  animation: dot-pulse 1s ease-in-out infinite alternate;
+}
+
+@keyframes dot-pulse {
+  from { opacity: 0.35; }
+  to { opacity: 1; }
+}
+
+.menuAnchor {
+  position: relative;
+  flex: none;
+}
+
+.menu {
+  position: absolute;
+  top: 32px;
+  right: 0;
+  min-width: 168px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--ds-radius-10);
+  background: var(--dsw-specific-menu);
+  box-shadow: var(--dsw-elevation-prominent);
+  z-index: 20;
+}
+
+.menuItem {
+  padding: 7px 10px;
+  border: none;
+  border-radius: var(--ds-radius-6);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-family: inherit;
+  font-size: var(--ds-font-12-5);
+  text-align: left;
+  cursor: pointer;
+}
+
+.menuItem:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.menuItem:disabled {
+  color: var(--dsw-alias-label-dimmed);
+  cursor: default;
+}

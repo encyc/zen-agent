@@ -19,6 +19,7 @@ interface BridgeState {
   pending: PendingItemMock[]
   calls: Record<string, unknown>[]
   dialogSelection: string | string[] | null
+  title: string
 }
 
 declare global {
@@ -41,7 +42,7 @@ function installBridge(state: BridgeState) {
       {
         path: '/sessions/a.jsonl',
         name: 'a',
-        title: '修复登录超时',
+        title: state.title,
         project: 'p',
         messages: 4,
         current: true,
@@ -95,6 +96,9 @@ function installBridge(state: BridgeState) {
         return { type: 'result', id: payload.id, ok: true, models: [] }
       case 'commands':
         return { type: 'result', id: payload.id, ok: true, commands: [] }
+      case 'command':
+        if (payload.name === 'rename') state.title = String(payload.argument ?? '')
+        return { type: 'result', id: payload.id, ok: true }
       case 'session':
         switch (payload.op) {
           case 'list':
@@ -183,6 +187,7 @@ function initialState(overrides: Partial<BridgeState> = {}): BridgeState {
     pending: [],
     calls: [],
     dialogSelection: null,
+    title: '修复登录超时',
     ...overrides,
   }
 }
@@ -191,7 +196,7 @@ async function boot(page: Page, state: BridgeState) {
   await page.addInitScript(installBridge, state)
   await page.goto('/')
   await page.getByRole('button', { name: '用当前目录启动' }).click()
-  await expect(page.getByRole('button', { name: /修复登录超时/ })).toBeVisible()
+  await expect(page.locator('[data-topbar-title]')).toHaveText(state.title)
 }
 
 async function setPending(page: Page, items: PendingItemMock[]) {
@@ -199,6 +204,47 @@ async function setPending(page: Page, items: PendingItemMock[]) {
     window.__ZEN_E2E__.pending = pending
   }, items)
 }
+
+test('the topbar shows the project and renames the current session inline', async ({ page }) => {
+  await boot(page, initialState())
+  await expect(page.locator('[data-topbar-project]')).toHaveText('p')
+  await page.getByRole('button', { name: '重命名会话标题' }).click()
+  const input = page.getByRole('textbox', { name: '会话标题' })
+  await input.fill('新的标题')
+  await input.press('Enter')
+  await expect(page.locator('[data-topbar-title]')).toHaveText('新的标题')
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__ZEN_E2E__.calls.some(
+          (call) => call.type === 'command' && call.name === 'rename' && call.argument === '新的标题',
+        ),
+      ),
+    )
+    .toBe(true)
+})
+
+test('the topbar menu runs undo and compact through the session op', async ({ page }) => {
+  await boot(page, initialState({ running: false }))
+  await page.locator('[data-topbar-menu]').click()
+  await page.getByRole('menuitem', { name: '撤销上一轮' }).click()
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__ZEN_E2E__.calls.some((call) => call.type === 'session' && call.op === 'undo'),
+      ),
+    )
+    .toBe(true)
+  await page.locator('[data-topbar-menu]').click()
+  await page.getByRole('menuitem', { name: '压缩上下文' }).click()
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__ZEN_E2E__.calls.some((call) => call.type === 'session' && call.op === 'compact'),
+      ),
+    )
+    .toBe(true)
+})
 
 test('fork is only offered on the current session row', async ({ page }) => {
   await boot(page, initialState())

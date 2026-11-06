@@ -48,6 +48,33 @@ export function StopIcon(props: IconProps) {
   )
 }
 
+export function PanelRightIcon(props: IconProps) {
+  return (
+    <svg {...base(props.size, props.className, props.style)}>
+      <rect x="2" y="2.5" width="12" height="11" rx="2" />
+      <path d="M9.5 2.5v11" />
+    </svg>
+  )
+}
+
+export function PencilIcon(props: IconProps) {
+  return (
+    <svg {...base(props.size, props.className, props.style)}>
+      <path d="m3 13 .7-2.8L10.9 3a1.4 1.4 0 0 1 2 0l.1.1a1.4 1.4 0 0 1 0 2L5.8 12.3Z" />
+    </svg>
+  )
+}
+
+export function MoreIcon(props: IconProps) {
+  return (
+    <svg {...base(props.size, props.className, props.style)} fill="currentColor" stroke="none">
+      <circle cx="3.5" cy="8" r="1.1" />
+      <circle cx="8" cy="8" r="1.1" />
+      <circle cx="12.5" cy="8" r="1.1" />
+    </svg>
+  )
+}
+
 export function PanelLeftIcon(props: IconProps) {
   return (
     <svg {...base(props.size, props.className, props.style)}>
