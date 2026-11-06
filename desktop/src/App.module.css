@@ -49,7 +49,7 @@
   height: 100%;
   gap: 12px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 13px;
+  font-size: var(--ds-font-13);
 }
 
 .bootSpinner {
@@ -78,7 +78,7 @@
 }
 
 .exitTitle {
-  font-size: 14px;
+  font-size: var(--ds-font-14);
   font-weight: 600;
   color: var(--dsw-alias-label-primary);
 }
@@ -100,7 +100,7 @@
   border-radius: var(--dsw-radius-sm);
   background: var(--dsw-alias-button-info-fill);
   color: var(--dsw-alias-label-primary-foreground);
-  font-size: 13px;
+  font-size: var(--ds-font-13);
   font-weight: 500;
   cursor: pointer;
 }

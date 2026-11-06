@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { lastProjectCwd, useAppStore } from '../state/appStore'
-import { canForkSession, isCrossProject } from '../state/sessionSelectors'
+import { canForkSession, isBlockedSession } from '../state/sessionSelectors'
 import {
   currentPending,
   useNoticeStore,
@@ -31,11 +31,14 @@ import {
   FileIcon,
   FolderIcon,
   ForkIcon,
-  GearIcon,
+  MonitorIcon,
+  MoonIcon,
   MoreIcon,
   PanelLeftIcon,
   PinIcon,
   PlusIcon,
+  SettingsIcon,
+  SunIcon,
   TerminalIcon,
   XIcon,
 } from './icons'
@@ -50,6 +53,19 @@ interface RowMenu {
   path: string
   left: number
   top: number
+}
+
+const SECTION_KEY = 'zen.sidebar.sections'
+
+function readClosedSections(): string[] {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(SECTION_KEY) ?? '[]')
+    return Array.isArray(value)
+      ? value.filter((entry): entry is string => typeof entry === 'string')
+      : []
+  } catch {
+    return []
+  }
 }
 
 export function Sidebar(props: { onCollapse(): void }) {
@@ -69,7 +85,7 @@ export function Sidebar(props: { onCollapse(): void }) {
   const togglePin = useAppStore((state) => state.togglePin)
   const deleteSession = useAppStore((state) => state.deleteSession)
   const forkSession = useAppStore((state) => state.forkSession)
-  const resumeSession = useAppStore((state) => state.resumeSession)
+  const openSession = useAppStore((state) => state.openSession)
   const undoLast = useAppStore((state) => state.undoLast)
   const compactNow = useAppStore((state) => state.compactNow)
   const busy = useAppStore((state) => state.busy)
@@ -79,6 +95,7 @@ export function Sidebar(props: { onCollapse(): void }) {
   const [armed, setArmed] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [expandedProjects, setExpandedProjects] = useState<string[]>([])
+  const [closedSections, setClosedSections] = useState<string[]>(readClosedSections)
   const menuRef = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
 
@@ -92,6 +109,10 @@ export function Sidebar(props: { onCollapse(): void }) {
   }, [sessions, query, projectEntries])
   const current = sessions.find((session) => session.path === currentPath) ?? null
   const currentProject = current?.project ?? null
+  const registeredProjects = useMemo(
+    () => new Set(projectEntries.map((entry) => entry.path)),
+    [projectEntries],
+  )
   const menuSession = menu === null ? null : sessions.find((session) => session.path === menu.path) ?? null
   const empty = pinned.length === 0 && standalone.length === 0 && projects.length === 0
 
@@ -117,6 +138,22 @@ export function Sidebar(props: { onCollapse(): void }) {
     setArmed(null)
     if (restoreFocus) triggerRef.current?.focus()
   }
+
+  const toggleSection = (name: string) => {
+    setClosedSections((value) => {
+      const next = value.includes(name)
+        ? value.filter((entry) => entry !== name)
+        : [...value, name]
+      try {
+        localStorage.setItem(SECTION_KEY, JSON.stringify(next))
+      } catch {
+        // ignore
+      }
+      return next
+    })
+  }
+  const sessionsClosed = closedSections.includes('sessions')
+  const projectsClosed = closedSections.includes('projects')
 
   const commitRename = (path: string, title: string) => {
     setEditing(null)
@@ -165,6 +202,12 @@ export function Sidebar(props: { onCollapse(): void }) {
     }
   }, [menu])
 
+  const openProject = async (path: string) => {
+    if (lastProjectCwd() === path) return
+    await disconnect()
+    await connect(undefined, path)
+  }
+
   const renderRow = (session: SessionSummary, showProject = false) => (
     <SessionRow
       key={session.path}
@@ -178,23 +221,17 @@ export function Sidebar(props: { onCollapse(): void }) {
       showProject={showProject}
       current={session.path === currentPath}
       pinned={session.pinned === true}
-      crossProject={isCrossProject(session.path, session.project, currentPath, currentProject)}
+      blocked={isBlockedSession(session, currentPath)}
       busy={busy}
       pending={session.path === currentPath ? pending : 0}
       editing={editing === session.path}
       menuOpen={menu?.path === session.path}
-      onOpen={() => void resumeSession(session.path)}
+      onOpen={() => void openSession(session.path)}
       onMenu={(event) => openMenu(event, session.path)}
       onRename={(title) => commitRename(session.path, title)}
       onCancelRename={() => setEditing(null)}
     />
   )
-
-  const openProject = async (path: string) => {
-    if (lastProjectCwd() === path) return
-    await disconnect()
-    await connect(undefined, path)
-  }
 
   const createProject = async () => {
     const path = await pickProjectFolder()
@@ -253,15 +290,17 @@ export function Sidebar(props: { onCollapse(): void }) {
               >
                 <PlusIcon size={12} />
               </button>
-              <button
-                type="button"
-                className={css.projectAction}
-                data-remove-project
-                aria-label={t('sidebar.removeProject', { name: group.project })}
-                onClick={() => removeProject(group.path as string)}
-              >
-                <XIcon size={12} />
-              </button>
+              {registeredProjects.has(group.path) && (
+                <button
+                  type="button"
+                  className={css.projectAction}
+                  data-remove-project
+                  aria-label={t('sidebar.removeProject', { name: group.project })}
+                  onClick={() => removeProject(group.path as string)}
+                >
+                  <XIcon size={12} />
+                </button>
+              )}
             </span>
           )}
         </div>
@@ -325,30 +364,64 @@ export function Sidebar(props: { onCollapse(): void }) {
 
       <section className={css.sessions} data-sidebar-section="sessions" aria-labelledby="sessions-label">
         <div className={css.sectionToolbar}>
-          <span id="sessions-label" className={css.sectionLabel}>{t('sidebar.sessions')}</span>
+          <button
+            type="button"
+            className={css.sectionToggle}
+            aria-expanded={!sessionsClosed}
+            aria-label={t(sessionsClosed ? 'sidebar.expandSection' : 'sidebar.collapseSection', {
+              name: t('sidebar.sessions'),
+            })}
+            onClick={() => toggleSection('sessions')}
+          >
+            <ChevronDownIcon
+              size={12}
+              className={css.sectionChevron}
+              data-collapsed={sessionsClosed || undefined}
+            />
+            <span id="sessions-label" className={css.sectionLabel}>{t('sidebar.sessions')}</span>
+          </button>
           <SessionTools />
         </div>
-        <div className={css.searchWrap}>
-          <input
-            className={css.search}
-            type="text"
-            placeholder={t('sidebar.search')}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            spellCheck={false}
-          />
-        </div>
-        <div className={css.standaloneList}>
-          {standalone.length > 0 ? (
-            standalone.map((session) => renderRow(session))
-          ) : (
-            <div className={css.sectionEmpty}>{t('sidebar.standalone')}</div>
-          )}
-        </div>
+        {!sessionsClosed && (
+          <>
+            <div className={css.searchWrap}>
+              <input
+                className={css.search}
+                type="text"
+                placeholder={t('sidebar.search')}
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                spellCheck={false}
+              />
+            </div>
+            <div className={css.standaloneList}>
+              {standalone.length > 0 ? (
+                standalone.map((session) => renderRow(session))
+              ) : (
+                <div className={css.sectionEmpty}>{t('sidebar.standalone')}</div>
+              )}
+            </div>
+          </>
+        )}
       </section>
 
       <div className={css.sectionToolbar} data-sidebar-section="projects">
-        <span className={css.sectionLabel}>{t('sidebar.projects')}</span>
+        <button
+          type="button"
+          className={css.sectionToggle}
+          aria-expanded={!projectsClosed}
+          aria-label={t(projectsClosed ? 'sidebar.expandSection' : 'sidebar.collapseSection', {
+            name: t('sidebar.projects'),
+          })}
+          onClick={() => toggleSection('projects')}
+        >
+          <ChevronDownIcon
+            size={12}
+            className={css.sectionChevron}
+            data-collapsed={projectsClosed || undefined}
+          />
+          <span className={css.sectionLabel}>{t('sidebar.projects')}</span>
+        </button>
         <Tooltip label={t('sidebar.newProject')}>
           <button
             type="button"
@@ -360,15 +433,17 @@ export function Sidebar(props: { onCollapse(): void }) {
           </button>
         </Tooltip>
       </div>
-      <div className={css.projectList}>
-        {projects.map(renderProject)}
-        {empty && (
-          <div className={css.empty}>
-            <ChatIcon size={16} />
-            <span>{t('sidebar.empty')}</span>
-          </div>
-        )}
-      </div>
+      {!projectsClosed && (
+        <div className={css.projectList}>
+          {projects.map(renderProject)}
+          {empty && (
+            <div className={css.empty}>
+              <ChatIcon size={16} />
+              <span>{t('sidebar.empty')}</span>
+            </div>
+          )}
+        </div>
+      )}
 
       <Footer />
 
@@ -589,7 +664,7 @@ function SessionRow(props: {
   showProject: boolean
   current: boolean
   pinned: boolean
-  crossProject: boolean
+  blocked: boolean
   busy: boolean
   pending: number
   editing: boolean
@@ -618,14 +693,18 @@ function SessionRow(props: {
       className={css.sessionRow}
       data-session-path={props.path}
       data-current={props.current || undefined}
-      data-cross={props.crossProject || undefined}
-      aria-disabled={props.crossProject || undefined}
-      onClick={props.crossProject ? undefined : props.onOpen}
+      data-blocked={props.blocked || undefined}
+      aria-disabled={props.blocked || undefined}
+      onClick={props.blocked ? undefined : props.onOpen}
       role="button"
       tabIndex={0}
-      title={props.crossProject ? t('sidebar.crossProject') : lineage ?? props.title}
+      title={props.blocked ? t('sidebar.blockedSession') : lineage ?? props.title}
       onKeyDown={(event) => {
-        if (event.key === 'Enter' && !props.crossProject) props.onOpen()
+        // Nested controls (the menu trigger, the rename input) handle their own
+        // Enter; only the focused row itself opens the session.
+        if (event.key === 'Enter' && !props.blocked && event.target === event.currentTarget) {
+          props.onOpen()
+        }
       }}
     >
       <div className={css.sessionIcon}>
@@ -719,14 +798,38 @@ function RenameInput(props: {
 function Footer() {
   const t = useT()
   const setView = useSettingsStore((state) => state.setView)
+  const theme = useSettingsStore((state) => state.theme)
+  const setTheme = useSettingsStore((state) => state.setTheme)
   const openPage = (view: 'settings' | 'tools') => {
     captureChatState()
     setView(view)
   }
 
+  const nextTheme = theme === 'light' ? 'dark' : theme === 'dark' ? 'auto' : 'light'
+  const themeLabel =
+    theme === 'light' ? t('theme.light') : theme === 'dark' ? t('theme.dark') : t('theme.auto')
+  const themeIcon =
+    theme === 'light' ? (
+      <SunIcon size={14} />
+    ) : theme === 'dark' ? (
+      <MoonIcon size={14} />
+    ) : (
+      <MonitorIcon size={14} />
+    )
+
   return (
-    <div className={css.footer}>
+    <div className={css.footer} data-sidebar-footer>
       <div className={css.footerActions}>
+        <Tooltip label={`${t('menu.theme')}: ${themeLabel}`}>
+          <button
+            type="button"
+            className={css.footerButton}
+            aria-label={`${t('menu.theme')}: ${themeLabel}`}
+            onClick={() => setTheme(nextTheme)}
+          >
+            {themeIcon}
+          </button>
+        </Tooltip>
         <Tooltip label={t('settings.title')}>
           <button
             type="button"
@@ -734,7 +837,7 @@ function Footer() {
             aria-label={t('settings.title')}
             onClick={() => openPage('settings')}
           >
-            <GearIcon size={14} />
+            <SettingsIcon size={14} />
           </button>
         </Tooltip>
         <Tooltip label={t('tools.title')}>

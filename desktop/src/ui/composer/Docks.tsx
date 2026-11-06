@@ -1,7 +1,7 @@
 /** Composer docks: todo panel, pending lanes (queue/steer), context meter —
  * the dsh composer.dock entries, driven by the status snapshot. */
 
-import { useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { useAppStore } from '../../state/appStore'
 import {
@@ -12,6 +12,7 @@ import {
 import { useStatusStore } from '../../state/stores'
 import type { PendingMessage } from '../../rpc/types'
 import { useT } from '../../i18n/locale'
+import { formatCompactTokens } from '../format'
 import { ChevronDownIcon, ListTodoIcon } from '../icons'
 import { StateDot } from '../primitives'
 import css from './Docks.module.css'
@@ -144,29 +145,119 @@ function PendingGroup({
   )
 }
 
+const CONTEXT_RING_RADIUS = 9
+const CONTEXT_RING_CIRCUMFERENCE = 2 * Math.PI * CONTEXT_RING_RADIUS
+// The card sits above the trigger with a small gap, so crossing it fires a
+// leave/enter pair. A short grace keeps the card open while the pointer
+// travels between the two.
+const CONTEXT_CLOSE_DELAY_MS = 120
+
 export function ContextMeter() {
+  const t = useT()
   const status = useStatusStore((state) => state.status)
+  const [open, setOpen] = useState(false)
+  const closeTimer = useRef<number | null>(null)
+  const cardId = useId()
   const used = status?.context_used ?? null
   const window_ = status?.context_window ?? null
+  const report = status?.context ?? null
+
+  useEffect(
+    () => () => {
+      if (closeTimer.current !== null) window.clearTimeout(closeTimer.current)
+    },
+    [],
+  )
+
   if (used === null || window_ === null || window_ <= 0 || used <= 0) return null
   const ratio = Math.min(1, used / window_)
+  // pi colors capacity by what is left, so the warning keeps one meaning even
+  // though the trigger leads with the used figure.
+  const level = ratio >= 0.9 ? 'critical' : ratio >= 0.75 ? 'warning' : 'normal'
+  const percent = Math.round(ratio * 100)
+  const openCard = () => {
+    if (closeTimer.current !== null) window.clearTimeout(closeTimer.current)
+    closeTimer.current = null
+    setOpen(true)
+  }
+  const scheduleClose = () => {
+    if (closeTimer.current !== null) window.clearTimeout(closeTimer.current)
+    closeTimer.current = window.setTimeout(() => {
+      closeTimer.current = null
+      setOpen(false)
+    }, CONTEXT_CLOSE_DELAY_MS)
+  }
+  const freePct = report !== null && report.window > 0 ? (report.free_tokens / report.window) * 100 : 0
+  const totalLabel = `${report !== null && !report.measured ? '≈' : ''}${formatCompactTokens(
+    report?.total_tokens ?? used,
+  )}`
   return (
-    <div className={css.contextMeter} title={`${used} / ${window_}`}>
-      <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden>
-        <circle cx="8" cy="8" r="6" fill="none" stroke="var(--dsw-alias-border-l2)" strokeWidth="2.5" />
-        <circle
-          cx="8"
-          cy="8"
-          r="6"
-          fill="none"
-          stroke={ratio > 0.85 ? 'var(--dsw-alias-state-warn-primary)' : 'var(--dsw-alias-state-business-primary)'}
-          strokeWidth="2.5"
-          strokeDasharray={`${ratio * 37.7} 37.7`}
-          strokeLinecap="round"
-          transform="rotate(-90 8 8)"
-        />
-      </svg>
-      <span>{Math.round(ratio * 100)}%</span>
-    </div>
+    <span
+      className={css.contextMeterWrap}
+      onPointerEnter={openCard}
+      onPointerLeave={scheduleClose}
+      onFocus={openCard}
+      onBlur={scheduleClose}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') setOpen(false)
+      }}
+    >
+      <span
+        className={css.contextMeter}
+        data-level={level}
+        data-testid="context-meter"
+        tabIndex={0}
+        aria-describedby={open && report !== null ? cardId : undefined}
+        title={report === null ? `${t('usage.context')} ${used} / ${window_}` : undefined}
+      >
+        <svg className={css.contextRing} viewBox="0 0 24 24" aria-hidden>
+          <circle className={css.contextRingTrack} cx="12" cy="12" r={CONTEXT_RING_RADIUS} />
+          <circle
+            className={css.contextRingProgress}
+            cx="12"
+            cy="12"
+            r={CONTEXT_RING_RADIUS}
+            strokeDasharray={CONTEXT_RING_CIRCUMFERENCE}
+            strokeDashoffset={CONTEXT_RING_CIRCUMFERENCE * (1 - ratio)}
+          />
+        </svg>
+        <span className={css.contextValue}>{percent}%</span>
+      </span>
+      {open && report !== null && (
+        <div className={css.contextCard} id={cardId} role="tooltip" data-testid="context-card">
+          <div className={css.contextCardHead}>
+            <strong className={css.contextCardHeadValue}>
+              {t('context.spent', { tokens: totalLabel })}
+            </strong>
+            <strong className={css.contextCardHeadPercent}>{percent}%</strong>
+          </div>
+          <div className={css.contextCardWindow}>
+            <span>{t('context.window')}</span>
+            <strong>
+              {formatCompactTokens(used)} / {formatCompactTokens(window_)}
+            </strong>
+          </div>
+          <div className={css.contextCardRows}>
+            {report.slices.map((slice) => (
+              <div className={css.contextCardRow} key={slice.id} data-slice={slice.id}>
+                <span className={css.contextCardLabel}>{t(`context.slice.${slice.id}`)}</span>
+                <span className={css.contextCardValue}>
+                  ≈{formatCompactTokens(slice.tokens)} · {slice.pct.toFixed(1)}%
+                </span>
+              </div>
+            ))}
+            <div className={clsx(css.contextCardRow, css.contextCardFree)} data-slice="free">
+              <span className={css.contextCardLabel}>{t('context.free')}</span>
+              <span className={css.contextCardValue}>
+                ≈{formatCompactTokens(report.free_tokens)} · {freePct.toFixed(1)}%
+              </span>
+            </div>
+          </div>
+          <div className={css.contextCardNote}>
+            {t(report.measured ? 'context.noteMeasured' : 'context.noteEstimated')}
+          </div>
+        </div>
+      )}
+    </span>
   )
 }

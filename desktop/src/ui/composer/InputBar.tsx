@@ -1,7 +1,7 @@
 /** The composer capsule (dsh InputBar shape): attachments rail, auto-growing
- * draft surface, control row (attach · mode · model · thinking | send/stop),
- * slash-command menu, pending lanes dock and todo dock below. Enter submits;
- * while running it steers; Esc interrupts. */
+ * draft surface, control row (attach · mode | context · model+thinking ·
+ * send/stop), slash-command menu, pending lanes dock and todo dock below.
+ * Enter submits; while running it steers; Esc interrupts. */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
@@ -12,13 +12,13 @@ import { useT } from '../../i18n/locale'
 import { ApprovalPanel } from '../approval/ApprovalPanel'
 import { pickImagePaths } from './pickImages'
 import { TodoDock, PendingDock, ContextMeter } from './Docks'
-import { ModelMenu, ModeMenu, ThinkingMenu } from './Menus'
+import { ModelMenu, ModeMenu } from './Menus'
 import { ChevronDownIcon, FileIcon, PlusIcon, SendArrowUpIcon, StopIcon, XIcon } from '../icons'
 import { Tooltip } from '../primitives'
 import css from './InputBar.module.css'
 
 interface MenuState {
-  kind: 'model' | 'mode' | 'thinking' | null
+  kind: 'model' | 'mode' | null
 }
 
 export function InputBar() {
@@ -220,12 +220,39 @@ export function InputBar() {
                 </button>
               </Tooltip>
               <div className={css.modes}>
-                <ModeChip mode={mode} onOpen={() => setMenu({ kind: 'mode' })} />
-                <ThinkingChip thinking={thinking} onOpen={() => setMenu({ kind: 'thinking' })} />
+                <span className={css.anchor}>
+                  <ModeChip mode={mode} onOpen={() => setMenu({ kind: 'mode' })} />
+                  {menu.kind === 'mode' && (
+                    <div className={css.menuLayer}>
+                      <ModeMenu
+                        mode={mode}
+                        onPick={(picked) => {
+                          void setMode(picked)
+                          setMenu({ kind: null })
+                        }}
+                        onClose={() => setMenu({ kind: null })}
+                      />
+                    </div>
+                  )}
+                </span>
               </div>
             </div>
             <div className={css.trailing}>
-              <ModelChip model={model} onOpen={() => setMenu({ kind: 'model' })} />
+              <ContextMeter />
+              <span className={css.anchor} data-align="right">
+                <ModelChip model={model} thinking={thinking} onOpen={() => setMenu({ kind: 'model' })} />
+                {menu.kind === 'model' && (
+                  <div className={css.menuLayer}>
+                    <ModelMenu
+                      thinking={thinking}
+                      onThinkingPick={(level) => {
+                        void useAppStore.getState().setThinking(level)
+                      }}
+                      onClose={() => setMenu({ kind: null })}
+                    />
+                  </div>
+                )}
+              </span>
               <Tooltip label={busy ? t('composer.stop') : empty ? t('composer.send') : t('composer.steer')}>
                 <button
                   type="button"
@@ -248,37 +275,9 @@ export function InputBar() {
               </Tooltip>
             </div>
           </div>
-          {menu.kind !== null && (
-            <div className={css.menuLayer}>
-              {menu.kind === 'model' && (
-                <ModelMenu onClose={() => setMenu({ kind: null })} />
-              )}
-              {menu.kind === 'mode' && (
-                <ModeMenu
-                  mode={mode}
-                  onPick={(picked) => {
-                    void setMode(picked)
-                    setMenu({ kind: null })
-                  }}
-                  onClose={() => setMenu({ kind: null })}
-                />
-              )}
-              {menu.kind === 'thinking' && (
-                <ThinkingMenu
-                  thinking={thinking}
-                  onPick={(level) => {
-                    void useAppStore.getState().setThinking(level)
-                    setMenu({ kind: null })
-                  }}
-                  onClose={() => setMenu({ kind: null })}
-                />
-              )}
-            </div>
-          )}
         </div>
       <div className={css.dock}>
         <TodoDock />
-        <ContextMeter />
       </div>
     </div>
   )
@@ -287,28 +286,43 @@ export function InputBar() {
 function ModeChip({ mode, onOpen }: { mode: string; onOpen(): void }) {
   const t = useT()
   return (
-    <button type="button" className={clsx(css.chip, css.modeChip)} onClick={onOpen}>
+    <button
+      type="button"
+      className={clsx(css.chip, css.modeChip)}
+      data-menu-trigger="mode"
+      onClick={onOpen}
+    >
       <span className={css.chipLabel} data-mode={mode}>{t(`status.mode.${mode}`)}</span>
       <ChevronDownIcon size={11} />
     </button>
   )
 }
 
-function ThinkingChip({ thinking, onOpen }: { thinking: string | null; onOpen(): void }) {
+function ModelChip({
+  model,
+  thinking,
+  onOpen,
+}: {
+  model: string
+  thinking: string | null
+  onOpen(): void
+}) {
   const t = useT()
-  if (thinking === null || thinking === 'off') return null
+  const level = thinking !== null && thinking !== 'off' ? thinking : null
   return (
-    <button type="button" className={css.chip} onClick={onOpen}>
-      <span className={css.chipLabel}>{t('status.thinking')}: {thinking}</span>
-      <ChevronDownIcon size={11} />
-    </button>
-  )
-}
-
-function ModelChip({ model, onOpen }: { model: string; onOpen(): void }) {
-  return (
-    <button type="button" className={css.chip} onClick={onOpen}>
+    <button
+      type="button"
+      className={css.chip}
+      data-menu-trigger="model"
+      aria-label={
+        level === null
+          ? `${t('menu.model')}: ${model}`
+          : `${t('menu.model')}: ${model}. ${t('menu.thinking')}: ${level}`
+      }
+      onClick={onOpen}
+    >
       <span className={css.chipLabel}>{model}</span>
+      {level !== null ? <span className={css.thinkingBadge}>{level}</span> : null}
       <ChevronDownIcon size={11} />
     </button>
   )

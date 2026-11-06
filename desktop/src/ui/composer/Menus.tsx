@@ -11,11 +11,14 @@ import css from './Menus.module.css'
 function MenuShell({
   query,
   onQuery,
+  footer,
   children,
   onClose,
 }: {
   query?: string
   onQuery?(value: string): void
+  /** Pinned below the scrolling list; stays reachable without scrolling. */
+  footer?: React.ReactNode
   children: React.ReactNode
   onClose(): void
 }) {
@@ -50,15 +53,27 @@ function MenuShell({
         </div>
       )}
       <div className={css.list}>{children}</div>
+      {footer !== undefined && <div className={css.footer}>{footer}</div>}
     </div>
   )
 }
 
-export function ModelMenu({ onClose }: { onClose(): void }) {
+const THINKING_LEVELS = ['off', 'low', 'medium', 'high', 'max']
+
+export function ModelMenu({
+  thinking,
+  onThinkingPick,
+  onClose,
+}: {
+  thinking: string | null
+  onThinkingPick(level: string): void
+  onClose(): void
+}) {
   const t = useT()
   const models = useCatalogStore((state) => state.models)
   const setModel = useAppStore((state) => state.setModel)
   const [query, setQuery] = useState('')
+  const level = thinking ?? 'off'
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     const list = models.filter(
@@ -70,7 +85,31 @@ export function ModelMenu({ onClose }: { onClose(): void }) {
   }, [models, query])
 
   return (
-    <MenuShell query={query} onQuery={setQuery} onClose={onClose}>
+    <MenuShell
+      query={query}
+      onQuery={setQuery}
+      onClose={onClose}
+      footer={
+        <div className={css.section}>
+          <div className={css.groupLabel}>{t('menu.thinking')}</div>
+          <div className={css.segments} role="radiogroup" aria-label={t('menu.thinking')}>
+            {THINKING_LEVELS.map((candidate) => (
+              <button
+                key={candidate}
+                type="button"
+                role="radio"
+                aria-checked={level === candidate}
+                data-active={level === candidate || undefined}
+                className={css.segment}
+                onClick={() => onThinkingPick(candidate)}
+              >
+                {candidate}
+              </button>
+            ))}
+          </div>
+        </div>
+      }
+    >
       <div className={css.groupLabel}>{t('menu.model')}</div>
       {filtered.available.map((model) => (
         <button
@@ -139,36 +178,6 @@ export function ModeMenu({
           <span className={css.itemTitle}>{t(`status.mode.${entry.id}`)}</span>
           <span className={css.itemSub}>{t(entry.key)}</span>
           {mode === entry.id && <CheckIcon size={12} />}
-        </button>
-      ))}
-    </MenuShell>
-  )
-}
-
-const THINKING_LEVELS = ['off', 'low', 'medium', 'high', 'max']
-
-export function ThinkingMenu({
-  thinking,
-  onPick,
-  onClose,
-}: {
-  thinking: string | null
-  onPick(level: string): void
-  onClose(): void
-}) {
-  const t = useT()
-  return (
-    <MenuShell onClose={onClose}>
-      <div className={css.groupLabel}>{t('menu.thinking')}</div>
-      {THINKING_LEVELS.map((level) => (
-        <button
-          key={level}
-          type="button"
-          className={css.item}
-          onClick={() => onPick(level)}
-        >
-          <span className={css.itemTitle}>{level}</span>
-          {(thinking ?? 'off') === level && <CheckIcon size={12} />}
         </button>
       ))}
     </MenuShell>

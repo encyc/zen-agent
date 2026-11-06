@@ -18,7 +18,7 @@ export class RpcClient {
   private handlers = new Set<EventHandler>()
   private unlisten: UnlistenFn | null = null
   private stderrHandlers = new Set<(line: string) => void>()
-  private exitHandlers = new Set<(code: number | null) => void>()
+  private exitHandlers = new Set<(code: number | null, pid?: number) => void>()
   private unlistenStderr: UnlistenFn | null = null
   private unlistenExit: UnlistenFn | null = null
 
@@ -34,8 +34,8 @@ export class RpcClient {
       })
     }
     if (this.unlistenExit === null) {
-      this.unlistenExit = await listen<{ code: number | null }>('rpc:exit', (event) => {
-        for (const handler of this.exitHandlers) handler(event.payload.code)
+      this.unlistenExit = await listen<{ code: number | null; pid?: number }>('rpc:exit', (event) => {
+        for (const handler of this.exitHandlers) handler(event.payload.code, event.payload.pid)
       })
     }
     const report = await invoke<{ pid: number }>('rpc_start', {
@@ -71,7 +71,7 @@ export class RpcClient {
     return () => this.stderrHandlers.delete(handler)
   }
 
-  onExit(handler: (code: number | null) => void): () => void {
+  onExit(handler: (code: number | null, pid?: number) => void): () => void {
     this.exitHandlers.add(handler)
     return () => this.exitHandlers.delete(handler)
   }

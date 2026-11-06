@@ -69,6 +69,7 @@ interface AppState {
   setThinking(level: string): Promise<void>
   newSession(): Promise<void>
   forkSession(): Promise<void>
+  openSession(path: string): Promise<void>
   resumeSession(path: string): Promise<void>
   deleteSession(path: string): Promise<void>
   renameSession(title: string): Promise<void>
@@ -120,7 +121,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       rpc.onStderr((line) => {
         set((state) => ({ stderrTail: [...state.stderrTail.slice(-49), line] }))
       })
-      rpc.onExit((code) => {
+      rpc.onExit((code, pid) => {
+        // Restarting at another project stops the old child, whose delayed
+        // exit event must not end the replacement process the store tracks.
+        const current = get().pid
+        if (pid !== undefined && current !== null && pid !== current) return
         if (pollTimer !== null) {
           clearInterval(pollTimer)
           pollTimer = null
@@ -363,6 +368,19 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async forkSession() {
     await runSessionOp(get, { type: 'session', op: 'fork' }, () => refreshAfterSessionChange(get))
+  },
+
+  async openSession(path) {
+    const session = useSessionStore.getState().sessions.find((entry) => entry.path === path)
+    const root = session?.project_path ?? ''
+    // The runtime is cwd-bound. A session recorded in another project needs
+    // the process restarted there before it can be resumed (pi does the same
+    // through selectSession → activateProject).
+    if (root !== '' && lastProjectCwd() !== root) {
+      await get().disconnect()
+      await get().connect(undefined, root)
+    }
+    await get().resumeSession(path)
   },
 
   async resumeSession(path) {

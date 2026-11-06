@@ -108,7 +108,7 @@
 .slashName {
   flex: none;
   font-family: var(--ds-font-family-code);
-  font-size: 12.5px;
+  font-size: var(--ds-font-12-5);
   font-weight: 600;
   color: var(--dsw-alias-label-primary);
 }
@@ -116,7 +116,7 @@
 .slashDesc {
   flex: 1;
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--ds-font-12);
   color: var(--dsw-alias-label-tertiary);
   white-space: nowrap;
   overflow: hidden;
@@ -180,7 +180,7 @@
   border-radius: var(--dsw-radius-sm);
   background: transparent;
   color: var(--dsw-alias-label-secondary);
-  font-size: 13px;
+  font-size: var(--ds-font-13);
   line-height: 20px;
   font-weight: 500;
   white-space: nowrap;
@@ -193,6 +193,25 @@
 
 .chipLabel {
   max-width: 220px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* pi rides the reasoning level on the model chip as a small tonal badge:
+   metadata next to the name, never a chip of its own. */
+.thinkingBadge {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 96px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--dsw-alias-label-primary) 5%, transparent);
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--ds-font-11);
+  font-weight: 500;
+  line-height: 1.3;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -239,12 +258,22 @@
 
 /* ---- floating menus --------------------------------------------------------- */
 
+.anchor {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+
 .menuLayer {
   position: absolute;
-  left: 12px;
-  right: 12px;
   bottom: calc(100% + 8px);
+  left: 0;
   z-index: 30;
+}
+
+.anchor[data-align='right'] .menuLayer {
+  left: auto;
+  right: 0;
 }
 
 /* ---- attachments ---------------------------------------------------------------- */
@@ -278,7 +307,7 @@
 
 .attachName {
   max-width: 160px;
-  font-size: 12px;
+  font-size: var(--ds-font-12);
   color: var(--dsw-alias-label-secondary);
   white-space: nowrap;
   overflow: hidden;

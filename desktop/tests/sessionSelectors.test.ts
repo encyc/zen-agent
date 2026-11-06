@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { canForkSession, isCrossProject } from '../src/state/sessionSelectors.ts'
+import { canForkSession, isBlockedSession } from '../src/state/sessionSelectors.ts'
 
 test('fork is offered only for the current session', () => {
   assert.equal(canForkSession('/sessions/a.jsonl', '/sessions/a.jsonl'), true)
@@ -8,10 +8,20 @@ test('fork is offered only for the current session', () => {
   assert.equal(canForkSession(null, '/sessions/a.jsonl'), false)
 })
 
-test('cross-project detection fails closed when the current session is unknown', () => {
-  assert.equal(isCrossProject('/sessions/a.jsonl', 'p', '/sessions/a.jsonl', null), false)
-  assert.equal(isCrossProject('/sessions/b.jsonl', 'p', '/sessions/a.jsonl', 'p'), false)
-  assert.equal(isCrossProject('/sessions/c.jsonl', 'q', '/sessions/a.jsonl', 'p'), true)
-  assert.equal(isCrossProject('/sessions/b.jsonl', 'p', null, null), true)
-  assert.equal(isCrossProject('/sessions/b.jsonl', 'p', '/sessions/a.jsonl', null), true)
+test('a recorded project root makes any session openable', () => {
+  assert.equal(
+    isBlockedSession({ path: '/sessions/c.jsonl', project_path: '/work/q' }, '/sessions/a.jsonl'),
+    false,
+  )
+  assert.equal(
+    isBlockedSession({ path: '/sessions/a.jsonl', project_path: '/work/p' }, '/sessions/a.jsonl'),
+    false,
+  )
+  assert.equal(isBlockedSession({ path: '/sessions/a.jsonl' }, '/sessions/a.jsonl'), false)
+})
+
+test('rootless sessions stay discovery-only unless they are current', () => {
+  assert.equal(isBlockedSession({ path: '/sessions/b.jsonl' }, '/sessions/a.jsonl'), true)
+  assert.equal(isBlockedSession({ path: '/sessions/b.jsonl', project_path: '' }, null), true)
+  assert.equal(isBlockedSession({ path: '/sessions/b.jsonl' }, null), true)
 })

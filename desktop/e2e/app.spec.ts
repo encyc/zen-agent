@@ -19,7 +19,7 @@ interface BridgeState {
   running: boolean
   pending: PendingItemMock[]
   calls: Record<string, unknown>[]
-  starts: { cwd?: string | null }[]
+  starts: { cwd?: string | null; pid?: number }[]
   dialogSelection: string | string[] | null
   title: string
   failExport?: boolean
@@ -28,6 +28,8 @@ interface BridgeState {
   transcript?: Record<string, unknown>[]
   todos?: Record<string, unknown>[]
   tools?: { name: string; description: string; approval: string }[]
+  thinking?: string | null
+  models?: Record<string, unknown>[]
 }
 
 declare global {
@@ -42,6 +44,7 @@ function installBridge(state: BridgeState) {
   const listeners = new Map<string, ((payload: unknown) => void)[]>()
   let nextCallback = 1
   let nextEvent = 1
+  let nextPid = 4242
 
   const sessions = (id: unknown, scope: unknown) => ({
     type: 'result',
@@ -54,6 +57,7 @@ function installBridge(state: BridgeState) {
         name: 'a',
         title: state.title,
         project: 'p',
+        project_path: '/work/p',
         messages: 4,
         current: state.noCurrent !== true,
         pinned: false,
@@ -67,6 +71,7 @@ function installBridge(state: BridgeState) {
         name: 'b',
         title: '另一个会话',
         project: 'p',
+        project_path: '/work/p',
         messages: 2,
         current: false,
         pinned: false,
@@ -98,6 +103,7 @@ function installBridge(state: BridgeState) {
               name: 'c',
               title: '另一个项目',
               project: 'q',
+              project_path: '/work/q',
               messages: 1,
               current: false,
               pinned: false,
@@ -124,8 +130,23 @@ function installBridge(state: BridgeState) {
           usage: { input: 0, output: 0, cache_read: 0, cache_write: 0, cost: 0 },
           termination: null,
           mode: 'zen',
+          thinking: state.thinking ?? 'high',
           pending: state.pending,
           todos: state.todos ?? [],
+          context_used: 32000,
+          context_window: 128000,
+          context: {
+            slices: [
+              { id: 'system', label: 'system prompt', chars: 12000, tokens: 3200, pct: 2.5 },
+              { id: 'tools', label: 'tool schemas', chars: 0, tokens: 4800, pct: 3.8 },
+              { id: 'session', label: 'session', chars: 0, tokens: 24000, pct: 18.8 },
+            ],
+            total_tokens: 32000,
+            window: 128000,
+            measured: true,
+            prompt_tokens: 32000,
+            free_tokens: 96000,
+          },
         }
       case 'transcript':
         return {
@@ -137,7 +158,7 @@ function installBridge(state: BridgeState) {
           compactions: [],
         }
       case 'models':
-        return { type: 'result', id: payload.id, ok: true, models: [] }
+        return { type: 'result', id: payload.id, ok: true, models: state.models ?? [] }
       case 'tools':
         return {
           type: 'result',
@@ -160,6 +181,7 @@ function installBridge(state: BridgeState) {
         }
       case 'command':
         if (payload.name === 'rename') state.title = String(payload.argument ?? '')
+        if (payload.name === 'thinking') state.thinking = String(payload.argument ?? 'off')
         return {
           type: 'result',
           id: payload.id,
@@ -250,8 +272,10 @@ function installBridge(state: BridgeState) {
       if (cmd === 'plugin:event|unlisten') return null
       if (cmd === 'rpc_start') {
         const options = (args.options ?? {}) as { cwd?: string | null }
-        state.starts.push({ cwd: options.cwd ?? null })
-        return { pid: 4242 }
+        const pid = nextPid
+        nextPid += 1
+        state.starts.push({ cwd: options.cwd ?? null, pid })
+        return { pid }
       }
       if (cmd === 'rpc_stop') return null
       if (cmd === 'plugin:dialog|open') return state.dialogSelection
@@ -303,6 +327,7 @@ async function setPending(page: Page, items: PendingItemMock[]) {
 }
 
 const paletteKey = process.platform === 'darwin' ? 'Meta+k' : 'Control+k'
+const sidebarKey = process.platform === 'darwin' ? 'Meta+b' : 'Control+b'
 
 test('a returning user lands on the home hero and auto-connects', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('zen.last.cwd', '/work'))
@@ -439,6 +464,33 @@ test('the work panel opens on review and switches to context', async ({ page }) 
   await expect(page.locator('[data-work-panel]')).toHaveCount(0)
 })
 
+test('hovering the context ring shows the composition card', async ({ page }) => {
+  await boot(page, initialState())
+  const card = page.getByTestId('context-card')
+  await expect(card).toHaveCount(0)
+
+  await page.getByTestId('context-meter').hover()
+  await expect(card).toBeVisible()
+  await expect(card).toContainText('已用 32K')
+  await expect(card).toContainText('25%')
+  await expect(card).toContainText('32K / 128K')
+  await expect(card).toContainText('系统提示词')
+  await expect(card).toContainText('≈3.2K · 2.5%')
+  await expect(card).toContainText('工具 schema')
+  await expect(card).toContainText('≈4.8K · 3.8%')
+  await expect(card).toContainText('会话')
+  await expect(card).toContainText('≈24K · 18.8%')
+  await expect(card).toContainText('空闲')
+  await expect(card).toContainText('≈96K · 75.0%')
+
+  // Reading takes time: moving onto the card must keep it open.
+  await card.hover()
+  await expect(card).toBeVisible()
+
+  await page.mouse.move(5, 5)
+  await expect(card).toHaveCount(0)
+})
+
 test('the shell keeps the sidebar full height and docks the composer inside the center column', async ({
   page,
 }) => {
@@ -454,6 +506,110 @@ test('the shell keeps the sidebar full height and docks the composer inside the 
   assert.ok(composer.x >= center.x)
   assert.ok(composer.x + composer.width <= center.x + center.width + 1)
   assert.ok(composer.y + composer.height <= center.y + center.height + 1)
+})
+
+test('collapsing the sidebar gives the conversation the full width', async ({ page }) => {
+  await boot(page, initialState())
+  const center = page.locator('[data-shell-center]')
+  const open = await center.boundingBox()
+  assert.ok(open !== null)
+  assert.ok(open.x > 0, `center starts at ${open.x}`)
+
+  await page.getByRole('button', { name: 'toggle sidebar' }).click()
+  await expect.poll(async () => (await center.boundingBox())?.x ?? -1).toBe(0)
+  const collapsed = await center.boundingBox()
+  const viewport = page.viewportSize()
+  assert.ok(collapsed !== null && viewport !== null)
+  assert.equal(Math.round(collapsed.width), viewport.width)
+
+  await page.keyboard.press(sidebarKey)
+  await expect.poll(async () => (await center.boundingBox())?.x ?? -1).toBe(Math.round(open.x))
+})
+
+test('composer menus open directly above their own trigger', async ({ page }) => {
+  await boot(page, initialState())
+  const mode = page.locator('[data-menu-trigger="mode"]')
+  await mode.click()
+  const modeChip = await mode.boundingBox()
+  const modeMenu = await page.getByRole('menu').boundingBox()
+  assert.ok(modeChip !== null && modeMenu !== null)
+  assert.ok(Math.abs(modeMenu.x - modeChip.x) <= 1, `mode menu x ${modeMenu.x} vs ${modeChip.x}`)
+  assert.ok(
+    modeChip.y - (modeMenu.y + modeMenu.height) <= 12,
+    `mode menu gap ${modeChip.y - (modeMenu.y + modeMenu.height)}`,
+  )
+
+  const model = page.locator('[data-menu-trigger="model"]')
+  await model.click()
+  const modelChip = await model.boundingBox()
+  const modelMenu = await page.getByRole('menu').boundingBox()
+  assert.ok(modelChip !== null && modelMenu !== null)
+  assert.ok(
+    Math.abs(modelMenu.x + modelMenu.width - (modelChip.x + modelChip.width)) <= 1,
+    `model menu right ${modelMenu.x + modelMenu.width} vs ${modelChip.x + modelChip.width}`,
+  )
+  assert.ok(
+    modelChip.y - (modelMenu.y + modelMenu.height) <= 12,
+    `model menu gap ${modelChip.y - (modelMenu.y + modelMenu.height)}`,
+  )
+})
+
+test('the reasoning level rides on the model chip instead of its own control', async ({ page }) => {
+  await boot(page, initialState({ thinking: 'high' }))
+  const model = page.locator('[data-menu-trigger="model"]')
+  await expect(model).toContainText('deepseek-flash')
+  await expect(model).toContainText('high')
+  await expect(page.locator('[data-menu-trigger="thinking"]')).toHaveCount(0)
+
+  await model.click()
+  const levels = page.getByRole('radiogroup', { name: '思考深度' })
+  await expect(levels).toBeVisible()
+  await expect(levels.getByRole('radio')).toHaveCount(5)
+  await levels.getByRole('radio', { name: 'max' }).click()
+  await expect(levels.getByRole('radio', { name: 'max' })).toHaveAttribute('aria-checked', 'true')
+  await expect(model).toContainText('max')
+})
+
+test('the reasoning levels stay pinned under a scrolling model list', async ({ page }) => {
+  const models = Array.from({ length: 30 }, (_, index) => ({
+    id: `model-${index}`,
+    provider: 'p',
+    context_window: 128000,
+    max_tokens: 4096,
+    reasoning: true,
+    supports_vision: false,
+    available: true,
+    reason: null,
+    current: index === 0,
+  }))
+  await boot(page, initialState({ models, thinking: 'high' }))
+  await page.locator('[data-menu-trigger="model"]').click()
+
+  const menu = page.getByRole('menu')
+  const levels = page.getByRole('radiogroup', { name: '思考深度' })
+  await expect(levels).toBeVisible()
+  const menuBox = await menu.boundingBox()
+  const levelsBox = await levels.boundingBox()
+  assert.ok(menuBox !== null && levelsBox !== null)
+  assert.ok(
+    levelsBox.y + levelsBox.height <= menuBox.y + menuBox.height + 1,
+    'the effort row must sit inside the menu',
+  )
+
+  const scrolled = await menu.evaluate((el) => {
+    const list = [...el.querySelectorAll('div')].find((node) => {
+      const style = getComputedStyle(node)
+      return style.overflowY === 'auto' && node.scrollHeight > node.clientHeight
+    })
+    if (list === undefined) return false
+    list.scrollTop = list.scrollHeight
+    return true
+  })
+  assert.equal(scrolled, true, 'the model list must actually scroll')
+
+  const pinnedBox = await levels.boundingBox()
+  assert.ok(pinnedBox !== null)
+  assert.equal(pinnedBox.y, levelsBox.y, 'the effort row must not move with the list')
 })
 
 test('the composer plate spans the transcript band', async ({ page }) => {
@@ -616,7 +772,7 @@ test('a filtered, collapsed project stays collapsed and loads more on demand', a
   await expect(visibleRows).toHaveCount(12)
 })
 
-test('the sidebar lists every project and refuses cross-project opens', async ({ page }) => {
+test('opening another project’s session restarts the runtime there, then resumes', async ({ page }) => {
   await boot(page, initialState())
   await expect
     .poll(() =>
@@ -627,15 +783,69 @@ test('the sidebar lists every project and refuses cross-project opens', async ({
     .toBe(true)
   await expect(page.locator('[data-project-group="q"]')).toBeVisible()
   const cross = page.locator('[data-session-path="/sessions/c.jsonl"]')
-  await expect(cross).toHaveAttribute('aria-disabled', 'true')
-  // aria-disabled rows fail Playwright's actionability check; force the pointer.
-  await cross.click({ force: true })
-  assert.equal(
-    await page.evaluate(() =>
-      window.__ZEN_E2E__.calls.some((call) => call.type === 'session' && call.op === 'resume'),
-    ),
-    false,
-  )
+  await expect(cross).not.toHaveAttribute('aria-disabled', 'true')
+  await cross.click()
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const starts = window.__ZEN_E2E__.starts
+        return starts[starts.length - 1]?.cwd
+      }),
+    )
+    .toBe('/work/q')
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__ZEN_E2E__.calls.some(
+          (call) => call.type === 'session' && call.op === 'resume' && call.path === '/sessions/c.jsonl',
+        ),
+      ),
+    )
+    .toBe(true)
+
+  // The stopped process reports its exit after the replacement is already
+  // ready; that stale event must not be mistaken for the live process dying.
+  const pids = await page.evaluate(() => window.__ZEN_E2E__.starts.map((start) => start.pid))
+  const stale = pids[0]
+  const live = pids[pids.length - 1]
+  assert.notEqual(stale, live)
+  const emitExit = (pid: number | undefined) =>
+    page.evaluate(
+      (value) =>
+        window.__ZEN_E2E_EMIT__('rpc:exit', {
+          event: 'rpc:exit',
+          id: 1,
+          payload: { code: 0, pid: value },
+        }),
+      pid,
+    )
+  await emitExit(stale)
+  await expect(page.locator('[data-shell-composer]')).toBeVisible()
+  await expect(page.getByText(/会话进程已退出/)).toHaveCount(0)
+
+  await emitExit(live)
+  await expect(page.getByText(/会话进程已退出/)).toBeVisible()
+})
+
+test('a project discovered from sessions can start its own session', async ({ page }) => {
+  await boot(page, initialState())
+  await expect(page.locator('[data-project-group="q"]')).toBeVisible()
+  await page.getByRole('button', { name: '在 q 中新建会话' }).click()
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const starts = window.__ZEN_E2E__.starts
+        return starts[starts.length - 1]?.cwd
+      }),
+    )
+    .toBe('/work/q')
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__ZEN_E2E__.calls.some((call) => call.type === 'session' && call.op === 'new'),
+      ),
+    )
+    .toBe(true)
 })
 
 test('the current row menu pins and renames; other rows omit both actions', async ({ page }) => {
@@ -786,13 +996,13 @@ test('escaping a row menu neither cancels the run nor traps the keyboard', async
   )
 })
 
-test('an unknown current project leaves every listed session disabled', async ({ page }) => {
+test('a recorded project root stays openable without a current session', async ({ page }) => {
   await page.addInitScript(installBridge, initialState({ noCurrent: true }))
   await page.goto('/')
   await expect(page.locator('[data-session-path="/sessions/a.jsonl"]')).toBeVisible()
-  await expect(page.locator('[data-session-path="/sessions/a.jsonl"]')).toHaveAttribute('aria-disabled', 'true')
-  await expect(page.locator('[data-session-path="/sessions/b.jsonl"]')).toHaveAttribute('aria-disabled', 'true')
-  await expect(page.locator('[data-session-path="/sessions/c.jsonl"]')).toHaveAttribute('aria-disabled', 'true')
+  await expect(page.locator('[data-session-path="/sessions/a.jsonl"]')).not.toHaveAttribute('aria-disabled', 'true')
+  await expect(page.locator('[data-session-path="/sessions/b.jsonl"]')).not.toHaveAttribute('aria-disabled', 'true')
+  await expect(page.locator('[data-session-path="/sessions/c.jsonl"]')).not.toHaveAttribute('aria-disabled', 'true')
 })
 
 test('a queued message can be promoted to steering', async ({ page }) => {
@@ -904,13 +1114,38 @@ test('palette commands run bare or insert their prefix', async ({ page }) => {
   await expect(page.getByRole('option', { name: /quit|Quit/ })).toHaveCount(0)
 })
 
+test('the font size setting scales chat and settings together', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('zen.fontScale', JSON.stringify(1.2)))
+  await boot(page, initialState())
+  const fontOf = (locator: string) =>
+    page.locator(locator).first().evaluate((el) => getComputedStyle(el).fontSize)
+
+  // pi multiplies every type token by the scale, so entering settings never
+  // changes the apparent zoom level. The composer body is 14px * 1.2.
+  assert.equal(await fontOf('[data-composer-plate] textarea'), '16.8px')
+
+  await page.getByRole('button', { name: '设置' }).click()
+  assert.equal(await fontOf('nav button'), '15.6px')
+})
+
 test('settings and tools replace the shell and return to chat', async ({ page }) => {
   await boot(page, initialState())
   await page.getByRole('button', { name: '设置' }).click()
-  await expect(page.getByRole('heading', { name: '设置' })).toBeVisible()
-  await expect(page.getByRole('button', { name: '深色' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '外观' })).toBeVisible()
+  await page.getByRole('button', { name: '主题' }).click()
+  await page.getByRole('option', { name: '深色' }).click()
+  await expect(page.locator('body')).toHaveAttribute('data-ds-dark-theme', '')
+  await page.getByRole('button', { name: '对话' }).click()
+  await expect(page.getByRole('heading', { name: '对话', exact: true })).toBeVisible()
+  await expect(page.getByRole('switch', { name: '显示会话时间' })).toBeVisible()
   await page.getByRole('button', { name: '返回' }).click()
   await expect(page.locator('[data-shell-composer]')).toBeVisible()
+
+  // The footer keeps the previous theme cycle next to the settings cog.
+  await expect(page.getByRole('button', { name: '外观: 深色' })).toBeVisible()
+  await page.getByRole('button', { name: '外观: 深色' }).click()
+  await expect(page.getByRole('button', { name: '外观: 跟随系统' })).toBeVisible()
+  await expect(page.locator('body')).not.toHaveAttribute('data-ds-dark-theme', '')
 
   await page.getByRole('button', { name: '工具' }).click()
   await expect(page.getByText('read_file')).toBeVisible()
@@ -919,23 +1154,60 @@ test('settings and tools replace the shell and return to chat', async ({ page })
   await expect(page.locator('[data-shell-composer]')).toBeVisible()
 })
 
-test('a cross-project palette result is disabled and Enter does nothing', async ({ page }) => {
+test('the session and project sections collapse independently and persist', async ({ page }) => {
+  await boot(page, initialState())
+  await expect(page.getByPlaceholder('搜索会话')).toBeVisible()
+  await page.getByRole('button', { name: '折叠会话' }).click()
+  await expect(page.getByPlaceholder('搜索会话')).toHaveCount(0)
+  await expect(page.locator('[data-sidebar-project-group="p"]')).toBeVisible()
+  await page.getByRole('button', { name: '折叠项目' }).click()
+  await expect(page.locator('[data-sidebar-project-group="p"]')).toHaveCount(0)
+
+  // With both sections folded the footer owns the leftover space, so the icon
+  // row stays on the sidebar's bottom edge instead of riding up under it.
+  await expect(page.locator('[data-sidebar-footer]')).toBeVisible()
+  const bottomGap = await page.evaluate(() => {
+    const sidebar = document.querySelector('[data-shell-sidebar]')!.getBoundingClientRect()
+    const footer = document.querySelector('[data-sidebar-footer]')!.getBoundingClientRect()
+    return Math.round(sidebar.bottom - footer.bottom)
+  })
+  expect(Math.abs(bottomGap)).toBeLessThanOrEqual(1)
+
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '返回' }).click()
+  await expect(page.getByPlaceholder('搜索会话')).toHaveCount(0)
+  await expect(page.locator('[data-sidebar-project-group="p"]')).toHaveCount(0)
+
+  await page.getByRole('button', { name: '展开会话' }).click()
+  await expect(page.getByPlaceholder('搜索会话')).toBeVisible()
+  await page.getByRole('button', { name: '展开项目' }).click()
+  await expect(page.locator('[data-sidebar-project-group="p"]')).toBeVisible()
+})
+
+test('a palette session from another project switches the runtime and resumes', async ({ page }) => {
   await boot(page, initialState())
   await page.keyboard.press(paletteKey)
   const input = page.getByRole('dialog').getByRole('combobox')
   await input.fill('另一个项目')
   const option = page.getByRole('option', { name: /另一个项目/ })
-  await expect(option).toHaveAttribute('aria-disabled', 'true')
-  // aria-disabled options are unclickable under Playwright's actionability check.
-  await option.click({ force: true })
-  await page.keyboard.press('Enter')
-  assert.equal(
-    await page.evaluate(() =>
-      window.__ZEN_E2E__.calls.some((call) => call.type === 'session' && call.op === 'resume'),
-    ),
-    false,
-  )
-  await expect(page.getByRole('dialog')).toBeVisible()
-  await page.keyboard.press('Escape')
+  await expect(option).not.toHaveAttribute('aria-disabled', 'true')
+  await option.click()
   await expect(page.getByRole('dialog')).toBeHidden()
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const starts = window.__ZEN_E2E__.starts
+        return starts[starts.length - 1]?.cwd
+      }),
+    )
+    .toBe('/work/q')
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__ZEN_E2E__.calls.some(
+          (call) => call.type === 'session' && call.op === 'resume' && call.path === '/sessions/c.jsonl',
+        ),
+      ),
+    )
+    .toBe(true)
 })
