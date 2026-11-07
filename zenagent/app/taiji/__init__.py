@@ -1,1 +1,21 @@
-"""Taiji: the orchestration layer and its read-only snapshot builders."""
+"""Taiji: the orchestration layer over the Runtime — Router, workers, panel snapshots."""
+
+from zenagent.app.taiji.session import (
+    TAIJI_SESSION_STEM,
+    TaijiHostLocked,
+    acquire_taiji_lock,
+    ensure_taiji_session,
+    is_taiji_session,
+    release_taiji_lock,
+    taiji_session_path,
+)
+
+__all__ = [
+    "TAIJI_SESSION_STEM",
+    "TaijiHostLocked",
+    "acquire_taiji_lock",
+    "ensure_taiji_session",
+    "is_taiji_session",
+    "release_taiji_lock",
+    "taiji_session_path",
+]
