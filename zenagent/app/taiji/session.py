@@ -13,8 +13,8 @@ import os
 import time
 from pathlib import Path
 
-from zenagent.agent.session import HEADER_TYPE, RECORD_VERSION, set_session_title
 from zenagent import __version__
+from zenagent.agent.session import HEADER_TYPE, RECORD_VERSION, set_session_title
 
 TAIJI_SESSION_STEM = "taiji"
 TAIJI_SESSION_TITLE = "太极 Router"

@@ -49,7 +49,9 @@ class TestCommitGraph:
         assert [c["subject"] for c in graph["commits"]] == ["second", "init"]
         assert [c["lane"] for c in graph["commits"]] == [0, 0]
         assert graph["max_lane"] == 0
-        assert graph["branches"] == [{"name": "main", "sha": graph["commits"][0]["sha"], "is_head": True}]
+        assert graph["branches"] == [
+            {"name": "main", "sha": graph["commits"][0]["sha"], "is_head": True}
+        ]
 
     def test_branch_commit_takes_new_lane_and_merge_returns(self, repo: Path) -> None:
         _commit(repo, "a.txt", "init")
@@ -80,7 +82,15 @@ class TestCommitGraph:
         _commit(repo, "a.txt", "init")
         graph = commit_graph(repo)
         first = graph["commits"][0]
-        assert set(first) == {"sha", "short", "parents", "subject", "author", "ts", "lane"}
+        assert set(first) == {
+            "sha",
+            "short",
+            "parents",
+            "subject",
+            "author",
+            "ts",
+            "lane",
+        }
         assert first["author"] == "taiji"
         assert isinstance(first["ts"], int)
         assert first["parents"] == []
@@ -112,7 +122,9 @@ def _session_file(directory: Path, stem: str, *, created_at: int = 1000) -> Path
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{stem}.jsonl"
     path.write_text(
-        '{"type":"session","version":1,"id":"' + stem + '","createdAt":'
+        '{"type":"session","version":1,"id":"'
+        + stem
+        + '","createdAt":'
         + str(created_at)
         + ',"cwd":"x","app":"zenagent","appVersion":"0"}\n',
         encoding="utf-8",
@@ -121,7 +133,9 @@ def _session_file(directory: Path, stem: str, *, created_at: int = 1000) -> Path
 
 
 class TestSessionMap:
-    def test_maps_main_and_worktree_projects(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
+    def test_maps_main_and_worktree_projects(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
         from zenagent.project import project_key
 
         _commit(repo, "a.txt", "init")
@@ -153,7 +167,9 @@ class TestSessionMap:
         assert wt_entry["worktree"] is True
         assert [s["name"] for s in wt_entry["sessions"]] == ["20260101-020202"]
 
-    def test_sessions_sorted_newest_first(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
+    def test_sessions_sorted_newest_first(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
         from zenagent.project import project_key
 
         _commit(repo, "a.txt", "init")
@@ -169,9 +185,14 @@ class TestSessionMap:
 
         result = session_map(repo)
 
-        assert [s["name"] for s in result["projects"][0]["sessions"]] == ["newer", "older"]
+        assert [s["name"] for s in result["projects"][0]["sessions"]] == [
+            "newer",
+            "older",
+        ]
 
-    def test_worktree_without_project_dir_lists_empty_sessions(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
+    def test_worktree_without_project_dir_lists_empty_sessions(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
         _commit(repo, "a.txt", "init")
         linked = tmp_path / "linked"
         _git(repo, "worktree", "add", "-q", "-b", "feature", str(linked))
@@ -183,7 +204,9 @@ class TestSessionMap:
         assert by_root[str(linked.resolve())]["sessions"] == []
         assert by_root[str(linked.resolve())]["branch"] == "feature"
 
-    def test_detached_worktree_has_no_branch(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
+    def test_detached_worktree_has_no_branch(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
         _commit(repo, "a.txt", "init")
         linked = tmp_path / "linked"
         _git(repo, "worktree", "add", "-q", "--detach", str(linked))
@@ -194,7 +217,9 @@ class TestSessionMap:
         by_root = {p["root"]: p for p in result["projects"]}
         assert by_root[str(linked.resolve())]["branch"] is None
 
-    def test_broken_titles_sidecar_is_tolerated(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
+    def test_broken_titles_sidecar_is_tolerated(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
         from zenagent.project import project_key
 
         _commit(repo, "a.txt", "init")

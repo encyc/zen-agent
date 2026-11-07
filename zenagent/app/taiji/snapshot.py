@@ -39,7 +39,13 @@ def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str] | None:
 
 
 def _empty_graph(root: Path, *, is_repo: bool) -> dict:
-    return {"root": str(root), "is_repo": is_repo, "commits": [], "branches": [], "max_lane": 0}
+    return {
+        "root": str(root),
+        "is_repo": is_repo,
+        "commits": [],
+        "branches": [],
+        "max_lane": 0,
+    }
 
 
 def _parse_log(text: str) -> list[dict]:
@@ -127,10 +133,16 @@ def commit_graph(cwd: Path | str, *, limit: int = 200) -> dict:
         str(limit),
         f"--pretty=format:{_LOG_FORMAT}",
     )
-    commits = _parse_log(completed.stdout) if completed is not None and completed.returncode == 0 else []
+    commits = (
+        _parse_log(completed.stdout)
+        if completed is not None and completed.returncode == 0
+        else []
+    )
 
     refs = _git(root, "for-each-ref", "refs/heads", f"--format={_REF_FORMAT}")
-    branches = _parse_refs(refs.stdout) if refs is not None and refs.returncode == 0 else []
+    branches = (
+        _parse_refs(refs.stdout) if refs is not None and refs.returncode == 0 else []
+    )
     heads = {wt["branch"] for wt in overview["worktrees"] if wt.get("branch")}
     for branch in branches:
         branch["is_head"] = branch["name"] in heads
