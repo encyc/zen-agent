@@ -25,6 +25,47 @@ export type ResultFrame =
   | { type: 'result'; id: string; ok: false; reason?: string }
   | ErrorFrame
 
+// ---- wire contract -------------------------------------------------------
+//
+// The Python dispatcher (rpc.py `_handle_line`) is the authority for request
+// kinds; this list mirrors it and is pinned by tests/test_rpc_contract.py so
+// a one-sided change goes red instead of failing at runtime.
+
+export const PROTOCOL_VERSION = 2
+
+export const REQUEST_KINDS = [
+  'approval',
+  'ask',
+  'cancel',
+  'command',
+  'commands',
+  'fs_list',
+  'fs_read',
+  'git_worktrees',
+  'hello',
+  'mode',
+  'model',
+  'models',
+  'prompt',
+  'session',
+  'shutdown',
+  'status',
+  'steer',
+  'subagent_transcript',
+  'tools',
+  'transcript',
+  'usage',
+] as const
+
+export type RequestKind = (typeof REQUEST_KINDS)[number]
+
+export interface HelloResult {
+  type: 'result'
+  id: string
+  ok: true
+  protocol_version: number
+}
+
 // ---- prompt --------------------------------------------------------------
 
 export interface PromptResult {

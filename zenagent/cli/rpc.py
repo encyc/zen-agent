@@ -45,6 +45,10 @@ ReadLine = Callable[[], Awaitable[str | None]]
 WriteLine = Callable[[str], None]
 
 #: How much of a running tool's streamed output an RPC event may carry.
+#: Wire contract version; the desktop client handshakes with a ``hello``
+#: request and refuses to talk to a server on a different version.
+PROTOCOL_VERSION = 2
+
 _PARTIAL_RESULT_CHARS = 4000
 #: Bound for one JSON-encoded tool argument blob in an event.
 _ARGS_CHARS = 4000
@@ -453,6 +457,15 @@ class RpcServer:
 
         kind = request.get("type")
         request_id = request.get("id")
+        if kind == "hello":
+            self._send(
+                {
+                    "type": "result",
+                    "id": request_id,
+                    "protocol_version": PROTOCOL_VERSION,
+                }
+            )
+            return True
         if kind == "prompt":
             text = request.get("text")
             if not isinstance(text, str) or not text.strip():

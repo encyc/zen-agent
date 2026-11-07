@@ -124,6 +124,8 @@ function installBridge(state: BridgeState) {
 
   const respond = (payload: Record<string, unknown>) => {
     switch (payload.type) {
+      case 'hello':
+        return { type: 'result', id: payload.id, ok: true, protocol_version: 2 }
       case 'status':
         return {
           type: 'result',

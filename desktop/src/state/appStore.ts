@@ -145,6 +145,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       // `--mode ask` keeps old released zen binaries happy (they crash without
       // an explicit mode) and is the safe default; the mode chip switches later.
       const pid = await rpc.start({ bin, cwd, args: args ?? ['--mode', 'ask', '--no-mcp'] })
+      // The wire contract is versioned: refuse to talk to a server that does
+      // not speak the same protocol (its result frames would mislead the UI).
+      await rpc.handshake()
       try {
         localStorage.setItem(LAST_CWD_KEY, cwd ?? '')
       } catch {

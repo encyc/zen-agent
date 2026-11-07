@@ -4,6 +4,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import type { ServerFrame } from './types'
+import { PROTOCOL_VERSION } from './types'
 import { startFailureOf } from '../state/startFailure.ts'
 
 export interface StartOptions {
@@ -58,6 +59,21 @@ export class RpcClient {
 
   async stop(): Promise<void> {
     await invoke('rpc_stop').catch(() => {})
+  }
+
+  /** Verify the wire contract before any domain request.
+   *
+   * Rejects with a structured failure (the same shape `rpc_start` rejects
+   * with) so the app's diagnostics card can render a version mismatch. */
+  async handshake(): Promise<void> {
+    const frame = (await this.send({ type: 'hello' })) as { protocol_version?: unknown }
+    if (frame.protocol_version !== PROTOCOL_VERSION) {
+      throw {
+        code: 'protocol_mismatch',
+        bin: 'zen',
+        osError: `client speaks protocol ${PROTOCOL_VERSION}, server answered ${String(frame.protocol_version)}`,
+      }
+    }
   }
 
   /** Send one request and resolve with its result/error frame. */
