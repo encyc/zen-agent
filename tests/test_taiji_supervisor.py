@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import shutil
 import subprocess
 from pathlib import Path
@@ -14,6 +15,7 @@ from zenagent.app.taiji.supervisor import (
     TurnResult,
     close_taiji,
     get_taiji,
+    supervisor_summary,
 )
 
 
@@ -204,3 +206,163 @@ async def test_get_taiji_is_a_per_loop_singleton(repo: Path, tmp_path: Path) -> 
     )
     assert one is two
     await close_taiji()
+
+
+class FakeChat:
+    """Records submits in order; serialized like a busy Router would be."""
+
+    def __init__(self) -> None:
+        self.messages: list[str] = []
+        self._lock = asyncio.Lock()
+
+    async def submit(self, text: str, **kwargs) -> None:
+        async with self._lock:
+            await asyncio.sleep(0)
+            self.messages.append(text)
+
+
+def make_chat_supervisor(
+    repo: Path, tmp_path: Path, runner: StubRunner, *, mode: str, chat: FakeChat
+) -> TaijiSupervisor:
+    return TaijiSupervisor(
+        repo_root=repo,
+        sessions_dir=tmp_path / "sessions",
+        registry_path=tmp_path / "sessions" / "taiji.json",
+        runner=runner,
+        chat=chat,
+        mode_of=lambda: mode,
+    )
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+class TestMilestonesAndMerge:
+    async def test_zen_auto_merges_clean_work_and_reports_merged(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
+        )
+        chat = FakeChat()
+        supervisor = make_chat_supervisor(
+            repo, tmp_path, StubRunner(), mode="zen", chat=chat
+        )
+
+        await supervisor.spawn("clean work", name="clean")
+        await supervisor.wait_idle()
+
+        record = supervisor.list_workers()[0]
+        assert record.status == "merged"
+        main_log = _git(repo, "log", "--format=%s", "main").stdout
+        assert "work: clean work" in main_log
+        assert not (tmp_path / "home" / "clean").exists()
+        assert len(chat.messages) == 1
+        assert chat.messages[0].startswith("[worker task/clean · merged]")
+        assert "did the thing" in chat.messages[0]
+
+    async def test_zen_with_dirty_main_falls_back_to_acceptance_question(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
+        )
+        (repo / "dirty.txt").write_text("wip\n", encoding="utf-8")
+        chat = FakeChat()
+        supervisor = make_chat_supervisor(
+            repo, tmp_path, StubRunner(), mode="zen", chat=chat
+        )
+
+        await supervisor.spawn("dirty work", name="dirty")
+        await supervisor.wait_idle()
+
+        record = supervisor.list_workers()[0]
+        assert record.status == "ok"
+        main_tip = _git(repo, "rev-parse", "main").stdout.strip()
+        assert (
+            _git(
+                repo, "merge-base", "--is-ancestor", record.branch, main_tip
+            ).returncode
+            != 0
+        )
+        assert len(chat.messages) == 2
+        assert chat.messages[0].startswith("[worker task/dirty · ok]")
+        assert "待验收" in chat.messages[1] and "task/dirty" in chat.messages[1]
+
+    async def test_plan_mode_never_merges_and_never_asks(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
+        )
+        chat = FakeChat()
+        supervisor = make_chat_supervisor(
+            repo, tmp_path, StubRunner(), mode="plan", chat=chat
+        )
+
+        await supervisor.spawn("planned work", name="planned")
+        await supervisor.wait_idle()
+
+        assert supervisor.list_workers()[0].status == "ok"
+        assert len(chat.messages) == 1
+        assert chat.messages[0].startswith("[worker task/planned · ok]")
+
+    async def test_error_turn_reports_and_never_merges(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
+        )
+        chat = FakeChat()
+        supervisor = make_chat_supervisor(
+            repo,
+            tmp_path,
+            StubRunner(status="error", summary="tests failed"),
+            mode="zen",
+            chat=chat,
+        )
+
+        await supervisor.spawn("broken work", name="broken")
+        await supervisor.wait_idle()
+
+        assert supervisor.list_workers()[0].status == "error"
+        assert len(chat.messages) == 1
+        assert "[worker task/broken · error]" in chat.messages[0]
+        assert "tests failed" in chat.messages[0]
+
+    async def test_explicit_merge_works_in_ask_mode(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
+        )
+        chat = FakeChat()
+        supervisor = make_chat_supervisor(
+            repo, tmp_path, StubRunner(), mode="ask", chat=chat
+        )
+
+        await supervisor.spawn("reviewed work", name="reviewed")
+        await supervisor.wait_idle()
+        assert len(chat.messages) == 2  # milestone + acceptance question
+
+        merged = await supervisor.merge("reviewed")
+
+        assert merged is True
+        assert supervisor.list_workers()[0].status == "merged"
+        assert "work: reviewed work" in _git(repo, "log", "--format=%s", "main").stdout
+        assert not (tmp_path / "home" / "reviewed").exists()
+
+    async def test_summary_truncates_long_summaries(
+        self, repo: Path, tmp_path: Path
+    ) -> None:
+        record = WorkerRecord(
+            name="n",
+            branch="task/n",
+            base="main",
+            worktree="/w",
+            status="ok",
+            created_at=1.0,
+            updated_at=2.0,
+        )
+        line = supervisor_summary(record, "x" * 500, 63.0)
+        assert line.startswith("[worker task/n · ok] ")
+        assert line.endswith(" · 01:03")
+        assert len(line) < 240

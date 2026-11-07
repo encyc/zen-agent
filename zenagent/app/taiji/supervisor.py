@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+from zenagent.app.git import git_status
 from zenagent.app.taiji.registry import TaijiRegistry, WorkerRecord
 
 GIT_TIMEOUT_S = 10.0
@@ -57,6 +58,13 @@ class TurnResult:
     status: str
     summary: str
     session_path: str
+
+
+def supervisor_summary(record: WorkerRecord, summary: str, duration_s: float) -> str:
+    """The one-line milestone the Router receives for a finished turn."""
+    brief = summary if len(summary) <= 200 else summary[:197] + "…"
+    minutes, seconds = int(duration_s) // 60, int(duration_s) % 60
+    return f"[worker {record.branch} · {record.status}] {brief} · {minutes:02d}:{seconds:02d}"
 
 
 class WorkerRunner(Protocol):
@@ -215,13 +223,60 @@ class TaijiSupervisor:
     async def _emit_turn(
         self, record: WorkerRecord, summary: str, started: float, *, status: str
     ) -> None:
-        """Report the turn milestone; the merge gate joins in Task 5."""
-        self._on_milestone(record, summary, started, status=status)
+        """Milestone injection plus the deterministic merge gate.
 
-    def _on_milestone(
-        self, record: WorkerRecord, summary: str, started: float, *, status: str
-    ) -> None:
-        del record, summary, started, status  # injection lands in Task 5
+        zen mode merges finished work automatically (the LLM is never in the
+        critical path — the gate is this code); ask mode and a zen mode whose
+        preconditions are unmet stop at an acceptance question; plan mode
+        only reports.
+        """
+        if status == "ok" and self.mode_of() == "zen" and await self.merge(record.name):
+            status = "merged"
+        if self.chat is None:
+            return
+        await self.chat.submit(
+            supervisor_summary(record, summary, time.time() - started)
+        )
+        if status == "ok" and self.mode_of() in ("zen", "ask"):
+            await self.chat.submit(
+                f"任务 {record.branch} 完成，待验收：{record.summary or summary}。"
+                f"请说「合并 {record.branch}」或提返工意见。"
+            )
+
+    async def merge(self, name: str) -> bool:
+        """Merge a finished task into its base branch, mode-agnostic.
+
+        Explicit merges (the Router tool) work in every mode — the mode gate
+        only decides whether zen merges *without asking*. Preconditions keep
+        the user's working tree sacred: the base branch must be checked out
+        in the main worktree and clean.
+        """
+        record = self.registry.records.get(name)
+        if record is None or record.status != "ok":
+            return False
+        current = _git(self.repo_root, "branch", "--show-current")
+        if current is None or current.stdout.strip() != record.base:
+            return False
+        status = git_status(self.repo_root)
+        if status is None or not status.is_clean:
+            return False
+        completed = _git(
+            self.repo_root,
+            "merge",
+            "--no-ff",
+            record.branch,
+            "-m",
+            f"taiji: merge {record.branch}",
+        )
+        if completed is None or completed.returncode != 0:
+            return False
+        removed = _git(self.repo_root, "worktree", "remove", record.worktree)
+        if removed is None or removed.returncode != 0:
+            shutil.rmtree(record.worktree, ignore_errors=True)
+        record.status = "merged"
+        record.updated_at = time.time()
+        self._save()
+        return True
 
     async def wait_idle(self) -> None:
         """Wait for every in-flight worker turn (tests and shutdown)."""
