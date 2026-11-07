@@ -264,6 +264,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }
 
+    // The streaming assistant node is always the newest push, so a tail-first
+    // scan finds it in O(1) on the hot text_delta path (long transcripts).
+    const assistantIndexOf = (id: string) => {
+      for (let i = nodes.length - 1; i >= 0; i--) {
+        if (nodes[i].id === id) return i
+      }
+      return -1
+    }
+
     switch (event.type) {
       case 'message_start': {
         const role = event.message?.role
@@ -297,22 +306,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
         if (currentAssistantId === null) break
         if (kind === 'thinking_start' || kind === 'thinking_delta') {
-          const node = nodes.find((candidate) => candidate.id === currentAssistantId) as AssistantNode | undefined
-          if (node) {
-            patchNode(node.id, {
+          const index = assistantIndexOf(currentAssistantId)
+          if (index >= 0) {
+            const node = nodes[index] as AssistantNode
+            nodes[index] = {
+              ...node,
               thinking: (node.thinking ?? '') + (assistantEvent.delta ?? ''),
               thinkingRunning: true,
-            } as Partial<ChatNode>)
+            } as ChatNode
+            changed = true
           }
         } else if (kind === 'thinking_end') {
           patchNode(currentAssistantId, { thinkingRunning: false } as Partial<ChatNode>)
         } else if (kind === 'text_delta') {
-          const node = nodes.find((candidate) => candidate.id === currentAssistantId) as AssistantNode | undefined
-          if (node) {
-            patchNode(node.id, {
+          const index = assistantIndexOf(currentAssistantId)
+          if (index >= 0) {
+            const node = nodes[index] as AssistantNode
+            nodes[index] = {
+              ...node,
               text: node.text + (assistantEvent.delta ?? ''),
               thinkingRunning: false,
-            } as Partial<ChatNode>)
+            } as ChatNode
+            changed = true
           }
         } else if (kind === 'error') {
           patchNode(currentAssistantId, { streaming: false } as Partial<ChatNode>)

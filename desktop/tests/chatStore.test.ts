@@ -209,3 +209,45 @@ test('retryableNodeId ignores a streaming or empty turn', () => {
   assert.equal(retryableNodeId(useChatStore.getState().nodes), null)
   assert.equal(retryableNodeId([]), null)
 })
+
+test('streaming deltas land on the current assistant node after long history', () => {
+  const transcript: TranscriptResult['transcript'] = Array.from(
+    { length: 200 },
+    (_, i) =>
+      i % 2 === 0
+        ? { kind: 'user', id: `u${i}`, text: `q${i}`, timestamp: i, steering: false }
+        : {
+            kind: 'assistant',
+            id: `a${i}`,
+            text: `t${i}`,
+            timestamp: i,
+            model: 'm',
+            provider: 'p',
+            duration_ms: 1,
+            usage: {
+              input: 0,
+              output: 0,
+              cache_read: 0,
+              cache_write: 0,
+              reasoning: null,
+              cost: { input: 0, output: 0, cache_read: 0, cache_write: 0, total: 0 },
+            },
+          },
+  )
+  useChatStore.getState().loadSnapshot({ ...empty, transcript })
+  const before = useChatStore.getState().revision
+  useChatStore.getState().applyEvent({
+    type: 'message_start',
+    message: { role: 'assistant', text: '' },
+  })
+  for (const delta of ['a', 'b', 'c']) {
+    useChatStore.getState().applyEvent({
+      type: 'message_update',
+      assistant_event: { type: 'text_delta', delta },
+    })
+  }
+  const { nodes, revision } = useChatStore.getState()
+  const last = nodes[nodes.length - 1]
+  assert.equal(last.kind === 'assistant' && last.text, 'abc')
+  assert.ok(revision > before)
+})
