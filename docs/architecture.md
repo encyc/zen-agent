@@ -33,6 +33,51 @@
 所有「扩展面」（MCP、skills、templates、extensions、RPC、导出、指标、崩溃日志）都在 `agent/` 之上
 或旁边**接线**，不修改 loop。
 
+## 2026-11-07 架构清理（本轮优化了什么）
+
+完整依据见 [`reviews/2026-11-07-architecture-review.md`](reviews/2026-11-07-architecture-review.md) 与
+[`superpowers/plans/2026-11-07-architecture-cleanup.md`](superpowers/plans/2026-11-07-architecture-cleanup.md)。
+分层与进程模型**一字未动**，优化集中在四条线：
+
+**契约归位（改错位，不改行为）**
+
+- `StreamOptions` 从具体适配器 `openai_completions.py` 迁到中立的 `providers/stream_options.py`
+  ——此前通用 loop 和另外三个适配器都要 import 一个厂商实现。
+- 工具协议（`AgentTool`/`ToolContext`/`ToolResultAgent`）从 `loop.py` 抽到 `agent/protocol.py`
+  ——工具/MCP/skills/extensions 不再为了两个 dataclass 依赖整个 loop；loop 里唯一的函数内
+  延迟 import 也随之消灭。
+- 根包 `zenagent/__init__` 现在导出门面：`from zenagent import Agent, agent_loop` 即可用库。
+
+**前端去重（一份逻辑，四个前端）**
+
+- usage 聚合曾抄了 4 份（`views.usage_total` + rpc/render/main 各一），现在只此一份。
+- slash 命令补全曾有一张与注册表平行的静态表（往注册表加命令，REPL 补全静默缺失），
+  现在 `completion.slash_commands(registry)` 直接从活注册表派生。
+- **四个前端（REPL/headless/Textual TUI/JSONL RPC）的装配仪式收敛为 `app/bootstrap.py::prepare`**。
+  历史上它复制了 4 份且已漂移过一次（只有 RPC 转发了 `read_only`）；现在 broker 与 runtime
+  读同一个 `RuntimeOptions`，参数化测试钉死每个模式都透传。
+- `task` 工具 854 行里藏着子代理运行时（进程监管/看门狗/子 Agent 构造）——搬到了
+  `agent/subagents_runtime.py`，`tools/task.py` 只剩 320 行的工具面。
+- `set_ask_handler`/`set_subagent_observer` 是进程级全局变量（同进程双前端互踩）——改为
+  每 Runtime 槽位（`runtime.ask_handler`），工具在调用时解析。
+
+**GUI 防线（desktop）**
+
+- Tauri CSP 从 `null` 改为严格策略；`rpc_start` 的登录 shell 环境采集加 3s 超时
+  （坏 shell 配置不再挂死每次连接）。
+- RPC 加 `hello` 协议版本握手（`PROTOCOL_VERSION = 2`），版本不符走诊断卡；
+  `tests/test_rpc_contract.py` 双向钉住 Python 分派与 TS `REQUEST_KINDS`，单边改动直接红。
+- `ToolCallView` 加 `kind` 判别字段，桌面端不再靠 `'kind' in view` 启发式分派。
+- chatStore 流式增量从全量扫描改为尾部定位（长会话不再 O(n)/delta）。
+
+**效率与门禁**
+
+- 4 个 provider 适配器共用进程级 `httpx.AsyncClient`（`transport.get_shared_async_client`），
+  每次流式请求不再重建 TLS 会话；`fs` 大文件读取移出事件循环。
+- `scripts/check_architecture.py` + `docs/architecture/allowlist.json`：源文件 800 行上限，
+  存量大文件登记基线**只许降**；挂在 CI 的 `check.sh` 与 `release-check.sh` 里。
+  `crash.py` 的崩溃日志钩子在 CLI 启动接线（此前是死代码）。
+
 ## 一次请求的完整数据流
 
 ```
@@ -97,13 +142,15 @@ agent_end 事件
 |---|---|---|
 | `zenagent/types.py` | 消息/内容块/用量/成本 | `AssistantMessage`、`ToolCall`、`Usage`、`Cost` |
 | `zenagent/events.py` | 两层事件 + 取消令牌 | `AssistantEvent`、`AgentEvent`、`AbortToken`、`Aborted` |
-| `zenagent/providers/` | 协议适配与传输 | `StreamFn`、`safe_stream`、`stream_fn_for`、`Model`、`CompatFlags` |
-| `zenagent/agent/loop.py` | 无状态执行器 | `agent_loop`、`AgentConfig`、`AgentState`、`AgentTool` |
+| `zenagent/providers/` | 协议适配与传输 | `StreamFn`、`safe_stream`、`stream_fn_for`、`StreamOptions`（中立模块 `stream_options.py`）、`Model`、`CompatFlags` |
+| `zenagent/agent/protocol.py` | 工具协议（扩展面的唯一 import 目标） | `AgentTool`、`ToolContext`、`ToolResultAgent` |
+| `zenagent/agent/loop.py` | 无状态执行器 | `agent_loop`、`AgentConfig`、`AgentState`（协议类型从 `protocol` re-export） |
 | `zenagent/agent/agent.py` | 有状态包装 | `Agent`（subscribe/steer/abort/wait_for_idle） |
+| `zenagent/agent/subagents_runtime.py` | 子代理运行时 | `TaskManager`、`run_child`、`construct_child`、`child_allowed`（`task` 工具只是它的表面） |
 | `zenagent/agent/validate.py` | 参数 schema 校验 | `validate_arguments` |
 | `zenagent/agent/session.py` | JSONL 会话持久化 | `Session`、`latest_session`、`truncate_last_turn` |
-| `zenagent/tools/` | 内置工具 | `ALL_TOOLS` = `read_file`/`write_file`/`edit_file`/`list_dir`/`bash`/`wait`/`ask`/`glob`/`grep`/`web_search`/`fetch`；`Runtime` 另外注入 `todo`/`task`/`memory`/`checkpoint`/`lsp`/`github`/skills/MCP |
-| `zenagent/app/` | UI 无关的应用层 | `Runtime`、`ChatController`、`CommandRegistry`、`SessionManager`、`PermissionGate`/`PermissionBroker`、`RunStatus`、`records` |
+| `zenagent/tools/` | 内置工具 | `base_tools(ask_tool)` = `read_file`/`write_file`/`edit_file`/`list_dir`/`bash`/`wait`/`ask`/`glob`/`grep`/`web_search`/`fetch`（ask 每 Runtime 一份，handler 挂在 `runtime.ask_handler`）；`Runtime` 另外注入 `todo`/`task`/`memory`/`checkpoint`/`lsp`/`github`/skills/MCP |
+| `zenagent/app/` | UI 无关的应用层 | `Runtime`、`ChatController`、`CommandRegistry`、`SessionManager`、`PermissionGate`/`PermissionBroker`、`RunStatus`、`records`、`bootstrap.prepare`（四前端唯一装配序列） |
 | `zenagent/cli/` | 所有交互面 | `main`、`repl`、`rpc`、`tui`（`cli/permissions.py` 只是兼容 shim） |
 | `zenagent/mcp/` | MCP 客户端与生命周期 | `McpClient`、`StdioTransport`、`HttpTransport`、`McpManager` |
 | `zenagent/skills.py` / `templates.py` | 文件即扩展 | `discover_skills`、`build_skill_tool`、`expand` |
@@ -115,4 +162,7 @@ agent_end 事件
 - 分层与依赖：`pyproject.toml` 无第三方依赖（除 httpx），可 `grep -rn "^from zenagent" zenagent | sort` 查看依赖方向
 - 一次 run：`zenagent/agent/loop.py::agent_loop`
 - 事件定义：`zenagent/events.py`
+- 前端装配：`zenagent/app/bootstrap.py::prepare`（四个前端唯一入口）
+- 线协议：`zenagent/cli/rpc.py`（权威）↔ `desktop/src/rpc/types.ts`（`REQUEST_KINDS`），契约测试 `tests/test_rpc_contract.py` 双向钉住
+- 行数预算：`scripts/check_architecture.py` + `docs/architecture/allowlist.json`（只许降）
 - 对应测试：`tests/test_loop.py`、`tests/test_agent_class.py`、`tests/test_events.py`

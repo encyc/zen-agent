@@ -3,6 +3,61 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+**The architecture cleanup: same behavior, fewer copies, harder guards.**
+Full audit in `docs/reviews/2026-11-07-architecture-review.md`, task-by-task
+record in `docs/superpowers/plans/2026-11-07-architecture-cleanup.md`.
+
+### Changed
+
+- **One bootstrap for every frontend.** REPL, headless, the Textual TUI and
+  the JSONL RPC server each carried their own broker → RuntimeOptions →
+  `Runtime.bootstrap` ritual, and the copies had already drifted (only RPC
+  forwarded `read_only`). `zenagent.app.bootstrap.prepare` is the single
+  sequence now, pinned by tests that run all four modes.
+- **Tool protocol lives in `zenagent/agent/protocol.py`** (`AgentTool`,
+  `ToolContext`, `ToolResultAgent`) — tools, MCP, skills and extensions no
+  longer import the whole loop for two dataclasses, and the loop's one
+  deferred import is gone. `StreamOptions` moved to
+  `zenagent/providers/stream_options.py` for the same reason.
+- **The subagent runtime moved out of the task tool**: `tools/task.py` 854 →
+  320 lines; process supervision, the watchdog and child construction now
+  live in `zenagent/agent/subagents_runtime.py`.
+- **Ask/subagent-observer handlers are per-Runtime slots**
+  (`runtime.ask_handler`, `runtime.subagent_observer`) instead of module
+  globals — two agents in one process can no longer race for the
+  interactive surface.
+- **Usage aggregation, slash-command completion and the root package facade**
+  each collapsed to one source (`views.usage_total`, the live registry,
+  `from zenagent import Agent, agent_loop`).
+
+### Added
+
+- **RPC protocol version handshake**: clients send `hello`, the server
+  answers `protocol_version`; a mismatch reaches the desktop diagnostics
+  card instead of silently mis-rendering. `tests/test_rpc_contract.py` pins
+  request kinds and the hello frame across Python and TypeScript.
+- **LOC budget gate** (`scripts/check_architecture.py` +
+  `docs/architecture/allowlist.json`): new source files cap at 800 lines,
+  legacy giants are allowlisted and may only shrink; wired into CI and the
+  release check.
+- **Explicit `kind` discriminator on tool views** — the desktop no longer
+  guesses view types from field shapes.
+
+### Fixed
+
+- **Desktop: strict CSP** replaces `"csp": null`; the login-shell
+  environment harvest now times out after 3s instead of hanging every
+  connect on a broken shell profile; streaming chat updates locate the
+  assistant node from the tail instead of scanning the whole transcript
+  per delta.
+- **Providers share one `httpx.AsyncClient`** (`get_shared_async_client`)
+  — a fresh TLS handshake per streaming call was the review's measured
+  throughput friction; large `read_file`s run off the event loop.
+- **The crash-log excepthook is installed at CLI startup** — `crash.py`
+  existed, was tested, and was never wired to anything.
+
 ## v0.8.4 — 2026-11-06
 
 **The macOS bundle opens, and the update manifest can actually be built.**
