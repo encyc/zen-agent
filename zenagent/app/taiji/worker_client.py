@@ -89,8 +89,12 @@ class SubprocessTransport:
 class WorkerRpcClient:
     """Speak the zen rpc protocol to one worker: hello, resume, prompt, stop."""
 
-    def __init__(self, *, transport: WorkerTransport | None = None) -> None:
+    def __init__(
+        self, *, transport: WorkerTransport | None = None, model: str | None = None
+    ) -> None:
         self.transport: WorkerTransport | None = transport
+        #: Worker model routing; ``None`` inherits the provider default.
+        self._model = model
         self.last_result: dict | None = None
         self._on_event: EVENT_CALLBACK = lambda event: None
         self._next_id = 0
@@ -130,7 +134,9 @@ class WorkerRpcClient:
 
     async def start(self, cwd: Path, *, on_event: EVENT_CALLBACK) -> None:
         if self.transport is None:
-            self.transport = SubprocessTransport(worker_command(cwd), cwd)
+            self.transport = SubprocessTransport(
+                worker_command(cwd, model=self._model), cwd
+            )
         self._on_event = on_event
         await self.transport.start(self._on_line)
         hello = await self._request({"type": "hello"}, 30.0)
@@ -161,5 +167,11 @@ class WorkerRpcClient:
             )
         except (OSError, RuntimeError, AssertionError):
             pass  # the child may already be gone; terminate below regardless
+        # A pending prompt dies with the subprocess: fail its future so the
+        # caller surfaces a turn end instead of waiting out the timeout.
+        for future in self._pending.values():
+            if not future.done():
+                future.set_exception(RuntimeError("worker stopped before answering"))
+        self._pending.clear()
         await self.transport.stop()
         self.transport = None

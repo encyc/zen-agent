@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+
+import pytest
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
@@ -197,12 +199,9 @@ async def test_stop_fails_a_pending_prompt_instead_of_hanging() -> None:
     await asyncio.sleep(0.05)
     await client.stop()
 
-    try:
+    # the prompt task must actually COMPLETE (failed), not keep hanging
+    with pytest.raises(RuntimeError, match="stopped before answering"):
         await asyncio.wait_for(prompt_task, 2.0)
-        raised = False
-    except (RuntimeError, TimeoutError):
-        raised = True
-    assert raised is True
 
 
 def test_worker_command_carries_the_model_flag() -> None:
@@ -210,3 +209,27 @@ def test_worker_command_carries_the_model_flag() -> None:
 
     command = worker_command(Path("/wt"), model="glm-5.3")
     assert command[-2:] == ["--model", "glm-5.3"]
+
+
+async def test_client_routes_the_model_into_the_spawn_command(monkeypatch) -> None:
+    captured: dict = {}
+
+    class CaptureTransport:
+        def __init__(self, command: list[str], cwd: Path) -> None:
+            captured["command"] = command
+
+        async def start(self, on_line) -> None:
+            raise RuntimeError("captured")  # the command is all we need
+
+        async def send_line(self, line: str) -> None:
+            pass
+
+        async def stop(self) -> None:
+            pass
+
+    monkeypatch.setattr("zenagent.app.taiji.worker_client.SubprocessTransport", CaptureTransport)
+    client = WorkerRpcClient(model="glm-5.3")
+    with pytest.raises(RuntimeError, match="captured"):
+        await client.start(Path("/wt"), on_event=lambda event: None)
+
+    assert captured["command"][-2:] == ["--model", "glm-5.3"]

@@ -889,3 +889,165 @@ async def test_turn_ends_promptly_when_the_worker_asks(tmp_path: Path) -> None:
     assert result.attention is not None
     assert "哪个方案" in (result.attention or {}).get("question", "")
     assert elapsed < 10
+
+
+async def test_rpc_runner_routes_the_worker_model(monkeypatch) -> None:
+    import zenagent.app.taiji.worker_client as worker_client_module
+    from zenagent.app.taiji.supervisor import RpcRunner
+    from zenagent.app.taiji.worker_client import WorkerRpcClient
+
+    captured: dict = {}
+
+    class CaptureTransport:
+        def __init__(self, command: list[str], cwd: Path) -> None:
+            captured["command"] = command
+
+        async def start(self, on_line) -> None:
+            raise RuntimeError("stop here")
+
+        async def send_line(self, line: str) -> None:
+            pass
+
+        async def stop(self) -> None:
+            pass
+
+    monkeypatch.setattr(worker_client_module, "SubprocessTransport", CaptureTransport)
+    runner = RpcRunner(worker_model="glm-5.3")
+    try:
+        await runner.run_turn("/tmp/wt", None, "go")
+    except RuntimeError:
+        pass
+
+    assert captured["command"][-2:] == ["--model", "glm-5.3"]
+    assert WorkerRpcClient is not None
+
+
+async def test_message_to_a_queued_worker_cancels_the_queued_turn(repo: Path, tmp_path: Path, monkeypatch) -> None:
+    """A human redirect supersedes the queued spawn turn: exactly one turn
+    for that worker ever runs."""
+    from zenagent.app.taiji.supervisor import TaijiSupervisor
+
+    monkeypatch.setattr("zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home")
+    runner = GatedRunner()
+    supervisor = TaijiSupervisor(
+        repo_root=repo,
+        sessions_dir=tmp_path / "sessions",
+        registry_path=tmp_path / "sessions" / "taiji.json",
+        runner=runner,
+        chat=None,
+        mode_of=lambda: "ask",
+        max_workers=1,
+    )
+
+    await supervisor.spawn("holder", name="holder")
+    await asyncio.sleep(0.05)
+    await supervisor.spawn("original work", name="victim")
+    await asyncio.sleep(0.05)
+
+    redirected = await supervisor.message("victim", "human redirect")
+    runner.gate("holder").set()
+    runner.gate("victim").set()
+    await supervisor.wait_idle()
+
+    assert redirected.status == "ok"
+    assert runner.started.count("victim") == 1
+    assert any(turn[2] == "human redirect" for turn in runner.turns)
+
+
+async def test_explicit_merge_beats_the_auto_threshold(repo: Path, tmp_path: Path, monkeypatch) -> None:
+    """The 200-line gate guards the zen AUTO merge only — the Router's
+    explicit merge still works (that is the escape hatch)."""
+    from zenagent.app.taiji.supervisor import TaijiSupervisor
+
+    monkeypatch.setattr("zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home")
+
+    class BigRunner(StubRunner):
+        async def run_turn(self, worktree, session_path, prompt):
+            (Path(worktree) / "big.txt").write_text("x" * 300 + "\n" * 300, encoding="utf-8")
+            _git(Path(worktree), "add", ".")
+            _git(Path(worktree), "commit", "-qm", "big work")
+            return TurnResult(status="ok", summary="wrote a lot", session_path="")
+
+    supervisor = make_chat_supervisor(repo, tmp_path, BigRunner(), mode="zen", chat=FakeChat())
+    await supervisor.spawn("big change", name="big")
+    await supervisor.wait_idle()
+    assert supervisor.list_workers()[0].status == "ok"  # auto refused
+
+    merged = await supervisor.merge("big")
+    assert merged is True
+
+
+class AskedThenDoneTransport:
+    """Emits an ask_request, then completes the prompt normally."""
+
+    def __init__(self, out: asyncio.Queue) -> None:
+        self.out = out
+        self._on_line = None
+
+    async def start(self, on_line) -> None:
+        self._on_line = on_line
+        asyncio.create_task(self._pump())
+
+    async def _pump(self) -> None:
+        while True:
+            line = await self.out.get()
+            if line is None:
+                return
+            await self._on_line(line)
+
+    async def send_line(self, line: str) -> None:
+        payload = json.loads(line)
+        if payload.get("type") == "hello":
+            self.out.put_nowait(json.dumps({"type": "result", "id": payload["id"], "ok": True, "protocol_version": 2}))
+        elif payload.get("type") == "prompt":
+            self.out.put_nowait(json.dumps({
+                "type": "event",
+                "event": {"type": "ask_request", "request_id": "q0", "questions": [{"question": "临时一问"}]},
+            }))
+            self.out.put_nowait(json.dumps({
+                "type": "result", "id": payload["id"], "ok": True, "text": "answered myself",
+                "termination": "stop", "session": "/s.jsonl",
+            }))
+
+    async def stop(self) -> None:
+        self.out.put_nowait(None)
+
+
+async def test_ask_resolved_inside_the_turn_leaves_no_attention() -> None:
+    from zenagent.app.taiji.supervisor import RpcRunner
+    from zenagent.app.taiji.worker_client import WorkerRpcClient
+
+    out: asyncio.Queue = asyncio.Queue()
+    runner = RpcRunner(client_factory=lambda: WorkerRpcClient(transport=AskedThenDoneTransport(out)))
+
+    result = await runner.run_turn("/tmp/wt", None, "go")
+
+    assert result.status == "ok"
+    assert result.attention is None
+
+
+class ResumeFailTransport(AskedThenDoneTransport):
+    async def send_line(self, line: str) -> None:
+        payload = json.loads(line)
+        if payload.get("type") == "session":
+            self.out.put_nowait(json.dumps({"type": "error", "id": payload["id"], "message": "session file missing"}))
+        elif payload.get("type") == "hello":
+            self.out.put_nowait(json.dumps({"type": "result", "id": payload["id"], "ok": True, "protocol_version": 2}))
+        elif payload.get("type") == "prompt":
+            self.out.put_nowait(json.dumps({
+                "type": "result", "id": payload["id"], "ok": True, "text": "should not run",
+                "termination": "stop", "session": "/s.jsonl",
+            }))
+
+
+async def test_a_failed_resume_is_a_failed_turn() -> None:
+    from zenagent.app.taiji.supervisor import RpcRunner
+    from zenagent.app.taiji.worker_client import WorkerRpcClient
+
+    out: asyncio.Queue = asyncio.Queue()
+    runner = RpcRunner(client_factory=lambda: WorkerRpcClient(transport=ResumeFailTransport(out)))
+
+    result = await runner.run_turn("/tmp/wt", "/missing.jsonl", "go")
+
+    assert result.status == "error"
+    assert "resume" in result.summary

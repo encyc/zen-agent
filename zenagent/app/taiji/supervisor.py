@@ -108,7 +108,11 @@ class RpcRunner:
     ) -> TurnResult:
         from zenagent.app.taiji.worker_client import WorkerRpcClient
 
-        client = self._client_factory() if self._client_factory else WorkerRpcClient()
+        client = (
+            self._client_factory()
+            if self._client_factory
+            else WorkerRpcClient(model=self._worker_model)
+        )
         events: list[dict] = []
         asked = asyncio.Event()
 
@@ -125,40 +129,42 @@ class RpcRunner:
             if session_path:
                 resume_result = await client.resume(session_path)
                 if resume_result.get("ok") is not True:
-                    summary = f"resume failed: {resume_result.get('message', '')}"
-            if summary:
-                answer = None
+                    return TurnResult(
+                        status="error",
+                        summary=f"resume failed: {resume_result.get('message', '')}",
+                        session_path=str(session_path),
+                    )
+            prompt_task = asyncio.create_task(
+                client.prompt(prompt, timeout_s=self._timeout_s)
+            )
+            asked_wait = asyncio.create_task(asked.wait())
+            done, _pending = await asyncio.wait(
+                [prompt_task, asked_wait], return_when=asyncio.FIRST_COMPLETED
+            )
+            if prompt_task in done:
+                answer = prompt_task.result()
+                asked_wait.cancel()
             else:
-                prompt_task = asyncio.create_task(
-                    client.prompt(prompt, timeout_s=self._timeout_s)
-                )
-                asked_wait = asyncio.create_task(asked.wait())
-                done, _pending = await asyncio.wait(
-                    [prompt_task, asked_wait], return_when=asyncio.FIRST_COMPLETED
-                )
-                if prompt_task in done:
-                    answer = prompt_task.result()
-                else:
-                    # the worker asked a question: the run blocks on it, so the
-                    # turn ends here and the question becomes the attention
-                    await asyncio.sleep(self._attention_grace_s)
-                    await client.stop()
-                    asked_wait.cancel()
+                # the worker asked a question: the run blocks on it, so the
+                # turn ends here and the question becomes the attention
+                await asyncio.sleep(self._attention_grace_s)
+                await client.stop()
+                asked_wait.cancel()
         finally:
             await client.stop()
-        for event in events:
-            if event.get("type") == "ask_request":
-                questions = event.get("questions") or []
-                attention = {
-                    "request_id": str(event.get("request_id", "")),
-                    "question": "; ".join(
-                        str(question.get("question", ""))
-                        for question in questions
-                        if isinstance(question, dict)
-                    ).strip("; "),
-                }
-                if answer is not None:
-                    break  # the ask resolved inside the turn; not a handoff
+        if answer is None:
+            # the turn ended on the question; that question is the attention
+            for event in events:
+                if event.get("type") == "ask_request":
+                    questions = event.get("questions") or []
+                    attention = {
+                        "request_id": str(event.get("request_id", "")),
+                        "question": "; ".join(
+                            str(question.get("question", ""))
+                            for question in questions
+                            if isinstance(question, dict)
+                        ).strip("; "),
+                    }
         if answer is not None and answer.get("ok") is False:
             # A graceful ok:false frame (provider error, max turns, abort) is
             # a failed turn — never a mergeable success.
@@ -309,6 +315,13 @@ class TaijiSupervisor:
         record = self._record(name)
         if record.status in ("running", "killed"):
             raise RuntimeError(f"worker {name} is {record.status}")
+        if record.status == "queued":
+            # A human redirect supersedes the queued spawn turn: cancel it so
+            # exactly one turn for this worker ever runs.
+            queued = self._turns.get(name)
+            if queued is not None and not queued.done():
+                queued.cancel()
+                await asyncio.gather(queued, return_exceptions=True)
         record.status = "running"
         record.updated_at = time.time()
         self._save()
@@ -432,7 +445,7 @@ class TaijiSupervisor:
             status == "ok"
             and not record.attention
             and self.mode_of() == "zen"
-            and await self.merge(record.name)
+            and await self.merge(record.name, auto=True)
         ):
             status = "merged"
         if self.chat is None:
@@ -470,22 +483,20 @@ class TaijiSupervisor:
                         total += int(raw)
         return total
 
-    async def merge(self, name: str) -> bool:
+    async def merge(self, name: str, *, auto: bool = False) -> bool:
         """Merge a finished task into its base branch, mode-agnostic.
 
         Explicit merges (the Router tool) work in every mode — the mode gate
         only decides whether zen merges *without asking*. Preconditions keep
         the user's working tree sacred: the base branch must be checked out
-        in the main worktree and clean, and a zen auto-merge stays small
-        (large work deserves eyes — DSH's delivery policy).
+        in the main worktree and clean. The diff-size threshold guards the
+        zen *auto* merge only — an explicit human-directed merge is the
+        escape hatch for large work.
         """
         record = self.registry.records.get(name)
         if record is None or record.status != "ok":
             return False
-        if (
-            self.mode_of() == "zen"
-            and self._diff_lines(record) > AUTO_MERGE_MAX_DIFF_LINES
-        ):
+        if auto and self._diff_lines(record) > AUTO_MERGE_MAX_DIFF_LINES:
             return False
         current = _git(self.repo_root, "branch", "--show-current")
         if current is None or current.stdout.strip() != record.base:

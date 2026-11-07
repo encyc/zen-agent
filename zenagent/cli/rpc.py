@@ -1889,9 +1889,10 @@ async def _run(args) -> int:
     runtime.ask_handler = server.ask
     runtime.taiji_chat = chat
     taiji_project_dir = project_dir(Path.cwd())
-    if should_init_taiji(Path.cwd()):
+    taiji_hosts = should_init_taiji(Path.cwd())
+    if taiji_hosts:
         ensure_taiji_session(project_sessions_dir(Path.cwd()))
-    taiji_owned = own_taiji_lock(taiji_project_dir)
+    taiji_owned = taiji_hosts and own_taiji_lock(taiji_project_dir)
     if not taiji_owned:
         runtime._note("taiji: 另一个宿主已持有本项目的太极锁")
     try:
