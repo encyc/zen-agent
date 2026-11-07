@@ -32,6 +32,7 @@
 | 工具 | 文件 |
 |---|---|
 | `read_file` / `write_file` / `edit_file` / `list_dir` | `zenagent/tools/fs.py` |
+| 先读后改门禁（read/write 前的文件新鲜度校验） | `zenagent/tools/read_state.py` |
 | `bash`（危险命令拦截） | `zenagent/tools/bash.py` |
 | `glob` / `grep` | `zenagent/tools/search.py` |
 | 工具清单 | `zenagent/tools/__init__.py`（`ALL_TOOLS`） |

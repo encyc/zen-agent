@@ -24,7 +24,7 @@ __all__ = [
 
 #: Bumped whenever block content changes; recorded in eval reports and the
 #: prompt CHANGELOG.
-PROMPT_VERSION = "2026-11-05.1"
+PROMPT_VERSION = "2026-11-07.1"
 
 CacheClass = Literal["stable", "session", "volatile"]
 
@@ -219,5 +219,8 @@ for _tool_name in TOOL_BLOCK_NAMES:
 
 #: Hard budgets from the design doc (§6.3); enforced by the budget test.
 TOTAL_BUDGET_CHARS = 9000
-TOOL_TOTAL_BUDGET_CHARS = 4800
+# 4800 -> 5200: the read-before-write gate adds its contract to read_file,
+# write_file and edit_file (prompt CHANGELOG 2026-11-07.1); single-tool caps
+# are untouched.
+TOOL_TOTAL_BUDGET_CHARS = 5200
 TOOL_BUDGET_CHARS = 900

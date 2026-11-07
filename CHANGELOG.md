@@ -5,6 +5,19 @@ matches the release tag; older history is in the repository tags and commits.
 
 ## Unreleased
 
+### Added
+
+- **`edit_file` and `write_file` refuse to touch a file the model has not read
+  in this session.** A successful `read_file` fingerprints the file (mtime +
+  size); a write to an existing file whose fingerprint is missing or stale —
+  modified since the read by the user, a formatter or a shell command — is
+  refused with an error that says to read again, so `old_string` anchors come
+  from content the model actually saw and concurrent external modifications
+  fail loudly. A successful write refreshes the fingerprint (follow-up edits
+  need no re-read), and creating a new file never needs a read. The gate and
+  its tests live in `zenagent/tools/read_state.py`; the tool descriptions
+  state the contract (prompt version 2026-11-07.1, tool budget 4800 → 5200).
+
 ### Fixed
 
 - **Quitting the desktop shell no longer leaves an empty session behind.** The

@@ -22,6 +22,7 @@ from pathlib import Path
 from zenagent.agent.loop import AgentTool, ToolResultAgent
 from zenagent.agent.result_budget import LINE_TRUNCATION_MARKER
 from zenagent.prompts import tool_description
+from zenagent.tools import read_state
 from zenagent.tools._result import text_result
 
 __all__ = [
@@ -188,6 +189,10 @@ async def _read_file(
     except UnicodeDecodeError as exc:
         return text_result(f"refusing to read {path}: not valid UTF-8 ({exc})", is_error=True)
 
+    # The model now holds this content: record it as fresh so a follow-up
+    # edit_file/write_file passes the read gate without a second read.
+    read_state.note_read(path)
+
     lines = text.splitlines()
     total = len(lines)
     try:
@@ -301,6 +306,13 @@ async def _write_file(
 ) -> ToolResultAgent:
     path = _arg_path(args["path"])
     content = args["content"]
+    # Overwriting an existing file requires having seen it: refuse when the
+    # model never read it this session, or it changed since (see read_state).
+    reason = read_state.stale_reason(path)
+    if reason is not None:
+        return text_result(
+            f"refusing to overwrite {path}: {reason}.", is_error=True, path=str(path)
+        )
     previous, raw = _read_existing(path)
     # A model that read one page and writes it back would silently truncate the
     # file. Refuse when the payload is still a truncated read projection and is
@@ -332,6 +344,7 @@ async def _write_file(
         path.write_bytes(payload.encode("utf-8"))
     except OSError as exc:
         return text_result(f"cannot write {path}: {exc}", is_error=True)
+    read_state.note_write(path)
     diff = unified_diff(str(path), previous, payload)
     notice = ""
     if payload != content:
@@ -356,6 +369,14 @@ async def _edit_file(
         return text_result("replace_all must be a boolean", is_error=True)
     if not old:
         return text_result("old_string must not be empty", is_error=True)
+
+    # Editing requires having seen the file: refuse when the model never read
+    # it this session, or it changed on disk since (see read_state).
+    reason = read_state.stale_reason(path)
+    if reason is not None:
+        return text_result(
+            f"refusing to edit {path}: {reason}.", is_error=True, path=str(path)
+        )
 
     try:
         raw = path.read_bytes()
@@ -409,6 +430,7 @@ async def _edit_file(
         path.write_bytes(updated.encode("utf-8"))
     except OSError as exc:
         return text_result(f"cannot write {path}: {exc}", is_error=True)
+    read_state.note_write(path)
     diff = unified_diff(str(path), text, updated)
     count = matches if replace_all else 1
     noun = "occurrence" if count == 1 else "occurrences"

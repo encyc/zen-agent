@@ -6,6 +6,7 @@ through the loop; the loop integration is covered by ``test_loop.py``.
 
 import pytest
 
+from zenagent.tools import read_state
 from zenagent.tools.fs import (
     DEFAULT_READ_LIMIT,
     EDIT_FILE,
@@ -25,6 +26,14 @@ async def call(tool, **args):
 def in_tmp(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     return tmp_path
+
+
+@pytest.fixture(autouse=True)
+def fresh_read_state():
+    """The read gate is process state; each test starts and ends clean."""
+    read_state.reset()
+    yield
+    read_state.reset()
 
 
 # ---------------------------------------------------------------------------
@@ -51,6 +60,7 @@ async def test_edit_and_list_expand_home(tmp_path, monkeypatch):
     (home / "sub").mkdir(parents=True)
     (home / "sub" / "a.txt").write_text("one\ntwo\n")
     monkeypatch.setenv("HOME", str(home))
+    await call(READ_FILE, path="~/sub/a.txt")
 
     edited = await call(
         EDIT_FILE, path="~/sub/a.txt", old_string="two", new_string="three"
@@ -205,6 +215,7 @@ async def test_write_allows_a_shorter_normal_overwrite():
     from pathlib import Path
 
     Path("data.txt").write_text("long content " * 100)
+    await call(READ_FILE, path="data.txt")
     result = await call(WRITE_FILE, path="data.txt", content="short")
     assert not result.is_error
     assert Path("data.txt").read_text() == "short"
@@ -224,6 +235,7 @@ async def test_edit_replaces_a_unique_match():
     from pathlib import Path
 
     Path("code.py").write_text("def f():\n    return 1\n")
+    await call(READ_FILE, path="code.py")
     result = await call(
         EDIT_FILE, path="code.py", old_string="return 1", new_string="return 2"
     )
@@ -236,6 +248,7 @@ async def test_edit_with_two_matches_refuses_and_leaves_file_untouched():
 
     original = "x = 1\ny = 1\n"
     Path("two.py").write_text(original)
+    await call(READ_FILE, path="two.py")
     result = await call(EDIT_FILE, path="two.py", old_string="= 1", new_string="= 2")
     assert result.is_error
     assert "2 times" in result.content[0].text
@@ -247,6 +260,7 @@ async def test_edit_with_zero_matches_refuses():
     from pathlib import Path
 
     Path("one.py").write_text("a\n")
+    await call(READ_FILE, path="one.py")
     result = await call(EDIT_FILE, path="one.py", old_string="zzz", new_string="b")
     assert result.is_error
     assert "not found" in result.content[0].text
@@ -290,6 +304,106 @@ async def test_list_dir_missing_is_an_error_result():
 
 
 # ---------------------------------------------------------------------------
+# read gate: edit_file / write_file refuse files the model has not seen
+# ---------------------------------------------------------------------------
+
+
+async def test_edit_refuses_a_file_never_read():
+    from pathlib import Path
+
+    Path("code.py").write_text("x = 1\n")
+    result = await call(
+        EDIT_FILE, path="code.py", old_string="x = 1", new_string="x = 2"
+    )
+    assert result.is_error
+    assert "has not been read yet" in result.content[0].text
+    assert "read_file" in result.content[0].text
+    assert Path("code.py").read_text() == "x = 1\n"  # untouched
+
+
+async def test_edit_refuses_after_an_external_modification():
+    from pathlib import Path
+
+    Path("code.py").write_text("x = 1\n")
+    await call(READ_FILE, path="code.py")
+    Path("code.py").write_text("x = 22\n")  # the user or a formatter, mid-session
+    result = await call(
+        EDIT_FILE, path="code.py", old_string="x = 22", new_string="x = 3"
+    )
+    assert result.is_error
+    assert "modified since it was last read" in result.content[0].text
+    assert Path("code.py").read_text() == "x = 22\n"  # untouched
+
+
+async def test_read_refreshes_a_stale_fingerprint():
+    from pathlib import Path
+
+    Path("code.py").write_text("x = 1\n")
+    await call(READ_FILE, path="code.py")
+    Path("code.py").write_text("x = 22\n")
+    await call(READ_FILE, path="code.py")
+    result = await call(
+        EDIT_FILE, path="code.py", old_string="x = 22", new_string="x = 3"
+    )
+    assert not result.is_error
+
+
+async def test_edit_after_edit_needs_no_second_read():
+    from pathlib import Path
+
+    Path("code.py").write_text("a\nb\n")
+    await call(READ_FILE, path="code.py")
+    first = await call(EDIT_FILE, path="code.py", old_string="a", new_string="A")
+    second = await call(EDIT_FILE, path="code.py", old_string="b", new_string="B")
+    assert not first.is_error and not second.is_error
+    assert Path("code.py").read_text() == "A\nB\n"
+
+
+async def test_write_refuses_overwriting_a_file_never_read():
+    from pathlib import Path
+
+    Path("data.txt").write_text("original\n")
+    result = await call(WRITE_FILE, path="data.txt", content="clobber\n")
+    assert result.is_error
+    assert "has not been read yet" in result.content[0].text
+    assert Path("data.txt").read_text() == "original\n"  # untouched
+
+
+async def test_write_refuses_after_an_external_modification():
+    from pathlib import Path
+
+    Path("data.txt").write_text("v1\n")
+    await call(READ_FILE, path="data.txt")
+    Path("data.txt").write_text("v22\n")
+    result = await call(WRITE_FILE, path="data.txt", content="v3\n")
+    assert result.is_error
+    assert "modified since it was last read" in result.content[0].text
+    assert Path("data.txt").read_text() == "v22\n"  # untouched
+
+
+async def test_write_of_a_new_file_needs_no_read():
+    from pathlib import Path
+
+    result = await call(WRITE_FILE, path="new.txt", content="hi\n")
+    assert not result.is_error
+    assert Path("new.txt").read_text() == "hi\n"
+
+
+async def test_the_read_gate_tracks_resolved_paths():
+    """The same file under a different spelling is the same fingerprint."""
+    from pathlib import Path
+
+    Path("sub").mkdir()
+    Path("sub/code.py").write_text("x = 1\n")
+    await call(READ_FILE, path="sub/./code.py")
+    result = await call(
+        EDIT_FILE, path="sub/code.py", old_string="x = 1", new_string="x = 2"
+    )
+    assert not result.is_error
+    assert Path("sub/code.py").read_text() == "x = 2\n"
+
+
+# ---------------------------------------------------------------------------
 # schemas must be truthful: the loop validates against them
 # ---------------------------------------------------------------------------
 
@@ -322,6 +436,7 @@ async def test_edit_result_carries_a_unified_diff():
     from pathlib import Path
 
     Path("d.py").write_text("a = 1\nb = 2\n")
+    await call(READ_FILE, path="d.py")
     result = await call(EDIT_FILE, path="d.py", old_string="b = 2", new_string="b = 99")
     diff = result.details["diff"]
     assert "-b = 2" in diff and "+b = 99" in diff
@@ -339,6 +454,7 @@ async def test_write_result_diff_for_overwrite_shows_removals():
     from pathlib import Path
 
     Path("f.txt").write_text("old\n")
+    await call(READ_FILE, path="f.txt")
     result = await call(WRITE_FILE, path="f.txt", content="brand new\n")
     diff = result.details["diff"]
     assert "-old" in diff and "+brand new" in diff
@@ -431,6 +547,7 @@ async def test_write_keeps_crlf_when_given_lf_content():
     from pathlib import Path
 
     Path("win.txt").write_bytes(b"one\r\ntwo\r\n")
+    await call(READ_FILE, path="win.txt")
     result = await call(WRITE_FILE, path="win.txt", content="one\ntwo\nthree\n")
     assert not result.is_error
     assert Path("win.txt").read_bytes() == b"one\r\ntwo\r\nthree\r\n"
@@ -440,6 +557,7 @@ async def test_write_keeps_bom_and_crlf_of_the_existing_file():
     from pathlib import Path
 
     Path("bom.txt").write_bytes(b"\xef\xbb\xbfone\r\ntwo\r\n")
+    await call(READ_FILE, path="bom.txt")
     result = await call(WRITE_FILE, path="bom.txt", content="one\ntwo\nthree\n")
     assert not result.is_error
     assert Path("bom.txt").read_bytes() == b"\xef\xbb\xbfone\r\ntwo\r\nthree\r\n"
@@ -449,6 +567,7 @@ async def test_write_does_not_double_convert_content_already_using_crlf():
     from pathlib import Path
 
     Path("win.txt").write_bytes(b"a\r\nb\r\n")
+    await call(READ_FILE, path="win.txt")
     result = await call(WRITE_FILE, path="win.txt", content="a\r\nb\r\nc\r\n")
     assert not result.is_error
     assert Path("win.txt").read_bytes() == b"a\r\nb\r\nc\r\n"
@@ -466,6 +585,7 @@ async def test_edit_keeps_crlf_and_accepts_an_lf_old_string():
     from pathlib import Path
 
     Path("win.py").write_bytes(b"alpha\r\nbeta\r\ngamma\r\n")
+    await call(READ_FILE, path="win.py")
     result = await call(
         EDIT_FILE,
         path="win.py",
@@ -480,6 +600,7 @@ async def test_edit_keeps_bom_and_crlf_after_the_edit():
     from pathlib import Path
 
     Path("bom.py").write_bytes(b"\xef\xbb\xbfhello\r\nworld\r\n")
+    await call(READ_FILE, path="bom.py")
     result = await call(
         EDIT_FILE, path="bom.py", old_string="world", new_string="there"
     )
@@ -496,6 +617,7 @@ async def test_edit_replace_all_replaces_every_occurrence():
     from pathlib import Path
 
     Path("vars.py").write_text("a = 1\nb = 1\nc = 1\n")
+    await call(READ_FILE, path="vars.py")
     result = await call(
         EDIT_FILE,
         path="vars.py",
@@ -512,6 +634,7 @@ async def test_edit_replace_all_with_zero_matches_is_an_error():
     from pathlib import Path
 
     Path("one.py").write_text("a\n")
+    await call(READ_FILE, path="one.py")
     result = await call(
         EDIT_FILE,
         path="one.py",
@@ -529,6 +652,7 @@ async def test_edit_replace_all_false_still_requires_a_unique_match():
 
     original = "x = 1\ny = 1\n"
     Path("two.py").write_text(original)
+    await call(READ_FILE, path="two.py")
     result = await call(
         EDIT_FILE,
         path="two.py",
@@ -552,6 +676,7 @@ async def test_edit_keeps_a_bom_even_when_old_string_mentions_it():
     from pathlib import Path
 
     Path("bom.py").write_bytes("\ufeffimport os\n".encode())
+    await call(READ_FILE, path="bom.py")
     result = await call(EDIT_FILE, path="bom.py", old_string="import os", new_string="import sys")
     assert not result.is_error
     assert Path("bom.py").read_bytes().startswith(b"\xef\xbb\xbf")
@@ -562,6 +687,7 @@ async def test_writing_empty_content_to_a_bom_only_file_truncates_to_zero():
     from pathlib import Path
 
     Path("bom.txt").write_bytes(b"\xef\xbb\xbf")
+    await call(READ_FILE, path="bom.txt")
     result = await call(WRITE_FILE, path="bom.txt", content="")
     assert not result.is_error
     assert Path("bom.txt").read_bytes() == b""
@@ -589,6 +715,7 @@ async def test_write_file_preserves_an_executable_bit(tmp_path):
     script = tmp_path / "run.sh"
     script.write_text("#!/bin/sh\necho old\n")
     script.chmod(0o755)
+    await call(READ_FILE, path="run.sh")
 
     result = await call(WRITE_FILE, path="run.sh", content="#!/bin/sh\necho new\n")
     assert not result.is_error

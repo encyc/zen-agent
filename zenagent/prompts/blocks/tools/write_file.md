@@ -1,1 +1,1 @@
-Write UTF-8 text to a file, creating parent directories as needed. Overwrites the whole file. An existing file's CRLF line endings and UTF-8 BOM are kept; a new file is written with LF line endings.
+Write UTF-8 text to a file, creating parent directories as needed. Overwrites the whole file. Overwriting an existing file requires having read it with read_file this session; creating a new file needs no read. An existing file's CRLF line endings and UTF-8 BOM are kept; a new file is written with LF line endings.

@@ -4,6 +4,19 @@ Every content change bumps `PROMPT_VERSION` (`zenagent/prompts/spec.py`) and get
 one entry here: what changed, why, and the experiment/report that justified it.
 P0 extracted the v0.4.1 text verbatim — no behavior change.
 
+## 2026-11-07.1 — read-before-write gate on the file tools
+
+- `tool.read_file`, `tool.write_file` and `tool.edit_file` state the new
+  harness contract: a successful read marks the file fresh, and edit/write of
+  an existing file is refused when the file was never read this session or
+  changed on disk since (the enforcement itself is
+  `zenagent/tools/read_state.py`; only the model-facing wording lives here).
+  Purpose: old_string anchors must come from content the model actually saw,
+  and concurrent external modifications (user, formatter, shell) must fail
+  loudly instead of silently applying against stale context. The budget gate
+  moves with it: `TOOL_TOTAL_BUDGET_CHARS` 4800 → 5200 (single-tool caps and
+  every other block untouched).
+
 ## 2026-11-05.1 — review dispatch contract: no test runs, chunk large diffs
 
 - `tool.task` and `system.tool_policy` carry the review-dispatch rules that
