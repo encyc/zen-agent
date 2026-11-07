@@ -9,6 +9,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+from zenagent import project as project_module
+from zenagent.agent.session import Session, read_session_titles
 from zenagent.app.workspace import worktree_overview
 
 GIT_TIMEOUT_S = 5.0
@@ -141,3 +143,63 @@ def commit_graph(cwd: Path | str, *, limit: int = 200) -> dict:
         "branches": branches,
         "max_lane": max_lane,
     }
+
+
+def _list_dir_sessions(directory: Path, *, limit: int = 100) -> list[dict]:
+    """Sessions of one project directory, newest first, unreadable files skipped."""
+    if not directory.is_dir():
+        return []
+    titles = read_session_titles(directory)
+    infos = []
+    for path in sorted(directory.glob("*.jsonl")):
+        try:
+            infos.append(Session(path).read_info(titles=titles))
+        except (ValueError, OSError):
+            continue
+    infos.sort(key=lambda info: info.mtime, reverse=True)
+    return [
+        {
+            "name": info.path.stem,
+            "title": info.title,
+            "updated_at": info.mtime,
+            "messages": info.messages,
+        }
+        for info in infos[:limit]
+    ]
+
+
+def session_map(cwd: Path | str) -> dict:
+    """Zen sessions grouped by the worktree (main checkout first) they belong to."""
+    root = Path(cwd).expanduser().resolve()
+    overview = worktree_overview(root)
+    if not overview["is_repo"]:
+        return {"repo_root": str(root), "projects": []}
+
+    main = overview["main"]
+    ordered: list[tuple[str, str | None, bool]] = []
+    seen: set[str] = set()
+    for wt in overview["worktrees"]:
+        if wt.get("bare"):
+            continue
+        path = wt["path"]
+        if path in seen:
+            continue
+        seen.add(path)
+        ordered.append((path, wt.get("branch") or None, path != main))
+    if main not in seen:
+        ordered.insert(0, (main, overview.get("branch") or None, False))
+
+    projects_root = project_module.projects_root()
+    projects = []
+    for path, branch, is_linked in ordered:
+        directory = projects_root / project_module.project_key(path) / "sessions"
+        projects.append(
+            {
+                "key": project_module.project_key(path),
+                "root": path,
+                "branch": branch,
+                "worktree": is_linked,
+                "sessions": _list_dir_sessions(directory),
+            }
+        )
+    return {"repo_root": str(root), "projects": projects}
