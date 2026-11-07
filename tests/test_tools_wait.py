@@ -8,8 +8,8 @@ teardown to leave the next test a clean slate.
 import time
 
 import pytest
-
 from prompt_fixtures import golden_tools
+
 from zenagent.tools.bash import BASH
 from zenagent.tools.jobs import get_job_manager
 from zenagent.tools.wait import WAIT

@@ -43,6 +43,7 @@ export const REQUEST_KINDS = [
   'fs_read',
   'git_worktrees',
   'hello',
+  'mcp',
   'mode',
   'model',
   'models',
@@ -50,6 +51,7 @@ export const REQUEST_KINDS = [
   'secrets',
   'session',
   'shutdown',
+  'skills',
   'status',
   'steer',
   'subagent_transcript',
@@ -215,6 +217,68 @@ export interface SecretTestResult {
   message: string
 }
 
+// ---- skills --------------------------------------------------------------
+
+export interface SkillRow {
+  name: string
+  description: string
+  path: string
+  source: 'project' | 'global'
+  enabled: boolean
+}
+
+export interface SkillsResult {
+  type: 'result'
+  id: string
+  ok: true
+  skills: SkillRow[]
+  warnings: string[]
+  notes: string[]
+}
+
+export interface SkillReadResult {
+  type: 'result'
+  id: string
+  ok: true
+  name: string
+  path: string
+  body: string
+  truncated: boolean
+}
+
+// ---- mcp -----------------------------------------------------------------
+
+export interface McpServerRow {
+  name: string
+  transport: 'stdio' | 'http'
+  command: string | null
+  url: string | null
+  env_keys: string[]
+  header_keys: string[]
+  source: 'global' | 'project'
+  overrides_global: boolean
+  state: 'connected' | 'failed' | 'off'
+  tools: string[]
+  error: string | null
+}
+
+export interface McpListResult {
+  type: 'result'
+  id: string
+  ok: true
+  servers: McpServerRow[]
+  problem: string | null
+}
+
+export interface McpTestResult {
+  type: 'result'
+  id: string
+  ok: true
+  connected: boolean
+  tools: string[]
+  message: string
+}
+
 // ---- sessions -------------------------------------------------------------
 
 export interface SessionSummary {
@@ -285,6 +349,8 @@ export interface MessageView {
 }
 
 export interface ToolCallView {
+  /** Wire discriminator: MessageView carries user/assistant/skill. */
+  kind: 'tool'
   call_id: string
   /** Stable row identity inside one session (`v{n}`). */
   id?: string

@@ -94,3 +94,29 @@ async def test_hello_reports_protocol_version(runtime_factory):
         "id": "h1",
         "protocol_version": PROTOCOL_VERSION,
     }
+
+
+def test_toolcallview_carries_a_kind_discriminator():
+    """ToolCallView is the only transcript view without a ``kind``; the desktop
+    dispatches on ``'kind' in view`` — a silent break waiting for a refactor."""
+    views = (Path(__file__).resolve().parents[1] / "zenagent" / "app" / "views.py").read_text()
+    assert 'kind: Literal["tool"]' in views
+
+
+def test_view_kinds_agree_between_python_and_ts():
+    views = (Path(__file__).resolve().parents[1] / "zenagent" / "app" / "views.py").read_text()
+    ts = TS_PATH.read_text()
+    first_union = re.search(r"kind: Literal\[([^\]]+)\]", views)
+    assert first_union, "MessageView lost its kind union"
+    py_kinds = set(re.findall(r'"([a-z_]+)"', first_union.group(1)))
+    assert py_kinds == {"user", "assistant", "skill"}
+
+    message_view = re.search(r"export interface MessageView \{[^}]+\}", ts)
+    assert message_view, "types.ts lost MessageView"
+    kind_line = re.search(r"kind: ([^\n]+)", message_view.group(0))
+    assert kind_line
+    ts_kinds = set(re.findall(r"'([a-z_]+)'", kind_line.group(1)))
+    assert ts_kinds == py_kinds
+
+    tool_view = re.search(r"export interface ToolCallView \{[^}]+\}", ts)
+    assert tool_view and "kind: 'tool'" in tool_view.group(0)

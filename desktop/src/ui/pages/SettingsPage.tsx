@@ -33,17 +33,23 @@ import {
   ChatIcon,
   CheckIcon,
   ChevronDownIcon,
+  FileIcon,
+  FolderIcon,
   InfoIcon,
   PaletteIcon,
   SearchIcon,
   SparkIcon,
+  TerminalIcon,
 } from '../icons'
 import { ZenWordmark } from '../ZenWordmark'
 import { ModelSettings } from './ModelSettings'
+import { SkillSettings } from './SkillSettings'
+import { McpSettings } from './McpSettings'
+import { ProjectSettings } from './ProjectSettings'
 import css from './SettingsPage.module.css'
 
-type Tab = 'appearance' | 'models' | 'conversation' | 'about'
-type NavGroup = 'preferences' | 'system'
+type Tab = 'appearance' | 'models' | 'conversation' | 'skills' | 'mcp' | 'projects' | 'about'
+type NavGroup = 'preferences' | 'resources' | 'system'
 
 interface NavItem {
   id: Tab
@@ -92,6 +98,30 @@ const NAV_ITEMS: NavItem[] = [
     ],
   },
   {
+    id: 'skills',
+    labelKey: 'settings.skills',
+    hintKey: 'settings.skillsHint',
+    icon: <FileIcon size={14} />,
+    group: 'resources',
+    keywords: ['settings.skillsList', 'settings.skillProject', 'settings.skillGlobal'],
+  },
+  {
+    id: 'mcp',
+    labelKey: 'settings.mcp',
+    hintKey: 'settings.mcpHint',
+    icon: <TerminalIcon size={14} />,
+    group: 'resources',
+    keywords: ['settings.mcpServers', 'settings.mcpAdd', 'settings.mcpLayer'],
+  },
+  {
+    id: 'projects',
+    labelKey: 'settings.projects',
+    hintKey: 'settings.projectsHint',
+    icon: <FolderIcon size={14} />,
+    group: 'resources',
+    keywords: ['settings.projectsList', 'settings.projectAdd', 'settings.projectNewSession'],
+  },
+  {
     id: 'about',
     labelKey: 'settings.about',
     hintKey: 'settings.aboutHint',
@@ -103,6 +133,7 @@ const NAV_ITEMS: NavItem[] = [
 
 const NAV_GROUPS: { id: NavGroup; labelKey: string }[] = [
   { id: 'preferences', labelKey: 'settings.groupPreferences' },
+  { id: 'resources', labelKey: 'settings.groupResources' },
   { id: 'system', labelKey: 'settings.groupSystem' },
 ]
 
@@ -477,6 +508,12 @@ export function SettingsPage() {
           )}
 
           {tab === 'models' && <ModelSettings />}
+
+          {tab === 'skills' && <SkillSettings />}
+
+          {tab === 'mcp' && <McpSettings />}
+
+          {tab === 'projects' && <ProjectSettings />}
 
           {tab === 'conversation' && (
             <div className={css.stack}>

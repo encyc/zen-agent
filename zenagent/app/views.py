@@ -120,6 +120,9 @@ class ToolCallView:
     #: ``time.monotonic()`` when the call started (live only; history replay has
     #: no timing). The sidebar derives a subagent's live elapsed from it.
     started_at: float | None = None
+    #: Wire discriminator: transcript views dispatch on ``kind`` (MessageView
+    #: carries user/assistant/skill; the tool card is ``"tool"``).
+    kind: Literal["tool"] = "tool"
 
 
 @dataclass

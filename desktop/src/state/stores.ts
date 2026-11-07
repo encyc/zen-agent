@@ -7,10 +7,12 @@ import { projectName } from './sessionGroups.ts'
 import type {
   AskQuestion,
   CommandEntry,
+  McpServerRow,
   ModelEntry,
   PendingMessage,
   SecretProviderRow,
   SessionSummary,
+  SkillRow,
   StatusResult,
 } from '../rpc/types'
 import type { AskDraft } from './askDraft.ts'
@@ -290,6 +292,32 @@ export const useSecretsStore = create<SecretsState>((set) => ({
   searchProviders: [],
   setProviders: (modelProviders, searchProviders) =>
     set({ modelProviders, searchProviders }),
+}))
+
+// ---- skills -----------------------------------------------------------------
+
+interface SkillsState {
+  skills: SkillRow[]
+  setSkills(skills: SkillRow[]): void
+}
+
+export const useSkillsStore = create<SkillsState>((set) => ({
+  skills: [],
+  setSkills: (skills) => set({ skills }),
+}))
+
+// ---- mcp --------------------------------------------------------------------
+
+interface McpState {
+  servers: McpServerRow[]
+  problem: string | null
+  setServers(servers: McpServerRow[], problem: string | null): void
+}
+
+export const useMcpStore = create<McpState>((set) => ({
+  servers: [],
+  problem: null,
+  setServers: (servers, problem) => set({ servers, problem }),
 }))
 
 // ---- approvals ---------------------------------------------------------------

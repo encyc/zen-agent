@@ -36,6 +36,12 @@ interface BridgeState {
   secretsModel?: Record<string, unknown>[]
   secretsSearch?: Record<string, unknown>[]
   secretTests?: Record<string, { connected: boolean; message: string }>
+  skills?: Record<string, unknown>[]
+  skillsDisabled?: string[]
+  skillBodies?: Record<string, string>
+  mcpServers?: Record<string, unknown>[]
+  mcpProblem?: string
+  mcpTests?: Record<string, { connected: boolean; tools?: string[]; message?: string }>
   fsEntries?: Record<string, Record<string, unknown>[]>
   fsFiles?: Record<string, Record<string, unknown>>
   worktrees?: Record<string, unknown>
@@ -251,6 +257,135 @@ function installBridge(state: BridgeState) {
           }
         }
         return { type: 'error', id: payload.id, message: 'unknown secrets op' }
+      }
+      case 'skills': {
+        const rows =
+          state.skills ?? [
+            {
+              name: 'review',
+              description: '按 checklist 审查改动',
+              path: '/work/p/.zenagent/skills/review/SKILL.md',
+              source: 'project',
+            },
+            {
+              name: 'tidy',
+              description: '整理命名与文件结构',
+              path: '/Users/e2e/.zenagent/skills/tidy/SKILL.md',
+              source: 'global',
+            },
+          ]
+        const disabled = () => state.skillsDisabled ?? []
+        const decorate = () =>
+          rows.map((row) => ({
+            ...row,
+            enabled: !disabled().includes(String(row.name)),
+          }))
+        if (payload.op === 'list' || payload.op === 'rescan') {
+          return { type: 'result', id: payload.id, ok: true, skills: decorate(), warnings: [], notes: [] }
+        }
+        const name = String(payload.name ?? '')
+        if (!rows.some((row) => row.name === name)) {
+          return { type: 'error', id: payload.id, message: `unknown skill: ${name}` }
+        }
+        if (payload.op === 'read') {
+          return {
+            type: 'result',
+            id: payload.id,
+            ok: true,
+            name,
+            path: rows.find((row) => row.name === name)?.path,
+            body: state.skillBodies?.[name] ?? `# ${name}\n\nbody of ${name}`,
+            truncated: false,
+          }
+        }
+        if (payload.op === 'toggle') {
+          const enabled = payload.enabled === true
+          state.skillsDisabled = enabled
+            ? disabled().filter((entry) => entry !== name)
+            : [...new Set([...disabled(), name])]
+          return { type: 'result', id: payload.id, ok: true, name, enabled, notes: [] }
+        }
+        return { type: 'error', id: payload.id, message: 'unknown skills op' }
+      }
+      case 'mcp': {
+        const rows = () =>
+          state.mcpServers ?? [
+            {
+              name: 'filesystem',
+              transport: 'stdio',
+              command: 'npx -y @modelcontextprotocol/server-filesystem',
+              url: null,
+              env_keys: ['HOME'],
+              header_keys: [],
+              source: 'global',
+              overrides_global: false,
+              state: 'off',
+              tools: [],
+              error: null,
+            },
+            {
+              name: 'docs',
+              transport: 'http',
+              url: 'https://example.com/mcp',
+              command: null,
+              env_keys: [],
+              header_keys: ['Authorization'],
+              source: 'project',
+              overrides_global: true,
+              state: 'off',
+              tools: [],
+              error: null,
+            },
+          ]
+        const list = () => ({
+          type: 'result',
+          id: payload.id,
+          ok: true,
+          servers: rows(),
+          problem: state.mcpProblem ?? null,
+        })
+        if (payload.op === 'list') return list()
+        const name = String(payload.name ?? '')
+        if (payload.op === 'add') {
+          const transport = payload.transport === 'http' ? 'http' : 'stdio'
+          const keys = (value: unknown) =>
+            value !== null && typeof value === 'object' ? Object.keys(value) : []
+          state.mcpServers = [
+            ...rows(),
+            {
+              name,
+              transport,
+              command: typeof payload.command === 'string' ? payload.command : null,
+              url: typeof payload.url === 'string' ? payload.url : null,
+              env_keys: keys(payload.env),
+              header_keys: keys(payload.headers),
+              source: payload.layer === 'project' ? 'project' : 'global',
+              overrides_global: false,
+              state: 'off',
+              tools: [],
+              error: null,
+            },
+          ]
+          return list()
+        }
+        if (payload.op === 'remove') {
+          state.mcpServers = rows().filter(
+            (row) => !(row.name === name && row.source === payload.layer),
+          )
+          return list()
+        }
+        if (payload.op === 'test') {
+          const outcome = state.mcpTests?.[name] ?? { connected: true, tools: ['read', 'write'] }
+          return {
+            type: 'result',
+            id: payload.id,
+            ok: true,
+            connected: outcome.connected,
+            tools: outcome.tools ?? [],
+            message: outcome.message ?? '',
+          }
+        }
+        return { type: 'error', id: payload.id, message: 'unknown mcp op' }
       }
       case 'tools':
         return {
@@ -594,6 +729,7 @@ test('a running tool turn rotates the mark in the process header', async ({ page
         { kind: 'user', id: 'u1', text: 'go', timestamp: 1 },
         {
           id: 't1',
+          kind: 'tool',
           call_id: 'c1',
           name: 'read_file',
           args_preview: '{"path":"/work/a.ts"}',
@@ -839,6 +975,7 @@ test('the work panel renders review hunks and opens the files tab', async ({ pag
       transcript: [
         {
           id: 't1',
+          kind: 'tool',
           call_id: 'c1',
           name: 'edit_file',
           args_preview: '{"path":"/src/a.ts"}',
@@ -946,6 +1083,7 @@ test('a task row opens the subagent conversation in the work panel', async ({ pa
         { kind: 'user', id: 'u1', text: 'delegate', timestamp: 1 },
         {
           id: 't1',
+          kind: 'tool',
           call_id: 'c1',
           name: 'task',
           args_preview: '{"name":"Researcher"}',
@@ -973,6 +1111,7 @@ test('a task row opens the subagent conversation in the work panel', async ({ pa
           { kind: 'user', text: 'find x', timestamp: 1 },
           {
             id: 'ct1',
+            kind: 'tool',
             call_id: 'ct1',
             name: 'bash',
             args_preview: '{"command":"rg timeout"}',
@@ -1212,6 +1351,7 @@ test('a settled turn keeps its tool steps expanded by default', async ({ page })
         { kind: 'assistant', id: 'a1', text: 'done', timestamp: 2, duration_ms: 900 },
         {
           id: 't1',
+          kind: 'tool',
           call_id: 'c1',
           name: 'read_file',
           args_preview: '{"path":"a.ts"}',
@@ -1222,6 +1362,7 @@ test('a settled turn keeps its tool steps expanded by default', async ({ page })
         },
         {
           id: 't2',
+          kind: 'tool',
           call_id: 'c2',
           name: 'bash',
           args_preview: '{"command":"ls"}',
@@ -1815,6 +1956,128 @@ test('model settings tests model and search connections inline', async ({ page }
       ['search', 'tavily'],
     ],
   )
+})
+
+test('skill settings previews and toggles a skill', async ({ page }) => {
+  await boot(page, initialState({ running: false, skillsDisabled: ['tidy'] }))
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '技能' }).click()
+
+  await expect(page.getByRole('heading', { name: '技能库' })).toBeVisible()
+  const review = page.locator('[data-skill="review"]')
+  const tidy = page.locator('[data-skill="tidy"]')
+  await expect(review).toContainText('项目')
+  await expect(tidy).toContainText('全局')
+  await expect(tidy.getByRole('switch')).toHaveAttribute('aria-checked', 'false')
+
+  await review.getByRole('button', { name: '预览' }).click()
+  await expect(review.locator('pre')).toContainText('body of review')
+
+  await tidy.getByRole('switch').click()
+  await expect(tidy.getByRole('switch')).toHaveAttribute('aria-checked', 'true')
+
+  await page.getByRole('button', { name: '重新扫描' }).click()
+  const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
+  const toggles = calls.filter((call) => call.type === 'skills' && call.op === 'toggle')
+  assert.deepEqual(
+    toggles.map((call) => [call.name, call.enabled]),
+    [['tidy', true]],
+  )
+  assert.equal(
+    calls.some((call) => call.type === 'skills' && call.op === 'rescan'),
+    true,
+  )
+})
+
+test('mcp settings probes a server and reports its tools', async ({ page }) => {
+  await boot(page, initialState({ running: false }))
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: 'MCP' }).click()
+
+  await expect(page.getByRole('heading', { name: 'MCP 服务器' })).toBeVisible()
+  const filesystem = page.locator('[data-server="filesystem"]')
+  const docs = page.locator('[data-server="docs"]')
+  await expect(filesystem).toContainText('npx -y')
+  await expect(filesystem).toContainText('环境变量：HOME')
+  await expect(docs).toContainText('覆盖全局')
+
+  await filesystem.getByRole('button', { name: '测试连接' }).click()
+  await expect(filesystem).toContainText('连接正常，2 个工具：read, write')
+
+  const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
+  assert.equal(
+    calls.some((call) => call.type === 'mcp' && call.op === 'test' && call.name === 'filesystem'),
+    true,
+  )
+})
+
+test('mcp settings adds a project server and removes one', async ({ page }) => {
+  await boot(page, initialState({ running: false }))
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: 'MCP' }).click()
+
+  await page.getByRole('button', { name: '添加服务器' }).click()
+  const form = page.locator('[data-mcp-form]')
+  await form.getByLabel('名称').fill('github')
+  await form.getByRole('button', { name: 'HTTP', exact: true }).click()
+  await form.getByLabel('服务地址').fill('https://mcp.example.com')
+  await form.getByRole('button', { name: '项目', exact: true }).click()
+  await expect(form).toContainText('项目层保存在仓库内')
+  await form.getByRole('button', { name: '保存服务器' }).click()
+
+  const github = page.locator('[data-server="github"]')
+  await expect(github).toContainText('https://mcp.example.com')
+  await expect(github).toContainText('项目')
+
+  const docs = page.locator('[data-server="docs"]')
+  await docs.getByRole('button', { name: '移除' }).click()
+  await docs.getByRole('button', { name: '确认移除' }).click()
+  await expect(docs).toHaveCount(0)
+
+  const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
+  const added = calls.find((call) => call.type === 'mcp' && call.op === 'add')
+  assert.equal(added?.name, 'github')
+  assert.equal(added?.transport, 'http')
+  assert.equal(added?.url, 'https://mcp.example.com')
+  assert.equal(added?.layer, 'project')
+  const removed = calls.find((call) => call.type === 'mcp' && call.op === 'remove')
+  assert.deepEqual([removed?.name, removed?.layer], ['docs', 'project'])
+})
+
+test('project settings lists folders, opens one and forgets another', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('zen.last.cwd', '/work/p')
+    localStorage.setItem(
+      'zen.projects',
+      JSON.stringify([
+        { path: '/work/p', name: 'p', at: 1 },
+        { path: '/work/q', name: 'q', at: 1 },
+      ]),
+    )
+  })
+  await boot(page, initialState({ running: false }))
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '项目' }).click()
+
+  await expect(page.getByRole('heading', { name: '项目目录' })).toBeVisible()
+  const current = page.locator('[data-project="/work/p"]')
+  const other = page.locator('[data-project="/work/q"]')
+  await expect(current).toContainText('当前')
+  await expect(current).toContainText('2 个会话')
+  await expect(other).toContainText('1 个会话')
+
+  // Opening another folder restarts the runtime there and returns to chat.
+  await other.getByRole('button', { name: '打开' }).click()
+  await expect(page.locator('[data-shell-composer]')).toBeVisible()
+  const starts = await page.evaluate(() => window.__ZEN_E2E__.starts)
+  assert.equal(starts.at(-1)?.cwd, '/work/q')
+
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '项目' }).click()
+  const first = page.locator('[data-project="/work/p"]')
+  await first.getByRole('button', { name: '移除' }).click()
+  await first.getByRole('button', { name: '确认移除' }).click()
+  await expect(first).toHaveCount(0)
 })
 
 test('thinking settings unfold and hide settled reasoning', async ({ page }) => {

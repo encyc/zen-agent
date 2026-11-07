@@ -9,11 +9,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from prompt_fixtures import SKILLS, TOOL_GOLDEN_NAMES
+from prompt_fixtures import SKILLS, TOOL_GOLDEN_NAMES, golden_tools
 
 from zenagent.prompts import TOOL_BLOCK_NAMES, tool_description
 from zenagent.skills import build_skill_tool
-from prompt_fixtures import golden_tools
 from zenagent.tools.task import build_task_tool
 from zenagent.tools.todo import build_todo_tool
 

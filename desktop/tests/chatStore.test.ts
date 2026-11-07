@@ -64,6 +64,7 @@ test('loadSnapshot keeps hydrated tool cards and the interrupted state', () => {
     ...empty,
     transcript: [
       {
+        kind: 'tool',
         call_id: 'c1',
         id: 'v1',
         name: 'edit_file',
@@ -78,6 +79,7 @@ test('loadSnapshot keeps hydrated tool cards and the interrupted state', () => {
         diff: '+x',
       },
       {
+        kind: 'tool',
         call_id: 'c2',
         id: 'v2',
         name: 'bash',

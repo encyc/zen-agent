@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from prompt_fixtures import CONFIGS, CWD
+from prompt_fixtures import CONFIGS, CWD, golden_tools
 
 from zenagent.prompts import BLOCKS, PromptContext, compose_system
 from zenagent.prompts.registry import read_block
@@ -13,7 +13,6 @@ from zenagent.prompts.spec import (
     TOTAL_BUDGET_CHARS,
 )
 from zenagent.skills import build_skill_tool, format_skill_entries
-from prompt_fixtures import golden_tools
 from zenagent.tools.task import build_task_tool
 from zenagent.tools.todo import build_todo_tool
 

@@ -9,9 +9,11 @@ import { homeDir } from '@tauri-apps/api/path'
 import { RpcClient } from '../rpc/client'
 import type {
   CompactionRecord,
+  McpServerRow,
   Mode,
   SecretProviderRow,
   ServerFrame,
+  SkillRow,
   StatusResult,
 } from '../rpc/types'
 import {
@@ -19,11 +21,13 @@ import {
   useAskStore,
   useCatalogStore,
   useComposerStore,
+  useMcpStore,
   useNoticeStore,
   useProjectStore,
   useSecretsStore,
   useSessionStore,
   useSettingsStore,
+  useSkillsStore,
   useStatusStore,
 } from './stores'
 import { useChatStore } from './chatStore'
@@ -33,6 +37,18 @@ import { frameError } from '../rpc/frames'
 export type ConnectionState = 'idle' | 'starting' | 'ready' | 'exited'
 
 export type ExportFormat = 'md' | 'html'
+
+export type McpLayer = 'global' | 'project'
+
+export interface McpServerInput {
+  name: string
+  transport: 'stdio' | 'http'
+  command?: string
+  url?: string
+  env?: Record<string, string>
+  headers?: Record<string, string>
+  layer: McpLayer
+}
 
 const LAST_CWD_KEY = 'zen.last.cwd'
 
@@ -72,6 +88,15 @@ interface AppState {
   saveSecret(name: string, value: string): Promise<Record<string, unknown>>
   clearSecret(name: string): Promise<Record<string, unknown>>
   testSecret(scope: 'model' | 'search', target: string): Promise<Record<string, unknown>>
+  refreshSkills(): Promise<void>
+  readSkill(name: string): Promise<Record<string, unknown>>
+  rescanSkills(): Promise<Record<string, unknown>>
+  toggleSkill(name: string, enabled: boolean): Promise<Record<string, unknown>>
+  refreshMcp(): Promise<void>
+  addMcpServer(input: McpServerInput): Promise<Record<string, unknown>>
+  removeMcpServer(name: string, layer: McpLayer): Promise<Record<string, unknown>>
+  testMcpServer(name: string): Promise<Record<string, unknown>>
+  openProject(path: string): Promise<void>
   refreshTranscript(): Promise<void>
   submit(): Promise<void>
   steer(text: string): Promise<void>
@@ -290,6 +315,81 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   testSecret(scope, target) {
     return get().client().send({ type: 'secrets', op: 'test', scope, target })
+  },
+
+  refreshSkills() {
+    return get()
+      .client()
+      .send({ type: 'skills', op: 'list' })
+      .then((frame) => {
+        if (frame.type === 'result' && frame.ok) {
+          useSkillsStore.getState().setSkills((frame.skills ?? []) as SkillRow[])
+        }
+      })
+      .catch(() => {})
+  },
+
+  readSkill(name) {
+    return get().client().send({ type: 'skills', op: 'read', name })
+  },
+
+  async rescanSkills() {
+    const frame = await get().client().send({ type: 'skills', op: 'rescan' })
+    if (frame.type === 'result' && frame.ok) {
+      useSkillsStore.getState().setSkills((frame.skills ?? []) as SkillRow[])
+    }
+    return frame
+  },
+
+  async toggleSkill(name, enabled) {
+    const frame = await get()
+      .client()
+      .send({ type: 'skills', op: 'toggle', name, enabled })
+    if (frame.type === 'result' && frame.ok) await get().refreshSkills()
+    return frame
+  },
+
+  refreshMcp() {
+    return get()
+      .client()
+      .send({ type: 'mcp', op: 'list' })
+      .then((frame) => {
+        if (frame.type === 'result' && frame.ok) {
+          useMcpStore
+            .getState()
+            .setServers(
+              (frame.servers ?? []) as McpServerRow[],
+              typeof frame.problem === 'string' ? frame.problem : null,
+            )
+        }
+      })
+      .catch(() => {})
+  },
+
+  async addMcpServer(input) {
+    const frame = await get()
+      .client()
+      .send({ type: 'mcp', op: 'add', ...input })
+    if (frame.type === 'result' && frame.ok) await get().refreshMcp()
+    return frame
+  },
+
+  async removeMcpServer(name, layer) {
+    const frame = await get()
+      .client()
+      .send({ type: 'mcp', op: 'remove', name, layer })
+    if (frame.type === 'result' && frame.ok) await get().refreshMcp()
+    return frame
+  },
+
+  testMcpServer(name) {
+    return get().client().send({ type: 'mcp', op: 'test', name })
+  },
+
+  async openProject(path) {
+    if (path === '' || lastProjectCwd() === path) return
+    await get().disconnect()
+    await get().connect(undefined, path)
   },
 
   refreshTranscript() {

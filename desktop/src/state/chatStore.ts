@@ -155,58 +155,58 @@ function newAssistantNode(): AssistantNode {
 }
 
 function viewToNode(view: MessageView | ToolCallView, cards: Record<string, string>): ChatNode | null {
-  // ToolCallView carries no discriminator: only MessageView has `kind`.
-  if ('kind' in view) {
-    if (view.kind === 'user') {
-      return {
-        kind: 'user',
-        id: view.id || nid(),
-        text: view.text,
-        steering: view.steering === true,
-        timestamp: view.timestamp ?? 0,
-      }
+  // Both wire views carry an explicit `kind` discriminator now.
+  if (view.kind === 'tool') {
+    const tool: ToolCallView = view
+    const node: ToolNode = {
+      kind: 'tool',
+      id: tool.id || nid(),
+      callId: tool.call_id,
+      name: tool.name,
+      argsPreview: tool.args_preview,
+      args: tool.args ?? {},
+      state: tool.status,
+      progress: tool.progress ?? '',
+      resultText: tool.result_text ?? '',
+      isError: Boolean(tool.is_error),
+      durationMs: tool.duration_ms ?? null,
+      diff: typeof tool.diff === 'string' && tool.diff ? tool.diff : null,
+      details: tool.details ?? {},
     }
-    if (view.kind === 'skill') {
-      return {
-        kind: 'skill',
-        id: view.id || nid(),
-        name: view.text,
-        args: view.skill_args ?? null,
-        body: view.skill_body ?? null,
-      }
-    }
+    cards[node.callId] = node.id
+    return node
+  }
+  if (view.kind === 'user') {
     return {
-      kind: 'assistant',
+      kind: 'user',
       id: view.id || nid(),
       text: view.text,
-      thinking: view.thinking ?? null,
-      thinkingRunning: false,
-      streaming: false,
+      steering: view.steering === true,
       timestamp: view.timestamp ?? 0,
-      model: view.model ?? '',
-      provider: view.provider ?? '',
-      usage: view.usage ?? null,
-      durationMs: view.duration_ms ?? null,
     }
   }
-  const tool: ToolCallView = view
-  const node: ToolNode = {
-    kind: 'tool',
-    id: tool.id || nid(),
-    callId: tool.call_id,
-    name: tool.name,
-    argsPreview: tool.args_preview,
-    args: tool.args ?? {},
-    state: tool.status,
-    progress: tool.progress ?? '',
-    resultText: tool.result_text ?? '',
-    isError: Boolean(tool.is_error),
-    durationMs: tool.duration_ms ?? null,
-    diff: typeof tool.diff === 'string' && tool.diff ? tool.diff : null,
-    details: tool.details ?? {},
+  if (view.kind === 'skill') {
+    return {
+      kind: 'skill',
+      id: view.id || nid(),
+      name: view.text,
+      args: view.skill_args ?? null,
+      body: view.skill_body ?? null,
+    }
   }
-  cards[node.callId] = node.id
-  return node
+  return {
+    kind: 'assistant',
+    id: view.id || nid(),
+    text: view.text,
+    thinking: view.thinking ?? null,
+    thinkingRunning: false,
+    streaming: false,
+    timestamp: view.timestamp ?? 0,
+    model: view.model ?? '',
+    provider: view.provider ?? '',
+    usage: view.usage ?? null,
+    durationMs: view.duration_ms ?? null,
+  }
 }
 
 /** Snapshot views → render nodes, without touching the live session state.

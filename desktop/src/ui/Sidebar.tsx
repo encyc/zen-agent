@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { lastProjectCwd, useAppStore } from '../state/appStore'
+import { useAppStore } from '../state/appStore'
 import { canForkSession, isBlockedSession } from '../state/sessionSelectors'
 import {
   currentPending,
@@ -80,8 +80,7 @@ export function Sidebar(props: { onCollapse(): void }) {
   const projectEntries = useProjectStore((state) => state.projects)
   const addProject = useProjectStore((state) => state.addProject)
   const removeProject = useProjectStore((state) => state.removeProject)
-  const connect = useAppStore((state) => state.connect)
-  const disconnect = useAppStore((state) => state.disconnect)
+  const openProject = useAppStore((state) => state.openProject)
   const newSession = useAppStore((state) => state.newSession)
   const refreshSessions = useAppStore((state) => state.refreshSessions)
   const renameSession = useAppStore((state) => state.renameSession)
@@ -204,12 +203,6 @@ export function Sidebar(props: { onCollapse(): void }) {
       document.removeEventListener('keydown', onKeyDown, true)
     }
   }, [menu])
-
-  const openProject = async (path: string) => {
-    if (lastProjectCwd() === path) return
-    await disconnect()
-    await connect(undefined, path)
-  }
 
   const renderRow = (session: SessionSummary, showProject = false) => (
     <SessionRow

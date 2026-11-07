@@ -127,35 +127,48 @@ def load_mcp_config(
     return servers
 
 
-def save_server(
-    name: str, command: list[str], path: Path | None = None
-) -> Path:
-    """Add/replace one stdio server in ``mcp.json`` (atomic, mode 0600).
+def layer_path(layer: str, *, cwd: Path | None = None) -> Path:
+    """The file a management write targets (``global`` or ``project``)."""
+    if layer == "global":
+        return config_path()
+    if layer == "project":
+        return project.project_mcp_path(cwd)
+    raise ValueError(f"unknown MCP layer {layer!r}")
 
-    Used by the TUI's MCP add wizard. A corrupt existing file is an error rather
-    than silently overwritten: the user's other servers must not be lost.
-    """
-    import os
-    import tempfile
 
-    if not name.strip():
-        raise ValueError("server name must not be empty")
-    if not command or not all(isinstance(part, str) and part for part in command):
-        raise ValueError("command must be a non-empty list of strings")
-    target = Path(path) if path is not None else config_path()
-    data: dict = {}
-    if target.is_file():
-        try:
-            data = json.loads(target.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc:
-            raise ValueError(f"cannot read mcp config {target}: {exc}") from exc
-        if not isinstance(data, dict):
-            raise ValueError(f"mcp config {target} must contain an object")
+def load_mcp_layers(
+    *, cwd: Path | None = None
+) -> tuple[dict[str, McpServerConfig], dict[str, McpServerConfig]]:
+    """Read the global and project layers separately (for a management view)."""
+    return (
+        _load_mcp_file(config_path()),
+        _load_mcp_file(project.project_mcp_path(cwd)),
+    )
+
+
+def _read_layer(target: Path) -> dict:
+    """The raw document for editing; a corrupt file is never overwritten."""
+    if not target.is_file():
+        return {"servers": {}}
+    try:
+        data = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ValueError(f"cannot read mcp config {target}: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(  # noqa: TRY004 - config errors are ValueError by contract
+            f"mcp config {target} must contain an object"
+        )
     servers = data.get("servers")
-    if not isinstance(servers, dict):
-        servers = {}
-    servers[name.strip()] = {"command": list(command)}
-    data["servers"] = servers
+    if servers is None:
+        data["servers"] = {}
+    elif not isinstance(servers, dict):
+        raise ValueError(
+            f"mcp config {target}: 'servers' must be an object"
+        )
+    return data
+
+
+def _write_layer(target: Path, data: dict) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temp_name = tempfile.mkstemp(
         dir=target.parent, prefix=f"{target.name}.", suffix=".tmp"
@@ -171,6 +184,78 @@ def save_server(
     except BaseException:
         Path(temp_name).unlink(missing_ok=True)
         raise
+
+
+def _server_payload(config: McpServerConfig) -> dict:
+    payload: dict = (
+        {"command": list(config.command)}
+        if config.command is not None
+        else {"url": config.url}
+    )
+    if config.env:
+        payload["env"] = dict(config.env)
+    if config.headers:
+        payload["headers"] = dict(config.headers)
+    return payload
+
+
+def save_mcp_server(
+    name: str,
+    *,
+    command: list[str] | None = None,
+    url: str | None = None,
+    env: dict[str, str] | None = None,
+    headers: dict[str, str] | None = None,
+    layer: str = "global",
+    cwd: Path | None = None,
+) -> Path:
+    """Add/replace one server in the chosen layer (atomic, mode 0600)."""
+    raw: dict = {}
+    if command is not None:
+        raw["command"] = list(command)
+    if url is not None:
+        raw["url"] = url
+    if env:
+        raw["env"] = dict(env)
+    if headers:
+        raw["headers"] = dict(headers)
+    config = _parse_server(str(name).strip(), raw)
+    target = layer_path(layer, cwd=cwd)
+    data = _read_layer(target)
+    data["servers"][config.name] = _server_payload(config)
+    _write_layer(target, data)
+    return target
+
+
+def remove_mcp_server(
+    name: str, *, layer: str = "global", cwd: Path | None = None
+) -> Path:
+    """Drop one server from the chosen layer; other layers stay untouched."""
+    target = layer_path(layer, cwd=cwd)
+    data = _read_layer(target)
+    if name not in data["servers"]:
+        raise ValueError(f"no MCP server {name!r} in the {layer} layer")
+    del data["servers"][name]
+    _write_layer(target, data)
+    return target
+
+
+def save_server(
+    name: str, command: list[str], path: Path | None = None
+) -> Path:
+    """Add/replace one stdio server in ``mcp.json`` (atomic, mode 0600).
+
+    Used by the TUI's MCP add wizard. A corrupt existing file is an error rather
+    than silently overwritten: the user's other servers must not be lost.
+    """
+    if not name.strip():
+        raise ValueError("server name must not be empty")
+    if not command or not all(isinstance(part, str) and part for part in command):
+        raise ValueError("command must be a non-empty list of strings")
+    target = Path(path) if path is not None else config_path()
+    data = _read_layer(target)
+    data["servers"][name.strip()] = {"command": list(command)}
+    _write_layer(target, data)
     return target
 
 

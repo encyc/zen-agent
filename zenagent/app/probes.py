@@ -15,6 +15,8 @@ from dataclasses import dataclass
 import httpx
 
 from zenagent import settings
+from zenagent.mcp.client import McpClient, McpError
+from zenagent.mcp.config import McpServerConfig, make_transport
 from zenagent.providers.catalog import Model, ProviderConfig
 from zenagent.providers.registry import StreamFn, safe_stream, stream_fn_for
 from zenagent.providers.stream_options import StreamOptions
@@ -30,7 +32,9 @@ __all__ = [
     "MAX_MESSAGE_CHARS",
     "PROBE_TIMEOUT_S",
     "PROVIDERS",
+    "McpProbeResult",
     "ProbeResult",
+    "probe_mcp_server",
     "probe_model_provider",
     "probe_search_provider",
 ]
@@ -46,6 +50,13 @@ _PING = "ping"
 class ProbeResult:
     connected: bool
     message: str = ""
+
+
+@dataclass(frozen=True)
+class McpProbeResult:
+    connected: bool
+    message: str = ""
+    tools: tuple[str, ...] = ()
 
 
 def _short(text: object) -> str:
@@ -114,3 +125,29 @@ async def probe_search_provider(
     except (ProviderError, httpx.HTTPError, OSError, ValueError) as exc:
         return ProbeResult(False, _short(exc))
     return ProbeResult(True)
+
+
+async def probe_mcp_server(
+    config: McpServerConfig, *, timeout: float = PROBE_TIMEOUT_S
+) -> McpProbeResult:
+    """Start one server, list its tools, and close it again.
+
+    The probe owns a temporary client: it never joins the runtime's tool list,
+    so a management page can test a server the app is not using.
+    """
+
+    async def run() -> McpProbeResult:
+        client = McpClient(config.name, make_transport(config), timeout_s=timeout)
+        try:
+            await client.start()
+            tools = await client.list_tools()
+            return McpProbeResult(True, tools=tuple(tool.name for tool in tools))
+        finally:
+            await client.close()
+
+    try:
+        return await asyncio.wait_for(run(), timeout)
+    except TimeoutError:
+        return McpProbeResult(False, f"timed out after {timeout:g}s")
+    except (McpError, OSError, ValueError) as exc:
+        return McpProbeResult(False, _short(exc))

@@ -1,0 +1,181 @@
+/* Project registry rows: folder glyph, registered path, session count and
+ * last-used age, with actions right-aligned on the row. */
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cardBlock {
+  margin-bottom: 28px;
+}
+
+.cardHeadline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.headCopy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cardHeading {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: var(--ds-font-13-5);
+  font-weight: 600;
+}
+
+.cardCaption {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--ds-font-12-5);
+  line-height: 1.45;
+}
+
+.addButton {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  border: 0;
+  border-radius: var(--ds-radius-6);
+  padding: 0 9px;
+  background: var(--dsw-alias-label-primary);
+  color: var(--dsw-alias-bg-base);
+  font-family: inherit;
+  font-size: var(--ds-font-11-5);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.project {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  column-gap: 10px;
+  align-items: center;
+  border-radius: var(--ds-radius-14);
+  padding: 10px 12px;
+  background: color-mix(in oklab, var(--dsw-alias-label-primary) 3.5%, transparent);
+}
+
+.icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: var(--ds-radius-8);
+  background: color-mix(in oklab, var(--dsw-alias-label-primary) 7%, transparent);
+  color: var(--dsw-alias-label-secondary);
+  user-select: none;
+}
+
+.copy {
+  min-width: 0;
+}
+
+.name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--dsw-alias-label-primary);
+  font-size: var(--ds-font-13-5);
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.current {
+  border-radius: var(--ds-radius-full);
+  padding: 1px 6px;
+  background: color-mix(in oklab, var(--dsw-alias-state-business-primary) 14%, transparent);
+  color: var(--dsw-alias-state-business-primary);
+  font-size: var(--ds-font-10-5);
+  font-weight: 500;
+}
+
+.path {
+  margin-top: 2px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--ds-font-11);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 3px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--ds-font-12);
+  line-height: 1.45;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  border: 0;
+  border-radius: var(--ds-radius-6);
+  padding: 0 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-family: inherit;
+  font-size: var(--ds-font-11-5);
+  cursor: pointer;
+}
+
+.action:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.action:disabled {
+  color: var(--dsw-alias-label-tertiary);
+  cursor: default;
+}
+
+.actionDanger {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.empty {
+  border-radius: var(--ds-radius-14);
+  padding: 16px 12px;
+  background: color-mix(in oklab, var(--dsw-alias-label-primary) 3.5%, transparent);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--ds-font-12);
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .project {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .actions {
+    grid-column: 2;
+    flex-wrap: wrap;
+  }
+}
