@@ -58,6 +58,9 @@ class ChatController:
         self, runtime: Runtime, *, on_change: Callable[[], None] = lambda: None
     ) -> None:
         self.runtime = runtime
+        # Every face drives the runtime through a ChatController, so this is
+        # where the taiji Router's milestone injection gets its target.
+        runtime.taiji_chat = self
         self._on_change = on_change
         self._builder = TranscriptBuilder()
         #: Subagent transcripts, sidebar rows and spend (see SubagentTracker).

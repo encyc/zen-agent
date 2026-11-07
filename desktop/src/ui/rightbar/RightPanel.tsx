@@ -25,6 +25,7 @@ import { MemoryPanel } from './MemoryPanel'
 import { ReviewPanel } from './ReviewPanel'
 import { SubagentTranscript } from './SubagentTranscript'
 import { WorktreePanel } from './WorktreePanel'
+import { TaijiPanel } from './TaijiPanel'
 import css from './RightPanel.module.css'
 
 export interface RightPanelProps {
@@ -45,6 +46,7 @@ const TOOL_TABS = [
   { kind: 'files', label: 'panel.files', Icon: FolderIcon },
   { kind: 'worktree', label: 'panel.worktree', Icon: BranchIcon },
   { kind: 'memory', label: 'panel.memory', Icon: SparkIcon },
+  { kind: 'taiji', label: 'panel.taiji', Icon: BranchIcon },
 ] as const
 
 function clampPanel(px: number): number {
@@ -260,6 +262,8 @@ export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
           <FilesPanel />
         ) : activeTab?.kind === 'worktree' ? (
           <WorktreePanel />
+        ) : activeTab?.kind === 'taiji' ? (
+          <TaijiPanel />
         ) : (
           <div className={css.reviewWrap}>
             <ReviewPanel />

@@ -42,6 +42,7 @@ from zenagent.app.support import (
     resolve_task_model,
     session_id_for,
 )
+from zenagent.app.taiji.tools import runtime_taiji_provider, taiji_tools_for
 from zenagent.app.views import last_request_usage
 from zenagent.config import (
     ContextGuard,
@@ -638,6 +639,13 @@ class Runtime:
         if self.skills:
             tools.append(build_skill_tool(self.skills))
         tools.extend(self._extension_tools)
+        session_in_context = getattr(self, "_session", None)
+        tools.extend(
+            taiji_tools_for(
+                session_in_context.path if session_in_context is not None else None,
+                runtime_taiji_provider(self),
+            )
+        )
         self._skill_entries = format_skill_entries(self.skills)
         self.tool_registry.reconcile(tools)
         active = self.tool_registry.active()
@@ -906,3 +914,6 @@ class Runtime:
         # Reseed from the loaded transcript: the last assistant turn is the
         # request that sized the context, and compaction/pruning read it.
         self.guard.last_usage = last_request_usage(messages)
+        # The tool set is session-gated (taiji tools ride the taiji session),
+        # so a switch must recompose, not just rebind.
+        self._recompose()

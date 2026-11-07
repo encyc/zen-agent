@@ -58,6 +58,7 @@ export const REQUEST_KINDS = [
   'status',
   'steer',
   'subagent_transcript',
+  'taiji',
   'tools',
   'transcript',
   'usage',
@@ -510,6 +511,68 @@ export interface GitWorktreesResult {
   id: string
   ok: true
   worktree: WorktreeOverview
+}
+
+// ---- taiji -----------------------------------------------------------------
+
+export interface TaijiCommit {
+  sha: string
+  short: string
+  parents: string[]
+  subject: string
+  author: string
+  ts: number
+  lane: number
+}
+
+export interface TaijiBranch {
+  name: string
+  sha: string
+  is_head: boolean
+}
+
+export interface TaijiGraph {
+  root: string
+  is_repo: boolean
+  commits: TaijiCommit[]
+  branches: TaijiBranch[]
+  max_lane: number
+}
+
+export interface TaijiProjectSession {
+  name: string
+  title: string
+  updated_at: number
+  messages: number
+  /** Present when the session belongs to a taiji worker. */
+  worker?: string
+  status?: string
+  branch?: string
+}
+
+export interface TaijiProject {
+  key: string
+  root: string
+  branch: string | null
+  worktree: boolean
+  sessions: TaijiProjectSession[]
+}
+
+export interface TaijiSessionMap {
+  repo_root: string
+  projects: TaijiProject[]
+}
+
+export interface TaijiSnapshot {
+  graph: TaijiGraph
+  sessions: TaijiSessionMap
+}
+
+export interface TaijiResult {
+  type: 'result'
+  id: string
+  ok: true
+  taiji: TaijiSnapshot
 }
 
 // ---- ask -------------------------------------------------------------------

@@ -67,6 +67,8 @@ def test_only_the_cli_package_imports_the_cli_package():
         parts = path.relative_to(ROOT).parts
         if parts[0] == "cli":
             continue
+        if parts == ("__main__.py",):
+            continue  # the package entry shim is a face, not a kernel module
         for module in _imports(path):
             if module == "zenagent.cli" or module.startswith("zenagent.cli."):
                 violations.append(f"{path.relative_to(ROOT)}: {module}")

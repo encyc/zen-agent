@@ -1,0 +1,1 @@
+Merge a finished worker's branch into its base branch. Refuses when the task is not finished, the base branch is not checked out here, or the working tree is dirty — report that instead of retrying blindly. In ask mode the user normally approves a task first; this tool is the explicit "merge it".

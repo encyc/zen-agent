@@ -1,0 +1,1 @@
+Stop a worker: its subprocess ends and its worktree is removed, but its branch and session transcript stay on disk for inspection. Use it when the user cancels a task or a worker is clearly stuck in the wrong direction.
