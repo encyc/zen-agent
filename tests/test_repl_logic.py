@@ -263,7 +263,6 @@ async def test_repl_reconnects_a_late_mcp_server(tmp_path, isolated_sessions):
 
 
 async def test_reload_discovers_skills_added_mid_session(tmp_path, monkeypatch):
-    import zenagent.cli.repl as repl_module
     from zenagent.config import UserConfig
 
     monkeypatch.setattr("zenagent.app.bootstrap.load_user_config", lambda: UserConfig())

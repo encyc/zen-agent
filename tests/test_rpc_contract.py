@@ -21,7 +21,7 @@ TS_PATH = (
 def test_request_kinds_match_ts_contract_list():
     py = set(re.findall(r'kind == "([a-z_]+)"', RPC_PATH.read_text()))
     source = TS_PATH.read_text()
-    match = re.search(r"export const REQUEST_KINDS = \[([^\]]*)\]", source, re.S)
+    match = re.search(r"export const REQUEST_KINDS = \[([^\]]*)\]", source, re.DOTALL)
     assert match, "desktop/src/rpc/types.ts lost REQUEST_KINDS"
     ts = set(re.findall(r"'([a-z_]+)'", match.group(1)))
     assert {"hello"} <= py

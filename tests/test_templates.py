@@ -76,7 +76,6 @@ def test_default_roots_put_the_project_first(tmp_path):
 
 def test_repl_slash_command_expands_a_template(tmp_path, monkeypatch):
     import zenagent.agent.session as session_module
-    import zenagent.cli.repl as repl_module
     from zenagent.cli.repl import repl
     from zenagent.config import UserConfig
 

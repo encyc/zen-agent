@@ -8,6 +8,7 @@ in every mode.
 """
 
 from types import SimpleNamespace
+from typing import ClassVar
 
 import pytest
 
@@ -22,7 +23,7 @@ def fake_stack(monkeypatch):
     seen = {}
 
     class FakeRuntime:
-        warnings: list = []
+        warnings: ClassVar[list] = []
 
         async def close(self) -> None: ...
 

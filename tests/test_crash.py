@@ -18,7 +18,11 @@ def test_write_crash_log_captures_the_traceback(tmp_path):
     assert "Traceback" in text
 
 
-def test_install_excepthook_is_idempotent(tmp_path):
+def test_install_excepthook_is_idempotent(tmp_path, monkeypatch):
+    # Other CLI tests run main(), which installs the hook for real; isolate
+    # the module state so the idempotency contract is what is under test.
+    monkeypatch.setattr(crash, "_installed", False)
+    monkeypatch.setattr(crash, "_log_dir", None)
     original = sys.excepthook
     try:
         first = crash.install_excepthook(tmp_path)

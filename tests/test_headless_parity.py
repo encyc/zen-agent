@@ -77,16 +77,18 @@ def fake_stream(text: str = "ok"):
 def _record_real_runtime(monkeypatch, captured: dict) -> None:
     """Wrap the real assembly seam and keep the Runtime the run built."""
 
-    real_bootstrap = cli_main._bootstrap
+    from zenagent.app.runtime import Runtime
 
-    async def bootstrap(options, **kwargs):
-        runtime = await real_bootstrap(options, **kwargs)
+    real_bootstrap = Runtime.bootstrap.__func__
+
+    async def bootstrap(cls, options, **kwargs):
+        runtime = await real_bootstrap(cls, options, **kwargs)
         captured["runtime"] = runtime
         captured["agent"] = runtime.agent
         captured["tools"] = [tool.name for tool in runtime.agent.tools]
         return runtime
 
-    monkeypatch.setattr(cli_main, "_bootstrap", bootstrap)
+    monkeypatch.setattr(Runtime, "bootstrap", classmethod(bootstrap))
 
 
 async def _run_headless(**overrides):

@@ -90,7 +90,6 @@ def test_missing_extension_file_warns(tmp_path):
 
 async def test_extension_command_runs_via_repl(tmp_path, monkeypatch):
     import zenagent.agent.session as session_module
-    import zenagent.cli.repl as repl_module
     from zenagent.config import UserConfig
 
     monkeypatch.setattr("zenagent.app.bootstrap.load_user_config", lambda: UserConfig())
