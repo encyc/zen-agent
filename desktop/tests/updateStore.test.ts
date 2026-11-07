@@ -36,3 +36,26 @@ test('a stale cache triggers one network check', () => {
 test('a missing cache triggers one network check', () => {
   assert.equal(bootUpdateCheck(base), 'network')
 })
+
+test('install() re-checks when the pending handle was lost to a reload', async () => {
+  ;(globalThis as Record<string, unknown>).__APP_VERSION__ ??= '0.8.4'
+  const { useUpdateStore, _usePluginLoader } = await import('../src/state/updateStore.ts')
+  let downloads = 0
+  _usePluginLoader(async () => ({
+    check: async () => ({
+      version: '0.9.0',
+      downloadAndInstall: async () => {
+        downloads += 1
+      },
+    }),
+  }))
+  useUpdateStore.setState({
+    cache: { checkedAt: Date.now(), latest: '0.9.0', notified: null },
+    phase: 'available',
+    pending: null,
+    selfUpdatable: true,
+    message: null,
+  })
+  await useUpdateStore.getState().install()
+  assert.equal(downloads, 1)
+})

@@ -173,5 +173,11 @@ async def test_text_that_arrives_before_the_mount_renders_after_it():
     async with app.run_test(size=(60, 20)) as pilot:
         await pilot.pause()
         await app.document.wait_for_render()
+        # The pump coalesces chunks; on a loaded CI runner the second one can
+        # land a pause later, so wait for the full text within a bounded loop.
+        for _ in range(50):
+            if app.document.source == "alpha beta":
+                break
+            await pilot.pause()
         assert app.document.source == "alpha beta"
         assert _paragraphs(app) == ["alpha beta"]

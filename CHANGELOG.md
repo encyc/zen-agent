@@ -3,7 +3,32 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased
+## v0.9.1 — 2026-11-07
+
+**The updater works end to end, and closing the window keeps the agent alive.**
+
+### Fixed
+
+- **The desktop update button could do nothing.** A banner restored from the
+  cached check had no deferred download handle — the plugin's `check()` result
+  lives only in the session that ran it — so clicking *Update* after a relaunch
+  silently returned. `install()` now re-checks once (surfacing a real failure
+  if that check fails) and then downloads.
+- **macOS updates downloaded a 404.** `latest.json` pointed the two darwin
+  entries at `ZenAgent.app.tar.gz` while the release assets carry
+  architecture-suffixed names (`ZenAgent_aarch64.app.tar.gz`): the app
+  detected the new version but the download failed. The live manifest was
+  hot-fixed for v0.9.0 and the fragment generator now mirrors tauri-action's
+  rename, so this cannot recur.
+
+### Added
+
+- **Closing the window goes to the background.** The zen runtime and its
+  background tasks stay alive; the tray icon (or the macOS dock) brings the
+  window back, and *Quit ZenAgent* in the tray menu is the only path that
+  ends the runtime.
+
+## v0.9.0 — 2026-11-07
 
 **The architecture cleanup: same behavior, fewer copies, harder guards.**
 Full audit in `docs/reviews/2026-11-07-architecture-review.md`, task-by-task
@@ -44,6 +69,19 @@ record in `docs/superpowers/plans/2026-11-07-architecture-cleanup.md`.
   release check.
 - **Explicit `kind` discriminator on tool views** — the desktop no longer
   guesses view types from field shapes.
+
+### Desktop
+
+- **Composer @ file mentions with token boxes** — type `@` to fuzzy-search
+  workspace files, attached as visual tokens instead of raw paths, with
+  deterministic `fuzzy`/`mentions` stores under unit test.
+- **Skills join the composer slash menu**, and the desktop gains settings
+  pages for MCP servers and skills (layered global/project config with
+  0600-private writes, API keys stored without echo) plus project state
+  relocation with collision refusal.
+- **New app icon**: a geometric black-and-white taiji drawn
+  programmatically (no more AI-generated artwork, no watermark), rendered
+  at 4× and regenerated across every Tauri platform size.
 
 ### Fixed
 
