@@ -202,7 +202,7 @@ export const usePaletteStore = create<PaletteState>((set) => ({
 
 // ---- work panel -------------------------------------------------------------
 
-export type WorkPanelTabKind = 'review' | 'files' | 'worktree' | 'subagent'
+export type WorkPanelTabKind = 'review' | 'files' | 'worktree' | 'taiji' | 'subagent'
 
 export interface WorkPanelTab {
   id: string
@@ -224,7 +224,7 @@ interface WorkPanelState {
   activeId: string
   openPanel(): void
   closePanel(): void
-  showTab(kind: 'review' | 'files' | 'worktree'): void
+  showTab(kind: 'review' | 'files' | 'worktree' | 'taiji'): void
   activate(id: string): void
   openSubagent(target: SubagentPanelTarget): void
   closeTab(id: string): void

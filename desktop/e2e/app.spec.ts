@@ -49,6 +49,7 @@ interface BridgeState {
   fsIndex?: { path: string; kind: 'dir' | 'file' }[]
   fsFiles?: Record<string, Record<string, unknown>>
   worktrees?: Record<string, unknown>
+  taiji?: Record<string, unknown>
 }
 
 declare global {
@@ -539,6 +540,19 @@ function installBridge(state: BridgeState) {
               },
             ],
             status: { branch: 'main', staged: 0, dirty: 0, untracked: 0, clean: true },
+          },
+        }
+      case 'taiji':
+        if (payload.op !== 'snapshot') {
+          return { type: 'error', id: payload.id, message: 'unknown taiji op' }
+        }
+        return {
+          type: 'result',
+          id: payload.id,
+          ok: true,
+          taiji: state.taiji ?? {
+            graph: { root: '/work/p', is_repo: false, commits: [], branches: [], max_lane: 0 },
+            sessions: { repo_root: '/work/p', projects: [] },
           },
         }
       case 'project': {
@@ -1123,6 +1137,71 @@ test('the worktree tab lists worktrees and marks the current one', async ({ page
   await expect(panel).toContainText('当前')
   await expect(panel).toContainText('3 个未提交变更')
   await expect(panel.getByRole('button', { name: '切换' })).toHaveCount(1)
+  await page.getByRole('button', { name: '关闭工作面板' }).click()
+  await expect(page.locator('[data-work-panel]')).toHaveCount(0)
+})
+
+const taijiSnapshot = {
+  graph: {
+    root: '/work/p',
+    is_repo: true,
+    commits: [
+      { sha: 'c3', short: 'c3abc12', parents: ['c1'], subject: 'taiji: merge task/fix', author: 'justin', ts: 3, lane: 0 },
+      { sha: 'c2', short: 'c2abc12', parents: ['c1'], subject: 'fix: login timeout', author: 'worker', ts: 2, lane: 1 },
+      { sha: 'c1', short: 'c1abc12', parents: [], subject: 'init', author: 'justin', ts: 1, lane: 0 },
+    ],
+    branches: [
+      { name: 'main', sha: 'c3', is_head: true },
+      { name: 'task/fix', sha: 'c2', is_head: false },
+    ],
+    max_lane: 1,
+  },
+  sessions: {
+    repo_root: '/work/p',
+    projects: [
+      {
+        key: 'p-main',
+        root: '/work/p',
+        branch: 'main',
+        worktree: false,
+        sessions: [{ name: 's1', title: 'Router talk', updated_at: 10, messages: 4 }],
+      },
+      {
+        key: 'p-task',
+        root: '/work/p-task',
+        branch: 'task/fix',
+        worktree: true,
+        sessions: [{ name: 's2', title: 'fix login', updated_at: 9, messages: 2 }],
+      },
+    ],
+  },
+}
+
+test('the taiji tab lists commits, branches and sessions', async ({ page }) => {
+  await boot(page, initialState({ taiji: taijiSnapshot }))
+  await page.getByRole('button', { name: '打开工作面板' }).click()
+  const panel = page.locator('[data-work-panel]')
+  await page.getByRole('button', { name: '打开工作面板标签' }).click()
+  await panel.getByRole('menuitem', { name: '太极' }).click()
+  await expect(panel.getByRole('tab', { name: '太极' })).toHaveAttribute('aria-selected', 'true')
+  await expect(panel).toContainText('taiji: merge task/fix')
+  await expect(panel).toContainText('fix: login timeout')
+  await expect(panel).toContainText('main')
+  await expect(panel).toContainText('task/fix')
+  await expect(panel).toContainText('Router talk')
+  await expect(panel).toContainText('fix login')
+  await page.getByRole('button', { name: '关闭工作面板' }).click()
+  await expect(page.locator('[data-work-panel]')).toHaveCount(0)
+})
+
+test('the taiji tab shows an empty state outside a repository', async ({ page }) => {
+  await boot(page, initialState())
+  await page.getByRole('button', { name: '打开工作面板' }).click()
+  const panel = page.locator('[data-work-panel]')
+  await page.getByRole('button', { name: '打开工作面板标签' }).click()
+  await panel.getByRole('menuitem', { name: '太极' }).click()
+  await expect(panel.getByRole('tab', { name: '太极' })).toHaveAttribute('aria-selected', 'true')
+  await expect(panel).toContainText('还没有 git 仓库')
   await page.getByRole('button', { name: '关闭工作面板' }).click()
   await expect(page.locator('[data-work-panel]')).toHaveCount(0)
 })
