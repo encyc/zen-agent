@@ -126,3 +126,26 @@ def test_cli_usage_rejects_bad_since(isolated, capsys):
 
     assert cli_main.main(["usage", "--since", "yesterday"]) == 1
     assert "bad --since" in capsys.readouterr().err
+
+
+def test_usage_wrappers_match_usage_total():
+    """The three front-end adapters must agree with the shared aggregator."""
+    from zenagent.app.views import usage_total
+    from zenagent.cli.main import _usage_and_counts
+    from zenagent.cli.render import aggregate_usage
+
+    messages = [
+        assistant("m", input_tokens=10, output=5, cache_read=2, cost=0.02),
+        assistant("m", input_tokens=7, output=3, cache_read=1, cost=0.01),
+    ]
+    total = usage_total(messages)
+    assert aggregate_usage(messages) == total
+    flat, count = _usage_and_counts(messages)
+    assert flat == {
+        "input": total.input,
+        "output": total.output,
+        "cache_read": total.cache_read,
+        "cache_write": total.cache_write,
+        "cost": total.cost.total,
+    }
+    assert count == len(messages)

@@ -29,6 +29,7 @@ from zenagent.app.modes import MODES, resolve_mode
 from zenagent.app.permissions import build_broker_for
 from zenagent.app.runtime import Runtime, RuntimeOptions
 from zenagent.app.support import resolve_model
+from zenagent.app.views import usage_total
 from zenagent.attachments import read_image_argument
 from zenagent.cli.doctor import run_doctor
 from zenagent.cli.exportcmd import run_export
@@ -100,20 +101,14 @@ class _PlainOutput:
 
 
 def _usage_and_counts(messages: list[Message]) -> tuple[dict, int]:
-    usage: dict = {
-        "input": 0,
-        "output": 0,
-        "cache_read": 0,
-        "cache_write": 0,
-        "cost": 0.0,
+    total = usage_total(messages)
+    usage = {
+        "input": total.input,
+        "output": total.output,
+        "cache_read": total.cache_read,
+        "cache_write": total.cache_write,
+        "cost": total.cost.total,
     }
-    for message in messages:
-        if isinstance(message, AssistantMessage):
-            usage["input"] += message.usage.input
-            usage["output"] += message.usage.output
-            usage["cache_read"] += message.usage.cache_read
-            usage["cache_write"] += message.usage.cache_write
-            usage["cost"] += message.usage.cost.total
     return usage, len(messages)
 
 

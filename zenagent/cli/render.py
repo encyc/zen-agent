@@ -17,6 +17,7 @@ from rich.text import Text
 
 from zenagent.agent.loop import ToolResultAgent
 from zenagent.agent.session import Session
+from zenagent.app.views import usage_total
 from zenagent.cli.theme import DEFAULT_THEME, Theme
 from zenagent.events import AssistantEvent
 from zenagent.types import (
@@ -142,19 +143,7 @@ def tool_progress_line(tool_name: str, partial: ToolResultAgent) -> str:
 
 def aggregate_usage(messages: list) -> Usage:
     """Sum the usage of every assistant message (the run's bill)."""
-    total = Usage()
-    for message in messages:
-        if isinstance(message, AssistantMessage):
-            total.input += message.usage.input
-            total.output += message.usage.output
-            total.cache_read += message.usage.cache_read
-            total.cache_write += message.usage.cache_write
-            total.cost.input += message.usage.cost.input
-            total.cost.output += message.usage.cost.output
-            total.cost.cache_read += message.usage.cost.cache_read
-            total.cost.cache_write += message.usage.cost.cache_write
-            total.cost.total += message.usage.cost.total
-    return total
+    return usage_total(messages)
 
 
 def _human_tokens(count: int) -> str:

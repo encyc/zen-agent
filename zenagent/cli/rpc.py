@@ -29,6 +29,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from zenagent.agent import Agent
+from zenagent.app.views import usage_total
 from zenagent.app.workspace import list_directory, read_file, worktree_overview
 from zenagent.events import AgentEvent
 from zenagent.types import (
@@ -193,17 +194,14 @@ def serialize_event(event: AgentEvent) -> dict:
 
 
 def _usage(agent: Agent) -> dict:
-    totals = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0, "cost": 0.0}
-    for message in agent.messages:
-        if not isinstance(message, AssistantMessage):
-            continue
-        usage = message.usage
-        totals["input"] += usage.input
-        totals["output"] += usage.output
-        totals["cache_read"] += usage.cache_read
-        totals["cache_write"] += usage.cache_write
-        totals["cost"] += usage.cost.total
-    return totals
+    total = usage_total(agent.messages)
+    return {
+        "input": total.input,
+        "output": total.output,
+        "cache_read": total.cache_read,
+        "cache_write": total.cache_write,
+        "cost": total.cost.total,
+    }
 
 
 class RpcServer:
