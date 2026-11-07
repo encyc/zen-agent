@@ -180,3 +180,26 @@ def test_worker_command_prefers_zen_on_path(monkeypatch) -> None:
         "/wt",
         "--yes",
     ]
+
+
+async def test_stop_fails_a_pending_prompt_instead_of_hanging() -> None:
+    client, transport = make_client()
+
+    class Stall(LoopbackTransport):
+        async def send_line(self, line: str) -> None:
+            if json.loads(line).get("type") == "prompt":
+                return  # never answers
+            await self.server._handle_line(line)
+
+    client.transport = Stall(transport.server, transport.out)  # type: ignore[assignment]
+    await client.start(Path("/nowhere"), on_event=lambda event: None)
+    prompt_task = asyncio.create_task(client.prompt("go", timeout_s=30.0))
+    await asyncio.sleep(0.05)
+    await client.stop()
+
+    try:
+        await asyncio.wait_for(prompt_task, 2.0)
+        raised = False
+    except (RuntimeError, TimeoutError):
+        raised = True
+    assert raised is True

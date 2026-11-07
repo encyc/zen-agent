@@ -240,7 +240,9 @@ class TestSessionMap:
 
 
 class TestSessionStatus:
-    def test_registry_status_flows_into_sessions(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
+    def test_registry_status_flows_into_sessions(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
         from zenagent.app.taiji.registry import TaijiRegistry, WorkerRecord
         from zenagent.project import project_key
 
@@ -269,7 +271,9 @@ class TestSessionStatus:
         assert sessions[0]["worker"] == "login-timeout"
         assert sessions[0]["branch"] == "task/login-timeout"
 
-    def test_sessions_without_a_worker_have_no_status(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
+    def test_sessions_without_a_worker_have_no_status(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
         from zenagent.project import project_key
 
         _commit(repo, "a.txt", "init")
@@ -285,7 +289,9 @@ class TestSessionStatus:
 
 
 class TestAttentionSnapshot:
-    def test_worker_attention_surfaces_in_the_session_row(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
+    def test_worker_attention_surfaces_in_the_session_row(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
         from zenagent.app.taiji.registry import TaijiRegistry, WorkerRecord
         from zenagent.project import project_key
 
@@ -296,8 +302,13 @@ class TestAttentionSnapshot:
         _session_file(directory, "worker-turn")
         registry = TaijiRegistry()
         registry.records["w"] = WorkerRecord(
-            name="w", branch="task/w", base="main", worktree="/wt",
-            status="ok", created_at=1.0, updated_at=2.0,
+            name="w",
+            branch="task/w",
+            base="main",
+            worktree="/wt",
+            status="ok",
+            created_at=1.0,
+            updated_at=2.0,
             session=str(directory / "worker-turn.jsonl"),
             attention='{"request_id": "q0", "question": "A 还是 B？"}',
         )

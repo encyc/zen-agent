@@ -95,9 +95,11 @@ class RpcRunner:
         *,
         timeout_s: float = 1800.0,
         client_factory: Callable[[], Any] | None = None,
+        attention_grace_s: float = 2.0,
     ) -> None:
         self._timeout_s = timeout_s
         self._client_factory = client_factory
+        self._attention_grace_s = attention_grace_s
 
     async def run_turn(
         self, worktree: str, session_path: str | None, prompt: str
@@ -106,24 +108,56 @@ class RpcRunner:
 
         client = self._client_factory() if self._client_factory else WorkerRpcClient()
         events: list[dict] = []
-        await client.start(Path(worktree), on_event=events.append)
+        asked = asyncio.Event()
+
+        def on_event(event: dict) -> None:
+            events.append(event)
+            if event.get("type") == "ask_request":
+                asked.set()
+
+        await client.start(Path(worktree), on_event=on_event)
+        attention = None
+        summary = ""
+        answer = None
         try:
             if session_path:
-                await client.resume(session_path)
-            answer = await client.prompt(prompt, timeout_s=self._timeout_s)
+                resume_result = await client.resume(session_path)
+                if resume_result.get("ok") is not True:
+                    summary = f"resume failed: {resume_result.get('message', '')}"
+            if summary:
+                answer = None
+            else:
+                prompt_task = asyncio.create_task(
+                    client.prompt(prompt, timeout_s=self._timeout_s)
+                )
+                asked_wait = asyncio.create_task(asked.wait())
+                done, _pending = await asyncio.wait(
+                    [prompt_task, asked_wait], return_when=asyncio.FIRST_COMPLETED
+                )
+                if prompt_task in done:
+                    answer = prompt_task.result()
+                else:
+                    # the worker asked a question: the run blocks on it, so the
+                    # turn ends here and the question becomes the attention
+                    await asyncio.sleep(self._attention_grace_s)
+                    await client.stop()
+                    asked_wait.cancel()
         finally:
             await client.stop()
-        attention = None
         for event in events:
             if event.get("type") == "ask_request":
                 questions = event.get("questions") or []
                 attention = {
                     "request_id": str(event.get("request_id", "")),
                     "question": "; ".join(
-                        str(question.get("question", "")) for question in questions if isinstance(question, dict)
+                        str(question.get("question", ""))
+                        for question in questions
+                        if isinstance(question, dict)
                     ).strip("; "),
                 }
-        if answer.get("ok") is False:
+                if answer is not None:
+                    break  # the ask resolved inside the turn; not a handoff
+        if answer is not None and answer.get("ok") is False:
             # A graceful ok:false frame (provider error, max turns, abort) is
             # a failed turn — never a mergeable success.
             reason = str(answer.get("error") or answer.get("text") or "turn failed")
@@ -131,6 +165,14 @@ class RpcRunner:
                 status="error",
                 summary=reason[:2000],
                 session_path=str(answer.get("session") or session_path or ""),
+                attention=attention,
+            )
+        if answer is None:
+            return TurnResult(
+                status="ok",
+                summary=summary or (attention or {}).get("question", "")[:200],
+                session_path=str(session_path or ""),
+                attention=attention,
             )
         summary = str(answer.get("text") or "").strip()
         return TurnResult(
@@ -229,7 +271,11 @@ class TaijiSupervisor:
         worktree = worktrees_root() / project_key(self.repo_root) / worker
 
         current = _git(self.repo_root, "branch", "--show-current")
-        base = current.stdout.strip() if current is not None and current.stdout.strip() else "main"
+        base = (
+            current.stdout.strip()
+            if current is not None and current.stdout.strip()
+            else "main"
+        )
         branched = _git(self.repo_root, "branch", branch, base)
         if branched is None or branched.returncode != 0:
             detail = branched.stderr.strip() if branched else "git is not available"
@@ -252,7 +298,9 @@ class TaijiSupervisor:
         )
         self.registry.records[worker] = record
         self._save()
-        self._start_turn(record, prompt, resume=None, rollback_on_start_failure=True, use_slot=True)
+        self._start_turn(
+            record, prompt, resume=None, rollback_on_start_failure=True, use_slot=True
+        )
         return record
 
     async def message(self, name: str, text: str) -> WorkerRecord:
@@ -263,7 +311,11 @@ class TaijiSupervisor:
         record.updated_at = time.time()
         self._save()
         self._start_turn(
-            record, text, resume=record.session or None, rollback_on_start_failure=False, use_slot=False
+            record,
+            text,
+            resume=record.session or None,
+            rollback_on_start_failure=False,
+            use_slot=False,
         )
         return record
 
@@ -348,7 +400,11 @@ class TaijiSupervisor:
         record.status = result.status
         record.summary = result.summary
         record.session = result.session_path
-        record.attention = _json.dumps(result.attention, ensure_ascii=False) if result.attention else ""
+        record.attention = (
+            _json.dumps(result.attention, ensure_ascii=False)
+            if result.attention
+            else ""
+        )
         record.updated_at = time.time()
         self._save()
         await self._emit_turn(record, result.summary, started, status=result.status)
@@ -424,7 +480,10 @@ class TaijiSupervisor:
         record = self.registry.records.get(name)
         if record is None or record.status != "ok":
             return False
-        if self.mode_of() == "zen" and self._diff_lines(record) > AUTO_MERGE_MAX_DIFF_LINES:
+        if (
+            self.mode_of() == "zen"
+            and self._diff_lines(record) > AUTO_MERGE_MAX_DIFF_LINES
+        ):
             return False
         current = _git(self.repo_root, "branch", "--show-current")
         if current is None or current.stdout.strip() != record.base:

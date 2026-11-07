@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -423,7 +425,9 @@ class TestReviewFixes:
         assert record.base == "master"
         merged = await supervisor.merge("mastered")
         assert merged is True
-        assert "work: works on master" in _git(repo, "log", "--format=%s", "master").stdout
+        assert (
+            "work: works on master" in _git(repo, "log", "--format=%s", "master").stdout
+        )
 
     async def test_merge_conflict_aborts_and_keeps_the_tree_clean(
         self, repo: Path, tmp_path: Path, monkeypatch
@@ -509,8 +513,12 @@ class TestReviewFixes:
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
 class TestCrossReviewFixes:
-    async def test_kill_cancels_the_in_flight_turn_and_stays_killed(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
-        monkeypatch.setattr("zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home")
+    async def test_kill_cancels_the_in_flight_turn_and_stays_killed(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
+        )
         cancelled = asyncio.Event()
 
         class SlowRunner(StubRunner):
@@ -536,8 +544,12 @@ class TestCrossReviewFixes:
         # a killed task never reaches the merge gate
         assert _git(repo, "rev-parse", "main").stdout.strip() == main_before
 
-    async def test_spawn_records_the_checked_out_base_branch(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
-        monkeypatch.setattr("zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home")
+    async def test_spawn_records_the_checked_out_base_branch(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
+        )
         _git(repo, "branch", "-m", "main", "master")
         supervisor = make_supervisor(repo, tmp_path, StubRunner(), mode="ask")
 
@@ -553,10 +565,16 @@ class TestCrossReviewFixes:
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
 class TestMergeThreshold:
-    async def test_zen_small_diff_auto_merges(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
-        monkeypatch.setattr("zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home")
+    async def test_zen_small_diff_auto_merges(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
+        )
         chat = FakeChat()
-        supervisor = make_chat_supervisor(repo, tmp_path, StubRunner(), mode="zen", chat=chat)
+        supervisor = make_chat_supervisor(
+            repo, tmp_path, StubRunner(), mode="zen", chat=chat
+        )
 
         await supervisor.spawn("small change", name="small")
         await supervisor.wait_idle()
@@ -564,18 +582,26 @@ class TestMergeThreshold:
         assert supervisor.list_workers()[0].status == "merged"
         assert len(chat.messages) == 1
 
-    async def test_zen_large_diff_falls_back_to_acceptance(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
-        monkeypatch.setattr("zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home")
+    async def test_zen_large_diff_falls_back_to_acceptance(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
+        )
 
         class BigRunner(StubRunner):
             async def run_turn(self, worktree, session_path, prompt):
-                (Path(worktree) / "big.txt").write_text("x" * 300 + "\n" * 300, encoding="utf-8")
+                (Path(worktree) / "big.txt").write_text(
+                    "x" * 300 + "\n" * 300, encoding="utf-8"
+                )
                 _git(Path(worktree), "add", ".")
                 _git(Path(worktree), "commit", "-qm", "big work")
                 return TurnResult(status="ok", summary="wrote a lot", session_path="")
 
         chat = FakeChat()
-        supervisor = make_chat_supervisor(repo, tmp_path, BigRunner(), mode="zen", chat=chat)
+        supervisor = make_chat_supervisor(
+            repo, tmp_path, BigRunner(), mode="zen", chat=chat
+        )
 
         await supervisor.spawn("big change", name="big")
         await supervisor.wait_idle()
@@ -583,7 +609,12 @@ class TestMergeThreshold:
         assert supervisor.list_workers()[0].status == "ok"
         main_before = _git(repo, "rev-parse", "main").stdout.strip()
         record = supervisor.list_workers()[0]
-        assert _git(repo, "merge-base", "--is-ancestor", record.branch, main_before).returncode != 0
+        assert (
+            _git(
+                repo, "merge-base", "--is-ancestor", record.branch, main_before
+            ).returncode
+            != 0
+        )
         assert len(chat.messages) == 2
         assert "待验收" in chat.messages[1]
 
@@ -608,8 +639,12 @@ class GatedRunner(StubRunner):
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
 class TestWorkerSlots:
-    async def test_spawn_beyond_limit_queues_until_a_slot_frees(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
-        monkeypatch.setattr("zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home")
+    async def test_spawn_beyond_limit_queues_until_a_slot_frees(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
+        )
         runner = GatedRunner()
         supervisor = TaijiSupervisor(
             repo_root=repo,
@@ -637,8 +672,12 @@ class TestWorkerSlots:
         runner.gate("job-b").set()
         await supervisor.wait_idle()
 
-    async def test_message_wakes_even_when_slots_are_full(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
-        monkeypatch.setattr("zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home")
+    async def test_message_wakes_even_when_slots_are_full(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
+        )
         runner = GatedRunner()
         supervisor = TaijiSupervisor(
             repo_root=repo,
@@ -665,8 +704,12 @@ class TestWorkerSlots:
         runner.gate("p2").set()
         await supervisor.wait_idle()
 
-    async def test_kill_a_queued_worker_never_runs_it(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
-        monkeypatch.setattr("zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home")
+    async def test_kill_a_queued_worker_never_runs_it(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
+        )
         runner = GatedRunner()
         supervisor = TaijiSupervisor(
             repo_root=repo,
@@ -705,13 +748,20 @@ class AttentionRunner(StubRunner):
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
 class TestAttention:
-    async def test_attention_is_persisted_and_relayed_and_blocks_merge(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
-        monkeypatch.setattr("zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home")
+    async def test_attention_is_persisted_and_relayed_and_blocks_merge(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
+        )
         chat = FakeChat()
         question = {"request_id": "q0", "question": "方案 A 还是 B？"}
         supervisor = make_chat_supervisor(
-            repo, tmp_path, AttentionRunner({"request_id": "q0", "question": "方案 A 还是 B？"}),
-            mode="zen", chat=chat,
+            repo,
+            tmp_path,
+            AttentionRunner({"request_id": "q0", "question": "方案 A 还是 B？"}),
+            mode="zen",
+            chat=chat,
         )
 
         await supervisor.spawn("needs a decision", name="asking")
@@ -722,9 +772,16 @@ class TestAttention:
         assert "方案 A" in record.attention
         # a pending question blocks the zen auto-merge
         main_before = _git(repo, "rev-parse", "main").stdout.strip()
-        assert _git(repo, "merge-base", "--is-ancestor", record.branch, main_before).returncode != 0
+        assert (
+            _git(
+                repo, "merge-base", "--is-ancestor", record.branch, main_before
+            ).returncode
+            != 0
+        )
         # the Router hears the question
-        assert any("提问" in message and "方案 A" in message for message in chat.messages)
+        assert any(
+            "提问" in message and "方案 A" in message for message in chat.messages
+        )
 
         # the human answers: the next turn clears the attention and merges
         supervisor.runner = StubRunner()
@@ -734,17 +791,102 @@ class TestAttention:
         assert supervisor.list_workers()[0].attention == ""
         assert supervisor.list_workers()[0].status == "merged"
 
-    async def test_registry_without_attention_field_loads(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
+    async def test_registry_without_attention_field_loads(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
         import json as _json
 
-        monkeypatch.setattr("zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home")
+        monkeypatch.setattr(
+            "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
+        )
         registry_path = tmp_path / "sessions" / "taiji.json"
         registry_path.parent.mkdir(parents=True)
-        registry_path.write_text(_json.dumps({
-            "legacy": {"name": "legacy", "branch": "task/legacy", "base": "main",
-                        "worktree": "/wt", "status": "interrupted",
-                        "created_at": 1.0, "updated_at": 2.0}
-        }), encoding="utf-8")
+        registry_path.write_text(
+            _json.dumps(
+                {
+                    "legacy": {
+                        "name": "legacy",
+                        "branch": "task/legacy",
+                        "base": "main",
+                        "worktree": "/wt",
+                        "status": "interrupted",
+                        "created_at": 1.0,
+                        "updated_at": 2.0,
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
 
         supervisor = make_supervisor(repo, tmp_path, StubRunner())
         assert supervisor.list_workers()[0].attention == ""
+
+
+class AskingLoopback:
+    """A transport whose worker asks a question mid-run and never answers."""
+
+    def __init__(self, out: asyncio.Queue) -> None:
+        self.out = out
+        self._on_line = None
+
+    async def start(self, on_line) -> None:
+        self._on_line = on_line
+        asyncio.create_task(self._pump())
+
+    async def _pump(self) -> None:
+        while True:
+            line = await self.out.get()
+            if line is None:
+                return
+            await self._on_line(line)
+
+    async def send_line(self, line: str) -> None:
+        payload = json.loads(line)
+        if payload.get("type") == "hello":
+            self.out.put_nowait(
+                json.dumps(
+                    {
+                        "type": "result",
+                        "id": payload["id"],
+                        "ok": True,
+                        "protocol_version": 2,
+                    }
+                )
+            )
+            return
+        if payload.get("type") == "prompt":
+            self.out.put_nowait(
+                json.dumps(
+                    {
+                        "type": "event",
+                        "event": {
+                            "type": "ask_request",
+                            "request_id": "q0",
+                            "questions": [{"question": "用哪个方案？"}],
+                        },
+                    }
+                )
+            )
+            return  # the worker now blocks on the ask; never completes
+
+    async def stop(self) -> None:
+        self.out.put_nowait(None)
+
+
+async def test_turn_ends_promptly_when_the_worker_asks(tmp_path: Path) -> None:
+    from zenagent.app.taiji.supervisor import RpcRunner
+    from zenagent.app.taiji.worker_client import WorkerRpcClient
+
+    out: asyncio.Queue = asyncio.Queue()
+    runner = RpcRunner(
+        client_factory=lambda: WorkerRpcClient(transport=AskingLoopback(out)),
+        attention_grace_s=0.2,
+    )
+
+    started = time.time()
+    result = await runner.run_turn("/tmp/wt", None, "decide something")
+    elapsed = time.time() - started
+
+    assert result.attention is not None
+    assert "哪个方案" in (result.attention or {}).get("question", "")
+    assert elapsed < 10

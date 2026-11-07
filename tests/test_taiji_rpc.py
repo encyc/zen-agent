@@ -66,3 +66,36 @@ async def test_unknown_op_is_an_error(runtime_factory, repo: Path, monkeypatch) 
 
     assert result["type"] == "error"
     assert "ghost" in result["message"]
+
+
+async def test_workers_op_reports_the_registry(
+    runtime_factory, repo: Path, monkeypatch, tmp_path: Path
+) -> None:
+    from zenagent.app.taiji.registry import TaijiRegistry, WorkerRecord
+    from zenagent.project import project_dir
+
+    monkeypatch.chdir(repo)
+    registry_dir = project_dir(root=repo)
+    registry_dir.mkdir(parents=True, exist_ok=True)
+    registry = TaijiRegistry()
+    registry.records["w"] = WorkerRecord(
+        name="w",
+        branch="task/w",
+        base="main",
+        worktree="/wt",
+        status="ok",
+        created_at=1.0,
+        updated_at=2.0,
+        summary="did it",
+        attention='{"request_id": "q0", "question": "A 还是 B？"}',
+    )
+    registry.save(registry_dir / "taiji.json")
+
+    server = build_server(await runtime_factory(), writes := [])
+    result = await call(server, writes, {"type": "taiji", "op": "workers"})
+
+    assert result["ok"] is True
+    row = result["workers"]["w"]
+    assert row["status"] == "ok"
+    assert row["summary"] == "did it"
+    assert "A 还是 B" in row["attention"]
