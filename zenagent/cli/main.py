@@ -500,7 +500,18 @@ def _missing_extras(frontend: str, missing: str) -> int:
     return 2
 
 
+def _install_crash_hook() -> None:
+    """Best-effort crash-log excepthook; never blocks startup."""
+    try:
+        from zenagent.crash import install_excepthook
+
+        install_excepthook()
+    except Exception:  # noqa: BLE001 - crash reporting must never break startup
+        pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _install_crash_hook()
     raw = sys.argv[1:] if argv is None else list(argv)
     if raw and raw[0] == "rpc":
         from zenagent.cli.rpc import main as rpc_main
