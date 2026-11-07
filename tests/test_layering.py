@@ -111,3 +111,22 @@ def test_loop_imports_tool_exec_at_module_level():
     ]
     body_src = ast.unparse(fns[0])
     assert "from zenagent.agent.tool_exec" not in body_src
+
+
+def test_root_package_exports_the_kernel_facade():
+    """A newcomer's first import should be ``from zenagent import Agent``."""
+    from zenagent import (
+        Agent,
+        AgentConfig,
+        AgentState,
+        AgentTool,
+        StreamOptions,
+        agent_loop,
+        register_stream_fn,
+    )
+
+    assert callable(agent_loop)
+    assert callable(register_stream_fn)
+    assert Agent is not None and AgentConfig is not None
+    assert AgentState is not None and AgentTool is not None
+    assert StreamOptions is not None

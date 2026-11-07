@@ -193,8 +193,6 @@ async def _rename(services: AppServices, argument: str) -> CommandResult:
 
 @_command("pin")
 async def _pin(services: AppServices, argument: str) -> CommandResult:
-    from zenagent.agent.session import session_title
-
     requested = argument.strip().lower()
     current = services.sessions.current()
     try:

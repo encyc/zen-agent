@@ -258,7 +258,7 @@ const zh: Dict = {
   'settings.mcpSave': '保存服务器',
   'settings.remove': '移除',
   'settings.projects': '项目',
-  'settings.projectsHint': '登记的项目目录与最近使用情况。',
+  'settings.projectsHint': '所有已知项目及其最近使用情况。',
   'settings.projectsList': '项目目录',
   'settings.projectsListCaption': '有会话历史的目录与手动登记的目录；移除只忘记登记，不会删除文件。',
   'settings.projectCurrent': '当前',
@@ -648,7 +648,7 @@ const en: Dict = {
   'settings.mcpSave': 'Save server',
   'settings.remove': 'Remove',
   'settings.projects': 'Projects',
-  'settings.projectsHint': 'Registered project folders and their recent activity.',
+  'settings.projectsHint': 'Every known project and its recent activity.',
   'settings.projectsList': 'Project folders',
   'settings.projectsListCaption':
     'Folders with session history plus manual registrations; removing only forgets the registration.',

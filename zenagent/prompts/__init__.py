@@ -85,7 +85,7 @@ class PromptContext:
 
 
 def _block_tokens(text: str) -> int:
-    """Estimate one block's token cost (lazy import avoids an import cycle)."""
+    """Estimate one block's token cost (lazy import keeps startup light)."""
     from zenagent.providers.limits import estimate_text_tokens
 
     return estimate_text_tokens(text)
