@@ -1,9 +1,9 @@
 """Executing tool calls: validation, hooks, timeouts, batching, results.
 
 Extracted from :mod:`zenagent.agent.loop` so the loop reads as a turn machine.
-This module may import the loop's vocabulary (``AgentTool``/``ToolResultAgent``);
-the loop imports this module *inside* ``agent_loop`` to keep that dependency one
-way at import time.
+The loop imports this module at top level; the protocol vocabulary this module
+needs lives in :mod:`zenagent.agent.protocol`, so the runtime dependency is a
+one-way edge loop → tool_exec.
 """
 
 from __future__ import annotations
@@ -13,10 +13,10 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from zenagent.agent.loop import (
+from zenagent.agent.protocol import (
     _MAX_ERROR_TEXT,
-    AgentConfig,
     AgentTool,
     ToolContext,
     ToolResultAgent,
@@ -29,6 +29,9 @@ from zenagent.agent.timeouts import effective_timeout
 from zenagent.agent.validate import validate_arguments
 from zenagent.events import AbortToken, AgentEvent
 from zenagent.types import ToolCall
+
+if TYPE_CHECKING:
+    from zenagent.agent.loop import AgentConfig
 
 
 @dataclass

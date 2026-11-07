@@ -86,3 +86,28 @@ def test_loop_does_not_import_concrete_adapter():
 
     src = inspect.getsource(loop)
     assert "openai_completions" not in src
+
+
+def test_tool_protocol_lives_outside_loop():
+    import inspect
+
+    import zenagent.agent.protocol as proto
+    from zenagent.agent import loop
+
+    assert "class AgentTool" in inspect.getsource(proto)
+    assert "class AgentTool" not in inspect.getsource(loop)
+
+
+def test_loop_imports_tool_exec_at_module_level():
+    import ast
+    import inspect
+
+    from zenagent.agent import loop
+
+    fns = [
+        n
+        for n in ast.walk(ast.parse(inspect.getsource(loop)))
+        if isinstance(n, ast.AsyncFunctionDef) and n.name == "agent_loop"
+    ]
+    body_src = ast.unparse(fns[0])
+    assert "from zenagent.agent.tool_exec" not in body_src
