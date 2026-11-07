@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { attachSessions, graphEdges, laneColor } from '../src/ui/rightbar/taijiGraph.ts'
+import {
+  attachSessions,
+  graphEdges,
+  laneColor,
+  relativeTime,
+  statusMeta,
+} from '../src/ui/rightbar/taijiGraph.ts'
 import type { TaijiCommit, TaijiGraph, TaijiSessionMap } from '../src/rpc/types.ts'
 
 const commit = (sha: string, parents: string[], lane: number, subject = sha): TaijiCommit => ({
@@ -125,4 +131,29 @@ test('attachSessions without a current path marks nothing here', () => {
 
   assert.equal(rows[0]!.isHere, false)
   assert.equal(rows[0]!.sessions.length, 1)
+})
+
+test('statusMeta maps registry statuses to tone, pulse and an i18n key', () => {
+  assert.deepEqual(statusMeta('running'), {
+    key: 'panel.taiji.status.running',
+    tone: 'run',
+    pulse: true,
+  })
+  assert.deepEqual(statusMeta('ok'), { key: 'panel.taiji.status.ok', tone: 'wait', pulse: false })
+  assert.deepEqual(statusMeta('error'), { key: 'panel.taiji.status.error', tone: 'error', pulse: false })
+  assert.equal(statusMeta('merged')?.tone, 'done')
+  assert.equal(statusMeta('interrupted')?.tone, 'done')
+  assert.equal(statusMeta('killed')?.tone, 'done')
+  assert.equal(statusMeta(undefined), null)
+  assert.equal(statusMeta('nonsense'), null)
+})
+
+test('relativeTime renders compact, locale-neutral spans', () => {
+  const now = 100_000_000
+  assert.equal(relativeTime(now - 30, now), 'now')
+  assert.equal(relativeTime(now - 720, now), '12m')
+  assert.equal(relativeTime(now - 3 * 3600, now), '3h')
+  assert.equal(relativeTime(now - 2 * 86400, now), '2d')
+  assert.equal(relativeTime(now - 40 * 86400, now), '40d')
+  assert.equal(relativeTime(undefined, now), '')
 })

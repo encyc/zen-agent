@@ -6,6 +6,7 @@ a slow or broken repository yields an empty snapshot, not a broken panel.
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -157,11 +158,39 @@ def commit_graph(cwd: Path | str, *, limit: int = 200) -> dict:
     }
 
 
+def _worker_status(directory: Path) -> dict[str, dict]:
+    """Worker records for one project directory, keyed by session file name.
+
+    The registry is taiji's runtime state; a session that belongs to a worker
+    carries that worker's status so the panel can show it without a second
+    round trip.
+    """
+    registry_path = directory.parent / "taiji.json"
+    try:
+        data = json.loads(registry_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    by_session: dict[str, dict] = {}
+    for raw in data.values() if isinstance(data, dict) else ():
+        if not isinstance(raw, dict):
+            continue
+        session = raw.get("session")
+        if not isinstance(session, str) or not session:
+            continue
+        by_session[Path(session).stem] = {
+            "worker": str(raw.get("name", "")),
+            "status": str(raw.get("status", "")),
+            "branch": str(raw.get("branch", "")),
+        }
+    return by_session
+
+
 def _list_dir_sessions(directory: Path, *, limit: int = 100) -> list[dict]:
     """Sessions of one project directory, newest first, unreadable files skipped."""
     if not directory.is_dir():
         return []
     titles = read_session_titles(directory)
+    workers = _worker_status(directory)
     infos = []
     for path in sorted(directory.glob("*.jsonl")):
         try:
@@ -169,15 +198,17 @@ def _list_dir_sessions(directory: Path, *, limit: int = 100) -> list[dict]:
         except (ValueError, OSError):
             continue
     infos.sort(key=lambda info: info.mtime, reverse=True)
-    return [
-        {
+    rows = []
+    for info in infos[:limit]:
+        row = {
             "name": info.path.stem,
             "title": info.title,
             "updated_at": info.mtime,
             "messages": info.messages,
         }
-        for info in infos[:limit]
-    ]
+        row.update(workers.get(info.path.stem, {}))
+        rows.append(row)
+    return rows
 
 
 def session_map(cwd: Path | str) -> dict:

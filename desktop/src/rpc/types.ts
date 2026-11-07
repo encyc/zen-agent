@@ -513,6 +513,10 @@ export interface TaijiProjectSession {
   title: string
   updated_at: number
   messages: number
+  /** Present when the session belongs to a taiji worker. */
+  worker?: string
+  status?: string
+  branch?: string
 }
 
 export interface TaijiProject {

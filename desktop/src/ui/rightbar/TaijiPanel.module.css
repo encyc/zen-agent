@@ -1,3 +1,6 @@
+/* The task graph: quiet greys everywhere, color only where it carries
+ * status — green alive, amber waiting on you, red broken, grey finished. */
+
 .root {
   display: flex;
   flex-direction: column;
@@ -6,38 +9,72 @@
   overflow-y: auto;
 }
 
-.note {
-  margin: 0;
-  padding: 12px;
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+  padding: 24px;
   color: var(--dsw-alias-label-tertiary);
+  text-align: center;
+}
+
+.state p {
+  margin: 0;
   font-size: var(--ds-font-12);
   line-height: 18px;
+}
+
+.stateSpin {
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--dsw-alias-border-l2);
+  border-top-color: var(--dsw-alias-label-secondary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .header {
   display: flex;
   flex: none;
-  align-items: center;
-  gap: 6px;
-  min-height: 34px;
-  padding: 0 8px 0 10px;
+  align-items: baseline;
+  gap: 8px;
+  min-height: 36px;
+  padding: 4px 10px 4px 12px;
   border-bottom: 1px solid var(--dsw-alias-border-l1);
-  color: var(--dsw-alias-label-secondary);
 }
 
 .title {
   color: var(--dsw-alias-label-primary);
-  font-weight: 500;
-  font-size: var(--ds-font-12);
+  font-weight: 600;
+  font-size: var(--ds-font-12-5);
+}
+
+.summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--ds-font-11);
 }
 
 .iconButton {
   display: grid;
   flex: none;
   place-items: center;
+  align-self: center;
   width: 24px;
   height: 24px;
-  margin-left: auto;
   border: none;
   border-radius: var(--dsw-radius-sm);
   background: transparent;
@@ -53,38 +90,42 @@
 .list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
   margin: 0;
-  padding: 4px;
+  padding: 2px 0 8px;
   list-style: none;
 }
 
-.item {
-  padding: 6px 8px;
-  border-radius: var(--dsw-radius-sm);
-}
-
-.item:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.itemHead {
+.row {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
+  align-items: flex-start;
+  min-height: 40px;
+  padding: 3px 8px 3px 0;
+}
+
+.row:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 .rail {
   flex: none;
   display: block;
+  margin-top: 0;
 }
 
-.short {
-  flex: none;
-  color: var(--dsw-alias-label-tertiary);
-  font-family: var(--ds-font-family-code);
-  font-size: var(--ds-font-11);
+.body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding-top: 8px;
+}
+
+.subjectRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
 }
 
 .subject {
@@ -95,43 +136,146 @@
   white-space: nowrap;
   color: var(--dsw-alias-label-primary);
   font-size: var(--ds-font-12);
-}
-
-.badge {
-  flex: none;
-  padding: 0 6px;
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: var(--dsw-radius-sm);
-  color: var(--dsw-alias-label-secondary);
-  font-family: var(--ds-font-family-code);
-  font-size: var(--ds-font-11);
+  font-weight: 500;
   line-height: 16px;
-  white-space: nowrap;
 }
 
-.badge[data-head] {
-  border-color: transparent;
-  background: var(--dsw-alias-state-success-primary);
-  color: var(--dsw-alias-label-primary);
+.time {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: var(--ds-font-10-5);
 }
 
-.sessions {
+.metaRow {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 4px;
+  align-items: center;
+  gap: 4px 6px;
+  min-width: 0;
 }
 
-.session {
+.ref {
   display: inline-flex;
-  overflow: hidden;
+  align-items: center;
+  gap: 4px;
   max-width: 100%;
-  padding: 1px 7px;
+  overflow: hidden;
+  padding: 0 6px 0 4px;
   border-radius: var(--dsw-radius-sm);
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary);
-  font-size: var(--ds-font-11);
-  line-height: 16px;
+  font-family: var(--ds-font-family-code);
+  font-size: var(--ds-font-10-5);
+  line-height: 17px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ref i {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0 7px 0 5px;
+  border-radius: var(--dsw-radius-sm);
+  font-size: var(--ds-font-11);
+  line-height: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip i,
+.pulseDot {
+  position: relative;
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.chip[data-tone='plain'] {
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.chip[data-tone='plain'] i {
+  background: var(--dsw-alias-label-tertiary);
+}
+
+.chip[data-tone='run'] {
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent);
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.chip[data-tone='run'] i {
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.chip[data-tone='wait'] {
+  background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 14%, transparent);
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.chip[data-tone='wait'] i {
+  background: var(--dsw-alias-state-warn-primary);
+}
+
+.chip[data-tone='error'] {
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, transparent);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.chip[data-tone='error'] i {
+  background: var(--dsw-alias-state-error-primary);
+}
+
+.chip[data-tone='done'] {
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.chip[data-tone='done'] i {
+  background: var(--dsw-alias-label-tertiary);
+}
+
+.chip[data-here] {
+  outline: 1px solid var(--dsw-alias-border-l2);
+}
+
+.pulseDot::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 1px solid currentcolor;
+  opacity: 0.6;
+  animation: ripple 1.8s ease-out infinite;
+}
+
+@keyframes ripple {
+  0% {
+    transform: scale(0.5);
+    opacity: 0.7;
+  }
+  70%,
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulseDot::after,
+  .stateSpin {
+    animation: none;
+  }
 }
