@@ -23,6 +23,7 @@ from zenagent.app.taiji.registry import TaijiRegistry, WorkerRecord
 from zenagent.project import project_key
 
 CLOSE_GRACE_S = 5.0
+AUTO_MERGE_MAX_DIFF_LINES = 200
 
 GIT_TIMEOUT_S = 10.0
 _SLUG_KEEP = re.compile(r"[^a-z0-9._-]+")
@@ -341,16 +342,38 @@ class TaijiSupervisor:
                 f"请说「合并 {record.branch}」或提返工意见。"
             )
 
+    def _diff_lines(self, record: WorkerRecord) -> int:
+        """Added plus deleted lines between the base and the task branch."""
+        completed = _git(
+            self.repo_root,
+            "diff",
+            "--numstat",
+            f"{record.base}...{record.branch}",
+        )
+        if completed is None or completed.returncode != 0:
+            return -1  # unknowable: refuse rather than guess
+        total = 0
+        for line in completed.stdout.splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 2:
+                for raw in parts[:2]:
+                    if raw.isdigit():
+                        total += int(raw)
+        return total
+
     async def merge(self, name: str) -> bool:
         """Merge a finished task into its base branch, mode-agnostic.
 
         Explicit merges (the Router tool) work in every mode — the mode gate
         only decides whether zen merges *without asking*. Preconditions keep
         the user's working tree sacred: the base branch must be checked out
-        in the main worktree and clean.
+        in the main worktree and clean, and a zen auto-merge stays small
+        (large work deserves eyes — DSH's delivery policy).
         """
         record = self.registry.records.get(name)
         if record is None or record.status != "ok":
+            return False
+        if self.mode_of() == "zen" and self._diff_lines(record) > AUTO_MERGE_MAX_DIFF_LINES:
             return False
         current = _git(self.repo_root, "branch", "--show-current")
         if current is None or current.stdout.strip() != record.base:

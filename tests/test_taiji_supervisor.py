@@ -549,3 +549,40 @@ class TestCrossReviewFixes:
         merged = await supervisor.merge("onmaster")
         assert merged is True
         assert "work: works here" in _git(repo, "log", "--format=%s", "master").stdout
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+class TestMergeThreshold:
+    async def test_zen_small_diff_auto_merges(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr("zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home")
+        chat = FakeChat()
+        supervisor = make_chat_supervisor(repo, tmp_path, StubRunner(), mode="zen", chat=chat)
+
+        await supervisor.spawn("small change", name="small")
+        await supervisor.wait_idle()
+
+        assert supervisor.list_workers()[0].status == "merged"
+        assert len(chat.messages) == 1
+
+    async def test_zen_large_diff_falls_back_to_acceptance(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr("zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home")
+
+        class BigRunner(StubRunner):
+            async def run_turn(self, worktree, session_path, prompt):
+                (Path(worktree) / "big.txt").write_text("x" * 300 + "\n" * 300, encoding="utf-8")
+                _git(Path(worktree), "add", ".")
+                _git(Path(worktree), "commit", "-qm", "big work")
+                return TurnResult(status="ok", summary="wrote a lot", session_path="")
+
+        chat = FakeChat()
+        supervisor = make_chat_supervisor(repo, tmp_path, BigRunner(), mode="zen", chat=chat)
+
+        await supervisor.spawn("big change", name="big")
+        await supervisor.wait_idle()
+
+        assert supervisor.list_workers()[0].status == "ok"
+        main_before = _git(repo, "rev-parse", "main").stdout.strip()
+        record = supervisor.list_workers()[0]
+        assert _git(repo, "merge-base", "--is-ancestor", record.branch, main_before).returncode != 0
+        assert len(chat.messages) == 2
+        assert "待验收" in chat.messages[1]
