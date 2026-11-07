@@ -90,6 +90,20 @@ def acquire_taiji_lock(project_dir: Path) -> None:
         json.dump({"pid": os.getpid(), "createdAt": int(time.time())}, handle)
 
 
+def own_taiji_lock(project_dir: Path) -> bool:
+    """Acquire the host lock, reporting instead of raising.
+
+    Returns ``True`` only when this process owns the lock; a live foreign
+    host yields ``False`` and the foreign lock file is left untouched, so
+    the owner's claim survives this process's exit.
+    """
+    try:
+        acquire_taiji_lock(project_dir)
+    except TaijiHostLocked:
+        return False
+    return True
+
+
 def release_taiji_lock(project_dir: Path) -> None:
     try:
         _lock_path(project_dir).unlink()

@@ -6,6 +6,7 @@ from zenagent.app.taiji.session import (
     acquire_taiji_lock,
     ensure_taiji_session,
     is_taiji_session,
+    own_taiji_lock,
     release_taiji_lock,
     taiji_session_path,
 )
@@ -13,12 +14,13 @@ from zenagent.app.taiji.supervisor import close_taiji, get_taiji
 
 __all__ = [
     "TAIJI_SESSION_STEM",
-    "close_taiji",
-    "get_taiji",
     "TaijiHostLocked",
     "acquire_taiji_lock",
+    "close_taiji",
     "ensure_taiji_session",
+    "get_taiji",
     "is_taiji_session",
+    "own_taiji_lock",
     "release_taiji_lock",
     "taiji_session_path",
 ]

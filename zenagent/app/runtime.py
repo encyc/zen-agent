@@ -42,6 +42,7 @@ from zenagent.app.support import (
     resolve_task_model,
     session_id_for,
 )
+from zenagent.app.taiji.tools import runtime_taiji_provider, taiji_tools_for
 from zenagent.app.views import last_request_usage
 from zenagent.config import (
     ContextGuard,
@@ -82,7 +83,6 @@ from zenagent.tools.ask import AskHandler, build_ask_tool
 from zenagent.tools.github import build_github_tool
 from zenagent.tools.lsp import build_lsp_tool, shutdown_clients
 from zenagent.tools.memory import build_memory_tool, build_memory_write_tool
-from zenagent.app.taiji.tools import runtime_taiji_provider, taiji_tools_for
 from zenagent.tools.task import build_task_tool
 from zenagent.tools.todo import (
     TodoTool,

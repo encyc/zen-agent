@@ -7,19 +7,25 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 from zenagent.agent import Agent
-from zenagent.app.taiji.worker_client import WorkerRpcClient
-from zenagent.cli.rpc import RpcServer
 from zenagent.app.taiji.tools import (
     RpcRunner,
     build_taiji_tools,
     runtime_taiji_provider,
     taiji_tools_for,
 )
+from zenagent.app.taiji.worker_client import WorkerRpcClient
+from zenagent.cli.rpc import RpcServer
+from zenagent.events import AssistantEvent
+from zenagent.types import AssistantMessage, TextContent, Usage
 
-TOOL_NAMES = {"spawn_worker", "message_worker", "kill_worker", "merge_worker", "list_workers"}
+TOOL_NAMES = {
+    "spawn_worker",
+    "message_worker",
+    "kill_worker",
+    "merge_worker",
+    "list_workers",
+}
 
 
 def make_tools() -> list:
@@ -83,12 +89,19 @@ class LoopbackTransport:
 
 
 async def test_rpc_runner_drives_a_turn_over_the_loopback() -> None:
-    from test_taiji_worker_client import model, stream  # sibling test module, prompt_fixtures style
+    from test_taiji_worker_client import (  # sibling test module, prompt_fixtures style
+        model,
+        stream,
+    )
 
-    agent = Agent(model=model(), system_prompt="s", api_key="k", stream_fn=stream("did the work"))
+    agent = Agent(
+        model=model(), system_prompt="s", api_key="k", stream_fn=stream("did the work")
+    )
     out: asyncio.Queue = asyncio.Queue()
     server = RpcServer(agent, read_line=None, write_line=out.put_nowait)  # type: ignore[arg-type]
-    runner = RpcRunner(client_factory=lambda: WorkerRpcClient(transport=LoopbackTransport(server, out)))
+    runner = RpcRunner(
+        client_factory=lambda: WorkerRpcClient(transport=LoopbackTransport(server, out))
+    )
 
     result = await runner.run_turn("/tmp/wt", None, "fix it")
 
@@ -96,10 +109,18 @@ async def test_rpc_runner_drives_a_turn_over_the_loopback() -> None:
     assert "did the work" in result.summary
 
 
-async def test_runtime_provider_binds_current_project(runtime_factory, monkeypatch, tmp_path: Path) -> None:
+async def test_runtime_provider_binds_current_project(
+    runtime_factory, monkeypatch, tmp_path: Path
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
-    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=str(repo), check=True, capture_output=True)
+    await asyncio.to_thread(
+        subprocess.run,
+        ["git", "init", "-q", "-b", "main"],
+        cwd=str(repo),
+        check=True,
+        capture_output=True,
+    )
     monkeypatch.chdir(repo)
     runtime = await runtime_factory()
 
@@ -113,3 +134,45 @@ async def test_runtime_provider_binds_current_project(runtime_factory, monkeypat
         from zenagent.app.taiji import close_taiji
 
         await close_taiji()
+
+
+async def test_rpc_runner_maps_a_failed_turn_to_error() -> None:
+    """A graceful ok:false result frame (provider error, max turns, abort)
+    must surface as an error turn — never as a mergeable success."""
+    from test_taiji_worker_client import model
+
+    def stream_fail(text: str):
+        async def fn(model_, messages, tools, options):
+            partial = AssistantMessage(
+                content=[],
+                provider="p",
+                model="m",
+                usage=Usage(),
+                stop_reason="pending",
+                timestamp=0,
+            )
+            yield AssistantEvent(type="start", partial=partial)
+            block = TextContent(text="")
+            partial.content.append(block)
+            block.text += text
+            partial.stop_reason = "error"
+            yield AssistantEvent(type="done", partial=partial, reason="error")
+
+        return fn
+
+    agent = Agent(
+        model=model(),
+        system_prompt="s",
+        api_key="k",
+        stream_fn=stream_fail("half done"),
+    )
+    out: asyncio.Queue = asyncio.Queue()
+    server = RpcServer(agent, read_line=None, write_line=out.put_nowait)  # type: ignore[arg-type]
+    runner = RpcRunner(
+        client_factory=lambda: WorkerRpcClient(transport=LoopbackTransport(server, out))
+    )
+
+    result = await runner.run_turn("/tmp/wt", None, "fix it")
+
+    assert result.status == "error"
+    assert result.summary

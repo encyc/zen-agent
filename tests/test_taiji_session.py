@@ -14,6 +14,7 @@ from zenagent.app.taiji import (
     acquire_taiji_lock,
     ensure_taiji_session,
     is_taiji_session,
+    own_taiji_lock,
     release_taiji_lock,
     taiji_session_path,
 )
@@ -64,3 +65,17 @@ def test_release_removes_the_lock(tmp_path: Path) -> None:
     release_taiji_lock(tmp_path)
     assert not (tmp_path / "taiji.lock").exists()
     release_taiji_lock(tmp_path)  # idempotent
+
+
+def test_own_taiji_lock_never_touches_a_foreign_lock(tmp_path: Path) -> None:
+    assert own_taiji_lock(tmp_path) is True
+    assert json.loads((tmp_path / "taiji.lock").read_text())["pid"] == os.getpid()
+    release_taiji_lock(tmp_path)
+
+    (tmp_path / "taiji.lock").write_text(
+        json.dumps({"pid": os.getpid()}), encoding="utf-8"
+    )
+    assert own_taiji_lock(tmp_path) is False
+    # the rightful owner's lock file is untouched
+    assert json.loads((tmp_path / "taiji.lock").read_text())["pid"] == os.getpid()
+    assert own_taiji_lock(tmp_path) is False

@@ -25,8 +25,14 @@ from zenagent.types import AssistantMessage, Cost, TextContent, Usage
 
 def model() -> Model:
     return Model(
-        id="m", provider="p", api="openai-completions", base_url="https://x/v1",
-        context_window=1000, max_tokens=100, reasoning=False, cost=Cost(),
+        id="m",
+        provider="p",
+        api="openai-completions",
+        base_url="https://x/v1",
+        context_window=1000,
+        max_tokens=100,
+        reasoning=False,
+        cost=Cost(),
         compat=CompatFlags(),
     )
 
@@ -34,15 +40,21 @@ def model() -> Model:
 def stream(text: str):
     async def fn(model_, messages, tools, options):
         partial = AssistantMessage(
-            content=[], provider="p", model="m", usage=Usage(),
-            stop_reason="pending", timestamp=0,
+            content=[],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="pending",
+            timestamp=0,
         )
         yield AssistantEvent(type="start", partial=partial)
         block = TextContent(text="")
         partial.content.append(block)
         for chunk in (text, " world"):
             block.text += chunk
-            yield AssistantEvent(type="text_delta", partial=partial, content_index=0, delta=chunk)
+            yield AssistantEvent(
+                type="text_delta", partial=partial, content_index=0, delta=chunk
+            )
         partial.stop_reason = "stop"
         yield AssistantEvent(type="done", partial=partial, reason="stop")
 
@@ -144,8 +156,27 @@ async def test_prompt_timeout_raises() -> None:
 
 
 def test_worker_command_prefers_zen_on_path(monkeypatch) -> None:
-    monkeypatch.setattr("zenagent.app.taiji.worker_client.shutil.which", lambda name: "/usr/local/bin/zen")
-    assert worker_command(Path("/wt")) == ["/usr/local/bin/zen", "rpc", "--cwd", "/wt", "--yes"]
+    monkeypatch.setattr(
+        "zenagent.app.taiji.worker_client.shutil.which",
+        lambda name: "/usr/local/bin/zen",
+    )
+    assert worker_command(Path("/wt")) == [
+        "/usr/local/bin/zen",
+        "rpc",
+        "--cwd",
+        "/wt",
+        "--yes",
+    ]
 
-    monkeypatch.setattr("zenagent.app.taiji.worker_client.shutil.which", lambda name: None)
-    assert worker_command(Path("/wt")) == [sys.executable, "-m", "zenagent", "rpc", "--cwd", "/wt", "--yes"]
+    monkeypatch.setattr(
+        "zenagent.app.taiji.worker_client.shutil.which", lambda name: None
+    )
+    assert worker_command(Path("/wt")) == [
+        sys.executable,
+        "-m",
+        "zenagent",
+        "rpc",
+        "--cwd",
+        "/wt",
+        "--yes",
+    ]

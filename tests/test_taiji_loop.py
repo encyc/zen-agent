@@ -10,6 +10,7 @@ import pytest
 
 from tests.test_taiji_supervisor import FakeChat, StubRunner
 from zenagent.app.taiji import close_taiji, ensure_taiji_session, get_taiji
+from zenagent.project import project_key
 
 
 def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -61,7 +62,7 @@ async def test_zen_mode_runs_the_full_autonomous_loop(
     assert _git(repo, "rev-parse", "--verify", "refs/heads/task/readme").returncode == 0
     main_log = _git(repo, "log", "--format=%s", "main").stdout
     assert "work: add a README" in main_log
-    assert not (tmp_path / "home" / "readme").exists()
+    assert not (tmp_path / "home" / project_key(repo) / "readme").exists()
 
     assert len(chat.messages) == 1
     assert chat.messages[0].startswith("[worker task/readme · merged]")

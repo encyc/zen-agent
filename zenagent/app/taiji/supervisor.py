@@ -20,6 +20,9 @@ from typing import Any, Protocol
 
 from zenagent.app.git import git_status
 from zenagent.app.taiji.registry import TaijiRegistry, WorkerRecord
+from zenagent.project import project_key
+
+CLOSE_GRACE_S = 5.0
 
 GIT_TIMEOUT_S = 10.0
 _SLUG_KEEP = re.compile(r"[^a-z0-9._-]+")
@@ -84,7 +87,9 @@ class RpcRunner:
         self._timeout_s = timeout_s
         self._client_factory = client_factory
 
-    async def run_turn(self, worktree: str, session_path: str | None, prompt: str) -> TurnResult:
+    async def run_turn(
+        self, worktree: str, session_path: str | None, prompt: str
+    ) -> TurnResult:
         from zenagent.app.taiji.worker_client import WorkerRpcClient
 
         client = self._client_factory() if self._client_factory else WorkerRpcClient()
@@ -95,6 +100,15 @@ class RpcRunner:
             answer = await client.prompt(prompt, timeout_s=self._timeout_s)
         finally:
             await client.stop()
+        if answer.get("ok") is False:
+            # A graceful ok:false frame (provider error, max turns, abort) is
+            # a failed turn — never a mergeable success.
+            reason = str(answer.get("error") or answer.get("text") or "turn failed")
+            return TurnResult(
+                status="error",
+                summary=reason[:2000],
+                session_path=str(answer.get("session") or session_path or ""),
+            )
         summary = str(answer.get("text") or "").strip()
         return TurnResult(
             status="ok",
@@ -130,7 +144,18 @@ class TaijiSupervisor:
         self.mode_of = mode_of
         self.registry = TaijiRegistry()
         self.registry.load(self.registry_path)
+        self.registry.reconcile(self._worktree_paths())
         self._tasks: set[asyncio.Task[None]] = set()
+
+    def _worktree_paths(self) -> list[str]:
+        listed = _git(self.repo_root, "worktree", "list", "--porcelain")
+        if listed is None or listed.returncode != 0:
+            return []
+        return [
+            line[len("worktree ") :]
+            for line in listed.stdout.splitlines()
+            if line.startswith("worktree ")
+        ]
 
     # -- registry ----------------------------------------------------------
 
@@ -146,8 +171,26 @@ class TaijiSupervisor:
     # -- spawn / message / kill ---------------------------------------------
 
     def _free_name(self, slug: str) -> str:
+        """A worker name whose branch does not exist in git or the registry.
+
+        The registry forgets finished workers whose worktree was cleaned up,
+        but their branches stay — so git refs, not just records, decide.
+        """
+
+        def taken(name: str) -> bool:
+            if name in self.registry.records:
+                return True
+            ref = _git(
+                self.repo_root,
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                f"refs/heads/{BRANCH_PREFIX}{name}",
+            )
+            return ref is not None and ref.returncode == 0
+
         name, bump = slug, 2
-        while name in self.registry.records:
+        while taken(name):
             name = f"{slug}-{bump}"
             bump += 1
         return name
@@ -156,10 +199,12 @@ class TaijiSupervisor:
         slug = _slug(name if name else prompt[:24])
         worker = self._free_name(slug)
         branch = BRANCH_PREFIX + worker
-        worktree = worktrees_root() / worker
+        worktree = worktrees_root() / project_key(self.repo_root) / worker
 
-        if _git(self.repo_root, "branch", branch, "main") is None:
-            raise RuntimeError("git is not available")
+        branched = _git(self.repo_root, "branch", branch, "main")
+        if branched is None or branched.returncode != 0:
+            detail = branched.stderr.strip() if branched else "git is not available"
+            raise RuntimeError(f"branch {branch} failed: {detail}")
         added = _git(self.repo_root, "worktree", "add", str(worktree), branch)
         if added is None or added.returncode != 0:
             _git(self.repo_root, "branch", "-D", branch)
@@ -305,14 +350,24 @@ class TaijiSupervisor:
             f"taiji: merge {record.branch}",
         )
         if completed is None or completed.returncode != 0:
+            # A conflicted merge would otherwise leave MERGE_HEAD and markers
+            # in the user's working tree — the tree stays sacred.
+            _git(self.repo_root, "merge", "--abort")
             return False
-        removed = _git(self.repo_root, "worktree", "remove", record.worktree)
-        if removed is None or removed.returncode != 0:
-            shutil.rmtree(record.worktree, ignore_errors=True)
         record.status = "merged"
         record.updated_at = time.time()
         self._save()
+        self._retire_worktree(record)
         return True
+
+    def _retire_worktree(self, record: WorkerRecord) -> None:
+        """Remove the worker's worktree unless it still holds uncommitted work."""
+        dirty = _git(record.worktree, "status", "--porcelain")
+        if dirty is not None and dirty.returncode == 0 and dirty.stdout.strip():
+            return  # uncommitted worker output survives for inspection
+        removed = _git(self.repo_root, "worktree", "remove", record.worktree)
+        if removed is None or removed.returncode != 0:
+            shutil.rmtree(record.worktree, ignore_errors=True)
 
     async def wait_idle(self) -> None:
         """Wait for every in-flight worker turn (tests and shutdown)."""
@@ -320,7 +375,22 @@ class TaijiSupervisor:
             await asyncio.gather(*self._tasks, return_exceptions=True)
 
     async def close(self) -> None:
-        await self.wait_idle()
+        """Stop the fleet promptly: a short grace, then cancel stragglers.
+
+        Lifecycle (a): the host owns the process tree, so cancelled turns
+        leave their worker subprocesses to die with the host; their records
+        become ``interrupted`` and their sessions survive on disk.
+        """
+        if self._tasks:
+            _done, pending = await asyncio.wait(self._tasks, timeout=CLOSE_GRACE_S)
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+        for record in self.registry.records.values():
+            if record.status == "running":
+                record.status = "interrupted"
+        self._save()
 
 
 _SINGLETON: TaijiSupervisor | None = None

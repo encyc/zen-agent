@@ -130,7 +130,9 @@ class WorkerRpcClient:
         if hello.get("ok") is not True:
             raise RuntimeError(f"worker handshake failed: {hello}")
         if hello.get("protocol_version") != 2:
-            raise RuntimeError(f"worker protocol mismatch: {hello.get('protocol_version')}")
+            raise RuntimeError(
+                f"worker protocol mismatch: {hello.get('protocol_version')}"
+            )
 
     async def resume(self, session_path: str) -> dict:
         return await self._request(
@@ -147,7 +149,9 @@ class WorkerRpcClient:
         if self.transport is None:
             return
         try:
-            await self.transport.send_line(json.dumps({"type": "shutdown", "id": "w-stop"}))
+            await self.transport.send_line(
+                json.dumps({"type": "shutdown", "id": "w-stop"})
+            )
         except (OSError, RuntimeError, AssertionError):
             pass  # the child may already be gone; terminate below regardless
         await self.transport.stop()

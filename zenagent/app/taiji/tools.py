@@ -25,13 +25,21 @@ SUPERVISOR_PROVIDER = Callable[[], "TaijiSupervisor"]
 
 def _text(payload: str) -> ToolResultAgent:
     return ToolResultAgent(
-        content=[TextContent(text=payload)], details={}, is_error=False, terminate=False, error_kind=""
+        content=[TextContent(text=payload)],
+        details={},
+        is_error=False,
+        terminate=False,
+        error_kind="",
     )
 
 
 def _error(payload: str) -> ToolResultAgent:
     return ToolResultAgent(
-        content=[TextContent(text=payload)], details={}, is_error=True, terminate=False, error_kind="taiji"
+        content=[TextContent(text=payload)],
+        details={},
+        is_error=True,
+        terminate=False,
+        error_kind="taiji",
     )
 
 
@@ -43,7 +51,9 @@ def build_taiji_tools(supervisor_provider: SUPERVISOR_PROVIDER) -> list[AgentToo
     ) -> ToolResultAgent:
         del tool_call_id, abort, on_update
         try:
-            record = await supervisor_provider().spawn(args["prompt"], name=args.get("name"))
+            record = await supervisor_provider().spawn(
+                args["prompt"], name=args.get("name")
+            )
         except Exception as exc:  # noqa: BLE001 - tool errors are results, not crashes
             return _error(f"spawn failed: {exc}")
         return _text(
@@ -69,7 +79,9 @@ def build_taiji_tools(supervisor_provider: SUPERVISOR_PROVIDER) -> list[AgentToo
             record = await supervisor_provider().kill(args["name"])
         except Exception as exc:  # noqa: BLE001
             return _error(f"kill failed: {exc}")
-        return _text(f"worker {record.name} 已终止，worktree 已清理，分支 {record.branch} 保留。")
+        return _text(
+            f"worker {record.name} 已终止，worktree 已清理，分支 {record.branch} 保留。"
+        )
 
     async def merge_worker(
         tool_call_id: str, args: dict, abort: Any = None, on_update: Any = None
@@ -107,8 +119,14 @@ def build_taiji_tools(supervisor_provider: SUPERVISOR_PROVIDER) -> list[AgentToo
             parameters={
                 "type": "object",
                 "properties": {
-                    "prompt": {"type": "string", "description": "The task for the worker to run."},
-                    "name": {"type": "string", "description": "Optional short task name; defaults from the prompt."},
+                    "prompt": {
+                        "type": "string",
+                        "description": "The task for the worker to run.",
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Optional short task name; defaults from the prompt.",
+                    },
                 },
                 "required": ["prompt"],
             },
@@ -123,7 +141,10 @@ def build_taiji_tools(supervisor_provider: SUPERVISOR_PROVIDER) -> list[AgentToo
                 "type": "object",
                 "properties": {
                     "name": {"type": "string", "description": "The worker's name."},
-                    "text": {"type": "string", "description": "The follow-up instruction."},
+                    "text": {
+                        "type": "string",
+                        "description": "The follow-up instruction.",
+                    },
                 },
                 "required": ["name", "text"],
             },
@@ -136,7 +157,9 @@ def build_taiji_tools(supervisor_provider: SUPERVISOR_PROVIDER) -> list[AgentToo
             description=tool_description("kill_worker"),
             parameters={
                 "type": "object",
-                "properties": {"name": {"type": "string", "description": "The worker's name."}},
+                "properties": {
+                    "name": {"type": "string", "description": "The worker's name."}
+                },
                 "required": ["name"],
             },
             execution_mode="sequential",
@@ -148,7 +171,9 @@ def build_taiji_tools(supervisor_provider: SUPERVISOR_PROVIDER) -> list[AgentToo
             description=tool_description("merge_worker"),
             parameters={
                 "type": "object",
-                "properties": {"name": {"type": "string", "description": "The worker's name."}},
+                "properties": {
+                    "name": {"type": "string", "description": "The worker's name."}
+                },
                 "required": ["name"],
             },
             execution_mode="sequential",

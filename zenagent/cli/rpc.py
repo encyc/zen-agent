@@ -36,6 +36,13 @@ from zenagent.app.skill_commands import (
     build_skill_submission,
     parse_skill_display,
 )
+from zenagent.app.taiji import (
+    close_taiji,
+    ensure_taiji_session,
+    own_taiji_lock,
+    release_taiji_lock,
+)
+from zenagent.app.taiji.snapshot import commit_graph, session_map
 from zenagent.app.views import usage_total
 from zenagent.app.workspace import (
     list_directory,
@@ -43,14 +50,6 @@ from zenagent.app.workspace import (
     workspace_files,
     worktree_overview,
 )
-from zenagent.app.taiji import (
-    TaijiHostLocked,
-    acquire_taiji_lock,
-    close_taiji,
-    ensure_taiji_session,
-    release_taiji_lock,
-)
-from zenagent.app.taiji.snapshot import commit_graph, session_map
 from zenagent.events import AgentEvent
 from zenagent.mcp.config import load_mcp_layers, remove_mcp_server, save_mcp_server
 from zenagent.project import (
@@ -125,7 +124,10 @@ def _message_projection(message) -> dict:
                 "skill_args": display.args,
                 "skill_body": display.body,
             }
-    payload: dict = {"role": role, "text": _message_text(message)[-_PARTIAL_RESULT_CHARS:]}
+    payload: dict = {
+        "role": role,
+        "text": _message_text(message)[-_PARTIAL_RESULT_CHARS:],
+    }
     stop_reason = getattr(message, "stop_reason", None)
     if stop_reason:
         payload["stop_reason"] = stop_reason
@@ -346,9 +348,7 @@ class RpcServer:
         request_id = f"a{self._approval_seq}"
         self._approval_seq += 1
         try:
-            args = json.dumps(arguments, ensure_ascii=False, default=str)[
-                :_ARGS_CHARS
-            ]
+            args = json.dumps(arguments, ensure_ascii=False, default=str)[:_ARGS_CHARS]
         except (TypeError, ValueError):  # pragma: no cover - defensive
             args = str(arguments)[:_ARGS_CHARS]
         event: dict = {
@@ -444,8 +444,7 @@ class RpcServer:
         if not isinstance(raw, list) or not all(
             item is None
             or (
-                isinstance(item, list)
-                and all(isinstance(value, str) for value in item)
+                isinstance(item, list) and all(isinstance(value, str) for value in item)
             )
             for item in raw
         ):
@@ -514,30 +513,32 @@ class RpcServer:
         if kind == "prompt":
             text = request.get("text")
             if not isinstance(text, str) or not text.strip():
-                self._send({"type": "error", "id": request_id, "message": "prompt needs text"})
+                self._send(
+                    {"type": "error", "id": request_id, "message": "prompt needs text"}
+                )
                 return True
             images, image_error = self._read_prompt_images(request.get("images"))
             if image_error is not None:
-                self._send(
-                    {"type": "error", "id": request_id, "message": image_error}
-                )
+                self._send({"type": "error", "id": request_id, "message": image_error})
                 return True
             if self.busy:
                 self._send({"type": "error", "id": request_id, "message": "busy"})
                 return True
             self._text = []
-            self._task = asyncio.create_task(
-                self._run_prompt(text, request_id, images)
-            )
+            self._task = asyncio.create_task(self._run_prompt(text, request_id, images))
             return True
         if kind == "cancel":
             # A run may have been started by a retry session op or a queued
             # follow-up, in which case ``_task`` is None but the agent is busy.
             if self.busy:
                 self.agent.abort()
-                self._send({"type": "result", "id": request_id, "ok": True, "cancelled": True})
+                self._send(
+                    {"type": "result", "id": request_id, "ok": True, "cancelled": True}
+                )
             else:
-                self._send({"type": "result", "id": request_id, "ok": True, "cancelled": False})
+                self._send(
+                    {"type": "result", "id": request_id, "ok": True, "cancelled": False}
+                )
             return True
         if kind == "status":
             self._send(self._status_result(request_id))
@@ -592,7 +593,12 @@ class RpcServer:
             return self._mode(request, request_id)
         if kind == "usage":
             self._send(
-                {"type": "result", "id": request_id, "ok": True, "usage": _usage(self.agent)}
+                {
+                    "type": "result",
+                    "id": request_id,
+                    "ok": True,
+                    "usage": _usage(self.agent),
+                }
             )
             return True
         if kind == "approval":
@@ -637,7 +643,11 @@ class RpcServer:
                 )
                 return True
             self._send(
-                {"type": "error", "id": request_id, "message": f"unknown taiji op: {op}"}
+                {
+                    "type": "error",
+                    "id": request_id,
+                    "message": f"unknown taiji op: {op}",
+                }
             )
             return True
         if kind == "secrets":
@@ -652,7 +662,9 @@ class RpcServer:
         if kind == "project":
             await self._project(request, request_id)
             return True
-        self._send({"type": "error", "id": request_id, "message": f"unknown type: {kind}"})
+        self._send(
+            {"type": "error", "id": request_id, "message": f"unknown type: {kind}"}
+        )
         return True
 
     def _fs_request(self, request: dict, request_id, op: str) -> bool:
@@ -734,7 +746,9 @@ class RpcServer:
     def _steer(self, request: dict, request_id) -> bool:
         text = request.get("text")
         if not isinstance(text, str) or not text.strip():
-            self._send({"type": "error", "id": request_id, "message": "steer needs text"})
+            self._send(
+                {"type": "error", "id": request_id, "message": "steer needs text"}
+            )
             return True
         if self.chat is not None:
             self.chat.steer(text)
@@ -761,7 +775,9 @@ class RpcServer:
             if session is not None:
                 session.ensure_loaded()
                 compactions = [
-                    record for record in session.records if records.is_compaction(record)
+                    record
+                    for record in session.records
+                    if records.is_compaction(record)
                 ]
             views = [asdict(view) for view in self.chat.transcript]
             notices = [
@@ -889,7 +905,11 @@ class RpcServer:
             name = request.get("name")
             if not isinstance(name, str) or name not in self._known_secret_envs():
                 self._send(
-                    {"type": "error", "id": request_id, "message": f"unknown key: {name}"}
+                    {
+                        "type": "error",
+                        "id": request_id,
+                        "message": f"unknown key: {name}",
+                    }
                 )
                 return
             if op == "set":
@@ -1036,15 +1056,19 @@ class RpcServer:
             return
         if op == "rescan":
             notes = []
-            if self.runtime is not None and getattr(self.runtime, "skills_enabled", False):
+            if self.runtime is not None and getattr(
+                self.runtime, "skills_enabled", False
+            ):
                 notes = self.runtime.refresh_skills()
-            self._send(
-                self._skills_result(request_id, roots, skills, warnings, notes)
-            )
+            self._send(self._skills_result(request_id, roots, skills, warnings, notes))
             return
         if op not in ("read", "toggle"):
             self._send(
-                {"type": "error", "id": request_id, "message": f"unknown skills op: {op}"}
+                {
+                    "type": "error",
+                    "id": request_id,
+                    "message": f"unknown skills op: {op}",
+                }
             )
             return
 
@@ -1098,7 +1122,9 @@ class RpcServer:
                 disabled.add(skill.name)
             settings.set_disabled_skills(disabled)
             notes = []
-            if self.runtime is not None and getattr(self.runtime, "skills_enabled", False):
+            if self.runtime is not None and getattr(
+                self.runtime, "skills_enabled", False
+            ):
                 notes = self.runtime.refresh_skills()
             self._send(
                 {
@@ -1201,13 +1227,13 @@ class RpcServer:
                 layer = self._mcp_layer(request)
                 command_text = request.get("command")
                 raw_url = request.get("url")
-                has_command = isinstance(command_text, str) and bool(command_text.strip())
+                has_command = isinstance(command_text, str) and bool(
+                    command_text.strip()
+                )
                 has_url = isinstance(raw_url, str) and bool(raw_url.strip())
                 if has_command and has_url:
                     raise ValueError("an MCP server cannot have both command and url")
-                transport = request.get("transport") or (
-                    "http" if has_url else "stdio"
-                )
+                transport = request.get("transport") or ("http" if has_url else "stdio")
                 command = url = None
                 if transport == "stdio":
                     if not has_command:
@@ -1229,22 +1255,16 @@ class RpcServer:
                     cwd=Path.cwd(),
                 )
             except (ValueError, OSError) as exc:
-                self._send(
-                    {"type": "error", "id": request_id, "message": str(exc)}
-                )
+                self._send({"type": "error", "id": request_id, "message": str(exc)})
                 return
             self._send(self._mcp_result(request_id))
             return
 
         if op == "remove":
             try:
-                remove_mcp_server(
-                    name, layer=self._mcp_layer(request), cwd=Path.cwd()
-                )
+                remove_mcp_server(name, layer=self._mcp_layer(request), cwd=Path.cwd())
             except (ValueError, OSError) as exc:
-                self._send(
-                    {"type": "error", "id": request_id, "message": str(exc)}
-                )
+                self._send({"type": "error", "id": request_id, "message": str(exc)})
                 return
             self._send(self._mcp_result(request_id))
             return
@@ -1255,9 +1275,7 @@ class RpcServer:
             try:
                 config = self._effective_mcp(name)
             except ValueError as exc:
-                self._send(
-                    {"type": "error", "id": request_id, "message": str(exc)}
-                )
+                self._send({"type": "error", "id": request_id, "message": str(exc)})
                 return
             if config is None:
                 self._send(
@@ -1288,11 +1306,17 @@ class RpcServer:
     def _model(self, request: dict, request_id) -> bool:
         model_id = request.get("model_id")
         if not isinstance(model_id, str) or not model_id.strip():
-            self._send({"type": "error", "id": request_id, "message": "model needs model_id"})
+            self._send(
+                {"type": "error", "id": request_id, "message": "model needs model_id"}
+            )
             return True
         if self.models is None:
             self._send(
-                {"type": "error", "id": request_id, "message": "model switching needs a runtime"}
+                {
+                    "type": "error",
+                    "id": request_id,
+                    "message": "model switching needs a runtime",
+                }
             )
             return True
         result = self.models.switch(model_id)
@@ -1311,13 +1335,19 @@ class RpcServer:
         mode = request.get("mode")
         if self.runtime is None:
             self._send(
-                {"type": "error", "id": request_id, "message": "mode switching needs a runtime"}
+                {
+                    "type": "error",
+                    "id": request_id,
+                    "message": "mode switching needs a runtime",
+                }
             )
             return True
         try:
             applied = self.runtime.set_mode(str(mode or ""))
         except ValueError as exc:
-            self._send({"type": "result", "id": request_id, "ok": False, "reason": str(exc)})
+            self._send(
+                {"type": "result", "id": request_id, "ok": False, "reason": str(exc)}
+            )
             return True
         self._send({"type": "result", "id": request_id, "ok": True, "mode": applied})
         return True
@@ -1537,7 +1567,9 @@ class RpcServer:
         """Dispatch one slash command; False means ``quit`` asked to shut down."""
         name = request.get("name")
         if not isinstance(name, str) or not name.strip():
-            self._send({"type": "error", "id": request_id, "message": "command needs name"})
+            self._send(
+                {"type": "error", "id": request_id, "message": "command needs name"}
+            )
             return True
         if name.startswith(SKILL_COMMAND_PREFIX):
             await self._skill_command(
@@ -1546,16 +1578,26 @@ class RpcServer:
             return True
         if self.commands is None:
             self._send(
-                {"type": "error", "id": request_id, "message": "commands need a runtime"}
+                {
+                    "type": "error",
+                    "id": request_id,
+                    "message": "commands need a runtime",
+                }
             )
             return True
         if self.commands.get(name) is None:
             self._send(
-                {"type": "error", "id": request_id, "message": f"unknown command: {name}"}
+                {
+                    "type": "error",
+                    "id": request_id,
+                    "message": f"unknown command: {name}",
+                }
             )
             return True
         try:
-            result = await self.commands.dispatch(name, str(request.get("argument") or ""))
+            result = await self.commands.dispatch(
+                name, str(request.get("argument") or "")
+            )
         except Exception as exc:  # noqa: BLE001 - a command must not kill the server
             self._send({"type": "error", "id": request_id, "message": str(exc)})
             return True
@@ -1607,18 +1649,24 @@ class RpcServer:
         )
         if resolution is None:
             self._send(
-                {"type": "error", "id": request_id, "message": f"unknown command: {name}"}
+                {
+                    "type": "error",
+                    "id": request_id,
+                    "message": f"unknown command: {name}",
+                }
             )
             return
         if resolution.error is not None:
-            self._send(
-                {"type": "error", "id": request_id, "message": resolution.error}
-            )
+            self._send({"type": "error", "id": request_id, "message": resolution.error})
             return
         submission = resolution.submission
         if submission is None:
             self._send(
-                {"type": "error", "id": request_id, "message": f"unknown command: {name}"}
+                {
+                    "type": "error",
+                    "id": request_id,
+                    "message": f"unknown command: {name}",
+                }
             )
             return
         await self.chat.submit(submission.prompt)
@@ -1725,17 +1773,17 @@ async def _run(args) -> int:
     runtime.ask_handler = server.ask
     runtime.taiji_chat = chat
     taiji_project_dir = project_dir(Path.cwd())
-    try:
-        ensure_taiji_session(project_sessions_dir(Path.cwd()))
-        acquire_taiji_lock(taiji_project_dir)
-    except TaijiHostLocked as exc:
-        runtime._note(f"taiji: 另一个宿主已持有本项目的太极锁（{exc}）")
+    ensure_taiji_session(project_sessions_dir(Path.cwd()))
+    taiji_owned = own_taiji_lock(taiji_project_dir)
+    if not taiji_owned:
+        runtime._note("taiji: 另一个宿主已持有本项目的太极锁")
     try:
         return await server.run()
     finally:
         runtime.ask_handler = None
         await close_taiji()
-        release_taiji_lock(taiji_project_dir)
+        if taiji_owned:
+            release_taiji_lock(taiji_project_dir)
         await runtime.close()
 
 
@@ -1743,9 +1791,13 @@ def main(argv: list[str] | None = None) -> int:
     from zenagent.app.modes import MODES
     from zenagent.cli.main import THINKING_CHOICES
 
-    parser = argparse.ArgumentParser(prog="zenagent rpc", description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        prog="zenagent rpc", description=__doc__.splitlines()[0]
+    )
     parser.add_argument("-m", "--model", help="model id")
-    parser.add_argument("--yes", action="store_true", help="run everything without asking (zen mode)")
+    parser.add_argument(
+        "--yes", action="store_true", help="run everything without asking (zen mode)"
+    )
     parser.add_argument("--mode", choices=MODES, help="runtime mode: plan|ask|zen")
     parser.add_argument("--read-only", action="store_true", help="refuse write tools")
     parser.add_argument("--thinking", choices=THINKING_CHOICES, help="reasoning level")
@@ -1753,7 +1805,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-cost", type=float)
     parser.add_argument("--retries", type=int, default=0)
     parser.add_argument("--resume", nargs="?", const="latest", help="resume a session")
-    parser.add_argument("--no-mcp", action="store_true", help="do not connect MCP servers")
+    parser.add_argument(
+        "--no-mcp", action="store_true", help="do not connect MCP servers"
+    )
     parser.add_argument("--mcp-file", help="MCP config file")
     parser.add_argument(
         "--mcp-server", action="append", dest="mcp_servers", help="only this MCP server"

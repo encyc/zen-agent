@@ -17,6 +17,7 @@ from zenagent.app.taiji.supervisor import (
     get_taiji,
     supervisor_summary,
 )
+from zenagent.project import project_key
 
 
 def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -103,7 +104,7 @@ class TestSupervisor:
         assert record.branch == "task/login-timeout"
         assert record.status in ("running", "ok")
         assert branch_exists(repo, "task/login-timeout")
-        assert (tmp_path / "home" / "login-timeout").is_dir()
+        assert (tmp_path / "home" / project_key(repo) / "login-timeout").is_dir()
         assert supervisor.list_workers()[0].name == "login-timeout"
         assert runner.turns[0][2] == "fix the login timeout"
         assert (tmp_path / "sessions" / "taiji.json").exists()
@@ -136,7 +137,7 @@ class TestSupervisor:
         await supervisor.wait_idle()
 
         assert not branch_exists(repo, "task/broken")
-        assert not (tmp_path / "home" / "broken").exists()
+        assert not (tmp_path / "home" / project_key(repo) / "broken").exists()
         assert supervisor.list_workers() == []
         assert record.name == "broken"
 
@@ -152,7 +153,7 @@ class TestSupervisor:
         killed = await supervisor.kill("long")
 
         assert killed.status == "killed"
-        assert not (tmp_path / "home" / "long").exists()
+        assert not (tmp_path / "home" / project_key(repo) / "long").exists()
         assert branch_exists(repo, "task/long")
         assert supervisor.list_workers()[0].status == "killed"
 
@@ -254,7 +255,7 @@ class TestMilestonesAndMerge:
         assert record.status == "merged"
         main_log = _git(repo, "log", "--format=%s", "main").stdout
         assert "work: clean work" in main_log
-        assert not (tmp_path / "home" / "clean").exists()
+        assert not (tmp_path / "home" / project_key(repo) / "clean").exists()
         assert len(chat.messages) == 1
         assert chat.messages[0].startswith("[worker task/clean · merged]")
         assert "did the thing" in chat.messages[0]
@@ -348,7 +349,7 @@ class TestMilestonesAndMerge:
         assert merged is True
         assert supervisor.list_workers()[0].status == "merged"
         assert "work: reviewed work" in _git(repo, "log", "--format=%s", "main").stdout
-        assert not (tmp_path / "home" / "reviewed").exists()
+        assert not (tmp_path / "home" / project_key(repo) / "reviewed").exists()
 
     async def test_summary_truncates_long_summaries(
         self, repo: Path, tmp_path: Path
@@ -366,3 +367,136 @@ class TestMilestonesAndMerge:
         assert line.startswith("[worker task/n · ok] ")
         assert line.endswith(" · 01:03")
         assert len(line) < 240
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+class TestReviewFixes:
+    async def test_restart_reconciles_and_resumes(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
+        )
+        runner = StubRunner()
+        first = make_supervisor(repo, tmp_path, runner)
+        await first.spawn("long task", name="resumable")
+
+        # a new host reconciles the on-disk registry before the first host's
+        # turn completes: the worker is running on disk, so it is interrupted
+        second = make_supervisor(repo, tmp_path, StubRunner())
+        record = second.list_workers()[0]
+        assert record.status == "interrupted"
+        updated = await second.message("resumable", "continue")
+        await second.wait_idle()
+        assert updated.status == "ok"
+        assert second.list_workers()[0].status == "ok"
+        await first.wait_idle()
+
+    async def test_git_branch_collision_gets_a_suffix_even_without_registry(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
+        )
+        _git(repo, "branch", "task/ghost", "main")
+        supervisor = make_supervisor(repo, tmp_path, StubRunner())
+
+        record = await supervisor.spawn("fresh work", name="ghost")
+        await supervisor.wait_idle()
+
+        assert record.branch == "task/ghost-2"
+
+    async def test_spawn_on_a_repo_without_main_fails_cleanly(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
+        )
+        _git(repo, "checkout", "-qb", "master")
+        _git(repo, "branch", "-D", "main")
+        supervisor = make_supervisor(repo, tmp_path, StubRunner())
+
+        with pytest.raises(RuntimeError, match="branch"):
+            await supervisor.spawn("nothing works", name="doomed")
+        assert supervisor.list_workers() == []
+
+    async def test_merge_conflict_aborts_and_keeps_the_tree_clean(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
+        )
+
+        class TouchingRunner(StubRunner):
+            async def run_turn(self, worktree, session_path, prompt):
+                (Path(worktree) / "a.txt").write_text("worker side\n", encoding="utf-8")
+                _git(Path(worktree), "add", ".")
+                _git(Path(worktree), "commit", "-qm", "worker edit")
+                return TurnResult(status="ok", summary="edited a.txt", session_path="")
+
+        chat = FakeChat()
+        supervisor = make_chat_supervisor(
+            repo, tmp_path, TouchingRunner(), mode="ask", chat=chat
+        )
+        await supervisor.spawn("touch a.txt", name="conflict")
+        await supervisor.wait_idle()
+        # main moves the same file the worker moved: a guaranteed conflict
+        (repo / "a.txt").write_text("main side\n", encoding="utf-8")
+        _git(repo, "add", ".")
+        _git(repo, "commit", "-qm", "main edit")
+
+        merged = await supervisor.merge("conflict")
+
+        assert merged is False
+        assert _git(repo, "rev-parse", "-q", "--verify", "MERGE_HEAD").returncode != 0
+        assert _git(repo, "status", "--porcelain").stdout.strip() == ""
+        assert _git(repo, "merge", "--abort").returncode != 0  # nothing left to abort
+
+    async def test_merge_keeps_a_dirty_worktree_instead_of_deleting_it(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
+        )
+
+        class MessyRunner(StubRunner):
+            async def run_turn(self, worktree, session_path, prompt):
+                result = await super().run_turn(worktree, session_path, prompt)
+                (Path(worktree) / "notes.txt").write_text(
+                    "uncommitted\n", encoding="utf-8"
+                )
+                return result
+
+        supervisor = make_supervisor(repo, tmp_path, MessyRunner(), mode="ask")
+        await supervisor.spawn("leave notes", name="messy")
+        await supervisor.wait_idle()
+
+        merged = await supervisor.merge("messy")
+
+        assert merged is True
+        assert (tmp_path / "home" / project_key(repo) / "messy" / "notes.txt").exists()
+        assert supervisor.list_workers()[0].status == "merged"
+
+    async def test_close_cancels_straggler_turns_quickly(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
+        )
+
+        class SlowRunner(StubRunner):
+            async def run_turn(self, worktree, session_path, prompt):
+                await asyncio.sleep(30)
+                return TurnResult(status="ok", summary="done", session_path="")
+
+        supervisor = make_supervisor(repo, tmp_path, SlowRunner())
+        await supervisor.spawn("never finishes", name="slow")
+
+        import time as _time
+
+        started = _time.monotonic()
+        await supervisor.close()
+        elapsed = _time.monotonic() - started
+
+        assert elapsed < 10
+        assert supervisor.list_workers()[0].status == "interrupted"
