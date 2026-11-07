@@ -71,6 +71,21 @@ def asset_url(repo: str, tag: str, name: str) -> str:
     return f"https://github.com/{repo}/releases/download/{tag}/{name}"
 
 
+def uploaded_name(name: str, triple: str) -> str:
+    """The release-asset name tauri-action uploads, for the bundle file name.
+
+    tauri-action renames macOS updater archives on upload to keep two arch
+    legs from colliding on one release: ``ZenAgent.app.tar.gz`` lands as
+    ``ZenAgent_aarch64.app.tar.gz``. Every other platform keeps its local
+    name. The fragment must point at the asset name, not the local one, or
+    macOS users download a 404 (v0.9.0 shipped exactly that bug).
+    """
+    if name.endswith(".app.tar.gz"):
+        arch, _, _rest = triple.partition("-")
+        return name.replace(".app.tar.gz", f"_{arch}.app.tar.gz")
+    return name
+
+
 def write_fragment(
     *, target: str, tag: str, bundle_dir: Path, repo: str, out: Path
 ) -> bool:
@@ -84,7 +99,7 @@ def write_fragment(
     payload = {
         "platform": platform_key(target),
         "signature": signature.read_text(encoding="utf-8").strip(),
-        "url": asset_url(repo, tag, artifact.name),
+        "url": asset_url(repo, tag, uploaded_name(artifact.name, target)),
     }
     out.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return True
