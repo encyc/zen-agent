@@ -402,7 +402,7 @@ def _make_default_reader(
 
     history = Path.home() / ".zenagent" / "history"
     history.parent.mkdir(parents=True, exist_ok=True)
-    commands = {**slash_commands(), **(extra_commands or {})}
+    commands = dict(extra_commands or {})
     session = PromptSession(
         history=FileHistory(str(history)),
         completer=(
@@ -754,9 +754,7 @@ async def repl(
     read = input_fn or _make_default_reader(
         completion=completion,
         keybindings=active_keybindings,
-        extra_commands={
-            f"/{command.name}": command.description for command in commands.names()
-        },
+        extra_commands=slash_commands(commands),
         extra_values={"/model": model_values},
         typed_provider=typed_commands,
         skill_provider=skill_provider,

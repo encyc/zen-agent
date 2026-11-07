@@ -1,7 +1,8 @@
 """REPL completion: slash commands at line start, ``@path`` anywhere after space.
 
-Kept separate from ``repl.py`` so it is testable without a terminal, and built
-on a single command table that ``/help`` also renders — one source of truth.
+Kept separate from ``repl.py`` so it is testable without a terminal. The slash
+table is derived from the live command registry — the same source ``/help``
+and the TUI hints read — so there is one source of truth for command names.
 """
 
 from __future__ import annotations
@@ -19,7 +20,6 @@ from zenagent.app.slash_args import argument_values
 from zenagent.i18n import t
 
 __all__ = [
-    "SLASH_COMMANDS",
     "ReplCompleter",
     "command_matches",
     "help_text",
@@ -28,70 +28,31 @@ __all__ = [
     "slash_commands",
 ]
 
-#: Command → catalog key of its one-line description (drives completion + /help).
-#: Keys are resolved at read time, so /lang switches the table live.
-SLASH_COMMANDS: dict[str, str] = {
-    "/help": "cmd.repl.help",
-    "/exit": "cmd.repl.exit",
-    "/clear": "cmd.repl.clear",
-    "/model": "cmd.repl.model",
-    "/thinking": "cmd.repl.thinking",
-    "/mode": "cmd.repl.mode",
-    "/session": "cmd.repl.session",
-    "/tools": "cmd.repl.tools",
-    "/compact": "cmd.repl.compact",
-    "/undo": "cmd.repl.undo",
-    "/restore": "cmd.repl.restore",
-    "/retry": "cmd.repl.retry",
-    "/pin": "cmd.repl.pin",
-    "/new": "cmd.repl.new",
-    "/settings": "cmd.repl.settings",
-    "/search": "cmd.repl.search",
-    "/doctor": "cmd.repl.doctor",
-    "/todo": "cmd.todo.description",
-    "/memory": "cmd.memory.description",
-    "/jobs": "cmd.jobs.description",
-    "/copy": "cmd.copy.description",
-    "/urls": "cmd.urls.description",
-    "/open": "cmd.open.description",
-    "/btw": "cmd.btw.description",
-    "/shake": "cmd.shake.description",
-    "/handoff": "cmd.handoff.description",
-    "/add-dir": "cmd.add-dir.description",
-    "/remove-dir": "cmd.remove-dir.description",
-    "/dirs": "cmd.dirs.description",
-    "/fresh": "cmd.fresh.description",
-    "/trace": "cmd.trace.description",
-    "/image": "cmd.repl.image",
-    "/images": "cmd.repl.images",
-    "/mcp": "cmd.repl.mcp",
-    "/skills": "cmd.repl.skills",
-    "/reload": "cmd.repl.reload",
-    "/theme": "cmd.repl.theme",
-    "/lang": "cmd.repl.lang",
-    "/hotkeys": "cmd.repl.hotkeys",
-    "/sessions": "cmd.repl.sessions",
-    "/rename": "cmd.repl.rename",
-    "/fork": "cmd.repl.fork",
-    "/import": "cmd.repl.import",
-}
 
+def slash_commands(registry) -> dict[str, str]:
+    """The live command table with descriptions in the active locale.
 
-def _translated_slash_commands() -> dict[str, str]:
-    return slash_commands()
-
-
-def slash_commands() -> dict[str, str]:
-    """The REPL command table with descriptions in the active locale."""
-    return {name: t(key) for name, key in SLASH_COMMANDS.items()}
+    Names come from the registry (single source of truth). Descriptions
+    re-resolve the ``cmd.<name>.description`` key at read time so ``/lang``
+    switches the table live; commands without a catalog key (extensions)
+    fall back to their registered description.
+    """
+    table: dict[str, str] = {}
+    for command in registry.names():
+        key = f"cmd.{command.name}.description"
+        translated = t(key)
+        table[f"/{command.name}"] = (
+            command.description if translated == key else translated
+        )
+    return table
 
 #: Text matched when the cursor sits in an ``@path`` token.
 _AT_TOKEN = re.compile(r"(?:^|\s)@(\S*)$")
 
 
-def help_text() -> str:
+def help_text(registry) -> str:
     """Render the command table plus usage notes for ``/help``."""
-    table = slash_commands()
+    table = slash_commands(registry)
     width = max(len(name) for name in table)
     rows = [f"  {name:<{width}}  {description}" for name, description in table.items()]
     return (
@@ -254,7 +215,7 @@ class ReplCompleter(Completer):
         skill_provider: Callable[[], list[tuple[str, str]]] | None = None,
     ) -> None:
         if slash_commands is None:
-            self.slash_commands = _translated_slash_commands()
+            self.slash_commands = {}
         else:
             self.slash_commands = dict(slash_commands)
         self.base_dir = Path(base_dir) if base_dir is not None else Path.cwd()

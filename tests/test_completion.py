@@ -1,10 +1,28 @@
-"""Completion: slash commands at line start, @path tokens after whitespace."""
+"""Completion: slash commands at line start, @path tokens after whitespace.
+
+The slash table is derived from the live command registry — the same
+source ``/help`` and the TUI hints read — so a command added to
+``build_default_commands`` is completable without touching this module.
+"""
 
 from pathlib import Path
+from types import SimpleNamespace
+from typing import cast
 
 from prompt_toolkit.document import Document
 
-from zenagent.cli.completion import SLASH_COMMANDS, ReplCompleter, help_text
+from zenagent.app.commands import (
+    AppServices,
+    Command,
+    CommandRegistry,
+    build_default_commands,
+)
+from zenagent.cli.completion import ReplCompleter, help_text, slash_commands
+
+
+def make_registry() -> CommandRegistry:
+    """The real 46-command registry; handlers are never invoked here."""
+    return build_default_commands(cast(AppServices, SimpleNamespace()))
 
 
 def complete(completer: ReplCompleter, text: str) -> list[str]:
@@ -12,8 +30,25 @@ def complete(completer: ReplCompleter, text: str) -> list[str]:
     return [c.text for c in completer.get_completions(document, None)]
 
 
+def test_slash_table_is_derived_from_the_registry():
+    registry = make_registry()
+    assert set(slash_commands(registry)) == {
+        f"/{command.name}" for command in registry.names()
+    }
+
+
+def test_custom_commands_reach_completion():
+    registry = make_registry()
+    registry.register(
+        Command(name="mycmd", description="Does a thing", handler=None)
+    )
+    assert "/mycmd" in slash_commands(registry)
+
+
 def test_slash_prefix_completes_commands():
-    completer = ReplCompleter(base_dir=Path("/tmp"))
+    completer = ReplCompleter(
+        slash_commands=slash_commands(make_registry()), base_dir=Path("/tmp")
+    )
     assert complete(completer, "/mo") == ["/mode", "/model"]
     assert set(complete(completer, "/se")) == {
         "/session",
@@ -24,9 +59,10 @@ def test_slash_prefix_completes_commands():
 
 
 def test_bare_slash_lists_every_command():
-    completer = ReplCompleter(base_dir=Path("/tmp"))
+    table = slash_commands(make_registry())
+    completer = ReplCompleter(slash_commands=table, base_dir=Path("/tmp"))
     got = complete(completer, "/")
-    assert set(got) == set(SLASH_COMMANDS)
+    assert set(got) == set(table)
 
 
 def test_plain_text_has_no_completions():
@@ -67,10 +103,11 @@ def test_hidden_files_are_not_offered(tmp_path):
 
 
 def test_help_text_is_generated_from_the_command_table():
-    text = help_text()
-    for name in SLASH_COMMANDS:
+    table = slash_commands(make_registry())
+    text = help_text(make_registry())
+    for name in table:
         assert name in text
-    assert "steering" in text
+    assert "plan|ask|zen" in text
 
 
 def test_mode_arguments_are_completed():
@@ -152,12 +189,11 @@ def test_typed_commands_carry_a_type_label():
 
 
 def test_builtin_commands_are_tagged_as_command():
-    completer = ReplCompleter(base_dir=Path("/tmp"))
-    items = dict(complete_items(completer, "/mo"))
-    assert (
-        items["/mode"]
-        == "command · set runtime mode: plan|ask|zen (plan = read-only)"
+    completer = ReplCompleter(
+        slash_commands=slash_commands(make_registry()), base_dir=Path("/tmp")
     )
+    items = dict(complete_items(completer, "/mo"))
+    assert items["/mode"] == "command · set runtime mode: plan|ask|zen"
 
 
 def test_mid_sentence_slash_offers_only_skills():

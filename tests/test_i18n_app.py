@@ -95,15 +95,20 @@ async def test_command_hints_prefix_is_chinese(fake_runtime, monkeypatch):
 
 
 def test_repl_command_table_follows_locale():
+    from types import SimpleNamespace
+    from typing import cast
+
+    from zenagent.app.commands import AppServices, build_default_commands
     from zenagent.cli.completion import help_text, slash_commands
 
+    registry = build_default_commands(cast(AppServices, SimpleNamespace()))
     i18n.set_locale("zh")
     try:
-        table = slash_commands()
-        assert table["/help"] == "显示本帮助"
-        assert table["/lang"] == "切换界面语言：auto|en|zh"
-        assert "命令：" in help_text()
-        assert "agent 运行期间" in help_text()
+        table = slash_commands(registry)
+        assert table["/help"] == "列出全部命令"
+        assert table["/lang"] == "设置界面语言：auto|en|zh"
+        assert "命令：" in help_text(registry)
+        assert "agent 运行期间" in help_text(registry)
     finally:
         i18n.set_locale("en")
 
