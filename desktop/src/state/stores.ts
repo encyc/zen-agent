@@ -217,6 +217,7 @@ export interface SubagentPanelTarget {
 }
 
 const REVIEW_TAB: WorkPanelTab = { id: 'review', kind: 'review' }
+const FILES_TAB: WorkPanelTab = { id: 'files', kind: 'files' }
 
 interface WorkPanelState {
   open: boolean
@@ -236,8 +237,8 @@ function withTab(tabs: WorkPanelTab[], tab: WorkPanelTab): WorkPanelTab[] {
 
 export const useWorkPanelStore = create<WorkPanelState>((set) => ({
   open: false,
-  tabs: [REVIEW_TAB],
-  activeId: REVIEW_TAB.id,
+  tabs: [REVIEW_TAB, FILES_TAB],
+  activeId: FILES_TAB.id,
   openPanel: () => set({ open: true }),
   closePanel: () => set({ open: false }),
   showTab: (kind) =>
@@ -268,9 +269,10 @@ export const useWorkPanelStore = create<WorkPanelState>((set) => ({
     set((state) => {
       if (id === REVIEW_TAB.id) return state
       const tabs = state.tabs.filter((tab) => tab.id !== id)
+      const fallback = tabs.some((tab) => tab.id === FILES_TAB.id) ? FILES_TAB.id : REVIEW_TAB.id
       return {
         tabs,
-        activeId: state.activeId === id ? REVIEW_TAB.id : state.activeId,
+        activeId: state.activeId === id ? fallback : state.activeId,
       }
     }),
 }))

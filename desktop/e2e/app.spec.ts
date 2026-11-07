@@ -1076,7 +1076,7 @@ test('the ask card collects answers and resolves the blocked tool call', async (
   )
 })
 
-test('the work panel renders review hunks and opens the files tab', async ({ page }) => {
+test('the work panel opens on files and renders review hunks', async ({ page }) => {
   await boot(
     page,
     initialState({
@@ -1115,6 +1115,8 @@ test('the work panel renders review hunks and opens the files tab', async ({ pag
   )
   await page.getByRole('button', { name: '打开工作面板' }).click()
   const panel = page.locator('[data-work-panel]')
+  await expect(panel.getByRole('tab', { name: '文件' })).toHaveAttribute('aria-selected', 'true')
+  await panel.getByRole('tab', { name: '审核' }).click()
   await expect(panel.getByRole('tab', { name: '审核' })).toHaveAttribute('aria-selected', 'true')
   await expect(panel).toContainText('a.ts')
   await expect(panel).toContainText('@@ -1,2 +1,2 @@')
@@ -1355,7 +1357,7 @@ test('a task row opens the subagent conversation in the work panel', async ({ pa
 
   await page.getByRole('button', { name: '关闭 Researcher' }).click()
   await expect(panel.getByRole('tab', { name: /Researcher/ })).toHaveCount(0)
-  await expect(panel.getByRole('tab', { name: '审核' })).toHaveAttribute(
+  await expect(panel.getByRole('tab', { name: '文件' })).toHaveAttribute(
     'aria-selected',
     'true',
   )
