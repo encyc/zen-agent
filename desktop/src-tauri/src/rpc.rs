@@ -515,10 +515,15 @@ pub fn updates_self_updatable() -> bool {
     true
 }
 
-/// Restart the shell after an update installed itself. The child `zen rpc`
-/// dies with the process, so the new bundle and its sidecar start together.
+/// Restart the shell after an update installed itself. Stop the child first:
+/// `app.restart()` takes the whole process down, and a hard death would skip
+/// the child's shutdown path (it drops the session file an unused launch
+/// wrote), so the new bundle would start on top of a fresh `(empty)` session.
 #[tauri::command]
-pub fn relaunch_app(app: AppHandle) {
+pub fn relaunch_app(app: AppHandle, state: State<'_, RpcState>) {
+    if let Some(proc) = state.proc.lock().unwrap().take() {
+        stop_proc(&proc);
+    }
     app.restart();
 }
 
@@ -565,11 +570,13 @@ pub async fn runtime_probe() -> RuntimeProbe {
     }
 }
 
+/// Best-effort teardown on app exit: the same graceful stop `rpc_stop` uses.
+/// A hard kill here would skip the child's own shutdown path — which is what
+/// drops the session file a launch never wrote a message to — so an unused
+/// launch would leave an `(empty)` session behind on every quit.
 pub fn kill_all(state: &RpcState) {
     if let Some(proc) = state.proc.lock().unwrap().take() {
-        proc.alive.store(false, Ordering::SeqCst);
-        let mut child = proc.child.lock().unwrap();
-        kill_quiet(&mut child);
+        stop_proc(&proc);
     }
 }
 
@@ -674,5 +681,61 @@ mod env_tests {
         let (map, timed_out) = login_shell_env_with(command, Duration::from_millis(200));
         assert!(timed_out);
         assert!(map.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod stop_tests {
+    use super::*;
+
+    /// A child that runs its own teardown and exits once it reads a
+    /// `shutdown` line — the contract `zen rpc`'s loop honours. Anything
+    /// else keeps it alive.
+    fn shutdown_aware_child() -> (Proc, Arc<Mutex<Child>>) {
+        let mut child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("while IFS= read -r line; do case \"$line\" in *shutdown*) exit 0;; esac; done")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn the stub child");
+        let stdin = child.stdin.take().expect("child has stdin");
+        let child = Arc::new(Mutex::new(child));
+        let kept = Arc::clone(&child);
+        (
+            Proc {
+                child,
+                stdin: Mutex::new(stdin),
+                pending: Arc::new(Mutex::new(HashMap::new())),
+                alive: Arc::new(AtomicBool::new(true)),
+            },
+            kept,
+        )
+    }
+
+    /// `Some(_)` means the child exited on its own; `None` means a signal
+    /// killed it — the exact distinction that decides whether `zen rpc` got
+    /// to run `Runtime.close()` and drop an unused session file.
+    fn exit_code(kept: &Arc<Mutex<Child>>) -> Option<i32> {
+        let mut child = kept.lock().unwrap();
+        child.wait().expect("wait for the child").code()
+    }
+
+    #[test]
+    fn stop_proc_lets_a_cooperative_child_exit_cleanly() {
+        let (proc, kept) = shutdown_aware_child();
+        stop_proc(&Arc::new(proc));
+        assert_eq!(exit_code(&kept), Some(0));
+    }
+
+    #[test]
+    fn kill_all_stops_the_registered_child_the_same_way() {
+        let (proc, kept) = shutdown_aware_child();
+        let state = RpcState {
+            proc: Mutex::new(Some(Arc::new(proc))),
+        };
+        kill_all(&state);
+        assert_eq!(exit_code(&kept), Some(0));
     }
 }

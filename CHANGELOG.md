@@ -3,6 +3,18 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+### Fixed
+
+- **Quitting the desktop shell no longer leaves an empty session behind.** The
+  exit teardown (`kill_all`) and the post-update restart (`relaunch_app`)
+  SIGKILLed the `zen rpc` child, so its own shutdown path — the one that drops
+  the session file a launch never wrote a message to — never ran, and every
+  app open added one more `(empty)` row to the listings. Both paths now use
+  the same graceful stop as `rpc_stop`: a `shutdown` request first, a short
+  grace period, then a hard kill for a stuck child.
+
 ## v0.9.1 — 2026-11-07
 
 **The updater works end to end, and closing the window keeps the agent alive.**
