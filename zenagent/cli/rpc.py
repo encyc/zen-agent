@@ -491,6 +491,7 @@ class RpcServer:
                 {
                     "type": "result",
                     "id": request_id,
+                    "ok": True,
                     "protocol_version": PROTOCOL_VERSION,
                 }
             )

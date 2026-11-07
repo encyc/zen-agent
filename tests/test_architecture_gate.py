@@ -13,6 +13,7 @@ def run_gate(root: Path) -> subprocess.CompletedProcess:
         [sys.executable, str(SCRIPT), "--root", str(root)],
         capture_output=True,
         text=True,
+        check=False,
     )
 
 

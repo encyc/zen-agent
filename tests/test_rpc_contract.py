@@ -92,6 +92,7 @@ async def test_hello_reports_protocol_version(runtime_factory):
     assert json.loads(writes[0]) == {
         "type": "result",
         "id": "h1",
+        "ok": True,
         "protocol_version": PROTOCOL_VERSION,
     }
 
@@ -120,3 +121,17 @@ def test_view_kinds_agree_between_python_and_ts():
 
     tool_view = re.search(r"export interface ToolCallView \{[^}]+\}", ts)
     assert tool_view and "kind: 'tool'" in tool_view.group(0)
+
+
+def test_hello_result_shape_matches_ts():
+    """The reviewer found hello answering without ``ok`` while TS required it —
+    three sources, three shapes, every suite green. Pin the result frame."""
+    rpc = RPC_PATH.read_text()
+    ts = TS_PATH.read_text()
+    hello = re.search(r'if kind == "hello":.*?return True', rpc, re.DOTALL)
+    assert hello, "hello branch moved"
+    assert '"ok": True' in hello.group(0), "hello result must carry ok like every result frame"
+    hello_result = re.search(r"export interface HelloResult \{[^}]+\}", ts)
+    assert hello_result
+    for field in ("ok: true", "protocol_version: number"):
+        assert field in hello_result.group(0)
