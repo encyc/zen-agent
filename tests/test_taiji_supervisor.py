@@ -688,3 +688,63 @@ class TestWorkerSlots:
 
         assert killed.status == "killed"
         assert "doomed" not in runner.started
+
+
+class AttentionRunner(StubRunner):
+    """A turn that ends with the worker asking a structured question."""
+
+    def __init__(self, attention: dict | None) -> None:
+        super().__init__()
+        self.attention = attention
+
+    async def run_turn(self, worktree, session_path, prompt):
+        result = await super().run_turn(worktree, session_path, prompt)
+        result.attention = self.attention
+        return result
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+class TestAttention:
+    async def test_attention_is_persisted_and_relayed_and_blocks_merge(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr("zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home")
+        chat = FakeChat()
+        question = {"request_id": "q0", "question": "方案 A 还是 B？"}
+        supervisor = make_chat_supervisor(
+            repo, tmp_path, AttentionRunner({"request_id": "q0", "question": "方案 A 还是 B？"}),
+            mode="zen", chat=chat,
+        )
+
+        await supervisor.spawn("needs a decision", name="asking")
+        await supervisor.wait_idle()
+
+        record = supervisor.list_workers()[0]
+        assert record.status == "ok"
+        assert "方案 A" in record.attention
+        # a pending question blocks the zen auto-merge
+        main_before = _git(repo, "rev-parse", "main").stdout.strip()
+        assert _git(repo, "merge-base", "--is-ancestor", record.branch, main_before).returncode != 0
+        # the Router hears the question
+        assert any("提问" in message and "方案 A" in message for message in chat.messages)
+
+        # the human answers: the next turn clears the attention and merges
+        supervisor.runner = StubRunner()
+        await supervisor.message("asking", "答案：B")
+        await supervisor.wait_idle()
+
+        assert supervisor.list_workers()[0].attention == ""
+        assert supervisor.list_workers()[0].status == "merged"
+
+    async def test_registry_without_attention_field_loads(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
+        import json as _json
+
+        monkeypatch.setattr("zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home")
+        registry_path = tmp_path / "sessions" / "taiji.json"
+        registry_path.parent.mkdir(parents=True)
+        registry_path.write_text(_json.dumps({
+            "legacy": {"name": "legacy", "branch": "task/legacy", "base": "main",
+                        "worktree": "/wt", "status": "interrupted",
+                        "created_at": 1.0, "updated_at": 2.0}
+        }), encoding="utf-8")
+
+        supervisor = make_supervisor(repo, tmp_path, StubRunner())
+        assert supervisor.list_workers()[0].attention == ""

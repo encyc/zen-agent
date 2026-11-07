@@ -9,6 +9,7 @@ paths. Milestone injection and the merge gate live on top (see below).
 from __future__ import annotations
 
 import asyncio
+import json as _json
 import re
 import shutil
 import subprocess
@@ -62,6 +63,16 @@ class TurnResult:
     status: str
     summary: str
     session_path: str
+    #: A worker question waiting on a person (from an ``ask_request`` event).
+    attention: dict | None = None
+
+
+def _attention_question(record: WorkerRecord) -> str:
+    try:
+        data = _json.loads(record.attention)
+    except ValueError:
+        return record.attention
+    return str(data.get("question", "")) if isinstance(data, dict) else record.attention
 
 
 def supervisor_summary(record: WorkerRecord, summary: str, duration_s: float) -> str:
@@ -94,13 +105,24 @@ class RpcRunner:
         from zenagent.app.taiji.worker_client import WorkerRpcClient
 
         client = self._client_factory() if self._client_factory else WorkerRpcClient()
-        await client.start(Path(worktree), on_event=lambda event: None)
+        events: list[dict] = []
+        await client.start(Path(worktree), on_event=events.append)
         try:
             if session_path:
                 await client.resume(session_path)
             answer = await client.prompt(prompt, timeout_s=self._timeout_s)
         finally:
             await client.stop()
+        attention = None
+        for event in events:
+            if event.get("type") == "ask_request":
+                questions = event.get("questions") or []
+                attention = {
+                    "request_id": str(event.get("request_id", "")),
+                    "question": "; ".join(
+                        str(question.get("question", "")) for question in questions if isinstance(question, dict)
+                    ).strip("; "),
+                }
         if answer.get("ok") is False:
             # A graceful ok:false frame (provider error, max turns, abort) is
             # a failed turn — never a mergeable success.
@@ -115,6 +137,7 @@ class RpcRunner:
             status="ok",
             summary=summary[:2000] or "(no output)",
             session_path=str(answer.get("session") or session_path or ""),
+            attention=attention,
         )
 
 
@@ -325,6 +348,7 @@ class TaijiSupervisor:
         record.status = result.status
         record.summary = result.summary
         record.session = result.session_path
+        record.attention = _json.dumps(result.attention, ensure_ascii=False) if result.attention else ""
         record.updated_at = time.time()
         self._save()
         await self._emit_turn(record, result.summary, started, status=result.status)
@@ -346,14 +370,24 @@ class TaijiSupervisor:
         preconditions are unmet stop at an acceptance question; plan mode
         only reports.
         """
-        if status == "ok" and self.mode_of() == "zen" and await self.merge(record.name):
+        if (
+            status == "ok"
+            and not record.attention
+            and self.mode_of() == "zen"
+            and await self.merge(record.name)
+        ):
             status = "merged"
         if self.chat is None:
             return
         await self.chat.submit(
             supervisor_summary(record, summary, time.time() - started)
         )
-        if status == "ok" and self.mode_of() in ("zen", "ask"):
+        if record.attention:
+            await self.chat.submit(
+                f"worker {record.branch} 提问：{_attention_question(record)}。"
+                f"回答后用 message_worker 转达给 {record.name}。"
+            )
+        elif status == "ok" and self.mode_of() in ("zen", "ask"):
             await self.chat.submit(
                 f"任务 {record.branch} 完成，待验收：{record.summary or summary}。"
                 f"请说「合并 {record.branch}」或提返工意见。"

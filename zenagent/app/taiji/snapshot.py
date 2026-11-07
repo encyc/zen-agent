@@ -177,11 +177,15 @@ def _worker_status(directory: Path) -> dict[str, dict]:
         session = raw.get("session")
         if not isinstance(session, str) or not session:
             continue
-        by_session[Path(session).stem] = {
+        row = {
             "worker": str(raw.get("name", "")),
             "status": str(raw.get("status", "")),
             "branch": str(raw.get("branch", "")),
         }
+        attention = raw.get("attention")
+        if isinstance(attention, str) and attention:
+            row["attention"] = attention
+        by_session[Path(session).stem] = row
     return by_session
 
 

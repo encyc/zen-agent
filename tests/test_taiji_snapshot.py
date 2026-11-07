@@ -282,3 +282,29 @@ class TestSessionStatus:
         session = result["projects"][0]["sessions"][0]
         assert "status" not in session
         assert "worker" not in session
+
+
+class TestAttentionSnapshot:
+    def test_worker_attention_surfaces_in_the_session_row(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
+        from zenagent.app.taiji.registry import TaijiRegistry, WorkerRecord
+        from zenagent.project import project_key
+
+        _commit(repo, "a.txt", "init")
+        home = tmp_path / "home"
+        monkeypatch.setattr("zenagent.project.projects_root", lambda: home)
+        directory = home / project_key(repo) / "sessions"
+        _session_file(directory, "worker-turn")
+        registry = TaijiRegistry()
+        registry.records["w"] = WorkerRecord(
+            name="w", branch="task/w", base="main", worktree="/wt",
+            status="ok", created_at=1.0, updated_at=2.0,
+            session=str(directory / "worker-turn.jsonl"),
+            attention='{"request_id": "q0", "question": "A 还是 B？"}',
+        )
+        registry.save(directory.parent / "taiji.json")
+
+        result = session_map(repo)
+
+        session = result["projects"][0]["sessions"][0]
+        assert session["status"] == "ok"
+        assert "A 还是 B" in session["attention"]
