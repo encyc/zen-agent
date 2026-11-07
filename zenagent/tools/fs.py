@@ -14,6 +14,7 @@ returns ``is_error=True`` with an explanatory message instead of raising.
 
 from __future__ import annotations
 
+import asyncio
 import difflib
 import re
 from pathlib import Path
@@ -167,7 +168,8 @@ async def _read_file(
 ) -> ToolResultAgent:
     path = _arg_path(args["path"])
     try:
-        data = path.read_bytes()
+        # Off the event loop: large reads must not stall streaming turns.
+        data = await asyncio.to_thread(path.read_bytes)
     except FileNotFoundError:
         return text_result(f"file not found: {path}", is_error=True)
     except IsADirectoryError:

@@ -42,6 +42,7 @@ interface BridgeState {
   mcpServers?: Record<string, unknown>[]
   mcpProblem?: string
   mcpTests?: Record<string, { connected: boolean; tools?: string[]; message?: string }>
+  sessionProjects?: string[]
   relocations?: { from: string; to: string }[]
   relocateError?: string
   fsEntries?: Record<string, Record<string, unknown>[]>
@@ -134,6 +135,20 @@ function installBridge(state: BridgeState) {
               model: 'deepseek-flash',
               derived_from: '',
             },
+            ...(state.sessionProjects ?? []).map((root, index) => ({
+              path: `/sessions/extra${index}.jsonl`,
+              name: `extra${index}`,
+              title: `会话项目 ${root}`,
+              project: root.split('/').filter(Boolean).at(-1) ?? 'extra',
+              project_path: root,
+              messages: 1,
+              current: false,
+              pinned: false,
+              created_at: 1,
+              updated_at: 3,
+              model: 'deepseek-flash',
+              derived_from: '',
+            })),
           ]
         : []),
     ],
@@ -2109,7 +2124,9 @@ test('project settings lists folders, opens one and forgets another', async ({ p
   const first = page.locator('[data-project="/work/p"]')
   await first.getByRole('button', { name: '移除' }).click()
   await first.getByRole('button', { name: '确认移除' }).click()
-  await expect(first).toHaveCount(0)
+  // Forgetting the registration keeps the row while its sessions exist.
+  await expect(first).toContainText('来自会话')
+  await expect(first.getByRole('button', { name: '移除' })).toHaveCount(0)
 })
 
 test('project settings moves a renamed folder to its new path', async ({ page }) => {
@@ -2150,6 +2167,50 @@ test('project settings moves a renamed folder to its new path', async ({ page })
     ),
   )
   assert.deepEqual(stored.sort(), ['/work/p2', '/work/q'])
+})
+
+test('project settings lists projects seen in sessions', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('zen.last.cwd', '/work/q')
+    localStorage.setItem(
+      'zen.projects',
+      JSON.stringify([{ path: '/work/q', name: 'q', at: 1 }]),
+    )
+  })
+  await boot(page, initialState({ running: false, sessionProjects: ['/work/solo'] }))
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '项目' }).click()
+
+  const derived = page.locator('[data-project="/work/solo"]')
+  await expect(derived).toBeVisible()
+  await expect(derived).toContainText('来自会话')
+  await expect(derived).toContainText('1 个会话')
+  await expect(derived.getByRole('button', { name: '打开' })).toBeEnabled()
+  // Only manual registrations can be forgotten.
+  await expect(derived.getByRole('button', { name: '移除' })).toHaveCount(0)
+
+  const registered = page.locator('[data-project="/work/q"]')
+  await expect(registered).toContainText('1 个会话')
+  await expect(registered).not.toContainText('来自会话')
+  await expect(registered.getByRole('button', { name: '移除' })).toBeVisible()
+})
+
+test('project settings keeps every registered folder past eight', async ({ page }) => {
+  await page.addInitScript(() => {
+    const projects = Array.from({ length: 10 }, (_, index) => ({
+      path: `/work/p${index}`,
+      name: `p${index}`,
+      at: 10 - index,
+    }))
+    localStorage.setItem('zen.projects', JSON.stringify(projects))
+  })
+  await boot(page, initialState({ running: false }))
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '项目' }).click()
+
+  for (let index = 0; index < 10; index += 1) {
+    await expect(page.locator(`[data-project="/work/p${index}"]`)).toBeVisible()
+  }
 })
 
 test('thinking settings unfold and hide settled reasoning', async ({ page }) => {

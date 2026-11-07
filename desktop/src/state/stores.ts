@@ -74,14 +74,12 @@ function loadProjects(): ProjectEntry[] {
     const raw = localStorage.getItem(PROJECTS_KEY)
     if (raw !== null) {
       const parsed = JSON.parse(raw) as ProjectEntry[]
-      return Array.isArray(parsed) ? parsed.slice(0, 8) : []
+      return Array.isArray(parsed) ? parsed : []
     }
     const legacy = localStorage.getItem(LEGACY_RECENTS_KEY)
     const parsed = legacy === null ? [] : (JSON.parse(legacy) as { path: string; at: number }[])
     const migrated = Array.isArray(parsed)
-      ? parsed
-          .slice(0, 8)
-          .map((item) => ({ path: item.path, name: projectName(item.path), at: item.at }))
+      ? parsed.map((item) => ({ path: item.path, name: projectName(item.path), at: item.at }))
       : []
     persist(PROJECTS_KEY, migrated)
     return migrated
@@ -105,7 +103,7 @@ export const useProjectStore = create<ProjectState>((set) => ({
       const next = [
         { path, name: projectName(path), at: Date.now() },
         ...state.projects.filter((project) => project.path !== path),
-      ].slice(0, 8)
+      ]
       persist(PROJECTS_KEY, next)
       return { projects: next }
     })

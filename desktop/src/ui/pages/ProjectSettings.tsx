@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { lastProjectCwd, useAppStore } from '../../state/appStore'
+import { projectRows } from '../../state/projectRows'
 import { useProjectStore, useSessionStore, useSettingsStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
 import { formatAge } from '../format'
@@ -13,32 +14,16 @@ import { pickProjectFolder } from '../HomeHero'
 import { ChatIcon, FolderIcon, PlusIcon, XIcon } from '../icons'
 import css from './ProjectSettings.module.css'
 
-interface ProjectStat {
-  sessions: number
-  last: number
-}
-
-const EMPTY_STAT: ProjectStat = { sessions: 0, last: 0 }
-
-/** The recorded project root for a registry entry: the containing session root
- * when the registered folder was a subdirectory of the repository. */
-function rootFor(path: string, stats: Map<string, ProjectStat>): string {
-  if (stats.has(path)) return path
-  for (const root of stats.keys()) {
-    if (path.startsWith(`${root}/`)) return root
-  }
-  return path
-}
-
 interface ProjectRowProps {
   path: string
   root: string
   name: string
-  stat: ProjectStat
+  registered: boolean
+  stat: { sessions: number; last: number }
   active: boolean
 }
 
-function ProjectRow({ path, root, name, stat, active }: ProjectRowProps) {
+function ProjectRow({ path, root, name, registered, stat, active }: ProjectRowProps) {
   const t = useT()
   const locale = useSettingsStore((state) => state.locale)
   const removeProject = useProjectStore((state) => state.removeProject)
@@ -97,7 +82,7 @@ function ProjectRow({ path, root, name, stat, active }: ProjectRowProps) {
         )
         return
       }
-      updateProject(path, target)
+      if (registered) updateProject(path, target)
       setTarget(null)
     } finally {
       setBusy(false)
@@ -112,6 +97,9 @@ function ProjectRow({ path, root, name, stat, active }: ProjectRowProps) {
       <div className={css.copy}>
         <div className={css.name}>
           <span>{name}</span>
+          {registered ? null : (
+            <span className={css.source}>{t('settings.projectFromSessions')}</span>
+          )}
           {active ? <span className={css.current}>{t('settings.projectCurrent')}</span> : null}
         </div>
         <div className={css.path}>{path}</div>
@@ -147,15 +135,17 @@ function ProjectRow({ path, root, name, stat, active }: ProjectRowProps) {
           <FolderIcon size={11} />
           <span>{t('settings.projectRelocate')}</span>
         </button>
-        <button
-          type="button"
-          className={clsx(css.action, armed && css.actionDanger)}
-          disabled={busy}
-          onClick={() => (armed ? removeProject(path) : setArmed(true))}
-        >
-          <XIcon size={11} />
-          <span>{armed ? t('settings.projectRemoveArmed') : t('settings.remove')}</span>
-        </button>
+        {registered ? (
+          <button
+            type="button"
+            className={clsx(css.action, armed && css.actionDanger)}
+            disabled={busy}
+            onClick={() => (armed ? removeProject(path) : setArmed(true))}
+          >
+            <XIcon size={11} />
+            <span>{armed ? t('settings.projectRemoveArmed') : t('settings.remove')}</span>
+          </button>
+        ) : null}
       </div>
       {active ? <div className={css.hint}>{t('settings.projectRelocateActive')}</div> : null}
       {target !== null ? (
@@ -198,19 +188,7 @@ export function ProjectSettings() {
     void refreshSessions()
   }, [refreshSessions])
 
-  const stats = useMemo(() => {
-    const map = new Map<string, ProjectStat>()
-    for (const session of sessions) {
-      const root = session.project_path ?? ''
-      if (root === '') continue
-      const previous = map.get(root) ?? { sessions: 0, last: 0 }
-      map.set(root, {
-        sessions: previous.sessions + 1,
-        last: Math.max(previous.last, session.updated_at ?? 0),
-      })
-    }
-    return map
-  }, [sessions])
+  const rows = useMemo(() => projectRows(sessions, projects), [sessions, projects])
 
   const add = async () => {
     const path = await pickProjectFolder()
@@ -232,22 +210,20 @@ export function ProjectSettings() {
           </button>
         </div>
         <div className={css.panel}>
-          {projects.length === 0 ? (
+          {rows.length === 0 ? (
             <div className={css.empty}>{t('settings.projectsEmpty')}</div>
           ) : (
-            projects.map((project) => {
-              const root = rootFor(project.path, stats)
-              return (
-                <ProjectRow
-                  key={project.path}
-                  path={project.path}
-                  root={root}
-                  name={project.name}
-                  stat={stats.get(root) ?? EMPTY_STAT}
-                  active={current === project.path || current === root}
-                />
-              )
-            })
+            rows.map((row) => (
+              <ProjectRow
+                key={row.path}
+                path={row.path}
+                root={row.root}
+                name={row.name}
+                registered={row.registered}
+                stat={row.stat}
+                active={current === row.path || current === row.root}
+              />
+            ))
           )}
         </div>
       </section>

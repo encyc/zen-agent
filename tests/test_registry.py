@@ -263,3 +263,19 @@ async def test_safe_stream_keeps_error_reason_for_other_exceptions():
     assert events[-1].type == "error"
     assert events[-1].reason == "error"
     assert events[-1].partial.stop_reason == "error"
+
+
+def test_shared_async_client_is_singleton() -> None:
+    # One TLS pool per process: per-call clients were the 2026-11-07 review's
+    # throughput friction (a fresh handshake on every stream).
+    from zenagent.providers.transport import get_shared_async_client
+
+    assert get_shared_async_client() is get_shared_async_client()
+
+
+def test_shared_async_client_carries_streaming_timeouts() -> None:
+    from zenagent.providers.transport import get_shared_async_client
+
+    client = get_shared_async_client()
+    assert client.timeout.connect == 10.0
+    assert client.timeout.read == 300.0

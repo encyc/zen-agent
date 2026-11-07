@@ -117,10 +117,30 @@ def should_retry(status: int | None, exc: Exception | None) -> bool:
 
 
 def default_client() -> httpx.AsyncClient:
-    """Client with streaming-appropriate timeouts (connect 10s, read 300s)."""
+    """A client with streaming-appropriate timeouts (connect 10s, read 300s).
+
+    Builds a fresh client each call; the adapters use
+    :func:`get_shared_async_client` so one TLS pool serves the process.
+    """
     return async_client(
         timeout=httpx.Timeout(connect=10.0, read=300.0, write=10.0, pool=10.0),
     )
+
+
+_shared_async_client: httpx.AsyncClient | None = None
+
+
+def get_shared_async_client() -> httpx.AsyncClient:
+    """The process-level streaming client (lazy, never closed by callers).
+
+    One connection pool per process: per-call clients paid a fresh TLS
+    handshake on every stream and were the 2026-11-07 review's throughput
+    friction. Callers must not close it.
+    """
+    global _shared_async_client
+    if _shared_async_client is None:
+        _shared_async_client = default_client()
+    return _shared_async_client
 
 
 async def _sleep(delay: float, abort: AbortToken | None = None) -> None:

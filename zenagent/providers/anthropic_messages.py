@@ -30,7 +30,11 @@ from zenagent.providers.compat import normalize_thinking
 from zenagent.providers.history import replayable
 from zenagent.providers.limits import fit_stream_options
 from zenagent.providers.stream_options import StreamOptions
-from zenagent.providers.transport import default_client, iter_sse_data, post_stream
+from zenagent.providers.transport import (
+    get_shared_async_client,
+    iter_sse_data,
+    post_stream,
+)
 from zenagent.types import (
     AssistantMessage,
     Cost,
@@ -539,17 +543,14 @@ async def stream(
     """Stream one Messages API completion; failures surface as terminal events."""
     messages = replayable(messages)
     url, headers, body = build_request(model, messages, tools, options)
-    client = default_client()
+    client = get_shared_async_client()
+    response = await post_stream(
+        client, url, headers, body, abort=options.abort
+    )
     try:
-        response = await post_stream(
-            client, url, headers, body, abort=options.abort
-        )
-        try:
-            async for event in _events_from_chunks(
-                model, _chunk_stream(response), options.abort
-            ):
-                yield event
-        finally:
-            await response.aclose()
+        async for event in _events_from_chunks(
+            model, _chunk_stream(response), options.abort
+        ):
+            yield event
     finally:
-        await client.aclose()
+        await response.aclose()

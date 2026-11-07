@@ -410,7 +410,7 @@ async def test_stream_wiring_via_mock_transport(monkeypatch):
         return httpx.Response(200, content=fixture.encode())
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    monkeypatch.setattr(oc, "default_client", lambda: client)
+    monkeypatch.setattr(oc, "get_shared_async_client", lambda: client)
 
     model = _model(base_url="https://api.zai.test/v1/")  # trailing slash
     messages = [
@@ -463,7 +463,7 @@ async def test_stream_drops_turns_no_provider_accepts(monkeypatch):
         return httpx.Response(200, content=fixture.encode())
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    monkeypatch.setattr(oc, "default_client", lambda: client)
+    monkeypatch.setattr(oc, "get_shared_async_client", lambda: client)
 
     def assistant(content, stop_reason, error_message=None):
         return AssistantMessage(

@@ -298,12 +298,11 @@ async def test_stream_posts_to_the_messages_endpoint(monkeypatch):
         return httpx.Response(200, content=fixture.encode())
 
     transport = httpx.MockTransport(handler)
-    real_client = am.default_client
 
     def patched():
         return httpx.AsyncClient(transport=transport)
 
-    monkeypatch.setattr(am, "default_client", patched)
+    monkeypatch.setattr(am, "get_shared_async_client", patched)
     events = [
         event
         async for event in am.stream(
@@ -319,7 +318,6 @@ async def test_stream_posts_to_the_messages_endpoint(monkeypatch):
     assert captured["body"]["max_tokens"] == 256
     assert events[-1].type == "done"
     assert events[-1].partial.content[0].text == "Hello from Claude"
-    assert real_client is not am.default_client  # sanity: patch scoped
 
 
 async def test_stream_drops_turns_no_provider_accepts(monkeypatch):
@@ -333,7 +331,7 @@ async def test_stream_drops_turns_no_provider_accepts(monkeypatch):
 
     transport = httpx.MockTransport(handler)
     monkeypatch.setattr(
-        am, "default_client", lambda: httpx.AsyncClient(transport=transport)
+        am, "get_shared_async_client", lambda: httpx.AsyncClient(transport=transport)
     )
 
     def assistant(content, stop_reason):
