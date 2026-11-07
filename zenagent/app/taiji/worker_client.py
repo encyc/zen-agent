@@ -44,7 +44,7 @@ class WorkerTransport(Protocol):
 class SubprocessTransport:
     """One ``zen rpc`` child process, line-pumped over stdio."""
 
-    def __init__(self, command: list[str], cwd: Path) -> None:  # noqa: D107
+    def __init__(self, command: list[str], cwd: Path) -> None:
         self._command = command
         self._cwd = cwd
         self._process: asyncio.subprocess.Process | None = None
