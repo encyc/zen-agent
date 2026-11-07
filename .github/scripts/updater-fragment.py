@@ -81,7 +81,9 @@ def uploaded_name(name: str, triple: str) -> str:
     macOS users download a 404 (v0.9.0 shipped exactly that bug).
     """
     if name.endswith(".app.tar.gz"):
+        # tauri-action's own mac arch names: aarch64 stays, x86_64 becomes x64.
         arch, _, _rest = triple.partition("-")
+        arch = {"x86_64": "x64"}.get(arch, arch)
         return name.replace(".app.tar.gz", f"_{arch}.app.tar.gz")
     return name
 
