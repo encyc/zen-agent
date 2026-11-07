@@ -56,6 +56,10 @@
   caret-color: var(--dsw-alias-state-business-primary);
 }
 
+.inputWrap {
+  position: relative;
+}
+
 .input::placeholder {
   color: var(--dsw-alias-label-caption);
 }
@@ -111,6 +115,12 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.matchHit {
+  background: transparent;
+  color: var(--dsw-alias-state-business-primary);
+  font-weight: 700;
 }
 
 /* ---- control row --------------------------------------------------------------- */

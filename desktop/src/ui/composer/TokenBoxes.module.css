@@ -1,0 +1,30 @@
+/* Hidden measurement mirror + the frame painted over the native textarea. */
+
+.layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.mirror {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  padding: 4px 8px 0 14px;
+  overflow: hidden;
+  visibility: hidden;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.box {
+  position: absolute;
+  border: 1px solid var(--dsw-alias-state-business-primary);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 8%, transparent);
+}

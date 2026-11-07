@@ -46,6 +46,7 @@ interface BridgeState {
   relocations?: { from: string; to: string }[]
   relocateError?: string
   fsEntries?: Record<string, Record<string, unknown>[]>
+  fsIndex?: { path: string; kind: 'dir' | 'file' }[]
   fsFiles?: Record<string, Record<string, unknown>>
   worktrees?: Record<string, unknown>
 }
@@ -503,6 +504,14 @@ function installBridge(state: BridgeState) {
           truncated: false,
         }
       }
+      case 'fs_index':
+        return {
+          type: 'result',
+          id: payload.id,
+          ok: true,
+          entries: state.fsIndex ?? [],
+          truncated: false,
+        }
       case 'fs_read': {
         const file = state.fsFiles?.[String(payload.path ?? '')]
         if (file === undefined) return { type: 'error', message: 'not found' }
@@ -1333,6 +1342,63 @@ test('the composer slash menu offers skills and runs the picked skill', async ({
   await expect(card).toBeVisible()
   await expect(card).toContainText('src/app.ts')
   await expect(card).toContainText('check the diff')
+})
+
+test('the composer @ menu completes file paths and boxes the reference', async ({ page }) => {
+  await boot(
+    page,
+    initialState({
+      running: false,
+      fsIndex: [
+        { path: 'docs', kind: 'dir' },
+        { path: 'docs/guide.md', kind: 'file' },
+        { path: 'src', kind: 'dir' },
+        { path: 'src/main.ts', kind: 'file' },
+        { path: 'src/my notes.md', kind: 'file' },
+      ],
+    }),
+  )
+  const input = page.locator('[data-composer-plate] textarea')
+  const options = page.getByRole('option')
+
+  await input.fill('look at @')
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__ZEN_E2E__.calls.some((call) => call.type === 'fs_index'),
+      ),
+    )
+    .toBe(true)
+  await expect(options).toHaveCount(5)
+  await expect(page.locator('[data-token-kind]')).toHaveCount(0)
+
+  // A fuzzy name hit, not a directory-scoped tree.
+  await input.fill('look at @main')
+  await expect(options).toHaveCount(1)
+  await expect(options.first()).toContainText('src/main.ts')
+  await expect(options.first()).toContainText('文件')
+
+  await page.keyboard.press('Enter')
+  await expect(input).toHaveValue('look at @src/main.ts ')
+  await expect(options).toHaveCount(0)
+  await expect(page.locator('[data-token-kind="file"]')).toBeVisible()
+
+  // A path with spaces switches to the quoted form.
+  await input.fill('open @my')
+  await expect(options).toHaveCount(1)
+  await page.keyboard.press('Enter')
+  await expect(input).toHaveValue('open @"src/my notes.md" ')
+  await expect(page.locator('[data-token-kind="file"]')).toBeVisible()
+
+  await page.keyboard.press('Enter')
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const call = window.__ZEN_E2E__.calls.find((entry) => entry.type === 'prompt')
+        return (call?.text as string | undefined) ?? null
+      }),
+    )
+    .toBe('open @"src/my notes.md"')
 })
 
 test('the reasoning level rides on the model chip instead of its own control', async ({ page }) => {

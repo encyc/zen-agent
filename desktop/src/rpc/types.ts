@@ -39,6 +39,7 @@ export const REQUEST_KINDS = [
   'cancel',
   'command',
   'commands',
+  'fs_index',
   'fs_list',
   'fs_read',
   'git_worktrees',
@@ -439,6 +440,19 @@ export interface FsReadResult {
   id: string
   ok: true
   file: WorkspaceFile
+}
+
+export interface FsIndexEntry {
+  path: string
+  kind: 'dir' | 'file'
+}
+
+export interface FsIndexResult {
+  type: 'result'
+  id: string
+  ok: true
+  entries: FsIndexEntry[]
+  truncated: boolean
 }
 
 export interface WorktreeEntry {

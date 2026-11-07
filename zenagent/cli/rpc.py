@@ -37,7 +37,12 @@ from zenagent.app.skill_commands import (
     parse_skill_display,
 )
 from zenagent.app.views import usage_total
-from zenagent.app.workspace import list_directory, read_file, worktree_overview
+from zenagent.app.workspace import (
+    list_directory,
+    read_file,
+    workspace_files,
+    worktree_overview,
+)
 from zenagent.events import AgentEvent
 from zenagent.mcp.config import load_mcp_layers, remove_mcp_server, save_mcp_server
 from zenagent.project import (
@@ -593,6 +598,9 @@ class RpcServer:
             return self._fs_request(request, request_id, "list")
         if kind == "fs_read":
             return self._fs_request(request, request_id, "read")
+        if kind == "fs_index":
+            await self._fs_index(request_id)
+            return True
         if kind == "git_worktrees":
             self._send(
                 {
@@ -641,6 +649,14 @@ class RpcServer:
             return True
         self._send({"type": "result", "id": request_id, "ok": True, **payload})
         return True
+
+    async def _fs_index(self, request_id) -> None:
+        try:
+            payload = await asyncio.to_thread(workspace_files, Path.cwd())
+        except (OSError, ValueError) as exc:
+            self._send({"type": "error", "id": request_id, "message": str(exc)})
+            return
+        self._send({"type": "result", "id": request_id, "ok": True, **payload})
 
     def _status_result(self, request_id) -> dict:
         payload = {

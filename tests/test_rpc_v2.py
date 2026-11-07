@@ -1195,6 +1195,24 @@ async def test_fs_requests_read_the_project_directory(runtime_factory, tmp_path,
     assert results["r"]["file"]["text"] == "export const value = 1\n"
 
 
+async def test_fs_index_lists_the_workspace_for_the_at_menu(
+    runtime_factory, tmp_path, monkeypatch
+):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.ts").write_text("x", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    _runtime, server, writes, queue = await build(runtime_factory)
+    await run_lines(server, queue, [{"type": "fs_index", "id": "i"}])
+
+    payload = decode(writes)[0]
+    assert payload["type"] == "result"
+    assert payload["ok"] is True
+    kinds = {entry["path"]: entry["kind"] for entry in payload["entries"]}
+    assert kinds["src"] == "dir"
+    assert kinds["src/main.ts"] == "file"
+
+
 async def test_fs_requests_reject_paths_outside_the_project(runtime_factory, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     _runtime, server, writes, queue = await build(runtime_factory)

@@ -11,6 +11,7 @@ import pytest
 from zenagent.app.workspace import (
     list_directory,
     read_file,
+    workspace_files,
     worktree_overview,
 )
 
@@ -97,6 +98,72 @@ def _git(cwd: Path, *args: str) -> str:
         capture_output=True,
         text=True,
     ).stdout
+
+
+def test_workspace_files_walks_outside_a_repository(tmp_path: Path) -> None:
+    (tmp_path / "src" / "nested").mkdir(parents=True)
+    (tmp_path / "src" / "main.ts").write_text("x", encoding="utf-8")
+    (tmp_path / "src" / "nested" / "deep.py").write_text("x", encoding="utf-8")
+    (tmp_path / "README.md").write_text("x", encoding="utf-8")
+    (tmp_path / "node_modules" / "pkg").mkdir(parents=True)
+    (tmp_path / "node_modules" / "pkg" / "index.js").write_text("x", encoding="utf-8")
+    (tmp_path / ".git").mkdir()
+    (tmp_path / ".git" / "config").write_text("x", encoding="utf-8")
+    (tmp_path / "__pycache__").mkdir()
+    (tmp_path / "__pycache__" / "a.pyc").write_text("x", encoding="utf-8")
+
+    result = workspace_files(tmp_path)
+
+    kinds = {entry["path"]: entry["kind"] for entry in result["entries"]}
+    assert kinds["src/main.ts"] == "file"
+    assert kinds["src/nested/deep.py"] == "file"
+    assert kinds["src"] == "dir"
+    assert kinds["src/nested"] == "dir"
+    assert "node_modules/pkg/index.js" not in kinds
+    assert "__pycache__/a.pyc" not in kinds
+    assert result["truncated"] is False
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+def test_workspace_files_honors_gitignore_and_keeps_untracked(tmp_path: Path) -> None:
+    _git(tmp_path, "init", "-q")
+    (tmp_path / ".gitignore").write_text("secret/\n", encoding="utf-8")
+    (tmp_path / "app.py").write_text("x", encoding="utf-8")
+    (tmp_path / "new.txt").write_text("x", encoding="utf-8")
+    (tmp_path / "secret").mkdir()
+    (tmp_path / "secret" / "key.txt").write_text("x", encoding="utf-8")
+
+    result = workspace_files(tmp_path)
+
+    paths = {entry["path"] for entry in result["entries"]}
+    assert {"app.py", "new.txt", ".gitignore"} <= paths
+    assert "secret/key.txt" not in paths
+    assert "secret" not in paths
+
+
+def test_workspace_files_stops_at_the_index_cap(tmp_path: Path, monkeypatch) -> None:
+    from zenagent.app import workspace
+
+    for index in range(5):
+        (tmp_path / f"file-{index}.txt").write_text("x", encoding="utf-8")
+    monkeypatch.setattr(workspace, "FS_INDEX_MAX_ENTRIES", 3)
+
+    result = workspace_files(tmp_path)
+
+    files = [entry for entry in result["entries"] if entry["kind"] == "file"]
+    assert len(files) == 3
+    assert result["truncated"] is True
+
+
+def test_workspace_files_reuses_its_snapshot(tmp_path: Path) -> None:
+    (tmp_path / "first.txt").write_text("x", encoding="utf-8")
+    first = workspace_files(tmp_path)
+
+    (tmp_path / "second.txt").write_text("x", encoding="utf-8")
+    second = workspace_files(tmp_path)
+
+    assert first == second
+    assert "second.txt" not in {entry["path"] for entry in second["entries"]}
 
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")

@@ -12,11 +12,18 @@ import base64
 import shutil
 import stat
 import subprocess
+import time
 from pathlib import Path
 
 from zenagent.app.git import GitStatus, git_status
 
-__all__ = ["list_directory", "read_file", "worktree_overview"]
+__all__ = [
+    "FS_INDEX_MAX_ENTRIES",
+    "list_directory",
+    "read_file",
+    "workspace_files",
+    "worktree_overview",
+]
 
 #: One directory listing never returns more than this many entries.
 MAX_LIST_ENTRIES = 500
@@ -26,6 +33,26 @@ MAX_TEXT_BYTES = 512 * 1024
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
 #: Git worktree listing is cheap but must never hang the request loop.
 GIT_TIMEOUT_S = 3.0
+#: The composer's "@" menu snapshot: git's listing or a bounded walk.
+FS_INDEX_MAX_ENTRIES = 8000
+FS_INDEX_TIMEOUT_S = 4.0
+FS_INDEX_TTL_S = 15.0
+_FS_INDEX_MAX_BUFFER = 32 * 1024 * 1024
+_FS_INDEX_IGNORED = {
+    ".git",
+    "node_modules",
+    ".DS_Store",
+    "target",
+    "dist",
+    "build",
+    "out",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+}
+_FS_INDEX_CACHE: dict[Path, tuple[float, dict]] = {}
 
 _IMAGE_MIME = {
     ".png": "image/png",
@@ -139,6 +166,102 @@ def read_file(root: Path | str, path: str) -> dict:
         "total_lines": len(text.splitlines()),
         "truncated": truncated,
     }
+
+
+def workspace_files(root: Path | str) -> dict:
+    """The composer's ``@`` snapshot: workspace-relative files and their dirs.
+
+    ``git ls-files`` gives the project's own ignore rules for free; a bounded
+    walk covers non-repositories and a broken git. The snapshot is cached
+    briefly because the menu refetches whenever it reopens.
+    """
+    base = Path(root).expanduser().resolve()
+    now = time.monotonic()
+    cached = _FS_INDEX_CACHE.get(base)
+    if cached is not None and now - cached[0] < FS_INDEX_TTL_S:
+        return cached[1]
+
+    listing = _git_files(base)
+    if listing is None:
+        listing = _walk_files(base)
+    files, truncated = listing
+
+    dirs = _parent_dirs(files)
+    result = {
+        "entries": [
+            *({"path": path, "kind": "dir"} for path in sorted(dirs)),
+            *({"path": path, "kind": "file"} for path in sorted(files)),
+        ],
+        "truncated": truncated,
+    }
+    _FS_INDEX_CACHE[base] = (now, result)
+    return result
+
+
+def _ignored_path(path: str) -> bool:
+    return any(segment in _FS_INDEX_IGNORED for segment in path.split("/"))
+
+
+def _git_files(base: Path) -> tuple[list[str], bool] | None:
+    git = shutil.which("git")
+    if git is None:
+        return None
+    try:
+        completed = subprocess.run(
+            [git, "ls-files", "-co", "--exclude-standard", "-z"],
+            cwd=str(base),
+            capture_output=True,
+            timeout=FS_INDEX_TIMEOUT_S,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if completed.returncode != 0:
+        return None
+    if len(completed.stdout) > _FS_INDEX_MAX_BUFFER:
+        return None
+    raw = completed.stdout.decode("utf-8", errors="replace")
+    files = [path for path in raw.split("\0") if path and not _ignored_path(path)]
+    truncated = len(files) > FS_INDEX_MAX_ENTRIES
+    return files[:FS_INDEX_MAX_ENTRIES], truncated
+
+
+def _walk_files(base: Path) -> tuple[list[str], bool]:
+    files: list[str] = []
+    queue = [base]
+    for directory in queue:
+        try:
+            entries = list(directory.iterdir())
+        except OSError:
+            continue
+        for entry in entries:
+            if entry.name in _FS_INDEX_IGNORED:
+                continue
+            try:
+                info = entry.lstat()
+            except OSError:
+                continue
+            if stat.S_ISLNK(info.st_mode):
+                continue
+            if stat.S_ISDIR(info.st_mode):
+                queue.append(entry)
+                continue
+            if not stat.S_ISREG(info.st_mode):
+                continue
+            files.append(_relative(base, entry))
+            if len(files) >= FS_INDEX_MAX_ENTRIES:
+                return files, True
+    return files, False
+
+
+def _parent_dirs(files: list[str]) -> set[str]:
+    dirs: set[str] = set()
+    for path in files:
+        parent = Path(path).parent
+        while parent != Path("."):
+            dirs.add(parent.as_posix())
+            parent = parent.parent
+    return dirs
 
 
 def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess[str] | None:
