@@ -237,3 +237,48 @@ class TestSessionMap:
         monkeypatch.setattr("zenagent.project.projects_root", lambda: tmp_path / "home")
         result = session_map(tmp_path)
         assert result == {"repo_root": str(tmp_path.resolve()), "projects": []}
+
+
+class TestSessionStatus:
+    def test_registry_status_flows_into_sessions(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
+        from zenagent.app.taiji.registry import TaijiRegistry, WorkerRecord
+        from zenagent.project import project_key
+
+        _commit(repo, "a.txt", "init")
+        home = tmp_path / "home"
+        monkeypatch.setattr("zenagent.project.projects_root", lambda: home)
+        directory = home / project_key(repo) / "sessions"
+        _session_file(directory, "worker-turn")
+        registry = TaijiRegistry()
+        registry.records["login-timeout"] = WorkerRecord(
+            name="login-timeout",
+            branch="task/login-timeout",
+            base="main",
+            worktree="/wt",
+            status="running",
+            created_at=1.0,
+            updated_at=2.0,
+            session=str(directory / "worker-turn.jsonl"),
+        )
+        registry.save(directory.parent / "taiji.json")
+
+        result = session_map(repo)
+
+        sessions = result["projects"][0]["sessions"]
+        assert sessions[0]["status"] == "running"
+        assert sessions[0]["worker"] == "login-timeout"
+        assert sessions[0]["branch"] == "task/login-timeout"
+
+    def test_sessions_without_a_worker_have_no_status(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
+        from zenagent.project import project_key
+
+        _commit(repo, "a.txt", "init")
+        home = tmp_path / "home"
+        monkeypatch.setattr("zenagent.project.projects_root", lambda: home)
+        _session_file(home / project_key(repo) / "sessions", "plain")
+
+        result = session_map(repo)
+
+        session = result["projects"][0]["sessions"][0]
+        assert "status" not in session
+        assert "worker" not in session
