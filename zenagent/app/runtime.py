@@ -76,11 +76,12 @@ from zenagent.templates import (
     default_template_roots,
     discover_templates,
 )
-from zenagent.tools import ALL_TOOLS
+from zenagent.tools import base_tools
+from zenagent.tools.ask import AskHandler, build_ask_tool
 from zenagent.tools.github import build_github_tool
 from zenagent.tools.lsp import build_lsp_tool, shutdown_clients
 from zenagent.tools.memory import build_memory_tool, build_memory_write_tool
-from zenagent.tools.task import build_task_tool
+from zenagent.tools.task import SubagentObserver, build_task_tool
 from zenagent.tools.todo import (
     TodoTool,
     build_todo_tool,
@@ -164,6 +165,15 @@ class Runtime:
         self._created_sessions: set[Path] = set()
         #: Per-session task/subagent tool (read-only children share this model).
         self.task_tool = None
+        #: The frontend that answers ``ask`` calls, installed after bootstrap
+        #: (REPL reader, RPC server, the mounted TUI). None degrades gracefully.
+        self.ask_handler: AskHandler | None = None
+        #: The live subagent viewer (the TUI's subagent view); None for headless.
+        self.subagent_observer: SubagentObserver | None = None
+        #: The ask tool instance bound to this Runtime's handler slot; the
+        #: task tool's children receive it so subagents ask through the same
+        #: frontend.
+        self.ask_tool = build_ask_tool(lambda: self.ask_handler)
         self._mode: str = DEFAULT_MODE
         self._base_prompt: str = ""
         #: Block provenance of the last composed system prompt (ctx report).
@@ -399,7 +409,8 @@ class Runtime:
         # parent's live tool set and permission mode at each dispatch.
         runtime.task_tool = build_task_tool(
             model=lambda: runtime.agent.model,
-            base_tools=list(ALL_TOOLS),
+            base_tools=base_tools(runtime.ask_tool),
+            get_observer=lambda: runtime.subagent_observer,
             api_key=lambda: runtime.agent.api_key,
             stream_fn=stream_fn,
             thinking=lambda: runtime.agent.thinking,
@@ -599,7 +610,7 @@ class Runtime:
                 self.agent.system_prompt = self._prompt_with_mode()
             return
 
-        tools = list(ALL_TOOLS)
+        tools = base_tools(self.ask_tool)
         tools.extend(build_checkpoint_tools(lambda: getattr(self, "agent", None), self.rewind))
         github_tool = build_github_tool()
         if github_tool is not None:

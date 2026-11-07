@@ -26,6 +26,7 @@ from zenagent.tools.web.query import (
 from zenagent.tools.web.types import ProviderError, SearchRequest, SearchResult
 
 __all__ = [
+    "KEY_ENVS",
     "LABELS",
     "PROVIDERS",
     "available_providers",
@@ -327,6 +328,13 @@ PROVIDERS = {
     "brave": brave,
     "bing": bing,
     "duckduckgo": duckduckgo,
+}
+
+#: The env var each keyed provider reads; keyless scrapers have no entry.
+KEY_ENVS = {
+    "deepseek": "DEEPSEEK_API_KEY",
+    "tavily": "TAVILY_API_KEY",
+    "brave": "BRAVE_API_KEY",
 }
 
 

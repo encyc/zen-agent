@@ -41,6 +41,7 @@ from zenagent.types import AssistantMessage, TextContent, ToolCall
 __all__ = [
     "DEFAULT_TASK_MAX_TURNS",
     "TASK_RUN_RETENTION",
+    "ObserverSource",
     "SubagentObserver",
     "TaskManager",
     "TaskRun",
@@ -50,9 +51,7 @@ __all__ = [
     "child_allowed",
     "child_tool_names",
     "close_task_manager",
-    "get_subagent_observer",
     "get_task_manager",
-    "set_subagent_observer",
 ]
 
 #: Tools a child may never see, whatever the parent's mode: ``task`` (no
@@ -202,22 +201,15 @@ def _live(value):
 #: The interactive frontend's live hook (the TUI's subagent view).
 SubagentObserver = Callable[[str, str, dict], None]
 
-_OBSERVER: SubagentObserver | None = None
+#: Late binding: the observer is installed on the Runtime after bootstrap, so
+#: the recorder resolves it at emit time.
+ObserverSource = Callable[[], SubagentObserver | None]
 
 
-def set_subagent_observer(observer: SubagentObserver | None) -> None:
-    """Register the live subagent observer (None clears it, like ask_handler)."""
-    global _OBSERVER
-    _OBSERVER = observer
-
-
-def get_subagent_observer() -> SubagentObserver | None:
-    """The current live observer, or None for headless runs."""
-    return _OBSERVER
-
-
-def _emit(call_id: str, kind: str, payload: dict) -> None:
-    observer = _OBSERVER
+def _emit(
+    get_observer: ObserverSource, call_id: str, kind: str, payload: dict
+) -> None:
+    observer = get_observer()
     if observer is None:
         return
     try:
@@ -428,19 +420,25 @@ class _TaskRecorder:
     #: Minimum seconds between two progress lines pushed to the tool card.
     PROGRESS_INTERVAL = 0.1
 
-    def __init__(self, *, store, call_id, name, model, messages, on_update):
+    def __init__(self, *, store, call_id, name, model, messages, on_update, get_observer):
         self._store = store
         self._call_id = call_id
         self._name = name
         self._model = model
         self._messages = messages
         self._on_update = on_update
+        self._get_observer = get_observer
         self._turn = 0
         self._last_progress = 0.0
 
     def start(self) -> None:
         self._store.begin(self._call_id, self._name, self._model)
-        _emit(self._call_id, "start", {"name": self._name, "model": self._model})
+        _emit(
+            self._get_observer,
+            self._call_id,
+            "start",
+            {"name": self._name, "model": self._model},
+        )
 
     def on_event(self, event) -> None:
         kind = event.type
@@ -453,7 +451,7 @@ class _TaskRecorder:
         elif kind == "tool_execution_end":
             self._store.append(self._call_id, self._messages())
         if kind in self._FORWARDED:
-            _emit(self._call_id, "event", {"event": event})
+            _emit(self._get_observer, self._call_id, "event", {"event": event})
 
     def finish(self, *, status, duration_ms, cost, tokens) -> None:
         self._store.append(self._call_id, self._messages())
@@ -465,6 +463,7 @@ class _TaskRecorder:
             tokens=tokens,
         )
         _emit(
+            self._get_observer,
             self._call_id,
             "end",
             {
@@ -518,6 +517,7 @@ def build_task_tool(
     session_path: Path | None = None,
     limits: SubagentLimits | None = None,
     before_tool_call: Callable | None = None,
+    get_observer: ObserverSource | None = None,
 ) -> TaskTool:
     """Build the per-run ``task`` tool (the child uses the parent's model).
 
@@ -585,6 +585,7 @@ def build_task_tool(
             model=child.model.id,
             messages=lambda: child.messages,
             on_update=on_update,
+            get_observer=get_observer or (lambda: None),
         )
         recorder.start()
         child.subscribe(recorder.on_event)

@@ -47,6 +47,7 @@ export const REQUEST_KINDS = [
   'model',
   'models',
   'prompt',
+  'secrets',
   'session',
   'shutdown',
   'status',
@@ -183,6 +184,35 @@ export interface ModelEntry {
 export interface CommandEntry {
   name: string
   description: string
+}
+
+// ---- settings secrets ------------------------------------------------------
+
+export interface SecretProviderRow {
+  id: string
+  name: string
+  env: string
+  /** Catalog model count; absent for search providers. */
+  models?: number
+  configured: boolean
+  source: 'stored' | 'env' | null
+  current?: boolean
+}
+
+export interface SecretsResult {
+  type: 'result'
+  id: string
+  ok: true
+  model_providers: SecretProviderRow[]
+  search_providers: SecretProviderRow[]
+}
+
+export interface SecretTestResult {
+  type: 'result'
+  id: string
+  ok: true
+  connected: boolean
+  message: string
 }
 
 // ---- sessions -------------------------------------------------------------

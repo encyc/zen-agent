@@ -8,7 +8,7 @@ Protocol v2 (v1 messages keep their shape):
     requests  prompt, cancel, status, shutdown, steer, tools, model, mode,
               usage, approval, ask, session, command, transcript,
               subagent_transcript, models, commands, fs_list, fs_read,
-              git_worktrees
+              git_worktrees, secrets
     responses {"type":"result"|"error", "id": ..., ...}
     events    {"type":"event","event":{...}} plus ``approval_request`` and
               ``ask_request`` events
@@ -28,6 +28,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import asdict
 from pathlib import Path
 
+from zenagent import settings
 from zenagent.agent import Agent
 from zenagent.app.views import usage_total
 from zenagent.app.workspace import list_directory, read_file, worktree_overview
@@ -573,6 +574,9 @@ class RpcServer:
                 }
             )
             return True
+        if kind == "secrets":
+            await self._secrets(request, request_id)
+            return True
         self._send({"type": "error", "id": request_id, "message": f"unknown type: {kind}"})
         return True
 
@@ -729,6 +733,176 @@ class RpcServer:
                 for command in self.commands.names()
             ]
         return {"type": "result", "id": request_id, "ok": True, "commands": catalog}
+
+    # -- secrets ------------------------------------------------------------
+
+    def _model_catalog(self) -> dict:
+        catalog = getattr(self.runtime, "catalog", None)
+        return catalog if isinstance(catalog, dict) else {}
+
+    def _known_secret_envs(self) -> set[str]:
+        from zenagent.tools.web.providers import KEY_ENVS
+
+        return {
+            provider.api_key_env for provider in self._model_catalog().values()
+        } | set(KEY_ENVS.values())
+
+    def _secrets_result(self, request_id) -> dict:
+        """Provider rows for the settings screen; key values never leave here."""
+        from zenagent.tools.web.providers import KEY_ENVS, LABELS
+
+        stored = settings.describe()["keys"]
+        current = getattr(getattr(self.runtime, "model", None), "provider", None)
+        if current is None:
+            current = getattr(self.agent.model, "provider", None)
+
+        model_rows = []
+        for provider in sorted(
+            self._model_catalog().values(), key=lambda item: item.name.lower()
+        ):
+            key = settings.get_api_key(provider.api_key_env)
+            model_rows.append(
+                {
+                    "id": provider.id,
+                    "name": provider.name,
+                    "env": provider.api_key_env,
+                    "models": len(provider.models),
+                    "configured": bool(key),
+                    "source": (
+                        "stored"
+                        if provider.api_key_env in stored
+                        else ("env" if key else None)
+                    ),
+                    "current": provider.id == current,
+                }
+            )
+
+        search_rows = []
+        for provider_id, env in KEY_ENVS.items():
+            key = settings.get_api_key(env)
+            search_rows.append(
+                {
+                    "id": provider_id,
+                    "name": LABELS.get(provider_id, provider_id),
+                    "env": env,
+                    "configured": bool(key),
+                    "source": "stored" if env in stored else ("env" if key else None),
+                }
+            )
+        return {
+            "type": "result",
+            "id": request_id,
+            "ok": True,
+            "model_providers": model_rows,
+            "search_providers": search_rows,
+        }
+
+    async def _secrets(self, request: dict, request_id) -> None:
+        op = request.get("op")
+        if op == "list":
+            self._send(self._secrets_result(request_id))
+            return
+        if op in ("set", "clear"):
+            name = request.get("name")
+            if not isinstance(name, str) or name not in self._known_secret_envs():
+                self._send(
+                    {"type": "error", "id": request_id, "message": f"unknown key: {name}"}
+                )
+                return
+            if op == "set":
+                value = request.get("value")
+                if not isinstance(value, str) or not value.strip():
+                    self._send(
+                        {
+                            "type": "error",
+                            "id": request_id,
+                            "message": f"set needs a value for {name}",
+                        }
+                    )
+                    return
+                settings.set_api_key(name, value)
+            else:
+                settings.set_api_key(name, "")
+            self._reload_key(name)
+            self._send({"type": "result", "id": request_id, "ok": True})
+            return
+        if op == "test":
+            await self._secrets_test(request, request_id)
+            return
+        self._send(
+            {"type": "error", "id": request_id, "message": f"unknown secrets op: {op}"}
+        )
+
+    def _reload_key(self, name: str) -> None:
+        """Adopt a set/cleared key in the live agent when it drives the model."""
+        runtime = self.runtime
+        if runtime is None:
+            return
+        current = getattr(runtime, "model", None)
+        provider = (
+            self._model_catalog().get(current.provider) if current is not None else None
+        )
+        if provider is None or provider.api_key_env != name:
+            return
+        if not runtime.reload_api_key():
+            runtime.agent.api_key = ""
+            runtime.missing_api_key = name
+
+    async def _secrets_test(self, request: dict, request_id) -> None:
+        from zenagent.app import probes
+        from zenagent.tools.web.providers import PROVIDERS
+
+        scope = request.get("scope")
+        target = request.get("target")
+        if not isinstance(target, str) or not target:
+            self._send(
+                {
+                    "type": "error",
+                    "id": request_id,
+                    "message": "secrets test needs a target",
+                }
+            )
+            return
+        if scope == "model":
+            if target not in self._model_catalog():
+                self._send(
+                    {
+                        "type": "error",
+                        "id": request_id,
+                        "message": f"unknown model provider: {target}",
+                    }
+                )
+                return
+            result = await probes.probe_model_provider(self._model_catalog(), target)
+        elif scope == "search":
+            if target not in PROVIDERS:
+                self._send(
+                    {
+                        "type": "error",
+                        "id": request_id,
+                        "message": f"unknown search provider: {target}",
+                    }
+                )
+                return
+            result = await probes.probe_search_provider(target)
+        else:
+            self._send(
+                {
+                    "type": "error",
+                    "id": request_id,
+                    "message": f"unknown secrets scope: {scope}",
+                }
+            )
+            return
+        self._send(
+            {
+                "type": "result",
+                "id": request_id,
+                "ok": True,
+                "connected": result.connected,
+                "message": result.message,
+            }
+        )
 
     def _model(self, request: dict, request_id) -> bool:
         model_id = request.get("model_id")
@@ -1084,13 +1258,11 @@ async def _run(args) -> int:
         commands=prepared.commands,
     )
     prepared.broker.set_confirm(server.confirm)
-    from zenagent.tools.ask import set_ask_handler
-
-    set_ask_handler(server.ask)
+    runtime.ask_handler = server.ask
     try:
         return await server.run()
     finally:
-        set_ask_handler(None)
+        runtime.ask_handler = None
         await runtime.close()
 
 

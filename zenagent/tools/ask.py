@@ -1,11 +1,12 @@
 """The ``ask`` tool: the model asks the user a structured question.
 
 The kernel cannot answer a question for the user, and a headless run has nobody
-to ask. A module-level handler registry lets the active frontend volunteer (the
-TUI registers ``ZenAgentApp.request_ask`` while mounted; REPL/headless may do
-the same later), while every other run degrades to a non-error result that
-tells the model to proceed with the most conservative option instead of
-blocking forever.
+to ask. Each Runtime owns its handler slot (``runtime.ask_handler``): the
+active frontend installs itself (the TUI registers ``ZenAgentApp.request_ask``
+while mounted; REPL/RPC wire their readers), and every other run degrades to a
+non-error result that tells the model to proceed with the most conservative
+option instead of blocking forever. Two agents in one process therefore cannot
+race for a module-level handler.
 
 The tool itself is a stateless, read-tier builtin (it changes no files and no
 session state); all UI work lives in the frontend handler. Answers come back as
@@ -20,18 +21,17 @@ import contextlib
 import inspect
 from collections.abc import Awaitable, Callable
 
-from zenagent.agent.loop import AgentTool, ToolResultAgent
+from zenagent.agent.protocol import AgentTool, ToolResultAgent
 from zenagent.prompts import tool_description
 from zenagent.tools._result import text_result
 
 __all__ = [
-    "ASK",
     "MAX_OPTIONS",
     "MAX_QUESTIONS",
     "MIN_OPTIONS",
     "AskHandler",
-    "get_ask_handler",
-    "set_ask_handler",
+    "AskHandlerSource",
+    "build_ask_tool",
 ]
 
 #: A frontend callback: normalized questions in, answers out.
@@ -40,6 +40,10 @@ __all__ = [
 #: An empty list means "the user dismissed the question without answering";
 #: a shorter list means the remaining questions were not answered.
 AskHandler = Callable[[list[dict]], Awaitable[list[dict]] | list[dict]]
+
+#: Late binding: the handler is installed on the Runtime after bootstrap, so
+#: the tool resolves it at call time.
+AskHandlerSource = Callable[[], AskHandler | None]
 
 #: Question/option bounds the model must respect (omp's ask uses the same shape).
 MAX_QUESTIONS = 5
@@ -57,25 +61,6 @@ _DISMISSED_TEXT = (
     "The user dismissed the question without answering. Continue with the most "
     "conservative option, and state the assumption you made in your answer."
 )
-
-_handler: AskHandler | None = None
-
-
-def set_ask_handler(handler: AskHandler | None) -> None:
-    """Install (or clear) the frontend that owns the interactive surface.
-
-    Exactly one frontend per process answers ``ask`` calls: the TUI sets this in
-    ``on_mount`` and clears it in ``on_unmount``, so a later headless call sees
-    the graceful no-UI degrade instead of a stale dialog that can never appear.
-    """
-    global _handler
-    _handler = handler
-
-
-def get_ask_handler() -> AskHandler | None:
-    """The currently installed frontend handler, if any."""
-    return _handler
-
 
 def _validate_questions(raw: object) -> tuple[list[dict], str | None]:
     """Normalize the model's questions, or return ``([], problem)``.
@@ -236,102 +221,111 @@ def _format_answers(questions: list[dict], answers: list[dict]) -> str:
     return "\n".join(lines)
 
 
-async def _ask(tool_call_id: str, args: dict, abort=None, on_update=None) -> ToolResultAgent:
-    questions, problem = _validate_questions(args.get("questions"))
-    if problem is not None:
-        return text_result(f"invalid ask arguments: {problem}", is_error=True)
+def build_ask_tool(get_handler: AskHandlerSource) -> AgentTool:
+    """One ``ask`` tool instance bound to a handler source (a Runtime slot).
 
-    handler = get_ask_handler()
-    if handler is None:
-        return text_result(_NO_UI_TEXT, available=False)
+    The source is resolved per call, so a frontend may install or clear its
+    handler at any point in the Runtime's life without touching this module.
+    """
 
-    async def _run_handler():
-        outcome = handler(questions)
-        # Accept a plain sync callable too (a REPL reading stdin may not be async).
-        return await outcome if inspect.isawaitable(outcome) else outcome
+    async def _ask(
+        tool_call_id: str, args: dict, abort=None, on_update=None
+    ) -> ToolResultAgent:
+        questions, problem = _validate_questions(args.get("questions"))
+        if problem is not None:
+            return text_result(f"invalid ask arguments: {problem}", is_error=True)
 
-    handler_task = asyncio.create_task(_run_handler())
-    abort_task = None
-    try:
-        if abort is not None:
-            abort_task = asyncio.create_task(abort.wait())
-            done, _pending = await asyncio.wait(
-                {handler_task, abort_task}, return_when=asyncio.FIRST_COMPLETED
-            )
-            if abort_task in done and handler_task not in done:
-                handler_task.cancel()
-                with contextlib.suppress(asyncio.CancelledError, Exception):
-                    await handler_task
-                return text_result(
-                    "aborted while waiting for the user's answer; proceed with "
-                    "the most conservative option and state the assumption.",
-                    available=True,
-                    aborted=True,
+        handler = get_handler()
+        if handler is None:
+            return text_result(_NO_UI_TEXT, available=False)
+
+        async def _run_handler():
+            outcome = handler(questions)
+            # Accept a plain sync callable too (a REPL reading stdin may not be async).
+            return await outcome if inspect.isawaitable(outcome) else outcome
+
+        handler_task = asyncio.create_task(_run_handler())
+        abort_task = None
+        try:
+            if abort is not None:
+                abort_task = asyncio.create_task(abort.wait())
+                done, _pending = await asyncio.wait(
+                    {handler_task, abort_task}, return_when=asyncio.FIRST_COMPLETED
                 )
-        raw_answers = await handler_task
-    except Exception as exc:  # noqa: BLE001 - a UI failure must not kill the run
+                if abort_task in done and handler_task not in done:
+                    handler_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError, Exception):
+                        await handler_task
+                    return text_result(
+                        "aborted while waiting for the user's answer; proceed with "
+                        "the most conservative option and state the assumption.",
+                        available=True,
+                        aborted=True,
+                    )
+            raw_answers = await handler_task
+        except Exception as exc:  # noqa: BLE001 - a UI failure must not kill the run
+            return text_result(
+                f"the interactive UI failed to answer: {type(exc).__name__}: {exc}",
+                is_error=True,
+                available=True,
+            )
+        finally:
+            if abort_task is not None:
+                abort_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await abort_task
+
+        answers = _normalize_answers(raw_answers, questions)
+        if not answers:
+            return text_result(_DISMISSED_TEXT, available=True, answers=[])
         return text_result(
-            f"the interactive UI failed to answer: {type(exc).__name__}: {exc}",
-            is_error=True,
-            available=True,
+            _format_answers(questions, answers), available=True, answers=answers
         )
-    finally:
-        if abort_task is not None:
-            abort_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError, Exception):
-                await abort_task
-
-    answers = _normalize_answers(raw_answers, questions)
-    if not answers:
-        return text_result(_DISMISSED_TEXT, available=True, answers=[])
-    return text_result(
-        _format_answers(questions, answers), available=True, answers=answers
-    )
 
 
-ASK = AgentTool(
-    name="ask",
-    description=tool_description("ask"),
-    parameters={
-        "type": "object",
-        "properties": {
-            "questions": {
-                "type": "array",
-                "minItems": 1,
-                "maxItems": MAX_QUESTIONS,
-                "description": (
-                    "1-5 questions. Each one is {id, question, header?, "
-                    "options: [{label, description?}] (2-6 options), multi?, "
-                    "recommended?}; recommended names one option label."
-                ),
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "id": {"type": "string"},
-                        "question": {"type": "string"},
-                        "header": {"type": "string"},
-                        "options": {
-                            "type": "array",
-                            "minItems": MIN_OPTIONS,
-                            "maxItems": MAX_OPTIONS,
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "label": {"type": "string"},
-                                    "description": {"type": "string"},
+    return AgentTool(
+        name="ask",
+        description=tool_description("ask"),
+        parameters={
+            "type": "object",
+            "properties": {
+                "questions": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": MAX_QUESTIONS,
+                    "description": (
+                        "1-5 questions. Each one is {id, question, header?, "
+                        "options: [{label, description?}] (2-6 options), multi?, "
+                        "recommended?}; recommended names one option label."
+                    ),
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "question": {"type": "string"},
+                            "header": {"type": "string"},
+                            "options": {
+                                "type": "array",
+                                "minItems": MIN_OPTIONS,
+                                "maxItems": MAX_OPTIONS,
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "label": {"type": "string"},
+                                        "description": {"type": "string"},
+                                    },
+                                    "required": ["label"],
                                 },
-                                "required": ["label"],
                             },
+                            "multi": {"type": "boolean"},
+                            "recommended": {"type": "string"},
                         },
-                        "multi": {"type": "boolean"},
-                        "recommended": {"type": "string"},
+                        "required": ["id", "question", "options"],
                     },
-                    "required": ["id", "question", "options"],
-                },
-            }
+                }
+            },
+            "required": ["questions"],
         },
-        "required": ["questions"],
-    },
-    execute=_ask,
-    approval="read",
-)
+        execute=_ask,
+        approval="read",
+    )

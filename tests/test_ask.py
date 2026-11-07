@@ -1,14 +1,15 @@
 """The ``ask`` tool: schema validation, frontend handler, headless degrade.
 
-The tool is driven directly (``ASK.execute(tool_call_id, args, abort)``) like the
-other built-in tools. The handler registry is process-global by design (one
-frontend owns the interactive surface), so every test clears it around itself.
+The tool is driven directly (``tool.execute(tool_call_id, args, abort)``) like
+the other built-in tools. The handler lives on the owning Runtime's slot
+(``runtime.ask_handler``) and is resolved at call time, so two agents in one
+process cannot race for a module-level registry.
 """
 
 import pytest
 
-from zenagent.tools import ALL_TOOLS
-from zenagent.tools.ask import ASK, get_ask_handler, set_ask_handler
+from zenagent.tools import base_tools
+from zenagent.tools.ask import build_ask_tool
 
 
 def question(**overrides):
@@ -26,15 +27,20 @@ def question(**overrides):
     return base
 
 
-async def call(args):
-    return await ASK.execute("call_ask", args, None)
+class AskHarness:
+    """A per-test ask tool over a mutable slot (mirrors Runtime.ask_handler)."""
+
+    def __init__(self) -> None:
+        self.handler = None
+        self.tool = build_ask_tool(lambda: self.handler)
+
+    async def call(self, args):
+        return await self.tool.execute("call_ask", args, None)
 
 
-@pytest.fixture(autouse=True)
-def clean_handler():
-    set_ask_handler(None)
-    yield
-    set_ask_handler(None)
+@pytest.fixture()
+def ask():
+    return AskHarness()
 
 
 # ---------------------------------------------------------------------------
@@ -42,31 +48,34 @@ def clean_handler():
 # ---------------------------------------------------------------------------
 
 
-def test_ask_tool_declaration():
-    assert ASK.name == "ask"
-    assert ASK.approval == "read"
-    assert ASK.execution_mode == "parallel", "the spec keeps the default mode"
-    assert ASK.parameters["required"] == ["questions"]
-    props = ASK.parameters["properties"]
+def test_ask_tool_declaration(ask):
+    assert ask.tool.name == "ask"
+    assert ask.tool.approval == "read"
+    assert ask.tool.execution_mode == "parallel", "the spec keeps the default mode"
+    assert ask.tool.parameters["required"] == ["questions"]
+    props = ask.tool.parameters["properties"]
     assert props["questions"]["type"] == "array"
     assert "1-5" in props["questions"]["description"]
     assert "2-6" in props["questions"]["description"]
 
 
-def test_ask_is_listed_in_all_tools_right_after_wait():
-    names = [tool.name for tool in ALL_TOOLS]
+def test_ask_is_listed_in_prompt_order_right_after_wait(ask):
+    names = [tool.name for tool in base_tools(ask.tool)]
     assert "ask" in names
     assert names.index("ask") == names.index("wait") + 1
 
 
-def test_set_ask_handler_round_trips():
+async def test_the_handler_slot_is_resolved_at_call_time(ask):
     async def handler(questions):
         return []
 
-    set_ask_handler(handler)
-    assert get_ask_handler() is handler
-    set_ask_handler(None)
-    assert get_ask_handler() is None
+    ask.handler = handler
+    answered = await ask.call({"questions": [question()]})
+    assert not answered.is_error
+
+    ask.handler = None
+    degraded = await ask.call({"questions": [question()]})
+    assert "no interactive ui" in degraded.content[0].text.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -74,8 +83,8 @@ def test_set_ask_handler_round_trips():
 # ---------------------------------------------------------------------------
 
 
-async def test_without_a_handler_degrades_without_error():
-    result = await call({"questions": [question()]})
+async def test_without_a_handler_degrades_without_error(ask):
+    result = await ask.call({"questions": [question()]})
 
     assert not result.is_error
     text = result.content[0].text.lower()
@@ -84,15 +93,15 @@ async def test_without_a_handler_degrades_without_error():
     assert result.details == {"available": False}
 
 
-async def test_the_handler_is_not_called_for_invalid_questions():
+async def test_the_handler_is_not_called_for_invalid_questions(ask):
     calls: list = []
 
     async def handler(questions):
         calls.append(questions)
         return []
 
-    set_ask_handler(handler)
-    result = await call({"questions": []})
+    ask.handler = handler
+    result = await ask.call({"questions": []})
 
     assert result.is_error
     assert calls == [], "validation must fail before the UI is involved"
@@ -103,15 +112,15 @@ async def test_the_handler_is_not_called_for_invalid_questions():
 # ---------------------------------------------------------------------------
 
 
-async def test_handler_answers_are_formatted_for_the_model():
+async def test_handler_answers_are_formatted_for_the_model(ask):
     asked: list[list[dict]] = []
 
     async def handler(questions):
         asked.append(questions)
         return [{"id": "q1", "selected": ["Postgres"], "custom": "prod parity"}]
 
-    set_ask_handler(handler)
-    result = await call({"questions": [question()]})
+    ask.handler = handler
+    result = await ask.call({"questions": [question()]})
 
     assert not result.is_error
     assert asked and asked[0][0]["id"] == "q1"
@@ -125,12 +134,12 @@ async def test_handler_answers_are_formatted_for_the_model():
     ]
 
 
-async def test_a_multi_select_answer_keeps_every_label():
+async def test_a_multi_select_answer_keeps_every_label(ask):
     async def handler(questions):
         return [{"id": "q1", "selected": ["SQLite", "Postgres"]}]
 
-    set_ask_handler(handler)
-    result = await call({"questions": [question(multi=True)]})
+    ask.handler = handler
+    result = await ask.call({"questions": [question(multi=True)]})
 
     assert not result.is_error
     assert "SQLite, Postgres" in result.content[0].text
@@ -139,23 +148,23 @@ async def test_a_multi_select_answer_keeps_every_label():
     ]
 
 
-async def test_a_custom_answer_only_is_reported():
+async def test_a_custom_answer_only_is_reported(ask):
     async def handler(questions):
         return [{"id": "q1", "selected": [], "custom": "use DuckDB"}]
 
-    set_ask_handler(handler)
-    result = await call({"questions": [question()]})
+    ask.handler = handler
+    result = await ask.call({"questions": [question()]})
 
     assert "(no selection)" in result.content[0].text
     assert "custom: use DuckDB" in result.content[0].text
 
 
-async def test_an_empty_answer_list_means_the_user_dismissed():
+async def test_an_empty_answer_list_means_the_user_dismissed(ask):
     async def handler(questions):
         return []
 
-    set_ask_handler(handler)
-    result = await call({"questions": [question()]})
+    ask.handler = handler
+    result = await ask.call({"questions": [question()]})
 
     assert not result.is_error
     assert "dismissed" in result.content[0].text.lower()
@@ -164,12 +173,12 @@ async def test_an_empty_answer_list_means_the_user_dismissed():
     assert result.details["answers"] == []
 
 
-async def test_partial_answers_mark_the_rest_unanswered():
+async def test_partial_answers_mark_the_rest_unanswered(ask):
     async def handler(questions):
         return [{"id": "q1", "selected": ["SQLite"]}]
 
-    set_ask_handler(handler)
-    result = await call(
+    ask.handler = handler
+    result = await ask.call(
         {
             "questions": [
                 question(),
@@ -188,12 +197,12 @@ async def test_partial_answers_mark_the_rest_unanswered():
     assert "(no answer)" in text
 
 
-async def test_a_handler_exception_becomes_an_error_result():
+async def test_a_handler_exception_becomes_an_error_result(ask):
     async def handler(questions):
         raise RuntimeError("dialog exploded")
 
-    set_ask_handler(handler)
-    result = await call({"questions": [question()]})
+    ask.handler = handler
+    result = await ask.call({"questions": [question()]})
 
     assert result.is_error
     assert "dialog exploded" in result.content[0].text
@@ -204,15 +213,15 @@ async def test_a_handler_exception_becomes_an_error_result():
 # ---------------------------------------------------------------------------
 
 
-async def test_the_handler_receives_normalized_questions():
+async def test_the_handler_receives_normalized_questions(ask):
     captured: list[list[dict]] = []
 
     async def handler(questions):
         captured.append(questions)
         return [{"id": "q1", "selected": ["A"]}]
 
-    set_ask_handler(handler)
-    await call(
+    ask.handler = handler
+    await ask.call(
         {
             "questions": [
                 {
@@ -243,15 +252,15 @@ async def test_the_handler_receives_normalized_questions():
     ]
 
 
-async def test_multi_defaults_to_false_and_optional_fields_are_dropped():
+async def test_multi_defaults_to_false_and_optional_fields_are_dropped(ask):
     captured: list[list[dict]] = []
 
     async def handler(questions):
         captured.append(questions)
         return [{"id": "q1", "selected": ["A"]}]
 
-    set_ask_handler(handler)
-    await call(
+    ask.handler = handler
+    await ask.call(
         {
             "questions": [
                 {
@@ -289,8 +298,8 @@ async def test_multi_defaults_to_false_and_optional_fields_are_dropped():
         ([{"id": "q1", "options": [{"label": "A"}, {"label": "B"}]}], "question"),
     ],
 )
-async def test_invalid_arguments_are_error_results(questions, needle):
-    result = await call({"questions": questions})
+async def test_invalid_arguments_are_error_results(ask, questions, needle):
+    result = await ask.call({"questions": questions})
 
     assert result.is_error
     text = result.content[0].text.lower()
@@ -347,8 +356,8 @@ async def test_ask_runs_through_the_agent_loop(runtime_factory):
     async def handler(questions):
         return [{"id": "q1", "selected": ["Postgres"]}]
 
-    set_ask_handler(handler)
     runtime = await runtime_factory(stream_fn=stream)
+    runtime.ask_handler = handler
     chat = ChatController(runtime)
 
     await chat.submit("go")
@@ -365,7 +374,7 @@ async def test_ask_runs_through_the_agent_loop(runtime_factory):
     assert "User answers:" in text and "Postgres" in text
 
 
-async def test_answers_are_validated_against_the_offered_options():
+async def test_answers_are_validated_against_the_offered_options(ask):
     async def handler(_questions):
         return [
             {
@@ -375,8 +384,8 @@ async def test_answers_are_validated_against_the_offered_options():
             }
         ]
 
-    set_ask_handler(handler)
-    result = await call({"questions": [question()]})
+    ask.handler = handler
+    result = await ask.call({"questions": [question()]})
     assert "SQLite" in result.content[0].text
     assert "not-an-option" not in result.content[0].text
     assert result.details["answers"] == [
@@ -384,16 +393,16 @@ async def test_answers_are_validated_against_the_offered_options():
     ]
 
 
-async def test_single_select_answers_keep_only_the_first_label():
+async def test_single_select_answers_keep_only_the_first_label(ask):
     async def handler(_questions):
         return [{"id": "q1", "selected": ["SQLite", "Postgres"]}]
 
-    set_ask_handler(handler)
-    result = await call({"questions": [question()]})
+    ask.handler = handler
+    result = await ask.call({"questions": [question()]})
     assert result.details["answers"] == [{"id": "q1", "selected": ["SQLite"]}]
 
 
-async def test_ask_returns_promptly_when_the_run_is_aborted():
+async def test_ask_returns_promptly_when_the_run_is_aborted(ask):
     import asyncio
 
     from zenagent.events import AbortToken
@@ -404,7 +413,7 @@ async def test_ask_returns_promptly_when_the_run_is_aborted():
         await blocker.wait()
         return []
 
-    set_ask_handler(handler)
+    ask.handler = handler
     abort = AbortToken()
 
     async def trigger():
@@ -413,10 +422,43 @@ async def test_ask_returns_promptly_when_the_run_is_aborted():
 
     task = asyncio.create_task(trigger())
     result = await asyncio.wait_for(
-        ASK.execute("c1", {"questions": [question()]}, abort), timeout=5
+        ask.tool.execute("c1", {"questions": [question()]}, abort), timeout=5
     )
     await task
     blocker.set()
     assert not result.is_error
     assert result.details.get("aborted") is True
     assert "conservative" in result.content[0].text
+
+
+async def test_two_agents_can_use_different_ask_handlers():
+    tool_one = build_ask_tool(lambda: _select("one"))
+    tool_two = build_ask_tool(lambda: _select("two"))
+    args = {
+        "questions": [
+            {"id": "q", "question": "?", "options": [{"label": "one"}, {"label": "two"}]}
+        ]
+    }
+    one = await tool_one.execute("c1", args, None)
+    two = await tool_two.execute("c2", args, None)
+    assert "one" in one.content[0].text
+    assert "two" in two.content[0].text
+
+
+def _select(label):
+    async def handler(questions):
+        return [{"id": questions[0]["id"], "selected": [label]}]
+
+    return handler
+
+
+async def test_ask_without_handler_errors_not_hangs():
+    tool = build_ask_tool(lambda: None)
+    args = {
+        "questions": [
+            {"id": "q", "question": "?", "options": [{"label": "a"}, {"label": "b"}]}
+        ]
+    }
+    result = await tool.execute("c3", args, None)
+    assert not result.is_error  # graceful no-UI degrade, never a hang
+    assert "no interactive ui" in result.content[0].text.lower()

@@ -9,6 +9,7 @@ import type {
   CommandEntry,
   ModelEntry,
   PendingMessage,
+  SecretProviderRow,
   SessionSummary,
   StatusResult,
 } from '../rpc/types'
@@ -274,6 +275,21 @@ export const useCatalogStore = create<CatalogState>((set) => ({
   commands: [],
   setModels: (models) => set({ models }),
   setCommands: (commands) => set({ commands }),
+}))
+
+// ---- provider keys ----------------------------------------------------------
+
+interface SecretsState {
+  modelProviders: SecretProviderRow[]
+  searchProviders: SecretProviderRow[]
+  setProviders(modelProviders: SecretProviderRow[], searchProviders: SecretProviderRow[]): void
+}
+
+export const useSecretsStore = create<SecretsState>((set) => ({
+  modelProviders: [],
+  searchProviders: [],
+  setProviders: (modelProviders, searchProviders) =>
+    set({ modelProviders, searchProviders }),
 }))
 
 // ---- approvals ---------------------------------------------------------------

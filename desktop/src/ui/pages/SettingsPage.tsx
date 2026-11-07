@@ -36,11 +36,13 @@ import {
   InfoIcon,
   PaletteIcon,
   SearchIcon,
+  SparkIcon,
 } from '../icons'
 import { ZenWordmark } from '../ZenWordmark'
+import { ModelSettings } from './ModelSettings'
 import css from './SettingsPage.module.css'
 
-type Tab = 'appearance' | 'conversation' | 'about'
+type Tab = 'appearance' | 'models' | 'conversation' | 'about'
 type NavGroup = 'preferences' | 'system'
 
 interface NavItem {
@@ -60,6 +62,19 @@ const NAV_ITEMS: NavItem[] = [
     icon: <PaletteIcon size={14} />,
     group: 'preferences',
     keywords: ['settings.theme', 'settings.language', 'settings.fontScale'],
+  },
+  {
+    id: 'models',
+    labelKey: 'settings.models',
+    hintKey: 'settings.modelsHint',
+    icon: <SparkIcon size={14} />,
+    group: 'preferences',
+    keywords: [
+      'settings.modelProviders',
+      'settings.searchProviders',
+      'settings.configured',
+      'settings.testConnection',
+    ],
   },
   {
     id: 'conversation',
@@ -460,6 +475,8 @@ export function SettingsPage() {
               </Card>
             </div>
           )}
+
+          {tab === 'models' && <ModelSettings />}
 
           {tab === 'conversation' && (
             <div className={css.stack}>

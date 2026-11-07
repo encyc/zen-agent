@@ -34,9 +34,14 @@ def test_hook_failure_never_breaks_startup(monkeypatch):
         main_mod.main(["--version"])
 
 
-def test_install_excepthook_creates_directory(tmp_path, clean_excepthook):
+def test_install_excepthook_creates_directory(tmp_path, clean_excepthook, monkeypatch):
+    from zenagent import crash
     from zenagent.crash import install_excepthook
 
+    # Other CLI tests run main(), which installs the hook for real; isolate
+    # the module state so directory creation is what is under test.
+    monkeypatch.setattr(crash, "_installed", False)
+    monkeypatch.setattr(crash, "_log_dir", None)
     path = install_excepthook(tmp_path)
     assert path.exists()
     assert path == tmp_path

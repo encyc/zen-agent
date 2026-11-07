@@ -7,7 +7,13 @@ import { startFailureOf, type StartFailure } from './startFailure.ts'
 import { create } from 'zustand'
 import { homeDir } from '@tauri-apps/api/path'
 import { RpcClient } from '../rpc/client'
-import type { CompactionRecord, Mode, ServerFrame, StatusResult } from '../rpc/types'
+import type {
+  CompactionRecord,
+  Mode,
+  SecretProviderRow,
+  ServerFrame,
+  StatusResult,
+} from '../rpc/types'
 import {
   useApprovalStore,
   useAskStore,
@@ -15,6 +21,7 @@ import {
   useComposerStore,
   useNoticeStore,
   useProjectStore,
+  useSecretsStore,
   useSessionStore,
   useSettingsStore,
   useStatusStore,
@@ -61,6 +68,10 @@ interface AppState {
   refreshStatus(): Promise<void>
   refreshSessions(): Promise<void>
   refreshCatalog(): Promise<void>
+  refreshSecrets(): Promise<void>
+  saveSecret(name: string, value: string): Promise<Record<string, unknown>>
+  clearSecret(name: string): Promise<Record<string, unknown>>
+  testSecret(scope: 'model' | 'search', target: string): Promise<Record<string, unknown>>
   refreshTranscript(): Promise<void>
   submit(): Promise<void>
   steer(text: string): Promise<void>
@@ -236,6 +247,49 @@ export const useAppStore = create<AppState>((set, get) => ({
       })
       .catch(() => {})
     return Promise.resolve()
+  },
+
+  refreshSecrets() {
+    return get()
+      .client()
+      .send({ type: 'secrets', op: 'list' })
+      .then((frame) => {
+        if (frame.type === 'result' && frame.ok) {
+          useSecretsStore
+            .getState()
+            .setProviders(
+              (frame.model_providers ?? []) as SecretProviderRow[],
+              (frame.search_providers ?? []) as SecretProviderRow[],
+            )
+        }
+      })
+      .catch(() => {})
+  },
+
+  async saveSecret(name, value) {
+    const frame = await get()
+      .client()
+      .send({ type: 'secrets', op: 'set', name, value })
+    if (frame.type === 'result' && frame.ok) {
+      await get().refreshSecrets()
+      void get().refreshCatalog()
+    }
+    return frame
+  },
+
+  async clearSecret(name) {
+    const frame = await get()
+      .client()
+      .send({ type: 'secrets', op: 'clear', name })
+    if (frame.type === 'result' && frame.ok) {
+      await get().refreshSecrets()
+      void get().refreshCatalog()
+    }
+    return frame
+  },
+
+  testSecret(scope, target) {
+    return get().client().send({ type: 'secrets', op: 'test', scope, target })
   },
 
   refreshTranscript() {

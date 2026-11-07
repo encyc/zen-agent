@@ -415,18 +415,14 @@ class ToolCallChildStream:
 
 async def test_task_persists_its_transcript_and_broadcasts_lifecycle(tmp_path):
     from zenagent.agent.subagents import SubagentStore, task_dir
-    from zenagent.tools.task import set_subagent_observer
 
     session = tmp_path / "sessions" / "s.jsonl"
     events: list[tuple[str, str, dict]] = []
-    set_subagent_observer(
-        lambda call_id, kind, payload: events.append((call_id, kind, payload))
+    observer = lambda call_id, kind, payload: events.append((call_id, kind, payload))
+    task = _tool(
+        ChildStream("child answer"), session_path=session, get_observer=lambda: observer
     )
-    try:
-        task = _tool(ChildStream("child answer"), session_path=session)
-        result = await task.execute("call_1", {"prompt": "go", "name": "research"})
-    finally:
-        set_subagent_observer(None)
+    result = await task.execute("call_1", {"prompt": "go", "name": "research"})
 
     assert not result.is_error
     kinds = [kind for _call, kind, _payload in events]

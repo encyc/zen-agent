@@ -32,6 +32,10 @@ interface BridgeState {
   tools?: { name: string; description: string; approval: string }[]
   thinking?: string | null
   models?: Record<string, unknown>[]
+  secretsStored?: string[]
+  secretsModel?: Record<string, unknown>[]
+  secretsSearch?: Record<string, unknown>[]
+  secretTests?: Record<string, { connected: boolean; message: string }>
   fsEntries?: Record<string, Record<string, unknown>[]>
   fsFiles?: Record<string, Record<string, unknown>>
   worktrees?: Record<string, unknown>
@@ -177,6 +181,77 @@ function installBridge(state: BridgeState) {
       }
       case 'models':
         return { type: 'result', id: payload.id, ok: true, models: state.models ?? [] }
+      case 'secrets': {
+        const stored = () => state.secretsStored ?? []
+        if (payload.op === 'list') {
+          const modelProviders = state.secretsModel ?? [
+            {
+              id: 'deepseek',
+              name: 'DeepSeek',
+              env: 'DEEPSEEK_API_KEY',
+              models: 2,
+              configured: false,
+              source: null,
+              current: true,
+            },
+            {
+              id: 'openai',
+              name: 'OpenAI',
+              env: 'OPENAI_API_KEY',
+              models: 3,
+              configured: false,
+              source: null,
+              current: false,
+            },
+          ]
+          const searchProviders = state.secretsSearch ?? [
+            {
+              id: 'tavily',
+              name: 'Tavily',
+              env: 'TAVILY_API_KEY',
+              configured: false,
+              source: null,
+            },
+          ]
+          const decorate = (row: Record<string, unknown>) => {
+            const env = String(row.env)
+            const isStored = stored().includes(env)
+            return {
+              ...row,
+              configured: row.source === 'env' || isStored,
+              source: row.source === 'env' ? 'env' : isStored ? 'stored' : null,
+            }
+          }
+          return {
+            type: 'result',
+            id: payload.id,
+            ok: true,
+            model_providers: modelProviders.map(decorate),
+            search_providers: searchProviders.map(decorate),
+          }
+        }
+        if (payload.op === 'set') {
+          const name = String(payload.name)
+          state.secretsStored = [...new Set([...stored(), name])]
+          return { type: 'result', id: payload.id, ok: true }
+        }
+        if (payload.op === 'clear') {
+          state.secretsStored = stored().filter((name) => name !== String(payload.name))
+          return { type: 'result', id: payload.id, ok: true }
+        }
+        if (payload.op === 'test') {
+          return {
+            type: 'result',
+            id: payload.id,
+            ok: true,
+            ...(state.secretTests?.[String(payload.target)] ?? {
+              connected: true,
+              message: '',
+            }),
+          }
+        }
+        return { type: 'error', id: payload.id, message: 'unknown secrets op' }
+      }
       case 'tools':
         return {
           type: 'result',
@@ -1661,6 +1736,85 @@ test('settings and tools replace the shell and return to chat', async ({ page })
   await expect(page.getByText('Read a file')).toBeVisible()
   await page.getByRole('button', { name: '返回' }).click()
   await expect(page.locator('[data-shell-composer]')).toBeVisible()
+})
+
+test('model settings saves a provider key without echoing it', async ({ page }) => {
+  await boot(page, initialState({ running: false }))
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '模型' }).click()
+
+  await expect(page.getByRole('heading', { name: '模型服务' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '搜索服务' })).toBeVisible()
+  const deepseek = page.locator('[data-provider="deepseek"]')
+  await expect(deepseek).toContainText('未配置')
+
+  await deepseek.getByRole('button', { name: '设置' }).click()
+  const input = deepseek.getByLabel('设置')
+  await expect(input).toHaveAttribute('type', 'password')
+  await input.fill('sk-e2e-secret')
+  await deepseek.getByRole('button', { name: '保存' }).click()
+
+  await expect(deepseek).toContainText('已配置')
+  await expect(deepseek.getByLabel('设置')).toHaveCount(0)
+  await expect(page.locator('[data-page="settings"]')).not.toContainText('sk-e2e-secret')
+
+  const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
+  const saved = calls.find((call) => call.type === 'secrets' && call.op === 'set')
+  assert.equal(saved?.name, 'DEEPSEEK_API_KEY')
+  assert.equal(saved?.value, 'sk-e2e-secret')
+
+  // Reopening starts blank: the server never returns key material.
+  await deepseek.getByRole('button', { name: '更换' }).click()
+  await expect(deepseek.getByLabel('设置')).toHaveValue('')
+})
+
+test('model settings clears a stored key', async ({ page }) => {
+  await boot(
+    page,
+    initialState({ running: false, secretsStored: ['DEEPSEEK_API_KEY'] }),
+  )
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '模型' }).click()
+
+  const deepseek = page.locator('[data-provider="deepseek"]')
+  await expect(deepseek).toContainText('已配置')
+  await deepseek.getByRole('button', { name: '清除' }).click()
+  await expect(deepseek).toContainText('未配置')
+
+  const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
+  const cleared = calls.find((call) => call.type === 'secrets' && call.op === 'clear')
+  assert.equal(cleared?.name, 'DEEPSEEK_API_KEY')
+})
+
+test('model settings tests model and search connections inline', async ({ page }) => {
+  await boot(
+    page,
+    initialState({
+      running: false,
+      secretsStored: ['DEEPSEEK_API_KEY', 'TAVILY_API_KEY'],
+      secretTests: { tavily: { connected: false, message: 'HTTP 401' } },
+    }),
+  )
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '模型' }).click()
+
+  const deepseek = page.locator('[data-provider="deepseek"]')
+  await deepseek.getByRole('button', { name: '测试连接' }).click()
+  await expect(deepseek).toContainText('连接正常')
+
+  const tavily = page.locator('[data-provider="tavily"]')
+  await tavily.getByRole('button', { name: '测试连接' }).click()
+  await expect(tavily).toContainText('连接失败：HTTP 401')
+
+  const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
+  const tests = calls.filter((call) => call.type === 'secrets' && call.op === 'test')
+  assert.deepEqual(
+    tests.map((call) => [call.scope, call.target]),
+    [
+      ['model', 'deepseek'],
+      ['search', 'tavily'],
+    ],
+  )
 })
 
 test('thinking settings unfold and hide settled reasoning', async ({ page }) => {

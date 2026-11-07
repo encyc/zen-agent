@@ -371,9 +371,7 @@ class ZenAgentApp(
             on_job=self.show_job_log,
             on_context=self.action_show_context_breakdown,
         )
-        from zenagent.tools.task import set_subagent_observer
-
-        set_subagent_observer(self.chat.on_subagent_event)
+        self.runtime.subagent_observer = self.chat.on_subagent_event
         self._announce_appearance_warnings()
         self._announce_language_warnings()
         self._announce_missing_key()
@@ -385,19 +383,14 @@ class ZenAgentApp(
         self._refresh_status()
         self.query_one(PromptInput).focus()
         self._start_update_check()
-        # The ask tool is a static builtin: this mounted app is the interactive
-        # surface that answers it. Headless frontends simply leave it unset.
-        from zenagent.tools.ask import set_ask_handler
-
-        set_ask_handler(self.request_ask)
+        # This mounted app is the interactive surface that answers ask calls.
+        # Headless frontends simply leave the slot unset.
+        self.runtime.ask_handler = self.request_ask
 
     def on_unmount(self) -> None:
         """Drop the tool handlers so a later headless run degrades, not hangs."""
-        from zenagent.tools.ask import set_ask_handler
-        from zenagent.tools.task import set_subagent_observer
-
-        set_ask_handler(None)
-        set_subagent_observer(None)
+        self.runtime.ask_handler = None
+        self.runtime.subagent_observer = None
 
     def _on_change(self) -> None:
         # Streaming fires this per delta; coalesce bursts into one repaint.

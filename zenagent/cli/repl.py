@@ -60,7 +60,6 @@ from zenagent.events import AgentEvent
 from zenagent.i18n import LANGUAGE_CHOICES, resolve_language, set_locale, t
 from zenagent.providers.registry import StreamFn
 from zenagent.templates import expand
-from zenagent.tools.ask import set_ask_handler
 from zenagent.types import ImageContent
 
 __all__ = [
@@ -918,7 +917,7 @@ async def repl(
             )
         )
 
-    set_ask_handler(ask_user)
+    runtime.ask_handler = ask_user
     broker.set_confirm(confirm_via_stdin)
     try:
         while True:
@@ -1014,7 +1013,7 @@ async def repl(
                 pass
             await chat.submit(prompt_text)
     finally:
-        set_ask_handler(None)
+        runtime.ask_handler = None
         for claimant in pending_lines:
             if not claimant.done():
                 claimant.cancel()
