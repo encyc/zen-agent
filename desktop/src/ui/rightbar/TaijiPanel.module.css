@@ -75,6 +75,11 @@
   min-width: 0;
 }
 
+.rail {
+  flex: none;
+  display: block;
+}
+
 .short {
   flex: none;
   color: var(--dsw-alias-label-tertiary);
