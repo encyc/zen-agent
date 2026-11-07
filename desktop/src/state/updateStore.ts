@@ -14,6 +14,19 @@ import {
 import { useSettingsStore } from './stores.ts'
 
 const CACHE_KEY = 'zen.update.cache'
+
+/** The updater plugin, behind a seam: tests install a fake `check` here
+ * because the real one needs the Tauri runtime. */
+type UpdaterPlugin = {
+  check: () => Promise<{ version?: string; downloadAndInstall?: (onEvent?: unknown) => Promise<void> } | null>
+}
+let loadPlugin: () => Promise<UpdaterPlugin> = () =>
+  import('@tauri-apps/plugin-updater') as Promise<UpdaterPlugin>
+
+/** Test seam: swap the plugin module (call the returned undo, or leave it). */
+export function _usePluginLoader(loader: () => Promise<UpdaterPlugin>): void {
+  loadPlugin = loader
+}
 /** How long after launch the check runs, so startup never waits on the network. */
 export const BOOT_DELAY_MS = 5_000
 
@@ -125,7 +138,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     const current = __APP_VERSION__
     set({ phase: 'checking', message: null })
     try {
-      const { check } = await import('@tauri-apps/plugin-updater')
+      const { check } = await loadPlugin()
       const update = await check()
       const cache: UpdateCache = {
         checkedAt: Date.now(),
@@ -158,10 +171,17 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     // hides the button, and this keeps a stale click from slipping through.
     if (!get().selfUpdatable) return
     if (guard.busy === true || (guard.pendingApprovals ?? 0) > 0) return
-    const pending = get().pending as
+    let pending = get().pending as
       | { downloadAndInstall(onEvent?: (event: unknown) => void): Promise<void> }
       | null
-    if (pending === null || pending === undefined) return
+    if (pending === null || pending === undefined) {
+      // A banner restored from the cache has no deferred handle: the check()
+      // result lives only in the session that ran it. Re-check once so the
+      // click cannot die silently (v0.9.0 shipped exactly this no-op).
+      await get().checkNow('manual')
+      pending = get().pending as typeof pending
+      if (pending === null || pending === undefined) return
+    }
     set({ phase: 'installing', message: null })
     try {
       await pending.downloadAndInstall(() => {})
