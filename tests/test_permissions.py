@@ -400,9 +400,9 @@ async def test_directory_grant_does_not_leak_to_sibling_tools(monkeypatch, tmp_p
 
 
 async def test_task_and_ask_are_read_only_for_name_only_callers():
-    from zenagent.tools.ask import ASK
+    from zenagent.tools.ask import build_ask_tool
 
-    assert ASK.approval == "read"
+    assert build_ask_tool(lambda: None).approval == "read"
     gate = PermissionGate(interactive=False, mode="plan")
     assert (await gate.check("ask", {}))[0] is True
     assert (await gate.check("task", {"prompt": "x"}))[0] is True

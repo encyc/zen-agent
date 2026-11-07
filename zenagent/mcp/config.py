@@ -18,13 +18,25 @@ committed, so credentials belong in the global file or in the environment.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from zenagent import project
 from zenagent.mcp.client import HttpTransport, StdioTransport, Transport
 
-__all__ = ["McpServerConfig", "config_path", "load_mcp_config", "make_transport"]
+__all__ = [
+    "McpServerConfig",
+    "config_path",
+    "layer_path",
+    "load_mcp_config",
+    "load_mcp_layers",
+    "make_transport",
+    "remove_mcp_server",
+    "save_mcp_server",
+    "save_server",
+]
 
 
 @dataclass

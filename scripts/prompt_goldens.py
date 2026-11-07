@@ -22,7 +22,7 @@ from prompt_fixtures import CONFIGS, SKILLS, TOOL_GOLDEN_NAMES, TRANSCRIPT
 
 from zenagent.prompts import PromptContext, compose_compact, compose_system
 from zenagent.skills import build_skill_tool, format_skill_entries
-from zenagent.tools import ALL_TOOLS
+from prompt_fixtures import golden_tools
 from zenagent.tools.task import build_task_tool
 from zenagent.tools.todo import build_todo_tool
 
@@ -64,7 +64,7 @@ def render_config(cfg) -> tuple[str, str]:
 
 def tool_descriptions() -> dict[str, dict]:
     """Capture the 14 tool descriptions exactly as the model sees them."""
-    tools = list(ALL_TOOLS)
+    tools = golden_tools()
     tools.append(build_todo_tool(None))
     tools.append(build_task_tool(model=None, base_tools=[]))
     tools.append(build_skill_tool(list(SKILLS)))

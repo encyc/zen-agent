@@ -13,7 +13,7 @@ from zenagent.prompts.spec import (
     TOTAL_BUDGET_CHARS,
 )
 from zenagent.skills import build_skill_tool, format_skill_entries
-from zenagent.tools import ALL_TOOLS
+from prompt_fixtures import golden_tools
 from zenagent.tools.task import build_task_tool
 from zenagent.tools.todo import build_todo_tool
 
@@ -26,7 +26,7 @@ def test_template_budgets_hold() -> None:
 
 
 def test_tool_budgets_hold() -> None:
-    tools = list(ALL_TOOLS)
+    tools = golden_tools()
     tools.append(build_todo_tool(None))
     tools.append(build_task_tool(model=None, base_tools=[]))
     tools.append(build_skill_tool([]))

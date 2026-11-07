@@ -12,7 +12,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from zenagent import project
+from zenagent import project, settings
 from zenagent.agent import Agent
 from zenagent.agent.artifacts import build_artifact_sink
 from zenagent.agent.memory_store import MemoryStore, format_memory_index
@@ -93,6 +93,12 @@ from zenagent.trace import TraceRecorder
 __all__ = ["Runtime", "RuntimeOptions"]
 
 SwitchHook = Callable[[Path | None], Awaitable[bool]]
+
+
+def _active_skills(skills: list) -> list:
+    """Drop skills the user switched off in settings before they reach the agent."""
+    disabled = settings.disabled_skills()
+    return [skill for skill in skills if skill.name not in disabled]
 
 
 @dataclass
@@ -374,6 +380,7 @@ class Runtime:
             runtime.skills, warnings = discover_skills(
                 default_skill_roots(Path.cwd())
             )
+            runtime.skills = _active_skills(runtime.skills)
             runtime.warnings.extend(f"skills {warning}" for warning in warnings)
 
         if options.templates:
@@ -732,6 +739,7 @@ class Runtime:
         if not self.skills_enabled:
             return []
         skills, warnings = discover_skills(default_skill_roots(Path.cwd()))
+        skills = _active_skills(skills)
         for warning in warnings:
             self._note(f"skills {warning}")
         if self._signature(skills) == self._signature(self.skills):
@@ -762,6 +770,7 @@ class Runtime:
 
         if options is None or options.skills:
             skills, warnings = discover_skills(default_skill_roots(Path.cwd()))
+            skills = _active_skills(skills)
             for warning in warnings:
                 self._note(f"skills {warning}")
             if self._signature(skills) != self._signature(self.skills):

@@ -28,11 +28,13 @@ __all__ = [
     "SettingsStore",
     "clear_cache",
     "describe",
+    "disabled_skills",
     "get_api_key",
     "get_pref",
     "load",
     "save",
     "set_api_key",
+    "set_disabled_skills",
     "set_pref",
 ]
 
@@ -179,6 +181,18 @@ def set_pref(name: str, value) -> None:
     else:
         store.prefs[name] = value
     save(store)
+
+
+def disabled_skills() -> set[str]:
+    """Skill names the user switched off; a hand-edited non-list reads as none."""
+    value = get_pref("disabled_skills", [])
+    if not isinstance(value, list):
+        return set()
+    return {item for item in value if isinstance(item, str)}
+
+
+def set_disabled_skills(names: set[str]) -> None:
+    set_pref("disabled_skills", sorted(names) or None)
 
 
 def describe() -> dict:

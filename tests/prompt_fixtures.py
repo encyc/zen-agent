@@ -12,13 +12,20 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from zenagent.skills import Skill
-from zenagent.tools import ALL_TOOLS
+from zenagent.tools import base_tools
+from zenagent.tools.ask import build_ask_tool
 
 #: The literal working directory baked into golden files.
 CWD = Path("/repo")
 
-#: The 11 built-in tools, in ALL_TOOLS order (v0.4.1).
-ALL_TOOL_NAMES = tuple(tool.name for tool in ALL_TOOLS)
+
+def golden_tools():
+    """The runtime's prompt-ordered base set with a no-handler ask tool."""
+    return base_tools(build_ask_tool(lambda: None))
+
+
+#: The 11 built-in tools, in base_tools order (v0.4.1).
+ALL_TOOL_NAMES = tuple(tool.name for tool in golden_tools())
 
 #: A minimal AGENTS.md body; the wrapper adds "## Project instructions".
 AGENTS_TEXT = "### /repo/AGENTS.md\n- Use pytest. Do not add dependencies.\n"

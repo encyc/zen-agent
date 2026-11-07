@@ -7,10 +7,7 @@ out, then drive it with the pilot).
 
 import asyncio
 
-import pytest
-
 from zenagent.cli.tui.screens.modals import AskQuestion, DialogChoice
-from zenagent.tools.ask import ASK, get_ask_handler, set_ask_handler
 
 
 def question(
@@ -37,13 +34,6 @@ def question(
     if recommended:
         payload["recommended"] = recommended
     return payload
-
-
-@pytest.fixture(autouse=True)
-def clean_handler():
-    set_ask_handler(None)
-    yield
-    set_ask_handler(None)
 
 
 async def _wait_for_ask(
@@ -77,16 +67,16 @@ def choices(screen):
 
 async def test_mounting_the_app_registers_the_ask_handler(picker_app):
     app = picker_app
-    assert get_ask_handler() is None, "no frontend owns the UI yet"
+    assert app.runtime.ask_handler is None, "no frontend owns the UI yet"
 
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
-        handler = get_ask_handler()
+        handler = app.runtime.ask_handler
         assert handler is not None
         # The registered handler is the app's public request_ask method.
         assert handler.__self__ is app
 
-    assert get_ask_handler() is None, "unmount must clear the handler"
+    assert app.runtime.ask_handler is None, "unmount must clear the handler"
 
 
 # ---------------------------------------------------------------------------
@@ -285,7 +275,9 @@ async def test_the_ask_tool_uses_the_mounted_tui_handler(picker_app):
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         task = asyncio.create_task(
-            ASK.execute("call_ask", {"questions": [question()]}, None)
+            app.runtime.ask_tool.execute(
+                "call_ask", {"questions": [question()]}, None
+            )
         )
         await _wait_for_ask(app)
         await pilot.press("1")
@@ -305,10 +297,12 @@ async def test_ask_tool_falls_back_after_the_app_unmounts(runtime_factory):
     app = ZenAgentApp(runtime)
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
-        assert get_ask_handler() is not None
+        assert runtime.ask_handler is not None
 
-    assert get_ask_handler() is None
-    result = await ASK.execute("call_ask", {"questions": [question()]}, None)
+    assert runtime.ask_handler is None
+    result = await runtime.ask_tool.execute(
+        "call_ask", {"questions": [question()]}, None
+    )
     assert not result.is_error
     assert result.details == {"available": False}
 

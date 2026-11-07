@@ -13,7 +13,7 @@ from prompt_fixtures import SKILLS, TOOL_GOLDEN_NAMES
 
 from zenagent.prompts import TOOL_BLOCK_NAMES, tool_description
 from zenagent.skills import build_skill_tool
-from zenagent.tools import ALL_TOOLS
+from prompt_fixtures import golden_tools
 from zenagent.tools.task import build_task_tool
 from zenagent.tools.todo import build_todo_tool
 
@@ -39,7 +39,7 @@ def test_no_orphan_tool_blocks() -> None:
 
 def test_tool_descriptions_match_golden() -> None:
     golden = _golden()
-    tools = list(ALL_TOOLS)
+    tools = golden_tools()
     tools.append(build_todo_tool(None))
     tools.append(build_task_tool(model=None, base_tools=[]))
     tools.append(build_skill_tool(list(SKILLS)))

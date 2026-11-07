@@ -1,13 +1,18 @@
 """Lightweight connection probes: one tiny request per provider, never a turn."""
 
 import asyncio
+import sys
+from pathlib import Path
 
 import pytest
 
 from zenagent.app import probes
 from zenagent.events import AssistantEvent
+from zenagent.mcp.config import McpServerConfig
 from zenagent.providers.catalog import load_catalog
 from zenagent.tools.web.types import ProviderError, SearchRequest, SearchResult
+
+ECHO_SERVER = Path(__file__).resolve().parent / "fixtures" / "mcp_echo_server.py"
 
 
 def done_stream():
@@ -154,3 +159,26 @@ def test_probe_result_is_immutable():
 
 def test_timeout_default_is_short():
     assert 0 < probes.PROBE_TIMEOUT_S <= 30
+
+
+async def test_mcp_probe_lists_tools_from_a_live_server(app_env):
+    config = McpServerConfig(name="echo", command=[sys.executable, str(ECHO_SERVER)])
+    result = await probes.probe_mcp_server(config)
+    assert result.connected is True
+    assert "echo" in result.tools
+
+
+async def test_mcp_probe_reports_startup_failure_inline(app_env):
+    config = McpServerConfig(name="broken", command=["zenagent-no-such-command-xyz"])
+    result = await probes.probe_mcp_server(config)
+    assert result.connected is False
+    assert result.message
+
+
+async def test_mcp_probe_times_out_instead_of_hanging(app_env):
+    config = McpServerConfig(
+        name="slow", command=[sys.executable, "-c", "import time; time.sleep(5)"]
+    )
+    result = await probes.probe_mcp_server(config, timeout=0.01)
+    assert result.connected is False
+    assert "timed out" in result.message

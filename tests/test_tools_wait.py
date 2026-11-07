@@ -9,7 +9,7 @@ import time
 
 import pytest
 
-from zenagent.tools import ALL_TOOLS
+from prompt_fixtures import golden_tools
 from zenagent.tools.bash import BASH
 from zenagent.tools.jobs import get_job_manager
 from zenagent.tools.wait import WAIT
@@ -50,7 +50,7 @@ def test_wait_schema_declares_optional_job_id_and_timeout():
 
 
 def test_all_tools_lists_wait_right_after_bash():
-    names = [tool.name for tool in ALL_TOOLS]
+    names = [tool.name for tool in golden_tools()]
     assert "wait" in names
     assert names.index("wait") == names.index("bash") + 1
 
