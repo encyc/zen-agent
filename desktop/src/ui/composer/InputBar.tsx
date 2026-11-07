@@ -8,7 +8,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { listen } from '@tauri-apps/api/event'
 import { useAppStore } from '../../state/appStore'
-import { useApprovalStore, useAskStore, useComposerStore, useSettingsStore, useStatusStore, useCatalogStore } from '../../state/stores'
+import { useApprovalStore, useAskStore, useComposerStore, useSettingsStore, useStatusStore, useCatalogStore, useSkillsStore } from '../../state/stores'
+import { slashEntries } from '../../state/slashMenu'
 import { useT } from '../../i18n/locale'
 import { ApprovalPanel } from '../approval/ApprovalPanel'
 import { AskCard } from '../ask/AskCard'
@@ -41,6 +42,8 @@ export function InputBar() {
   const addImages = useComposerStore((state) => state.addImages)
   const removeImage = useComposerStore((state) => state.removeImage)
   const commands = useCatalogStore((state) => state.commands)
+  const skills = useSkillsStore((state) => state.skills)
+  const refreshSkills = useAppStore((state) => state.refreshSkills)
   const enterToSend = useSettingsStore((state) => state.enterToSend)
   const approvalCount = useApprovalStore((state) => state.queue.length)
   const askCount = useAskStore((state) => state.queue.length)
@@ -51,13 +54,17 @@ export function InputBar() {
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
   const empty = draft.trim() === '' && images.length === 0
-  const isSlash = draft.startsWith('/') && !draft.includes('\n')
-  const slashQuery = isSlash ? draft.slice(1) : ''
-  const slashMatches = useMemo(() => {
-    if (!isSlash) return []
-    const query = slashQuery.split(' ')[0].toLowerCase()
-    return commands.filter((command) => command.name.startsWith(query)).slice(0, 8)
-  }, [commands, isSlash, slashQuery])
+  const entries = useMemo(
+    () => slashEntries(commands, skills, draft),
+    [commands, skills, draft],
+  )
+  const menuOpen = entries.length > 0 && menu.kind === null
+  const activeIndex = entries.length === 0 ? -1 : Math.min(slashIndex, entries.length - 1)
+
+  // Newly enabled skills (settings toggle, external edit) appear on next open.
+  useEffect(() => {
+    void refreshSkills()
+  }, [refreshSkills])
 
   // Auto-grow the textarea (dsh: the scrollport caps at 14 lines).
   useEffect(() => {
@@ -99,19 +106,19 @@ export function InputBar() {
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Slash menu navigation owns the keys first.
-    if (isSlash && slashMatches.length > 0 && menu.kind === null) {
+    if (menuOpen) {
       if (event.key === 'ArrowDown') {
         event.preventDefault()
-        setSlashIndex((index) => (index + 1) % slashMatches.length)
+        setSlashIndex((index) => (index + 1) % entries.length)
         return
       }
       if (event.key === 'ArrowUp') {
         event.preventDefault()
-        setSlashIndex((index) => (index - 1 + slashMatches.length) % slashMatches.length)
+        setSlashIndex((index) => (index - 1 + entries.length) % entries.length)
         return
       }
       if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
-        const picked = slashMatches[slashIndex] ?? slashMatches[0]
+        const picked = entries[activeIndex] ?? entries[0]
         if (picked !== undefined) {
           event.preventDefault()
           setDraft(`/${picked.name} `)
@@ -190,24 +197,29 @@ export function InputBar() {
               dir="auto"
             />
           </div>
-          {isSlash && slashMatches.length > 0 && menu.kind === null && (
+          {menuOpen && (
             <div className={css.slashMenu} role="listbox">
-              {slashMatches.map((command, index) => (
+              {entries.map((entry, index) => (
                 <button
-                  key={command.name}
+                  key={entry.name}
                   type="button"
                   role="option"
-                  aria-selected={index === slashIndex}
+                  aria-selected={index === activeIndex}
                   className={css.slashItem}
-                  data-active={index === slashIndex || undefined}
+                  data-active={index === activeIndex || undefined}
+                  data-kind={entry.kind}
                   onMouseEnter={() => setSlashIndex(index)}
                   onClick={() => {
-                    setDraft(`/${command.name} `)
+                    setDraft(`/${entry.name} `)
                     textRef.current?.focus()
                   }}
                 >
-                  <span className={css.slashName}>/{command.name}</span>
-                  <span className={css.slashDesc}>{command.description}</span>
+                  <span className={css.slashName}>/{entry.name}</span>
+                  <span className={css.slashDesc}>
+                    {entry.kind === 'skill'
+                      ? `${t('composer.skillTag')} · ${entry.description}`
+                      : entry.description}
+                  </span>
                 </button>
               ))}
             </div>

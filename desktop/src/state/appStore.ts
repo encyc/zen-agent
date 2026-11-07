@@ -505,7 +505,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       return
     }
     const message = typeof frame.message === 'string' ? frame.message : null
-    useChatStore.getState().pushCommand(name, argument, message)
+    // A skill turn projects its own card from the streamed message.
+    if (!name.startsWith('skill:')) {
+      useChatStore.getState().pushCommand(name, argument, message)
+    }
     if (frame.appearance === 'dark' || frame.appearance === 'light' || frame.appearance === 'auto') {
       useSettingsStore.getState().setTheme(frame.appearance)
     }

@@ -1286,6 +1286,55 @@ test('composer menus open directly above their own trigger', async ({ page }) =>
   )
 })
 
+test('the composer slash menu offers skills and runs the picked skill', async ({ page }) => {
+  await boot(page, initialState({ running: false }))
+  const input = page.locator('[data-composer-plate] textarea')
+  const options = page.getByRole('option')
+
+  await input.fill('/')
+  await expect(options.filter({ hasText: '/compact' })).toHaveCount(1)
+  await expect(options.filter({ hasText: '/skill:review' })).toHaveCount(1)
+  await expect(options.filter({ hasText: '/skill:tidy' })).toHaveCount(1)
+
+  // Skills match on their own name as well as on the literal `skill:` prefix.
+  await input.fill('/skill:r')
+  await expect(options).toHaveCount(1)
+  await expect(options.first()).toContainText('/skill:review')
+  await expect(options.first()).toContainText('技能 · 按 checklist 审查改动')
+
+  await page.keyboard.press('Enter')
+  await expect(input).toHaveValue('/skill:review ')
+  await expect(options).toHaveCount(0)
+
+  await page.keyboard.press('Enter')
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__ZEN_E2E__.calls.some(
+          (call) =>
+            call.type === 'command' && call.name === 'skill:review' && call.argument === '',
+        ),
+      ),
+    )
+    .toBe(true)
+
+  // The turn's injected prompt projects as a skill card, not raw SKILL.md text.
+  await emitEvent(page, {
+    type: 'message_start',
+    message: {
+      role: 'user',
+      text: 'review',
+      skill: true,
+      skill_args: 'src/app.ts',
+      skill_body: '# Review\ncheck the diff',
+    },
+  })
+  const card = page.locator('[data-skill-card="review"]')
+  await expect(card).toBeVisible()
+  await expect(card).toContainText('src/app.ts')
+  await expect(card).toContainText('check the diff')
+})
+
 test('the reasoning level rides on the model chip instead of its own control', async ({ page }) => {
   await boot(page, initialState({ thinking: 'high' }))
   const model = page.locator('[data-menu-trigger="model"]')

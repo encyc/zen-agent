@@ -31,6 +31,11 @@ from pathlib import Path
 
 from zenagent import settings
 from zenagent.agent import Agent
+from zenagent.app.skill_commands import (
+    SKILL_COMMAND_PREFIX,
+    build_skill_submission,
+    parse_skill_display,
+)
 from zenagent.app.views import usage_total
 from zenagent.app.workspace import list_directory, read_file, worktree_overview
 from zenagent.events import AgentEvent
@@ -94,6 +99,17 @@ def _message_projection(message) -> dict:
         role = "user"
     else:
         role = "message"
+    if role == "user":
+        # An injected /skill: turn is displayed as a chip, not as the raw body.
+        display = parse_skill_display(_message_text(message))
+        if display is not None:
+            return {
+                "role": "user",
+                "text": display.name,
+                "skill": True,
+                "skill_args": display.args,
+                "skill_body": display.body,
+            }
     payload: dict = {"role": role, "text": _message_text(message)[-_PARTIAL_RESULT_CHARS:]}
     stop_reason = getattr(message, "stop_reason", None)
     if stop_reason:
@@ -1477,6 +1493,11 @@ class RpcServer:
         if not isinstance(name, str) or not name.strip():
             self._send({"type": "error", "id": request_id, "message": "command needs name"})
             return True
+        if name.startswith(SKILL_COMMAND_PREFIX):
+            await self._skill_command(
+                name, str(request.get("argument") or ""), request_id
+            )
+            return True
         if self.commands is None:
             self._send(
                 {"type": "error", "id": request_id, "message": "commands need a runtime"}
@@ -1523,6 +1544,47 @@ class RpcServer:
             self._closed = True
             return False
         return True
+
+    async def _skill_command(self, name: str, argument: str, request_id) -> None:
+        """Inject ``/skill:<name>`` as the next user turn, like the TUI does."""
+        if self.runtime is None or self.chat is None:
+            self._send(
+                {"type": "error", "id": request_id, "message": "skills need a runtime"}
+            )
+            return
+        templates = {template.name for template in (self.runtime.templates or [])}
+        extensions = set(self.runtime.extension_commands or {})
+        resolution = build_skill_submission(
+            f"/{name} {argument}".strip(),
+            list(self.runtime.skills or []),
+            reserved_names={*templates, *extensions},
+        )
+        if resolution is None:
+            self._send(
+                {"type": "error", "id": request_id, "message": f"unknown command: {name}"}
+            )
+            return
+        if resolution.error is not None:
+            self._send(
+                {"type": "error", "id": request_id, "message": resolution.error}
+            )
+            return
+        submission = resolution.submission
+        if submission is None:
+            self._send(
+                {"type": "error", "id": request_id, "message": f"unknown command: {name}"}
+            )
+            return
+        await self.chat.submit(submission.prompt)
+        self._send(
+            {
+                "type": "result",
+                "id": request_id,
+                "ok": True,
+                "command": name,
+                "message": None,
+            }
+        )
 
     async def _shutdown(self) -> None:
         # A client that disconnects mid-approval will never answer: deny the

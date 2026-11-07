@@ -277,13 +277,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
       case 'message_start': {
         const role = event.message?.role
         if (role === 'user') {
-          nodes.push({
-            kind: 'user',
-            id: nid(),
-            text: event.message?.text ?? '',
-            steering: event.message?.steering === true,
-            timestamp: 0,
-          })
+          if (event.message?.skill === true) {
+            nodes.push({
+              kind: 'skill',
+              id: nid(),
+              name: event.message.text,
+              args: event.message.skill_args ?? null,
+              body: event.message.skill_body ?? null,
+            })
+          } else {
+            nodes.push({
+              kind: 'user',
+              id: nid(),
+              text: event.message?.text ?? '',
+              steering: event.message?.steering === true,
+              timestamp: 0,
+            })
+          }
           changed = true
         } else if (role === 'assistant') {
           const node = newAssistantNode()

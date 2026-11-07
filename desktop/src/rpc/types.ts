@@ -512,6 +512,10 @@ export interface MessageProjection {
   tool_name?: string
   is_error?: boolean
   steering?: boolean
+  /** Set when the user turn is an injected `/skill:<name>` invocation. */
+  skill?: boolean
+  skill_args?: string
+  skill_body?: string
 }
 
 export interface AgentEventFrame {

@@ -1211,3 +1211,79 @@ async def test_git_worktrees_reports_a_non_repository(runtime_factory, tmp_path,
     worktree = decode(writes)[0]["worktree"]
     assert worktree["is_repo"] is False
     assert worktree["worktrees"] == []
+
+
+async def test_command_request_injects_a_skill_body(runtime_factory, tmp_path):
+    """`/skill:<name>` renders the SKILL.md payload into the user turn."""
+    from zenagent.skills import Skill
+
+    runtime, server, writes, queue = await build(runtime_factory)
+    runtime.skills = [
+        Skill(
+            name="review",
+            description="review a diff",
+            path=tmp_path / "review" / "SKILL.md",
+            body="# Review\nCheck the diff carefully.",
+        )
+    ]
+    await run_lines(
+        server,
+        queue,
+        [
+            {
+                "type": "command",
+                "id": "s1",
+                "name": "skill:review",
+                "argument": "src/app.py",
+            }
+        ],
+    )
+    await server.chat.wait_for_idle()
+    payload = decode(writes)[0]
+    assert payload["ok"] is True
+    assert payload["command"] == "skill:review"
+    user = runtime.agent.messages[0]
+    assert isinstance(user, UserMessage)
+    content = user.content
+    text = content if isinstance(content, str) else "".join(
+        item if isinstance(item, str) else item.text for item in content
+    )
+    assert text.startswith("[skill:review] src/app.py")
+    assert "Check the diff carefully." in text
+    assert "[Skill directory:" in text
+
+
+async def test_command_request_reports_an_unknown_skill(runtime_factory):
+    _runtime, server, writes, queue = await build(runtime_factory)
+    await run_lines(
+        server,
+        queue,
+        [{"type": "command", "id": "s1", "name": "skill:missing"}],
+    )
+    payload = decode(writes)[0]
+    assert payload["type"] == "error"
+    assert "missing" in payload["message"]
+
+
+def test_serialize_event_marks_a_skill_turn():
+    from zenagent.app.skill_commands import render_skill_prompt
+    from zenagent.skills import Skill
+
+    skill = Skill(
+        name="review",
+        description="review a diff",
+        path=Path("/skills/review/SKILL.md"),
+        body="# Review\nCheck the diff carefully.",
+    )
+    prompt = render_skill_prompt(skill, skill.body, "src/app.py")
+    user = UserMessage(
+        content=[TextContent(text=prompt)],
+        timestamp=1,
+    )
+    payload = serialize_event(AgentEvent(type="message_start", message=user))
+    message = payload["message"]
+    assert message["role"] == "user"
+    assert message["skill"] is True
+    assert message["text"] == "review"
+    assert message["skill_args"] == "src/app.py"
+    assert "Check the diff carefully." in message["skill_body"]

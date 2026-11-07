@@ -41,7 +41,7 @@ export function SkillMessage({
 }) {
   return (
     <div className={css.userRow}>
-      <div className={css.skillCard} data-selectable>
+      <div className={css.skillCard} data-selectable data-skill-card={name}>
         <div className={css.skillHead}>
           <span className={css.skillName}>{name}</span>
           {args !== null && args !== '' && (
