@@ -225,32 +225,50 @@ fn resolve_bin(bin: &str) -> String {
 /// Collect the user's login-shell environment (dsh desktop does the same):
 /// a GUI app inherits launchd's minimal env, so API keys and PATH entries the
 /// user configures in their shell profile would be invisible to `zen rpc`.
-/// Best-effort: on any failure return an empty map and spawn as-is.
-fn login_shell_env() -> HashMap<String, String> {
+/// Best-effort: on any failure or timeout return an empty map and spawn
+/// as-is. A timed-out harvest leaks its worker thread until the child exits
+/// on its own — bounded by the child's lifetime, never by the UI thread.
+fn login_shell_env_with(
+    mut command: Command,
+    timeout: Duration,
+) -> (HashMap<String, String>, bool) {
+    let (tx, rx) = std::sync::mpsc::channel();
+    thread::spawn(move || {
+        let stdout = command
+            .output()
+            .ok()
+            .filter(|output| output.status.success())
+            .map(|output| output.stdout);
+        let _ = tx.send(stdout);
+    });
+    let mut map = HashMap::new();
+    match rx.recv_timeout(timeout) {
+        Ok(Some(stdout)) => {
+            for entry in stdout.split(|byte| *byte == 0) {
+                let text = String::from_utf8_lossy(entry);
+                if let Some((key, value)) = text.split_once('=') {
+                    if !key.is_empty() && key != "_" && key != "PWD" {
+                        map.insert(key.to_string(), value.to_string());
+                    }
+                }
+            }
+            (map, false)
+        }
+        Ok(None) => (map, false),
+        Err(_) => (map, true),
+    }
+}
+
+fn login_shell_env() -> (HashMap<String, String>, bool) {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
-    let output = Command::new(&shell)
+    let mut command = Command::new(&shell);
+    command
         .arg("-l")
         .arg("-i")
         .arg("-c")
         .arg("/usr/bin/env -0")
-        .stderr(Stdio::null())
-        .output();
-    let mut map = HashMap::new();
-    let Ok(output) = output else {
-        return map;
-    };
-    if !output.status.success() {
-        return map;
-    }
-    for entry in output.stdout.split(|byte| *byte == 0) {
-        let text = String::from_utf8_lossy(entry);
-        if let Some((key, value)) = text.split_once('=') {
-            if !key.is_empty() && key != "_" && key != "PWD" {
-                map.insert(key.to_string(), value.to_string());
-            }
-        }
-    }
-    map
+        .stderr(Stdio::null());
+    login_shell_env_with(command, Duration::from_secs(3))
 }
 
 /// Classify a spawn failure. A bundled runtime that is present but will not
@@ -285,13 +303,20 @@ pub fn rpc_start(
     }
 
     let bin = resolve_bin(options.bin.as_deref().unwrap_or("zen"));
+    let (shell_env, shell_env_timed_out) = login_shell_env();
+    if shell_env_timed_out {
+        let _ = app.emit(
+            "rpc:stderr",
+            serde_json::json!({ "line": "[zen] login-shell env harvest timed out; spawning without shell profile env" }),
+        );
+    }
     let mut command = Command::new(&bin);
     command.arg("rpc").args(&options.args);
     if let Some(cwd) = &options.cwd {
         command.arg("--cwd").arg(cwd).current_dir(cwd);
     }
     command
-        .envs(login_shell_env())
+        .envs(shell_env)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -621,5 +646,33 @@ mod runtime_tests {
             runtime_problem(std::io::ErrorKind::Other, Some(24), false),
             "spawn_failed"
         );
+    }
+}
+
+#[cfg(test)]
+mod env_tests {
+    use super::*;
+
+    #[test]
+    fn login_env_fast_shell_returns_map() {
+        let mut command = Command::new("/bin/sh");
+        command
+            .arg("-l")
+            .arg("-i")
+            .arg("-c")
+            .arg("/usr/bin/env -0")
+            .stderr(Stdio::null());
+        let (map, timed_out) = login_shell_env_with(command, Duration::from_secs(10));
+        assert!(!timed_out);
+        assert!(!map.is_empty());
+    }
+
+    #[test]
+    fn login_env_slow_shell_times_out_to_empty() {
+        let mut command = Command::new("/bin/sleep");
+        command.arg("5");
+        let (map, timed_out) = login_shell_env_with(command, Duration::from_millis(200));
+        assert!(timed_out);
+        assert!(map.is_empty());
     }
 }
