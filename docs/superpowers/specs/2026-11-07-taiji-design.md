@@ -108,7 +108,8 @@ taiji 层内含：Router Runtime（进程内组合持有）、Worker 注册表�
 
 - **P0 只读 panel**：Python 侧新增**只读 RPC ops**（commit-graph 快照 + 跨 worktree session 归集），desktop 只做渲染。"零新运行时" = 不引入 taiji 编排层，不等于 desktop 自己长 git 子系统（那违反 client-not-rewrite）。P2 切 taiji ops 时这批只读 ops 退役或由 taiji 提供同形状数据。先验证 §4.3 绑定模型。可与 P1 并行。
 - **P1 最小闭环**：`app/taiji/` 编排层 + Router 工具集（spawn/message/merge/kill）+ worker rpc 子进程 + 事件注入；zen 模式跑通全自动环。
-- **P2 模式对照 + 协议**：ask/plan 的验收卡片与人审事件汇聚；RPC taiji ops 命名空间；panel 从直连数据源切换到 taiji ops。
+- **P2 模式对照 + 协议**：ask/plan 的验收卡片与人审事件汇聚；RPC taiji ops 命名空间；panel 从直连数据源切换到 taiji ops。纳入 DSH 原型可借鉴项（见附录 B）：**结构化 Attention**（worker 等人用结构化字段而非文本，panel 动作的地基）、**zen 自动合并的 diff 规模阈值**（超限降级为验收卡片）、**worker 并发槽 + 人优先**（人的唤醒走保留槽位）、**Ticket 状态与执行器状态分离**（重构 WorkerRecord：任务态独立于子进程态，可交接/恢复）。
+- **P2 遗留的技术债**（本阶段已知、刻意搁置）：worker 子进程目前恒为 `--yes`，ask 模式的工具审批上浮通道（转问卡片）属 P2；Router/Worker 模型路由未接（§9）；合并仍为 porcelain（冲突即 abort 已保底，plumbing 式为改进项）；taiji.jsonl 为宿主启动时急初始化（D2 的懒初始化语义在 P2 对齐）。
 - **P3 TUI 太极视图**。
 
 ## 8. 留给 builder 的决定
@@ -154,3 +155,19 @@ taiji 层内含：Router Runtime（进程内组合持有）、Worker 注册表�
 | 开放问题 §8.2 | 脱离 Session 后的人机协作界面在哪 | taiji session 单例 + git 图 panel 即该问题的一个具体答案 | 定位本身 |
 
 两处文章实验数据支持本文决定：消融实验（单 Session+提示词委派不稳定）佐证 §6 否掉路线 C；去直通后 Router 决定数 +30%/token +37% 佐证 §4.1/§4.2 的确定性门禁。
+
+
+## 附录 B：与 dsh-superagent-prototype 的对照
+
+DeepSeek 开源的配套原型（MIT，92 个 TS 文件，DeepSeek Harness 插件形态：GitHub + 可选飞书 → Source/Trigger/Thread/Eval/Ticket 域模型 → Executor Session 交付 PR）。同一哲学在不同基建假设下的分叉：它面向团队持续在线，taiji 面向本机 solo 并行；它零 git 可视化，我们以 git 图为任务图本体。
+
+已纳入 P2 的借鉴项：
+
+| DSH 概念 | 要点 | taiji 落法 |
+|---|---|---|
+| Attention（待人工决定） | 拒绝从报告自由文本推断"等人工"，必须结构化字段 | worker 的提问/验收等待升级为结构化 Attention，panel 动作（应答/合并/返工）直接挂在上面 |
+| 交付政策 | auto-merge 有明确阈值（本 Ticket 的 PR、ready、审批覆盖、diff < 200 行），推新修订前先撤回 | zen 自动合并加 diff 规模前置条件（默认 200 行，超出降级验收卡片）；返工后重新验收 |
+| worker 槽位 | 并发满时人的唤醒走保留槽——"新工作不能阻止人继续旧工作" | worker 并发上限实现时带上人优先保留槽 |
+| Ticket/Assignment 分离 | 工单自定义状态（open/ended/resumed），可交接、可由多个执行器先后执行 | WorkerRecord 拆分：任务态独立于子进程态 |
+
+已了解、暂不采纳（及理由）：Source/Trigger/Policy/Mandate 全套事件接入（solo 本地无外部信道，接入之日即是引入之时）；PR 交付流（本地直接合并更贴合 solo）；prompt 层 auto-merge 政策（我们是确定性门禁，更严格）；panel 的多 tab 域结构（我们的单图 + chip 已经覆盖三问）。
