@@ -19,11 +19,18 @@ EVENT_CALLBACK = Callable[[dict], None]
 LINE_CALLBACK = Callable[[str], Awaitable[None]]
 
 
-def worker_command(cwd: Path) -> list[str]:
-    """How to spawn a worker: the installed ``zen``, else this interpreter."""
+def worker_command(cwd: Path, *, model: str | None = None) -> list[str]:
+    """How to spawn a worker: the installed ``zen``, else this interpreter.
+
+    ``model`` routes the worker to a strong model while the Router session
+    stays light (spec §9); ``None`` inherits the provider default.
+    """
     zen = shutil.which("zen")
     head = [zen] if zen else [sys.executable, "-m", "zenagent"]
-    return [*head, "rpc", "--cwd", str(cwd), "--yes"]
+    command = [*head, "rpc", "--cwd", str(cwd), "--yes"]
+    if model:
+        command += ["--model", model]
+    return command
 
 
 class WorkerTransport(Protocol):
@@ -37,7 +44,7 @@ class WorkerTransport(Protocol):
 class SubprocessTransport:
     """One ``zen rpc`` child process, line-pumped over stdio."""
 
-    def __init__(self, command: list[str], cwd: Path) -> None:
+    def __init__(self, command: list[str], cwd: Path) -> None:  # noqa: D107
         self._command = command
         self._cwd = cwd
         self._process: asyncio.subprocess.Process | None = None

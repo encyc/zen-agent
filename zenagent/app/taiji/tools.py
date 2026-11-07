@@ -208,11 +208,14 @@ def runtime_taiji_provider(runtime: Any) -> SUPERVISOR_PROVIDER:
         from zenagent.app.taiji.supervisor import get_taiji
 
         root = project.find_project_root(Path.cwd())
+        import os
+
+        worker_model = os.environ.get("ZENAGENT_WORKER_MODEL") or None
         return get_taiji(
             repo_root=root,
             sessions_dir=project.project_sessions_dir(root=root),
             registry_path=project.project_dir(root=root) / "taiji.json",
-            runner=RpcRunner(),
+            runner=RpcRunner(worker_model=worker_model),
             chat=getattr(runtime, "taiji_chat", None),
             mode_of=lambda: runtime.mode,
         )

@@ -96,10 +96,12 @@ class RpcRunner:
         timeout_s: float = 1800.0,
         client_factory: Callable[[], Any] | None = None,
         attention_grace_s: float = 2.0,
+        worker_model: str | None = None,
     ) -> None:
         self._timeout_s = timeout_s
         self._client_factory = client_factory
         self._attention_grace_s = attention_grace_s
+        self._worker_model = worker_model
 
     async def run_turn(
         self, worktree: str, session_path: str | None, prompt: str

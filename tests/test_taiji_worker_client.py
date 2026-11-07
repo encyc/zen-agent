@@ -203,3 +203,10 @@ async def test_stop_fails_a_pending_prompt_instead_of_hanging() -> None:
     except (RuntimeError, TimeoutError):
         raised = True
     assert raised is True
+
+
+def test_worker_command_carries_the_model_flag() -> None:
+    assert "--model" not in worker_command(Path("/wt"))
+
+    command = worker_command(Path("/wt"), model="glm-5.3")
+    assert command[-2:] == ["--model", "glm-5.3"]

@@ -42,6 +42,7 @@ from zenagent.app.taiji import (
     ensure_taiji_session,
     own_taiji_lock,
     release_taiji_lock,
+    should_init_taiji,
 )
 from zenagent.app.taiji.snapshot import commit_graph, session_map
 from zenagent.app.views import usage_total
@@ -1888,7 +1889,8 @@ async def _run(args) -> int:
     runtime.ask_handler = server.ask
     runtime.taiji_chat = chat
     taiji_project_dir = project_dir(Path.cwd())
-    ensure_taiji_session(project_sessions_dir(Path.cwd()))
+    if should_init_taiji(Path.cwd()):
+        ensure_taiji_session(project_sessions_dir(Path.cwd()))
     taiji_owned = own_taiji_lock(taiji_project_dir)
     if not taiji_owned:
         runtime._note("taiji: 另一个宿主已持有本项目的太极锁")

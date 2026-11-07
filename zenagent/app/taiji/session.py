@@ -65,6 +65,18 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
+def should_init_taiji(cwd: Path) -> bool:
+    """Whether this host may materialize taiji artifacts for its project.
+
+    Only the main checkout hosts taiji; a worker subprocess running in a
+    linked worktree must not create sessions, titles or locks of its own.
+    """
+    from zenagent.app.workspace import worktree_overview
+
+    overview = worktree_overview(cwd)
+    return overview["is_repo"] and not overview["is_worktree"]
+
+
 def _lock_path(project_dir: Path) -> Path:
     return Path(project_dir) / LOCK_FILENAME
 
