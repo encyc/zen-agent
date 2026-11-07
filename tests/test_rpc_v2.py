@@ -1271,6 +1271,106 @@ async def test_command_request_injects_a_skill_body(runtime_factory, tmp_path):
     assert "[Skill directory:" in text
 
 
+async def test_memory_requests_manage_the_project_library(
+    runtime_factory, tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    runtime, server, writes, queue = await build(runtime_factory)
+
+    await run_lines(
+        server,
+        queue,
+        [
+            {"type": "memory", "id": "l0", "op": "list"},
+            {
+                "type": "memory",
+                "id": "c",
+                "op": "create",
+                "title": "Build notes",
+                "body": "Use uv and ruff.",
+            },
+        ],
+    )
+    results = {message["id"]: message for message in decode(writes)}
+    assert results["l0"]["entries"] == []
+    created = results["c"]["entry"]
+    assert len(created["id"]) == 4
+    assert created["title"] == "Build notes"
+    assert created["source"] == "ui"
+
+    writes.clear()
+    await run_lines(
+        server,
+        queue,
+        [
+            {"type": "memory", "id": "l1", "op": "list"},
+            {
+                "type": "memory",
+                "id": "u",
+                "op": "update",
+                "entry_id": created["id"],
+                "title": "Build notes v2",
+                "body": "Use uv, ruff and pytest.",
+            },
+        ],
+    )
+    results = {message["id"]: message for message in decode(writes)}
+    assert len(results["l1"]["entries"]) == 1
+    updated = results["u"]["entry"]
+    assert updated["title"] == "Build notes v2"
+    assert updated["body"] == "Use uv, ruff and pytest."
+    assert updated["source"] == "ui"
+
+    writes.clear()
+    await run_lines(
+        server,
+        queue,
+        [
+            {"type": "memory", "id": "d", "op": "delete", "entry_id": created["id"]},
+            {"type": "memory", "id": "d2", "op": "delete", "entry_id": created["id"]},
+        ],
+    )
+    results = {message["id"]: message for message in decode(writes)}
+    assert results["d"]["deleted"] is True
+    assert results["d2"]["deleted"] is False
+    assert runtime.memory_store.list_entries() == []
+    assert [event["op"] for event in runtime.memory_store.read_journal()] == [
+        "add",
+        "update",
+        "delete",
+    ]
+
+
+async def test_memory_requests_reject_unknown_entries_and_ops(
+    runtime_factory, tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    _runtime, server, writes, queue = await build(runtime_factory)
+    await run_lines(
+        server,
+        queue,
+        [
+            {
+                "type": "memory",
+                "id": "u",
+                "op": "update",
+                "entry_id": "ffff",
+                "title": "missing",
+                "body": "",
+            },
+            {"type": "memory", "id": "o", "op": "rewrite"},
+            {"type": "memory", "id": "t", "op": "create", "title": 7, "body": ""},
+        ],
+    )
+    results = {message["id"]: message for message in decode(writes)}
+    assert results["u"]["type"] == "error"
+    assert "not found" in results["u"]["message"]
+    assert results["o"]["type"] == "error"
+    assert "unknown memory op" in results["o"]["message"]
+    assert results["t"]["type"] == "error"
+    assert "memory create needs title and body" == results["t"]["message"]
+
+
 async def test_command_request_reports_an_unknown_skill(runtime_factory):
     _runtime, server, writes, queue = await build(runtime_factory)
     await run_lines(

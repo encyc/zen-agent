@@ -8,7 +8,7 @@ Protocol v2 (v1 messages keep their shape):
     requests  prompt, cancel, status, shutdown, steer, tools, model, mode,
               usage, approval, ask, session, command, transcript,
               subagent_transcript, models, commands, fs_list, fs_read,
-              git_worktrees, secrets, skills, mcp, project
+              memory, git_worktrees, secrets, skills, mcp, project
     responses {"type":"result"|"error", "id": ..., ...}
     events    {"type":"event","event":{...}} plus ``approval_request`` and
               ``ask_request`` events
@@ -31,6 +31,7 @@ from pathlib import Path
 
 from zenagent import settings
 from zenagent.agent import Agent
+from zenagent.agent.memory_store import MemoryStore
 from zenagent.app.skill_commands import (
     SKILL_COMMAND_PREFIX,
     build_skill_submission,
@@ -46,6 +47,7 @@ from zenagent.app.workspace import (
 from zenagent.events import AgentEvent
 from zenagent.mcp.config import load_mcp_layers, remove_mcp_server, save_mcp_server
 from zenagent.project import (
+    find_project_root,
     project_key,
     project_key_for_session,
     relocate_project,
@@ -601,6 +603,9 @@ class RpcServer:
         if kind == "fs_index":
             await self._fs_index(request_id)
             return True
+        if kind == "memory":
+            self._memory_request(request, request_id)
+            return True
         if kind == "git_worktrees":
             self._send(
                 {
@@ -657,6 +662,97 @@ class RpcServer:
             self._send({"type": "error", "id": request_id, "message": str(exc)})
             return
         self._send({"type": "result", "id": request_id, "ok": True, **payload})
+
+    def _memory_request(self, request: dict, request_id) -> bool:
+        """Project memory CRUD for the desktop panel, journaled like the TUI."""
+        store = (
+            self.runtime.memory_store
+            if self.runtime is not None
+            else MemoryStore(find_project_root(Path.cwd()))
+        )
+        op = request.get("op")
+        if op == "list":
+            self._send(
+                {
+                    "type": "result",
+                    "id": request_id,
+                    "ok": True,
+                    "entries": [asdict(entry) for entry in store.list_entries()],
+                }
+            )
+            return True
+        if op == "create":
+            title = request.get("title")
+            body = request.get("body")
+            if not isinstance(title, str) or not isinstance(body, str):
+                self._send(
+                    {
+                        "type": "error",
+                        "id": request_id,
+                        "message": "memory create needs title and body",
+                    }
+                )
+                return True
+            entry = store.write_entry(
+                title=title, body=body, source="ui", reason="ui add"
+            )
+            self._send(
+                {"type": "result", "id": request_id, "ok": True, "entry": asdict(entry)}
+            )
+            return True
+        if op == "update":
+            entry_id = request.get("entry_id")
+            title = request.get("title")
+            body = request.get("body")
+            if (
+                not isinstance(entry_id, str)
+                or not isinstance(title, str)
+                or not isinstance(body, str)
+            ):
+                self._send(
+                    {
+                        "type": "error",
+                        "id": request_id,
+                        "message": "memory update needs entry_id, title and body",
+                    }
+                )
+                return True
+            entry = store.update_entry(
+                entry_id, title=title, body=body, reason="ui edit"
+            )
+            if entry is None:
+                self._send(
+                    {
+                        "type": "error",
+                        "id": request_id,
+                        "message": f"memory entry not found: {entry_id}",
+                    }
+                )
+                return True
+            self._send(
+                {"type": "result", "id": request_id, "ok": True, "entry": asdict(entry)}
+            )
+            return True
+        if op == "delete":
+            entry_id = request.get("entry_id")
+            if not isinstance(entry_id, str):
+                self._send(
+                    {"type": "error", "id": request_id, "message": "memory delete needs entry_id"}
+                )
+                return True
+            deleted = store.delete_entry(entry_id, reason="ui delete")
+            self._send(
+                {"type": "result", "id": request_id, "ok": True, "deleted": deleted}
+            )
+            return True
+        self._send(
+            {
+                "type": "error",
+                "id": request_id,
+                "message": f"unknown memory op: {op}",
+            }
+        )
+        return True
 
     def _status_result(self, request_id) -> dict:
         payload = {

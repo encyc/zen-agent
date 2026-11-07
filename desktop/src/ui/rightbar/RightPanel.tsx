@@ -17,9 +17,11 @@ import {
   FileIcon,
   FolderIcon,
   PlusIcon,
+  SparkIcon,
   XIcon,
 } from '../icons'
 import { FilesPanel } from './FilesPanel'
+import { MemoryPanel } from './MemoryPanel'
 import { ReviewPanel } from './ReviewPanel'
 import { SubagentTranscript } from './SubagentTranscript'
 import { WorktreePanel } from './WorktreePanel'
@@ -42,6 +44,7 @@ const TOOL_TABS = [
   { kind: 'review', label: 'panel.review', Icon: FileIcon },
   { kind: 'files', label: 'panel.files', Icon: FolderIcon },
   { kind: 'worktree', label: 'panel.worktree', Icon: BranchIcon },
+  { kind: 'memory', label: 'panel.memory', Icon: SparkIcon },
 ] as const
 
 function clampPanel(px: number): number {
@@ -251,6 +254,8 @@ export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
           <SubagentTranscript
             target={{ callId: activeTab.callId ?? '', name: activeTab.name ?? '' }}
           />
+        ) : activeTab?.kind === 'memory' ? (
+          <MemoryPanel />
         ) : activeTab?.kind === 'files' ? (
           <FilesPanel />
         ) : activeTab?.kind === 'worktree' ? (

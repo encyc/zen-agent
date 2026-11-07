@@ -3,13 +3,13 @@
     "zenagent/app/runtime.py": 908,
     "zenagent/app/commands.py": 866,
     "zenagent/cli/repl.py": 1023,
-    "zenagent/cli/rpc.py": 1773,
+    "zenagent/cli/rpc.py": 1869,
     "zenagent/cli/tui/screens/modals.py": 1042
   },
   "ts": {
     "desktop/src/ui/Sidebar.tsx": 854,
-    "desktop/src/state/appStore.ts": 808,
-    "desktop/src/i18n/locale.ts": 806,
-    "desktop/e2e/app.spec.ts": 2453
+    "desktop/src/state/appStore.ts": 812,
+    "desktop/src/i18n/locale.ts": 858,
+    "desktop/e2e/app.spec.ts": 2611
   }
 }

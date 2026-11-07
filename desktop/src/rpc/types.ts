@@ -45,6 +45,7 @@ export const REQUEST_KINDS = [
   'git_worktrees',
   'hello',
   'mcp',
+  'memory',
   'mode',
   'model',
   'models',
@@ -453,6 +454,36 @@ export interface FsIndexResult {
   ok: true
   entries: FsIndexEntry[]
   truncated: boolean
+}
+
+export interface MemoryEntry {
+  id: string
+  title: string
+  body: string
+  created: string
+  updated: string
+  source: string
+}
+
+export interface MemoryListResult {
+  type: 'result'
+  id: string
+  ok: true
+  entries: MemoryEntry[]
+}
+
+export interface MemoryEntryResult {
+  type: 'result'
+  id: string
+  ok: true
+  entry: MemoryEntry
+}
+
+export interface MemoryDeleteResult {
+  type: 'result'
+  id: string
+  ok: true
+  deleted: boolean
 }
 
 export interface WorktreeEntry {

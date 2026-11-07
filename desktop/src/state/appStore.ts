@@ -29,6 +29,7 @@ import {
   useSettingsStore,
   useSkillsStore,
   useStatusStore,
+  useWorkPanelStore,
 } from './stores'
 import { useChatStore } from './chatStore'
 import { nextDraft } from './pending'
@@ -505,8 +506,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       return
     }
     const message = typeof frame.message === 'string' ? frame.message : null
+    if (frame.screen === 'memory-manager') {
+      useWorkPanelStore.getState().showTab('memory')
+    }
     // A skill turn projects its own card from the streamed message.
-    if (!name.startsWith('skill:')) {
+    if (!name.startsWith('skill:') && frame.screen !== 'memory-manager') {
       useChatStore.getState().pushCommand(name, argument, message)
     }
     if (frame.appearance === 'dark' || frame.appearance === 'light' || frame.appearance === 'auto') {
