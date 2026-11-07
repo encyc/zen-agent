@@ -328,7 +328,7 @@ ok "zen --version / --help"
 from zenagent.cli.doctor import run_doctor  # noqa: F401
 from zenagent.cli.repl import repl  # noqa: F401
 from zenagent.cli.rpc import main as rpc_main  # noqa: F401
-from zenagent.cli.tui import ZenAgentApp, run_tui  # noqa: F401
+from zenagent.cli.tui import ZenAgentApp, run_tui_session  # noqa: F401
 
 print(f"  ok    frontends import: tui app={ZenAgentApp.__name__}, repl, rpc, doctor")
 PY
