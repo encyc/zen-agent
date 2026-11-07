@@ -6,15 +6,14 @@ import { useCallback, useEffect, useState } from 'react'
 import { useAppStore } from '../../state/appStore'
 import { useStatusStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
-import type { TaijiGraph, TaijiProjectSession, TaijiResult, TaijiSessionMap } from '../../rpc/types'
-import { attachSessions, laneColor, relativeTime, statusMeta } from './taijiGraph'
+import type { TaijiGraph, TaijiResult, TaijiSessionMap } from '../../rpc/types'
+import { attachSessions, laneColor, pickChips, relativeTime, statusMeta, type RowSession } from './taijiGraph'
 import { BranchIcon, RefreshIcon } from '../icons'
 import css from './TaijiPanel.module.css'
 
 const REQUEST_TIMEOUT_MS = 8000
 const LANE_W = 11
 const ROW_H = 40
-const DAY_S = 86400
 
 interface EdgeSpan {
   fromLane: number
@@ -85,14 +84,15 @@ function RailCell(props: {
   )
 }
 
-function SessionChip(props: { session: TaijiProjectSession; here: boolean }) {
-  const { session, here } = props
+function SessionChip(props: { session: RowSession; overflow?: number }) {
+  const { session, overflow } = props
   const t = useT()
   const meta = statusMeta(session.status)
   const tone = meta?.tone ?? 'plain'
-  const label = meta ? t(meta.key) : here ? t('panel.taiji.here') : session.title
+  const label = overflow !== undefined ? `+${overflow}` : meta ? t(meta.key) : session.here ? t('panel.taiji.here') : session.title
+  const title = overflow !== undefined ? t('panel.taiji.overflow', { count: overflow }) : session.title
   return (
-    <span className={css.chip} data-tone={tone} data-here={here || undefined} title={session.title}>
+    <span className={css.chip} data-tone={tone} data-here={session.here || undefined} title={title}>
       <i className={meta?.pulse ? css.pulseDot : css.dot} aria-hidden="true" />
       {label}
     </span>
@@ -178,9 +178,7 @@ export function TaijiPanel() {
       </div>
       <ul className={css.list}>
         {rows.map((row, index) => {
-          const visible = row.sessions.filter(
-            (session) => session.status !== undefined || row.isHere || now - session.updated_at < DAY_S,
-          )
+          const { chips, overflow } = pickChips(row.sessions, 3)
           return (
             <li key={row.commit.sha} className={css.row}>
               <RailCell
@@ -197,7 +195,7 @@ export function TaijiPanel() {
                   </span>
                   <span className={css.time}>{relativeTime(row.commit.ts, now)}</span>
                 </div>
-                {(row.branch !== undefined || visible.length > 0) && (
+                {(row.branch !== undefined || chips.length > 0) && (
                   <div className={css.metaRow}>
                     {row.branch && (
                       <span className={css.ref} title={row.branch.name}>
@@ -205,9 +203,10 @@ export function TaijiPanel() {
                         {row.branch.name}
                       </span>
                     )}
-                    {visible.map((session) => (
-                      <SessionChip key={session.name} session={session} here={row.isHere} />
+                    {chips.map((session) => (
+                      <SessionChip key={session.name} session={session} />
                     ))}
+                    {overflow > 0 && <SessionChip key="overflow" session={chips[0]!} overflow={overflow} />}
                   </div>
                 )}
               </div>

@@ -5,6 +5,7 @@ import {
   attachSessions,
   graphEdges,
   laneColor,
+  pickChips,
   relativeTime,
   statusMeta,
 } from '../src/ui/rightbar/taijiGraph.ts'
@@ -156,4 +157,68 @@ test('relativeTime renders compact, locale-neutral spans', () => {
   assert.equal(relativeTime(now - 2 * 86400, now), '2d')
   assert.equal(relativeTime(now - 40 * 86400, now), '40d')
   assert.equal(relativeTime(undefined, now), '')
+})
+
+test('attachSessions marks the one current session, not the whole row', () => {
+  const graph: TaijiGraph = {
+    root: '/p',
+    is_repo: true,
+    commits: [commit('m', [], 0)],
+    branches: [{ name: 'main', sha: 'm', is_head: true }],
+    max_lane: 0,
+  }
+  const sessions: TaijiSessionMap = {
+    repo_root: '/p',
+    projects: [
+      {
+        key: 'k1',
+        root: '/p',
+        branch: 'main',
+        worktree: false,
+        sessions: [
+          { name: 'current', title: 'Current one', updated_at: 9, messages: 1 },
+          { name: 'past', title: 'Past work', updated_at: 8, messages: 1 },
+        ],
+      },
+    ],
+  }
+
+  const rows = attachSessions(graph, sessions, '/home/u/projects/k1/sessions/current.jsonl')
+
+  const byName = new Map(rows[0]!.sessions.map((s) => [s.name, s]))
+  assert.equal(byName.get('current')!.here, true)
+  assert.equal(byName.get('past')!.here, false)
+  assert.equal(rows[0]!.isHere, true)
+})
+
+test('pickChips puts the current session first, workers next, caps and overflows', () => {
+  const mk = (name: string, updated: number, status?: string) => ({
+    name,
+    title: name,
+    updated_at: updated,
+    messages: 1,
+    ...(status ? { status } : {}),
+  })
+  const sessions = [
+    { ...mk('old-plain', 1), here: false },
+    { ...mk('waiting', 5, 'ok'), here: false },
+    { ...mk('current', 9), here: true },
+    { ...mk('running', 7, 'running'), here: false },
+    { ...mk('broken', 6, 'error'), here: false },
+  ]
+
+  const picked = pickChips(sessions, 3)
+
+  assert.deepEqual(picked.chips.map((s) => s.name), ['current', 'running', 'waiting'])
+  assert.equal(picked.overflow, 1)
+})
+
+test('pickChips keeps plain sessions only when nothing better exists', () => {
+  const sessions = [
+    { name: 'current', title: 'C', updated_at: 9, messages: 1, here: true },
+    { name: 'plain', title: 'P', updated_at: 8, messages: 1, here: false },
+  ]
+  const picked = pickChips(sessions, 3)
+  assert.deepEqual(picked.chips.map((s) => s.name), ['current'])
+  assert.equal(picked.overflow, 0)
 })

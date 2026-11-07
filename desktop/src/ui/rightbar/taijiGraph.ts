@@ -40,11 +40,35 @@ export function graphEdges(commits: TaijiCommit[]): GraphEdge[] {
   return edges
 }
 
+export type RowSession = TaijiProjectSession & { here: boolean }
+
 export interface TaijiRow {
   commit: TaijiCommit
   branch: TaijiBranch | undefined
-  sessions: TaijiProjectSession[]
+  sessions: RowSession[]
   isHere: boolean
+}
+
+const STATUS_RANK: Record<string, number> = { run: 0, wait: 1, error: 2, done: 3, plain: 4 }
+
+/** The chips a row shows: the current session, then workers by status, then
+ * the most recent plain sessions — capped, with the overflow counted. */
+export function pickChips(
+  sessions: RowSession[],
+  cap: number,
+): { chips: RowSession[]; overflow: number } {
+  const ranked = [...sessions].sort((one, two) => {
+    if (one.here !== two.here) return one.here ? -1 : 1
+    const oneRank = STATUS_RANK[statusMeta(one.status)?.tone ?? 'plain']
+    const twoRank = STATUS_RANK[statusMeta(two.status)?.tone ?? 'plain']
+    if (oneRank !== twoRank) return oneRank - twoRank
+    return two.updated_at - one.updated_at
+  })
+  const interesting = ranked.filter(
+    (session) => session.here || session.status !== undefined,
+  )
+  const chips = interesting.slice(0, cap)
+  return { chips, overflow: interesting.length - chips.length }
 }
 
 export function attachSessions(
@@ -65,13 +89,18 @@ export function attachSessions(
     if (project.branch === null || project.sessions.length === 0) continue
     const row = rowByBranch.get(project.branch)
     if (row === undefined) continue
-    row.sessions.push(...project.sessions)
+    row.sessions.push(
+      ...project.sessions.map((session) => ({
+        ...session,
+        here:
+          currentSessionPath !== undefined &&
+          currentSessionPath.endsWith(`/${session.name}.jsonl`),
+      })),
+    )
   }
   for (const row of rows) {
     row.sessions.sort((one, two) => two.updated_at - one.updated_at)
-    row.isHere =
-      currentSessionPath !== undefined &&
-      row.sessions.some((session) => currentSessionPath.endsWith(`/${session.name}.jsonl`))
+    row.isHere = row.sessions.some((session) => session.here)
   }
   return rows
 }

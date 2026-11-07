@@ -544,7 +544,7 @@ const taijiSnapshot = {
 }
 
 test('the taiji tab lists commits, branches and sessions', async ({ page }) => {
-  await boot(page, initialState({ taiji: taijiSnapshot }))
+  await boot(page, initialState({ taiji: taijiSnapshot, statusSession: '/home/u/projects/p-main/sessions/s1.jsonl' }))
   await page.getByRole('button', { name: '打开工作面板' }).click()
   const panel = page.locator('[data-work-panel]')
   await page.getByRole('button', { name: '打开工作面板标签' }).click()
@@ -554,7 +554,7 @@ test('the taiji tab lists commits, branches and sessions', async ({ page }) => {
   await expect(panel).toContainText('fix: login timeout')
   await expect(panel).toContainText('main')
   await expect(panel).toContainText('task/fix')
-  await expect(panel).toContainText('Router talk')
+  await expect(panel).toContainText('你在这里')
   await expect(panel).toContainText('运行中')
   await expect(panel).toContainText('task/fix')
   await page.getByRole('button', { name: '关闭工作面板' }).click()
