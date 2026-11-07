@@ -42,10 +42,17 @@ installed — the app you download is the whole agent. That also means the
 runtime cannot be upgraded on its own: the shell and its sidecar always change
 version together.
 
-The builds are **not signed or notarized** yet:
+The builds are **ad-hoc signed but not notarized** — there is no paid Apple
+Developer ID behind them. The app's own signature is intact (`codesign --verify
+--deep --strict` passes), so macOS accepts the bundle as unmodified; what it
+cannot do is attest where it came from.
 
-- **macOS**: the first launch is blocked by Gatekeeper. Right-click the app →
-  *Open*, or run `xattr -dr com.apple.quarantine /Applications/ZenAgent.app`.
+- **macOS** shows *"Apple could not verify "ZenAgent.app" is free of malware"*
+  on the first launch. Any one of these gets past it:
+  1. **System Settings → Privacy & Security**, scroll to *Security*, and click
+     **Open Anyway** next to ZenAgent (macOS 15 and later moved it here).
+  2. Right-click the app → *Open* → *Open* (works on older releases of macOS).
+  3. `xattr -dr com.apple.quarantine /Applications/ZenAgent.app`, then open it.
 - **Windows**: SmartScreen shows "Windows protected your PC" → *More info* →
   *Run anyway*.
 
