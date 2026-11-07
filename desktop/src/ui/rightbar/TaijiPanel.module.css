@@ -279,3 +279,41 @@
     animation: none;
   }
 }
+
+.attention {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-left: 2px solid var(--dsw-alias-state-warn-primary);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.attentionQ {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--ds-font-11-5);
+}
+
+.replyButton {
+  flex: none;
+  padding: 1px 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--ds-font-11);
+  cursor: pointer;
+}
+
+.replyButton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}

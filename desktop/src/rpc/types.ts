@@ -548,6 +548,8 @@ export interface TaijiProjectSession {
   worker?: string
   status?: string
   branch?: string
+  /** JSON of the worker's pending question, when it asked one. */
+  attention?: string
 }
 
 export interface TaijiProject {

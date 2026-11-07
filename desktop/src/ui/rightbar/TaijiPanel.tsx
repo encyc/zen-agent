@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useAppStore } from '../../state/appStore'
+import { useNoticeStore } from '../../state/stores'
 import { useStatusStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
 import type { TaijiGraph, TaijiResult, TaijiSessionMap } from '../../rpc/types'
@@ -81,6 +82,32 @@ function RailCell(props: {
         <circle cx={x(lane)} cy={mid} r="3.5" fill={laneColor(lane)} />
       )}
     </svg>
+  )
+}
+
+function AttentionCard(props: { session: RowSession; branch: string }) {
+  const { session, branch } = props
+  const t = useT()
+  const question = (() => {
+    try {
+      const data = JSON.parse(session.attention ?? '{}') as { question?: string }
+      return data.question ?? ''
+    } catch {
+      return ''
+    }
+  })()
+  const reply = () => {
+    const text = `worker ${branch} 提问：${question || session.title}。请决策并用 message_worker 转达给 ${session.worker ?? branch}。`
+    void useAppStore.getState().client().send({ type: 'prompt', text }, 15000)
+    useNoticeStore.getState().show({ kind: 'info', text: t('panel.taiji.replied') })
+  }
+  return (
+    <div className={css.attention} data-attention="">
+      <span className={css.attentionQ}>{question || session.title}</span>
+      <button type="button" className={css.replyButton} onClick={reply}>
+        {t('panel.taiji.reply')}
+      </button>
+    </div>
   )
 }
 
@@ -207,6 +234,11 @@ export function TaijiPanel() {
                       <SessionChip key={session.name} session={session} />
                     ))}
                     {overflow > 0 && <SessionChip key="overflow" session={chips[0]!} overflow={overflow} />}
+                    {row.sessions
+                      .filter((session) => session.attention)
+                      .map((session) => (
+                        <AttentionCard key={`a-${session.name}`} session={session} branch={row.branch?.name ?? ''} />
+                      ))}
                   </div>
                 )}
               </div>

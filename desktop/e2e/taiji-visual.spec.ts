@@ -99,3 +99,32 @@ test('taiji panel visual state', async ({ page }) => {
   await page.waitForTimeout(250)
   await panel.screenshot({ path: 'test-results/taiji-panel.png' })
 })
+
+test('an attention question renders a card with a quick reply', async ({ page }) => {
+  const attentionSnapshot = {
+    ...richTaiji,
+    sessions: {
+      ...richTaiji.sessions,
+      projects: richTaiji.sessions.projects.map((project) =>
+        project.key === 'p-e2e'
+          ? {
+              ...project,
+              sessions: project.sessions.map((session, index) =>
+                index === 0
+                  ? { ...session, status: 'ok', attention: '{"question": "方案 A 还是 B？"}' }
+                  : session,
+              ),
+            }
+          : project,
+      ),
+    },
+  }
+  await boot(page, initialState({ taiji: attentionSnapshot }))
+  await page.getByRole('button', { name: '打开工作面板' }).click()
+  const panel = page.locator('[data-work-panel]')
+  await page.getByRole('button', { name: '打开工作面板标签' }).click()
+  await panel.getByRole('menuitem', { name: '太极' }).click()
+  await expect(panel).toContainText('方案 A 还是 B')
+  await panel.getByRole('button', { name: '让 Router 处理' }).click()
+  await expect(panel.locator('[data-composer-plate] textarea')).toBeVisible()
+})

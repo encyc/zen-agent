@@ -634,6 +634,25 @@ class RpcServer:
             return True
         if kind == "taiji":
             op = request.get("op")
+            if op == "workers":
+                from zenagent.app.taiji.registry import TaijiRegistry
+
+                registry = TaijiRegistry()
+                registry.load(project_dir(Path.cwd()) / "taiji.json")
+                workers = {
+                    name: {
+                        "name": record.name,
+                        "branch": record.branch,
+                        "base": record.base,
+                        "status": record.status,
+                        "summary": record.summary,
+                        "attention": record.attention,
+                        "session": record.session,
+                    }
+                    for name, record in registry.records.items()
+                }
+                self._send({"type": "result", "id": request_id, "ok": True, "workers": workers})
+                return True
             if op == "snapshot":
                 self._send(
                     {
