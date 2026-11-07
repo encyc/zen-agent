@@ -95,6 +95,11 @@ step "lint"
 
 # Same gate scripts/check.sh runs, so a style error can no longer ride a
 # release tag: the 0.7.9 CI failures were exactly this gap.
+if python3 scripts/check_architecture.py >/dev/null 2>&1; then
+  ok "architecture budget: within allowlist"
+else
+  die "architecture budget exceeded — see python3 scripts/check_architecture.py"
+fi
 if lint_out="$(uv run ruff check . 2>&1)"; then
   ok "ruff: all checks passed"
 else

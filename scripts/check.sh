@@ -23,5 +23,8 @@ uv sync --extra cli --dev
 echo "==> lint"
 uv run ruff check .
 
+echo "==> architecture budget"
+python3 scripts/check_architecture.py
+
 echo "==> tests"
 uv run pytest -q
