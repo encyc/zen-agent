@@ -235,7 +235,7 @@ async def test_runtime_exposes_a_read_only_task_tool(runtime_factory):
     assert task.execution_mode == "sequential"
     # Outside zen the child tool set is the parent's read tools minus the
     # denylist; time travel and session state never reach the child.
-    from zenagent.tools.task import child_tool_names
+    from zenagent.agent.subagents_runtime import child_tool_names
 
     child = child_tool_names(list(runtime._base_tools))
     assert child <= {name for name, tool in tools.items() if tool.approval == "read"}

@@ -47,6 +47,7 @@ export const REQUEST_KINDS = [
   'mode',
   'model',
   'models',
+  'project',
   'prompt',
   'secrets',
   'session',

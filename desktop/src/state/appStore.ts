@@ -96,6 +96,7 @@ interface AppState {
   addMcpServer(input: McpServerInput): Promise<Record<string, unknown>>
   removeMcpServer(name: string, layer: McpLayer): Promise<Record<string, unknown>>
   testMcpServer(name: string): Promise<Record<string, unknown>>
+  relocateProject(from: string, to: string): Promise<Record<string, unknown>>
   openProject(path: string): Promise<void>
   refreshTranscript(): Promise<void>
   submit(): Promise<void>
@@ -384,6 +385,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   testMcpServer(name) {
     return get().client().send({ type: 'mcp', op: 'test', name })
+  },
+
+  async relocateProject(from, to) {
+    const frame = await get()
+      .client()
+      .send({ type: 'project', op: 'relocate', from, to })
+    if (frame.type === 'result' && frame.ok) await get().refreshSessions()
+    return frame
   },
 
   async openProject(path) {

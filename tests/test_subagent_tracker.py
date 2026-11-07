@@ -67,8 +67,8 @@ def test_tracker_shows_running_for_inflight_background_task(tmp_path):
     import asyncio
 
     from zenagent.agent.subagents import SubagentStore
+    from zenagent.agent.subagents_runtime import close_task_manager, get_task_manager
     from zenagent.app.subagent_tracker import SubagentTracker
-    from zenagent.tools.task import close_task_manager, get_task_manager
 
     async def scenario():
         # A background child pinned to this session has written only the

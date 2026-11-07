@@ -94,6 +94,7 @@ interface ProjectState {
   projects: ProjectEntry[]
   addProject(path: string): void
   removeProject(path: string): void
+  updateProject(path: string, next: string): void
 }
 
 export const useProjectStore = create<ProjectState>((set) => ({
@@ -114,6 +115,19 @@ export const useProjectStore = create<ProjectState>((set) => ({
       const next = state.projects.filter((project) => project.path !== path)
       persist(PROJECTS_KEY, next)
       return { projects: next }
+    }),
+  updateProject: (path, next) =>
+    set((state) => {
+      if (path === next) return {}
+      const entries = state.projects
+        .filter((project) => project.path !== next)
+        .map((project) =>
+          project.path === path
+            ? { path: next, name: projectName(next), at: project.at }
+            : project,
+        )
+      persist(PROJECTS_KEY, entries)
+      return { projects: entries }
     }),
 }))
 

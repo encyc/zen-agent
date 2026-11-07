@@ -208,7 +208,7 @@ def _task_tool(stream):
 
 @pytest.fixture(autouse=True)
 async def clean_task_manager():
-    from zenagent.tools.task import close_task_manager
+    from zenagent.agent.subagents_runtime import close_task_manager
 
     yield
     await close_task_manager()

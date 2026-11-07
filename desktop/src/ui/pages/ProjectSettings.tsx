@@ -1,6 +1,7 @@
 /** Project registry: the folders the rail remembers, their session counts and
  * last activity. Opening a row restarts the runtime at that cwd; removing a
- * row only forgets the registration — files are never touched. */
+ * row only forgets the registration — files are never touched. Changing a
+ * directory moves the project's state to the renamed folder's key. */
 
 import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
@@ -17,17 +18,39 @@ interface ProjectStat {
   last: number
 }
 
-function ProjectRow({ path, name, stat }: { path: string; name: string; stat: ProjectStat }) {
+const EMPTY_STAT: ProjectStat = { sessions: 0, last: 0 }
+
+/** The recorded project root for a registry entry: the containing session root
+ * when the registered folder was a subdirectory of the repository. */
+function rootFor(path: string, stats: Map<string, ProjectStat>): string {
+  if (stats.has(path)) return path
+  for (const root of stats.keys()) {
+    if (path.startsWith(`${root}/`)) return root
+  }
+  return path
+}
+
+interface ProjectRowProps {
+  path: string
+  root: string
+  name: string
+  stat: ProjectStat
+  active: boolean
+}
+
+function ProjectRow({ path, root, name, stat, active }: ProjectRowProps) {
   const t = useT()
   const locale = useSettingsStore((state) => state.locale)
   const removeProject = useProjectStore((state) => state.removeProject)
+  const updateProject = useProjectStore((state) => state.updateProject)
   const openProject = useAppStore((state) => state.openProject)
+  const relocateProject = useAppStore((state) => state.relocateProject)
   const newSession = useAppStore((state) => state.newSession)
   const setView = useSettingsStore((state) => state.setView)
-  const current = useAppStore(() => lastProjectCwd())
   const [armed, setArmed] = useState(false)
+  const [target, setTarget] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const active = current === path
 
   async function open() {
     if (busy) return
@@ -47,6 +70,35 @@ function ProjectRow({ path, name, stat }: { path: string; name: string; stat: Pr
       await openProject(path)
       await newSession()
       setView('chat')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function chooseTarget() {
+    if (busy || active) return
+    const picked = await pickProjectFolder()
+    if (picked === null || picked === path) return
+    setError(null)
+    setTarget(picked)
+  }
+
+  async function relocate() {
+    if (busy || target === null) return
+    setBusy(true)
+    setError(null)
+    try {
+      const frame = await relocateProject(root, target)
+      if (frame.type === 'error') {
+        setError(
+          t('settings.projectRelocateFailed', {
+            message: String(frame.message ?? ''),
+          }),
+        )
+        return
+      }
+      updateProject(path, target)
+      setTarget(null)
     } finally {
       setBusy(false)
     }
@@ -87,6 +139,16 @@ function ProjectRow({ path, name, stat }: { path: string; name: string; stat: Pr
         </button>
         <button
           type="button"
+          className={css.action}
+          disabled={busy || active}
+          title={active ? t('settings.projectRelocateActive') : undefined}
+          onClick={() => void chooseTarget()}
+        >
+          <FolderIcon size={11} />
+          <span>{t('settings.projectRelocate')}</span>
+        </button>
+        <button
+          type="button"
           className={clsx(css.action, armed && css.actionDanger)}
           disabled={busy}
           onClick={() => (armed ? removeProject(path) : setArmed(true))}
@@ -95,6 +157,31 @@ function ProjectRow({ path, name, stat }: { path: string; name: string; stat: Pr
           <span>{armed ? t('settings.projectRemoveArmed') : t('settings.remove')}</span>
         </button>
       </div>
+      {active ? <div className={css.hint}>{t('settings.projectRelocateActive')}</div> : null}
+      {target !== null ? (
+        <div className={css.confirm} data-project-confirm>
+          <span className={css.confirmText}>
+            {t('settings.projectRelocateConfirm', { count: stat.sessions, path: target })}
+          </span>
+          <button
+            type="button"
+            className={css.action}
+            disabled={busy}
+            onClick={() => setTarget(null)}
+          >
+            {t('settings.projectRelocateCancel')}
+          </button>
+          <button
+            type="button"
+            className={clsx(css.action, css.confirmAction)}
+            disabled={busy}
+            onClick={() => void relocate()}
+          >
+            {t('settings.projectRelocateAction')}
+          </button>
+        </div>
+      ) : null}
+      {error !== null ? <div className={css.error}>{error}</div> : null}
     </div>
   )
 }
@@ -105,6 +192,7 @@ export function ProjectSettings() {
   const addProject = useProjectStore((state) => state.addProject)
   const sessions = useSessionStore((state) => state.sessions)
   const refreshSessions = useAppStore((state) => state.refreshSessions)
+  const current = useAppStore(() => lastProjectCwd())
 
   useEffect(() => {
     void refreshSessions()
@@ -147,14 +235,19 @@ export function ProjectSettings() {
           {projects.length === 0 ? (
             <div className={css.empty}>{t('settings.projectsEmpty')}</div>
           ) : (
-            projects.map((project) => (
-              <ProjectRow
-                key={project.path}
-                path={project.path}
-                name={project.name}
-                stat={stats.get(project.path) ?? { sessions: 0, last: 0 }}
-              />
-            ))
+            projects.map((project) => {
+              const root = rootFor(project.path, stats)
+              return (
+                <ProjectRow
+                  key={project.path}
+                  path={project.path}
+                  root={root}
+                  name={project.name}
+                  stat={stats.get(root) ?? EMPTY_STAT}
+                  active={current === project.path || current === root}
+                />
+              )
+            })
           )}
         </div>
       </section>

@@ -160,6 +160,54 @@
   color: var(--dsw-alias-state-error-primary);
 }
 
+.hint {
+  grid-column: 1 / -1;
+  margin-top: 6px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--ds-font-11);
+  line-height: 1.4;
+}
+
+.confirm {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  border-radius: var(--ds-radius-10);
+  padding: 8px 10px;
+  background: color-mix(in oklab, var(--dsw-alias-label-primary) 6%, transparent);
+}
+
+.confirmText {
+  min-width: 0;
+  flex: 1 1 220px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--ds-font-12);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.confirmAction,
+.confirmAction:hover:not(:disabled) {
+  background: var(--dsw-alias-label-primary);
+  color: var(--dsw-alias-bg-base);
+}
+
+.confirmAction:hover:not(:disabled) {
+  opacity: 0.86;
+}
+
+.error {
+  grid-column: 1 / -1;
+  margin-top: 6px;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: var(--ds-font-11-5);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .empty {
   border-radius: var(--ds-radius-14);
   padding: 16px 12px;

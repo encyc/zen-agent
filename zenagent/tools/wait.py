@@ -12,6 +12,7 @@ import asyncio
 import contextlib
 
 from zenagent.agent.loop import AgentTool, ToolResultAgent
+from zenagent.agent.subagents_runtime import UnknownTaskError, get_task_manager
 from zenagent.prompts import tool_description
 from zenagent.tools._result import text_result
 from zenagent.tools.jobs import (
@@ -19,7 +20,6 @@ from zenagent.tools.jobs import (
     UnknownJobError,
     get_job_manager,
 )
-from zenagent.tools.task import UnknownTaskError, get_task_manager
 
 __all__ = ["DEFAULT_WAIT_TIMEOUT_S", "MAX_WAIT_TIMEOUT_S", "WAIT"]
 

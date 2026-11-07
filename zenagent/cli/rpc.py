@@ -8,7 +8,7 @@ Protocol v2 (v1 messages keep their shape):
     requests  prompt, cancel, status, shutdown, steer, tools, model, mode,
               usage, approval, ask, session, command, transcript,
               subagent_transcript, models, commands, fs_list, fs_read,
-              git_worktrees, secrets, skills, mcp
+              git_worktrees, secrets, skills, mcp, project
     responses {"type":"result"|"error", "id": ..., ...}
     events    {"type":"event","event":{...}} plus ``approval_request`` and
               ``ask_request`` events
@@ -35,6 +35,11 @@ from zenagent.app.views import usage_total
 from zenagent.app.workspace import list_directory, read_file, worktree_overview
 from zenagent.events import AgentEvent
 from zenagent.mcp.config import load_mcp_layers, remove_mcp_server, save_mcp_server
+from zenagent.project import (
+    project_key,
+    project_key_for_session,
+    relocate_project,
+)
 from zenagent.skills import (
     MAX_SKILL_BODY_BYTES,
     default_skill_roots,
@@ -589,6 +594,9 @@ class RpcServer:
             return True
         if kind == "mcp":
             await self._mcp(request, request_id)
+            return True
+        if kind == "project":
+            await self._project(request, request_id)
             return True
         self._send({"type": "error", "id": request_id, "message": f"unknown type: {kind}"})
         return True
@@ -1300,6 +1308,43 @@ class RpcServer:
         if self.runtime is not None:
             payload["session"] = str(self.runtime.session.path)
         self._send(payload)
+
+    # -- project state -----------------------------------------------------
+
+    async def _project(self, request: dict, request_id) -> None:
+        op = request.get("op")
+        try:
+            if op != "relocate":
+                raise ValueError(f"unknown project op: {op}")
+            old_root = request.get("from")
+            if not isinstance(old_root, str) or not old_root.strip():
+                raise ValueError("relocate needs from")
+            new_root = request.get("to")
+            if not isinstance(new_root, str) or not new_root.strip():
+                raise ValueError("relocate needs to")
+            if self.runtime is not None and project_key_for_session(
+                self.runtime.session.path
+            ) == project_key(old_root):
+                raise RuntimeError(
+                    "cannot relocate the open project; switch to another project first"
+                )
+            relocation = relocate_project(old_root, new_root)
+        except Exception as exc:  # noqa: BLE001 - a bad project op is a result, not a crash
+            self._send({"type": "error", "id": request_id, "message": str(exc)})
+            return
+        self._send(
+            {
+                "type": "result",
+                "id": request_id,
+                "ok": True,
+                "old_root": relocation.old_root,
+                "new_root": relocation.new_root,
+                "old_key": relocation.old_key,
+                "new_key": relocation.new_key,
+                "sessions": relocation.sessions,
+                "moved": relocation.moved,
+            }
+        )
 
     # -- sessions and commands ---------------------------------------------
 

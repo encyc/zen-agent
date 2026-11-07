@@ -46,7 +46,7 @@ __all__ = ["ChatController"]
 
 def _inflight_task_ids() -> set[str]:
     """Call ids of background children still running (they pin their store)."""
-    from zenagent.tools.task import get_task_manager
+    from zenagent.agent.subagents_runtime import get_task_manager
 
     return get_task_manager().running_call_ids()
 

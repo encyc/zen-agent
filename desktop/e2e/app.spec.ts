@@ -42,6 +42,8 @@ interface BridgeState {
   mcpServers?: Record<string, unknown>[]
   mcpProblem?: string
   mcpTests?: Record<string, { connected: boolean; tools?: string[]; message?: string }>
+  relocations?: { from: string; to: string }[]
+  relocateError?: string
   fsEntries?: Record<string, Record<string, unknown>[]>
   fsFiles?: Record<string, Record<string, unknown>>
   worktrees?: Record<string, unknown>
@@ -61,6 +63,11 @@ function installBridge(state: BridgeState) {
   let nextEvent = 1
   let nextPid = 4242
 
+  const relocatedPath = (from: string) => {
+    const moves = (state.relocations ?? []).filter((move) => move.from === from)
+    return moves.length > 0 ? moves[moves.length - 1].to : from
+  }
+
   const sessions = (id: unknown, scope: unknown) => ({
     type: 'result',
     id,
@@ -72,7 +79,7 @@ function installBridge(state: BridgeState) {
         name: 'a',
         title: state.title,
         project: 'p',
-        project_path: '/work/p',
+        project_path: relocatedPath('/work/p'),
         messages: 4,
         current: state.noCurrent !== true,
         pinned: false,
@@ -86,7 +93,7 @@ function installBridge(state: BridgeState) {
         name: 'b',
         title: '另一个会话',
         project: 'p',
-        project_path: '/work/p',
+        project_path: relocatedPath('/work/p'),
         messages: 2,
         current: false,
         pinned: false,
@@ -510,6 +517,28 @@ function installBridge(state: BridgeState) {
             status: { branch: 'main', staged: 0, dirty: 0, untracked: 0, clean: true },
           },
         }
+      case 'project': {
+        if (payload.op !== 'relocate') {
+          return { type: 'error', id: payload.id, message: 'unknown project op' }
+        }
+        if (state.relocateError !== undefined) {
+          return { type: 'error', id: payload.id, message: state.relocateError }
+        }
+        const from = String(payload.from ?? '')
+        const to = String(payload.to ?? '')
+        state.relocations = [...(state.relocations ?? []), { from, to }]
+        return {
+          type: 'result',
+          id: payload.id,
+          ok: true,
+          old_root: from,
+          new_root: to,
+          old_key: 'old-key',
+          new_key: 'new-key',
+          sessions: 2,
+          moved: true,
+        }
+      }
       default:
         return { type: 'result', id: payload.id, ok: true }
     }
@@ -2065,6 +2094,9 @@ test('project settings lists folders, opens one and forgets another', async ({ p
   await expect(current).toContainText('当前')
   await expect(current).toContainText('2 个会话')
   await expect(other).toContainText('1 个会话')
+  // Relocation must not move the project the runtime is writing to.
+  await expect(current.getByRole('button', { name: '更改目录' })).toBeDisabled()
+  await expect(other.getByRole('button', { name: '更改目录' })).toBeEnabled()
 
   // Opening another folder restarts the runtime there and returns to chat.
   await other.getByRole('button', { name: '打开' }).click()
@@ -2078,6 +2110,46 @@ test('project settings lists folders, opens one and forgets another', async ({ p
   await first.getByRole('button', { name: '移除' }).click()
   await first.getByRole('button', { name: '确认移除' }).click()
   await expect(first).toHaveCount(0)
+})
+
+test('project settings moves a renamed folder to its new path', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('zen.last.cwd', '/work/q')
+    localStorage.setItem(
+      'zen.projects',
+      JSON.stringify([
+        { path: '/work/p', name: 'p', at: 1 },
+        { path: '/work/q', name: 'q', at: 1 },
+      ]),
+    )
+  })
+  await boot(page, initialState({ running: false, dialogSelection: '/work/p2' }))
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '项目' }).click()
+
+  const row = page.locator('[data-project="/work/p"]')
+  await expect(row).toContainText('2 个会话')
+  await row.getByRole('button', { name: '更改目录' }).click()
+  const confirm = row.locator('[data-project-confirm]')
+  await expect(confirm).toContainText('把 2 个会话迁移到 /work/p2？')
+  await confirm.getByRole('button', { name: '迁移' }).click()
+
+  const moved = page.locator('[data-project="/work/p2"]')
+  await expect(moved).toBeVisible()
+  await expect(row).toHaveCount(0)
+  await expect(moved).toContainText('2 个会话')
+  const calls = await page.evaluate(() =>
+    window.__ZEN_E2E__.calls.filter((call) => call.type === 'project'),
+  )
+  assert.equal(calls[0]?.op, 'relocate')
+  assert.equal(calls[0]?.from, '/work/p')
+  assert.equal(calls[0]?.to, '/work/p2')
+  const stored = await page.evaluate(() =>
+    (JSON.parse(localStorage.getItem('zen.projects') ?? '[]') as { path: string }[]).map(
+      (project) => project.path,
+    ),
+  )
+  assert.deepEqual(stored.sort(), ['/work/p2', '/work/q'])
 })
 
 test('thinking settings unfold and hide settled reasoning', async ({ page }) => {
@@ -2202,3 +2274,4 @@ test('a palette session from another project switches the runtime and resumes', 
     )
     .toBe(true)
 })
+

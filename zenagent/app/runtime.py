@@ -19,6 +19,7 @@ from zenagent.agent.memory_store import MemoryStore, format_memory_index
 from zenagent.agent.registry import ToolRegistry
 from zenagent.agent.session import Session, latest_session, unique_session_path
 from zenagent.agent.subagents import SubagentLimits
+from zenagent.agent.subagents_runtime import SubagentObserver
 from zenagent.app.journal import attach_journal, journal_for, load_backup_policy
 from zenagent.app.metrics import MetricsSession
 from zenagent.app.modes import (
@@ -81,7 +82,7 @@ from zenagent.tools.ask import AskHandler, build_ask_tool
 from zenagent.tools.github import build_github_tool
 from zenagent.tools.lsp import build_lsp_tool, shutdown_clients
 from zenagent.tools.memory import build_memory_tool, build_memory_write_tool
-from zenagent.tools.task import SubagentObserver, build_task_tool
+from zenagent.tools.task import build_task_tool
 from zenagent.tools.todo import (
     TodoTool,
     build_todo_tool,

@@ -136,7 +136,7 @@ class SubagentTracker:
         # its transcript has a header but no end line, which reads as
         # "interrupted". The TaskManager's in-flight set is the truth. No
         # running loop means no manager and no background children.
-        from zenagent.tools.task import get_task_manager
+        from zenagent.agent.subagents_runtime import get_task_manager
 
         try:
             inflight = get_task_manager().running_call_ids()

@@ -31,6 +31,7 @@ from pathlib import Path
 
 __all__ = [
     "ProjectMeta",
+    "ProjectRelocation",
     "all_session_dirs",
     "find_project_root",
     "legacy_sessions_dir",
@@ -44,6 +45,7 @@ __all__ = [
     "project_root_for_sessions_dir",
     "project_sessions_dir",
     "projects_root",
+    "relocate_project",
     "write_project_meta",
     "zenagent_home",
 ]
@@ -130,6 +132,18 @@ class ProjectMeta:
     last_used: str
 
 
+@dataclass
+class ProjectRelocation:
+    """Outcome of re-pointing a project's state at a renamed folder."""
+
+    old_root: str
+    new_root: str
+    old_key: str
+    new_key: str
+    sessions: int
+    moved: bool
+
+
 def _meta_path(root: Path | str | None = None, cwd: Path | str | None = None) -> Path:
     return project_dir(cwd, root=root) / "meta.json"
 
@@ -170,18 +184,8 @@ def project_root_for_sessions_dir(session_dir: Path | str) -> str:
     return meta.root if meta is not None else ""
 
 
-def write_project_meta(
-    cwd: Path | str | None = None, *, root: Path | str | None = None
-) -> ProjectMeta:
-    """Create/refresh ``meta.json`` for a project (atomic replace)."""
-    base = Path(root) if root is not None else find_project_root(cwd)
-    base = base.expanduser().resolve()
-    meta = ProjectMeta(
-        root=str(base),
-        name=base.name or "project",
-        last_used=datetime.now(UTC).isoformat(timespec="seconds"),
-    )
-    target = _meta_path(root=base)
+def _write_meta(meta: ProjectMeta, target: Path) -> None:
+    """Publish one ``meta.json`` atomically (private temp sibling + replace)."""
     target.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temp_name = tempfile.mkstemp(
         dir=target.parent, prefix=f"{target.name}.", suffix=".tmp"
@@ -201,7 +205,84 @@ def write_project_meta(
     except BaseException:
         Path(temp_name).unlink(missing_ok=True)
         raise
+
+
+def write_project_meta(
+    cwd: Path | str | None = None, *, root: Path | str | None = None
+) -> ProjectMeta:
+    """Create/refresh ``meta.json`` for a project (atomic replace)."""
+    base = Path(root) if root is not None else find_project_root(cwd)
+    base = base.expanduser().resolve()
+    meta = ProjectMeta(
+        root=str(base),
+        name=base.name or "project",
+        last_used=datetime.now(UTC).isoformat(timespec="seconds"),
+    )
+    _write_meta(meta, _meta_path(root=base))
     return meta
+
+
+def relocate_project(
+    old_root: Path | str, new_root: Path | str
+) -> ProjectRelocation:
+    """Move a project's state to the key of ``new_root`` (a renamed folder).
+
+    Only the ``~/.zenagent/projects/<key>`` directory moves; transcripts are
+    byte-identical because their project path comes from ``meta.json``, not
+    from the records. Same-key targets are a no-op, and an existing target
+    state directory is refused rather than merged. The caller must make sure
+    no live runtime still owns the old state directory.
+    """
+    old_base = Path(old_root).expanduser().resolve()
+    old_key = project_key(old_base)
+    old_dir = projects_root() / old_key
+    if not old_dir.is_dir():
+        raise ValueError(f"no project state for {old_base}")
+    target = Path(new_root).expanduser()
+    if not target.is_dir():
+        raise ValueError(f"not a directory: {target}")
+    new_base = find_project_root(target)
+    new_key = project_key(new_base)
+    sessions = len(list((old_dir / "sessions").glob("*.jsonl")))
+    if new_key == old_key:
+        return ProjectRelocation(
+            old_root=str(old_base),
+            new_root=str(new_base),
+            old_key=old_key,
+            new_key=new_key,
+            sessions=sessions,
+            moved=False,
+        )
+    new_dir = projects_root() / new_key
+    if new_dir.exists():
+        raise ValueError(f"a project already uses {new_base}")
+    previous = _read_meta(old_dir / "meta.json")
+    last_used = (
+        previous.last_used
+        if previous is not None and previous.last_used
+        else datetime.now(UTC).isoformat(timespec="seconds")
+    )
+    os.replace(old_dir, new_dir)
+    try:
+        _write_meta(
+            ProjectMeta(
+                root=str(new_base),
+                name=new_base.name or "project",
+                last_used=last_used,
+            ),
+            new_dir / "meta.json",
+        )
+    except BaseException:
+        os.replace(new_dir, old_dir)
+        raise
+    return ProjectRelocation(
+        old_root=str(old_base),
+        new_root=str(new_base),
+        old_key=old_key,
+        new_key=new_key,
+        sessions=sessions,
+        moved=True,
+    )
 
 
 def all_session_dirs() -> list[Path]:
