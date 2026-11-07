@@ -33,7 +33,7 @@ from zenagent.providers import (
     openai_responses,
 )
 from zenagent.providers.catalog import Model
-from zenagent.providers.openai_completions import StreamOptions
+from zenagent.providers.stream_options import StreamOptions
 from zenagent.providers.transport import default_client
 from zenagent.types import AssistantMessage, Message, ToolDef, Usage
 

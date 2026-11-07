@@ -33,6 +33,7 @@ from zenagent.providers.catalog import Model
 from zenagent.providers.compat import CompatFlags, normalize_thinking
 from zenagent.providers.history import replayable
 from zenagent.providers.limits import fit_stream_options
+from zenagent.providers.stream_options import StreamOptions
 from zenagent.providers.transport import (
     default_client,
     iter_sse_data,
@@ -53,25 +54,6 @@ from zenagent.types import (
 )
 
 __all__ = ["StreamOptions", "build_params", "stream", "to_request_messages"]
-
-
-@dataclass
-class StreamOptions:
-    """Per-call options for one streaming completion request.
-
-    ``thinking`` is the user-level reasoning setting ("off"/"low"/
-    "medium"/"high"); the request side translates it into each dialect's
-    ``thinking`` block / bare ``reasoning_effort``. ``abort`` is the
-    cooperative cancellation token shared with the loop and transport.
-    """
-
-    api_key: str = ""
-    thinking: str | None = None
-    max_tokens: int | None = None
-    temperature: float | None = None
-    session_id: str | None = None
-    extra_headers: dict | None = None
-    abort: AbortToken | None = None
 
 
 # ---------------------------------------------------------------------------

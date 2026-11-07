@@ -48,8 +48,8 @@ from zenagent.agent.guard import (
 )
 from zenagent.events import AbortToken, AgentEvent
 from zenagent.providers.catalog import Model
-from zenagent.providers.openai_completions import StreamOptions
 from zenagent.providers.registry import StreamFn, stream_fn_for
+from zenagent.providers.stream_options import StreamOptions
 from zenagent.retry import stream_with_retry
 from zenagent.types import (
     AssistantMessage,

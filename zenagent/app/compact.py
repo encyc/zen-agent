@@ -14,8 +14,8 @@ from zenagent.agent import Agent
 from zenagent.agent.session import Session, unique_session_path
 from zenagent.app import records
 from zenagent.prompts import compact_result, compose_compact
-from zenagent.providers.openai_completions import StreamOptions
 from zenagent.providers.registry import StreamFn, safe_stream, stream_fn_for
+from zenagent.providers.stream_options import StreamOptions
 from zenagent.types import (
     AssistantMessage,
     SystemMessage,

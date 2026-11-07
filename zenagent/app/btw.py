@@ -11,8 +11,8 @@ from __future__ import annotations
 import time
 
 from zenagent.agent import Agent
-from zenagent.providers.openai_completions import StreamOptions
 from zenagent.providers.registry import safe_stream, stream_fn_for
+from zenagent.providers.stream_options import StreamOptions
 from zenagent.types import SystemMessage, UserMessage
 
 __all__ = ["ask_side_question"]

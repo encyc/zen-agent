@@ -71,3 +71,18 @@ def test_only_the_cli_package_imports_the_cli_package():
             if module == "zenagent.cli" or module.startswith("zenagent.cli."):
                 violations.append(f"{path.relative_to(ROOT)}: {module}")
     assert violations == []
+
+
+def test_stream_options_lives_in_neutral_module():
+    from zenagent.providers import openai_completions, stream_options
+
+    assert openai_completions.StreamOptions is stream_options.StreamOptions
+
+
+def test_loop_does_not_import_concrete_adapter():
+    import inspect
+
+    from zenagent.agent import loop
+
+    src = inspect.getsource(loop)
+    assert "openai_completions" not in src
