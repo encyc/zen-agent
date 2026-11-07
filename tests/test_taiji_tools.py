@@ -176,3 +176,15 @@ async def test_rpc_runner_maps_a_failed_turn_to_error() -> None:
 
     assert result.status == "error"
     assert result.summary
+
+
+async def test_chat_controller_wires_the_router_injection_target(runtime_factory) -> None:
+    """Every face drives the runtime through a ChatController, so the taiji
+    milestone injection works in TUI/headless too, not just the rpc host."""
+    from zenagent.app.chat import ChatController
+
+    runtime = await runtime_factory()
+
+    chat = ChatController(runtime)
+
+    assert runtime.taiji_chat is chat

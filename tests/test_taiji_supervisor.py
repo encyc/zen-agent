@@ -406,19 +406,24 @@ class TestReviewFixes:
 
         assert record.branch == "task/ghost-2"
 
-    async def test_spawn_on_a_repo_without_main_fails_cleanly(
+    async def test_spawn_on_a_repo_without_main_uses_the_checked_out_branch(
         self, repo: Path, tmp_path: Path, monkeypatch
     ) -> None:
+        """The base is whatever the main worktree has checked out — a repo
+        whose default branch is not main still works (and merges back)."""
         monkeypatch.setattr(
             "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
         )
-        _git(repo, "checkout", "-qb", "master")
-        _git(repo, "branch", "-D", "main")
+        _git(repo, "branch", "-m", "main", "master")
         supervisor = make_supervisor(repo, tmp_path, StubRunner())
 
-        with pytest.raises(RuntimeError, match="branch"):
-            await supervisor.spawn("nothing works", name="doomed")
-        assert supervisor.list_workers() == []
+        record = await supervisor.spawn("works on master", name="mastered")
+        await supervisor.wait_idle()
+
+        assert record.base == "master"
+        merged = await supervisor.merge("mastered")
+        assert merged is True
+        assert "work: works on master" in _git(repo, "log", "--format=%s", "master").stdout
 
     async def test_merge_conflict_aborts_and_keeps_the_tree_clean(
         self, repo: Path, tmp_path: Path, monkeypatch
@@ -500,3 +505,47 @@ class TestReviewFixes:
 
         assert elapsed < 10
         assert supervisor.list_workers()[0].status == "interrupted"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+class TestCrossReviewFixes:
+    async def test_kill_cancels_the_in_flight_turn_and_stays_killed(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr("zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home")
+        cancelled = asyncio.Event()
+
+        class SlowRunner(StubRunner):
+            async def run_turn(self, worktree, session_path, prompt):
+                try:
+                    await asyncio.sleep(30)
+                except asyncio.CancelledError:
+                    cancelled.set()
+                    raise
+                return TurnResult(status="ok", summary="done", session_path="")
+
+        supervisor = make_supervisor(repo, tmp_path, SlowRunner(), mode="zen")
+        await supervisor.spawn("never finishes", name="racy")
+        await asyncio.sleep(0.05)
+
+        main_before = _git(repo, "rev-parse", "main").stdout.strip()
+        killed = await supervisor.kill("racy")
+        await asyncio.sleep(0.1)
+
+        assert killed.status == "killed"
+        assert cancelled.is_set()
+        assert supervisor.list_workers()[0].status == "killed"
+        # a killed task never reaches the merge gate
+        assert _git(repo, "rev-parse", "main").stdout.strip() == main_before
+
+    async def test_spawn_records_the_checked_out_base_branch(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr("zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home")
+        _git(repo, "branch", "-m", "main", "master")
+        supervisor = make_supervisor(repo, tmp_path, StubRunner(), mode="ask")
+
+        record = await supervisor.spawn("works here", name="onmaster")
+        await supervisor.wait_idle()
+
+        assert record.base == "master"
+        assert record.branch == "task/onmaster"
+        merged = await supervisor.merge("onmaster")
+        assert merged is True
+        assert "work: works here" in _git(repo, "log", "--format=%s", "master").stdout

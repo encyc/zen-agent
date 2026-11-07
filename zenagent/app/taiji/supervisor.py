@@ -146,6 +146,7 @@ class TaijiSupervisor:
         self.registry.load(self.registry_path)
         self.registry.reconcile(self._worktree_paths())
         self._tasks: set[asyncio.Task[None]] = set()
+        self._turns: dict[str, asyncio.Task[None]] = {}
 
     def _worktree_paths(self) -> list[str]:
         listed = _git(self.repo_root, "worktree", "list", "--porcelain")
@@ -201,7 +202,9 @@ class TaijiSupervisor:
         branch = BRANCH_PREFIX + worker
         worktree = worktrees_root() / project_key(self.repo_root) / worker
 
-        branched = _git(self.repo_root, "branch", branch, "main")
+        current = _git(self.repo_root, "branch", "--show-current")
+        base = current.stdout.strip() if current is not None and current.stdout.strip() else "main"
+        branched = _git(self.repo_root, "branch", branch, base)
         if branched is None or branched.returncode != 0:
             detail = branched.stderr.strip() if branched else "git is not available"
             raise RuntimeError(f"branch {branch} failed: {detail}")
@@ -215,7 +218,7 @@ class TaijiSupervisor:
         record = WorkerRecord(
             name=worker,
             branch=branch,
-            base="main",
+            base=base,
             worktree=str(worktree),
             status="running",
             created_at=time.time(),
@@ -240,6 +243,10 @@ class TaijiSupervisor:
 
     async def kill(self, name: str) -> WorkerRecord:
         record = self._record(name)
+        task = self._turns.get(name)
+        if task is not None and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
         removed = _git(self.repo_root, "worktree", "remove", "--force", record.worktree)
         if removed is None or removed.returncode != 0:
             shutil.rmtree(record.worktree, ignore_errors=True)
@@ -262,7 +269,13 @@ class TaijiSupervisor:
             self._run_turn(record, prompt, resume, rollback_on_start_failure)
         )
         self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+        self._turns[record.name] = task
+
+        def _settled(done: asyncio.Task[None]) -> None:
+            self._tasks.discard(done)
+            self._turns.pop(record.name, None)
+
+        task.add_done_callback(_settled)
 
     async def _run_turn(
         self,
@@ -274,6 +287,8 @@ class TaijiSupervisor:
         started = time.time()
         try:
             result = await self.runner.run_turn(record.worktree, resume, prompt)
+        except asyncio.CancelledError:
+            raise
         except Exception as exc:  # noqa: BLE001 - a failed turn is a state, not a crash
             if rollback_on_start_failure and not record.session:
                 self._rollback(record)
@@ -287,6 +302,8 @@ class TaijiSupervisor:
             self._save()
             await self._emit_turn(record, str(exc), started, status="error")
             return
+        if record.status == "killed":
+            return  # a kill during the turn is final; do not overwrite or merge
         record.status = result.status
         record.summary = result.summary
         record.session = result.session_path
