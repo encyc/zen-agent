@@ -43,12 +43,21 @@ from zenagent.app.workspace import (
     workspace_files,
     worktree_overview,
 )
+from zenagent.app.taiji import (
+    TaijiHostLocked,
+    acquire_taiji_lock,
+    close_taiji,
+    ensure_taiji_session,
+    release_taiji_lock,
+)
 from zenagent.app.taiji.snapshot import commit_graph, session_map
 from zenagent.events import AgentEvent
 from zenagent.mcp.config import load_mcp_layers, remove_mcp_server, save_mcp_server
 from zenagent.project import (
+    project_dir,
     project_key,
     project_key_for_session,
+    project_sessions_dir,
     relocate_project,
 )
 from zenagent.skills import (
@@ -1714,10 +1723,19 @@ async def _run(args) -> int:
     )
     prepared.broker.set_confirm(server.confirm)
     runtime.ask_handler = server.ask
+    runtime.taiji_chat = chat
+    taiji_project_dir = project_dir(Path.cwd())
+    try:
+        ensure_taiji_session(project_sessions_dir(Path.cwd()))
+        acquire_taiji_lock(taiji_project_dir)
+    except TaijiHostLocked as exc:
+        runtime._note(f"taiji: 另一个宿主已持有本项目的太极锁（{exc}）")
     try:
         return await server.run()
     finally:
         runtime.ask_handler = None
+        await close_taiji()
+        release_taiji_lock(taiji_project_dir)
         await runtime.close()
 
 

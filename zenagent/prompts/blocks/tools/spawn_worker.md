@@ -1,0 +1,1 @@
+Start a new worker for a self-contained task: it gets its own git branch (task/<name>), its own worktree and its own session, and runs without interrupting this conversation. Give it a complete, self-sufficient prompt — it cannot see this conversation. Use it whenever the user asks for parallel or background work; do not use it for quick questions you can answer directly.

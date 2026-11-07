@@ -217,6 +217,20 @@ for _tool_name in TOOL_BLOCK_NAMES:
     )
 
 
+# Taiji's Router tools are composed only for the taiji session, so they sit
+# outside the standard tool block set (and the golden parity pin) but share
+# the same registry, budgets and validation.
+for _tool_name in ("spawn_worker", "message_worker", "kill_worker", "merge_worker", "list_workers"):
+    BLOCKS[f"tool.{_tool_name}"] = BlockSpec(
+        id=f"tool.{_tool_name}",
+        path=f"tools/{_tool_name}.md",
+        version=PROMPT_VERSION,
+        cache_class="stable",
+        budget_chars=900,
+        required_vars=_TOOL_VARS.get(_tool_name, ()),
+    )
+
+
 #: Hard budgets from the design doc (§6.3); enforced by the budget test.
 TOTAL_BUDGET_CHARS = 9000
 TOOL_TOTAL_BUDGET_CHARS = 4800

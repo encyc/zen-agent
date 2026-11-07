@@ -11,7 +11,7 @@ from pathlib import Path
 
 from prompt_fixtures import SKILLS, TOOL_GOLDEN_NAMES, golden_tools
 
-from zenagent.prompts import TOOL_BLOCK_NAMES, tool_description
+from zenagent.prompts import BLOCKS, TOOL_BLOCK_NAMES, tool_description
 from zenagent.skills import build_skill_tool
 from zenagent.tools.task import build_task_tool
 from zenagent.tools.todo import build_todo_tool
@@ -33,7 +33,14 @@ def test_tool_blocks_cover_every_tool() -> None:
 
 def test_no_orphan_tool_blocks() -> None:
     on_disk = {path.stem for path in TOOLS_DIR.glob("*.md")}
-    assert on_disk == set(TOOL_BLOCK_NAMES)
+    # The taiji Router tools register outside TOOL_BLOCK_NAMES (they compose
+    # only for the taiji session), so the no-orphan pin reads the registry.
+    registered = {
+        block_id.removeprefix("tool.")
+        for block_id in BLOCKS
+        if block_id.startswith("tool.")
+    }
+    assert on_disk == registered
 
 
 def test_tool_descriptions_match_golden() -> None:

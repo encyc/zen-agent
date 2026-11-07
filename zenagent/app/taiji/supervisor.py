@@ -67,6 +67,42 @@ def supervisor_summary(record: WorkerRecord, summary: str, duration_s: float) ->
     return f"[worker {record.branch} · {record.status}] {brief} · {minutes:02d}:{seconds:02d}"
 
 
+class RpcRunner:
+    """The real WorkerRunner: one ``zen rpc`` subprocess per turn.
+
+    The worker session persists on disk across turns (lifecycle (a)): each
+    turn spawns a fresh subprocess bound to the worktree and resumes the
+    session, so a host restart costs a re-spawn, not the transcript.
+    """
+
+    def __init__(
+        self,
+        *,
+        timeout_s: float = 1800.0,
+        client_factory: Callable[[], Any] | None = None,
+    ) -> None:
+        self._timeout_s = timeout_s
+        self._client_factory = client_factory
+
+    async def run_turn(self, worktree: str, session_path: str | None, prompt: str) -> TurnResult:
+        from zenagent.app.taiji.worker_client import WorkerRpcClient
+
+        client = self._client_factory() if self._client_factory else WorkerRpcClient()
+        await client.start(Path(worktree), on_event=lambda event: None)
+        try:
+            if session_path:
+                await client.resume(session_path)
+            answer = await client.prompt(prompt, timeout_s=self._timeout_s)
+        finally:
+            await client.stop()
+        summary = str(answer.get("text") or "").strip()
+        return TurnResult(
+            status="ok",
+            summary=summary[:2000] or "(no output)",
+            session_path=str(answer.get("session") or session_path or ""),
+        )
+
+
 class WorkerRunner(Protocol):
     async def run_turn(
         self, worktree: str, session_path: str | None, prompt: str
