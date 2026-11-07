@@ -8,7 +8,7 @@ Protocol v2 (v1 messages keep their shape):
     requests  prompt, cancel, status, shutdown, steer, tools, model, mode,
               usage, approval, ask, session, command, transcript,
               subagent_transcript, models, commands, fs_list, fs_read,
-              git_worktrees, secrets, skills, mcp, project
+              git_worktrees, taiji, secrets, skills, mcp, project
     responses {"type":"result"|"error", "id": ..., ...}
     events    {"type":"event","event":{...}} plus ``approval_request`` and
               ``ask_request`` events
@@ -43,6 +43,7 @@ from zenagent.app.workspace import (
     workspace_files,
     worktree_overview,
 )
+from zenagent.app.taiji.snapshot import commit_graph, session_map
 from zenagent.events import AgentEvent
 from zenagent.mcp.config import load_mcp_layers, remove_mcp_server, save_mcp_server
 from zenagent.project import (
@@ -609,6 +610,25 @@ class RpcServer:
                     "ok": True,
                     "worktree": worktree_overview(Path.cwd()),
                 }
+            )
+            return True
+        if kind == "taiji":
+            op = request.get("op")
+            if op == "snapshot":
+                self._send(
+                    {
+                        "type": "result",
+                        "id": request_id,
+                        "ok": True,
+                        "taiji": {
+                            "graph": commit_graph(Path.cwd()),
+                            "sessions": session_map(Path.cwd()),
+                        },
+                    }
+                )
+                return True
+            self._send(
+                {"type": "error", "id": request_id, "message": f"unknown taiji op: {op}"}
             )
             return True
         if kind == "secrets":
