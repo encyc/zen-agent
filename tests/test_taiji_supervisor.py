@@ -755,7 +755,6 @@ class TestAttention:
             "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
         )
         chat = FakeChat()
-        question = {"request_id": "q0", "question": "方案 A 还是 B？"}
         supervisor = make_chat_supervisor(
             repo,
             tmp_path,
