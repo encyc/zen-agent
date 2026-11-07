@@ -586,3 +586,105 @@ class TestMergeThreshold:
         assert _git(repo, "merge-base", "--is-ancestor", record.branch, main_before).returncode != 0
         assert len(chat.messages) == 2
         assert "待验收" in chat.messages[1]
+
+
+class GatedRunner(StubRunner):
+    """Turns that start (holding a slot) and wait on a per-worker gate."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.gates: dict[str, asyncio.Event] = {}
+        self.started: list[str] = []
+
+    def gate(self, name: str) -> asyncio.Event:
+        return self.gates.setdefault(name, asyncio.Event())
+
+    async def run_turn(self, worktree, session_path, prompt):
+        name = Path(worktree).name
+        self.started.append(name)
+        await self.gates.setdefault(name, asyncio.Event()).wait()
+        return await super().run_turn(worktree, session_path, prompt)
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+class TestWorkerSlots:
+    async def test_spawn_beyond_limit_queues_until_a_slot_frees(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr("zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home")
+        runner = GatedRunner()
+        supervisor = TaijiSupervisor(
+            repo_root=repo,
+            sessions_dir=tmp_path / "sessions",
+            registry_path=tmp_path / "sessions" / "taiji.json",
+            runner=runner,
+            chat=None,
+            mode_of=lambda: "ask",
+            max_workers=1,
+        )
+
+        await supervisor.spawn("first", name="job-a")
+        await asyncio.sleep(0.05)
+        await supervisor.spawn("second", name="job-b")
+        await asyncio.sleep(0.05)
+
+        statuses = {r.name: r.status for r in supervisor.list_workers()}
+        assert statuses["job-a"] == "running"
+        assert statuses["job-b"] == "queued"
+        assert runner.started == ["job-a"]
+
+        runner.gate("job-a").set()
+        await asyncio.sleep(0.1)
+        assert "job-b" in runner.started  # resumed as soon as the slot freed
+        runner.gate("job-b").set()
+        await supervisor.wait_idle()
+
+    async def test_message_wakes_even_when_slots_are_full(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr("zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home")
+        runner = GatedRunner()
+        supervisor = TaijiSupervisor(
+            repo_root=repo,
+            sessions_dir=tmp_path / "sessions",
+            registry_path=tmp_path / "sessions" / "taiji.json",
+            runner=runner,
+            chat=None,
+            mode_of=lambda: "ask",
+            max_workers=1,
+        )
+
+        await supervisor.spawn("first", name="p1")
+        await asyncio.sleep(0.05)
+        runner.gate("p1").set()
+        await supervisor.wait_idle()
+        await supervisor.spawn("second", name="p2")
+        await asyncio.sleep(0.05)  # p2 now holds the only slot, gated
+
+        await supervisor.message("p1", "human wake")
+        await asyncio.sleep(0.05)
+
+        assert runner.started.count("p1") == 2  # woke without waiting for p2
+        runner.gate("p1").set()
+        runner.gate("p2").set()
+        await supervisor.wait_idle()
+
+    async def test_kill_a_queued_worker_never_runs_it(self, repo: Path, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr("zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home")
+        runner = GatedRunner()
+        supervisor = TaijiSupervisor(
+            repo_root=repo,
+            sessions_dir=tmp_path / "sessions",
+            registry_path=tmp_path / "sessions" / "taiji.json",
+            runner=runner,
+            chat=None,
+            mode_of=lambda: "ask",
+            max_workers=1,
+        )
+
+        await supervisor.spawn("first", name="holder")
+        await asyncio.sleep(0.05)
+        await supervisor.spawn("doomed", name="doomed")
+        await asyncio.sleep(0.05)
+        killed = await supervisor.kill("doomed")
+        runner.gate("holder").set()
+        await supervisor.wait_idle()
+
+        assert killed.status == "killed"
+        assert "doomed" not in runner.started

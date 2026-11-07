@@ -136,6 +136,7 @@ class TaijiSupervisor:
         runner: WorkerRunner,
         chat: Any = None,
         mode_of: Callable[[], str],
+        max_workers: int = 3,
     ) -> None:
         self.repo_root = Path(repo_root).expanduser().resolve()
         self.sessions_dir = Path(sessions_dir)
@@ -148,6 +149,7 @@ class TaijiSupervisor:
         self.registry.reconcile(self._worktree_paths())
         self._tasks: set[asyncio.Task[None]] = set()
         self._turns: dict[str, asyncio.Task[None]] = {}
+        self._slots = asyncio.Semaphore(max_workers)
 
     def _worktree_paths(self) -> list[str]:
         listed = _git(self.repo_root, "worktree", "list", "--porcelain")
@@ -227,7 +229,7 @@ class TaijiSupervisor:
         )
         self.registry.records[worker] = record
         self._save()
-        self._start_turn(record, prompt, resume=None, rollback_on_start_failure=True)
+        self._start_turn(record, prompt, resume=None, rollback_on_start_failure=True, use_slot=True)
         return record
 
     async def message(self, name: str, text: str) -> WorkerRecord:
@@ -238,7 +240,7 @@ class TaijiSupervisor:
         record.updated_at = time.time()
         self._save()
         self._start_turn(
-            record, text, resume=record.session or None, rollback_on_start_failure=False
+            record, text, resume=record.session or None, rollback_on_start_failure=False, use_slot=False
         )
         return record
 
@@ -265,9 +267,10 @@ class TaijiSupervisor:
         *,
         resume: str | None,
         rollback_on_start_failure: bool,
+        use_slot: bool,
     ) -> None:
         task = asyncio.create_task(
-            self._run_turn(record, prompt, resume, rollback_on_start_failure)
+            self._run_turn(record, prompt, resume, rollback_on_start_failure, use_slot)
         )
         self._tasks.add(task)
         self._turns[record.name] = task
@@ -284,8 +287,19 @@ class TaijiSupervisor:
         prompt: str,
         resume: str | None,
         rollback_on_start_failure: bool,
+        use_slot: bool,
     ) -> None:
         started = time.time()
+        if use_slot:
+            if self._slots.locked():
+                record.status = "queued"
+                record.updated_at = time.time()
+                self._save()
+            await self._slots.acquire()
+            if record.status == "queued":
+                record.status = "running"
+                record.updated_at = time.time()
+                self._save()
         try:
             result = await self.runner.run_turn(record.worktree, resume, prompt)
         except asyncio.CancelledError:
@@ -303,6 +317,9 @@ class TaijiSupervisor:
             self._save()
             await self._emit_turn(record, str(exc), started, status="error")
             return
+        finally:
+            if use_slot:
+                self._slots.release()
         if record.status == "killed":
             return  # a kill during the turn is final; do not overwrite or merge
         record.status = result.status

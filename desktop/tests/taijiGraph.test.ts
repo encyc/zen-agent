@@ -222,3 +222,11 @@ test('pickChips keeps plain sessions only when nothing better exists', () => {
   assert.deepEqual(picked.chips.map((s) => s.name), ['current'])
   assert.equal(picked.overflow, 0)
 })
+
+test('queued is a known done-tone status', () => {
+  assert.deepEqual(statusMeta('queued'), {
+    key: 'panel.taiji.status.queued',
+    tone: 'done',
+    pulse: false,
+  })
+})

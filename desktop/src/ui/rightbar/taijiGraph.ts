@@ -113,6 +113,7 @@ export interface StatusMeta {
 
 const STATUS_TABLE: Record<string, StatusMeta> = {
   running: { key: 'panel.taiji.status.running', tone: 'run', pulse: true },
+  queued: { key: 'panel.taiji.status.queued', tone: 'done', pulse: false },
   ok: { key: 'panel.taiji.status.ok', tone: 'wait', pulse: false },
   error: { key: 'panel.taiji.status.error', tone: 'error', pulse: false },
   merged: { key: 'panel.taiji.status.merged', tone: 'done', pulse: false },
