@@ -406,6 +406,53 @@ test('a returning user lands on the home hero and auto-connects', async ({ page 
   await expect(page.locator('[data-home-hero]')).toBeVisible()
 })
 
+test('the home hero shows the padded app icon', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('zen.last.cwd', '/work'))
+  await page.addInitScript(installBridge, initialState())
+  await page.goto('/')
+  const logo = page.locator('[data-home-hero] [data-home-logo]')
+  await expect(logo).toBeVisible()
+  const metrics = await logo.evaluate(async (element) => {
+    const img = element as HTMLImageElement
+    await img.decode()
+    const canvas = document.createElement('canvas')
+    canvas.width = img.naturalWidth
+    canvas.height = img.naturalHeight
+    const context = canvas.getContext('2d')!
+    context.drawImage(img, 0, 0)
+    const { data } = context.getImageData(0, 0, canvas.width, canvas.height)
+    let left = canvas.width
+    let top = canvas.height
+    let right = -1
+    let bottom = -1
+    for (let y = 0; y < canvas.height; y += 1) {
+      for (let x = 0; x < canvas.width; x += 1) {
+        if (data[(y * canvas.width + x) * 4 + 3] < 8) continue
+        if (x < left) left = x
+        if (x > right) right = x
+        if (y < top) top = y
+        if (y > bottom) bottom = y
+      }
+    }
+    return {
+      width: canvas.width,
+      height: canvas.height,
+      left,
+      top,
+      right,
+      bottom,
+      cornerAlpha: data[3],
+    }
+  })
+  assert.equal(metrics.width, metrics.height)
+  assert.equal(metrics.cornerAlpha, 0)
+  const widthRatio = (metrics.right - metrics.left + 1) / metrics.width
+  const heightRatio = (metrics.bottom - metrics.top + 1) / metrics.height
+  // macOS icons keep the artwork inside an 824px tile of a 1024px canvas.
+  assert.ok(widthRatio > 0.76 && widthRatio < 0.85, `width ratio ${widthRatio}`)
+  assert.ok(heightRatio > 0.76 && heightRatio < 0.85, `height ratio ${heightRatio}`)
+})
+
 test('a first launch goes straight into the chat shell', async ({ page }) => {
   await page.addInitScript(installBridge, initialState())
   await page.goto('/')

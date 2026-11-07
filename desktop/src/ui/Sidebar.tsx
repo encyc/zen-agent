@@ -47,6 +47,7 @@ import { Notifications } from './Notifications'
 import { captureChatState } from './pages/navigation'
 import { pickProjectFolder } from './HomeHero'
 import { pickSessionFileToOpen } from './sessions/fileDialog'
+import appIcon from '../assets/app-icon.png'
 import css from './Sidebar.module.css'
 
 interface RowMenu {
@@ -337,7 +338,7 @@ export function Sidebar(props: { onCollapse(): void }) {
       <div className={css.header} data-tauri-drag-region>
         <div className={css.brand} data-tauri-drag-region>
           <div className={css.brandMark} aria-hidden>
-            <SparkMark />
+            <img src={appIcon} alt="" draggable={false} />
           </div>
           <span className={css.brandName} data-tauri-drag-region>{t('brand.name')}</span>
         </div>
@@ -854,17 +855,5 @@ function Footer() {
       </div>
       <span className={css.version}>v{__APP_VERSION__}</span>
     </div>
-  )
-}
-
-function SparkMark() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
-      <rect x="1" y="1" width="16" height="16" rx="4.5" fill="var(--dsw-alias-state-business-primary)" />
-      <path
-        d="M9 4.2 10.3 7.7 13.8 9l-3.5 1.3L9 13.8 7.7 10.3 4.2 9l3.5-1.3Z"
-        fill="var(--dsw-alias-label-primary-foreground)"
-      />
-    </svg>
   )
 }

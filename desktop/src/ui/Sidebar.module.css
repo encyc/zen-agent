@@ -39,6 +39,12 @@ html[data-platform='darwin'] .brand {
   flex: none;
 }
 
+.brandMark img {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+
 .brandName {
   overflow: hidden;
   text-overflow: ellipsis;
