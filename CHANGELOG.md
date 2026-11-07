@@ -3,6 +3,31 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## v0.9.1 — 2026-11-07
+
+**The updater works end to end, and closing the window keeps the agent alive.**
+
+### Fixed
+
+- **The desktop update button could do nothing.** A banner restored from the
+  cached check had no deferred download handle — the plugin's `check()` result
+  lives only in the session that ran it — so clicking *Update* after a relaunch
+  silently returned. `install()` now re-checks once (surfacing a real failure
+  if that check fails) and then downloads.
+- **macOS updates downloaded a 404.** `latest.json` pointed the two darwin
+  entries at `ZenAgent.app.tar.gz` while the release assets carry
+  architecture-suffixed names (`ZenAgent_aarch64.app.tar.gz`): the app
+  detected the new version but the download failed. The live manifest was
+  hot-fixed for v0.9.0 and the fragment generator now mirrors tauri-action's
+  rename, so this cannot recur.
+
+### Added
+
+- **Closing the window goes to the background.** The zen runtime and its
+  background tasks stay alive; the tray icon (or the macOS dock) brings the
+  window back, and *Quit ZenAgent* in the tray menu is the only path that
+  ends the runtime.
+
 ## v0.9.0 — 2026-11-07
 
 **The architecture cleanup: same behavior, fewer copies, harder guards.**
