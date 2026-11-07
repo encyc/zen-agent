@@ -31,6 +31,7 @@ import { ConversationMinimap } from './ConversationMinimap'
 import { ChatWidthHandles } from './ChatWidthHandles'
 import { NoticeRow, CommandCard, UsageRow } from './AuxRows'
 import { ArrowDownIcon } from '../icons'
+import { RunningMark } from '../RunningMark'
 import css from './ChatView.module.css'
 
 /** The rail only cares about user rows; a stream of assistant deltas rebuilds
@@ -392,7 +393,7 @@ function RunningRow() {
   const t = useT()
   return (
     <div className={css.runningRow}>
-      <span className={css.runningDot} aria-hidden />
+      <RunningMark size={12} />
       <span className={css.runningLabel}>{t('status.running')}</span>
     </div>
   )

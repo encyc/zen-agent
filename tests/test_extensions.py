@@ -93,7 +93,7 @@ async def test_extension_command_runs_via_repl(tmp_path, monkeypatch):
     import zenagent.cli.repl as repl_module
     from zenagent.config import UserConfig
 
-    monkeypatch.setattr(repl_module, "load_user_config", lambda: UserConfig())
+    monkeypatch.setattr("zenagent.app.bootstrap.load_user_config", lambda: UserConfig())
     monkeypatch.setattr(
         "zenagent.app.runtime.load_user_config",
         lambda *args, **kwargs: UserConfig(),
@@ -172,16 +172,18 @@ def register(api):
         )
         yield AssistantEvent(type="done", partial=partial, reason="stop")
 
-    real_bootstrap = cli_main._bootstrap
+    from zenagent.app.runtime import Runtime
 
-    async def bootstrap(options, **kwargs):
+    real_bootstrap = Runtime.bootstrap.__func__
+
+    async def bootstrap(cls, options, **kwargs):
         kwargs["stream_fn"] = fake
-        runtime = await real_bootstrap(options, **kwargs)
+        runtime = await real_bootstrap(cls, options, **kwargs)
         captured["tools"] = [tool.name for tool in runtime.agent.tools]
         captured["prompt"] = runtime.agent.system_prompt
         return runtime
 
-    monkeypatch.setattr(cli_main, "_bootstrap", bootstrap)
+    monkeypatch.setattr(Runtime, "bootstrap", classmethod(bootstrap))
     assert cli_main.main(["-p", "hi", "--extension", str(extension)]) == 0
     assert "ext_tool" in captured["tools"]
     assert "FROM EXTENSION" in captured["prompt"]

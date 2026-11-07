@@ -1,8 +1,9 @@
 """Headless CLI tests: model resolution, streaming output, permission gate.
 
 The network is replaced by a fake ``stream_fn`` injected through the
-``_bootstrap`` seam, so ``main()`` itself is exercised end to end while the
-assembly under test stays the shared :class:`Runtime.bootstrap` path.
+:class:`Runtime.bootstrap` seam (the one all four frontends assemble through),
+so ``main()`` itself is exercised end to end while the assembly under test
+stays real.
 """
 
 import io
@@ -21,7 +22,7 @@ from zenagent.types import AssistantMessage, TextContent, ToolCall, Usage
 @pytest.fixture(autouse=True)
 def isolate_user_config(monkeypatch):
     """Tests must not read the developer's real ~/.zenagent/config.toml."""
-    monkeypatch.setattr(cli_main, "load_user_config", lambda: UserConfig())
+    monkeypatch.setattr("zenagent.app.bootstrap.load_user_config", lambda: UserConfig())
     # Assembly moved into the Runtime, so that is where the config is read.
     monkeypatch.setattr(
         "zenagent.app.runtime.load_user_config", lambda *a, **k: UserConfig()
@@ -99,11 +100,13 @@ def _patch_bootstrap(monkeypatch, stream, captured: dict, on_built=None):
     and teardown run for real, so a flag that stops reaching the Runtime fails
     here instead of failing against a hand-built Agent.
     """
-    real_bootstrap = cli_main._bootstrap
+    from zenagent.app.runtime import Runtime
 
-    async def bootstrap(options, **kwargs):
+    real_bootstrap = Runtime.bootstrap.__func__
+
+    async def bootstrap(cls, options, **kwargs):
         kwargs["stream_fn"] = stream
-        runtime = await real_bootstrap(options, **kwargs)
+        runtime = await real_bootstrap(cls, options, **kwargs)
         captured.update(
             options=options,
             runtime=runtime,
@@ -117,7 +120,7 @@ def _patch_bootstrap(monkeypatch, stream, captured: dict, on_built=None):
             on_built(runtime)
         return runtime
 
-    monkeypatch.setattr(cli_main, "_bootstrap", bootstrap)
+    monkeypatch.setattr(Runtime, "bootstrap", classmethod(bootstrap))
 
 
 def test_main_headless_streams_text_and_returns_zero(monkeypatch, capsys):
@@ -683,11 +686,16 @@ def test_policy_flags_reach_the_permission_gate(monkeypatch):
         "zenagent.app.runtime.load_user_config",
         lambda *a, **k: UserConfig(tool_allow=["read_*"], tool_deny=["bash"]),
     )
+    # prepare() reads the user config for the broker before bootstrap runs.
+    monkeypatch.setattr(
+        "zenagent.app.bootstrap.load_user_config",
+        lambda *a, **k: UserConfig(tool_allow=["read_*"], tool_deny=["bash"]),
+    )
     captured: dict = {}
     _patch_bootstrap(monkeypatch, fake_stream(), captured)
 
     assert cli_main.main(["-p", "hi", "--read-only"]) == 0
-    gate = captured["gate"]
+    gate = captured["gate"].gate
     assert gate.mode == "plan"
     assert gate.allow == ["read_*"]
     assert gate.deny == ["bash"]
@@ -800,7 +808,7 @@ async def test_headless_wires_policy_and_journal(monkeypatch, app_env):
         allow_protected=True,
     )
     assert code == 0
-    gate = captured["gate"]
+    gate = captured["gate"].gate
     allow_outside = [str(path) for path in gate.policy.allow_outside]
     assert str(Path("/tmp/outside").resolve()) in allow_outside
     assert gate.policy.allow_destructive and gate.policy.allow_protected
@@ -944,7 +952,7 @@ def test_tui_launch_attaches_image_flags(monkeypatch, tmp_path):
             return None
 
     monkeypatch.setattr(Runtime, "bootstrap", classmethod(fake_bootstrap))
-    monkeypatch.setattr(cli_main, "_tui_app_class", lambda: FakeApp)
+    monkeypatch.setattr("zenagent.cli.tui.run.ZenAgentApp", FakeApp)
 
     assert cli_main.main(["--image", str(_png(tmp_path))]) == 0
     assert len(captured["images"]) == 1

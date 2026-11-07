@@ -95,19 +95,6 @@
   line-height: 16px;
 }
 
-.runningDot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--dsw-alias-state-business-primary);
-  animation: dot-pulse 1s ease-in-out infinite alternate;
-}
-
-@keyframes dot-pulse {
-  from { opacity: 0.35; }
-  to { opacity: 1; }
-}
-
 .runningLabel {
   font-weight: 500;
 }

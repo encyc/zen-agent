@@ -550,6 +550,11 @@ class PermissionBroker:
     def mode(self) -> str:
         return self._gate.mode
 
+    @property
+    def gate(self) -> PermissionGate:
+        """The wrapped gate; policy inspection without broker ceremony."""
+        return self._gate
+
     def set_mode(self, mode: str) -> None:
         self._gate.set_mode(mode)
 

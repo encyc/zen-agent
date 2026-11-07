@@ -27,16 +27,12 @@ from zenagent.agent.session import (
     sessions_dir,
 )
 from zenagent.app.appearance import THEME_CHOICES
-from zenagent.app.chat import ChatController
-from zenagent.app.commands import AppServices, build_default_commands
-from zenagent.app.models import ModelManager
+from zenagent.app.bootstrap import prepare
 from zenagent.app.modes import describe_modes
 from zenagent.app.permissions import (
-    build_broker_for,
     render_approval_prompt,
 )
-from zenagent.app.runtime import Runtime, RuntimeOptions
-from zenagent.app.sessions import SessionManager
+from zenagent.app.runtime import RuntimeOptions
 from zenagent.app.skill_commands import build_skill_submission
 from zenagent.app.support import api_key_for
 from zenagent.attachments import read_image_argument
@@ -59,7 +55,7 @@ from zenagent.cli.theme import (
     Theme,
     resolve_theme_spec,
 )
-from zenagent.config import config_path, load_user_config
+from zenagent.config import config_path
 from zenagent.events import AgentEvent
 from zenagent.i18n import LANGUAGE_CHOICES, resolve_language, set_locale, t
 from zenagent.providers.registry import StreamFn
@@ -461,20 +457,6 @@ async def repl(
 ) -> int:
     """Run the interactive loop; returns the process exit code."""
     set_locale(resolve_language(lang, pref=_saved_language()))
-    user_config = load_user_config()
-    # The broker owns the interactive surface: approvals travel through the
-    # same single-stdin protocol as every other question (see the interaction
-    # gate below), instead of a blocking input() that fought the steering
-    # reader for stdin and froze the event loop mid-prompt.
-    broker = build_broker_for(
-        user_config=user_config,
-        mode=mode,
-        read_only=read_only,
-        allow_dangerous=allow_dangerous,
-        allow_outside=allow_outside or [],
-        allow_destructive=allow_destructive,
-        allow_protected=allow_protected,
-    )
     options = RuntimeOptions(
         model_id=model_id,
         thinking=thinking,
@@ -503,15 +485,19 @@ async def repl(
         mcp_retry_interval_s=mcp_retry_interval_s,
     )
     try:
-        runtime = await Runtime.bootstrap(
-            options, stream_fn=stream_fn, gate=broker, allow_missing_key=False
-        )
+        prepared = await prepare(options, stream_fn=stream_fn)
     except KeyError as exc:
         print("zenagent: " + t("repl.unknown_model", model=exc), file=sys.stderr)
         return 1
     except (RuntimeError, LookupError) as exc:
         print(f"zenagent: {exc}", file=sys.stderr)
         return 1
+    runtime = prepared.runtime
+    broker = prepared.broker
+    # The broker owns the interactive surface: approvals travel through the
+    # same single-stdin protocol as every other question (see the interaction
+    # gate below), instead of a blocking input() that fought the steering
+    # reader for stdin and froze the event loop mid-prompt.
     for warning in runtime.warnings:
         print(f"zenagent: {warning}", file=sys.stderr)
 
@@ -644,14 +630,9 @@ async def repl(
         settings.set_pref("language", normalized)
         print_fn(t("repl.lang_set", code=code))
 
-    chat = ChatController(runtime)
-    services = AppServices(
-        runtime=runtime,
-        chat=chat,
-        models=ModelManager(runtime),
-        sessions=SessionManager(runtime),
-    )
-    commands = build_default_commands(services)
+    chat = prepared.chat
+    services = prepared.services
+    commands = prepared.commands
     for block in initial_images:
         chat.attach_image(block)
 

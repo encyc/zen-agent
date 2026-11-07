@@ -1,0 +1,17 @@
+.mark {
+  display: block;
+  flex: none;
+  animation: running-spin 2.6s linear infinite;
+}
+
+@keyframes running-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mark {
+    animation: none;
+  }
+}

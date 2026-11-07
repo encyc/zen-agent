@@ -24,17 +24,16 @@ from pathlib import Path
 
 from zenagent import __version__
 from zenagent.agent.session import list_sessions
+from zenagent.app.bootstrap import prepare
 from zenagent.app.compact import maybe_auto_compact
 from zenagent.app.modes import MODES, resolve_mode
-from zenagent.app.permissions import build_broker_for
-from zenagent.app.runtime import Runtime, RuntimeOptions
+from zenagent.app.runtime import RuntimeOptions
 from zenagent.app.support import resolve_model
 from zenagent.app.views import usage_total
 from zenagent.attachments import read_image_argument
 from zenagent.cli.doctor import run_doctor
 from zenagent.cli.exportcmd import run_export
 from zenagent.cli.usagecmd import run_usage
-from zenagent.config import load_user_config
 from zenagent.events import AgentEvent
 from zenagent.i18n import LANGUAGE_CHOICES
 from zenagent.providers.registry import StreamFn
@@ -44,12 +43,6 @@ __all__ = ["build_parser", "main", "resolve_model", "run_headless"]
 
 THINKING_CHOICES = ("off", "low", "medium", "high", "max")
 
-
-#: The assembly seam: headless delegates to ``Runtime.bootstrap`` — the same
-#: catalog → policy → gate → tools → session wiring the TUI, REPL and RPC use —
-#: instead of re-wiring them here. Tests wrap this alias to inject a fake
-#: stream and capture the built runtime.
-_bootstrap = Runtime.bootstrap
 
 
 @dataclass
@@ -208,8 +201,8 @@ async def run_headless(
         tools=tools,
     )
     try:
-        runtime = await _bootstrap(
-            options, stream_fn=stream_fn, assume_yes=assume_yes, allow_missing_key=False
+        prepared = await prepare(
+            options, stream_fn=stream_fn, assume_yes=assume_yes, views=False
         )
     except KeyError as exc:
         print(f"zenagent: unknown model: {exc}", file=sys.stderr)
@@ -217,6 +210,7 @@ async def run_headless(
     except (RuntimeError, LookupError) as exc:
         print(f"zenagent: {exc}", file=sys.stderr)
         return 1
+    runtime = prepared.runtime
     for warning in runtime.warnings:
         print(f"zenagent: {warning}", file=sys.stderr)
 
@@ -632,40 +626,26 @@ def main(argv: list[str] | None = None) -> int:
                 auto_compact=not args.no_auto_compact,
             )
 
-            broker = build_broker_for(
-                user_config=load_user_config(),
-                mode=mode,
-                read_only=args.read_only,
-                allow_dangerous=args.allow_dangerous,
-                allow_outside=args.allow_outside or [],
-                allow_destructive=args.allow_destructive,
-                allow_protected=args.allow_protected,
-            )
-
             async def run_tui_session() -> int:
                 # Imported here so a broken install is reported by the except
                 # below instead of escaping as a traceback.
-                ZenAgentApp = _tui_app_class()
-                runtime = await Runtime.bootstrap(
-                    options, gate=broker, allow_missing_key=True
-                )
+                from zenagent.cli.tui import run as tui_run
+
+                prepared = await prepare(options, allow_missing_key=True, views=False)
                 try:
-                    image_blocks = _read_images(runtime.agent.model, args.images)
+                    image_blocks = _read_images(
+                        prepared.runtime.agent.model, args.images
+                    )
                     if image_blocks is None:
                         return 1
-                    app = ZenAgentApp(
-                        runtime,
+                    return await tui_run.run_tui_session(
+                        prepared,
                         theme=args.theme,
                         language=args.lang,
                         images=image_blocks,
                     )
-                    broker.set_confirm(app.request_tool_approval)
-                    await app.run_async()
-                    if app.exit_summary:
-                        print(app.exit_summary)
-                    return 0
                 finally:
-                    await runtime.close()
+                    await prepared.runtime.close()
 
             try:
                 return asyncio.run(run_tui_session())

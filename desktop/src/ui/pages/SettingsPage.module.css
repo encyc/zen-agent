@@ -600,21 +600,15 @@
   transform: translateX(12px);
 }
 
-/* About opens with pi's centred hero: name over version, no card chrome. */
+/* About opens with pi's centred hero: wordmark over version, no card chrome. */
 .aboutHero {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 10px;
   padding: 26px 16px 8px;
   text-align: center;
-}
-
-.aboutName {
   color: var(--dsw-alias-label-primary);
-  font-size: var(--ds-font-18);
-  font-weight: 600;
-  line-height: 1.25;
 }
 
 .aboutVersion {

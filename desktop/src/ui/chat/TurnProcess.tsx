@@ -6,6 +6,7 @@ import type { ToolNode } from '../../state/chatStore'
 import { useT } from '../../i18n/locale'
 import { formatDuration } from '../format'
 import { ChevronRightIcon } from '../icons'
+import { RunningMark } from '../RunningMark'
 import { ToolRowView } from './ToolRowView'
 import css from './TurnProcess.module.css'
 
@@ -33,6 +34,7 @@ export function TurnProcess({ tools, durationMs, running }: TurnProcessProps) {
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
+        {running && <RunningMark size={12} />}
         <span className={css.label}>{label}</span>
         <span className={css.chevron} data-open={open || undefined} aria-hidden>
           <ChevronRightIcon size={11} />

@@ -37,6 +37,7 @@ import {
   PaletteIcon,
   SearchIcon,
 } from '../icons'
+import { ZenWordmark } from '../ZenWordmark'
 import css from './SettingsPage.module.css'
 
 type Tab = 'appearance' | 'conversation' | 'about'
@@ -557,7 +558,7 @@ export function SettingsPage() {
 
           {tab === 'about' && (
             <div className={css.aboutHero}>
-              <div className={css.aboutName}>ZenAgent</div>
+              <ZenWordmark height={28} />
               <div className={css.aboutVersion}>
                 {t('settings.aboutVersion', { version: __APP_VERSION__ })}
               </div>

@@ -28,7 +28,7 @@ from zenagent.types import (
 @pytest.fixture(autouse=True)
 def isolate_user_config(monkeypatch):
     """Tests must not read the developer's real ~/.zenagent/config.toml."""
-    monkeypatch.setattr(repl_module, "load_user_config", lambda: UserConfig())
+    monkeypatch.setattr("zenagent.app.bootstrap.load_user_config", lambda: UserConfig())
     monkeypatch.setattr(
         "zenagent.app.runtime.load_user_config",
         lambda *args, **kwargs: UserConfig(),
@@ -266,7 +266,7 @@ async def test_reload_discovers_skills_added_mid_session(tmp_path, monkeypatch):
     import zenagent.cli.repl as repl_module
     from zenagent.config import UserConfig
 
-    monkeypatch.setattr(repl_module, "load_user_config", lambda: UserConfig())
+    monkeypatch.setattr("zenagent.app.bootstrap.load_user_config", lambda: UserConfig())
     monkeypatch.setattr(
         "zenagent.app.runtime.load_user_config",
         lambda *args, **kwargs: UserConfig(),

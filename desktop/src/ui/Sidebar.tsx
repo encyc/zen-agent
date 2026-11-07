@@ -24,7 +24,7 @@ import {
 import { armDelete, deleteArmed } from '../state/armedDelete'
 import { useT } from '../i18n/locale'
 import type { SessionSummary } from '../rpc/types'
-import { StateDot, Tooltip } from './primitives'
+import { Tooltip } from './primitives'
 import {
   ChatIcon,
   ChevronDownIcon,
@@ -48,6 +48,8 @@ import { captureChatState } from './pages/navigation'
 import { pickProjectFolder } from './HomeHero'
 import { pickSessionFileToOpen } from './sessions/fileDialog'
 import appIcon from '../assets/app-icon.png'
+import { RunningMark } from './RunningMark'
+import { ZenWordmark } from './ZenWordmark'
 import css from './Sidebar.module.css'
 
 interface RowMenu {
@@ -340,7 +342,7 @@ export function Sidebar(props: { onCollapse(): void }) {
           <div className={css.brandMark} aria-hidden>
             <img src={appIcon} alt="" draggable={false} />
           </div>
-          <span className={css.brandName} data-tauri-drag-region>{t('brand.name')}</span>
+          <ZenWordmark height={13} />
         </div>
         <Tooltip label="⌘B">
           <button
@@ -726,7 +728,7 @@ function SessionRow(props: {
       </div>
       {props.current && props.busy && (
         <span className={css.sessionCue} title={t('session.running')}>
-          <StateDot state="running" size={6} />
+          <RunningMark size={8} />
         </span>
       )}
       {props.current && props.pending > 0 && (

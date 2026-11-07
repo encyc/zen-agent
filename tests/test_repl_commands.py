@@ -23,7 +23,7 @@ from zenagent.types import AssistantMessage, Cost, TextContent, Usage
 
 @pytest.fixture(autouse=True)
 def isolate_config(monkeypatch):
-    monkeypatch.setattr(repl_module, "load_user_config", lambda: UserConfig())
+    monkeypatch.setattr("zenagent.app.bootstrap.load_user_config", lambda: UserConfig())
     monkeypatch.setattr(
         "zenagent.app.runtime.load_user_config",
         lambda *args, **kwargs: UserConfig(),

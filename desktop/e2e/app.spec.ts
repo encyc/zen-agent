@@ -455,6 +455,85 @@ test('the home hero shows the padded app icon', async ({ page }) => {
   assert.ok(heightRatio > 0.76 && heightRatio < 0.85, `height ratio ${heightRatio}`)
 })
 
+test('the about page carries the ZEN wordmark', async ({ page }) => {
+  await boot(page, initialState({ running: false }))
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '信息' }).click()
+  const mark = page.locator('[data-page="settings"] [data-zen-wordmark]')
+  await expect(mark).toBeVisible()
+  await expect(mark).toHaveAttribute('role', 'img')
+  await expect(mark).toHaveAttribute('aria-label', 'ZEN')
+})
+
+test('the sidebar brand keeps the ZEN wordmark in the DOM', async ({ page }) => {
+  await boot(page, initialState({ running: false }))
+  // The brand row is hidden on macOS; on other platforms the same mark shows.
+  await expect(page.locator('[data-shell-sidebar] [data-zen-wordmark]')).toHaveCount(1)
+})
+
+test('a running turn rotates the app mark', async ({ page }) => {
+  await boot(
+    page,
+    initialState({
+      running: true,
+      transcript: [{ kind: 'user', id: 'u1', text: 'go', timestamp: 1 }],
+    }),
+  )
+  const mark = page.locator('[data-chat-flow] [data-running-logo]')
+  await expect(mark).toBeVisible()
+  const spin = await mark.evaluate((element) => {
+    const style = getComputedStyle(element)
+    return { name: style.animationName, iterations: style.animationIterationCount }
+  })
+  assert.notEqual(spin.name, 'none')
+  assert.equal(spin.iterations, 'infinite')
+  await expect(page.locator('[data-shell-sidebar] [data-running-logo]')).toBeVisible()
+
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  assert.equal(
+    await mark.evaluate((element) => getComputedStyle(element).animationName),
+    'none',
+  )
+})
+
+test('an idle session shows no running mark', async ({ page }) => {
+  await boot(
+    page,
+    initialState({
+      running: false,
+      transcript: [
+        { kind: 'user', id: 'u1', text: 'go', timestamp: 1 },
+        { kind: 'assistant', id: 'a1', text: 'done', timestamp: 2 },
+      ],
+    }),
+  )
+  await expect(page.locator('[data-running-logo]')).toHaveCount(0)
+})
+
+test('a running tool turn rotates the mark in the process header', async ({ page }) => {
+  await boot(
+    page,
+    initialState({
+      running: true,
+      transcript: [
+        { kind: 'user', id: 'u1', text: 'go', timestamp: 1 },
+        {
+          id: 't1',
+          call_id: 'c1',
+          name: 'read_file',
+          args_preview: '{"path":"/work/a.ts"}',
+          status: 'ok',
+          result_text: 'export {}',
+          duration_ms: 20,
+        },
+      ],
+    }),
+  )
+  const mark = page.locator('[data-turn-process] [data-running-logo]')
+  await expect(mark).toBeVisible()
+  await expect(page.locator('[data-chat-flow] [data-running-logo]')).toHaveCount(1)
+})
+
 test('a first launch goes straight into the chat shell', async ({ page }) => {
   await page.addInitScript(installBridge, initialState())
   await page.goto('/')

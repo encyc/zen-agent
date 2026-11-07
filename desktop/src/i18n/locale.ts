@@ -7,7 +7,6 @@ import { useSettingsStore, type Locale } from '../state/stores'
 type Dict = Record<string, string>
 
 const zh: Dict = {
-  'brand.name': 'ZenAgent',
   'brand.subtitle': '桌面端',
   'sidebar.search': '搜索会话',
   'sidebar.new': '新会话',
@@ -301,7 +300,6 @@ const zh: Dict = {
 }
 
 const en: Dict = {
-  'brand.name': 'ZenAgent',
   'brand.subtitle': 'Desktop',
   'sidebar.search': 'Search sessions',
   'sidebar.new': 'New session',

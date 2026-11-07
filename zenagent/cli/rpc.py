@@ -1025,33 +1025,16 @@ def _stdout_line(text: str) -> None:
 
 
 async def _run(args) -> int:
-    from zenagent.app.chat import ChatController
-    from zenagent.app.commands import AppServices, build_default_commands
-    from zenagent.app.models import ModelManager
+    from zenagent.app.bootstrap import prepare
     from zenagent.app.modes import resolve_mode
-    from zenagent.app.runtime import Runtime, RuntimeOptions
-    from zenagent.app.sessions import SessionManager
-    from zenagent.config import load_user_config
+    from zenagent.app.runtime import RuntimeOptions
 
     # Resolve the mode exactly like the other frontends: an explicit --mode
     # wins, then --read-only (plan), then --yes (zen). Passing the raw
     # ``args.mode`` (None when the flag is omitted) into the gate used to
     # raise "unknown mode: None" for every documented ``zen rpc`` invocation.
-    user_config = load_user_config()
     mode = resolve_mode(
         explicit=args.mode, assume_yes=args.yes, read_only=args.read_only
-    )
-    from zenagent.app.permissions import build_broker_for
-
-    broker = build_broker_for(
-        user_config=user_config,
-        mode=mode,
-        read_only=args.read_only,
-        assume_yes=args.yes,
-        allow_dangerous=args.allow_dangerous,
-        allow_outside=args.allow_outside or [],
-        allow_destructive=args.allow_destructive,
-        allow_protected=args.allow_protected,
     )
     options = RuntimeOptions(
         model_id=args.model,
@@ -1078,28 +1061,19 @@ async def _run(args) -> int:
         metrics=args.metrics,
     )
     try:
-        runtime = await Runtime.bootstrap(
-            options,
-            gate=broker,
-            assume_yes=args.yes,
-            allow_missing_key=False,
-        )
+        prepared = await prepare(options, assume_yes=args.yes)
     except KeyError as exc:
         print(f"zenagent: unknown model: {exc}", file=sys.stderr)
         return 2
     except (RuntimeError, LookupError) as exc:
         print(f"zenagent: {exc}", file=sys.stderr)
         return 2
+    runtime = prepared.runtime
+    chat = prepared.chat
+    services = prepared.services
     for warning in runtime.warnings:
         print(f"zenagent: {warning}", file=sys.stderr)
 
-    chat = ChatController(runtime)
-    services = AppServices(
-        runtime=runtime,
-        chat=chat,
-        models=ModelManager(runtime),
-        sessions=SessionManager(runtime),
-    )
     server = RpcServer(
         runtime=runtime,
         read_line=_stdin_line,
@@ -1107,9 +1081,9 @@ async def _run(args) -> int:
         chat=chat,
         models=services.models,
         sessions=services.sessions,
-        commands=build_default_commands(services),
+        commands=prepared.commands,
     )
-    broker.set_confirm(server.confirm)
+    prepared.broker.set_confirm(server.confirm)
     from zenagent.tools.ask import set_ask_handler
 
     set_ask_handler(server.ask)
