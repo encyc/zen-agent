@@ -172,6 +172,40 @@ interface FrameHandling {
   get: () => AppState
 }
 
+interface BootOptions {
+  bin?: string
+  cwd?: string
+  args?: string[]
+  /** A switch must not leave the previous project's transcript on screen if it fails to load. */
+  fromSwitch: boolean
+}
+
+/** The one boot sequence both connect and openProject ride: start the child,
+ * pin its pid, handshake, remember the project, load the transcript and
+ * replay the person's saved choices. Callers own the connection state. */
+async function bootChild(
+  set: (partial: Partial<AppState>) => void,
+  get: () => AppState,
+  opts: BootOptions,
+): Promise<void> {
+  const rpc = get().client()
+  // `--mode ask` keeps old released zen binaries happy and is the safe
+  // default; the user's own mode is replayed from prefs (see restorePrefs).
+  const pid = await rpc.start({ bin: opts.bin, cwd: opts.cwd, args: opts.args })
+  set({ pid })
+  await rpc.handshake()
+  try {
+    localStorage.setItem(LAST_CWD_KEY, opts.cwd ?? '')
+  } catch {
+    // ignore
+  }
+  if (opts.cwd !== undefined && opts.cwd !== '') useProjectStore.getState().addProject(opts.cwd)
+  const loaded = await get().refreshTranscript()
+  if (!loaded && opts.fromSwitch) useChatStore.getState().reset()
+  await restorePrefs()
+  await get().refreshSessions()
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   connection: 'idle',
   switching: null,
@@ -220,26 +254,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     try {
-      // `--mode ask` keeps old released zen binaries happy (they crash without
-      // an explicit mode) and is the safe default; the user's own mode is
-      // replayed from prefs once the child is up (see restorePrefs).
-      const pid = await rpc.start({ bin, cwd, args: args ?? spawnArgs() })
-      // Track the child immediately: the previous process's exit event (the
-      // shell kills it during a restart) must not end this replacement.
-      set({ pid })
-      // The wire contract is versioned: refuse to talk to a server that does
-      // not speak the same protocol (its result frames would mislead the UI).
-      await rpc.handshake()
-      try {
-        localStorage.setItem(LAST_CWD_KEY, cwd ?? '')
-      } catch {
-        // ignore
-      }
-      if (cwd !== undefined && cwd !== '') useProjectStore.getState().addProject(cwd)
+      await bootChild(set, get, { bin, cwd, args: args ?? spawnArgs(), fromSwitch: false })
       set({ connection: 'ready' })
-      await get().refreshTranscript()
-      await restorePrefs()
-      await get().refreshSessions()
       await get().refreshCatalog()
       pollTimer = setInterval(() => {
         // A switch owns the wire while it runs; polling it would race the
@@ -463,25 +479,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     useAskStore.getState().clear()
     useChatStore.getState().finalize()
 
-    const rpc = get().client()
     try {
-      const pid = await rpc.start({ cwd: path, args: spawnArgs() })
-      // Before the handshake: the old child's exit event carries its own pid
-      // and must not be mistaken for this one dying.
-      set({ pid })
-      await rpc.handshake()
-      try {
-        localStorage.setItem(LAST_CWD_KEY, path)
-      } catch {
-        // ignore
-      }
-      useProjectStore.getState().addProject(path)
-      const loaded = await get().refreshTranscript()
-      // A failed transcript request must not leave the previous project's
-      // conversation on screen pretending to be this one.
-      if (!loaded) useChatStore.getState().reset()
-      await restorePrefs()
-      await get().refreshSessions()
+      await bootChild(set, get, { cwd: path, args: spawnArgs(), fromSwitch: true })
       set({ connection: 'ready', switching: null, exitCode: null, startFailure: null })
     } catch (error) {
       const failure = startFailureOf(error)

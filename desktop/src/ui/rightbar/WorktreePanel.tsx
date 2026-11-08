@@ -42,8 +42,8 @@ export function WorktreePanel() {
     if (switching !== null || running) return
     setSwitching(path)
     try {
-      await useAppStore.getState().disconnect()
-      await useAppStore.getState().connect(undefined, path)
+      // openProject owns the pid/exit races; the panel only guards its button.
+      await useAppStore.getState().openProject(path)
     } finally {
       setSwitching(null)
     }

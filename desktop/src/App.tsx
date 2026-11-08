@@ -46,6 +46,7 @@ function loadWidth(key: string, fallback: number): number {
 export function App() {
   const t = useT()
   const connection = useAppStore((state) => state.connection)
+  const switching = useAppStore((state) => state.switching)
   const connect = useAppStore((state) => state.connect)
   const collapsed = useSettingsStore((state) => state.sidebarCollapsed)
   const setCollapsed = useSettingsStore((state) => state.setSidebarCollapsed)
@@ -233,6 +234,12 @@ export function App() {
         onExpandSidebar={() => setCollapsed(false)}
         onNewSession={() => void useAppStore.getState().newSession()}
       />
+      {switching !== null && (
+        <div className={css.switchBanner} role="status">
+          <div className={css.bootSpinner} aria-hidden />
+          <span>{t('app.switching', { path: switching.path })}</span>
+        </div>
+      )}
       <NoticeBanner />
       <UpdateBanner />
       <ChatView />

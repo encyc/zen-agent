@@ -52,6 +52,17 @@
   font-size: var(--ds-font-13);
 }
 
+.switchBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--ds-font-13);
+  background: var(--dsw-alias-bg-subtle);
+}
+
 .bootSpinner {
   width: 16px;
   height: 16px;
