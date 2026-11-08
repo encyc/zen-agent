@@ -59,6 +59,28 @@ def isolated_update_check(tmp_path, monkeypatch):
     monkeypatch.setenv("ZENAGENT_UPDATE_CACHE_PATH", str(tmp_path / "update.json"))
 
 
+_GIT_IDENTITY = {
+    "GIT_AUTHOR_NAME": "ZenAgent Tests",
+    "GIT_AUTHOR_EMAIL": "tests@zenagent.invalid",
+    "GIT_COMMITTER_NAME": "ZenAgent Tests",
+    "GIT_COMMITTER_EMAIL": "tests@zenagent.invalid",
+}
+
+
+@pytest.fixture(autouse=True)
+def isolated_git_identity(monkeypatch):
+    """``git commit`` in a test repo never depends on the machine's identity.
+
+    A bare CI runner has no ``user.name``/``user.email`` and a dotless hostname,
+    so git cannot even auto-detect an author and the commit dies with exit 128
+    ("Author identity unknown") — which is how the taiji worktree tests went red
+    on ubuntu while the identical code stayed green on macOS. The env vars win
+    over any config file, so every runner commits the same way.
+    """
+    for name, value in _GIT_IDENTITY.items():
+        monkeypatch.setenv(name, value)
+
+
 @pytest.fixture
 async def runtime_factory(app_env):
     """Build Runtime instances for tests; closes them all on teardown."""
