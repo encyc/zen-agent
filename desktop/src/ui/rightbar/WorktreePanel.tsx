@@ -42,8 +42,9 @@ export function WorktreePanel() {
     if (switching !== null || running) return
     setSwitching(path)
     try {
-      await useAppStore.getState().disconnect()
-      await useAppStore.getState().connect(undefined, path)
+      // Another worktree is another project key: same runtime swap, same
+      // mounted shell (openProject keeps the transcript until the new one lands).
+      await useAppStore.getState().openProject(path)
     } finally {
       setSwitching(null)
     }

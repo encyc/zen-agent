@@ -2161,3 +2161,75 @@ test('submitting /memory opens the memory tab', async ({ page }) => {
   await expect(panel.getByRole('tab', { name: '记忆' })).toHaveAttribute('aria-selected', 'true')
   await expect(panel).toContainText('这个项目还没有记忆')
 })
+
+test('a project switch keeps the shell mounted and shows a progress strip', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('zen.last.cwd', '/work/p')
+    localStorage.setItem(
+      'zen.projects',
+      JSON.stringify([
+        { path: '/work/p', name: 'p', at: 1 },
+        { path: '/work/q', name: 'q', at: 1 },
+      ]),
+    )
+  })
+  await boot(page, initialState({ switchDelayMs: 800 }))
+  await expect(page.locator('[data-shell-composer]')).toBeVisible()
+
+  await page.getByRole('button', { name: '在 q 中新建会话' }).click()
+
+  // Mid-switch the runtime is being replaced, the shell is not: no boot
+  // screen, no unmounted sidebar, just a strip saying what is happening.
+  await expect(page.locator('[data-switching="/work/q"]')).toBeVisible()
+  await expect(page.locator('[data-shell-composer]')).toBeVisible()
+  await expect(page.getByText('正在启动 zen rpc…')).toHaveCount(0)
+
+  await expect(page.locator('[data-switching]')).toHaveCount(0)
+  await expect
+    .poll(() => page.evaluate(() => window.__ZEN_E2E__.starts.at(-1)?.cwd))
+    .toBe('/work/q')
+})
+
+test('a fresh runtime is put back onto the last mode, model and thinking', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('zen.pref.mode', 'plan')
+    localStorage.setItem('zen.pref.model', 'other-model')
+    localStorage.setItem('zen.pref.thinking', 'low')
+  })
+  await boot(page, initialState())
+
+  // The child defaults to zen mode / catalog model / high thinking; the prefs
+  // are replayed as ordinary frames, so the person never notices the restart.
+  await expect
+    .poll(() => page.evaluate(() => window.__ZEN_E2E__.calls.some((call) => call.type === 'mode' && call.mode === 'plan')))
+    .toBe(true)
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__ZEN_E2E__.calls.some((call) => call.type === 'model' && call.model_id === 'other-model'),
+      ),
+    )
+    .toBe(true)
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__ZEN_E2E__.calls.some(
+          (call) => call.type === 'command' && call.name === 'thinking' && call.argument === 'low',
+        ),
+      ),
+    )
+    .toBe(true)
+
+  const order = await page.evaluate(() =>
+    window.__ZEN_E2E__.calls
+      .filter(
+        (call) =>
+          call.type === 'mode' ||
+          call.type === 'model' ||
+          (call.type === 'command' && call.name === 'thinking'),
+      )
+      .map((call) => (call.type === 'command' ? 'thinking' : String(call.type))),
+  )
+  // A model switch may reset the thinking level, so thinking lands last.
+  assert.deepEqual(order.slice(0, 3), ['mode', 'model', 'thinking'])
+})

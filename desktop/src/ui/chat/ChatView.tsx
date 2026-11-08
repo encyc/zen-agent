@@ -190,8 +190,7 @@ export function ChatView() {
 
   const switchProject = async (path: string) => {
     if (!window.confirm(t('home.switchConfirm', { path }))) return
-    await useAppStore.getState().disconnect()
-    await useAppStore.getState().connect(undefined, path)
+    await useAppStore.getState().openProject(path)
   }
   const pickAndSwitchProject = async () => {
     const path = await pickProjectFolder()

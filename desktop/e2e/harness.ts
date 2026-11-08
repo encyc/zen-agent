@@ -71,6 +71,9 @@ export interface BridgeState {
   statusSession?: string
   /** The runtime mode the fake status answers with (default zen). */
   statusMode?: string
+  /** Milliseconds `rpc_start` stays in flight, so a spec can watch a project
+   * switch happen (the shell must never fall back to the boot screen). */
+  switchDelayMs?: number
 }
 
 declare global {
@@ -741,6 +744,11 @@ export function installBridge(state: BridgeState) {
         const pid = nextPid
         nextPid += 1
         state.starts.push({ cwd: options.cwd ?? null, pid })
+        // A real child takes a few hundred ms to replace; the delay makes that
+        // window observable instead of a race the spec would usually lose.
+        if (state.switchDelayMs !== undefined) {
+          await new Promise((resolve) => setTimeout(resolve, state.switchDelayMs))
+        }
         return { pid }
       }
       if (cmd === 'rpc_stop') return null
