@@ -9,8 +9,10 @@ from pathlib import Path
 
 from zenagent.agent import Agent
 from zenagent.app.taiji.tools import (
+    ROUTER_EXCLUDED_TOOLS,
     RpcRunner,
     build_taiji_tools,
+    router_tool_gate,
     runtime_taiji_provider,
     taiji_tools_for,
 )
@@ -50,6 +52,39 @@ def test_session_gate_composes_only_for_the_taiji_session(tmp_path: Path) -> Non
     assert len(taiji_tools_for(tmp_path / "taiji.jsonl", lambda: None)) == 5
     assert taiji_tools_for(tmp_path / "20260101-010101.jsonl", lambda: None) == []
     assert taiji_tools_for(None, lambda: None) == []
+
+
+class _NamedTool:
+    """The gate only reads ``name``; a stub keeps the test off tool plumbing."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+
+def test_router_gate_strips_the_execution_tools() -> None:
+    tools = [
+        _NamedTool("read_file"),
+        _NamedTool("edit_file"),
+        _NamedTool("bash"),
+        _NamedTool("write_file"),
+        _NamedTool("grep"),
+    ]
+    gated = router_tool_gate(tools)
+    assert [tool.name for tool in gated] == ["read_file", "bash", "grep"]
+    # Pure: the caller's list is untouched (recompose rebuilds from scratch).
+    assert [tool.name for tool in tools] == [
+        "read_file",
+        "edit_file",
+        "bash",
+        "write_file",
+        "grep",
+    ]
+
+
+def test_router_gate_is_exactly_the_write_pair() -> None:
+    # bash stays: the Router still inspects (git plumbing, read-only checks);
+    # only the file-mutation tools are worker territory.
+    assert ROUTER_EXCLUDED_TOOLS == {"edit_file", "write_file"}
 
 
 def test_python_dash_m_zenagent_runs() -> None:

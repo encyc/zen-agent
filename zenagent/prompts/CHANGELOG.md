@@ -4,6 +4,26 @@ Every content change bumps `PROMPT_VERSION` (`zenagent/prompts/spec.py`) and get
 one entry here: what changed, why, and the experiment/report that justified it.
 P0 extracted the v0.4.1 text verbatim — no behavior change.
 
+## 2026-11-08.1 — the taiji Router directs, workers edit
+
+- New session-gated block `taiji_router` (rendered only while the taiji
+  session is active, via `PromptContext.include_taiji_router`): the Router
+  dispatches every repository-changing task with `spawn_worker`, verifies
+  milestones, merges — and never edits the main checkout. Justified by the
+  2026-11-08 zen-agent session: the Router answered "切换项目 GUI reload 感"
+  by implementing the fix itself (26 edits + direct commits to main) without
+  spawning a worker — the brief's "执行都在 worker" contract existed only in
+  docs, never in the model's instructions.
+- `tool.spawn_worker` states the reversed dispatch contract: implementation
+  goes to workers by default; direct answers are for questions, diagnosis
+  and read-only inspection. The old wording ("use it whenever the user asks
+  for parallel or background work") actively told the Router to do code
+  changes itself when the user didn't mention parallelism.
+- Enforcement rides with the wording: the taiji session's tool set now drops
+  `edit_file`/`write_file` (`ROUTER_EXCLUDED_TOOLS` + `router_tool_gate` in
+  `zenagent/app/taiji/tools.py`), so the contract holds even when the model
+  ignores the prompt.
+
 ## 2026-11-07.1 — read-before-write gate on the file tools
 
 - `tool.read_file`, `tool.write_file` and `tool.edit_file` state the new

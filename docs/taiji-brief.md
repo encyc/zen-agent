@@ -23,6 +23,12 @@
 
 Router 的五个工具：`spawn_worker` / `message_worker` / `kill_worker` / `merge_worker` / `list_workers`。全部 `approval="read"`、`sequential`，**只在活跃会话是 taiji session 时组装进工具集**（`runtime.py::_recompose` → `taiji_tools_for`）。
 
+Router 的分工契约（2026-11-08.1 起三层落实，教训：Router 曾在自家 session 里直接实现"切换项目 reload 感"的修复并 commit 进 main，从未 spawn worker）：
+
+1. **提示词**：`taiji_router` 块（仅 taiji session 渲染）写明 Router 只做诊断、拆解、派发、验收、合并；`spawn_worker` 描述改为"改仓库的任务一律派 worker，直接回答仅限问答/诊断/只读检查"。
+2. **硬门禁**：taiji session 的工具集剔除 `edit_file`/`write_file`（`tools.py::ROUTER_EXCLUDED_TOOLS` + `router_tool_gate`，`_recompose` 在组装 worker 工具的同一处套用）——模型不听话也干不了：主 checkout 保持干净，merge 门禁才可能通过。
+3. **bash 保留**：git 巡检、轻量只读验证仍归 Router；改动一律进 worker 的分支/worktree。
+
 ## 3. 不变量（写进代码的硬约束）
 
 1. **git-native**：任务状态唯一真相是 git 分支/worktree + 注册表；`taiji.json` 是运行时态不是历史（重启对着 `git worktree list` reconcile）。
