@@ -2038,58 +2038,12 @@ async def _run(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    from zenagent.app.modes import MODES
-    from zenagent.cli.main import THINKING_CHOICES
+    from zenagent.cli.flags import add_runtime_flags
 
     parser = argparse.ArgumentParser(
         prog="zenagent rpc", description=__doc__.splitlines()[0]
     )
-    parser.add_argument("-m", "--model", help="model id")
-    parser.add_argument(
-        "--yes", action="store_true", help="run everything without asking (zen mode)"
-    )
-    parser.add_argument("--mode", choices=MODES, help="runtime mode: plan|ask|zen")
-    parser.add_argument("--read-only", action="store_true", help="refuse write tools")
-    parser.add_argument("--thinking", choices=THINKING_CHOICES, help="reasoning level")
-    parser.add_argument("--max-turns", type=int)
-    parser.add_argument("--max-cost", type=float)
-    parser.add_argument("--retries", type=int, default=0)
-    parser.add_argument("--resume", nargs="?", const="latest", help="resume a session")
-    parser.add_argument(
-        "--no-mcp", action="store_true", help="do not connect MCP servers"
-    )
-    parser.add_argument("--mcp-file", help="MCP config file")
-    parser.add_argument(
-        "--mcp-server", action="append", dest="mcp_servers", help="only this MCP server"
-    )
-    parser.add_argument("--no-skills", action="store_true", help="do not load skills")
-    parser.add_argument(
-        "--no-templates", action="store_true", help="do not load prompt templates"
-    )
-    parser.add_argument(
-        "--no-auto-compact", action="store_true", help="never compact automatically"
-    )
-    parser.add_argument(
-        "--extension",
-        action="append",
-        dest="extension_paths",
-        metavar="PATH",
-        help="load an extension module (repeatable)",
-    )
-    parser.add_argument(
-        "--no-context-files", action="store_true", help="do not read AGENTS.md"
-    )
-    parser.add_argument("--trace", metavar="PATH", help="write a JSONL trace")
-    parser.add_argument("--metrics", metavar="PATH", help="append per-run metrics")
-    parser.add_argument("--cwd", metavar="PATH", help="working directory")
-    parser.add_argument(
-        "--allow-dangerous", action="store_true", help="allow catastrophic commands"
-    )
-    parser.add_argument(
-        "--allow-outside", action="append", dest="allow_outside", metavar="PATH"
-    )
-    parser.add_argument("--allow-destructive", action="store_true")
-    parser.add_argument("--allow-protected", action="store_true")
+    add_runtime_flags(parser)
     args = parser.parse_args(argv)
     if args.cwd:
         import os
