@@ -515,66 +515,71 @@ export interface GitWorktreesResult {
 
 // ---- taiji -----------------------------------------------------------------
 
-export interface TaijiCommit {
-  sha: string
-  short: string
-  parents: string[]
-  subject: string
-  author: string
-  ts: number
-  lane: number
+/** One worker question waiting on a person (from an `ask_request` event). */
+export interface TaijiAttention {
+  question: string
+  /** Up to four option labels the panel renders as quick answers. */
+  options: string[]
 }
 
-export interface TaijiBranch {
+export interface TaijiDiffFile {
+  path: string
+  adds: number
+  dels: number
+}
+
+/** One row of the dispatch board: the registry record, board-shaped. */
+export interface TaijiWorker {
   name: string
-  sha: string
-  is_head: boolean
-}
-
-export interface TaijiGraph {
-  root: string
-  is_repo: boolean
-  commits: TaijiCommit[]
-  branches: TaijiBranch[]
-  max_lane: number
-}
-
-export interface TaijiProjectSession {
-  name: string
-  title: string
+  branch: string
+  base: string
+  status: string
+  summary: string
+  session: string
+  created_at: number
   updated_at: number
-  messages: number
-  /** Present when the session belongs to a taiji worker. */
-  worker?: string
-  status?: string
-  branch?: string
-  /** JSON of the worker's pending question, when it asked one. */
-  attention?: string
+  attention: TaijiAttention | null
+  /** Present only while the worker sits at acceptance (status ok). */
+  diffstat: TaijiDiffFile[] | null
 }
 
-export interface TaijiProject {
-  key: string
-  root: string
-  branch: string | null
-  worktree: boolean
-  sessions: TaijiProjectSession[]
+export interface TaijiSlots {
+  busy: number
+  max: number
+  queued: number
 }
 
-export interface TaijiSessionMap {
-  repo_root: string
-  projects: TaijiProject[]
+/** The board: the fleet sorted on the client by how much a person must do. */
+export interface TaijiBoard {
+  /** False when this host never started taiji (worker subprocess, linked worktree). */
+  active: boolean
+  /** The host Router conversation is mid-turn. */
+  router_busy: boolean
+  slots: TaijiSlots | null
+  workers: TaijiWorker[]
 }
 
-export interface TaijiSnapshot {
-  graph: TaijiGraph
-  sessions: TaijiSessionMap
-}
-
-export interface TaijiResult {
+export interface TaijiBoardResult {
   type: 'result'
   id: string
   ok: true
-  taiji: TaijiSnapshot
+  board: TaijiBoard
+}
+
+export interface TaijiMessageResult {
+  type: 'result'
+  id: string
+  ok: true
+  /** True when the text went to the inbox and rides the current turn's tail. */
+  queued: boolean
+  status: string
+}
+
+export interface TaijiPeekResult {
+  type: 'result'
+  id: string
+  ok: true
+  items: { role: string; text: string }[]
 }
 
 // ---- ask -------------------------------------------------------------------
