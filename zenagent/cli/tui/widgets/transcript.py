@@ -9,7 +9,7 @@ from __future__ import annotations
 from textual.containers import VerticalScroll
 from textual.message import Message
 
-from zenagent.app.views import MessageView, RunStatus, ToolCallView
+from zenagent.app.views import DividerView, MessageView, RunStatus, ToolCallView
 from zenagent.cli.tui.widgets.markdown_stream import StreamingMarkdown
 from zenagent.cli.tui.widgets.rows import (
     DividerRow,
@@ -22,6 +22,7 @@ from zenagent.cli.tui.widgets.rows import (
 from zenagent.cli.tui.widgets.skill_block import SkillBlock
 from zenagent.cli.tui.widgets.tool_card import ToolCard
 from zenagent.cli.tui.widgets.welcome import WelcomeBlock
+from zenagent.i18n import t
 
 __all__ = ["TranscriptView"]
 
@@ -171,7 +172,11 @@ class TranscriptView(VerticalScroll):
         self.scroll_end(animate=False)
         self._set_pending(False)
 
-    def sync(self, views: list[MessageView | ToolCallView], status: RunStatus) -> None:
+    def sync(
+        self,
+        views: list[MessageView | ToolCallView | DividerView],
+        status: RunStatus,
+    ) -> None:
         """Apply the transcript diff.
 
         Called on every streamed delta, so it must be proportional to what
@@ -180,14 +185,16 @@ class TranscriptView(VerticalScroll):
         progress moved.
         """
         if len(views) < self._count:
-            # The controller transcript shrank (auto-compaction, session switch):
-            # append-only diffing cannot remove stale widgets, so rebuild.
+            # The controller transcript shrank (session switch): append-only
+            # diffing cannot remove stale widgets, so rebuild.
             self.reset()
         grew = len(views) > self._count
         for index in range(self._count, len(views)):
             view = views[index]
             if isinstance(view, MessageView):
                 self._append_message(view)
+            elif isinstance(view, DividerView):
+                self._append_divider(view)
             else:
                 self._append_tool(view)
             self._count += 1
@@ -343,3 +350,8 @@ class TranscriptView(VerticalScroll):
         self._open_read_group = None
         self.mount(DividerRow(text))
         self.scroll_end(animate=False)
+
+    def _append_divider(self, view: DividerView) -> None:
+        """The compaction divider sits mid-stream at the replay cut."""
+        self._open_read_group = None
+        self.mount(DividerRow(t("notice.compacted", tokens=view.tokens_before or 0)))

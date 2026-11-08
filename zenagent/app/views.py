@@ -10,7 +10,7 @@ from typing import Literal
 
 from zenagent.agent.loop import LOOP_GUARD_PREFIX
 from zenagent.app.context import ContextReport
-from zenagent.app.records import is_tool_end
+from zenagent.app.records import is_compaction, is_tool_end
 from zenagent.app.skill_commands import parse_skill_display
 from zenagent.events import AgentEvent
 from zenagent.types import (
@@ -123,6 +123,28 @@ class ToolCallView:
     #: Wire discriminator: transcript views dispatch on ``kind`` (MessageView
     #: carries user/assistant/skill; the tool card is ``"tool"``).
     kind: Literal["tool"] = "tool"
+
+
+@dataclass
+class DividerView:
+    """The compaction divider, positioned inside the transcript stream.
+
+    The display keeps pre-boundary history visible as scrollback; the divider
+    marks where the model's live context was cut (the summary message follows
+    it). ``tokens_before``/``reason`` come from the latest compaction record;
+    UIs render their own localized label.
+    """
+
+    tokens_before: int | None = None
+    reason: str | None = None
+    #: Stable row identity inside one append-only session (``v{n}``).
+    id: str = ""
+    #: Wire discriminator: transcript views dispatch on ``kind``.
+    kind: Literal["divider"] = "divider"
+
+
+#: One rendered transcript row: a message turn, a tool card or the divider.
+TranscriptView = MessageView | ToolCallView | DividerView
 
 
 @dataclass
@@ -311,7 +333,7 @@ def settle_tool_status(is_error: bool, details: dict | None) -> str:
 
 
 def _apply_tool_records(
-    views: list[MessageView | ToolCallView], records: list[dict] | None
+    views: list[TranscriptView], records: list[dict] | None
 ) -> None:
     """Hydrate cards from ``tool_end`` records; unknown calls are ignored."""
     cards = {view.call_id: view for view in views if isinstance(view, ToolCallView)}
@@ -333,14 +355,31 @@ def _apply_tool_records(
 
 
 def messages_to_views(
-    messages: list[Message], records: list[dict] | None = None
-) -> list[MessageView | ToolCallView]:
-    """Convert stored messages into view models, pairing calls with results."""
-    views: list[MessageView | ToolCallView] = []
+    messages: list[Message],
+    records: list[dict] | None = None,
+    *,
+    divider_at: int | None = None,
+    divider_tokens: int | None = None,
+    divider_reason: str | None = None,
+) -> list[TranscriptView]:
+    """Convert stored messages into view models, pairing calls with results.
+
+    ``divider_at`` is a message index (the replay cut): the compaction divider
+    is inserted before that message's rows, so pre-boundary history stays
+    visible as scrollback while still marking the cut.
+    """
+    views: list[TranscriptView] = []
     cards: dict[str, ToolCallView] = {}
     paired: set[str] = set()
+    divider = (
+        DividerView(tokens_before=divider_tokens, reason=divider_reason)
+        if divider_at is not None
+        else None
+    )
 
-    for message in messages:
+    for index, message in enumerate(messages):
+        if divider is not None and index == divider_at:
+            views.append(divider)
         if isinstance(message, UserMessage):
             text = (
                 message.content
@@ -465,7 +504,7 @@ class TranscriptBuilder:
     """
 
     def __init__(self) -> None:
-        self.views: list[MessageView | ToolCallView] = []
+        self.views: list[TranscriptView] = []
         self.cards: dict[str, ToolCallView] = {}
         self.current: MessageView | None = None
         self._next_id = 1
@@ -478,9 +517,36 @@ class TranscriptBuilder:
         self.current = None
         self._next_id = 1
 
-    def load(self, messages: list[Message], records: list[dict] | None = None) -> None:
-        """Start over from a stored transcript (session switch / resume)."""
-        self.views = messages_to_views(messages, records)
+    def load(
+        self,
+        messages: list[Message],
+        records: list[dict] | None = None,
+        *,
+        divider_at: int | None = None,
+    ) -> None:
+        """Start over from a stored transcript (session switch / resume).
+
+        ``divider_at`` is the replay cut's message index (``Session.segment_start``);
+        ``None`` draws no divider. The divider's tokens and reason come from the
+        latest compaction record.
+        """
+        tokens_before = None
+        reason = None
+        if divider_at is not None:
+            for record in records or ():
+                if not is_compaction(record):
+                    continue
+                raw = record.get("tokensBefore")
+                tokens_before = raw if isinstance(raw, int) else None
+                raw_reason = record.get("reason")
+                reason = raw_reason if isinstance(raw_reason, str) else None
+        self.views = messages_to_views(
+            messages,
+            records,
+            divider_at=divider_at,
+            divider_tokens=tokens_before,
+            divider_reason=reason,
+        )
         self.cards = {
             view.call_id: view for view in self.views if isinstance(view, ToolCallView)
         }
@@ -499,7 +565,7 @@ class TranscriptBuilder:
             if card.status == "running":
                 card.status = "interrupted"
 
-    def _append(self, view: MessageView | ToolCallView) -> None:
+    def _append(self, view: TranscriptView) -> None:
         view.id = f"v{self._next_id}"
         self._next_id += 1
         self.views.append(view)

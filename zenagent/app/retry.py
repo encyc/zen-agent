@@ -58,4 +58,4 @@ def prepare_retry(agent: Agent, session: Session) -> tuple[str, Session] | None:
     new_path = Session(session.path).rewrite(
         truncated, keep=records.keep_for_rewrite()
     )
-    return text, Session(new_path)
+    return text, records.open_session(new_path)

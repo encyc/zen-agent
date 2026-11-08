@@ -780,6 +780,106 @@ def test_records_survive_load(isolated_sessions):
     ]
 
 
+def test_boundary_cut_replays_the_latest_segment(isolated_sessions):
+    """A compaction boundary cuts replay: only the summary segment survives."""
+    path = isolated_sessions / "s.jsonl"
+    session = Session(path, boundary=records.is_compaction)
+    for message in [user("old"), assistant("done")]:
+        session.append(message)
+    session.append_meta({"type": "compaction", "tokensBefore": 10})
+    session.append(user("summary"))
+
+    cut = Session(path, boundary=records.is_compaction)
+    messages = cut.load()
+    assert [m.content for m in messages if isinstance(m, UserMessage)] == ["summary"]
+    assert cut.segment_start == 2
+    # Records stay complete: the whole file remains the audit trail.
+    assert [record["type"] for record in cut.records] == ["session", "compaction"]
+
+
+def test_stacked_boundaries_keep_only_the_latest_segment(isolated_sessions):
+    path = isolated_sessions / "s.jsonl"
+    for message in [user("a"), user("b")]:
+        Session(path).append(message)
+    session = Session(path)
+    session.append_meta({"type": "compaction", "tokensBefore": 10})
+    session.append(user("summary one"))
+    session.append_meta({"type": "compaction", "tokensBefore": 20})
+    session.append(user("summary two"))
+
+    cut = Session(path, boundary=records.is_compaction)
+    messages = cut.load()
+    assert [m.content for m in messages if isinstance(m, UserMessage)] == [
+        "summary two"
+    ]
+    assert cut.segment_start == 3
+
+
+def test_boundary_without_following_messages_is_not_yet_effective(isolated_sessions):
+    """A torn tail right after the boundary replays the transcript, not ``[]``."""
+    path = isolated_sessions / "s.jsonl"
+    session = Session(path)
+    for message in [user("old"), assistant("done")]:
+        session.append(message)
+    session.append_meta({"type": "compaction", "tokensBefore": 10})
+    with path.open("a") as handle:  # torn summary line
+        handle.write('{"role": "user", "content": [{"type": "te')
+
+    cut = Session(path, boundary=records.is_compaction)
+    messages = cut.load()
+    assert [m.content for m in messages if isinstance(m, UserMessage)] == ["old"]
+    assert cut.segment_start is None
+
+
+def test_trailing_carried_boundary_replays_everything(isolated_sessions):
+    """Rewrite/fork files carry compaction records at the tail; they replay fully."""
+    source = Session(isolated_sessions / "s.jsonl", boundary=records.is_compaction)
+    for message in [user("one"), user("two")]:
+        source.append(message)
+    source.append_meta({"type": "compaction", "tokensBefore": 10})
+    source.append(user("summary"))
+    live = list(source.messages)
+
+    rewritten = Session(
+        source.rewrite(live, keep=records.keep_for_rewrite()),
+        boundary=records.is_compaction,
+    )
+    messages = rewritten.load()
+    assert messages == live
+    assert rewritten.segment_start is None
+
+
+def test_without_boundary_or_matches_replay_is_complete(isolated_sessions):
+    path = isolated_sessions / "s.jsonl"
+    session = Session(path, boundary=lambda record: False)
+    for message in [user("a"), assistant("b")]:
+        session.append(message)
+    session.append_meta({"type": "compaction", "tokensBefore": 10})
+    session.append(user("summary"))
+
+    messages = session.load()
+    assert len(messages) == 3
+    assert session.segment_start is None
+
+
+def test_append_after_cut_extends_the_replayed_segment(isolated_sessions):
+    path = isolated_sessions / "s.jsonl"
+    session = Session(path, boundary=records.is_compaction)
+    session.append(user("old"))
+    session.append_meta({"type": "compaction", "tokensBefore": 10})
+    session.append(user("summary"))
+    session.load()
+
+    session.append(user("next"))
+    expected = Session(path, boundary=records.is_compaction)
+    assert session.messages == expected.load()
+    assert [m.content for m in expected.messages if isinstance(m, UserMessage)] == [
+        "summary",
+        "next",
+    ]
+    assert expected.segment_start == 1
+
+
 def test_carry_records_keeps_live_calls_and_compactions(isolated_sessions):
     source = Session(isolated_sessions / "source.jsonl")
     messages = [user("go"), assistant_call("c1")]
@@ -916,7 +1016,7 @@ def test_side_channel_records_round_trip(isolated_sessions):
         records.tool_end("c1", "read_file", 5, False, None),
         records.retry(attempt=1, max_retries=2, delay_ms=100, error="503", model="m"),
         records.mode("plan"),
-        records.compaction(10, "parent", "auto"),
+        records.compaction(10, "auto"),
         records.run_end(termination="stop", turns=1),
         {"type": "future-kind", "payload": 1},
     ):

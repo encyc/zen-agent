@@ -20,6 +20,7 @@ from zenagent.agent.registry import ToolRegistry
 from zenagent.agent.session import Session, latest_session, unique_session_path
 from zenagent.agent.subagents import SubagentLimits
 from zenagent.agent.subagents_runtime import SubagentObserver
+from zenagent.app import records
 from zenagent.app.journal import attach_journal, journal_for, load_backup_policy
 from zenagent.app.metrics import MetricsSession
 from zenagent.app.modes import (
@@ -526,7 +527,7 @@ class Runtime:
             path = latest_session() if resume == "latest" else Path(resume)
             if path is not None and Path(path).is_file():
                 self._note_session_scope(Path(path))
-                return Session(Path(path))
+                return records.open_session(Path(path))
             self.warnings.append(t("runtime.no_resume", resume=resume))
         self._touch_project()
         return self.use_new_session()
@@ -539,7 +540,7 @@ class Runtime:
         remove the file when nothing was ever written to it -- including files
         abandoned by switching to another session later in the same process.
         """
-        self.session = Session(unique_session_path())
+        self.session = records.open_session(unique_session_path())
         self._created_sessions.add(self.session.path)
         return self.session
 
@@ -898,7 +899,7 @@ class Runtime:
         await self.agent.wait_for_idle()
         if path is not None:
             self._note_session_scope(Path(path))
-            session = Session(path)
+            session = records.open_session(path)
         else:
             self._touch_project()
             session = self.use_new_session()

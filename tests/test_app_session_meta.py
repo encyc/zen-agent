@@ -254,12 +254,14 @@ async def test_fork_records_derived_from(services):
     assert reloaded.header["derivedFrom"] == source_stem
 
 
-async def test_compact_records_derived_from(runtime_factory, app_env, monkeypatch):
+async def test_compact_appends_the_boundary_to_the_same_file(
+    runtime_factory, app_env, monkeypatch
+):
     from zenagent.app.compact import compact
 
     runtime = await runtime_factory(stream_fn=text_stream())
     await runtime.agent.prompt("long conversation incoming")
-    source_stem = runtime.session.path.stem
+    path_before = runtime.session.path
 
     async def summary_stream(model, messages, tools, options):
         partial = AssistantMessage(
@@ -270,10 +272,18 @@ async def test_compact_records_derived_from(runtime_factory, app_env, monkeypatc
         partial.stop_reason = "stop"
         yield AssistantEvent(type="done", partial=partial, reason="stop")
 
-    path = await compact(runtime.agent, stream_fn=summary_stream, derived_from=source_stem)
+    path = await compact(runtime.agent, runtime.session, stream_fn=summary_stream)
+    assert path == path_before, "compaction keeps the session identity"
+
     reloaded = Session(path)
     reloaded.load()
-    assert reloaded.header["derivedFrom"] == source_stem
+    # The header is untouched (an existing file never grows a header); the
+    # compaction record carries the cut instead.
+    assert "derivedFrom" not in (reloaded.header or {})
+    kinds = [record["type"] for record in reloaded.records]
+    assert kinds[-2:] == ["compaction", None] or "compaction" in kinds
+    record = next(item for item in reloaded.records if item["type"] == "compaction")
+    assert record["reason"] == "manual"
 
 
 async def test_delivered_steering_aggregates_and_marks_the_message(session_runtime):

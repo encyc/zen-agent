@@ -103,10 +103,14 @@ test('loadSnapshot keeps hydrated tool cards and the interrupted state', () => {
   assert.equal(abandoned.kind === 'tool' && abandoned.state, 'interrupted')
 })
 
-test('loadSnapshot draws one compaction divider from the record array', () => {
+test('loadSnapshot keeps an in-stream compaction divider where it sits', () => {
   useChatStore.getState().loadSnapshot({
     ...empty,
-    transcript: [{ kind: 'user', id: 'v1', text: 'summary' }],
+    transcript: [
+      { kind: 'user', id: 'v1', text: 'before the cut' },
+      { kind: 'divider', id: 'v2', tokens_before: 3400, reason: 'manual' },
+      { kind: 'user', id: 'v3', text: 'summary' },
+    ],
     compactions: [
       { type: 'compaction', timestamp: 1, tokensBefore: 1200, reason: 'auto' },
       { type: 'compaction', timestamp: 2, tokensBefore: 3400, reason: 'manual' },
@@ -114,11 +118,24 @@ test('loadSnapshot draws one compaction divider from the record array', () => {
   })
 
   const nodes = useChatStore.getState().nodes
-  assert.equal(nodes.length, 2)
-  assert.equal(nodes[0].kind, 'notice')
-  assert.equal(nodes[0].kind === 'notice' && nodes[0].variant, 'divider')
+  assert.deepEqual(nodes.map((node) => node.kind), ['user', 'notice', 'user'])
+  const divider = nodes[1]
+  assert.equal(divider.kind === 'notice' && divider.variant, 'divider')
+  assert.equal(divider.kind === 'notice' && divider.tokensBefore, 3400)
+})
+
+test('loadSnapshot falls back to a record-derived divider for legacy servers', () => {
+  useChatStore.getState().loadSnapshot({
+    ...empty,
+    transcript: [{ kind: 'user', id: 'v1', text: 'summary' }],
+    compactions: [
+      { type: 'compaction', timestamp: 2, tokensBefore: 3400, reason: 'manual' },
+    ],
+  })
+
+  const nodes = useChatStore.getState().nodes
+  assert.deepEqual(nodes.map((node) => node.kind), ['notice', 'user'])
   assert.equal(nodes[0].kind === 'notice' && nodes[0].tokensBefore, 3400)
-  assert.equal(nodes[1].kind === 'user' && nodes[1].text, 'summary')
 })
 
 test('a live steering message_start marks the user row', () => {

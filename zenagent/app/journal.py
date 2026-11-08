@@ -6,8 +6,9 @@ current project's runtime directory. ``/restore`` uses that log to put a run's
 files back, refusing to overwrite a file the user changed afterwards.
 
 Storage lives in ``~/.zenagent/projects/<key>/backups/`` rather than next to a
-session file: ``/undo``, ``/compact`` and ``/fork`` all create a new session
-file, and the user is most likely to want a restore right after one of those.
+session file: ``/undo`` and ``/fork`` create a new session file and ``/compact``
+rewrites the live transcript (the JSONL keeps the full history), and the user
+is most likely to want a restore right after one of those.
 """
 
 from __future__ import annotations

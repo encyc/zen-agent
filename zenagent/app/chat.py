@@ -9,7 +9,6 @@ from pathlib import Path
 
 from zenagent.agent.session import Session
 from zenagent.agent.subagents import carry_task_dir
-from zenagent.app import records
 from zenagent.app.attachments_state import Attachments
 from zenagent.app.compact import compact, should_auto_compact
 from zenagent.app.context import build_context_report
@@ -403,10 +402,12 @@ class ChatController:
         return usage.input + usage.output
 
     async def compact_now(self, *, force: bool = False) -> str | None:
-        """Summarize the transcript into a new session file; returns the notice.
+        """Summarize the transcript in place behind a compaction boundary.
 
-        Refuses mid-run (nested model calls would corrupt the transcript) and on
-        an empty transcript. ``force`` is the auto path: the controller already
+        The session file keeps its identity: the summary is appended to the same
+        JSONL and the Agent's live context becomes just the summary. Refuses
+        mid-run (nested model calls would corrupt the transcript) and on an
+        empty transcript. ``force`` is the auto path: the controller already
         owns the busy flag, so only the agent streaming check applies.
         """
         if not force and (self._running or self._compacting):
@@ -416,28 +417,32 @@ class ChatController:
         if not self.runtime.agent.messages:
             return None
         before = self._before_tokens()
-        old_path = self.runtime.session.path
-        path = await compact(
+        await compact(
             self.runtime.agent,
-            derived_from=old_path.stem,
+            self.runtime.session,
             reason="auto" if force else "manual",
             tokens_before=before,
-            carry_from=Session(old_path),
         )
-        # Compaction continues the same work: keep its subagent transcripts.
-        carry_task_dir(old_path, path, skip=_inflight_task_ids())
-        # Compaction continues the same work: carry the todo checklist over.
-        await self.runtime.switch_session(path, carry_todos=True)
+        # The summary replaced the sized transcript; reseed the guard so the
+        # auto-compaction check cannot fire again before a real request lands.
+        self.runtime.guard.last_usage = last_request_usage(
+            self.runtime.agent.messages
+        )
         self.reload_transcript()
         text = t("notice.compacted", tokens=before)
-        self._notices.append(
-            TranscriptNotice("divider", text, source=records.COMPACTION)
-        )
         self._notify()
         return text
 
     def reload_transcript(self, *, drop_pending: bool = False) -> None:
-        """Rebuild views from the current agent messages (after a session switch).
+        """Rebuild views from the whole session file (after a switch or compact).
+
+        Once a session was compacted in place (``segment_start`` set), the
+        display reads the full transcript — pre-boundary history stays visible
+        as scrollback — and the builder draws one divider at ``segment_start``,
+        where the model's live context was cut. Sessions without a cut keep
+        building from the live agent messages: the file and the transcript are
+        the same rows then, and in-memory-only state (a run that has not been
+        persisted yet) must not blink out of the view.
 
         ``drop_pending`` also discards anything queued for the old conversation:
         callers that replace or rewind the transcript pass it, compaction does
@@ -449,7 +454,12 @@ class ChatController:
         if session is not None:
             session.ensure_loaded()
         records = list(getattr(session, "records", []) or [])
-        self._builder.load(self.runtime.agent.messages, records)
+        divider_at = getattr(session, "segment_start", None)
+        if divider_at is None:
+            self._builder.load(self.runtime.agent.messages, records)
+        else:
+            display = Session(session.path).load()
+            self._builder.load(display, records, divider_at=divider_at)
         # Switching sessions/compaction changes the sidecar the HUD reads and
         # starts a fresh subagent-cost accounting bucket.
         self._subagents.reset()

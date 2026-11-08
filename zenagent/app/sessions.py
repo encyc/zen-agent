@@ -249,7 +249,7 @@ class SessionManager:
         )
         # The truncated history keeps its subagent transcripts.
         carry_task_dir(source, new_path, skip=_inflight_task_ids())
-        self.runtime.session = Session(new_path)
+        self.runtime.session = records.open_session(new_path)
         return dropped, new_path
 
     def delete(self, path: Path) -> Path:
