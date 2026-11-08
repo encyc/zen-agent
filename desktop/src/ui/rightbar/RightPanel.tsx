@@ -167,11 +167,10 @@ export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
             const Icon = iconFor(tab.kind)
             const label = labelFor(tab)
             const selected = tab.id === activeTab?.id
-            const pinned = tab.id === 'review'
             return (
               <div
                 key={tab.id}
-                className={pinned ? css.pinnedTab : css.subagentTab}
+                className={css.tabWrap}
                 data-active={selected || undefined}
                 role="presentation"
               >
@@ -186,17 +185,15 @@ export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
                   <Icon size={13} />
                   <span className={css.tabLabel}>{label}</span>
                 </button>
-                {!pinned && (
-                  <button
-                    type="button"
-                    className={css.tabClose}
-                    aria-label={t('panel.closeTab', { name: label })}
-                    title={t('panel.closeTab', { name: label })}
-                    onClick={() => closeTab(tab.id)}
-                  >
-                    <XIcon size={11} />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className={css.tabClose}
+                  aria-label={t('panel.closeTab', { name: label })}
+                  title={t('panel.closeTab', { name: label })}
+                  onClick={() => closeTab(tab.id)}
+                >
+                  <XIcon size={11} />
+                </button>
               </div>
             )
           })}
@@ -252,17 +249,17 @@ export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
         </button>
       </div>
       <div className={css.body} data-selectable data-embed="">
-        {activeTab?.kind === 'subagent' ? (
+        {activeTab === undefined ? null : activeTab.kind === 'subagent' ? (
           <SubagentTranscript
             target={{ callId: activeTab.callId ?? '', name: activeTab.name ?? '' }}
           />
-        ) : activeTab?.kind === 'memory' ? (
+        ) : activeTab.kind === 'memory' ? (
           <MemoryPanel />
-        ) : activeTab?.kind === 'files' ? (
+        ) : activeTab.kind === 'files' ? (
           <FilesPanel />
-        ) : activeTab?.kind === 'worktree' ? (
+        ) : activeTab.kind === 'worktree' ? (
           <WorktreePanel />
-        ) : activeTab?.kind === 'taiji' ? (
+        ) : activeTab.kind === 'taiji' ? (
           <TaijiPanel />
         ) : (
           <div className={css.reviewWrap}>

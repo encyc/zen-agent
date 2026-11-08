@@ -13,15 +13,70 @@ function reset() {
   })
 }
 
-test('the work panel starts on files and keeps review pinned', () => {
+test('the work panel starts on files', () => {
   reset()
   const panel = useWorkPanelStore.getState()
   assert.equal(panel.activeId, 'files')
+})
+
+test('opening the panel always lands on files, even when review was last active', () => {
+  reset()
+  const panel = useWorkPanelStore.getState()
+  panel.activate('review')
+  assert.equal(useWorkPanelStore.getState().activeId, 'review')
+  panel.closePanel()
+  panel.openPanel()
+
+  const state = useWorkPanelStore.getState()
+  assert.equal(state.open, true)
+  assert.equal(state.activeId, 'files')
+})
+
+test('opening the panel restores files when its tab was closed', () => {
+  reset()
+  const panel = useWorkPanelStore.getState()
+  panel.closeTab('files')
+  panel.closePanel()
+  panel.openPanel()
+
+  const state = useWorkPanelStore.getState()
+  assert.equal(state.activeId, 'files')
+  assert.deepEqual(
+    state.tabs.map((tab) => tab.id),
+    ['review', 'files'],
+  )
+})
+
+test('review is closable like any other tab', () => {
+  reset()
+  const panel = useWorkPanelStore.getState()
+  panel.activate('review')
   panel.closeTab('review')
-  assert.deepEqual(useWorkPanelStore.getState().tabs, [
-    { id: 'review', kind: 'review' },
-    { id: 'files', kind: 'files' },
-  ])
+
+  const state = useWorkPanelStore.getState()
+  assert.deepEqual(state.tabs, [{ id: 'files', kind: 'files' }])
+  assert.equal(state.activeId, 'files')
+  assert.equal(state.open, true)
+})
+
+test('closing the last tab closes the panel', () => {
+  reset()
+  const panel = useWorkPanelStore.getState()
+  panel.closeTab('review')
+  panel.closeTab('files')
+
+  const state = useWorkPanelStore.getState()
+  assert.deepEqual(state.tabs, [])
+  assert.equal(state.open, false)
+
+  useWorkPanelStore.getState().openPanel()
+  const reopened = useWorkPanelStore.getState()
+  assert.equal(reopened.open, true)
+  assert.equal(reopened.activeId, 'files')
+  assert.deepEqual(
+    reopened.tabs.map((tab) => tab.id),
+    ['files'],
+  )
 })
 
 test('files and worktree are singleton tabs', () => {

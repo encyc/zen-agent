@@ -239,7 +239,14 @@ export const useWorkPanelStore = create<WorkPanelState>((set) => ({
   open: false,
   tabs: [REVIEW_TAB, FILES_TAB],
   activeId: FILES_TAB.id,
-  openPanel: () => set({ open: true }),
+  // Every fresh open lands on files: the rail is a browsing surface first, so
+  // a review (or subagent) tab left active must not swallow the next open.
+  openPanel: () =>
+    set((state) => ({
+      open: true,
+      tabs: withTab(state.tabs, FILES_TAB),
+      activeId: FILES_TAB.id,
+    })),
   closePanel: () => set({ open: false }),
   showTab: (kind) =>
     set((state) => ({
@@ -267,13 +274,12 @@ export const useWorkPanelStore = create<WorkPanelState>((set) => ({
     }),
   closeTab: (id) =>
     set((state) => {
-      if (id === REVIEW_TAB.id) return state
       const tabs = state.tabs.filter((tab) => tab.id !== id)
-      const fallback = tabs.some((tab) => tab.id === FILES_TAB.id) ? FILES_TAB.id : REVIEW_TAB.id
-      return {
-        tabs,
-        activeId: state.activeId === id ? fallback : state.activeId,
-      }
+      // Closing the last tab closes the rail: an empty dock has nothing to show.
+      if (tabs.length === 0) return { tabs, activeId: '', open: false }
+      if (tabs.some((tab) => tab.id === state.activeId)) return { tabs }
+      const fallback = tabs.find((tab) => tab.id === FILES_TAB.id) ?? tabs[tabs.length - 1]
+      return { tabs, activeId: fallback.id }
     }),
 }))
 

@@ -444,6 +444,16 @@ test('the work panel opens on files and renders review hunks', async ({ page }) 
   await page.getByRole('button', { name: '关闭 文件' }).click()
   await expect(panel.getByRole('tab', { name: '文件' })).toHaveCount(0)
   await expect(panel.getByRole('tab', { name: '审核' })).toHaveAttribute('aria-selected', 'true')
+
+  // Review is a plain tab: closing it retires the last tab and the dock with it.
+  await page.getByRole('button', { name: '关闭 审核' }).click()
+  await expect(panel).toHaveCount(0)
+
+  // Reopening always lands on files, never on the surface the user just shut.
+  await page.getByRole('button', { name: '打开工作面板' }).click()
+  await expect(panel.getByRole('tab', { name: '文件' })).toHaveAttribute('aria-selected', 'true')
+  await expect(panel.getByRole('button', { name: 'README.md' })).toBeVisible()
+  await expect(panel.getByRole('tab', { name: '审核' })).toHaveCount(0)
 })
 
 test('the worktree tab lists worktrees and marks the current one', async ({ page }) => {

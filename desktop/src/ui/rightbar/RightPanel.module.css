@@ -101,9 +101,10 @@ html[data-work-panel-resizing] * {
   outline-offset: -2px;
 }
 
-/* The live subagent target owns a tab of its own; the wrapper carries the
- * selected/hover plate so the inner tab and its close X read as one chip. */
-.subagentTab {
+/* Every tab (tools and live subagent targets alike) carries its own close X;
+ * the wrapper holds the selected/hover plate so the tab and its X read as one
+ * chip. */
+.tabWrap {
   display: inline-flex;
   flex: 0 1 auto;
   min-width: 0;
@@ -112,11 +113,11 @@ html[data-work-panel-resizing] * {
   border-radius: var(--dsw-radius-sm);
 }
 
-.subagentTab[data-active] {
+.tabWrap[data-active] {
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
-.subagentTab[data-active] .tab {
+.tabWrap[data-active] .tab {
   color: var(--dsw-alias-label-primary);
 }
 
@@ -173,22 +174,6 @@ html[data-work-panel-resizing] * {
 .body[data-embed] {
   overflow: hidden;
   padding: 0;
-}
-
-.pinnedTab {
-  display: inline-flex;
-  flex: 0 0 auto;
-  min-width: 0;
-  align-items: center;
-  border-radius: var(--dsw-radius-sm);
-}
-
-.pinnedTab[data-active] {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.pinnedTab[data-active] .tab {
-  color: var(--dsw-alias-label-primary);
 }
 
 .launcherWrap {
