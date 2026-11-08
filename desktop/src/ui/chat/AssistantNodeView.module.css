@@ -75,14 +75,14 @@
 
 .thinkingIcon {
   flex: none;
-  color: var(--dsw-alias-state-business-primary);
+  color: var(--zen-op-think);
   opacity: 0.85;
 }
 
 .thinkingBody {
   margin: 2px 0 4px 8px;
   padding: 6px 12px;
-  border-left: 2px solid var(--dsw-alias-border-l2);
+  border-left: 2px solid color-mix(in srgb, var(--zen-op-think) 45%, transparent);
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--ds-font-12-5);
   line-height: 20px;

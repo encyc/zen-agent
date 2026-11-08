@@ -18,6 +18,7 @@ import {
   clampFontScale,
   useSettingsStore,
   type Locale,
+  type ThemeId,
   type ThemeMode,
 } from '../../state/stores'
 import { useT } from '../../i18n/locale'
@@ -67,7 +68,7 @@ const NAV_ITEMS: NavItem[] = [
     hintKey: 'settings.appearanceHint',
     icon: <PaletteIcon size={14} />,
     group: 'preferences',
-    keywords: ['settings.theme', 'settings.language', 'settings.fontScale'],
+    keywords: ['settings.theme', 'settings.themePalette', 'settings.language', 'settings.fontScale'],
   },
   {
     id: 'models',
@@ -143,6 +144,46 @@ const THEMES: { value: ThemeMode; labelKey: string }[] = [
   { value: 'dark', labelKey: 'theme.dark' },
 ]
 
+/** One preview triple per palette side; the picker shows the side that the
+ * current mode setting resolves to, so cards read as they would render. */
+interface PalettePreview {
+  bg: string
+  line: string
+  lineSoft: string
+  accent: string
+  edge: string
+}
+
+const PALETTES: { value: ThemeId; labelKey: string; light: PalettePreview; dark: PalettePreview }[] = [  {
+    value: 'zen',
+    labelKey: 'theme.zen',
+    light: { bg: '#ffffff', line: '#0f1115', lineSoft: '#adb2b8', accent: '#0f1115', edge: 'rgba(0,0,0,0.1)' },
+    dark: { bg: '#151517', line: '#f9fafb', lineSoft: '#61656b', accent: '#f9fafb', edge: 'rgba(255,255,255,0.12)' },
+  },
+  {
+    value: 'vscode',
+    labelKey: 'theme.vscode',
+    light: { bg: '#ffffff', line: '#3b3b3b', lineSoft: '#9d9d9d', accent: '#005fb8', edge: 'rgba(0,0,0,0.1)' },
+    dark: { bg: '#1f1f1f', line: '#cccccc', lineSoft: '#6f6f6f', accent: '#0078d4', edge: 'rgba(255,255,255,0.12)' },
+  },
+  {
+    value: 'github',
+    labelKey: 'theme.github',
+    light: { bg: '#ffffff', line: '#1f2328', lineSoft: '#818b98', accent: '#0969da', edge: 'rgba(0,0,0,0.1)' },
+    dark: { bg: '#0d1117', line: '#e6edf3', lineSoft: '#6e7681', accent: '#1f6feb', edge: 'rgba(255,255,255,0.12)' },
+  },
+  {
+    value: 'tokyonight',
+    labelKey: 'theme.tokyonight',
+    light: { bg: '#e1e2e7', line: '#3760bf', lineSoft: '#9aa2c6', accent: '#2e7de9', edge: 'rgba(54,89,169,0.24)' },
+    dark: { bg: '#1a1b26', line: '#c0caf5', lineSoft: '#6b74a3', accent: '#7aa2f7', edge: 'rgba(169,177,214,0.2)' },
+  },
+]
+
+function resolvesToDark(mode: ThemeMode, systemDark: boolean): boolean {
+  return mode === 'dark' || (mode === 'auto' && systemDark)
+}
+
 const LOCALES: { value: Locale; labelKey: string }[] = [
   { value: 'zh', labelKey: 'language.zh' },
   { value: 'en', labelKey: 'language.en' },
@@ -159,10 +200,12 @@ function Row(props: {
   title: string
   detail?: string
   nested?: boolean
+  /** Stacks the control under the copy so a wide control gets the full row. */
+  wide?: boolean
   children: ReactNode
 }) {
   return (
-    <div className={clsx(css.row, props.nested && css.rowNested)}>
+    <div className={clsx(css.row, props.nested && css.rowNested, props.wide && css.rowWide)}>
       <div className={css.rowCopy}>
         <div className={css.rowTitle}>{props.title}</div>
         {props.detail ? <div className={css.rowDetail}>{props.detail}</div> : null}
@@ -271,6 +314,51 @@ function Segmented<T extends string>(props: {
   )
 }
 
+/** The palette chooser: four miniature canvases, each a two-line document and
+ * an accent chip drawn in that palette's own colors. */
+function PalettePicker(props: {
+  value: ThemeId
+  dark: boolean
+  label: string
+  onChange(value: ThemeId): void
+}) {
+  const t = useT()
+  return (
+    <div className={css.paletteGrid} role="group" aria-label={props.label}>
+      {PALETTES.map((palette) => {
+        const preview = props.dark ? palette.dark : palette.light
+        return (
+          <button
+            key={palette.value}
+            type="button"
+            className={css.paletteItem}
+            aria-pressed={palette.value === props.value}
+            onClick={() => props.onChange(palette.value)}
+          >
+            <span
+              className={css.palettePreview}
+              style={{ background: preview.bg, boxShadow: `inset 0 0 0 1px ${preview.edge}` }}
+            >
+              <span className={css.paletteLines}>
+                <span
+                  className={css.paletteLine}
+                  style={{ width: '62%', background: preview.line }}
+                />
+                <span
+                  className={css.paletteLine}
+                  style={{ width: '40%', background: preview.lineSoft }}
+                />
+              </span>
+              <span className={css.paletteChip} style={{ background: preview.accent }} />
+            </span>
+            <span className={css.paletteName}>{t(palette.labelKey)}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 /** Manual check: ignores the cache and says what happened, unlike the silent
  * boot check. Install still goes through the banner. */
 function UpdateCheckButton() {
@@ -326,6 +414,7 @@ function Switch(props: { checked: boolean; label: string; onChange(checked: bool
 export function SettingsPage() {
   const t = useT()
   const theme = useSettingsStore((state) => state.theme)
+  const themeId = useSettingsStore((state) => state.themeId)
   const locale = useSettingsStore((state) => state.locale)
   const fontScale = useSettingsStore((state) => state.fontScale)
   const chatWidth = useSettingsStore((state) => state.chatWidth)
@@ -336,6 +425,7 @@ export function SettingsPage() {
   const contextUsageDisplay = useSettingsStore((state) => state.contextUsageDisplay)
   const enterToSend = useSettingsStore((state) => state.enterToSend)
   const setTheme = useSettingsStore((state) => state.setTheme)
+  const setThemeId = useSettingsStore((state) => state.setThemeId)
   const setLocale = useSettingsStore((state) => state.setLocale)
   const setFontScale = useSettingsStore((state) => state.setFontScale)
   const setChatWidth = useSettingsStore((state) => state.setChatWidth)
@@ -349,6 +439,17 @@ export function SettingsPage() {
 
   const [tab, setTab] = useState<Tab>('appearance')
   const [query, setQuery] = useState('')
+  // The palette previews follow the resolved side, so track the system half
+  // of 'auto' here too.
+  const [systemDark, setSystemDark] = useState(
+    () => window.matchMedia('(prefers-color-scheme: dark)').matches,
+  )
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const onChange = () => setSystemDark(media.matches)
+    media.addEventListener('change', onChange)
+    return () => media.removeEventListener('change', onChange)
+  }, [])
   const contentRef = useRef<HTMLElement | null>(null)
   const searchRef = useRef<HTMLInputElement | null>(null)
   const active = NAV_ITEMS.find((item) => item.id === tab) ?? NAV_ITEMS[0]
@@ -456,6 +557,14 @@ export function SettingsPage() {
           {tab === 'appearance' && (
             <div className={css.stack}>
               <Card title={t('settings.interface')}>
+                <Row wide title={t('settings.themePalette')} detail={t('settings.themePaletteHint')}>
+                  <PalettePicker
+                    value={themeId}
+                    dark={resolvesToDark(theme, systemDark)}
+                    label={t('settings.themePalette')}
+                    onChange={setThemeId}
+                  />
+                </Row>
                 <Row title={t('settings.theme')} detail={t('settings.themeHint')}>
                   <Picker
                     value={theme}

@@ -441,6 +441,9 @@ export const useComposerStore = create<ComposerState>((set) => ({
 // ---- settings (persisted) -------------------------------------------------------
 
 export type ThemeMode = 'light' | 'dark' | 'auto'
+/** Named palette layered on top of the mode: zen is the monochrome base. */
+export type ThemeId = 'zen' | 'vscode' | 'github' | 'tokyonight'
+export const THEME_IDS: readonly ThemeId[] = ['zen', 'vscode', 'github', 'tokyonight']
 export type Locale = 'en' | 'zh'
 export type AppView = 'chat' | 'settings' | 'tools'
 
@@ -458,6 +461,7 @@ export function clampFontScale(value: number): number {
 
 interface SettingsState {
   theme: ThemeMode
+  themeId: ThemeId
   locale: Locale
   sidebarCollapsed: boolean
   chatWidth: number
@@ -470,6 +474,7 @@ interface SettingsState {
   enterToSend: boolean
   view: AppView
   setTheme(theme: ThemeMode): void
+  setThemeId(themeId: ThemeId): void
   setLocale(locale: Locale): void
   setSidebarCollapsed(collapsed: boolean): void
   setChatWidth(width: number): void
@@ -500,8 +505,16 @@ function persist(key: string, value: unknown): void {
   }
 }
 
+/** Guards the persisted palette: pre-theme installs and foreign values fall
+ * back to the zen base instead of rendering an unnamed palette. */
+function loadThemeId(): ThemeId {
+  const value = load<string>('zen.themeId', 'zen')
+  return (THEME_IDS as readonly string[]).includes(value) ? (value as ThemeId) : 'zen'
+}
+
 export const useSettingsStore = create<SettingsState>((set) => ({
   theme: load('zen.theme', 'auto' as ThemeMode),
+  themeId: loadThemeId(),
   locale: load('zen.locale', 'zh' as Locale),
   sidebarCollapsed: load('zen.sidebar.collapsed', false),
   chatWidth: load('zen.chat.width', CHAT_WIDTH_DEFAULT),
@@ -518,6 +531,10 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setTheme: (theme) => {
     persist('zen.theme', theme)
     set({ theme })
+  },
+  setThemeId: (themeId) => {
+    persist('zen.themeId', themeId)
+    set({ themeId })
   },
   setLocale: (locale) => {
     persist('zen.locale', locale)

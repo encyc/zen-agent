@@ -42,15 +42,58 @@
   transform: rotate(90deg);
 }
 
+/* The operation badge: a small tinted chip in the family's hue. Unknown
+ * families keep the neutral ink. Error restyles win by coming later. */
 .leading {
   display: inline-grid;
   place-items: center;
   flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--dsw-radius-xs);
   color: var(--dsw-alias-label-tertiary);
+}
+
+.root[data-family='read'] {
+  --tool-op: var(--zen-op-read);
+}
+
+.root[data-family='search'] {
+  --tool-op: var(--zen-op-search);
+}
+
+.root[data-family='exec'] {
+  --tool-op: var(--zen-op-exec);
+}
+
+.root[data-family='write'] {
+  --tool-op: var(--zen-op-write);
+}
+
+.root[data-family='edit'] {
+  --tool-op: var(--zen-op-edit);
+}
+
+.root[data-family='think'] {
+  --tool-op: var(--zen-op-think);
+}
+
+.root[data-family='task'] {
+  --tool-op: var(--zen-op-task);
+}
+
+.root[data-family] .leading {
+  color: var(--tool-op);
+  background: color-mix(in srgb, var(--tool-op) 13%, transparent);
+}
+
+.root[data-family][data-state='running'] .leading {
+  background: color-mix(in srgb, var(--tool-op) 24%, transparent);
 }
 
 .root[data-state='error'] .leading {
   color: var(--dsw-alias-state-error-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 13%, transparent);
 }
 
 .title {

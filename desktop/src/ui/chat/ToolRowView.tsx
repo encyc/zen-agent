@@ -43,6 +43,26 @@ const FAMILY_ICONS: Record<string, (props: { size?: number }) => React.ReactNode
   todo: ListTodoIcon,
 }
 
+/** The operation hue role a tool rides (--zen-op-*); unknown tools stay
+ * neutral. Roles are fixed across palettes — each theme supplies its own
+ * values, so the coding survives a palette switch. */
+export type ToolFamily = 'read' | 'search' | 'exec' | 'write' | 'edit' | 'think' | 'task'
+
+const TOOL_FAMILIES: Record<string, ToolFamily> = {
+  read_file: 'read',
+  list_dir: 'read',
+  glob: 'search',
+  grep: 'search',
+  web_search: 'search',
+  fetch: 'search',
+  bash: 'exec',
+  wait: 'exec',
+  write_file: 'write',
+  edit_file: 'edit',
+  task: 'task',
+  todo: 'think',
+}
+
 function titleFor(name: string): string {
   return name
 }
@@ -129,9 +149,15 @@ export function ToolRowView({ node }: { node: ToolNode }) {
       : node.resultText
     : ''
   const Icon = FAMILY_ICONS[node.name] ?? FileIcon
+  const family = TOOL_FAMILIES[node.name]
 
   return (
-    <div className={css.root} data-state={node.state} data-tool={node.name}>
+    <div
+      className={css.root}
+      data-state={node.state}
+      data-tool={node.name}
+      data-family={family}
+    >
       <button
         type="button"
         className={css.row}

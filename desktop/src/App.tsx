@@ -50,6 +50,7 @@ export function App() {
   const collapsed = useSettingsStore((state) => state.sidebarCollapsed)
   const setCollapsed = useSettingsStore((state) => state.setSidebarCollapsed)
   const theme = useSettingsStore((state) => state.theme)
+  const themeId = useSettingsStore((state) => state.themeId)
   const chatWidth = useSettingsStore((state) => state.chatWidth)
   const fontScale = useSettingsStore((state) => state.fontScale)
   const view = useSettingsStore((state) => state.view)
@@ -66,6 +67,8 @@ export function App() {
   const dockRef = useRef<HTMLDivElement | null>(null)
 
   // Theme presenter: write the snapshot to the DOM, outside React (dsh pattern).
+  // The palette rides a separate attribute so both sides of every palette
+  // resolve against the same mode flip.
   useEffect(() => {
     const apply = () => {
       const dark =
@@ -73,11 +76,12 @@ export function App() {
         (theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches)
       document.body.toggleAttribute('data-ds-dark-theme', dark)
     }
+    document.body.dataset.dsTheme = themeId
     apply()
     const media = window.matchMedia('(prefers-color-scheme: dark)')
     media.addEventListener('change', apply)
     return () => media.removeEventListener('change', apply)
-  }, [theme])
+  }, [theme, themeId])
 
   // The band width is a shell-wide custom property: both the transcript and
   // the docked composer read it.
