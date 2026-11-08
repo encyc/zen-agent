@@ -33,6 +33,7 @@ import {
 } from './stores'
 import { useChatStore } from './chatStore'
 import { nextDraft } from './pending'
+import { loadPrefs, replayFrames, savePref, spawnArgs, type LiveChoices } from './prefs'
 import { frameError } from '../rpc/frames'
 
 export type ConnectionState = 'idle' | 'starting' | 'ready' | 'exited'
@@ -74,6 +75,9 @@ export function lastProjectCwd(): string {
 
 interface AppState {
   connection: ConnectionState
+  /** Set while a project switch is replacing the runtime; the shell stays
+   * mounted so the switch reads as a content swap, not a reload. */
+  switching: { path: string } | null
   exitCode: number | null
   stderrTail: string[]
   startFailure: StartFailure | null
@@ -99,7 +103,7 @@ interface AppState {
   testMcpServer(name: string): Promise<Record<string, unknown>>
   relocateProject(from: string, to: string): Promise<Record<string, unknown>>
   openProject(path: string): Promise<void>
-  refreshTranscript(): Promise<void>
+  refreshTranscript(): Promise<boolean>
   submit(): Promise<void>
   steer(text: string): Promise<void>
   cancel(): Promise<void>
@@ -134,6 +138,35 @@ let wired = false
 /** Last seen cumulative usage, for computing a turn's delta row. */
 let lastUsage: { input: number; output: number; cache_read: number; cache_write: number; cost: number } | null = null
 
+/** Bring a freshly started child onto the person's saved choices.
+ *
+ * Diffs against the child's own status first (see replayFrames), so a
+ * stale pref never fights the server; a failed frame costs that one
+ * choice, not the session. Ends with an explicit status refresh because
+ * the poll timer stands down while a switch owns the wire. */
+async function restorePrefs(): Promise<void> {
+  const app = useAppStore.getState()
+  let live: LiveChoices = {}
+  try {
+    const frame = await app.client().send({ type: 'status' })
+    if (frame.type === 'result' && frame.ok) {
+      const status = frame as unknown as StatusResult
+      live = { mode: status.mode, model: status.model, thinking: status.thinking }
+    }
+  } catch {
+    // No status answer: replay everything saved — the child's own defaults
+    // are the same choices we would otherwise have skipped.
+  }
+  for (const frame of replayFrames(loadPrefs(), live)) {
+    try {
+      await app.client().send(frame)
+    } catch {
+      // keep going: the remaining choices still replay
+    }
+  }
+  await app.refreshStatus()
+}
+
 interface FrameHandling {
   set: (partial: Partial<Pick<AppState, 'busy'>>) => void
   get: () => AppState
@@ -141,6 +174,7 @@ interface FrameHandling {
 
 export const useAppStore = create<AppState>((set, get) => ({
   connection: 'idle',
+  switching: null,
   exitCode: null,
   stderrTail: [],
   startFailure: null,
@@ -154,7 +188,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async connect(bin, cwd, args) {
     const rpc = get().client()
-    set({ connection: 'starting', exitCode: null, stderrTail: [], startFailure: null })
+    set({
+      connection: 'starting',
+      switching: null,
+      exitCode: null,
+      stderrTail: [],
+      startFailure: null,
+    })
     useChatStore.getState().reset()
     useApprovalStore.getState().clear()
     useAskStore.getState().clear()
@@ -175,14 +215,18 @@ export const useAppStore = create<AppState>((set, get) => ({
           pollTimer = null
         }
         useChatStore.getState().finalize()
-        set({ connection: 'exited', exitCode: code, busy: false })
+        set({ connection: 'exited', exitCode: code, busy: false, switching: null })
       })
     }
 
     try {
       // `--mode ask` keeps old released zen binaries happy (they crash without
-      // an explicit mode) and is the safe default; the mode chip switches later.
-      const pid = await rpc.start({ bin, cwd, args: args ?? ['--mode', 'ask', '--no-mcp'] })
+      // an explicit mode) and is the safe default; the user's own mode is
+      // replayed from prefs once the child is up (see restorePrefs).
+      const pid = await rpc.start({ bin, cwd, args: args ?? spawnArgs() })
+      // Track the child immediately: the previous process's exit event (the
+      // shell kills it during a restart) must not end this replacement.
+      set({ pid })
       // The wire contract is versioned: refuse to talk to a server that does
       // not speak the same protocol (its result frames would mislead the UI).
       await rpc.handshake()
@@ -192,12 +236,16 @@ export const useAppStore = create<AppState>((set, get) => ({
         // ignore
       }
       if (cwd !== undefined && cwd !== '') useProjectStore.getState().addProject(cwd)
-      set({ connection: 'ready', pid })
+      set({ connection: 'ready' })
       await get().refreshTranscript()
-      await get().refreshStatus()
+      await restorePrefs()
       await get().refreshSessions()
       await get().refreshCatalog()
-      pollTimer = setInterval(() => void get().refreshStatus(), 2000)
+      pollTimer = setInterval(() => {
+        // A switch owns the wire while it runs; polling it would race the
+        // replacement's own refresh with stale answers.
+        if (get().switching === null) void get().refreshStatus()
+      }, 2000)
     } catch (error) {
       const failure = startFailureOf(error)
       set({ connection: 'exited', exitCode: null, startFailure: failure })
@@ -397,31 +445,75 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   async openProject(path) {
-    if (path === '' || lastProjectCwd() === path) return
-    await get().disconnect()
-    await get().connect(undefined, path)
+    if (path === '') return
+    if (path === lastProjectCwd() && get().connection === 'ready') return
+    // Nothing to preserve before the first connection: a plain start.
+    if (get().connection !== 'ready') {
+      await get().connect(undefined, path)
+      return
+    }
+    if (get().switching !== null) return
+
+    // The runtime is cwd-bound, so a project switch replaces the child. The
+    // difference from connect() is what the user sees: the shell stays
+    // mounted, the old transcript keeps painting until the new snapshot
+    // lands, and the whole swap is a progress bar instead of a boot screen.
+    set({ switching: { path }, busy: false })
+    useApprovalStore.getState().clear()
+    useAskStore.getState().clear()
+    useChatStore.getState().finalize()
+
+    const rpc = get().client()
+    try {
+      const pid = await rpc.start({ cwd: path, args: spawnArgs() })
+      // Before the handshake: the old child's exit event carries its own pid
+      // and must not be mistaken for this one dying.
+      set({ pid })
+      await rpc.handshake()
+      try {
+        localStorage.setItem(LAST_CWD_KEY, path)
+      } catch {
+        // ignore
+      }
+      useProjectStore.getState().addProject(path)
+      const loaded = await get().refreshTranscript()
+      // A failed transcript request must not leave the previous project's
+      // conversation on screen pretending to be this one.
+      if (!loaded) useChatStore.getState().reset()
+      await restorePrefs()
+      await get().refreshSessions()
+      set({ connection: 'ready', switching: null, exitCode: null, startFailure: null })
+    } catch (error) {
+      const failure = startFailureOf(error)
+      set({ connection: 'exited', switching: null, startFailure: failure, exitCode: null })
+      set((state) => ({
+        stderrTail: [
+          ...state.stderrTail,
+          failure === null ? String(error) : `failed to start ${failure.bin} rpc: ${failure.osError}`,
+        ],
+      }))
+    }
   },
 
-  refreshTranscript() {
-    return get()
-      .client()
-      .send({ type: 'transcript' })
-      .then((frame) => {
-        if (frame.type === 'result' && frame.ok) {
-          const transcript = (frame.transcript ?? []) as never
-          const notices = (frame.notices ?? []) as never
-          const compactions = (frame.compactions ?? []) as CompactionRecord[]
-          useChatStore.getState().loadSnapshot({
-            type: 'result',
-            id: '',
-            ok: true,
-            transcript,
-            notices,
-            compactions,
-          })
-        }
+  async refreshTranscript() {
+    try {
+      const frame = await get().client().send({ type: 'transcript' })
+      if (frame.type !== 'result' || !frame.ok) return false
+      const transcript = (frame.transcript ?? []) as never
+      const notices = (frame.notices ?? []) as never
+      const compactions = (frame.compactions ?? []) as CompactionRecord[]
+      useChatStore.getState().loadSnapshot({
+        type: 'result',
+        id: '',
+        ok: true,
+        transcript,
+        notices,
+        compactions,
       })
-      .catch(() => {})
+      return true
+    } catch {
+      return false
+    }
   },
 
   async submit() {
@@ -520,6 +612,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       useSettingsStore.getState().setLocale(frame.language)
     }
     if (typeof frame.model === 'string' && frame.model) {
+      // The server is the authority on which model is live; remember it so the
+      // next child starts there.
+      savePref('model', frame.model)
       void get().refreshStatus()
       void get().refreshCatalog()
     }
@@ -536,25 +631,30 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   async setModel(modelId) {
+    let frame: Record<string, unknown>
     try {
-      await get().client().send({ type: 'model', model_id: modelId })
+      frame = await get().client().send({ type: 'model', model_id: modelId })
     } catch {
       return
     }
+    if (frame.type === 'result' && frame.ok !== false) savePref('model', modelId)
     void get().refreshStatus()
     void get().refreshCatalog()
   },
 
   async setMode(mode) {
+    let frame: Record<string, unknown>
     try {
-      await get().client().send({ type: 'mode', mode })
+      frame = await get().client().send({ type: 'mode', mode })
     } catch {
       return
     }
+    if (frame.type === 'result' && frame.ok !== false) savePref('mode', mode)
     void get().refreshStatus()
   },
 
   async setThinking(level) {
+    savePref('thinking', level)
     await get().runCommand('thinking', level)
   },
 
@@ -571,11 +671,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     const root = session?.project_path ?? ''
     // The runtime is cwd-bound. A session recorded in another project needs
     // the process restarted there before it can be resumed (pi does the same
-    // through selectSession → activateProject).
-    if (root !== '' && lastProjectCwd() !== root) {
-      await get().disconnect()
-      await get().connect(undefined, root)
-    }
+    // through selectSession → activateProject). openProject keeps the shell
+    // mounted while it happens.
+    if (root !== '' && lastProjectCwd() !== root) await get().openProject(root)
     await get().resumeSession(path)
   },
 
