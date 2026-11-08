@@ -157,6 +157,18 @@ class RpcRunner:
             for event in events:
                 if event.get("type") == "ask_request":
                     questions = event.get("questions") or []
+                    options: list[str] = []
+                    for question in questions:
+                        if not isinstance(question, dict):
+                            continue
+                        for option in question.get("options") or []:
+                            label = (
+                                option.get("label", "")
+                                if isinstance(option, dict)
+                                else ""
+                            )
+                            if isinstance(label, str) and label:
+                                options.append(label)
                     attention = {
                         "request_id": str(event.get("request_id", "")),
                         "question": "; ".join(
@@ -164,6 +176,7 @@ class RpcRunner:
                             for question in questions
                             if isinstance(question, dict)
                         ).strip("; "),
+                        "options": options[:4],
                     }
         if answer is not None and answer.get("ok") is False:
             # A graceful ok:false frame (provider error, max turns, abort) is

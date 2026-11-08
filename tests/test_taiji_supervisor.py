@@ -1278,3 +1278,61 @@ class TestDiffstatAndMergeReasons:
         _git(repo, "checkout", "-qb", "elsewhere")
         assert supervisor.merge_block_reason("ds") == "基分支 main 未在主检出"
         _git(repo, "checkout", "-q", "main")
+
+
+class OptionsAskLoopback(AskingLoopback):
+    """The ask blocks forever, but its questions carry option labels."""
+
+    async def send_line(self, line: str) -> None:
+        payload = json.loads(line)
+        if payload.get("type") == "hello":
+            self.out.put_nowait(json.dumps({"type": "result", "id": payload["id"], "ok": True, "protocol_version": 2}))
+        elif payload.get("type") == "prompt":
+            self.out.put_nowait(json.dumps({
+                "type": "event",
+                "event": {"type": "ask_request", "request_id": "q0", "questions": [{
+                    "question": "选哪种？",
+                    "options": [
+                        {"label": "方案 A"},
+                        {"label": "方案 B"},
+                        {"label": "方案 C"},
+                        {"label": "方案 D"},
+                        {"label": "方案 E"},  # past the cap: dropped
+                    ],
+                }]},
+            }))
+            return  # the worker now blocks on the ask; never completes
+
+
+async def test_attention_carries_up_to_four_option_labels() -> None:
+    from zenagent.app.taiji.supervisor import RpcRunner
+    from zenagent.app.taiji.worker_client import WorkerRpcClient
+
+    out: asyncio.Queue = asyncio.Queue()
+    runner = RpcRunner(
+        client_factory=lambda: WorkerRpcClient(transport=OptionsAskLoopback(out)),
+        attention_grace_s=0.05,
+    )
+
+    result = await runner.run_turn("/tmp/wt", None, "go")
+
+    assert result.attention is not None
+    assert result.attention["question"] == "选哪种？"
+    assert result.attention["options"] == ["方案 A", "方案 B", "方案 C", "方案 D"]
+
+
+async def test_attention_options_stay_empty_without_labelled_choices() -> None:
+    from zenagent.app.taiji.supervisor import RpcRunner
+    from zenagent.app.taiji.worker_client import WorkerRpcClient
+
+    out: asyncio.Queue = asyncio.Queue()
+    runner = RpcRunner(
+        client_factory=lambda: WorkerRpcClient(transport=AskingLoopback(out)),
+        attention_grace_s=0.05,
+    )
+
+    result = await runner.run_turn("/tmp/wt", None, "go")
+
+    # AskingLoopback's questions carry no options: the attention survives.
+    assert result.attention is not None
+    assert result.attention["options"] == []
