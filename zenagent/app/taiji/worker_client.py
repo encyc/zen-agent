@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import shutil
 import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -20,14 +19,16 @@ LINE_CALLBACK = Callable[[str], Awaitable[None]]
 
 
 def worker_command(cwd: Path, *, model: str | None = None) -> list[str]:
-    """How to spawn a worker: the installed ``zen``, else this interpreter.
+    """How to spawn a worker: this host's own interpreter, hence its own code.
+
+    Never a ``zen`` found on PATH — that may be an older install whose wire
+    protocol predates ``hello`` (a uv-tool 0.8.1 answers ``unknown type:
+    hello``), and a worker must speak exactly the host's protocol.
 
     ``model`` routes the worker to a strong model while the Router session
     stays light (spec §9); ``None`` inherits the provider default.
     """
-    zen = shutil.which("zen")
-    head = [zen] if zen else [sys.executable, "-m", "zenagent"]
-    command = [*head, "rpc", "--cwd", str(cwd), "--yes"]
+    command = [sys.executable, "-m", "zenagent", "rpc", "--cwd", str(cwd), "--yes"]
     if model:
         command += ["--model", model]
     return command
@@ -48,7 +49,11 @@ class SubprocessTransport:
         self._command = command
         self._cwd = cwd
         self._process: asyncio.subprocess.Process | None = None
-        self._pump: asyncio.Task[None] | None = None
+        #: The reader task. Named ``_pump_task``, not ``_pump``: an instance
+        #: attribute shadows the ``_pump`` method of the same class, which is
+        #: how the whole production transport used to die on spawn with
+        #: "'NoneType' object is not callable".
+        self._pump_task: asyncio.Task[None] | None = None
 
     async def start(self, on_line: LINE_CALLBACK) -> None:
         self._process = await asyncio.create_subprocess_exec(
@@ -58,7 +63,7 @@ class SubprocessTransport:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
         )
-        self._pump = asyncio.create_task(self._pump(on_line))
+        self._pump_task = asyncio.create_task(self._pump(on_line))
 
     async def _pump(self, on_line: LINE_CALLBACK) -> None:
         assert self._process is not None and self._process.stdout is not None
@@ -71,8 +76,8 @@ class SubprocessTransport:
         await self._process.stdin.drain()
 
     async def stop(self) -> None:
-        if self._pump is not None:
-            self._pump.cancel()
+        if self._pump_task is not None:
+            self._pump_task.cancel()
         if self._process is None:
             return
         try:

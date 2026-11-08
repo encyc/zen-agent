@@ -1,8 +1,10 @@
 """The taiji worker rpc client, exercised over an in-process RpcServer.
 
-No subprocess is spawned anywhere here: a loopback transport feeds the
-client's lines to a real ``RpcServer`` driven by a fake streaming agent, so
-the client's framing, correlation and event delivery are tested end to end.
+The client's framing, correlation and event delivery are tested end to end
+against a loopback transport wired to a real ``RpcServer`` driven by a fake
+streaming agent. The ``SubprocessTransport`` — the only transport production
+uses — needs one real child process, so it gets one test of its own: injecting
+a loopback everywhere is exactly how its reader task stayed broken.
 """
 
 from __future__ import annotations
@@ -17,7 +19,11 @@ import pytest
 
 from zenagent.agent import Agent
 from zenagent.app.sessions import SessionManager
-from zenagent.app.taiji.worker_client import WorkerRpcClient, worker_command
+from zenagent.app.taiji.worker_client import (
+    SubprocessTransport,
+    WorkerRpcClient,
+    worker_command,
+)
 from zenagent.cli.rpc import RpcServer
 from zenagent.events import AssistantEvent
 from zenagent.providers.catalog import Model
@@ -157,22 +163,11 @@ async def test_prompt_timeout_raises() -> None:
     await client.stop()
 
 
-def test_worker_command_prefers_zen_on_path(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "zenagent.app.taiji.worker_client.shutil.which",
-        lambda name: "/usr/local/bin/zen",
-    )
-    assert worker_command(Path("/wt")) == [
-        "/usr/local/bin/zen",
-        "rpc",
-        "--cwd",
-        "/wt",
-        "--yes",
-    ]
-
-    monkeypatch.setattr(
-        "zenagent.app.taiji.worker_client.shutil.which", lambda name: None
-    )
+def test_worker_command_runs_the_host_interpreter() -> None:
+    # Never ``which zen``: this machine's uv-tool install is 0.8.1 and answers
+    # ``unknown type: hello`` to the handshake, because it predates the frame.
+    # A worker must run the same code — and speak the same protocol — as its
+    # host.
     assert worker_command(Path("/wt")) == [
         sys.executable,
         "-m",
@@ -182,6 +177,38 @@ def test_worker_command_prefers_zen_on_path(monkeypatch) -> None:
         "/wt",
         "--yes",
     ]
+
+
+async def test_subprocess_transport_pumps_stdio_over_a_real_child(tmp_path) -> None:
+    # The regression: an instance attribute ``self._pump`` shadowed the
+    # ``_pump`` method, so start() called None and every production spawn died
+    # with "'NoneType' object is not callable" — invisible to loopback tests.
+    child = (
+        "import sys\n"
+        "print('ready', flush=True)\n"
+        "for line in sys.stdin:\n"
+        "    print('echo:' + line.strip(), flush=True)\n"
+    )
+    transport = SubprocessTransport([sys.executable, "-u", "-c", child], tmp_path)
+    lines: list[str] = []
+    first = asyncio.Event()
+
+    async def on_line(line: str) -> None:
+        lines.append(line)
+        first.set()
+
+    await transport.start(on_line)
+    try:
+        await asyncio.wait_for(first.wait(), 10.0)
+        assert lines[0] == "ready"
+        await transport.send_line("ping")
+        for _ in range(200):
+            if "echo:ping" in lines:
+                break
+            await asyncio.sleep(0.05)
+        assert "echo:ping" in lines
+    finally:
+        await transport.stop()
 
 
 async def test_stop_fails_a_pending_prompt_instead_of_hanging() -> None:
