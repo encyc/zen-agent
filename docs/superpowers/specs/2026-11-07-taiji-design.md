@@ -154,3 +154,53 @@ taiji 层内含：Router Runtime（进程内组合持有）、Worker 注册表�
 | 开放问题 §8.2 | 脱离 Session 后的人机协作界面在哪 | taiji session 单例 + git 图 panel 即该问题的一个具体答案 | 定位本身 |
 
 两处文章实验数据支持本文决定：消融实验（单 Session+提示词委派不稳定）佐证 §6 否掉路线 C；去直通后 Router 决定数 +30%/token +37% 佐证 §4.1/§4.2 的确定性门禁。
+
+## 附录 C：Panel v2 —— 调度台（2026-11-08 修订）
+
+**缘起**：P0/P2 的 panel 以 commit 泳道图为主体，实测"没有任何交互"——整个面板只有 2 个 click（attention 回复 + 手动刷新），且 `taiji` RPC 仅有只读 op。修订出发点（用户裁定）：**不从"做一个 git tree"出发，从"taiji 究竟在管理什么"出发**。D1 的 git-native 任务模型不变（任务=分支=worktree=session），变的是 panel 的组织原则：git 图不再是主体，git 信息降级为卡片上的属性 chip。
+
+### C.1 太极管理的对象（panel 内容的推导依据）
+
+| 管理对象 | 载体 | panel 呈现 |
+|---|---|---|
+| 工单（委托出去的工作单元） | `WorkerRecord` | 卡片/行：名字、分支 chip、摘要 |
+| 生命周期状态机 | `queued→running→(attention)→ok/error→merged/killed` | 分组排序 + 状态点 |
+| 人的注意力（唯一阻塞项） | `record.attention` | 顶层"等你回答"卡 + 快捷答复 |
+| 验收关口 | `status=ok` 且无 attention | "待验收"卡：diff 证据 + 合并/打回 |
+| 资源 | 槽位（3）+ 队列 | 头部 `⚡busy/max` 指示 |
+| Router 自身 | 宿主 chat busy | 头部 Router 状态条 |
+
+**组织原则**：按"人的介入程度"自上而下排序（等你回答 → 待验收 → 干活中 → 排队 → 历史）；每个状态都有对应动作，无动作的状态（merged）折叠进历史。
+
+### C.2 交互总表（每按钮 → 机制）
+
+| 看到 | 点 | 机制 |
+|---|---|---|
+| 等你回答卡 | 选项按钮 / 自由输入 | `taiji.message` op → `supervisor.message(name, …)`；worker 运行中则入**插话信箱**，回合结束自动续跑 |
+| 等你回答卡 | 转 Router | 现有 prompt op → Router 会话（唯一走对话路径的动作） |
+| 待验收卡 | 合并 | `taiji.merge` op → `supervisor.merge(name, auto=False)`（显式人工合并豁免阈值；attention 阻断与主树洁净前置照常）；失败带 `merge_block_reason` |
+| 待验收卡 | 打回… | 内联输入 → `taiji.message`（留言重做，不是 kill） |
+| 待验收卡 | 文件清单▾ | `diff --numstat` 的文件级 adds/dels（服务端 board op 附带） |
+| 干活中行 | 插话 | 内联输入 → `taiji.message` → 信箱排队（本回合结束后送达） |
+| 干活中行 | 终止 | 两步确认 → `taiji.kill` |
+| 干活中行 | 点行 | `taiji.peek` op → worker session JSONL 尾部对话 |
+| 排队行 | 取消 | `taiji.kill`（取消排队回合） |
+| error/interrupted 行 | 恢复 | worktree 还在 → `taiji.message(name, "继续")` |
+| 头部 Router 条 | 点击 | 聚焦主对话 |
+
+### C.3 协议与运行时
+
+- `taiji` kind op 收敛为一个读 op **`board`**（替代 `workers`/`snapshot`；泳道图数据退役）+ 四个写 op **`message`/`merge`/`kill`/`peek`**。payload：`{active, router_busy, slots:{busy,max,queued}, workers:[…, attention:{question,options}, diffstat]}`。
+- 宿主持有太极锁时**急切构造 supervisor**（boot 即 reconcile 注册表，panel 立见真相）；`existing_taiji()` 供 RPC ops 取进程单例，取不到 → `active:false`，panel 显示"太极未启用"，绝不静默构造空 supervisor。
+- attention 采集升级：`ask_request` 的选项 label 一并捕获（上限 4），panel 渲染快捷答复按钮。
+- 刷新 = 2s 轮询 `board` + 客户端本地计时。
+
+### C.4 决策记录（builder 自裁）
+
+1. **泳道图弃为主视图**，GitLens 式图将来如需要做成独立 tab，不占太极面板。
+2. **面板操作直连 supervisor RPC**（依据 D5：四表面直接消费 taiji Runtime 层），不走 Router 转发；唯一例外"转 Router"刻意走对话路径。结果仍经 supervisor 里程碑注入留在 Router 对话里，审计链不断。
+3. **spawn 不上面板**：brief 是对话性输入；空状态引导去主对话派活。
+4. **打回 = 带留言的 message**，保留 worker 上下文，不是 kill+重建。
+5. **插话语义 = 信箱**：worker 是回合制（每回合新子进程），运行中无法插播输入；信箱在回合链尾部续跑，kill/回滚时清空。
+6. **diff 证据到文件清单为止**，完整 diff viewer 范围外。
+7. TUI 太极视图（原 P3）顺延为 P4，直接复用 `board` payload 与调度台分组。
