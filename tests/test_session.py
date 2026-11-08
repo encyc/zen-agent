@@ -1057,3 +1057,40 @@ async def test_concurrent_append_preserves_order(tmp_path):
     payloads = [json.loads(line) for line in lines]
     texts = [payload["content"] for payload in payloads if "content" in payload]
     assert texts == [f"m-{i:03d}" for i in range(100)]
+
+
+async def test_meta_and_message_writes_never_tear(tmp_path):
+    """Concurrent message appends (worker threads) and meta writes (loop
+    thread) must interleave only at whole-line granularity — one write call
+    per line, serialized (2026-11-08 followups #2)."""
+    import asyncio
+    import threading
+
+    path = tmp_path / "torn.jsonl"
+    session = Session(path)
+    write_calls: list[int] = []
+    real_write = session._write_line
+
+    def counting_write(payload):
+        write_calls.append(threading.get_ident())
+        real_write(payload)
+
+    session._write_line = counting_write
+    await session.append(user("hello"))  # first append also writes the header
+    assert len(write_calls) == 2  # header + message, each ONE whole line
+    await session.append(user("second"))
+    assert len(write_calls) == 3  # this message alone: payload + newline in ONE call
+
+    session._write_line = real_write
+    async def hammer():
+        tasks = [session.append(user(f"m-{i:03d}")) for i in range(50)]
+        for i in range(50):
+            session.append_meta({"type": "tool_end", "call_id": f"c{i}"})
+            await asyncio.sleep(0)
+        await asyncio.gather(*tasks)
+
+    await hammer()
+    lines = path.read_text(encoding="utf-8").splitlines()
+    payloads = [json.loads(line) for line in lines]  # torn lines raise here
+    assert sum(1 for p in payloads if p.get("type") == "tool_end") == 50
+    assert sum(1 for p in payloads if str(p.get("content", "")).startswith("m-")) == 50

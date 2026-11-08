@@ -20,6 +20,7 @@ import asyncio
 import json
 import os
 import tempfile
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -408,10 +409,15 @@ class Session:
             self._header_ensured = False  # retry on the next append
             raise
 
+    #: Serializes whole-line writes across the loop thread (sync append_meta)
+    #: and worker threads (async append) — a line is never torn mid-write.
+    _file_lock = threading.Lock()
+
     def _write_line(self, payload: dict) -> None:
-        with self.path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(payload, ensure_ascii=False))
-            handle.write("\n")
+        with self._file_lock, self.path.open("a", encoding="utf-8") as handle:
+            # One write call per line: payload and newline land atomically,
+            # so a concurrent writer can only interleave between lines.
+            handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
             handle.flush()
 
     def append_meta(self, record: dict) -> None:
