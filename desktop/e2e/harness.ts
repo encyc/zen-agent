@@ -58,7 +58,14 @@ export interface BridgeState {
   fsFiles?: Record<string, Record<string, unknown>>
   memory?: MemoryEntryMock[]
   worktrees?: Record<string, unknown>
+  /** The dispatch board payload served for `taiji board`. */
   taiji?: Record<string, unknown>
+  /** When set, `taiji merge` answers this error message. */
+  taijiMergeError?: string
+  /** The transcript tail served for `taiji peek`. */
+  taijiPeek?: { role: string; text: string }[]
+  /** Action ops (message/merge/kill/peek) the panel sent, most recent last. */
+  taijiRequests?: { op: string; name?: string; text?: string }[]
   statusSession?: string
 }
 
@@ -598,19 +605,53 @@ export function installBridge(state: BridgeState) {
             status: { branch: 'main', staged: 0, dirty: 0, untracked: 0, clean: true },
           },
         }
-      case 'taiji':
-        if (payload.op !== 'snapshot') {
-          return { type: 'error', id: payload.id, message: 'unknown taiji op' }
+      case 'taiji': {
+        const op = payload.op
+        if (op === 'board') {
+          return {
+            type: 'result',
+            id: payload.id,
+            ok: true,
+            board: state.taiji ?? {
+              active: false,
+              router_busy: false,
+              slots: null,
+              workers: [],
+            },
+          }
         }
-        return {
-          type: 'result',
-          id: payload.id,
-          ok: true,
-          taiji: state.taiji ?? {
-            graph: { root: '/work/p', is_repo: false, commits: [], branches: [], max_lane: 0 },
-            sessions: { repo_root: '/work/p', projects: [] },
-          },
+        state.taijiRequests = [
+          ...(state.taijiRequests ?? []),
+          { op, name: payload.name, text: payload.text },
+        ]
+        if (op === 'message') {
+          const board = state.taiji as
+            | { workers?: { name: string; status: string }[] }
+            | undefined
+          const worker = (board?.workers ?? []).find((w) => w.name === payload.name)
+          const queued = worker?.status === 'running'
+          return {
+            type: 'result',
+            id: payload.id,
+            ok: true,
+            queued,
+            status: queued ? 'running' : 'ok',
+          }
         }
+        if (op === 'merge') {
+          if (state.taijiMergeError !== undefined) {
+            return { type: 'error', id: payload.id, message: state.taijiMergeError }
+          }
+          return { type: 'result', id: payload.id, ok: true }
+        }
+        if (op === 'kill') {
+          return { type: 'result', id: payload.id, ok: true }
+        }
+        if (op === 'peek') {
+          return { type: 'result', id: payload.id, ok: true, items: state.taijiPeek ?? [] }
+        }
+        return { type: 'error', id: payload.id, message: `unknown taiji op: ${op}` }
+      }
       case 'project': {
         if (payload.op !== 'relocate') {
           return { type: 'error', id: payload.id, message: 'unknown project op' }
