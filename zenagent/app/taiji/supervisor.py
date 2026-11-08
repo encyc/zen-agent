@@ -223,6 +223,11 @@ class TaijiSupervisor:
         self._tasks: set[asyncio.Task[None]] = set()
         self._turns: dict[str, asyncio.Task[None]] = {}
         self._slots = asyncio.Semaphore(max_workers)
+        self._max_workers = max_workers
+        self._busy = 0
+        #: Human messages stashed while the worker's turn is mid-flight; the
+        #: turn's tail chains them as the next prompt (spec 附录 C 决策 5).
+        self._inbox: dict[str, list[str]] = {}
 
     def _worktree_paths(self) -> list[str]:
         listed = _git(self.repo_root, "worktree", "list", "--porcelain")
@@ -238,6 +243,13 @@ class TaijiSupervisor:
 
     def list_workers(self) -> list[WorkerRecord]:
         return list(self.registry.records.values())
+
+    def slots_state(self) -> dict:
+        """The fleet's slot occupancy for the dispatch board header."""
+        queued = sum(
+            1 for record in self.registry.records.values() if record.status == "queued"
+        )
+        return {"busy": self._busy, "max": self._max_workers, "queued": queued}
 
     def _save(self) -> None:
         self.registry.save(self.registry_path)
@@ -313,7 +325,12 @@ class TaijiSupervisor:
 
     async def message(self, name: str, text: str) -> WorkerRecord:
         record = self._record(name)
-        if record.status in ("running", "killed"):
+        if record.status == "running":
+            # The worker is turn-based: mid-flight input cannot be injected,
+            # so the human's words wait in the inbox and ride the turn's tail.
+            self._inbox.setdefault(name, []).append(text)
+            return record
+        if record.status == "killed":
             raise RuntimeError(f"worker {name} is {record.status}")
         if record.status == "queued":
             # A human redirect supersedes the queued spawn turn: cancel it so
@@ -336,6 +353,7 @@ class TaijiSupervisor:
 
     async def kill(self, name: str) -> WorkerRecord:
         record = self._record(name)
+        self._inbox.pop(name, None)
         task = self._turns.get(name)
         if task is not None and not task.done():
             task.cancel()
@@ -367,7 +385,11 @@ class TaijiSupervisor:
 
         def _settled(done: asyncio.Task[None]) -> None:
             self._tasks.discard(done)
-            self._turns.pop(record.name, None)
+            # Only clear our own slot: a successor turn (chained inbox or a
+            # human message) may already have claimed the mapping, and a
+            # stale clear would make kill cancel nothing (P2 kill race).
+            if self._turns.get(record.name) is done:
+                self._turns.pop(record.name, None)
 
         task.add_done_callback(_settled)
 
@@ -386,6 +408,7 @@ class TaijiSupervisor:
                 record.updated_at = time.time()
                 self._save()
             await self._slots.acquire()
+            self._busy += 1
             if record.status == "queued":
                 record.status = "running"
                 record.updated_at = time.time()
@@ -409,6 +432,7 @@ class TaijiSupervisor:
             return
         finally:
             if use_slot:
+                self._busy -= 1
                 self._slots.release()
         if record.status == "killed":
             return  # a kill during the turn is final; do not overwrite or merge
@@ -423,11 +447,21 @@ class TaijiSupervisor:
         record.updated_at = time.time()
         self._save()
         await self._emit_turn(record, result.summary, started, status=result.status)
+        pending = self._inbox.pop(record.name, None)
+        if pending and record.status not in ("killed", "merged"):
+            self._start_turn(
+                record,
+                "\n\n".join(pending),
+                resume=record.session or None,
+                rollback_on_start_failure=False,
+                use_slot=False,
+            )
 
     def _rollback(self, record: WorkerRecord) -> None:
         _git(self.repo_root, "worktree", "remove", "--force", record.worktree)
         shutil.rmtree(record.worktree, ignore_errors=True)
         _git(self.repo_root, "branch", "-D", record.branch)
+        self._inbox.pop(record.name, None)
         self.registry.records.pop(record.name, None)
         self._save()
 
@@ -564,6 +598,15 @@ def get_taiji(**kwargs: Any) -> TaijiSupervisor:
     global _SINGLETON
     if _SINGLETON is None:
         _SINGLETON = TaijiSupervisor(**kwargs)
+    return _SINGLETON
+
+
+def existing_taiji() -> TaijiSupervisor | None:
+    """The live supervisor, or None when this host never started taiji.
+
+    RPC panel ops consult this: a worker subprocess or a linked worktree
+    must read ``active: false``, never silently construct a bare fleet.
+    """
     return _SINGLETON
 
 

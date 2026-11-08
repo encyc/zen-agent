@@ -957,7 +957,6 @@ async def test_message_to_a_queued_worker_cancels_the_queued_turn(repo: Path, tm
 async def test_explicit_merge_beats_the_auto_threshold(repo: Path, tmp_path: Path, monkeypatch) -> None:
     """The 200-line gate guards the zen AUTO merge only — the Router's
     explicit merge still works (that is the escape hatch)."""
-    from zenagent.app.taiji.supervisor import TaijiSupervisor
 
     monkeypatch.setattr("zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home")
 
@@ -1051,3 +1050,151 @@ async def test_a_failed_resume_is_a_failed_turn() -> None:
 
     assert result.status == "error"
     assert "resume" in result.summary
+
+
+# ------------------------------------------------------- inbox / slots / tracking
+
+
+async def test_existing_taiji_returns_none_before_any_construction() -> None:
+    from zenagent.app.taiji import supervisor as supervisor_module
+
+    supervisor_module._SINGLETON = None
+    try:
+        assert supervisor_module.existing_taiji() is None
+    finally:
+        await supervisor_module.close_taiji()
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+class TestMessageInbox:
+    async def make_gated(
+        self, repo: Path, tmp_path: Path, monkeypatch, *, max_workers: int = 1
+    ) -> tuple[TaijiSupervisor, GatedRunner]:
+        monkeypatch.setattr(
+            "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
+        )
+        runner = GatedRunner()
+        supervisor = TaijiSupervisor(
+            repo_root=repo,
+            sessions_dir=tmp_path / "sessions",
+            registry_path=tmp_path / "sessions" / "taiji.json",
+            runner=runner,
+            chat=None,
+            mode_of=lambda: "ask",
+            max_workers=max_workers,
+        )
+        return supervisor, runner
+
+    async def test_message_to_a_running_worker_queues_in_the_inbox(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        supervisor, runner = await self.make_gated(repo, tmp_path, monkeypatch)
+
+        await supervisor.spawn("first", name="w1")
+        await asyncio.sleep(0.05)
+
+        record = await supervisor.message("w1", "插话 A")
+        await supervisor.message("w1", "插话 B")
+        await asyncio.sleep(0.05)
+
+        assert record.status == "running"  # nothing restarted while it runs
+        assert runner.started.count("w1") == 1
+
+        runner.gate("w1").set()
+        await asyncio.sleep(0.1)
+        assert runner.started.count("w1") == 2  # the inbox chained a follow-up turn
+        assert "插话 A\n\n插话 B" in runner.turns[-1][2]
+        await supervisor.wait_idle()
+
+    async def test_kill_clears_the_inbox_and_no_followup_runs(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        supervisor, runner = await self.make_gated(repo, tmp_path, monkeypatch)
+
+        await supervisor.spawn("first", name="w1")
+        await asyncio.sleep(0.05)
+        await supervisor.message("w1", "too late")
+        await supervisor.kill("w1")
+        runner.gate("w1").set()
+        await asyncio.sleep(0.1)
+        await supervisor.wait_idle()
+
+        assert runner.started.count("w1") == 1
+
+    async def test_message_to_a_settled_worker_starts_immediately(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        supervisor, runner = await self.make_gated(repo, tmp_path, monkeypatch)
+
+        await supervisor.spawn("first", name="w1")
+        runner.gate("w1").set()
+        await supervisor.wait_idle()
+        assert supervisor.list_workers()[0].status == "ok"
+
+        await supervisor.message("w1", "direct answer")
+        await asyncio.sleep(0.05)
+
+        assert runner.started.count("w1") == 2
+        await supervisor.wait_idle()
+
+    async def test_message_during_settling_keeps_turn_tracking(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        """A settling turn must only clear its own mapping, never a successor's.
+
+        If the first turn's done-callback cleared ``_turns[name]`` after a
+        chained (or human) turn already claimed the slot, a later kill would
+        cancel nothing — the P2 kill race, reborn.
+        """
+        supervisor, runner = await self.make_gated(repo, tmp_path, monkeypatch)
+
+        await supervisor.spawn("first", name="w1")
+        await asyncio.sleep(0.05)
+        live = supervisor._turns["w1"]
+        sentinel = asyncio.create_task(asyncio.sleep(3600))
+        supervisor._turns["w1"] = sentinel  # a newer turn claimed the slot first
+
+        runner.gate("w1").set()
+        await asyncio.gather(live, return_exceptions=True)
+        await asyncio.sleep(0.05)
+
+        assert supervisor._turns.get("w1") is sentinel
+        sentinel.cancel()
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+class TestSlotsState:
+    async def test_slots_state_reports_busy_max_and_queued(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
+        )
+        runner = GatedRunner()
+        supervisor = TaijiSupervisor(
+            repo_root=repo,
+            sessions_dir=tmp_path / "sessions",
+            registry_path=tmp_path / "sessions" / "taiji.json",
+            runner=runner,
+            chat=None,
+            mode_of=lambda: "ask",
+            max_workers=2,
+        )
+
+        await supervisor.spawn("a", name="s1")
+        await asyncio.sleep(0.05)
+        await supervisor.spawn("b", name="s2")
+        await asyncio.sleep(0.05)
+        await supervisor.spawn("c", name="s3")
+        await asyncio.sleep(0.05)
+
+        assert supervisor.slots_state() == {"busy": 2, "max": 2, "queued": 1}
+
+        runner.gate("s1").set()
+        await asyncio.sleep(0.1)
+        assert supervisor.slots_state() == {"busy": 2, "max": 2, "queued": 0}
+
+        runner.gate("s2").set()
+        runner.gate("s3").set()
+        await supervisor.wait_idle()
+        assert supervisor.slots_state() == {"busy": 0, "max": 2, "queued": 0}
