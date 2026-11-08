@@ -719,6 +719,24 @@ test('the taiji chip hides where the host has no taiji session', async ({ page }
   await expect(page.getByRole('button', { name: '太极', exact: true })).toHaveCount(0)
 })
 
+test('an empty taiji board shows the on-ramp and drafts a sample task', async ({ page }) => {
+  await boot(
+    page,
+    initialState({
+      taiji: { active: true, router_busy: false, slots: { busy: 0, max: 3, queued: 0 }, workers: [] },
+    }),
+  )
+  await page.getByRole('button', { name: '打开工作面板' }).click()
+  const panel = page.locator('[data-work-panel]')
+  await page.getByRole('button', { name: '打开工作面板标签' }).click()
+  await panel.getByRole('menuitem', { name: '太极' }).click()
+  await expect(panel.getByRole('tab', { name: '太极' })).toHaveAttribute('aria-selected', 'true')
+
+  await expect(panel.getByText('太极已就绪')).toBeVisible()
+  await panel.getByRole('button', { name: '把示例任务写进输入框' }).click()
+  await expect(page.locator('[data-composer-plate] textarea')).toHaveValue(/iOS Safari/)
+})
+
 test('a task row opens the subagent conversation in the work panel', async ({ page }) => {
   await boot(
     page,

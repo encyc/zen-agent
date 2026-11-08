@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../../state/appStore'
-import { useNoticeStore, useWorkPanelStore } from '../../state/stores'
+import { useComposerStore, useNoticeStore, useWorkPanelStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
 import type {
   TaijiAttention,
@@ -445,8 +445,19 @@ export function TaijiPanel() {
         </button>
       </div>
       {board.workers.length === 0 ? (
-        <div className={css.state}>
-          <p>{t('panel.taiji.empty')}</p>
+        <div className={css.emptyCard} data-selectable>
+          <BranchIcon size={20} />
+          <p className={css.emptyTitle}>{t('panel.taiji.emptyTitle')}</p>
+          <p className={css.emptyBody}>{t('panel.taiji.emptyBody')}</p>
+          <button
+            type="button"
+            className={css.smallButton}
+            onClick={() => {
+              useComposerStore.getState().setDraft(t('panel.taiji.sampleTask'))
+            }}
+          >
+            {t('panel.taiji.emptyTry')}
+          </button>
         </div>
       ) : (
         <div className={css.bands}>

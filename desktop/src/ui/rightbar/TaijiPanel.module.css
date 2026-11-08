@@ -123,6 +123,37 @@
   padding: 4px 8px 12px;
 }
 
+/* The initial screen: taiji is armed but nobody has dispatched work yet. */
+.emptyCard {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 12px 8px;
+  padding: 24px 20px;
+  border: 1px dashed var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+  color: var(--dsw-alias-label-tertiary);
+  text-align: center;
+}
+
+.emptyTitle {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: var(--ds-font-12-5);
+  font-weight: 600;
+}
+
+.emptyBody {
+  margin: 0;
+  max-width: 26em;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--ds-font-11-5);
+  line-height: 18px;
+}
+
 .section {
   display: flex;
   flex-direction: column;
