@@ -746,7 +746,13 @@ class RpcServer:
             else:
                 reason = await supervisor.merge_block_reason(name) or "合并未执行"
                 self._send(
-                    {"type": "error", "id": request_id, "message": reason}
+                    {
+                        "type": "error",
+                        "id": request_id,
+                        "message": reason,
+                        "code": "taiji.merge_blocked",
+                        "params": {"reason": reason},
+                    }
                 )
             return True
 
@@ -762,6 +768,8 @@ class RpcServer:
                         "type": "error",
                         "id": request_id,
                         "message": f"worker 不存在: {name}",
+                        "code": "taiji.worker_missing",
+                        "params": {"name": name},
                     }
                 )
                 return True
@@ -780,6 +788,8 @@ class RpcServer:
                         "type": "error",
                         "id": request_id,
                         "message": f"peek limit 不是数字: {request.get('limit')}",
+                        "code": "taiji.bad_limit",
+                        "params": {"value": str(request.get("limit"))},
                     }
                 )
                 return True
@@ -807,6 +817,7 @@ class RpcServer:
                 "type": "error",
                 "id": request_id,
                 "message": "taiji 未在此宿主启用",
+                "code": "taiji.inactive",
             }
         )
         return True

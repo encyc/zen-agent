@@ -180,3 +180,25 @@ def test_taiji_board_shape_matches_ts():
     py = set(re.findall(r'"([a-z_]+)":', match.group(1)))
     ts = _ts_interface_fields("TaijiBoard")
     assert py == ts, f"drift: py-only={sorted(py - ts)} ts-only={sorted(ts - py)}"
+
+
+def test_taiji_error_codes_agree_both_sides():
+    """Server taiji errors cross the wire as codes + params; the desktop
+    dictionary must carry a key for every code the server can send."""
+    rpc = RPC_PATH.read_text()
+    py_codes = set(re.findall(r'"code": "(taiji\.[a-z_]+)"', rpc))
+    assert py_codes == {
+        "taiji.inactive",
+        "taiji.merge_blocked",
+        "taiji.worker_missing",
+        "taiji.bad_limit",
+    }
+    errors_ts = (
+        Path(__file__).resolve().parents[1] / "desktop" / "src" / "i18n" / "errors.ts"
+    ).read_text()
+    ts_keys = set(re.findall(r"'(taiji\.[a-z_]+)':", errors_ts))
+    assert ts_codes_ok(py_codes, ts_keys)
+
+
+def ts_codes_ok(py_codes: set[str], ts_keys: set[str]) -> bool:
+    return py_codes <= set(ts_keys)

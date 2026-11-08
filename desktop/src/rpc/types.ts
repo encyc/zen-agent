@@ -18,6 +18,9 @@ export interface ErrorFrame {
   type: 'error'
   id: string | null
   message: string
+  /** Machine-readable code (i18n on the client); optional for old servers. */
+  code?: string
+  params?: Record<string, string>
 }
 
 export type ResultFrame =

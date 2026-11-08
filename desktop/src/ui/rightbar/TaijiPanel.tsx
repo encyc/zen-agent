@@ -89,9 +89,13 @@ function AttentionCard(props: { worker: TaijiWorker }) {
   const { worker } = props
   const t = useT()
   const attention: TaijiAttention = worker.attention ?? { question: '', options: [] }
-  const answer = (text: string) => void deliver(worker.name, `答复：${text}`, t)
+  const answer = (text: string) => void deliver(worker.name, `${t('taiji.answerPrefix')}${text}`, t)
   const toRouter = () => {
-    const text = `worker ${worker.branch} 提问：${attention.question || worker.summary}。请决策并用 message_worker 转达给 ${worker.name}。`
+    const text = t('taiji.toRouterPrompt', {
+      branch: worker.branch,
+      question: attention.question || worker.summary,
+      name: worker.name,
+    })
     void (async () => {
       try {
         await useAppStore.getState().client().send({ type: 'prompt', text }, 15000)
@@ -186,7 +190,7 @@ function AcceptanceCard(props: { worker: TaijiWorker }) {
           label={t('panel.taiji.send')}
           onSubmit={(text) => {
             setRejecting(false)
-            void deliver(worker.name, `打回：${text}`, t)
+            void deliver(worker.name, `${t('taiji.bouncePrefix')}${text}`, t)
           }}
         />
       )}
@@ -311,7 +315,7 @@ function HistoryRow(props: { worker: TaijiWorker; now: number }) {
   const t = useT()
   const tone = statusTone(worker.status)
   const resumable = (worker.status === 'error' || worker.status === 'interrupted') && worker.session
-  const resume = () => void deliver(worker.name, '继续', t)
+  const resume = () => void deliver(worker.name, t('taiji.resume'), t)
   return (
     <div className={css.historyRow} data-band="history" data-tone={tone}>
       <i className={css.historyDot} aria-hidden="true" />
