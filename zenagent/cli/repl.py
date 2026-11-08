@@ -35,6 +35,7 @@ from zenagent.app.permissions import (
 from zenagent.app.runtime import RuntimeOptions
 from zenagent.app.skill_commands import build_skill_submission
 from zenagent.app.support import api_key_for
+from zenagent.app.views import TranscriptBuilder
 from zenagent.attachments import read_image_argument
 from zenagent.cli.completion import (
     ReplCompleter,
@@ -287,12 +288,16 @@ class _EventPrinter:
         self.console = console
         self.print = print_fn
         self.theme = theme or DEFAULT_THEME
+        self._builder = TranscriptBuilder()
         self._line_open = False
         #: A tool progress line is currently painted on the terminal.
         self._progress_open = False
         self._last_progress_at = 0.0
 
     def __call__(self, event: AgentEvent) -> None:
+        # Facts come from the card: the builder settles statuses the way the
+        # TUI/RPC views do; the live print stays line-per-event.
+        self._builder.apply(event)
         if event.type == "message_start":
             self._clear_progress()
             self._line_open = False
@@ -318,8 +323,12 @@ class _EventPrinter:
         if event.type == "tool_execution_end":
             self._clear_progress()
             self._close_line()
+            card = self._builder.cards.get(event.tool_call_id or "")
             line = tool_result_line(
-                event.tool_name or "?", event.result, event.duration_ms
+                event.tool_name or "?",
+                event.result,
+                event.duration_ms,
+                status=card.status if card is not None else None,
             )
             if self.console is not None:
                 self.console.print(line, highlight=False)

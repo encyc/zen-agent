@@ -1531,7 +1531,7 @@ async def test_auto_merge_refuses_an_unknowable_diff(
 ) -> None:
     """A git failure makes the diff size unknowable (-1); zen's auto merge
     must refuse rather than merge unbounded work (2026-11-08 followups #1)."""
-    from zenagent.app.taiji import merge_gate, supervisor as sup
+    from zenagent.app.taiji import merge_gate
 
     monkeypatch.setattr(merge_gate, "diff_lines", lambda root, record: -1)
     _git(repo, "branch", "task/w1")  # the recorded branch must really exist

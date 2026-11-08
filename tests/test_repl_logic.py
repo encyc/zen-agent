@@ -940,3 +940,36 @@ async def test_eof_during_approval_denies_instead_of_exiting(
     )
     assert code == 0
     assert not (tmp_path / "approved.txt").exists()
+
+
+async def test_printer_marks_a_timed_out_tool_via_the_builder():
+    """The printer rides TranscriptBuilder's settle semantics: a bash call
+    that timed out (bash.py: is_error stays False) shows ✗ timed out, not ✓
+    (2026-11-08 followups #3 — the drift the review named)."""
+    from zenagent.agent.protocol import ToolResultAgent
+    from zenagent.cli.repl import _EventPrinter
+    from zenagent.events import AgentEvent
+
+    out: list[str] = []
+    printer = _EventPrinter(console=None, print_fn=out.append)
+    call_id = "c1"
+    printer._builder.apply(
+        AgentEvent(type="tool_execution_start", tool_call_id=call_id, tool_name="bash")
+    )
+    result = ToolResultAgent(
+        content=[],
+        is_error=False,
+        details={"exit_code": -9, "timed_out": True},
+    )
+    printer(
+        AgentEvent(
+            type="tool_execution_end",
+            tool_call_id=call_id,
+            tool_name="bash",
+            result=result,
+            duration_ms=90000,
+        )
+    )
+    line = "\n".join(out)
+    assert "✗" in line and "timed_out" in line, line
+    assert not line.lstrip().startswith("✓"), line

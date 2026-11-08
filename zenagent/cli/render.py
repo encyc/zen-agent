@@ -118,15 +118,28 @@ def _first_line(result: ToolResultAgent) -> str:
 
 
 def tool_result_line(
-    tool_name: str, result: ToolResultAgent, duration_ms: int | None = None
+    tool_name: str,
+    result: ToolResultAgent,
+    duration_ms: int | None = None,
+    *,
+    status: str | None = None,
 ) -> str:
-    """One-line summary of a finished tool call."""
-    mark = "✗" if result.is_error else "✓"
+    """One-line summary of a finished tool call.
+
+    ``status`` is the settled status from the view layer (``settle_tool_status``):
+    ``ok`` renders like the old ✓/✗-by-is_error line; any other settled status
+    (``timed_out``, ``interrupted``) renders ✗ with the reason — a command that
+    exits non-zero is information (✗ with its preview), but a killed one is a
+    distinct outcome the old mark could not show.
+    """
+    settled = status if status is not None else ("error" if result.is_error else "ok")
+    mark = "✗" if settled != "ok" else "✓"
+    reason = "" if settled in ("ok", "error") else f" ({settled})"
     timing = f" {duration_ms}ms" if duration_ms is not None else ""
     preview = _first_line(result)
     if len(preview) > _PREVIEW_CHARS:
         preview = preview[: _PREVIEW_CHARS - 1] + "…"
-    return f"{mark} {tool_name}{timing}  {preview}".rstrip()
+    return f"{mark} {tool_name}{reason}{timing}  {preview}".rstrip()
 
 
 def tool_progress_line(tool_name: str, partial: ToolResultAgent) -> str:
