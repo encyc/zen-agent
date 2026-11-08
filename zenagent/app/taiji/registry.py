@@ -29,6 +29,12 @@ class WorkerRecord:
     session: str = ""
     summary: str = ""
     attention: str = ""
+    #: The task text the worker was spawned with — a crash before the first
+    #: turn completes must not lose the task itself.
+    prompt: str = ""
+    #: Human words waiting to ride the next turn's tail; persisted so a
+    #: restart delivers them instead of dropping them.
+    inbox: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -58,6 +64,8 @@ class TaijiRegistry:
                     session=str(raw.get("session", "")),
                     summary=str(raw.get("summary", "")),
                     attention=str(raw.get("attention", "")),
+                    prompt=str(raw.get("prompt", "")),
+                    inbox=[str(item) for item in raw.get("inbox", [])],
                 )
             except (KeyError, TypeError, ValueError):
                 continue

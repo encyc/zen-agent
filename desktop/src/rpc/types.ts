@@ -540,6 +540,8 @@ export interface TaijiWorker {
   updated_at: number
   attention: TaijiAttention | null
   /** Present only while the worker sits at acceptance (status ok). */
+  /** The task text the worker was spawned with. */
+  prompt?: string
   diffstat: TaijiDiffFile[] | null
 }
 

@@ -101,9 +101,6 @@ class TaijiSupervisor:
         self._slots = asyncio.Semaphore(max_workers)
         self._max_workers = max_workers
         self._busy = 0
-        #: Human messages stashed while the worker's turn is mid-flight; the
-        #: turn's tail chains them as the next prompt (spec 附录 C 决策 5).
-        self._inbox: dict[str, list[str]] = {}
 
     def _worktree_paths(self) -> list[str]:
         # Boot-time reconcile keeps the sync form: the event loop is not
@@ -207,6 +204,7 @@ class TaijiSupervisor:
             status="running",
             created_at=time.time(),
             updated_at=time.time(),
+            prompt=prompt,
         )
         self.registry.records[worker] = record
         self._save()
@@ -230,7 +228,7 @@ class TaijiSupervisor:
             # A human redirect supersedes the queued spawn turn: cancel it so
             # exactly one turn for this worker ever runs.
             await self._cancel_queued_turn(name)
-            self._inbox.pop(name, None)
+            record.inbox.clear()
         else:
             # The worker is turn-based: while a turn is live — running, or
             # past its terminal status but still inside the milestone emit —
@@ -239,7 +237,8 @@ class TaijiSupervisor:
             # decides: status flips to terminal before the emit finishes.
             live = self._turns.get(name)
             if record.status == "running" or live is not None:
-                self._inbox.setdefault(name, []).append(text)
+                record.inbox.append(text)
+                self._save()
                 return record
         record.status = "running"
         record.updated_at = time.time()
@@ -255,7 +254,7 @@ class TaijiSupervisor:
 
     async def kill(self, name: str) -> WorkerRecord:
         record = self._record(name)
-        self._inbox.pop(name, None)
+        record.inbox.clear()
         task = self._turns.get(name)
         if task is not None and not task.done():
             task.cancel()
@@ -381,11 +380,14 @@ class TaijiSupervisor:
         )
         record.updated_at = time.time()
         self._save()
-        pending = self._inbox.pop(record.name, None)
+        pending = list(record.inbox)
+        record.inbox.clear()
+        self._save()
         await self._emit_turn(record, result.summary, started, status=result.status)
         # Words that arrived during the emit window land after the pop; the
         # chain must carry them too, in arrival order.
-        pending = [*(pending or []), *self._inbox.pop(record.name, [])]
+        pending = [*pending, *record.inbox]
+        record.inbox.clear()
         if pending and record.status not in ("killed", "merged"):
             if self._turns.get(record.name) is asyncio.current_task():
                 self._start_turn(
@@ -398,11 +400,11 @@ class TaijiSupervisor:
             else:
                 # A successor claimed the slot while we were emitting; hand
                 # the words to its tail instead of running a parallel turn.
-                self._inbox.setdefault(record.name, [])[:0] = pending
+                record.inbox[:0] = pending
+                self._save()
 
     async def _rollback(self, record: WorkerRecord) -> None:
         await asyncio.to_thread(rollback, self.repo_root, record.branch, record.worktree)
-        self._inbox.pop(record.name, None)
         self.registry.records.pop(record.name, None)
         self._save()
 

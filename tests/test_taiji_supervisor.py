@@ -1453,3 +1453,73 @@ async def test_merge_runs_git_off_loop(repo: Path, tmp_path: Path, monkeypatch) 
     merge_idents = idents[before_merge:]
     assert merge_idents, "merge never reached git"
     assert all(i != loop_ident for i in merge_idents), "git ran on the event loop"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+class TestDurability:
+    """The 2026-11-08 review: a crash before the first turn lost the task
+    itself (no prompt field), and queued interjections vanished with the
+    process. Both now live in the registry file."""
+
+    async def test_inbox_survives_supervisor_restart(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
+        )
+        registry_path = tmp_path / "sessions" / "taiji.json"
+        runner = GatedRunner()
+
+        supervisor = TaijiSupervisor(
+            repo_root=repo,
+            sessions_dir=tmp_path / "sessions",
+            registry_path=registry_path,
+            runner=runner,
+            chat=None,
+            mode_of=lambda: "ask",
+        )
+        await supervisor.spawn("first", name="w1")
+        await asyncio.sleep(0.05)
+        await supervisor.message("w1", "while running")  # inboxed, not run yet
+        assert runner.started.count("w1") == 1
+
+        # The host crashes: a new supervisor loads the same registry file.
+        restarted = TaijiSupervisor(
+            repo_root=repo,
+            sessions_dir=tmp_path / "sessions",
+            registry_path=registry_path,
+            runner=runner,
+            chat=None,
+            mode_of=lambda: "ask",
+        )
+        record = restarted.find_record("w1")
+        assert record is not None
+        # The queued word made it to disk with the status change.
+        assert "while running" in "".join(record.inbox)
+        # (In-process the original turn task survives; it owns the chain.
+        # A real crash replays through `message`, reading this same file.)
+        runner.gate("w1").set()
+        await supervisor.wait_idle()
+        # The chain tail carries the surviving interjection.
+        assert "while running" in runner.turns[-1][2]
+
+    async def test_spawn_persists_prompt(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
+        )
+        registry_path = tmp_path / "sessions" / "taiji.json"
+        supervisor = TaijiSupervisor(
+            repo_root=repo,
+            sessions_dir=tmp_path / "sessions",
+            registry_path=registry_path,
+            runner=StubRunner(),
+            chat=None,
+            mode_of=lambda: "ask",
+        )
+        await supervisor.spawn("ship the release notes", name="writer")
+        await supervisor.wait_idle()
+
+        saved = json.loads(registry_path.read_text(encoding="utf-8"))
+        assert saved["writer"]["prompt"] == "ship the release notes"

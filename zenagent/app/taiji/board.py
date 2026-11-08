@@ -50,6 +50,7 @@ def project_worker(supervisor, record: WorkerRecord) -> dict:
         "created_at": record.created_at,
         "updated_at": record.updated_at,
         "attention": parse_attention(record.attention),
+        "prompt": record.prompt,
         "diffstat": supervisor.diffstat(record) if record.status == "ok" else None,
     }
 

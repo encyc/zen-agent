@@ -66,3 +66,20 @@ def test_save_is_atomic(tmp_path: Path) -> None:
     registry.save(target)
     assert json.loads(target.read_text(encoding="utf-8"))["a"]["status"] == "running"
     assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_registry_roundtrips_prompt_and_inbox(tmp_path: Path) -> None:
+    """A crash before the first turn must not lose the task itself: the
+    prompt persists, and queued interjections survive the restart."""
+    registry = TaijiRegistry()
+    record = make_record("survivor")
+    record.prompt = "fix the flaky login test"
+    record.inbox = ["also check the logs"]
+    registry.records["survivor"] = record
+    target = tmp_path / "taiji.json"
+    registry.save(target)
+
+    reloaded = TaijiRegistry()
+    reloaded.load(target)
+    assert reloaded.records["survivor"].prompt == "fix the flaky login test"
+    assert reloaded.records["survivor"].inbox == ["also check the logs"]

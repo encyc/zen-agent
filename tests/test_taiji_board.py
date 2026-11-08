@@ -83,6 +83,7 @@ def test_project_worker_key_set_is_pinned():
         "created_at",
         "updated_at",
         "attention",
+        "prompt",
         "diffstat",
     }
 
