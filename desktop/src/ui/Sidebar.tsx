@@ -47,7 +47,7 @@ import { Notifications } from './Notifications'
 import { captureChatState } from './pages/navigation'
 import { pickProjectFolder } from './HomeHero'
 import { pickSessionFileToOpen } from './sessions/fileDialog'
-import appIcon from '../assets/app-icon.png'
+import { AppMark } from './AppMark'
 import { RunningMark } from './RunningMark'
 import { ZenWordmark } from './ZenWordmark'
 import css from './Sidebar.module.css'
@@ -333,7 +333,7 @@ export function Sidebar(props: { onCollapse(): void }) {
       <div className={css.header} data-tauri-drag-region>
         <div className={css.brand} data-tauri-drag-region>
           <div className={css.brandMark} aria-hidden>
-            <img src={appIcon} alt="" draggable={false} />
+            <AppMark alt="" draggable={false} />
           </div>
           <ZenWordmark height={13} />
         </div>

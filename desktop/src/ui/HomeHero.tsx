@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { useT } from '../i18n/locale'
 import { FolderIcon, XIcon } from './icons'
-import appIcon from '../assets/app-icon.png'
+import { AppMark } from './AppMark'
 import css from './HomeHero.module.css'
 
 const TIPS_KEY = 'zen.home.tips'
@@ -90,7 +90,7 @@ export function HomeHero(props: HomeHeroProps) {
   return (
     <div className={css.root} data-home-hero>
       <div className={css.mark} aria-hidden>
-        <img src={appIcon} alt="" data-home-logo draggable={false} />
+        <AppMark alt="" data-home-logo draggable={false} />
       </div>
       <h1 className={css.headline}>
         {t('home.titleInProjectBefore')}

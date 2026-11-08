@@ -40,7 +40,8 @@ html[data-platform='darwin'] .brand {
   flex: none;
 }
 
-.brandMark img {
+.brandMark img,
+.brandMark svg {
   display: block;
   width: 18px;
   height: 18px;
