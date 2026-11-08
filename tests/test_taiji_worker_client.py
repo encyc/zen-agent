@@ -10,10 +10,10 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
-
-import pytest
 from collections.abc import Awaitable, Callable
 from pathlib import Path
+
+import pytest
 
 from zenagent.agent import Agent
 from zenagent.app.sessions import SessionManager

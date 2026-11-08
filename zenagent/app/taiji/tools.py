@@ -200,24 +200,30 @@ def taiji_tools_for(
     return build_taiji_tools(supervisor_provider)
 
 
+def taiji_supervisor_for(runtime: Any) -> TaijiSupervisor:
+    """This host's supervisor for ``runtime``'s project, mode and chat.
+
+    The public seam for both the Router's tool provider and the RPC panel
+    ops; the first call wins the process singleton, so serve() may construct
+    it eagerly at boot and later calls (tools, ops) just rebind.
+    """
+    from zenagent import project
+    from zenagent.app.taiji.supervisor import get_taiji
+
+    root = project.find_project_root(Path.cwd())
+    import os
+
+    worker_model = os.environ.get("ZENAGENT_WORKER_MODEL") or None
+    return get_taiji(
+        repo_root=root,
+        sessions_dir=project.project_sessions_dir(root=root),
+        registry_path=project.project_dir(root=root) / "taiji.json",
+        runner=RpcRunner(worker_model=worker_model),
+        chat=getattr(runtime, "taiji_chat", None),
+        mode_of=lambda: runtime.mode,
+    )
+
+
 def runtime_taiji_provider(runtime: Any) -> SUPERVISOR_PROVIDER:
     """Bind a lazy supervisor to ``runtime``'s project, mode and host chat."""
-
-    def provider() -> TaijiSupervisor:
-        from zenagent import project
-        from zenagent.app.taiji.supervisor import get_taiji
-
-        root = project.find_project_root(Path.cwd())
-        import os
-
-        worker_model = os.environ.get("ZENAGENT_WORKER_MODEL") or None
-        return get_taiji(
-            repo_root=root,
-            sessions_dir=project.project_sessions_dir(root=root),
-            registry_path=project.project_dir(root=root) / "taiji.json",
-            runner=RpcRunner(worker_model=worker_model),
-            chat=getattr(runtime, "taiji_chat", None),
-            mode_of=lambda: runtime.mode,
-        )
-
-    return provider
+    return lambda: taiji_supervisor_for(runtime)
