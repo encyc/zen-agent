@@ -35,6 +35,7 @@ import { useChatStore } from './chatStore'
 import { nextDraft } from './pending'
 import { loadPrefs, replayFrames, savePref, spawnArgs, type LiveChoices } from './prefs'
 import { frameError } from '../rpc/frames'
+import { reportRefreshFailure } from './refresh'
 
 export type ConnectionState = 'idle' | 'starting' | 'ready' | 'exited'
 
@@ -297,7 +298,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           if (status.usage !== undefined) lastUsage = status.usage
         }
       })
-      .catch(() => {})
+      .catch((error) => reportRefreshFailure('status', error))
       .finally(() => {
         statusInFlight = false
       })
@@ -316,7 +317,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           useSessionStore.getState().setCurrent(current?.path ?? null)
         }
       })
-      .catch(() => {})
+      .catch((error) => reportRefreshFailure('sessions', error))
   },
 
   refreshCatalog() {
@@ -328,7 +329,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           useCatalogStore.getState().setModels((frame.models ?? []) as never)
         }
       })
-      .catch(() => {})
+      .catch((error) => reportRefreshFailure('models', error))
     void rpc
       .send({ type: 'commands' })
       .then((frame) => {
@@ -336,7 +337,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           useCatalogStore.getState().setCommands((frame.commands ?? []) as never)
         }
       })
-      .catch(() => {})
+      .catch((error) => reportRefreshFailure('commands', error))
     return Promise.resolve()
   },
 
@@ -354,7 +355,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             )
         }
       })
-      .catch(() => {})
+      .catch((error) => reportRefreshFailure('secrets', error))
   },
 
   async saveSecret(name, value) {
@@ -392,7 +393,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           useSkillsStore.getState().setSkills((frame.skills ?? []) as SkillRow[])
         }
       })
-      .catch(() => {})
+      .catch((error) => reportRefreshFailure('skills', error))
   },
 
   readSkill(name) {
@@ -429,7 +430,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             )
         }
       })
-      .catch(() => {})
+      .catch((error) => reportRefreshFailure('mcp', error))
   },
 
   async addMcpServer(input) {
