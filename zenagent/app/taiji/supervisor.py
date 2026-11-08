@@ -59,6 +59,15 @@ def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str] | None:
         return None
 
 
+async def _git_async(root: Path, *args: str) -> subprocess.CompletedProcess[str] | None:
+    """``_git`` off the event loop — async paths call this, never ``_git``.
+
+    One slow git (a locked repo, a cold NFS mount) must not stall the RPC
+    pump or the Router chat; only boot-time reconcile keeps the sync form.
+    """
+    return await asyncio.to_thread(_git, root, *args)
+
+
 @dataclass
 class TurnResult:
     status: str
@@ -243,6 +252,8 @@ class TaijiSupervisor:
         self._inbox: dict[str, list[str]] = {}
 
     def _worktree_paths(self) -> list[str]:
+        # Boot-time reconcile keeps the sync form: the event loop is not
+        # serving traffic yet when the supervisor is constructed.
         listed = _git(self.repo_root, "worktree", "list", "--porcelain")
         if listed is None or listed.returncode != 0:
             return []
@@ -293,17 +304,17 @@ class TaijiSupervisor:
 
     # -- spawn / message / kill ---------------------------------------------
 
-    def _free_name(self, slug: str) -> str:
+    async def _free_name(self, slug: str) -> str:
         """A worker name whose branch does not exist in git or the registry.
 
         The registry forgets finished workers whose worktree was cleaned up,
         but their branches stay — so git refs, not just records, decide.
         """
 
-        def taken(name: str) -> bool:
+        async def taken(name: str) -> bool:
             if name in self.registry.records:
                 return True
-            ref = _git(
+            ref = await _git_async(
                 self.repo_root,
                 "rev-parse",
                 "--verify",
@@ -313,30 +324,30 @@ class TaijiSupervisor:
             return ref is not None and ref.returncode == 0
 
         name, bump = slug, 2
-        while taken(name):
+        while await taken(name):
             name = f"{slug}-{bump}"
             bump += 1
         return name
 
     async def spawn(self, prompt: str, *, name: str | None = None) -> WorkerRecord:
         slug = _slug(name if name else prompt[:24])
-        worker = self._free_name(slug)
+        worker = await self._free_name(slug)
         branch = BRANCH_PREFIX + worker
         worktree = worktrees_root() / project_key(self.repo_root) / worker
 
-        current = _git(self.repo_root, "branch", "--show-current")
+        current = await _git_async(self.repo_root, "branch", "--show-current")
         base = (
             current.stdout.strip()
             if current is not None and current.stdout.strip()
             else "main"
         )
-        branched = _git(self.repo_root, "branch", branch, base)
+        branched = await _git_async(self.repo_root, "branch", branch, base)
         if branched is None or branched.returncode != 0:
             detail = branched.stderr.strip() if branched else "git is not available"
             raise RuntimeError(f"branch {branch} failed: {detail}")
-        added = _git(self.repo_root, "worktree", "add", str(worktree), branch)
+        added = await _git_async(self.repo_root, "worktree", "add", str(worktree), branch)
         if added is None or added.returncode != 0:
-            _git(self.repo_root, "branch", "-D", branch)
+            await _git_async(self.repo_root, "branch", "-D", branch)
             raise RuntimeError(
                 f"worktree add failed: {added.stderr.strip() if added else 'git missing'}"
             )
@@ -405,7 +416,9 @@ class TaijiSupervisor:
         if task is not None and not task.done():
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
-        removed = _git(self.repo_root, "worktree", "remove", "--force", record.worktree)
+        removed = await _git_async(
+            self.repo_root, "worktree", "remove", "--force", record.worktree
+        )
         if removed is None or removed.returncode != 0:
             shutil.rmtree(record.worktree, ignore_errors=True)
         record.status = "killed"
@@ -456,7 +469,7 @@ class TaijiSupervisor:
             raise
         except Exception as exc:  # noqa: BLE001 - a failed turn is a state, not a crash
             if rollback_on_start_failure and not record.session:
-                self._rollback(record)
+                await self._rollback(record)
                 await self._emit_turn(
                     record, f"启动失败：{exc}", started, status="error"
                 )
@@ -543,10 +556,10 @@ class TaijiSupervisor:
                 # the words to its tail instead of running a parallel turn.
                 self._inbox.setdefault(record.name, [])[:0] = pending
 
-    def _rollback(self, record: WorkerRecord) -> None:
-        _git(self.repo_root, "worktree", "remove", "--force", record.worktree)
+    async def _rollback(self, record: WorkerRecord) -> None:
+        await _git_async(self.repo_root, "worktree", "remove", "--force", record.worktree)
         shutil.rmtree(record.worktree, ignore_errors=True)
-        _git(self.repo_root, "branch", "-D", record.branch)
+        await _git_async(self.repo_root, "branch", "-D", record.branch)
         self._inbox.pop(record.name, None)
         self.registry.records.pop(record.name, None)
         self._save()
@@ -630,7 +643,7 @@ class TaijiSupervisor:
                 )
         return files
 
-    def merge_block_reason(self, name: str) -> str | None:
+    async def merge_block_reason(self, name: str) -> str | None:
         """Why an explicit merge would refuse, in board-displayable words.
 
         Mirrors :meth:`merge`'s preconditions without executing it; None
@@ -639,10 +652,10 @@ class TaijiSupervisor:
         record = self.registry.records.get(name)
         if record is None or record.status != "ok":
             return "任务未处于待验收状态"
-        current = _git(self.repo_root, "branch", "--show-current")
+        current = await _git_async(self.repo_root, "branch", "--show-current")
         if current is None or current.stdout.strip() != record.base:
             return f"基分支 {record.base} 未在主检出"
-        status = git_status(self.repo_root)
+        status = await asyncio.to_thread(git_status, self.repo_root)
         if status is None or not status.is_clean:
             return "主工作区有未提交更改"
         return None
@@ -660,15 +673,17 @@ class TaijiSupervisor:
         record = self.registry.records.get(name)
         if record is None or record.status != "ok":
             return False
-        if auto and self._diff_lines(record) > AUTO_MERGE_MAX_DIFF_LINES:
+        if auto and await asyncio.to_thread(
+            self._diff_lines, record
+        ) > AUTO_MERGE_MAX_DIFF_LINES:
             return False
-        current = _git(self.repo_root, "branch", "--show-current")
+        current = await _git_async(self.repo_root, "branch", "--show-current")
         if current is None or current.stdout.strip() != record.base:
             return False
-        status = git_status(self.repo_root)
+        status = await asyncio.to_thread(git_status, self.repo_root)
         if status is None or not status.is_clean:
             return False
-        completed = _git(
+        completed = await _git_async(
             self.repo_root,
             "merge",
             "--no-ff",
@@ -679,20 +694,20 @@ class TaijiSupervisor:
         if completed is None or completed.returncode != 0:
             # A conflicted merge would otherwise leave MERGE_HEAD and markers
             # in the user's working tree — the tree stays sacred.
-            _git(self.repo_root, "merge", "--abort")
+            await _git_async(self.repo_root, "merge", "--abort")
             return False
         record.status = "merged"
         record.updated_at = time.time()
         self._save()
-        self._retire_worktree(record)
+        await self._retire_worktree(record)
         return True
 
-    def _retire_worktree(self, record: WorkerRecord) -> None:
+    async def _retire_worktree(self, record: WorkerRecord) -> None:
         """Remove the worker's worktree unless it still holds uncommitted work."""
-        dirty = _git(record.worktree, "status", "--porcelain")
+        dirty = await _git_async(record.worktree, "status", "--porcelain")
         if dirty is not None and dirty.returncode == 0 and dirty.stdout.strip():
             return  # uncommitted worker output survives for inspection
-        removed = _git(self.repo_root, "worktree", "remove", record.worktree)
+        removed = await _git_async(self.repo_root, "worktree", "remove", record.worktree)
         if removed is None or removed.returncode != 0:
             shutil.rmtree(record.worktree, ignore_errors=True)
 

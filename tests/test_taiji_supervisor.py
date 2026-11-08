@@ -1264,19 +1264,19 @@ class TestDiffstatAndMergeReasons:
 
         supervisor = await self.make_supervisor_with_worker(repo, tmp_path, monkeypatch)
 
-        assert supervisor.merge_block_reason("ghost") == "任务未处于待验收状态"
-        assert supervisor.merge_block_reason("ds") is None
+        assert await supervisor.merge_block_reason("ghost") == "任务未处于待验收状态"
+        assert await supervisor.merge_block_reason("ds") is None
 
         (repo / "dirty.txt").write_text("uncommitted", encoding="utf-8")
         reset_cache()  # git_status caches per directory; the mutation must be seen
-        assert supervisor.merge_block_reason("ds") == "主工作区有未提交更改"
+        assert await supervisor.merge_block_reason("ds") == "主工作区有未提交更改"
         (repo / "dirty.txt").unlink()
         reset_cache()
 
         # task/ds itself is checked out by the worker worktree (git refuses a
         # second checkout), so "base elsewhere" is simulated with a new branch.
         _git(repo, "checkout", "-qb", "elsewhere")
-        assert supervisor.merge_block_reason("ds") == "基分支 main 未在主检出"
+        assert await supervisor.merge_block_reason("ds") == "基分支 main 未在主检出"
         _git(repo, "checkout", "-q", "main")
 
 
@@ -1386,3 +1386,69 @@ class TestEmitWindowRace:
         assert runner.started.count("w1") == 2  # exactly one follow-up turn
         assert "M1\n\nM2" in runner.turns[-1][2]
         assert supervisor.list_workers()[0].status == "ok"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+async def test_git_async_offloads_to_worker_thread(monkeypatch) -> None:
+    """The supervisor's async-path git helper must run off the event loop."""
+    import threading
+
+    from zenagent.app.taiji import supervisor as sup
+
+    idents: list[int] = []
+
+    def fake_git(root, *args):
+        idents.append(threading.get_ident())
+
+    monkeypatch.setattr(sup, "_git", fake_git)
+    await sup._git_async(Path("/tmp"), "status")
+    assert idents, "_git_async never reached git"
+    assert idents[0] != threading.get_ident()
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+async def test_merge_runs_git_off_loop(repo: Path, tmp_path: Path, monkeypatch) -> None:
+    """merge's whole git sequence — show-current, status, merge, retire —
+    must leave the event loop; one slow git must not stall the RPC pump."""
+    import subprocess
+    import threading
+
+    from zenagent.app.git import GitStatus
+    from zenagent.app.taiji import supervisor as sup
+
+    loop_ident = threading.get_ident()
+    idents: list[int] = []
+
+    def fake_git(root, *args):
+        idents.append(threading.get_ident())
+        if args[:2] == ("branch", "--show-current"):
+            return subprocess.CompletedProcess(args, 0, "main\n", "")
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    def fake_status(cwd=None, **_kw):
+        idents.append(threading.get_ident())
+        return GitStatus(branch="main")
+
+    monkeypatch.setattr(sup, "_git", fake_git)
+    monkeypatch.setattr(sup, "git_status", fake_status)
+
+    supervisor = make_supervisor(repo, tmp_path, StubRunner())
+    supervisor.registry.records["w1"] = WorkerRecord(
+        name="w1",
+        branch="task/w1",
+        base="main",
+        worktree=str(tmp_path / "wt"),
+        status="ok",
+        created_at=1.0,
+        updated_at=1.0,
+    )
+    # Boot-time reconcile inside the constructor is sync by design (documented);
+    # the assertion covers the git calls the merge itself makes.
+    before_merge = len(idents)
+
+    merged = await supervisor.merge("w1")
+    assert merged is True
+    assert supervisor.registry.records["w1"].status == "merged"
+    merge_idents = idents[before_merge:]
+    assert merge_idents, "merge never reached git"
+    assert all(i != loop_ident for i in merge_idents), "git ran on the event loop"

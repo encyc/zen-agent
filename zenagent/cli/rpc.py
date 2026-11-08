@@ -744,7 +744,7 @@ class RpcServer:
             if await supervisor.merge(name, auto=False):
                 self._send({"type": "result", "id": request_id, "ok": True})
             else:
-                reason = supervisor.merge_block_reason(name) or "合并未执行"
+                reason = await supervisor.merge_block_reason(name) or "合并未执行"
                 self._send(
                     {"type": "error", "id": request_id, "message": reason}
                 )
