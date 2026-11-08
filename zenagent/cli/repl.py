@@ -561,19 +561,13 @@ async def repl(
             print_fn(f"mcp: {warning}")
         print_fn(f"mcp: tools updated ({len(agent.tools)} available)")
 
-    async def reload_runtime() -> None:
-        """Re-discover skills, templates and extensions without restarting."""
+    def _refresh_lists() -> None:
+        """Re-read the rosters the slash layer uses, then say so."""
         nonlocal skill_list, template_list, template_by_name, extension_commands
-        if agent.is_streaming:
-            print_fn("cannot reload while the agent is working")
-            return
-        notes = await runtime.reconcile_async()
         skill_list = list(runtime.skills)
         template_list = list(runtime.templates)
         template_by_name = {template.name: template for template in template_list}
         extension_commands = dict(runtime.extension_commands)
-        for note in notes:
-            print_fn(note)
         print_fn(
             t(
                 "repl.reloaded",
@@ -582,6 +576,17 @@ async def repl(
                 templates=len(template_list),
             )
         )
+
+    async def reload_runtime() -> None:
+        """Re-discover skills, templates and extensions without restarting."""
+        nonlocal skill_list, template_list, template_by_name, extension_commands
+        if agent.is_streaming:
+            print_fn("cannot reload while the agent is working")
+            return
+        notes = await runtime.reconcile_async()
+        _refresh_lists()
+        for note in notes:
+            print_fn(note)
 
     console = Console() if sys.stdout.isatty() else None
     theme_warnings: list[str] = []
@@ -704,18 +709,7 @@ async def repl(
             set_language=set_language,
         )
         if name == "reload":
-            skill_list = list(runtime.skills)
-            template_list = list(runtime.templates)
-            template_by_name = {template.name: template for template in template_list}
-            extension_commands = dict(runtime.extension_commands)
-            print_fn(
-                t(
-                    "repl.reloaded",
-                    tools=len(agent.tools),
-                    skills=len(skill_list),
-                    templates=len(template_list),
-                )
-            )
+            _refresh_lists()
         return outcome
 
     def on_event(event: AgentEvent) -> None:
