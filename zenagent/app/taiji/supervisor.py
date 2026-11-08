@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from zenagent.app.git import git_status
+from zenagent.app.taiji import board
 from zenagent.app.taiji.registry import TaijiRegistry, WorkerRecord
 from zenagent.project import project_key
 
@@ -68,11 +69,10 @@ class TurnResult:
 
 
 def _attention_question(record: WorkerRecord) -> str:
-    try:
-        data = _json.loads(record.attention)
-    except ValueError:
-        return record.attention
-    return str(data.get("question", "")) if isinstance(data, dict) else record.attention
+    parsed = board.parse_attention(record.attention)
+    if parsed is None:
+        return ""
+    return parsed["question"]
 
 
 def supervisor_summary(record: WorkerRecord, summary: str, duration_s: float) -> str:
@@ -256,6 +256,20 @@ class TaijiSupervisor:
 
     def list_workers(self) -> list[WorkerRecord]:
         return list(self.registry.records.values())
+
+    def find_record(self, name: str) -> WorkerRecord | None:
+        """The worker's registry row, or ``None`` when there is no such worker."""
+        return self.registry.records.get(name)
+
+    def has_running(self, name: str) -> bool:
+        """Whether the worker holds a live turn right now.
+
+        Surfaces read this *before* awaiting ``message`` so ``queued`` on
+        the reply means "the text rides the current turn's tail", not "a
+        turn we just started".
+        """
+        record = self.find_record(name)
+        return record is not None and record.status == "running"
 
     def slots_state(self) -> dict:
         """The dispatch board's slot gauge.

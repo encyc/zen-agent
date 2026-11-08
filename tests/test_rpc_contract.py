@@ -33,6 +33,15 @@ def test_protocol_version_pinned_both_sides():
     assert "PROTOCOL_VERSION = 2" in TS_PATH.read_text()
 
 
+def test_rpc_never_touches_supervisor_internals():
+    """The wire layer consumes the taiji supervisor's public API only — the
+    2026-11-08 review found it reading ``registry.records`` and calling the
+    private ``_record``; board projection lives in ``app/taiji/board.py``."""
+    rpc = RPC_PATH.read_text()
+    assert "registry.records" not in rpc
+    assert "._record(" not in rpc
+
+
 def _ok_stream():
     from zenagent.events import AssistantEvent
     from zenagent.types import AssistantMessage, TextContent, Usage

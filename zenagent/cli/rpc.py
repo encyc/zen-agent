@@ -38,6 +38,9 @@ from zenagent.app.skill_commands import (
     parse_skill_display,
 )
 from zenagent.app.taiji import (
+    board as taiji_board,
+)
+from zenagent.app.taiji import (
     close_taiji,
     ensure_taiji_session,
     own_taiji_lock,
@@ -718,23 +721,15 @@ class RpcServer:
             chat = getattr(self.runtime, "taiji_chat", None)
             # diffstat shells out to git per acceptance worker; keep the read
             # pump responsive by projecting the board off the event loop.
-            workers = await asyncio.to_thread(
-                lambda: [
-                    self._taiji_worker(record, supervisor)
-                    for record in supervisor.list_workers()
-                ]
+            board = await asyncio.to_thread(
+                taiji_board.project_board, supervisor, bool(getattr(chat, "busy", False))
             )
             self._send(
                 {
                     "type": "result",
                     "id": request_id,
                     "ok": True,
-                    "board": {
-                        "active": True,
-                        "router_busy": bool(getattr(chat, "busy", False)),
-                        "slots": supervisor.slots_state(),
-                        "workers": workers,
-                    },
+                    "board": board,
                 }
             )
             return True
@@ -788,7 +783,7 @@ class RpcServer:
                     }
                 )
                 return True
-            record = supervisor.registry.records.get(name)
+            record = supervisor.find_record(name)
             items = (
                 peek_tail(record.session, limit=limit)
                 if record and record.session
@@ -805,38 +800,6 @@ class RpcServer:
             }
         )
         return True
-
-    def _taiji_worker(self, record, supervisor) -> dict:
-        """One registry row as the board renders it."""
-        attention: dict | None = None
-        if record.attention:
-            try:
-                data = json.loads(record.attention)
-                if isinstance(data, dict):
-                    attention = {
-                        "question": str(data.get("question", "")),
-                        "options": [
-                            str(label)
-                            for label in (data.get("options") or [])
-                            if isinstance(label, (str, int, float))
-                        ][:4],
-                    }
-            except ValueError:
-                attention = {"question": record.attention, "options": []}
-        return {
-            "name": record.name,
-            "branch": record.branch,
-            "base": record.base,
-            "status": record.status,
-            "summary": record.summary,
-            "session": record.session,
-            "created_at": record.created_at,
-            "updated_at": record.updated_at,
-            "attention": attention,
-            "diffstat": (
-                supervisor.diffstat(record) if record.status == "ok" else None
-            ),
-        }
 
     def _taiji_missing(self, request_id) -> bool:
         self._send(
@@ -856,10 +819,7 @@ class RpcServer:
         # Snapshot before the await (no yield between: atomic in the loop) —
         # ``queued`` must mean "the text rides the current turn's tail", not
         # "a fresh turn we just started is running".
-        was_running = (
-            supervisor.registry.records.get(name) is not None
-            and supervisor._record(name).status == "running"
-        )
+        was_running = supervisor.has_running(name)
         try:
             record = await supervisor.message(name, text)
         except (KeyError, RuntimeError) as exc:
