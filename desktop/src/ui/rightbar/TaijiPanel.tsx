@@ -9,7 +9,6 @@ import { useNoticeStore, useWorkPanelStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
 import type {
   TaijiAttention,
-  TaijiBoard,
   TaijiDiffFile,
   TaijiWorker,
 } from '../../rpc/types'
@@ -17,18 +16,11 @@ import { diffSummary, groupWorkers, statusTone, taskAge, relativeTime } from './
 import { BranchIcon, RefreshIcon } from '../icons'
 import css from './TaijiPanel.module.css'
 
+import { useTaijiStore } from '../../state/taijiStore'
+
 const POLL_MS = 2000
-const OP_TIMEOUT_MS = 15000
 const KILL_ARM_MS = 3000
 
-type Reply = { type: 'result' | 'error'; id: string; ok?: boolean; message?: string } & Record<string, unknown>
-
-async function taijiOp(payload: Record<string, unknown>): Promise<Reply> {
-  return (await useAppStore
-    .getState()
-    .client()
-    .send({ type: 'taiji', ...payload }, OP_TIMEOUT_MS)) as unknown as Reply
-}
 
 function notice(kind: 'info' | 'error', text: string) {
   useNoticeStore.getState().show({ kind, text })
@@ -48,7 +40,7 @@ function renderAge(
  * mid-turn and the words ride that turn's tail. */
 async function deliver(name: string, text: string, t: (key: string, params?: Record<string, string | number>) => string) {
   try {
-    const reply = await taijiOp({ op: 'message', name, text })
+    const reply = await useTaijiStore.getState().send(name, text)
     if (reply.ok === true) {
       if (reply.queued === true) notice('info', t('panel.taiji.queuedNotice', { name }))
       else notice('info', t('panel.taiji.delivered'))
@@ -150,7 +142,7 @@ function AcceptanceCard(props: { worker: TaijiWorker }) {
   const summary = diffSummary(worker.diffstat)
   const merge = async () => {
     try {
-      const reply = await taijiOp({ op: 'merge', name: worker.name })
+      const reply = await useTaijiStore.getState().merge(worker.name)
       if (reply.ok === true) notice('info', t('panel.taiji.merged', { branch: worker.branch }))
       else notice('error', t('panel.taiji.mergeFailed', { reason: String(reply.message ?? '') }))
     } catch {
@@ -223,7 +215,7 @@ function RunningRow(props: { worker: TaijiWorker; now: number }) {
     setArmed(false)
     void (async () => {
       try {
-        await taijiOp({ op: 'kill', name: worker.name })
+        await useTaijiStore.getState().kill(worker.name)
         notice('info', t('panel.taiji.killedNotice', { name: worker.name }))
       } catch {
         notice('error', t('panel.taiji.actionFailed', { reason: 'timeout' }))
@@ -238,7 +230,7 @@ function RunningRow(props: { worker: TaijiWorker; now: number }) {
       setItems(null)
       void (async () => {
         try {
-          const reply = await taijiOp({ op: 'peek', name: worker.name })
+          const reply = await useTaijiStore.getState().peek(worker.name, 12)
           setItems(Array.isArray(reply.items) ? (reply.items as { role: string; text: string }[]) : [])
         } catch {
           setItems([])
@@ -294,7 +286,7 @@ function QueuedRow(props: { worker: TaijiWorker }) {
   const t = useT()
   const cancel = async () => {
     try {
-      await taijiOp({ op: 'kill', name: worker.name })
+      await useTaijiStore.getState().kill(worker.name)
       notice('info', t('panel.taiji.killedNotice', { name: worker.name }))
     } catch {
       notice('error', t('panel.taiji.actionFailed', { reason: 'timeout' }))
@@ -357,24 +349,12 @@ function Section(props: { title: string; count: number; children: React.ReactNod
 
 export function TaijiPanel() {
   const t = useT()
-  const [board, setBoard] = useState<TaijiBoard | null>(null)
-  const [failed, setFailed] = useState(false)
+  const board = useTaijiStore((state) => state.board)
+  const failed = useTaijiStore((state) => state.failed)
   const [now, setNow] = useState(() => Date.now() / 1000)
-  const loadingRef = useRef(false)
 
   const load = useCallback(async () => {
-    if (loadingRef.current) return // a slow poll must not stack requests
-    loadingRef.current = true
-    try {
-      const frame = await taijiOp({ op: 'board' })
-      if (frame.ok !== true) throw new Error(String(frame.message ?? 'taiji failed'))
-      setBoard(frame.board as TaijiBoard)
-      setFailed(false)
-    } catch {
-      setFailed(true)
-    } finally {
-      loadingRef.current = false
-    }
+    await useTaijiStore.getState().refresh()
   }, [])
 
   useEffect(() => {
