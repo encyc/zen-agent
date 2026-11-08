@@ -79,3 +79,26 @@ def test_own_taiji_lock_never_touches_a_foreign_lock(tmp_path: Path) -> None:
     # the rightful owner's lock file is untouched
     assert json.loads((tmp_path / "taiji.lock").read_text())["pid"] == os.getpid()
     assert own_taiji_lock(tmp_path) is False
+
+
+def test_worker_worktree_hosts_do_not_materialize_taiji(tmp_path: Path) -> None:
+    """A worker subprocess (cwd = a linked worktree) must not create taiji
+    artifacts of its own — only the main checkout hosts taiji."""
+    import shutil as _shutil
+    import subprocess as _subprocess
+
+    from zenagent.app.taiji.session import should_init_taiji
+
+    if _shutil.which("git") is None:
+        pytest.skip("git is not installed")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _subprocess.run(["git", "init", "-q", "-b", "main"], cwd=str(repo), check=True, capture_output=True)
+    (repo / "a.txt").write_text("x\n", encoding="utf-8")
+    _subprocess.run(["git", "add", "."], cwd=str(repo), check=True, capture_output=True)
+    _subprocess.run(["git", "commit", "-qm", "init"], cwd=str(repo), check=True, capture_output=True)
+    linked = tmp_path / "linked"
+    _subprocess.run(["git", "worktree", "add", "-q", "-b", "w", str(linked)], cwd=str(repo), check=True, capture_output=True)
+
+    assert should_init_taiji(repo) is True
+    assert should_init_taiji(linked) is False

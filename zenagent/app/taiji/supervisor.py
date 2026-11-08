@@ -9,6 +9,7 @@ paths. Milestone injection and the merge gate live on top (see below).
 from __future__ import annotations
 
 import asyncio
+import json as _json
 import re
 import shutil
 import subprocess
@@ -23,6 +24,7 @@ from zenagent.app.taiji.registry import TaijiRegistry, WorkerRecord
 from zenagent.project import project_key
 
 CLOSE_GRACE_S = 5.0
+AUTO_MERGE_MAX_DIFF_LINES = 200
 
 GIT_TIMEOUT_S = 10.0
 _SLUG_KEEP = re.compile(r"[^a-z0-9._-]+")
@@ -61,6 +63,16 @@ class TurnResult:
     status: str
     summary: str
     session_path: str
+    #: A worker question waiting on a person (from an ``ask_request`` event).
+    attention: dict | None = None
+
+
+def _attention_question(record: WorkerRecord) -> str:
+    try:
+        data = _json.loads(record.attention)
+    except ValueError:
+        return record.attention
+    return str(data.get("question", "")) if isinstance(data, dict) else record.attention
 
 
 def supervisor_summary(record: WorkerRecord, summary: str, duration_s: float) -> str:
@@ -83,24 +95,90 @@ class RpcRunner:
         *,
         timeout_s: float = 1800.0,
         client_factory: Callable[[], Any] | None = None,
+        attention_grace_s: float = 2.0,
+        worker_model: str | None = None,
     ) -> None:
         self._timeout_s = timeout_s
         self._client_factory = client_factory
+        self._attention_grace_s = attention_grace_s
+        self._worker_model = worker_model
 
     async def run_turn(
         self, worktree: str, session_path: str | None, prompt: str
     ) -> TurnResult:
         from zenagent.app.taiji.worker_client import WorkerRpcClient
 
-        client = self._client_factory() if self._client_factory else WorkerRpcClient()
-        await client.start(Path(worktree), on_event=lambda event: None)
+        client = (
+            self._client_factory()
+            if self._client_factory
+            else WorkerRpcClient(model=self._worker_model)
+        )
+        events: list[dict] = []
+        asked = asyncio.Event()
+
+        def on_event(event: dict) -> None:
+            events.append(event)
+            if event.get("type") == "ask_request":
+                asked.set()
+
+        await client.start(Path(worktree), on_event=on_event)
+        attention = None
+        summary = ""
+        answer = None
         try:
             if session_path:
-                await client.resume(session_path)
-            answer = await client.prompt(prompt, timeout_s=self._timeout_s)
+                resume_result = await client.resume(session_path)
+                if resume_result.get("ok") is not True:
+                    return TurnResult(
+                        status="error",
+                        summary=f"resume failed: {resume_result.get('message', '')}",
+                        session_path=str(session_path),
+                    )
+            prompt_task = asyncio.create_task(
+                client.prompt(prompt, timeout_s=self._timeout_s)
+            )
+            asked_wait = asyncio.create_task(asked.wait())
+            done, _pending = await asyncio.wait(
+                [prompt_task, asked_wait], return_when=asyncio.FIRST_COMPLETED
+            )
+            if prompt_task in done:
+                answer = prompt_task.result()
+                asked_wait.cancel()
+            else:
+                # the worker asked a question: the run blocks on it, so the
+                # turn ends here and the question becomes the attention
+                await asyncio.sleep(self._attention_grace_s)
+                await client.stop()
+                asked_wait.cancel()
         finally:
             await client.stop()
-        if answer.get("ok") is False:
+        if answer is None:
+            # the turn ended on the question; that question is the attention
+            for event in events:
+                if event.get("type") == "ask_request":
+                    questions = event.get("questions") or []
+                    options: list[str] = []
+                    for question in questions:
+                        if not isinstance(question, dict):
+                            continue
+                        for option in question.get("options") or []:
+                            label = (
+                                option.get("label", "")
+                                if isinstance(option, dict)
+                                else ""
+                            )
+                            if isinstance(label, str) and label:
+                                options.append(label)
+                    attention = {
+                        "request_id": str(event.get("request_id", "")),
+                        "question": "; ".join(
+                            str(question.get("question", ""))
+                            for question in questions
+                            if isinstance(question, dict)
+                        ).strip("; "),
+                        "options": options[:4],
+                    }
+        if answer is not None and answer.get("ok") is False:
             # A graceful ok:false frame (provider error, max turns, abort) is
             # a failed turn — never a mergeable success.
             reason = str(answer.get("error") or answer.get("text") or "turn failed")
@@ -108,12 +186,21 @@ class RpcRunner:
                 status="error",
                 summary=reason[:2000],
                 session_path=str(answer.get("session") or session_path or ""),
+                attention=attention,
+            )
+        if answer is None:
+            return TurnResult(
+                status="ok",
+                summary=summary or (attention or {}).get("question", "")[:200],
+                session_path=str(session_path or ""),
+                attention=attention,
             )
         summary = str(answer.get("text") or "").strip()
         return TurnResult(
             status="ok",
             summary=summary[:2000] or "(no output)",
             session_path=str(answer.get("session") or session_path or ""),
+            attention=attention,
         )
 
 
@@ -135,6 +222,7 @@ class TaijiSupervisor:
         runner: WorkerRunner,
         chat: Any = None,
         mode_of: Callable[[], str],
+        max_workers: int = 3,
     ) -> None:
         self.repo_root = Path(repo_root).expanduser().resolve()
         self.sessions_dir = Path(sessions_dir)
@@ -147,6 +235,12 @@ class TaijiSupervisor:
         self.registry.reconcile(self._worktree_paths())
         self._tasks: set[asyncio.Task[None]] = set()
         self._turns: dict[str, asyncio.Task[None]] = {}
+        self._slots = asyncio.Semaphore(max_workers)
+        self._max_workers = max_workers
+        self._busy = 0
+        #: Human messages stashed while the worker's turn is mid-flight; the
+        #: turn's tail chains them as the next prompt (spec 附录 C 决策 5).
+        self._inbox: dict[str, list[str]] = {}
 
     def _worktree_paths(self) -> list[str]:
         listed = _git(self.repo_root, "worktree", "list", "--porcelain")
@@ -162,6 +256,20 @@ class TaijiSupervisor:
 
     def list_workers(self) -> list[WorkerRecord]:
         return list(self.registry.records.values())
+
+    def slots_state(self) -> dict:
+        """The dispatch board's slot gauge.
+
+        ``busy`` counts slot *holders* — turns that went through the
+        semaphore. Inbox-chained and human-wake turns run outside the
+        slots (they must never queue behind work), so they are not
+        counted here and ``busy`` may legitimately stay below the true
+        number of live turns.
+        """
+        queued = sum(
+            1 for record in self.registry.records.values() if record.status == "queued"
+        )
+        return {"busy": self._busy, "max": self._max_workers, "queued": queued}
 
     def _save(self) -> None:
         self.registry.save(self.registry_path)
@@ -203,7 +311,11 @@ class TaijiSupervisor:
         worktree = worktrees_root() / project_key(self.repo_root) / worker
 
         current = _git(self.repo_root, "branch", "--show-current")
-        base = current.stdout.strip() if current is not None and current.stdout.strip() else "main"
+        base = (
+            current.stdout.strip()
+            if current is not None and current.stdout.strip()
+            else "main"
+        )
         branched = _git(self.repo_root, "branch", branch, base)
         if branched is None or branched.returncode != 0:
             detail = branched.stderr.strip() if branched else "git is not available"
@@ -226,23 +338,55 @@ class TaijiSupervisor:
         )
         self.registry.records[worker] = record
         self._save()
-        self._start_turn(record, prompt, resume=None, rollback_on_start_failure=True)
+        self._start_turn(
+            record, prompt, resume=None, rollback_on_start_failure=True, use_slot=True
+        )
         return record
 
     async def message(self, name: str, text: str) -> WorkerRecord:
         record = self._record(name)
-        if record.status in ("running", "killed"):
+        if record.status == "killed":
             raise RuntimeError(f"worker {name} is {record.status}")
+        if record.status == "queued":
+            # A human redirect supersedes the queued spawn turn: cancel it so
+            # exactly one turn for this worker ever runs.
+            queued = self._turns.get(name)
+            if queued is not None and not queued.done():
+                queued.cancel()
+                await asyncio.gather(queued, return_exceptions=True)
+            self._inbox.pop(name, None)
+        else:
+            # The worker is turn-based: while a turn is live — running, or
+            # past its terminal status but still inside the milestone emit —
+            # input cannot be injected, so the words wait in the inbox and
+            # ride the turn chain's tail. _turns presence, not status,
+            # decides: status flips to terminal before the emit finishes.
+            live = self._turns.get(name)
+            if record.status == "running" or live is not None:
+                self._inbox.setdefault(name, []).append(text)
+                return record
+        if record.status == "queued":
+            # A human redirect supersedes the queued spawn turn: cancel it so
+            # exactly one turn for this worker ever runs.
+            queued = self._turns.get(name)
+            if queued is not None and not queued.done():
+                queued.cancel()
+                await asyncio.gather(queued, return_exceptions=True)
         record.status = "running"
         record.updated_at = time.time()
         self._save()
         self._start_turn(
-            record, text, resume=record.session or None, rollback_on_start_failure=False
+            record,
+            text,
+            resume=record.session or None,
+            rollback_on_start_failure=False,
+            use_slot=False,
         )
         return record
 
     async def kill(self, name: str) -> WorkerRecord:
         record = self._record(name)
+        self._inbox.pop(name, None)
         task = self._turns.get(name)
         if task is not None and not task.done():
             task.cancel()
@@ -264,27 +408,34 @@ class TaijiSupervisor:
         *,
         resume: str | None,
         rollback_on_start_failure: bool,
+        use_slot: bool,
     ) -> None:
         task = asyncio.create_task(
-            self._run_turn(record, prompt, resume, rollback_on_start_failure)
+            self._run_turn(record, prompt, resume, rollback_on_start_failure, use_slot)
         )
         self._tasks.add(task)
         self._turns[record.name] = task
 
         def _settled(done: asyncio.Task[None]) -> None:
             self._tasks.discard(done)
-            self._turns.pop(record.name, None)
+            # Only clear our own slot: a successor turn (chained inbox or a
+            # human message) may already have claimed the mapping, and a
+            # stale clear would make kill cancel nothing (P2 kill race).
+            if self._turns.get(record.name) is done:
+                self._turns.pop(record.name, None)
 
         task.add_done_callback(_settled)
 
-    async def _run_turn(
+    async def _execute_turn(
         self,
         record: WorkerRecord,
-        prompt: str,
         resume: str | None,
+        prompt: str,
+        started: float,
+        *,
         rollback_on_start_failure: bool,
-    ) -> None:
-        started = time.time()
+    ) -> TurnResult | None:
+        """Run one turn and absorb its failure states; None when absorbed."""
         try:
             result = await self.runner.run_turn(record.worktree, resume, prompt)
         except asyncio.CancelledError:
@@ -295,26 +446,94 @@ class TaijiSupervisor:
                 await self._emit_turn(
                     record, f"启动失败：{exc}", started, status="error"
                 )
-                return
+                return None
             record.status = "error"
             record.summary = str(exc)
             record.updated_at = time.time()
             self._save()
             await self._emit_turn(record, str(exc), started, status="error")
-            return
+            return None
         if record.status == "killed":
-            return  # a kill during the turn is final; do not overwrite or merge
+            return None  # a kill during the turn is final; do not overwrite
+        return result
+
+    async def _run_turn(
+        self,
+        record: WorkerRecord,
+        prompt: str,
+        resume: str | None,
+        rollback_on_start_failure: bool,
+        use_slot: bool,
+    ) -> None:
+        started = time.time()
+        if use_slot:
+            if self._slots.locked():
+                record.status = "queued"
+                record.updated_at = time.time()
+                self._save()
+            await self._slots.acquire()
+            try:
+                self._busy += 1
+                if record.status == "queued":
+                    record.status = "running"
+                    record.updated_at = time.time()
+                    self._save()
+                result = await self._execute_turn(
+                    record,
+                    resume,
+                    prompt,
+                    started,
+                    rollback_on_start_failure=rollback_on_start_failure,
+                )
+            finally:
+                self._busy -= 1
+                self._slots.release()
+        else:
+            # Human wake-ups and inbox chains run outside the slots: they
+            # must never queue behind spawned work.
+            result = await self._execute_turn(
+                record,
+                resume,
+                prompt,
+                started,
+                rollback_on_start_failure=rollback_on_start_failure,
+            )
+        if result is None:
+            return
         record.status = result.status
         record.summary = result.summary
         record.session = result.session_path
+        record.attention = (
+            _json.dumps(result.attention, ensure_ascii=False)
+            if result.attention
+            else ""
+        )
         record.updated_at = time.time()
         self._save()
+        pending = self._inbox.pop(record.name, None)
         await self._emit_turn(record, result.summary, started, status=result.status)
+        # Words that arrived during the emit window land after the pop; the
+        # chain must carry them too, in arrival order.
+        pending = [*(pending or []), *self._inbox.pop(record.name, [])]
+        if pending and record.status not in ("killed", "merged"):
+            if self._turns.get(record.name) is asyncio.current_task():
+                self._start_turn(
+                    record,
+                    "\n\n".join(pending),
+                    resume=record.session or None,
+                    rollback_on_start_failure=False,
+                    use_slot=False,
+                )
+            else:
+                # A successor claimed the slot while we were emitting; hand
+                # the words to its tail instead of running a parallel turn.
+                self._inbox.setdefault(record.name, [])[:0] = pending
 
     def _rollback(self, record: WorkerRecord) -> None:
         _git(self.repo_root, "worktree", "remove", "--force", record.worktree)
         shutil.rmtree(record.worktree, ignore_errors=True)
         _git(self.repo_root, "branch", "-D", record.branch)
+        self._inbox.pop(record.name, None)
         self.registry.records.pop(record.name, None)
         self._save()
 
@@ -328,29 +547,106 @@ class TaijiSupervisor:
         preconditions are unmet stop at an acceptance question; plan mode
         only reports.
         """
-        if status == "ok" and self.mode_of() == "zen" and await self.merge(record.name):
+        if (
+            status == "ok"
+            and not record.attention
+            and self.mode_of() == "zen"
+            and await self.merge(record.name, auto=True)
+        ):
             status = "merged"
         if self.chat is None:
             return
         await self.chat.submit(
             supervisor_summary(record, summary, time.time() - started)
         )
-        if status == "ok" and self.mode_of() in ("zen", "ask"):
+        if record.attention:
+            await self.chat.submit(
+                f"worker {record.branch} 提问：{_attention_question(record)}。"
+                f"回答后用 message_worker 转达给 {record.name}。"
+            )
+        elif status == "ok" and self.mode_of() in ("zen", "ask"):
             await self.chat.submit(
                 f"任务 {record.branch} 完成，待验收：{record.summary or summary}。"
                 f"请说「合并 {record.branch}」或提返工意见。"
             )
 
-    async def merge(self, name: str) -> bool:
+    def _diff_lines(self, record: WorkerRecord) -> int:
+        """Added plus deleted lines between the base and the task branch."""
+        completed = _git(
+            self.repo_root,
+            "diff",
+            "--numstat",
+            f"{record.base}...{record.branch}",
+        )
+        if completed is None or completed.returncode != 0:
+            return -1  # unknowable: refuse rather than guess
+        total = 0
+        for line in completed.stdout.splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 2:
+                for raw in parts[:2]:
+                    if raw.isdigit():
+                        total += int(raw)
+        return total
+
+    def diffstat(self, record: WorkerRecord) -> list[dict] | None:
+        """Per-file added/deleted counts for the acceptance card's evidence.
+
+        Binary files (numstat's ``-``) count as zero; an unknowable diff is
+        None rather than a guess.
+        """
+        completed = _git(
+            self.repo_root,
+            "diff",
+            "--numstat",
+            f"{record.base}...{record.branch}",
+        )
+        if completed is None or completed.returncode != 0:
+            return None
+        files: list[dict] = []
+        for line in completed.stdout.splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 3:
+                files.append(
+                    {
+                        "path": parts[2],
+                        "adds": int(parts[0]) if parts[0].isdigit() else 0,
+                        "dels": int(parts[1]) if parts[1].isdigit() else 0,
+                    }
+                )
+        return files
+
+    def merge_block_reason(self, name: str) -> str | None:
+        """Why an explicit merge would refuse, in board-displayable words.
+
+        Mirrors :meth:`merge`'s preconditions without executing it; None
+        means the merge would be attempted.
+        """
+        record = self.registry.records.get(name)
+        if record is None or record.status != "ok":
+            return "任务未处于待验收状态"
+        current = _git(self.repo_root, "branch", "--show-current")
+        if current is None or current.stdout.strip() != record.base:
+            return f"基分支 {record.base} 未在主检出"
+        status = git_status(self.repo_root)
+        if status is None or not status.is_clean:
+            return "主工作区有未提交更改"
+        return None
+
+    async def merge(self, name: str, *, auto: bool = False) -> bool:
         """Merge a finished task into its base branch, mode-agnostic.
 
         Explicit merges (the Router tool) work in every mode — the mode gate
         only decides whether zen merges *without asking*. Preconditions keep
         the user's working tree sacred: the base branch must be checked out
-        in the main worktree and clean.
+        in the main worktree and clean. The diff-size threshold guards the
+        zen *auto* merge only — an explicit human-directed merge is the
+        escape hatch for large work.
         """
         record = self.registry.records.get(name)
         if record is None or record.status != "ok":
+            return False
+        if auto and self._diff_lines(record) > AUTO_MERGE_MAX_DIFF_LINES:
             return False
         current = _git(self.repo_root, "branch", "--show-current")
         if current is None or current.stdout.strip() != record.base:
@@ -418,6 +714,15 @@ def get_taiji(**kwargs: Any) -> TaijiSupervisor:
     global _SINGLETON
     if _SINGLETON is None:
         _SINGLETON = TaijiSupervisor(**kwargs)
+    return _SINGLETON
+
+
+def existing_taiji() -> TaijiSupervisor | None:
+    """The live supervisor, or None when this host never started taiji.
+
+    RPC panel ops consult this: a worker subprocess or a linked worktree
+    must read ``active: false``, never silently construct a bare fleet.
+    """
     return _SINGLETON
 
 

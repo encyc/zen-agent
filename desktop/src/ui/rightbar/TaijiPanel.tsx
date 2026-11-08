@@ -1,129 +1,390 @@
-/** Taiji tab: the repository's task graph — the commit lanes with the zen
- * sessions and worker statuses that live on each branch. Read-only in P0;
- * the Router session stays the only way to act on a task. */
+/** Taiji tab: the dispatch board. The fleet sorted by how much a person has
+ * to do — questions first, then acceptance, then work in flight — and every
+ * band carries its own actions. Board data comes from the `taiji` rpc ops;
+ * actions talk to the supervisor directly (spec 附录 C). */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../../state/appStore'
-import { useStatusStore } from '../../state/stores'
+import { useNoticeStore, useWorkPanelStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
-import type { TaijiGraph, TaijiResult, TaijiSessionMap } from '../../rpc/types'
-import { attachSessions, laneColor, pickChips, relativeTime, statusMeta, type RowSession } from './taijiGraph'
+import type {
+  TaijiAttention,
+  TaijiBoard,
+  TaijiDiffFile,
+  TaijiWorker,
+} from '../../rpc/types'
+import { diffSummary, groupWorkers, statusTone, taskAge, relativeTime } from './taijiBoard'
 import { BranchIcon, RefreshIcon } from '../icons'
 import css from './TaijiPanel.module.css'
 
-const REQUEST_TIMEOUT_MS = 8000
-const LANE_W = 11
-const ROW_H = 40
+const POLL_MS = 2000
+const OP_TIMEOUT_MS = 15000
+const KILL_ARM_MS = 3000
 
-interface EdgeSpan {
-  fromLane: number
-  toLane: number
-  childIndex: number
-  parentIndex: number
+type Reply = { type: 'result' | 'error'; id: string; ok?: boolean; message?: string } & Record<string, unknown>
+
+async function taijiOp(payload: Record<string, unknown>): Promise<Reply> {
+  return (await useAppStore
+    .getState()
+    .client()
+    .send({ type: 'taiji', ...payload }, OP_TIMEOUT_MS)) as unknown as Reply
 }
 
-function edgeSpans(graph: TaijiGraph, positions: Map<string, number>): EdgeSpan[] {
-  return graph.commits.flatMap((commit, childIndex) =>
-    commit.parents
-      .map((parent) => positions.get(parent))
-      .filter((parentIndex): parentIndex is number => parentIndex !== undefined)
-      .map((parentIndex) => ({
-        fromLane: graph.commits[parentIndex]!.lane,
-        toLane: commit.lane,
-        childIndex,
-        parentIndex,
-      })),
-  )
+function notice(kind: 'info' | 'error', text: string) {
+  useNoticeStore.getState().show({ kind, text })
 }
 
-/** One row's slice of the rail: full-height lane lines so adjacent cells
- * join seamlessly, a curve leaving through the cell's bottom edge, and the
- * commit dot at mid-height (ringed when a worktree is checked out here). */
-function RailCell(props: {
-  index: number
-  lane: number
-  laneCount: number
-  spans: EdgeSpan[]
-  headTip: boolean
-}) {
-  const { index, lane, laneCount, spans, headTip } = props
-  const width = laneCount * LANE_W + 6
-  const x = (laneNumber: number) => laneNumber * LANE_W + LANE_W / 2 + 3
-  const mid = ROW_H / 2
-  const pieces: React.ReactNode[] = []
-  spans.forEach((span, key) => {
-    const color = laneColor(span.fromLane)
-    if (span.childIndex === index && span.childIndex !== span.parentIndex) {
-      const shoulder = mid + ROW_H * 0.25
-      const d = `M ${x(span.toLane)} ${mid} C ${x(span.toLane)} ${shoulder}, ${x(span.fromLane)} ${shoulder}, ${x(span.fromLane)} ${ROW_H}`
-      pieces.push(
-        <path key={key} d={d} fill="none" stroke={color} strokeWidth="1.5" />,
-      )
-    } else if (span.childIndex < index && index < span.parentIndex) {
-      pieces.push(
-        <line key={key} x1={x(span.fromLane)} y1={0} x2={x(span.fromLane)} y2={ROW_H} stroke={color} strokeWidth="1.5" />,
-      )
-    } else if (span.parentIndex === index) {
-      pieces.push(
-        <line key={key} x1={x(span.fromLane)} y1={0} x2={x(span.fromLane)} y2={mid} stroke={color} strokeWidth="1.5" />,
-      )
+/** A task age in the interface language; the tick form is digits already. */
+function renderAge(
+  age: ReturnType<typeof taskAge>,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  if (age.kind === 'tick') return age.text
+  if (age.kind === 'hours') return t('panel.taiji.ageHours', { h: age.hours, m: age.minutes })
+  return t('panel.taiji.ageDays', { d: age.days })
+}
+
+/** Send a human message through the board. `queued` means the worker was
+ * mid-turn and the words ride that turn's tail. */
+async function deliver(name: string, text: string, t: (key: string, params?: Record<string, string | number>) => string) {
+  try {
+    const reply = await taijiOp({ op: 'message', name, text })
+    if (reply.ok === true) {
+      if (reply.queued === true) notice('info', t('panel.taiji.queuedNotice', { name }))
+      else notice('info', t('panel.taiji.delivered'))
+    } else {
+      notice('error', t('panel.taiji.actionFailed', { reason: String(reply.message ?? '') }))
     }
-  })
+  } catch {
+    notice('error', t('panel.taiji.actionFailed', { reason: 'timeout' }))
+  }
+}
+
+/** One inline text input that submits on Enter and clears itself. */
+function InlineInput(props: {
+  placeholder: string
+  label: string
+  onSubmit: (text: string) => void
+}) {
+  const { placeholder, label, onSubmit } = props
+  const inputRef = useRef<HTMLInputElement>(null)
+  const submit = () => {
+    const text = inputRef.current?.value.trim() ?? ''
+    if (!text) return
+    if (inputRef.current) inputRef.current.value = ''
+    onSubmit(text)
+  }
   return (
-    <svg className={css.rail} width={width} height={ROW_H} aria-hidden="true">
-      {pieces}
-      {headTip ? (
-        <>
-          <circle cx={x(lane)} cy={mid} r="6.5" fill="none" stroke={laneColor(lane)} strokeWidth="1.2" opacity="0.55" />
-          <circle cx={x(lane)} cy={mid} r="3.2" fill={laneColor(lane)} />
-        </>
-      ) : (
-        <circle cx={x(lane)} cy={mid} r="3.5" fill={laneColor(lane)} />
-      )}
-    </svg>
+    <div className={css.inline}>
+      <input
+        ref={inputRef}
+        className={css.inlineInput}
+        type="text"
+        placeholder={placeholder}
+        aria-label={label}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') submit()
+        }}
+      />
+      <button type="button" className={css.smallButton} onClick={submit}>
+        {label}
+      </button>
+    </div>
   )
 }
 
-function SessionChip(props: { session: RowSession; overflow?: number }) {
-  const { session, overflow } = props
+function AttentionCard(props: { worker: TaijiWorker }) {
+  const { worker } = props
   const t = useT()
-  const meta = statusMeta(session.status)
-  const tone = meta?.tone ?? 'plain'
-  const label = overflow !== undefined ? `+${overflow}` : meta ? t(meta.key) : session.here ? t('panel.taiji.here') : session.title
-  const title = overflow !== undefined ? t('panel.taiji.overflow', { count: overflow }) : session.title
+  const attention: TaijiAttention = worker.attention ?? { question: '', options: [] }
+  const answer = (text: string) => void deliver(worker.name, `答复：${text}`, t)
+  const toRouter = () => {
+    const text = `worker ${worker.branch} 提问：${attention.question || worker.summary}。请决策并用 message_worker 转达给 ${worker.name}。`
+    void (async () => {
+      try {
+        await useAppStore.getState().client().send({ type: 'prompt', text }, 15000)
+        notice('info', t('panel.taiji.toRouterNotice'))
+      } catch {
+        notice('error', t('panel.taiji.actionFailed', { reason: 'router busy' }))
+      }
+    })()
+  }
   return (
-    <span className={css.chip} data-tone={tone} data-here={session.here || undefined} title={title}>
-      <i className={meta?.pulse ? css.pulseDot : css.dot} aria-hidden="true" />
-      {label}
-    </span>
+    <div className={css.attentionCard} data-band="attention">
+      <div className={css.cardName}>
+        <span className={css.name}>{worker.name}</span>
+        <span className={css.branch}>{worker.branch}</span>
+      </div>
+      <p className={css.attentionQ}>{attention.question || worker.summary}</p>
+      {attention.options.length > 0 && (
+        <div className={css.optionRow}>
+          {attention.options.map((option, index) => (
+            <button
+              key={`${index}-${option}`}
+              type="button"
+              className={css.optionButton}
+              onClick={() => answer(option)}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+      )}
+      <InlineInput
+        placeholder={t('panel.taiji.answerPlaceholder')}
+        label={t('panel.taiji.send')}
+        onSubmit={answer}
+      />
+      <button type="button" className={css.smallButton} onClick={toRouter}>
+        {t('panel.taiji.toRouter')}
+      </button>
+    </div>
+  )
+}
+
+function AcceptanceCard(props: { worker: TaijiWorker }) {
+  const { worker } = props
+  const t = useT()
+  const [rejecting, setRejecting] = useState(false)
+  const files: TaijiDiffFile[] = worker.diffstat ?? []
+  const summary = diffSummary(worker.diffstat)
+  const merge = async () => {
+    try {
+      const reply = await taijiOp({ op: 'merge', name: worker.name })
+      if (reply.ok === true) notice('info', t('panel.taiji.merged', { branch: worker.branch }))
+      else notice('error', t('panel.taiji.mergeFailed', { reason: String(reply.message ?? '') }))
+    } catch {
+      notice('error', t('panel.taiji.actionFailed', { reason: 'timeout' }))
+    }
+  }
+  return (
+    <div className={css.acceptanceCard} data-band="acceptance">
+      <div className={css.cardName}>
+        <span className={css.name}>{worker.name}</span>
+        <span className={css.branch}>{worker.branch}→{worker.base}</span>
+        {summary && <span className={css.diff}>{t('panel.taiji.diff', summary)}</span>}
+      </div>
+      <p className={css.cardSummary}>{worker.summary}</p>
+      {files.length > 0 && (
+        <details className={css.files}>
+          <summary>{t('panel.taiji.files', { count: files.length })}</summary>
+          <ul>
+            {files.map((file) => (
+              <li key={file.path}>
+                <span className={css.filePath}>{file.path}</span>
+                <span className={css.fileCounts}>
+                  +{file.adds} −{file.dels}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+      <div className={css.buttonRow}>
+        <button type="button" className={css.primaryButton} onClick={() => void merge()}>
+          {t('panel.taiji.merge')}
+        </button>
+        <button type="button" className={css.smallButton} onClick={() => setRejecting((value) => !value)}>
+          {t('panel.taiji.reject')}
+        </button>
+      </div>
+      {rejecting && (
+        <InlineInput
+          placeholder={t('panel.taiji.rejectPlaceholder')}
+          label={t('panel.taiji.send')}
+          onSubmit={(text) => {
+            setRejecting(false)
+            void deliver(worker.name, `打回：${text}`, t)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function RunningRow(props: { worker: TaijiWorker; now: number }) {
+  const { worker, now } = props
+  const t = useT()
+  const [interjecting, setInterjecting] = useState(false)
+  const [armed, setArmed] = useState(false)
+  const [open, setOpen] = useState(false)
+  const [items, setItems] = useState<{ role: string; text: string }[] | null>(null)
+  const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => {
+    if (armTimer.current) clearTimeout(armTimer.current)
+  }, [])
+  const kill = () => {
+    if (!armed) {
+      setArmed(true)
+      armTimer.current = setTimeout(() => setArmed(false), KILL_ARM_MS)
+      return
+    }
+    if (armTimer.current) clearTimeout(armTimer.current)
+    setArmed(false)
+    void (async () => {
+      try {
+        await taijiOp({ op: 'kill', name: worker.name })
+        notice('info', t('panel.taiji.killedNotice', { name: worker.name }))
+      } catch {
+        notice('error', t('panel.taiji.actionFailed', { reason: 'timeout' }))
+      }
+    })()
+  }
+  const peek = () => {
+    const next = !open
+    setOpen(next)
+    // Re-read on every open: a running worker's tail goes stale between opens.
+    if (next) {
+      setItems(null)
+      void (async () => {
+        try {
+          const reply = await taijiOp({ op: 'peek', name: worker.name })
+          setItems(Array.isArray(reply.items) ? (reply.items as { role: string; text: string }[]) : [])
+        } catch {
+          setItems([])
+        }
+      })()
+    }
+  }
+  return (
+    <div className={css.runningRow} data-band="running">
+      <button type="button" className={css.rowMain} onClick={peek} aria-expanded={open}>
+        <i className={css.runDot} aria-hidden="true" />
+        <span className={css.name}>{worker.name}</span>
+        <span className={css.age}>{renderAge(taskAge(worker.created_at, now), t)}</span>
+        <span className={css.rowSummary}>{worker.summary}</span>
+      </button>
+      <span className={css.rowButtons}>
+        <button type="button" className={css.smallButton} onClick={() => setInterjecting((value) => !value)}>
+          {t('panel.taiji.interject')}
+        </button>
+        <button type="button" className={armed ? css.killArmed : css.smallButton} onClick={kill}>
+          {armed ? t('panel.taiji.killConfirm') : t('panel.taiji.kill')}
+        </button>
+      </span>
+      {interjecting && (
+        <InlineInput
+          placeholder={t('panel.taiji.interjectPlaceholder', { name: worker.name })}
+          label={t('panel.taiji.send')}
+          onSubmit={(text) => {
+            setInterjecting(false)
+            void deliver(worker.name, text, t)
+          }}
+        />
+      )}
+      {open && (
+        <div className={css.peek} data-selectable>
+          {items === null
+            ? t('panel.taiji.loading')
+            : items.length === 0
+              ? t('panel.taiji.peekEmpty')
+              : items.map((item, index) => (
+                  <p key={index} className={item.role === 'user' ? css.peekUser : css.peekAssistant}>
+                    {item.text}
+                  </p>
+                ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function QueuedRow(props: { worker: TaijiWorker }) {
+  const { worker } = props
+  const t = useT()
+  const cancel = async () => {
+    try {
+      await taijiOp({ op: 'kill', name: worker.name })
+      notice('info', t('panel.taiji.killedNotice', { name: worker.name }))
+    } catch {
+      notice('error', t('panel.taiji.actionFailed', { reason: 'timeout' }))
+    }
+  }
+  return (
+    <div className={css.queuedRow} data-band="queued">
+      <i className={css.queueDot} aria-hidden="true" />
+      <span className={css.name}>{worker.name}</span>
+      <span className={css.rowSummary}>{worker.summary}</span>
+      <span className={css.rowButtons}>
+        <button type="button" className={css.smallButton} onClick={() => void cancel()}>
+          {t('panel.taiji.cancel')}
+        </button>
+      </span>
+    </div>
+  )
+}
+
+function HistoryRow(props: { worker: TaijiWorker; now: number }) {
+  const { worker, now } = props
+  const t = useT()
+  const tone = statusTone(worker.status)
+  const resumable = (worker.status === 'error' || worker.status === 'interrupted') && worker.session
+  const resume = () => void deliver(worker.name, '继续', t)
+  return (
+    <div className={css.historyRow} data-band="history" data-tone={tone}>
+      <i className={css.historyDot} aria-hidden="true" />
+      <span className={css.name}>{worker.name}</span>
+      <span className={css.rowSummary}>{worker.summary}</span>
+      <span className={css.historyMeta}>
+        {t(`panel.taiji.status.${worker.status}`)}
+        {' · '}
+        {relativeTime(worker.updated_at, now)}
+      </span>
+      {resumable && (
+        <span className={css.rowButtons}>
+          <button type="button" className={css.smallButton} onClick={resume}>
+            {t('panel.taiji.resume')}
+          </button>
+        </span>
+      )}
+    </div>
+  )
+}
+
+function Section(props: { title: string; count: number; children: React.ReactNode }) {
+  const { title, count, children } = props
+  if (count === 0) return null
+  return (
+    <section className={css.section}>
+      <h3 className={css.sectionTitle}>
+        {title}
+        <span className={css.sectionCount}>{count}</span>
+      </h3>
+      {children}
+    </section>
   )
 }
 
 export function TaijiPanel() {
   const t = useT()
-  const currentSessionPath = useStatusStore((state) => state.status?.session)
-  const [graph, setGraph] = useState<TaijiGraph | null>(null)
-  const [sessions, setSessions] = useState<TaijiSessionMap | null>(null)
+  const [board, setBoard] = useState<TaijiBoard | null>(null)
   const [failed, setFailed] = useState(false)
+  const [now, setNow] = useState(() => Date.now() / 1000)
+  const loadingRef = useRef(false)
 
   const load = useCallback(async () => {
-    setFailed(false)
+    if (loadingRef.current) return // a slow poll must not stack requests
+    loadingRef.current = true
     try {
-      const frame = await useAppStore
-        .getState()
-        .client()
-        .send({ type: 'taiji', op: 'snapshot' }, REQUEST_TIMEOUT_MS)
-      const result = frame as unknown as TaijiResult
-      if (result.ok !== true) throw new Error(String(frame.message ?? 'taiji failed'))
-      setGraph(result.taiji.graph)
-      setSessions(result.taiji.sessions)
+      const frame = await taijiOp({ op: 'board' })
+      if (frame.ok !== true) throw new Error(String(frame.message ?? 'taiji failed'))
+      setBoard(frame.board as TaijiBoard)
+      setFailed(false)
     } catch {
       setFailed(true)
+    } finally {
+      loadingRef.current = false
     }
   }, [])
 
   useEffect(() => {
     void load()
+    const poll = setInterval(() => void load(), POLL_MS)
+    const tick = setInterval(() => setNow(Date.now() / 1000), 1000)
+    return () => {
+      clearInterval(poll)
+      clearInterval(tick)
+    }
   }, [load])
 
   if (failed)
@@ -131,41 +392,48 @@ export function TaijiPanel() {
       <div className={css.state}>
         <BranchIcon size={16} />
         <p>{t('panel.taiji.error')}</p>
+        <button type="button" className={css.smallButton} onClick={() => void load()}>
+          {t('panel.taiji.refresh')}
+        </button>
       </div>
     )
-  if (graph === null || sessions === null)
+  if (board === null)
     return (
       <div className={css.state}>
         <span className={css.stateSpin} />
         <p>{t('panel.taiji.loading')}</p>
       </div>
     )
-  if (!graph.is_repo)
+  if (!board.active)
     return (
       <div className={css.state}>
         <BranchIcon size={16} />
-        <p>{t('panel.taiji.empty')}</p>
+        <p>{t('panel.taiji.inactive')}</p>
       </div>
     )
 
-  const rows = attachSessions(graph, sessions, currentSessionPath)
-  const positions = new Map(graph.commits.map((commit, index) => [commit.sha, index]))
-  const spans = edgeSpans(graph, positions)
-  const laneCount = Math.max(graph.max_lane + 1, 1)
-  const now = Date.now() / 1000
-  const activeCount = rows.filter((row) =>
-    row.sessions.some((session) => statusMeta(session.status)?.tone === 'run'),
-  ).length
+  const groups = groupWorkers(board.workers)
+  const slots = board.slots
 
   return (
     <div className={css.root}>
       <div className={css.header}>
         <span className={css.title}>{t('panel.taiji')}</span>
-        <span className={css.summary}>
-          {graph.branches.length > 0
-            ? t('panel.taiji.summary', { branches: graph.branches.length, active: activeCount })
-            : ''}
-        </span>
+        {slots && (
+          <span className={css.slots} title={t('panel.taiji.slotsTitle')}>
+            {slots.busy}/{slots.max}
+            {slots.queued > 0 && <span className={css.slotsQueued}>+{slots.queued}</span>}
+          </span>
+        )}
+        <button
+          type="button"
+          className={css.routerState}
+          data-busy={board.router_busy || undefined}
+          title={t('panel.taiji.routerFocus')}
+          onClick={() => useWorkPanelStore.getState().closePanel()}
+        >
+          {board.router_busy ? t('panel.taiji.routerBusy') : t('panel.taiji.routerIdle')}
+        </button>
         <button
           type="button"
           className={css.iconButton}
@@ -176,44 +444,39 @@ export function TaijiPanel() {
           <RefreshIcon size={13} />
         </button>
       </div>
-      <ul className={css.list}>
-        {rows.map((row, index) => {
-          const { chips, overflow } = pickChips(row.sessions, 3)
-          return (
-            <li key={row.commit.sha} className={css.row}>
-              <RailCell
-                index={index}
-                lane={row.commit.lane}
-                laneCount={laneCount}
-                spans={spans}
-                headTip={row.branch?.is_head === true}
-              />
-              <div className={css.body}>
-                <div className={css.subjectRow}>
-                  <span className={css.subject} title={row.commit.subject}>
-                    {row.commit.subject}
-                  </span>
-                  <span className={css.time}>{relativeTime(row.commit.ts, now)}</span>
-                </div>
-                {(row.branch !== undefined || chips.length > 0) && (
-                  <div className={css.metaRow}>
-                    {row.branch && (
-                      <span className={css.ref} title={row.branch.name}>
-                        <i style={{ background: laneColor(row.commit.lane) }} aria-hidden="true" />
-                        {row.branch.name}
-                      </span>
-                    )}
-                    {chips.map((session) => (
-                      <SessionChip key={session.name} session={session} />
-                    ))}
-                    {overflow > 0 && <SessionChip key="overflow" session={chips[0]!} overflow={overflow} />}
-                  </div>
-                )}
-              </div>
-            </li>
-          )
-        })}
-      </ul>
+      {board.workers.length === 0 ? (
+        <div className={css.state}>
+          <p>{t('panel.taiji.empty')}</p>
+        </div>
+      ) : (
+        <div className={css.bands}>
+          <Section title={t('panel.taiji.section.attention')} count={groups.attention.length}>
+            {groups.attention.map((worker) => (
+              <AttentionCard key={worker.name} worker={worker} />
+            ))}
+          </Section>
+          <Section title={t('panel.taiji.section.acceptance')} count={groups.acceptance.length}>
+            {groups.acceptance.map((worker) => (
+              <AcceptanceCard key={worker.name} worker={worker} />
+            ))}
+          </Section>
+          <Section title={t('panel.taiji.section.running')} count={groups.running.length}>
+            {groups.running.map((worker) => (
+              <RunningRow key={worker.name} worker={worker} now={now} />
+            ))}
+          </Section>
+          <Section title={t('panel.taiji.section.queued')} count={groups.queued.length}>
+            {groups.queued.map((worker) => (
+              <QueuedRow key={worker.name} worker={worker} />
+            ))}
+          </Section>
+          <Section title={t('panel.taiji.section.history')} count={groups.history.length}>
+            {groups.history.map((worker) => (
+              <HistoryRow key={worker.name} worker={worker} now={now} />
+            ))}
+          </Section>
+        </div>
+      )}
     </div>
   )
 }

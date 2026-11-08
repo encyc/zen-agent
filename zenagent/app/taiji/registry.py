@@ -28,6 +28,7 @@ class WorkerRecord:
     updated_at: float
     session: str = ""
     summary: str = ""
+    attention: str = ""
 
 
 @dataclass
@@ -56,6 +57,7 @@ class TaijiRegistry:
                     updated_at=float(raw["updated_at"]),
                     session=str(raw.get("session", "")),
                     summary=str(raw.get("summary", "")),
+                    attention=str(raw.get("attention", "")),
                 )
             except (KeyError, TypeError, ValueError):
                 continue

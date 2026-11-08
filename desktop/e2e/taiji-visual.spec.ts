@@ -1,101 +1,127 @@
-/** Visual harness for the Taiji panel: renders the real component with a
- * rich mocked snapshot and screenshots it for design critique. Keeps no
+/** Visual harness for the Taiji dispatch board: renders the real component
+ * with a rich mocked board and screenshots it for design critique. Keeps no
  * baseline; the PNG lands in test-results/ (git-ignored). */
 
+import assert from 'node:assert/strict'
 import { expect, test } from '@playwright/test'
 
 import { boot, initialState } from './harness'
 
 const now = () => Math.floor(Date.now() / 1000)
 
-const richTaiji = {
-  graph: {
-    root: '/work/p',
-    is_repo: true,
-    commits: [
-      { sha: 'm5', short: 'm5abc12', parents: ['m4', 'e1'], subject: 'taiji: merge task/explore', author: 'justin', ts: now() - 600, lane: 0 },
-      { sha: 'e1', short: 'e1abc12', parents: ['m2'], subject: 'wip: 独立 job 探索', author: 'worker', ts: now() - 900, lane: 1 },
-      { sha: 'm4', short: 'm4abc12', parents: ['m3'], subject: 'perf: shared httpx client and off-loop file IO', author: 'justin', ts: now() - 3600, lane: 0 },
-      { sha: 't2', short: 't2abc12', parents: ['m2'], subject: 'draft: auth e2e 用例骨架', author: 'worker', ts: now() - 240, lane: 1 },
-      { sha: 'm3', short: 'm3abc12', parents: ['m2'], subject: 'chore: LOC budget gate with debt allowlist', author: 'justin', ts: now() - 7200, lane: 0 },
-      { sha: 't1', short: 't1abc12', parents: ['m1'], subject: 'repro: 登录超时复现脚本', author: 'worker', ts: now() - 9000, lane: 1 },
-      { sha: 'm2', short: 'm2abc12', parents: ['m1'], subject: 'refactor(rpc): explicit kind discriminator', author: 'justin', ts: now() - 12000, lane: 0 },
-      { sha: 'm1', short: 'm1abc12', parents: [], subject: 'init', author: 'justin', ts: now() - 86400 * 3, lane: 0 },
-    ],
-    branches: [
-      { name: 'main', sha: 'm5', is_head: true },
-      { name: 'task/e2e-auth', sha: 't2', is_head: false },
-      { name: 'task/explore', sha: 'e1', is_head: false },
-    ],
-    max_lane: 1,
-  },
-  sessions: {
-    repo_root: '/work/p',
-    projects: [
-      {
-        key: 'p-main',
-        root: '/work/p',
-        branch: 'main',
-        worktree: false,
-        sessions: [
-          { name: 'router', title: 'architecture-cleanup', updated_at: now() - 60, messages: 42 },
-        ],
+const richBoard = {
+  active: true,
+  router_busy: true,
+  slots: { busy: 2, max: 3, queued: 1 },
+  workers: [
+    {
+      name: 'auth',
+      branch: 'task/auth',
+      base: 'main',
+      status: 'ok',
+      summary: '旧 token 兼容方案的取舍',
+      session: '/s/auth.jsonl',
+      created_at: now() - 1873,
+      updated_at: now() - 42,
+      attention: {
+        question: '登录接口要兼容旧 token 格式吗？老格式下季度就下线了。',
+        options: ['兼容旧版', '不兼容'],
       },
-      {
-        key: 'p-e2e',
-        root: '/work/p-e2e',
-        branch: 'task/e2e-auth',
-        worktree: true,
-        sessions: [
-          {
-            name: 'w-e2e',
-            title: 'draft: auth e2e 用例骨架',
-            updated_at: now() - 240,
-            messages: 18,
-            worker: 'e2e-auth',
-            status: 'running',
-            branch: 'task/e2e-auth',
-          },
-          {
-            name: 'w-e2e-old',
-            title: 'repro: 登录超时复现脚本',
-            updated_at: now() - 9000,
-            messages: 6,
-            worker: 'e2e-old',
-            status: 'error',
-            branch: 'task/e2e-auth',
-          },
-        ],
-      },
-      {
-        key: 'p-explore',
-        root: '/work/p-explore',
-        branch: 'task/explore',
-        worktree: true,
-        sessions: [
-          {
-            name: 'w-explore',
-            title: 'wip: 独立 job 探索',
-            updated_at: now() - 900,
-            messages: 7,
-            worker: 'explore',
-            status: 'ok',
-            branch: 'task/explore',
-          },
-        ],
-      },
-    ],
-  },
+      diffstat: null,
+    },
+    {
+      name: 'ui',
+      branch: 'task/ui',
+      base: 'main',
+      status: 'ok',
+      summary: '重做了侧栏折叠动画，spring 曲线对齐设计稿',
+      session: '/s/ui.jsonl',
+      created_at: now() - 5400,
+      updated_at: now() - 300,
+      attention: null,
+      diffstat: [
+        { path: 'src/ui/sidebar.ts', adds: 142, dels: 18 },
+        { path: 'src/ui/sidebar.module.css', adds: 55, dels: 12 },
+        { path: 'src/ui/index.ts', adds: 2, dels: 0 },
+      ],
+    },
+    {
+      name: 'api',
+      branch: 'task/api',
+      base: 'main',
+      status: 'running',
+      summary: '在写重定向逻辑，还差重试分支',
+      session: '',
+      created_at: now() - 753,
+      updated_at: now(),
+      attention: null,
+      diffstat: null,
+    },
+    {
+      name: 'refactor',
+      branch: 'task/refactor',
+      base: 'main',
+      status: 'queued',
+      summary: '',
+      session: '',
+      created_at: now() - 15,
+      updated_at: now() - 15,
+      attention: null,
+      diffstat: null,
+    },
+    {
+      name: 'explore',
+      branch: 'task/explore',
+      base: 'main',
+      status: 'merged',
+      summary: '独立 job 探索已并入主干',
+      session: '',
+      created_at: now() - 36000,
+      updated_at: now() - 35000,
+      attention: null,
+      diffstat: null,
+    },
+    {
+      name: 'flaky',
+      branch: 'task/flaky',
+      base: 'main',
+      status: 'error',
+      summary: 'e2e 第三次超时，定位到 mock 时钟',
+      session: '/s/flaky.jsonl',
+      created_at: now() - 1800,
+      updated_at: now() - 600,
+      attention: null,
+      diffstat: null,
+    },
+  ],
 }
 
-test('taiji panel visual state', async ({ page }) => {
-  await boot(page, initialState({ taiji: richTaiji, statusSession: '/home/u/projects/p-main/sessions/router.jsonl' }))
+const openBoard = async (page: import('@playwright/test').Page) => {
+  await boot(page, initialState({ taiji: richBoard }))
   await page.getByRole('button', { name: '打开工作面板' }).click()
   const panel = page.locator('[data-work-panel]')
   await page.getByRole('button', { name: '打开工作面板标签' }).click()
   await panel.getByRole('menuitem', { name: '太极' }).click()
   await expect(panel.getByRole('tab', { name: '太极' })).toHaveAttribute('aria-selected', 'true')
-  await expect(panel).toContainText('运行中')
+  return panel
+}
+
+test('taiji board visual state', async ({ page }) => {
+  const panel = await openBoard(page)
+  await expect(panel.getByText('等你回答')).toBeVisible()
   await page.waitForTimeout(250)
-  await panel.screenshot({ path: 'test-results/taiji-panel.png' })
+  await panel.screenshot({ path: 'test-results/taiji-board.png' })
+})
+
+test('an attention question answers through the board, not the composer', async ({ page }) => {
+  const panel = await openBoard(page)
+
+  await expect(panel.getByText('登录接口要兼容旧 token 格式吗')).toBeVisible()
+  await panel.getByRole('button', { name: '兼容旧版' }).click()
+
+  await expect(page.getByRole('alert')).toContainText('已投递')
+  assert.deepEqual(
+    await page.evaluate(() => window.__ZEN_E2E__.taijiRequests?.slice(-1)),
+    [{ op: 'message', name: 'auth', text: '答复：兼容旧版' }],
+  )
 })

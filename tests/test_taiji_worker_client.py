@@ -13,6 +13,8 @@ import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
+import pytest
+
 from zenagent.agent import Agent
 from zenagent.app.sessions import SessionManager
 from zenagent.app.taiji.worker_client import WorkerRpcClient, worker_command
@@ -180,3 +182,54 @@ def test_worker_command_prefers_zen_on_path(monkeypatch) -> None:
         "/wt",
         "--yes",
     ]
+
+
+async def test_stop_fails_a_pending_prompt_instead_of_hanging() -> None:
+    client, transport = make_client()
+
+    class Stall(LoopbackTransport):
+        async def send_line(self, line: str) -> None:
+            if json.loads(line).get("type") == "prompt":
+                return  # never answers
+            await self.server._handle_line(line)
+
+    client.transport = Stall(transport.server, transport.out)  # type: ignore[assignment]
+    await client.start(Path("/nowhere"), on_event=lambda event: None)
+    prompt_task = asyncio.create_task(client.prompt("go", timeout_s=30.0))
+    await asyncio.sleep(0.05)
+    await client.stop()
+
+    # the prompt task must actually COMPLETE (failed), not keep hanging
+    with pytest.raises(RuntimeError, match="stopped before answering"):
+        await asyncio.wait_for(prompt_task, 2.0)
+
+
+def test_worker_command_carries_the_model_flag() -> None:
+    assert "--model" not in worker_command(Path("/wt"))
+
+    command = worker_command(Path("/wt"), model="glm-5.3")
+    assert command[-2:] == ["--model", "glm-5.3"]
+
+
+async def test_client_routes_the_model_into_the_spawn_command(monkeypatch) -> None:
+    captured: dict = {}
+
+    class CaptureTransport:
+        def __init__(self, command: list[str], cwd: Path) -> None:
+            captured["command"] = command
+
+        async def start(self, on_line) -> None:
+            raise RuntimeError("captured")  # the command is all we need
+
+        async def send_line(self, line: str) -> None:
+            pass
+
+        async def stop(self) -> None:
+            pass
+
+    monkeypatch.setattr("zenagent.app.taiji.worker_client.SubprocessTransport", CaptureTransport)
+    client = WorkerRpcClient(model="glm-5.3")
+    with pytest.raises(RuntimeError, match="captured"):
+        await client.start(Path("/wt"), on_event=lambda event: None)
+
+    assert captured["command"][-2:] == ["--model", "glm-5.3"]

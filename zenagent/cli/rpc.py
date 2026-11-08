@@ -42,8 +42,9 @@ from zenagent.app.taiji import (
     ensure_taiji_session,
     own_taiji_lock,
     release_taiji_lock,
+    should_init_taiji,
 )
-from zenagent.app.taiji.snapshot import commit_graph, session_map
+from zenagent.app.taiji.transcript import peek_tail
 from zenagent.app.views import usage_total
 from zenagent.app.workspace import (
     list_directory,
@@ -633,27 +634,7 @@ class RpcServer:
             )
             return True
         if kind == "taiji":
-            op = request.get("op")
-            if op == "snapshot":
-                self._send(
-                    {
-                        "type": "result",
-                        "id": request_id,
-                        "ok": True,
-                        "taiji": {
-                            "graph": commit_graph(Path.cwd()),
-                            "sessions": session_map(Path.cwd()),
-                        },
-                    }
-                )
-                return True
-            self._send(
-                {
-                    "type": "error",
-                    "id": request_id,
-                    "message": f"unknown taiji op: {op}",
-                }
-            )
+            await self._taiji_request(request, request_id)
             return True
         if kind == "secrets":
             await self._secrets(request, request_id)
@@ -703,6 +684,199 @@ class RpcServer:
             self._send({"type": "error", "id": request_id, "message": str(exc)})
             return
         self._send({"type": "result", "id": request_id, "ok": True, **payload})
+
+    async def _taiji_request(self, request: dict, request_id) -> bool:
+        """The dispatch board: one read op plus the four supervisor actions.
+
+        The panel talks to this host's live taiji supervisor directly (D5:
+        surfaces consume the taiji layer). A host that never started taiji —
+        a worker subprocess, a linked worktree — reads ``active: false``;
+        it must never silently construct a bare fleet. Ops are awaited
+        inline: the board's answers keep the request's reply order.
+        """
+        from zenagent.app.taiji.supervisor import existing_taiji
+
+        supervisor = existing_taiji()
+        op = request.get("op")
+
+        if op == "board":
+            if supervisor is None:
+                self._send(
+                    {
+                        "type": "result",
+                        "id": request_id,
+                        "ok": True,
+                        "board": {
+                            "active": False,
+                            "router_busy": False,
+                            "slots": None,
+                            "workers": [],
+                        },
+                    }
+                )
+                return True
+            chat = getattr(self.runtime, "taiji_chat", None)
+            # diffstat shells out to git per acceptance worker; keep the read
+            # pump responsive by projecting the board off the event loop.
+            workers = await asyncio.to_thread(
+                lambda: [
+                    self._taiji_worker(record, supervisor)
+                    for record in supervisor.list_workers()
+                ]
+            )
+            self._send(
+                {
+                    "type": "result",
+                    "id": request_id,
+                    "ok": True,
+                    "board": {
+                        "active": True,
+                        "router_busy": bool(getattr(chat, "busy", False)),
+                        "slots": supervisor.slots_state(),
+                        "workers": workers,
+                    },
+                }
+            )
+            return True
+
+        if op == "message":
+            return await self._taiji_action(request, request_id, supervisor)
+
+        if op == "merge":
+            if supervisor is None:
+                return self._taiji_missing(request_id)
+            name = str(request.get("name", ""))
+            if await supervisor.merge(name, auto=False):
+                self._send({"type": "result", "id": request_id, "ok": True})
+            else:
+                reason = supervisor.merge_block_reason(name) or "合并未执行"
+                self._send(
+                    {"type": "error", "id": request_id, "message": reason}
+                )
+            return True
+
+        if op == "kill":
+            if supervisor is None:
+                return self._taiji_missing(request_id)
+            name = str(request.get("name", ""))
+            try:
+                await supervisor.kill(name)
+            except KeyError:
+                self._send(
+                    {
+                        "type": "error",
+                        "id": request_id,
+                        "message": f"worker 不存在: {name}",
+                    }
+                )
+                return True
+            self._send({"type": "result", "id": request_id, "ok": True})
+            return True
+
+        if op == "peek":
+            if supervisor is None:
+                return self._taiji_missing(request_id)
+            name = str(request.get("name", ""))
+            try:
+                limit = int(request.get("limit", 12))
+            except (TypeError, ValueError):
+                self._send(
+                    {
+                        "type": "error",
+                        "id": request_id,
+                        "message": f"peek limit 不是数字: {request.get('limit')}",
+                    }
+                )
+                return True
+            record = supervisor.registry.records.get(name)
+            items = (
+                peek_tail(record.session, limit=limit)
+                if record and record.session
+                else []
+            )
+            self._send({"type": "result", "id": request_id, "ok": True, "items": items})
+            return True
+
+        self._send(
+            {
+                "type": "error",
+                "id": request_id,
+                "message": f"unknown taiji op: {op}",
+            }
+        )
+        return True
+
+    def _taiji_worker(self, record, supervisor) -> dict:
+        """One registry row as the board renders it."""
+        attention: dict | None = None
+        if record.attention:
+            try:
+                data = json.loads(record.attention)
+                if isinstance(data, dict):
+                    attention = {
+                        "question": str(data.get("question", "")),
+                        "options": [
+                            str(label)
+                            for label in (data.get("options") or [])
+                            if isinstance(label, (str, int, float))
+                        ][:4],
+                    }
+            except ValueError:
+                attention = {"question": record.attention, "options": []}
+        return {
+            "name": record.name,
+            "branch": record.branch,
+            "base": record.base,
+            "status": record.status,
+            "summary": record.summary,
+            "session": record.session,
+            "created_at": record.created_at,
+            "updated_at": record.updated_at,
+            "attention": attention,
+            "diffstat": (
+                supervisor.diffstat(record) if record.status == "ok" else None
+            ),
+        }
+
+    def _taiji_missing(self, request_id) -> bool:
+        self._send(
+            {
+                "type": "error",
+                "id": request_id,
+                "message": "taiji 未在此宿主启用",
+            }
+        )
+        return True
+
+    async def _taiji_action(self, request: dict, request_id, supervisor) -> bool:
+        if supervisor is None:
+            return self._taiji_missing(request_id)
+        name = str(request.get("name", ""))
+        text = str(request.get("text", ""))
+        # Snapshot before the await (no yield between: atomic in the loop) —
+        # ``queued`` must mean "the text rides the current turn's tail", not
+        # "a fresh turn we just started is running".
+        was_running = (
+            supervisor.registry.records.get(name) is not None
+            and supervisor._record(name).status == "running"
+        )
+        try:
+            record = await supervisor.message(name, text)
+        except (KeyError, RuntimeError) as exc:
+            self._send(
+                {"type": "error", "id": request_id, "message": f"message failed: {exc}"}
+            )
+            return True
+        self._send(
+            {
+                "type": "result",
+                "id": request_id,
+                "ok": True,
+                "queued": was_running,
+                "status": record.status,
+            }
+        )
+        return True
 
     def _memory_request(self, request: dict, request_id) -> bool:
         """Project memory CRUD for the desktop panel, journaled like the TUI."""
@@ -1869,10 +2043,19 @@ async def _run(args) -> int:
     runtime.ask_handler = server.ask
     runtime.taiji_chat = chat
     taiji_project_dir = project_dir(Path.cwd())
-    ensure_taiji_session(project_sessions_dir(Path.cwd()))
-    taiji_owned = own_taiji_lock(taiji_project_dir)
+    taiji_hosts = should_init_taiji(Path.cwd())
+    if taiji_hosts:
+        ensure_taiji_session(project_sessions_dir(Path.cwd()))
+    taiji_owned = taiji_hosts and own_taiji_lock(taiji_project_dir)
     if not taiji_owned:
         runtime._note("taiji: 另一个宿主已持有本项目的太极锁")
+    elif taiji_hosts:
+        # The lock holder constructs the fleet at boot: the registry
+        # reconciles immediately, so the panel sees the truth from its
+        # very first board poll (spec 附录 C.3).
+        from zenagent.app.taiji.tools import taiji_supervisor_for
+
+        taiji_supervisor_for(runtime)
     try:
         return await server.run()
     finally:
