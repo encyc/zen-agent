@@ -3,43 +3,275 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased
+## v0.10.0 — 2026-11-08
+
+**太极 (Taiji): one Router session, many workers in parallel git
+worktrees, and a board that shows the whole parallel state.** This release
+also lands in-place context compaction, in-place project switching, a
+read-before-write gate on the file tools, and four switchable desktop theme
+palettes.
+
+Taiji's identity is `task = branch = worktree = worker session`: git is the
+only task-state store, and the right rail is the projection of it. The
+person keeps talking to one Router session; workers do the editing.
 
 ### Added
 
-- **The taiji Router directs; workers edit.** The Router session previously
-  shared the ordinary tool set, so it could — and did (zen-agent 2026-11-08:
-  a GUI fix implemented in the Router session, 26 edits committed straight to
-  main) — implement tasks itself, bypassing the worker branch/worktree
-  isolation the whole design rests on. Three layers now hold the contract: a
-  session-gated `taiji_router` prompt block (dispatch everything that changes
-  the repo, verify, merge); a rewritten `spawn_worker` description (workers
-  are the default for implementation, direct answers only for questions and
-  read-only inspection); and a hard gate — the taiji session's tool set no
-  longer includes `edit_file`/`write_file` (`router_tool_gate`), so the main
-  checkout stays clean and worker merges stay possible (prompt version
-  2026-11-08.1).
+- **The taiji orchestration layer (`zenagent/app/taiji/`).** A per-project
+  `taiji` session singleton ("太极 Router") guarded by a host lock (`taiji.lock`
+  records the pid; a live pid refuses a second host, a dead one hands the lock
+  over without touching the other's file), a worker registry with atomic
+  writes (mkstemp + `os.replace`) and reconciliation against
+  `git worktree list` — a cold start turns stale `running` rows into
+  `interrupted`, and a vanished worktree either drops the row or marks it
+  interrupted, never silently resurrects it. One supervisor per host owns the
+  fleet: spawn (branch + worktree + `zen rpc` child, rolled back together when
+  the spawn dies halfway), message, kill, merge, wait-idle, close. Merging is
+  always preceded by "base branch checked out in the main worktree and the tree
+  is clean"; a conflict aborts the merge and degrades to an acceptance question,
+  so a user's checkout never keeps a `MERGE_HEAD` or conflict markers.
 
-- **`edit_file` and `write_file` refuse to touch a file the model has not read
-  in this session.** A successful `read_file` fingerprints the file (mtime +
-  size); a write to an existing file whose fingerprint is missing or stale —
-  modified since the read by the user, a formatter or a shell command — is
-  refused with an error that says to read again, so `old_string` anchors come
-  from content the model actually saw and concurrent external modifications
-  fail loudly. A successful write refreshes the fingerprint (follow-up edits
-  need no re-read), and creating a new file never needs a read. The gate and
-  its tests live in `zenagent/tools/read_state.py`; the tool descriptions
-  state the contract (prompt version 2026-11-07.1, tool budget 4800 → 5200).
+- **Router↔worker RPC over JSONL, versioned by handshake.** Workers run
+  `zen rpc` and speak line-delimited JSON with an incrementing `w{n}` id per
+  request; the handshake asserts `protocol_version == 2` and refuses a worker
+  from a different vintage instead of talking past it. The transport is
+  injectable, so the client is testable in-process — and one test now spawns a
+  real child, because injecting a loopback everywhere is exactly how the reader
+  task stayed broken.
+
+- **Five Router tools, assembled only for the taiji session.**
+  `spawn_worker`, `message_worker`, `kill_worker`, `merge_worker`,
+  `list_workers` are composed in by `_recompose()` when the active session is
+  the taiji one (and re-composed on session load/resume, so a restored session
+  gets them back). Each finished worker turn injects one milestone line into
+  the Router (`[worker task/<slug> · ok] <summary ≤200 chars> · <time>`), which
+  is how the Router learns about work it cannot see.
+
+- **A Router that directs instead of editing.** Three layers now hold the
+  contract, because the brief's "执行都在 worker" lived only in docs and the
+  Router once answered a GUI task with 26 edits and two commits straight to
+  main: a session-gated `taiji_router` prompt block (rendered only while the
+  taiji session is active, so ordinary sessions stay byte-identical), a
+  rewritten `spawn_worker` description that makes workers the default for any
+  repository change, and a hard gate — the taiji session's tool set drops
+  `edit_file`/`write_file` (`ROUTER_EXCLUDED_TOOLS` + `router_tool_gate`), so a
+  model that ignores the prompt has nothing to ignore it with. `bash` stays for
+  git inspection and read-only checks. Prompt version 2026-11-08.1.
+
+- **Merge gates with real evidence.** Zen mode auto-merges work whose diff is
+  at most 200 added+deleted lines (`AUTO_MERGE_MAX_DIFF_LINES`); anything
+  larger, and every ask/plan session, stops at an acceptance question. An
+  unknowable diff (git failing) is refused rather than guessed, and
+  `merge_block_reason` tells the board why a merge would refuse (base not
+  checked out, dirty tree, conflict history). The acceptance card carries a
+  per-file `+/-` diffstat so the human decides on evidence, not on a summary.
+
+- **Worker fleet management.** Three concurrent worker slots
+  (`max_workers=3`) with the human's wake-ups and inbox chains running outside
+  the slots so a person never queues behind background work; per-worker model
+  routing (the Router session stays light, workers run a strong model); a
+  message inbox that chains an arriving message onto the live turn instead of
+  spawning a parallel one, and survives a host crash; structured attention —
+  a worker that ends its turn with a question becomes an attention card with up
+  to four quick-answer options, and the Router can answer on the person's
+  behalf.
+
+- **The taiji dispatch board (desktop right rail).** Rows are grouped by how
+  much the person has to do — attention, acceptance, running, queued, history —
+  so the top of the panel is always the next decision. Every band carries the
+  actions for its state: quick answers and a Router hand-off on questions;
+  merge or reject with diffstat evidence at acceptance; interject, two-step
+  kill and transcript peek on running rows; cancel on queued; resume on failed
+  ones. Ages render in the interface language (`mm:ss` under an hour, coarse
+  spans after), and the board projection runs off the event loop with a guard
+  against stacking slow polls. An armed-but-empty board is a real on-ramp: it
+  explains that the composer below *is* the Router, and one button drops a
+  sample task into the draft.
+
+- **In-place context compaction.** `/compact` and auto-compaction now append
+  the summary to the same session JSONL behind a compaction record instead of
+  forking a `-compact` session: the session keeps its identity, the sidebar
+  stops growing a fork chain, todos and titles survive, and resuming an old
+  session no longer reloads the whole un-compacted context. The kernel gained
+  an injected replay-boundary predicate (`load()` replays the last non-empty
+  segment and exposes `segment_start`), the app opens sessions through
+  `records.open_session()`, and one in-stream `DividerView` marks the cut in
+  both the TUI and the desktop (which falls back to record-derived dividers for
+  legacy snapshots). Usage totals stop double-counting compacted transcripts.
+
+- **Read-before-write on the file tools.** A successful `read_file`
+  fingerprints the file (mtime + size); `edit_file`/`write_file` refuse an
+  existing file whose fingerprint is missing or stale — changed since the read
+  by the user, a formatter or a shell command — with an error that says to read
+  again, so `old_string` anchors come from content the model actually saw.
+  A successful write refreshes the fingerprint (follow-up edits need no
+  re-read) and creating a new file never needs one. `zenagent/tools/read_state.py`;
+  prompt version 2026-11-07.1, tool budget 4800 → 5200 characters.
+
+- **Project switching without a reload (desktop).** A switch replaces the
+  cwd-bound `zen rpc` child in place: the shell stays mounted, the switch is a
+  2px strip over the topbar, the previous transcript keeps painting until the
+  new snapshot lands (and is cleared if that request fails, so the old chat can
+  never pose as the new one), and the 2s status poll stands down while the
+  switch owns the wire. The replacement pid is recorded before the handshake,
+  so the stopped child's late exit event cannot end it. Mode, model and
+  thinking move to `localStorage` (`prefs.ts`) and replay onto every new child:
+  spawn keeps the compatible `--mode ask` default, then `restorePrefs` diffs the
+  child's own status and replays only what differs, thinking last because a
+  model switch may reset it. The login-shell environment is harvested once per
+  app launch instead of once per spawn (measured 0.48s with a themed zsh here,
+  up to the 3s timeout).
+
+- **Four theme palettes with per-operation transcript hues (desktop).** Zen
+  base, VS Code, GitHub and Tokyo Night, each with its own light and dark alias
+  layer selected via `body[data-ds-theme]` while the mode attribute stays
+  independent, so every palette flips sides with the existing theme presenter.
+  Settings → Appearance gains a palette picker with per-side preview canvases,
+  and tool rows now map each call to a family hue (think/read/search/exec/
+  write/edit/task) drawn from the active palette's ramp, so a transcript scans
+  by operation kind. Errors keep their restyling priority.
+
+- **Project memory in the work rail (desktop).** A `memory` RPC lists,
+  creates, updates and deletes the current project's `MemoryStore` entries, and
+  the rail renders each note as Markdown, switches to a source editor on edit,
+  and supports search plus delete confirmation. `/memory` opens the tab.
+
+- **A redesigned ask card.** The question is the card's hero: the agent's
+  context tag becomes a quiet line above it, the all-caps header strip becomes a
+  small status line with progress dots, and the decision actions move to a
+  footer bar (dismiss left, skip/submit right). Option rows get comfortable
+  padding with a ring mark that fills on selection, and the list cap loosens so
+  a typical option set never scrolls.
+
+- **Taiji on-ramp in the composer.** The ☯ chip sits beside the mode chip but
+  is not a fourth runtime mode: taiji is a session plus a mode default (spec
+  D2/D5), not an autonomy level. Entering remembers the current session and
+  mode, resumes the project's taiji session, defaults the mode to zen and opens
+  the board; leaving restores both. The chip hides where the host never created
+  a taiji session (a linked worktree).
+
+### Changed
+
+- **Workers run the host's own code.** `worker_command()` no longer prefers a
+  `zen` found on `PATH`: that may be a different install speaking a different
+  protocol (a uv-tool 0.8.1 answers `unknown type: hello` to the handshake), so
+  a worker is spawned as `sys.executable -m zenagent rpc`. A worker must speak
+  exactly its host's protocol, and now it does by construction.
+
+- **The work rail opens on Files, and every tab closes.** A fresh open always
+  lands on Files (re-adding its tab if it was closed) instead of restoring
+  whichever tab was last active, and Review is a plain tab now — it has a close
+  X and `closeTab()` honors it. Closing the last tab closes the rail instead of
+  leaving an empty dock.
+
+- **`zenagent/cli/rpc.py` became a package.** The 2069-line module split into
+  `codec`/`server`/`cli` plus four domain mixins (`ops_files`, `ops_taiji`,
+  `ops_session`, `ops_config`), each under the 800-line cap, with the package
+  path re-exporting everything the eight test files import and patch targets
+  following their code homes. The rpc allowlist entry is gone and `repl.py`
+  tightened 1023 → 1017.
+
+- **Blocking IO left the event loop.** Session, trace and telemetry writes run
+  in a thread; every async-path git call in the taiji layer does too, which is
+  what keeps the board responsive while workers churn.
+
+- **Session writes are whole-line.** `_write_line` emits payload + newline in
+  one call under a thread lock, so the loop thread's sync `append_meta` and the
+  worker threads' async `append` can only interleave between lines — closing
+  the torn-line window without an async-signature ripple.
+
+- **Compaction wording.** The `notice.compacted` string drops "summary
+  session" (zh: 摘要会话) because compaction no longer forks one.
+
+- **One desktop boot path.** Project switches go through `openProject`, the
+  switching state is derived rather than duplicated, and `appStore` no longer
+  swallows errors in silent catches.
 
 ### Fixed
 
-- **Quitting the desktop shell no longer leaves an empty session behind.** The
-  exit teardown (`kill_all`) and the post-update restart (`relaunch_app`)
+- **The taiji production transport never spawned at all.**
+  `SubprocessTransport` kept its reader task in `self._pump`, shadowing the
+  `_pump` method of the same class, so `start()` called `None` and every real
+  spawn died with `'NoneType' object is not callable` — invisible to
+  loopback-only tests. The attribute is now `_pump_task`, and a test drives the
+  real transport over a real child process.
+
+- **Auto-merge accepted a diff of unknowable size.** `diff_lines()` returns
+  `-1` when git fails ("refuse rather than guess"), but `-1` passed the
+  `> 200` line gate, so zen mode silently merged unbounded work when git could
+  not measure it. The auto path now refuses negative sizes and
+  `block_reason()` says so on the card.
+
+- **Taiji turn and lifecycle races.** Kill cancels the in-flight turn instead
+  of letting it finish; the base branch follows the actual checkout; worker
+  prompts and the queued inbox survive a host crash; a message landing in the
+  milestone-emit window rides the chained turn instead of spawning a parallel
+  one; a resume failure is an error rather than a silent empty turn; `stop`
+  fails a pending prompt instead of hanging; a worktree host takes no taiji
+  lock; and kill/peek answer error frames instead of raising out of the read
+  pump.
+
+- **Quitting the desktop shell no longer leaves an empty session behind.**
+  The exit teardown (`kill_all`) and the post-update restart (`relaunch_app`)
   SIGKILLed the `zen rpc` child, so its own shutdown path — the one that drops
-  the session file a launch never wrote a message to — never ran, and every
-  app open added one more `(empty)` row to the listings. Both paths now use
-  the same graceful stop as `rpc_stop`: a `shutdown` request first, a short
-  grace period, then a hard kill for a stuck child.
+  the session file a launch never wrote a message to — never ran, and every app
+  open added one more `(empty)` row to the listings. Both paths now use the
+  same graceful stop as `rpc_stop`: a `shutdown` request first, a short grace
+  period, then a hard kill for a stuck child.
+
+- **A project switch could show the previous project's chat, or be mistaken
+  for a crash.** A failed transcript request resets instead of posing the old
+  conversation as the new one, and the stopped child's exit event is matched by
+  pid so the replacement is never declared dead.
+
+- **Torn session lines.** `append_meta` wrote on the loop thread while message
+  appends ran in a worker thread; both now share the lock and the whole-line
+  write.
+
+- **The REPL printed ✓ for a timed-out bash call.** `_EventPrinter` now runs
+  every event through `TranscriptBuilder` and derives each tool line's mark
+  from the settled card status (`✗ (timed_out)`, `✗ (interrupted)`), with
+  `render.tool_result_line` growing an optional `status` parameter that leaves
+  the old format byte-identical when absent.
+
+- **macOS x86_64 updater assets were published under the wrong name.**
+  `tauri-action` renames `ZenAgent.app.tar.gz` to `ZenAgent_x64.app.tar.gz` on
+  the `x86_64-apple-darwin` leg (`x64`, not `x86_64`), while the fragment
+  generator emitted the other spelling, so the app detected an update and the
+  download 404'd. The generator now uses the same mapping.
+
+- **A stale icon cache could stand a broken-image glyph in for the brand.**
+  `AppMark` swaps to an inline SVG taiji in the surface's own ink when the
+  bitmap fails to load; hero and sidebar brand both use it.
+
+### Removed
+
+- The read-only commit-lane graph and its helpers (`desktop/src/ui/rightbar/
+  taijiGraph.ts`, `zenagent/app/taiji/snapshot.py`). The dispatch board renders
+  the same git truth with actions attached, and the taiji rpc op is now `board`
+  (`board`/`message`/`merge`/`kill`/`peek`) instead of `snapshot`.
+- The `-compact` session fork. Compaction appends in place, so the sidebar no
+  longer grows a fork chain per compaction and the summary is not a second
+  session to resume.
+- The 962-line `desktop/src/i18n/locale.ts` monolith (pure `messages.ts` plus a
+  14-line store glue instead), and worker discovery through `which("zen")`.
+
+### Internal
+
+- `zenagent/cli/flags.py` declares the runtime flags once — `main.py` lost 128
+  lines to the move; `zenagent/i18n` is untouched apart from the compaction
+  string.
+- Desktop `locale.ts` (962 lines) split into pure `messages.ts` data (parity
+  tested in `node --test`) plus a 14-line store glue; taiji errors now cross the
+  wire as codes and are rendered through the dictionaries. The desktop e2e
+  harness moved into `e2e/harness.ts` (801 lines) and gained a visual spec.
+- `docs/`: the taiji brief and design spec (D1–D7), the P0–P3 implementation
+  plans and execution/review ledgers, and `docs/reviews/2026-11-08-architecture-review.md`
+  with its P0/P1/P2 cleanup plan; the follow-up ledger closed three of its four
+  items in this release.
+- Architecture budget: post-taiji file growth is registered per source commit
+  in `docs/architecture/allowlist.json` (the rpc split and the locale split paid
+  their entries back).
 
 ## v0.9.1 — 2026-11-07
 
