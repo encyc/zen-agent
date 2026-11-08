@@ -20,6 +20,7 @@ import {
 } from '../../state/askDraft'
 import { useT } from '../../i18n/locale'
 import { Button } from '../primitives'
+import { SparkIcon } from '../icons'
 import css from './AskCard.module.css'
 
 export function AskCard() {
@@ -82,18 +83,21 @@ function AskCardBody({ request }: { request: PendingAsk }) {
   return (
     <div className={css.root}>
       <section className={css.card} role="region" aria-label={t('ask.title')} data-testid="ask-card">
-        <div className={css.header}>
-          <div className={css.headerMain}>
-            <span className={css.title} role="status" aria-live="polite">
-              {t('ask.title')}
-            </span>
-            <span className={css.progress}>
-              {t('ask.progress', {
-                current: index + 1,
-                total: request.questions.length,
-              })}
-              {queued > 0 ? <span> · {t('ask.queued', { count: queued })}</span> : null}
-            </span>
+        <header className={css.strip}>
+          <span className={css.stripIcon} aria-hidden>
+            <SparkIcon size={12} />
+          </span>
+          <span className={css.title} role="status" aria-live="polite">
+            {t('ask.title')}
+          </span>
+          <span className={css.progress}>
+            {t('ask.progress', {
+              current: index + 1,
+              total: request.questions.length,
+            })}
+            {queued > 0 ? <span> · {t('ask.queued', { count: queued })}</span> : null}
+          </span>
+          {request.questions.length > 1 && (
             <div className={css.indicators} aria-label={t('ask.indicatorLabel')}>
               {statuses.map((status, position) => (
                 <button
@@ -108,39 +112,20 @@ function AskCardBody({ request }: { request: PendingAsk }) {
                 />
               ))}
             </div>
-          </div>
-          <div className={css.headerActions}>
-            <button
-              type="button"
-              className={css.decline}
-              disabled={resolving}
-              onClick={() => submit(request.questions.map(() => null))}
-            >
-              {t('ask.decline')}
-            </button>
-            <Button variant="ghost" disabled={resolving} onClick={skip}>
-              {t('ask.skip')}
-            </Button>
-            <Button variant="primary" disabled={resolving} onClick={goNext}>
-              {index === request.questions.length - 1
-                ? t('ask.submit')
-                : t('ask.next')}
-            </Button>
-          </div>
-        </div>
+          )}
+        </header>
 
         <div className={css.body}>
-          <h3 className={css.question}>
-            <span className={css.questionNumber}>
-              {t('ask.questionNumber', { number: index + 1 })}
-            </span>
-            <span className={css.questionBody} tabIndex={0}>
-              {current.header !== undefined && (
-                <span className={css.questionHeader}>{current.header}</span>
-              )}
-              <span>{current.question}</span>
-            </span>
-          </h3>
+          <div className={css.questionBlock}>
+            {current.header !== undefined && (
+              <span className={css.questionHeader}>{current.header}</span>
+            )}
+            <h3 className={css.question}>
+              <span className={css.questionBody} tabIndex={0}>
+                {current.question}
+              </span>
+            </h3>
+          </div>
 
           <div
             className={css.options}
@@ -156,7 +141,6 @@ function AskCardBody({ request }: { request: PendingAsk }) {
                   type="button"
                   className={css.option}
                   data-selected={selected || undefined}
-                  data-recommended={recommended || undefined}
                   role={current.multi ? 'checkbox' : 'radio'}
                   aria-checked={current.multi ? undefined : selected}
                   aria-pressed={current.multi ? selected : undefined}
@@ -218,6 +202,27 @@ function AskCardBody({ request }: { request: PendingAsk }) {
             />
           )}
         </div>
+
+        <footer className={css.footer}>
+          <button
+            type="button"
+            className={css.decline}
+            disabled={resolving}
+            onClick={() => submit(request.questions.map(() => null))}
+          >
+            {t('ask.decline')}
+          </button>
+          <div className={css.footerMain}>
+            <Button variant="ghost" disabled={resolving} onClick={skip}>
+              {t('ask.skip')}
+            </Button>
+            <Button variant="primary" disabled={resolving} onClick={goNext}>
+              {index === request.questions.length - 1
+                ? t('ask.submit')
+                : t('ask.next')}
+            </Button>
+          </div>
+        </footer>
       </section>
     </div>
   )
