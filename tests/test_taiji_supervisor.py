@@ -1336,3 +1336,53 @@ async def test_attention_options_stay_empty_without_labelled_choices() -> None:
     # AskingLoopback's questions carry no options: the attention survives.
     assert result.attention is not None
     assert result.attention["options"] == []
+
+
+class SlowChat:
+    """A chat whose submit stalls, widening the milestone-emit window."""
+
+    def __init__(self) -> None:
+        self.released = asyncio.Event()
+        self.messages: list[str] = []
+
+    async def submit(self, text: str, **kwargs) -> None:
+        await self.released.wait()
+        self.messages.append(text)
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+class TestEmitWindowRace:
+    async def test_message_during_emit_rides_the_next_turn_never_a_parallel_one(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        """A message landing in the milestone-emit window must join the
+        inbox of the chained turn — never start a second concurrent turn
+        (the P2 kill-race shape) and never lose the earlier inbox item."""
+        monkeypatch.setattr(
+            "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
+        )
+        runner = GatedRunner()
+        chat = SlowChat()
+        supervisor = TaijiSupervisor(
+            repo_root=repo,
+            sessions_dir=tmp_path / "sessions",
+            registry_path=tmp_path / "sessions" / "taiji.json",
+            runner=runner,
+            chat=chat,
+            mode_of=lambda: "ask",
+            max_workers=3,
+        )
+
+        await supervisor.spawn("first", name="w1")
+        await asyncio.sleep(0.05)
+        await supervisor.message("w1", "M1")  # inboxed while running
+        runner.gate("w1").set()  # the turn ends; the milestone emit stalls
+        await asyncio.sleep(0.05)
+        await supervisor.message("w1", "M2")  # lands inside the emit window
+        chat.released.set()
+        await asyncio.sleep(0.15)
+        await supervisor.wait_idle()
+
+        assert runner.started.count("w1") == 2  # exactly one follow-up turn
+        assert "M1\n\nM2" in runner.turns[-1][2]
+        assert supervisor.list_workers()[0].status == "ok"

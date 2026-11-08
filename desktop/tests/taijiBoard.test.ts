@@ -70,20 +70,20 @@ test('statusTone maps every registry status and falls back to plain', () => {
 
 test('taskAge ticks minutes under an hour, then coarse hours and days', () => {
   const now = 100_000
-  assert.equal(taskAge(now - 40, now), '00:40')
-  assert.equal(taskAge(now - 3600, now), '1小时0分')
-  assert.equal(taskAge(now - 7200 - 300, now), '2小时5分')
-  assert.equal(taskAge(now - 3 * 86400, now), '3天')
+  assert.deepEqual(taskAge(now - 40, now), { kind: 'tick', text: '00:40' })
+  assert.deepEqual(taskAge(now - 3600, now), { kind: 'hours', hours: 1, minutes: 0 })
+  assert.deepEqual(taskAge(now - 7200 - 300, now), { kind: 'hours', hours: 2, minutes: 5 })
+  assert.deepEqual(taskAge(now - 3 * 86400, now), { kind: 'days', days: 3 })
 })
 
-test('diffSummary renders plus/minus and a file count, empty when unknowable', () => {
-  assert.equal(diffSummary(null), '')
-  assert.equal(diffSummary([]), '')
-  assert.equal(
+test('diffSummary tallies plus/minus and a file count, null when unknowable', () => {
+  assert.equal(diffSummary(null), null)
+  assert.equal(diffSummary([]), null)
+  assert.deepEqual(
     diffSummary([
       { path: 'a.ts', adds: 12, dels: 3 },
       { path: 'b.ts', adds: 0, dels: 5 },
     ]),
-    '+12 −8 · 2 文件',
+    { adds: 12, dels: 8, count: 2 },
   )
 })

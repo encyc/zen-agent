@@ -258,7 +258,14 @@ class TaijiSupervisor:
         return list(self.registry.records.values())
 
     def slots_state(self) -> dict:
-        """The fleet's slot occupancy for the dispatch board header."""
+        """The dispatch board's slot gauge.
+
+        ``busy`` counts slot *holders* — turns that went through the
+        semaphore. Inbox-chained and human-wake turns run outside the
+        slots (they must never queue behind work), so they are not
+        counted here and ``busy`` may legitimately stay below the true
+        number of live turns.
+        """
         queued = sum(
             1 for record in self.registry.records.values() if record.status == "queued"
         )
@@ -338,13 +345,26 @@ class TaijiSupervisor:
 
     async def message(self, name: str, text: str) -> WorkerRecord:
         record = self._record(name)
-        if record.status == "running":
-            # The worker is turn-based: mid-flight input cannot be injected,
-            # so the human's words wait in the inbox and ride the turn's tail.
-            self._inbox.setdefault(name, []).append(text)
-            return record
         if record.status == "killed":
             raise RuntimeError(f"worker {name} is {record.status}")
+        if record.status == "queued":
+            # A human redirect supersedes the queued spawn turn: cancel it so
+            # exactly one turn for this worker ever runs.
+            queued = self._turns.get(name)
+            if queued is not None and not queued.done():
+                queued.cancel()
+                await asyncio.gather(queued, return_exceptions=True)
+            self._inbox.pop(name, None)
+        else:
+            # The worker is turn-based: while a turn is live — running, or
+            # past its terminal status but still inside the milestone emit —
+            # input cannot be injected, so the words wait in the inbox and
+            # ride the turn chain's tail. _turns presence, not status,
+            # decides: status flips to terminal before the emit finishes.
+            live = self._turns.get(name)
+            if record.status == "running" or live is not None:
+                self._inbox.setdefault(name, []).append(text)
+                return record
         if record.status == "queued":
             # A human redirect supersedes the queued spawn turn: cancel it so
             # exactly one turn for this worker ever runs.
@@ -406,6 +426,37 @@ class TaijiSupervisor:
 
         task.add_done_callback(_settled)
 
+    async def _execute_turn(
+        self,
+        record: WorkerRecord,
+        resume: str | None,
+        prompt: str,
+        started: float,
+        *,
+        rollback_on_start_failure: bool,
+    ) -> TurnResult | None:
+        """Run one turn and absorb its failure states; None when absorbed."""
+        try:
+            result = await self.runner.run_turn(record.worktree, resume, prompt)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - a failed turn is a state, not a crash
+            if rollback_on_start_failure and not record.session:
+                self._rollback(record)
+                await self._emit_turn(
+                    record, f"启动失败：{exc}", started, status="error"
+                )
+                return None
+            record.status = "error"
+            record.summary = str(exc)
+            record.updated_at = time.time()
+            self._save()
+            await self._emit_turn(record, str(exc), started, status="error")
+            return None
+        if record.status == "killed":
+            return None  # a kill during the turn is final; do not overwrite
+        return result
+
     async def _run_turn(
         self,
         record: WorkerRecord,
@@ -421,34 +472,34 @@ class TaijiSupervisor:
                 record.updated_at = time.time()
                 self._save()
             await self._slots.acquire()
-            self._busy += 1
-            if record.status == "queued":
-                record.status = "running"
-                record.updated_at = time.time()
-                self._save()
-        try:
-            result = await self.runner.run_turn(record.worktree, resume, prompt)
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:  # noqa: BLE001 - a failed turn is a state, not a crash
-            if rollback_on_start_failure and not record.session:
-                self._rollback(record)
-                await self._emit_turn(
-                    record, f"启动失败：{exc}", started, status="error"
+            try:
+                self._busy += 1
+                if record.status == "queued":
+                    record.status = "running"
+                    record.updated_at = time.time()
+                    self._save()
+                result = await self._execute_turn(
+                    record,
+                    resume,
+                    prompt,
+                    started,
+                    rollback_on_start_failure=rollback_on_start_failure,
                 )
-                return
-            record.status = "error"
-            record.summary = str(exc)
-            record.updated_at = time.time()
-            self._save()
-            await self._emit_turn(record, str(exc), started, status="error")
-            return
-        finally:
-            if use_slot:
+            finally:
                 self._busy -= 1
                 self._slots.release()
-        if record.status == "killed":
-            return  # a kill during the turn is final; do not overwrite or merge
+        else:
+            # Human wake-ups and inbox chains run outside the slots: they
+            # must never queue behind spawned work.
+            result = await self._execute_turn(
+                record,
+                resume,
+                prompt,
+                started,
+                rollback_on_start_failure=rollback_on_start_failure,
+            )
+        if result is None:
+            return
         record.status = result.status
         record.summary = result.summary
         record.session = result.session_path
@@ -459,16 +510,24 @@ class TaijiSupervisor:
         )
         record.updated_at = time.time()
         self._save()
-        await self._emit_turn(record, result.summary, started, status=result.status)
         pending = self._inbox.pop(record.name, None)
+        await self._emit_turn(record, result.summary, started, status=result.status)
+        # Words that arrived during the emit window land after the pop; the
+        # chain must carry them too, in arrival order.
+        pending = [*(pending or []), *self._inbox.pop(record.name, [])]
         if pending and record.status not in ("killed", "merged"):
-            self._start_turn(
-                record,
-                "\n\n".join(pending),
-                resume=record.session or None,
-                rollback_on_start_failure=False,
-                use_slot=False,
-            )
+            if self._turns.get(record.name) is asyncio.current_task():
+                self._start_turn(
+                    record,
+                    "\n\n".join(pending),
+                    resume=record.session or None,
+                    rollback_on_start_failure=False,
+                    use_slot=False,
+                )
+            else:
+                # A successor claimed the slot while we were emitting; hand
+                # the words to its tail instead of running a parallel turn.
+                self._inbox.setdefault(record.name, [])[:0] = pending
 
     def _rollback(self, record: WorkerRecord) -> None:
         _git(self.repo_root, "worktree", "remove", "--force", record.worktree)

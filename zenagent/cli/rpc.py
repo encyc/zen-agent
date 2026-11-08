@@ -716,7 +716,14 @@ class RpcServer:
                 )
                 return True
             chat = getattr(self.runtime, "taiji_chat", None)
-            workers = [self._taiji_worker(record, supervisor) for record in supervisor.list_workers()]
+            # diffstat shells out to git per acceptance worker; keep the read
+            # pump responsive by projecting the board off the event loop.
+            workers = await asyncio.to_thread(
+                lambda: [
+                    self._taiji_worker(record, supervisor)
+                    for record in supervisor.list_workers()
+                ]
+            )
             self._send(
                 {
                     "type": "result",
@@ -752,7 +759,17 @@ class RpcServer:
             if supervisor is None:
                 return self._taiji_missing(request_id)
             name = str(request.get("name", ""))
-            await supervisor.kill(name)
+            try:
+                await supervisor.kill(name)
+            except KeyError:
+                self._send(
+                    {
+                        "type": "error",
+                        "id": request_id,
+                        "message": f"worker 不存在: {name}",
+                    }
+                )
+                return True
             self._send({"type": "result", "id": request_id, "ok": True})
             return True
 
@@ -760,9 +777,20 @@ class RpcServer:
             if supervisor is None:
                 return self._taiji_missing(request_id)
             name = str(request.get("name", ""))
+            try:
+                limit = int(request.get("limit", 12))
+            except (TypeError, ValueError):
+                self._send(
+                    {
+                        "type": "error",
+                        "id": request_id,
+                        "message": f"peek limit 不是数字: {request.get('limit')}",
+                    }
+                )
+                return True
             record = supervisor.registry.records.get(name)
             items = (
-                peek_tail(record.session, limit=int(request.get("limit", 12)))
+                peek_tail(record.session, limit=limit)
                 if record and record.session
                 else []
             )

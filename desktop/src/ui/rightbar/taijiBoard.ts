@@ -61,28 +61,36 @@ export function statusTone(status: string): StatusTone {
   return TONES[status] ?? 'plain'
 }
 
-/** Compact wall-clock age of a task, ticking per minute under an hour. */
-export function taskAge(createdAt: number, now: number): string {
+/** A task's wall-clock age, structured so the panel renders it in the
+ * interface language: a ticking mm:ss under an hour, then coarse spans. */
+export type TaskAge =
+  | { kind: 'tick'; text: string }
+  | { kind: 'hours'; hours: number; minutes: number }
+  | { kind: 'days'; days: number }
+
+export function taskAge(createdAt: number, now: number): TaskAge {
   const seconds = Math.max(0, Math.floor(now - createdAt))
   const minutes = Math.floor(seconds / 60)
   if (minutes < 60) {
-    return `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
+    return { kind: 'tick', text: `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}` }
   }
   const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}小时${minutes % 60}分`
-  return `${Math.floor(hours / 24)}天`
+  if (hours < 24) return { kind: 'hours', hours, minutes: minutes % 60 }
+  return { kind: 'days', days: Math.floor(hours / 24) }
 }
 
-/** The acceptance card's one-line diff evidence: `+A −D · N 文件`. */
-export function diffSummary(diffstat: TaijiDiffFile[] | null): string {
-  if (diffstat === null || diffstat.length === 0) return ''
+/** The acceptance card's diff evidence, tallied for i18n rendering. */
+export function diffSummary(
+  diffstat: TaijiDiffFile[] | null,
+): { adds: number; dels: number; count: number } | null {
+  if (diffstat === null || diffstat.length === 0) return null
   let adds = 0
   let dels = 0
   for (const file of diffstat) {
     adds += file.adds
     dels += file.dels
   }
-  return `+${adds} −${dels} · ${diffstat.length} 文件`
+  return { adds, dels, count: diffstat.length }
 }
 
 /** Compact, locale-neutral relative time for history rows. */

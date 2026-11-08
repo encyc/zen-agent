@@ -300,3 +300,33 @@ async def test_unknown_op_is_an_error(runtime_factory, repo: Path, monkeypatch) 
 
     assert result["type"] == "error"
     assert "snapshot" in result["message"]
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+async def test_kill_unknown_worker_is_an_error_frame_not_a_crash(
+    runtime_factory, repo: Path, monkeypatch, tmp_path: Path
+) -> None:
+    bind_supervisor(repo, tmp_path, monkeypatch)
+    monkeypatch.chdir(repo)
+    server = build_server(await runtime_factory(), writes := [])
+
+    result = await call(server, writes, {"type": "taiji", "op": "kill", "name": "ghost"})
+
+    assert result["type"] == "error"
+    assert "ghost" in result["message"]
+    # the read pump survives: a follow-up request still answers
+    follow = await call(server, writes, {"type": "taiji", "op": "board"})
+    assert follow["ok"] is True
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+async def test_peek_with_a_bad_limit_is_an_error_frame_not_a_crash(
+    runtime_factory, repo: Path, monkeypatch, tmp_path: Path
+) -> None:
+    bind_supervisor(repo, tmp_path, monkeypatch)
+    monkeypatch.chdir(repo)
+    server = build_server(await runtime_factory(), writes := [])
+
+    result = await call(server, writes, {"type": "taiji", "op": "peek", "name": "w", "limit": "abc"})
+
+    assert result["type"] == "error"

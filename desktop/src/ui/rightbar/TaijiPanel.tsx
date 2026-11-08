@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../../state/appStore'
-import { useNoticeStore } from '../../state/stores'
+import { useNoticeStore, useWorkPanelStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
 import type {
   TaijiAttention,
@@ -32,6 +32,16 @@ async function taijiOp(payload: Record<string, unknown>): Promise<Reply> {
 
 function notice(kind: 'info' | 'error', text: string) {
   useNoticeStore.getState().show({ kind, text })
+}
+
+/** A task age in the interface language; the tick form is digits already. */
+function renderAge(
+  age: ReturnType<typeof taskAge>,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  if (age.kind === 'tick') return age.text
+  if (age.kind === 'hours') return t('panel.taiji.ageHours', { h: age.hours, m: age.minutes })
+  return t('panel.taiji.ageDays', { d: age.days })
 }
 
 /** Send a human message through the board. `queued` means the worker was
@@ -90,8 +100,14 @@ function AttentionCard(props: { worker: TaijiWorker }) {
   const answer = (text: string) => void deliver(worker.name, `答复：${text}`, t)
   const toRouter = () => {
     const text = `worker ${worker.branch} 提问：${attention.question || worker.summary}。请决策并用 message_worker 转达给 ${worker.name}。`
-    void useAppStore.getState().client().send({ type: 'prompt', text }, 15000)
-    notice('info', t('panel.taiji.toRouterNotice'))
+    void (async () => {
+      try {
+        await useAppStore.getState().client().send({ type: 'prompt', text }, 15000)
+        notice('info', t('panel.taiji.toRouterNotice'))
+      } catch {
+        notice('error', t('panel.taiji.actionFailed', { reason: 'router busy' }))
+      }
+    })()
   }
   return (
     <div className={css.attentionCard} data-band="attention">
@@ -102,8 +118,13 @@ function AttentionCard(props: { worker: TaijiWorker }) {
       <p className={css.attentionQ}>{attention.question || worker.summary}</p>
       {attention.options.length > 0 && (
         <div className={css.optionRow}>
-          {attention.options.map((option) => (
-            <button key={option} type="button" className={css.optionButton} onClick={() => answer(option)}>
+          {attention.options.map((option, index) => (
+            <button
+              key={`${index}-${option}`}
+              type="button"
+              className={css.optionButton}
+              onClick={() => answer(option)}
+            >
               {option}
             </button>
           ))}
@@ -141,7 +162,7 @@ function AcceptanceCard(props: { worker: TaijiWorker }) {
       <div className={css.cardName}>
         <span className={css.name}>{worker.name}</span>
         <span className={css.branch}>{worker.branch}→{worker.base}</span>
-        {summary && <span className={css.diff}>{summary}</span>}
+        {summary && <span className={css.diff}>{t('panel.taiji.diff', summary)}</span>}
       </div>
       <p className={css.cardSummary}>{worker.summary}</p>
       {files.length > 0 && (
@@ -212,7 +233,9 @@ function RunningRow(props: { worker: TaijiWorker; now: number }) {
   const peek = () => {
     const next = !open
     setOpen(next)
-    if (next && items === null) {
+    // Re-read on every open: a running worker's tail goes stale between opens.
+    if (next) {
+      setItems(null)
       void (async () => {
         try {
           const reply = await taijiOp({ op: 'peek', name: worker.name })
@@ -228,7 +251,7 @@ function RunningRow(props: { worker: TaijiWorker; now: number }) {
       <button type="button" className={css.rowMain} onClick={peek} aria-expanded={open}>
         <i className={css.runDot} aria-hidden="true" />
         <span className={css.name}>{worker.name}</span>
-        <span className={css.age}>{taskAge(worker.created_at, now)}</span>
+        <span className={css.age}>{renderAge(taskAge(worker.created_at, now), t)}</span>
         <span className={css.rowSummary}>{worker.summary}</span>
       </button>
       <span className={css.rowButtons}>
@@ -337,8 +360,11 @@ export function TaijiPanel() {
   const [board, setBoard] = useState<TaijiBoard | null>(null)
   const [failed, setFailed] = useState(false)
   const [now, setNow] = useState(() => Date.now() / 1000)
+  const loadingRef = useRef(false)
 
   const load = useCallback(async () => {
+    if (loadingRef.current) return // a slow poll must not stack requests
+    loadingRef.current = true
     try {
       const frame = await taijiOp({ op: 'board' })
       if (frame.ok !== true) throw new Error(String(frame.message ?? 'taiji failed'))
@@ -346,6 +372,8 @@ export function TaijiPanel() {
       setFailed(false)
     } catch {
       setFailed(true)
+    } finally {
+      loadingRef.current = false
     }
   }, [])
 
@@ -397,9 +425,15 @@ export function TaijiPanel() {
             {slots.queued > 0 && <span className={css.slotsQueued}>+{slots.queued}</span>}
           </span>
         )}
-        <span className={css.routerState} data-busy={board.router_busy || undefined}>
+        <button
+          type="button"
+          className={css.routerState}
+          data-busy={board.router_busy || undefined}
+          title={t('panel.taiji.routerFocus')}
+          onClick={() => useWorkPanelStore.getState().closePanel()}
+        >
           {board.router_busy ? t('panel.taiji.routerBusy') : t('panel.taiji.routerIdle')}
-        </span>
+        </button>
         <button
           type="button"
           className={css.iconButton}

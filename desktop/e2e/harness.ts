@@ -629,7 +629,10 @@ export function installBridge(state: BridgeState) {
             | { workers?: { name: string; status: string }[] }
             | undefined
           const worker = (board?.workers ?? []).find((w) => w.name === payload.name)
-          const queued = worker?.status === 'running'
+          if (worker === undefined) {
+            return { type: 'error', id: payload.id, message: `message failed: worker 不存在: ${payload.name}` }
+          }
+          const queued = worker.status === 'running'
           return {
             type: 'result',
             id: payload.id,

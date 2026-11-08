@@ -79,11 +79,19 @@
   flex: 1;
   min-width: 0;
   overflow: hidden;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
   text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--ds-font-11);
+}
+
+.routerState:hover {
+  color: var(--dsw-alias-label-primary);
 }
 
 .routerState[data-busy] {
