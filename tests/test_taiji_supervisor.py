@@ -1523,3 +1523,30 @@ class TestDurability:
 
         saved = json.loads(registry_path.read_text(encoding="utf-8"))
         assert saved["writer"]["prompt"] == "ship the release notes"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+async def test_auto_merge_refuses_an_unknowable_diff(
+    repo: Path, tmp_path: Path, monkeypatch
+) -> None:
+    """A git failure makes the diff size unknowable (-1); zen's auto merge
+    must refuse rather than merge unbounded work (2026-11-08 followups #1)."""
+    from zenagent.app.taiji import merge_gate, supervisor as sup
+
+    monkeypatch.setattr(merge_gate, "diff_lines", lambda root, record: -1)
+    _git(repo, "branch", "task/w1")  # the recorded branch must really exist
+    supervisor = make_supervisor(repo, tmp_path, StubRunner())
+    supervisor.registry.records["w1"] = WorkerRecord(
+        name="w1",
+        branch="task/w1",
+        base="main",
+        worktree=str(tmp_path / "wt"),
+        status="ok",
+        created_at=1.0,
+        updated_at=1.0,
+    )
+
+    assert await supervisor.merge("w1", auto=True) is False
+    assert supervisor.registry.records["w1"].status == "ok"
+    # An explicit human merge stays the escape hatch.
+    assert await supervisor.merge("w1", auto=False) is True

@@ -21,7 +21,7 @@ def diff_lines(repo_root: Path, record: WorkerRecord) -> int:
     """Added plus deleted lines between the base and the task branch."""
     completed = _git(repo_root, "diff", "--numstat", f"{record.base}...{record.branch}")
     if completed is None or completed.returncode != 0:
-        return -1  # unknowable: refuse rather than guess
+        return -1  # unknowable; the auto-merge gate must treat it as over the line
     total = 0
     for line in completed.stdout.splitlines():
         parts = line.split("\t")
@@ -69,4 +69,6 @@ def block_reason(repo_root: Path, record: WorkerRecord) -> str | None:
     status = git_status(repo_root)
     if status is None or not status.is_clean:
         return "主工作区有未提交更改"
+    if diff_lines(repo_root, record) < 0:
+        return "分支差异不可知（git diff 失败）"
     return None

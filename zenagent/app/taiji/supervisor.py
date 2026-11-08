@@ -477,12 +477,12 @@ class TaijiSupervisor:
         record = self.registry.records.get(name)
         if record is None or record.status != "ok":
             return False
-        if (
-            auto
-            and await asyncio.to_thread(merge_gate.diff_lines, self.repo_root, record)
-            > AUTO_MERGE_MAX_DIFF_LINES
-        ):
-            return False
+        if auto:
+            diff = await asyncio.to_thread(merge_gate.diff_lines, self.repo_root, record)
+            # An unknowable diff (-1, git failed) is over the line too: zen
+            # must not merge work it cannot size.
+            if diff < 0 or diff > AUTO_MERGE_MAX_DIFF_LINES:
+                return False
         current = await _git_async(self.repo_root, "branch", "--show-current")
         if current is None or current.stdout.strip() != record.base:
             return False
