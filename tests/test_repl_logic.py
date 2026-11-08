@@ -628,7 +628,7 @@ async def test_repl_resume_loads_the_runtime_session(isolated_sessions):
     from zenagent.types import UserMessage
 
     prior = Session(unique_session_path())
-    prior.append(UserMessage(content="earlier question", timestamp=1))
+    await prior.append(UserMessage(content="earlier question", timestamp=1))
     seen: list = []
 
     async def stream(model_, messages, tools, options):

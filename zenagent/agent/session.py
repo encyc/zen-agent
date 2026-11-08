@@ -16,6 +16,7 @@ line. Unreadable lines are skipped and reported in ``warnings``.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import tempfile
@@ -356,6 +357,8 @@ class Session:
     header: dict | None = field(default=None, repr=False, compare=False)
     _header_ensured: bool = field(default=False, repr=False, compare=False)
     _messages: list[Message] | None = field(default=None, repr=False, compare=False)
+    #: Serializes off-loop writes; created lazily (may be no running loop at construction).
+    _append_lock: asyncio.Lock | None = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         self.path = Path(self.path)
@@ -420,13 +423,23 @@ class Session:
         except OSError:
             return
 
-    def append(self, message: Message) -> None:
-        """Append one message as a JSON line and flush it immediately."""
+    def _append_sync(self, message: Message) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._ensure_header()
         self._write_line(message.to_json())
         if self._messages is not None:
             self._messages.append(message)
+
+    async def append(self, message: Message) -> None:
+        """Append one message as a JSON line and flush it immediately.
+
+        The write leaves the event loop (a cold disk must not stall the
+        stream pump), but order is the contract: a per-session lock makes
+        even gathered appends land in submission order."""
+        if self._append_lock is None:
+            self._append_lock = asyncio.Lock()
+        async with self._append_lock:
+            await asyncio.to_thread(self._append_sync, message)
 
     def load(self) -> list[Message]:
         """Read the transcript, skipping unreadable (e.g. torn) lines."""
@@ -531,7 +544,7 @@ class Session:
         prefix = messages[: user_positions[index - 1] + 1]
         forked = Session(unique_session_path(f"fork{index}"), derived_from=self.path.stem)
         for message in prefix:
-            forked.append(message)
+            forked._append_sync(message)
         for record in self.carry_records(prefix, keep=keep):
             forked.append_meta(record)
         return forked.path
@@ -542,7 +555,7 @@ class Session:
         """Write ``messages`` to a *new* session file and return its path."""
         rewritten = Session(unique_session_path("rewrite"), derived_from=self.path.stem)
         for message in messages:
-            rewritten.append(message)
+            rewritten._append_sync(message)
         for record in self.carry_records(messages, keep=keep):
             rewritten.append_meta(record)
         return rewritten.path

@@ -216,7 +216,7 @@ class SessionManager:
         messages = source_session.load()
         target = Session(unique_session_path("fork"), derived_from=source.stem)
         for message in messages:
-            target.append(message)
+            target._append_sync(message)
         for record in source_session.carry_records(
             messages, keep=records.keep_for_rewrite()
         ):

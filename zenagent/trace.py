@@ -8,6 +8,7 @@ benchmark adapters later.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from dataclasses import asdict, dataclass
@@ -45,7 +46,12 @@ class TraceRecorder:
             target.parent.mkdir(parents=True, exist_ok=True)
             self._handle = target.open("a", encoding="utf-8")
 
-    def __call__(self, event: AgentEvent) -> None:
+    async def __call__(self, event: AgentEvent) -> None:
+        """Listener form: the dispatch loop awaits this, so per-event write
+        order is the call order; the write itself leaves the event loop."""
+        await asyncio.to_thread(self._record, event)
+
+    def _record(self, event: AgentEvent) -> None:
         if event.type == "turn_start":
             self._turn += 1
             self._emit(TraceRecord(ts=time.time(), type="turn_start", turn=self._turn))

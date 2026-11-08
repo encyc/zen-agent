@@ -131,9 +131,9 @@ def test_tool_progress_line_is_single_line_and_strips_control_chars():
     assert line.startswith("⚙ bash (")
 
 
-def test_session_header_reports_name_and_count(tmp_path):
+async def test_session_header_reports_name_and_count(tmp_path):
     session = Session(tmp_path / "20260101-000000-x.jsonl")
-    session.append(UserMessage(content="hi", timestamp=1))
+    await session.append(UserMessage(content="hi", timestamp=1))
     header = session_header(session)
     assert "20260101-000000-x.jsonl" in header
     assert "1 messages" in header

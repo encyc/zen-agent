@@ -705,7 +705,7 @@ async def _shake(services: AppServices, argument: str) -> CommandResult:
     else:
         return CommandResult(message=t("cmdmsg.shake_usage"))
     try:
-        changed, session = shake(
+        changed, session = await shake(
             services.runtime.agent, kinds,
             derived_from=services.runtime.session.path.stem,
             source=services.runtime.session,

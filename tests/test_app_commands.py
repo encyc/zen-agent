@@ -140,7 +140,7 @@ async def test_import_command_switches_to_the_session_file(services, tmp_path):
 
     source = tmp_path / "20260101-000000.jsonl"
     session = Session(source)
-    session.append(UserMessage(content="imported prompt", timestamp=1))
+    await session.append(UserMessage(content="imported prompt", timestamp=1))
 
     registry = build_default_commands(services)
     result = await registry.dispatch("import", str(source))
@@ -487,7 +487,7 @@ async def test_shake_tools_does_not_carry_tool_end_records(services):
     ]
     runtime.agent.replace_messages(messages)
     for message in messages:
-        runtime.session.append(message)
+        await runtime.session.append(message)
     runtime.session.append_meta(
         {"type": "tool_end", "call_id": "c1", "details": {"diff": "+x"}}
     )

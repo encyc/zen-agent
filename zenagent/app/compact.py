@@ -161,6 +161,6 @@ async def compact(
         ):
             session.append_meta(record)
     session.append_meta(records.compaction(tokens_before, derived_from, reason))
-    session.append(message)
+    await session.append(message)
     agent.replace_messages([message])
     return session.path

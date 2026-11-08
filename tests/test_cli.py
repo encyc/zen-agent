@@ -294,7 +294,7 @@ def test_config_default_model_is_used(monkeypatch):
     assert captured["model"].id == "deepseek-flash"
 
 
-def test_headless_resume_loads_the_previous_transcript(monkeypatch, tmp_path):
+async def test_headless_resume_loads_the_previous_transcript(monkeypatch, tmp_path):
     import zenagent.agent.session as session_module
     from zenagent.agent.session import Session
     from zenagent.types import UserMessage
@@ -302,12 +302,14 @@ def test_headless_resume_loads_the_previous_transcript(monkeypatch, tmp_path):
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
     monkeypatch.setattr(session_module, "sessions_dir", lambda: tmp_path)
     path = tmp_path / "s.jsonl"
-    Session(path).append(UserMessage(content="earlier question", timestamp=1))
+    await Session(path).append(UserMessage(content="earlier question", timestamp=1))
 
     captured: dict = {}
     _patch_bootstrap(monkeypatch, fake_stream("resumed ok"), captured)
 
-    assert cli_main.main(["-p", "next question", "--resume", str(path)]) == 0
+    import asyncio as _asyncio
+
+    assert await _asyncio.to_thread(cli_main.main, ["-p", "next question", "--resume", str(path)]) == 0
     texts = [
         m.content for m in captured["agent"].messages if isinstance(m, UserMessage)
     ]

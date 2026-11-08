@@ -93,7 +93,7 @@ def test_export_session_writes_beside_the_session_and_keeps_it_unchanged(tmp_pat
     path = tmp_path / "s.jsonl"
     session = session_module.Session(path)
     for message in transcript():
-        session.append(message)
+        session._append_sync(message)
     before = path.read_bytes()
 
     written = export_session(path, "md")
@@ -126,7 +126,7 @@ def write_session(sessions, name: str):
     path = sessions / name
     session = session_module.Session(path)
     for message in transcript():
-        session.append(message)
+        session._append_sync(message)
     return path
 
 

@@ -989,7 +989,7 @@ async def test_retry_hydrates_surviving_cards_from_records(runtime_factory):
     ]
     runtime.agent.replace_messages(messages)
     for message in messages:
-        runtime.session.append(message)
+        await runtime.session.append(message)
     runtime.session.append_meta(
         {
             "type": "tool_end",

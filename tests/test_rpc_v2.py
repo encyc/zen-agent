@@ -839,7 +839,7 @@ async def test_deleting_the_current_session_resets_the_controller(runtime_factor
     from zenagent.types import UserMessage
 
     runtime, server, writes, _queue = await build(runtime_factory)
-    runtime.session.append(UserMessage(content="hello", timestamp=1))
+    await runtime.session.append(UserMessage(content="hello", timestamp=1))
     server.agent.replace_messages([UserMessage(content="hello", timestamp=1)])
     server.chat.reload_transcript()
     assert server.chat.transcript
@@ -1013,8 +1013,8 @@ async def test_subagent_transcript_returns_the_live_child_conversation(
 
 async def test_session_list_carries_created_updated_model_and_lineage(runtime_factory):
     runtime, server, writes, queue = await build(runtime_factory)
-    runtime.session.append(UserMessage(content="hello", timestamp=1))
-    runtime.session.append(
+    await runtime.session.append(UserMessage(content="hello", timestamp=1))
+    await runtime.session.append(
         AssistantMessage(
             content=[TextContent(text="hi")],
             provider="p",

@@ -107,7 +107,7 @@ def _write_session(directory: Path, name: str, texts: list[str]) -> Path:
     path = directory / name
     session = Session(path)
     for index, text in enumerate(texts):
-        session.append(UserMessage(content=text, timestamp=index))
+        session._append_sync(UserMessage(content=text, timestamp=index))
     return path
 
 
@@ -334,8 +334,8 @@ async def test_fork_carries_tool_end_records_for_copied_calls(session_runtime):
 
     runtime = session_runtime
     manager = SessionManager(runtime)
-    runtime.session.append(UserMessage(content="go", timestamp=1))
-    runtime.session.append(
+    await runtime.session.append(UserMessage(content="go", timestamp=1))
+    await runtime.session.append(
         AssistantMessage(
             content=[ToolCall(id="c1", name="read_file", arguments={})],
             provider="p",
@@ -345,7 +345,7 @@ async def test_fork_carries_tool_end_records_for_copied_calls(session_runtime):
             timestamp=2,
         )
     )
-    runtime.session.append(
+    await runtime.session.append(
         ToolResultMessage(
             tool_call_id="c1",
             tool_name="read_file",
@@ -371,8 +371,8 @@ async def test_fork_carries_tool_end_records_for_copied_calls(session_runtime):
 async def test_entries_expose_creation_update_model_and_lineage(session_runtime):
     runtime = session_runtime
     manager = SessionManager(runtime)
-    runtime.session.append(UserMessage(content="hello", timestamp=1))
-    runtime.session.append(
+    await runtime.session.append(UserMessage(content="hello", timestamp=1))
+    await runtime.session.append(
         AssistantMessage(
             content=[TextContent(text="hi")],
             provider="p",

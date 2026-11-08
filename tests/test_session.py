@@ -57,7 +57,7 @@ async def test_append_then_load_round_trips( tmp_path ):
     session = Session(path)
     original = [user("hello"), assistant("hi"), user("again")]
     for message in original:
-        session.append(message)
+        await session.append(message)
 
     loaded = Session(path).load()
     assert loaded == original
@@ -69,7 +69,7 @@ async def test_torn_tail_is_skipped_with_a_warning(tmp_path):
     path = tmp_path / "s.jsonl"
     session = Session(path)
     for message in [user("a"), assistant("b"), user("c")]:
-        session.append(message)
+        await session.append(message)
     # simulate a process killed mid-write
     with path.open("a") as handle:
         handle.write('{"role": "assistant", "content": [{"type": "te')
@@ -90,8 +90,8 @@ async def test_missing_file_loads_empty(tmp_path):
 async def test_append_keeps_the_cached_view_in_sync(tmp_path):
     session = Session(tmp_path / "s.jsonl")
     assert session.messages == []
-    session.append(user("one"))
-    session.append(assistant("two"))
+    await session.append(user("one"))
+    await session.append(assistant("two"))
     assert [type(m) for m in session.messages] == [UserMessage, AssistantMessage]
     assert len(Session(session.path).load()) == 2
 
@@ -123,8 +123,8 @@ def _write_session(directory, name: str, texts: list[str], mtime: float | None =
     path = directory / name
     session = Session(path)
     for index, text in enumerate(texts):
-        session.append(user(text, timestamp=index))
-        session.append(assistant(f"re: {text}", timestamp=index))
+        session._append_sync(user(text, timestamp=index))
+        session._append_sync(assistant(f"re: {text}", timestamp=index))
     if mtime is not None:
         import os
 
@@ -157,13 +157,13 @@ def test_list_sessions_honours_the_limit(isolated_sessions):
     assert len(list_sessions(limit=2)) == 2
 
 
-def test_fork_at_copies_the_prefix_without_touching_the_source(isolated_sessions):
+async def test_fork_at_copies_the_prefix_without_touching_the_source(isolated_sessions):
     isolated_sessions.mkdir(parents=True)
     original = isolated_sessions / "orig.jsonl"
     session = Session(original)
     messages = [user("first"), assistant("a1"), user("second"), assistant("a2")]
     for message in messages:
-        session.append(message)
+        await session.append(message)
     before = original.read_bytes()
 
     forked_path = session.fork_at(2, keep=records.keep_for_rewrite())  # include the 2nd user message
@@ -175,10 +175,10 @@ def test_fork_at_copies_the_prefix_without_touching_the_source(isolated_sessions
     assert forked_path.name.endswith("-fork2.jsonl")
 
 
-def test_fork_at_rejects_an_out_of_range_index(isolated_sessions):
+async def test_fork_at_rejects_an_out_of_range_index(isolated_sessions):
     isolated_sessions.mkdir(parents=True)
     session = Session(isolated_sessions / "s.jsonl")
-    session.append(user("only"))
+    await session.append(user("only"))
     for bad in (0, -1, 2):
         try:
             session.fork_at(bad, keep=records.keep_for_rewrite())
@@ -188,11 +188,11 @@ def test_fork_at_rejects_an_out_of_range_index(isolated_sessions):
             raise AssertionError(f"expected ValueError for {bad}")
 
 
-def test_rewrite_writes_a_new_file(isolated_sessions):
+async def test_rewrite_writes_a_new_file(isolated_sessions):
     isolated_sessions.mkdir(parents=True)
     session = Session(isolated_sessions / "s.jsonl")
     for message in [user("keep"), assistant("kept")]:
-        session.append(message)
+        await session.append(message)
 
     new_path = session.rewrite([user("only")], keep=records.keep_for_rewrite())
     assert new_path != session.path
@@ -631,8 +631,8 @@ def test_set_session_pin_rejects_missing_file(tmp_path):
 async def test_first_append_writes_session_header(tmp_path):
     path = tmp_path / "s.jsonl"
     session = Session(path)
-    session.append(user("hello"))
-    session.append(assistant("hi"))
+    await session.append(user("hello"))
+    await session.append(assistant("hi"))
 
     first_line = json.loads(path.read_text().splitlines()[0])
     assert first_line["type"] == "session"
@@ -652,15 +652,15 @@ async def test_first_append_writes_session_header(tmp_path):
 
 async def test_header_written_once_and_never_on_resume(tmp_path):
     path = tmp_path / "s.jsonl"
-    Session(path).append(user("one"))
-    Session(path).append(user("two"))
+    await Session(path).append(user("one"))
+    await Session(path).append(user("two"))
     lines = path.read_text().splitlines()
     assert sum(1 for line in lines if json.loads(line).get("type") == "session") == 1
 
     # A legacy file with messages but no header keeps working unchanged.
     legacy = tmp_path / "legacy.jsonl"
     legacy.write_text(json.dumps(user("old").to_json()) + "\n")
-    Session(legacy).append(user("new"))
+    await Session(legacy).append(user("new"))
     legacy_lines = legacy.read_text().splitlines()
     assert len(legacy_lines) == 2
     assert all(json.loads(line).get("role") for line in legacy_lines)
@@ -670,7 +670,7 @@ async def test_header_written_once_and_never_on_resume(tmp_path):
 async def test_append_meta_records_are_collected_not_messages(tmp_path):
     path = tmp_path / "s.jsonl"
     session = Session(path)
-    session.append(user("hello"))
+    await session.append(user("hello"))
     session.append_meta({"type": "run_end", "termination": "stop", "turns": 3})
 
     lines = [json.loads(line) for line in path.read_text().splitlines()]
@@ -701,14 +701,14 @@ async def test_append_meta_swallows_os_errors(tmp_path):
     session = Session(directory)
     session.append_meta({"type": "run_end", "termination": "stop"})  # no raise
     with pytest.raises(OSError):
-        session.append(user("boom"))  # message append still fails loudly
+        await session.append(user("boom"))  # message append still fails loudly
 
 
 async def test_derived_from_records_provenance(tmp_path):
     path = tmp_path / "s.jsonl"
     session = Session(path)
-    session.append(user("one"))
-    session.append(user("two"))
+    await session.append(user("one"))
+    await session.append(user("two"))
 
     rewritten = Session(session.rewrite([user("one")], keep=records.keep_for_rewrite()))
     rewritten.load()
@@ -721,7 +721,7 @@ async def test_derived_from_records_provenance(tmp_path):
     assert forked.header["id"] == forked_path.stem
 
     fresh = Session(tmp_path / "fresh.jsonl")
-    fresh.append(user("x"))
+    await fresh.append(user("x"))
     fresh.load()
     assert "derivedFrom" not in fresh.header
 
@@ -764,9 +764,9 @@ def assistant_call(call_id: str = "c1") -> AssistantMessage:
     )
 
 
-def test_records_survive_load(isolated_sessions):
+async def test_records_survive_load(isolated_sessions):
     session = Session(isolated_sessions / "s.jsonl")
-    session.append(user("hi"))
+    await session.append(user("hi"))
     session.append_meta({"type": "tool_end", "call_id": "c1", "duration_ms": 5})
     session.append_meta({"type": "compaction", "tokensBefore": 10})
 
@@ -831,10 +831,10 @@ def test_rewrite_carries_records_for_kept_calls(isolated_sessions):
     ]
 
 
-def test_read_info_uses_header_creation_model_and_lineage(isolated_sessions):
+async def test_read_info_uses_header_creation_model_and_lineage(isolated_sessions):
     session = Session(isolated_sessions / "s.jsonl", derived_from="parent")
-    session.append(user("hi"))
-    session.append(assistant("hello"))
+    await session.append(user("hi"))
+    await session.append(assistant("hello"))
 
     info = session.read_info(titles={})
 
@@ -904,13 +904,13 @@ def test_kernel_does_not_know_record_kinds():
     assert offenders == []
 
 
-def test_side_channel_records_round_trip(isolated_sessions):
+async def test_side_channel_records_round_trip(isolated_sessions):
     """Every kind this build writes survives a reload; rewrite keeps the two
     kinds that still describe the transcript and drops the run-scoped ones."""
     session = Session(isolated_sessions / "records.jsonl")
     messages = [user("go"), assistant_call("c1")]
     for message in messages:
-        session.append(message)
+        await session.append(message)
     for record in (
         records.run_start(),
         records.tool_end("c1", "read_file", 5, False, None),
@@ -940,3 +940,20 @@ def test_rewrite_and_fork_at_require_the_keep_predicate():
     for method in (Session.rewrite, Session.fork_at):
         parameter = inspect.signature(method).parameters["keep"]
         assert parameter.default is inspect.Parameter.empty
+
+
+async def test_concurrent_append_preserves_order(tmp_path):
+    """Session writes leave the loop (to_thread) but order is the contract:
+    even gathered appends land in submission order (2026-11-08 review)."""
+    import asyncio
+
+    path = tmp_path / "ordered.jsonl"
+    session = Session(path)
+    messages = [user(f"m-{i:03d}") for i in range(100)]
+
+    await asyncio.gather(*(session.append(message) for message in messages))
+
+    lines = path.read_text(encoding="utf-8").splitlines()
+    payloads = [json.loads(line) for line in lines]
+    texts = [payload["content"] for payload in payloads if "content" in payload]
+    assert texts == [f"m-{i:03d}" for i in range(100)]

@@ -7,6 +7,7 @@ Nothing in this module imports a UI library or the CLI package.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -476,14 +477,14 @@ class Runtime:
             runtime._metrics = MetricsSession(runtime.metrics_path)
             runtime._metrics.start(agent)
 
-        def persist(event) -> None:
+        async def persist(event) -> None:
             if event.type != "agent_end":
                 return
             if event.new_messages:
                 for message in event.new_messages:
-                    runtime.session.append(message)
+                    await runtime.session.append(message)
             if runtime._metrics is not None:
-                runtime._metrics.flush(runtime.agent)
+                await asyncio.to_thread(runtime._metrics.flush, runtime.agent)
 
         agent.subscribe(persist)
         # Side-channel records: run boundaries land after the run's messages

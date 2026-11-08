@@ -57,7 +57,7 @@ def _strip_thinking(message):
     return replace(message, content=kept), removed
 
 
-def shake(
+async def shake(
     agent: Agent,
     kinds: set[str],
     derived_from: str = "",
@@ -86,7 +86,7 @@ def shake(
         new_messages.append(message)
     session = Session(unique_session_path("shake"), derived_from=derived_from)
     for message in new_messages:
-        session.append(message)
+        await session.append(message)
     if source is not None:
         for record in source.carry_records(
             new_messages,

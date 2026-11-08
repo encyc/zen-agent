@@ -30,7 +30,7 @@ def write_session(sessions, name: str, messages: list) -> None:
     path = sessions / name
     session = session_module.Session(path)
     for message in messages:
-        session.append(message)
+        session._append_sync(message)
 
 
 @pytest.fixture(autouse=True)

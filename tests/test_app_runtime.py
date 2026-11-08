@@ -118,7 +118,7 @@ async def test_switch_session_restores_the_last_request_usage(runtime_factory):
 
     runtime = await runtime_factory()
     path = unique_session_path()
-    Session(path).append(
+    await Session(path).append(
         AssistantMessage(
             content=[TextContent(text="hi")],
             provider="p",
@@ -144,7 +144,7 @@ async def test_bootstrap_resume_seeds_the_last_request_usage(runtime_factory):
     from zenagent.types import AssistantMessage, TextContent, Usage
 
     path = unique_session_path()
-    Session(path).append(
+    await Session(path).append(
         AssistantMessage(
             content=[TextContent(text="hi")],
             provider="p",
@@ -495,7 +495,7 @@ async def test_a_session_with_a_message_is_kept(runtime_factory):
     from zenagent.types import UserMessage
 
     runtime = await runtime_factory()
-    runtime.session.append(UserMessage(content="hello", timestamp=1))
+    await runtime.session.append(UserMessage(content="hello", timestamp=1))
     path = runtime.session.path
 
     await runtime.close()
@@ -539,7 +539,7 @@ async def test_an_abandoned_empty_session_is_dropped_too(runtime_factory):
     from zenagent.types import UserMessage
 
     other = unique_session_path()
-    Session(other).append(UserMessage(content="kept", timestamp=1))
+    await Session(other).append(UserMessage(content="kept", timestamp=1))
 
     runtime = await runtime_factory()
     abandoned = runtime.session.path
