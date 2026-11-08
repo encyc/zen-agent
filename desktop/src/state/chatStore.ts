@@ -5,7 +5,7 @@
 import { create } from 'zustand'
 import type {
   AgentEventFrame,
-  CompactionRecord,
+  DividerView,
   MessageUsage,
   MessageView,
   ToolCallView,
@@ -132,12 +132,6 @@ interface ChatState {
 let seq = 0
 const nid = () => `n${(seq += 1)}`
 
-/** Records are written oldest-first; the divider summarises the latest one. */
-function latestCompaction(records: CompactionRecord[] | undefined): CompactionRecord | null {
-  if (!records || records.length === 0) return null
-  return records[records.length - 1]
-}
-
 function newAssistantNode(): AssistantNode {
   return {
     kind: 'assistant',
@@ -154,8 +148,22 @@ function newAssistantNode(): AssistantNode {
   }
 }
 
-function viewToNode(view: MessageView | ToolCallView, cards: Record<string, string>): ChatNode | null {
-  // Both wire views carry an explicit `kind` discriminator now.
+function viewToNode(
+  view: MessageView | ToolCallView | DividerView,
+  cards: Record<string, string>,
+): ChatNode | null {
+  // All wire views carry an explicit `kind` discriminator.
+  if (view.kind === 'divider') {
+    const divider: DividerView = view
+    return {
+      kind: 'notice',
+      id: divider.id || nid(),
+      variant: 'divider',
+      text: '',
+      tokensBefore: divider.tokens_before ?? null,
+      reason: divider.reason ?? null,
+    }
+  }
   if (view.kind === 'tool') {
     const tool: ToolCallView = view
     const node: ToolNode = {
@@ -210,8 +218,11 @@ function viewToNode(view: MessageView | ToolCallView, cards: Record<string, stri
 }
 
 /** Snapshot views → render nodes, without touching the live session state.
- * The subagent panel reads one child's transcript through the same mapping. */
-export function nodesFromViews(views: (MessageView | ToolCallView)[]): ChatNode[] {
+ * The subagent panel reads one child's transcript through the same mapping.
+ * Compaction dividers arrive in-stream, positioned at the replay cut. */
+export function nodesFromViews(
+  views: (MessageView | ToolCallView | DividerView)[],
+): ChatNode[] {
   const cards: Record<string, string> = {}
   return views
     .map((view) => viewToNode(view, cards))
@@ -229,11 +240,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const nodes = result.transcript
       .map((view) => viewToNode(view, cards))
       .filter((node): node is ChatNode => node !== null)
-    // The file writes compaction records before the summary, so the divider
-    // leads the transcript. Repeated compactions stack records; draw exactly
-    // one divider (the latest compaction) instead of one per record.
-    const compaction = latestCompaction(result.compactions)
-    if (compaction !== null) {
+    // Legacy servers without in-stream dividers: fall back to drawing one
+    // divider above the transcript from the records (written oldest-first,
+    // repeated compactions stack; draw exactly one, the latest).
+    const hasDivider = nodes.some(
+      (node) => node.kind === 'notice' && node.variant === 'divider',
+    )
+    if (result.compactions?.length && !hasDivider) {
+      const compaction = result.compactions[result.compactions.length - 1]
       nodes.unshift({
         kind: 'notice',
         id: nid(),

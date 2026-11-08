@@ -25,10 +25,9 @@ def test_tool_end_omits_absent_fields():
 
 
 def test_compaction_shape():
-    assert records.compaction(1200, "abc", "auto") == {
+    assert records.compaction(1200, "auto") == {
         "type": "compaction",
         "tokensBefore": 1200,
-        "derivedFrom": "abc",
         "reason": "auto",
     }
 
@@ -67,7 +66,7 @@ def test_retry_and_mode_shapes():
 
 def test_predicates_only_recognize_their_own_kind():
     end = records.tool_end("c1", "bash", 1, False, None)
-    compacted = records.compaction(1, "s", "manual")
+    compacted = records.compaction(1, "manual")
     assert records.is_tool_end(end) and not records.is_tool_end(compacted)
     assert records.is_compaction(compacted) and not records.is_compaction(end)
     assert records.record_type(end) == "tool_end"

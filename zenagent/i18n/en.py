@@ -450,7 +450,7 @@ CATALOG: dict[str, str] = {
     "type.extension": "extension",
     "type.skill": "skill",
     # shared: notices, permissions, runtime and session errors
-    "notice.compacted": "compacted · {tokens:,} prompt tokens → summary session",
+    "notice.compacted": "compacted · {tokens:,} prompt tokens → summary",
     "notice.run_failed": "the run failed",
     "notice.auto_compaction_failed": "auto-compaction failed: {error}",
     "notice.pending_dropped": "dropped {n} pending messages (session changed)",

@@ -7,6 +7,19 @@ matches the release tag; older history is in the repository tags and commits.
 
 ### Added
 
+- **The taiji Router directs; workers edit.** The Router session previously
+  shared the ordinary tool set, so it could — and did (zen-agent 2026-11-08:
+  a GUI fix implemented in the Router session, 26 edits committed straight to
+  main) — implement tasks itself, bypassing the worker branch/worktree
+  isolation the whole design rests on. Three layers now hold the contract: a
+  session-gated `taiji_router` prompt block (dispatch everything that changes
+  the repo, verify, merge); a rewritten `spawn_worker` description (workers
+  are the default for implementation, direct answers only for questions and
+  read-only inspection); and a hard gate — the taiji session's tool set no
+  longer includes `edit_file`/`write_file` (`router_tool_gate`), so the main
+  checkout stays clean and worker merges stay possible (prompt version
+  2026-11-08.1).
+
 - **`edit_file` and `write_file` refuse to touch a file the model has not read
   in this session.** A successful `read_file` fingerprints the file (mtime +
   size); a write to an existing file whose fingerprint is missing or stale —

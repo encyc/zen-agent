@@ -65,7 +65,7 @@ def test_misc_messages_are_localized():
         assert i18n.t("mode.unknown", mode="x") == "未知模式：x（可选 plan|ask|zen）"
         assert "未知 skill" in i18n.t("skill.unknown", name="nope", available="(none)")
         assert i18n.t("notice.compacted", tokens=1200) == (
-            "已压缩 · 1,200 prompt token → 摘要会话"
+            "已压缩 · 1,200 prompt token → 摘要"
         )
     finally:
         i18n.set_locale("en")

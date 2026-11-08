@@ -33,7 +33,7 @@ import {
 } from './stores'
 import { useChatStore } from './chatStore'
 import { nextDraft } from './pending'
-import { loadPrefs, replayFrames, savePref, spawnArgs, type LiveChoices } from './prefs'
+import { loadPrefs, replayFrames, savePref, spawnArgs } from './prefs'
 import { frameError } from '../rpc/frames'
 import { reportRefreshFailure } from './refresh'
 
@@ -79,6 +79,9 @@ interface AppState {
   /** Set while a project switch is replacing the runtime; the shell stays
    * mounted so the switch reads as a content swap, not a reload. */
   switching: { path: string } | null
+  /** Where the ☯ toggle came from: the session and mode to restore on exit.
+   * Taiji is a session + a mode default (spec D2/D5), not a runtime mode. */
+  taijiReturn: { path: string; mode: Mode } | null
   exitCode: number | null
   stderrTail: string[]
   startFailure: StartFailure | null
@@ -118,6 +121,8 @@ interface AppState {
   forkSession(): Promise<void>
   openSession(path: string): Promise<void>
   resumeSession(path: string): Promise<void>
+  enterTaiji(): Promise<void>
+  exitTaiji(): Promise<void>
   deleteSession(path: string): Promise<void>
   renameSession(title: string): Promise<void>
   togglePin(pinned: boolean): Promise<void>
@@ -138,35 +143,6 @@ let statusInFlight = false
 let wired = false
 /** Last seen cumulative usage, for computing a turn's delta row. */
 let lastUsage: { input: number; output: number; cache_read: number; cache_write: number; cost: number } | null = null
-
-/** Bring a freshly started child onto the person's saved choices.
- *
- * Diffs against the child's own status first (see replayFrames), so a
- * stale pref never fights the server; a failed frame costs that one
- * choice, not the session. Ends with an explicit status refresh because
- * the poll timer stands down while a switch owns the wire. */
-async function restorePrefs(): Promise<void> {
-  const app = useAppStore.getState()
-  let live: LiveChoices = {}
-  try {
-    const frame = await app.client().send({ type: 'status' })
-    if (frame.type === 'result' && frame.ok) {
-      const status = frame as unknown as StatusResult
-      live = { mode: status.mode, model: status.model, thinking: status.thinking }
-    }
-  } catch {
-    // No status answer: replay everything saved — the child's own defaults
-    // are the same choices we would otherwise have skipped.
-  }
-  for (const frame of replayFrames(loadPrefs(), live)) {
-    try {
-      await app.client().send(frame)
-    } catch {
-      // keep going: the remaining choices still replay
-    }
-  }
-  await app.refreshStatus()
-}
 
 interface FrameHandling {
   set: (partial: Partial<Pick<AppState, 'busy'>>) => void
@@ -203,13 +179,14 @@ async function bootChild(
   if (opts.cwd !== undefined && opts.cwd !== '') useProjectStore.getState().addProject(opts.cwd)
   const loaded = await get().refreshTranscript()
   if (!loaded && opts.fromSwitch) useChatStore.getState().reset()
-  await restorePrefs()
+  await restorePrefs(get)
   await get().refreshSessions()
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
   connection: 'idle',
   switching: null,
+  taijiReturn: null,
   exitCode: null,
   stderrTail: [],
   startFailure: null,
@@ -683,6 +660,38 @@ export const useAppStore = create<AppState>((set, get) => ({
     )
   },
 
+  async enterTaiji() {
+    // The taiji session is a project singleton the host creates at boot;
+    // a host without it (a linked worktree) simply has no ☯ chip.
+    const session = useSessionStore
+      .getState()
+      .sessions.find((entry) => entry.name === 'taiji')
+    if (session === undefined) return
+    const current = useSessionStore.getState().currentPath
+    if (current !== session.path && get().taijiReturn === null) {
+      set({
+        taijiReturn: {
+          path: current ?? '',
+          mode: useStatusStore.getState().status?.mode ?? 'zen',
+        },
+      })
+    }
+    if (session.path !== current) await get().openSession(session.path)
+    if ((useStatusStore.getState().status?.mode ?? 'zen') !== 'zen') {
+      await get().setMode('zen') // 默认全自动（用户在太极里仍可改回 ask）
+    }
+    useWorkPanelStore.getState().showTab('taiji')
+  },
+
+  async exitTaiji() {
+    const back = get().taijiReturn
+    set({ taijiReturn: null })
+    if (back === null) return
+    if (back.path !== '') await get().openSession(back.path)
+    const mode = useStatusStore.getState().status?.mode ?? 'zen'
+    if (mode !== back.mode) await get().setMode(back.mode)
+  },
+
   async deleteSession(path) {
     await runSessionOp(get, { type: 'session', op: 'delete', path }, () =>
       refreshAfterSessionChange(get),
@@ -834,6 +843,34 @@ async function refreshAfterSessionChange(get: () => AppState): Promise<void> {
   await get().refreshTranscript()
   await get().refreshStatus()
   await get().refreshSessions()
+}
+
+/** Re-apply the user's mode/model/thinking onto a freshly spawned child.
+ *
+ * The child comes up with `--mode ask` and catalog defaults; without this a
+ * project switch silently drops the person out of zen mode and back to the
+ * default model, which is exactly the "everything reset" feeling a reload
+ * has. Every replayed frame is a normal request: a pref the server rejects
+ * (a model that was renamed, say) costs that pref, never the connection. */
+async function restorePrefs(get: () => AppState): Promise<void> {
+  await get().refreshStatus()
+  const prefs = loadPrefs()
+  const live = useStatusStore.getState().status
+  const frames = replayFrames(prefs, {
+    mode: live?.mode ?? null,
+    model: live?.model ?? null,
+    thinking: live?.thinking ?? null,
+  })
+  if (frames.length === 0) return
+  for (const payload of frames) {
+    try {
+      await get().client().send(payload)
+    } catch {
+      // A dead child ends here; the caller's own error path reports it.
+      return
+    }
+  }
+  await get().refreshStatus()
 }
 
 function handleFrame(frame: ServerFrame, handling: FrameHandling): void {

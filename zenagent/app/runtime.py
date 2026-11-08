@@ -21,6 +21,7 @@ from zenagent.agent.registry import ToolRegistry
 from zenagent.agent.session import Session, latest_session, unique_session_path
 from zenagent.agent.subagents import SubagentLimits
 from zenagent.agent.subagents_runtime import SubagentObserver
+from zenagent.app import records
 from zenagent.app.journal import attach_journal, journal_for, load_backup_policy
 from zenagent.app.metrics import MetricsSession
 from zenagent.app.modes import (
@@ -43,7 +44,12 @@ from zenagent.app.support import (
     resolve_task_model,
     session_id_for,
 )
-from zenagent.app.taiji.tools import runtime_taiji_provider, taiji_tools_for
+from zenagent.app.taiji.session import is_taiji_session
+from zenagent.app.taiji.tools import (
+    router_tool_gate,
+    runtime_taiji_provider,
+    taiji_tools_for,
+)
 from zenagent.app.views import last_request_usage
 from zenagent.config import (
     ContextGuard,
@@ -527,7 +533,7 @@ class Runtime:
             path = latest_session() if resume == "latest" else Path(resume)
             if path is not None and Path(path).is_file():
                 self._note_session_scope(Path(path))
-                return Session(Path(path))
+                return records.open_session(Path(path))
             self.warnings.append(t("runtime.no_resume", resume=resume))
         self._touch_project()
         return self.use_new_session()
@@ -540,7 +546,7 @@ class Runtime:
         remove the file when nothing was ever written to it -- including files
         abandoned by switching to another session later in the same process.
         """
-        self.session = Session(unique_session_path())
+        self.session = records.open_session(unique_session_path())
         self._created_sessions.add(self.session.path)
         return self.session
 
@@ -578,6 +584,7 @@ class Runtime:
             if self.memory_store is not None
             else ""
         )
+        session_in_context = getattr(self, "_session", None)
         context = PromptContext(
             cwd=Path.cwd(),
             tool_names=tuple(tool.name for tool in tools),
@@ -589,6 +596,9 @@ class Runtime:
             ),
             include_context=self._context_files,
             include_mode=False,
+            include_taiji_router=is_taiji_session(
+                session_in_context.path if session_in_context is not None else None
+            ),
         )
         rendered = compose_system(context)
         self._base_prompt_report = rendered
@@ -641,9 +651,17 @@ class Runtime:
             tools.append(build_skill_tool(self.skills))
         tools.extend(self._extension_tools)
         session_in_context = getattr(self, "_session", None)
+        session_path = (
+            session_in_context.path if session_in_context is not None else None
+        )
+        # The Router directs, workers edit: the taiji session loses the
+        # execution tools (see ROUTER_EXCLUDED_TOOLS) the same turn it gains
+        # the worker tools, so the fleet split holds at the tool layer too.
+        if is_taiji_session(session_path):
+            tools = router_tool_gate(tools)
         tools.extend(
             taiji_tools_for(
-                session_in_context.path if session_in_context is not None else None,
+                session_path,
                 runtime_taiji_provider(self),
             )
         )
@@ -899,7 +917,7 @@ class Runtime:
         await self.agent.wait_for_idle()
         if path is not None:
             self._note_session_scope(Path(path))
-            session = Session(path)
+            session = records.open_session(path)
         else:
             self._touch_project()
             session = self.use_new_session()

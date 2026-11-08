@@ -80,6 +80,9 @@ class PromptContext:
     include_memory: bool = True
     include_extensions: bool = True
     include_mode: bool = True
+    #: The taiji Router contract, appended only while the taiji session is the
+    #: active one (the Router's tools are session-gated the same way).
+    include_taiji_router: bool = False
     system_override: str | None = None
     root: Path | None = None
 
@@ -137,9 +140,10 @@ def compose_system(ctx: PromptContext) -> RenderedPrompt:
     """Render the system prompt for ``ctx``.
 
     Assembly order matches v0.4.1: base system blocks, then the project
-    context, skills index, extension fragments and (plan mode only) the plan
-    note. Appends keep the legacy ``"\\n\\n"`` join exactly — the golden parity
-    tests pin this byte for byte.
+    context, skills index, extension fragments, the taiji Router contract
+    (taiji session only) and (plan mode only) the plan note. Appends keep
+    the legacy ``"\\n\\n"`` join exactly — the golden parity tests pin this
+    byte for byte.
     """
     blocks: list[RenderedBlock] = []
     if ctx.system_override is not None:
@@ -184,6 +188,10 @@ def compose_system(ctx: PromptContext) -> RenderedPrompt:
                 tokens=_block_tokens(part),
             )
         )
+    if ctx.include_taiji_router:
+        part = read_block("taiji_router", ctx.root)
+        text = f"{text}\n\n{part}"
+        blocks.append(_block("taiji_router", part))
     if ctx.include_mode and ctx.mode in ("plan", "zen"):
         block_id = f"{ctx.mode}_mode"
         part = read_block(block_id, ctx.root)

@@ -43,6 +43,12 @@ function loadWidth(key: string, fallback: number): number {
   }
 }
 
+/** The last path segment of a project root, for the switching strip. */
+function projectLabel(path: string): string {
+  const parts = path.split('/').filter((part) => part !== '')
+  return parts[parts.length - 1] ?? path
+}
+
 export function App() {
   const t = useT()
   const connection = useAppStore((state) => state.connection)
@@ -235,9 +241,19 @@ export function App() {
         onNewSession={() => void useAppStore.getState().newSession()}
       />
       {switching !== null && (
-        <div className={css.switchBanner} role="status">
-          <div className={css.bootSpinner} aria-hidden />
-          <span>{t('app.switching', { path: switching.path })}</span>
+        <div
+          className={css.switchingBar}
+          data-switching={switching.path}
+          role="status"
+          aria-live="polite"
+          title={t('connection.switching', { path: projectLabel(switching.path) })}
+        >
+          {/* A project switch replaces the runtime without unmounting the shell:
+              the old conversation keeps painting until the new snapshot lands
+              and this strip is the only chrome that says "working". */}
+          <span className={css.switchingLabel}>
+            {t('connection.switching', { path: projectLabel(switching.path) })}
+          </span>
         </div>
       )}
       <NoticeBanner />

@@ -176,8 +176,10 @@ async def test_dequeue_follow_up_takes_the_last_queued_message(runtime_factory):
     await task
 
 
-async def test_compact_now_switches_to_the_summary_session(runtime_factory, capsys):
+async def test_compact_now_stays_in_the_same_session(runtime_factory, capsys):
     from conftest import sequenced_stream
+
+    from zenagent.app import records
 
     runtime = await runtime_factory(stream_fn=sequenced_stream(["hi", "summary text"]))
     chat = ChatController(runtime)
@@ -188,10 +190,15 @@ async def test_compact_now_switches_to_the_summary_session(runtime_factory, caps
     message = await chat.compact_now()
 
     assert message and "compacted" in message
-    assert runtime.session.path != old_path and runtime.session.path.exists()
+    assert runtime.session.path == old_path, "compaction keeps the session identity"
     assert len(runtime.agent.messages) == 1  # only the summary UserMessage
-    notices = chat.take_notices()
-    assert notices and notices[0].kind == "divider" and "compacted" in notices[0].text
+    # Replay returns the summary segment; the file keeps the full history.
+    cut = records.open_session(old_path)
+    assert cut.load() == runtime.agent.messages
+    # The transcript keeps the pre-compaction rows with one divider mid-stream.
+    kinds = [view.kind for view in chat.transcript]
+    assert kinds == ["user", "assistant", "divider", "user"]
+    assert chat.take_notices() == [], "the divider is a transcript view now"
     assert capsys.readouterr().out == "", "the TUI controller must never print"
 
 
@@ -221,8 +228,8 @@ async def test_auto_compaction_runs_after_a_turn(runtime_factory, monkeypatch):
     await chat.submit("hello")
     await chat.wait_for_idle()
 
-    notices = chat.take_notices()
-    assert notices and notices[0].kind == "divider"
+    kinds = [view.kind for view in chat.transcript]
+    assert kinds.count("divider") == 1
 
 
 def image_block():
@@ -242,10 +249,10 @@ async def test_submit_during_auto_compaction_is_queued_not_lost(
     started = asyncio.Event()
     release = asyncio.Event()
 
-    async def slow_compact(agent, stream_fn=None, derived_from="", **kwargs):
+    async def slow_compact(agent, session, stream_fn=None, **kwargs):
         started.set()
         await release.wait()
-        return await real_compact(agent, stream_fn, derived_from, **kwargs)
+        return await real_compact(agent, session, stream_fn, **kwargs)
 
     monkeypatch.setattr(chat_module, "compact", slow_compact)
     calls = {"n": 0}
@@ -956,7 +963,9 @@ async def test_compact_now_sources_the_divider_and_persists_tokens(runtime_facto
     notice = await chat.compact_now()
 
     assert notice
-    assert chat.notices_snapshot[-1].source == "compaction"
+    assert chat.notices_snapshot == [], "the divider is a transcript view now"
+    kinds = [view.kind for view in chat.transcript]
+    assert kinds == ["divider", "user"], "divider leads the compacted segment"
     session = Session(runtime.session.path)
     session.load()
     record = next(item for item in session.records if item["type"] == "compaction")

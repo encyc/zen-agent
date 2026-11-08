@@ -1,4 +1,6 @@
-"""compact() tests: the transcript is replaced, the old file survives, failures change nothing."""
+"""compact() tests: the summary lands in the same session file behind a
+compaction boundary; the session keeps its identity and failures change
+nothing."""
 
 import time
 
@@ -6,6 +8,8 @@ import pytest
 
 import zenagent.agent.session as session_module
 from zenagent.agent import Agent
+from zenagent.agent.session import Session, session_title
+from zenagent.app import records
 from zenagent.app.compact import compact
 from zenagent.events import AssistantEvent
 from zenagent.providers.catalog import Model
@@ -76,6 +80,14 @@ def agent_with_history(stream) -> Agent:
     return agent
 
 
+def live_session(agent: Agent, root) -> Session:
+    """A session file holding exactly the agent's live transcript."""
+    session = Session(root / "s.jsonl")
+    for message in agent.messages:
+        session._append_sync(message)
+    return session
+
+
 @pytest.fixture(autouse=True)
 def isolated_sessions(tmp_path, monkeypatch):
     root = tmp_path / "sessions"
@@ -83,49 +95,60 @@ def isolated_sessions(tmp_path, monkeypatch):
     return root
 
 
-async def test_compact_replaces_transcript_and_writes_a_new_session(isolated_sessions):
+async def test_compact_appends_the_summary_to_the_same_session(isolated_sessions):
     agent = agent_with_history(summary_stream("目标：改文件；决定：已改；未竟：无"))
+    session = live_session(agent, isolated_sessions)
 
-    path = await compact(agent)
+    path = await compact(agent, session)
 
-    assert path.parent == isolated_sessions
-    assert path.name.endswith("-compact.jsonl")
+    assert path == session.path, "compaction keeps the session identity"
     assert len(agent.messages) == 1
     only = agent.messages[0]
     assert isinstance(only, UserMessage)
     assert only.content.startswith("# 此前会话摘要")
     assert "改文件" in only.content
-    # the new session file contains exactly that message
-    from zenagent.agent.session import Session
-
-    assert Session(path).load() == [only]
+    # Boundary-aware replay returns just the summary segment...
+    cut = records.open_session(path)
+    assert cut.load() == [only]
+    assert cut.segment_start == 2
+    # ...while the file keeps the full history as the audit trail.
+    assert Session(path).load() == agent_with_history(summary_stream()).messages + [only]
+    assert not list(isolated_sessions.glob("*-compact.jsonl"))
 
 
 async def test_compact_failure_leaves_the_transcript_untouched(isolated_sessions):
     agent = agent_with_history(failing_stream("boom"))
+    session = live_session(agent, isolated_sessions)
     before = agent.messages
+    file_before = session.path.read_text()
 
     with pytest.raises(RuntimeError, match="compaction failed"):
-        await compact(agent)
+        await compact(agent, session)
 
     assert agent.messages == before
-    assert not isolated_sessions.exists()
+    assert session.path.read_text() == file_before
 
 
-async def test_compact_empty_transcript_is_rejected():
+async def test_compact_empty_transcript_is_rejected(isolated_sessions):
     agent = Agent(model(), "system", api_key="k", stream_fn=summary_stream())
+    session = Session(isolated_sessions / "s.jsonl")
     with pytest.raises(ValueError, match="nothing to compact"):
-        await compact(agent)
+        await compact(agent, session)
 
 
 async def test_compact_empty_summary_is_rejected(isolated_sessions):
     agent = agent_with_history(summary_stream("   "))
+    session = live_session(agent, isolated_sessions)
+    file_before = session.path.read_text()
+
     with pytest.raises(RuntimeError, match="empty summary"):
-        await compact(agent)
+        await compact(agent, session)
+
     assert len(agent.messages) == 2
+    assert session.path.read_text() == file_before
 
 
-async def test_compact_uses_the_agent_stream_fn_by_default():
+async def test_compact_uses_the_agent_stream_fn_by_default(isolated_sessions):
     seen: list[list] = []
 
     async def stream(model_, messages, tools, options):
@@ -141,10 +164,22 @@ async def test_compact_uses_the_agent_stream_fn_by_default():
         yield AssistantEvent(type="done", partial=partial, reason="stop")
 
     agent = agent_with_history(stream)
-    await compact(agent)
+    session = live_session(agent, isolated_sessions)
+    await compact(agent, session)
     assert seen, "the agent's stream fn must be used when none is passed"
     # the summarization request carries the transcript inside the user message
     assert "把文件改一下" in seen[0][-1].content
+
+
+async def test_compact_pins_the_session_title(isolated_sessions):
+    agent = agent_with_history(summary_stream("摘要"))
+    session = live_session(agent, isolated_sessions)
+
+    await compact(agent, session)
+
+    # The cut would otherwise make the derived title collapse to the summary's
+    # own header line; the pin keeps the original brief.
+    assert session_title(session.path) == "把文件改一下"
 
 
 # ---------------------------------------------------------------------------
@@ -183,64 +218,78 @@ def _big_agent(stream, context_window=100, prompt_tokens=90):
 
 async def test_maybe_auto_compact_triggers_above_the_threshold(isolated_sessions):
     agent = _big_agent(summary_stream("summary text"))
+    session = live_session(agent, isolated_sessions)
 
-    path = await maybe_auto_compact(agent, print_fn=lambda *_: None)
+    path = await maybe_auto_compact(agent, session, print_fn=lambda *_: None)
 
-    assert path is not None and path.parent == isolated_sessions
+    assert path == session.path
     assert len(agent.messages) == 1
     assert agent.messages[0].content.startswith("# 此前会话摘要")
+    assert records.open_session(path).load() == agent.messages
 
 
 async def test_maybe_auto_compact_does_nothing_below_the_threshold(isolated_sessions):
     agent = _big_agent(summary_stream(), prompt_tokens=10)
-    assert await maybe_auto_compact(agent, print_fn=lambda *_: None) is None
+    session = live_session(agent, isolated_sessions)
+    assert (
+        await maybe_auto_compact(agent, session, print_fn=lambda *_: None) is None
+    )
     assert len(agent.messages) == 2
 
 
 async def test_maybe_auto_compact_failure_keeps_the_transcript(isolated_sessions):
     agent = _big_agent(failing_stream("nope"))
+    session = live_session(agent, isolated_sessions)
     before = agent.messages
-    path = await maybe_auto_compact(agent, print_fn=lambda *_: None)
+    path = await maybe_auto_compact(agent, session, print_fn=lambda *_: None)
     assert path is None
     assert agent.messages == before
 
 
 async def test_maybe_auto_compact_skips_while_streaming(isolated_sessions):
     agent = _big_agent(summary_stream())
+    session = live_session(agent, isolated_sessions)
     agent._run = object()  # pretend a run is in flight
-    assert await maybe_auto_compact(agent, print_fn=lambda *_: None) is None
+    assert (
+        await maybe_auto_compact(agent, session, print_fn=lambda *_: None) is None
+    )
     agent._run = None
 
 
-async def test_maybe_auto_compact_skips_an_empty_transcript():
+async def test_maybe_auto_compact_skips_an_empty_transcript(isolated_sessions):
     agent = Agent(model(), "system", api_key="k", stream_fn=summary_stream())
-    assert await maybe_auto_compact(agent, print_fn=lambda *_: None) is None
+    session = Session(isolated_sessions / "s.jsonl")
+    assert (
+        await maybe_auto_compact(agent, session, print_fn=lambda *_: None) is None
+    )
 
 
-async def test_compact_writes_the_compaction_record_before_the_summary(isolated_sessions):
+async def test_compact_appends_the_boundary_record_before_the_summary(
+    isolated_sessions,
+):
     import json
 
     agent = agent_with_history(summary_stream("摘要"))
+    session = live_session(agent, isolated_sessions)
 
-    path = await compact(
-        agent, derived_from="parent", reason="manual", tokens_before=1234
-    )
+    path = await compact(agent, session, reason="manual", tokens_before=1234)
 
     lines = [json.loads(line) for line in path.read_text().splitlines()]
-    assert [line.get("type") for line in lines[:2]] == ["session", "compaction"]
-    assert lines[1]["tokensBefore"] == 1234
-    assert lines[1]["derivedFrom"] == "parent"
-    assert lines[1]["reason"] == "manual"
-    assert lines[2]["role"] == "user"
+    assert lines[-2]["type"] == "compaction"
+    assert lines[-2]["tokensBefore"] == 1234
+    assert lines[-2]["reason"] == "manual"
+    assert "derivedFrom" not in lines[-2]
+    assert lines[-1]["role"] == "user"
 
 
 async def test_compact_defaults_tokens_before_to_the_last_usage(isolated_sessions):
     import json
 
     agent = agent_with_history(summary_stream("摘要"))
+    session = live_session(agent, isolated_sessions)
     agent.messages[-1].usage = Usage(input=900, cache_read=100)
 
-    path = await compact(agent)
+    path = await compact(agent, session)
 
     record = next(
         item

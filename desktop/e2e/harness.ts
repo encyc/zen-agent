@@ -66,7 +66,14 @@ export interface BridgeState {
   taijiPeek?: { role: string; text: string }[]
   /** Action ops (message/merge/kill/peek) the panel sent, most recent last. */
   taijiRequests?: { op: string; name?: string; text?: string }[]
+  /** When set, the session list carries the project's taiji singleton. */
+  taijiSession?: boolean
   statusSession?: string
+  /** The runtime mode the fake status answers with (default zen). */
+  statusMode?: string
+  /** Milliseconds `rpc_start` stays in flight, so a spec can watch a project
+   * switch happen (the shell must never fall back to the boot screen). */
+  switchDelayMs?: number
 }
 
 declare global {
@@ -88,6 +95,10 @@ export function installBridge(state: BridgeState) {
     return moves.length > 0 ? moves[moves.length - 1].to : from
   }
 
+  /** The fake tracks the current session so a resume flips the list. */
+  let currentMode = state.statusMode ?? 'zen'
+  let currentSessionPath = state.noCurrent === true ? '' : '/sessions/a.jsonl'
+
   const sessions = (id: unknown, scope: unknown) => ({
     type: 'result',
     id,
@@ -101,7 +112,7 @@ export function installBridge(state: BridgeState) {
         project: 'p',
         project_path: relocatedPath('/work/p'),
         messages: 4,
-        current: state.noCurrent !== true,
+        current: currentSessionPath === '/sessions/a.jsonl',
         pinned: false,
         created_at: 1,
         updated_at: 2,
@@ -115,13 +126,31 @@ export function installBridge(state: BridgeState) {
         project: 'p',
         project_path: relocatedPath('/work/p'),
         messages: 2,
-        current: false,
+        current: currentSessionPath === '/sessions/b.jsonl',
         pinned: false,
         created_at: 1,
         updated_at: 1,
         model: 'deepseek-flash',
         derived_from: '',
       },
+      ...(state.taijiSession === true
+        ? [
+            {
+              path: '/sessions/taiji.jsonl',
+              name: 'taiji',
+              title: '太极',
+              project: 'p',
+              project_path: relocatedPath('/work/p'),
+              messages: 0,
+              current: currentSessionPath === '/sessions/taiji.jsonl',
+              pinned: false,
+              created_at: 1,
+              updated_at: 1,
+              model: 'deepseek-flash',
+              derived_from: '',
+            },
+          ]
+        : []),
       ...Array.from({ length: Math.max(0, (state.projectSessions ?? 2) - 2) }, (_, index) => {
         const ordinal = index + 3
         return {
@@ -187,7 +216,7 @@ export function installBridge(state: BridgeState) {
           model: 'deepseek-flash',
           usage: { input: 0, output: 0, cache_read: 0, cache_write: 0, cost: 0 },
           termination: null,
-          mode: 'zen',
+          mode: currentMode,
           session: state.statusSession,
           thinking: state.thinking ?? 'high',
           pending: state.pending,
@@ -465,6 +494,9 @@ export function installBridge(state: BridgeState) {
         switch (payload.op) {
           case 'list':
             return sessions(payload.id, payload.scope)
+          case 'resume':
+            currentSessionPath = String(payload.path)
+            return { type: 'result', id: payload.id, ok: true }
           case 'export': {
             if (state.failExport) return { type: 'error', message: '导出失败' }
             const suffix = payload.format === 'html' ? '.html' : '.md'
@@ -712,6 +744,11 @@ export function installBridge(state: BridgeState) {
         const pid = nextPid
         nextPid += 1
         state.starts.push({ cwd: options.cwd ?? null, pid })
+        // A real child takes a few hundred ms to replace; the delay makes that
+        // window observable instead of a race the spec would usually lose.
+        if (state.switchDelayMs !== undefined) {
+          await new Promise((resolve) => setTimeout(resolve, state.switchDelayMs))
+        }
         return { pid }
       }
       if (cmd === 'rpc_stop') return null
@@ -720,6 +757,11 @@ export function installBridge(state: BridgeState) {
       if (cmd === 'rpc_send') {
         const payload = args.payload ?? {}
         state.calls.push(payload)
+        // The fake's status answers track the frames the client sent, so a
+        // mode switch reads back on the next status poll.
+        if (payload.type === 'mode' && typeof payload.mode === 'string') {
+          currentMode = payload.mode
+        }
         return respond(payload)
       }
       throw new Error(`unexpected invoke: ${cmd}`)

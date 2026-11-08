@@ -7,7 +7,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from zenagent.agent.session import Session, session_title
+from zenagent.agent.session import session_title
 from zenagent.app import clipboard
 from zenagent.app.appearance import THEME_CHOICES
 from zenagent.app.chat import ChatController
@@ -780,7 +780,7 @@ async def _handoff(services: AppServices, argument: str) -> CommandResult:
 
     agent = services.runtime.agent
     try:
-        path = await compact(agent, derived_from=services.runtime.session.path.stem)
+        await compact(agent, services.runtime.session)
     except (ValueError, RuntimeError) as exc:
         return CommandResult(message=str(exc))
     summary = "\n".join(
@@ -794,7 +794,6 @@ async def _handoff(services: AppServices, argument: str) -> CommandResult:
         document.write_text(f"# Handoff\n\n{summary}\n", encoding="utf-8")
     except OSError as exc:
         return CommandResult(message=str(exc))
-    services.runtime.session = Session(path)
     services.chat.reload_transcript(drop_pending=True)
     return CommandResult(
         message=t("cmdmsg.handoff", path=document.name), reset_transcript=True

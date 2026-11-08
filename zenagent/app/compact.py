@@ -1,8 +1,11 @@
-"""``/compact``: summarize the transcript into a fresh session file.
+"""``/compact``: summarize the transcript in place, behind a replay boundary.
 
-The old JSONL stays on disk untouched (it is the audit trail); the compacted
-conversation is written to a *new* session file and becomes the Agent's
-transcript. If summarization fails, nothing changes.
+The session file stays append-only and the session itself keeps its identity:
+the summary message is appended after a ``compaction`` boundary record, and
+boundary-aware replay (:func:`zenagent.app.records.open_session`) returns only
+the messages after the latest effective boundary. The pre-boundary history
+stays in the file as the audit trail — bare ``Session`` reads and ``/export``
+still see all of it. If summarization fails, nothing is appended.
 """
 
 from __future__ import annotations
@@ -11,7 +14,7 @@ import time
 from pathlib import Path
 
 from zenagent.agent import Agent
-from zenagent.agent.session import Session, unique_session_path
+from zenagent.agent.session import Session, session_title, set_session_title
 from zenagent.app import records
 from zenagent.prompts import compact_result, compose_compact
 from zenagent.providers.registry import StreamFn, safe_stream, stream_fn_for
@@ -82,6 +85,7 @@ def should_auto_compact(
 
 async def maybe_auto_compact(
     agent: Agent,
+    session: Session,
     *,
     threshold: float = AUTO_COMPACT_THRESHOLD,
     stream_fn: StreamFn | None = None,
@@ -97,27 +101,29 @@ async def maybe_auto_compact(
     if not should_auto_compact(_last_usage(agent), agent.model.context_window, threshold):
         return None
     try:
-        path = await compact(agent, stream_fn, reason="auto")
+        path = await compact(agent, session, stream_fn, reason="auto")
     except Exception as exc:  # noqa: BLE001 - automatic path must never break the session
         print_fn(f"auto-compaction failed: {exc}")
         return None
-    print_fn(f"auto-compacted into {path.name}")
+    print_fn("context compacted")
     return path
 
 
 async def compact(
     agent: Agent,
+    session: Session,
     stream_fn: StreamFn | None = None,
-    derived_from: str = "",
     *,
     reason: str = "manual",
     tokens_before: int | None = None,
-    carry_from: Session | None = None,
 ) -> Path:
-    """Replace the transcript with a summary; returns the new session path.
+    """Append the summary to ``session`` behind a compaction boundary.
 
-    Raises ``ValueError`` when there is nothing to compact and ``RuntimeError``
-    when the summarization call fails — in both cases the Agent is unchanged.
+    The Agent's live context becomes just the summary message; the file keeps
+    the full history, and the session keeps its identity (no new file, no
+    switch). Raises ``ValueError`` when there is nothing to compact and
+    ``RuntimeError`` when the summarization call fails — in both cases nothing
+    is written and the Agent is unchanged.
     """
     if not agent.messages:
         raise ValueError("nothing to compact: the transcript is empty")
@@ -151,16 +157,14 @@ async def compact(
     if not summary.strip():
         raise RuntimeError("compaction produced an empty summary")
 
+    # Pin the display title first: after the cut the first message is the
+    # summary, and a derived title would collapse to its header line.
+    set_session_title(session.path, session_title(session.path))
+    session.append_meta(records.compaction(tokens_before, reason=reason))
     message = UserMessage(
         content=compact_result(summary.strip()), timestamp=int(time.time())
     )
-    session = Session(unique_session_path("compact"), derived_from=derived_from)
-    if carry_from is not None:
-        for record in carry_from.carry_records(
-            [message], keep=records.keep_for_rewrite()
-        ):
-            session.append_meta(record)
-    session.append_meta(records.compaction(tokens_before, derived_from, reason))
     await session.append(message)
     agent.replace_messages([message])
+    session.load()  # re-sync the cached view with the replay cut
     return session.path

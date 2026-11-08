@@ -321,7 +321,7 @@ async def test_session_current_list_and_new(runtime_factory):
     assert str(runtime.session.path) == messages["s3"]["path"]
 
 
-async def test_session_compact_switches_the_file(runtime_factory):
+async def test_session_compact_keeps_the_file(runtime_factory):
     runtime, server, writes, queue = await build(runtime_factory)
     runtime.agent.replace_messages([UserMessage(content="hi", timestamp=1)])
     await run_lines(
@@ -329,7 +329,19 @@ async def test_session_compact_switches_the_file(runtime_factory):
     )
     payload = decode(writes)[0]
     assert payload["compacted"] is True
-    assert payload["path"].endswith("-compact.jsonl")
+    assert payload["path"] == str(runtime.session.path), (
+        "compaction keeps the session identity"
+    )
+    # The summary lands in the same file behind a compaction boundary.
+    import json
+
+    lines = [
+        line
+        for line in runtime.session.path.read_text().splitlines()
+        if line.strip()
+    ]
+    assert json.loads(lines[-1])["role"] == "user"
+    assert json.loads(lines[-2])["type"] == "compaction"
 
 
 async def test_session_undo_and_export(runtime_factory):

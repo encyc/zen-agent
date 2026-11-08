@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { listen } from '@tauri-apps/api/event'
 import { useAppStore } from '../../state/appStore'
-import { useApprovalStore, useAskStore, useComposerStore, useSettingsStore, useStatusStore, useCatalogStore, useSkillsStore } from '../../state/stores'
+import { useApprovalStore, useAskStore, useComposerStore, useSessionStore, useSettingsStore, useStatusStore, useCatalogStore, useSkillsStore } from '../../state/stores'
 import { slashEntries } from '../../state/slashMenu'
 import { detectMention, formatMentionInsert, recognizedTokens } from '../../state/mentions'
 import type { IndexedPath } from '../../state/mentions'
@@ -376,6 +376,7 @@ export function InputBar() {
                     </div>
                   )}
                 </span>
+                <TaijiChip />
               </div>
             </div>
             <div className={css.trailing}>
@@ -453,6 +454,34 @@ function ModeChip({ mode, onOpen }: { mode: string; onOpen(): void }) {
     >
       <span className={css.chipLabel} data-mode={mode}>{t(`status.mode.${mode}`)}</span>
       <ChevronDownIcon size={11} />
+    </button>
+  )
+}
+
+/** The ☯ toggle: not a fourth runtime mode but the D2/D5 compound —
+ * switch to the taiji session, default the mode to zen, open the board.
+ * Hidden where the host never created a taiji session (linked worktree). */
+function TaijiChip() {
+  const t = useT()
+  const statusSession = useStatusStore((state) => state.status?.session ?? null)
+  const currentPath = useSessionStore((state) => state.currentPath)
+  const taijiPath = useSessionStore((state) =>
+    state.sessions.find((entry) => entry.name === 'taiji'),
+  )?.path
+  if (taijiPath === undefined) return null
+  const inTaiji = currentPath === taijiPath || statusSession?.endsWith('/taiji.jsonl') === true
+  return (
+    <button
+      type="button"
+      className={clsx(css.chip, css.taijiChip)}
+      data-active={inTaiji || undefined}
+      title={inTaiji ? t('composer.taijiExit') : t('composer.taijiEnter')}
+      onClick={() => {
+        const app = useAppStore.getState()
+        void (inTaiji ? app.exitTaiji() : app.enterTaiji())
+      }}
+    >
+      <span className={css.chipLabel}>{t('composer.taiji')}</span>
     </button>
   )
 }

@@ -344,17 +344,27 @@ class Session:
 
     ``warnings`` collects notes about skipped lines during :meth:`load`.
     ``messages`` is the cached view; it is kept in sync by :meth:`append`.
-    ``derived_from`` is the filename stem of the source session for forked,
-    rewritten and compacted copies; it lands in the header record.
+    ``derived_from`` is the filename stem of the source session for forked and
+    rewritten copies; it lands in the header record.
     """
 
     path: Path
     warnings: list[str] = field(default_factory=list)
     derived_from: str = ""
+    #: Optional structural predicate marking replay boundaries (record dicts),
+    #: injected by the app layer — the kernel never knows record kinds. When
+    #: set, :meth:`load` replays only the last boundary-delimited segment that
+    #: holds at least one readable message.
+    boundary: Callable[[dict], bool] | None = field(
+        default=None, repr=False, compare=False
+    )
     #: Side-channel records from the last :meth:`load` (header first).
     records: list[dict] = field(default_factory=list, repr=False, compare=False)
     #: The ``session`` header record from the last :meth:`load`, if any.
     header: dict | None = field(default=None, repr=False, compare=False)
+    #: Offset of the replayed segment within the full message list; ``None``
+    #: when replay was not cut (no boundary, or none effective).
+    segment_start: int | None = field(default=None, repr=False, compare=False)
     _header_ensured: bool = field(default=False, repr=False, compare=False)
     _messages: list[Message] | None = field(default=None, repr=False, compare=False)
     #: Serializes off-loop writes; created lazily (may be no running loop at construction).
@@ -442,14 +452,24 @@ class Session:
             await asyncio.to_thread(self._append_sync, message)
 
     def load(self) -> list[Message]:
-        """Read the transcript, skipping unreadable (e.g. torn) lines."""
-        messages: list[Message] = []
+        """Read the transcript, skipping unreadable (e.g. torn) lines.
+
+        With a ``boundary`` predicate, boundary records split the file into
+        segments and replay returns the last segment that holds at least one
+        readable message, with :attr:`segment_start` as its offset in the
+        full message list. A boundary with nothing readable after it is not
+        yet effective — a torn tail must never lose the transcript — so the
+        previous segment (or the whole file) replays instead, and
+        ``segment_start`` stays ``None``.
+        """
+        segments: list[list[Message]] = [[]]
         self.warnings = []
         self.records = []
         self.header = None
+        self.segment_start = None
         if not self.path.is_file():
-            self._messages = messages
-            return messages
+            self._messages = segments[0]
+            return segments[0]
         text = self.path.read_text(encoding="utf-8")
         for lineno, raw in enumerate(text.splitlines(), start=1):
             line = raw.strip()
@@ -471,13 +491,24 @@ class Session:
                 self.records.append(record)
                 if record["type"] == "session" and self.header is None:
                     self.header = record
+                if self.boundary is not None and self.boundary(record):
+                    segments.append([])
                 continue
             try:
-                messages.append(message_from_json(record))
+                segments[-1].append(message_from_json(record))
             except (ValueError, TypeError) as exc:
                 self.warnings.append(
                     f"{self.path.name}:{lineno}: skipped unreadable line ({exc})"
                 )
+        cut = next(
+            (index for index in range(len(segments) - 1, 0, -1) if segments[index]),
+            None,
+        )
+        if cut is not None:
+            self.segment_start = sum(len(part) for part in segments[:cut])
+            messages = segments[cut]
+        else:
+            messages = segments[0]
         self._messages = messages
         return messages
 

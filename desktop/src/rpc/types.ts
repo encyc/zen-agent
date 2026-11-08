@@ -305,7 +305,7 @@ export interface SessionSummary {
   updated_at?: number
   /** Provider model id of the last assistant message; empty when none. */
   model?: string
-  /** Parent session stem after fork/compact; empty when original. */
+  /** Parent session stem after fork; empty when original. */
   derived_from?: string
 }
 
@@ -380,8 +380,19 @@ export interface TranscriptNotice {
   kind: 'divider' | 'info'
   text: string
   /** `"compaction"` notices are excluded from the snapshot in favour of the
-   * records below. */
+   * in-stream divider views. */
   source?: string
+}
+
+export interface DividerView {
+  /** Wire discriminator: the compaction divider sits mid-stream, where the
+   * model's live context was cut. */
+  kind: 'divider'
+  /** Stable row identity inside one session (`v{n}`). */
+  id?: string
+  /** Prompt tokens the cut released (from the latest compaction record). */
+  tokens_before?: number | null
+  reason?: string | null
 }
 
 /** One compaction side-channel record, oldest first in the file. */
@@ -389,6 +400,7 @@ export interface CompactionRecord {
   type: 'compaction'
   timestamp?: number
   tokensBefore?: number
+  /** Legacy field: compaction no longer forks the session file. */
   derivedFrom?: string
   reason?: 'auto' | 'manual' | string
 }
@@ -397,10 +409,10 @@ export interface TranscriptResult {
   type: 'result'
   id: string
   ok: true
-  transcript: (MessageView | ToolCallView)[]
+  transcript: (MessageView | ToolCallView | DividerView)[]
   notices: TranscriptNotice[]
-  /** Compaction records from the loaded session; the divider is drawn from
-   * these, never synthesized from a notice. */
+  /** Compaction records from the loaded session; dividers arrive in-stream
+   * (an older server without them is still tolerated). */
   compactions?: CompactionRecord[]
 }
 

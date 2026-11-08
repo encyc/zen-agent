@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
 
@@ -259,16 +259,29 @@ fn login_shell_env_with(
     }
 }
 
+/// One harvest per app launch, reused by every child.
+///
+/// An interactive login shell is the single most expensive step of a spawn
+/// (hundreds of milliseconds with a themed zsh, up to the 3s timeout), and the
+/// environment it reports cannot change while the app runs. Caching it is what
+/// makes a project switch (which replaces the child) feel like a content swap
+/// instead of a reload. Restart the app to pick up a changed shell profile.
+static LOGIN_SHELL_ENV: OnceLock<(HashMap<String, String>, bool)> = OnceLock::new();
+
 fn login_shell_env() -> (HashMap<String, String>, bool) {
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
-    let mut command = Command::new(&shell);
-    command
-        .arg("-l")
-        .arg("-i")
-        .arg("-c")
-        .arg("/usr/bin/env -0")
-        .stderr(Stdio::null());
-    login_shell_env_with(command, Duration::from_secs(3))
+    LOGIN_SHELL_ENV
+        .get_or_init(|| {
+            let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+            let mut command = Command::new(&shell);
+            command
+                .arg("-l")
+                .arg("-i")
+                .arg("-c")
+                .arg("/usr/bin/env -0")
+                .stderr(Stdio::null());
+            login_shell_env_with(command, Duration::from_secs(3))
+        })
+        .clone()
 }
 
 /// Classify a spawn failure. A bundled runtime that is present but will not

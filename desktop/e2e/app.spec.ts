@@ -673,6 +673,70 @@ test('the taiji board shows the inactive state without a supervisor', async ({ p
   await expect(page.locator('[data-work-panel]')).toHaveCount(0)
 })
 
+test('the taiji chip switches to the router session in zen mode and back', async ({ page }) => {
+  await boot(page, initialState({ taijiSession: true, statusMode: 'ask' }))
+  const chip = page.getByRole('button', { name: '太极', exact: true })
+  await expect(chip).toBeVisible()
+
+  await chip.click()
+
+  // The compound: resume the taiji session, default the mode to zen, open
+  // the dispatch board — one click, no sidebar hunting.
+  const panel = page.locator('[data-work-panel]')
+  await expect(panel.getByRole('tab', { name: '太极' })).toHaveAttribute('aria-selected', 'true')
+  assert.equal(
+    await page.evaluate(() =>
+      window.__ZEN_E2E__.calls.some((call) => call.type === 'session' && call.op === 'resume' && call.path === '/sessions/taiji.jsonl'),
+    ),
+    true,
+  )
+  assert.equal(
+    await page.evaluate(() =>
+      window.__ZEN_E2E__.calls.some((call) => call.type === 'mode' && call.mode === 'zen'),
+    ),
+    true,
+  )
+  await expect(chip).toHaveAttribute('data-active', 'true')
+
+  await chip.click()
+
+  assert.equal(
+    await page.evaluate(() =>
+      window.__ZEN_E2E__.calls.some((call) => call.type === 'session' && call.op === 'resume' && call.path === '/sessions/a.jsonl'),
+    ),
+    true,
+  )
+  assert.equal(
+    await page.evaluate(() =>
+      window.__ZEN_E2E__.calls.some((call) => call.type === 'mode' && call.mode === 'ask'),
+    ),
+    true,
+  )
+})
+
+test('the taiji chip hides where the host has no taiji session', async ({ page }) => {
+  await boot(page, initialState())
+  await expect(page.getByRole('button', { name: '太极', exact: true })).toHaveCount(0)
+})
+
+test('an empty taiji board shows the on-ramp and drafts a sample task', async ({ page }) => {
+  await boot(
+    page,
+    initialState({
+      taiji: { active: true, router_busy: false, slots: { busy: 0, max: 3, queued: 0 }, workers: [] },
+    }),
+  )
+  await page.getByRole('button', { name: '打开工作面板' }).click()
+  const panel = page.locator('[data-work-panel]')
+  await page.getByRole('button', { name: '打开工作面板标签' }).click()
+  await panel.getByRole('menuitem', { name: '太极' }).click()
+  await expect(panel.getByRole('tab', { name: '太极' })).toHaveAttribute('aria-selected', 'true')
+
+  await expect(panel.getByText('太极已就绪')).toBeVisible()
+  await panel.getByRole('button', { name: '把示例任务写进输入框' }).click()
+  await expect(page.locator('[data-composer-plate] textarea')).toHaveValue(/iOS Safari/)
+})
+
 test('a task row opens the subagent conversation in the work panel', async ({ page }) => {
   await boot(
     page,
@@ -2096,4 +2160,76 @@ test('submitting /memory opens the memory tab', async ({ page }) => {
   const panel = page.locator('[data-work-panel]')
   await expect(panel.getByRole('tab', { name: '记忆' })).toHaveAttribute('aria-selected', 'true')
   await expect(panel).toContainText('这个项目还没有记忆')
+})
+
+test('a project switch keeps the shell mounted and shows a progress strip', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('zen.last.cwd', '/work/p')
+    localStorage.setItem(
+      'zen.projects',
+      JSON.stringify([
+        { path: '/work/p', name: 'p', at: 1 },
+        { path: '/work/q', name: 'q', at: 1 },
+      ]),
+    )
+  })
+  await boot(page, initialState({ switchDelayMs: 800 }))
+  await expect(page.locator('[data-shell-composer]')).toBeVisible()
+
+  await page.getByRole('button', { name: '在 q 中新建会话' }).click()
+
+  // Mid-switch the runtime is being replaced, the shell is not: no boot
+  // screen, no unmounted sidebar, just a strip saying what is happening.
+  await expect(page.locator('[data-switching="/work/q"]')).toBeVisible()
+  await expect(page.locator('[data-shell-composer]')).toBeVisible()
+  await expect(page.getByText('正在启动 zen rpc…')).toHaveCount(0)
+
+  await expect(page.locator('[data-switching]')).toHaveCount(0)
+  await expect
+    .poll(() => page.evaluate(() => window.__ZEN_E2E__.starts.at(-1)?.cwd))
+    .toBe('/work/q')
+})
+
+test('a fresh runtime is put back onto the last mode, model and thinking', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('zen.pref.mode', 'plan')
+    localStorage.setItem('zen.pref.model', 'other-model')
+    localStorage.setItem('zen.pref.thinking', 'low')
+  })
+  await boot(page, initialState())
+
+  // The child defaults to zen mode / catalog model / high thinking; the prefs
+  // are replayed as ordinary frames, so the person never notices the restart.
+  await expect
+    .poll(() => page.evaluate(() => window.__ZEN_E2E__.calls.some((call) => call.type === 'mode' && call.mode === 'plan')))
+    .toBe(true)
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__ZEN_E2E__.calls.some((call) => call.type === 'model' && call.model_id === 'other-model'),
+      ),
+    )
+    .toBe(true)
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__ZEN_E2E__.calls.some(
+          (call) => call.type === 'command' && call.name === 'thinking' && call.argument === 'low',
+        ),
+      ),
+    )
+    .toBe(true)
+
+  const order = await page.evaluate(() =>
+    window.__ZEN_E2E__.calls
+      .filter(
+        (call) =>
+          call.type === 'mode' ||
+          call.type === 'model' ||
+          (call.type === 'command' && call.name === 'thinking'),
+      )
+      .map((call) => (call.type === 'command' ? 'thinking' : String(call.type))),
+  )
+  // A model switch may reset the thinking level, so thinking lands last.
+  assert.deepEqual(order.slice(0, 3), ['mode', 'model', 'thinking'])
 })

@@ -20,6 +20,9 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from pathlib import Path
+
+from zenagent.agent.session import Session
 
 __all__ = [
     "COMPACTION",
@@ -36,6 +39,7 @@ __all__ = [
     "is_tool_end",
     "keep_for_rewrite",
     "mode",
+    "open_session",
     "record_type",
     "retry",
     "run_end",
@@ -137,14 +141,24 @@ def tool_end(
     return record
 
 
-def compaction(tokens_before: int, derived_from: str, reason: str) -> dict:
-    """One ``compaction`` record: the divider a resumed session redraws."""
+def compaction(tokens_before: int, reason: str) -> dict:
+    """One ``compaction`` record: the replay boundary and its divider."""
     return {
         "type": COMPACTION,
         "tokensBefore": int(tokens_before),
-        "derivedFrom": derived_from,
         "reason": reason,
     }
+
+
+def open_session(path: Path) -> Session:
+    """A session whose replay cuts at compaction boundaries (model context).
+
+    Every context consumer opens sessions through this — resume, switch, undo,
+    retry seed the Agent from the compacted segment only — while listings,
+    titles and export keep the whole file (bare ``Session``). The display reads
+    the full view and positions the divider from ``Session.segment_start``.
+    """
+    return Session(path, boundary=is_compaction)
 
 
 def run_start() -> dict:

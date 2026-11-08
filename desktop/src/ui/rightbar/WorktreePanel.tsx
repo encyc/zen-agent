@@ -42,7 +42,8 @@ export function WorktreePanel() {
     if (switching !== null || running) return
     setSwitching(path)
     try {
-      // openProject owns the pid/exit races; the panel only guards its button.
+      // Another worktree is another project key: same runtime swap, same
+      // mounted shell. openProject owns the pid/exit races; the panel only guards its button.
       await useAppStore.getState().openProject(path)
     } finally {
       setSwitching(null)

@@ -449,7 +449,7 @@ CATALOG: dict[str, str] = {
     "type.extension": "扩展",
     "type.skill": "技能",
     # 共享：通知、权限、运行时与会话错误
-    "notice.compacted": "已压缩 · {tokens:,} prompt token → 摘要会话",
+    "notice.compacted": "已压缩 · {tokens:,} prompt token → 摘要",
     "notice.run_failed": "运行失败",
     "notice.auto_compaction_failed": "自动压缩失败：{error}",
     "notice.pending_dropped": "已丢弃 {n} 条待发消息（会话已切换）",

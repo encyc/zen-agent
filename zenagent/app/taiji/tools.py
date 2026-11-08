@@ -22,6 +22,20 @@ if TYPE_CHECKING:
 
 SUPERVISOR_PROVIDER = Callable[[], "TaijiSupervisor"]
 
+#: The execution tools the Router never gets. Editing is what workers exist
+#: for, and a dirty main checkout blocks every merge gate. The prompt block
+#: (``taiji_router``) states the contract; removing the tools enforces it.
+ROUTER_EXCLUDED_TOOLS = frozenset({"edit_file", "write_file"})
+
+
+def router_tool_gate(tools: list[AgentTool]) -> list[AgentTool]:
+    """Strip the execution tools from the Router's tool set.
+
+    Pure and session-agnostic — the caller decides when the gate applies
+    (only the taiji session). Returns a new list; the input is untouched.
+    """
+    return [tool for tool in tools if tool.name not in ROUTER_EXCLUDED_TOOLS]
+
 
 def _text(payload: str) -> ToolResultAgent:
     return ToolResultAgent(

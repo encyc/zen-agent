@@ -226,7 +226,9 @@ async def run_headless(
         await agent.prompt(prompt, images=image_blocks or None)
         if auto_compact:
             await maybe_auto_compact(
-                agent, print_fn=lambda message: print(message, file=sys.stderr)
+                agent,
+                runtime.session,
+                print_fn=lambda message: print(message, file=sys.stderr),
             )
     finally:
         # Runtime.close releases MCP, the cached LSP clients and this run's

@@ -275,8 +275,9 @@ async def test_repl_plan_review_prints_the_plan(isolated_sessions):
     assert "inspect the repo" in joined
 
 
-async def test_repl_compact_continues_in_the_summary_session(isolated_sessions):
+async def test_repl_compact_continues_in_the_same_session(isolated_sessions):
     from zenagent.agent.session import Session
+    from zenagent.app import records
 
     lines: list[str] = []
     code = await repl(
@@ -288,15 +289,23 @@ async def test_repl_compact_continues_in_the_summary_session(isolated_sessions):
     )
     assert code == 0
     files = list(isolated_sessions.glob("*.jsonl"))
-    compacted = [path for path in files if "-compact" in path.name]
-    assert compacted, "compaction must write a summary session"
-    # The post-compaction turn landed in the summary file, not the old one.
+    assert len(files) == 1, "compaction must not spawn a summary session file"
+    path = files[0]
+    # Replay returns the compacted segment; the file keeps the full history.
     texts = [
         message.content
-        for message in Session(compacted[0]).load()
+        for message in records.open_session(path).load()
         if isinstance(message.content, str)
     ]
-    assert "next" in texts
+    assert len(texts) == 2
+    assert "此前会话摘要" in texts[0] and "summary" in texts[0]
+    assert texts[1] == "next"
+    full_texts = [
+        message.content
+        for message in Session(path).load()
+        if isinstance(message.content, str)
+    ]
+    assert "hi" in full_texts and "next" in full_texts
 
 
 async def test_repl_retry_reruns_without_duplicating_the_prompt(isolated_sessions):

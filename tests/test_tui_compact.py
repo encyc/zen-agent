@@ -1,4 +1,4 @@
-"""TUI compaction: the transcript divider and the summary that replaces it."""
+"""TUI compaction: the divider sits mid-stream and the history stays visible."""
 
 from zenagent.cli.tui.app import ZenAgentApp
 from zenagent.cli.tui.widgets.prompt_input import PromptInput
@@ -26,7 +26,9 @@ async def test_slash_compact_shows_a_divider_and_the_summary(fake_runtime):
         assert any("此前会话摘要" in block.plain for block in app.query(UserBlock))
 
 
-async def test_auto_compaction_rebuilds_the_transcript_view(runtime_factory, monkeypatch):
+async def test_auto_compaction_keeps_the_history_and_marks_the_cut(
+    runtime_factory, monkeypatch
+):
     import asyncio
 
     from conftest import sequenced_stream
@@ -38,10 +40,10 @@ async def test_auto_compaction_rebuilds_the_transcript_view(runtime_factory, mon
     started = asyncio.Event()
     release = asyncio.Event()
 
-    async def slow_compact(agent, stream_fn=None, derived_from="", **kwargs):
+    async def slow_compact(agent, session, stream_fn=None, **kwargs):
         started.set()
         await release.wait()
-        return await real_compact(agent, stream_fn, derived_from, **kwargs)
+        return await real_compact(agent, session, stream_fn, **kwargs)
 
     calls = {"n": 0}
 
@@ -60,7 +62,7 @@ async def test_auto_compaction_rebuilds_the_transcript_view(runtime_factory, mon
         await app.chat.submit("first")
         await asyncio.wait_for(started.wait(), timeout=5)
 
-        # Paint the pre-compaction transcript (the stale view the bug kept).
+        # Paint the pre-compaction transcript.
         app._refresh_status()
         await pilot.pause()
         assert len(app.query(Markdown)) == 1
@@ -70,8 +72,10 @@ async def test_auto_compaction_rebuilds_the_transcript_view(runtime_factory, mon
         await pilot.pause()
         await pilot.pause()
 
-        # The rebuilt view: no stale assistant bubble, one summary, one divider.
-        assert len(app.query(Markdown)) == 0
+        # The rebuilt view keeps the full history as scrollback: the first
+        # turn's bubble survives, one divider marks the cut, and the summary
+        # follows it as a user block.
+        assert len(app.query(Markdown)) == 1
         assert any("此前会话摘要" in block.plain for block in app.query(UserBlock))
         assert list(app.query(DividerRow))
 
@@ -84,4 +88,5 @@ async def test_auto_compaction_rebuilds_the_transcript_view(runtime_factory, mon
         await pilot.pause()
 
         assert any(block.plain == "second" for block in app.query(UserBlock))
-        assert len(app.query(Markdown)) == 1
+        # Both turns' bubbles render: the history was never dropped.
+        assert len(app.query(Markdown)) == 2

@@ -11,9 +11,11 @@ from zenagent.app.permissions import PermissionBroker
 from zenagent.app.runtime import Runtime, RuntimeOptions
 from zenagent.app.sessions import SessionManager
 from zenagent.app.views import (
+    DividerView,
     MessageView,
     RunStatus,
     ToolCallView,
+    TranscriptView,
     messages_to_views,
     usage_total,
 )
@@ -21,6 +23,7 @@ from zenagent.app.views import (
 __all__ = [
     "ChatController",
     "CommandRegistry",
+    "DividerView",
     "MessageView",
     "ModelManager",
     "PermissionBroker",
@@ -29,6 +32,7 @@ __all__ = [
     "RuntimeOptions",
     "SessionManager",
     "ToolCallView",
+    "TranscriptView",
     "messages_to_views",
     "usage_total",
 ]
