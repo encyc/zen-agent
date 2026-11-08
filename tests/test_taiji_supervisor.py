@@ -1393,15 +1393,15 @@ async def test_git_async_offloads_to_worker_thread(monkeypatch) -> None:
     """The supervisor's async-path git helper must run off the event loop."""
     import threading
 
-    from zenagent.app.taiji import supervisor as sup
+    from zenagent.app.taiji import worktree
 
     idents: list[int] = []
 
     def fake_git(root, *args):
         idents.append(threading.get_ident())
 
-    monkeypatch.setattr(sup, "_git", fake_git)
-    await sup._git_async(Path("/tmp"), "status")
+    monkeypatch.setattr(worktree, "_git", fake_git)
+    await worktree._git_async(Path("/tmp"), "status")
     assert idents, "_git_async never reached git"
     assert idents[0] != threading.get_ident()
 
@@ -1415,6 +1415,7 @@ async def test_merge_runs_git_off_loop(repo: Path, tmp_path: Path, monkeypatch) 
 
     from zenagent.app.git import GitStatus
     from zenagent.app.taiji import supervisor as sup
+    from zenagent.app.taiji import worktree
 
     loop_ident = threading.get_ident()
     idents: list[int] = []
@@ -1429,7 +1430,7 @@ async def test_merge_runs_git_off_loop(repo: Path, tmp_path: Path, monkeypatch) 
         idents.append(threading.get_ident())
         return GitStatus(branch="main")
 
-    monkeypatch.setattr(sup, "_git", fake_git)
+    monkeypatch.setattr(worktree, "_git", fake_git)
     monkeypatch.setattr(sup, "git_status", fake_status)
 
     supervisor = make_supervisor(repo, tmp_path, StubRunner())
