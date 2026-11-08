@@ -77,7 +77,7 @@ Provider registry(`register_stream_fn`,registry.py:55-68)、`AgentTool` 自声�
 
 | 文件 | 行数 | 病灶 |
 |---|---|---|
-| `cli/rpc.py` | 1181 | 三职:线编解码 + 18 类请求服务端 + 复刻 main.py 全部旗标的 argparse(:1112-1159);另重写 usage/摊平/图片读取 |
+| `zenagent/cli/rpc/` | 1181 | 三职:线编解码 + 18 类请求服务端 + 复刻 main.py 全部旗标的 argparse(:1112-1159);另重写 usage/摊平/图片读取 |
 | `cli/repl.py` | 1045 | 渲染器 + 主题状态 + 主循环 + 单 stdin 协议四职;:579 与 :726 重复 reload 块 |
 | `cli/tui/screens/modals.py` | 1042 | 13 个互不相关 Modal 类 grab-bag |
 | `cli/main.py` | 747 | 解析器 + headless 前端 + 路由 + 内联 TUI 装配(:639-668,与死代码 `cli/tui/run.py:run_tui` 二选一) |

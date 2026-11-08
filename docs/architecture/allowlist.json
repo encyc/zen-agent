@@ -2,8 +2,7 @@
   "python": {
     "zenagent/app/runtime.py": 920,
     "zenagent/app/commands.py": 866,
-    "zenagent/cli/repl.py": 1023,
-    "zenagent/cli/rpc.py": 2144,
+    "zenagent/cli/repl.py": 1017,
     "zenagent/cli/tui/screens/modals.py": 1042
   },
   "ts": {

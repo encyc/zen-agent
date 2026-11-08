@@ -6,7 +6,7 @@
 相关：`docs/research/omp-cli-study/11-prompt-inventory-and-comparison.md`（现状审计与 omp 对照）、
 `zenagent/app/support.py`、`zenagent/app/modes.py`、`zenagent/context_files.py`、`zenagent/skills.py`、
 `zenagent/app/compact.py`、`zenagent/extensions.py`、`zenagent/tools/`、`zenagent/app/runtime.py`、
-`zenagent/cli/main.py`、`zenagent/cli/repl.py`、`zenagent/cli/rpc.py`、`scripts/eval.py`、
+`zenagent/cli/main.py`、`zenagent/cli/repl.py`、`zenagent/cli/rpc/`、`scripts/eval.py`、
 `zenagent/evals_runner.py`、`scripts/check.sh`
 
 ## 1. 意图与为什么
@@ -16,7 +16,7 @@
 审计（`11-prompt-inventory-and-comparison.md`）确认了症状与病根：
 
 - 症状（按 v0.4.1 `dde8bf0` 重测）：9 个 prompt 位置 / 22 个制品，固定文本 **5,949 字符**；基础 system prompt **802 字符**（11 内置 + todo/task/read_skill）、**14 条工具描述**、一条 plan 附注（294 字符）、4KB skills 索引、32KB 上下文注入、1 条中文压缩摘要。omp 同位置是 10,360+ 字符 system + 7,303 B 工具描述 + 261 个提示词文件。
-- 病根：**散**。prompt 文本散在 6 个模块（`support.py`/`modes.py`/`context_files.py`/`skills.py`/`compact.py`/各工具模块）；装配逻辑在 4 个前端各写一遍（`app/runtime.py`、`cli/main.py`、`cli/repl.py`、`cli/rpc.py`），顺序还不完全一致；`scripts/eval.py` 另有一条自己的 base prompt；没有版本、没有 lint、没有 golden、没有 token 预算；工具描述焊死在工具实现里。
+- 病根：**散**。prompt 文本散在 6 个模块（`support.py`/`modes.py`/`context_files.py`/`skills.py`/`compact.py`/各工具模块）；装配逻辑在 4 个前端各写一遍（`app/runtime.py`、`cli/main.py`、`cli/repl.py`、`zenagent/cli/rpc/`），顺序还不完全一致；`scripts/eval.py` 另有一条自己的 base prompt；没有版本、没有 lint、没有 golden、没有 token 预算；工具描述焊死在工具实现里。
 
 现有资产（要复用，不要重造）：
 

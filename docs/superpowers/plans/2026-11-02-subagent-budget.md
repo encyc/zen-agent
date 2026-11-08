@@ -291,7 +291,7 @@ max_turns=user_config.task_max_turns,
 limits=SubagentLimits.from_user_config(user_config),
 ```
 
-  and the corresponding import. `zenagent/cli/rpc.py` has no parsed config; it
+  and the corresponding import. `zenagent/cli/rpc/` has no parsed config; it
   keeps the defaults (no change).
 
 - [ ] **Step 7: Run the task tests + affected suites**

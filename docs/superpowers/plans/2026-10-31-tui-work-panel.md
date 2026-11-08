@@ -186,7 +186,7 @@ zenagent/cli/tui/theme.tcss             新 id 的样式
 ### Task 9: task 工具观察者与落盘
 
 **Files:**
-- Modify: `zenagent/tools/task.py`、`zenagent/app/runtime.py`、`zenagent/cli/main.py`、`zenagent/cli/repl.py`、`zenagent/cli/rpc.py`
+- Modify: `zenagent/tools/task.py`、`zenagent/app/runtime.py`、`zenagent/cli/main.py`、`zenagent/cli/repl.py`、`zenagent/cli/rpc/`
 - Test: `tests/test_task.py`
 
 **Interfaces:**

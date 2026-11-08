@@ -6,7 +6,7 @@
 
 | 改动 | 文件 | 测试 |
 |---|---|---|
-| `RunStatus.to_wire()`；RPC `status` 附带完整快照（`status` 键），平铺键保留给老客户端 | `app/views.py`、`cli/rpc.py` | `tests/test_rpc_v2.py::test_status_carries_the_complete_run_status` |
+| `RunStatus.to_wire()`；RPC `status` 附带完整快照（`status` 键），平铺键保留给老客户端 | `app/views.py`、`zenagent/cli/rpc/` | `tests/test_rpc_v2.py::test_status_carries_the_complete_run_status` |
 | `build_broker_for(...)`：策略+门+broker 一处构造，三个前端不再各写一遍；**修掉只有 RPC 传 `read_only` 的分叉** | `app/permissions.py`、`cli/{main,repl,rpc}.py` | `tests/test_permissions.py`、`test_cli.py`、`test_repl_logic.py`、`test_rpc_v2.py` |
 | `tests/test_docs_paths.py`：文档里被引用的 `zenagent/**.py` 必须存在（首次运行即抓到 `providers/retry.py`） | 新测试 | 自证 |
 | 文档纠偏：`architecture.md` 增 `app/` 层与规则、`file-map.md` 增应用层表、`tools-internals.md` 重写 `task` 段与 `AgentTool` 字段、`contracts.md` §3/§4/§6、`testing.md` 去掉硬编码条数、`feature-map.md` 组件路径、`events.md` `turns` | `docs/**` | `test_docs_paths.py` 等 |

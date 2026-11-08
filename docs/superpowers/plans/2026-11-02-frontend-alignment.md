@@ -212,7 +212,7 @@ git commit -m "fix(cli): honor --thinking/--metrics/--image in the REPL"
 ### Task 4（P0）：RPC 事件投影补字段
 
 **Files:**
-- Modify: `zenagent/cli/rpc.py`（`serialize_event`）
+- Modify: `zenagent/cli/rpc/`（`serialize_event`）
 - Test: `tests/test_rpc.py`
 
 **Interfaces:**
@@ -260,7 +260,7 @@ Expected: PASS
 - [x] **Step 5: 提交**
 
 ```bash
-git add zenagent/cli/rpc.py tests/test_rpc.py
+git add zenagent/cli/rpc/ tests/test_rpc.py
 git commit -m "feat(rpc): carry tool args, results and durations in events"
 ```
 
@@ -503,7 +503,7 @@ git commit -m "refactor(repl): drive runs through ChatController"
 ### Task 9（P2）：RPC 服务器 v2 核心（审批 / steer / 模型 / 模式 / 工具）
 
 **Files:**
-- Modify: `zenagent/cli/rpc.py`
+- Modify: `zenagent/cli/rpc/`
 - Test: `tests/test_rpc.py`、`tests/test_rpc_v2.py`（新建）
 
 **Interfaces:**
@@ -547,7 +547,7 @@ Expected: PASS
 - [x] **Step 5: 提交**
 
 ```bash
-git add zenagent/cli/rpc.py tests/
+git add zenagent/cli/rpc/ tests/
 git commit -m "feat(rpc): protocol v2 with approvals, steering and runtime control"
 ```
 
@@ -556,7 +556,7 @@ git commit -m "feat(rpc): protocol v2 with approvals, steering and runtime contr
 ### Task 10（P2）：RPC 会话/命令请求与 CLI flag
 
 **Files:**
-- Modify: `zenagent/cli/rpc.py`（`session`、`command` 请求；`main()` 参数）
+- Modify: `zenagent/cli/rpc/`（`session`、`command` 请求；`main()` 参数）
 - Test: `tests/test_rpc_v2.py`、`tests/test_cli.py`
 
 **Interfaces:**
@@ -593,7 +593,7 @@ Expected: PASS
 - [x] **Step 5: 提交**
 
 ```bash
-git add zenagent/cli/rpc.py tests/
+git add zenagent/cli/rpc/ tests/
 git commit -m "feat(rpc): session and command requests, full CLI flag set"
 ```
 

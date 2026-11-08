@@ -12,14 +12,21 @@ import re
 import time
 from pathlib import Path
 
-RPC_PATH = Path(__file__).resolve().parents[1] / "zenagent" / "cli" / "rpc.py"
+
+def _rpc_source() -> str:
+    """The whole wire package's source: contract greps span codec/server/ops."""
+    pkg = Path(__file__).resolve().parents[1] / "zenagent" / "cli" / "rpc"
+    return "\n".join(sorted(p.read_text() for p in pkg.glob("*.py")))
+
+
+RPC_PATH = _rpc_source()  # a string now, not a path — same grep surface
 TS_PATH = (
     Path(__file__).resolve().parents[1] / "desktop" / "src" / "rpc" / "types.ts"
 )
 
 
 def test_request_kinds_match_ts_contract_list():
-    py = set(re.findall(r'kind == "([a-z_]+)"', RPC_PATH.read_text()))
+    py = set(re.findall(r'kind == "([a-z_]+)"', RPC_PATH))
     source = TS_PATH.read_text()
     match = re.search(r"export const REQUEST_KINDS = \[([^\]]*)\]", source, re.DOTALL)
     assert match, "desktop/src/rpc/types.ts lost REQUEST_KINDS"
@@ -29,7 +36,7 @@ def test_request_kinds_match_ts_contract_list():
 
 
 def test_protocol_version_pinned_both_sides():
-    assert "PROTOCOL_VERSION = 2" in RPC_PATH.read_text()
+    assert "PROTOCOL_VERSION = 2" in RPC_PATH
     assert "PROTOCOL_VERSION = 2" in TS_PATH.read_text()
 
 
@@ -37,7 +44,7 @@ def test_rpc_never_touches_supervisor_internals():
     """The wire layer consumes the taiji supervisor's public API only — the
     2026-11-08 review found it reading ``registry.records`` and calling the
     private ``_record``; board projection lives in ``app/taiji/board.py``."""
-    rpc = RPC_PATH.read_text()
+    rpc = RPC_PATH
     assert "registry.records" not in rpc
     assert "._record(" not in rpc
 
@@ -135,7 +142,7 @@ def test_view_kinds_agree_between_python_and_ts():
 def test_hello_result_shape_matches_ts():
     """The reviewer found hello answering without ``ok`` while TS required it —
     three sources, three shapes, every suite green. Pin the result frame."""
-    rpc = RPC_PATH.read_text()
+    rpc = RPC_PATH
     ts = TS_PATH.read_text()
     hello = re.search(r'if kind == "hello":.*?return True', rpc, re.DOTALL)
     assert hello, "hello branch moved"
@@ -185,7 +192,7 @@ def test_taiji_board_shape_matches_ts():
 def test_taiji_error_codes_agree_both_sides():
     """Server taiji errors cross the wire as codes + params; the desktop
     dictionary must carry a key for every code the server can send."""
-    rpc = RPC_PATH.read_text()
+    rpc = RPC_PATH
     py_codes = set(re.findall(r'"code": "(taiji\.[a-z_]+)"', rpc))
     assert py_codes == {
         "taiji.inactive",

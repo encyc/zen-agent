@@ -8,7 +8,7 @@
 
 ## 总体判断
 
-**上一轮清理是实打实兑现的(13/16),六层结构与进程模型依旧健康。但 taiji 功能流绕过了自己刚建的预算门**:`cli/rpc.py` 从 1181 行涨到 2144 行(+81%,18 个提交),LOC 预算门**当前红灯**(实测 `python3 scripts/check_architecture.py` exit=1,已接入 CI `scripts/check.sh:27`)。门建好了,新功能没有从门里过。
+**上一轮清理是实打实兑现的(13/16),六层结构与进程模型依旧健康。但 taiji 功能流绕过了自己刚建的预算门**:`zenagent/cli/rpc/` 从 1181 行涨到 2144 行(+81%,18 个提交),LOC 预算门**当前红灯**(实测 `python3 scripts/check_architecture.py` exit=1,已接入 CI `scripts/check.sh:27`)。门建好了,新功能没有从门里过。
 
 ## 一、旧债清偿核验(对照 11-07)
 
@@ -20,7 +20,7 @@
 ## 二、P0-1:LOC 门红灯——机制被自己的功能流绕过
 
 ```
-zenagent/cli/rpc.py:            2144 行(登记 1869)
+zenagent/cli/rpc/:            2144 行(登记 1869)
 zenagent/app/runtime.py:          919 行(登记 908)
 desktop/src/i18n/locale.ts:       962 行(登记 858)
 desktop/src/state/appStore.ts:    910 行(登记 812)

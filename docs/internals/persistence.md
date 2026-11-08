@@ -26,8 +26,8 @@ class Session:
 | `run_start` / `run_end` | `SessionMetaRecorder`（Runtime 订阅者） | 无 UI 消费者（事后剖解 CLI 用） | 每轮从哪开始、为何结束（终止原因/轮数/耗时/最后错误） |
 | `retry` | `make_retry_recorder`（`on_retry`） | 同上 | 被吞掉的瞬时失败与退避 |
 | `mode` | `Runtime.bootstrap` / `/mode` | 同上 | 会话运行过的权限模式 |
-| `tool_end` | `SessionMetaRecorder`（**Runtime**，不是 UI 控制器） | `app/views.py`、`cli/rpc.py` 快照 | 工具卡片重放：耗时、错误、有界 details（16 384 字符 / diff 400 行） |
-| `compaction` | `app/compact.py` | `app/views.py`、`cli/rpc.py` 快照 | 恢复后重画分隔线一次 |
+| `tool_end` | `SessionMetaRecorder`（**Runtime**，不是 UI 控制器） | `app/views.py`、`zenagent/cli/rpc/` 快照 | 工具卡片重放：耗时、错误、有界 details（16 384 字符 / diff 400 行） |
+| `compaction` | `app/compact.py` | `app/views.py`、`zenagent/cli/rpc/` 快照 | 恢复后重画分隔线一次 |
 
 重写（`/undo`、`/fork`、`/compact`、`/shake`、重试）会写新文件，并按
 `records.keep_for_rewrite()` 决定哪些记录跟随：`compaction` 总是跟随，`tool_end` 跟随仍存在的

@@ -48,7 +48,7 @@ Router 的五个工具：`spawn_worker` / `message_worker` / `kill_worker` / `me
 ### 接线与协议
 
 - `zenagent/__main__.py`：`python -m zenagent` 成为 worker spawn 的兜底命令（`which zen` 优先）。
-- `zenagent/cli/rpc.py`：新增 `{"type":"taiji","op":"snapshot"}` 只读 op；rpc 启动时 `ensure_taiji_session` + `own_taiji_lock`，退出 `close_taiji()` + 释放锁；`runtime.taiji_chat = chat`。
+- `zenagent/cli/rpc/`：新增 `{"type":"taiji","op":"snapshot"}` 只读 op；rpc 启动时 `ensure_taiji_session` + `own_taiji_lock`，退出 `close_taiji()` + 释放锁；`runtime.taiji_chat = chat`。
 - `zenagent/prompts/spec.py`：五个 `tool.*` block（900 字预算，`stable` cache class），不进标准工具黄金对齐集。
 - `runtime.py`：`_recompose()` 条件组装 taiji 工具；`load_session`/恢复后也要 recompose（工具集随会话变）。
 
@@ -89,7 +89,7 @@ Router 的五个工具：`spawn_worker` / `message_worker` / `kill_worker` / `me
 1. **`kill` 有竞态**（`supervisor.py::kill`）：只删 worktree + 记 `killed`，**不终止在跑的那个 `zen rpc` 子进程**；该回合结束后 `_run_turn` 会把 `record.status` 覆盖成 `ok`/`error`，甚至可能对一个已删 worktree 的回合判 `ok` 并触发自动合并。spec §4.1 要求"终止子进程"。现有测试（`test_kill_removes_worktree_keeps_branch`）只覆盖 worker 空闲时 kill。修法：per-record 持有 in-flight task/client 句柄，kill 先 cancel 再落状态，且 `_run_turn` 结束时对 `killed` 记录不改状态。
 2. **基分支硬编码 `main`**（`spawn` 里 `git branch <b> main`，`WorkerRecord.base="main"`）。spec §4.1 要求记 spawn 时的基分支（面板/仓库可能跑在别的默认分支上）。修法：spawn 时读 `git symbolic-ref refs/remotes/origin/HEAD` 或当前分支，失败回落 `main`（现有测试 `test_spawn_on_a_repo_without_main_fails_cleanly` 把这个缺陷当成预期行为钉住了，改的时候要连它一起改）。
 3. **worker 永远 `--yes`（zen）**（`worker_client.worker_command`）：因此 ask 模式下 worker 的工具审批**不会**经"转问卡片"上浮，注册表也没有 spec 里的 `blocked/question` 态。D4/§4.1 的完整人审通道是 P2 的活，现在是"worker 自己全权、人在合并口验收"。
-4. **里程碑注入只在 rpc 宿主生效**：`runtime.taiji_chat` 只有 `cli/rpc.py` 赋值（`tools.py:216` 用 getattr 兜 None）。TUI/REPL/headless 里 Router 能开 worker、能自动合并，但**收不到汇报文本**。要么把 chat 在 `Runtime` 里统一接上，要么把这层能力显式标注为"需 rpc 宿主"。
+4. **里程碑注入只在 rpc 宿主生效**：`runtime.taiji_chat` 只有 `zenagent/cli/rpc/` 赋值（`tools.py:216` 用 getattr 兜 None）。TUI/REPL/headless 里 Router 能开 worker、能自动合并，但**收不到汇报文本**。要么把 chat 在 `Runtime` 里统一接上，要么把这层能力显式标注为"需 rpc 宿主"。
 5. **Router 轻模型 / worker 强模型未接**（spec §9 默认决定）：`RpcRunner` 不传 `--model`，worker 用宿主默认模型。配置面需要在 P2 补 `taiji.router_model` / `taiji.worker_model`。
 6. **合并是 porcelain 而非 plumbing**：`git merge --no-ff` 直接在用户主 worktree 跑，靠"基分支已 checkout + 干净 + 失败 abort"三件套保护。满足"工作区神圣"，但没到 §4.1 说的"plumbing/临时索引式合并"（那是为了在脏树下也能合）。
 7. **taiji session 是急初始化**：rpc 一启动就 `ensure_taiji_session`，D2 说的是"存量项目首次触碰时懒初始化"——现在每个项目目录都会多出一个 `taiji.jsonl`。

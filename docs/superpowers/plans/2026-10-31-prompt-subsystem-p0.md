@@ -318,7 +318,7 @@ Commit: `git add zenagent/prompts zenagent/app/compact.py tests/test_prompts_com
 ### Task 7: Wire the five call sites
 
 **Files:**
-- Modify: `zenagent/app/runtime.py`, `zenagent/cli/main.py`, `zenagent/cli/repl.py`, `zenagent/cli/rpc.py`, `scripts/eval.py`
+- Modify: `zenagent/app/runtime.py`, `zenagent/cli/main.py`, `zenagent/cli/repl.py`, `zenagent/cli/rpc/`, `scripts/eval.py`
 - Modify: `scripts/prompt_goldens.py` (`--check` uses compose)
 - Test: `tests/test_prompts_frontends.py`
 
@@ -338,7 +338,7 @@ In `Runtime._build_prompt`/`_prompt_with_mode`: build one `PromptContext(cwd=Pat
 
 - `cli/main.py::_build_agent`/`run_headless`: replace manual `system_prompt` + `system_prompt_with_context` + `extra_prompt` concatenation with `compose_system` using the frontend's own tool-name order; keep mode note placement (it is part of compose when `include_mode=True`).
 - `cli/repl.py`: same, using `discover_runtime`'s skills/extensions results.
-- `cli/rpc.py`: `include_skills=False`, `include_extensions=False`, `include_mode=False`.
+- `zenagent/cli/rpc/`: `include_skills=False`, `include_extensions=False`, `include_mode=False`.
 - `scripts/eval.py`: `system_override=options.get("system_prompt_override") or "You are zenagent, a coding agent. Be concise."`, `include_mode=False`, `skill_entries=format_skill_entries(discovered)`, `include_context=bool(options.get("context_files"))`; keep `system_prompt_override` semantics.
 
 - [ ] **Step 4: Update `scripts/prompt_goldens.py --check`**

@@ -2,7 +2,7 @@
 
 状态：待审批
 作者：Lead（与用户讨论后整理）
-相关：`docs/architecture.md`、`zenagent/cli/repl.py`、`zenagent/cli/rpc.py`
+相关：`docs/architecture.md`、`zenagent/cli/repl.py`、`zenagent/cli/rpc/`
 
 ## 1. 意图与为什么
 
@@ -85,7 +85,7 @@ follow-up 队列。用户把它总结为「交互很差」。
 │                messages_to_views() 历史消息→卡片                  │
 └───────┬───────────────────┬──────────────────────┬───────────────┘
         │                   │                      │
-  cli/repl.py        cli/tui/                cli/rpc.py
+  cli/repl.py        cli/tui/                cli/rpc/
   行式前端（改造）    Textual 前端（新）       JSONL（未来 Tauri）
 ```
 

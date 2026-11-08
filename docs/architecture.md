@@ -163,6 +163,6 @@ agent_end 事件
 - 一次 run：`zenagent/agent/loop.py::agent_loop`
 - 事件定义：`zenagent/events.py`
 - 前端装配：`zenagent/app/bootstrap.py::prepare`（四个前端唯一入口）
-- 线协议：`zenagent/cli/rpc.py`（权威）↔ `desktop/src/rpc/types.ts`（`REQUEST_KINDS`），契约测试 `tests/test_rpc_contract.py` 双向钉住
+- 线协议：`zenagent/cli/rpc/`（权威）↔ `desktop/src/rpc/types.ts`（`REQUEST_KINDS`），契约测试 `tests/test_rpc_contract.py` 双向钉住
 - 行数预算：`scripts/check_architecture.py` + `docs/architecture/allowlist.json`（只许降）
 - 对应测试：`tests/test_loop.py`、`tests/test_agent_class.py`、`tests/test_events.py`

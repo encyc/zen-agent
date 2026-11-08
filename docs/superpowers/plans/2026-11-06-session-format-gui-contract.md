@@ -39,7 +39,7 @@ These are the inputs/conditions the spec implies but no requirement names; each 
 | `zenagent/types.py` | 1 | `UserMessage.steering` + serialization |
 | `zenagent/agent/agent.py` | 1 | mark delivered steering |
 | `zenagent/app/views.py` | 1, 2, 3, 4 | view fields, ids, parity, hydration, notice source |
-| `zenagent/cli/rpc.py` | 1, 4, 5 | event projection + transcript/list wire |
+| `zenagent/cli/rpc/` | 1, 4, 5 | event projection + transcript/list wire |
 | `zenagent/cli/tui/widgets/tool_card.py`, `zenagent/i18n/{en,zh}.py` | 2 | `interrupted` label |
 | `zenagent/app/session_meta.py` | 3 | `tool_end_record` + bounding |
 | `zenagent/agent/session.py` | 3, 5 | `ensure_loaded`, `carry_records`, info fields |
@@ -55,7 +55,7 @@ These are the inputs/conditions the spec implies but no requirement names; each 
 ### Task 1: Steering provenance end-to-end
 
 **Files:**
-- Modify: `zenagent/types.py` (`UserMessage`, `message_from_json`), `zenagent/agent/agent.py` (`_drain_steering`), `zenagent/app/views.py` (`MessageView`, `user_view`, `messages_to_views`, `_message_start`), `zenagent/cli/rpc.py` (`_message_text`, `_message_projection`)
+- Modify: `zenagent/types.py` (`UserMessage`, `message_from_json`), `zenagent/agent/agent.py` (`_drain_steering`), `zenagent/app/views.py` (`MessageView`, `user_view`, `messages_to_views`, `_message_start`), `zenagent/cli/rpc/` (`_message_text`, `_message_projection`)
 - Test: `tests/test_session.py`, `tests/test_app_views.py`, `tests/test_rpc_v2.py`, `tests/test_app_session_meta.py`
 
 **Interfaces:**
@@ -229,7 +229,7 @@ self.views.append(
 )
 ```
 
-`zenagent/cli/rpc.py`:
+`zenagent/cli/rpc/`:
 
 ```python
 def _message_text(message) -> str:
@@ -255,7 +255,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add zenagent/types.py zenagent/agent/agent.py zenagent/app/views.py zenagent/cli/rpc.py tests/test_session.py tests/test_app_views.py tests/test_rpc_v2.py tests/test_app_session_meta.py
+git add zenagent/types.py zenagent/agent/agent.py zenagent/app/views.py zenagent/cli/rpc/ tests/test_session.py tests/test_app_views.py tests/test_rpc_v2.py tests/test_app_session_meta.py
 git commit -m "feat(session): mark delivered steering messages end-to-end"
 ```
 
@@ -1192,7 +1192,7 @@ git commit -m "feat(session): persist tool completion as tool_end records"
 ### Task 4: `compaction` record and one divider on the wire
 
 **Files:**
-- Modify: `zenagent/app/compact.py`, `zenagent/app/chat.py`, `zenagent/app/views.py` (`TranscriptNotice`), `zenagent/cli/rpc.py` (`_transcript_result`)
+- Modify: `zenagent/app/compact.py`, `zenagent/app/chat.py`, `zenagent/app/views.py` (`TranscriptNotice`), `zenagent/cli/rpc/` (`_transcript_result`)
 - Test: `tests/test_compact.py`, `tests/test_app_chat.py`, `tests/test_rpc_v2.py`
 
 **Interfaces:**
@@ -1420,7 +1420,7 @@ class TranscriptNotice:
     source: str = ""
 ```
 
-`zenagent/cli/rpc.py` `_transcript_result`:
+`zenagent/cli/rpc/` `_transcript_result`:
 
 ```python
         views: list = []
@@ -1462,7 +1462,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add zenagent/app/compact.py zenagent/app/chat.py zenagent/app/views.py zenagent/cli/rpc.py tests/test_compact.py tests/test_app_chat.py tests/test_rpc_v2.py
+git add zenagent/app/compact.py zenagent/app/chat.py zenagent/app/views.py zenagent/cli/rpc/ tests/test_compact.py tests/test_app_chat.py tests/test_rpc_v2.py
 git commit -m "feat(session): persist compaction records and expose them on transcript"
 ```
 
@@ -1471,7 +1471,7 @@ git commit -m "feat(session): persist compaction records and expose them on tran
 ### Task 5: Session-list creation, update, model and lineage
 
 **Files:**
-- Modify: `zenagent/agent/session.py` (`SessionInfo`, `read_info`), `zenagent/app/sessions.py` (`SessionEntry`, `entries`), `zenagent/cli/tui/screens/modals.py`, `zenagent/cli/rpc.py` (`_session_op` list)
+- Modify: `zenagent/agent/session.py` (`SessionInfo`, `read_info`), `zenagent/app/sessions.py` (`SessionEntry`, `entries`), `zenagent/cli/tui/screens/modals.py`, `zenagent/cli/rpc/` (`_session_op` list)
 - Test: `tests/test_session.py`, `tests/test_app_sessions.py`, `tests/test_tui_sessions.py`, `tests/test_project_scoping.py`, `tests/test_rpc_v2.py`
 
 **Interfaces:**
@@ -1649,7 +1649,7 @@ class SessionEntry:
 
 `zenagent/cli/tui/screens/modals.py:123`: `time.localtime(entry.updated_at)`.
 
-`zenagent/cli/rpc.py` list entries add:
+`zenagent/cli/rpc/` list entries add:
 
 ```python
                         "created_at": entry.created_at,
@@ -1667,7 +1667,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add zenagent/agent/session.py zenagent/app/sessions.py zenagent/cli/tui/screens/modals.py zenagent/cli/rpc.py tests/test_session.py tests/test_app_sessions.py tests/test_tui_sessions.py tests/test_project_scoping.py tests/test_rpc_v2.py
+git add zenagent/agent/session.py zenagent/app/sessions.py zenagent/cli/tui/screens/modals.py zenagent/cli/rpc/ tests/test_session.py tests/test_app_sessions.py tests/test_tui_sessions.py tests/test_project_scoping.py tests/test_rpc_v2.py
 git commit -m "feat(session): list creation time, last model and lineage"
 ```
 

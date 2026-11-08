@@ -67,7 +67,7 @@
 7. **备份 best-effort 但可见**：超过大小上限时跳过并在工具结果里写明，不阻塞写入。
 8. **恢复不覆盖用户后续修改**：当前内容与 agent 写后哈希不一致就跳过并报告，不提供 force。
 9. **`~` 路径统一**：`read_file`/`write_file`/`edit_file`/`list_dir` 允许并展开 `~`（工具侧 `expanduser()`），策略、备份、审批预览都用同一解析结果。
-10. **RPC 只继承围栏、不做备份**：`cli/rpc.py` 没有会话（`session_path=None`），也没有 `/restore` 面；嵌入方自己承担恢复语义。
+10. **RPC 只继承围栏、不做备份**：`zenagent/cli/rpc/` 没有会话（`session_path=None`），也没有 `/restore` 面；嵌入方自己承担恢复语义。
 
 ## 设计
 
@@ -204,7 +204,7 @@ workspace 外写入       confirm(risk=outside)       ← 新增
 | TUI | `Runtime.bootstrap`（`cli/main.py`） | `PermissionBroker.wrap(PermissionGate)` | ✅ 由 bootstrap 创建 |
 | REPL | `cli/repl.py::repl`（自己建 Agent） | `PermissionGate(interactive=True)` | ✅ 建 session 后创建 |
 | headless | `cli/main.py::run_headless` → `_build_agent` seam | `PermissionGate(interactive=False)` | ✅ 建 session 后创建 |
-| RPC | `cli/rpc.py` | `PermissionGate`（路径围栏生效） | ❌ 无会话/无 `/restore`，明文豁免 |
+| RPC | `zenagent/cli/rpc/` | `PermissionGate`（路径围栏生效） | ❌ 无会话/无 `/restore`，明文豁免 |
 
 共享装配（`app/journal.py`）：
 
@@ -241,13 +241,13 @@ keep_runs = 50
 
 - 合并：全局配置 → CLI flag 取并集（flag 只能加不能减）；项目层禁止 `[safety]`/`[backup]`，解析时报错并提示放进全局配置。
 - 装配：新增 `build_permission_gate(...)` helper（app 层），TUI/REPL/headless/RPC 都走它，避免四处复制策略构造；`RuntimeOptions` 增加对应字段。
-- **受影响的前端文件**：`cli/main.py`（flags、TUI broker、headless）、`cli/repl.py`（gate + journal + `/restore` 分支）、`cli/rpc.py`（用 helper 建 gate，不建 journal）。
+- **受影响的前端文件**：`cli/main.py`（flags、TUI broker、headless）、`cli/repl.py`（gate + journal + `/restore` 分支）、`zenagent/cli/rpc/`（用 helper 建 gate，不建 journal）。
 
 ### 7. 影响面
 
 新增：`app/safety.py`、`app/journal.py`、`app/restore.py`、`tests/test_safety.py`、`tests/test_journal.py`、`tests/test_restore.py`、本设计。
 
-修改：`app/permissions.py`（Verdict/风险评估/ask 标签/broker）、`app/runtime.py`（policy、journal、钩子组合、`runtime.journal`）、`app/commands.py`（`/restore`）、`tools/fs.py`（`~` 展开）、`project.py`（backups 目录 helper）、`config.py`（`[safety]`/`[backup]` 解析与项目层限制）、`cli/main.py`（flags 与装配）、`cli/repl.py`、`cli/rpc.py`（gate helper）、`cli/tui/app.py`、`cli/tui/screens/modals.py`、`i18n/en.py`、`i18n/zh.py`、`tests/test_permissions.py`、`tests/test_app_permissions.py`、`tests/test_config.py`、`tests/test_tui_approval.py`、`tests/test_tools_fs.py`、文档四篇（tools-permissions/config/guardrails/feature-map）、`CHANGELOG.md`、`README.md`。
+修改：`app/permissions.py`（Verdict/风险评估/ask 标签/broker）、`app/runtime.py`（policy、journal、钩子组合、`runtime.journal`）、`app/commands.py`（`/restore`）、`tools/fs.py`（`~` 展开）、`project.py`（backups 目录 helper）、`config.py`（`[safety]`/`[backup]` 解析与项目层限制）、`cli/main.py`（flags 与装配）、`cli/repl.py`、`zenagent/cli/rpc/`（gate helper）、`cli/tui/app.py`、`cli/tui/screens/modals.py`、`i18n/en.py`、`i18n/zh.py`、`tests/test_permissions.py`、`tests/test_app_permissions.py`、`tests/test_config.py`、`tests/test_tui_approval.py`、`tests/test_tools_fs.py`、文档四篇（tools-permissions/config/guardrails/feature-map）、`CHANGELOG.md`、`README.md`。
 
 不改：内核（`agent/`、`types`、`providers`）零改动（只使用既有 `after_tool_call` 钩子）；`write_file`/`edit_file` 除 `~` 展开外逻辑不动。
 

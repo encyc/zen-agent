@@ -155,7 +155,7 @@ TUI 的侧栏（todo/subagent/jobs/context）、job 日志浮层、子代理转�
 
 | 功能 | 源码 | 测试 | 文档 |
 |---|---|---|---|
-| JSONL RPC 服务（v1 + v2：审批/steer/会话/命令） | `cli/rpc.py` | `test_rpc.py`、`test_rpc_v2.py` | [RPC 与 SDK](guide/rpc-sdk.md) |
+| JSONL RPC 服务（v1 + v2：审批/steer/会话/命令） | `zenagent/cli/rpc/` | `test_rpc.py`、`test_rpc_v2.py` | [RPC 与 SDK](guide/rpc-sdk.md) |
 | Python SDK（Agent 直接调用） | `agent/agent.py` | `test_agent_class.py` | 同上 |
 | 可运行示例 | `examples/` | `test_examples.py` | 同上 |
 

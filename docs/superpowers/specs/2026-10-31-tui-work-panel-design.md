@@ -246,7 +246,7 @@ def build_task_tool(..., session_path: Path | None = None) -> TaskTool
   3. **广播**：`observer(call_id, "event", {"event": event})` 给 TUI 的活缓冲。
 - start 时：`store.begin(...)` + `observer("start", {"name","model","started_at"})`。
 - end（含异常 / abort）：`store.finish(...)` + `observer("end", meta_dict)`；`finish` 幂等。
-- 四个 `build_task_tool` 调用点（`app/runtime.py`、`cli/main.py`、`cli/repl.py`、`cli/rpc.py`）
+- 四个 `build_task_tool` 调用点（`app/runtime.py`、`cli/main.py`、`cli/repl.py`、`zenagent/cli/rpc/`）
   都传各自的 `session_path`；无会话的前端传 `None`（memory-only，行为同今天）。
 
 ### 5.4 视图构建重构（`zenagent/app/views.py`）

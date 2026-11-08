@@ -34,7 +34,7 @@
 | `zenagent/app/records.py` | 1, 2 | 类型常量、构造器、谓词、`keep_for_rewrite` |
 | `zenagent/app/session_meta.py` | 1, 3 | 构造器改用 `records`；接 `tool_execution_end` |
 | `zenagent/app/compact.py` | 1, 2 | `compaction` 构造 + carry 谓词 |
-| `zenagent/app/views.py`、`zenagent/cli/rpc.py` | 1 | 解码改用 `records.is_*` |
+| `zenagent/app/views.py`、`zenagent/cli/rpc/` | 1 | 解码改用 `records.is_*` |
 | `zenagent/app/chat.py` | 3 | 删掉 `tool_end` 写入，只保留视图状态 |
 | `zenagent/agent/session.py` | 2 | `carry_records/fork_at/rewrite` 收谓词 |
 | `zenagent/app/sessions.py`、`app/shake.py`、`app/retry.py` | 2 | carry 调用点传谓词 |
@@ -46,7 +46,7 @@
 
 **Files:**
 - Create: `zenagent/app/records.py`, `tests/test_app_records.py`
-- Modify: `zenagent/app/session_meta.py`, `zenagent/app/compact.py`, `zenagent/app/views.py`, `zenagent/cli/rpc.py`, `zenagent/app/chat.py`
+- Modify: `zenagent/app/session_meta.py`, `zenagent/app/compact.py`, `zenagent/app/views.py`, `zenagent/cli/rpc/`, `zenagent/app/chat.py`
 
 **Interfaces:**
 - Produces（后续任务依赖）：
@@ -58,7 +58,7 @@
 - [ ] **Step 1: 写失败的测试** `tests/test_app_records.py`：断言每个构造器产出的 dict 与今天逐字相同（`tool_end(...) == {"type": "tool_end", "call_id": ..., "tool_name": ..., "is_error": False}` 等）、`is_*` 谓词只认自己的类型、`keep_for_rewrite()` 保留 `compaction` + 命中 `call_ids` 的 `tool_end`、丢弃 `run_end`/`retry`/`mode`/`run_start`；`keep_tool_end=False` 时连 `tool_end` 也丢。
 - [ ] **Step 2: 跑测试确认失败**（`ImportError: cannot import name 'records'`）。
 - [ ] **Step 3: 实现 `zenagent/app/records.py`**：常量 + 构造器（`timestamp` 由 `append_meta` 盖，所以构造器不写它）+ 谓词 + `keep_for_rewrite`；`TOOL_DETAILS_LIMIT`/`TOOL_DIFF_MAX_LINES`/`_bound_details` 从 `session_meta.py` 搬进来（`session_meta` 仍 re-export 这两个常量以保持 import 兼容）。
-- [ ] **Step 4: 迁移写/读点**：`session_meta.py`（`SessionMetaRecorder`、`make_retry_recorder`、`mode_record` 改为调用 `records.*`）、`compact.py`（`records.compaction(...)`）、`views.py::_apply_tool_records`（`records.is_tool_end`）、`cli/rpc.py` 的 compactions 过滤（`records.is_compaction`）、`chat.py` 的 `source="compaction"` 改用 `records.COMPACTION`。
+- [ ] **Step 4: 迁移写/读点**：`session_meta.py`（`SessionMetaRecorder`、`make_retry_recorder`、`mode_record` 改为调用 `records.*`）、`compact.py`（`records.compaction(...)`）、`views.py::_apply_tool_records`（`records.is_tool_end`）、`zenagent/cli/rpc/` 的 compactions 过滤（`records.is_compaction`）、`chat.py` 的 `source="compaction"` 改用 `records.COMPACTION`。
 - [ ] **Step 5: 跑相关测试**：`uv run pytest tests/test_app_records.py tests/test_app_session_meta.py tests/test_session.py tests/test_app_views.py tests/test_rpc_v2.py tests/test_compact.py tests/test_app_chat.py -q` → 全 PASS。
 - [ ] **Step 6: 提交** `refactor(app): give session records one schema module`。
 

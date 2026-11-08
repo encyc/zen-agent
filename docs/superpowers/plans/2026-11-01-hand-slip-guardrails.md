@@ -573,7 +573,7 @@ git commit -m "feat(app): /restore command and restore core"
 ### Task 9: Wire guard policy and journal into every frontend
 
 **Files:**
-- Modify: `zenagent/cli/main.py` (flags, TUI broker construction, headless), `zenagent/cli/repl.py` (gate, journal, `/restore` branch), `zenagent/cli/rpc.py` (gate helper), `zenagent/app/runtime.py` (`RuntimeOptions` fields, journal creation + attach in `bootstrap`)
+- Modify: `zenagent/cli/main.py` (flags, TUI broker construction, headless), `zenagent/cli/repl.py` (gate, journal, `/restore` branch), `zenagent/cli/rpc/` (gate helper), `zenagent/app/runtime.py` (`RuntimeOptions` fields, journal creation + attach in `bootstrap`)
 - Test: `tests/test_cli.py`, `tests/test_repl_logic.py`
 
 **Interfaces:**
@@ -621,7 +621,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add zenagent/cli/main.py zenagent/cli/repl.py zenagent/cli/rpc.py zenagent/app/runtime.py tests/test_cli.py tests/test_repl_logic.py
+git add zenagent/cli/main.py zenagent/cli/repl.py zenagent/cli/rpc/ zenagent/app/runtime.py tests/test_cli.py tests/test_repl_logic.py
 git commit -m "feat(cli): wire guard policy and write journal into all frontends"
 ```
 

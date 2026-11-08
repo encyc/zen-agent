@@ -61,7 +61,7 @@
 ### 2.1 装配管线（提示词如何进入请求）
 
 - **唯一注入点**：提示词不写入会话 JSONL，而是在每次 LLM 请求前临时构造为第一条 `SystemMessage`（`zenagent/agent/loop.py:532-535`，注释 "the state never sees it"）。工具描述走独立通道：`ToolDef(name, description, parameters)` 进入 provider 的 tool schema（`agent/loop.py:539`）。
-- **四个前端各拼各的**（`zenagent/app/runtime.py`、`cli/main.py`、`cli/repl.py`、`cli/rpc.py`），固定顺序：
+- **四个前端各拼各的**（`zenagent/app/runtime.py`、`cli/main.py`、`cli/repl.py`、`zenagent/cli/rpc/`），固定顺序：
 
 ```
 system_prompt(tool_names)                 # A 基础 system prompt（含 cwd + 工具名单）

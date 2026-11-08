@@ -9,7 +9,7 @@ passed；`git log` 显示非 desktop 最近的改动集中在会话侧信道记�
 **方法**：按层派出 5 个只读评审员（内核 / tools / app / 前端 / 门禁与文档），各自带契约基线，
 回来后逐条复核所有 Critical 与关键 Important。标记 ✅ 的条目由审查者本人读码或跑验证脚本确认。
 
-规模：≈37k 行 Python。最大文件 `cli/repl.py 1054`、`cli/tui/screens/modals.py 1042`、`cli/rpc.py 993`、
+规模：≈37k 行 Python。最大文件 `cli/repl.py 1054`、`cli/tui/screens/modals.py 1042`、`cli/rpc/（包，2026-11-08 起；下文行号为拆分前的单文件 rpc.py） 993`、
 `app/commands.py 869`、`tools/task.py 847`、`app/runtime.py 831`、`agent/loop.py 815`。
 
 ---
@@ -53,7 +53,7 @@ passed；`git log` 显示非 desktop 最近的改动集中在会话侧信道记�
 ### C3. 会话记录没有 schema 归属，且跨层泄漏 ✅
 
 `"tool_end"` 写于 `app/session_meta.py:82`、过滤于 `agent/session.py:570`、解码于 `app/views.py:285`；
-`"compaction"` 写于 `app/compact.py:162`、内核 `session.py:568` 携带、`cli/rpc.py:497` 解码；
+`"compaction"` 写于 `app/compact.py:162`、内核 `session.py:568` 携带、`cli/rpc/·pre-split:497` 解码；
 `run_start/run_end/retry/mode` 又在 `session_meta.py:118-156` 内联构造。
 
 后果：`59bb511`、`415f69e` 两个提交都因为"加一个记录类型"被迫改 6~13 个文件；内核每认识一种
@@ -115,11 +115,11 @@ AST 级检查也不会响；`tests/` 里没有任何 layering 测试。更糟：
 ### 前端的重复实现（4 个前端 × app 层的"决策"）
 
 - **I10** 用量聚合 4 份：`app/views.py:391 usage_total`（正牌）、`cli/render.py:143 aggregate_usage`、
-  `cli/rpc.py:158 _usage`、`cli/main.py:103 _usage_and_counts`；后三者已把 `Cost` 压成 float。
+  `cli/rpc/·pre-split:158 _usage`、`cli/main.py:103 _usage_and_counts`；后三者已把 `Cost` 压成 float。
 - **I11** Runtime 装配（`RuntimeOptions` + `GuardPolicy` + `build_permission_gate` + `PermissionBroker`）
-  在 `cli/main.py:605`、`cli/repl.py:466`、`cli/rpc.py:838` 各写一遍；`bootstrap` 收到 gate 时仍先
+  在 `cli/main.py:605`、`cli/repl.py:466`、`cli/rpc/·pre-split:838` 各写一遍；`bootstrap` 收到 gate 时仍先
   构造一个 `GuardPolicy`（`app/runtime.py:319-338`）。分叉已发生：只有 RPC 传 `read_only=`。
-- **I12** RPC `_status_result`（`cli/rpc.py:428-465`）手抄 `RunStatus` 31 个字段中的 18 个，漏
+- **I12** RPC `_status_result`（`cli/rpc/·pre-split:428-465`）手抄 `RunStatus` 31 个字段中的 18 个，漏
   `git_branch/git_staged/git_dirty/git_untracked` 与整个 `ContextReport`；没有任何测试钉住清单。
 - **I13** REPL 不用共享 reducer：自己 subscribe + `render.AssistantLiveRenderer`（`repl.py:751-753`），
   于是 `views.RunStatus`（23 字段）与 `render.status_line` 两套状态行并行维护。
@@ -173,7 +173,7 @@ AST 级检查也不会响；`tests/` 里没有任何 layering 测试。更糟：
   （目前靠 32KB < 40KB 的算术巧合兜住）。
 - `cli/main.py:281-472` 一个扁平 45 flag 解析器，`-p` 下至少 9 个 flag 被静默忽略
   （`--format/--since/-o/--report/--report-out/--all-projects/--no-completion/--no-tui/--theme/--lang`）；
-  `cli/rpc.py:924-971` 是第二份 24 flag 解析器，22 个重复。
+  `cli/rpc/·pre-split:924-971` 是第二份 24 flag 解析器，22 个重复。
 - `cli/main.py:522` `zen evals` 从 `Path(__file__).parents[2]/"scripts"/"eval.py"` 加载，wheel 里没有
   `scripts/`；`build_parser` 的 help 仍写"subcommand: doctor, sessions"（实有 6 个）。
 - `cli/completion.py:33-78` 的 `SLASH_COMMANDS`（43 条）是 48 条注册表的过期副本。

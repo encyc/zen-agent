@@ -130,7 +130,7 @@
 **Files:**
 - Create: `zenagent/tools/taiji.py`
 - Create: `zenagent/__main__.py`
-- Modify: `zenagent/app/runtime.py`（`_recompose` 条件组装）、`zenagent/cli/rpc.py`（shutdown 处 `close_taiji()`）
+- Modify: `zenagent/app/runtime.py`（`_recompose` 条件组装）、`zenagent/cli/rpc/`（shutdown 处 `close_taiji()`）
 - Test: `tests/test_taiji_tools.py`
 
 **Interfaces:**

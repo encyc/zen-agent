@@ -619,8 +619,9 @@ def test_rpc_cli_serves_the_documented_smoke_client(monkeypatch, app_env):
     def fake_write_line(text: str) -> None:
         outputs.append(json.loads(text))
 
-    monkeypatch.setattr(rpc_module, "_stdin_line", fake_read_line)
-    monkeypatch.setattr(rpc_module, "_stdout_line", fake_write_line)
+    from zenagent.cli.rpc import cli as rpc_cli
+    monkeypatch.setattr(rpc_cli, "_stdin_line", fake_read_line)
+    monkeypatch.setattr(rpc_cli, "_stdout_line", fake_write_line)
 
     assert rpc_module.main(["--no-mcp", "--no-skills"]) == 0
     by_id = {message.get("id"): message for message in outputs}

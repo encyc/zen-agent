@@ -104,7 +104,7 @@
 - 兼容点：`Session` 类本身不动（append/load/records/carry/fork_at/rewrite）。
 
 - [ ] **Step 1: 搬迁**：把浏览/标题/置顶/预览函数移到 `app/session_library.py`，`agent/session.py` 加 `from zenagent.app.session_library import ...  # noqa: F401` 之类的显式 re-export（注意不能形成循环：`session_library` 不得 import `Session` 以外的东西）。
-- [ ] **Step 2: 改 import**：`app/sessions.py`、`cli/sessionscmd.py`、`cli/repl.py`、`cli/rpc.py`、`cli/tui/**` 改为从 `app.session_library` 取；`app/` 之外的调用点一次性替换。
+- [ ] **Step 2: 改 import**：`app/sessions.py`、`cli/sessionscmd.py`、`cli/repl.py`、`zenagent/cli/rpc/`、`cli/tui/**` 改为从 `app.session_library` 取；`app/` 之外的调用点一次性替换。
 - [ ] **Step 3: 跑测试**：`uv run pytest tests/test_session.py tests/test_app_sessions.py tests/test_project_scoping.py tests/test_cli.py tests/test_rpc_v2.py tests/test_tui_sessions.py -q` → 全 PASS。
 - [ ] **Step 4: 全量门禁 + 提交**：`bash scripts/check.sh` → ruff clean、pytest 全绿；`refactor(session): split the format from the session library`。
 

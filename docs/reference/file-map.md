@@ -64,7 +64,7 @@
 | 自动补全 | `zenagent/cli/completion.py` |
 | `doctor` | `zenagent/cli/doctor.py` |
 | 图片输入 | `zenagent/attachments.py` |
-| RPC | `zenagent/cli/rpc.py` |
+| RPC | `zenagent/cli/rpc/` |
 | 导出/用量/主题/键位 | `zenagent/cli/{exportcmd,usagecmd,theme,keybindings}.py` |
 
 ## 扩展面

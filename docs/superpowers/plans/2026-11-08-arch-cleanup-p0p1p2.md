@@ -4,7 +4,7 @@
 
 **Goal:** 落实 [2026-11-08 架构审查](../../reviews/2026-11-08-architecture-review.md) 全部修复项:LOC 门变绿、taiji 边界(rpc↔supervisor)归位、git 出事件循环、supervisor/desktop 状态层/locale 还债、rpc 包拆分收尾。
 
-**Architecture:** 不动六层结构与进程模型。三类改动:(1) 把 taiji 的投影与策略从 `cli/rpc.py` 移回 `app/taiji`;(2) 把 supervisor 的第二关注点(`RpcRunner`/合并门/worktree)拆成模块;(3) desktop 抽 boot 共享路径、taiji 数据层出组件、locale 双通道收敛。每任务独立可合并、门保持绿。
+**Architecture:** 不动六层结构与进程模型。三类改动:(1) 把 taiji 的投影与策略从 `zenagent/cli/rpc/` 移回 `app/taiji`;(2) 把 supervisor 的第二关注点(`RpcRunner`/合并门/worktree)拆成模块;(3) desktop 抽 boot 共享路径、taiji 数据层出组件、locale 双通道收敛。每任务独立可合并、门保持绿。
 
 **Tech Stack:** Python 3.11+(stdlib httpx 内核,pytest/ruff)、React+zustand(TS strict)、Tauri 2 Rust 壳、node --test / Playwright。
 
@@ -49,7 +49,7 @@
     "zenagent/app/runtime.py": 919,
     "zenagent/app/commands.py": 866,
     "zenagent/cli/repl.py": 1023,
-    "zenagent/cli/rpc.py": 2144,
+    "zenagent/cli/rpc/": 2144,
     "zenagent/cli/tui/screens/modals.py": 1042
   },
   "ts": {
@@ -82,7 +82,7 @@ appStore.ts 910 (boot dedupe -> Task 5), locale.ts 962 (keys -> Task 8)."
 **Files:**
 - Create: `zenagent/app/taiji/board.py`
 - Modify: `zenagent/app/taiji/supervisor.py`(新增 `find_record`/`has_running` 公共访问器;`_attention_question` 改用 `board.parse_attention`)
-- Modify: `zenagent/cli/rpc.py:688-879`(删 `_taiji_worker`,board/peek/message op 改走新 API)
+- Modify: `zenagent/cli/rpc/:688-879`(删 `_taiji_worker`,board/peek/message op 改走新 API)
 - Test: `tests/test_taiji_board.py`(新)、`tests/test_rpc_contract.py`(追加边界断言)
 
 **Interfaces:**
@@ -204,7 +204,7 @@ def test_taiji_modules_are_split():
 **Files:**
 - Modify: `zenagent/app/taiji/registry.py`(`WorkerRecord` +2 字段)
 - Modify: `zenagent/app/taiji/supervisor.py`(`_inbox` dict 移除,改 `record.inbox`;spawn 存 prompt)
-- Modify: `zenagent/cli/rpc.py` board 投影增可选字段 `prompt`(经 `board.project_worker`)
+- Modify: `zenagent/cli/rpc/` board 投影增可选字段 `prompt`(经 `board.project_worker`)
 - Test: `tests/test_taiji_registry.py`、`tests/test_taiji_supervisor.py`(追加)
 
 **Interfaces:**
@@ -251,7 +251,7 @@ def test_spawn_persists_prompt(...):                     # spawn 后 registry �
 ### Task 8: locale 双通道收敛——错误码过线,面板串进字典,TS parity 测试
 
 **Files:**
-- Modify: `zenagent/cli/rpc.py` taiji 错误帧 +`code`/`params`;`zenagent/app/taiji/board.py` 如错误经投影则随移
+- Modify: `zenagent/cli/rpc/` taiji 错误帧 +`code`/`params`;`zenagent/app/taiji/board.py` 如错误经投影则随移
 - Modify: `desktop/src/rpc/types.ts`(ErrorFrame 可选字段)、`desktop/src/ui/rightbar/TaijiPanel.tsx`(串→键)、`desktop/src/i18n/locale.ts`(+键×2)、Create `desktop/src/i18n/errors.ts`、`desktop/tests/locale.test.ts`
 
 **Interfaces:**
@@ -280,7 +280,7 @@ def test_spawn_persists_prompt(...):                     # spawn 后 registry �
 
 **Files:**
 - Create: `zenagent/cli/flags.py`
-- Modify: `zenagent/cli/main.py`(`build_parser` :265-458 改委托)、`zenagent/cli/rpc.py`(`main()` :2069+ 改委托)
+- Modify: `zenagent/cli/main.py`(`build_parser` :265-458 改委托)、`zenagent/cli/rpc/`(`main()` :2069+ 改委托)
 - Test: `tests/test_cli_flags.py`(新)
 
 **Interfaces:**
@@ -299,7 +299,7 @@ def test_shared_flags_declared_once_with_same_defaults(build):
         assert action.default == flags.DEFAULTS[flag]
 ```
 
-- [ ] **Step 2: 确认失败 → 实现 → 两解析器委托**;`wc -l zenagent/cli/rpc.py` 预期 -40 左右
+- [ ] **Step 2: 确认失败 → 实现 → 两解析器委托**;`wc -l zenagent/cli/rpc/` 预期 -40 左右
 - [ ] **Step 3: 验证** — Run: `uv run pytest -q && uv run ruff check && python3 scripts/check_architecture.py`;Expected: 全 PASS(rpc.py 登记值不再触顶)
 - [ ] **Step 4: Commit** — `refactor(cli): runtime flags declared once in cli/flags.py`
 
@@ -372,7 +372,7 @@ async def test_concurrent_append_preserves_order(tmp_path):
 ### Task 14: rpc.py → `cli/rpc/` 包拆分 + allowlist 收紧(还债收尾)
 
 **Files:**
-- Create: `zenagent/cli/rpc/__init__.py`、`codec.py`、`server.py`、`ops_chat.py`、`ops_session.py`、`ops_config.py`、`ops_files.py`、`ops_taiji.py`、`cli.py`(删除原 `zenagent/cli/rpc.py` 文件,包目录替代)
+- Create: `zenagent/cli/rpc/__init__.py`、`codec.py`、`server.py`、`ops_chat.py`、`ops_session.py`、`ops_config.py`、`ops_files.py`、`ops_taiji.py`、`cli.py`(删除原 `zenagent/cli/rpc/` 文件,包目录替代)
 - Modify: `docs/architecture/allowlist.json`(收紧)
 - Test: 既有全部 `tests/test_*rpc*.py` 零改动通过 + 门
 
@@ -382,7 +382,7 @@ async def test_concurrent_append_preserves_order(tmp_path):
   - `codec.py`:模块级线编解码(`_message_projection`、`serialize_event`、usage 薄适配,:94-257 段)。
   - `server.py`:`RpcServer` 核心(`__init__/_send/_handle_line` 派发 + hello/approval/ask/shutdown/status);`ops_*.py`:按 `_handle_line` 的 `kind` 分组的域 mixin 类(`ChatOps/SessionOps/ConfigOps/FilesOps/TaijiOps`),`class RpcServer(ChatOps, ..., TaijiOps)` 组合。**纯搬移,零行为改动**。
   - `cli.py`:`main()`(Task 9 后已是薄壳)。
-  - 硬规则:每个新文件 < 800 行(门自然验证);搬移后 `docs/architecture/allowlist.json` 删除 `zenagent/cli/rpc.py` 条目,并收紧 Task 2/5/8/13 已缩文件的登记值至实测。
+  - 硬规则:每个新文件 < 800 行(门自然验证);搬移后 `docs/architecture/allowlist.json` 删除 `zenagent/cli/rpc/` 条目,并收紧 Task 2/5/8/13 已缩文件的登记值至实测。
 
 - [ ] **Step 1: 建 `codec.py`(先搬模块级函数)** → 跑全部 rpc 测试
 - [ ] **Step 2: 建 ops mixin 与 server 组合**(按域逐个搬,每搬一域跑一次测试)

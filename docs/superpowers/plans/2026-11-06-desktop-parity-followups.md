@@ -89,7 +89,7 @@ git commit -m "fix(desktop): only offer fork on the current session"
 ### Task 2: Pending queue actions over RPC and in the composer
 
 **Files:**
-- Modify: `zenagent/cli/rpc.py:630-725` (`_session_op`)
+- Modify: `zenagent/cli/rpc/:630-725` (`_session_op`)
 - Test: `tests/test_rpc_v2.py`
 - Create: `desktop/src/state/pending.ts`
 - Test: `desktop/tests/pending.test.ts`
@@ -372,7 +372,7 @@ Expected: PASS.
 - [ ] **Step 10: Commit**
 
 ```bash
-git add zenagent/cli/rpc.py tests/test_rpc_v2.py desktop/src/state/pending.ts desktop/tests/pending.test.ts desktop/src/state/appStore.ts desktop/src/ui/composer/Docks.tsx desktop/src/ui/composer/Docks.module.css
+git add zenagent/cli/rpc/ tests/test_rpc_v2.py desktop/src/state/pending.ts desktop/tests/pending.test.ts desktop/src/state/appStore.ts desktop/src/ui/composer/Docks.tsx desktop/src/ui/composer/Docks.module.css
 git commit -m "feat(desktop): pending queue actions over rpc"
 ```
 

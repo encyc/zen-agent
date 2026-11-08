@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - 不新增 Python 运行时依赖（httpx 仍是唯一一个）；git 全部走 subprocess 且带超时（对齐 `workspace.py:_git` 模式，超时 5.0s）。
-- RPC 协议 `PROTOCOL_VERSION = 2` 不变；新 kind 必须同时加到 `zenagent/cli/rpc.py` 的 `_handle_line` 和 `desktop/src/rpc/types.ts` 的 `REQUEST_KINDS`（`tests/test_rpc_contract.py` 强制同步，漏一边即红）。
+- RPC 协议 `PROTOCOL_VERSION = 2` 不变；新 kind 必须同时加到 `zenagent/cli/rpc/` 的 `_handle_line` 和 `desktop/src/rpc/types.ts` 的 `REQUEST_KINDS`（`tests/test_rpc_contract.py` 强制同步，漏一边即红）。
 - Desktop：只用 CSS Modules + design tokens（禁止写死颜色）；所有文案走 `i18n/locale.ts` 的 zh+en 两个字典；单测 node:test（`pnpm test`）；e2e 遵循 `installBridge`/`initialState`/`boot` 模式（`pnpm e2e`）。
 - P0 严格只读：不写盘、不 spawn、不改会话。
 - import DAG：`app/taiji` 只准 import `project.py`/`workspace.py`/`git.py`/`agent/session.py`，禁止 import cli。
@@ -77,7 +77,7 @@
 ### Task 3: RPC kind `taiji`
 
 **Files:**
-- Modify: `zenagent/cli/rpc.py`（`_handle_line` 加分支 + 模块 docstring 请求清单补一行）
+- Modify: `zenagent/cli/rpc/`（`_handle_line` 加分支 + 模块 docstring 请求清单补一行）
 - Modify: `desktop/src/rpc/types.ts`（`REQUEST_KINDS` + 快照类型）
 - Test: `tests/test_taiji_rpc.py`
 

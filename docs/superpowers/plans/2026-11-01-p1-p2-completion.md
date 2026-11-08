@@ -90,7 +90,7 @@ browser/computer、debug/DAP、IDA、security_scan、tts/generate_image、eval �
 #### T3 · partial result 全前端
 
 - [x] `zenagent/cli/repl.py`：消费 `tool_execution_update`，TTY 下打一行 0.2s 节流、原地覆盖的进度行（复用 `cli/render.py::tool_progress_line`，`tool_progress_line` 不再是死代码）；非 TTY 不输出。
-- [x] `zenagent/cli/rpc.py`：事件序列化带上 `partial_result` 文本（截断），不改变既有字段。
+- [x] `zenagent/cli/rpc/`：事件序列化带上 `partial_result` 文本（截断），不改变既有字段。
 - [x] headless（`cli/main.py`）保持安全忽略，并加注释说明；`tests/test_rpc.py`、`tests/test_repl_logic.py` 覆盖。
 - [x] 单测：update 事件不丢/不乱序；REPL 同一 call 的进度行被替换而非刷屏。
 

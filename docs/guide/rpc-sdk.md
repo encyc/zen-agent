@@ -118,7 +118,7 @@ print(agent.messages[-1].content[0].text)
 
 ## 源码对照
 
-- RPC：`zenagent/cli/rpc.py`（`RpcServer`、`serialize_event`、审批往返）
+- RPC：`zenagent/cli/rpc/`（`RpcServer`、`serialize_event`、审批往返）
 - SDK：`zenagent/agent/agent.py::Agent`；app 层：`zenagent/app/{runtime,chat}.py`
 - 示例：`examples/`
 - 对应测试：`tests/test_rpc.py`、`tests/test_rpc_v2.py`、`tests/test_examples.py`

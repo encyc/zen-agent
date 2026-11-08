@@ -97,7 +97,7 @@ def test_loop_imports_tool_exec_at_module_level():
 ### Task 3: usage 聚合四合一
 
 **Files:**
-- Modify: `zenagent/cli/rpc.py:195-206`(`_usage` 改为调 `usage_total` 后组 dict)
+- Modify: `zenagent/cli/rpc/:195-206`(`_usage` 改为调 `usage_total` 后组 dict)
 - Modify: `zenagent/cli/render.py:143-158`(`aggregate_usage` 改为 `return usage_total(messages)`)
 - Modify: `zenagent/cli/main.py:102-117`(`_usage_and_counts` 改为调 `usage_total`)
 - Test: `tests/test_usage.py`(追加)
@@ -210,7 +210,7 @@ CSP 值(逐字):
 ### Task 8: RPC 协议握手 + 双端契约测试
 
 **Files:**
-- Modify: `zenagent/cli/rpc.py`(模块级 `PROTOCOL_VERSION = 2`;`_handle_line` 分派最前处理 `hello` → result 带 `protocol_version`)
+- Modify: `zenagent/cli/rpc/`(模块级 `PROTOCOL_VERSION = 2`;`_handle_line` 分派最前处理 `hello` → result 带 `protocol_version`)
 - Modify: `desktop/src/rpc/types.ts`(导出 `PROTOCOL_VERSION = 2` 与 `HelloRequest`/`HelloResult` 类型)、`desktop/src/rpc/client.ts`(`connect` 后先发 `hello`,版本不符 → 抛带双端版本的错误,由 appStore 走现有 `startFailure` 卡片)
 - Modify: `desktop/e2e/app.spec.ts` `installBridge`(:96-354)(mock 响应 hello)
 - Create: `tests/test_rpc_contract.py`
@@ -222,7 +222,7 @@ CSP 值(逐字):
 
 ```python
 import re, pathlib
-RPC = pathlib.Path("zenagent/cli/rpc.py").read_text()
+RPC = pathlib.Path("zenagent/cli/rpc/").read_text()
 TS = pathlib.Path("desktop/src/rpc/types.ts").read_text()
 
 def test_request_kinds_match_ts_union():
@@ -244,7 +244,7 @@ def test_protocol_version_pinned_both_sides():
 
 **Files:**
 - Create: `zenagent/app/bootstrap.py`
-- Modify: `zenagent/cli/main.py`(TUI 内联装配 :639-668 与 headless :188-236 的装配段)、`zenagent/cli/repl.py:461-654`(装配段)、`zenagent/cli/rpc.py:1029-1104`(装配段)
+- Modify: `zenagent/cli/main.py`(TUI 内联装配 :639-668 与 headless :188-236 的装配段)、`zenagent/cli/repl.py:461-654`(装配段)、`zenagent/cli/rpc/:1029-1104`(装配段)
 - Modify: `zenagent/cli/tui/run.py`(改为调 `prepare()` 的 `run_tui`,消灭 main.py 内联副本)
 - Test: 新增 `tests/test_bootstrap.py`
 
@@ -378,7 +378,7 @@ def test_shared_async_client_is_singleton():
 ### Task 16(可选,最后做): 神文件机械拆分
 
 - `cli/tui/screens/modals.py` → `screens/modals/` 包,一类一文件(13 类 + `preview_diff` 归 textutil);`tests/test_tui_screen_registry.py` 必须保持绿。
-- `cli/rpc.py` → `cli/rpc/` 包:`codec.py`(serialize_event 及投影)、`server.py`(RpcServer)、`cli.py`(argparse main);`cli/rpc.py` 变薄 re-export。契约测试(Task 8)与 `test_rpc_v2.py` 全程绿。
+- `zenagent/cli/rpc/` → `cli/rpc/` 包:`codec.py`(serialize_event 及投影)、`server.py`(RpcServer)、`cli.py`(argparse main);`zenagent/cli/rpc/` 变薄 re-export。契约测试(Task 8)与 `test_rpc_v2.py` 全程绿。
 - `cli/repl.py` 拆出 `cli/repl_render.py`(`_EventPrinter`、screen 文本渲染 :94-280)与 `cli/repl_io.py`(单 stdin 协议 :764-995),并消灭 :579 与 :726 的重复 reload 块。
 - 每个子步独立 commit;完成后跑 Task 15 门,从 allowlist 删除已达标条目。
 - Commit `refactor(cli): mechanical god-file splits`
