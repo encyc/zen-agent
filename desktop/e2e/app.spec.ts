@@ -673,6 +673,52 @@ test('the taiji board shows the inactive state without a supervisor', async ({ p
   await expect(page.locator('[data-work-panel]')).toHaveCount(0)
 })
 
+test('the taiji chip switches to the router session in zen mode and back', async ({ page }) => {
+  await boot(page, initialState({ taijiSession: true, statusMode: 'ask' }))
+  const chip = page.getByRole('button', { name: '太极', exact: true })
+  await expect(chip).toBeVisible()
+
+  await chip.click()
+
+  // The compound: resume the taiji session, default the mode to zen, open
+  // the dispatch board — one click, no sidebar hunting.
+  const panel = page.locator('[data-work-panel]')
+  await expect(panel.getByRole('tab', { name: '太极' })).toHaveAttribute('aria-selected', 'true')
+  assert.equal(
+    await page.evaluate(() =>
+      window.__ZEN_E2E__.calls.some((call) => call.type === 'session' && call.op === 'resume' && call.path === '/sessions/taiji.jsonl'),
+    ),
+    true,
+  )
+  assert.equal(
+    await page.evaluate(() =>
+      window.__ZEN_E2E__.calls.some((call) => call.type === 'mode' && call.mode === 'zen'),
+    ),
+    true,
+  )
+  await expect(chip).toHaveAttribute('data-active', 'true')
+
+  await chip.click()
+
+  assert.equal(
+    await page.evaluate(() =>
+      window.__ZEN_E2E__.calls.some((call) => call.type === 'session' && call.op === 'resume' && call.path === '/sessions/a.jsonl'),
+    ),
+    true,
+  )
+  assert.equal(
+    await page.evaluate(() =>
+      window.__ZEN_E2E__.calls.some((call) => call.type === 'mode' && call.mode === 'ask'),
+    ),
+    true,
+  )
+})
+
+test('the taiji chip hides where the host has no taiji session', async ({ page }) => {
+  await boot(page, initialState())
+  await expect(page.getByRole('button', { name: '太极', exact: true })).toHaveCount(0)
+})
+
 test('a task row opens the subagent conversation in the work panel', async ({ page }) => {
   await boot(
     page,
