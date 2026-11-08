@@ -517,6 +517,50 @@ class TaijiSupervisor:
                         total += int(raw)
         return total
 
+    def diffstat(self, record: WorkerRecord) -> list[dict] | None:
+        """Per-file added/deleted counts for the acceptance card's evidence.
+
+        Binary files (numstat's ``-``) count as zero; an unknowable diff is
+        None rather than a guess.
+        """
+        completed = _git(
+            self.repo_root,
+            "diff",
+            "--numstat",
+            f"{record.base}...{record.branch}",
+        )
+        if completed is None or completed.returncode != 0:
+            return None
+        files: list[dict] = []
+        for line in completed.stdout.splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 3:
+                files.append(
+                    {
+                        "path": parts[2],
+                        "adds": int(parts[0]) if parts[0].isdigit() else 0,
+                        "dels": int(parts[1]) if parts[1].isdigit() else 0,
+                    }
+                )
+        return files
+
+    def merge_block_reason(self, name: str) -> str | None:
+        """Why an explicit merge would refuse, in board-displayable words.
+
+        Mirrors :meth:`merge`'s preconditions without executing it; None
+        means the merge would be attempted.
+        """
+        record = self.registry.records.get(name)
+        if record is None or record.status != "ok":
+            return "任务未处于待验收状态"
+        current = _git(self.repo_root, "branch", "--show-current")
+        if current is None or current.stdout.strip() != record.base:
+            return f"基分支 {record.base} 未在主检出"
+        status = git_status(self.repo_root)
+        if status is None or not status.is_clean:
+            return "主工作区有未提交更改"
+        return None
+
     async def merge(self, name: str, *, auto: bool = False) -> bool:
         """Merge a finished task into its base branch, mode-agnostic.
 

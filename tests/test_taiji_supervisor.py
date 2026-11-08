@@ -1198,3 +1198,83 @@ class TestSlotsState:
         runner.gate("s3").set()
         await supervisor.wait_idle()
         assert supervisor.slots_state() == {"busy": 0, "max": 2, "queued": 0}
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+class TestDiffstatAndMergeReasons:
+    async def make_supervisor_with_worker(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> TaijiSupervisor:
+        monkeypatch.setattr(
+            "zenagent.app.taiji.supervisor.worktrees_root", lambda: tmp_path / "home"
+        )
+        supervisor = make_supervisor(repo, tmp_path, StubRunner())
+        await supervisor.spawn("task one", name="ds")
+        await supervisor.wait_idle()
+        return supervisor
+
+    async def test_diffstat_counts_added_and_deleted_lines(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        supervisor = await self.make_supervisor_with_worker(repo, tmp_path, monkeypatch)
+        record = supervisor._record("ds")
+        worktree = Path(record.worktree)
+        (worktree / "b.txt").write_text("x\n" * 5, encoding="utf-8")
+        (worktree / "a.txt").unlink()
+        _git(worktree, "add", "-A")
+        _git(worktree, "commit", "-qm", "more work")
+
+        stat = supervisor.diffstat(record)
+
+        assert stat is not None
+        by_path = {entry["path"]: entry for entry in stat}
+        assert by_path["b.txt"] == {"path": "b.txt", "adds": 5, "dels": 0}
+        assert by_path["a.txt"]["dels"] == 1
+        assert by_path["a.txt"]["adds"] == 0
+
+    async def test_diffstat_counts_binary_files_as_zero(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        supervisor = await self.make_supervisor_with_worker(repo, tmp_path, monkeypatch)
+        record = supervisor._record("ds")
+        worktree = Path(record.worktree)
+        (worktree / "blob.bin").write_bytes(b"\x00\x01\x02\xff")
+        _git(worktree, "add", "-A")
+        _git(worktree, "commit", "-qm", "binary")
+
+        stat = supervisor.diffstat(record)
+
+        assert stat is not None
+        blob = next(entry for entry in stat if entry["path"] == "blob.bin")
+        assert blob == {"path": "blob.bin", "adds": 0, "dels": 0}
+
+    async def test_diffstat_returns_none_when_the_range_is_unknowable(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        supervisor = await self.make_supervisor_with_worker(repo, tmp_path, monkeypatch)
+        record = supervisor._record("ds")
+        record.base = "no-such-base"
+
+        assert supervisor.diffstat(record) is None
+
+    async def test_merge_block_reason_reports_each_precondition(
+        self, repo: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        from zenagent.app.git import reset_cache
+
+        supervisor = await self.make_supervisor_with_worker(repo, tmp_path, monkeypatch)
+
+        assert supervisor.merge_block_reason("ghost") == "任务未处于待验收状态"
+        assert supervisor.merge_block_reason("ds") is None
+
+        (repo / "dirty.txt").write_text("uncommitted", encoding="utf-8")
+        reset_cache()  # git_status caches per directory; the mutation must be seen
+        assert supervisor.merge_block_reason("ds") == "主工作区有未提交更改"
+        (repo / "dirty.txt").unlink()
+        reset_cache()
+
+        # task/ds itself is checked out by the worker worktree (git refuses a
+        # second checkout), so "base elsewhere" is simulated with a new branch.
+        _git(repo, "checkout", "-qb", "elsewhere")
+        assert supervisor.merge_block_reason("ds") == "基分支 main 未在主检出"
+        _git(repo, "checkout", "-q", "main")
