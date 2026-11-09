@@ -1,6 +1,11 @@
 /** Limits & budgets: every tunable the backend exposes through `[limits]` and
  * `[task]`, in one registry-driven page. The server owns the values, the
- * ranges and the write-through; this component only renders what it gets. */
+ * ranges and the write-through; this component only renders what it gets.
+ *
+ * One edit surface: the page is read-only until 「修改」, which dims the copy
+ * and lights the editors; the same button becomes 「保存」 and submits every
+ * changed knob in one batch. One bad value rejects the whole batch (the file
+ * is never partially written), and the row stays marked for fixing. */
 
 import { useEffect, useMemo, useState } from 'react'
 import { useAppStore } from '../../state/appStore'
@@ -24,55 +29,47 @@ function pathLabel(path: string): string {
   return home ? `~${home[1]}` : path
 }
 
-/** One knob row: value editor + provenance chips + reset. Editing is local
- * until Enter/blur; the server validates and answers with the whole page,
- * which the parent applies (the file, not this form, is the authority). */
+/** Parse one draft against its knob; null = keep (untouched), undefined = invalid. */
+function parseDraft(knob: LimitKnob, raw: string): number | null | undefined {
+  const text = raw.trim()
+  const original = knob.value === null ? '' : String(knob.value)
+  if (text === original) return null // unchanged; nothing to send
+  if (text === '' && knob.nullable) return null // "uncapped" stays as-is
+  const parsed = knob.kind === 'float' ? Number.parseFloat(text) : Number.parseInt(text, 10)
+  if (Number.isNaN(parsed)) return undefined
+  if (parsed < knob.min || parsed > knob.max) return undefined
+  return parsed
+}
+
+/** One knob row. Editing is gated by the parent's `editing` flag; drafts live
+ * here (so each row keeps its own undo), but only the parent's save sends. */
 function KnobRow({
   knob,
-  onWrite,
+  editing,
+  invalid,
+  onDraft,
+  onSave,
 }: {
   knob: LimitKnob
-  onWrite: (op: 'set' | 'reset', key: string, value: number | null) => Promise<void>
+  editing: boolean
+  invalid: boolean
+  onDraft: (key: string, raw: string) => void
+  onSave: () => void
 }) {
   const t = useT()
   const [draft, setDraft] = useState(String(knob.value ?? ''))
-  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     setDraft(knob.value === null ? '' : String(knob.value))
   }, [knob.value])
 
-  const dirty = draft !== (knob.value === null ? '' : String(knob.value))
-
-  async function commit() {
-    if (busy || !dirty) return
-    setBusy(true)
-    try {
-      const raw = draft.trim()
-      if (raw === '' && knob.nullable) {
-        await onWrite('set', knob.key, null)
-      } else {
-        const parsed = knob.kind === 'float' ? Number.parseFloat(raw) : Number.parseInt(raw, 10)
-        if (Number.isNaN(parsed)) return
-        await onWrite('set', knob.key, parsed)
-      }
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function reset() {
-    if (busy) return
-    setBusy(true)
-    try {
-      await onWrite('reset', knob.key, null)
-    } finally {
-      setBusy(false)
-    }
+  function change(raw: string) {
+    setDraft(raw)
+    onDraft(knob.key, raw)
   }
 
   return (
-    <div className={css.knob} data-knob={knob.key} data-explicit={knob.explicit || undefined}>
+    <div className={css.knob} data-knob={knob.key} data-explicit={knob.explicit || undefined} data-invalid={invalid || undefined}>
       <div className={css.copy}>
         <div className={css.nameRow}>
           <code className={css.name}>{knob.name}</code>
@@ -89,35 +86,30 @@ function KnobRow({
         </div>
         <div className={css.detail}>
           {t(`settings.limit.${knob.key.replace(/^limits\./, '')}`)}
-          {knob.explicit ? null : <span className={css.defaultNote}> · {t('settings.limitDefault', { value: formatDefault(knob) })}</span>}
+          {knob.explicit ? null : (
+            <span className={css.defaultNote}> · {t('settings.limitDefault', { value: formatDefault(knob) })}</span>
+          )}
         </div>
       </div>
       <div className={css.control}>
-        <input
-          className={css.input}
-          type="text"
-          inputMode={knob.kind === 'float' ? 'decimal' : 'numeric'}
-          value={draft}
-          disabled={busy}
-          aria-label={knob.key}
-          min={knob.min}
-          max={knob.max}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') void commit()
-          }}
-          onBlur={() => void commit()}
-        />
-        {knob.explicit ? (
-          <button
-            type="button"
-            className={css.reset}
-            disabled={busy}
-            onClick={() => void reset()}
-          >
-            {t('settings.limitReset')}
-          </button>
-        ) : null}
+        {editing ? (
+          <input
+            className={css.input}
+            type="text"
+            inputMode={knob.kind === 'float' ? 'decimal' : 'numeric'}
+            value={draft}
+            aria-label={knob.key}
+            aria-invalid={invalid || undefined}
+            min={knob.min}
+            max={knob.max}
+            onChange={(event) => change(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') onSave()
+            }}
+          />
+        ) : (
+          <code className={css.value}>{knob.value === null ? '—' : knob.kind === 'float' ? String(knob.value) : knob.value.toLocaleString()}</code>
+        )}
       </div>
     </div>
   )
@@ -133,6 +125,9 @@ export function LimitSettings() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
 
   const apply = (frame: Record<string, unknown>) => {
     if (frame.type === 'result' && frame.ok) {
@@ -164,12 +159,62 @@ export function LimitSettings() {
     // `locale` stands in for `t`, which is recreated per render.
   }, [fetchLimits, locale])
 
-  async function write(op: 'set' | 'reset', key: string, value: number | null) {
-    const frame =
-      op === 'set'
-        ? await useAppStore.getState().setLimit(key, value)
-        : await useAppStore.getState().resetLimit(key)
-    apply(frame)
+  const knobByKey = useMemo(() => new Map(knobs.map((knob) => [knob.key, knob])), [knobs])
+
+  /** Which drafts would actually change something, and which of those are invalid. */
+  const pending = useMemo(() => {
+    const changes: { knob: LimitKnob; value: number | null }[] = []
+    const bad: Set<string> = new Set()
+    for (const [key, raw] of Object.entries(drafts)) {
+      const knob = knobByKey.get(key)
+      if (!knob) continue
+      const parsed = parseDraft(knob, raw)
+      if (parsed === undefined) {
+        bad.add(key)
+      } else if (parsed !== null) {
+        changes.push({ knob, value: parsed })
+      }
+    }
+    return { changes, bad }
+  }, [drafts, knobByKey])
+
+  function setDraft(key: string, raw: string) {
+    setDrafts((current) => ({ ...current, [key]: raw }))
+  }
+
+  function toggleEdit() {
+    if (editing) {
+      void saveAll()
+      return
+    }
+    setDrafts({})
+    setEditing(true)
+  }
+
+  async function saveAll() {
+    // Batch discipline: one bad value rejects the whole batch — the file is
+    // never partially written. The rows stay in edit mode for fixing.
+    if (pending.bad.size > 0 || pending.changes.length === 0 || saving) return
+    setSaving(true)
+    try {
+      let frame: Record<string, unknown> | null = null
+      for (const { knob, value } of pending.changes) {
+        frame = await useAppStore.getState().setLimit(knob.key, value)
+      }
+      if (frame) apply(frame)
+      setDrafts({})
+      setEditing(false)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function cancelEdit() {
+    setDrafts({})
+    setEditing(false)
+    setError('')
   }
 
   const groups = useMemo(() => {
@@ -192,8 +237,21 @@ export function LimitSettings() {
     }
   }
 
+  // The button names the batch the user *attempted* (changed drafts), so a
+  // blocked save still says what it is refusing to send.
+  const changedCount = useMemo(() => {
+    let attempted = 0
+    for (const [key, raw] of Object.entries(drafts)) {
+      const knob = knobByKey.get(key)
+      if (!knob) continue
+      if (parseDraft(knob, raw) !== null) attempted += 1
+    }
+    return attempted
+  }, [drafts, knobByKey])
+  const blocked = editing && pending.bad.size > 0
+
   return (
-    <div className={css.stack}>
+    <div className={css.stack} data-editing={editing || undefined}>
       <section className={css.cardBlock}>
         <div className={css.cardHeadline}>
           <h2 className={css.cardHeading}>{t('settings.limitFile')}</h2>
@@ -227,11 +285,42 @@ export function LimitSettings() {
           </div>
           <div className={css.panel}>
             {rows.map((knob) => (
-              <KnobRow key={knob.key} knob={knob} onWrite={write} />
+              <KnobRow
+                key={knob.key}
+                knob={knob}
+                editing={editing}
+                invalid={editing && pending.bad.has(knob.key)}
+                onDraft={setDraft}
+                onSave={() => void saveAll()}
+              />
             ))}
           </div>
         </section>
       ))}
+
+      <div className={css.actionBar}>
+        <button
+          type="button"
+          className={css.editButton}
+          data-role={editing ? 'save' : 'edit'}
+          disabled={loading || saving || (editing && blocked)}
+          onClick={() => void toggleEdit()}
+        >
+          {saving
+            ? t('settings.limitSaving')
+            : editing
+              ? changedCount > 0
+                ? t('settings.limitSaveCount', { count: changedCount })
+                : t('settings.limitSave')
+              : t('settings.limitEdit')}
+        </button>
+        {editing ? (
+          <button type="button" className={css.cancelButton} disabled={saving} onClick={cancelEdit}>
+            {t('settings.limitCancel')}
+          </button>
+        ) : null}
+        {editing && blocked ? <span className={css.blockedNote}>{t('settings.limitBlocked')}</span> : null}
+      </div>
     </div>
   )
 }

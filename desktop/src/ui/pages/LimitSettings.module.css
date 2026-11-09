@@ -1,5 +1,6 @@
-/* Knob rows: name + apply chip on the left, compact value editor on the right;
- * groups are plain cards like every other settings page. */
+/* Knob rows: name + apply chip on the left, compact value on the right. The
+ * page is read-only until 修改 dims the copy and lights the editors; the same
+ * button becomes 保存 and submits the batch. */
 
 .stack {
   display: flex;
@@ -91,6 +92,25 @@
   justify-content: space-between;
   gap: 12px;
   padding: 9px 12px;
+  transition: opacity var(--ds-transition-duration-fast, 120ms) ease;
+}
+
+/* Editing state: the copy recedes, the editors carry the row. */
+[data-editing] .copy {
+  opacity: 0.55;
+}
+
+[data-editing] .chip,
+[data-editing] .chipOverride {
+  opacity: 0.6;
+}
+
+.knob[data-invalid] .copy {
+  opacity: 0.85;
+}
+
+.knob[data-invalid] .name {
+  color: #ff453a;
 }
 
 .knob + .knob {
@@ -152,6 +172,15 @@
   flex: none;
 }
 
+.value {
+  font-family: var(--ds-font-mono, ui-monospace, monospace);
+  font-size: var(--ds-font-12);
+  color: var(--dsw-alias-label-primary);
+  min-width: 110px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .input {
   width: 110px;
   height: 26px;
@@ -168,6 +197,11 @@
 .input:focus {
   outline: none;
   border-color: var(--dsw-alias-stroke-strong);
+}
+
+.input[aria-invalid='true'] {
+  border-color: rgba(255, 69, 58, 0.55);
+  color: #ff453a;
 }
 
 .input:disabled {
@@ -195,6 +229,62 @@
 .reset:disabled {
   color: var(--dsw-alias-label-tertiary);
   cursor: default;
+}
+
+.actionBar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  padding: 12px 0 4px;
+  background: var(--dsw-alias-surface-base);
+  border-top: 1px solid var(--dsw-alias-stroke-subtle);
+}
+
+.editButton {
+  height: 30px;
+  border: 0;
+  border-radius: var(--ds-radius-8);
+  padding: 0 16px;
+  background: var(--dsw-alias-label-primary);
+  color: var(--dsw-alias-surface-base);
+  font-family: inherit;
+  font-size: var(--ds-font-12-5);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.editButton:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.editButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.cancelButton {
+  height: 30px;
+  border: 0;
+  border-radius: var(--ds-radius-8);
+  padding: 0 12px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-family: inherit;
+  font-size: var(--ds-font-12-5);
+  cursor: pointer;
+}
+
+.cancelButton:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.blockedNote {
+  color: #ff453a;
+  font-size: var(--ds-font-11-5);
 }
 
 .hint {

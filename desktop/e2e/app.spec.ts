@@ -1778,30 +1778,30 @@ test('limit settings lists grouped knobs and reports the override', async ({ pag
   await expect(page.locator('[data-group="subagents"]')).toBeVisible()
   await expect(page.locator('[data-group="tools"]')).toBeVisible()
 
+  // Read-only by default: values render as text, no editor in sight.
   const turns = page.locator('[data-knob="limits.agent.max_turns"]')
   await expect(turns).toContainText('100')
   await expect(turns).toContainText('默认 100')
   await expect(turns).toContainText('--max-turns 20')
-  // Defaults carry no reset button; only the explicitly-set knobs do.
-  await expect(turns.getByRole('button', { name: '恢复默认' })).toHaveCount(0)
+  await expect(turns.getByRole('textbox')).toHaveCount(0)
   await expect(page.locator('[data-knob="task.max_cost"]')).toContainText('—')
+  await expect(page.getByRole('button', { name: '修改' })).toBeVisible()
 })
 
-test('limit settings edits a knob, keeps the file note and resets it', async ({ page }) => {
-  await boot(
-    page,
-    initialState({
-      running: false,
-      limitValues: { 'limits.skills.max_index_bytes': 12288 },
-      limitExplicit: [],
-    }),
-  )
+test('limit settings: 修改 dims the copy, 保存 submits the whole batch', async ({ page }) => {
+  await boot(page, initialState({ running: false }))
   await page.getByRole('button', { name: '设置' }).click()
   await page.getByRole('button', { name: '参数与预算' }).click()
 
+  await page.getByRole('button', { name: '修改' }).click()
+  const stack = page.locator('[data-editing]')
+  await expect(stack).toBeVisible()
   const index = page.locator('[data-knob="limits.skills.max_index_bytes"]')
+  const turns = page.locator('[data-knob="limits.agent.max_turns"]')
   await index.getByRole('textbox').fill('16384')
-  await index.getByRole('textbox').press('Enter')
+  await turns.getByRole('textbox').fill('150')
+  // Two changed knobs, one save: the button names the batch.
+  await page.getByRole('button', { name: '保存（2 项改动）' }).click()
 
   const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
   const sets = calls
@@ -1809,18 +1809,35 @@ test('limit settings edits a knob, keeps the file note and resets it', async ({ 
     .map(({ type, op, key, value }) => ({ type, op, key, value }))
   assert.deepEqual(sets, [
     { type: 'limits', op: 'set', key: 'limits.skills.max_index_bytes', value: 16384 },
+    { type: 'limits', op: 'set', key: 'limits.agent.max_turns', value: 150 },
   ])
+  // Back to read-only, values now read from the saved state.
+  await expect(page.getByRole('button', { name: '修改' })).toBeVisible()
+  await expect(turns).toContainText('150')
+})
 
-  // After a write the knob counts as explicit and offers the reset.
-  await expect(index.getByRole('button', { name: '恢复默认' })).toBeVisible()
-  await index.getByRole('button', { name: '恢复默认' }).click()
-  const resets = await page.evaluate(() => window.__ZEN_E2E__.calls)
-  const dropped = resets
-    .filter((call) => call.type === 'limits' && call.op === 'reset')
-    .map(({ type, op, key }) => ({ type, op, key }))
-  assert.deepEqual(dropped, [
-    { type: 'limits', op: 'reset', key: 'limits.skills.max_index_bytes' },
-  ])
+test('limit settings: one bad value blocks the whole save', async ({ page }) => {
+  await boot(page, initialState({ running: false }))
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '参数与预算' }).click()
+
+  await page.getByRole('button', { name: '修改' }).click()
+  const index = page.locator('[data-knob="limits.skills.max_index_bytes"]')
+  const turns = page.locator('[data-knob="limits.agent.max_turns"]')
+  await index.getByRole('textbox').fill('16384')
+  await turns.getByRole('textbox').fill('99999999') // over the knob's max
+  const save = page.getByRole('button', { name: '保存（2 项改动）' })
+  await expect(save).toBeDisabled()
+  await expect(turns.getByRole('textbox')).toHaveValue('99999999')
+  await expect(turns).toHaveAttribute('data-invalid', 'true')
+  await expect(page.getByText('有无效值，修正后才能保存')).toBeVisible()
+
+  // Nothing was sent, and fixing the row re-enables the same button.
+  await turns.getByRole('textbox').fill('150')
+  await expect(save).toBeEnabled()
+  await save.click()
+  const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
+  assert.equal(calls.filter((call) => call.type === 'limits' && call.op === 'set').length, 2)
 })
 
 test('limit settings surfaces a refused write instead of pretending', async ({ page }) => {
@@ -1834,9 +1851,10 @@ test('limit settings surfaces a refused write instead of pretending', async ({ p
   await page.getByRole('button', { name: '设置' }).click()
   await page.getByRole('button', { name: '参数与预算' }).click()
 
+  await page.getByRole('button', { name: '修改' }).click()
   const index = page.locator('[data-knob="limits.skills.max_index_bytes"]')
   await index.getByRole('textbox').fill('2048')
-  await index.getByRole('textbox').press('Enter')
+  await page.getByRole('button', { name: '保存（1 项改动）' }).click()
 
   await expect(page.locator('[data-page="settings"] .error, [data-page="settings"] [class*="error"]').last()).toContainText(
     'unknown keys',

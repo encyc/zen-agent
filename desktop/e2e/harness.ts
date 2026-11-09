@@ -385,21 +385,23 @@ export function installBridge(state: BridgeState) {
         return { type: 'error', id: payload.id, message: 'unknown skills op' }
       }
       case 'limits': {
+        // Ranges mirror the backend registry (zenagent/limits.py LIMITS/TASK_KNOBS)
+        // so specs can rely on client-side range rejection.
         const knobs = [
-          ['limits.skills', 'max_index_bytes', 12288, 'int', 'immediate'],
-          ['limits.skills', 'max_body_bytes', 32768, 'int', 'immediate'],
-          ['limits.context', 'max_context_bytes', 32768, 'int', 'session'],
-          ['limits.context', 'compact_threshold', 0.85, 'float', 'session'],
-          ['limits.agent', 'max_turns', 100, 'int', 'session'],
-          ['limits.agent', 'loop_guard_threshold', 5, 'int', 'immediate'],
-          ['limits.agent', 'max_result_bytes', 40000, 'int', 'session'],
-          ['limits.tools', 'shell_max_output_bytes', 30000, 'int', 'immediate'],
-          ['task', 'max_turns', 300, 'int', 'session'],
-          ['task', 'timeout_s', 900, 'int', 'session'],
-          ['task', 'max_cost', null, 'float', 'session'],
-          ['task', 'keep_transcripts', 64, 'int', 'session'],
-          ['task', 'max_transcript_bytes', 33554432, 'int', 'session'],
-          ['task', 'max_transcript_file_bytes', 8388608, 'int', 'session'],
+          ['limits.skills', 'max_index_bytes', 12288, 'int', 'immediate', 1024, 262144],
+          ['limits.skills', 'max_body_bytes', 32768, 'int', 'immediate', 1024, 1048576],
+          ['limits.context', 'max_context_bytes', 32768, 'int', 'session', 0, 1048576],
+          ['limits.context', 'compact_threshold', 0.85, 'float', 'session', 0.3, 0.99],
+          ['limits.agent', 'max_turns', 100, 'int', 'session', 1, 10000],
+          ['limits.agent', 'loop_guard_threshold', 5, 'int', 'immediate', 2, 100],
+          ['limits.agent', 'max_result_bytes', 40000, 'int', 'session', 4096, 1048576],
+          ['limits.tools', 'shell_max_output_bytes', 30000, 'int', 'immediate', 1024, 1048576],
+          ['task', 'max_turns', 300, 'int', 'session', 1, 100000],
+          ['task', 'timeout_s', 900, 'int', 'session', 0, 86400],
+          ['task', 'max_cost', null, 'float', 'session', 0.000001, 1000000],
+          ['task', 'keep_transcripts', 64, 'int', 'session', 1, 10000],
+          ['task', 'max_transcript_bytes', 33554432, 'int', 'session', 1048576, 2147483648],
+          ['task', 'max_transcript_file_bytes', 8388608, 'int', 'session', 1048576, 2147483648],
         ] as const
         const sections: Record<string, string> = {
           'limits.skills': 'skills',
@@ -418,15 +420,15 @@ export function installBridge(state: BridgeState) {
           (state2.limitExplicit ?? []).includes(`${table}.${name}`)
         const overrides: Record<string, string> = { 'limits.agent.max_turns': '--max-turns 20' }
         const rows = () =>
-          knobs.map(([table, name, fallback, kind, apply]) => ({
+          knobs.map(([table, name, fallback, kind, apply, min, max]) => ({
             key: `${table}.${name}`,
             section: sections[table] ?? table,
             table,
             name,
             kind,
             nullable: name === 'max_cost',
-            min: 0,
-            max: 100000000,
+            min,
+            max,
             default: fallback,
             unit: 'bytes',
             apply,
