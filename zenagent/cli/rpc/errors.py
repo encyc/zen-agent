@@ -20,8 +20,14 @@ class Refusal(ValueError):
     """A refusal whose message this server authored (path-free, safe to show).
 
     The message is already the person-facing text; only the frame shape is
-    sanitized, so validation hints like "relocate needs to" survive.
+    sanitized, so validation hints like "relocate needs to" survive. ``code``
+    is the wire code the client localizes: a refusal that knows its kind
+    (busy vs malformed) sets it; otherwise the handler supplies the default.
     """
+
+    def __init__(self, message: str, *, code: str | None = None) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 def basename(value: object) -> str:

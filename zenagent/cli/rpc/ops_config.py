@@ -734,14 +734,19 @@ class ConfigOps:
         try:
             applied = self.runtime.set_mode(str(mode or ""))
         except ValueError as exc:
+            # Mode validation is authored text, so keep the original result
+            # shape. The raw exception (which may quote a path) is logged;
+            # the reason is re-rendered from the request instead.
+            logger.warning("mode switch refused: %s", exc, exc_info=True)
+            from zenagent.i18n import t
+
             self._send(
-                failure_frame(
-                    request_id,
-                    code="mode_failed",
-                    message="mode failed",
-                    exc=exc,
-                    op="mode",
-                )
+                {
+                    "type": "result",
+                    "id": request_id,
+                    "ok": False,
+                    "reason": t("mode.unknown", mode=str(mode or "")),
+                }
             )
             return True
         self._send({"type": "result", "id": request_id, "ok": True, "mode": applied})
@@ -765,12 +770,21 @@ class ConfigOps:
                 self.runtime.session.path
             ) == project_key(old_root):
                 raise Refusal(
-                    "cannot relocate the open project; switch to another project first"
+                    "cannot relocate the open project; switch to another project first",
+                    code="project_busy",
                 )
             relocation = relocate_project(old_root, new_root)
         except Refusal as exc:
-            # Authored validation text is safe; only the frame gets a code.
-            self._send(error_frame(request_id, str(exc), "project_failed", {"op": label}))
+            # Authored validation text is safe; the code separates a busy
+            # open project from a malformed relocate request.
+            self._send(
+                error_frame(
+                    request_id,
+                    str(exc),
+                    exc.code or "project_invalid",
+                    {"op": label},
+                )
+            )
             return
         except Exception as exc:  # noqa: BLE001 - a bad project op is a result, not a crash
             self._send(

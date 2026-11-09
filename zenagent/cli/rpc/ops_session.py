@@ -153,8 +153,17 @@ class SessionOps:
             )
             return
         except Refusal as exc:
-            # Authored validation text ("resume needs path") is already safe.
-            self._send(error_frame(request_id, str(exc), "session_failed", {"op": label}))
+            # Authored validation text ("resume needs path") is already safe;
+            # the code tells the busy refusals (cancel the run first) apart
+            # from malformed requests.
+            self._send(
+                error_frame(
+                    request_id,
+                    str(exc),
+                    exc.code or "session_invalid",
+                    {"op": label},
+                )
+            )
             return
         except Exception as exc:  # noqa: BLE001 - a bad session op is a result, not a crash
             self._send(
@@ -229,7 +238,9 @@ class SessionOps:
             return {"path": str(path)}
         if op == "undo":
             if self.busy:
-                raise Refusal("busy: cancel the run before undoing")
+                raise Refusal(
+                    "busy: cancel the run before undoing", code="session_busy"
+                )
             result = self.sessions.undo()
             if result is None:
                 return {"dropped": 0, "path": None}
@@ -239,7 +250,10 @@ class SessionOps:
             return {"dropped": dropped, "path": str(path)}
         if op == "delete":
             if self.busy:
-                raise Refusal("busy: cancel the run before deleting a session")
+                raise Refusal(
+                    "busy: cancel the run before deleting a session",
+                    code="session_busy",
+                )
             target = request.get("path")
             if not isinstance(target, str) or not target.strip():
                 raise Refusal("delete needs path")

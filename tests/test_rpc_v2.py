@@ -143,8 +143,9 @@ async def test_mode_and_model_requests_switch_the_runtime(runtime_factory, app_e
     )
     results = {message["id"]: message for message in decode(writes)}
     assert results["m1"]["ok"] is True and results["m1"]["mode"] == "plan"
-    assert results["m2"]["type"] == "error"
-    assert results["m2"]["code"] == "mode_failed"
+    assert results["m2"]["type"] == "result"
+    assert results["m2"]["ok"] is False
+    assert "unknown mode" in results["m2"]["reason"]
     assert results["m3"]["ok"] is True
     assert results["m4"]["ok"] is False
 
@@ -1368,6 +1369,62 @@ async def test_a_failed_session_op_crosses_as_a_code(runtime_factory, tmp_path, 
     assert str(secret) in caplog.text
 
 
+async def test_busy_session_ops_cross_as_session_busy(runtime_factory):
+    """An authored busy refusal keeps its own code, so the desktop can tell the
+    person to cancel the run instead of showing generic session-failed copy."""
+    runtime, server, writes, _queue = await build(
+        runtime_factory, stream_fn=await slow_stream()
+    )
+    runtime.agent.replace_messages([UserMessage(content="hello", timestamp=1)])
+    await server._handle_line(
+        json.dumps({"type": "prompt", "id": "p", "text": "hi"})
+    )
+    await asyncio.sleep(0.05)
+    await server._handle_line(
+        json.dumps({"type": "session", "id": "u", "op": "undo"})
+    )
+    await server._handle_line(
+        json.dumps({"type": "session", "id": "d", "op": "delete"})
+    )
+
+    frames = {message.get("id"): message for message in decode(writes)}
+    assert frames["u"]["type"] == "error"
+    assert frames["u"]["code"] == "session_busy"
+    assert frames["u"]["params"] == {"op": "undo"}
+    assert "cancel the run" in frames["u"]["message"]
+    assert frames["d"]["code"] == "session_busy"
+    assert frames["d"]["params"] == {"op": "delete"}
+
+    server.agent.abort()
+    await asyncio.gather(server._task, return_exceptions=True)
+
+
+async def test_an_incomplete_session_request_crosses_as_session_invalid(
+    runtime_factory, tmp_path
+):
+    """Path-less and unknown session ops share one invalid code; the authored
+    hint stays the fallback and no absolute path crosses."""
+    _runtime, server, writes, queue = await build(runtime_factory)
+
+    await run_lines(
+        server,
+        queue,
+        [
+            {"type": "session", "id": "s1", "op": "resume"},
+            {"type": "session", "id": "s2", "op": "nonsense"},
+        ],
+    )
+
+    frames = {message.get("id"): message for message in decode(writes)}
+    assert frames["s1"]["type"] == "error"
+    assert frames["s1"]["code"] == "session_invalid"
+    assert frames["s1"]["params"] == {"op": "resume"}
+    assert frames["s1"]["message"] == "resume needs path"
+    assert frames["s2"]["code"] == "session_invalid"
+    assert frames["s2"]["params"] == {"op": "nonsense"}
+    assert str(tmp_path) not in json.dumps(frames)
+
+
 async def test_session_import_of_a_missing_file_crosses_a_basename(
     runtime_factory, tmp_path
 ):
@@ -1494,9 +1551,11 @@ async def test_a_failed_mcp_save_crosses_as_a_code(
     assert str(tmp_path) not in json.dumps(payload)
 
 
-async def test_a_refused_mode_switch_crosses_as_a_code(
+async def test_a_refused_mode_switch_keeps_the_result_shape(
     runtime_factory, tmp_path
 ):
+    """Mode validation stays additive: the original result frame, with authored
+    reason text. Raw exception detail is logged, never sent."""
     runtime, server, writes, queue = await build(runtime_factory)
     secret = tmp_path / "mode-state.json"
 
@@ -1508,11 +1567,69 @@ async def test_a_refused_mode_switch_crosses_as_a_code(
     await run_lines(server, queue, [{"type": "mode", "id": "m", "mode": "plan"}])
 
     payload = decode(writes)[0]
-    assert payload["type"] == "error"
-    assert payload["code"] == "mode_failed"
-    assert payload["message"] == "mode failed"
-    assert payload["params"] == {"op": "mode"}
+    assert payload["type"] == "result"
+    assert payload["id"] == "m"
+    assert payload["ok"] is False
+    assert "unknown mode: plan" in payload["reason"]
     assert str(tmp_path) not in json.dumps(payload)
+
+
+async def test_relocating_the_open_project_crosses_as_project_busy(
+    runtime_factory, monkeypatch
+):
+    """The open-project refusal has its own code and actionable copy."""
+    _runtime, server, writes, queue = await build(runtime_factory)
+    monkeypatch.setattr(
+        "zenagent.cli.rpc.ops_config.project_key_for_session", lambda path: "same"
+    )
+    monkeypatch.setattr("zenagent.cli.rpc.ops_config.project_key", lambda root: "same")
+
+    await run_lines(
+        server,
+        queue,
+        [
+            {
+                "type": "project",
+                "id": "p",
+                "op": "relocate",
+                "from": "/tmp/old",
+                "to": "/tmp/new",
+            }
+        ],
+    )
+
+    payload = decode(writes)[0]
+    assert payload["type"] == "error"
+    assert payload["code"] == "project_busy"
+    assert payload["params"] == {"op": "relocate"}
+    assert "switch to another project" in payload["message"]
+    assert "/tmp" not in json.dumps(payload)
+
+
+async def test_an_incomplete_project_request_crosses_as_project_invalid(
+    runtime_factory,
+):
+    _runtime, server, writes, queue = await build(runtime_factory)
+
+    await run_lines(
+        server,
+        queue,
+        [
+            {
+                "type": "project",
+                "id": "p",
+                "op": "relocate",
+                "from": "/tmp/old",
+            }
+        ],
+    )
+
+    payload = decode(writes)[0]
+    assert payload["type"] == "error"
+    assert payload["code"] == "project_invalid"
+    assert payload["params"] == {"op": "relocate"}
+    assert payload["message"] == "relocate needs to"
+    assert "/tmp" not in json.dumps(payload)
 
 
 async def test_a_failed_project_relocation_crosses_as_a_code(
