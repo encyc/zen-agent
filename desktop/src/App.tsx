@@ -2,7 +2,8 @@
  * exit banner). Keyboard: Cmd/Ctrl+B toggles the sidebar, like dsh. */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { invoke } from '@tauri-apps/api/core'
+import { isTauri } from '@tauri-apps/api/core'
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { defaultProjectCwd, lastProjectCwd, useAppStore } from './state/appStore'
 import {
   clampFontScale,
@@ -21,6 +22,7 @@ import { SettingsPage } from './ui/pages/SettingsPage'
 import { ToolsPage } from './ui/pages/ToolsPage'
 import { restoreChatState } from './ui/pages/navigation'
 import { isRuntimeMissing, type RuntimeProbe } from './state/startFailure.ts'
+import { runtimeProbe } from './rpc/client.ts'
 import { ConversationTopbar } from './ui/ConversationTopbar'
 import { NoticeBanner } from './ui/NoticeBanner'
 import { UpdateBanner } from './ui/UpdateBanner'
@@ -67,6 +69,7 @@ export function App() {
   // home folder, else zen's own cwd. There is no idle welcome surface.
   const [lastCwd] = useState(lastProjectCwd)
   const autoConnected = useRef(false)
+  const windowShown = useRef(false)
 
   const [sidebarWidth, setSidebarWidth] = useState(() => loadWidth(SIDEBAR_KEY, SIDEBAR_DEFAULT))
   const rightbarOpen = useWorkPanelStore((state) => state.open)
@@ -134,6 +137,21 @@ export function App() {
     if (connection !== 'ready' || updateChecked.current) return
     updateChecked.current = true
     void useUpdateStore.getState().start()
+  }, [connection])
+
+  // The shell window boots hidden (tauri.conf.json `visible: false`), so the
+  // first thing the user sees is the ready tree, not an empty webview. One
+  // animation frame lets that tree rasterize before the window appears; a
+  // plain browser (dev, e2e) has no window to show.
+  useEffect(() => {
+    if (connection !== 'ready' || windowShown.current) return
+    windowShown.current = true
+    requestAnimationFrame(() => {
+      if (!isTauri()) return
+      void getCurrentWebviewWindow()
+        .show()
+        .catch(() => {})
+    })
   }, [connection])
 
   // The composer floats over the center column; publish its real height so
@@ -323,10 +341,12 @@ function RuntimeScreen({ failure, onRestart }: { failure: { bin: string; osError
 
   useEffect(() => {
     let live = true
-    void invoke<RuntimeProbe>('runtime_probe')
+    void runtimeProbe()
       .then((result) => {
         if (live) setProbe(result)
       })
+      // `runtime_probe` is a `Result`: a rejection is the shell's error string,
+      // and the diagnostics card already renders "unknown" for a missing probe.
       .catch(() => {})
     return () => {
       live = false

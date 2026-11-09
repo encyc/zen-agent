@@ -4,6 +4,7 @@
 
 import { invoke } from '@tauri-apps/api/core'
 import { create } from 'zustand'
+import { initialState } from '../rpc/client.ts'
 import {
   cacheAfterFailure,
   cacheIsFresh,
@@ -85,19 +86,15 @@ interface UpdateState {
   dismiss(): void
 }
 
-async function selfUpdatable(): Promise<boolean> {
+/** The shell's boot flags, once: env-disabled checks and whether this install
+ * can replace itself. A shell that cannot answer keeps the old defaults — the
+ * check runs, and the install is assumed replaceable. */
+async function bootFlags(): Promise<{ envDisabled: boolean; selfUpdatable: boolean }> {
   try {
-    return await invoke<boolean>('updates_self_updatable')
+    const state = await initialState()
+    return { envDisabled: state.updatesDisabled, selfUpdatable: state.selfUpdatable }
   } catch {
-    return true
-  }
-}
-
-async function envDisabled(): Promise<boolean> {
-  try {
-    return await invoke<boolean>('updates_disabled_by_env')
-  } catch {
-    return false
+    return { envDisabled: false, selfUpdatable: true }
   }
 }
 
@@ -113,10 +110,11 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     // whole feature stays dark instead of failing loudly on every launch.
     if (!__UPDATE_ENABLED__) return
     const current = __APP_VERSION__
+    const flags = await bootFlags()
     const decision = bootUpdateCheck({
       current,
       settings: { updateChecks: useSettingsStore.getState().updateChecks },
-      envDisabled: await envDisabled(),
+      envDisabled: flags.envDisabled,
       busy: false,
       pendingApprovals: 0,
       cache: readCache(),
@@ -126,8 +124,8 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     set({
       cache,
       phase: cache !== null && shouldOffer(cache, current) ? 'available' : 'idle',
+      selfUpdatable: flags.selfUpdatable,
     })
-    set({ selfUpdatable: await selfUpdatable() })
     if (decision === 'network') {
       await new Promise((resolve) => setTimeout(resolve, BOOT_DELAY_MS))
       await get().checkNow('boot')

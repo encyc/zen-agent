@@ -82,7 +82,6 @@ export function Sidebar(props: { onCollapse(): void }) {
   const removeProject = useProjectStore((state) => state.removeProject)
   const openProject = useAppStore((state) => state.openProject)
   const newSession = useAppStore((state) => state.newSession)
-  const refreshSessions = useAppStore((state) => state.refreshSessions)
   const renameSession = useAppStore((state) => state.renameSession)
   const togglePin = useAppStore((state) => state.togglePin)
   const deleteSession = useAppStore((state) => state.deleteSession)
@@ -117,10 +116,6 @@ export function Sidebar(props: { onCollapse(): void }) {
   )
   const menuSession = menu === null ? null : sessions.find((session) => session.path === menu.path) ?? null
   const empty = pinned.length === 0 && standalone.length === 0 && projects.length === 0
-
-  useEffect(() => {
-    void refreshSessions()
-  }, [refreshSessions])
 
   const openMenu = (event: MouseEvent<HTMLButtonElement>, path: string) => {
     event.stopPropagation()

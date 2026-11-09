@@ -5,6 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
     <title>ZenAgent</title>
+    <!-- Painted before the bundle loads: the window is shown only after this,
+         and a white canvas under a dark theme reads as a flash. Mirrors
+         --dsw-alias-bg-base for the default (auto) theme. -->
+    <style>
+      html {
+        background-color: rgb(255, 255, 255);
+      }
+      @media (prefers-color-scheme: dark) {
+        html {
+          background-color: rgb(21, 21, 23);
+        }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

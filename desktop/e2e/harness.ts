@@ -80,6 +80,9 @@ export interface BridgeState {
   /** Milliseconds `rpc_start` stays in flight, so a spec can watch a project
    * switch happen (the shell must never fall back to the boot screen). */
   switchDelayMs?: number
+  /** `get_initial_state` flags; absent → updates enabled and self-updatable. */
+  updatesDisabled?: boolean
+  selfUpdatable?: boolean
 }
 
 declare global {
@@ -800,6 +803,12 @@ export function installBridge(state: BridgeState) {
   }
 
   const internals = {
+    // The api package reads these for getCurrentWindow/getCurrentWebviewWindow;
+    // boot calls the latter to show the window after the first paint.
+    metadata: {
+      currentWindow: { label: 'main' },
+      currentWebview: { label: 'main' },
+    },
     transformCallback(callback: (payload: unknown) => void) {
       const id = nextCallback
       nextCallback += 1
@@ -837,6 +846,18 @@ export function installBridge(state: BridgeState) {
         return { pid }
       }
       if (cmd === 'rpc_stop') return null
+      if (cmd === 'get_initial_state') {
+        return {
+          updatesDisabled: state.updatesDisabled ?? false,
+          selfUpdatable: state.selfUpdatable ?? true,
+        }
+      }
+      // `runtime_probe` is a `Result<RuntimeProbe, String>`: the Ok branch.
+      if (cmd === 'runtime_probe') {
+        return { resolved: '/app/zen', exists: true, version: '0.0.0-e2e' }
+      }
+      // The shell shows its window after the ready frame paints.
+      if (cmd === 'plugin:window|show') return null
       if (cmd === 'plugin:dialog|open') return state.dialogSelection
       if (cmd === 'plugin:path|resolve_directory') return '/Users/e2e'
       if (cmd === 'rpc_send') {

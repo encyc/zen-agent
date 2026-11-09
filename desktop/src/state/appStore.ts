@@ -180,10 +180,14 @@ async function bootChild(
     // ignore
   }
   if (opts.cwd !== undefined && opts.cwd !== '') useProjectStore.getState().addProject(opts.cwd)
-  const loaded = await get().refreshTranscript()
+  // The three boot reads are independent requests, id-correlated on the wire:
+  // run them together so the first paint waits for the slowest, not the sum.
+  const [loaded] = await Promise.all([
+    get().refreshTranscript(),
+    restorePrefs(get),
+    get().refreshSessions(),
+  ])
   if (!loaded && opts.fromSwitch) useChatStore.getState().reset()
-  await restorePrefs(get)
-  await get().refreshSessions()
 }
 
 export const useAppStore = create<AppState>((set, get) => ({

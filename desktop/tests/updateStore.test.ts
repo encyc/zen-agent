@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { bootUpdateCheck } from '../src/state/updateStore.ts'
+import { _useBridge } from '../src/rpc/client.ts'
 
 const base = {
   current: '0.8.1',
@@ -58,4 +59,59 @@ test('install() re-checks when the pending handle was lost to a reload', async (
   })
   await useUpdateStore.getState().install()
   assert.equal(downloads, 1)
+})
+
+/** Boot reads both policy flags from the shell in one invoke: the old pair of
+ * `updates_*` commands is gone, and a removal here would silently re-enable
+ * updates under ZENAGENT_NO_UPDATE_CHECK. */
+function stubBootGlobals(): Record<string, unknown> {
+  const globals = globalThis as Record<string, unknown>
+  globals.__APP_VERSION__ ??= '0.8.4'
+  globals.__UPDATE_ENABLED__ = true
+  globals.localStorage = {
+    getItem: () => JSON.stringify({ checkedAt: Date.now(), latest: '0.8.4', notified: null }),
+    setItem: () => {},
+    removeItem: () => {},
+  }
+  return globals
+}
+
+function recordCommands(answer: { updatesDisabled: boolean; selfUpdatable: boolean }): {
+  commands: string[]
+} {
+  const commands: string[] = []
+  _useBridge({
+    async invoke<T>(command: string): Promise<T> {
+      commands.push(command)
+      return answer as T
+    },
+    async listen<T>(): Promise<() => void> {
+      return () => {}
+    },
+  })
+  return { commands }
+}
+
+test('start() reads both boot flags from a single get_initial_state call', async () => {
+  stubBootGlobals()
+  const { commands } = recordCommands({ updatesDisabled: false, selfUpdatable: false })
+  const { useUpdateStore } = await import('../src/state/updateStore.ts')
+  useUpdateStore.setState({ selfUpdatable: true, phase: 'idle', cache: null, message: null, pending: null })
+
+  await useUpdateStore.getState().start()
+
+  assert.deepEqual(commands, ['get_initial_state'])
+  assert.equal(useUpdateStore.getState().selfUpdatable, false)
+})
+
+test('an env-disabled shell skips the check after that one round-trip', async () => {
+  stubBootGlobals()
+  const { commands } = recordCommands({ updatesDisabled: true, selfUpdatable: true })
+  const { useUpdateStore } = await import('../src/state/updateStore.ts')
+  useUpdateStore.setState({ selfUpdatable: true, phase: 'idle', cache: null, message: null, pending: null })
+
+  await useUpdateStore.getState().start()
+
+  assert.deepEqual(commands, ['get_initial_state'])
+  assert.equal(useUpdateStore.getState().phase, 'idle')
 })
