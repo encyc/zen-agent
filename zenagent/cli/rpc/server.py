@@ -25,6 +25,7 @@ from zenagent.cli.rpc.ops_files import FilesOps
 from zenagent.cli.rpc.ops_session import SessionOps
 from zenagent.cli.rpc.ops_taiji import TaijiOps
 from zenagent.events import AgentEvent
+from zenagent.limits import LimitsWriteError
 from zenagent.types import (
     AssistantMessage,
     TextContent,
@@ -42,6 +43,7 @@ _PARTIAL_RESULT_CHARS = 4000
 _ARGS_CHARS = 4000
 #: Default approval timeout, matching the TUI modal.
 _APPROVAL_TIMEOUT_S = 120.0
+
 
 def _text_of(result) -> str:
     return "".join(
@@ -246,8 +248,6 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
     # -- wire ---------------------------------------------------------------
 
     @property
-
-
     def agent(self) -> Agent:
         if self.runtime is not None:
             return self.runtime.agent
@@ -255,11 +255,9 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
             raise RuntimeError("RpcServer needs an agent or a runtime")
         return self._agent
 
-
     def _send(self, payload: dict) -> None:
         if self._write_line is not None:
             self._write_line(json.dumps(payload, ensure_ascii=False, default=str))
-
 
     def _on_event(self, event: AgentEvent) -> None:
         if (
@@ -270,7 +268,6 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
         ):
             self._text.append(event.assistant_event.delta)
         self._send({"type": "event", "event": serialize_event(event)})
-
 
     def _final_text(self) -> str:
         """The run's answer: streamed deltas, else the canonical final message.
@@ -288,14 +285,10 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
         return ""
 
     @property
-
-
     def running(self) -> bool:
         return self._task is not None and not self._task.done()
 
     @property
-
-
     def busy(self) -> bool:
         """True while a run owns the agent, however it was started.
 
@@ -306,7 +299,6 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
         return self.running or self.agent.is_streaming
 
     # -- approval round-trip ------------------------------------------------
-
 
     async def confirm(self, tool_name: str, arguments: dict, verdict=None) -> str:
         """Ask the client to approve one tool call; ``deny`` on timeout."""
@@ -338,7 +330,6 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
         finally:
             self._approvals.pop(request_id, None)
 
-
     def _resolve_approval(self, request: dict) -> bool:
         request_id = request.get("request_id")
         decision = request.get("decision")
@@ -366,7 +357,6 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
         return True
 
     # -- ask round-trip -----------------------------------------------------
-
 
     async def ask(self, questions: list[dict]) -> list[dict]:
         """Ask the client the model's structured questions; ``[]`` when dismissed.
@@ -405,7 +395,6 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
             self._asks.pop(request_id, None)
         return _answers_from_selection(questions, raw)
 
-
     def _resolve_ask(self, request: dict) -> bool:
         request_id = request.get("request_id")
         raw = request.get("answers")
@@ -440,7 +429,6 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
 
     # -- loop ---------------------------------------------------------------
 
-
     async def run(self) -> int:
         while True:
             line = await self._read_line()
@@ -454,7 +442,6 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
                 return 0
         await self._shutdown()
         return 0
-
 
     async def _handle_line(self, line: str) -> bool:
         """Handle one request line; False means shutdown."""
@@ -609,6 +596,15 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
         if kind == "skills":
             await self._skills(request, request_id)
             return True
+        if kind == "limits":
+            # A refused write (bad value, hand-mangled file) is a normal,
+            # reportable outcome — the server must survive it and so must the
+            # caller, so nothing here raises past the dispatch.
+            try:
+                await self._limits(request, request_id)
+            except (LimitsWriteError, ValueError) as exc:
+                self._send({"type": "error", "id": request_id, "message": str(exc)})
+            return True
         if kind == "mcp":
             await self._mcp(request, request_id)
             return True
@@ -619,7 +615,6 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
             {"type": "error", "id": request_id, "message": f"unknown type: {kind}"}
         )
         return True
-
 
     def _status_result(self, request_id) -> dict:
         payload = {
@@ -665,7 +660,6 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
             payload["status"] = status.to_wire()
         return payload
 
-
     def _steer(self, request: dict, request_id) -> bool:
         text = request.get("text")
         if not isinstance(text, str) or not text.strip():
@@ -679,7 +673,6 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
             self.agent.steer(text)
         self._send({"type": "result", "id": request_id, "ok": True})
         return True
-
 
     def _read_prompt_images(self, raw) -> tuple[list | None, str | None]:
         """Load ``prompt.images`` paths; (blocks, None) or (None, error)."""
@@ -698,7 +691,6 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
             except ValueError as exc:
                 return None, str(exc)
         return blocks, None
-
 
     async def _run_prompt(self, text: str, request_id, images=None) -> None:
         try:
@@ -730,7 +722,6 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
         self._send(payload)
 
     # -- project state -----------------------------------------------------
-
 
     async def _shutdown(self) -> None:
         # A client that disconnects mid-approval will never answer: deny the

@@ -47,6 +47,7 @@ export const REQUEST_KINDS = [
   'fs_read',
   'git_worktrees',
   'hello',
+  'limits',
   'mcp',
   'memory',
   'mode',
@@ -232,6 +233,34 @@ export interface SkillRow {
   path: string
   source: 'project' | 'global'
   enabled: boolean
+}
+
+export interface LimitKnob {
+  key: string
+  section: string
+  table: string
+  name: string
+  kind: 'int' | 'float'
+  nullable: boolean
+  min: number
+  max: number
+  default: number | null
+  unit: string
+  apply: 'immediate' | 'session'
+  value: number | null
+  explicit: boolean
+  override: string | null
+}
+
+export interface LimitsResult {
+  type: 'result'
+  id: string
+  ok: true
+  path: string
+  project_path: string
+  groups: string[]
+  knobs: LimitKnob[]
+  error?: string
 }
 
 export interface SkillsResult {

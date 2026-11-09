@@ -20,6 +20,7 @@ from pathlib import Path
 from zenagent import __version__, project, settings
 from zenagent.agent.session import sessions_dir
 from zenagent.config import UserConfig, apply_user_config, config_path, load_user_config
+from zenagent.limits import describe
 from zenagent.providers.catalog import load_catalog
 
 __all__ = ["Check", "collect_checks", "collect_report", "run_doctor"]
@@ -101,6 +102,9 @@ def collect_checks(env: Mapping[str, str] | None = None) -> list[Check]:
         project_config = project.project_config_path()
         suffix = f" + {project_config}" if project_config.is_file() else ""
         checks.append(Check("config", True, f"{config_path()}{suffix} · {detail}"))
+        rows = describe(user_config.limits)
+        if rows:
+            checks.append(Check("limits", True, " · ".join(rows)))
     except ValueError as exc:
         user_config = UserConfig()
         checks.append(Check("config", False, str(exc)))
@@ -121,12 +125,16 @@ def collect_checks(env: Mapping[str, str] | None = None) -> list[Check]:
 
     for provider in catalog.values():
         # Settings (set in /settings) win; the environment is the fallback.
-        stored = settings.get_api_key(provider.api_key_env) or values.get(provider.api_key_env)
+        stored = settings.get_api_key(provider.api_key_env) or values.get(
+            provider.api_key_env
+        )
         present = bool(stored)
         detail = provider.api_key_env + (" is set" if present else " is missing")
         # An unconfigured provider is not a broken install: with 17 providers
         # most keys will always be absent. Advisory, so doctor stays green.
-        checks.append(Check(f"key:{provider.id}", present, detail, advisory=not present))
+        checks.append(
+            Check(f"key:{provider.id}", present, detail, advisory=not present)
+        )
 
     checks.append(
         Check(

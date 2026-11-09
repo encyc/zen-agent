@@ -7,6 +7,17 @@ from pathlib import Path
 
 from zenagent import settings
 from zenagent.app.skill_commands import SKILL_COMMAND_PREFIX, build_skill_submission
+from zenagent.config import config_path as global_config_path
+from zenagent.config import load_user_config
+from zenagent.limits import (
+    ALL_KNOBS,
+    GROUP_ORDER,
+    KNOB_BY_KEY,
+    LimitsWriteError,
+    coerce_value,
+    read_managed,
+    write_managed,
+)
 from zenagent.mcp.config import load_mcp_layers, remove_mcp_server, save_mcp_server
 from zenagent.project import (
     project_key,
@@ -32,7 +43,6 @@ class ConfigOps:
             entries = [asdict(entry) for entry in self.models.entries()]
         return {"type": "result", "id": request_id, "ok": True, "models": entries}
 
-
     def _commands_result(self, request_id) -> dict:
         """The built-in slash-command catalog (name + description)."""
         catalog = []
@@ -45,11 +55,9 @@ class ConfigOps:
 
     # -- secrets ------------------------------------------------------------
 
-
     def _model_catalog(self) -> dict:
         catalog = getattr(self.runtime, "catalog", None)
         return catalog if isinstance(catalog, dict) else {}
-
 
     def _known_secret_envs(self) -> set[str]:
         from zenagent.tools.web.providers import KEY_ENVS
@@ -57,7 +65,6 @@ class ConfigOps:
         return {
             provider.api_key_env for provider in self._model_catalog().values()
         } | set(KEY_ENVS.values())
-
 
     def _secrets_result(self, request_id) -> dict:
         """Provider rows for the settings screen; key values never leave here."""
@@ -109,7 +116,6 @@ class ConfigOps:
             "search_providers": search_rows,
         }
 
-
     async def _secrets(self, request: dict, request_id) -> None:
         op = request.get("op")
         if op == "list":
@@ -150,7 +156,6 @@ class ConfigOps:
             {"type": "error", "id": request_id, "message": f"unknown secrets op: {op}"}
         )
 
-
     def _reload_key(self, name: str) -> None:
         """Adopt a set/cleared key in the live agent when it drives the model."""
         runtime = self.runtime
@@ -165,7 +170,6 @@ class ConfigOps:
         if not runtime.reload_api_key():
             runtime.agent.api_key = ""
             runtime.missing_api_key = name
-
 
     async def _secrets_test(self, request: dict, request_id) -> None:
         from zenagent.app import probes
@@ -225,15 +229,12 @@ class ConfigOps:
 
     # -- skills -------------------------------------------------------------
 
-
     def _discover(self):
         roots = default_skill_roots(Path.cwd())
         skills, warnings = discover_skills(roots)
         return roots, skills, warnings
 
     @staticmethod
-
-
     def _skill_rows(roots, skills) -> list[dict]:
         project_root = Path(roots[0]).expanduser() if roots else None
         disabled = settings.disabled_skills()
@@ -257,7 +258,6 @@ class ConfigOps:
             )
         return rows
 
-
     def _skills_result(self, request_id, roots, skills, warnings, notes=()) -> dict:
         return {
             "type": "result",
@@ -267,7 +267,6 @@ class ConfigOps:
             "warnings": list(warnings),
             "notes": list(notes),
         }
-
 
     async def _skills(self, request: dict, request_id) -> None:
         op = request.get("op")
@@ -361,7 +360,6 @@ class ConfigOps:
 
     # -- mcp ----------------------------------------------------------------
 
-
     def _mcp_rows(self) -> list[dict]:
         global_layer, project_layer = load_mcp_layers(cwd=Path.cwd())
         statuses = {}
@@ -389,7 +387,6 @@ class ConfigOps:
             )
         return rows
 
-
     def _mcp_result(self, request_id) -> dict:
         try:
             servers = self._mcp_rows()
@@ -406,8 +403,6 @@ class ConfigOps:
         }
 
     @staticmethod
-
-
     def _mcp_layer(request: dict) -> str:
         layer = request.get("layer", "global")
         if layer not in ("global", "project"):
@@ -415,8 +410,6 @@ class ConfigOps:
         return layer
 
     @staticmethod
-
-
     def _string_map(value, label: str) -> dict[str, str] | None:
         if value is None:
             return None
@@ -427,11 +420,132 @@ class ConfigOps:
             raise ValueError(f"{label} must map strings to strings")
         return dict(value)
 
-
     def _effective_mcp(self, name: str):
         global_layer, project_layer = load_mcp_layers(cwd=Path.cwd())
         return project_layer.get(name) or global_layer.get(name)
 
+    # -- limits (prompt/loop budgets) ---------------------------------------
+
+    @staticmethod
+    def _knob_value(runtime, knob) -> object:
+        """The value this build of the session is actually running with.
+
+        ``[limits]`` knobs come from the live runtime's config; ``[task]``
+        budgets reach subagents at spawn time, so the *file* is what the next
+        subagent will see — a stale in-memory copy must not win.
+        """
+        config = getattr(runtime, "user_config", None) or load_user_config()
+        if knob.table.startswith("limits"):
+            return config.limits.value(knob.attr)
+        fresh = load_user_config(global_config_path())
+        return getattr(fresh, knob.attr)
+
+    def _limits_result(self, request_id, *, ok=True, error=None) -> dict:
+        from zenagent.project import project_config_path
+
+        runtime = self.runtime
+        overrides = runtime.limit_overrides() if runtime is not None else {}
+        explicit = {
+            f"{table}.{name}"
+            for table, rows in read_managed(global_config_path()).items()
+            for name in rows
+        }
+        knobs = [
+            {
+                "key": knob.key,
+                "section": knob.section,
+                "table": knob.table,
+                "name": knob.name,
+                "kind": knob.kind,
+                "nullable": knob.nullable,
+                "min": knob.minimum,
+                "max": knob.maximum,
+                "default": knob.default,
+                "unit": knob.unit,
+                "apply": knob.apply,
+                "value": self._knob_value(runtime, knob),
+                "explicit": knob.key in explicit,
+                "override": overrides.get(knob.attr),
+            }
+            for knob in ALL_KNOBS
+        ]
+        payload = {
+            "type": "result",
+            "id": request_id,
+            "ok": ok,
+            "path": str(global_config_path()),
+            "project_path": str(project_config_path(Path.cwd())),
+            "groups": list(GROUP_ORDER),
+            "knobs": knobs,
+        }
+        if error is not None:
+            payload["error"] = error
+        return payload
+
+    def _adopt_limits(self) -> None:
+        """Push the rewritten file into the running session."""
+        runtime = self.runtime
+        if runtime is None:
+            return
+        fresh = load_user_config(global_config_path())
+        runtime.user_config.limits = fresh.limits
+        runtime.user_config.task_max_turns = fresh.task_max_turns
+        runtime.user_config.task_timeout_s = fresh.task_timeout_s
+        runtime.user_config.task_max_cost = fresh.task_max_cost
+        runtime.user_config.task_keep_transcripts = fresh.task_keep_transcripts
+        runtime.user_config.task_max_transcript_bytes = fresh.task_max_transcript_bytes
+        runtime.user_config.task_max_transcript_file_bytes = (
+            fresh.task_max_transcript_file_bytes
+        )
+        runtime.apply_limits()
+
+    async def _limits(self, request: dict, request_id) -> None:
+        op = request.get("op")
+        if op == "get":
+            self._send(self._limits_result(request_id))
+            return
+        if op not in ("set", "reset"):
+            self._send(
+                {
+                    "type": "error",
+                    "id": request_id,
+                    "message": f"unknown limits op: {op}",
+                }
+            )
+            return
+        key = request.get("key")
+        knob = KNOB_BY_KEY.get(key) if isinstance(key, str) else None
+        if knob is None:
+            self._send(
+                {"type": "error", "id": request_id, "message": f"unknown limit: {key}"}
+            )
+            return
+        try:
+            # Always start from the file: the page may hold a stale snapshot.
+            tables = read_managed(global_config_path())
+            rows = tables.setdefault(knob.table, {})
+            if op == "set":
+                rows[knob.name] = coerce_value(
+                    knob, request.get("value"), global_config_path()
+                )
+            else:
+                rows.pop(knob.name, None)
+            if not rows:
+                tables.pop(knob.table, None)
+            write_managed(global_config_path(), tables)
+        except LimitsWriteError as exc:
+            # Unknown keys / unreadable file: refuse, never rewrite.
+            self._send(self._limits_result(request_id, ok=False, error=str(exc)))
+            return
+        try:
+            self._adopt_limits()
+        except ValueError as exc:
+            # The rewrite succeeded; adopting it failed because the file as a
+            # whole does not parse (hand edit elsewhere). Report the config
+            # error — the next session will fail the same way, loudly.
+            self._send(self._limits_result(request_id, ok=False, error=str(exc)))
+            return
+        self._send(self._limits_result(request_id))
 
     async def _mcp(self, request: dict, request_id) -> None:
         op = request.get("op")
@@ -532,7 +646,6 @@ class ConfigOps:
             {"type": "error", "id": request_id, "message": f"unknown mcp op: {op}"}
         )
 
-
     def _model(self, request: dict, request_id) -> bool:
         model_id = request.get("model_id")
         if not isinstance(model_id, str) or not model_id.strip():
@@ -561,7 +674,6 @@ class ConfigOps:
         )
         return True
 
-
     def _mode(self, request: dict, request_id) -> bool:
         mode = request.get("mode")
         if self.runtime is None:
@@ -584,7 +696,6 @@ class ConfigOps:
         return True
 
     # -- run ----------------------------------------------------------------
-
 
     async def _project(self, request: dict, request_id) -> None:
         op = request.get("op")
@@ -622,7 +733,6 @@ class ConfigOps:
         )
 
     # -- sessions and commands ---------------------------------------------
-
 
     async def _command(self, request: dict, request_id) -> bool:
         """Dispatch one slash command; False means ``quit`` asked to shut down."""
@@ -694,7 +804,6 @@ class ConfigOps:
             return False
         return True
 
-
     async def _skill_command(self, name: str, argument: str, request_id) -> None:
         """Inject ``/skill:<name>`` as the next user turn, like the TUI does."""
         if self.runtime is None or self.chat is None:
@@ -708,6 +817,7 @@ class ConfigOps:
             f"/{name} {argument}".strip(),
             list(self.runtime.skills or []),
             reserved_names={*templates, *extensions},
+            max_body_bytes=self.runtime.limits.max_body_bytes,
         )
         if resolution is None:
             self._send(
