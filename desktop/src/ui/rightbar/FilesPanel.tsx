@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../../state/appStore'
+import { FILES_REVEAL_BATCH, revealedCount } from '../../state/reveal'
 import { useT } from '../../i18n/locale'
 import { useMarkdown } from '../chat/markdown'
 import chatCss from '../chat/AssistantNodeView.module.css'
@@ -35,6 +36,8 @@ function formatSize(size: number): string {
 export function FilesPanel() {
   const t = useT()
   const [dirs, setDirs] = useState<Record<string, DirState>>({})
+  // Entries mounted per directory: the first batch on open, +1 per "more".
+  const [dirPages, setDirPages] = useState<Record<string, number>>({})
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [selected, setSelected] = useState<string | null>(null)
   const [file, setFile] = useState<WorkspaceFile | null>(null)
@@ -106,7 +109,13 @@ export function FilesPanel() {
         </div>
       )
     }
-    return state.entries.map((entry) => {
+    const shown = revealedCount(
+      state.entries.length,
+      dirPages[rel] ?? 1,
+      FILES_REVEAL_BATCH,
+    )
+    const hidden = state.entries.length - shown
+    const rows = state.entries.slice(0, shown).map((entry) => {
       if (entry.kind === 'dir') {
         const open = expanded.has(entry.path)
         return (
@@ -143,6 +152,21 @@ export function FilesPanel() {
         </button>
       )
     })
+    if (hidden === 0) return rows
+    return [
+      ...rows,
+      <button
+        key={`${rel}:more`}
+        type="button"
+        className={css.more}
+        style={{ paddingLeft: 12 + depth * 14 }}
+        onClick={() =>
+          setDirPages((value) => ({ ...value, [rel]: (value[rel] ?? 1) + 1 }))
+        }
+      >
+        {t('sidebar.more', { count: hidden })}
+      </button>,
+    ]
   }
 
   if (selected !== null) {

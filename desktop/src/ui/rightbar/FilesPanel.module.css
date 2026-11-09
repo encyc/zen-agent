@@ -51,6 +51,25 @@
   white-space: nowrap;
 }
 
+.more {
+  width: 100%;
+  height: 26px;
+  padding: 0 6px;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-caption);
+  font-family: inherit;
+  font-size: var(--ds-font-11);
+  text-align: left;
+  cursor: pointer;
+}
+
+.more:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+}
+
 .note {
   margin: 0;
   padding: 10px 12px;

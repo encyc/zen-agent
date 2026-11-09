@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 're
 import { useAppStore } from '../../state/appStore'
 import { useT } from '../../i18n/locale'
 import { filterMemoryEntries, sortMemoryEntries } from '../../state/memory'
+import { MEMORY_REVEAL_BATCH, revealedCount } from '../../state/reveal'
 import type {
   MemoryEntry,
   MemoryEntryResult,
@@ -72,6 +73,8 @@ export function MemoryPanel() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  // Notes mounted in the list: the first batch on open, +1 per "more".
+  const [revealPages, setRevealPages] = useState(1)
   const generation = useRef(0)
 
   const viewed =
@@ -354,6 +357,8 @@ export function MemoryPanel() {
   }
 
   const visible = filterMemoryEntries(entries, query)
+  const shown = revealedCount(visible.length, revealPages, MEMORY_REVEAL_BATCH)
+  const hidden = visible.length - shown
 
   return (
     <div className={css.root} data-memory-panel data-mode="list">
@@ -364,7 +369,10 @@ export function MemoryPanel() {
             value={query}
             placeholder={t('panel.memory.search')}
             aria-label={t('panel.memory.search')}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value)
+              setRevealPages(1)
+            }}
           />
         </label>
         <button
@@ -401,7 +409,7 @@ export function MemoryPanel() {
         ) : visible.length === 0 ? (
           <p className={css.note}>{t('panel.memory.noMatch')}</p>
         ) : (
-          visible.map((entry) => {
+          visible.slice(0, shown).map((entry) => {
             const preview = snippet(entry.body)
             return (
               <button
@@ -427,6 +435,15 @@ export function MemoryPanel() {
               </button>
             )
           })
+        )}
+        {hidden > 0 && (
+          <button
+            type="button"
+            className={css.more}
+            onClick={() => setRevealPages((value) => value + 1)}
+          >
+            {t('sidebar.more', { count: hidden })}
+          </button>
         )}
       </div>
     </div>
