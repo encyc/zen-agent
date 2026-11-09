@@ -2,9 +2,8 @@
  * glue to `@tauri-apps/plugin-updater`. All policy lives in `update.ts`; this
  * module owns the clock, the cache and the installer. */
 
-import { invoke } from '@tauri-apps/api/core'
 import { create } from 'zustand'
-import { initialState } from '../rpc/client.ts'
+import { initialState, relaunchApp } from '../rpc/client.ts'
 import {
   cacheAfterFailure,
   cacheIsFresh,
@@ -189,7 +188,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     set({ phase: 'installing', message: null })
     try {
       await pending.downloadAndInstall(() => {})
-      await invoke('relaunch_app')
+      await relaunchApp()
     } catch (error) {
       set({ phase: 'failed', message: error instanceof Error ? error.message : String(error) })
     }

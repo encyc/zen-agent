@@ -255,7 +255,9 @@ export interface LimitKnob {
 export interface LimitsResult {
   type: 'result'
   id: string
-  ok: true
+  /** A refusal still carries the snapshot (ok:false) so the page can render
+   * the values it could not change. */
+  ok: boolean
   path: string
   project_path: string
   groups: string[]

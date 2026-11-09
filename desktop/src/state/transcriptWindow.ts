@@ -54,6 +54,34 @@ export function reduceTranscriptWindow({
   return { mounted, hiddenAbove, bounded: hiddenAbove > 0 }
 }
 
+export interface EarlierRow {
+  /** Whether the row renders above the first mounted turn. */
+  visible: boolean
+  /** Rows named in the button: withheld rows, else one wire page. */
+  count: number
+  /** Whether a click fetches an older page instead of growing the mount. */
+  loadsPage: boolean
+}
+
+/** The top-of-transcript affordance. Loaded history withheld by the mounted
+ * window grows on click; once every loaded row is mounted but the server still
+ * holds older pages, the same row must fetch one — otherwise that cursor is
+ * reachable only by a scroll-to-top gesture with no visible target. */
+export function earlierRow(
+  bounded: boolean,
+  hiddenAbove: number,
+  hasMoreBefore: boolean,
+): EarlierRow {
+  if (bounded) {
+    const count = Math.max(0, hiddenAbove)
+    return { visible: true, count, loadsPage: false }
+  }
+  if (hasMoreBefore) {
+    return { visible: true, count: TRANSCRIPT_PAGE_SIZE, loadsPage: true }
+  }
+  return { visible: false, count: 0, loadsPage: false }
+}
+
 /** Next window budget when the user reaches the top of the mounted rows. */
 export function growTranscriptWindow(
   windowSize: number,
@@ -106,51 +134,3 @@ export function shrinkTranscriptWindow(windowSize: number): number {
   return current <= TRANSCRIPT_WINDOW_MIN ? current : TRANSCRIPT_WINDOW_MIN
 }
 
-/** What a polled view needs to prove it is the same row as before: message
- * rows carry `id`, tool rows fall back to their call id, and the live tail
- * row's mutable fields name the content that streams in place. */
-export interface TranscriptViewIdentity {
-  id?: string
-  call_id?: string
-  text?: string
-  thinking?: string | null
-  thinking_seconds?: number | null
-  progress?: string
-  result_text?: string
-  status?: string
-  duration_ms?: number | null
-}
-
-function viewIdentity(view: TranscriptViewIdentity): string {
-  const identity = view.id ?? view.call_id ?? ''
-  if (identity === '') return ''
-  // The builder appends the live assistant row once and then mutates its text
-  // (and tool rows their progress) under the same id; the tail signature must
-  // include that content or the poll would freeze a streaming row.
-  return [
-    identity,
-    view.text ?? '',
-    view.thinking ?? '',
-    view.thinking_seconds ?? '',
-    view.progress ?? '',
-    view.result_text ?? '',
-    view.status ?? '',
-    view.duration_ms ?? '',
-  ].join('\u0000')
-}
-
-/** Whether a polled transcript can keep the rows already on screen. The wire
- * sends the whole child transcript every second; the same row count with the
- * same trailing row — identity and content — means there is nothing to
- * rebuild. */
-export function sameTranscriptTail(
-  previous: readonly TranscriptViewIdentity[] | null,
-  next: readonly TranscriptViewIdentity[],
-): boolean {
-  if (previous === null || previous.length !== next.length) return false
-  if (next.length === 0) return true
-  const before = viewIdentity(previous[previous.length - 1])
-  const after = viewIdentity(next[next.length - 1])
-  // A row with no identity at all cannot prove it is unchanged.
-  return before !== '' && before === after
-}

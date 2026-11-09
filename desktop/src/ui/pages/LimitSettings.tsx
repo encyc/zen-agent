@@ -10,7 +10,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAppStore } from '../../state/appStore'
 import { useLocale, useT } from '../../i18n/locale'
-import type { LimitKnob } from '../../rpc/types'
+import type { ErrorFrame, LimitKnob, LimitsResult } from '../../rpc/types'
+import { frameErrorNotice } from '../../rpc/frames'
 import { copyText } from '../clipboard'
 import { CopyIcon } from '../icons'
 import css from './LimitSettings.module.css'
@@ -129,15 +130,22 @@ export function LimitSettings() {
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
 
-  const apply = (frame: Record<string, unknown>) => {
-    if (frame.type === 'result' && frame.ok) {
-      setKnobs((frame.knobs ?? []) as LimitKnob[])
-      setPath(String(frame.path ?? ''))
-      setProjectPath(String(frame.project_path ?? ''))
-      setError(typeof frame.error === 'string' ? frame.error : '')
-    } else {
-      setError(messageOf(frame.error) || messageOf(frame.message) || t('settings.limitLoadFailed'))
+  const apply = (frame: LimitsResult | ErrorFrame) => {
+    if (frame.type === 'error') {
+      // A sanitized refusal: the code chooses the copy, the message is the
+      // fallback for codes this build does not know yet.
+      setError(frameErrorNotice(frame, locale) ?? t('settings.limitLoadFailed'))
+      return
     }
+    if (!frame.ok) {
+      // A legacy refusal still carries the snapshot plus a short reason.
+      setError(messageOf(frame.error) || t('settings.limitLoadFailed'))
+      return
+    }
+    setKnobs(frame.knobs)
+    setPath(frame.path)
+    setProjectPath(frame.project_path)
+    setError('')
   }
 
   useEffect(() => {
@@ -197,11 +205,11 @@ export function LimitSettings() {
     if (pending.bad.size > 0 || pending.changes.length === 0 || saving) return
     setSaving(true)
     try {
-      let frame: Record<string, unknown> | null = null
+      let frame: LimitsResult | ErrorFrame | null = null
       for (const { knob, value } of pending.changes) {
         frame = await useAppStore.getState().setLimit(knob.key, value)
       }
-      if (frame) apply(frame)
+      if (frame !== null) apply(frame)
       setDrafts({})
       setEditing(false)
     } catch (cause) {

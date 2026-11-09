@@ -6,7 +6,8 @@ import { useEffect, useState, type FormEvent } from 'react'
 import clsx from 'clsx'
 import { useAppStore, type McpLayer, type McpServerInput } from '../../state/appStore'
 import { useMcpStore } from '../../state/stores'
-import { useT } from '../../i18n/locale'
+import { useLocale, useT } from '../../i18n/locale'
+import { frameErrorNotice } from '../../rpc/frames'
 import type { McpServerRow } from '../../rpc/types'
 import { PlusIcon, RefreshIcon } from '../icons'
 import css from './McpSettings.module.css'
@@ -38,6 +39,7 @@ function parsePairs(text: string): Record<string, string> | undefined {
 
 function McpRow({ row }: { row: McpServerRow }) {
   const t = useT()
+  const locale = useLocale()
   const removeMcpServer = useAppStore((state) => state.removeMcpServer)
   const testMcpServer = useAppStore((state) => state.testMcpServer)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
@@ -82,7 +84,7 @@ function McpRow({ row }: { row: McpServerRow }) {
     try {
       const frame = await removeMcpServer(row.name, row.source)
       if (!(frame.type === 'result' && frame.ok)) {
-        setError(messageOf(frame.message) || t('settings.mcpRemoveFailed'))
+        setError(frameErrorNotice(frame, locale) ?? (messageOf(frame.message) || t('settings.mcpRemoveFailed')))
         setArmed(false)
       }
     } catch (cause) {
@@ -171,6 +173,7 @@ function McpRow({ row }: { row: McpServerRow }) {
 
 function AddServer({ onDone }: { onDone(): void }) {
   const t = useT()
+  const locale = useLocale()
   const addMcpServer = useAppStore((state) => state.addMcpServer)
   const [name, setName] = useState('')
   const [transport, setTransport] = useState<'stdio' | 'http'>('stdio')
@@ -210,7 +213,7 @@ function AddServer({ onDone }: { onDone(): void }) {
       if (frame.type === 'result' && frame.ok) {
         onDone()
       } else {
-        setError(messageOf(frame.message) || t('settings.mcpAddFailed'))
+        setError(frameErrorNotice(frame, locale) ?? (messageOf(frame.message) || t('settings.mcpAddFailed')))
       }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))

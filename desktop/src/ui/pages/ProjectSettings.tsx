@@ -9,6 +9,7 @@ import { lastProjectCwd, useAppStore } from '../../state/appStore'
 import { projectRows } from '../../state/projectRows'
 import { useProjectStore, useSessionStore, useSettingsStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
+import { frameErrorNotice } from '../../rpc/frames'
 import { formatAge } from '../format'
 import { pickProjectFolder } from '../sessions/fileDialog'
 import { ChatIcon, FolderIcon, PlusIcon, XIcon } from '../icons'
@@ -75,11 +76,10 @@ function ProjectRow({ path, root, name, registered, stat, active }: ProjectRowPr
     try {
       const frame = await relocateProject(root, target)
       if (frame.type === 'error') {
-        setError(
-          t('settings.projectRelocateFailed', {
-            message: String(frame.message ?? ''),
-          }),
-        )
+        // A sanitized code picks the copy; the short server message is the
+        // fallback when it carries no safe detail.
+        const detail = frameErrorNotice(frame, locale) ?? String(frame.message ?? '')
+        setError(t('settings.projectRelocateFailed', { message: detail }))
         return
       }
       if (registered) updateProject(path, target)

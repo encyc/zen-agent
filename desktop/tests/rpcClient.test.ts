@@ -30,6 +30,7 @@ function record(script: (command: string) => unknown): Recorder {
         await new Promise((resolve) => setTimeout(resolve, 1))
         return () => {}
       },
+      async relaunch(): Promise<void> {},
     },
   }
 }
@@ -89,6 +90,7 @@ test('a partial registration is released before the retry registers again', asyn
       live.set(event, (live.get(event) ?? 0) + 1)
       return () => live.set(event, (live.get(event) ?? 1) - 1)
     },
+    async relaunch(): Promise<void> {},
   })
   const client = new RpcClient()
 
@@ -114,6 +116,7 @@ test('a failed listener registration does not poison the later starts', async ()
       if (listens.length === 1) throw new Error('event plugin unavailable')
       return () => {}
     },
+    async relaunch(): Promise<void> {},
   })
   const client = new RpcClient()
 

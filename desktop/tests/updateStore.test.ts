@@ -38,6 +38,42 @@ test('a missing cache triggers one network check', () => {
   assert.equal(bootUpdateCheck(base), 'network')
 })
 
+test('install() relaunches through the RPC bridge seam', async () => {
+  ;(globalThis as Record<string, unknown>).__APP_VERSION__ ??= '0.8.4'
+  const { useUpdateStore, _usePluginLoader } = await import('../src/state/updateStore.ts')
+  _usePluginLoader(async () => ({
+    check: async () => ({
+      version: '0.9.0',
+      downloadAndInstall: async () => {},
+    }),
+  }))
+  const calls: string[] = []
+  _useBridge({
+    async invoke<T>(command: string): Promise<T> {
+      calls.push(`invoke:${command}`)
+      return {} as T
+    },
+    async listen<T>(): Promise<() => void> {
+      return () => {}
+    },
+    async relaunch(): Promise<void> {
+      calls.push('relaunch')
+    },
+  })
+  useUpdateStore.setState({
+    cache: { checkedAt: Date.now(), latest: '0.9.0', notified: null },
+    phase: 'available',
+    pending: null,
+    selfUpdatable: true,
+    message: null,
+  })
+
+  await useUpdateStore.getState().install()
+
+  assert.deepEqual(calls, ['relaunch'])
+  assert.equal(useUpdateStore.getState().phase, 'installing')
+})
+
 test('install() re-checks when the pending handle was lost to a reload', async () => {
   ;(globalThis as Record<string, unknown>).__APP_VERSION__ ??= '0.8.4'
   const { useUpdateStore, _usePluginLoader } = await import('../src/state/updateStore.ts')
@@ -50,6 +86,15 @@ test('install() re-checks when the pending handle was lost to a reload', async (
       },
     }),
   }))
+  _useBridge({
+    async invoke<T>(): Promise<T> {
+      return {} as T
+    },
+    async listen<T>(): Promise<() => void> {
+      return () => {}
+    },
+    async relaunch(): Promise<void> {},
+  })
   useUpdateStore.setState({
     cache: { checkedAt: Date.now(), latest: '0.9.0', notified: null },
     phase: 'available',
@@ -88,6 +133,7 @@ function recordCommands(answer: { updatesDisabled: boolean; selfUpdatable: boole
     async listen<T>(): Promise<() => void> {
       return () => {}
     },
+    async relaunch(): Promise<void> {},
   })
   return { commands }
 }

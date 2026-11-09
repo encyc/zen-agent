@@ -15,6 +15,7 @@ import { retryableNodeId, useChatStore, type ChatNode, type ToolNode, type UserN
 import { groupTurns, type ChatTurn } from '../../state/turns'
 import {
   TRANSCRIPT_WINDOW_MIN,
+  earlierRow,
   growTranscriptWindow,
   reduceTranscriptWindow,
   shrinkTranscriptWindow,
@@ -264,6 +265,9 @@ export function ChatView() {
     setFollow(false)
     scroller.scrollTo({ top: 0, behavior: 'smooth' })
   }
+  // The row also covers server-side history the snapshot never loaded: once
+  // every loaded row is mounted a click fetches the next page directly.
+  const earlier = earlierRow(transcriptWindow.bounded, transcriptWindow.hiddenAbove, hasMoreBefore)
 
   return (
     <div className={css.root}>
@@ -279,15 +283,15 @@ export function ChatView() {
           </div>
         ) : (
           <div className={css.flow} data-chat-flow>
-            {transcriptWindow.bounded && (
+            {earlier.visible && (
               <div className={css.earlierRow}>
                 <button
                   type="button"
                   className={css.earlier}
                   data-earlier
-                  onClick={revealEarlier}
+                  onClick={earlier.loadsPage ? () => void loadOlder() : revealEarlier}
                 >
-                  {t('chat.showEarlier', { count: transcriptWindow.hiddenAbove })}
+                  {t('chat.showEarlier', { count: earlier.count })}
                 </button>
               </div>
             )}

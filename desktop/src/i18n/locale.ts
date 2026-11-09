@@ -2,7 +2,7 @@
  * locale and hands components a translate function. The dictionaries and the
  * pure translate() live in ./messages (node --test loads them directly). */
 
-import { translate } from './messages.ts'
+import { translate, type Locale } from './messages.ts'
 import { useSettingsStore } from '../state/stores'
 
 export { translate }
@@ -15,6 +15,6 @@ export function useT(): (key: string, params?: Record<string, string | number>) 
 
 /** The locale itself, for effects that must not re-run on every render
  * (`useT` returns a fresh function each time, so it cannot be a dependency). */
-export function useLocale(): string {
+export function useLocale(): Locale {
   return useSettingsStore((state) => state.locale)
 }

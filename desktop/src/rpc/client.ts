@@ -18,11 +18,20 @@ export interface StartOptions {
 export interface Bridge {
   invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>
   listen<T>(event: string, handler: (event: { payload: T }) => void): Promise<UnlistenFn>
+  /** Restart the app in place (after an installed update). */
+  relaunch(): Promise<void>
 }
 
 let bridge: Bridge = {
   invoke: (command, args) => invoke(command, args),
   listen: (event, handler) => listen(event, handler),
+  relaunch: () => invoke('relaunch_app'),
+}
+
+/** Restart the app after an installed update, through the same bridge seam as
+ * every other shell command. */
+export function relaunchApp(): Promise<void> {
+  return bridge.relaunch()
 }
 
 /** Test seam: swap the Tauri bridge (the real one needs a webview). */
