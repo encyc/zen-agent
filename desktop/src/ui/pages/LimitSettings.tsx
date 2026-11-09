@@ -254,8 +254,32 @@ export function LimitSettings() {
     <div className={css.stack} data-editing={editing || undefined}>
       <section className={css.cardBlock}>
         <div className={css.cardHeadline}>
-          <h2 className={css.cardHeading}>{t('settings.limitFile')}</h2>
-          <p className={css.cardCaption}>{t('settings.limitFileCaption')}</p>
+          <div className={css.headCopy}>
+            <h2 className={css.cardHeading}>{t('settings.limitFile')}</h2>
+            <p className={css.cardCaption}>{t('settings.limitFileCaption')}</p>
+          </div>
+          <div className={css.headActions}>
+            <button
+              type="button"
+              className={css.editButton}
+              disabled={loading || saving || (editing && blocked)}
+              onClick={() => void toggleEdit()}
+            >
+              {saving
+                ? t('settings.limitSaving')
+                : editing
+                  ? changedCount > 0
+                    ? t('settings.limitSaveCount', { count: changedCount })
+                    : t('settings.limitSave')
+                  : t('settings.limitEdit')}
+            </button>
+            {editing ? (
+              <button type="button" className={css.cancelButton} disabled={saving} onClick={cancelEdit}>
+                {t('settings.limitCancel')}
+              </button>
+            ) : null}
+            {editing && blocked ? <span className={css.blockedNote}>{t('settings.limitBlocked')}</span> : null}
+          </div>
         </div>
         <div className={css.fileRow}>
           <code className={css.filePath}>{pathLabel(path)}</code>
@@ -280,8 +304,10 @@ export function LimitSettings() {
       {groups.map(([section, rows]) => (
         <section className={css.cardBlock} key={section} data-group={section}>
           <div className={css.cardHeadline}>
-            <h2 className={css.cardHeading}>{sectionTitle(section)}</h2>
-            <p className={css.cardCaption}>{sectionCaption(section)}</p>
+            <div className={css.headCopy}>
+              <h2 className={css.cardHeading}>{sectionTitle(section)}</h2>
+              <p className={css.cardCaption}>{sectionCaption(section)}</p>
+            </div>
           </div>
           <div className={css.panel}>
             {rows.map((knob) => (
@@ -297,30 +323,6 @@ export function LimitSettings() {
           </div>
         </section>
       ))}
-
-      <div className={css.actionBar}>
-        <button
-          type="button"
-          className={css.editButton}
-          data-role={editing ? 'save' : 'edit'}
-          disabled={loading || saving || (editing && blocked)}
-          onClick={() => void toggleEdit()}
-        >
-          {saving
-            ? t('settings.limitSaving')
-            : editing
-              ? changedCount > 0
-                ? t('settings.limitSaveCount', { count: changedCount })
-                : t('settings.limitSave')
-              : t('settings.limitEdit')}
-        </button>
-        {editing ? (
-          <button type="button" className={css.cancelButton} disabled={saving} onClick={cancelEdit}>
-            {t('settings.limitCancel')}
-          </button>
-        ) : null}
-        {editing && blocked ? <span className={css.blockedNote}>{t('settings.limitBlocked')}</span> : null}
-      </div>
     </div>
   )
 }

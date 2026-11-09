@@ -14,11 +14,24 @@
 
 .cardHeadline {
   display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.headCopy {
+  display: flex;
   min-width: 0;
   flex-direction: column;
-  align-items: flex-start;
   gap: 3px;
-  margin-bottom: 10px;
+}
+
+.headActions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
 }
 
 .cardHeading {
@@ -40,7 +53,7 @@
   flex-direction: column;
   border: 1px solid var(--dsw-alias-stroke-subtle);
   border-radius: var(--ds-radius-10);
-  background: var(--dsw-alias-surface-raised);
+  background: color-mix(in oklab, var(--dsw-alias-label-primary) 3.5%, transparent);
 }
 
 .fileRow {
@@ -187,7 +200,7 @@
   border: 1px solid var(--dsw-alias-stroke-subtle);
   border-radius: var(--ds-radius-6);
   padding: 0 8px;
-  background: var(--dsw-alias-surface-base);
+  background: transparent;
   color: var(--dsw-alias-label-primary);
   font-family: var(--ds-font-mono, ui-monospace, monospace);
   font-size: var(--ds-font-12);
@@ -231,28 +244,16 @@
   cursor: default;
 }
 
-.actionBar {
-  position: sticky;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 4px;
-  padding: 12px 0 4px;
-  background: var(--dsw-alias-surface-base);
-  border-top: 1px solid var(--dsw-alias-stroke-subtle);
-}
-
 .editButton {
   height: 30px;
   border: 0;
   border-radius: var(--ds-radius-8);
-  padding: 0 16px;
+  padding: 0 12px;
   background: var(--dsw-alias-label-primary);
-  color: var(--dsw-alias-surface-base);
+  color: var(--dsw-alias-bg-base);
   font-family: inherit;
   font-size: var(--ds-font-12-5);
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
 }
 
@@ -261,7 +262,7 @@
 }
 
 .editButton:disabled {
-  opacity: 0.4;
+  opacity: 0.45;
   cursor: default;
 }
 
