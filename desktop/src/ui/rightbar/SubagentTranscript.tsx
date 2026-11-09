@@ -34,6 +34,9 @@ export function SubagentTranscript({ target }: { target: SubagentPanelTarget }) 
   /** The accumulated rows; the poll cursor and the merge read it without a
    * re-render dependency. */
   const viewsRef = useRef<View[] | null>(null)
+  /** Set when a poll found the server transcript shorter than the rows on
+   * screen: the held cursor points past it, so the next poll resends all. */
+  const resync = useRef(false)
   const [available, setAvailable] = useState(true)
   const hasViews = useRef(false)
   const requestSeq = useRef(0)
@@ -59,8 +62,8 @@ export function SubagentTranscript({ target }: { target: SubagentPanelTarget }) 
     const seq = (requestSeq.current += 1)
     // Ask only for what the panel does not hold; the cursor stays on the
     // earliest running card (plus one tail row) so in-place growth and a
-    // settlement both land.
-    const after = nextSubagentCursor(viewsRef.current)
+    // settlement both land. A pending resync asks for the whole transcript.
+    const after = nextSubagentCursor(viewsRef.current, resync.current)
     const payload: Record<string, unknown> = {
       type: 'subagent_transcript',
       call_id: target.callId,
@@ -78,11 +81,16 @@ export function SubagentTranscript({ target }: { target: SubagentPanelTarget }) 
       }
       hasViews.current = true
       setAvailable(result.available !== false)
-      const merged = mergeSubagentPage(viewsRef.current, result)
-      viewsRef.current = merged
+      // A shrink keeps the rows already on screen and resyncs next poll
+      // rather than blanking the panel with a partial page.
+      const merged = mergeSubagentPage(viewsRef.current, result, {
+        fullSnapshot: after === undefined,
+      })
+      viewsRef.current = merged.views
+      resync.current = merged.resync
       // The merge returns the previous array identity when no row changed, so
       // React skips the rebuild; a settlement or an append is a new array.
-      setViews(merged)
+      setViews(merged.views)
     } catch {
       // A failed poll must not wipe rows already on screen.
       if (seq === requestSeq.current && !hasViews.current) setAvailable(false)
@@ -92,6 +100,7 @@ export function SubagentTranscript({ target }: { target: SubagentPanelTarget }) 
   useEffect(() => {
     hasViews.current = false
     viewsRef.current = null
+    resync.current = false
     stick.current = true
     setViews(null)
     setAvailable(true)
