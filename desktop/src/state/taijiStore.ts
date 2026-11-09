@@ -24,10 +24,13 @@ export function _useClient(loader: () => Promise<RpcLike>): void {
   clientSource = loader
 }
 
-/** One taiji wire reply: `ok` false carries the server's refusal reason. */
+/** One taiji wire reply: `ok` false carries the server's refusal reason; a
+ * newer server also sends a `code` + `params` for the UI dictionary. */
 export type TaijiReply = {
   ok?: boolean
   message?: string
+  code?: string
+  params?: Record<string, string>
   queued?: boolean
   board?: TaijiBoard
   items?: { role: string; text: string }[]

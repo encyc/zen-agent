@@ -5,8 +5,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../../state/appStore'
-import { useComposerStore, useNoticeStore, useWorkPanelStore } from '../../state/stores'
+import { useComposerStore, useNoticeStore, useSettingsStore, useWorkPanelStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
+import { localizeError } from '../../i18n/errors.ts'
 import type {
   TaijiAttention,
   TaijiDiffFile,
@@ -24,6 +25,12 @@ const KILL_ARM_MS = 3000
 
 function notice(kind: 'info' | 'error', text: string) {
   useNoticeStore.getState().show({ kind, text })
+}
+
+/** A refusal in the person's language: a known code maps to the dictionary,
+ * anything else keeps the server's own message. */
+function failureReason(reply: { message?: string; code?: string; params?: Record<string, string> }): string {
+  return localizeError(reply, useSettingsStore.getState().locale)
 }
 
 /** A task age in the interface language; the tick form is digits already. */
@@ -45,7 +52,7 @@ async function deliver(name: string, text: string, t: (key: string, params?: Rec
       if (reply.queued === true) notice('info', t('panel.taiji.queuedNotice', { name }))
       else notice('info', t('panel.taiji.delivered'))
     } else {
-      notice('error', t('panel.taiji.actionFailed', { reason: String(reply.message ?? '') }))
+      notice('error', t('panel.taiji.actionFailed', { reason: failureReason(reply) }))
     }
   } catch {
     notice('error', t('panel.taiji.actionFailed', { reason: 'timeout' }))
@@ -148,7 +155,7 @@ function AcceptanceCard(props: { worker: TaijiWorker }) {
     try {
       const reply = await useTaijiStore.getState().merge(worker.name)
       if (reply.ok === true) notice('info', t('panel.taiji.merged', { branch: worker.branch }))
-      else notice('error', t('panel.taiji.mergeFailed', { reason: String(reply.message ?? '') }))
+      else notice('error', t('panel.taiji.mergeFailed', { reason: failureReason(reply) }))
     } catch {
       notice('error', t('panel.taiji.actionFailed', { reason: 'timeout' }))
     }

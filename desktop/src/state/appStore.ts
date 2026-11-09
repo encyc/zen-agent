@@ -34,7 +34,7 @@ import {
 import { useChatStore } from './chatStore'
 import { nextDraft } from './pending'
 import { loadPrefs, replayFrames, savePref, spawnArgs } from './prefs'
-import { frameError } from '../rpc/frames'
+import { frameErrorNotice, type ReplyLike } from '../rpc/frames'
 import { reportRefreshFailure } from './refresh'
 
 export type ConnectionState = 'idle' | 'starting' | 'ready' | 'exited'
@@ -734,11 +734,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       showActionError(error)
       return false
     }
-    const error = frameError(frame)
-    if (error !== null) {
-      showActionError(error)
-      return false
-    }
+    if (showFrameError(frame)) return false
     await refreshAfterSessionChange(get)
     return true
   },
@@ -756,11 +752,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       showActionError(error)
       return null
     }
-    const error = frameError(frame)
-    if (error !== null) {
-      showActionError(error)
-      return null
-    }
+    if (showFrameError(frame)) return null
     return typeof frame.path === 'string' ? frame.path : null
   },
 
@@ -780,11 +772,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       showActionError(error)
       return
     }
-    const error = frameError(frame)
-    if (error !== null) {
-      showActionError(error)
-      return
-    }
+    if (showFrameError(frame)) return
     if (frame.dequeued === true && typeof frame.text === 'string') {
       const composer = useComposerStore.getState()
       composer.setDraft(nextDraft(composer.draft, frame.text))
@@ -824,11 +812,7 @@ async function runSessionOp(
     showActionError(error)
     return
   }
-  const error = frameError(frame)
-  if (error !== null) {
-    showActionError(error)
-    return
-  }
+  if (showFrameError(frame)) return
   await after()
 }
 
@@ -844,10 +828,7 @@ async function runSessionCommand(
     showActionError(error)
     return
   }
-  const error = frameError(frame)
-  if (error !== null) {
-    showActionError(error)
-  }
+  if (showFrameError(frame)) return
 }
 
 function showActionError(value: unknown): void {
@@ -855,6 +836,16 @@ function showActionError(value: unknown): void {
     kind: 'error',
     text: value instanceof Error ? value.message : String(value),
   })
+}
+
+/** A server refusal goes through the code→dictionary mapper (`message` stays
+ * the fallback for codes this build does not know); returns false when the
+ * frame is not a refusal. */
+function showFrameError(frame: ReplyLike): boolean {
+  const text = frameErrorNotice(frame, useSettingsStore.getState().locale)
+  if (text === null) return false
+  useNoticeStore.getState().show({ kind: 'error', text })
+  return true
 }
 
 async function refreshAfterSessionChange(get: () => AppState): Promise<void> {
