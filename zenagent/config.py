@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from zenagent import project
+from zenagent.limits import Limits, parse_limits
 from zenagent.providers.catalog import ProviderConfig, model_from_mapping
 from zenagent.types import AssistantMessage, Message, Usage
 
@@ -61,7 +62,9 @@ def config_path() -> Path:
 
 
 #: Provider keys accepted inside ``[providers.custom.<id>]``.
-_CUSTOM_PROVIDER_KEYS = frozenset({"name", "base_url", "api_key_env", "adapter", "models"})
+_CUSTOM_PROVIDER_KEYS = frozenset(
+    {"name", "base_url", "api_key_env", "adapter", "models"}
+)
 #: Keys accepted inside ``[safety]``.
 _SAFETY_KEYS = frozenset({"allow_outside", "allow_destructive", "allow_protected"})
 #: Keys accepted inside ``[backup]``.
@@ -204,7 +207,9 @@ def _parse_task(
     timeout_s = table.get("timeout_s", DEFAULT_TASK_TIMEOUT_S)
     if isinstance(timeout_s, bool) or not isinstance(timeout_s, int) or timeout_s < 0:
         # 0 disables the wall-clock watchdog; anything negative is a typo.
-        raise ValueError(f"config {target}: task.timeout_s must be a non-negative integer")
+        raise ValueError(
+            f"config {target}: task.timeout_s must be a non-negative integer"
+        )
     values = (
         _positive_int(table, "max_turns", DEFAULT_TASK_MAX_TURNS, "task", target),
         timeout_s,
@@ -331,15 +336,18 @@ class UserConfig:
     task_max_transcript_bytes: int = DEFAULT_TASK_MAX_TRANSCRIPT_BYTES
     #: ``[task]``: one transcript past this is cut and marked truncated
     task_max_transcript_file_bytes: int = DEFAULT_TASK_MAX_TRANSCRIPT_FILE_BYTES
+    #: ``[limits]``: prompt/loop budgets (global-only; see zenagent.limits)
+    limits: Limits = field(default_factory=Limits)
 
 
 def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfig:
     """Read one config file; a missing file means "use the defaults".
 
     ``project_layer=True`` marks the committable ``<root>/.zenagent/config.toml``
-    layer: it may not set the global-only ``[safety]``/``[backup]``/``[task]``
-    sections, so a repository can never grant itself permissions or raise its
-    own subagent budgets.
+    layer: it may not set the global-only ``[safety]``/``[backup]``/``[task]``/
+    ``[limits]`` sections, so a repository can never grant itself permissions,
+    raise its own subagent budgets or resize the prompt budgets of the machine
+    it was cloned onto.
     """
     if not target.is_file():
         return UserConfig()
@@ -348,12 +356,13 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
     except (tomllib.TOMLDecodeError, OSError) as exc:
         raise ValueError(f"cannot read config {target}: {exc}") from exc
 
-    global_only = [name for name in ("safety", "backup", "task") if name in data]
+    global_only = [
+        name for name in ("safety", "backup", "task", "limits") if name in data
+    ]
     if project_layer and global_only:
         listed = ", ".join(f"[{name}]" for name in global_only)
         raise ValueError(
-            f"config {target}: {listed} are global-only; "
-            f"move them to {config_path()}"
+            f"config {target}: {listed} are global-only; move them to {config_path()}"
         )
 
     default_model = data.get("default_model")
@@ -371,9 +380,7 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
     if not isinstance(extensions_raw, list) or not all(
         isinstance(item, str) for item in extensions_raw
     ):
-        raise ValueError(
-            f"config {target}: extensions must be an array of strings"
-        )
+        raise ValueError(f"config {target}: extensions must be an array of strings")
     extensions = [_absolute_path(item, target) for item in extensions_raw]
 
     tools_table = data.get("tools") or {}
@@ -390,7 +397,9 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
     tool_deny: list[str] = []
     for label, destination in (("allow", tool_allow), ("deny", tool_deny)):
         value = tools_table.get(label) or []
-        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        if not isinstance(value, list) or not all(
+            isinstance(item, str) for item in value
+        ):
             raise ValueError(
                 f"config {target}: tools.{label} must be an array of strings"
             )
@@ -430,6 +439,7 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
         task_max_transcript_bytes,
         task_max_transcript_file_bytes,
     ) = _parse_task(_section_table(data, "task", target), target)
+    limits = parse_limits(data.get("limits"), target)
     return UserConfig(
         default_model=default_model,
         provider_overrides=overrides,
@@ -449,6 +459,7 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
         task_keep_transcripts=task_keep_transcripts,
         task_max_transcript_bytes=task_max_transcript_bytes,
         task_max_transcript_file_bytes=task_max_transcript_file_bytes,
+        limits=limits,
     )
 
 
@@ -493,10 +504,13 @@ def _merge_user_configs(base: UserConfig, override: UserConfig) -> UserConfig:
         task_keep_transcripts=base.task_keep_transcripts,
         task_max_transcript_bytes=base.task_max_transcript_bytes,
         task_max_transcript_file_bytes=base.task_max_transcript_file_bytes,
+        limits=base.limits,
     )
 
 
-def load_user_config(path: Path | None = None, *, cwd: Path | None = None) -> UserConfig:
+def load_user_config(
+    path: Path | None = None, *, cwd: Path | None = None
+) -> UserConfig:
     """Read config, layering the project file over the global one.
 
     An explicit ``path`` disables layering: only that file is read, preserving
@@ -626,4 +640,6 @@ class ContextGuard:
             self.last_usage = event.message.usage
 
     async def transform(self, messages: list[Message]) -> list[Message]:
-        return await naive_overflow_prune(messages, self.context_window, self.last_usage)
+        return await naive_overflow_prune(
+            messages, self.context_window, self.last_usage
+        )
