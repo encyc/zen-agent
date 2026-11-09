@@ -6,7 +6,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
-import { listen } from '@tauri-apps/api/event'
 import { useAppStore } from '../../state/appStore'
 import { useApprovalStore, useAskStore, useComposerStore, useSessionStore, useSettingsStore, useStatusStore, useCatalogStore, useSkillsStore } from '../../state/stores'
 import { slashEntries } from '../../state/slashMenu'
@@ -19,6 +18,7 @@ import { useT } from '../../i18n/locale'
 import { ApprovalPanel } from '../approval/ApprovalPanel'
 import { AskCard } from '../ask/AskCard'
 import { pickImagePaths } from './pickImages'
+import { attachDragDrop } from './dragDrop'
 import { TodoDock, PendingDock, ContextMeter } from './Docks'
 import { ModelMenu, ModeMenu } from './Menus'
 import { TokenBoxes } from './TokenBoxes'
@@ -140,23 +140,17 @@ export function InputBar() {
     area.style.height = `${Math.min(area.scrollHeight, 360)}px`
   }, [draft])
 
-  // Tauri drag-drop: file drop events carry absolute paths.
-  useEffect(() => {
-    let disposed = false
-    const promise = listen<{ paths: string[]; type: string }>('tauri://drag-drop', (event) => {
-      const paths = event.payload.paths
-      if (Array.isArray(paths)) {
+  // Tauri drag-drop: file drop events carry absolute paths. The helper's
+  // cleanup unlistens even when StrictMode tears this effect down before the
+  // async registration settles.
+  useEffect(
+    () =>
+      attachDragDrop((paths) => {
         const imagePaths = paths.filter((path) => /\.(png|jpe?g|gif|webp|bmp)$/i.test(path))
         if (imagePaths.length > 0) addImages(imagePaths)
-      }
-    })
-    return () => {
-      disposed = true
-      void promise.then((unlisten) => {
-        if (!disposed) unlisten()
-      })
-    }
-  }, [addImages])
+      }),
+    [addImages],
+  )
 
   const doSubmit = () => {
     setMenu({ kind: null })
