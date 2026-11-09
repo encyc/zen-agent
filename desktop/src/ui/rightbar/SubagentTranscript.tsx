@@ -12,6 +12,7 @@ import {
 } from '../../state/transcriptWindow'
 import { useStatusStore, type SubagentPanelTarget } from '../../state/stores'
 import { nodesFromViews, type ChatNode } from '../../state/chatStore'
+import { mergeSubagentPage, nextSubagentCursor } from '../../state/subagentPage'
 import type { MessageView, SubagentTranscriptResult, ToolCallView } from '../../rpc/types'
 import { useT } from '../../i18n/locale'
 import { formatDuration } from '../format'
@@ -31,6 +32,9 @@ type View = MessageView | ToolCallView
 export function SubagentTranscript({ target }: { target: SubagentPanelTarget }) {
   const t = useT()
   const [views, setViews] = useState<View[] | null>(null)
+  /** The accumulated rows; the poll cursor and the merge read it without a
+   * re-render dependency. */
+  const viewsRef = useRef<View[] | null>(null)
   const [available, setAvailable] = useState(true)
   const hasViews = useRef(false)
   const requestSeq = useRef(0)
@@ -54,11 +58,19 @@ export function SubagentTranscript({ target }: { target: SubagentPanelTarget }) 
 
   const load = useCallback(async () => {
     const seq = (requestSeq.current += 1)
+    // Ask only for what the panel does not hold; the cursor keeps the tail
+    // row so its in-place growth (streamed text, tool progress) still lands.
+    const after = nextSubagentCursor(viewsRef.current)
+    const payload: Record<string, unknown> = {
+      type: 'subagent_transcript',
+      call_id: target.callId,
+    }
+    if (after !== undefined) payload.after = after
     try {
-      const result = await useAppStore.getState().client().send<SubagentTranscriptResult>(
-        { type: 'subagent_transcript', call_id: target.callId },
-        REQUEST_TIMEOUT_MS,
-      )
+      const result = await useAppStore
+        .getState()
+        .client()
+        .send<SubagentTranscriptResult>(payload, REQUEST_TIMEOUT_MS)
       if (seq !== requestSeq.current) return
       if (result.ok !== true) {
         if (!hasViews.current) setAvailable(false)
@@ -66,10 +78,11 @@ export function SubagentTranscript({ target }: { target: SubagentPanelTarget }) 
       }
       hasViews.current = true
       setAvailable(result.available !== false)
-      const next = result.transcript ?? []
-      // The poll re-sends the whole transcript every second; identical rows
-      // must keep their identity so React skips the rebuild.
-      setViews((previous) => (sameTranscriptTail(previous, next) ? previous : next))
+      const merged = mergeSubagentPage(viewsRef.current, result)
+      viewsRef.current = merged
+      // An unchanged poll keeps the previous array identity so React skips
+      // the rebuild (the same guard the full-snapshot poll used).
+      setViews((previous) => (sameTranscriptTail(previous, merged) ? previous : merged))
     } catch {
       // A failed poll must not wipe rows already on screen.
       if (seq === requestSeq.current && !hasViews.current) setAvailable(false)
@@ -78,6 +91,7 @@ export function SubagentTranscript({ target }: { target: SubagentPanelTarget }) 
 
   useEffect(() => {
     hasViews.current = false
+    viewsRef.current = null
     stick.current = true
     setViews(null)
     setAvailable(true)
