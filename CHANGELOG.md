@@ -5,6 +5,27 @@ matches the release tag; older history is in the repository tags and commits.
 
 ## Unreleased
 
+- **Architecture diagrams as a first-class asset** (`docs/architecture-simplify.html`,
+  `docs/architecture-full.html`): two standalone interactive HTML diagrams of the
+  whole system — a module-level simplify view and a per-file full view (64 nodes,
+  58 edges; hover any node for its merged file list and details, and to highlight
+  its edges). Governance now lives in `docs/architecture.md` §架构图资产:
+  architecture/requirement discussions must go through the diagrams, and every
+  changelog entry must state what changed on them. (Diagram deltas for this
+  entry: **added** both files as new assets, then cross-checked against
+  `scripts/import_graph.py` — coverage gaps folded into node tooltips
+  (`error_notice` → chat, `project` / `registry` consumer notes). Design
+  review **added** 2 edges (`prep→config`, `runtime→observability`), per-node
+  fan-in badges, a hover/click layer that reveals non-drawn import relations
+  as blue dotted lines annotated with the calling methods (AST-extracted),
+  and a presentation pass (visual-sample legend, provenance line, column
+  hairline rules, tiered badges, focus-dim softening, reduced-motion
+  fallback). The checker also surfaced a 4-module import cycle inside the
+  kernel, `agent.loop ↔ tool_exec ↔ result_budget ↔ timeouts`, which the
+  diagram intentionally hides by merging them into one node.)
+
+## v0.10.1 — 2026-11-09
+
 **[limits]: the tunable budgets, and a settings page for them.** The prompt /
 loop budgets that used to be module constants (`MAX_INDEX_BYTES`,
 `_MAX_TURNS`, `MAX_OUTPUT_BYTES`, …) are one `[limits]` block of
@@ -13,19 +34,6 @@ loop budgets that used to be module constants (`MAX_INDEX_BYTES`,
 
 ### Added
 
-- **Architecture diagrams as a first-class asset** (`docs/architecture-simplify.html`,
-  `docs/architecture-full.html`): two standalone interactive HTML diagrams of the
-  whole system — a module-level simplify view and a per-file full view (64 nodes,
-  58 edges; hover any node for its merged file list and details, and to highlight
-  its edges). Governance now lives in `docs/architecture.md` §架构图资产:
-  architecture/requirement discussions must go through the diagrams, and every
-  changelog entry must state what changed on them. (Diagram deltas for this
-  entry: **added** both files as new assets; afterwards cross-checked against
-  `scripts/import_graph.py` — coverage gaps folded into node tooltips
-  (`error_notice` → chat, `project` / `registry` consumer notes), no nodes or
-  edges added or removed. The checker also surfaced a 4-module import cycle
-  inside the kernel, `agent.loop ↔ tool_exec ↔ result_budget ↔ timeouts`,
-  which the diagram intentionally hides by merging them into one node.)
 - **`[limits]` in config.toml** (`zenagent/limits.py`): a registry of 8 knobs
   in four tables (`skills` / `context` / `agent` / `tools`), each with a safe
   range, a default, a unit and an apply timing ("immediate" vs "next
@@ -35,7 +43,9 @@ loop budgets that used to be module constants (`MAX_INDEX_BYTES`,
   Skills / Context / Agent / Subagents / Tools, with the config file path (+
   copy), per-knob description, default, apply timing, a "overridden this
   session by --max-turns 20" chip when a CLI flag wins, and reset-to-default
-  (= delete the key). Backed by the new `{type:'limits', op:get|set|reset}`
+  (= delete the key). The page is read-only until 修改; 保存 submits every
+  changed knob as one all-or-nothing batch, and one out-of-range value blocks
+  the whole save. Backed by the new `{type:'limits', op:get|set|reset}`
   RPC op (`zenagent/cli/rpc/ops_config.py`), pinned into the TS
   `REQUEST_KINDS` contract.
 - **`zen doctor` reports non-default limits** as a read-only line, so
