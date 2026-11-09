@@ -1,0 +1,224 @@
+/* Knob rows: name + apply chip on the left, compact value editor on the right;
+ * groups are plain cards like every other settings page. */
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cardBlock {
+  margin-bottom: 28px;
+}
+
+.cardHeadline {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  margin-bottom: 10px;
+}
+
+.cardHeading {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: var(--ds-font-13-5);
+  font-weight: 600;
+}
+
+.cardCaption {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--ds-font-12-5);
+  line-height: 1.45;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--dsw-alias-stroke-subtle);
+  border-radius: var(--ds-radius-10);
+  background: var(--dsw-alias-surface-raised);
+}
+
+.fileRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filePath {
+  font-family: var(--ds-font-mono, ui-monospace, monospace);
+  font-size: var(--ds-font-11-5);
+  color: var(--dsw-alias-label-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copyButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--ds-radius-6);
+  padding: 0 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-family: inherit;
+  font-size: var(--ds-font-11-5);
+  cursor: pointer;
+  flex: none;
+}
+
+.copyButton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.fileNote {
+  margin-top: 6px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--ds-font-11-5);
+  line-height: 1.45;
+}
+
+.knob {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+}
+
+.knob + .knob {
+  border-top: 1px solid var(--dsw-alias-stroke-subtle);
+}
+
+.copy {
+  min-width: 0;
+}
+
+.nameRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.name {
+  font-family: var(--ds-font-mono, ui-monospace, monospace);
+  font-size: var(--ds-font-12);
+  color: var(--dsw-alias-label-primary);
+}
+
+.chip {
+  border-radius: 999px;
+  padding: 1px 7px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.chipOverride {
+  border-radius: 999px;
+  padding: 1px 7px;
+  background: rgba(255, 159, 10, 0.18);
+  font-size: 10px;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.detail {
+  margin-top: 2px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--ds-font-11-5);
+  line-height: 1.45;
+}
+
+.defaultNote {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.input {
+  width: 110px;
+  height: 26px;
+  border: 1px solid var(--dsw-alias-stroke-subtle);
+  border-radius: var(--ds-radius-6);
+  padding: 0 8px;
+  background: var(--dsw-alias-surface-base);
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--ds-font-mono, ui-monospace, monospace);
+  font-size: var(--ds-font-12);
+  text-align: right;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--dsw-alias-stroke-strong);
+}
+
+.input:disabled {
+  opacity: 0.5;
+}
+
+.reset {
+  height: 26px;
+  border: 0;
+  border-radius: var(--ds-radius-6);
+  padding: 0 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-family: inherit;
+  font-size: var(--ds-font-11-5);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.reset:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.reset:disabled {
+  color: var(--dsw-alias-label-tertiary);
+  cursor: default;
+}
+
+.hint {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--ds-font-12);
+}
+
+.error {
+  border: 1px solid rgba(255, 69, 58, 0.35);
+  border-radius: var(--ds-radius-8);
+  padding: 8px 10px;
+  color: #ff453a;
+  font-size: var(--ds-font-12);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (max-width: 560px) {
+  .knob {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .control {
+    justify-content: flex-end;
+  }
+}

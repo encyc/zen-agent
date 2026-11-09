@@ -46,6 +46,12 @@ export interface BridgeState {
   secretTests?: Record<string, { connected: boolean; message: string }>
   skills?: Record<string, unknown>[]
   skillsDisabled?: string[]
+  /** Knob values served for `limits get`, keyed by `table.name`; absent → default. */
+  limitValues?: Record<string, number | null>
+  /** Keys the fake considers written to the file (drives the "explicit" chip). */
+  limitExplicit?: string[]
+  /** When set, `limits set` answers this error (hand-mangled file, bad value). */
+  limitSetError?: string
   skillBodies?: Record<string, string>
   mcpServers?: Record<string, unknown>[]
   mcpProblem?: string
@@ -377,6 +383,83 @@ export function installBridge(state: BridgeState) {
           return { type: 'result', id: payload.id, ok: true, name, enabled, notes: [] }
         }
         return { type: 'error', id: payload.id, message: 'unknown skills op' }
+      }
+      case 'limits': {
+        const knobs = [
+          ['limits.skills', 'max_index_bytes', 12288, 'int', 'immediate'],
+          ['limits.skills', 'max_body_bytes', 32768, 'int', 'immediate'],
+          ['limits.context', 'max_context_bytes', 32768, 'int', 'session'],
+          ['limits.context', 'compact_threshold', 0.85, 'float', 'session'],
+          ['limits.agent', 'max_turns', 100, 'int', 'session'],
+          ['limits.agent', 'loop_guard_threshold', 5, 'int', 'immediate'],
+          ['limits.agent', 'max_result_bytes', 40000, 'int', 'session'],
+          ['limits.tools', 'shell_max_output_bytes', 30000, 'int', 'immediate'],
+          ['task', 'max_turns', 300, 'int', 'session'],
+          ['task', 'timeout_s', 900, 'int', 'session'],
+          ['task', 'max_cost', null, 'float', 'session'],
+          ['task', 'keep_transcripts', 64, 'int', 'session'],
+          ['task', 'max_transcript_bytes', 33554432, 'int', 'session'],
+          ['task', 'max_transcript_file_bytes', 8388608, 'int', 'session'],
+        ] as const
+        const sections: Record<string, string> = {
+          'limits.skills': 'skills',
+          'limits.context': 'context',
+          'limits.agent': 'agent',
+          'limits.tools': 'tools',
+          task: 'subagents',
+        }
+        const state2 = state
+        const valueOf = (table: string, name: string, fallback: number | null) => {
+          const values = state2.limitValues ?? {}
+          const key = `${table}.${name}`
+          return key in values ? (values[key] as number | null) : fallback
+        }
+        const explicitOf = (table: string, name: string) =>
+          (state2.limitExplicit ?? []).includes(`${table}.${name}`)
+        const overrides: Record<string, string> = { 'limits.agent.max_turns': '--max-turns 20' }
+        const rows = () =>
+          knobs.map(([table, name, fallback, kind, apply]) => ({
+            key: `${table}.${name}`,
+            section: sections[table] ?? table,
+            table,
+            name,
+            kind,
+            nullable: name === 'max_cost',
+            min: 0,
+            max: 100000000,
+            default: fallback,
+            unit: 'bytes',
+            apply,
+            value: valueOf(table, name, fallback),
+            explicit: explicitOf(table, name),
+            override: overrides[`${table}.${name}`] ?? null,
+          }))
+        const result = (ok = true, error?: string) => ({
+          type: 'result',
+          id: payload.id,
+          ok,
+          path: '/Users/e2e/.zenagent/config.toml',
+          project_path: '/work/p/.zenagent/config.toml',
+          groups: ['skills', 'context', 'agent', 'subagents', 'tools'],
+          knobs: rows(),
+          ...(error ? { error } : {}),
+        })
+        if (payload.op === 'get') return result()
+        const key = String(payload.key ?? '')
+        const [table, name] = key.split('.')
+        if (state.limitSetError) return result(false, state.limitSetError)
+        const values = { ...(state.limitValues ?? {}) }
+        const explicit = new Set(state.limitExplicit ?? [])
+        if (payload.op === 'set') {
+          values[key] = payload.value as number | null
+          explicit.add(key)  // written to the file = explicit, whatever the value
+        } else {
+          delete values[key]
+          explicit.delete(key)
+        }
+        state.limitValues = values
+        state.limitExplicit = [...explicit]
+        return result()
       }
       case 'mcp': {
         const rows = () =>

@@ -37,6 +37,7 @@ import {
   FileIcon,
   FolderIcon,
   InfoIcon,
+  ActivityIcon,
   PaletteIcon,
   SearchIcon,
   SparkIcon,
@@ -45,11 +46,20 @@ import {
 import { ZenWordmark } from '../ZenWordmark'
 import { ModelSettings } from './ModelSettings'
 import { SkillSettings } from './SkillSettings'
+import { LimitSettings } from './LimitSettings'
 import { McpSettings } from './McpSettings'
 import { ProjectSettings } from './ProjectSettings'
 import css from './SettingsPage.module.css'
 
-type Tab = 'appearance' | 'models' | 'conversation' | 'skills' | 'mcp' | 'projects' | 'about'
+type Tab =
+  | 'appearance'
+  | 'models'
+  | 'conversation'
+  | 'skills'
+  | 'limits'
+  | 'mcp'
+  | 'projects'
+  | 'about'
 type NavGroup = 'preferences' | 'resources' | 'system'
 
 interface NavItem {
@@ -105,6 +115,20 @@ const NAV_ITEMS: NavItem[] = [
     icon: <FileIcon size={14} />,
     group: 'resources',
     keywords: ['settings.skillsList', 'settings.skillProject', 'settings.skillGlobal'],
+  },
+  {
+    id: 'limits',
+    labelKey: 'settings.limits',
+    hintKey: 'settings.limitsHint',
+    icon: <ActivityIcon size={14} />,
+    group: 'system',
+    keywords: [
+      'settings.limitFile',
+      'settings.limit.skills.max_index_bytes',
+      'settings.limit.task.max_turns',
+      'settings.limitGroup.subagents',
+      'settings.limitGroup.tools',
+    ],
   },
   {
     id: 'mcp',
@@ -619,6 +643,8 @@ export function SettingsPage() {
           {tab === 'models' && <ModelSettings />}
 
           {tab === 'skills' && <SkillSettings />}
+
+          {tab === 'limits' && <LimitSettings />}
 
           {tab === 'mcp' && <McpSettings />}
 

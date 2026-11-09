@@ -98,6 +98,9 @@ interface AppState {
   clearSecret(name: string): Promise<Record<string, unknown>>
   testSecret(scope: 'model' | 'search', target: string): Promise<Record<string, unknown>>
   refreshSkills(): Promise<void>
+  fetchLimits(): Promise<Record<string, unknown>>
+  setLimit(key: string, value: number | null): Promise<Record<string, unknown>>
+  resetLimit(key: string): Promise<Record<string, unknown>>
   readSkill(name: string): Promise<Record<string, unknown>>
   rescanSkills(): Promise<Record<string, unknown>>
   toggleSkill(name: string, enabled: boolean): Promise<Record<string, unknown>>
@@ -371,6 +374,18 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       })
       .catch((error) => reportRefreshFailure('skills', error))
+  },
+
+  fetchLimits() {
+    return get().client().send({ type: 'limits', op: 'get' })
+  },
+
+  setLimit(key, value) {
+    return get().client().send({ type: 'limits', op: 'set', key, value })
+  },
+
+  resetLimit(key) {
+    return get().client().send({ type: 'limits', op: 'reset', key })
   },
 
   readSkill(name) {

@@ -12,3 +12,9 @@ export function useT(): (key: string, params?: Record<string, string | number>) 
   const locale = useSettingsStore((state) => state.locale)
   return (key, params) => translate(locale, key, params)
 }
+
+/** The locale itself, for effects that must not re-run on every render
+ * (`useT` returns a fresh function each time, so it cannot be a dependency). */
+export function useLocale(): string {
+  return useSettingsStore((state) => state.locale)
+}

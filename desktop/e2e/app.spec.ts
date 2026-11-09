@@ -1768,6 +1768,81 @@ test('skill settings previews and toggles a skill', async ({ page }) => {
   )
 })
 
+test('limit settings lists grouped knobs and reports the override', async ({ page }) => {
+  await boot(page, initialState({ running: false }))
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '参数与预算' }).click()
+
+  await expect(page.getByRole('heading', { name: '配置文件' })).toBeVisible()
+  await expect(page.locator('[data-group="skills"]')).toBeVisible()
+  await expect(page.locator('[data-group="subagents"]')).toBeVisible()
+  await expect(page.locator('[data-group="tools"]')).toBeVisible()
+
+  const turns = page.locator('[data-knob="limits.agent.max_turns"]')
+  await expect(turns).toContainText('100')
+  await expect(turns).toContainText('默认 100')
+  await expect(turns).toContainText('--max-turns 20')
+  // Defaults carry no reset button; only the explicitly-set knobs do.
+  await expect(turns.getByRole('button', { name: '恢复默认' })).toHaveCount(0)
+  await expect(page.locator('[data-knob="task.max_cost"]')).toContainText('—')
+})
+
+test('limit settings edits a knob, keeps the file note and resets it', async ({ page }) => {
+  await boot(
+    page,
+    initialState({
+      running: false,
+      limitValues: { 'limits.skills.max_index_bytes': 12288 },
+      limitExplicit: [],
+    }),
+  )
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '参数与预算' }).click()
+
+  const index = page.locator('[data-knob="limits.skills.max_index_bytes"]')
+  await index.getByRole('textbox').fill('16384')
+  await index.getByRole('textbox').press('Enter')
+
+  const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
+  const sets = calls
+    .filter((call) => call.type === 'limits' && call.op === 'set')
+    .map(({ type, op, key, value }) => ({ type, op, key, value }))
+  assert.deepEqual(sets, [
+    { type: 'limits', op: 'set', key: 'limits.skills.max_index_bytes', value: 16384 },
+  ])
+
+  // After a write the knob counts as explicit and offers the reset.
+  await expect(index.getByRole('button', { name: '恢复默认' })).toBeVisible()
+  await index.getByRole('button', { name: '恢复默认' }).click()
+  const resets = await page.evaluate(() => window.__ZEN_E2E__.calls)
+  const dropped = resets
+    .filter((call) => call.type === 'limits' && call.op === 'reset')
+    .map(({ type, op, key }) => ({ type, op, key }))
+  assert.deepEqual(dropped, [
+    { type: 'limits', op: 'reset', key: 'limits.skills.max_index_bytes' },
+  ])
+})
+
+test('limit settings surfaces a refused write instead of pretending', async ({ page }) => {
+  await boot(
+    page,
+    initialState({
+      running: false,
+      limitSetError: 'unknown keys [task.future_budget] in managed tables',
+    }),
+  )
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '参数与预算' }).click()
+
+  const index = page.locator('[data-knob="limits.skills.max_index_bytes"]')
+  await index.getByRole('textbox').fill('2048')
+  await index.getByRole('textbox').press('Enter')
+
+  await expect(page.locator('[data-page="settings"] .error, [data-page="settings"] [class*="error"]').last()).toContainText(
+    'unknown keys',
+  )
+})
+
 test('mcp settings probes a server and reports its tools', async ({ page }) => {
   await boot(page, initialState({ running: false }))
   await page.getByRole('button', { name: '设置' }).click()
