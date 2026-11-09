@@ -4,6 +4,7 @@ import {
   PROJECT_PAGE_SIZE,
   mergeProjects,
   projectName,
+  projectRowCount,
   sessionSections,
 } from '../src/state/sessionGroups.ts'
 import type { SessionSummary } from '../src/rpc/types.ts'
@@ -89,6 +90,17 @@ test('the query filters every section and keeps collapse data intact', () => {
 
 test('the project page size is ten rows', () => {
   assert.equal(PROJECT_PAGE_SIZE, 10)
+})
+
+test('project rows grow one page per "more" click, never past the group', () => {
+  assert.equal(projectRowCount(25, 1), PROJECT_PAGE_SIZE)
+  assert.equal(projectRowCount(25, 2), PROJECT_PAGE_SIZE * 2)
+  assert.equal(projectRowCount(25, 3), 25)
+  assert.equal(projectRowCount(25, 9), 25)
+  assert.equal(projectRowCount(4, 1), 4)
+  assert.equal(projectRowCount(0, 1), 0)
+  // Missing or stale page state still shows the first page.
+  assert.equal(projectRowCount(25, 0), PROJECT_PAGE_SIZE)
 })
 
 test('registered projects with no sessions join the rail and follow the query', () => {

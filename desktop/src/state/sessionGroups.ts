@@ -72,6 +72,14 @@ export function mergeProjects(
   return merged
 }
 
+/** Rows visible after `pages` pages: a project opens with one page and each
+ * "more" click adds exactly one page, never past the loaded sessions. */
+export function projectRowCount(total: number, pages: number): number {
+  const length = Math.max(0, total)
+  const pageCount = Math.max(1, Math.trunc(pages))
+  return Math.min(length, pageCount * PROJECT_PAGE_SIZE)
+}
+
 export function compareSessions(a: SessionSummary, b: SessionSummary): number {
   const byUpdated = (b.updated_at ?? 0) - (a.updated_at ?? 0)
   return byUpdated !== 0 ? byUpdated : a.path.localeCompare(b.path)

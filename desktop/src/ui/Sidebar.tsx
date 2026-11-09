@@ -16,8 +16,8 @@ import {
   useStatusStore,
 } from '../state/stores'
 import {
-  PROJECT_PAGE_SIZE,
   mergeProjects,
+  projectRowCount,
   sessionSections,
   type SidebarProjectGroup,
 } from '../state/sessionGroups'
@@ -94,7 +94,9 @@ export function Sidebar(props: { onCollapse(): void }) {
   const [menu, setMenu] = useState<RowMenu | null>(null)
   const [armed, setArmed] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
-  const [expandedProjects, setExpandedProjects] = useState<string[]>([])
+  // Pages revealed per project: one on open, +1 per "more" click. Keyed by
+  // project so an expand survives a session-list refresh.
+  const [projectPages, setProjectPages] = useState<Record<string, number>>({})
   const [closedSections, setClosedSections] = useState<string[]>(readClosedSections)
   const menuRef = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
@@ -237,8 +239,8 @@ export function Sidebar(props: { onCollapse(): void }) {
 
   const renderProject = (group: SidebarProjectGroup) => {
     const collapsed = collapsedProjects.includes(group.project)
-    const expanded = expandedProjects.includes(group.project)
-    const rows = expanded ? group.sessions : group.sessions.slice(0, PROJECT_PAGE_SIZE)
+    const pages = projectPages[group.project] ?? 1
+    const rows = group.sessions.slice(0, projectRowCount(group.sessions.length, pages))
     const hidden = group.sessions.length - rows.length
     const active = group.project === currentProject
     return (
@@ -309,9 +311,10 @@ export function Sidebar(props: { onCollapse(): void }) {
               type="button"
               className={css.loadMore}
               onClick={() =>
-                setExpandedProjects((value) =>
-                  value.includes(group.project) ? value : [...value, group.project],
-                )
+                setProjectPages((value) => ({
+                  ...value,
+                  [group.project]: (value[group.project] ?? 1) + 1,
+                }))
               }
             >
               {t('sidebar.more', { count: hidden })}
