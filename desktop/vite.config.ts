@@ -32,6 +32,9 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    // Cargo rewrites src-tauri/target on every build; watching it restarts the
+    // dev server mid-`tauri dev` for no frontend change.
+    watch: { ignored: ['**/src-tauri/**'] },
   },
   build: {
     target: 'es2022',
