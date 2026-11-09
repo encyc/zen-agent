@@ -2,7 +2,6 @@
  * embeds a project switcher; three onboarding tips stay until dismissed. */
 
 import { useEffect, useRef, useState } from 'react'
-import { invoke } from '@tauri-apps/api/core'
 import { useT } from '../i18n/locale'
 import { FolderIcon, XIcon } from './icons'
 import { AppMark } from './AppMark'
@@ -20,17 +19,6 @@ export interface HomeHeroProps {
   recents: RecentProject[]
   onPickFolder(): void
   onOpenRecent(path: string): void
-}
-
-export async function pickProjectFolder(): Promise<string | null> {
-  try {
-    const selection = await invoke<string | null>('plugin:dialog|open', {
-      options: { directory: true, multiple: false, title: 'ZenAgent' },
-    })
-    return typeof selection === 'string' ? selection : null
-  } catch {
-    return null
-  }
 }
 
 function baseName(path: string): string {

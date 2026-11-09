@@ -10,7 +10,7 @@ import { projectRows } from '../../state/projectRows'
 import { useProjectStore, useSessionStore, useSettingsStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
 import { formatAge } from '../format'
-import { pickProjectFolder } from '../HomeHero'
+import { pickProjectFolder } from '../sessions/fileDialog'
 import { ChatIcon, FolderIcon, PlusIcon, XIcon } from '../icons'
 import css from './ProjectSettings.module.css'
 
