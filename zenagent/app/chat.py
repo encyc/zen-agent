@@ -12,6 +12,7 @@ from zenagent.agent.subagents import carry_task_dir
 from zenagent.app.attachments_state import Attachments
 from zenagent.app.compact import compact, should_auto_compact
 from zenagent.app.context import build_context_report
+from zenagent.app.error_notice import bug_notice, run_error_notice
 from zenagent.app.git import git_status
 from zenagent.app.pending import PendingQueue
 from zenagent.app.retry import prepare_retry
@@ -521,6 +522,7 @@ class ChatController:
         self._notify()
         started = time.monotonic()
         before_output = usage_total(self.runtime.agent.messages).output
+        failure = ""
         try:
             if text is None:
                 try:
@@ -531,8 +533,16 @@ class ChatController:
                     self._demote_steering()
             else:
                 await self.runtime.agent.prompt(text, images=images or None)
+        except Exception as exc:  # noqa: BLE001 - surfacing ANY escaped bug is the contract
+            # Provider failures end with termination="error" inside the loop;
+            # an exception escaping the loop is zenagent's own bug, and without
+            # this catch it would kill the run silently (the task's exception
+            # is never retrieved). Surface it as an actionable notice and treat
+            # the run as errored, so steering demotes and the queue never
+            # auto-drains on top of a crash.
+            failure = bug_notice(repr(exc))
         finally:
-            termination = self.runtime.agent.termination
+            termination = "error" if failure else self.runtime.agent.termination
             # Aborts and provider errors skip message_end; do not leave a row
             # ticking after the run is over.
             self._builder.finalize()
@@ -541,11 +551,11 @@ class ChatController:
                 usage_total(self.runtime.agent.messages).output - before_output
             )
             if termination == "error":
-                detail = self.runtime.agent.error_message
-                self._last_error = (
-                    detail
-                    if detail and detail != "error"
-                    else t("notice.run_failed")
+                # The headline tells the user what to do (top up, check the
+                # key, file an issue); the raw provider text rides along as
+                # evidence (app/error_notice.py).
+                self._last_error = failure or run_error_notice(
+                    self.runtime.agent.error_message
                 )
             self._notify()
             # A steer typed after the last step boundary never reached the

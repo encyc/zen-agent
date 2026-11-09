@@ -6,6 +6,7 @@ import pytest
 
 from zenagent.app.chat import ChatController
 from zenagent.events import AssistantEvent
+from zenagent.i18n import t
 from zenagent.types import AssistantMessage, TextContent, Usage, UserMessage
 
 
@@ -143,7 +144,40 @@ async def test_status_reports_a_provider_error_after_a_failed_run(runtime_factor
     await chat.submit("hi")
     await chat.wait_for_idle()
 
-    assert chat.status.last_error == "provider exploded"
+    # Unclassifiable provider text keeps the generic provider headline with
+    # the raw detail as evidence (app/error_notice.py).
+    assert chat.status.last_error == f"{t('notice.error.provider')} ｜ provider exploded"
+
+
+async def test_a_provider_error_is_classified_into_an_actionable_notice(runtime_factory):
+    runtime = await runtime_factory(
+        stream_fn=failing_stream(
+            "HTTPStatusError: Client error '402 Payment Required' for url "
+            "'https://api.deepseek.com/chat/completions': Insufficient Balance"
+        )
+    )
+    chat = ChatController(runtime)
+    await chat.submit("hi")
+    await chat.wait_for_idle()
+
+    assert chat.status.last_error.startswith(t("notice.error.balance"))
+
+
+async def test_an_unexpected_crash_surfaces_as_a_bug_notice(runtime_factory, monkeypatch):
+    runtime = await runtime_factory(stream_fn=failing_stream())
+
+    async def broken_prompt(text, images=None):
+        raise RuntimeError("boom bug")
+
+    monkeypatch.setattr(runtime.agent, "prompt", broken_prompt)
+    chat = ChatController(runtime)
+    await chat.submit("hi")
+    await chat.wait_for_idle()
+
+    # A bug escaping the loop must never be a silent stop: name it and point
+    # at the issue tracker, with the exception kept for reproduction.
+    assert chat.status.last_error.startswith(t("notice.error.bug"))
+    assert "RuntimeError" in chat.status.last_error
 
 
 async def test_submit_clears_the_previous_error(runtime_factory):
@@ -151,7 +185,7 @@ async def test_submit_clears_the_previous_error(runtime_factory):
     chat = ChatController(runtime)
     await chat.submit("first")
     await chat.wait_for_idle()
-    assert chat.status.last_error == "boom"
+    assert chat.status.last_error == f"{t('notice.error.provider')} ｜ boom"
 
     await chat.submit("second")
     await chat.wait_for_idle()
@@ -257,7 +291,7 @@ async def test_submit_during_auto_compaction_is_queued_not_lost(
     monkeypatch.setattr(chat_module, "compact", slow_compact)
     calls = {"n": 0}
 
-    def first_turn_only(usage, window):
+    def first_turn_only(usage, window, threshold=None):
         calls["n"] += 1
         return calls["n"] == 1
 
