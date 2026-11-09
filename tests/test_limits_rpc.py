@@ -138,7 +138,10 @@ async def test_set_rejects_out_of_range_and_leaves_the_file(
     )
 
     assert result["type"] == "error"
-    assert "must be between" in result["message"]
+    assert result["code"] == "limits_failed"
+    assert result["message"] == "limits failed"
+    # The refusal names the config file in the log, never on the wire.
+    assert str(config_file) not in json.dumps(result)
     assert config_file.read_text(encoding="utf-8") == before
 
 
@@ -224,7 +227,9 @@ async def test_write_refuses_unknown_managed_keys(runtime_factory, config_file):
     )
 
     assert result["type"] == "error"
-    assert "unknown keys" in result["message"]
+    assert result["code"] == "limits_failed"
+    assert result["message"] == "limits failed"
+    assert str(config_file) not in json.dumps(result)
     assert "future_budget = 1" in config_file.read_text(encoding="utf-8")
 
 

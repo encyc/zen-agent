@@ -143,7 +143,8 @@ async def test_mode_and_model_requests_switch_the_runtime(runtime_factory, app_e
     )
     results = {message["id"]: message for message in decode(writes)}
     assert results["m1"]["ok"] is True and results["m1"]["mode"] == "plan"
-    assert results["m2"]["ok"] is False
+    assert results["m2"]["type"] == "error"
+    assert results["m2"]["code"] == "mode_failed"
     assert results["m3"]["ok"] is True
     assert results["m4"]["ok"] is False
 
@@ -834,7 +835,8 @@ async def test_prompt_accepts_image_paths(runtime_factory, tmp_path):
 
 
 async def test_prompt_rejects_an_image_it_cannot_read(runtime_factory, tmp_path):
-    bad = tmp_path / "not-an-image.txt"
+    bad = tmp_path / "private" / "not-an-image.txt"
+    bad.parent.mkdir()
     bad.write_text("nope", encoding="utf-8")
 
     _runtime, server, writes, _queue = await build(runtime_factory)
@@ -846,7 +848,10 @@ async def test_prompt_rejects_an_image_it_cannot_read(runtime_factory, tmp_path)
 
     payload = next(message for message in decode(writes) if message.get("id") == "p")
     assert payload["type"] == "error"
-    assert "does not look like" in payload["message"]
+    assert payload["code"] == "image_read_failed"
+    assert payload["message"] == "image read failed"
+    assert payload["params"] == {"op": "read", "file": "not-an-image.txt"}
+    assert str(tmp_path) not in json.dumps(payload)
 
 
 async def test_deleting_the_current_session_resets_the_controller(runtime_factory):
@@ -1330,6 +1335,328 @@ async def test_a_failed_fs_index_crosses_as_a_code(runtime_factory, tmp_path, mo
         "file": "broken",
     }
     assert str(tmp_path) not in json.dumps(payload)
+
+
+async def test_a_failed_session_op_crosses_as_a_code(runtime_factory, tmp_path, caplog):
+    """Every session op funnels through one sanitized refusal: the raw OSError
+    (with its absolute path) stays in the log; the wire keeps a code, an op and
+    the file's basename."""
+    import errno
+    import logging
+
+    _runtime, server, writes, queue = await build(runtime_factory)
+    secret = tmp_path / "sessions" / "abc.jsonl"
+
+    async def explode():
+        raise OSError(errno.EACCES, "Permission denied", str(secret))
+
+    server.sessions.new = explode
+
+    with caplog.at_level(logging.WARNING):
+        await run_lines(server, queue, [{"type": "session", "id": "s", "op": "new"}])
+
+    payload = decode(writes)[0]
+    assert payload["type"] == "error"
+    assert payload["code"] == "session_failed"
+    assert payload["message"] == "session failed"
+    assert payload["params"] == {
+        "op": "new",
+        "errno": str(errno.EACCES),
+        "file": "abc.jsonl",
+    }
+    assert str(tmp_path) not in json.dumps(payload)
+    assert str(secret) in caplog.text
+
+
+async def test_session_import_of_a_missing_file_crosses_a_basename(
+    runtime_factory, tmp_path
+):
+    """``no such session: <absolute path>`` was the one session refusal that
+    quoted the person's home; the import code replaces it."""
+    _runtime, server, writes, queue = await build(runtime_factory)
+    missing = tmp_path / "private" / "gone.jsonl"
+
+    await run_lines(
+        server,
+        queue,
+        [{"type": "session", "id": "s", "op": "import", "path": str(missing)}],
+    )
+
+    payload = decode(writes)[0]
+    assert payload["type"] == "error"
+    assert payload["code"] == "session_import_missing"
+    assert payload["message"] == "session import failed"
+    assert payload["params"] == {"op": "import", "file": "gone.jsonl"}
+    assert str(tmp_path) not in json.dumps(payload)
+
+
+async def test_a_refused_limit_value_crosses_as_a_code(
+    runtime_factory, tmp_path, monkeypatch, caplog
+):
+    import logging
+
+    config = tmp_path / "config.toml"
+    config.write_text("", encoding="utf-8")
+    monkeypatch.setattr("zenagent.cli.rpc.ops_config.global_config_path", lambda: config)
+    monkeypatch.setattr("zenagent.config.config_path", lambda: config)
+    _runtime, server, writes, queue = await build(runtime_factory)
+
+    with caplog.at_level(logging.WARNING):
+        await run_lines(
+            server,
+            queue,
+            [
+                {
+                    "type": "limits",
+                    "id": "l",
+                    "op": "set",
+                    "key": "limits.skills.max_index_bytes",
+                    "value": 10,
+                }
+            ],
+        )
+
+    payload = decode(writes)[0]
+    assert payload["type"] == "error"
+    assert payload["code"] == "limits_failed"
+    assert payload["message"] == "limits failed"
+    assert payload["params"] == {"op": "set"}
+    assert str(tmp_path) not in json.dumps(payload)
+    assert str(config) in caplog.text
+
+
+async def test_a_limit_write_whose_config_no_longer_parses_is_config_failed(
+    runtime_factory, tmp_path, monkeypatch
+):
+    """A hand-mangled file blocks adoption after the write; the person gets a
+    configuration code, not the parser's absolute path."""
+    config = tmp_path / "config.toml"
+    config.write_text("", encoding="utf-8")
+    monkeypatch.setattr("zenagent.cli.rpc.ops_config.global_config_path", lambda: config)
+    monkeypatch.setattr("zenagent.config.config_path", lambda: config)
+    _runtime, server, writes, queue = await build(runtime_factory)
+
+    def explode(path):
+        raise ValueError(f"cannot parse {config}")
+
+    monkeypatch.setattr("zenagent.cli.rpc.ops_config.load_user_config", explode)
+
+    await run_lines(
+        server,
+        queue,
+        [
+            {
+                "type": "limits",
+                "id": "l",
+                "op": "set",
+                "key": "limits.agent.max_turns",
+                "value": 40,
+            }
+        ],
+    )
+
+    payload = decode(writes)[0]
+    assert payload["type"] == "error"
+    assert payload["code"] == "config_failed"
+    assert payload["message"] == "config failed"
+    assert payload["params"] == {"op": "set"}
+    assert str(tmp_path) not in json.dumps(payload)
+
+
+async def test_a_failed_mcp_save_crosses_as_a_code(
+    runtime_factory, tmp_path, monkeypatch
+):
+    import errno
+
+    _runtime, server, writes, queue = await build(runtime_factory)
+    secret = tmp_path / "mcp.json"
+
+    def explode(*args, **kwargs):
+        raise OSError(errno.EACCES, "Permission denied", str(secret))
+
+    monkeypatch.setattr("zenagent.cli.rpc.ops_config.save_mcp_server", explode)
+
+    await run_lines(
+        server,
+        queue,
+        [{"type": "mcp", "id": "m", "op": "add", "name": "x", "command": "x"}],
+    )
+
+    payload = decode(writes)[0]
+    assert payload["type"] == "error"
+    assert payload["code"] == "mcp_failed"
+    assert payload["message"] == "mcp failed"
+    assert payload["params"] == {
+        "op": "add",
+        "errno": str(errno.EACCES),
+        "file": "mcp.json",
+    }
+    assert str(tmp_path) not in json.dumps(payload)
+
+
+async def test_a_refused_mode_switch_crosses_as_a_code(
+    runtime_factory, tmp_path
+):
+    runtime, server, writes, queue = await build(runtime_factory)
+    secret = tmp_path / "mode-state.json"
+
+    def refuse(mode):
+        raise ValueError(f"cannot switch while {secret} loads")
+
+    runtime.set_mode = refuse
+
+    await run_lines(server, queue, [{"type": "mode", "id": "m", "mode": "plan"}])
+
+    payload = decode(writes)[0]
+    assert payload["type"] == "error"
+    assert payload["code"] == "mode_failed"
+    assert payload["message"] == "mode failed"
+    assert payload["params"] == {"op": "mode"}
+    assert str(tmp_path) not in json.dumps(payload)
+
+
+async def test_a_failed_project_relocation_crosses_as_a_code(
+    runtime_factory, tmp_path, monkeypatch
+):
+    import errno
+
+    _runtime, server, writes, queue = await build(runtime_factory)
+    secret = tmp_path / "projects" / "x"
+
+    def explode(from_root, to_root):
+        raise OSError(errno.EIO, "Input/output error", str(secret))
+
+    monkeypatch.setattr("zenagent.cli.rpc.ops_config.relocate_project", explode)
+
+    await run_lines(
+        server,
+        queue,
+        [
+            {
+                "type": "project",
+                "id": "p",
+                "op": "relocate",
+                "from": "/tmp/old",
+                "to": "/tmp/new",
+            }
+        ],
+    )
+
+    payload = decode(writes)[0]
+    assert payload["type"] == "error"
+    assert payload["code"] == "project_failed"
+    assert payload["message"] == "project failed"
+    assert payload["params"] == {
+        "op": "relocate",
+        "errno": str(errno.EIO),
+        "file": "x",
+    }
+    assert str(tmp_path) not in json.dumps(payload)
+
+
+async def test_a_failed_command_crosses_as_a_code(runtime_factory, tmp_path):
+    _runtime, server, writes, queue = await build(runtime_factory)
+    secret = tmp_path / "config.toml"
+
+    async def explode(name, argument):
+        raise RuntimeError(f"dispatch could not read {secret}")
+
+    server.commands.dispatch = explode
+
+    await run_lines(server, queue, [{"type": "command", "id": "c", "name": "help"}])
+
+    payload = decode(writes)[0]
+    assert payload["type"] == "error"
+    assert payload["code"] == "command_failed"
+    assert payload["message"] == "command failed"
+    assert payload["params"] == {"op": "command"}
+    assert str(tmp_path) not in json.dumps(payload)
+
+
+async def test_a_failed_taiji_message_crosses_as_a_code(
+    runtime_factory, tmp_path, monkeypatch
+):
+    _runtime, server, writes, queue = await build(runtime_factory)
+    secret = tmp_path / "inbox.json"
+
+    class FakeSupervisor:
+        def has_running(self, name):
+            return False
+
+        async def message(self, name, text):
+            raise RuntimeError(f"cannot write {secret}")
+
+    monkeypatch.setattr(
+        "zenagent.app.taiji.supervisor.existing_taiji", lambda: FakeSupervisor()
+    )
+
+    await run_lines(
+        server,
+        queue,
+        [{"type": "taiji", "id": "t", "op": "message", "name": "w1", "text": "hi"}],
+    )
+
+    payload = decode(writes)[0]
+    assert payload["type"] == "error"
+    assert payload["code"] == "taiji.message_failed"
+    assert payload["message"] == "message failed"
+    assert payload["params"] == {"op": "message", "name": "w1"}
+    assert str(tmp_path) not in json.dumps(payload)
+
+
+async def test_a_failure_scenario_never_leaks_the_tmp_path(
+    runtime_factory, tmp_path, monkeypatch
+):
+    """The regression net for Fix 1: run every sanitized family once and assert
+    no error frame anywhere in the batch carries the home path."""
+    monkeypatch.chdir(tmp_path)
+    bad_image = tmp_path / "notes.txt"
+    bad_image.write_text("not an image", encoding="utf-8")
+    monkeypatch.setattr(
+        "zenagent.cli.rpc.ops_config.global_config_path",
+        lambda: tmp_path / "config.toml",
+    )
+    monkeypatch.setattr("zenagent.config.config_path", lambda: tmp_path / "config.toml")
+    _runtime, server, writes, queue = await build(runtime_factory)
+
+    await run_lines(
+        server,
+        queue,
+        [
+            {"type": "fs_read", "id": "f", "path": "missing.txt"},
+            {
+                "type": "session",
+                "id": "s",
+                "op": "import",
+                "path": str(tmp_path / "gone.jsonl"),
+            },
+            {
+                "type": "limits",
+                "id": "l",
+                "op": "set",
+                "key": "limits.skills.max_index_bytes",
+                "value": 10,
+            },
+            {
+                "type": "project",
+                "id": "p",
+                "op": "relocate",
+                "from": str(tmp_path / "old"),
+                "to": str(tmp_path / "new"),
+            },
+            {
+                "type": "prompt",
+                "id": "i",
+                "text": "look",
+                "images": [str(bad_image)],
+            },
+        ],
+    )
+
+    frames = decode(writes)
+    assert frames
+    assert all(frame["type"] == "error" for frame in frames)
+    assert str(tmp_path) not in json.dumps(frames)
 
 
 async def test_session_list_carries_created_updated_model_and_lineage(runtime_factory):

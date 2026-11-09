@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import shlex
 from pathlib import Path
 
 from zenagent import settings
 from zenagent.app.skill_commands import SKILL_COMMAND_PREFIX, build_skill_submission
+from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
 from zenagent.config import config_path as global_config_path
 from zenagent.config import load_user_config
 from zenagent.limits import (
@@ -29,6 +31,9 @@ from zenagent.skills import (
     default_skill_roots,
     discover_skills,
 )
+
+#: Server-side diagnostics; raw exception detail never crosses the wire.
+logger = logging.getLogger(__name__)
 
 
 class ConfigOps:
@@ -392,8 +397,11 @@ class ConfigOps:
             servers = self._mcp_rows()
             problem = None
         except ValueError as exc:
+            # A hand-mangled layer file names its absolute path in the parser
+            # error; the log keeps it, the wire only says the read failed.
+            logger.warning("mcp config read failed: %s", exc, exc_info=True)
             servers = []
-            problem = str(exc)
+            problem = "mcp config could not be read"
         return {
             "type": "result",
             "id": request_id,
@@ -440,7 +448,7 @@ class ConfigOps:
         fresh = load_user_config(global_config_path())
         return getattr(fresh, knob.attr)
 
-    def _limits_result(self, request_id, *, ok=True, error=None) -> dict:
+    def _limits_result(self, request_id) -> dict:
         from zenagent.project import project_config_path
 
         runtime = self.runtime
@@ -469,18 +477,15 @@ class ConfigOps:
             }
             for knob in ALL_KNOBS
         ]
-        payload = {
+        return {
             "type": "result",
             "id": request_id,
-            "ok": ok,
+            "ok": True,
             "path": str(global_config_path()),
             "project_path": str(project_config_path(Path.cwd())),
             "groups": list(GROUP_ORDER),
             "knobs": knobs,
         }
-        if error is not None:
-            payload["error"] = error
-        return payload
 
     def _adopt_limits(self) -> None:
         """Push the rewritten file into the running session."""
@@ -534,8 +539,17 @@ class ConfigOps:
                 tables.pop(knob.table, None)
             write_managed(global_config_path(), tables)
         except LimitsWriteError as exc:
-            # Unknown keys / unreadable file: refuse, never rewrite.
-            self._send(self._limits_result(request_id, ok=False, error=str(exc)))
+            # Unknown keys / unreadable file: refuse, never rewrite. The
+            # exception quotes the absolute config path; it stays in the log.
+            self._send(
+                failure_frame(
+                    request_id,
+                    code="limits_failed",
+                    message="limits failed",
+                    exc=exc,
+                    op=str(op),
+                )
+            )
             return
         try:
             self._adopt_limits()
@@ -543,7 +557,15 @@ class ConfigOps:
             # The rewrite succeeded; adopting it failed because the file as a
             # whole does not parse (hand edit elsewhere). Report the config
             # error — the next session will fail the same way, loudly.
-            self._send(self._limits_result(request_id, ok=False, error=str(exc)))
+            self._send(
+                failure_frame(
+                    request_id,
+                    code="config_failed",
+                    message="config failed",
+                    exc=exc,
+                    op=str(op),
+                )
+            )
             return
         self._send(self._limits_result(request_id))
 
@@ -598,7 +620,15 @@ class ConfigOps:
                     cwd=Path.cwd(),
                 )
             except (ValueError, OSError) as exc:
-                self._send({"type": "error", "id": request_id, "message": str(exc)})
+                self._send(
+                    failure_frame(
+                        request_id,
+                        code="mcp_failed",
+                        message="mcp failed",
+                        exc=exc,
+                        op=str(op or ""),
+                    )
+                )
                 return
             self._send(self._mcp_result(request_id))
             return
@@ -607,7 +637,15 @@ class ConfigOps:
             try:
                 remove_mcp_server(name, layer=self._mcp_layer(request), cwd=Path.cwd())
             except (ValueError, OSError) as exc:
-                self._send({"type": "error", "id": request_id, "message": str(exc)})
+                self._send(
+                    failure_frame(
+                        request_id,
+                        code="mcp_failed",
+                        message="mcp failed",
+                        exc=exc,
+                        op=str(op or ""),
+                    )
+                )
                 return
             self._send(self._mcp_result(request_id))
             return
@@ -618,7 +656,15 @@ class ConfigOps:
             try:
                 config = self._effective_mcp(name)
             except ValueError as exc:
-                self._send({"type": "error", "id": request_id, "message": str(exc)})
+                self._send(
+                    failure_frame(
+                        request_id,
+                        code="mcp_failed",
+                        message="mcp failed",
+                        exc=exc,
+                        op=str(op or ""),
+                    )
+                )
                 return
             if config is None:
                 self._send(
@@ -689,7 +735,13 @@ class ConfigOps:
             applied = self.runtime.set_mode(str(mode or ""))
         except ValueError as exc:
             self._send(
-                {"type": "result", "id": request_id, "ok": False, "reason": str(exc)}
+                failure_frame(
+                    request_id,
+                    code="mode_failed",
+                    message="mode failed",
+                    exc=exc,
+                    op="mode",
+                )
             )
             return True
         self._send({"type": "result", "id": request_id, "ok": True, "mode": applied})
@@ -699,24 +751,37 @@ class ConfigOps:
 
     async def _project(self, request: dict, request_id) -> None:
         op = request.get("op")
+        label = str(op or "")
         try:
             if op != "relocate":
-                raise ValueError(f"unknown project op: {op}")
+                raise Refusal(f"unknown project op: {op}")
             old_root = request.get("from")
             if not isinstance(old_root, str) or not old_root.strip():
-                raise ValueError("relocate needs from")
+                raise Refusal("relocate needs from")
             new_root = request.get("to")
             if not isinstance(new_root, str) or not new_root.strip():
-                raise ValueError("relocate needs to")
+                raise Refusal("relocate needs to")
             if self.runtime is not None and project_key_for_session(
                 self.runtime.session.path
             ) == project_key(old_root):
-                raise RuntimeError(
+                raise Refusal(
                     "cannot relocate the open project; switch to another project first"
                 )
             relocation = relocate_project(old_root, new_root)
+        except Refusal as exc:
+            # Authored validation text is safe; only the frame gets a code.
+            self._send(error_frame(request_id, str(exc), "project_failed", {"op": label}))
+            return
         except Exception as exc:  # noqa: BLE001 - a bad project op is a result, not a crash
-            self._send({"type": "error", "id": request_id, "message": str(exc)})
+            self._send(
+                failure_frame(
+                    request_id,
+                    code="project_failed",
+                    message="project failed",
+                    exc=exc,
+                    op=label,
+                )
+            )
             return
         self._send(
             {
@@ -770,7 +835,15 @@ class ConfigOps:
                 name, str(request.get("argument") or "")
             )
         except Exception as exc:  # noqa: BLE001 - a command must not kill the server
-            self._send({"type": "error", "id": request_id, "message": str(exc)})
+            self._send(
+                failure_frame(
+                    request_id,
+                    code="command_failed",
+                    message="command failed",
+                    exc=exc,
+                    op="command",
+                )
+            )
             return True
         applied_model = None
         if result.model and self.models is not None:

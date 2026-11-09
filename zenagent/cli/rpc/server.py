@@ -21,6 +21,7 @@ from zenagent.app.views import usage_total
 from zenagent.app.workspace import (
     worktree_overview,
 )
+from zenagent.cli.rpc.errors import failure_frame
 from zenagent.cli.rpc.ops_config import ConfigOps
 from zenagent.cli.rpc.ops_files import FilesOps
 from zenagent.cli.rpc.ops_session import SessionOps
@@ -478,9 +479,11 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
                     {"type": "error", "id": request_id, "message": "prompt needs text"}
                 )
                 return True
-            images, image_error = self._read_prompt_images(request.get("images"))
+            images, image_error = self._read_prompt_images(
+                request.get("images"), request_id
+            )
             if image_error is not None:
-                self._send({"type": "error", "id": request_id, "message": image_error})
+                self._send(image_error)
                 return True
             if self.busy:
                 self._send({"type": "error", "id": request_id, "message": "busy"})
@@ -607,7 +610,15 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
             try:
                 await self._limits(request, request_id)
             except (LimitsWriteError, ValueError) as exc:
-                self._send({"type": "error", "id": request_id, "message": str(exc)})
+                self._send(
+                    failure_frame(
+                        request_id,
+                        code="limits_failed",
+                        message="limits failed",
+                        exc=exc,
+                        op=str(request.get("op") or ""),
+                    )
+                )
             return True
         if kind == "mcp":
             await self._mcp(request, request_id)
@@ -678,22 +689,41 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
         self._send({"type": "result", "id": request_id, "ok": True})
         return True
 
-    def _read_prompt_images(self, raw) -> tuple[list | None, str | None]:
-        """Load ``prompt.images`` paths; (blocks, None) or (None, error)."""
+    def _read_prompt_images(self, raw, request_id) -> tuple[list | None, dict | None]:
+        """Load ``prompt.images`` paths; (blocks, None) or (None, error frame).
+
+        An unreadable attachment's ValueError quotes the absolute path, so it
+        becomes a sanitized frame (code + basename) instead of wire text.
+        """
         if raw is None:
             return None, None
         if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
-            return None, "images must be a list of file paths"
+            return None, {
+                "type": "error",
+                "id": request_id,
+                "message": "images must be a list of file paths",
+            }
         from zenagent.attachments import read_image_argument
 
         if not self.agent.model.supports_vision:
-            return None, f"{self.agent.model.id} does not accept images"
+            return None, {
+                "type": "error",
+                "id": request_id,
+                "message": f"{self.agent.model.id} does not accept images",
+            }
         blocks = []
         for path in raw:
             try:
                 blocks.append(read_image_argument(Path(path)))
             except ValueError as exc:
-                return None, str(exc)
+                return None, failure_frame(
+                    request_id,
+                    code="image_read_failed",
+                    message="image read failed",
+                    exc=exc,
+                    op="read",
+                    path=path,
+                )
         return blocks, None
 
     async def _run_prompt(self, text: str, request_id, images=None) -> None:

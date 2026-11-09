@@ -8,6 +8,7 @@ from zenagent.app.taiji import (
     board as taiji_board,
 )
 from zenagent.app.taiji.transcript import peek_tail
+from zenagent.cli.rpc.errors import failure_frame
 
 
 class TaijiOps:
@@ -160,9 +161,30 @@ class TaijiOps:
         was_running = supervisor.has_running(name)
         try:
             record = await supervisor.message(name, text)
-        except (KeyError, RuntimeError) as exc:
+        except KeyError as exc:
             self._send(
-                {"type": "error", "id": request_id, "message": f"message failed: {exc}"}
+                failure_frame(
+                    request_id,
+                    code="taiji.worker_missing",
+                    message="no such worker",
+                    exc=exc,
+                    op="message",
+                    params={"name": name},
+                )
+            )
+            return True
+        except RuntimeError as exc:
+            # A worker turn error may quote a transcript path; log it, and send
+            # the name the board already knows.
+            self._send(
+                failure_frame(
+                    request_id,
+                    code="taiji.message_failed",
+                    message="message failed",
+                    exc=exc,
+                    op="message",
+                    params={"name": name},
+                )
             )
             return True
         self._send(

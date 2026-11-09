@@ -5,6 +5,17 @@ from __future__ import annotations
 from dataclasses import asdict
 from pathlib import Path
 
+from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
+
+
+class MissingSessionFile(Refusal):
+    """``session op=import`` named a file that is not there (path kept here so
+    only its basename crosses the wire)."""
+
+    def __init__(self, path: Path) -> None:
+        super().__init__(f"no such session: {path}")
+        self.path = path
+
 
 def _optional_count(value: object, *, minimum: int) -> int | None:
     """One optional wire count; a malformed value is ignored, not an error.
@@ -126,17 +137,42 @@ class SessionOps:
 
     async def _session(self, request: dict, request_id) -> None:
         op = request.get("op")
+        label = op if isinstance(op, str) else ""
         try:
             result = await self._session_op(op, request)
+        except MissingSessionFile as exc:
+            self._send(
+                failure_frame(
+                    request_id,
+                    code="session_import_missing",
+                    message="session import failed",
+                    exc=exc,
+                    op="import",
+                    path=exc.path,
+                )
+            )
+            return
+        except Refusal as exc:
+            # Authored validation text ("resume needs path") is already safe.
+            self._send(error_frame(request_id, str(exc), "session_failed", {"op": label}))
+            return
         except Exception as exc:  # noqa: BLE001 - a bad session op is a result, not a crash
-            self._send({"type": "error", "id": request_id, "message": str(exc)})
+            self._send(
+                failure_frame(
+                    request_id,
+                    code="session_failed",
+                    message="session failed",
+                    exc=exc,
+                    op=label,
+                )
+            )
             return
         self._send({"type": "result", "id": request_id, "ok": True, **(result or {})})
 
 
     async def _session_op(self, op: str, request: dict) -> dict:
         if self.runtime is None or self.sessions is None:
-            raise RuntimeError("session requests need a runtime")
+            raise Refusal("session requests need a runtime")
         if op == "current":
             path = self.runtime.session.path
             return {"path": str(path), "name": path.stem}
@@ -175,7 +211,7 @@ class SessionOps:
         if op == "resume":
             target = request.get("path")
             if not isinstance(target, str) or not target.strip():
-                raise ValueError("resume needs path")
+                raise Refusal("resume needs path")
             await self.sessions.resume(Path(target))
             if self.chat is not None:
                 self.chat.reload_transcript(drop_pending=True)
@@ -183,17 +219,17 @@ class SessionOps:
         if op == "import":
             target = request.get("path")
             if not isinstance(target, str) or not target.strip():
-                raise ValueError("import needs path")
+                raise Refusal("import needs path")
             path = Path(target).expanduser()
             if not path.is_file():
-                raise ValueError(f"no such session: {path}")
+                raise MissingSessionFile(path)
             await self.runtime.switch_session(path)
             if self.chat is not None:
                 self.chat.reload_transcript(drop_pending=True)
             return {"path": str(path)}
         if op == "undo":
             if self.busy:
-                raise RuntimeError("busy: cancel the run before undoing")
+                raise Refusal("busy: cancel the run before undoing")
             result = self.sessions.undo()
             if result is None:
                 return {"dropped": 0, "path": None}
@@ -203,24 +239,24 @@ class SessionOps:
             return {"dropped": dropped, "path": str(path)}
         if op == "delete":
             if self.busy:
-                raise RuntimeError("busy: cancel the run before deleting a session")
+                raise Refusal("busy: cancel the run before deleting a session")
             target = request.get("path")
             if not isinstance(target, str) or not target.strip():
-                raise ValueError("delete needs path")
+                raise Refusal("delete needs path")
             trashed = self.sessions.delete(Path(target))
             if self.chat is not None:
                 self.chat.reload_transcript(drop_pending=True)
             return {"path": str(trashed)}
         if op == "compact":
             if self.chat is None:
-                raise RuntimeError("compaction needs a runtime")
+                raise Refusal("compaction needs a runtime")
             notice = await self.chat.compact_now()
             if notice is None:
                 return {"compacted": False}
             return {"compacted": True, "path": str(self.runtime.session.path)}
         if op == "retry":
             if self.chat is None:
-                raise RuntimeError("retry needs a runtime")
+                raise Refusal("retry needs a runtime")
             text = self.chat.retry()
             if text is None:
                 return {"retried": False}
@@ -232,18 +268,18 @@ class SessionOps:
             return {"path": str(exported)}
         if op == "promote":
             if self.chat is None:
-                raise RuntimeError("promote needs a runtime")
+                raise Refusal("promote needs a runtime")
             pending_id = request.get("pending_id")
             if not isinstance(pending_id, int):
-                raise ValueError("promote needs pending_id")
+                raise Refusal("promote needs pending_id")
             return {"outcome": self.chat.promote(pending_id)}
         if op == "dequeue":
             if self.chat is None:
-                raise RuntimeError("dequeue needs a runtime")
+                raise Refusal("dequeue needs a runtime")
             text = self.chat.dequeue_follow_up()
             return {"dequeued": text is not None, "text": text}
         if op == "clear_pending":
             if self.chat is None:
-                raise RuntimeError("clear_pending needs a runtime")
+                raise Refusal("clear_pending needs a runtime")
             return {"cleared": self.chat.clear_pending()}
-        raise ValueError(f"unknown session op: {op}")
+        raise Refusal(f"unknown session op: {op}")

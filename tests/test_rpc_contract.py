@@ -20,6 +20,16 @@ def _rpc_source() -> str:
 
 
 RPC_PATH = _rpc_source()  # a string now, not a path — same grep surface
+
+
+def _wire_codes(prefix: str) -> set[str]:
+    """Stable error codes the RPC source can send, in either spelling: a code
+    literal inside a frame dict, or a keyword argument to the shared frame
+    helpers (`error_frame`/`failure_frame`)."""
+    pattern = rf"({prefix}[a-z_.]*)"
+    return set(re.findall(rf'"code": "{pattern}"', RPC_PATH)) | set(
+        re.findall(rf'code="{pattern}"', RPC_PATH)
+    )
 TS_PATH = (
     Path(__file__).resolve().parents[1] / "desktop" / "src" / "rpc" / "types.ts"
 )
@@ -192,13 +202,13 @@ def test_taiji_board_shape_matches_ts():
 def test_taiji_error_codes_agree_both_sides():
     """Server taiji errors cross the wire as codes + params; the desktop
     dictionary must carry a key for every code the server can send."""
-    rpc = RPC_PATH
-    py_codes = set(re.findall(r'"code": "(taiji\.[a-z_]+)"', rpc))
+    py_codes = _wire_codes(r"taiji\.")
     assert py_codes == {
         "taiji.inactive",
         "taiji.merge_blocked",
         "taiji.worker_missing",
         "taiji.bad_limit",
+        "taiji.message_failed",
     }
     errors_ts = (
         Path(__file__).resolve().parents[1] / "desktop" / "src" / "i18n" / "errors.ts"
@@ -210,8 +220,7 @@ def test_taiji_error_codes_agree_both_sides():
 def test_sanitized_error_codes_agree_both_sides():
     """I3: prompt/fs failures cross as codes; the desktop dictionary must
     carry a copy key for each, or the UI silently falls back to English."""
-    rpc = RPC_PATH
-    py_codes = set(re.findall(r'"code": "((?:prompt|fs)[a-z_]*)"', rpc))
+    py_codes = _wire_codes(r"(?:prompt|fs)")
     assert py_codes == {"prompt_failed", "fs_error"}
     errors_ts = (
         Path(__file__).resolve().parents[1] / "desktop" / "src" / "i18n" / "errors.ts"
