@@ -221,11 +221,12 @@ def test_sanitized_error_codes_agree_both_sides():
 
 
 def test_transcript_paging_fields_are_additive_and_camel_case():
-    """I4: `limit`/`before` in, `hasMoreBefore` out; `after` in, `total` out.
-    Optional on both sides, camelCase on the wire, version untouched."""
+    """I4: `limit`/`before` in, `hasMoreBefore`/`total` out; `after` in,
+    `total` out. Optional on both sides, camelCase on the wire, version
+    untouched."""
     rpc = RPC_PATH
     assert '"hasMoreBefore":' in rpc, "transcript result lost hasMoreBefore"
-    assert '"total":' in rpc, "subagent transcript result lost total"
+    assert '"total":' in rpc, "transcript result lost its absolute total"
     assert 'get("limit")' in rpc
     assert 'get("before")' in rpc
     assert 'get("after")' in rpc
@@ -234,6 +235,7 @@ def test_transcript_paging_fields_are_additive_and_camel_case():
     transcript = re.search(r"export interface TranscriptResult \{[^}]+\}", ts)
     assert transcript, "types.ts lost TranscriptResult"
     assert "hasMoreBefore?: boolean" in transcript.group(0)
+    assert "total?: number" in transcript.group(0)
 
     subagent = re.search(r"export interface SubagentTranscriptResult \{[^}]+\}", ts)
     assert subagent, "types.ts lost SubagentTranscriptResult"

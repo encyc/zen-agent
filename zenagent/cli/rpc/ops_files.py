@@ -59,8 +59,10 @@ class FilesOps:
     def _fs_request(self, request: dict, request_id, op: str) -> bool:
         path = request.get("path", "")
         if not isinstance(path, str):
+            # Same refusal shape as an OS error, so the client can localize
+            # it (`fs_error`) instead of printing a one-off server string.
             self._send(
-                {"type": "error", "id": request_id, "message": f"fs_{op} needs a path"}
+                _fs_error(request_id, op, ValueError("path must be a string"), "")
             )
             return True
         try:

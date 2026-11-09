@@ -67,6 +67,7 @@ class SessionOps:
                 if notice.source != "compaction"
             ]
         payload = request or {}
+        total = len(views)
         views, has_more_before = _page_views(
             views,
             limit=_optional_count(payload.get("limit"), minimum=1),
@@ -80,6 +81,9 @@ class SessionOps:
             "notices": notices,
             "compactions": compactions,
             "hasMoreBefore": has_more_before,
+            # The absolute row count: a tail page starts at ``total - len(page)``
+            # and that index — not the page length — is the next ``before``.
+            "total": total,
         }
 
 
@@ -101,7 +105,15 @@ class SessionOps:
         views = [asdict(view) for view in transcript or []]
         after = _optional_count((request or {}).get("after"), minimum=0)
         if after is not None:
-            views = views[after:]
+            # The increment carries non-tail mutations: an earlier card can
+            # settle (or keep streaming progress) at its original index long
+            # after the cursor moved past it. Re-send those still running;
+            # the stale ones are dropped by ``after`` itself, so a client that
+            # never sends ``after`` still gets the full snapshot.
+            running = [
+                view for view in views[:after] if view.get("status") == "running"
+            ]
+            views = running + views[after:]
         return {
             "type": "result",
             "id": request_id,

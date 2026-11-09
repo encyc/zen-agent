@@ -17,6 +17,7 @@ from zenagent.types import (
     AssistantMessage,
     ImageContent,
     TextContent,
+    ToolResultMessage,
     Usage,
     UserMessage,
 )
@@ -1085,6 +1086,86 @@ async def test_subagent_transcript_after_returns_only_new_views(runtime_factory)
     assert payloads["gone"]["total"] == 0
 
 
+def _subagent_event(chat, call_id: str, kind: str, **payload) -> None:
+    chat.on_subagent_event(call_id, "event", {"event": AgentEvent(type=kind, **payload)})
+
+
+def _tool_result(call_id: str, text: str) -> ToolResultMessage:
+    return ToolResultMessage(
+        tool_call_id=call_id,
+        tool_name="bash",
+        content=[TextContent(text=text)],
+        is_error=False,
+        timestamp=1,
+    )
+
+
+async def test_subagent_after_resends_an_earlier_card_still_running(runtime_factory):
+    """Parallel tool calls append in order and settle in place: a page that
+    starts after them would freeze every earlier card at ``running``."""
+    _runtime, server, writes, queue = await build(runtime_factory)
+    chat = server.chat
+    chat.on_subagent_event("c1", "start", {"name": "Researcher", "model": "m"})
+    _subagent_event(chat, "c1", "tool_execution_start", tool_call_id="t1", tool_name="bash", args="{}")
+    _subagent_event(chat, "c1", "tool_execution_start", tool_call_id="t2", tool_name="read_file", args="{}")
+    _subagent_event(
+        chat,
+        "c1",
+        "tool_execution_end",
+        tool_call_id="t2",
+        result=_tool_result("t2", "done"),
+    )
+
+    await run_lines(
+        server,
+        queue,
+        [
+            {"type": "subagent_transcript", "id": "full", "call_id": "c1"},
+            {"type": "subagent_transcript", "id": "tail", "call_id": "c1", "after": 1},
+        ],
+    )
+    payloads = {message["id"]: message for message in decode(writes)}
+
+    assert [view["status"] for view in payloads["full"]["transcript"]] == [
+        "running",
+        "ok",
+    ]
+    # The older running card is still carried, so the panel can settle it.
+    assert [view["id"] for view in payloads["tail"]["transcript"]] == ["v1", "v2"]
+    assert payloads["tail"]["transcript"][0]["status"] == "running"
+    assert payloads["tail"]["transcript"][1]["status"] == "ok"
+    assert payloads["tail"]["total"] == 2
+
+
+async def test_subagent_after_carries_a_settled_card_and_a_later_one(runtime_factory):
+    """The cursor stays on the first mutable row: when it settles while a
+    later call is appended, both land in the same page (deduped)."""
+    _runtime, server, writes, queue = await build(runtime_factory)
+    chat = server.chat
+    chat.on_subagent_event("c1", "start", {"name": "Researcher", "model": "m"})
+    _subagent_event(chat, "c1", "tool_execution_start", tool_call_id="t1", tool_name="bash", args="{}")
+    # The client's copy still shows v1 running, so it polls from index 0.
+    _subagent_event(
+        chat,
+        "c1",
+        "tool_execution_end",
+        tool_call_id="t1",
+        result=_tool_result("t1", "ok"),
+    )
+    _subagent_event(chat, "c1", "tool_execution_start", tool_call_id="t2", tool_name="read_file", args="{}")
+
+    await run_lines(
+        server,
+        queue,
+        [{"type": "subagent_transcript", "id": "page", "call_id": "c1", "after": 0}],
+    )
+    payload = decode(writes)[0]
+
+    assert payload["total"] == 2
+    assert [view["id"] for view in payload["transcript"]] == ["v1", "v2"]
+    assert [view["status"] for view in payload["transcript"]] == ["ok", "running"]
+
+
 async def _seed_transcript(runtime, server, count: int = 5) -> None:
     runtime.agent.replace_messages(
         [UserMessage(content=f"m{index}", timestamp=index) for index in range(count)]
@@ -1122,15 +1203,21 @@ async def test_transcript_pages_the_tail_and_flags_more_before(runtime_factory):
         "v5",
     ]
     assert payloads["all"]["hasMoreBefore"] is False
+    assert payloads["all"]["total"] == 5
 
     assert [view["id"] for view in payloads["tail"]["transcript"]] == ["v4", "v5"]
     assert payloads["tail"]["hasMoreBefore"] is True
+    # The page carries the absolute position: the client must subtract the
+    # page length (2) from 5, not send its own row count as the cursor.
+    assert payloads["tail"]["total"] == 5
 
     assert [view["id"] for view in payloads["page"]["transcript"]] == ["v3", "v4"]
     assert payloads["page"]["hasMoreBefore"] is True
+    assert payloads["page"]["total"] == 5
 
     assert [view["id"] for view in payloads["first"]["transcript"]] == ["v1", "v2"]
     assert payloads["first"]["hasMoreBefore"] is False
+    assert payloads["first"]["total"] == 5
 
     assert payloads["zero"]["transcript"] == []
     assert payloads["zero"]["hasMoreBefore"] is False
@@ -1204,6 +1291,19 @@ async def test_a_failed_fs_read_crosses_as_a_code_with_a_basename(
     # The absolute path never crosses the wire, in any frame field.
     assert str(tmp_path) not in json.dumps(payload)
     assert str(missing) in caplog.text
+
+
+async def test_a_non_string_fs_path_crosses_as_an_fs_error(runtime_factory):
+    """A malformed path is a refusal like any other fs failure: same code and
+    params shape, so the client localizes it instead of showing a raw string."""
+    _runtime, server, writes, queue = await build(runtime_factory)
+    await run_lines(server, queue, [{"type": "fs_read", "id": "r", "path": 7}])
+
+    payload = decode(writes)[0]
+    assert payload["type"] == "error"
+    assert payload["code"] == "fs_error"
+    assert payload["message"] == "read failed"
+    assert payload["params"] == {"op": "read"}
 
 
 async def test_a_failed_fs_index_crosses_as_a_code(runtime_factory, tmp_path, monkeypatch):

@@ -460,6 +460,9 @@ export interface TranscriptResult {
   /** The snapshot was paged (`limit`/`before`): older rows exist on the
    * server. Absent on an old server, which sends the whole transcript. */
   hasMoreBefore?: boolean
+  /** Full view count; the loaded page starts at `total - length`. Absent on
+   * an old server, where the page is the whole transcript. */
+  total?: number
 }
 
 /** One task child's conversation (`subagent_transcript`). `available` is false
