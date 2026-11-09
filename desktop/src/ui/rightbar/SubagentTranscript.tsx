@@ -7,7 +7,6 @@ import {
   TRANSCRIPT_WINDOW_MIN,
   growTranscriptWindow,
   reduceTranscriptWindow,
-  sameTranscriptTail,
   tailWindow,
 } from '../../state/transcriptWindow'
 import { useStatusStore, type SubagentPanelTarget } from '../../state/stores'
@@ -58,8 +57,9 @@ export function SubagentTranscript({ target }: { target: SubagentPanelTarget }) 
 
   const load = useCallback(async () => {
     const seq = (requestSeq.current += 1)
-    // Ask only for what the panel does not hold; the cursor keeps the tail
-    // row so its in-place growth (streamed text, tool progress) still lands.
+    // Ask only for what the panel does not hold; the cursor stays on the
+    // earliest running card (plus one tail row) so in-place growth and a
+    // settlement both land.
     const after = nextSubagentCursor(viewsRef.current)
     const payload: Record<string, unknown> = {
       type: 'subagent_transcript',
@@ -80,9 +80,9 @@ export function SubagentTranscript({ target }: { target: SubagentPanelTarget }) 
       setAvailable(result.available !== false)
       const merged = mergeSubagentPage(viewsRef.current, result)
       viewsRef.current = merged
-      // An unchanged poll keeps the previous array identity so React skips
-      // the rebuild (the same guard the full-snapshot poll used).
-      setViews((previous) => (sameTranscriptTail(previous, merged) ? previous : merged))
+      // The merge returns the previous array identity when no row changed, so
+      // React skips the rebuild; a settlement or an append is a new array.
+      setViews(merged)
     } catch {
       // A failed poll must not wipe rows already on screen.
       if (seq === requestSeq.current && !hasViews.current) setAvailable(false)
