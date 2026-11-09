@@ -78,11 +78,15 @@ test('a cancelled or failing folder pick is null', async () => {
 
 test('only the dialog service speaks to the plugin command', () => {
   const offenders: string[] = []
+  // The dev/e2e bridge answers the command instead of shipping it, so it has
+  // to name it too; it is not renderer code.
+  const devBridgeDir = join(here, '..', 'src', 'dev')
   const walk = (dir: string): void => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const path = join(dir, entry.name)
-      if (entry.isDirectory()) walk(path)
-      else if (entry.name !== 'fileDialog.ts' && readFileSync(path, 'utf8').includes(DIALOG_OPEN)) {
+      if (entry.isDirectory()) {
+        if (path !== devBridgeDir) walk(path)
+      } else if (entry.name !== 'fileDialog.ts' && readFileSync(path, 'utf8').includes(DIALOG_OPEN)) {
         offenders.push(path)
       }
     }

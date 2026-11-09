@@ -18,10 +18,22 @@ window.addEventListener('unhandledrejection', (event) => {
   document.title = `ERR ${reason?.message ?? String(event.reason)}`.slice(0, 200)
 })
 
-createRoot(container).render(
-  <React.StrictMode>
-    <ErrorBoundary>
-      <App />
-    </ErrorBoundary>
-  </React.StrictMode>,
-)
+// A plain browser (dev server without the Tauri shell) has no bridge, so the
+// scripted one loads first and the real shell boots against it. `DEV` folds to
+// false in a production build, letting the bundler drop this whole branch and
+// the dev chunk from the Tauri bundle.
+async function bootstrap(root: HTMLElement): Promise<void> {
+  if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
+    const { installBridge, initialState } = await import('./dev/bridge')
+    installBridge(initialState())
+  }
+  createRoot(root).render(
+    <React.StrictMode>
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
+    </React.StrictMode>,
+  )
+}
+
+void bootstrap(container)

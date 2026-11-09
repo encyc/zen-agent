@@ -6,9 +6,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:browser": "vite",
     "build": "tsc --noEmit && vite build",
     "test": "node --test tests/*.test.ts",
     "e2e": "playwright test",
+    "lint:tokens": "node ../scripts/check-style-tokens.mjs",
     "preview": "vite preview",
     "tauri": "tauri"
   },

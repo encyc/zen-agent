@@ -96,6 +96,7 @@ cd desktop
 pnpm install
 pnpm tauri dev      # full app: vite dev server + Rust shell + zen rpc child
 pnpm build          # type-check + production frontend bundle
+pnpm dev:browser    # vite only: real UI in a browser, scripted bridge, no shell
 cd src-tauri && cargo check
 ```
 
