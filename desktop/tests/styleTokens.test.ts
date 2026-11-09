@@ -66,7 +66,8 @@ test('token fallbacks, shadow alpha and mask stencils are not palette literals',
     '.a { color: var(--dsw-alias-label-inverse, #fff); }',
     '.b { box-shadow: 0 8px 24px rgb(0 0 0 / 18%); }',
     '.c { box-shadow: 0 8px 24px color-mix(in oklab, #000 22%, transparent); }',
-    '.d { -webkit-mask-image: linear-gradient(#000, transparent); }',
+    '.d { box-shadow: 0 3px 7.5px #0000000a; }',
+    '.e { -webkit-mask-image: linear-gradient(#000, transparent); }',
   ].join('\n')
   assert.deepEqual(scanCss(exempt, { file: 'desktop/src/ui/a.module.css' }).violations, [])
 })

@@ -54,7 +54,7 @@ const MASK_PROPERTIES = /^(?:mask|mask-image|-webkit-mask|-webkit-mask-image)$/
 
 /** Black or white, with or without alpha: no hue, so no palette. */
 const PURE_NEUTRAL =
-  /#(?:0{3}|f{3}|0{6}|f{6})\b|\b(?:rgba?|hsla?)\(\s*(?:0\s*[, ]\s*0\s*[, ]\s*0|255\s*[, ]\s*255\s*[, ]\s*255)\b[^)]*\)|\b(?:black|white)\b/gi
+  /#(?:0{3}|f{3}|0{6}|f{6}|0{6}[\da-f]{2}|f{6}[\da-f]{2})\b|\b(?:rgba?|hsla?)\(\s*(?:0\s*[, ]\s*0\s*[, ]\s*0|255\s*[, ]\s*255\s*[, ]\s*255)\b[^)]*\)|\b(?:black|white)\b/gi
 
 function normalizePath(file) {
   return file.split(sep).join('/')
