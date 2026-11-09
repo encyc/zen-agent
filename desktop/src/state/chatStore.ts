@@ -120,8 +120,15 @@ interface ChatState {
   currentAssistantId: string | null
   /** Monotonic revision bumped on every visible change. */
   revision: number
+  /** The snapshot was paged: older rows still exist on the server. */
+  hasMoreBefore: boolean
+  /** Transcript views the loaded nodes cover, counted from the session start
+   * (wire rows, not notices); the `before` cursor for an older page. */
+  loadedViews: number
 
   loadSnapshot(result: TranscriptResult): void
+  /** Prepend one older wire page to the loaded transcript. */
+  prependOlder(result: TranscriptResult): void
   applyEvent(event: AgentEventFrame): void
   pushCommand(name: string, argument: string, message: string | null): void
   pushUsage(usage: Usage | null, turnMs: number | null, termination: string | null): void
@@ -223,7 +230,13 @@ function viewToNode(
 export function nodesFromViews(
   views: (MessageView | ToolCallView | DividerView)[],
 ): ChatNode[] {
-  const cards: Record<string, string> = {}
+  return buildNodes(views, {})
+}
+
+function buildNodes(
+  views: (MessageView | ToolCallView | DividerView)[],
+  cards: Record<string, string>,
+): ChatNode[] {
   return views
     .map((view) => viewToNode(view, cards))
     .filter((node): node is ChatNode => node !== null)
@@ -234,12 +247,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
   cards: {},
   currentAssistantId: null,
   revision: 0,
+  hasMoreBefore: false,
+  loadedViews: 0,
 
   loadSnapshot(result) {
     const cards: Record<string, string> = {}
-    const nodes = result.transcript
-      .map((view) => viewToNode(view, cards))
-      .filter((node): node is ChatNode => node !== null)
+    const nodes = buildNodes(result.transcript, cards)
     // Legacy servers without in-stream dividers: fall back to drawing one
     // divider above the transcript from the records (written oldest-first,
     // repeated compactions stack; draw exactly one, the latest).
@@ -260,7 +273,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
     for (const notice of result.notices as TranscriptNotice[]) {
       nodes.push({ kind: 'notice', id: nid(), variant: notice.kind, text: notice.text })
     }
-    set({ nodes, cards, currentAssistantId: null, revision: get().revision + 1 })
+    set({
+      nodes,
+      cards,
+      currentAssistantId: null,
+      revision: get().revision + 1,
+      hasMoreBefore: result.hasMoreBefore === true,
+      loadedViews: result.transcript.length,
+    })
+  },
+
+  prependOlder(result) {
+    const state = get()
+    const cards = { ...state.cards }
+    const older = buildNodes(result.transcript, cards)
+    set({
+      nodes: [...older, ...state.nodes],
+      cards,
+      revision: state.revision + 1,
+      hasMoreBefore: result.hasMoreBefore === true,
+      loadedViews: state.loadedViews + result.transcript.length,
+    })
   },
 
   applyEvent(event) {
@@ -487,6 +520,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   reset() {
-    set({ nodes: [], cards: {}, currentAssistantId: null, revision: get().revision + 1 })
+    set({
+      nodes: [],
+      cards: {},
+      currentAssistantId: null,
+      revision: get().revision + 1,
+      hasMoreBefore: false,
+      loadedViews: 0,
+    })
   },
 }))

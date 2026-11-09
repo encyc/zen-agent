@@ -17,6 +17,7 @@ import {
   TRANSCRIPT_WINDOW_MIN,
   growTranscriptWindow,
   reduceTranscriptWindow,
+  shrinkTranscriptWindow,
   tailWindow,
 } from '../../state/transcriptWindow'
 import { useAppStore } from '../../state/appStore'
@@ -50,6 +51,7 @@ function sameUserRows(rows: UserNode[], nodes: ChatNode[]): boolean {
 export function ChatView() {
   const nodes = useChatStore((state) => state.nodes)
   const revision = useChatStore((state) => state.revision)
+  const hasMoreBefore = useChatStore((state) => state.hasMoreBefore)
   const busy = useAppStore((state) => state.busy)
   const project = useSessionStore(
     (state) => state.sessions.find((session) => session.path === state.currentPath)?.project ?? null,
@@ -131,6 +133,29 @@ export function ChatView() {
     setWindowSize(grown)
   }, [windowSize, nodes.length])
 
+  // The loaded rows are all mounted and the session has more history on the
+  // server: fetch the next older page and mount it in one commit, anchored
+  // like a window growth so the reader's place does not jump.
+  const loadOlder = useCallback(async () => {
+    const scroller = scrollerRef.current
+    const before = useChatStore.getState().nodes.length
+    if (!(await useAppStore.getState().loadOlderTranscript())) return
+    const added = useChatStore.getState().nodes.length - before
+    if (added <= 0) return
+    if (scroller !== null) {
+      anchorRef.current = scroller.scrollHeight - scroller.scrollTop
+    }
+    setWindowSize((size) => size + added)
+  }, [])
+
+  const revealTop = useCallback(() => {
+    if (transcriptWindow.bounded) {
+      growWindow()
+    } else if (hasMoreBefore) {
+      void loadOlder()
+    }
+  }, [transcriptWindow.bounded, hasMoreBefore, growWindow, loadOlder])
+
   const pendingJumpRef = useRef<string | null>(null)
   const mountedRef = useRef(0)
   useLayoutEffect(() => {
@@ -163,13 +188,16 @@ export function ChatView() {
 
   // Follow the tail while the user is at (or near) the bottom; any upward
   // scroll detaches until they return. Reaching the top of the mounted window
-  // mounts the next slice of loaded history instead of letting it strand.
+  // mounts the next slice of loaded history instead of letting it strand; at
+  // the top of everything loaded it fetches an older page. Returning to the
+  // tail releases the rows mounted while browsing (D261 windowing).
   useEffect(() => {
     const scroller = scrollerRef.current
     if (scroller === null) return
     const onScroll = () => {
       const distance = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
-      setFollow(distance < 48)
+      const following = distance < 48
+      setFollow(following)
       setShowJump(distance > 160)
       const anchor = scroller.getBoundingClientRect().top + scroller.clientHeight * 0.3
       let next: string | null = null
@@ -177,11 +205,15 @@ export function ChatView() {
         if (row.getBoundingClientRect().top <= anchor) next = row.dataset.minimapId ?? null
       })
       setActiveId(next)
-      if (transcriptWindow.bounded && scroller.scrollTop <= 8) growWindow()
+      if (scroller.scrollTop <= 8) revealTop()
+      if (following) {
+        const shrunk = shrinkTranscriptWindow(windowSize)
+        if (shrunk !== windowSize) setWindowSize(shrunk)
+      }
     }
     scroller.addEventListener('scroll', onScroll, { passive: true })
     return () => scroller.removeEventListener('scroll', onScroll)
-  }, [growWindow, transcriptWindow.bounded])
+  }, [revealTop, windowSize])
 
   // New content keeps the view pinned when following; else reveal the jump pill.
   useEffect(() => {
@@ -226,7 +258,7 @@ export function ChatView() {
     const scroller = scrollerRef.current
     if (scroller === null) return
     if (scroller.scrollTop <= 8) {
-      growWindow()
+      revealTop()
       return
     }
     setFollow(false)

@@ -5,11 +5,14 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   TRANSCRIPT_INITIAL_MOUNT,
+  TRANSCRIPT_PAGE_SIZE,
   TRANSCRIPT_WINDOW_MIN,
   TRANSCRIPT_WINDOW_STEP,
   growTranscriptWindow,
+  olderPageCursor,
   reduceTranscriptWindow,
   sameTranscriptTail,
+  shrinkTranscriptWindow,
   tailWindow,
 } from '../src/state/transcriptWindow.ts'
 
@@ -107,4 +110,26 @@ test('a streaming tail row with a stable id still forces a rebuild', () => {
     sameTranscriptTail(previous, [{ id: 'v1' }, { id: 'v2', text: 'Hel', status: 'running' }]),
     true,
   )
+})
+
+test('the first wire page is bounded so a long session paints the tail fast', () => {
+  assert.equal(TRANSCRIPT_PAGE_SIZE, 60)
+})
+
+test('a snapshot with more history before it yields the older-page cursor', () => {
+  assert.equal(olderPageCursor(true, 60), 60)
+  assert.equal(olderPageCursor(true, 120), 120)
+})
+
+test('no cursor when the loaded snapshot already reaches the session start', () => {
+  assert.equal(olderPageCursor(false, 60), null)
+  assert.equal(olderPageCursor(true, 0), null)
+  assert.equal(olderPageCursor(false, 0), null)
+})
+
+test('returning to the tail shrinks the window back to the steady-state cap', () => {
+  assert.equal(shrinkTranscriptWindow(140), TRANSCRIPT_WINDOW_MIN)
+  assert.equal(shrinkTranscriptWindow(TRANSCRIPT_WINDOW_MIN), TRANSCRIPT_WINDOW_MIN)
+  // A pre-first-commit budget is below the floor and stays untouched.
+  assert.equal(shrinkTranscriptWindow(TRANSCRIPT_INITIAL_MOUNT), TRANSCRIPT_INITIAL_MOUNT)
 })

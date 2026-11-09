@@ -270,3 +270,72 @@ test('streaming deltas land on the current assistant node after long history', (
   assert.equal(last.kind === 'assistant' && last.text, 'abc')
   assert.ok(revision > before)
 })
+
+function userView(id: string): TranscriptResult['transcript'][number] {
+  return { kind: 'user', id, text: `q-${id}`, timestamp: 1, steering: false }
+}
+
+test('a paged snapshot records how much history it left behind', () => {
+  useChatStore.getState().loadSnapshot({
+    ...empty,
+    transcript: [userView('v4'), userView('v5')],
+    hasMoreBefore: true,
+  })
+  const state = useChatStore.getState()
+  assert.equal(state.hasMoreBefore, true)
+  assert.equal(state.loadedViews, 2)
+})
+
+test('an old server without hasMoreBefore is treated as a complete snapshot', () => {
+  useChatStore.getState().loadSnapshot({ ...empty, transcript: [userView('v1')] })
+  assert.equal(useChatStore.getState().hasMoreBefore, false)
+})
+
+test('prepending an older page keeps the loaded tail and grows the view count', () => {
+  useChatStore.getState().loadSnapshot({
+    ...empty,
+    transcript: [userView('v3'), userView('v4')],
+    hasMoreBefore: true,
+  })
+  useChatStore.getState().prependOlder({
+    ...empty,
+    transcript: [userView('v1'), userView('v2')],
+    hasMoreBefore: false,
+  })
+
+  const state = useChatStore.getState()
+  assert.deepEqual(
+    state.nodes.map((node) => node.id),
+    ['v1', 'v2', 'v3', 'v4'],
+  )
+  assert.equal(state.loadedViews, 4)
+  assert.equal(state.hasMoreBefore, false)
+})
+
+test('prepending an older tool page indexes its card for live patches', () => {
+  useChatStore.getState().loadSnapshot({ ...empty, transcript: [userView('v3')] })
+  useChatStore.getState().prependOlder({
+    ...empty,
+    transcript: [
+      {
+        kind: 'tool',
+        id: 'v2',
+        call_id: 'call-old',
+        name: 'bash',
+        args_preview: 'ls',
+        args: {},
+        status: 'ok',
+      },
+    ],
+    hasMoreBefore: false,
+  })
+
+  useChatStore.getState().applyEvent({
+    type: 'tool_execution_end',
+    tool_call_id: 'call-old',
+    is_error: false,
+    result_text: 'late patch',
+  })
+  const tool = useChatStore.getState().nodes.find((node) => node.id === 'v2')
+  assert.equal(tool?.kind === 'tool' && tool.resultText, 'late patch')
+})

@@ -6,6 +6,7 @@
 import { startFailureOf, type StartFailure } from './startFailure.ts'
 import { create } from 'zustand'
 import { homeDir } from '@tauri-apps/api/path'
+import { TRANSCRIPT_PAGE_SIZE, olderPageCursor } from './transcriptWindow'
 import { RpcClient } from '../rpc/client'
 import type {
   CompactionRecord,
@@ -111,6 +112,7 @@ interface AppState {
   relocateProject(from: string, to: string): Promise<Record<string, unknown>>
   openProject(path: string): Promise<void>
   refreshTranscript(): Promise<boolean>
+  loadOlderTranscript(): Promise<boolean>
   submit(): Promise<void>
   steer(text: string): Promise<void>
   cancel(): Promise<void>
@@ -141,6 +143,8 @@ interface AppState {
 let client: RpcClient | null = null
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let statusInFlight = false
+/** One older-page fetch at a time: the scroll handler can fire repeatedly. */
+let olderInFlight = false
 /** Frame listeners register once per process: connect() may run again after
  * an exit, and stacked handlers would duplicate every node in the chat. */
 let wired = false
@@ -492,7 +496,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async refreshTranscript() {
     try {
-      const frame = await get().client().send({ type: 'transcript' })
+      // First load is the tail only: a long session paints fast, and the
+      // reader pages backwards when they scroll to the top.
+      const frame = await get().client().send({
+        type: 'transcript',
+        limit: TRANSCRIPT_PAGE_SIZE,
+      })
       if (frame.type !== 'result' || !frame.ok) return false
       const transcript = (frame.transcript ?? []) as never
       const notices = (frame.notices ?? []) as never
@@ -504,10 +513,41 @@ export const useAppStore = create<AppState>((set, get) => ({
         transcript,
         notices,
         compactions,
+        hasMoreBefore: frame.hasMoreBefore === true,
       })
       return true
     } catch {
       return false
+    }
+  },
+
+  async loadOlderTranscript() {
+    if (olderInFlight) return false
+    const chat = useChatStore.getState()
+    const before = olderPageCursor(chat.hasMoreBefore, chat.loadedViews)
+    if (before === null) return false
+    olderInFlight = true
+    try {
+      const frame = await get().client().send({
+        type: 'transcript',
+        limit: TRANSCRIPT_PAGE_SIZE,
+        before,
+      })
+      if (frame.type !== 'result' || !frame.ok) return false
+      useChatStore.getState().prependOlder({
+        type: 'result',
+        id: '',
+        ok: true,
+        transcript: (frame.transcript ?? []) as never,
+        notices: [],
+        compactions: [],
+        hasMoreBefore: frame.hasMoreBefore === true,
+      })
+      return true
+    } catch {
+      return false
+    } finally {
+      olderInFlight = false
     }
   },
 

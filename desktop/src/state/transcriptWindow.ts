@@ -17,6 +17,10 @@ export const TRANSCRIPT_WINDOW_MIN = 60
 /** Rows added each time the user reaches the top of the mounted window. */
 export const TRANSCRIPT_WINDOW_STEP = 40
 
+/** Rows requested for one wire page: the first load and every older page.
+ * A long session fetches its tail first and pages backwards from there. */
+export const TRANSCRIPT_PAGE_SIZE = 60
+
 export interface TranscriptWindowInput {
   /** Loaded transcript rows (all nodes the snapshot produced). */
   historyLength: number
@@ -65,6 +69,25 @@ export function growTranscriptWindow(
 export function tailWindow<T>(items: T[], mounted: number): T[] {
   if (mounted <= 0) return []
   return mounted >= items.length ? items : items.slice(-mounted)
+}
+
+/** The `before` cursor for the next older wire page, or null when the loaded
+ * snapshot already reaches the start of the session. The cursor counts views
+ * loaded from the start, so live appends at the tail never shift it. */
+export function olderPageCursor(
+  hasMoreBefore: boolean,
+  loadedViews: number,
+): number | null {
+  if (!hasMoreBefore || loadedViews <= 0) return null
+  return loadedViews
+}
+
+/** Budget after the reader returns to the tail: release the rows mounted
+ * while browsing upward. A budget already below the floor (the first commit)
+ * is left alone. */
+export function shrinkTranscriptWindow(windowSize: number): number {
+  const current = Math.max(0, windowSize)
+  return current <= TRANSCRIPT_WINDOW_MIN ? current : TRANSCRIPT_WINDOW_MIN
 }
 
 /** What a polled view needs to prove it is the same row as before: message
