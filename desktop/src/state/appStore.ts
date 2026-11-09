@@ -626,13 +626,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch {
       return
     }
-    handleResultFrame(frame, { set, get })
+    // A refused command prints on its own card below; routing the same frame
+    // through `handleResultFrame` would raise the banner too and show one
+    // failure twice. The card is the notice.
     if (frame.type !== 'result' || !frame.ok) {
       const message =
         frame.type === 'error' ? String(frame.message ?? 'command failed') : String(frame.reason ?? 'command failed')
       useChatStore.getState().pushCommand(name, argument, message)
+      void get().refreshStatus()
       return
     }
+    handleResultFrame(frame, { set, get })
     const message = typeof frame.message === 'string' ? frame.message : null
     if (frame.screen === 'memory-manager') {
       useWorkPanelStore.getState().showTab('memory')

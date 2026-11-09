@@ -100,3 +100,22 @@ test('a failed prompt and a failed file read reach the localized notice', () => 
   assert.match(files, /frameErrorNotice/)
   assert.match(files, /useNoticeStore/)
 })
+
+test('a failed command shows one notice, not two', () => {
+  // `runCommand` prints the refusal on its command card. Routing the same
+  // frame through `handleResultFrame` (whose error branch raises the banner)
+  // shows that one failure twice, so the failure branch must own the reply.
+  const appStore = read('state/appStore.ts')
+  const runCommand = appStore.match(/async runCommand\([\s\S]*?\n  \},/)?.[0]
+  assert.ok(runCommand, 'appStore lost runCommand')
+  const refused = runCommand.match(
+    /if \(frame\.type !== 'result' \|\| !frame\.ok\) \{[\s\S]*?\n    \}/,
+  )?.[0]
+  assert.ok(refused, 'runCommand lost its refusal branch')
+  assert.match(refused, /pushCommand/)
+  assert.match(refused, /refreshStatus/)
+  assert.match(refused, /return/)
+  // No second notice: neither the banner helper nor the shared result
+  // handler (whose error branch calls it) runs for a refused command.
+  assert.doesNotMatch(refused, /handleResultFrame|showFrameError/)
+})
