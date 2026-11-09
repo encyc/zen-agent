@@ -123,7 +123,7 @@
 }
 
 .knob[data-invalid] .name {
-  color: #ff453a;
+  color: var(--dsw-alias-state-error-primary);
 }
 
 .knob + .knob {
@@ -159,7 +159,7 @@
 .chipOverride {
   border-radius: 999px;
   padding: 1px 7px;
-  background: rgba(255, 159, 10, 0.18);
+  background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 18%, transparent);
   font-size: 10px;
   white-space: nowrap;
   max-width: 220px;
@@ -213,8 +213,8 @@
 }
 
 .input[aria-invalid='true'] {
-  border-color: rgba(255, 69, 58, 0.55);
-  color: #ff453a;
+  border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 55%, transparent);
+  color: var(--dsw-alias-state-error-primary);
 }
 
 .input:disabled {
@@ -284,7 +284,7 @@
 }
 
 .blockedNote {
-  color: #ff453a;
+  color: var(--dsw-alias-state-error-primary);
   font-size: var(--ds-font-11-5);
 }
 
@@ -294,10 +294,10 @@
 }
 
 .error {
-  border: 1px solid rgba(255, 69, 58, 0.35);
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-error-primary) 35%, transparent);
   border-radius: var(--ds-radius-8);
   padding: 8px 10px;
-  color: #ff453a;
+  color: var(--dsw-alias-state-error-primary);
   font-size: var(--ds-font-12);
   white-space: pre-wrap;
   word-break: break-word;
