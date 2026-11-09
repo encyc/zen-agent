@@ -4,6 +4,8 @@
  * persisted settings store; there are no placeholder sections. */
 
 import {
+  Suspense,
+  lazy,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -44,12 +46,25 @@ import {
   TerminalIcon,
 } from '../icons'
 import { ZenWordmark } from '../ZenWordmark'
-import { ModelSettings } from './ModelSettings'
-import { SkillSettings } from './SkillSettings'
-import { LimitSettings } from './LimitSettings'
-import { McpSettings } from './McpSettings'
-import { ProjectSettings } from './ProjectSettings'
 import css from './SettingsPage.module.css'
+
+// Each destination is its own chunk: opening Settings must not fetch every
+// provider, skill and project panel at once.
+const ModelSettings = lazy(() =>
+  import('./ModelSettings').then((module) => ({ default: module.ModelSettings })),
+)
+const SkillSettings = lazy(() =>
+  import('./SkillSettings').then((module) => ({ default: module.SkillSettings })),
+)
+const LimitSettings = lazy(() =>
+  import('./LimitSettings').then((module) => ({ default: module.LimitSettings })),
+)
+const McpSettings = lazy(() =>
+  import('./McpSettings').then((module) => ({ default: module.McpSettings })),
+)
+const ProjectSettings = lazy(() =>
+  import('./ProjectSettings').then((module) => ({ default: module.ProjectSettings })),
+)
 
 type Tab =
   | 'appearance'
@@ -640,15 +655,35 @@ export function SettingsPage() {
             </div>
           )}
 
-          {tab === 'models' && <ModelSettings />}
+          {tab === 'models' && (
+            <Suspense fallback={null}>
+              <ModelSettings />
+            </Suspense>
+          )}
 
-          {tab === 'skills' && <SkillSettings />}
+          {tab === 'skills' && (
+            <Suspense fallback={null}>
+              <SkillSettings />
+            </Suspense>
+          )}
 
-          {tab === 'limits' && <LimitSettings />}
+          {tab === 'limits' && (
+            <Suspense fallback={null}>
+              <LimitSettings />
+            </Suspense>
+          )}
 
-          {tab === 'mcp' && <McpSettings />}
+          {tab === 'mcp' && (
+            <Suspense fallback={null}>
+              <McpSettings />
+            </Suspense>
+          )}
 
-          {tab === 'projects' && <ProjectSettings />}
+          {tab === 'projects' && (
+            <Suspense fallback={null}>
+              <ProjectSettings />
+            </Suspense>
+          )}
 
           {tab === 'conversation' && (
             <div className={css.stack}>

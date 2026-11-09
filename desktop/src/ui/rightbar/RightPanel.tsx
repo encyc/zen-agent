@@ -2,7 +2,15 @@
  * worktree and per-subagent tabs, a launcher for the tool tabs, a close
  * control and a resizable left edge. */
 
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
+import {
+  Suspense,
+  lazy,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent,
+} from 'react'
 import { useStatusStore, useWorkPanelStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
 import {
@@ -20,13 +28,28 @@ import {
   SparkIcon,
   XIcon,
 } from '../icons'
-import { FilesPanel } from './FilesPanel'
-import { MemoryPanel } from './MemoryPanel'
-import { ReviewPanel } from './ReviewPanel'
-import { SubagentTranscript } from './SubagentTranscript'
-import { WorktreePanel } from './WorktreePanel'
-import { TaijiPanel } from './TaijiPanel'
 import css from './RightPanel.module.css'
+
+// Only the active tab's panel ships in the rail chunk; the other five load on
+// first activation, each as its own chunk.
+const FilesPanel = lazy(() =>
+  import('./FilesPanel').then((module) => ({ default: module.FilesPanel })),
+)
+const MemoryPanel = lazy(() =>
+  import('./MemoryPanel').then((module) => ({ default: module.MemoryPanel })),
+)
+const ReviewPanel = lazy(() =>
+  import('./ReviewPanel').then((module) => ({ default: module.ReviewPanel })),
+)
+const SubagentTranscript = lazy(() =>
+  import('./SubagentTranscript').then((module) => ({ default: module.SubagentTranscript })),
+)
+const WorktreePanel = lazy(() =>
+  import('./WorktreePanel').then((module) => ({ default: module.WorktreePanel })),
+)
+const TaijiPanel = lazy(() =>
+  import('./TaijiPanel').then((module) => ({ default: module.TaijiPanel })),
+)
 
 export interface RightPanelProps {
   width: number
@@ -249,23 +272,25 @@ export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
         </button>
       </div>
       <div className={css.body} data-selectable data-embed="">
-        {activeTab === undefined ? null : activeTab.kind === 'subagent' ? (
-          <SubagentTranscript
-            target={{ callId: activeTab.callId ?? '', name: activeTab.name ?? '' }}
-          />
-        ) : activeTab.kind === 'memory' ? (
-          <MemoryPanel />
-        ) : activeTab.kind === 'files' ? (
-          <FilesPanel />
-        ) : activeTab.kind === 'worktree' ? (
-          <WorktreePanel />
-        ) : activeTab.kind === 'taiji' ? (
-          <TaijiPanel />
-        ) : (
-          <div className={css.reviewWrap}>
-            <ReviewPanel />
-          </div>
-        )}
+        <Suspense fallback={null}>
+          {activeTab === undefined ? null : activeTab.kind === 'subagent' ? (
+            <SubagentTranscript
+              target={{ callId: activeTab.callId ?? '', name: activeTab.name ?? '' }}
+            />
+          ) : activeTab.kind === 'memory' ? (
+            <MemoryPanel />
+          ) : activeTab.kind === 'files' ? (
+            <FilesPanel />
+          ) : activeTab.kind === 'worktree' ? (
+            <WorktreePanel />
+          ) : activeTab.kind === 'taiji' ? (
+            <TaijiPanel />
+          ) : (
+            <div className={css.reviewWrap}>
+              <ReviewPanel />
+            </div>
+          )}
+        </Suspense>
       </div>
     </div>
   )

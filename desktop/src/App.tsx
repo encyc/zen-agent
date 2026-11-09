@@ -1,7 +1,7 @@
 /** App shell: theme presenter, connection gate (welcome → boot → frame →
  * exit banner). Keyboard: Cmd/Ctrl+B toggles the sidebar, like dsh. */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import { isTauri } from '@tauri-apps/api/core'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { defaultProjectCwd, lastProjectCwd, useAppStore } from './state/appStore'
@@ -17,9 +17,6 @@ import { AppFrame } from './ui/AppFrame'
 import { Sidebar } from './ui/Sidebar'
 import { ChatView } from './ui/chat/ChatView'
 import { InputBar } from './ui/composer/InputBar'
-import { RightPanel } from './ui/rightbar/RightPanel'
-import { SettingsPage } from './ui/pages/SettingsPage'
-import { ToolsPage } from './ui/pages/ToolsPage'
 import { restoreChatState } from './ui/pages/navigation'
 import { isRuntimeMissing, type RuntimeProbe } from './state/startFailure.ts'
 import { shouldShowWindow } from './state/shellWindow.ts'
@@ -28,13 +25,27 @@ import { ConversationTopbar } from './ui/ConversationTopbar'
 import { NoticeBanner } from './ui/NoticeBanner'
 import { UpdateBanner } from './ui/UpdateBanner'
 import { useUpdateStore } from './state/updateStore'
-import { CommandPalette } from './ui/palette/CommandPalette'
 import { SIDEBAR_DEFAULT, RIGHTBAR_DEFAULT, clampChatWidth } from './ui/columns'
 import { PanelRightIcon } from './ui/icons'
 import css from './App.module.css'
 
 const SIDEBAR_KEY = 'zen.sidebar.width'
 const RIGHTBAR_KEY = 'zen.rightbar.width'
+
+// Secondary surfaces stay out of the boot chunk: settings, tools, the work
+// panel and the palette load on first use, behind a null fallback.
+const SettingsPage = lazy(() =>
+  import('./ui/pages/SettingsPage').then((module) => ({ default: module.SettingsPage })),
+)
+const ToolsPage = lazy(() =>
+  import('./ui/pages/ToolsPage').then((module) => ({ default: module.ToolsPage })),
+)
+const RightPanel = lazy(() =>
+  import('./ui/rightbar/RightPanel').then((module) => ({ default: module.RightPanel })),
+)
+const CommandPalette = lazy(() =>
+  import('./ui/palette/CommandPalette').then((module) => ({ default: module.CommandPalette })),
+)
 
 function loadWidth(key: string, fallback: number): number {
   try {
@@ -238,8 +249,20 @@ export function App() {
     )
   }
 
-  if (view === 'settings') return <SettingsPage />
-  if (view === 'tools') return <ToolsPage />
+  if (view === 'settings') {
+    return (
+      <Suspense fallback={null}>
+        <SettingsPage />
+      </Suspense>
+    )
+  }
+  if (view === 'tools') {
+    return (
+      <Suspense fallback={null}>
+        <ToolsPage />
+      </Suspense>
+    )
+  }
 
   return (
     <>
@@ -255,14 +278,16 @@ export function App() {
       rightbarWidth={rightbarWidth}
       sidebar={<Sidebar onCollapse={() => setCollapsed(true)} />}
       rightbar={
-        <RightPanel
-          width={rightbarWidth}
-          onWidth={(width) => {
-            setRightbarWidth(width)
-            persistWidth(RIGHTBAR_KEY, width)
-          }}
-          onClose={() => useWorkPanelStore.getState().closePanel()}
-        />
+        <Suspense fallback={null}>
+          <RightPanel
+            width={rightbarWidth}
+            onWidth={(width) => {
+              setRightbarWidth(width)
+              persistWidth(RIGHTBAR_KEY, width)
+            }}
+            onClose={() => useWorkPanelStore.getState().closePanel()}
+          />
+        </Suspense>
       }
     >
       <ConversationTopbar
@@ -307,7 +332,9 @@ export function App() {
         <PanelRightIcon size={15} />
       </button>
       </AppFrame>
-      <CommandPalette />
+      <Suspense fallback={null}>
+        <CommandPalette />
+      </Suspense>
     </>
   )
 }
