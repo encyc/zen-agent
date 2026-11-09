@@ -72,3 +72,22 @@ test('concurrent start() calls register the three event listeners once', async (
   assert.deepEqual(pids, [41, 41, 41])
   assert.equal(recorder.listens.length, 3)
 })
+
+test('a failed listener registration does not poison the later starts', async () => {
+  const listens: string[] = []
+  _useBridge({
+    async invoke<T>(command: string): Promise<T> {
+      return (command === 'rpc_start' ? { pid: 7 } : null) as T
+    },
+    async listen<T>(event: string): Promise<() => void> {
+      listens.push(event)
+      if (listens.length === 1) throw new Error('event plugin unavailable')
+      return () => {}
+    },
+  })
+  const client = new RpcClient()
+
+  await assert.rejects(client.start())
+  assert.equal(await client.start(), 7)
+  assert.deepEqual(listens, ['rpc:frame', 'rpc:frame', 'rpc:stderr', 'rpc:exit'])
+})

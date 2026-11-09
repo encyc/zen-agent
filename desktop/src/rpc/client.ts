@@ -64,7 +64,14 @@ export class RpcClient {
   private wiring: Promise<void> | null = null
 
   async start(options: StartOptions = {}): Promise<number> {
-    if (this.wiring === null) this.wiring = this.listenAll()
+    if (this.wiring === null) {
+      // A failed registration must not poison every later start: drop the
+      // cached promise so a retry registers again.
+      this.wiring = this.listenAll().catch((error: unknown) => {
+        this.wiring = null
+        throw error
+      })
+    }
     await this.wiring
     try {
       const report = await bridge.invoke<{ pid: number }>('rpc_start', {
