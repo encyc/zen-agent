@@ -22,6 +22,7 @@ import { SettingsPage } from './ui/pages/SettingsPage'
 import { ToolsPage } from './ui/pages/ToolsPage'
 import { restoreChatState } from './ui/pages/navigation'
 import { isRuntimeMissing, type RuntimeProbe } from './state/startFailure.ts'
+import { shouldShowWindow } from './state/shellWindow.ts'
 import { runtimeProbe } from './rpc/client.ts'
 import { ConversationTopbar } from './ui/ConversationTopbar'
 import { NoticeBanner } from './ui/NoticeBanner'
@@ -140,18 +141,29 @@ export function App() {
   }, [connection])
 
   // The shell window boots hidden (tauri.conf.json `visible: false`), so the
-  // first thing the user sees is the ready tree, not an empty webview. One
-  // animation frame lets that tree rasterize before the window appears; a
-  // plain browser (dev, e2e) has no window to show.
+  // first thing the user sees is the ready tree — or the boot-failure screen —
+  // not an empty webview. WebKit suspends requestAnimationFrame while the view
+  // is hidden, which is exactly the state that must end, so the frame is only
+  // a first-paint hint: a timer guarantees the reveal. A plain browser (dev,
+  // e2e) has no window to show.
   useEffect(() => {
-    if (connection !== 'ready' || windowShown.current) return
+    if (!shouldShowWindow(connection) || windowShown.current) return
     windowShown.current = true
-    requestAnimationFrame(() => {
+    let done = false
+    const reveal = () => {
+      if (done) return
+      done = true
       if (!isTauri()) return
       void getCurrentWebviewWindow()
         .show()
         .catch(() => {})
-    })
+    }
+    requestAnimationFrame(reveal)
+    setTimeout(reveal, 500)
+    // Intentionally not cancelled: a connection change right after ready (the
+    // runtime dies while the reveal is pending) re-runs this effect, finds
+    // `windowShown` set and returns; cancelling here would leave the window
+    // hidden forever. `reveal` is idempotent and the effect never unmounts.
   }, [connection])
 
   // The composer floats over the center column; publish its real height so

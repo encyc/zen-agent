@@ -50,6 +50,8 @@ export interface BridgeState {
   limitValues?: Record<string, number | null>
   /** Keys the fake considers written to the file (drives the "explicit" chip). */
   limitExplicit?: string[]
+  /** How many times the shell asked the (faked) window plugin to show it. */
+  showCalls?: number
   /** When set, `limits set` answers this error (hand-mangled file, bad value). */
   limitSetError?: string
   skillBodies?: Record<string, string>
@@ -87,6 +89,8 @@ export interface BridgeState {
 
 declare global {
   interface Window {
+    /** What `isTauri()` reads; the boot reveal is Tauri-only. */
+    isTauri?: boolean
     __ZEN_E2E__: BridgeState
     __ZEN_E2E_EMIT__(event: string, payload: unknown): void
   }
@@ -857,7 +861,10 @@ export function installBridge(state: BridgeState) {
         return { resolved: '/app/zen', exists: true, version: '0.0.0-e2e' }
       }
       // The shell shows its window after the ready frame paints.
-      if (cmd === 'plugin:window|show') return null
+      if (cmd === 'plugin:window|show') {
+        state.showCalls = (state.showCalls ?? 0) + 1
+        return null
+      }
       if (cmd === 'plugin:dialog|open') return state.dialogSelection
       if (cmd === 'plugin:path|resolve_directory') return '/Users/e2e'
       if (cmd === 'rpc_send') {
@@ -875,6 +882,9 @@ export function installBridge(state: BridgeState) {
   }
 
   ;(window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = internals
+  // The scripted page is a webview as far as the shell is concerned, so the
+  // boot reveal (`isTauri()` → `plugin:window|show`) actually runs.
+  window.isTauri = true
   ;(
     window as unknown as { __TAURI_EVENT_PLUGIN_INTERNALS__: unknown }
   ).__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener() {} }

@@ -168,6 +168,10 @@ test('a first launch goes straight into the chat shell', async ({ page }) => {
   await expect
     .poll(() => page.evaluate(() => window.__ZEN_E2E__.starts[0]?.cwd))
     .toBe('/Users/e2e')
+  // The shell boots hidden; reaching the ready tree must reveal the window.
+  await expect
+    .poll(() => page.evaluate(() => window.__ZEN_E2E__.showCalls ?? 0))
+    .toBe(1)
 })
 
 test('a new project joins the rail and can be removed', async ({ page }) => {
