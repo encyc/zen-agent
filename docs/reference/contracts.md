@@ -64,6 +64,10 @@ StreamFn = Callable[[Model, list[Message], list[ToolDef], StreamOptions],
 - 密钥只从环境变量读取，名字由 catalog 的 `api_key_env` 决定。
 - `doctor --report`、metrics、crash log **绝不写密钥或 prompt 原文**。
 - config.toml 可以覆盖 base_url/模型，但**不能内联密钥**。
+- `[limits]` / `[task]`（预算旋钮）只有**一个写路径**：`zenagent/limits.py` 的外科手术式写盘
+  （只动这两张表的行，其余字节保序；未知键拒绝重写）。RPC `limits` op 与桌面参数页共用它。
+- `[limits]` 与 `[task]`、`[safety]`、`[backup]` 一样是**仅全局层**；范围校验失败一律报错，
+  不 clamp。
 
 ## 8. MCP 工具与权限
 

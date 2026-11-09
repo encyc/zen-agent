@@ -6,6 +6,7 @@
 ## 建议阅读路线
 
 1. [架构总览](architecture.md) — 五层依赖、一次请求的完整数据流、为什么这样分层
+   - 架构图资产：[简化版](architecture-simplify.html)（模块级）· [完整版](architecture-full.html)（逐文件，悬停看细节）— 设计讨论与 CHANGELOG 增删改的工作底图，见架构总览末尾的治理规则
 2. 使用指南（先知道它怎么工作）：
    - [CLI](guide/cli.md) · [斜杠命令](guide/commands.md) · [项目与全局作用域](guide/projects.md) · [配置与目录](guide/config.md) · [工具与权限](guide/tools-permissions.md)
    - [MCP](guide/mcp.md) · [Skills 与模板](guide/skills-templates.md) · [扩展](guide/extensions.md)

@@ -154,6 +154,7 @@ agent_end 事件
 | `zenagent/cli/` | 所有交互面 | `main`、`repl`、`rpc`、`tui`（`cli/permissions.py` 只是兼容 shim） |
 | `zenagent/mcp/` | MCP 客户端与生命周期 | `McpClient`、`StdioTransport`、`HttpTransport`、`McpManager` |
 | `zenagent/skills.py` / `templates.py` | 文件即扩展 | `discover_skills`、`build_skill_tool`、`expand` |
+| `zenagent/limits.py` | 可调预算的唯一注册表与写盘 | `LIMITS`、`TASK_KNOBS`、`parse_limits`、`write_managed`（`[limits]`/`[task]` 外科手术式重写，唯一写路径） |
 | `zenagent/extensions.py` | Python 扩展 | `ExtensionAPI`、`load_extensions` |
 | `zenagent/usage.py` / `export.py` / `telemetry.py` / `crash.py` | 可观测性 | `collect_usage`、`export_session`、`MetricsRecorder` |
 
@@ -166,3 +167,26 @@ agent_end 事件
 - 线协议：`zenagent/cli/rpc/`（权威）↔ `desktop/src/rpc/types.ts`（`REQUEST_KINDS`），契约测试 `tests/test_rpc_contract.py` 双向钉住
 - 行数预算：`scripts/check_architecture.py` + `docs/architecture/allowlist.json`（只许降）
 - 对应测试：`tests/test_loop.py`、`tests/test_agent_class.py`、`tests/test_events.py`
+
+## 架构图资产（核心资产与治理）
+
+> 2026-11-09（limits）：无新节点；`cli/rpc/` 节点 tooltip 增 `limits` op；
+> `zenagent/limits.py` 归入 `config` 聚合节点（prompts/catalog tooltip 的
+> "借 limits 估算预算" 即指它）。
+
+两份交互式架构图是本项目的**核心架构资产**，与本文件互为正典：文字定语义，图定结构。
+
+| 文件 | 粒度 | 用途 |
+|---|---|---|
+| [`architecture-simplify.html`](architecture-simplify.html) | 模块级（~30 节点） | 快速理解与对外介绍；单列版式，窄窗口可用 |
+| [`architecture-full.html`](architecture-full.html) | 逐文件级（64 节点 / 58 边） | 架构设计与需求评审的工作底图；悬停任意节点可见该节点合并的文件清单与关键行为 |
+
+两图均为独立 HTML（无构建、无外部依赖、跟随系统亮暗主题），悬停节点显示细节并高亮其全部连线。
+
+**治理规则**（对人与 agent 同样生效）：
+
+1. **设计经图**：一切架构设计、需求设计、模块增删的讨论，先在图上定位影响面（涉及哪些节点与边），结论落回图——不允许"代码改了、图还是旧的"。
+2. **CHANGELOG 必写架构图小节**：每个版本的条目必须包含对本图的增（新节点/边）、删（移除的节点/边）、改（节点职责、分组、连线语义变化）说明，引用节点 id（图内 `data-node`）。
+3. **节点的 tooltip 是文件的索引**：full 版每个节点合并了若干实现文件；新增文件先归入既有节点，只有形成新的架构职责才升格为新节点。
+4. 边只表达**调用 / 数据流向**；"某模块被谁装配"这类静态事实写在节点 tooltip，不画线，避免 spaghetti。
+

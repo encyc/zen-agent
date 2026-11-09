@@ -121,6 +121,7 @@ deny = ["git_push"]                           # 追加到全局 deny；不能移
 | `[tools] deny` | 并集去重保序；项目层只能加严，**不能放宽**全局 deny |
 | `[safety]` | **仅全局层**；项目层出现即报错（仓库不能给自己开权限） |
 | `[backup]` | **仅全局层**；同上 |
+| `[limits]` | **仅全局层**；同上（仓库不能放大所跑机器的提示词预算） |
 
 规则：
 
@@ -157,6 +158,36 @@ max_transcript_file_bytes = 8388608  # 单条转录超过 8 MiB 就截断并标�
   （关闭），其余必须是正数。
 - 子代理的工具面跟随会话权限模式：zen 模式继承主 Agent 的激活工具集（黑名单除外），其他模式只拿
   只读工具（见[工具与权限](tools-permissions.md)）。
+
+### [limits] 与参数页（仅全局层）
+
+提示词 / 主循环的预算值，桌面设置「参数与预算」页读写的就是它们；手写等价：
+
+```toml
+[limits.skills]
+max_index_bytes = 12288        # 系统提示里技能索引的总大小上限（超出显示 "more skills omitted"）
+max_body_bytes = 32768         # 单次 read_skill / /skill: 注入正文的上限，超出截断并标注
+
+[limits.context]
+max_context_bytes = 32768      # AGENTS.md / CLAUDE.md 注入上下文的总大小上限
+compact_threshold = 0.85       # 上下文用到窗口这一比例时触发自动压缩
+
+[limits.agent]
+max_turns = 100                # 主循环一次 run 的模型请求上限（--max-turns 覆盖它）
+loop_guard_threshold = 5       # 连续完全相同的工具调用几次后注入"别再重复"提示
+max_result_bytes = 40000       # 单个工具结果超过即只留头尾（全文可溢出到 artifact）
+
+[limits.tools]
+shell_max_output_bytes = 30000 # bash 输出保留量，超出只留头尾并标注
+```
+
+- **仅全局层**：项目层出现 `[limits]` 启动即报错——被检出的仓库不能放大它所跑机器的提示词预算。
+- 每个键加载时校验范围，越界/类型错误启动即报错（不会静默 clamp）。
+- 生效时机分两档，参数页会逐项标注：**立即**（技能索引/正文、loop 护栏、bash 输出，
+  `apply_limits()` 热替换）与**新会话**（上下文注入、压缩阈值、`max_turns`、工具结果预算）。
+- 「恢复默认」= 从文件里删掉这个键，上游改默认值时会跟着走。
+- `--max-turns` / `--no-skills` / `--no-context-files` / `--no-auto-compact` 仍然只覆盖本会话，
+  参数页会以"本会话被 … 覆盖"如实标注。
 
 ### [safety] 与 [backup]（仅全局层）
 

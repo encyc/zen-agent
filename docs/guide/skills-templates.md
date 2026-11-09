@@ -31,7 +31,9 @@ description: Build a PDF status report from a CSV
 - `name` 缺省用目录名；`description` 缺省用正文第一行。
 - 项目根优先于用户根，同名时项目赢并 warning。
 - frontmatter 未闭合 / 行缺冒号 → 跳过该 skill 并 warning，不影响其他。
-- prompt 里的索引上限 4KB（超出显示 "more skills omitted"）。
+- prompt 里的索引上限 12KB（`MAX_INDEX_BYTES`；超出显示 "more skills omitted"，
+  被省略的 skill 仍能按名字 `read_skill` / `/skill:<name>` 调用——`read_skill`
+  的工具描述列的是全部名字，丢的只是"什么时候该用"那一行）。
 - `read_skill` 返回正文，上限 32KB，超出截断并标注。
 - `read_skill` 是只读工具，不需要 `--yes`。
 - `/skills` **先重扫 skills 根目录再列出**（纯文件读取，15 个 skill 约 0.7ms），

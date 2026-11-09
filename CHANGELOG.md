@@ -3,6 +3,59 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+**[limits]: the tunable budgets, and a settings page for them.** The prompt /
+loop budgets that used to be module constants (`MAX_INDEX_BYTES`,
+`_MAX_TURNS`, `MAX_OUTPUT_BYTES`, …) are one `[limits]` block of
+`config.toml`, edited in the desktop settings page's new "参数与预算"
+(Limits & budgets) tab or by hand — same file, same validation.
+
+### Added
+
+- **Architecture diagrams as a first-class asset** (`docs/architecture-simplify.html`,
+  `docs/architecture-full.html`): two standalone interactive HTML diagrams of the
+  whole system — a module-level simplify view and a per-file full view (64 nodes,
+  58 edges; hover any node for its merged file list and details, and to highlight
+  its edges). Governance now lives in `docs/architecture.md` §架构图资产:
+  architecture/requirement discussions must go through the diagrams, and every
+  changelog entry must state what changed on them. (Diagram deltas for this
+  entry: **added** both files as new assets; afterwards cross-checked against
+  `scripts/import_graph.py` — coverage gaps folded into node tooltips
+  (`error_notice` → chat, `project` / `registry` consumer notes), no nodes or
+  edges added or removed. The checker also surfaced a 4-module import cycle
+  inside the kernel, `agent.loop ↔ tool_exec ↔ result_budget ↔ timeouts`,
+  which the diagram intentionally hides by merging them into one node.)
+- **`[limits]` in config.toml** (`zenagent/limits.py`): a registry of 8 knobs
+  in four tables (`skills` / `context` / `agent` / `tools`), each with a safe
+  range, a default, a unit and an apply timing ("immediate" vs "next
+  session"). Global-only like `[safety]`/`[backup]`: a committed project layer
+  that sets it fails startup. Out-of-range values error loudly; never clamped.
+- **The desktop "参数与预算" tab** (`LimitSettings.tsx`): every knob grouped
+  Skills / Context / Agent / Subagents / Tools, with the config file path (+
+  copy), per-knob description, default, apply timing, a "overridden this
+  session by --max-turns 20" chip when a CLI flag wins, and reset-to-default
+  (= delete the key). Backed by the new `{type:'limits', op:get|set|reset}`
+  RPC op (`zenagent/cli/rpc/ops_config.py`), pinned into the TS
+  `REQUEST_KINDS` contract.
+- **`zen doctor` reports non-default limits** as a read-only line, so
+  headless sessions can explain their own budgets.
+- `[task]` (subagent budgets, shipped earlier) joins the same page and the
+  same writer, so subagent max_turns / timeout / cost / transcript retention
+  are editable at last.
+
+### Changed
+
+- The surgical writer (`write_managed`) replaces only the `[limits.*]` and
+  `[task]` lines of `config.toml`; every other byte — comments, order, blank
+  lines — is preserved, keys from a future build are refused instead of
+  silently deleted, and writes go through temp-file + rename.
+- Wiring is explicit-parameter injection, not a global: `skills_prompt_index`,
+  `load_context_files`, `should_auto_compact`, `apply_result_budget`,
+  `Agent(loop_guard_threshold, max_result_bytes)` and `base_tools` take their
+  budget from `runtime.user_config`; `MAX_INDEX_BYTES` is now 12288 (the 4 KB
+  cap silently dropped 26 of 48 installed skills from the prompt).
+
 ## v0.10.0 — 2026-11-08
 
 **太极 (Taiji): one Router session, many workers in parallel git
