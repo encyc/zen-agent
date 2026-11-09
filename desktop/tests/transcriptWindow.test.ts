@@ -9,6 +9,7 @@ import {
   TRANSCRIPT_WINDOW_STEP,
   growTranscriptWindow,
   reduceTranscriptWindow,
+  sameTranscriptTail,
   tailWindow,
 } from '../src/state/transcriptWindow.ts'
 
@@ -73,4 +74,37 @@ test('the trailing slice always keeps the live tail', () => {
   assert.deepEqual(tailWindow(rows, 2), ['d', 'e'])
   assert.deepEqual(tailWindow(rows, 10), rows)
   assert.deepEqual(tailWindow(rows, 0), [])
+})
+
+test('a poll with the same row count and tail identity skips the rebuild', () => {
+  const previous = [{ id: 'v1' }, { id: 'v2' }]
+  assert.equal(sameTranscriptTail(previous, [{ id: 'v1' }, { id: 'v2' }]), true)
+  assert.equal(sameTranscriptTail(previous, [{ id: 'v1' }, { id: 'v3' }]), false)
+  assert.equal(sameTranscriptTail(previous, [{ id: 'v1' }]), false)
+  assert.equal(sameTranscriptTail(null, previous), false)
+  assert.equal(sameTranscriptTail([], []), true)
+})
+
+test('a tool row without a stable id keys off its call id', () => {
+  const previous = [{ id: 'v1' }, { call_id: 'c1' }]
+  assert.equal(sameTranscriptTail(previous, [{ id: 'v1' }, { call_id: 'c1' }]), true)
+  assert.equal(sameTranscriptTail(previous, [{ id: 'v1' }, { call_id: 'c2' }]), false)
+  // A row with neither identity cannot prove it is unchanged.
+  assert.equal(sameTranscriptTail([{}], [{}]), false)
+})
+
+test('a streaming tail row with a stable id still forces a rebuild', () => {
+  const previous = [{ id: 'v1' }, { id: 'v2', text: 'Hel', status: 'running' }]
+  assert.equal(
+    sameTranscriptTail(previous, [{ id: 'v1' }, { id: 'v2', text: 'Hello', status: 'running' }]),
+    false,
+  )
+  assert.equal(
+    sameTranscriptTail([{ call_id: 'c1', progress: '10%' }], [{ call_id: 'c1', progress: '20%' }]),
+    false,
+  )
+  assert.equal(
+    sameTranscriptTail(previous, [{ id: 'v1' }, { id: 'v2', text: 'Hel', status: 'running' }]),
+    true,
+  )
 })

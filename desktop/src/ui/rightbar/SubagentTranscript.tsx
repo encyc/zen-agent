@@ -3,6 +3,13 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '../../state/appStore'
+import {
+  TRANSCRIPT_WINDOW_MIN,
+  growTranscriptWindow,
+  reduceTranscriptWindow,
+  sameTranscriptTail,
+  tailWindow,
+} from '../../state/transcriptWindow'
 import { useStatusStore, type SubagentPanelTarget } from '../../state/stores'
 import { nodesFromViews, type ChatNode } from '../../state/chatStore'
 import type { MessageView, SubagentTranscriptResult, ToolCallView } from '../../rpc/types'
@@ -29,6 +36,13 @@ export function SubagentTranscript({ target }: { target: SubagentPanelTarget }) 
   const requestSeq = useRef(0)
   const stick = useRef(true)
   const scrollRef = useRef<HTMLDivElement | null>(null)
+  // Mounted history is a trailing window (D261 parity with the main
+  // transcript): a bounded first commit, then the steady-state budget, grown
+  // upward when the reader reaches the top.
+  const [windowSize, setWindowSize] = useState(TRANSCRIPT_WINDOW_MIN)
+  const [initialCommit, setInitialCommit] = useState(true)
+  const anchorRef = useRef<number | null>(null)
+  const mountedRef = useRef(0)
 
   const view = useStatusStore((state) =>
     state.status?.subagents?.find((entry) => entry.call_id === target.callId),
@@ -52,7 +66,10 @@ export function SubagentTranscript({ target }: { target: SubagentPanelTarget }) 
       }
       hasViews.current = true
       setAvailable(result.available !== false)
-      setViews(result.transcript ?? [])
+      const next = result.transcript ?? []
+      // The poll re-sends the whole transcript every second; identical rows
+      // must keep their identity so React skips the rebuild.
+      setViews((previous) => (sameTranscriptTail(previous, next) ? previous : next))
     } catch {
       // A failed poll must not wipe rows already on screen.
       if (seq === requestSeq.current && !hasViews.current) setAvailable(false)
@@ -64,6 +81,10 @@ export function SubagentTranscript({ target }: { target: SubagentPanelTarget }) 
     stick.current = true
     setViews(null)
     setAvailable(true)
+    setWindowSize(TRANSCRIPT_WINDOW_MIN)
+    setInitialCommit(true)
+    anchorRef.current = null
+    mountedRef.current = 0
     void load()
   }, [load])
 
@@ -75,17 +96,57 @@ export function SubagentTranscript({ target }: { target: SubagentPanelTarget }) 
 
   const nodes = useMemo(() => nodesFromViews(views ?? []), [views])
 
+  useEffect(() => {
+    if (!initialCommit || nodes.length === 0) return
+    const frame = requestAnimationFrame(() => setInitialCommit(false))
+    return () => cancelAnimationFrame(frame)
+  }, [initialCommit, nodes.length])
+
+  const transcriptWindow = reduceTranscriptWindow({
+    historyLength: nodes.length,
+    windowSize,
+    initialCommit,
+  })
+  // Only the trailing slice mounts; older loaded rows stay in the snapshot.
+  const visible = useMemo(
+    () => tailWindow(nodes, transcriptWindow.mounted),
+    [nodes, transcriptWindow.mounted],
+  )
+
+  const growWindow = useCallback(() => {
+    const element = scrollRef.current
+    if (element === null) return
+    const grown = growTranscriptWindow(windowSize, nodes.length)
+    if (grown === windowSize) return
+    // Mounting rows above the viewport moves everything in view: hold the
+    // distance from the bottom so the reader stays where they were.
+    anchorRef.current = element.scrollHeight - element.scrollTop
+    setWindowSize(grown)
+  }, [windowSize, nodes.length])
+
   useLayoutEffect(() => {
     const element = scrollRef.current
-    if (element === null || !stick.current) return
+    if (element === null) return
+    const mounted = transcriptWindow.mounted
+    const previous = mountedRef.current
+    mountedRef.current = mounted
+    if (anchorRef.current !== null && mounted > previous) {
+      element.scrollTop = element.scrollHeight - anchorRef.current
+      anchorRef.current = null
+      return
+    }
+    anchorRef.current = null
+    if (!stick.current) return
     element.scrollTop = element.scrollHeight
-  }, [nodes])
+  }, [transcriptWindow.mounted])
 
   const onScroll = () => {
     const element = scrollRef.current
     if (element === null) return
     stick.current =
       element.scrollHeight - element.scrollTop - element.clientHeight < STICK_PX
+    // Reaching the top mounts the next slice of loaded history.
+    if (transcriptWindow.bounded && element.scrollTop <= 8) growWindow()
   }
 
   const name = view?.name || target.name
@@ -141,7 +202,7 @@ export function SubagentTranscript({ target }: { target: SubagentPanelTarget }) 
           ) : nodes.length === 0 ? (
             <p className={css.empty}>{t('panel.subagentEmpty')}</p>
           ) : (
-            nodes.map((node) => <TranscriptRow key={node.id} node={node} />)
+            visible.map((node) => <TranscriptRow key={node.id} node={node} />)
           )}
         </div>
       </div>
