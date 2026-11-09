@@ -2,8 +2,7 @@
  * exit banner). Keyboard: Cmd/Ctrl+B toggles the sidebar, like dsh. */
 
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
-import { isTauri } from '@tauri-apps/api/core'
-import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { showShellWindow } from './state/windowShow.ts'
 import { defaultProjectCwd, lastProjectCwd, useAppStore } from './state/appStore'
 import {
   clampFontScale,
@@ -157,17 +156,14 @@ export function App() {
   // is hidden, which is exactly the state that must end, so the frame is only
   // a first-paint hint: a timer guarantees the reveal. A plain browser (dev,
   // e2e) has no window to show.
+  //
+  // `showShellWindow` owns "once": the boot fallback in main.tsx shares it, and
+  // a rejected `show()` clears the owner so either caller can retry.
   useEffect(() => {
     if (!shouldShowWindow(connection) || windowShown.current) return
     windowShown.current = true
-    let done = false
     const reveal = () => {
-      if (done) return
-      done = true
-      if (!isTauri()) return
-      void getCurrentWebviewWindow()
-        .show()
-        .catch(() => {})
+      void showShellWindow()
     }
     requestAnimationFrame(reveal)
     setTimeout(reveal, 500)

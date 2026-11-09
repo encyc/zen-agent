@@ -84,6 +84,9 @@ export interface BridgeState {
   /** Milliseconds `rpc_start` stays in flight, so a spec can watch a project
    * switch happen (the shell must never fall back to the boot screen). */
   switchDelayMs?: number
+  /** When set, `rpc_start` never resolves: the shell stays before the ready
+   * tree, whose boot fail-safe must still reveal the hidden window. */
+  startHangs?: boolean
   /** `get_initial_state` flags; absent → updates enabled and self-updatable. */
   updatesDisabled?: boolean
   selfUpdatable?: boolean
@@ -849,6 +852,9 @@ export function installBridge(state: BridgeState) {
         const pid = nextPid
         nextPid += 1
         state.starts.push({ cwd: options.cwd ?? null, pid })
+        if (state.startHangs === true) {
+          await new Promise<never>(() => {})
+        }
         // A real child takes a few hundred ms to replace; the delay makes that
         // window observable instead of a race the spec would usually lose.
         if (state.switchDelayMs !== undefined) {

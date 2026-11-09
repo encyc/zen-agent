@@ -5,6 +5,8 @@ import './styles/themes.css'
 import './styles/base.css'
 import { App } from './App'
 import { ErrorBoundary } from './ErrorBoundary'
+import { BOOT_REVEAL_FALLBACK_MS } from './state/shellWindow.ts'
+import { showShellWindow } from './state/windowShow.ts'
 
 const container = document.getElementById('root')
 if (container === null) throw new Error('missing #root')
@@ -34,6 +36,14 @@ async function bootstrap(root: HTMLElement): Promise<void> {
       </ErrorBoundary>
     </React.StrictMode>,
   )
+  // The fail-safe: the window boots hidden and App's ready effect is the only
+  // other reveal, which a crash before ready/exited never reaches (the
+  // ErrorBoundary renders into a window nobody can see). One unconditional
+  // timer, later than App's hints; the shared revealer makes a normal boot
+  // still call `plugin:window|show` exactly once.
+  setTimeout(() => {
+    void showShellWindow()
+  }, BOOT_REVEAL_FALLBACK_MS)
 }
 
 void bootstrap(container)

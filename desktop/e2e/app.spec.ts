@@ -174,6 +174,17 @@ test('a first launch goes straight into the chat shell', async ({ page }) => {
     .toBe(1)
 })
 
+test('a shell that never reaches ready still reveals its window', async ({ page }) => {
+  // `rpc_start` never settles, so the ready tree (and its show) never runs.
+  // The unconditional boot fail-safe must reveal the window anyway.
+  await page.addInitScript(installBridge, initialState({ startHangs: true }))
+  await page.goto('/')
+  await expect(page.locator('[data-topbar-title]')).toHaveCount(0)
+  await expect
+    .poll(() => page.evaluate(() => window.__ZEN_E2E__.showCalls ?? 0), { timeout: 5000 })
+    .toBeGreaterThanOrEqual(1)
+})
+
 test('a new project joins the rail and can be removed', async ({ page }) => {
   await boot(page, initialState({ running: false, dialogSelection: '/work/newproj' }))
   await page.getByRole('button', { name: '新建项目' }).click()
