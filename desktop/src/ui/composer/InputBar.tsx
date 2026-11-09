@@ -82,9 +82,8 @@ export function InputBar() {
     void useAppStore
       .getState()
       .client()
-      .send({ type: 'fs_index' }, FS_INDEX_TIMEOUT_MS)
-      .then((frame) => {
-        const result = frame as unknown as FsIndexResult
+      .send<FsIndexResult>({ type: 'fs_index' }, FS_INDEX_TIMEOUT_MS)
+      .then((result) => {
         if (result.ok !== true) {
           filesRequested.current = false
           return
@@ -145,7 +144,7 @@ export function InputBar() {
   useEffect(() => {
     let disposed = false
     const promise = listen<{ paths: string[]; type: string }>('tauri://drag-drop', (event) => {
-      const paths = (event.payload as unknown as { paths?: string[] }).paths
+      const paths = event.payload.paths
       if (Array.isArray(paths)) {
         const imagePaths = paths.filter((path) => /\.(png|jpe?g|gif|webp|bmp)$/i.test(path))
         if (imagePaths.length > 0) addImages(imagePaths)

@@ -41,12 +41,11 @@ export function SubagentTranscript({ target }: { target: SubagentPanelTarget }) 
   const load = useCallback(async () => {
     const seq = (requestSeq.current += 1)
     try {
-      const frame = await useAppStore.getState().client().send(
+      const result = await useAppStore.getState().client().send<SubagentTranscriptResult>(
         { type: 'subagent_transcript', call_id: target.callId },
         REQUEST_TIMEOUT_MS,
       )
       if (seq !== requestSeq.current) return
-      const result = frame as unknown as SubagentTranscriptResult
       if (result.ok !== true) {
         if (!hasViews.current) setAvailable(false)
         return

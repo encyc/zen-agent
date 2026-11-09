@@ -269,10 +269,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     statusInFlight = true
     return get()
       .client()
-      .send({ type: 'status' })
-      .then((frame) => {
-        if (frame.type === 'result' && frame.ok) {
-          const status = frame as unknown as StatusResult
+      .send<StatusResult>({ type: 'status' })
+      .then((status) => {
+        if (status.type === 'result' && status.ok) {
           useStatusStore.getState().set(status)
           set({ busy: Boolean(status.running) })
           if (status.usage !== undefined) lastUsage = status.usage

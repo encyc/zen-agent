@@ -12,7 +12,7 @@ const OP_TIMEOUT_MS = 15000
  * client needs the app store and its Tauri bridge (loaded lazily for the
  * same reason — node --test must not pull the bridge in). */
 type RpcLike = {
-  send(payload: Record<string, unknown>, timeoutMs?: number): Promise<unknown>
+  send<T = Record<string, unknown>>(payload: Record<string, unknown>, timeoutMs?: number): Promise<T>
 }
 let clientSource: () => Promise<RpcLike> = async () => {
   const { useAppStore } = await import('./appStore.ts')
@@ -48,7 +48,7 @@ let loading = false
 
 async function op(payload: Record<string, unknown>): Promise<TaijiReply> {
   const client = await clientSource()
-  return (await client.send({ type: 'taiji', ...payload }, OP_TIMEOUT_MS)) as unknown as TaijiReply
+  return client.send<TaijiReply>({ type: 'taiji', ...payload }, OP_TIMEOUT_MS)
 }
 
 export const useTaijiStore = create<TaijiState>((set) => ({

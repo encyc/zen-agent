@@ -3,9 +3,9 @@
 
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import type { ServerFrame } from './types'
-import { PROTOCOL_VERSION } from './types'
-import { startFailureOf } from '../state/startFailure.ts'
+import type { ServerFrame } from './types.ts'
+import { PROTOCOL_VERSION } from './types.ts'
+import { startFailureOf, type RuntimeProbe } from '../state/startFailure.ts'
 
 export interface StartOptions {
   bin?: string
@@ -13,35 +13,61 @@ export interface StartOptions {
   args?: string[]
 }
 
+/** The Tauri side of the client, behind a seam: node tests install a fake
+ * because the real bridge only exists inside a webview. */
+export interface Bridge {
+  invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>
+  listen<T>(event: string, handler: (event: { payload: T }) => void): Promise<UnlistenFn>
+}
+
+let bridge: Bridge = {
+  invoke: (command, args) => invoke(command, args),
+  listen: (event, handler) => listen(event, handler),
+}
+
+/** Test seam: swap the Tauri bridge (the real one needs a webview). */
+export function _useBridge(next: Bridge): void {
+  bridge = next
+}
+
+/** The shell's answer to `get_initial_state`: both boot-time policy flags in
+ * one round-trip (camelCase keys come straight from Rust). */
+export interface InitialState {
+  updatesDisabled: boolean
+  selfUpdatable: boolean
+}
+
+/** Where the shell looks for the runtime, and what it reports there.
+ *
+ * The command is `Result<RuntimeProbe, String>`: a resolve is the Ok answer, a
+ * rejection is the shell's error string (the diagnostics card shows "unknown"
+ * instead of a probe it never got). */
+export function runtimeProbe(): Promise<RuntimeProbe> {
+  return bridge.invoke<RuntimeProbe>('runtime_probe')
+}
+
+/** The two boot flags every launch reads: env-disabled updates and whether
+ * this install can replace itself. One invoke, not two. */
+export function initialState(): Promise<InitialState> {
+  return bridge.invoke<InitialState>('get_initial_state')
+}
+
 type EventHandler = (frame: ServerFrame) => void
 
 export class RpcClient {
   private nextId = 0
   private handlers = new Set<EventHandler>()
-  private unlisten: UnlistenFn | null = null
   private stderrHandlers = new Set<(line: string) => void>()
   private exitHandlers = new Set<(code: number | null, pid?: number) => void>()
-  private unlistenStderr: UnlistenFn | null = null
-  private unlistenExit: UnlistenFn | null = null
+  /** The in-flight listener registration: concurrent starts await one setup
+   * instead of each adding its own copy of every handler. */
+  private wiring: Promise<void> | null = null
 
   async start(options: StartOptions = {}): Promise<number> {
-    if (this.unlisten === null) {
-      this.unlisten = await listen<{ frame: ServerFrame }>('rpc:frame', (event) => {
-        for (const handler of this.handlers) handler(event.payload.frame)
-      })
-    }
-    if (this.unlistenStderr === null) {
-      this.unlistenStderr = await listen<{ line: string }>('rpc:stderr', (event) => {
-        for (const handler of this.stderrHandlers) handler(event.payload.line)
-      })
-    }
-    if (this.unlistenExit === null) {
-      this.unlistenExit = await listen<{ code: number | null; pid?: number }>('rpc:exit', (event) => {
-        for (const handler of this.exitHandlers) handler(event.payload.code, event.payload.pid)
-      })
-    }
+    if (this.wiring === null) this.wiring = this.listenAll()
+    await this.wiring
     try {
-      const report = await invoke<{ pid: number }>('rpc_start', {
+      const report = await bridge.invoke<{ pid: number }>('rpc_start', {
         options: {
           bin: options.bin ?? null,
           cwd: options.cwd ?? null,
@@ -57,8 +83,22 @@ export class RpcClient {
     }
   }
 
+  /** Register the three stream listeners once; the promise is what makes a
+   * concurrent `start()` join the same registration. */
+  private async listenAll(): Promise<void> {
+    await bridge.listen<{ frame: ServerFrame }>('rpc:frame', (event) => {
+      for (const handler of this.handlers) handler(event.payload.frame)
+    })
+    await bridge.listen<{ line: string }>('rpc:stderr', (event) => {
+      for (const handler of this.stderrHandlers) handler(event.payload.line)
+    })
+    await bridge.listen<{ code: number | null; pid?: number }>('rpc:exit', (event) => {
+      for (const handler of this.exitHandlers) handler(event.payload.code, event.payload.pid)
+    })
+  }
+
   async stop(): Promise<void> {
-    await invoke('rpc_stop').catch(() => {})
+    await bridge.invoke('rpc_stop').catch(() => {})
   }
 
   /** Verify the wire contract before any domain request.
@@ -66,7 +106,7 @@ export class RpcClient {
    * Rejects with a structured failure (the same shape `rpc_start` rejects
    * with) so the app's diagnostics card can render a version mismatch. */
   async handshake(): Promise<void> {
-    const frame = (await this.send({ type: 'hello' })) as { protocol_version?: unknown }
+    const frame = await this.send<{ protocol_version?: unknown }>({ type: 'hello' })
     if (frame.protocol_version !== PROTOCOL_VERSION) {
       throw {
         code: 'protocol_mismatch',
@@ -76,10 +116,15 @@ export class RpcClient {
     }
   }
 
-  /** Send one request and resolve with its result/error frame. */
-  send(payload: Record<string, unknown>, timeoutMs?: number): Promise<Record<string, unknown>> {
+  /** Send one request and resolve with its result frame, typed `T` by the
+   * caller from `rpc/types.ts`.
+   *
+   * This is the one place an untyped bridge answer becomes a domain frame:
+   * callers still gate on `ok` (and `type`) before reading `T`'s fields, and a
+   * transport failure still rejects. */
+  send<T = Record<string, unknown>>(payload: Record<string, unknown>, timeoutMs?: number): Promise<T> {
     const id = `r${(this.nextId += 1)}`
-    return invoke<Record<string, unknown>>('rpc_send', {
+    return bridge.invoke<T>('rpc_send', {
       payload: { ...payload, id },
       timeoutMs: timeoutMs ?? null,
     })

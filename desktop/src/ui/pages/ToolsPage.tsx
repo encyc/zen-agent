@@ -5,20 +5,15 @@ import { useCallback, useEffect, useState } from 'react'
 import { useAppStore } from '../../state/appStore'
 import { useSettingsStore } from '../../state/stores'
 import { frameError } from '../../rpc/frames'
+import type { ToolRow, ToolsResult } from '../../rpc/types'
 import { useT } from '../../i18n/locale'
 import { ArrowLeftIcon, RefreshIcon } from '../icons'
 import css from './ToolsPage.module.css'
 
-interface ToolEntry {
-  name: string
-  description: string
-  approval: string
-}
-
 type LoadState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
-  | { status: 'ready'; tools: ToolEntry[] }
+  | { status: 'ready'; tools: ToolRow[] }
 
 export function ToolsPage() {
   const t = useT()
@@ -53,15 +48,14 @@ function ToolList() {
     void useAppStore
       .getState()
       .client()
-      .send({ type: 'tools' })
+      .send<ToolsResult>({ type: 'tools' })
       .then((frame) => {
         const error = frameError(frame)
         if (error !== null) {
           setState({ status: 'error', message: error })
           return
         }
-        const payload = frame as unknown as { tools?: unknown }
-        const tools = Array.isArray(payload.tools) ? (payload.tools as ToolEntry[]) : []
+        const tools = Array.isArray(frame.tools) ? frame.tools : []
         setState({ status: 'ready', tools })
       })
       .catch((reason: unknown) => {

@@ -12,6 +12,7 @@ import type {
   MemoryEntryResult,
   MemoryListResult,
 } from '../../rpc/types'
+import { frameError, type ReplyLike } from '../../rpc/frames'
 import { useMarkdown } from '../chat/markdown'
 import chatCss from '../chat/AssistantNodeView.module.css'
 import {
@@ -32,18 +33,13 @@ type PanelMode =
   | { kind: 'view'; entryId: string }
   | { kind: 'edit'; entryId: string | null }
 
-async function sendMemory(payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function sendMemory<T extends ReplyLike>(payload: Record<string, unknown>): Promise<T> {
   const frame = await useAppStore
     .getState()
     .client()
-    .send({ type: 'memory', ...payload }, REQUEST_TIMEOUT_MS)
-  if (frame.type !== 'result' || frame.ok !== true) {
-    throw new Error(
-      frame.type === 'error'
-        ? String(frame.message ?? 'memory failed')
-        : String(frame.reason ?? 'memory failed'),
-    )
-  }
+    .send<T>({ type: 'memory', ...payload }, REQUEST_TIMEOUT_MS)
+  const error = frameError(frame, 'memory failed')
+  if (error !== null) throw new Error(error)
   return frame
 }
 
@@ -89,7 +85,7 @@ export function MemoryPanel() {
     setLoading(true)
     setError(false)
     try {
-      const frame = (await sendMemory({ op: 'list' })) as unknown as MemoryListResult
+      const frame = await sendMemory<MemoryListResult>({ op: 'list' })
       if (seq !== generation.current) return
       setEntries(sortMemoryEntries(frame.entries ?? []))
     } catch {
@@ -138,11 +134,10 @@ export function MemoryPanel() {
     setSaving(true)
     setSaveError(false)
     try {
-      const frame = (
+      const frame =
         mode.entryId === null
-          ? await sendMemory({ op: 'create', title, body })
-          : await sendMemory({ op: 'update', entry_id: mode.entryId, title, body })
-      ) as unknown as MemoryEntryResult
+          ? await sendMemory<MemoryEntryResult>({ op: 'create', title, body })
+          : await sendMemory<MemoryEntryResult>({ op: 'update', entry_id: mode.entryId, title, body })
       const saved = frame.entry
       setEntries((previous) => {
         const next =

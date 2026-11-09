@@ -1,0 +1,74 @@
+/** The two RPC-client contracts the boot path leans on: `send` is the single
+ * place a wire answer becomes a typed domain frame, and concurrent `start()`
+ * calls must register the event listeners once instead of stacking them. */
+
+import assert from 'node:assert/strict'
+import { test } from 'node:test'
+import { RpcClient, _useBridge, type Bridge } from '../src/rpc/client.ts'
+import type { StatusResult } from '../src/rpc/types.ts'
+
+interface Recorder {
+  bridge: Bridge
+  invokes: { command: string; args?: Record<string, unknown> }[]
+  listens: string[]
+}
+
+/** A fake Tauri bridge: records every call, answers `invoke` from `script`. */
+function record(script: (command: string) => unknown): Recorder {
+  const invokes: Recorder['invokes'] = []
+  const listens: Recorder['listens'] = []
+  return {
+    invokes,
+    listens,
+    bridge: {
+      async invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+        invokes.push({ command, args })
+        return script(command) as T
+      },
+      async listen<T>(): Promise<() => void> {
+        listens.push('listen')
+        await new Promise((resolve) => setTimeout(resolve, 1))
+        return () => {}
+      },
+    },
+  }
+}
+
+test('send() forwards the request with a correlation id and resolves the typed frame', async () => {
+  const recorder = record(() => ({ type: 'result', id: 'r1', ok: true, running: false }))
+  _useBridge(recorder.bridge)
+  const client = new RpcClient()
+
+  const status = await client.send<StatusResult>({ type: 'status' }, 2500)
+
+  assert.deepEqual(recorder.invokes, [
+    {
+      command: 'rpc_send',
+      args: { payload: { type: 'status', id: 'r1' }, timeoutMs: 2500 },
+    },
+  ])
+  assert.equal(status.running, false)
+})
+
+test('send() without a timeout passes null so the shell keeps its own default', async () => {
+  const recorder = record(() => ({ type: 'result', id: 'r1', ok: true }))
+  _useBridge(recorder.bridge)
+  const client = new RpcClient()
+
+  await client.send({ type: 'hello' })
+
+  assert.deepEqual(recorder.invokes, [
+    { command: 'rpc_send', args: { payload: { type: 'hello', id: 'r1' }, timeoutMs: null } },
+  ])
+})
+
+test('concurrent start() calls register the three event listeners once', async () => {
+  const recorder = record((command) => (command === 'rpc_start' ? { pid: 41 } : null))
+  _useBridge(recorder.bridge)
+  const client = new RpcClient()
+
+  const pids = await Promise.all([client.start(), client.start(), client.start()])
+
+  assert.deepEqual(pids, [41, 41, 41])
+  assert.equal(recorder.listens.length, 3)
+})

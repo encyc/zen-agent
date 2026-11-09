@@ -8,6 +8,7 @@ import { useT } from '../../i18n/locale'
 import { useMarkdown } from '../chat/markdown'
 import chatCss from '../chat/AssistantNodeView.module.css'
 import type { FsListResult, FsReadResult, WorkspaceEntry, WorkspaceFile } from '../../rpc/types'
+import { frameError } from '../../rpc/frames'
 import {
   ArrowLeftIcon,
   ChevronDownIcon,
@@ -43,12 +44,11 @@ export function FilesPanel() {
 
   const loadDir = useCallback(async (rel: string) => {
     try {
-      const frame = await useAppStore
+      const result = await useAppStore
         .getState()
         .client()
-        .send({ type: 'fs_list', path: rel }, REQUEST_TIMEOUT_MS)
-      const result = frame as unknown as FsListResult
-      if (result.ok !== true) throw new Error(String(frame.message ?? 'fs_list failed'))
+        .send<FsListResult>({ type: 'fs_list', path: rel }, REQUEST_TIMEOUT_MS)
+      if (result.ok !== true) throw new Error(frameError(result) ?? 'fs_list failed')
       setDirs((prev) => ({ ...prev, [rel]: { entries: result.entries ?? [] } }))
     } catch {
       setDirs((prev) => ({ ...prev, [rel]: { entries: [], error: true } }))
@@ -76,13 +76,12 @@ export function FilesPanel() {
     setError(false)
     setLoading(true)
     try {
-      const frame = await useAppStore
+      const result = await useAppStore
         .getState()
         .client()
-        .send({ type: 'fs_read', path }, REQUEST_TIMEOUT_MS)
+        .send<FsReadResult>({ type: 'fs_read', path }, REQUEST_TIMEOUT_MS)
       if (seq !== generation.current) return
-      const result = frame as unknown as FsReadResult
-      if (result.ok !== true) throw new Error(String(frame.message ?? 'fs_read failed'))
+      if (result.ok !== true) throw new Error(frameError(result) ?? 'fs_read failed')
       setFile(result.file)
     } catch {
       if (seq === generation.current) setError(true)

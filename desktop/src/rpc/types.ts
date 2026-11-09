@@ -282,6 +282,21 @@ export interface SkillReadResult {
   truncated: boolean
 }
 
+/** One tool the connected agent exposes (Tools page, read-only). */
+export interface ToolRow {
+  name: string
+  description: string
+  approval: string
+}
+
+export interface ToolsResult {
+  type: 'result'
+  id: string
+  ok: true
+  tools: ToolRow[]
+}
+
+
 // ---- mcp -----------------------------------------------------------------
 
 export interface McpServerRow {

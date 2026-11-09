@@ -9,9 +9,9 @@ function fakeClient(script: (payload: Record<string, unknown>) => FakeReply) {
   const sent: Record<string, unknown>[] = []
   return {
     sent,
-    send(payload: Record<string, unknown>): Promise<FakeReply> {
+    async send<T>(payload: Record<string, unknown>): Promise<T> {
       sent.push(payload)
-      return Promise.resolve(script(payload))
+      return script(payload) as T
     },
   }
 }

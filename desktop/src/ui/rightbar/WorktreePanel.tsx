@@ -7,6 +7,7 @@ import { useAppStore } from '../../state/appStore'
 import { useStatusStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
 import type { GitWorktreesResult, WorktreeOverview } from '../../rpc/types'
+import { frameError } from '../../rpc/frames'
 import { BranchIcon, CheckIcon, RefreshIcon } from '../icons'
 import css from './WorktreePanel.module.css'
 
@@ -22,12 +23,11 @@ export function WorktreePanel() {
   const load = useCallback(async () => {
     setFailed(false)
     try {
-      const frame = await useAppStore
+      const result = await useAppStore
         .getState()
         .client()
-        .send({ type: 'git_worktrees' }, REQUEST_TIMEOUT_MS)
-      const result = frame as unknown as GitWorktreesResult
-      if (result.ok !== true) throw new Error(String(frame.message ?? 'git_worktrees failed'))
+        .send<GitWorktreesResult>({ type: 'git_worktrees' }, REQUEST_TIMEOUT_MS)
+      if (result.ok !== true) throw new Error(frameError(result) ?? 'git_worktrees failed')
       setOverview(result.worktree)
     } catch {
       setFailed(true)
