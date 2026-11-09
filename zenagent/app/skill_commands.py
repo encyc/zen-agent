@@ -170,18 +170,19 @@ def parse_skill_invocation(text: str) -> SkillInvocation | None:
     before = text[:start].strip()
     after = text[end:].strip()
     args = " ".join(part for part in (before, after) if part)
-    return SkillInvocation(
-        name=name, args=args, start=start, end=end, prompt=stripped
-    )
+    return SkillInvocation(name=name, args=args, start=start, end=end, prompt=stripped)
 
 
-def load_skill_body(skill: Skill) -> tuple[str, bool]:
+def load_skill_body(
+    skill: Skill, max_bytes: int = MAX_SKILL_BODY_BYTES
+) -> tuple[str, bool]:
     """Read a skill's instruction body at invocation time.
 
     Re-reading matters: the user may have edited SKILL.md since discovery. A
     read/parse failure falls back to the discovered body; either source is
-    capped at :data:`MAX_SKILL_BODY_BYTES` because it goes straight into the
-    context window.
+    capped at ``max_bytes`` (``[limits.skills].max_body_bytes``, default
+    :data:`MAX_SKILL_BODY_BYTES`) because it goes straight into the context
+    window.
     """
     body = skill.body
     try:
@@ -192,7 +193,7 @@ def load_skill_body(skill: Skill) -> tuple[str, bool]:
         _meta, parsed, problem = parse_frontmatter(raw)
         if problem is None:
             body = parsed
-    return _truncate_bytes(body.strip(), MAX_SKILL_BODY_BYTES)
+    return _truncate_bytes(body.strip(), max_bytes)
 
 
 def _truncate_bytes(text: str, limit: int) -> tuple[str, bool]:
@@ -211,7 +212,12 @@ def _project_args(args: str) -> str:
 
 
 def render_skill_prompt(
-    skill: Skill, body: str, args: str, *, truncated: bool = False
+    skill: Skill,
+    body: str,
+    args: str,
+    *,
+    truncated: bool = False,
+    max_bytes: int = MAX_SKILL_BODY_BYTES,
 ) -> str:
     """The user-attributed message that carries a skill invocation.
 
@@ -238,7 +244,7 @@ def render_skill_prompt(
         body.rstrip(),
     ]
     if truncated:
-        parts += ["", f"[skill body truncated at {MAX_SKILL_BODY_BYTES} bytes]"]
+        parts += ["", f"[skill body truncated at {max_bytes} bytes]"]
     parts += [
         "",
         "---",
@@ -274,13 +280,15 @@ def build_skill_submission(
     skills: list[Skill],
     *,
     reserved_names: set[str] | frozenset[str] = frozenset(),
+    max_body_bytes: int = MAX_SKILL_BODY_BYTES,
 ) -> SkillResolution | None:
     """Resolve ``text`` into an injected skill prompt.
 
     Returns ``None`` when the draft is not a skill invocation, ``error`` when it
     names an unknown skill, and ``submission`` when it should be injected.
     ``reserved_names`` protects a command/template that happens to own the
-    full ``skill:<name>`` name (normally none can, thanks to the namespace).
+    full ``skill:<name>`` name (normally none can, thanks to the namespace);
+    ``max_body_bytes`` is ``[limits.skills].max_body_bytes``.
     """
     invocation = parse_skill_invocation(text)
     if invocation is None:
@@ -301,9 +309,9 @@ def build_skill_submission(
             error=t("skill.unknown", name=invocation.name, available=listed)
         )
 
-    body, truncated = load_skill_body(skill)
+    body, truncated = load_skill_body(skill, max_body_bytes)
     prompt = render_skill_prompt(
-        skill, body, invocation.args, truncated=truncated
+        skill, body, invocation.args, truncated=truncated, max_bytes=max_body_bytes
     )
     return SkillResolution(
         submission=SkillSubmission(

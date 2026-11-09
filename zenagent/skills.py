@@ -39,7 +39,14 @@ __all__ = [
 SKILL_FILE = "SKILL.md"
 
 #: Cap for the skill index injected into the system prompt.
-MAX_INDEX_BYTES = 4096
+#:
+#: Sized for a real library, not a demo one: the superpowers set (17 skills)
+#: plus mattpocock/skills (31) renders to ~8.8 KB of index text, so the old
+#: 4 KB cap silently dropped 26 of 48 skills from the prompt. Past the cap
+#: entries degrade to ``... more skills omitted`` and the names stay visible in
+#: the ``read_skill`` tool description, so the failure mode is "no hint", not
+#: "unusable".
+MAX_INDEX_BYTES = 12288
 
 #: Cap for a skill body returned by ``read_skill``.
 MAX_SKILL_BODY_BYTES = 32768
@@ -79,7 +86,9 @@ def discover_skills(roots: list[Path]) -> tuple[list[Skill], list[str]]:
         directory_root = Path(root).expanduser()
         if not directory_root.is_dir():
             continue
-        for directory in sorted(path for path in directory_root.iterdir() if path.is_dir()):
+        for directory in sorted(
+            path for path in directory_root.iterdir() if path.is_dir()
+        ):
             path = directory / SKILL_FILE
             if not path.is_file():
                 continue
@@ -93,7 +102,9 @@ def discover_skills(roots: list[Path]) -> tuple[list[Skill], list[str]]:
                 warnings.append(f"{path}: {problem}")
                 continue
             name = meta.get("name") or directory.name
-            description = meta.get("description") or _first_line(body) or "(no description)"
+            description = (
+                meta.get("description") or _first_line(body) or "(no description)"
+            )
             if name in skills:
                 warnings.append(
                     f"{path}: duplicate skill {name!r} (keeping {skills[name].path})"
@@ -105,8 +116,14 @@ def discover_skills(roots: list[Path]) -> tuple[list[Skill], list[str]]:
     return list(skills.values()), warnings
 
 
-def build_skill_tool(skills: list[Skill]) -> AgentTool:
-    """The ``read_skill`` tool backed by the discovered skills."""
+def build_skill_tool(
+    skills: list[Skill], max_body_bytes: int = MAX_SKILL_BODY_BYTES
+) -> AgentTool:
+    """The ``read_skill`` tool backed by the discovered skills.
+
+    ``max_body_bytes`` comes from ``[limits.skills].max_body_bytes``; the module
+    constant stays the default so tests and embedders keep working.
+    """
     available = {skill.name: skill for skill in skills}
     names = ", ".join(sorted(available))
 
@@ -124,9 +141,9 @@ def build_skill_tool(skills: list[Skill]) -> AgentTool:
             )
         body = skill.body
         encoded = body.encode("utf-8")
-        if len(encoded) > MAX_SKILL_BODY_BYTES:
+        if len(encoded) > max_body_bytes:
             body = (
-                encoded[:MAX_SKILL_BODY_BYTES].decode("utf-8", "replace")
+                encoded[:max_body_bytes].decode("utf-8", "replace")
                 + "\n[... skill truncated ...]"
             )
         return ToolResultAgent(
@@ -149,9 +166,7 @@ def build_skill_tool(skills: list[Skill]) -> AgentTool:
     )
 
 
-def format_skill_entries(
-    skills: list[Skill], max_bytes: int = MAX_INDEX_BYTES
-) -> str:
+def format_skill_entries(skills: list[Skill], max_bytes: int = MAX_INDEX_BYTES) -> str:
     """Format the bounded ``- name: description`` entries for the skills block.
 
     The header lives in ``zenagent/prompts/blocks/skills.md``; its rendered

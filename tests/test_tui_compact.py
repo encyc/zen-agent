@@ -47,7 +47,7 @@ async def test_auto_compaction_keeps_the_history_and_marks_the_cut(
 
     calls = {"n": 0}
 
-    def first_turn_only(usage, window):
+    def first_turn_only(usage, window, threshold=None):
         calls["n"] += 1
         return calls["n"] == 1
 

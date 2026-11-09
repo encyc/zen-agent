@@ -149,9 +149,7 @@ async def execute_tool(
             else:
                 verdict = await _maybe_await(hook(call, arguments))
         if isinstance(verdict, dict) and verdict.get("block"):
-            result = _error_result(
-                str(verdict.get("reason", "blocked")), kind="policy"
-            )
+            result = _error_result(str(verdict.get("reason", "blocked")), kind="policy")
         elif isinstance(verdict, dict) and isinstance(verdict.get("args"), dict):
             # A hook may normalize arguments (e.g. expand a path). The rewrite is
             # re-validated against the tool schema, and the original ToolCall is
@@ -208,7 +206,10 @@ async def execute_tool(
     # budget and truncation notice before it enters the transcript. The spill
     # sink (when configured) saves the full text so the model can read it back.
     result = apply_result_budget(
-        result, tool_name=call.name, save_artifact=config.artifact_sink
+        result,
+        tool_name=call.name,
+        save_artifact=config.artifact_sink,
+        max_bytes=config.max_result_bytes,
     )
 
     duration_ms = round((time.monotonic() - started) * 1000)
@@ -242,9 +243,7 @@ async def run_tool_batch(
     tools_by_name = {t.name: t for t in config.tools}
     outcomes: list[ToolOutcome | None] = [None] * len(calls)
     exclusive = [
-        i
-        for i, call in enumerate(calls)
-        if is_exclusive(tools_by_name.get(call.name))
+        i for i, call in enumerate(calls) if is_exclusive(tools_by_name.get(call.name))
     ]
     parallel = [i for i in range(len(calls)) if i not in exclusive]
 
@@ -289,5 +288,3 @@ def truncated_call_outcome(call: ToolCall) -> ToolOutcome:
         ),
         duration_ms=0,
     )
-
-

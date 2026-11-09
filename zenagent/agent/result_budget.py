@@ -69,14 +69,30 @@ def _cap_long_lines(text: str) -> tuple[str, int]:
     return "\n".join(out), truncated
 
 
+def _split_for(total_bytes: int) -> tuple[int, int]:
+    """Head/tail split for a budget: half the head, 30% the tail.
+
+    ``HEAD_BYTES``/``TAIL_BYTES`` are the split at the default budget; scaling
+    keeps a small ``max_result_bytes`` from asking for more head than it has.
+    """
+    head = max(1, total_bytes // 2)
+    tail = max(1, total_bytes * 3 // 10)
+    return head, tail
+
+
 def _truncate_bytes(
-    text: str, total_bytes: int, *, artifact: str = ""
+    text: str,
+    total_bytes: int,
+    *,
+    artifact: str = "",
+    head_bytes: int = HEAD_BYTES,
+    tail_bytes: int = TAIL_BYTES,
 ) -> str:
     """Keep the head and tail of ``text`` and mark the removed middle."""
     raw = text.encode("utf-8")
-    head = raw[:HEAD_BYTES].decode("utf-8", "ignore")
-    tail = raw[-TAIL_BYTES:].decode("utf-8", "ignore")
-    removed = total_bytes - HEAD_BYTES - TAIL_BYTES
+    head = raw[:head_bytes].decode("utf-8", "ignore")
+    tail = raw[-tail_bytes:].decode("utf-8", "ignore")
+    removed = total_bytes - head_bytes - tail_bytes
     notice = (
         f"\n\n… [truncated {removed} of {total_bytes} bytes: kept the first "
         f"{HEAD_BYTES} and last {TAIL_BYTES} (long lines trimmed); narrow the "
@@ -97,6 +113,7 @@ def apply_result_budget(
     *,
     tool_name: str = "",
     save_artifact: Callable[[str, str], Path | None] | None = None,
+    max_bytes: int = MAX_RESULT_BYTES,
 ) -> ToolResultAgent:
     """Cap one tool result's text payloads; image blocks pass through.
 
@@ -106,9 +123,7 @@ def apply_result_budget(
     path plus ``details["artifact"]``. A None return or a raising sink keeps
     today's plain truncation (spilling must never break a run).
     """
-    texts = [
-        block.text for block in result.content if isinstance(block, TextContent)
-    ]
+    texts = [block.text for block in result.content if isinstance(block, TextContent)]
     if not texts:
         return result
     # Idempotent: a second pass must not re-wrap or double-count.
@@ -117,7 +132,7 @@ def apply_result_budget(
 
     text = "\n".join(texts)
     original_bytes = len(text.encode("utf-8"))
-    if original_bytes <= MAX_RESULT_BYTES:
+    if original_bytes <= max_bytes:
         # Under budget the payload is returned untouched. Capping a single
         # long line here would destroy one-line payloads (minified HTML/JSON,
         # compact `jq -c` output) that are small enough to keep whole.
@@ -135,14 +150,19 @@ def apply_result_budget(
     budget: dict = {"truncated": True, "original_bytes": original_bytes}
     # Byte-budget first: a single overlong line must not swallow the head and
     # tail that make the truncation recoverable.
-    capped = _truncate_bytes(text, original_bytes, artifact=artifact)
+    head_bytes, tail_bytes = _split_for(max_bytes)
+    capped = _truncate_bytes(
+        text,
+        original_bytes,
+        artifact=artifact,
+        head_bytes=head_bytes,
+        tail_bytes=tail_bytes,
+    )
     capped, truncated_lines = _cap_long_lines(capped)
     if truncated_lines:
         budget["truncated_lines"] = truncated_lines
 
-    images = [
-        block for block in result.content if isinstance(block, ImageContent)
-    ]
+    images = [block for block in result.content if isinstance(block, ImageContent)]
     details = dict(result.details)
     details["budget"] = budget
     if artifact:
@@ -157,4 +177,3 @@ def apply_result_budget(
         terminate=result.terminate,
         error_kind=result.error_kind,
     )
-

@@ -46,6 +46,7 @@ from zenagent.agent.guard import (
     is_poll_call,
 )
 from zenagent.agent.protocol import AgentTool, ToolContext, ToolResultAgent
+from zenagent.agent.result_budget import MAX_RESULT_BYTES
 from zenagent.agent.tool_exec import run_tool_batch, truncated_call_outcome
 from zenagent.events import AbortToken, AgentEvent
 from zenagent.providers.catalog import Model
@@ -110,6 +111,12 @@ class AgentConfig:
     stream_fn: StreamFn | None = None  # None -> stream_fn_for(model)
     #: Hard cap on provider requests in one run (None -> module default).
     max_turns: int | None = None
+    #: Identical tool-call streak before the loop guard intervenes
+    #: (``[limits.agent].loop_guard_threshold``).
+    loop_guard_threshold: int = LOOP_GUARD_THRESHOLD
+    #: Per-result byte budget before head+tail truncation
+    #: (``[limits.agent].max_result_bytes``).
+    max_result_bytes: int = MAX_RESULT_BYTES
     #: Hard cap on accumulated spend in USD for one run (None -> unlimited).
     max_cost: float | None = None
     #: Extra attempts for transient assistant-call failures (0 -> no retry).
@@ -200,7 +207,9 @@ async def agent_loop(
             if abort is not None and abort.aborted:
                 termination = "aborted"
                 break
-            turn_limit = config.max_turns if config.max_turns is not None else _MAX_TURNS
+            turn_limit = (
+                config.max_turns if config.max_turns is not None else _MAX_TURNS
+            )
             if turns >= turn_limit:
                 # A pathological model loop, or the caller's explicit cap.
                 termination = "max_turns"
@@ -221,13 +230,21 @@ async def agent_loop(
                 *state.messages,
             ]
             if config.transform_context is not None:
-                request_messages = list(await config.transform_context(request_messages))
+                request_messages = list(
+                    await config.transform_context(request_messages)
+                )
 
             # "off" is a user-level setting meaning "no thinking"; the wire
             # side never receives the literal string.
             thinking = None if config.thinking in (None, "off") else config.thinking
-            stream_fn = config.stream_fn if config.stream_fn is not None else stream_fn_for(config.model)
-            tool_defs = [ToolDef(t.name, t.description, t.parameters) for t in config.tools]
+            stream_fn = (
+                config.stream_fn
+                if config.stream_fn is not None
+                else stream_fn_for(config.model)
+            )
+            tool_defs = [
+                ToolDef(t.name, t.description, t.parameters) for t in config.tools
+            ]
             options = StreamOptions(
                 api_key=config.api_key,
                 thinking=thinking,
@@ -250,7 +267,9 @@ async def agent_loop(
                 if not saw_message_start:
                     saw_message_start = True
                     yield AgentEvent(type="message_start", message=event.partial)
-                yield AgentEvent(type="message_update", assistant_event=event, message=event.partial)
+                yield AgentEvent(
+                    type="message_update", assistant_event=event, message=event.partial
+                )
                 if event.type in ("done", "error"):
                     final = event.partial
                     break
@@ -271,7 +290,8 @@ async def agent_loop(
             calls = [
                 block
                 for block in final.content
-                if isinstance(block, ToolCall) and not (block.id == "" and block.name == "")
+                if isinstance(block, ToolCall)
+                and not (block.id == "" and block.name == "")
             ]
 
             if final.stop_reason == "length" and calls:
@@ -378,7 +398,7 @@ async def agent_loop(
             else:
                 last_signature = signature
                 repeat_streak = 1
-            if repeat_streak >= LOOP_GUARD_THRESHOLD and not guard_injected:
+            if repeat_streak >= config.loop_guard_threshold and not guard_injected:
                 guard_injected = True
                 notice = UserMessage(
                     content=LOOP_GUARD_TEXT.format(n=repeat_streak),
@@ -400,9 +420,7 @@ async def agent_loop(
         # The corrective exists only for the turns after it fired: drop it from
         # the durable transcript so resume/retry/fork never see synthetic text.
         state.messages[:] = [
-            message
-            for message in state.messages
-            if not is_loop_guard_message(message)
+            message for message in state.messages if not is_loop_guard_message(message)
         ]
         state.termination = termination
         yield AgentEvent(

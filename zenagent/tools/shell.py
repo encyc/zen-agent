@@ -90,27 +90,35 @@ def decode_output(data: bytes) -> str:
 
 
 class OutputBuffer:
-    """Bounded head+tail buffer for process output."""
+    """Bounded head+tail buffer for process output.
 
-    def __init__(self) -> None:
+    ``max_output_bytes`` comes from ``[limits.tools].shell_max_output_bytes``;
+    the kept share splits the same way the default constants do (half head,
+    half tail) so a smaller budget keeps both ends instead of only the head.
+    """
+
+    def __init__(self, max_output_bytes: int = MAX_OUTPUT_BYTES) -> None:
+        self.max_output_bytes = max_output_bytes
+        self._head_bytes = max(1, max_output_bytes // 2)
+        self._tail_bytes = max(1, max_output_bytes - self._head_bytes)
         self.head = bytearray()
         self.tail = bytearray()
         self.total = 0
 
     def add(self, chunk: bytes) -> None:
         self.total += len(chunk)
-        if len(self.head) < _HEAD_BYTES:
-            take = min(len(chunk), _HEAD_BYTES - len(self.head))
+        if len(self.head) < self._head_bytes:
+            take = min(len(chunk), self._head_bytes - len(self.head))
             self.head.extend(chunk[:take])
             chunk = chunk[take:]
         if chunk:
             self.tail.extend(chunk)
-            if len(self.tail) > _TAIL_BYTES:
-                del self.tail[: len(self.tail) - _TAIL_BYTES]
+            if len(self.tail) > self._tail_bytes:
+                del self.tail[: len(self.tail) - self._tail_bytes]
 
     @property
     def truncated(self) -> bool:
-        return self.total > MAX_OUTPUT_BYTES
+        return self.total > self.max_output_bytes
 
     def text(self) -> str:
         if not self.truncated:

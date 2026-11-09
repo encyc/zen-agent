@@ -8,7 +8,7 @@ supplies its instance. Add new static tools there.
 from __future__ import annotations
 
 from zenagent.agent.protocol import AgentTool
-from zenagent.tools.bash import BASH
+from zenagent.tools.bash import BASH, build_bash_tool
 from zenagent.tools.fs import EDIT_FILE, LIST_DIR, READ_FILE, WRITE_FILE
 from zenagent.tools.search import GLOB, GREP
 from zenagent.tools.wait import WAIT
@@ -44,15 +44,27 @@ ALL_TOOLS = [
 ]
 
 
-def base_tools(ask_tool: AgentTool) -> list[AgentTool]:
+def base_tools(
+    ask_tool: AgentTool, *, shell_max_output_bytes: int | None = None
+) -> list[AgentTool]:
     """The full prompt-ordered set, with the per-Runtime ask instance slotted
-    in where ``ASK`` used to sit (between WAIT and GLOB)."""
+    in where ``ASK`` used to sit (between WAIT and GLOB).
+
+    ``shell_max_output_bytes`` rebuilds ``bash`` with the configured budget
+    (``[limits.tools].shell_max_output_bytes``); ``None`` keeps the module
+    default instance.
+    """
+    bash = (
+        build_bash_tool(shell_max_output_bytes)
+        if shell_max_output_bytes is not None
+        else BASH
+    )
     return [
         READ_FILE,
         WRITE_FILE,
         EDIT_FILE,
         LIST_DIR,
-        BASH,
+        bash,
         WAIT,
         ask_tool,
         GLOB,

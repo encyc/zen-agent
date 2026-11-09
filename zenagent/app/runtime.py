@@ -63,6 +63,7 @@ from zenagent.context_files import (
 )
 from zenagent.extensions import load_extensions
 from zenagent.i18n import t
+from zenagent.limits import Limits
 from zenagent.mcp.config import load_mcp_config
 from zenagent.mcp.manager import McpManager
 from zenagent.prompts import (
@@ -224,6 +225,11 @@ class Runtime:
         self._context_files = True
 
     @property
+    def limits(self) -> Limits:
+        """``[limits]`` in force: prompt/loop budgets from ``config.toml``."""
+        return self.user_config.limits
+
+    @property
     def session(self) -> Session:
         """The session in context; assigning one retargets the spill sink."""
         return self._session
@@ -331,7 +337,9 @@ class Runtime:
             provider = runtime.catalog.get(model.provider)
             env_name = provider.api_key_env if provider else "the provider's API key"
             if not allow_missing_key:
-                raise RuntimeError(t("runtime.missing_key", model=model.id, env=env_name))
+                raise RuntimeError(
+                    t("runtime.missing_key", model=model.id, env=env_name)
+                )
             # The TUI is a workbench, not a one-shot run: open it even without a
             # key and let the user paste one from /settings instead of refusing
             # to start. reload_api_key() adopts it for the next turn.
@@ -386,9 +394,7 @@ class Runtime:
             runtime.mcp = await runtime._start_mcp(options)
 
         if options.skills and options.tools is None:
-            runtime.skills, warnings = discover_skills(
-                default_skill_roots(Path.cwd())
-            )
+            runtime.skills, warnings = discover_skills(default_skill_roots(Path.cwd()))
             runtime.skills = _active_skills(runtime.skills)
             runtime.warnings.extend(f"skills {warning}" for warning in warnings)
 
@@ -404,7 +410,9 @@ class Runtime:
         ]
         if runtime.extension_files:
             loaded = load_extensions(runtime.extension_files)
-            runtime.warnings.extend(f"extension {warning}" for warning in loaded.warnings)
+            runtime.warnings.extend(
+                f"extension {warning}" for warning in loaded.warnings
+            )
             runtime._extension_tools = list(loaded.tools)
             runtime.extension_commands = dict(loaded.commands)
             runtime.hooks = loaded.hooks
@@ -466,8 +474,14 @@ class Runtime:
             stream_fn=stream_fn,
             before_tool_call=gate.before_tool_call,
             transform_context=runtime._transform_context,
-            max_turns=options.max_turns,
+            max_turns=(
+                options.max_turns
+                if options.max_turns is not None
+                else runtime.limits.max_turns
+            ),
             max_cost=options.max_cost,
+            loop_guard_threshold=runtime.limits.loop_guard_threshold,
+            max_result_bytes=runtime.limits.max_result_bytes,
             retries=options.retries,
             artifact_sink=runtime.artifact_sink,
         )
@@ -522,9 +536,7 @@ class Runtime:
             }
         if not configs:
             return None
-        manager = McpManager(
-            configs, retry_interval_s=options.mcp_retry_interval_s
-        )
+        manager = McpManager(configs, retry_interval_s=options.mcp_retry_interval_s)
         self.warnings.extend(f"mcp {warning}" for warning in await manager.start())
         return manager
 
@@ -575,7 +587,10 @@ class Runtime:
 
     def _build_prompt(self, tools: list) -> str:
         context_text = (
-            load_context_files(discover_context_files(Path.cwd()))
+            load_context_files(
+                discover_context_files(Path.cwd()),
+                max_bytes=self.limits.max_context_bytes,
+            )
             if self._context_files
             else ""
         )
@@ -630,8 +645,13 @@ class Runtime:
                 self.agent.system_prompt = self._prompt_with_mode()
             return
 
-        tools = base_tools(self.ask_tool)
-        tools.extend(build_checkpoint_tools(lambda: getattr(self, "agent", None), self.rewind))
+        tools = base_tools(
+            self.ask_tool,
+            shell_max_output_bytes=self.limits.shell_max_output_bytes,
+        )
+        tools.extend(
+            build_checkpoint_tools(lambda: getattr(self, "agent", None), self.rewind)
+        )
         github_tool = build_github_tool()
         if github_tool is not None:
             tools.append(github_tool)
@@ -648,7 +668,9 @@ class Runtime:
         if self.mcp is not None:
             tools.extend(self.mcp.tool_defs())
         if self.skills:
-            tools.append(build_skill_tool(self.skills))
+            tools.append(
+                build_skill_tool(self.skills, max_body_bytes=self.limits.max_body_bytes)
+            )
         tools.extend(self._extension_tools)
         session_in_context = getattr(self, "_session", None)
         session_path = (
@@ -665,7 +687,9 @@ class Runtime:
                 runtime_taiji_provider(self),
             )
         )
-        self._skill_entries = format_skill_entries(self.skills)
+        self._skill_entries = format_skill_entries(
+            self.skills, max_bytes=self.limits.max_index_bytes
+        )
         self.tool_registry.reconcile(tools)
         active = self.tool_registry.active()
         self._base_tools = list(active)
@@ -699,6 +723,7 @@ class Runtime:
             unsubscribe()
         self._hook_unsubscribes = []
         for event_type, callbacks in self.hooks.items():
+
             def hook(event, _type=event_type, _callbacks=callbacks) -> None:
                 if event.type != _type:
                     return
@@ -780,6 +805,41 @@ class Runtime:
             self._recompose()
         return [note]
 
+    def limit_overrides(self) -> dict[str, str]:
+        """Knobs this session overrides, mapped to the switch that did it.
+
+        The settings page shows effective values, so it has to know that
+        ``--max-turns 20`` (or ``--no-skills``) beats the file for this run.
+        Keys are :class:`~zenagent.limits.Limit` attrs.
+        """
+        active: dict[str, str] = {}
+        options = self._options
+        if options is not None and options.max_turns is not None:
+            active["max_turns"] = f"--max-turns {options.max_turns}"
+        if not self.skills_enabled:
+            active["max_index_bytes"] = "--no-skills"
+            active["max_body_bytes"] = "--no-skills"
+        if not self._context_files:
+            active["max_context_bytes"] = "--no-context-files"
+        if not self.auto_compact:
+            active["compact_threshold"] = "--no-auto-compact"
+        return active
+
+    def apply_limits(self) -> None:
+        """Push the *immediate* ``[limits]`` knobs into the live agent.
+
+        The rest (turn cap, context injection, compaction threshold, per-result
+        budget) are bound when the session starts; the settings page labels them
+        "new sessions" rather than pretending otherwise.
+        """
+        agent = getattr(self, "agent", None)
+        if agent is not None:
+            agent.loop_guard_threshold = self.limits.loop_guard_threshold
+        # ``_recompose`` (not ``rediscover``) rebuilds the tool list and prompt
+        # from the already-loaded extensions: a budget change must not re-run
+        # extension modules.
+        self._recompose()
+
     def rediscover(self) -> list[str]:
         """Re-run every discovery step and swap the result into the live agent.
 
@@ -853,9 +913,7 @@ class Runtime:
     @property
     def unused_session(self) -> bool:
         """True when close() will remove the session in context (nothing written)."""
-        return (
-            self.session.path in self._created_sessions and not self.session.messages
-        )
+        return self.session.path in self._created_sessions and not self.session.messages
 
     def _drop_unused_session(self) -> None:
         """Leave no file behind for a launch that produced no conversation.

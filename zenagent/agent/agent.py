@@ -30,12 +30,14 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from zenagent.agent.guard import LOOP_GUARD_THRESHOLD
 from zenagent.agent.loop import (
     AgentConfig,
     AgentState,
     AgentTool,
     agent_loop,
 )
+from zenagent.agent.result_budget import MAX_RESULT_BYTES
 from zenagent.events import AbortToken, AgentEvent
 from zenagent.providers.catalog import Model
 from zenagent.providers.registry import StreamFn
@@ -87,6 +89,8 @@ class Agent:
         transform_context: Callable | None = None,
         max_turns: int | None = None,
         max_cost: float | None = None,
+        loop_guard_threshold: int = LOOP_GUARD_THRESHOLD,
+        max_result_bytes: int = MAX_RESULT_BYTES,
         retries: int = 0,
         artifact_sink: Callable[[str, str], Path | None] | None = None,
         on_retry: Callable[[AssistantMessage, int, int, float], None] | None = None,
@@ -103,6 +107,9 @@ class Agent:
         self.transform_context = transform_context
         self.max_turns = max_turns
         self.max_cost = max_cost
+        #: ``[limits.agent]`` knobs, read when the next run starts.
+        self.loop_guard_threshold = loop_guard_threshold
+        self.max_result_bytes = max_result_bytes
         self.retries = retries
         #: Retry observer (``(message, attempt, max_retries, delay_s)``), wired
         #: by the app layer to the session's side-channel recorder.
@@ -181,9 +188,7 @@ class Agent:
         if run is not None:
             await run.done.wait()
 
-    async def prompt(
-        self, text: str, images: list[ImageContent] | None = None
-    ) -> None:
+    async def prompt(self, text: str, images: list[ImageContent] | None = None) -> None:
         """Start a run with a new user message and return when it settles."""
         if images:
             await self._drive([*images, TextContent(text=text)])
@@ -227,6 +232,8 @@ class Agent:
             stream_fn=self.stream_fn,
             max_turns=self.max_turns,
             max_cost=self.max_cost,
+            loop_guard_threshold=self.loop_guard_threshold,
+            max_result_bytes=self.max_result_bytes,
             retries=self.retries,
             artifact_sink=self.artifact_sink,
             on_retry=self.on_retry,
@@ -269,7 +276,9 @@ class Agent:
         self._run = run
         self._error_message = None
         try:
-            async for event in agent_loop(prompt, self._state, self._config(), run.abort):
+            async for event in agent_loop(
+                prompt, self._state, self._config(), run.abort
+            ):
                 await self._dispatch(event)
                 if event.type == "agent_end":
                     run.error_message = _terminal_error(self._state.messages)

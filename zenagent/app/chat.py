@@ -605,6 +605,7 @@ class ChatController:
         if not should_auto_compact(
             self.runtime.guard.last_usage,
             self.runtime.agent.model.context_window,
+            threshold=self.runtime.limits.compact_threshold,
         ):
             return
         self._compacting = True

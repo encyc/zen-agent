@@ -60,24 +60,18 @@ _UPDATE_BYTES = 4096
 _UPDATE_INTERVAL_S = 0.5
 
 
-async def _background(
-    command: str, args: dict, cwd: Path
-) -> ToolResultAgent:
+async def _background(command: str, args: dict, cwd: Path) -> ToolResultAgent:
     """Start ``command`` as a background job and report its id immediately."""
     raw_timeout = args.get("timeout_s")
     try:
-        timeout_s = (
-            DEFAULT_JOB_TIMEOUT_S if raw_timeout is None else float(raw_timeout)
-        )
+        timeout_s = DEFAULT_JOB_TIMEOUT_S if raw_timeout is None else float(raw_timeout)
     except (TypeError, ValueError):
         return text_result(
             f"timeout_s must be a number (got {raw_timeout!r})", is_error=True
         )
     timeout_s = min(max(timeout_s, MIN_JOB_TIMEOUT_S), MAX_JOB_TIMEOUT_S)
     try:
-        job = await get_job_manager().start(
-            command, cwd=cwd, timeout_s=timeout_s
-        )
+        job = await get_job_manager().start(command, cwd=cwd, timeout_s=timeout_s)
     except (ShellError, JobStartError) as exc:
         return text_result(str(exc), is_error=True)
     return text_result(
@@ -89,7 +83,12 @@ async def _background(
 
 
 async def _bash(
-    tool_call_id: str, args: dict, abort: AbortToken | None, on_update=None
+    tool_call_id: str,
+    args: dict,
+    abort: AbortToken | None,
+    on_update=None,
+    *,
+    max_output_bytes: int = MAX_OUTPUT_BYTES,
 ) -> ToolResultAgent:
     command = args["command"]
     is_async = args.get("async", False)
@@ -113,7 +112,7 @@ async def _bash(
         return text_result(f"cannot start command: {exc}", is_error=True)
 
     assert proc.stdout is not None
-    buffer = OutputBuffer()
+    buffer = OutputBuffer(max_output_bytes)
     last_update_at = 0.0
     last_update_bytes = 0
 
@@ -123,7 +122,11 @@ async def _bash(
             return
         now = time.monotonic()
         grew = buffer.total - last_update_bytes
-        if not force and grew < _UPDATE_BYTES and now - last_update_at < _UPDATE_INTERVAL_S:
+        if (
+            not force
+            and grew < _UPDATE_BYTES
+            and now - last_update_at < _UPDATE_INTERVAL_S
+        ):
             return
         last_update_at, last_update_bytes = now, buffer.total
         on_update(
@@ -201,38 +204,61 @@ async def _bash(
     )
 
 
-BASH = AgentTool(
-    name="bash",
-    description=tool_description("bash"),
-    parameters={
-        "type": "object",
-        "properties": {
-            "command": {"type": "string", "description": "Shell command to run."},
-            "timeout_s": {
-                "type": "number",
-                "description": (
-                    "Kill the command after this many seconds (default 120; "
-                    "background jobs default to 600, clamped to 1-3600)."
-                ),
+def build_bash_tool(max_output_bytes: int = MAX_OUTPUT_BYTES) -> AgentTool:
+    """The ``bash`` tool with its own output budget.
+
+    The budget comes from ``[limits.tools].shell_max_output_bytes``, so the
+    tool is built per Runtime; ``BASH`` stays the default instance every
+    existing caller (and test) uses.
+    """
+
+    async def execute(
+        tool_call_id: str, args: dict, abort: AbortToken | None, on_update=None
+    ) -> ToolResultAgent:
+        return await _bash(
+            tool_call_id,
+            args,
+            abort,
+            on_update,
+            max_output_bytes=max_output_bytes,
+        )
+
+    return AgentTool(
+        name="bash",
+        description=tool_description("bash"),
+        parameters={
+            "type": "object",
+            "properties": {
+                "command": {"type": "string", "description": "Shell command to run."},
+                "timeout_s": {
+                    "type": "number",
+                    "description": (
+                        "Kill the command after this many seconds (default 120; "
+                        "background jobs default to 600, clamped to 1-3600)."
+                    ),
+                },
+                "cwd": {
+                    "type": "string",
+                    "description": (
+                        "Directory to run in (absolute, or relative to the current "
+                        "working directory; default: the agent's cwd)."
+                    ),
+                },
+                "async": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": (
+                        "Start the command in the background and return a job id "
+                        "immediately; use the wait tool to collect its output."
+                    ),
+                },
             },
-            "cwd": {
-                "type": "string",
-                "description": (
-                    "Directory to run in (absolute, or relative to the current "
-                    "working directory; default: the agent's cwd)."
-                ),
-            },
-            "async": {
-                "type": "boolean",
-                "default": False,
-                "description": (
-                    "Start the command in the background and return a job id "
-                    "immediately; use the wait tool to collect its output."
-                ),
-            },
+            "required": ["command"],
         },
-        "required": ["command"],
-    },
-    execute=_bash,
-    approval="exec",
-)
+        execute=execute,
+        approval="exec",
+    )
+
+
+#: The default instance: 30 KB of output, the value ``[limits]`` starts from.
+BASH = build_bash_tool()

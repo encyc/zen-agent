@@ -36,6 +36,7 @@ class DraftsMixin:
                 text,
                 list(self.runtime.skills or []),
                 reserved_names={*templates, *extension_commands},
+                max_body_bytes=self.runtime.limits.max_body_bytes,
             )
             if resolution is not None:
                 if resolution.error is not None:

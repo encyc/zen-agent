@@ -989,6 +989,7 @@ async def repl(
                 line,
                 skill_list,
                 reserved_names={*template_by_name, *extension_commands},
+                max_body_bytes=runtime.limits.max_body_bytes,
             )
             if resolution is not None:
                 if resolution.error is not None:
