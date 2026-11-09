@@ -10,6 +10,10 @@ function newerFirst(a: SessionSummary, b: SessionSummary): number {
 
 export type PaletteCommandMode = 'run' | 'insert'
 
+/** Session hits rendered at once: a long history must not mount a list of
+ * every session before the user narrows the query. */
+export const PALETTE_SESSION_LIMIT = 50
+
 /** Zero-argument safe commands run; argument commands insert their prefix. */
 export const COMMAND_POLICY: Record<string, PaletteCommandMode> = {
   compact: 'run',
@@ -74,6 +78,8 @@ export function paletteResults(
       // there; sessions without one stay discovery-only.
       disabled: session.path !== currentPath && (session.project_path ?? '') === '',
     }))
+    // The sort is newest-first, so the cap keeps the most recent sessions.
+    .slice(0, PALETTE_SESSION_LIMIT)
   const commandHits = commands
     .filter((command) => COMMAND_POLICY[command.name] !== undefined)
     .filter(

@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { COMMAND_POLICY, nextPaletteIndex, paletteResults } from '../src/state/palette.ts'
+import {
+  COMMAND_POLICY,
+  PALETTE_SESSION_LIMIT,
+  nextPaletteIndex,
+  paletteResults,
+} from '../src/state/palette.ts'
 import type { CommandEntry, SessionSummary } from '../src/rpc/types.ts'
 
 const make = (path: string, extra: Partial<SessionSummary> = {}): SessionSummary => ({
@@ -78,6 +83,17 @@ test('only allowlisted commands surface, with run/insert modes', () => {
 test('command search matches name and description', () => {
   assert.deepEqual(paletteResults([], commands, 'RENAME', null).commands.map((hit) => hit.name), ['rename'])
   assert.deepEqual(paletteResults([], commands, 'compact', null).commands.map((hit) => hit.name), ['compact'])
+})
+
+test('session hits are capped at the newest fifty', () => {
+  const sessions = Array.from({ length: 60 }, (_, index) =>
+    make(`/s/${String(index).padStart(2, '0')}.jsonl`, { updated_at: index }),
+  )
+  const hits = paletteResults(sessions, [], '', '/s/59.jsonl')
+  assert.equal(PALETTE_SESSION_LIMIT, 50)
+  assert.equal(hits.sessions.length, PALETTE_SESSION_LIMIT)
+  assert.equal(hits.sessions[0].session.path, '/s/59.jsonl')
+  assert.equal(hits.sessions[hits.sessions.length - 1].session.path, '/s/10.jsonl')
 })
 
 test('nextPaletteIndex skips disabled rows and wraps', () => {
