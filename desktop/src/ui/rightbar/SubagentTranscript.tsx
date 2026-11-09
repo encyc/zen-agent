@@ -124,6 +124,12 @@ export function SubagentTranscript({ target }: { target: SubagentPanelTarget }) 
     setWindowSize(grown)
   }, [windowSize, nodes.length])
 
+  // The anchor branch runs first so a window growth restores the pre-growth
+  // offset; otherwise a sticking reader follows the tail. `visible` is in the
+  // dependencies because `mounted` only tracks the row count: the live row
+  // growing its text (and a full window shifting its tail) leaves `mounted`
+  // unchanged, and depending on it alone would strand the newest lines below
+  // the fold. The poll skip above keeps this from firing on unchanged polls.
   useLayoutEffect(() => {
     const element = scrollRef.current
     if (element === null) return
@@ -138,7 +144,7 @@ export function SubagentTranscript({ target }: { target: SubagentPanelTarget }) 
     anchorRef.current = null
     if (!stick.current) return
     element.scrollTop = element.scrollHeight
-  }, [transcriptWindow.mounted])
+  }, [transcriptWindow.mounted, visible])
 
   const onScroll = () => {
     const element = scrollRef.current
