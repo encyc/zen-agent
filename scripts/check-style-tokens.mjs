@@ -5,14 +5,17 @@
  * A component stylesheet (`desktop/src/**\/*.module.css`) must paint with
  * tokens: a raw colour literal hard-codes one palette into a surface, so a
  * contributed theme cannot move it. This scans the module stylesheets for
- * hex, rgb()/rgba() and hsl()/hsla() literals. The palette files
- * (`styles/tokens.css`, `styles/themes.css`, `styles/base.css`) are exactly
- * where literals belong and are exempt.
+ * hex (`#rrggbb` and its shorthand/alpha forms), the `rgb()`, `hsl()`,
+ * `hwb()`, `lab()`, `lch()`, `oklab()` and `oklch()` colour functions, and
+ * the `white` / `black` keywords. The palette files (`styles/tokens.css`,
+ * `styles/themes.css`, `styles/base.css`) are exactly where literals belong
+ * and are exempt.
  *
  * Deliberately not violations (the value carries no palette):
  *  - a literal inside `var(...)` — it is only the fallback of a token;
- *  - black/white inside `box-shadow` / `text-shadow` / `filter` — a shadow
- *    only offsets darkness;
+ *  - an `url(...)` reference — a `url(#fragment)` is an SVG id, not a colour;
+ *  - black/white (any hex shorthand or alpha form) inside `box-shadow` /
+ *    `text-shadow` / `filter` — a shadow only offsets darkness;
  *  - black/white inside a mask — a mask uses the stencil's alpha, not its
  *    colour.
  *
@@ -42,8 +45,10 @@ export const EXEMPT_FILES = new Set(['tokens.css', 'themes.css', 'base.css'])
  */
 export const BASELINE = []
 
-/** Raw colour literals the guard forbids. */
-const RAW_COLOR = /#[\da-f]{3,8}\b|\b(?:rgba?|hsla?)\s*\(/i
+/** Raw colour literals the guard forbids: hex, every CSS colour function and
+ * the `white` / `black` keywords. */
+const RAW_COLOR =
+  /#[\da-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\s*\(|\b(?:white|black)\b/i
 
 /** A colon-free rule body, then the declarations inside it. */
 const RULE = /([^{}]+)\{([^{}]*)\}/g
@@ -52,9 +57,10 @@ const DECLARATION = /([-\w]+)\s*:\s*([^;{}]+)/g
 const SHADOW_PROPERTIES = /^(?:box-shadow|text-shadow|filter)$/
 const MASK_PROPERTIES = /^(?:mask|mask-image|-webkit-mask|-webkit-mask-image)$/
 
-/** Black or white, with or without alpha: no hue, so no palette. */
+/** Black or white, in any hex shorthand/alpha form or as a keyword: no hue,
+ * so no palette. */
 const PURE_NEUTRAL =
-  /#(?:0{3}|f{3}|0{6}|f{6}|0{6}[\da-f]{2}|f{6}[\da-f]{2})\b|\b(?:rgba?|hsla?)\(\s*(?:0\s*[, ]\s*0\s*[, ]\s*0|255\s*[, ]\s*255\s*[, ]\s*255)\b[^)]*\)|\b(?:black|white)\b/gi
+  /#(?:0{3}[\da-f]?|f{3}[\da-f]?|0{6}(?:[\da-f]{2})?|f{6}(?:[\da-f]{2})?)\b|\b(?:rgba?|hsla?)\(\s*(?:0\s*[, ]\s*0\s*[, ]\s*0|255\s*[, ]\s*255\s*[, ]\s*255)\b[^)]*\)|\b(?:black|white)\b/gi
 
 function normalizePath(file) {
   return file.split(sep).join('/')
@@ -66,19 +72,39 @@ export function isExemptFile(file) {
   return base !== undefined && EXEMPT_FILES.has(base)
 }
 
-/** Drop `var(...)` wrappers, including a token's fallback literal. */
-function stripVars(value) {
-  let out = value
-  let previous
-  do {
-    previous = out
-    out = out.replace(/var\([^()]*\)/g, ' ')
-  } while (out !== previous)
-  return out
+/**
+ * Drop every `name(...)` span, walking parentheses so the close that ends a
+ * call is the one balancing its open: a token fallback can itself hold
+ * `rgb(0 0 0 / 40%)` or another `var(...)`.
+ */
+function stripCalls(value, name) {
+  const opener = `${name}(`
+  let out = ''
+  let rest = value
+  for (;;) {
+    const at = rest.toLowerCase().indexOf(opener)
+    if (at === -1) return out + rest
+    out += rest.slice(0, at)
+    let depth = 0
+    let index = at + name.length // the opening paren
+    for (; index < rest.length; index += 1) {
+      const char = rest[index]
+      if (char === '(') {
+        depth += 1
+      } else if (char === ')') {
+        depth -= 1
+        if (depth === 0) {
+          index += 1
+          break
+        }
+      }
+    }
+    rest = rest.slice(index)
+  }
 }
 
 function hasRawColor(property, value) {
-  let rest = stripVars(value)
+  let rest = stripCalls(stripCalls(value, 'var'), 'url')
   if (SHADOW_PROPERTIES.test(property) || MASK_PROPERTIES.test(property)) {
     rest = rest.replace(PURE_NEUTRAL, ' ')
   }
@@ -96,10 +122,15 @@ function hasRawColor(property, value) {
  */
 export function scanCss(source, { file = '', baseline = [] } = {}) {
   const result = { violations: [], skipped: [], stale: [] }
-  if (isExemptFile(file)) return result
-
   const wanted = normalizePath(file)
   const entries = baseline.filter((entry) => normalizePath(entry.file) === wanted)
+  if (isExemptFile(file)) {
+    // An exempt stylesheet can never carry a violation, so an entry pointing
+    // at one is stale: report it instead of ignoring it behind the return.
+    result.stale = entries
+    return result
+  }
+
   const matched = new Set()
   // Keep newlines so diagnostics carry the source line number.
   const css = source.replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, ' '))
