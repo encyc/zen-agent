@@ -296,7 +296,6 @@ export interface ToolsResult {
   tools: ToolRow[]
 }
 
-
 // ---- mcp -----------------------------------------------------------------
 
 export interface McpServerRow {

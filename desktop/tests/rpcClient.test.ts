@@ -73,6 +73,36 @@ test('concurrent start() calls register the three event listeners once', async (
   assert.equal(recorder.listens.length, 3)
 })
 
+test('a partial registration is released before the retry registers again', async () => {
+  // The fake tracks live listeners: a retry must end with exactly one of each,
+  // never the first attempt's still-attached `rpc:frame` plus the new one.
+  const live = new Map<string, number>()
+  let calls = 0
+  _useBridge({
+    async invoke<T>(command: string): Promise<T> {
+      return (command === 'rpc_start' ? { pid: 9 } : null) as T
+    },
+    async listen<T>(event: string): Promise<() => void> {
+      calls += 1
+      // Reach `rpc:stderr` before failing, so `rpc:frame` already succeeded.
+      if (calls === 2) throw new Error('event plugin unavailable')
+      live.set(event, (live.get(event) ?? 0) + 1)
+      return () => live.set(event, (live.get(event) ?? 1) - 1)
+    },
+  })
+  const client = new RpcClient()
+
+  await assert.rejects(client.start())
+  assert.equal(live.get('rpc:frame'), 0, 'the first attempt left its frame listener attached')
+
+  assert.equal(await client.start(), 9)
+  assert.deepEqual(Object.fromEntries([...live].sort()), {
+    'rpc:exit': 1,
+    'rpc:frame': 1,
+    'rpc:stderr': 1,
+  })
+})
+
 test('a failed listener registration does not poison the later starts', async () => {
   const listens: string[] = []
   _useBridge({

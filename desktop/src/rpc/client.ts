@@ -91,17 +91,40 @@ export class RpcClient {
   }
 
   /** Register the three stream listeners once; the promise is what makes a
-   * concurrent `start()` join the same registration. */
+   * concurrent `start()` join the same registration.
+   *
+   * A partial failure releases what it already attached: the retry must not
+   * leave the first attempt's `rpc:frame` listener alive, or every frame would
+   * reach the handlers twice. */
   private async listenAll(): Promise<void> {
-    await bridge.listen<{ frame: ServerFrame }>('rpc:frame', (event) => {
-      for (const handler of this.handlers) handler(event.payload.frame)
-    })
-    await bridge.listen<{ line: string }>('rpc:stderr', (event) => {
-      for (const handler of this.stderrHandlers) handler(event.payload.line)
-    })
-    await bridge.listen<{ code: number | null; pid?: number }>('rpc:exit', (event) => {
-      for (const handler of this.exitHandlers) handler(event.payload.code, event.payload.pid)
-    })
+    const attached: UnlistenFn[] = []
+    try {
+      attached.push(
+        await bridge.listen<{ frame: ServerFrame }>('rpc:frame', (event) => {
+          for (const handler of this.handlers) handler(event.payload.frame)
+        }),
+      )
+      attached.push(
+        await bridge.listen<{ line: string }>('rpc:stderr', (event) => {
+          for (const handler of this.stderrHandlers) handler(event.payload.line)
+        }),
+      )
+      attached.push(
+        await bridge.listen<{ code: number | null; pid?: number }>('rpc:exit', (event) => {
+          for (const handler of this.exitHandlers) handler(event.payload.code, event.payload.pid)
+        }),
+      )
+    } catch (error) {
+      for (const unlisten of attached) {
+        try {
+          unlisten()
+        } catch {
+          // A listener that cannot be released must not mask the registration
+          // error that sent us here.
+        }
+      }
+      throw error
+    }
   }
 
   async stop(): Promise<void> {

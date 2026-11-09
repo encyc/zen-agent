@@ -40,6 +40,9 @@ async function sendMemory<T extends ReplyLike>(payload: Record<string, unknown>)
     .send<T>({ type: 'memory', ...payload }, REQUEST_TIMEOUT_MS)
   const error = frameError(frame, 'memory failed')
   if (error !== null) throw new Error(error)
+  // Fail closed: anything that is not an explicit success frame is a failure,
+  // even if it is too malformed for `frameError` to describe.
+  if (frame.type !== 'result' || frame.ok !== true) throw new Error('memory failed')
   return frame
 }
 

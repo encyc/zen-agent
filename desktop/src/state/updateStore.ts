@@ -92,7 +92,13 @@ interface UpdateState {
 async function bootFlags(): Promise<{ envDisabled: boolean; selfUpdatable: boolean }> {
   try {
     const state = await initialState()
-    return { envDisabled: state.updatesDisabled, selfUpdatable: state.selfUpdatable }
+    // Fail closed on a shell that answers with the wrong shape: an update
+    // check stays enabled, and only a literal `false` marks this install
+    // unreplaceable.
+    return {
+      envDisabled: state.updatesDisabled === true,
+      selfUpdatable: state.selfUpdatable !== false,
+    }
   } catch {
     return { envDisabled: false, selfUpdatable: true }
   }
