@@ -35,9 +35,13 @@ struct Proc {
     alive: Arc<AtomicBool>,
 }
 
-#[derive(Default)]
+/// Shared handle to the running subprocess slot. The inner `Arc` makes the
+/// state cheaply cloneable so an async command can move a copy into a
+/// `spawn_blocking` closure (which must be `'static`) without borrowing the
+/// Tauri `State`.
+#[derive(Clone, Default)]
 pub struct RpcState {
-    proc: Mutex<Option<Arc<Proc>>>,
+    proc: Arc<Mutex<Option<Arc<Proc>>>>,
 }
 
 #[derive(Deserialize)]
@@ -74,6 +78,15 @@ pub struct RuntimeProbe {
     pub resolved: Option<String>,
     pub exists: bool,
     pub version: Option<String>,
+}
+
+/// The two boot-time policy flags the webview needs before its first paint,
+/// folded into one round-trip. JSON keys are camelCase for the frontend.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InitialState {
+    pub updates_disabled: bool,
+    pub self_updatable: bool,
 }
 
 /// One pending send: registered before the request hits stdin so an answer
@@ -284,6 +297,13 @@ fn login_shell_env() -> (HashMap<String, String>, bool) {
         .clone()
 }
 
+/// Warm the login-shell env cache off the main thread during setup, so the
+/// first `rpc_start` does not pay the (up to 3s) harvest cost. Best-effort:
+/// `login_shell_env` already falls back to an empty map on failure/timeout.
+pub fn prewarm_shell_env() {
+    let _ = login_shell_env();
+}
+
 /// Classify a spawn failure. A bundled runtime that is present but will not
 /// run (wrong architecture, no execute bit, missing interpreter) is the same
 /// user-visible problem as a missing one: the app has no agent.
@@ -304,10 +324,55 @@ fn runtime_problem(
     }
 }
 
+/// The webview only ever needs the program name, never the resolved absolute
+/// path (which can leak the user's home directory or install layout). Keep just
+/// the final path component; a bare name or an empty string passes through.
+fn basename(bin: &str) -> String {
+    Path::new(bin)
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| bin.to_string())
+}
+
+/// A stable, short, user-facing description of a spawn failure. The raw
+/// `io::Error` text (which embeds the full path and OS wording) goes to stderr
+/// instead, so the webview never sees machine-specific detail.
+fn os_error_message(kind: std::io::ErrorKind, raw_os_error: Option<i32>) -> String {
+    match kind {
+        std::io::ErrorKind::NotFound => "not found".to_string(),
+        std::io::ErrorKind::PermissionDenied => "permission denied".to_string(),
+        _ => match raw_os_error {
+            Some(code) => format!("spawn failed (os error {code})"),
+            None => "spawn failed".to_string(),
+        },
+    }
+}
+
 #[tauri::command]
-pub fn rpc_start(
+pub async fn rpc_start(
     app: AppHandle,
     state: State<'_, RpcState>,
+    options: StartOptions,
+) -> Result<StartReport, StartError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || start_rpc_blocking(app, state, options))
+        .await
+        .map_err(|error| {
+            eprintln!("[zen] rpc_start blocking task join failed: {error}");
+            StartError {
+                code: "spawn_failed",
+                bin: String::new(),
+                os_error: "spawn failed (internal)".to_string(),
+            }
+        })?
+}
+
+/// The blocking body of `rpc_start`: stop any previous child, harvest the
+/// login-shell env, spawn the new runtime and wire up its reader/waiter
+/// threads. Runs on the blocking pool so none of it touches the main thread.
+fn start_rpc_blocking(
+    app: AppHandle,
+    state: RpcState,
     options: StartOptions,
 ) -> Result<StartReport, StartError> {
     let mut slot = state.proc.lock().unwrap();
@@ -336,10 +401,13 @@ pub fn rpc_start(
 
     let sibling_exists =
         exe_dir().map(|dir| dir.join(exe_sibling_name()).is_file()).unwrap_or(false);
-    let mut child = command.spawn().map_err(|error| StartError {
-        code: runtime_problem(error.kind(), error.raw_os_error(), sibling_exists),
-        bin: bin.clone(),
-        os_error: error.to_string(),
+    let mut child = command.spawn().map_err(|error| {
+        eprintln!("[zen] rpc_start could not spawn {bin}: {error}");
+        StartError {
+            code: runtime_problem(error.kind(), error.raw_os_error(), sibling_exists),
+            bin: basename(&bin),
+            os_error: os_error_message(error.kind(), error.raw_os_error()),
+        }
     })?;
     let pid = child.id();
     let stdin = child
@@ -347,7 +415,7 @@ pub fn rpc_start(
         .take()
         .ok_or_else(|| StartError {
             code: "spawn_failed",
-            bin: bin.clone(),
+            bin: basename(&bin),
             os_error: "no stdin handle".to_string(),
         })?;
     let stdout = child
@@ -355,7 +423,7 @@ pub fn rpc_start(
         .take()
         .ok_or_else(|| StartError {
             code: "spawn_failed",
-            bin: bin.clone(),
+            bin: basename(&bin),
             os_error: "no stdout handle".to_string(),
         })?;
     let stderr = child
@@ -363,7 +431,7 @@ pub fn rpc_start(
         .take()
         .ok_or_else(|| StartError {
             code: "spawn_failed",
-            bin: bin.clone(),
+            bin: basename(&bin),
             os_error: "no stderr handle".to_string(),
         })?;
 
@@ -482,17 +550,19 @@ pub async fn rpc_send(
     }
 
     let line = request.to_string();
+    // Register the receiver before the request hits stdin so an answer racing
+    // the write can never miss it. The blocking stdin write/flush and the mpsc
+    // wait both run on the blocking pool, never on an async worker.
     let (guard, rx) = Guard::register(&proc.pending, id.clone());
-    {
-        let mut stdin = proc.stdin.lock().unwrap();
-        writeln!(stdin, "{line}").map_err(|error| format!("stdin write failed: {error}"))?;
-        stdin
-            .flush()
-            .map_err(|error| format!("stdin flush failed: {error}"))?;
-    }
-
     let timeout = Duration::from_millis(timeout_ms.unwrap_or(900_000));
     tauri::async_runtime::spawn_blocking(move || {
+        {
+            let mut stdin = proc.stdin.lock().unwrap();
+            writeln!(stdin, "{line}").map_err(|error| format!("stdin write failed: {error}"))?;
+            stdin
+                .flush()
+                .map_err(|error| format!("stdin flush failed: {error}"))?;
+        }
         match rx.recv_timeout(timeout) {
             Ok(frame) => Ok(frame),
             Err(_) => {
@@ -506,20 +576,22 @@ pub async fn rpc_send(
 }
 
 #[tauri::command]
-pub fn rpc_stop(state: State<'_, RpcState>) -> Result<(), String> {
-    let slot = state.proc.lock().unwrap();
-    if let Some(proc) = slot.as_ref() {
-        stop_proc(proc);
-    }
-    Ok(())
+pub async fn rpc_stop(state: State<'_, RpcState>) -> Result<(), String> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let slot = state.proc.lock().unwrap();
+        if let Some(proc) = slot.as_ref() {
+            stop_proc(proc);
+        }
+    })
+    .await
+    .map_err(|error| format!("rpc_stop join failed: {error}"))
 }
 
-/// Best-effort teardown on app exit.
 /// Can this install replace itself? The Tauri updater only handles AppImages
 /// on Linux: a .deb comes from a package manager, so the UI links there instead
 /// of offering a restart that can only fail.
-#[tauri::command]
-pub fn updates_self_updatable() -> bool {
+fn install_can_self_update() -> bool {
     if cfg!(target_os = "linux") {
         return std::env::var("APPIMAGE")
             .map(|value| !value.trim().is_empty())
@@ -528,24 +600,40 @@ pub fn updates_self_updatable() -> bool {
     true
 }
 
+/// True when the environment asks every zen frontend to stop checking for
+/// updates. Kept alongside the settings switch: either one silences it.
+fn env_requests_no_update_check() -> bool {
+    let value = std::env::var("ZENAGENT_NO_UPDATE_CHECK").unwrap_or_default();
+    matches!(value.trim().to_lowercase().as_str(), "1" | "true" | "yes")
+}
+
+/// The boot-time policy flags in a single round-trip (see `InitialState`).
+/// Replaces the former `updates_disabled_by_env` / `updates_self_updatable`
+/// commands so the webview's first paint needs one invoke, not two.
+#[tauri::command]
+pub fn get_initial_state() -> InitialState {
+    InitialState {
+        updates_disabled: env_requests_no_update_check(),
+        self_updatable: install_can_self_update(),
+    }
+}
+
 /// Restart the shell after an update installed itself. Stop the child first:
 /// `app.restart()` takes the whole process down, and a hard death would skip
 /// the child's shutdown path (it drops the session file an unused launch
 /// wrote), so the new bundle would start on top of a fresh `(empty)` session.
+/// The graceful stop can block for seconds, so it runs on the blocking pool.
 #[tauri::command]
-pub fn relaunch_app(app: AppHandle, state: State<'_, RpcState>) {
-    if let Some(proc) = state.proc.lock().unwrap().take() {
-        stop_proc(&proc);
-    }
-    app.restart();
-}
-
-/// True when the environment asks every zen frontend to stop checking for
-/// updates. Kept alongside the settings switch: either one silences it.
-#[tauri::command]
-pub fn updates_disabled_by_env() -> bool {
-    let value = std::env::var("ZENAGENT_NO_UPDATE_CHECK").unwrap_or_default();
-    matches!(value.trim().to_lowercase().as_str(), "1" | "true" | "yes")
+pub async fn relaunch_app(app: AppHandle, state: State<'_, RpcState>) -> Result<(), String> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        if let Some(proc) = state.proc.lock().unwrap().take() {
+            stop_proc(&proc);
+        }
+    })
+    .await
+    .map_err(|error| format!("relaunch_app join failed: {error}"))?;
+    app.restart()
 }
 
 /// Ask the binary its version, but never let a wedged runtime freeze the UI:
@@ -567,20 +655,26 @@ fn version_of(bin: String) -> Option<String> {
 
 /// Where the shell would look for the runtime, and what it reports there.
 /// Settings shows this so a user can tell a missing sidecar from a broken one.
+/// The resolve/stat/version probe can block (the version call waits up to 2s),
+/// so the whole thing runs on the blocking pool.
 #[tauri::command]
-pub async fn runtime_probe() -> RuntimeProbe {
-    let resolved = resolve_bin("zen");
-    let exists = Path::new(&resolved).is_file();
-    let version = if exists {
-        version_of(resolved.clone())
-    } else {
-        None
-    };
-    RuntimeProbe {
-        resolved: Some(resolved),
-        exists,
-        version,
-    }
+pub async fn runtime_probe() -> Result<RuntimeProbe, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let resolved = resolve_bin("zen");
+        let exists = Path::new(&resolved).is_file();
+        let version = if exists {
+            version_of(resolved.clone())
+        } else {
+            None
+        };
+        RuntimeProbe {
+            resolved: Some(resolved),
+            exists,
+            version,
+        }
+    })
+    .await
+    .map_err(|error| format!("runtime_probe join failed: {error}"))
 }
 
 /// Best-effort teardown on app exit: the same graceful stop `rpc_stop` uses.
@@ -746,9 +840,94 @@ mod stop_tests {
     fn kill_all_stops_the_registered_child_the_same_way() {
         let (proc, kept) = shutdown_aware_child();
         let state = RpcState {
-            proc: Mutex::new(Some(Arc::new(proc))),
+            proc: Arc::new(Mutex::new(Some(Arc::new(proc)))),
         };
         kill_all(&state);
         assert_eq!(exit_code(&kept), Some(0));
+    }
+}
+
+#[cfg(test)]
+mod sanitize_tests {
+    use super::*;
+
+    #[test]
+    fn basename_keeps_only_the_final_path_component() {
+        assert_eq!(basename("/opt/homebrew/bin/zen"), "zen");
+        assert_eq!(basename("/Users/u/.local/bin/zen"), "zen");
+        assert_eq!(basename("zen"), "zen");
+    }
+
+    #[test]
+    fn basename_of_empty_stays_empty() {
+        assert_eq!(basename(""), "");
+    }
+
+    #[test]
+    fn os_error_message_maps_kinds_to_stable_short_text() {
+        assert_eq!(
+            os_error_message(std::io::ErrorKind::NotFound, None),
+            "not found"
+        );
+        assert_eq!(
+            os_error_message(std::io::ErrorKind::PermissionDenied, Some(13)),
+            "permission denied"
+        );
+        assert_eq!(
+            os_error_message(std::io::ErrorKind::Other, Some(24)),
+            "spawn failed (os error 24)"
+        );
+        assert_eq!(
+            os_error_message(std::io::ErrorKind::Other, None),
+            "spawn failed"
+        );
+    }
+}
+
+#[cfg(test)]
+mod shape_tests {
+    use super::*;
+
+    #[test]
+    fn start_error_serializes_camel_case_keys() {
+        let value = serde_json::to_value(StartError {
+            code: "runtime_missing",
+            bin: "zen".into(),
+            os_error: "not found".into(),
+        })
+        .unwrap();
+        assert_eq!(value["code"], "runtime_missing");
+        assert_eq!(value["bin"], "zen");
+        assert_eq!(value["osError"], "not found");
+        assert!(value.get("os_error").is_none());
+        assert_eq!(value.as_object().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn runtime_probe_serializes_resolved_exists_version() {
+        let value = serde_json::to_value(RuntimeProbe {
+            resolved: Some("/opt/homebrew/bin/zen".into()),
+            exists: true,
+            version: Some("0.10.1".into()),
+        })
+        .unwrap();
+        assert_eq!(value["resolved"], "/opt/homebrew/bin/zen");
+        assert_eq!(value["exists"], true);
+        assert_eq!(value["version"], "0.10.1");
+        assert_eq!(value.as_object().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn initial_state_serializes_camel_case_keys() {
+        let value = serde_json::to_value(InitialState {
+            updates_disabled: true,
+            self_updatable: false,
+        })
+        .unwrap();
+        assert_eq!(value["updatesDisabled"], true);
+        assert_eq!(value["selfUpdatable"], false);
+        assert!(value.get("updates_disabled").is_none());
+        assert!(value.get("self_updatable").is_none());
+        assert_eq!(value.as_object().unwrap().len(), 2);
     }
 }
