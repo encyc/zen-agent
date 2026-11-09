@@ -5,9 +5,10 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "core:event:default",
     "core:window:allow-start-dragging",
-    "dialog:default",
-    "updater:default"
+    "core:window:allow-show",
+    "dialog:allow-open",
+    "updater:allow-check",
+    "updater:allow-download-and-install"
   ]
 }

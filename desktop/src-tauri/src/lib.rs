@@ -48,11 +48,15 @@ pub fn run() {
             rpc::rpc_send,
             rpc::rpc_stop,
             rpc::runtime_probe,
-            rpc::updates_disabled_by_env,
+            rpc::get_initial_state,
             rpc::relaunch_app,
-            rpc::updates_self_updatable,
         ])
         .setup(|app| {
+            // Warm the login-shell env cache off the main thread so the first
+            // rpc_start does not pay the (up to 3s) harvest cost. The window
+            // starts hidden (see tauri.conf.json) and the webview calls show()
+            // once its first paint is ready.
+            std::thread::spawn(rpc::prewarm_shell_env);
             let open = MenuItem::with_id(app, "open", "Open ZenAgent", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit ZenAgent", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&open, &quit])?;
