@@ -32,6 +32,13 @@ test('localizeError falls back to the raw message without a code', () => {
   assert.equal(localizeError({ message: 'boom' }), 'boom')
 })
 
+test('an unknown code still falls back to the server message', () => {
+  assert.equal(
+    localizeError({ message: 'a future refusal', code: 'future_code' }, 'zh'),
+    'a future refusal',
+  )
+})
+
 test('an fs refusal names the sanitized op and file', () => {
   assert.equal(
     localizeError({ code: 'fs_error', params: { op: 'read', file: 'notes.txt' } }, 'en'),
@@ -55,11 +62,15 @@ test('every sanitized RPC code renders localized copy in both locales', () => {
   for (const code of [
     'session_failed',
     'session_import_missing',
+    'session_busy',
+    'session_invalid',
     'limits_failed',
     'config_failed',
     'mcp_failed',
     'mode_failed',
     'project_failed',
+    'project_busy',
+    'project_invalid',
     'command_failed',
     'image_read_failed',
     'taiji.message_failed',
@@ -69,6 +80,23 @@ test('every sanitized RPC code renders localized copy in both locales', () => {
     assert.notEqual(en, 'server text', `${code} has no en copy`)
     assert.notEqual(zh, 'server text', `${code} has no zh copy`)
     assert.notEqual(en, zh, `${code} is not translated`)
+  }
+})
+
+test('authored busy and invalid refusals render actionable copy', () => {
+  const cases: Array<[string, string, string]> = [
+    ['session_busy', 'cancel the current run', '取消当前运行'],
+    ['project_busy', 'switch to another project', '切换到其他项目'],
+    ['session_invalid', 'incomplete or unsupported', '不完整或不受支持'],
+    ['project_invalid', 'incomplete or unsupported', '不完整或不受支持'],
+  ]
+  for (const [code, enNeedle, zhNeedle] of cases) {
+    const en = localizeError({ message: 'server english text', code }, 'en')
+    const zh = localizeError({ message: '服务端英文', code }, 'zh')
+    assert.ok(en.includes(enNeedle), `${code} en copy lacks ${enNeedle}: ${en}`)
+    assert.ok(zh.includes(zhNeedle), `${code} zh copy lacks ${zhNeedle}: ${zh}`)
+    assert.ok(!en.includes('server english text'), `${code} fell back to the server message`)
+    assert.ok(!zh.includes('服务端英文'), `${code} fell back to the server message`)
   }
 })
 
