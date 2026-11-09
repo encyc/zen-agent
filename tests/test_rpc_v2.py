@@ -1024,6 +1024,214 @@ async def test_subagent_transcript_returns_the_live_child_conversation(
     assert payloads["s3"]["type"] == "error"
 
 
+async def test_subagent_transcript_after_returns_only_new_views(runtime_factory):
+    """The panel polls once a second: ``after`` carries the rows it already
+    holds, and ``total`` lets the client prove nothing was skipped."""
+    _runtime, server, writes, queue = await build(runtime_factory)
+    chat = server.chat
+    chat.on_subagent_event("c1", "start", {"name": "Researcher", "model": "m"})
+    prompt = UserMessage(content="find the timeout", timestamp=1)
+    answer = AssistantMessage(
+        content=[TextContent(text="it is in the gateway")],
+        provider="p",
+        model="m",
+        usage=Usage(),
+        stop_reason="stop",
+        timestamp=2,
+    )
+    follow_up = UserMessage(content="and the retry?", timestamp=3)
+    for message in (prompt, answer, follow_up):
+        chat.on_subagent_event(
+            "c1", "event", {"event": AgentEvent(type="message_start", message=message)}
+        )
+    chat.on_subagent_event(
+        "c1", "event", {"event": AgentEvent(type="message_end", message=answer)}
+    )
+
+    await run_lines(
+        server,
+        queue,
+        [
+            {"type": "subagent_transcript", "id": "full", "call_id": "c1"},
+            {"type": "subagent_transcript", "id": "tail", "call_id": "c1", "after": 2},
+            {"type": "subagent_transcript", "id": "none", "call_id": "c1", "after": 3},
+            {"type": "subagent_transcript", "id": "beyond", "call_id": "c1", "after": 9},
+            {"type": "subagent_transcript", "id": "bad", "call_id": "c1", "after": "x"},
+            {"type": "subagent_transcript", "id": "gone", "call_id": "zzz"},
+        ],
+    )
+    payloads = {message["id"]: message for message in decode(writes)}
+
+    assert payloads["full"]["total"] == 3
+    assert [view["kind"] for view in payloads["full"]["transcript"]] == [
+        "user",
+        "assistant",
+        "user",
+    ]
+    # Only the rows the client does not hold: the follow-up user turn.
+    assert payloads["tail"]["total"] == 3
+    assert [view["text"] for view in payloads["tail"]["transcript"]] == [
+        "and the retry?"
+    ]
+    assert payloads["none"]["total"] == 3
+    assert payloads["none"]["transcript"] == []
+    # An ``after`` past the end is an empty page, not an error.
+    assert payloads["beyond"]["total"] == 3
+    assert payloads["beyond"]["transcript"] == []
+    # A malformed cursor is ignored so an old/confused client still gets rows.
+    assert payloads["bad"]["total"] == 3
+    assert len(payloads["bad"]["transcript"]) == 3
+    assert payloads["gone"]["available"] is False
+    assert payloads["gone"]["total"] == 0
+
+
+async def _seed_transcript(runtime, server, count: int = 5) -> None:
+    runtime.agent.replace_messages(
+        [UserMessage(content=f"m{index}", timestamp=index) for index in range(count)]
+    )
+    server.chat.reload_transcript()
+
+
+async def test_transcript_pages_the_tail_and_flags_more_before(runtime_factory):
+    """`limit`/`before` slice the snapshot; `hasMoreBefore` says whether an
+    older page exists. Without the new params the full snapshot still lands."""
+    runtime, server, writes, queue = await build(runtime_factory)
+    await _seed_transcript(runtime, server, 5)
+
+    await run_lines(
+        server,
+        queue,
+        [
+            {"type": "transcript", "id": "all"},
+            {"type": "transcript", "id": "tail", "limit": 2},
+            {"type": "transcript", "id": "page", "limit": 2, "before": 4},
+            {"type": "transcript", "id": "first", "before": 2},
+            {"type": "transcript", "id": "zero", "before": 0},
+            {"type": "transcript", "id": "beyond", "before": 99},
+            {"type": "transcript", "id": "bad", "limit": "two", "before": -3},
+            {"type": "transcript", "id": "bool", "limit": True},
+        ],
+    )
+    payloads = {message["id"]: message for message in decode(writes)}
+
+    assert [view["id"] for view in payloads["all"]["transcript"]] == [
+        "v1",
+        "v2",
+        "v3",
+        "v4",
+        "v5",
+    ]
+    assert payloads["all"]["hasMoreBefore"] is False
+
+    assert [view["id"] for view in payloads["tail"]["transcript"]] == ["v4", "v5"]
+    assert payloads["tail"]["hasMoreBefore"] is True
+
+    assert [view["id"] for view in payloads["page"]["transcript"]] == ["v3", "v4"]
+    assert payloads["page"]["hasMoreBefore"] is True
+
+    assert [view["id"] for view in payloads["first"]["transcript"]] == ["v1", "v2"]
+    assert payloads["first"]["hasMoreBefore"] is False
+
+    assert payloads["zero"]["transcript"] == []
+    assert payloads["zero"]["hasMoreBefore"] is False
+
+    # A cursor past the end clamps to the snapshot instead of erroring.
+    assert len(payloads["beyond"]["transcript"]) == 5
+    assert payloads["beyond"]["hasMoreBefore"] is False
+
+    # Malformed paging params are ignored: the client gets the full snapshot.
+    assert len(payloads["bad"]["transcript"]) == 5
+    assert payloads["bad"]["hasMoreBefore"] is False
+    assert len(payloads["bool"]["transcript"]) == 5
+
+
+async def test_a_failed_prompt_crosses_as_a_safe_code(runtime_factory, caplog):
+    """The raw exception (which may quote absolute paths) stays in the server
+    log; the wire carries only a code and a short, path-free message."""
+    import logging
+
+    _runtime, server, writes, queue = await build(runtime_factory)
+    secret = "/Users/very-secret/agent/notes.txt"
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError(f"provider exploded while reading {secret}")
+
+    server.chat.submit = boom
+
+    with caplog.at_level(logging.WARNING):
+        await run_lines(server, queue, [{"type": "prompt", "id": "p1", "text": "hi"}])
+
+    payload = next(message for message in decode(writes) if message.get("id") == "p1")
+    assert payload["type"] == "error"
+    assert payload["code"] == "prompt_failed"
+    assert payload["message"] == "prompt failed"
+    assert "provider exploded" not in payload["message"]
+    assert "/Users/very-secret" not in json.dumps(payload)
+    # The raw detail is still available to whoever reads the server log.
+    assert "provider exploded" in caplog.text
+    assert secret in caplog.text
+
+
+async def test_a_failed_fs_read_crosses_as_a_code_with_a_basename(
+    runtime_factory, tmp_path, monkeypatch, caplog
+):
+    import errno
+    import logging
+
+    monkeypatch.chdir(tmp_path)
+    _runtime, server, writes, queue = await build(runtime_factory)
+    missing = tmp_path / "notes.txt"
+
+    def explode(root, path):
+        raise FileNotFoundError(errno.ENOENT, "No such file or directory", str(missing))
+
+    monkeypatch.setattr("zenagent.cli.rpc.ops_files.read_file", explode)
+
+    with caplog.at_level(logging.WARNING):
+        await run_lines(
+            server, queue, [{"type": "fs_read", "id": "r", "path": "notes.txt"}]
+        )
+
+    payload = decode(writes)[0]
+    assert payload["type"] == "error"
+    assert payload["code"] == "fs_error"
+    assert payload["message"] == "read failed"
+    assert payload["params"] == {
+        "op": "read",
+        "errno": str(errno.ENOENT),
+        "file": "notes.txt",
+    }
+    # The absolute path never crosses the wire, in any frame field.
+    assert str(tmp_path) not in json.dumps(payload)
+    assert str(missing) in caplog.text
+
+
+async def test_a_failed_fs_index_crosses_as_a_code(runtime_factory, tmp_path, monkeypatch):
+    import errno
+
+    monkeypatch.chdir(tmp_path)
+    _runtime, server, writes, queue = await build(runtime_factory)
+    broken = tmp_path / "broken"
+
+    def explode(root):
+        raise OSError(errno.EIO, "Input/output error", str(broken))
+
+    monkeypatch.setattr("zenagent.cli.rpc.ops_files.workspace_files", explode)
+
+    await run_lines(server, queue, [{"type": "fs_index", "id": "i"}])
+
+    payload = decode(writes)[0]
+    assert payload["type"] == "error"
+    assert payload["code"] == "fs_error"
+    assert payload["message"] == "index failed"
+    assert payload["params"] == {
+        "op": "index",
+        "errno": str(errno.EIO),
+        "file": "broken",
+    }
+    assert str(tmp_path) not in json.dumps(payload)
+
+
 async def test_session_list_carries_created_updated_model_and_lineage(runtime_factory):
     runtime, server, writes, queue = await build(runtime_factory)
     await runtime.session.append(UserMessage(content="hello", timestamp=1))
@@ -1232,7 +1440,10 @@ async def test_fs_requests_reject_paths_outside_the_project(runtime_factory, tmp
     await run_lines(server, queue, [{"type": "fs_read", "id": "r", "path": "../secret"}])
     payload = decode(writes)[0]
     assert payload["type"] == "error"
-    assert "escapes the workspace" in payload["message"]
+    assert payload["code"] == "fs_error"
+    assert payload["params"] == {"op": "read", "file": "secret"}
+    assert payload["message"] == "read failed"
+    assert str(tmp_path) not in json.dumps(payload)
 
 
 async def test_git_worktrees_reports_a_non_repository(runtime_factory, tmp_path, monkeypatch):

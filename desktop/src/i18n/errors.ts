@@ -9,6 +9,8 @@ const CODE_KEYS: Record<string, string> = {
   'taiji.merge_blocked': 'taiji.error.mergeBlocked',
   'taiji.worker_missing': 'taiji.error.workerMissing',
   'taiji.bad_limit': 'taiji.error.badLimit',
+  'prompt_failed': 'rpc.error.promptFailed',
+  'fs_error': 'rpc.error.fsFailed',
 }
 
 export function localizeError(

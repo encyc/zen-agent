@@ -6,14 +6,44 @@ from dataclasses import asdict
 from pathlib import Path
 
 
+def _optional_count(value: object, *, minimum: int) -> int | None:
+    """One optional wire count; a malformed value is ignored, not an error.
+
+    Paging is an optimization: a client that sends a bad cursor still gets
+    the full snapshot instead of a broken page. Bools are rejected on
+    purpose — ``True`` is an ``int`` in Python but never a cursor.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value if value >= minimum else None
+
+
+def _page_views(
+    views: list, *, limit: int | None, before: int | None
+) -> tuple[list, bool]:
+    """Slice one page of views; ``(page, has_more_before)``.
+
+    ``before`` is the exclusive end cursor, so a client that already holds
+    the tail asks for ``before=<first loaded index>``. Appends at the tail
+    (the live turn) never shift an older page; a cursor past the end clamps
+    to the snapshot.
+    """
+    end = len(views) if before is None else min(before, len(views))
+    start = 0 if limit is None else max(0, end - limit)
+    return views[start:end], start > 0
+
+
 class SessionOps:
     """Mixin: see server.py for the composed RpcServer."""
 
-    def _transcript_result(self, request_id) -> dict:
+    def _transcript_result(
+        self, request_id, request: dict | None = None
+    ) -> dict:
         """The current transcript as view models (the TUI reducer's output).
 
         A GUI that resumes or switches sessions has no event journal to replay:
         this snapshot is its baseline, and live events then apply on top of it.
+        Optional ``limit``/``before`` page it for long sessions.
         """
 
         from zenagent.app import records
@@ -36,6 +66,12 @@ class SessionOps:
                 for notice in self.chat.notices_snapshot
                 if notice.source != "compaction"
             ]
+        payload = request or {}
+        views, has_more_before = _page_views(
+            views,
+            limit=_optional_count(payload.get("limit"), minimum=1),
+            before=_optional_count(payload.get("before"), minimum=0),
+        )
         return {
             "type": "result",
             "id": request_id,
@@ -43,26 +79,36 @@ class SessionOps:
             "transcript": views,
             "notices": notices,
             "compactions": compactions,
+            "hasMoreBefore": has_more_before,
         }
 
 
-    def _subagent_transcript_result(self, request_id, call_id: str) -> dict:
+    def _subagent_transcript_result(
+        self, request_id, call_id: str, request: dict | None = None
+    ) -> dict:
         """One ``task`` child's conversation, live buffer or persisted sidecar.
 
         ``available`` is false when neither exists (an old session whose
         sidecar is gone), so the client can say so instead of showing an
-        empty conversation.
+        empty conversation. Optional ``after`` returns only the views the
+        client does not hold yet; ``total`` is the full count, so a poller
+        can prove it did not skip a row.
         """
 
         transcript = (
             self.chat.subagent_transcript(call_id) if self.chat is not None else None
         )
+        views = [asdict(view) for view in transcript or []]
+        after = _optional_count((request or {}).get("after"), minimum=0)
+        if after is not None:
+            views = views[after:]
         return {
             "type": "result",
             "id": request_id,
             "ok": True,
             "available": transcript is not None,
-            "transcript": [asdict(view) for view in transcript or []],
+            "transcript": views,
+            "total": len(transcript or []),
         }
 
 

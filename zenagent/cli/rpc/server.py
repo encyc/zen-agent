@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict
 from pathlib import Path
@@ -35,6 +36,9 @@ from zenagent.types import (
 
 ReadLine = Callable[[], Awaitable[str | None]]
 WriteLine = Callable[[str], None]
+
+#: Server-side diagnostics; raw exception detail never crosses the wire.
+logger = logging.getLogger(__name__)
 
 PROTOCOL_VERSION = 2
 
@@ -529,7 +533,7 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
             self._send(self._commands_result(request_id))
             return True
         if kind == "transcript":
-            self._send(self._transcript_result(request_id))
+            self._send(self._transcript_result(request_id, request))
             return True
         if kind == "subagent_transcript":
             call_id = request.get("call_id")
@@ -542,7 +546,7 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
                     }
                 )
                 return True
-            self._send(self._subagent_transcript_result(request_id, call_id))
+            self._send(self._subagent_transcript_result(request_id, call_id, request))
             return True
         if kind == "model":
             return self._model(request, request_id)
@@ -699,8 +703,18 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
                 await self.chat.wait_for_idle()
             else:
                 await self.agent.prompt(text, images=images)
-        except Exception as exc:  # noqa: BLE001 - report, never kill the server
-            self._send({"type": "error", "id": request_id, "message": str(exc)})
+        except Exception:
+            # The raw exception may quote absolute paths or provider payloads;
+            # it belongs in the server log, not on the wire (I3).
+            logger.exception("prompt failed: request=%s", request_id)
+            self._send(
+                {
+                    "type": "error",
+                    "id": request_id,
+                    "message": "prompt failed",
+                    "code": "prompt_failed",
+                }
+            )
             return
         termination = self.agent.termination
         error = self.agent.error_message

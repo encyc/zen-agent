@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import asdict
 from pathlib import Path
 
@@ -15,6 +16,41 @@ from zenagent.app.workspace import (
 from zenagent.project import (
     find_project_root,
 )
+
+#: Server-side diagnostics; raw OSError detail never crosses the wire.
+logger = logging.getLogger(__name__)
+
+
+def _basename(value: object) -> str:
+    """The last path component of a wire/log value ('' when unavailable)."""
+    if not isinstance(value, str) or not value:
+        return ""
+    return Path(value).name
+
+
+def _fs_error(request_id, op: str, exc: BaseException, path: str) -> dict:
+    """One sanitized fs error frame (I3).
+
+    ``message`` is a short, path-free fallback; the client localizes by
+    ``code``. ``params`` carries only the op, the errno and the file's
+    basename — an absolute path must never cross the wire. The raw exception
+    goes to the server log, where a developer can still see what happened.
+    """
+    logger.warning("fs %s failed for %r: %s", op, path, exc)
+    params: dict[str, str] = {"op": op}
+    errno = getattr(exc, "errno", None)
+    if isinstance(errno, int):
+        params["errno"] = str(errno)
+    name = _basename(getattr(exc, "filename", None)) or _basename(path)
+    if name:
+        params["file"] = name
+    return {
+        "type": "error",
+        "id": request_id,
+        "message": f"{op} failed",
+        "code": "fs_error",
+        "params": params,
+    }
 
 
 class FilesOps:
@@ -33,13 +69,7 @@ class FilesOps:
             else:
                 payload = {"file": read_file(Path.cwd(), path)}
         except (OSError, ValueError) as exc:
-            self._send(
-                {
-                    "type": "error",
-                    "id": request_id,
-                    "message": f"{op} failed: {exc}",
-                }
-            )
+            self._send(_fs_error(request_id, op, exc, path))
             return True
         self._send({"type": "result", "id": request_id, "ok": True, **payload})
         return True
@@ -49,7 +79,7 @@ class FilesOps:
         try:
             payload = await asyncio.to_thread(workspace_files, Path.cwd())
         except (OSError, ValueError) as exc:
-            self._send({"type": "error", "id": request_id, "message": str(exc)})
+            self._send(_fs_error(request_id, "index", exc, ""))
             return
         self._send({"type": "result", "id": request_id, "ok": True, **payload})
 

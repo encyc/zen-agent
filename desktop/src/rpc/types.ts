@@ -457,16 +457,21 @@ export interface TranscriptResult {
   /** Compaction records from the loaded session; dividers arrive in-stream
    * (an older server without them is still tolerated). */
   compactions?: CompactionRecord[]
+  /** The snapshot was paged (`limit`/`before`): older rows exist on the
+   * server. Absent on an old server, which sends the whole transcript. */
+  hasMoreBefore?: boolean
 }
 
 /** One task child's conversation (`subagent_transcript`). `available` is false
- * when neither the live buffer nor a persisted sidecar exists. */
+ * when neither the live buffer nor a persisted sidecar exists. With `after`,
+ * `transcript` holds only the new rows and `total` the full count. */
 export interface SubagentTranscriptResult {
   type: 'result'
   id: string
   ok: true
   available: boolean
   transcript: (MessageView | ToolCallView)[]
+  total?: number
 }
 
 // ---- workspace ---------------------------------------------------------------

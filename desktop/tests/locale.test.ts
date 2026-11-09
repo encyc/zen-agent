@@ -41,3 +41,20 @@ test('the taiji panel composes no Chinese protocol strings of its own', () => {
   })
   assert.deepEqual(cjkLines, [], `CJK literals crept back:\n${cjkLines.join('\n')}`)
 })
+
+test('the sanitized server error codes render localized copy', () => {
+  // The server now sends codes + a short English fallback (I3); the dictionary
+  // is what the person actually reads.
+  assert.equal(
+    localizeError({ message: 'prompt failed', code: 'prompt_failed' }, 'zh'),
+    '本轮运行失败，详情见服务端日志',
+  )
+  assert.equal(
+    localizeError({ message: 'read failed', code: 'fs_error' }, 'en'),
+    'The file operation failed',
+  )
+  assert.equal(
+    localizeError({ message: 'read failed', code: 'fs_error' }, 'zh'),
+    '文件操作失败',
+  )
+})

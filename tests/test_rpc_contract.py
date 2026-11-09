@@ -207,5 +207,38 @@ def test_taiji_error_codes_agree_both_sides():
     assert ts_codes_ok(py_codes, ts_keys)
 
 
+def test_sanitized_error_codes_agree_both_sides():
+    """I3: prompt/fs failures cross as codes; the desktop dictionary must
+    carry a copy key for each, or the UI silently falls back to English."""
+    rpc = RPC_PATH
+    py_codes = set(re.findall(r'"code": "((?:prompt|fs)[a-z_]*)"', rpc))
+    assert py_codes == {"prompt_failed", "fs_error"}
+    errors_ts = (
+        Path(__file__).resolve().parents[1] / "desktop" / "src" / "i18n" / "errors.ts"
+    ).read_text()
+    ts_keys = set(re.findall(r"'((?:prompt|fs)[a-z_]*)':", errors_ts))
+    assert ts_codes_ok(py_codes, ts_keys)
+
+
+def test_transcript_paging_fields_are_additive_and_camel_case():
+    """I4: `limit`/`before` in, `hasMoreBefore` out; `after` in, `total` out.
+    Optional on both sides, camelCase on the wire, version untouched."""
+    rpc = RPC_PATH
+    assert '"hasMoreBefore":' in rpc, "transcript result lost hasMoreBefore"
+    assert '"total":' in rpc, "subagent transcript result lost total"
+    assert 'get("limit")' in rpc
+    assert 'get("before")' in rpc
+    assert 'get("after")' in rpc
+
+    ts = TS_PATH.read_text()
+    transcript = re.search(r"export interface TranscriptResult \{[^}]+\}", ts)
+    assert transcript, "types.ts lost TranscriptResult"
+    assert "hasMoreBefore?: boolean" in transcript.group(0)
+
+    subagent = re.search(r"export interface SubagentTranscriptResult \{[^}]+\}", ts)
+    assert subagent, "types.ts lost SubagentTranscriptResult"
+    assert "total?: number" in subagent.group(0)
+
+
 def ts_codes_ok(py_codes: set[str], ts_keys: set[str]) -> bool:
     return py_codes <= set(ts_keys)
