@@ -82,3 +82,21 @@ test('the action-error entry and the taiji panel render through the mapper', () 
   assert.match(read('state/appStore.ts'), /frameErrorNotice/)
   assert.match(read('ui/rightbar/TaijiPanel.tsx'), /localizeError/)
 })
+
+test('a failed prompt and a failed file read reach the localized notice', () => {
+  // A prompt error frame used to be dropped wholesale (`if (type === 'error')
+  // return`), so `prompt_failed` never rendered.
+  const appStore = read('state/appStore.ts')
+  const handleResult = appStore.match(
+    /function handleResultFrame\([\s\S]*?\n\}/,
+  )?.[0]
+  assert.ok(handleResult, 'appStore lost handleResultFrame')
+  assert.doesNotMatch(handleResult, /frame\.type === 'error'\) return/)
+  assert.match(handleResult, /showFrameError\(frame\)/)
+
+  // The files panel used to discard the sanitized code and print its own
+  // local line, so `fs_error` could never reach the banner.
+  const files = read('ui/rightbar/FilesPanel.tsx')
+  assert.match(files, /frameErrorNotice/)
+  assert.match(files, /useNoticeStore/)
+})

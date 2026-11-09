@@ -958,7 +958,13 @@ function handleFrame(frame: ServerFrame, handling: FrameHandling): void {
 }
 
 function handleResultFrame(frame: Record<string, unknown>, handling: FrameHandling): void {
-  if (frame.type === 'error') return
+  // A prompt failure crosses as an error frame with a code; the banner
+  // localizes it instead of dropping it (the raw detail stays in the log).
+  if (frame.type === 'error') {
+    showFrameError(frame)
+    void handling.get().refreshStatus()
+    return
+  }
   if (frame.type !== 'result' || !frame.ok) {
     void handling.get().refreshStatus()
     return

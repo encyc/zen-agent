@@ -5,11 +5,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../../state/appStore'
 import { FILES_REVEAL_BATCH, revealedCount } from '../../state/reveal'
+import { useNoticeStore, useSettingsStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
 import { useMarkdown } from '../chat/markdown'
 import chatCss from '../chat/AssistantNodeView.module.css'
 import type { FsListResult, FsReadResult, WorkspaceEntry, WorkspaceFile } from '../../rpc/types'
-import { frameError } from '../../rpc/frames'
+import { frameErrorNotice, type ReplyLike } from '../../rpc/frames'
 import {
   ArrowLeftIcon,
   ChevronDownIcon,
@@ -21,6 +22,13 @@ import css from './FilesPanel.module.css'
 
 const REQUEST_TIMEOUT_MS = 8000
 const VIEWER_LINE_CAP = 5000
+
+/** A failed fs request carries a `fs_error` code; show its localized copy in
+ * the notice banner instead of throwing the sanitized message away. */
+function reportFsFailure(result: ReplyLike): void {
+  const text = frameErrorNotice(result, useSettingsStore.getState().locale)
+  if (text !== null) useNoticeStore.getState().show({ kind: 'error', text })
+}
 
 interface DirState {
   entries: WorkspaceEntry[]
@@ -51,7 +59,11 @@ export function FilesPanel() {
         .getState()
         .client()
         .send<FsListResult>({ type: 'fs_list', path: rel }, REQUEST_TIMEOUT_MS)
-      if (result.ok !== true) throw new Error(frameError(result) ?? 'fs_list failed')
+      if (result.ok !== true) {
+        reportFsFailure(result)
+        setDirs((prev) => ({ ...prev, [rel]: { entries: [], error: true } }))
+        return
+      }
       setDirs((prev) => ({ ...prev, [rel]: { entries: result.entries ?? [] } }))
     } catch {
       setDirs((prev) => ({ ...prev, [rel]: { entries: [], error: true } }))
@@ -84,7 +96,11 @@ export function FilesPanel() {
         .client()
         .send<FsReadResult>({ type: 'fs_read', path }, REQUEST_TIMEOUT_MS)
       if (seq !== generation.current) return
-      if (result.ok !== true) throw new Error(frameError(result) ?? 'fs_read failed')
+      if (result.ok !== true) {
+        reportFsFailure(result)
+        setError(true)
+        return
+      }
       setFile(result.file)
     } catch {
       if (seq === generation.current) setError(true)
