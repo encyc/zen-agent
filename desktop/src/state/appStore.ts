@@ -10,6 +10,8 @@ import { TRANSCRIPT_PAGE_SIZE, olderPageCursor } from './transcriptWindow'
 import { RpcClient } from '../rpc/client'
 import type {
   CompactionRecord,
+  ErrorFrame,
+  LimitsResult,
   McpServerRow,
   Mode,
   SecretProviderRow,
@@ -99,9 +101,9 @@ interface AppState {
   clearSecret(name: string): Promise<Record<string, unknown>>
   testSecret(scope: 'model' | 'search', target: string): Promise<Record<string, unknown>>
   refreshSkills(): Promise<void>
-  fetchLimits(): Promise<Record<string, unknown>>
-  setLimit(key: string, value: number | null): Promise<Record<string, unknown>>
-  resetLimit(key: string): Promise<Record<string, unknown>>
+  fetchLimits(): Promise<LimitsResult | ErrorFrame>
+  setLimit(key: string, value: number | null): Promise<LimitsResult | ErrorFrame>
+  resetLimit(key: string): Promise<LimitsResult | ErrorFrame>
   readSkill(name: string): Promise<Record<string, unknown>>
   rescanSkills(): Promise<Record<string, unknown>>
   toggleSkill(name: string, enabled: boolean): Promise<Record<string, unknown>>
@@ -384,15 +386,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   fetchLimits() {
-    return get().client().send({ type: 'limits', op: 'get' })
+    return get().client().send<LimitsResult | ErrorFrame>({ type: 'limits', op: 'get' })
   },
 
   setLimit(key, value) {
-    return get().client().send({ type: 'limits', op: 'set', key, value })
+    return get()
+      .client()
+      .send<LimitsResult | ErrorFrame>({ type: 'limits', op: 'set', key, value })
   },
 
   resetLimit(key) {
-    return get().client().send({ type: 'limits', op: 'reset', key })
+    return get().client().send<LimitsResult | ErrorFrame>({ type: 'limits', op: 'reset', key })
   },
 
   readSkill(name) {
