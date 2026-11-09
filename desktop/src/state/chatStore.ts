@@ -3,6 +3,7 @@
  * RPC result) is the baseline; live events apply on top of it. */
 
 import { create } from 'zustand'
+import { firstLoadedIndex, prependFirstIndex } from './transcriptWindow.ts'
 import type {
   AgentEventFrame,
   DividerView,
@@ -122,9 +123,10 @@ interface ChatState {
   revision: number
   /** The snapshot was paged: older rows still exist on the server. */
   hasMoreBefore: boolean
-  /** Transcript views the loaded nodes cover, counted from the session start
-   * (wire rows, not notices); the `before` cursor for an older page. */
-  loadedViews: number
+  /** Absolute index (from the session start) of the first loaded view; the
+   * `before` cursor for an older page. A tail page starts at `total -
+   * page length`, never at its own length. */
+  firstLoadedIndex: number
 
   loadSnapshot(result: TranscriptResult): void
   /** Prepend one older wire page to the loaded transcript. */
@@ -248,7 +250,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   currentAssistantId: null,
   revision: 0,
   hasMoreBefore: false,
-  loadedViews: 0,
+  firstLoadedIndex: 0,
 
   loadSnapshot(result) {
     const cards: Record<string, string> = {}
@@ -279,7 +281,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       currentAssistantId: null,
       revision: get().revision + 1,
       hasMoreBefore: result.hasMoreBefore === true,
-      loadedViews: result.transcript.length,
+      firstLoadedIndex: firstLoadedIndex(
+        result.total,
+        result.transcript.length,
+      ),
     })
   },
 
@@ -292,7 +297,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       cards,
       revision: state.revision + 1,
       hasMoreBefore: result.hasMoreBefore === true,
-      loadedViews: state.loadedViews + result.transcript.length,
+      firstLoadedIndex: prependFirstIndex(
+        state.firstLoadedIndex,
+        result.transcript.length,
+      ),
     })
   },
 
@@ -526,7 +534,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       currentAssistantId: null,
       revision: get().revision + 1,
       hasMoreBefore: false,
-      loadedViews: 0,
+      firstLoadedIndex: 0,
     })
   },
 }))

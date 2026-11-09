@@ -8,8 +8,10 @@ import {
   TRANSCRIPT_PAGE_SIZE,
   TRANSCRIPT_WINDOW_MIN,
   TRANSCRIPT_WINDOW_STEP,
+  firstLoadedIndex,
   growTranscriptWindow,
   olderPageCursor,
+  prependFirstIndex,
   reduceTranscriptWindow,
   sameTranscriptTail,
   shrinkTranscriptWindow,
@@ -116,15 +118,62 @@ test('the first wire page is bounded so a long session paints the tail fast', ()
   assert.equal(TRANSCRIPT_PAGE_SIZE, 60)
 })
 
+test('a tail page records the absolute index of its first loaded view', () => {
+  // The server counts `before` from the session start, so a 60-row tail of a
+  // 150-view session starts at 90 — not at its own length.
+  assert.equal(firstLoadedIndex(150, 60), 90)
+  assert.equal(firstLoadedIndex(5, 2), 3)
+  // A full snapshot (or an old server without `total`) starts at zero.
+  assert.equal(firstLoadedIndex(40, 40), 0)
+  assert.equal(firstLoadedIndex(undefined, 12), 0)
+})
+
 test('a snapshot with more history before it yields the older-page cursor', () => {
-  assert.equal(olderPageCursor(true, 60), 60)
-  assert.equal(olderPageCursor(true, 120), 120)
+  assert.equal(olderPageCursor(true, 90), 90)
+  assert.equal(olderPageCursor(true, 30), 30)
 })
 
 test('no cursor when the loaded snapshot already reaches the session start', () => {
   assert.equal(olderPageCursor(false, 60), null)
   assert.equal(olderPageCursor(true, 0), null)
   assert.equal(olderPageCursor(false, 0), null)
+})
+
+test('prepending an older page moves the first loaded index down by its rows', () => {
+  assert.equal(prependFirstIndex(90, 60), 30)
+  assert.equal(prependFirstIndex(30, 30), 0)
+  // A short first page lands exactly on zero, never below it.
+  assert.equal(prependFirstIndex(2, 2), 0)
+  assert.equal(prependFirstIndex(1, 5), 0)
+})
+
+test('repeated tail and older loads cover 150 views without a gap or duplicate', () => {
+  // The bug this pins: a 60-row tail of a 150-view session is a page at
+  // offset 90. Treating its row count as the cursor re-reads the tail
+  // (duplicate keys) or skips the middle (out-of-order pages).
+  const count = 150
+  const pageSize = TRANSCRIPT_PAGE_SIZE
+  const range = (start: number, end: number) =>
+    Array.from({ length: end - start }, (_, offset) => start + offset)
+
+  // The first load is the tail page; the server reports the absolute total.
+  let first = firstLoadedIndex(count, pageSize)
+  let hasMore = first > 0
+  const pages: number[][] = [range(first, count)]
+  while (hasMore) {
+    const before = olderPageCursor(hasMore, first)
+    assert.notEqual(before, null)
+    const end = before as number
+    const start = Math.max(0, end - pageSize)
+    pages.unshift(range(start, end))
+    first = prependFirstIndex(first, end - start)
+    hasMore = start > 0
+  }
+
+  assert.equal(first, 0, 'the pages should reach the session start')
+  const loaded = pages.flat()
+  assert.deepEqual(loaded, range(0, count), 'contiguous, in order, duplicate-free')
+  assert.equal(new Set(loaded).size, count)
 })
 
 test('returning to the tail shrinks the window back to the steady-state cap', () => {

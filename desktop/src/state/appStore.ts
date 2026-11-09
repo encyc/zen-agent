@@ -514,6 +514,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         notices,
         compactions,
         hasMoreBefore: frame.hasMoreBefore === true,
+        total: typeof frame.total === 'number' ? frame.total : undefined,
       })
       return true
     } catch {
@@ -524,7 +525,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   async loadOlderTranscript() {
     if (olderInFlight) return false
     const chat = useChatStore.getState()
-    const before = olderPageCursor(chat.hasMoreBefore, chat.loadedViews)
+    const before = olderPageCursor(chat.hasMoreBefore, chat.firstLoadedIndex)
     if (before === null) return false
     olderInFlight = true
     try {

@@ -71,15 +71,31 @@ export function tailWindow<T>(items: T[], mounted: number): T[] {
   return mounted >= items.length ? items : items.slice(-mounted)
 }
 
+/** The absolute index of the first loaded view, counted from the session
+ * start. `before` on the wire is that index, so a tail page of a long session
+ * starts at `total - page length` — not at zero and not at its own length. A
+ * server without `total` sends the whole snapshot, which starts at zero. */
+export function firstLoadedIndex(total: number | undefined, loaded: number): number {
+  const count = Math.max(0, Math.trunc(total ?? loaded))
+  const length = Math.max(0, loaded)
+  return Math.max(0, count - length)
+}
+
 /** The `before` cursor for the next older wire page, or null when the loaded
  * snapshot already reaches the start of the session. The cursor counts views
  * loaded from the start, so live appends at the tail never shift it. */
 export function olderPageCursor(
   hasMoreBefore: boolean,
-  loadedViews: number,
+  firstLoaded: number,
 ): number | null {
-  if (!hasMoreBefore || loadedViews <= 0) return null
-  return loadedViews
+  if (!hasMoreBefore || firstLoaded <= 0) return null
+  return firstLoaded
+}
+
+/** The first loaded index after prepending a page of `pageLength` rows. Each
+ * older page walks the absolute range down by exactly the rows it delivered. */
+export function prependFirstIndex(firstLoaded: number, pageLength: number): number {
+  return Math.max(0, firstLoaded - Math.max(0, pageLength))
 }
 
 /** Budget after the reader returns to the tail: release the rows mounted

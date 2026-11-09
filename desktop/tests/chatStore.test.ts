@@ -275,32 +275,49 @@ function userView(id: string): TranscriptResult['transcript'][number] {
   return { kind: 'user', id, text: `q-${id}`, timestamp: 1, steering: false }
 }
 
-test('a paged snapshot records how much history it left behind', () => {
+test('a paged snapshot records the absolute index of its first loaded view', () => {
   useChatStore.getState().loadSnapshot({
     ...empty,
     transcript: [userView('v4'), userView('v5')],
     hasMoreBefore: true,
+    total: 5,
   })
   const state = useChatStore.getState()
   assert.equal(state.hasMoreBefore, true)
-  assert.equal(state.loadedViews, 2)
+  // The tail is views 4-5 of the session, so the older page ends at index 3 —
+  // the page length (2) would re-read v3 and v4.
+  assert.equal(state.firstLoadedIndex, 3)
 })
 
-test('an old server without hasMoreBefore is treated as a complete snapshot', () => {
+test('a full snapshot starts its loaded range at zero', () => {
+  useChatStore.getState().loadSnapshot({
+    ...empty,
+    transcript: [userView('v1'), userView('v2')],
+    total: 2,
+  })
+  assert.equal(useChatStore.getState().firstLoadedIndex, 0)
+})
+
+test('an old server without hasMoreBefore or total is treated as complete', () => {
   useChatStore.getState().loadSnapshot({ ...empty, transcript: [userView('v1')] })
-  assert.equal(useChatStore.getState().hasMoreBefore, false)
+  const state = useChatStore.getState()
+  assert.equal(state.hasMoreBefore, false)
+  assert.equal(state.firstLoadedIndex, 0)
 })
 
-test('prepending an older page keeps the loaded tail and grows the view count', () => {
+test('prepending an older page keeps the loaded tail and walks the range down', () => {
   useChatStore.getState().loadSnapshot({
     ...empty,
     transcript: [userView('v3'), userView('v4')],
     hasMoreBefore: true,
+    total: 4,
   })
+  assert.equal(useChatStore.getState().firstLoadedIndex, 2)
   useChatStore.getState().prependOlder({
     ...empty,
     transcript: [userView('v1'), userView('v2')],
     hasMoreBefore: false,
+    total: 4,
   })
 
   const state = useChatStore.getState()
@@ -308,8 +325,36 @@ test('prepending an older page keeps the loaded tail and grows the view count', 
     state.nodes.map((node) => node.id),
     ['v1', 'v2', 'v3', 'v4'],
   )
-  assert.equal(state.loadedViews, 4)
+  assert.equal(state.firstLoadedIndex, 0)
   assert.equal(state.hasMoreBefore, false)
+})
+
+test('a 150-view session pages backwards into one contiguous tail', () => {
+  const count = 150
+  const pageSize = 60
+  const views = Array.from({ length: count }, (_, index) => userView(`v${index + 1}`))
+  useChatStore.getState().loadSnapshot({
+    ...empty,
+    transcript: views.slice(count - pageSize),
+    hasMoreBefore: true,
+    total: count,
+  })
+
+  while (useChatStore.getState().hasMoreBefore) {
+    const { firstLoadedIndex } = useChatStore.getState()
+    const start = Math.max(0, firstLoadedIndex - pageSize)
+    useChatStore.getState().prependOlder({
+      ...empty,
+      transcript: views.slice(start, firstLoadedIndex),
+      hasMoreBefore: start > 0,
+      total: count,
+    })
+  }
+
+  const ids = useChatStore.getState().nodes.map((node) => node.id)
+  assert.deepEqual(ids, views.map((view) => view.id))
+  assert.equal(new Set(ids).size, count)
+  assert.equal(useChatStore.getState().firstLoadedIndex, 0)
 })
 
 test('prepending an older tool page indexes its card for live patches', () => {
