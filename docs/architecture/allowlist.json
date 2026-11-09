@@ -11,7 +11,7 @@
     "desktop/src/state/appStore.ts": 962,
     "desktop/src/i18n/locale.ts": 20,
     "desktop/e2e/app.spec.ts": 2611,
-    "desktop/src/i18n/messages.ts": 1074,
-    "desktop/e2e/harness.ts": 884
+    "desktop/src/i18n/messages.ts": 1086,
+    "desktop/e2e/harness.ts": 886
   }
 }
