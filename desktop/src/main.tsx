@@ -23,7 +23,7 @@ window.addEventListener('unhandledrejection', (event) => {
 // false in a production build, letting the bundler drop this whole branch and
 // the dev chunk from the Tauri bundle.
 async function bootstrap(root: HTMLElement): Promise<void> {
-  if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
+  if (import.meta.env.DEV && !window.__TAURI_INTERNALS__) {
     const { installBridge, initialState } = await import('./dev/bridge')
     installBridge(initialState())
   }

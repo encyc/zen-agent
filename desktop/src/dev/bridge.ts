@@ -93,6 +93,8 @@ declare global {
   interface Window {
     /** What `isTauri()` reads; the boot reveal is Tauri-only. */
     isTauri?: boolean
+    /** The IPC surface `invoke`/`listen` call; the real shell or this mock. */
+    __TAURI_INTERNALS__?: unknown
     __ZEN_E2E__: BridgeState
     __ZEN_E2E_EMIT__(event: string, payload: unknown): void
   }
@@ -886,7 +888,7 @@ export function installBridge(state: BridgeState) {
     },
   }
 
-  ;(window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = internals
+  window.__TAURI_INTERNALS__ = internals
   // The scripted page is a webview as far as the shell is concerned, so the
   // boot reveal (`isTauri()` → `plugin:window|show`) actually runs.
   window.isTauri = true
