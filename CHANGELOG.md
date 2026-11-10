@@ -5,6 +5,52 @@ matches the release tag; older history is in the repository tags and commits.
 
 ## Unreleased
 
+## v0.12.0 — 2026-11-10
+
+**One runtime per project, one host for all of them.** The runtime stops treating
+the process working directory as its identity: every `Runtime` carries an
+explicit project root, one `zen rpc` host keeps resident slots for several
+projects, and the desktop switches between them without respawning the child.
+
+### Project-scoped runtime (phases A–C)
+
+- **Explicit project root through the runtime** (`RuntimeOptions.root`):
+  bootstrap resolves `Runtime.cwd` (tools, status, relative file operations) and
+  `Runtime.root` (nearest `.git`; sessions, config, MCP, skills, templates,
+  memory, permission policy) once, then threads them through sessions, tools,
+  commands, chat status, and RPC handlers. The CLI keeps `os.chdir` only as a
+  compatibility shim; nothing in the runtime reads `Path.cwd()` as identity.
+  Behavior-preserving — no wire change, `PROTOCOL_VERSION` stays `2`.
+- **One host, resident slots** (`zenagent/cli/rpc/host.py`): the stdio loop owns
+  an `OrderedDict` of `RuntimeSlot`s keyed by `project_key(root)`, each wrapping
+  one runtime, chat, and RPC surface. Requests may name a `project`; a missing
+  field means the active slot, so v2 clients keep working. Slots are evicted LRU
+  beyond 4 and never while busy or while a taiji worker is queued.
+  `project open|switch|close|relocate` ops; refusals are stable codes
+  (`project_busy`, `project_invalid`, `project_failed`, `no_project`).
+- **Project-tagged frames and ids**: every emitted frame carries its `project`,
+  approval/ask ids are prefixed with the slot key (`<project_key>:aN` / `qN`),
+  and background-slot frames are filtered client-side by `frameBelongsTo`.
+- **Per-root taiji supervisors and job scoping**: taiji becomes a registry keyed
+  by project root; a slot claims and releases its project's host lock with its
+  lifecycle. Background job views are scoped to their runtime workspace.
+- **Desktop resident switching** (`appStore.ts`, `projectPanes.ts`):
+  `openProject` sends `{type:'project', op:'switch', root, resume?}` instead of
+  `rpc_stop`/`rpc_start`; an LRU of up to three transcript panes paints the
+  target's cached transcript synchronously, then revalidates it in the
+  background. A warm slot ignores `resume`, so the client follows up with one
+  `session resume` when the returned session differs; a refusal restores the
+  previous pane. The Rust shell keeps its single child — a crash still lands on
+  the existing exit screen and `rpc_start` replace path.
+- **Project-scoped approvals and asks** (`pendingProject.ts`): every queued
+  approval and ask carries its project; only the active project's (plus untagged)
+  entries render, while entries for other projects stay queued for their own
+  project.
+- **Proven end to end** (`desktop/e2e/app.spec.ts`): switching A → B → A spawns
+  no process (`starts.length === 1`), paints cached rows before the delayed
+  revalidation adds the rest, and a warm switch to a session the slot is not on
+  issues exactly one follow-up `session resume`.
+
 ## v0.11.1 — 2026-11-10
 
 ### Plugins — declarative connector packs
