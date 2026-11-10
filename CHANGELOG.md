@@ -24,6 +24,84 @@ matches the release tag; older history is in the repository tags and commits.
   kernel, `agent.loop ↔ tool_exec ↔ result_budget ↔ timeouts`, which the
   diagram intentionally hides by merging them into one node.)
 
+## v0.11.0 — 2026-11-10
+
+**A hardened IPC boundary, a startup path that always reveals, and paged
+transcripts.** Closes the desktop architecture review end to end: every error
+that crosses the wire is a stable code with no path or traceback, the shell
+boots hidden and reveals after first paint with an unconditional fail-safe,
+long transcripts and lists load in bounded windows, and the RPC protocol gains
+additive paging fields while staying `PROTOCOL_VERSION = 2`.
+
+### Security
+
+- **Errors cross as codes, never as payloads** (`zenagent/cli/rpc/errors.py`):
+  RPC frames now carry a stable snake_case `code` plus a short, path-free
+  message; only the op, an errno and a basename may travel in `params`, and
+  the raw exception stays in the server log. Every previously leaking site
+  (`ops_session`, `ops_config`, `ops_files`, `ops_taiji`, `server`) routes
+  through the shared `error_frame`/`failure_frame`; Rust spawn errors strip
+  absolute paths too. The desktop localizes each code, and busy/invalid
+  refusals keep their authored copy as distinct codes.
+- **The smallest Tauri surface that still works** (`capabilities/default.json`):
+  six permissions, one dialog service owns the picker command, and no bare
+  `invoke(` remains in a component.
+
+### Fixed
+
+- **The window always appears**: `visible:false` startup prewarms the shell
+  environment, reads initial state in parallel and reveals after first paint —
+  plus a 1.8s fail-safe for a boot that never reaches ready and a shared
+  revealer that retries a rejected show. Event listeners release what they
+  attached when registration fails and retry on the next start; the composer's
+  drop listener is removed on remount.
+- **Start, stop and relaunch leave the main thread**: the Tauri commands are
+  async and their blocking work runs on `spawn_blocking`, so IPC never freezes
+  the webview.
+- **Subagent transcripts follow the live tail** and refresh tool cards that
+  settle in place; a refused command shows its error once.
+
+### Changed
+
+- **Transcripts page backwards** (`zenagent/cli/rpc/ops_session.py`,
+  `desktop/src/state/transcriptWindow.ts`): the tail loads first (15 rows,
+  60 steady, grow 40), older pages use an absolute cursor (`limit`/`before`/
+  `total`/`hasMoreBefore`), and the subagent poll accepts `after`/`total`
+  while re-sending earlier rows that are still running. Identity merges keep
+  open cards stable; a shrinking page resyncs instead of blanking.
+- **Long surfaces load in bounded batches**: the palette mounts at most 50
+  session hits, sidebar projects expand 10 rows per page, Files/Memory reveal
+  200/100 rows at a time, and secondary surfaces are lazy chunks (15 in the
+  build).
+- **The dev server ignores `src-tauri/`** so a cargo rebuild no longer
+  reloads Vite.
+
+### Added
+
+- **A style-token guard** (`scripts/check-style-tokens.mjs`): scans every CSS
+  module for raw colour literals outside the token layer — every colour
+  family, alpha included — with unit tests and stale-baseline reporting.
+- **A browser dev shim** (`desktop/src/dev/bridge.ts`): one mock bridge shared
+  by e2e and `pnpm dev:browser`, so the shell can be exercised without Tauri.
+
+### Internal
+
+- Typed RPC client (`send<T>`, one bridge cast site), typed `LimitsResult`,
+  `relaunchApp()`; no new runtime dependencies.
+- Desktop version follows `pyproject.toml` through
+  `scripts/sync-desktop-version.py` as before.
+- The LOC budget allowlist re-registers what the review legitimately grew —
+  `ops_config` 940, `appStore` 1011, `messages` 1122, and the new
+  `dev/bridge` 924 — per the gate's grow-only re-registration rule.
+
+### Architecture diagrams
+
+- **No nodes or edges added or removed.** `cli/rpc` gains shared error frames
+  and transcript paging (tooltip only); the new desktop modules (`windowShow`,
+  `transcriptWindow`, `subagentPage`, `dev/bridge`) sit inside the existing
+  `desktop` grouping and do not warrant new module-level nodes. `errors.py`
+  belongs to the `cli/rpc` node.
+
 ## v0.10.1 — 2026-11-09
 
 **[limits]: the tunable budgets, and a settings page for them.** The prompt /
