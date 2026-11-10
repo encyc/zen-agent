@@ -44,6 +44,7 @@ async def _run(args) -> int:
         explicit=args.mode, assume_yes=args.yes, read_only=args.read_only
     )
     options = RuntimeOptions(
+        root=Path.cwd(),
         model_id=args.model,
         thinking=args.thinking,
         resume=args.resume,

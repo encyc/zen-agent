@@ -63,9 +63,9 @@ async def test_relocate_rpc_refuses_the_project_that_is_open(
     seed_project(open_repo, sessions=0)
     monkeypatch.setattr(
         "zenagent.agent.session.sessions_dir",
-        lambda: project.project_sessions_dir(root=open_repo),
+        lambda *, root=None: project.project_sessions_dir(root=root),
     )
-    runtime = await runtime_factory()
+    runtime = await runtime_factory(root=open_repo)
     open_root = project.project_root_for_sessions_dir(runtime.session.path.parent)
     assert open_root == str(open_repo.resolve())
     new = make_repo(tmp_path / "new-name")
@@ -99,3 +99,36 @@ async def test_relocate_rpc_rejects_missing_arguments(runtime_factory):
 
     assert result["type"] == "error"
     assert "to" in result["message"]
+
+
+async def test_file_ops_are_relative_to_the_runtime_cwd(runtime_factory, tmp_path):
+    root = make_repo(tmp_path / "project")
+    (root / "note.txt").write_text("hello\n", encoding="utf-8")
+    runtime = await runtime_factory(root=root)
+    writes: list[str] = []
+    server = build_server(runtime, writes)
+
+    assert server.cwd == root.resolve()
+    assert server.root == root.resolve()
+
+    result = await call(server, writes, {"type": "fs_read", "path": "note.txt"})
+
+    assert result["ok"] is True
+    assert result["file"]["text"] == "hello\n"
+
+
+async def test_skill_discovery_uses_the_runtime_root(runtime_factory, tmp_path):
+    root = make_repo(tmp_path / "project")
+    skill = root / ".zenagent" / "skills" / "demo" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text(
+        "---\nname: demo\ndescription: demo skill\n---\n\nbody\n",
+        encoding="utf-8",
+    )
+    runtime = await runtime_factory(root=root)
+    server = build_server(runtime, [])
+
+    roots, skills, _warnings = server._discover()
+
+    assert roots[0] == root / ".zenagent" / "skills"
+    assert "demo" in [item.name for item in skills]

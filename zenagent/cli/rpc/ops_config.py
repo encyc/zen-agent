@@ -235,7 +235,7 @@ class ConfigOps:
     # -- skills -------------------------------------------------------------
 
     def _discover(self):
-        roots = default_skill_roots(Path.cwd())
+        roots = default_skill_roots(self.root)
         skills, warnings = discover_skills(roots)
         return roots, skills, warnings
 
@@ -366,7 +366,7 @@ class ConfigOps:
     # -- mcp ----------------------------------------------------------------
 
     def _mcp_rows(self) -> list[dict]:
-        global_layer, project_layer = load_mcp_layers(cwd=Path.cwd())
+        global_layer, project_layer = load_mcp_layers(cwd=self.root)
         statuses = {}
         if self.runtime is not None and getattr(self.runtime, "mcp", None) is not None:
             statuses = {item.name: item for item in self.runtime.mcp.status()}
@@ -429,7 +429,7 @@ class ConfigOps:
         return dict(value)
 
     def _effective_mcp(self, name: str):
-        global_layer, project_layer = load_mcp_layers(cwd=Path.cwd())
+        global_layer, project_layer = load_mcp_layers(cwd=self.root)
         return project_layer.get(name) or global_layer.get(name)
 
     # -- limits (prompt/loop budgets) ---------------------------------------
@@ -482,7 +482,7 @@ class ConfigOps:
             "id": request_id,
             "ok": True,
             "path": str(global_config_path()),
-            "project_path": str(project_config_path(Path.cwd())),
+            "project_path": str(project_config_path(self.root)),
             "groups": list(GROUP_ORDER),
             "knobs": knobs,
         }
@@ -617,7 +617,7 @@ class ConfigOps:
                     env=self._string_map(request.get("env"), "env"),
                     headers=self._string_map(request.get("headers"), "headers"),
                     layer=layer,
-                    cwd=Path.cwd(),
+                    cwd=self.root,
                 )
             except (ValueError, OSError) as exc:
                 self._send(
@@ -635,7 +635,7 @@ class ConfigOps:
 
         if op == "remove":
             try:
-                remove_mcp_server(name, layer=self._mcp_layer(request), cwd=Path.cwd())
+                remove_mcp_server(name, layer=self._mcp_layer(request), cwd=self.root)
             except (ValueError, OSError) as exc:
                 self._send(
                     failure_frame(

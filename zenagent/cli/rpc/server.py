@@ -266,6 +266,16 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
             raise RuntimeError("RpcServer needs an agent or a runtime")
         return self._agent
 
+    @property
+    def root(self) -> Path:
+        """Project identity root for this server's runtime."""
+        return self.runtime.root if self.runtime is not None else Path.cwd()
+
+    @property
+    def cwd(self) -> Path:
+        """Working directory for relative file operations."""
+        return self.runtime.cwd if self.runtime is not None else Path.cwd()
+
     def _send(self, payload: dict) -> None:
         if self._write_line is not None:
             self._write_line(json.dumps(payload, ensure_ascii=False, default=str))
@@ -596,7 +606,7 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
                     "type": "result",
                     "id": request_id,
                     "ok": True,
-                    "worktree": worktree_overview(Path.cwd()),
+                    "worktree": worktree_overview(self.cwd),
                 }
             )
             return True
