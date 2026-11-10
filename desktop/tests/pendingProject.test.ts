@@ -18,3 +18,28 @@ test('only the active project and untagged entries render', () => {
     ['legacy', 'p', 'q'],
   )
 })
+
+test('a sibling session of the same project stays queued until it is on screen', () => {
+  const queue = [
+    { requestId: 'legacy' },
+    { requestId: 's1', project: '/work/p', session: '/work/p/s1.jsonl' },
+  ]
+
+  assert.deepEqual(
+    pendingForProject(queue, '/work/p', '/work/p/s1.jsonl').map(
+      (entry) => entry.requestId,
+    ),
+    ['legacy', 's1'],
+  )
+  assert.deepEqual(
+    pendingForProject(queue, '/work/p', '/work/p/s2.jsonl').map(
+      (entry) => entry.requestId,
+    ),
+    ['legacy'],
+  )
+  // Without a known active session every session of the project renders.
+  assert.deepEqual(
+    pendingForProject(queue, '/work/p', null).map((entry) => entry.requestId),
+    ['legacy', 's1'],
+  )
+})

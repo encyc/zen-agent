@@ -81,3 +81,15 @@ export function frameBelongsTo(frame: object, active: string | null): boolean {
   const tag = (frame as { project?: unknown }).project
   return typeof tag !== 'string' || tag === '' || tag === active
 }
+
+/** Whether a frame belongs to the session on screen. One project may keep
+ * several sessions running; a background session's events and prompt results
+ * must not paint into (or settle usage rows in) the visible pane. */
+export function frameSessionBelongsTo(
+  frame: object,
+  active: string | null,
+): boolean {
+  if (active === null || active === '') return true
+  const tag = (frame as { session?: unknown }).session
+  return typeof tag !== 'string' || tag === '' || tag === active
+}

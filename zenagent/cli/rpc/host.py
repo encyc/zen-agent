@@ -1,9 +1,12 @@
-"""The RPC host: one stdio loop over a registry of resident project slots.
+"""The RPC host: one stdio loop over a registry of resident slots.
 
 A request may name its project root. Without one, the active slot serves it,
 so a v2 client that never learns about slots keeps working exactly as before.
-The host owns only routing, the project ops and slot lifetime; every other
-request is forwarded verbatim to the target slot's server.
+A project may hold several slots while different sessions run in parallel:
+the registry is keyed per slot, and each project remembers which of its
+slots its requests should land on. The host owns routing, the project ops
+and slot lifetime; every other request is forwarded verbatim to the target
+slot's server.
 """
 
 from __future__ import annotations
@@ -12,6 +15,7 @@ import json
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import replace
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from zenagent.app.bootstrap import prepare
@@ -53,12 +57,16 @@ class RpcHost:
         self._approval_timeout_s = approval_timeout_s
         self._warn = warn
         self._slots: OrderedDict[str, RuntimeSlot] = OrderedDict()
+        #: The slot plain requests land on (the last activated one).
         self._active: RuntimeSlot | None = None
+        #: Per project, the slot its own requests land on.
+        self._active_by_project: dict[str, RuntimeSlot] = {}
         self._closed = False
         self._terminal = TerminalSession(self._send)
         if initial is not None:
             self._slots[initial.key] = initial
             self._active = initial
+            self._active_by_project[initial.project_key] = initial
 
     # -- introspection ------------------------------------------------------
 
@@ -126,6 +134,9 @@ class RpcHost:
             return True
         if kind == "terminal":
             self._terminal_op(request, request_id)
+            return True
+        if kind == "session" and request.get("op") == "resume":
+            await self._session_resume(request, request_id)
             return True
 
         slot = self._slot_for(request, prefer_id=kind in ("approval", "ask"))
@@ -217,8 +228,9 @@ class RpcHost:
 
         A named project never falls back to the active slot: running a prompt
         in the wrong project is worse than a ``no_project`` refusal. An
-        approval/ask id prefix outranks the project field so a pending run in
-        a background project still resolves after the person switched away.
+        approval/ask id prefix (which names one slot, not just its project)
+        outranks the project field so a pending run in a background slot still
+        resolves after the person switched away.
         """
         id_key = self._id_key(request)
         if prefer_id and id_key is not None:
@@ -226,10 +238,11 @@ class RpcHost:
         project = request.get("project")
         if isinstance(project, str) and project.strip():
             key = project_key(find_project_root(project))
-            slot = self._slots.get(key)
-            if slot is not None:
-                self._slots.move_to_end(key)
-            return slot
+            slot = self._active_by_project.get(key)
+            if slot is not None and slot.key in self._slots:
+                self._slots.move_to_end(slot.key)
+                return slot
+            return None
         if id_key is not None:
             slot = self._slots.get(id_key)
             if slot is not None:
@@ -244,16 +257,115 @@ class RpcHost:
                 return value.split(":", 1)[0]
         return None
 
-    async def _ensure(self, root: str, *, resume=None) -> RuntimeSlot:
+    @staticmethod
+    def _session_path(slot: RuntimeSlot) -> str:
+        return str(Path(slot.runtime.session.path).expanduser().resolve())
+
+    def _holder(self, root: Path, session: str) -> RuntimeSlot | None:
+        """The resident slot already sitting on ``session`` in ``root``."""
+        for slot in self._slots.values():
+            if Path(slot.runtime.root).resolve() != root:
+                continue
+            if self._session_path(slot) == session:
+                return slot
+        return None
+
+    async def _open_project_slot(
+        self, root: str, *, resume=None, background: bool = False
+    ) -> RuntimeSlot:
+        """The slot a project open should land on.
+
+        An exact holder of the requested session is activated untouched (its
+        run keeps going), a busy slot on another session gets a sibling slot,
+        and an idle slot is reused in place — that last case is what the
+        desktop follows up with an explicit ``session resume``.
+        """
         target = find_project_root(root)
-        key = project_key(target)
-        slot = self._slots.get(key)
-        if slot is not None:
-            self._slots.move_to_end(key)
-            return slot
+        base = project_key(target)
+        resume_path = (
+            str(Path(resume).expanduser().resolve()) if resume is not None else None
+        )
+        if resume_path is not None:
+            holder = self._holder(target, resume_path)
+            if holder is not None:
+                self._activate(holder, background=background)
+                return holder
+        current = self._active_by_project.get(base)
+        if current is not None and current.key in self._slots:
+            same = resume_path is None or resume_path == self._session_path(current)
+            if same or not current.busy:
+                self._activate(current, background=background)
+                return current
+        slot = await self._spawn(target, resume=resume_path, base=base)
+        self._activate(slot, background=background)
+        return slot
+
+    async def _session_resume(self, request: dict, request_id) -> None:
+        """Resume without ever aborting a run that belongs to another session.
+
+        A resume into the session a slot already holds is a no-op; one into an
+        idle slot loads in place; one into a busy slot opens a sibling slot.
+        Only the in-place case reaches the server, where ``switch_session``
+        would abort — and there it has nothing to abort.
+        """
+        slot = self._slot_for(request)
+        target = request.get("path")
+        if slot is None:
+            self._send(
+                error_frame(request_id, "no project: open one first", "no_project")
+            )
+            return
+        if not isinstance(target, str) or not target.strip():
+            # Malformed: let the slot answer with its usual refusal.
+            await slot.server._handle_line(json.dumps(request))
+            return
+        root = Path(slot.runtime.root).resolve()
+        resume_path = str(Path(target).expanduser().resolve())
+        try:
+            holder = self._holder(root, resume_path)
+            if holder is not None:
+                if holder is not slot:
+                    self._activate(holder)
+                self._send(
+                    {"type": "result", "id": request_id, "ok": True, "path": resume_path}
+                )
+                return
+            if slot.busy:
+                slot = await self._spawn(root, resume=resume_path, base=slot.project_key)
+                self._activate(slot)
+                self._send(
+                    {"type": "result", "id": request_id, "ok": True, "path": resume_path}
+                )
+                return
+        except Refusal as exc:
+            self._send(
+                error_frame(
+                    request_id,
+                    str(exc),
+                    exc.code or "session_invalid",
+                    {"op": "resume"},
+                )
+            )
+            return
+        except Exception as exc:  # noqa: BLE001 - a bad session op is a result
+            self._send(
+                failure_frame(
+                    request_id,
+                    code="session_failed",
+                    message="session failed",
+                    exc=exc,
+                    op="resume",
+                )
+            )
+            return
+        await slot.server._handle_line(json.dumps(request))
+
+    async def _spawn(self, root: Path, *, resume, base: str) -> RuntimeSlot:
+        """Prepare and register one runtime slot for ``root``."""
         if len(self._slots) >= self._max_slots:
             await self._make_room()
-        options = replace(self._options, root=target, resume=resume)
+        key = self._free_key(base)
+        options = replace(self._options, root=root, resume=resume)
         prepared = await prepare(
             options,
             stream_fn=self._stream_fn,
@@ -266,17 +378,46 @@ class RpcHost:
             prepared,
             write_line=self._write_line,
             approval_timeout_s=self._approval_timeout_s,
+            key=key,
+            # The taiji fleet and lock are project-wide: only the project's
+            # first slot claims them.
+            claim_host=not any(
+                other.project_key == base for other in self._slots.values()
+            ),
         )
-        self._slots[slot.key] = slot
+        self._slots[key] = slot
         return slot
+
+    def _free_key(self, base: str) -> str:
+        if base not in self._slots:
+            return base
+        number = 2
+        while f"{base}#{number}" in self._slots:
+            number += 1
+        return f"{base}#{number}"
+
+    def _activate(self, slot: RuntimeSlot, *, background: bool = False) -> None:
+        self._slots.move_to_end(slot.key)
+        self._active_by_project[slot.project_key] = slot
+        if not background:
+            self._active = slot
 
     async def _make_room(self) -> None:
         if len(self._slots) < self._max_slots:
             return
         for key, slot in list(self._slots.items()):
-            if not slot.pinned:
-                await self._drop(key)
-                return
+            if slot.pinned:
+                continue
+            # Closing the taiji owner would take a sibling session's fleet
+            # with it; leave it for a project with a single slot.
+            if slot.claim.owned and any(
+                other.project_key == slot.project_key
+                for other in self._slots.values()
+                if other is not slot
+            ):
+                continue
+            await self._drop(key)
+            return
         raise Refusal(
             f"all {self._max_slots} project slots are busy", code="project_busy"
         )
@@ -289,6 +430,19 @@ class RpcHost:
             self._active = (
                 next(reversed(self._slots.values())) if self._slots else None
             )
+        if self._active_by_project.get(slot.project_key) is slot:
+            sibling = next(
+                (
+                    other
+                    for other in reversed(self._slots.values())
+                    if other.project_key == slot.project_key
+                ),
+                None,
+            )
+            if sibling is not None:
+                self._active_by_project[slot.project_key] = sibling
+            else:
+                self._active_by_project.pop(slot.project_key, None)
         await slot.close()
 
     # -- project ops --------------------------------------------------------
@@ -331,9 +485,11 @@ class RpcHost:
         root = request.get("root")
         if not isinstance(root, str) or not root.strip():
             raise Refusal("open needs root")
-        slot = await self._ensure(root, resume=request.get("resume"))
-        if not request.get("background"):
-            self._active = slot
+        slot = await self._open_project_slot(
+            root,
+            resume=request.get("resume"),
+            background=bool(request.get("background")),
+        )
         self._send(
             {
                 "type": "result",
@@ -352,18 +508,19 @@ class RpcHost:
         if not isinstance(root, str) or not root.strip():
             raise Refusal("close needs root")
         key = project_key(root)
-        slot = self._slots.get(key)
-        closed = slot is not None
-        if slot is not None:
-            if slot.pinned:
-                raise Refusal("project is busy", code="project_busy")
-            await self._drop(key)
+        targets = [
+            slot for slot in self._slots.values() if slot.project_key == key
+        ]
+        if any(slot.pinned for slot in targets):
+            raise Refusal("project is busy", code="project_busy")
+        for slot in targets:
+            await self._drop(slot.key)
         self._send(
             {
                 "type": "result",
                 "id": request_id,
                 "ok": True,
-                "closed": closed,
+                "closed": bool(targets),
                 "active": self._active.server.project if self._active else "",
                 "resident": self.resident,
             }
@@ -376,7 +533,10 @@ class RpcHost:
             raise Refusal("relocate needs from")
         if not isinstance(new_root, str) or not new_root.strip():
             raise Refusal("relocate needs to")
-        if project_key(old_root) in self._slots:
+        if any(
+            slot.project_key == project_key(old_root)
+            for slot in self._slots.values()
+        ):
             raise Refusal(
                 "cannot relocate an open project; close it first",
                 code="project_busy",
@@ -396,6 +556,7 @@ class RpcHost:
         slots = list(self._slots.values())
         self._slots.clear()
         self._active = None
+        self._active_by_project.clear()
         for slot in slots:
             await slot.close()
 

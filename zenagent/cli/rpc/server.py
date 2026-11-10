@@ -234,6 +234,7 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, PluginsOps, ConfigOps):
         commands=None,
         approval_timeout_s: float = _APPROVAL_TIMEOUT_S,
         project: str | None = None,
+        identity: str | None = None,
     ) -> None:
         self.runtime = runtime
         self._agent = agent
@@ -244,6 +245,9 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, PluginsOps, ConfigOps):
         self.approval_timeout_s = approval_timeout_s
         self.project = str(Path(project).resolve()) if project else ""
         self.project_key = project_key(self.project) if self.project else ""
+        # Two slots of one project must not share an id prefix: an answer is
+        # routed by that prefix, so it has to name the exact slot.
+        self.identity = identity or self.project_key
         self._read_line = read_line
         self._write_line = write_line
         self._task: asyncio.Task | None = None
@@ -286,6 +290,14 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, PluginsOps, ConfigOps):
             return
         if self.project:
             payload = {**payload, "project": self.project}
+            # Slot frames also carry their session: one project may keep
+            # several live sessions, and only the on-screen one may paint. A
+            # standalone v2 server has a single session, so its wire shape
+            # stays untouched.
+            session = getattr(self.runtime, "session", None) if self.runtime else None
+            path = getattr(session, "path", None)
+            if path:
+                payload = {**payload, "session": str(path)}
         self._write_line(json.dumps(payload, ensure_ascii=False, default=str))
 
     def _on_event(self, event: AgentEvent) -> None:
@@ -331,7 +343,7 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, PluginsOps, ConfigOps):
 
     async def confirm(self, tool_name: str, arguments: dict, verdict=None) -> str:
         """Ask the client to approve one tool call; ``deny`` on timeout."""
-        prefix = f"{self.project_key}:" if self.project_key else ""
+        prefix = f"{self.identity}:" if self.identity else ""
         request_id = f"{prefix}a{self._approval_seq}"
         self._approval_seq += 1
         try:
@@ -395,7 +407,7 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, PluginsOps, ConfigOps):
         serving lines while the client renders the card and answers with
         ``{"type": "ask", "answers": [["label", ...] | null, ...]}``.
         """
-        prefix = f"{self.project_key}:" if self.project_key else ""
+        prefix = f"{self.identity}:" if self.identity else ""
         request_id = f"{prefix}q{self._ask_seq}"
         self._ask_seq += 1
         self._send(

@@ -20,6 +20,8 @@ export interface ErrorFrame {
   message: string
   /** The slot that emitted the frame (host tag, absent on a v2 server). */
   project?: string
+  /** The session the slot was on when it emitted the frame. */
+  session?: string
   /** Machine-readable code (i18n on the client); optional for old servers. */
   code?: string
   params?: Record<string, string>
@@ -27,7 +29,7 @@ export interface ErrorFrame {
 
 export type ResultFrame =
   | ({ type: 'result'; id: string; ok: true } & Record<string, unknown>)
-  | { type: 'result'; id: string; ok: false; reason?: string; project?: string }
+  | { type: 'result'; id: string; ok: false; reason?: string; project?: string; session?: string }
   | ErrorFrame
 
 // ---- wire contract -------------------------------------------------------
@@ -799,6 +801,8 @@ export interface EventFrame {
   type: 'event'
   /** The slot that emitted the frame (host tag, absent on a v2 server). */
   project?: string
+  /** The session that slot was on when the event happened. */
+  session?: string
   event: AgentEventFrame
 }
 

@@ -5,7 +5,7 @@
 
 import { useState } from 'react'
 import { useAppStore } from '../../state/appStore'
-import { useAskStore, type PendingAsk } from '../../state/stores'
+import { useAskStore, useSessionStore, type PendingAsk } from '../../state/stores'
 import { pendingForProject } from '../../state/pendingProject'
 import {
   CUSTOM_OPTION,
@@ -27,7 +27,8 @@ import css from './AskCard.module.css'
 export function AskCard() {
   const queue = useAskStore((state) => state.queue)
   const project = useAppStore((state) => state.project)
-  const request = pendingForProject(queue, project)[0]
+  const session = useSessionStore((state) => state.currentPath)
+  const request = pendingForProject(queue, project, session)[0]
   if (request === undefined) return null
   // Keying by requestId keeps resolving/scroll state out of the next ask.
   return <AskCardBody key={request.requestId} request={request} />
@@ -37,7 +38,11 @@ function AskCardBody({ request }: { request: PendingAsk }) {
   const t = useT()
   const queue = useAskStore((state) => state.queue)
   const activeProject = useAppStore((state) => state.project)
-  const queued = Math.max(0, pendingForProject(queue, activeProject).length - 1)
+  const activeSession = useSessionStore((state) => state.currentPath)
+  const queued = Math.max(
+    0,
+    pendingForProject(queue, activeProject, activeSession).length - 1,
+  )
   const resolveAsk = useAppStore((state) => state.resolveAsk)
   const stored = useAskStore((state) => state.drafts[request.requestId])
   const setStored = useAskStore((state) => state.setDraft)

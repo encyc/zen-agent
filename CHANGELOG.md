@@ -5,6 +5,34 @@ matches the release tag; older history is in the repository tags and commits.
 
 ## Unreleased
 
+**Background-parallel sessions.** Switching sessions inside one project no longer
+aborts the run in flight: the old session keeps executing in its own resident
+slot while the new one can be read and prompted.
+
+### Sessions
+
+- **Per-session slots** (`zenagent/cli/rpc/host.py`): the registry is keyed per
+  slot (`<project_key>`, `<project_key>#2`, …) and each project remembers which
+  slot its plain requests land on. `session op=resume` is intercepted by the
+  host: an exact holder is activated untouched, a resume into the session the
+  slot already holds is a no-op, an idle slot loads in place, and a busy slot on
+  another session gets a sibling slot instead of aborting. Eviction never drops
+  the slot owning a project's taiji claim while siblings live, and
+  `project close` closes every slot of that project.
+- **Slot-unique request ids** (`server.py`, `slot.py`): approval/ask ids are
+  prefixed with the slot identity (`<slot key>:aN` / `qN`), so answering a
+  background card resolves the exact slot. Every frame also carries the
+  `session` it was produced for.
+- **Taiji and shared resources**: only a project's first slot claims the fleet
+  and host lock; the supervisor's chat target follows the taiji session and
+  unbinds when its slot closes. LSP clients join the background job manager in
+  being refcounted, so closing one slot does not stop a sibling's language
+  server.
+- **Desktop routing** (`frames.ts`, `pendingProject.ts`, `appStore.ts`): frames
+  and pending approvals/asks are filtered by both project and session, usage
+  deltas keep a per-session baseline, and `session resume` is sent directly so
+  a held session's run is never touched.
+
 ## v0.12.0 — 2026-11-10
 
 **One runtime per project, one host for all of them.** The runtime stops treating

@@ -230,12 +230,16 @@ async def test_teardown_releases_lsp_clients_and_background_jobs(
     """Both process-scoped resources are closed once, after the run."""
     monkeypatch.chdir(tmp_path)
     from zenagent.tools import jobs as jobs_module
+    from zenagent.tools import lsp as lsp_module
 
     calls: list[str] = []
     real_release_job_manager = jobs_module.release_job_manager
+    real_release_clients = lsp_module.release_clients
 
-    async def fake_shutdown_clients() -> None:
+    async def fake_release_clients() -> None:
         calls.append("lsp")
+        # Call through: the refcount is process-wide (see below).
+        await real_release_clients()
 
     async def fake_release_job_manager() -> None:
         calls.append("jobs")
@@ -243,7 +247,7 @@ async def test_teardown_releases_lsp_clients_and_background_jobs(
         # would leave the manager acquired for every later test.
         await real_release_job_manager()
 
-    monkeypatch.setattr("zenagent.app.runtime.shutdown_clients", fake_shutdown_clients)
+    monkeypatch.setattr("zenagent.app.runtime.release_clients", fake_release_clients)
     monkeypatch.setattr(
         "zenagent.tools.jobs.release_job_manager", fake_release_job_manager
     )
@@ -261,7 +265,7 @@ async def test_teardown_failure_does_not_fail_the_run(
     """A broken teardown is swallowed; the run's exit code still wins."""
     monkeypatch.chdir(tmp_path)
 
-    async def broken_shutdown_clients() -> None:
+    async def broken_release_clients() -> None:
         raise RuntimeError("lsp teardown exploded")
 
     async def broken_release_job_manager() -> None:
@@ -269,12 +273,13 @@ async def test_teardown_failure_does_not_fail_the_run(
 
     def no_acquire():
         # A teardown that never completes would otherwise leak the process-wide
-        # job-manager refcount into the next test.
+        # refcount into the next test.
         return None
 
     monkeypatch.setattr("zenagent.tools.jobs.acquire_job_manager", no_acquire)
+    monkeypatch.setattr("zenagent.tools.lsp.acquire_clients", no_acquire)
     monkeypatch.setattr(
-        "zenagent.app.runtime.shutdown_clients", broken_shutdown_clients
+        "zenagent.app.runtime.release_clients", broken_release_clients
     )
     monkeypatch.setattr(
         "zenagent.tools.jobs.release_job_manager", broken_release_job_manager

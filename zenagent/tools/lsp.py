@@ -317,6 +317,25 @@ class LspClient:
 
 _CLIENTS: dict[tuple[str, str], LspClient] = {}
 _LOCK = asyncio.Lock()
+#: Runtimes sharing the client cache; closing one must not stop a sibling's
+#: in-flight request, so only the last release shuts the clients down.
+_refs = 0
+
+
+def acquire_clients() -> None:
+    """Acquire the process-wide client cache for one Runtime."""
+    global _refs
+    _refs += 1
+
+
+async def release_clients() -> None:
+    """Release one Runtime's claim; the last release closes every client."""
+    global _refs
+    if _refs > 0:
+        _refs -= 1
+    if _refs > 0:
+        return
+    await shutdown_clients()
 
 
 async def _client_for(spec: ServerSpec, root: Path) -> LspClient:

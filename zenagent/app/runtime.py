@@ -88,7 +88,7 @@ from zenagent.templates import (
 from zenagent.tools import base_tools
 from zenagent.tools.ask import AskHandler, build_ask_tool
 from zenagent.tools.github import build_github_tool
-from zenagent.tools.lsp import build_lsp_tool, shutdown_clients
+from zenagent.tools.lsp import build_lsp_tool, release_clients
 from zenagent.tools.memory import build_memory_tool, build_memory_write_tool
 from zenagent.tools.task import build_task_tool
 from zenagent.tools.todo import (
@@ -187,6 +187,8 @@ class Runtime:
         self.artifact_sink: Callable[[str, str], Path | None] | None = None
         #: Whether bootstrap acquired a background-job-manager reference.
         self._jobs_acquired = False
+        #: Whether bootstrap acquired an LSP-client-cache reference.
+        self._lsp_acquired = False
         #: Session files this process opened fresh (nothing was resumed). An
         #: unused one is removed at close instead of left in the listings.
         self._created_sessions: set[Path] = set()
@@ -410,6 +412,12 @@ class Runtime:
 
         runtime._jobs_acquired = True
         acquire_job_manager()
+        # Same refcount for the shared LSP clients: several resident slots of
+        # one host may sit on the same root and share one language server.
+        from zenagent.tools.lsp import acquire_clients
+
+        runtime._lsp_acquired = True
+        acquire_clients()
         assembly = None
         if options.tools is None:
             assembly = await plugin_wiring.start_plugins(runtime, options)
@@ -928,7 +936,11 @@ class Runtime:
         if self.tracer is not None:
             tracer, self.tracer = self.tracer, None
             tracer.close()
-        await shutdown_clients()
+        # Refcounted like the job manager: closing a sibling slot must not stop a
+        # live runtime's language-server clients (last close wins).
+        if self._lsp_acquired:
+            self._lsp_acquired = False
+            await release_clients()
         if self.mcp is not None:
             manager, self.mcp = self.mcp, None
             await manager.close()
@@ -1013,6 +1025,7 @@ class Runtime:
         messages = session.load()
         self.agent.replace_messages(messages)
         self.session = session
+        self._sync_taiji_chat()
         if self.todo_tool is not None:
             if carried:
                 save_todo_phases(session.path, carried)
@@ -1025,3 +1038,24 @@ class Runtime:
         # The tool set is session-gated (taiji tools ride the taiji session),
         # so a switch must recompose, not just rebind.
         self._recompose()
+
+    def _sync_taiji_chat(self) -> None:
+        """Point the shared fleet's chat at this runtime only while it hosts taiji.
+
+        The supervisor is per project, but milestone injection needs a target
+        chat: with several sessions resident, following the runtime that owns
+        the taiji session is what keeps worker reports in the Router's pane.
+        """
+        if getattr(self, "taiji_chat", None) is None:
+            return
+        from zenagent.app.taiji.supervisor import existing_taiji
+
+        supervisor = existing_taiji(self.root)
+        if supervisor is None:
+            return
+        if is_taiji_session(self.session.path):
+            supervisor.chat = self.taiji_chat
+            supervisor.mode_of = lambda: self.mode
+        elif supervisor.chat is self.taiji_chat:
+            supervisor.chat = None
+            supervisor.mode_of = lambda: "ask"
