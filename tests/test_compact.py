@@ -90,9 +90,11 @@ def live_session(agent: Agent, root) -> Session:
 
 @pytest.fixture(autouse=True)
 def isolated_sessions(tmp_path, monkeypatch):
-    root = tmp_path / "sessions"
-    monkeypatch.setattr(session_module, "sessions_dir", lambda: root)
-    return root
+    sessions_root = tmp_path / "sessions"
+    monkeypatch.setattr(
+        session_module, "sessions_dir", lambda *, root=None: sessions_root
+    )
+    return sessions_root
 
 
 async def test_compact_appends_the_summary_to_the_same_session(isolated_sessions):

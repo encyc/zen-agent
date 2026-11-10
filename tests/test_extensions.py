@@ -98,7 +98,9 @@ async def test_extension_command_runs_via_repl(tmp_path, monkeypatch):
         lambda *args, **kwargs: UserConfig(),
     )
     monkeypatch.setattr(
-        session_module, "sessions_dir", lambda: tmp_path / "sessions"
+        session_module,
+        "sessions_dir",
+        lambda *, root=None: tmp_path / "sessions",
     )
 
     async def stream(model_, messages, tools, options):

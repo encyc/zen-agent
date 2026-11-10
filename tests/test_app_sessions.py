@@ -110,7 +110,9 @@ def _enter_project(base: Path, monkeypatch, name: str) -> Path:
 def _rebind_sessions_to_projects(monkeypatch) -> None:
     """Undo the app_env fixture's flat sessions dir: use per-project storage."""
     monkeypatch.setattr(
-        session_module, "sessions_dir", lambda: project.project_sessions_dir()
+        session_module,
+        "sessions_dir",
+        lambda *, root=None: project.project_sessions_dir(root=root),
     )
 
 
@@ -132,7 +134,7 @@ def _legacy_session(
 
 def _manager_without_runtime() -> SessionManager:
     """``adopt`` never touches the Runtime; the CLI uses it with no API key."""
-    return SessionManager(SimpleNamespace())
+    return SessionManager(SimpleNamespace(root=None))
 
 
 def test_adopt_legacy_session_moves_file_and_title(tmp_path, monkeypatch):
@@ -240,10 +242,11 @@ async def test_renaming_an_unsaved_session_materializes_it(session_runtime):
 
 
 async def test_entries_defaults_to_the_current_project(
-    session_runtime, tmp_path, monkeypatch
+    runtime_factory, tmp_path, monkeypatch
 ):
-    _enter_project(tmp_path, monkeypatch, "alpha")
+    alpha = _enter_project(tmp_path, monkeypatch, "alpha")
     _rebind_sessions_to_projects(monkeypatch)
+    session_runtime = await runtime_factory(root=alpha)
     manager = SessionManager(session_runtime)
     await manager.new()
     await session_runtime.agent.prompt("alpha chat")
@@ -265,10 +268,11 @@ async def test_entries_defaults_to_the_current_project(
 
 
 async def test_entries_all_view_labels_each_project(
-    session_runtime, tmp_path, monkeypatch
+    runtime_factory, tmp_path, monkeypatch
 ):
-    _enter_project(tmp_path, monkeypatch, "alpha")
+    alpha = _enter_project(tmp_path, monkeypatch, "alpha")
     _rebind_sessions_to_projects(monkeypatch)
+    session_runtime = await runtime_factory(root=alpha)
     manager = SessionManager(session_runtime)
     current = await manager.new()
     await session_runtime.agent.prompt("alpha chat")

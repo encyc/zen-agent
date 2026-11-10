@@ -561,10 +561,14 @@ class Runtime:
 
     def _open_session(self, resume: Path | str | None) -> Session:
         if resume is not None:
-            path = latest_session() if resume == "latest" else Path(resume)
+            path = (
+                latest_session(root=self.root)
+                if resume == "latest"
+                else Path(resume)
+            )
             if path is not None and Path(path).is_file():
                 self._note_session_scope(Path(path))
-                return records.open_session(Path(path))
+                return records.open_session(Path(path), cwd=self.root)
             self.warnings.append(t("runtime.no_resume", resume=resume))
         self._touch_project()
         return self.use_new_session()
@@ -578,7 +582,9 @@ class Runtime:
         ``(empty)`` transcript behind; :meth:`close` still cleans up for
         frontends that materialized one without messaging.
         """
-        self.session = records.open_session(unique_session_path(), lazy=True)
+        self.session = records.open_session(
+            unique_session_path(root=self.root), lazy=True, cwd=self.root
+        )
         # The project's session directory is cheap and keeps exports, task
         # sidecars and journals working before the first message; the file
         # itself stays absent until there is something to write.
@@ -1002,7 +1008,7 @@ class Runtime:
         await self.agent.wait_for_idle()
         if path is not None:
             self._note_session_scope(Path(path))
-            session = records.open_session(path)
+            session = records.open_session(path, cwd=self.root)
         else:
             self._touch_project()
             session = self.use_new_session()

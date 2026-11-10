@@ -490,7 +490,9 @@ class ChatController:
             return None
         self.drop_pending()
         old_path = self.runtime.session.path
-        prepared = prepare_retry(self.runtime.agent, self.runtime.session)
+        prepared = prepare_retry(
+            self.runtime.agent, self.runtime.session, root=self.runtime.root
+        )
         if prepared is None:
             return None
         text, new_session = prepared

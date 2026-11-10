@@ -19,6 +19,7 @@ from zenagent.agent.session import (
     session_title,
     set_session_pin,
     set_session_title,
+    unique_session_path,
 )
 from zenagent.app import records
 from zenagent.types import (
@@ -48,9 +49,11 @@ def assistant(text: str, timestamp: int = 2) -> AssistantMessage:
 
 @pytest.fixture
 def isolated_sessions(tmp_path, monkeypatch):
-    root = tmp_path / "sessions"
-    monkeypatch.setattr(session_module, "sessions_dir", lambda: root)
-    return root
+    sessions_root = tmp_path / "sessions"
+    monkeypatch.setattr(
+        session_module, "sessions_dir", lambda *, root=None: sessions_root
+    )
+    return sessions_root
 
 
 async def test_append_then_load_round_trips( tmp_path ):
@@ -469,7 +472,7 @@ def test_rewrite_does_not_inherit_the_source_title(isolated_sessions):
 
 
 def test_unique_session_path_never_reuses_an_existing_file(tmp_path, monkeypatch):
-    monkeypatch.setattr(session_module, "sessions_dir", lambda: tmp_path)
+    monkeypatch.setattr(session_module, "sessions_dir", lambda *, root=None: tmp_path)
     first = session_module.unique_session_path()
     first.touch()
     second = session_module.unique_session_path()
@@ -1154,3 +1157,28 @@ async def test_meta_and_message_writes_never_tear(tmp_path):
     payloads = [json.loads(line) for line in lines]  # torn lines raise here
     assert sum(1 for p in payloads if p.get("type") == "tool_end") == 50
     assert sum(1 for p in payloads if str(p.get("content", "")).startswith("m-")) == 50
+
+
+def test_session_helpers_accept_an_explicit_root(tmp_path):
+    from zenagent import project
+
+    root = tmp_path / "project"
+    root.mkdir()
+
+    path = unique_session_path(root=root)
+
+    assert path.parent == project.project_sessions_dir(root=root)
+    assert latest_session(root=root) is None
+
+
+def test_a_new_session_header_records_the_explicit_root(tmp_path):
+    import json
+
+    root = tmp_path / "project"
+    root.mkdir()
+    session = Session(unique_session_path(root=root), cwd=root)
+
+    session.materialize()
+
+    header = json.loads(session.path.read_text(encoding="utf-8").splitlines()[0])
+    assert header["cwd"] == str(root)

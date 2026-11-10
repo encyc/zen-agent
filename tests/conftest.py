@@ -17,7 +17,8 @@ def app_env(tmp_path, monkeypatch):
         "zenagent.app.runtime.load_user_config", lambda *args, **kwargs: UserConfig(default_model="deepseek-flash")
     )
     monkeypatch.setattr(
-        "zenagent.agent.session.sessions_dir", lambda: tmp_path / "sessions"
+        "zenagent.agent.session.sessions_dir",
+        lambda *, root=None: tmp_path / "sessions",
     )
     return tmp_path
 

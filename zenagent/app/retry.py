@@ -7,6 +7,8 @@ session file, and hand the prompt text back so the caller can run it again.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from zenagent.agent import Agent
 from zenagent.agent.session import Session, truncate_last_turn
 from zenagent.app import records
@@ -29,7 +31,9 @@ def user_text(message: UserMessage) -> str:
     return "\n".join(parts)
 
 
-def prepare_retry(agent: Agent, session: Session) -> tuple[str, Session] | None:
+def prepare_retry(
+    agent: Agent, session: Session, *, root: Path | None = None
+) -> tuple[str, Session] | None:
     """Prepare one retry; ``None`` when there is no answered turn to replay.
 
     Mutates ``agent`` (the transcript is truncated) and returns the new session
@@ -56,6 +60,6 @@ def prepare_retry(agent: Agent, session: Session) -> tuple[str, Session] | None:
     truncated = truncate_last_turn(messages)
     agent.replace_messages(truncated)
     new_path = Session(session.path).rewrite(
-        truncated, keep=records.keep_for_rewrite()
+        truncated, keep=records.keep_for_rewrite(), root=root
     )
     return text, records.open_session(new_path)
