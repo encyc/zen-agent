@@ -558,3 +558,119 @@ html[data-platform='darwin'] .brand {
   background: var(--dsw-alias-bg-layer-2);
   box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
 }
+
+/* Zen roster: the project's single router plus its focused workers. */
+.zenToggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.zenToggle:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.zenToggle[data-zen-active] {
+  color: var(--dsw-alias-brand-text);
+  background: var(--dsw-alias-button-ghost-active-fill);
+}
+
+.zenRoster {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 6px;
+}
+
+.zenRouterRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--dsw-alias-button-ghost-active-fill);
+}
+
+.zenRouterBadge {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--dsw-alias-brand-text);
+  text-transform: uppercase;
+}
+
+.zenWorkersLabel {
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+  padding: 2px 8px 0;
+}
+
+.zenWorkerList {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.zenWorkerRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+}
+
+.zenWorkerRow:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.zenDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--dsw-alias-label-tertiary);
+}
+
+.zenDot[data-tone='active'] {
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.zenDot[data-tone='blocked'] {
+  background: var(--dsw-alias-state-error-primary);
+}
+
+.zenWorkerTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.zenFocus {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+  min-width: 0;
+}
+
+.zenStatus {
+  margin-left: auto;
+  flex: none;
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+}
