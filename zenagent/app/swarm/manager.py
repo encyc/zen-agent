@@ -114,15 +114,15 @@ class SwarmManager:
 
         roles, warnings = discover_roles()
         self.warnings.extend(warnings)
-        self.role_ids = {role.id for role in roles}
-        self.router = Router(self.store, self.role_ids)
         for role in roles:
-            await self._build_agent(role)
+            await self._try_build_agent(role)
+        self.role_ids = set(self.agents)
+        self.router = Router(self.store, self.role_ids)
         self._started = True
         self._loop_task = asyncio.create_task(self._schedule())
 
     async def close(self) -> None:
-        if not self._started:
+        if not self._started and not self.agents and self._loop_task is None:
             return
         self._stopping = True
         self._wake.set()
@@ -345,23 +345,31 @@ class SwarmManager:
 
     async def reload(self) -> list[str]:
         roles, warnings = discover_roles()
+        # A reload is the authoritative re-read: drop stale discovery/build
+        # warnings, keeping room-log warnings and healthy runtimes' diagnostics.
+        self.warnings = list(self.store.warnings)
         self.warnings.extend(warnings)
+        for agent in self.agents.values():
+            self.warnings.extend(agent.runtime.warnings)
         notes = list(warnings)
         incoming = {role.id: role for role in roles}
-        self.role_ids = set(incoming)
-        if self.router is not None:
-            self.router.role_ids = set(self.role_ids)
         for role_id in set(self.agents) - set(incoming):
             await self.delete_role(role_id)
             notes.append(f"removed {role_id}")
         for role_id, role in incoming.items():
             existing = self.agents.get(role_id)
             if existing is None:
-                await self._build_agent(role)
-                notes.append(f"added {role_id}")
+                added = await self._try_build_agent(role)
+                if added is not None:
+                    notes.append(f"added {role_id}")
+                else:
+                    notes.append(f"skipped {role_id}")
             elif role_signature(existing.role) != role_signature(role):
                 await self._apply_role(role)
                 notes.append(f"updated {role_id}")
+        self.role_ids = set(self.agents)
+        if self.router is not None:
+            self.router.role_ids = set(self.role_ids)
         return notes
 
     # -- approvals ----------------------------------------------------------
@@ -380,6 +388,19 @@ class SwarmManager:
         return False
 
     # -- runtime assembly ---------------------------------------------------
+
+    async def _try_build_agent(
+        self, role: RoleManifest, *, fresh_session: bool = False
+    ) -> SwarmAgent | None:
+        try:
+            return await self._build_agent(role, fresh_session=fresh_session)
+        except Exception as exc:  # noqa: BLE001 - one broken role must not kill the swarm
+            detail = f"{type(exc).__name__}: {exc}"
+            self.warnings.append(f"role {role.id}: {detail}")
+            self.agents.pop(role.id, None)
+            self.runners.pop(role.id, None)
+            self._system_note(f"Role @{role.id} is unavailable: {detail}")
+            return None
 
     async def _build_agent(
         self, role: RoleManifest, *, fresh_session: bool = False
@@ -401,6 +422,7 @@ class SwarmManager:
             mcp=False,
             skills=False,
             templates=False,
+            plugins=False,
             context_files=role.inherit_project,
             tools_allow=role.tools,
             extra_tools=[
@@ -422,12 +444,16 @@ class SwarmManager:
             gate=broker,
             allow_missing_key=True,
         )
-        self.warnings.extend(runtime.warnings)
-        await self._attach_role_tools(
-            runtime, role, retry_interval_s=options.mcp_retry_interval_s
-        )
-        runtime.ask_handler = self._ask_handler(role.id)
-        runtime._recompose()
+        try:
+            self.warnings.extend(runtime.warnings)
+            await self._attach_role_tools(
+                runtime, role, retry_interval_s=options.mcp_retry_interval_s
+            )
+            runtime.ask_handler = self._ask_handler(role.id)
+            runtime._recompose()
+        except Exception:
+            await runtime.close()
+            raise
 
         runner = TaskRunner(
             store=self.store,
@@ -435,8 +461,9 @@ class SwarmManager:
             session=runtime.session,
             role=role,
             post_message=lambda text, kind, role_id=role.id: self._post_from(
-                role_id, text, kind
+                role_id, text, kind, admit=False
             ),
+            admit_message=self._admit,
         )
         agent = SwarmAgent(
             role=role,
@@ -479,17 +506,27 @@ class SwarmManager:
         *,
         role: RoleManifest,
         fresh_session: bool = False,
-    ) -> SwarmAgent:
+    ) -> SwarmAgent | None:
         old = self.agents.pop(role_id, None)
         self.runners.pop(role_id, None)
         if old is not None:
             await old.runtime.close()
-        return await self._build_agent(role, fresh_session=fresh_session)
+        built = await self._try_build_agent(role, fresh_session=fresh_session)
+        if built is None:
+            self.role_ids.discard(role_id)
+            if self.router is not None:
+                self.router.role_ids = set(self.role_ids)
+        return built
 
     async def _apply_role(self, role: RoleManifest) -> None:
         agent = self.agents.get(role.id)
         if agent is None:
-            await self._build_agent(role)
+            if await self._try_build_agent(role) is not None:
+                self.role_ids.add(role.id)
+            else:
+                self.role_ids.discard(role.id)
+            if self.router is not None:
+                self.router.role_ids = set(self.role_ids)
             return
         if agent.state == "running":
             agent.pending_apply = role
@@ -587,6 +624,14 @@ class SwarmManager:
 
     def _admit(self, message: RoomMessage) -> list[TaskRecord]:
         assert self.router is not None
+        if message.author_kind == "agent" and "you" in message.mentions:
+            self._write(
+                {
+                    "type": "swarm_notice",
+                    "agent": message.author_id,
+                    "text": f"@{message.author_id}: {message.text[:280]}",
+                }
+            )
         admission = self.router.admit(message, inbox_sizes=self._inbox_sizes())
         for role_id, reason in admission.rejected:
             self._system_note(f"Delegation to @{role_id} rejected: {reason}")
@@ -603,7 +648,9 @@ class SwarmManager:
             sizes[task.assignee] = sizes.get(task.assignee, 0) + 1
         return sizes
 
-    def _post_from(self, role_id: str, text: str, kind: str = "agent") -> RoomMessage:
+    def _post_from(
+        self, role_id: str, text: str, kind: str = "agent", *, admit: bool = True
+    ) -> RoomMessage:
         agent = self.agents.get(role_id)
         current = agent.current_task if agent is not None else None
         source = self.store.tasks.get(current) if current else None
@@ -619,7 +666,7 @@ class SwarmManager:
         )
         self.store.append_message(message)
         self._emit_message(message)
-        if kind == "agent":
+        if kind == "agent" and admit:
             self._admit(message)
         return message
 

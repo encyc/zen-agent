@@ -33,12 +33,14 @@ class TaskRunner:
         session: Session,
         role: RoleManifest,
         post_message: Callable[[str, str], RoomMessage],
+        admit_message: Callable[[RoomMessage], object],
     ) -> None:
         self.store = store
         self.agent = agent
         self.session = session
         self.role = role
         self.post_message = post_message
+        self.admit_message = admit_message
         #: Terminal outcome the manager pins before aborting a run it owns
         #: (role removal, approval timeout, shutdown). ``None`` = user cancel.
         self.abort_outcome: tuple[str, str] | None = None
@@ -63,6 +65,10 @@ class TaskRunner:
             text = _final_text(new_messages) or "(no output)"
             posted = self.post_message(text, "agent")
             updated = replace(updated, state="done", result_message_id=posted.id)
+            # Record this run's cost before admitting its mentions: the router
+            # gates on the chain aggregate, which the terminal append updates.
+            self.store.append_task(updated)
+            self.admit_message(posted)
         elif termination == "aborted":
             state, reason = self.abort_outcome or ("cancelled", "aborted")
             if state == "cancelled":
@@ -70,11 +76,11 @@ class TaskRunner:
             else:
                 self.post_message(f"Task {task.id} failed: {reason}", "system")
             updated = replace(updated, state=state, reason=reason)
+            self.store.append_task(updated)
         else:
             self.post_message(f"Task {task.id} failed: {termination}", "system")
             updated = replace(updated, state="failed", reason=termination)
-
-        self.store.append_task(updated)
+            self.store.append_task(updated)
         await maybe_auto_compact(
             self.agent, self.session, print_fn=lambda _message: None
         )

@@ -42,6 +42,7 @@ class SwarmOps:
                     "agents": manager.agents_state(),
                     "tasks": manager.tasks(),
                     "messages": manager.messages(request.get("since")),
+                    "warnings": list(manager.warnings),
                 }
             elif op == "post":
                 text = request.get("text")
@@ -73,7 +74,11 @@ class SwarmOps:
                 payload = await self._swarm_roles(manager, request)
             elif op == "reload":
                 notes = await manager.reload()
-                payload = {"roles": manager.roles(), "notes": notes}
+                payload = {
+                    "roles": manager.roles(),
+                    "notes": notes,
+                    "warnings": list(manager.warnings),
+                }
             else:
                 raise Refusal(f"unknown swarm op: {op}")
             self._send({"type": "result", "id": request_id, "ok": True, **payload})
@@ -109,7 +114,7 @@ class SwarmOps:
     async def _swarm_roles(self, manager: SwarmManager, request: dict) -> dict:
         action = request.get("action") or "list"
         if action == "list":
-            return {"roles": manager.roles()}
+            return {"roles": manager.roles(), "warnings": list(manager.warnings)}
         # `id` is the request-correlation id every RPC carries; the role's own
         # id travels as `roleId` so creating a role cannot shadow the answer.
         role_id = _need(request, "roleId")
@@ -122,7 +127,7 @@ class SwarmOps:
             await manager.delete_role(role_id)
         else:
             raise Refusal(f"unknown roles action: {action}")
-        return {"roles": manager.roles()}
+        return {"roles": manager.roles(), "warnings": list(manager.warnings)}
 
     def _resolve_swarm_prompt(self, request: dict, kind: str) -> bool:
         """Answer an approval/ask whose id names the swarm, not a slot."""

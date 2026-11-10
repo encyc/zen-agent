@@ -22,6 +22,14 @@ from zenagent.app.swarm.roles import (
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 
 
+def _read_manifest(path) -> dict:
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
 def write_role(role_id: str, manifest: dict) -> RoleManifest:
     if not _ID_RE.fullmatch(role_id):
         raise ValueError(f"invalid role id {role_id!r}")
@@ -30,8 +38,17 @@ def write_role(role_id: str, manifest: dict) -> RoleManifest:
     payload["id"] = role_id
     role_dir = agents_root() / role_id
     role_dir.mkdir(parents=True, exist_ok=True)
-    (role_dir / "manifest.json").write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    manifest_path = role_dir / "manifest.json"
+    # Settings sends only the fields it shows; everything else in the file
+    # (skills, plugins, MCP servers, inheritProject) must survive an edit.
+    merged = _read_manifest(manifest_path)
+    for key, value in payload.items():
+        if value is None:
+            merged.pop(key, None)
+        else:
+            merged[key] = value
+    manifest_path.write_text(
+        json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     if prompt is not None:
         (role_dir / "prompt.md").write_text(str(prompt), encoding="utf-8")
@@ -75,6 +92,7 @@ def role_view(role: RoleManifest) -> dict:
         "description": role.description,
         "model": role.model,
         "thinking": role.thinking,
+        "systemPrompt": role.system_prompt,
         "mode": role.mode,
         "root": str(role.root),
         "tools": list(role.tools) if role.tools is not None else None,

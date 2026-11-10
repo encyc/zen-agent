@@ -79,6 +79,10 @@ class SwarmStore:
         self.root.mkdir(parents=True, exist_ok=True)
         self.messages: list[RoomMessage] = []
         self.tasks: dict[str, TaskRecord] = {}
+        #: Total spend per chain, summed from each run's increment. Task
+        #: records carry snapshots, which go stale as soon as a sibling
+        #: branch spends; the router gates on this aggregate instead.
+        self.chain_spend: dict[str, float] = {}
         self.warnings: list[str] = []
         self.loaded = False
         self._message_ids: set[str] = set()
@@ -96,6 +100,7 @@ class SwarmStore:
         with self._lock:
             self.messages = []
             self.tasks = {}
+            self.chain_spend = {}
             self._message_ids = set()
             self.warnings = []
             self._replay(self.room_path, self._apply_message)
@@ -123,7 +128,23 @@ class SwarmStore:
                         f"{previous.state!r} -> {task.state!r}"
                     )
             self._append_line(self.tasks_path, _task_record(task))
+            self._record_spend(previous, task)
             self.tasks[task.id] = task
+
+    def _record_spend(self, previous: TaskRecord | None, task: TaskRecord) -> None:
+        if previous is None:
+            # A task's first record carries the chain spend known when it was
+            # created (a retry reuses its source's total). Take it as a floor:
+            # ancestors and siblings already counted are not added twice.
+            self.chain_spend[task.chain_id] = max(
+                self.chain_spend.get(task.chain_id, 0.0), task.chain_cost
+            )
+            return
+        delta = task.chain_cost - previous.chain_cost
+        if delta:
+            self.chain_spend[task.chain_id] = round(
+                self.chain_spend.get(task.chain_id, 0.0) + delta, 6
+            )
 
     def reconcile(self) -> list[RoomMessage]:
         interrupted = [
@@ -191,6 +212,7 @@ class SwarmStore:
             reason=raw.get("reason"),
             derived_from=raw.get("derivedFrom"),
         )
+        self._record_spend(self.tasks.get(record.id), record)
         self.tasks[record.id] = record
 
     def _replay(self, path: Path, apply) -> None:

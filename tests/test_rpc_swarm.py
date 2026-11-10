@@ -43,6 +43,7 @@ class FakeSwarm:
         self.approvals: list[tuple[str, str]] = []
         self.role_updates: list[tuple[str, dict]] = []
         self.role_deletes: list[str] = []
+        self.warnings: list[str] = []
 
     async def start(self) -> None:
         self.started = True
@@ -203,6 +204,7 @@ async def test_swarm_frames_are_global(tmp_path, monkeypatch):
     class FrameManager:
         def __init__(self, *, write_frame=None, stream_fn_factory=None, max_concurrent=3):
             self.write_frame = write_frame
+            self.warnings: list[str] = []
             created.append(self)
 
         async def start(self) -> None:
@@ -260,3 +262,16 @@ async def test_swarm_approval_routes_by_prefix(tmp_path):
 
     assert fake.approvals == [("swarm:a1", "allow")]
     assert writes[-1] == {"type": "result", "id": "a1", "ok": True}
+
+
+async def test_list_and_roles_surface_manager_warnings(tmp_path):
+    host, writes = _host(tmp_path)
+    fake = FakeSwarm()
+    fake.warnings = ["role broken: bad manifest"]
+    host._swarm = fake  # type: ignore[assignment]
+
+    await _call(host, {"type": "swarm", "op": "list", "id": "s1"})
+    assert writes[-1]["warnings"] == ["role broken: bad manifest"]
+
+    await _call(host, {"type": "swarm", "op": "roles", "id": "s2", "action": "list"})
+    assert writes[-1]["warnings"] == ["role broken: bad manifest"]

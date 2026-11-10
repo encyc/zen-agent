@@ -12,6 +12,7 @@ import type {
   SwarmAgentState,
   SwarmListResult,
   SwarmMessage,
+  SwarmReloadResult,
   SwarmRole,
   SwarmTask,
 } from '../rpc/types'
@@ -34,6 +35,11 @@ function send(request: Record<string, unknown>): Promise<Record<string, unknown>
   return sender.send(request)
 }
 
+/** Notification text a frame should surface, or null when it is room traffic. */
+export function swarmNoticeText(frame: ServerFrame): string | null {
+  return frame.type === 'swarm_notice' && frame.text !== '' ? frame.text : null
+}
+
 function replaceBy<T>(rows: T[], row: T, key: (value: T) => string): T[] {
   const id = key(row)
   return rows.some((item) => key(item) === id)
@@ -46,10 +52,13 @@ interface SwarmState {
   tasks: SwarmTask[]
   agents: SwarmAgentState[]
   roles: SwarmRole[]
+  /** Role build/parse problems the host reported; shown above the room. */
+  warnings: string[]
   /** True once a `list` snapshot landed. */
   loaded: boolean
   post(text: string): Promise<void>
   load(): Promise<void>
+  reload(): Promise<void>
   cancel(id: string): Promise<void>
   retry(id: string): Promise<void>
   reset(agentId: string): Promise<void>
@@ -67,6 +76,7 @@ export const useSwarmStore = create<SwarmState>((set) => ({
   tasks: [],
   agents: [],
   roles: [],
+  warnings: [],
   loaded: false,
 
   applyFrame(frame) {
@@ -106,8 +116,18 @@ export const useSwarmStore = create<SwarmState>((set) => ({
       agents: answer.agents,
       tasks: answer.tasks,
       messages: answer.messages,
+      warnings: answer.warnings,
       loaded: true,
     })
+  },
+
+  async reload() {
+    const answer = (await send({
+      type: 'swarm',
+      op: 'reload',
+    })) as unknown as SwarmReloadResult
+    if (answer.ok !== true) return
+    set({ roles: answer.roles, warnings: answer.warnings })
   },
 
   async cancel(id) {
@@ -129,8 +149,13 @@ export const useSwarmStore = create<SwarmState>((set) => ({
       action,
       roleId: id,
       ...(manifest === undefined ? {} : { manifest }),
-    })) as unknown as { ok?: boolean; roles?: SwarmRole[] }
-    if (answer.ok === true && Array.isArray(answer.roles)) set({ roles: answer.roles })
+    })) as unknown as { ok?: boolean; roles?: SwarmRole[]; warnings?: string[] }
+    if (answer.ok === true && Array.isArray(answer.roles)) {
+      set({
+        roles: answer.roles,
+        ...(Array.isArray(answer.warnings) ? { warnings: answer.warnings } : {}),
+      })
+    }
     return answer as unknown as Record<string, unknown>
   },
 }))

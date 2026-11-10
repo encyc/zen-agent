@@ -3,12 +3,13 @@
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { _useSwarmSender, useSwarmStore } from '../src/state/swarmStore.ts'
+import { _useSwarmSender, swarmNoticeText, useSwarmStore } from '../src/state/swarmStore.ts'
 import type {
   SwarmAgentFrame,
   SwarmAgentState,
   SwarmMessage,
   SwarmMessageFrame,
+  SwarmNoticeFrame,
   SwarmRole,
   SwarmTask,
   SwarmTaskFrame,
@@ -26,6 +27,10 @@ function messageFrame(id: string, text: string): SwarmMessageFrame {
     taskId: null,
     chainDepth: 1,
   }
+}
+
+function noticeFrame(text: string): SwarmNoticeFrame {
+  return { type: 'swarm_notice', agent: 'research', text }
 }
 
 function taskFrame(id: string, state: SwarmTask['state']): SwarmTaskFrame {
@@ -66,6 +71,7 @@ function reset(): void {
     tasks: [] as SwarmTask[],
     agents: [] as SwarmAgentState[],
     roles: [] as SwarmRole[],
+    warnings: [] as string[],
     loaded: false,
   })
 }
@@ -138,6 +144,7 @@ test('load seeds the room from the list answer', async () => {
     agents: [{ agent: 'research', name: 'Research', state: 'idle', task: null, pendingApply: false }],
     tasks: [taskFrame('t_1', 'done')],
     messages: [messageFrame('m_1', 'hi')],
+    warnings: [],
   }))
 
   await useSwarmStore.getState().load()
@@ -163,4 +170,42 @@ test('cancel retry and reset send their task and agent ids', async () => {
     { type: 'swarm', op: 'retry', taskId: 't_1' },
     { type: 'swarm', op: 'reset', agentId: 'research' },
   ])
+})
+
+test('load and reload surface manager warnings', async () => {
+  reset()
+  const sent = fakeClient((request) =>
+    request.op === 'reload'
+      ? {
+          type: 'result',
+          id: '11',
+          ok: true,
+          roles: [],
+          notes: [],
+          warnings: ['role research: bad manifest'],
+        }
+      : {
+          type: 'result',
+          id: '10',
+          ok: true,
+          roles: [],
+          agents: [],
+          tasks: [],
+          messages: [],
+          warnings: ['role research: bad manifest'],
+        },
+  )
+
+  await useSwarmStore.getState().load()
+  assert.deepEqual(useSwarmStore.getState().warnings, ['role research: bad manifest'])
+
+  await useSwarmStore.getState().reload()
+  assert.deepEqual(useSwarmStore.getState().warnings, ['role research: bad manifest'])
+  assert.deepEqual(sent.at(-1), { type: 'swarm', op: 'reload' })
+})
+
+test('only a swarm notice produces a user notification', () => {
+  assert.equal(swarmNoticeText(noticeFrame('@research: @you done')), '@research: @you done')
+  assert.equal(swarmNoticeText(messageFrame('m_1', '@you done')), null)
+  assert.equal(swarmNoticeText(noticeFrame('')), null)
 })

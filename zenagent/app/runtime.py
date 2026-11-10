@@ -119,6 +119,9 @@ class RuntimeOptions:
     mcp_servers: list[str] | None = None
     skills: bool = True
     templates: bool = True
+    #: Global plugin assembly. Role runtimes turn this off: their capabilities
+    #: come from the role manifest, not from whatever the user enabled globally.
+    plugins: bool = True
     extension_paths: list[str] = field(default_factory=list)
     context_files: bool = True
     read_only: bool = False
@@ -422,7 +425,7 @@ class Runtime:
         runtime._lsp_acquired = True
         acquire_clients()
         assembly = None
-        if options.tools is None:
+        if options.tools is None and options.plugins:
             assembly = await plugin_wiring.start_plugins(runtime, options)
 
         if options.skills and options.tools is None:

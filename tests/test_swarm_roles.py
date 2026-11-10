@@ -9,6 +9,7 @@ from zenagent.app.swarm.roles import (
     parse_role,
     workspaces_root,
 )
+from zenagent.app.swarm.roster import role_view, write_role
 
 
 @pytest.fixture
@@ -94,6 +95,50 @@ def test_workspace_defaults_outside_protected_home(home):
     assert role.root == (workspaces_root() / "research").resolve()
     assert str(role.root).startswith(str(Path.home() / ".zenagent-workspaces"))
     assert role.root.is_dir()
+
+
+def test_write_role_keeps_fields_the_client_did_not_send(home):
+    role_dir = _write_role(
+        "research",
+        _manifest(
+            model="deepseek-chat",
+            skills=["skills"],
+            plugins=["zen.feishu"],
+            inheritProject=True,
+        ),
+    )
+
+    write_role(
+        "research",
+        {"schemaVersion": 1, "name": "Renamed", "mode": "ask", "systemPrompt": "v2"},
+    )
+
+    raw = json.loads((role_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert raw["name"] == "Renamed"
+    assert raw["model"] == "deepseek-chat"
+    assert raw["skills"] == ["skills"]
+    assert raw["plugins"] == ["zen.feishu"]
+    assert raw["inheritProject"] is True
+    assert "systemPrompt" not in raw
+    assert (role_dir / "prompt.md").read_text(encoding="utf-8") == "v2"
+
+
+def test_write_role_null_deletes_a_field(home):
+    role_dir = _write_role("research", _manifest(model="deepseek-chat", tools=["bash"]))
+
+    write_role("research", {"schemaVersion": 1, "name": "Research", "model": None, "tools": None})
+
+    raw = json.loads((role_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert "model" not in raw
+    assert "tools" not in raw
+
+
+def test_role_view_carries_the_persona_for_editing(home):
+    role_dir = _write_role("research", _manifest())
+    role, _ = parse_role(role_dir)
+
+    assert role is not None
+    assert role_view(role)["systemPrompt"] == "You are a role."
 
 
 def test_role_config_beats_plugin_contribution(home, tmp_path):

@@ -18,6 +18,7 @@ export function RoomPage() {
   const tasks = useSwarmStore((state) => state.tasks)
   const agents = useSwarmStore((state) => state.agents)
   const roles = useSwarmStore((state) => state.roles)
+  const warnings = useSwarmStore((state) => state.warnings)
   const loaded = useSwarmStore((state) => state.loaded)
   const load = useSwarmStore((state) => state.load)
   const feed = useRef<HTMLDivElement>(null)
@@ -39,6 +40,18 @@ export function RoomPage() {
   return (
     <div className={css.root} data-swarm-page>
       <div className={css.main}>
+        {warnings.length > 0 && (
+          <section className={css.warnings} data-swarm-warnings role="status">
+            <span className={css.warningsTitle}>
+              {t('swarm.warnings', { n: warnings.length })}
+            </span>
+            <ul className={css.warningsList}>
+              {warnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          </section>
+        )}
         <div
           ref={feed}
           className={css.feed}
@@ -227,9 +240,20 @@ function Composer({ roles }: { roles: SwarmRole[] }) {
 function Roster({ agents, numbers }: { agents: SwarmAgentState[]; numbers: TaskNumbers }) {
   const t = useT()
   const reset = useSwarmStore((state) => state.reset)
+  const reload = useSwarmStore((state) => state.reload)
   return (
     <section className={css.block}>
-      <h2 className={css.title}>{t('swarm.agents')}</h2>
+      <div className={css.blockHead}>
+        <h2 className={css.title}>{t('swarm.agents')}</h2>
+        <button
+          type="button"
+          className={css.ghost}
+          data-swarm-reload
+          onClick={() => void reload()}
+        >
+          {t('swarm.reload')}
+        </button>
+      </div>
       {agents.length === 0 ? (
         <p className={css.blockEmpty}>{t('swarm.noAgents')}</p>
       ) : (

@@ -20,7 +20,8 @@ the other branch.
   from `~/.zenagent/settings.json`; a missing key only skips that MCP server.
   `inheritProject` defaults to `false`, so a role is an isolated profile; its
   default root is `~/.zenagent-workspaces/<id>/`, outside the protected
-  `~/.zenagent` fence.
+  `~/.zenagent` fence. A role whose runtime cannot be built (unknown model,
+  broken MCP) is skipped with a room note; the other roles keep working.
 - **Room and task log** (`room.py`): `~/.zenagent/swarm/room.jsonl` and
   `tasks.jsonl` are append-only; startup replays them into memory, and every
   non-terminal task is appended as `failed(interrupted)` with a room note
@@ -31,7 +32,8 @@ the other branch.
   unknown mentions are kept as text. Each agent runs one task at a time
   (global cap 3). The run's final text is automatically posted as the result;
   `swarm_post` posts mid-run. There is no automatic receipt — @ the role you
-  want to see the result, exactly like any other delegation.
+  want to see the result, exactly like any other delegation. An agent message
+  that mentions `@you` raises a desktop notification; it creates no task.
 - **Structural gates**: chain depth 8, chain budget $5, per-agent inbox 16,
   concurrency 3. A refusal is a room system message and creates no task.
   Tool approvals reuse the existing approval channel, tagged with `agent` and
@@ -46,9 +48,11 @@ the other branch.
 - **Mode switcher** (`Sidebar`): segmented Coding / ZEN / Swarm control backed by
   the persisted `workspaceMode`; ZEN renders a placeholder page for the other
   branch.
-- **Swarm room** (`SwarmPage`): message feed with per-role status dots, task
+- **Swarm room** (`RoomPage`): message feed with per-role status dots, task
   pills and system notes; `@` autocomplete in the composer; right-side roster,
   task strip with cancel/retry, and the shared approval panel above the composer.
+  Role build problems are listed above the feed, and the roster's **Reload
+  agents** action re-reads manifests at any time.
 - **Settings → Agents** (`AgentSettings.tsx`): role list with
   ready / needs-credentials badges, a create/edit drawer (validated id, prompt,
   model, thinking, tools, root, mode, turn/cost limits) and two-step delete.
@@ -60,7 +64,8 @@ the other branch.
   `~/.zenagent/settings.json` (0600) — manifests hold `${KEY}` placeholders, and
   logs, RPC frames and room messages never echo secrets. A role's root is the
   cwd boundary of its tools; a role with bash/write tools is local code
-  execution, and the form states so.
+  execution, and the form states so. A role runtime assembles only what its
+  manifest declares — global plugins, skills and templates never load into it.
 
 ### Architecture diagrams
 

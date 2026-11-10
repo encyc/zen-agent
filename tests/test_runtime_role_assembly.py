@@ -35,3 +35,15 @@ async def test_extra_tools_are_appended_after_allowlist(runtime_factory):
 async def test_extra_prompt_reaches_system_prompt(runtime_factory):
     runtime = await runtime_factory(extra_prompt="ROLE-PERSONA")
     assert "ROLE-PERSONA" in runtime.agent.system_prompt
+
+
+@pytest.mark.asyncio
+async def test_plugins_false_skips_global_plugin_assembly(runtime_factory, monkeypatch):
+    from zenagent.app import runtime as runtime_module
+
+    async def forbidden(*_args, **_kwargs):
+        raise AssertionError("global plugins must not load into an isolated role")
+
+    monkeypatch.setattr(runtime_module.plugin_wiring, "start_plugins", forbidden)
+    runtime = await runtime_factory(plugins=False)
+    assert runtime.agent is not None

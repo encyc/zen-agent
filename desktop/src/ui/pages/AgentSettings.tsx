@@ -100,7 +100,7 @@ function RoleDrawer(props: {
   const [description, setDescription] = useState(row?.description ?? '')
   const [model, setModel] = useState(row?.model ?? '')
   const [thinking, setThinking] = useState(row?.thinking ?? '')
-  const [prompt, setPrompt] = useState('')
+  const [prompt, setPrompt] = useState(row?.systemPrompt ?? '')
   const [tools, setTools] = useState(row?.tools?.join(', ') ?? '')
   const [root, setRoot] = useState(row?.root ?? '')
   const [mode, setMode] = useState<string>(row?.mode ?? 'ask')
@@ -127,26 +127,27 @@ function RoleDrawer(props: {
       return
     }
 
+    const toolList = tools
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry !== '')
+    const limits: Record<string, number> = {}
+    if (turns !== null) limits.maxTurns = turns
+    if (cost !== null) limits.maxCost = cost
+    // Nulls delete a field; omitted keys keep whatever the file already has.
+    // `inheritProject` is deliberately absent so an edit cannot reset it.
     const manifest: Record<string, unknown> = {
       schemaVersion: 1,
       name: name.trim() || roleId,
       description: description.trim(),
       mode,
-      inheritProject: false,
+      model: model.trim() === '' ? null : model.trim(),
+      thinking: thinking.trim() === '' ? null : thinking.trim(),
+      systemPrompt: prompt.trim(),
+      root: root.trim() === '' ? null : root.trim(),
+      tools: toolList.length > 0 ? toolList : null,
+      limits: Object.keys(limits).length > 0 ? limits : null,
     }
-    if (model.trim() !== '') manifest.model = model.trim()
-    if (thinking.trim() !== '') manifest.thinking = thinking.trim()
-    if (prompt.trim() !== '') manifest.systemPrompt = prompt.trim()
-    if (root.trim() !== '') manifest.root = root.trim()
-    const toolList = tools
-      .split(',')
-      .map((entry) => entry.trim())
-      .filter((entry) => entry !== '')
-    if (toolList.length > 0) manifest.tools = toolList
-    const limits: Record<string, number> = {}
-    if (turns !== null) limits.maxTurns = turns
-    if (cost !== null) limits.maxCost = cost
-    if (Object.keys(limits).length > 0) manifest.limits = limits
 
     setSaving(true)
     setError('')

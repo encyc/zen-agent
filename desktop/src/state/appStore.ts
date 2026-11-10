@@ -27,6 +27,7 @@ import {
   useComposerStore,
   useMcpStore,
   useNoticeStore,
+  useNotificationStore,
   useProjectStore,
   useSecretsStore,
   useSessionStore,
@@ -36,7 +37,7 @@ import {
   useWorkPanelStore,
 } from './stores'
 import { useChatStore } from './chatStore'
-import { _useSwarmSender, useSwarmStore } from './swarmStore'
+import { _useSwarmSender, swarmNoticeText, useSwarmStore } from './swarmStore'
 import { nextDraft } from './pending'
 import { latestSessionForProject } from './latestSession'
 import { loadPrefs, replayFrames, savePref, spawnArgs } from './prefs'
@@ -1046,6 +1047,11 @@ async function restorePrefs(get: () => AppState): Promise<void> {
 }
 
 function handleFrame(frame: ServerFrame, handling: FrameHandling): void {
+  const notice = swarmNoticeText(frame)
+  if (notice !== null) {
+    useNotificationStore.getState().push({ tone: 'info', text: notice })
+    return
+  }
   const tagged = frame as { project?: unknown; session?: unknown; swarm?: boolean }
   // The swarm room spans every project slot: its frames carry no project or
   // session tag, so they must land before the filters below drop them.

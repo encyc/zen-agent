@@ -75,3 +75,21 @@ test('create a role from settings', async ({ page }) => {
   await page.getByRole('button', { name: '返回' }).click()
   await expect(page.locator('[data-swarm-agent="reviewer"]')).toBeVisible()
 })
+
+test('show role warnings above the room and reload them away', async ({ page }) => {
+  await boot(
+    page,
+    initialState(swarmFixture({ swarmWarnings: ['role research: bad manifest'] })),
+  )
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  const warnings = page.locator('[data-swarm-warnings]')
+  await expect(warnings).toContainText('role research: bad manifest')
+
+  // The fixture's reload reports no problems, so the stale banner clears.
+  await page.locator('[data-swarm-reload]').click()
+  await expect(warnings).toHaveCount(0)
+
+  const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
+  assert.ok(calls.some((call) => call.type === 'swarm' && call.op === 'reload'))
+})

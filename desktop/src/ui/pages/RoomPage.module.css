@@ -213,6 +213,37 @@
   gap: 8px;
 }
 
+.blockHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: var(--ds-radius-8);
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: inset 0 0 0 1px var(--dsw-alias-state-warn-primary);
+}
+
+.warningsTitle {
+  font-size: var(--ds-font-11);
+  font-weight: 600;
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.warningsList {
+  margin: 0;
+  padding-left: 16px;
+  font-size: var(--ds-font-11-5);
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+}
+
 .title {
   margin: 0;
   font-size: var(--ds-font-11);

@@ -15,6 +15,7 @@ Team room protocol:
 - Your final message is posted to the room as this task's result. Write it for whoever needs it.
 - Mention @role in the final message to hand work to that role; every known @role creates a queued task. Mention the role who delegated to you when they asked for the result back.
 - Use the swarm_post tool to post an update while the run continues; it accepts the same @role mentions.
+- Mention @you to notify the person watching the room; it creates no task.
 - Never mention a role you do not need: every mention is a task and spends budget."""
 
 

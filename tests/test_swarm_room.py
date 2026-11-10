@@ -44,6 +44,32 @@ def _task(**overrides) -> TaskRecord:
     return TaskRecord(**fields)
 
 
+def test_chain_spend_accumulates_each_run_and_survives_reload(tmp_path):
+    store = SwarmStore(tmp_path)
+    queued = _task(id="t1", state="queued")
+    store.append_task(queued)
+    store.append_task(replace(queued, state="running"))
+    store.append_task(replace(queued, state="done", chain_cost=0.7))
+
+    assert store.chain_spend["c1"] == pytest.approx(0.7)
+
+    store2 = SwarmStore(tmp_path)
+    store2.load()
+
+    assert store2.chain_spend["c1"] == pytest.approx(0.7)
+
+
+def test_chain_spend_sums_sibling_branches(tmp_path):
+    store = SwarmStore(tmp_path)
+    for task_id in ("t1", "t2"):
+        queued = _task(id=task_id, state="queued", chain_cost=0.0)
+        store.append_task(queued)
+        store.append_task(replace(queued, state="running"))
+        store.append_task(replace(queued, state="done", chain_cost=0.7))
+
+    assert store.chain_spend["c1"] == pytest.approx(1.4)
+
+
 def test_message_and_task_roundtrip(tmp_path):
     store = SwarmStore(tmp_path)
     store.append_message(_message())

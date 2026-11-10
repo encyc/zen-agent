@@ -8,8 +8,9 @@ export interface SwarmRole {
   id: string
   name: string
   description: string
-  model: string
-  thinking: string
+  model: string | null
+  thinking: string | null
+  systemPrompt: string
   mode: string
   root: string
   tools: string[] | null
@@ -38,7 +39,7 @@ export interface SwarmTask {
   id: string
   assignee: string
   state: SwarmTaskState
-  sourceMessageId: string
+  sourceMessageId: string | null
   createdBy: SwarmAuthor
   chainId: string
   chainDepth: number
@@ -66,6 +67,7 @@ export interface SwarmListResult {
   agents: SwarmAgentState[]
   tasks: SwarmTask[]
   messages: SwarmMessage[]
+  warnings: string[]
 }
 
 export interface SwarmPostResult {
@@ -81,6 +83,16 @@ export interface SwarmRolesResult {
   ok: true
   roles: SwarmRole[]
   notes?: string[]
+  warnings: string[]
+}
+
+export interface SwarmReloadResult {
+  type: 'result'
+  id: string
+  ok: true
+  roles: SwarmRole[]
+  notes: string[]
+  warnings: string[]
 }
 
 export interface SwarmOkResult {
@@ -108,4 +120,11 @@ export interface SwarmTaskFrame extends SwarmTask {
 export interface SwarmAgentFrame extends SwarmAgentState {
   type: 'swarm_agent'
   swarm: true
+}
+
+/** An agent mentioned @you: surface it as a notification, not in the room. */
+export interface SwarmNoticeFrame {
+  type: 'swarm_notice'
+  agent: string
+  text: string
 }

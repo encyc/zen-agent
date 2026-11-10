@@ -46,7 +46,7 @@ class Router:
         admission = Admission()
         source = self.store.tasks.get(message.task_id) if message.task_id else None
         chain_id = source.chain_id if source is not None else self.new_chain_id()
-        chain_cost = source.chain_cost if source is not None else 0.0
+        chain_cost = self.store.chain_spend.get(chain_id, 0.0)
         chain_depth = message.chain_depth + 1
         now = int(time.time())
 

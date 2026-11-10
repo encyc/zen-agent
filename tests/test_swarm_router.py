@@ -81,6 +81,30 @@ def test_chain_cost_cap_rejects(tmp_path):
     assert admission.rejected == [("research", "chain_cost")]
 
 
+def test_chain_cost_gate_counts_sibling_branches(tmp_path):
+    router, store = _router(tmp_path)
+    for task_id in ("t1", "t2"):
+        queued = TaskRecord(
+            id=task_id,
+            assignee="coder",
+            state="queued",
+            source_message_id="m0",
+            chain_id="c1",
+            chain_cost=0.0,
+        )
+        store.append_task(queued)
+        store.append_task(replace(queued, state="running"))
+        store.append_task(replace(queued, state="done", chain_cost=3.0))
+
+    admission = router.admit(
+        _message(mentions=["research"], task_id="t2", chain_depth=1),
+        inbox_sizes={},
+    )
+
+    assert admission.accepted == []
+    assert admission.rejected == [("research", "chain_cost")]
+
+
 def test_inbox_cap_rejects(tmp_path):
     router, _ = _router(tmp_path)
 

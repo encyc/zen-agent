@@ -18,15 +18,16 @@ from zenagent.types import (
     AssistantMessage,
     Cost,
     TextContent,
+    ToolCall,
     Usage,
 )
 
 ROLE = RoleManifest(id="research", name="Research")
 
 
-def _bind(tmp_path):
+def _bind(tmp_path, **router_kwargs):
     store = SwarmStore(tmp_path)
-    router = Router(store, {"research", "coder"})
+    router = Router(store, {"research", "coder"}, **router_kwargs)
     current: dict = {"task": None}
 
     def post(text: str, kind: str) -> RoomMessage:
@@ -42,11 +43,12 @@ def _bind(tmp_path):
             chain_depth=task.chain_depth if task is not None else 0,
         )
         store.append_message(message)
-        if kind == "agent":
-            router.admit(message, inbox_sizes={})
         return message
 
-    return store, router, current, post
+    def admit(message: RoomMessage):
+        return router.admit(message, inbox_sizes={})
+
+    return store, router, current, post, admit
 
 
 def _message(store: SwarmStore, text: str = "@research 查一下") -> RoomMessage:
@@ -82,23 +84,24 @@ def _task(store: SwarmStore, **overrides) -> TaskRecord:
     return task
 
 
-def _runner(runtime, store, post) -> TaskRunner:
+def _runner(runtime, store, post, admit) -> TaskRunner:
     return TaskRunner(
         store=store,
         agent=runtime.agent,
         session=runtime.session,
         role=ROLE,
         post_message=post,
+        admit_message=admit,
     )
 
 
 async def test_final_text_is_posted_and_task_done(tmp_path, runtime_factory):
     runtime = await runtime_factory(stream_fn=text_stream("结论是 Z"))
-    store, _router, current, post = _bind(tmp_path)
+    store, _router, current, post, admit = _bind(tmp_path)
     task = _task(store)
     current["task"] = task
 
-    record = await _runner(runtime, store, post).run(
+    record = await _runner(runtime, store, post, admit).run(
         task, _message(store)
     )
 
@@ -114,11 +117,11 @@ async def test_final_text_is_posted_and_task_done(tmp_path, runtime_factory):
 
 async def test_mentions_in_result_create_tasks(tmp_path, runtime_factory):
     runtime = await runtime_factory(stream_fn=text_stream("结论是 Z。@coder 改 Y"))
-    store, _router, current, post = _bind(tmp_path)
+    store, _router, current, post, admit = _bind(tmp_path)
     task = _task(store)
     current["task"] = task
 
-    record = await _runner(runtime, store, post).run(
+    record = await _runner(runtime, store, post, admit).run(
         task, _message(store)
     )
 
@@ -133,11 +136,11 @@ async def test_max_turns_marks_failed(tmp_path, runtime_factory):
     runtime = await runtime_factory(
         stream_fn=tool_then_text_stream(), max_turns=1
     )
-    store, _router, current, post = _bind(tmp_path)
+    store, _router, current, post, admit = _bind(tmp_path)
     task = _task(store)
     current["task"] = task
 
-    record = await _runner(runtime, store, post).run(
+    record = await _runner(runtime, store, post, admit).run(
         task, _message(store)
     )
 
@@ -166,10 +169,10 @@ async def test_abort_marks_cancelled(tmp_path, runtime_factory):
         raise Aborted("cancelled by user")
 
     runtime = await runtime_factory(stream_fn=abortable)
-    store, _router, current, post = _bind(tmp_path)
+    store, _router, current, post, admit = _bind(tmp_path)
     task = _task(store)
     current["task"] = task
-    runner = _runner(runtime, store, post)
+    runner = _runner(runtime, store, post, admit)
 
     running = asyncio.create_task(runner.run(task, _message(store)))
     await asyncio.sleep(0.05)
@@ -198,13 +201,82 @@ async def test_chain_cost_accumulates(tmp_path, runtime_factory):
         return stream
 
     runtime = await runtime_factory(stream_fn=cost_stream(0.4))
-    store, _router, current, post = _bind(tmp_path)
+    store, _router, current, post, admit = _bind(tmp_path)
     task = _task(store, chain_cost=1.0)
     current["task"] = task
 
-    record = await _runner(runtime, store, post).run(
+    record = await _runner(runtime, store, post, admit).run(
         task, _message(store)
     )
 
     assert record.chain_cost == pytest.approx(1.4)
     assert store.tasks[task.id].chain_cost == pytest.approx(1.4)
+
+
+async def test_result_mentions_are_gated_by_this_runs_cost(tmp_path, runtime_factory):
+    async def stream(model, messages, tools, options):
+        partial = AssistantMessage(
+            content=[TextContent(text="@coder 改 Y")],
+            provider="p",
+            model="m",
+            usage=Usage(cost=Cost(total=0.4)),
+            stop_reason="pending",
+            timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        partial.stop_reason = "stop"
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    runtime = await runtime_factory(stream_fn=stream)
+    store, _router, current, post, admit = _bind(tmp_path, max_chain_cost=0.2)
+    task = _task(store)
+    current["task"] = task
+
+    record = await _runner(runtime, store, post, admit).run(
+        task, _message(store)
+    )
+
+    assert record.state == "done"
+    assert record.chain_cost == pytest.approx(0.4)
+    assert [entry for entry in store.tasks.values() if entry.assignee == "coder"] == []
+
+
+async def test_max_cost_marks_failed(tmp_path, runtime_factory):
+    async def streaming_tool_loop(model, messages, tools, options):
+        partial = AssistantMessage(
+            content=[],
+            provider="p",
+            model="m",
+            usage=Usage(cost=Cost(total=0.01)),
+            stop_reason="pending",
+            timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        call = ToolCall(
+            id=f"c{len(messages)}", name="read_file", arguments={"path": "README.md"}
+        )
+        partial.content = [call]
+        yield AssistantEvent(
+            type="toolcall_start", partial=partial, content_index=0, tool_call=call
+        )
+        yield AssistantEvent(
+            type="toolcall_end", partial=partial, content_index=0, tool_call=call
+        )
+        partial.stop_reason = "tool_use"
+        yield AssistantEvent(type="done", partial=partial, reason="tool_use")
+
+    runtime = await runtime_factory(stream_fn=streaming_tool_loop, max_cost=0.005)
+    store, _router, current, post, admit = _bind(tmp_path)
+    task = _task(store)
+    current["task"] = task
+
+    record = await _runner(runtime, store, post, admit).run(
+        task, _message(store)
+    )
+
+    assert record.state == "failed"
+    assert record.reason == "max_cost"
+    assert any(
+        message.author_kind == "system" and "max_cost" in message.text
+        for message in store.messages
+    )

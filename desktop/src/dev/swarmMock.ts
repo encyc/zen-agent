@@ -17,6 +17,8 @@ export interface SwarmMockState {
   swarmAgents?: SwarmAgentState[]
   swarmTasks?: SwarmTask[]
   swarmMessages?: SwarmMessage[]
+  /** Role build problems to show above the room. */
+  swarmWarnings?: string[]
 }
 
 export interface SwarmFixtureOptions extends Partial<SwarmMockState> {
@@ -31,6 +33,7 @@ const ROLES: SwarmRole[] = [
     description: '查资料、做对比、给结论',
     model: 'deepseek-chat',
     thinking: 'medium',
+    systemPrompt: 'You research.',
     mode: 'ask',
     root: '/Users/e2e/.zenagent-workspaces/research',
     tools: null,
@@ -45,6 +48,7 @@ const ROLES: SwarmRole[] = [
     description: '实现并验证改动',
     model: 'deepseek-chat',
     thinking: 'medium',
+    systemPrompt: 'You build.',
     mode: 'ask',
     root: '/Users/e2e/.zenagent-workspaces/builder',
     tools: null,
@@ -134,6 +138,7 @@ function room(state: SwarmMockState): Room {
   state.swarmAgents ??= idleAgents(state.swarmRoles)
   state.swarmTasks ??= []
   state.swarmMessages ??= []
+  state.swarmWarnings ??= []
   return state as Room
 }
 
@@ -199,8 +204,9 @@ function roleView(rows: Room, id: string, manifest: Record<string, unknown>): Sw
     id,
     name: String(manifest.name ?? prior?.name ?? id),
     description: String(manifest.description ?? ''),
-    model: typeof manifest.model === 'string' ? manifest.model : (prior?.model ?? ''),
-    thinking: typeof manifest.thinking === 'string' ? manifest.thinking : (prior?.thinking ?? ''),
+    model: typeof manifest.model === 'string' ? manifest.model : (prior?.model ?? null),
+    thinking: typeof manifest.thinking === 'string' ? manifest.thinking : (prior?.thinking ?? null),
+    systemPrompt: typeof manifest.systemPrompt === 'string' ? manifest.systemPrompt : (prior?.systemPrompt ?? ''),
     mode: String(manifest.mode ?? 'ask'),
     root: String(manifest.root ?? `/Users/e2e/.zenagent-workspaces/${id}`),
     tools,
@@ -221,7 +227,7 @@ function addTask(
   rows: Room,
   spec: {
     assignee: string
-    source: string
+    source: string | null
     author: SwarmAuthor
     chainId: string
     depth: number
@@ -305,6 +311,7 @@ export function handleSwarm(
       agents: copy(rows.swarmAgents),
       tasks: copy(rows.swarmTasks),
       messages: copy(rows.swarmMessages),
+      warnings: [...rows.swarmWarnings],
     })
   }
 
@@ -383,11 +390,12 @@ export function handleSwarm(
         setAgent(rows, id, 'idle', null)
       }
     }
-    return ok({ roles: copy(rows.swarmRoles) })
+    return ok({ roles: copy(rows.swarmRoles), warnings: [...rows.swarmWarnings] })
   }
 
   if (op === 'reload') {
-    return ok({ roles: copy(rows.swarmRoles), notes: [] })
+    // Every mock role is valid, so a reload re-reads them without problems.
+    return ok({ roles: copy(rows.swarmRoles), notes: [], warnings: [] })
   }
 
   return { type: 'error', id: payload.id, ok: false, message: `unknown swarm op: ${op}` }
