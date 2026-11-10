@@ -1145,6 +1145,53 @@ test('the composer plate spans the transcript band', async ({ page }) => {
   )
 })
 
+test('dragging the composer top edge grows and shrinks the draft area', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 })
+  await boot(page, initialState())
+  const area = page.locator('[data-composer-plate] textarea')
+  const handle = page.getByRole('separator', { name: '调整输入框高度' })
+  const metrics = await area.evaluate((element) => {
+    const styles = getComputedStyle(element)
+    return {
+      lineHeight: Number.parseFloat(styles.lineHeight),
+      padding:
+        Number.parseFloat(styles.paddingTop) + Number.parseFloat(styles.paddingBottom),
+    }
+  })
+  const initial = await area.boundingBox()
+  assert.ok(initial !== null)
+
+  const dragHandleTo = async (toY: number) => {
+    const box = await handle.boundingBox()
+    assert.ok(box !== null)
+    const x = box.x + box.width / 2
+    const y = box.y + box.height / 2
+    await page.mouse.move(x, y)
+    await page.mouse.down()
+    await page.mouse.move(x, toY, { steps: 6 })
+    await page.mouse.up()
+  }
+
+  const handleBox = await handle.boundingBox()
+  assert.ok(handleBox !== null)
+  await dragHandleTo(handleBox.y + handleBox.height / 2 - 96)
+  const grown = await area.boundingBox()
+  assert.ok(grown !== null)
+  assert.ok(grown.height >= initial.height + 90, `${initial.height} -> ${grown.height}`)
+
+  // Pulling far past the floor parks the draft at exactly two text lines.
+  await dragHandleTo(700)
+  const shrunk = await area.boundingBox()
+  assert.ok(shrunk !== null)
+  const floor = metrics.lineHeight * 2 + metrics.padding
+  assert.ok(Math.abs(shrunk.height - floor) <= 1, `${shrunk.height} vs ${floor}`)
+
+  await handle.dblclick()
+  await expect
+    .poll(async () => Math.round((await area.boundingBox())?.height ?? 0))
+    .toBe(Math.round(initial.height))
+})
+
 test('the topbar shows the project crumb and renames the current session inline', async ({
   page,
 }) => {

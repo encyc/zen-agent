@@ -19,6 +19,7 @@ import { ApprovalPanel } from '../approval/ApprovalPanel'
 import { AskCard } from '../ask/AskCard'
 import { pickImagePaths } from './pickImages'
 import { attachDragDrop } from './dragDrop'
+import { clampInputHeight, inputHeightLimits, type InputHeightLimits } from './inputHeight'
 import { TodoDock, PendingDock, ContextMeter } from './Docks'
 import { ModelMenu, ModeMenu } from './Menus'
 import { TokenBoxes } from './TokenBoxes'
@@ -28,9 +29,32 @@ import css from './InputBar.module.css'
 
 const FS_INDEX_TIMEOUT_MS = 8000
 const MAX_FILE_ITEMS = 50
+const AUTO_GROW_MAX = 360
 
 interface MenuState {
   kind: 'model' | 'mode' | null
+}
+
+interface ResizeDrag {
+  pointerId: number
+  startY: number
+  startHeight: number
+  previous: number | null
+  limits: InputHeightLimits
+  current: number
+  frame: number
+}
+
+/** Limits straight from the laid-out textarea: its resolved line box and
+ * padding are the only source of truth for "two lines". */
+function limitsFor(area: HTMLTextAreaElement): InputHeightLimits {
+  const styles = getComputedStyle(area)
+  return inputHeightLimits(
+    Number.parseFloat(styles.lineHeight),
+    (Number.parseFloat(styles.paddingTop) || 0) +
+      (Number.parseFloat(styles.paddingBottom) || 0),
+    window.innerHeight,
+  )
 }
 
 export function InputBar() {
@@ -65,6 +89,10 @@ export function InputBar() {
   const filesRequested = useRef(false)
   const textRef = useRef<HTMLTextAreaElement | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
+  // null = auto-grow with the draft; a number is the size the user dragged.
+  const [manualHeight, setManualHeight] = useState<number | null>(null)
+  const [renderedHeight, setRenderedHeight] = useState(0)
+  const resizeDrag = useRef<ResizeDrag | null>(null)
 
   const empty = draft.trim() === '' && images.length === 0
   const entries = useMemo(
@@ -132,13 +160,15 @@ export function InputBar() {
     void refreshSkills()
   }, [refreshSkills])
 
-  // Auto-grow the textarea (dsh: the scrollport caps at 14 lines).
+  // Auto-grow the textarea unless the user pinned a height by dragging the
+  // top edge; then the inline size owns the box until a reset.
   useEffect(() => {
     const area = textRef.current
-    if (area === null) return
+    if (area === null || manualHeight !== null) return
     area.style.height = '0px'
-    area.style.height = `${Math.min(area.scrollHeight, 360)}px`
-  }, [draft])
+    area.style.height = `${Math.min(area.scrollHeight, AUTO_GROW_MAX)}px`
+    setRenderedHeight(area.offsetHeight)
+  }, [draft, manualHeight])
 
   // Tauri drag-drop: file drop events carry absolute paths. The helper's
   // cleanup unlistens even when StrictMode tears this effect down before the
@@ -151,6 +181,77 @@ export function InputBar() {
       }),
     [addImages],
   )
+
+  useEffect(
+    () => () => {
+      document.documentElement.removeAttribute('data-composer-resizing')
+    },
+    [],
+  )
+
+  const startResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    const area = textRef.current
+    if (event.button !== 0 || area === null) return
+    event.preventDefault()
+    event.currentTarget.focus({ preventScroll: true })
+    const startHeight = area.getBoundingClientRect().height
+    resizeDrag.current = {
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      startHeight,
+      previous: manualHeight,
+      limits: limitsFor(area),
+      current: startHeight,
+      frame: 0,
+    }
+    document.documentElement.setAttribute('data-composer-resizing', 'true')
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setManualHeight(startHeight)
+  }
+
+  const moveResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    const state = resizeDrag.current
+    if (state === null || state.pointerId !== event.pointerId) return
+    state.current = clampInputHeight(
+      state.startHeight + (state.startY - event.clientY),
+      state.limits,
+    )
+    if (state.frame !== 0) return
+    state.frame = requestAnimationFrame(() => {
+      state.frame = 0
+      if (resizeDrag.current === state) setManualHeight(state.current)
+    })
+  }
+
+  const endResize = (commit: boolean) => {
+    const state = resizeDrag.current
+    if (state === null) return
+    if (state.frame !== 0) cancelAnimationFrame(state.frame)
+    resizeDrag.current = null
+    document.documentElement.removeAttribute('data-composer-resizing')
+    setManualHeight(commit ? state.current : state.previous)
+  }
+
+  const onResizeKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const area = textRef.current
+    if (area === null) return
+    if (event.key === 'Escape' && resizeDrag.current !== null) {
+      event.preventDefault()
+      endResize(false)
+      return
+    }
+    const limits = limitsFor(area)
+    const base = manualHeight ?? area.getBoundingClientRect().height
+    const step = event.shiftKey ? limits.step * 2 : limits.step
+    let next: number | null = null
+    if (event.key === 'ArrowUp') next = base + step
+    else if (event.key === 'ArrowDown') next = base - step
+    else if (event.key === 'Home') next = limits.min
+    else if (event.key === 'End') next = limits.max
+    if (next === null) return
+    event.preventDefault()
+    setManualHeight(clampInputHeight(next, limits))
+  }
 
   const doSubmit = () => {
     setMenu({ kind: null })
@@ -244,6 +345,31 @@ export function InputBar() {
       <PendingDock />
       <TodoDock />
       <div className={css.card} data-composer-plate>
+        <div
+          className={css.resizeHandle}
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label={t('composer.resizeHeight')}
+          title={t('composer.resizeHint')}
+          aria-valuenow={manualHeight ?? renderedHeight}
+          aria-valuetext={`${manualHeight ?? renderedHeight}px`}
+          tabIndex={0}
+          onPointerDown={startResize}
+          onPointerMove={moveResize}
+          onPointerUp={(event) => {
+            if (resizeDrag.current?.pointerId !== event.pointerId) return
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+              event.currentTarget.releasePointerCapture(event.pointerId)
+            }
+            endResize(true)
+          }}
+          onPointerCancel={(event) => {
+            if (resizeDrag.current?.pointerId !== event.pointerId) return
+            endResize(false)
+          }}
+          onDoubleClick={() => setManualHeight(null)}
+          onKeyDown={onResizeKeyDown}
+        />
         {images.length > 0 && (
             <div className={css.attachRail}>
               {images.map((image) => (
@@ -264,11 +390,20 @@ export function InputBar() {
               ))}
             </div>
           )}
-          <div className={css.scroll} ref={scrollRef}>
+          <div
+            className={css.scroll}
+            ref={scrollRef}
+            style={manualHeight === null ? undefined : { maxHeight: manualHeight }}
+          >
             <div className={css.inputWrap}>
               <textarea
                 ref={textRef}
                 className={css.input}
+                style={
+                  manualHeight === null
+                    ? undefined
+                    : { height: manualHeight, minHeight: 0, maxHeight: manualHeight }
+                }
                 value={draft}
                 onChange={(event) => {
                   setDraft(event.target.value)

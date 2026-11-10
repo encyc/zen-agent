@@ -13,7 +13,7 @@
     "desktop/src/dev/bridge.ts": 998,
     "desktop/src/rpc/types.ts": 809,
     "desktop/src/i18n/locale.ts": 20,
-    "desktop/e2e/app.spec.ts": 2611,
+    "desktop/e2e/app.spec.ts": 2613,
     "desktop/src/i18n/messages.ts": 1123,
     "desktop/e2e/harness.ts": 886
   }
