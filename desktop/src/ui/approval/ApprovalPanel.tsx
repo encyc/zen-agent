@@ -5,15 +5,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../../state/appStore'
 import { useApprovalStore } from '../../state/stores'
+import { pendingForProject } from '../../state/pendingProject'
 import { useT } from '../../i18n/locale'
 import { StateDot } from '../primitives'
 import css from './ApprovalPanel.module.css'
 
 export function ApprovalPanel() {
   const queue = useApprovalStore((state) => state.queue)
+  const project = useAppStore((state) => state.project)
   const approve = useAppStore((state) => state.approve)
   const t = useT()
-  const approval = queue[0]
+  const approval = pendingForProject(queue, project)[0]
   const answered = useRef(false)
   const [busy, setBusy] = useState(false)
 
