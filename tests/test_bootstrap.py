@@ -55,7 +55,9 @@ def fake_stack(monkeypatch):
         "build_default_commands",
         lambda services: SimpleNamespace(services=services),
     )
-    monkeypatch.setattr(bootstrap_mod, "load_user_config", lambda: SimpleNamespace())
+    monkeypatch.setattr(
+        bootstrap_mod, "load_user_config", lambda *args, **kwargs: SimpleNamespace()
+    )
     return seen
 
 

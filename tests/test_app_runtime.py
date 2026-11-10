@@ -564,3 +564,27 @@ async def test_an_abandoned_empty_session_is_dropped_too(runtime_factory):
 
     assert not abandoned.exists(), "the launch's own empty file goes away"
     assert other.is_file(), "a session with a message is never touched"
+
+
+async def test_explicit_root_scopes_the_runtime(runtime_factory, tmp_path):
+    root = tmp_path / "project"
+    (root / ".git").mkdir(parents=True)
+    nested = root / "src"
+    nested.mkdir()
+
+    runtime = await runtime_factory(root=nested)
+
+    assert runtime.cwd == nested.resolve()
+    assert runtime.root == root.resolve()
+    assert runtime.memory_store is not None
+    assert runtime.memory_store.root == root.resolve()
+    assert runtime.gate.policy.workspace == root.resolve()
+    assert f"Working directory: {nested.resolve()}" in runtime.agent.system_prompt
+
+
+async def test_bootstrap_rejects_a_missing_root(tmp_path):
+    missing = tmp_path / "gone"
+    with pytest.raises(RuntimeError, match="project root is not a directory"):
+        await Runtime.bootstrap(
+            RuntimeOptions(root=missing, mcp=False, skills=False, templates=False)
+        )
