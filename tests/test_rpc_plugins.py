@@ -176,3 +176,19 @@ async def test_dispatch_accepts_plugins_kind(runtime_factory, monkeypatch):
 
     assert result["type"] == "result"
     assert "unknown type" not in result.get("message", "")
+
+
+async def test_deferred_apply_is_tracked_and_stops_after_close(runtime_factory, monkeypatch):
+    runtime = await runtime_factory()
+    apply = isolate_apply(runtime, monkeypatch, side_effect=RuntimeError("busy"))
+    writes: list[str] = []
+    server = build_server(runtime, writes)
+
+    assert await server._apply_or_defer() is False
+    tasks = server._plugin_tasks
+    assert len(tasks) == 1
+
+    server._closed = True
+    await next(iter(tasks))
+    assert apply.await_count == 1
+    assert server._plugin_tasks == set()

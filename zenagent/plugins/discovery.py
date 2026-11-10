@@ -27,6 +27,8 @@ def discover_plugins(
     if not base.is_dir():
         return manifests, warnings
     for entry in sorted(base.iterdir()):
+        if entry.name.startswith("."):
+            continue
         if not entry.is_dir() or not (entry / "manifest.json").is_file():
             continue
         try:

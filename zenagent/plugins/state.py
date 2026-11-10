@@ -64,7 +64,7 @@ def credentials_for(plugin_id: str) -> dict[str, str]:
     prefix = credential_name(plugin_id, "")
     found: dict[str, str] = {}
     for name, value in settings.load().api_keys.items():
-        if name.startswith(prefix) and value:
+        if name.startswith(prefix) and isinstance(value, str) and value:
             found[name[len(prefix) :]] = value
     return found
 

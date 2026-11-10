@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from zenagent import settings
 from zenagent.app.plugin_wiring import assemble_plugins
 from zenagent.mcp.config import McpServerConfig
 from zenagent.plugins import discovery
@@ -86,3 +87,13 @@ def test_bad_plugin_server_shape_warns_and_skips():
     assert assembly.configs == {}
     assert any("zen.demo.demo" in warning for warning in assembly.warnings)
     assert any("both" in warning for warning in assembly.warnings)
+
+
+def test_non_string_credential_degrades_to_needs_credentials():
+    make_plugin(server={"demo": {"url": "${MCP_URL}"}}, credentials=URL_CREDENTIAL)
+    store = settings.load()
+    store.api_keys["plugin:zen.demo:MCP_URL"] = 42  # hand-edited junk
+    settings.save(store)
+    assembly = assemble_plugins()
+    assert assembly.statuses == {"zen.demo": "needs_credentials"}
+    assert assembly.configs == {}

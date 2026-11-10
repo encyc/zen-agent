@@ -164,3 +164,25 @@ def test_uninstall_removes_dir_and_credentials(tmp_path):
 def test_uninstall_unknown_plugin_rejected(tmp_path):
     with pytest.raises(ValueError):
         uninstall_plugin("zen.missing", root=tmp_path / "installed")
+
+
+def test_discover_ignores_hidden_directories(tmp_path):
+    _make_plugin(tmp_path / ".install-leftover", "zen.demo")
+    manifests, _warnings = discover_plugins(tmp_path)
+    assert manifests == []
+
+
+def test_install_staging_is_invisible_to_discovery(tmp_path, monkeypatch):
+    source = _make_plugin(tmp_path / "src", "zen.demo")
+    root = tmp_path / "installed"
+    seen = []
+    real_copytree = install.shutil.copytree
+
+    def observing_copytree(src, dst, *args, **kwargs):
+        real_copytree(src, dst, *args, **kwargs)
+        seen.append(discover_plugins(root)[0])
+
+    monkeypatch.setattr(install.shutil, "copytree", observing_copytree)
+    install_plugin(source, root=root)
+    assert seen
+    assert all(manifests == [] for manifests in seen)

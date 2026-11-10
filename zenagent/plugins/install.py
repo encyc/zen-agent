@@ -10,7 +10,6 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
-import uuid
 import zipfile
 from pathlib import Path, PurePosixPath
 
@@ -55,15 +54,17 @@ def install_plugin(source: Path | str, *, root: Path | None = None) -> PluginMan
         manifest = parse_manifest(plugin_root)
 
         target = base / manifest.id
-        staging = base / f".install-{uuid.uuid4().hex}"
+        base.mkdir(parents=True, exist_ok=True)
+        # Stage beside installed/ so discovery never sees a half-copied plugin,
+        # while staying on the same filesystem for an atomic replace.
+        staging_parent = Path(tempfile.mkdtemp(prefix=".install-", dir=base.parent))
+        staging = staging_parent / manifest.id
         try:
-            base.mkdir(parents=True, exist_ok=True)
             shutil.copytree(plugin_root, staging)
             shutil.rmtree(target, ignore_errors=True)
             os.replace(staging, target)
-        except BaseException:
-            shutil.rmtree(staging, ignore_errors=True)
-            raise
+        finally:
+            shutil.rmtree(staging_parent, ignore_errors=True)
     return manifest
 
 

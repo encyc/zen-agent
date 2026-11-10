@@ -120,15 +120,22 @@ class PluginsOps:
         try:
             await self.runtime.reconfigure_plugins()
         except RuntimeError:
-            asyncio.create_task(self._apply_when_idle())
+            task = asyncio.create_task(self._apply_when_idle())
+            tasks = self.__dict__.setdefault("_plugin_tasks", set())
+            tasks.add(task)
+            task.add_done_callback(tasks.discard)
             return False
         return True
 
     async def _apply_when_idle(self) -> None:
+        if getattr(self, "_closed", False):
+            return
         try:
             agent = getattr(self.runtime, "agent", None)
             while agent is not None and agent.is_streaming:
                 await asyncio.sleep(0.5)
+            if getattr(self, "_closed", False):
+                return
             await self.runtime.reconfigure_plugins()
         except Exception as exc:
             logger.warning(

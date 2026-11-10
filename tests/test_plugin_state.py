@@ -115,3 +115,10 @@ def test_resolve_keeps_manifest_untouched(tmp_path):
     manifest = manifest_for(tmp_path)
     resolve(manifest, {"APP_ID": "cli_1", "APP_SECRET": "sec"})
     assert manifest.mcp_servers["feishu"]["env"]["APP_SECRET"] == "${APP_SECRET}"
+
+
+def test_non_string_credential_is_ignored():
+    store = settings.load()
+    store.api_keys["plugin:zen.feishu:APP_ID"] = 12345  # hand-edited junk
+    settings.save(store)
+    assert credentials_for("zen.feishu") == {}

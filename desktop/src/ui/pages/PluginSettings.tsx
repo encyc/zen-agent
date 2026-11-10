@@ -20,6 +20,7 @@ import {
   setPluginEnabled,
   uninstallPlugin,
 } from '../../state/pluginApi'
+import { newlyInstalledId } from '../../state/pluginInstall'
 import { usePluginStore } from '../../state/stores'
 import { RefreshIcon } from '../icons'
 import css from './PluginSettings.module.css'
@@ -279,12 +280,14 @@ export function PluginSettings() {
     if (pending !== null) return
     setPending(`install:${source.id ?? source.path ?? ''}`)
     setError('')
+    const knownIds = plugins.map((row) => row.id)
     try {
       const frame = await installPlugin(source)
       if (frame.type === 'result' && frame.ok) {
         adopt(frame)
-        const needs = (frame.plugins ?? []).find((row) => row.status === 'needs_credentials')
-        if (needs) setConfiguring(needs.id)
+        const installedId = newlyInstalledId(frame, knownIds, source.id)
+        const row = (frame.plugins ?? []).find((item) => item.id === installedId)
+        if (row?.status === 'needs_credentials') setConfiguring(row.id)
       } else {
         setError(noticeOf(frame, locale, t('settings.pluginsInstallFailed', { message: '' })))
       }

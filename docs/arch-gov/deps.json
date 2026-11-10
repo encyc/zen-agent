@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-10T04:09:05+00:00",
+ "generated_at": "2026-11-10T04:19:41+00:00",
  "root": "/Users/mac/zen-agent/.worktrees/plugin-system",
  "files": {
   "examples.custom_tool": {
@@ -1419,7 +1419,7 @@
   },
   "tests.test_plugin_install": {
    "path": "tests/test_plugin_install.py",
-   "loc": 167,
+   "loc": 189,
    "classes": {},
    "long_funcs": [],
    "imports": [
@@ -1475,7 +1475,7 @@
   },
   "tests.test_plugin_state": {
    "path": "tests/test_plugin_state.py",
-   "loc": 118,
+   "loc": 125,
    "classes": {},
    "long_funcs": [],
    "imports": [
@@ -1489,18 +1489,20 @@
   },
   "tests.test_plugin_wiring": {
    "path": "tests/test_plugin_wiring.py",
-   "loc": 89,
+   "loc": 100,
    "classes": {},
    "long_funcs": [],
    "imports": [
+    "zenagent",
     "zenagent.app.plugin_wiring",
     "zenagent.mcp.config",
     "zenagent.plugins",
     "zenagent.plugins.discovery",
-    "zenagent.plugins.state"
+    "zenagent.plugins.state",
+    "zenagent.settings"
    ],
    "fan_in": 0,
-   "fan_out": 5
+   "fan_out": 7
   },
   "tests.test_probes": {
    "path": "tests/test_probes.py",
@@ -1928,7 +1930,7 @@
   },
   "tests.test_rpc_plugins": {
    "path": "tests/test_rpc_plugins.py",
-   "loc": 179,
+   "loc": 195,
    "classes": {},
    "long_funcs": [],
    "imports": [
@@ -3577,7 +3579,7 @@
     "zenagent.providers.registry",
     "zenagent.providers.stream_options"
    ],
-   "fan_in": 57,
+   "fan_in": 58,
    "fan_out": 3
   },
   "zenagent.__main__": {
@@ -3846,7 +3848,7 @@
    },
    "long_funcs": [],
    "imports": [],
-   "fan_in": 25,
+   "fan_in": 26,
    "fan_out": 0
   },
   "zenagent.skills": {
@@ -5947,10 +5949,10 @@
   },
   "zenagent.cli.rpc.ops_plugins": {
    "path": "zenagent/cli/rpc/ops_plugins.py",
-   "loc": 241,
+   "loc": 248,
    "classes": {
     "PluginsOps": {
-     "loc": 199,
+     "loc": 206,
      "methods": 10
     }
    },
@@ -7405,7 +7407,7 @@
   },
   "zenagent.plugins.discovery": {
    "path": "zenagent/plugins/discovery.py",
-   "loc": 38,
+   "loc": 40,
    "classes": {},
    "long_funcs": [],
    "imports": [
@@ -7416,7 +7418,7 @@
   },
   "zenagent.plugins.install": {
    "path": "zenagent/plugins/install.py",
-   "loc": 126,
+   "loc": 127,
    "classes": {},
    "long_funcs": [],
    "imports": [
@@ -11114,6 +11116,11 @@
   },
   {
    "src": "tests.test_plugin_wiring",
+   "dst": "zenagent",
+   "calls": []
+  },
+  {
+   "src": "tests.test_plugin_wiring",
    "dst": "zenagent.app.plugin_wiring",
    "calls": [
     "assemble_plugins"
@@ -11144,6 +11151,14 @@
    "calls": [
     "set_credentials",
     "set_enabled"
+   ]
+  },
+  {
+   "src": "tests.test_plugin_wiring",
+   "dst": "zenagent.settings",
+   "calls": [
+    "load",
+    "save"
    ]
   },
   {
@@ -20325,7 +20340,7 @@
  ],
  "stats": {
   "files": 426,
-  "edges": 1742,
+  "edges": 1744,
   "cycles": 7,
   "errors": []
  }
