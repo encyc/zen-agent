@@ -65,6 +65,9 @@ type EventHandler = (frame: ServerFrame) => void
 
 export class RpcClient {
   private nextId = 0
+  /** The project every routed request belongs to; null until the host names
+   * its active slot (a v2 server leaves requests untagged). */
+  private project: string | null = null
   private handlers = new Set<EventHandler>()
   private stderrHandlers = new Set<(line: string) => void>()
   private exitHandlers = new Set<(code: number | null, pid?: number) => void>()
@@ -72,7 +75,17 @@ export class RpcClient {
    * instead of each adding its own copy of every handler. */
   private wiring: Promise<void> | null = null
 
+  setProject(root: string | null): void {
+    this.project = root === null || root === '' ? null : root
+  }
+
+  activeProject(): string | null {
+    return this.project
+  }
+
   async start(options: StartOptions = {}): Promise<number> {
+    // A replaced child comes up at a new root; the handshake re-adopts it.
+    this.project = null
     if (this.wiring === null) {
       // A failed registration must not poison every later start: drop the
       // cached promise so a retry registers again.
@@ -143,9 +156,13 @@ export class RpcClient {
   /** Verify the wire contract before any domain request.
    *
    * Rejects with a structured failure (the same shape `rpc_start` rejects
-   * with) so the app's diagnostics card can render a version mismatch. */
-  async handshake(): Promise<void> {
-    const frame = await this.send<{ protocol_version?: unknown }>({ type: 'hello' })
+   * with) so the app's diagnostics card can render a version mismatch.
+   * Resolves with the host's active project root, which every routed request
+   * then names. */
+  async handshake(): Promise<string> {
+    const frame = await this.send<{ protocol_version?: unknown; active?: unknown }>({
+      type: 'hello',
+    })
     if (frame.protocol_version !== PROTOCOL_VERSION) {
       throw {
         code: 'protocol_mismatch',
@@ -153,6 +170,9 @@ export class RpcClient {
         osError: `client speaks protocol ${PROTOCOL_VERSION}, server answered ${String(frame.protocol_version)}`,
       }
     }
+    const active = typeof frame.active === 'string' ? frame.active : ''
+    this.setProject(active)
+    return active
   }
 
   /** Send one request and resolve with its result frame, typed `T` by the
@@ -163,8 +183,12 @@ export class RpcClient {
    * transport failure still rejects. */
   send<T = Record<string, unknown>>(payload: Record<string, unknown>, timeoutMs?: number): Promise<T> {
     const id = `r${(this.nextId += 1)}`
+    // `hello` and `project` are host-level ops; everything else is served by
+    // a slot and must name it.
+    const routed =
+      payload.type !== 'hello' && payload.type !== 'project' && this.project !== null
     return bridge.invoke<T>('rpc_send', {
-      payload: { ...payload, id },
+      payload: { ...payload, ...(routed ? { project: this.project } : {}), id },
       timeoutMs: timeoutMs ?? null,
     })
   }

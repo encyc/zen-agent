@@ -741,6 +741,8 @@ export interface AgentEventFrame {
 
 export interface EventFrame {
   type: 'event'
+  /** The slot that emitted the frame (host tag, absent on a v2 server). */
+  project?: string
   event: AgentEventFrame
 }
 

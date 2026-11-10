@@ -124,3 +124,47 @@ test('a failed listener registration does not poison the later starts', async ()
   assert.equal(await client.start(), 7)
   assert.deepEqual(listens, ['rpc:frame', 'rpc:frame', 'rpc:stderr', 'rpc:exit'])
 })
+
+test('routed requests carry the active project; host ops stay untagged', async () => {
+  const recorder = record(() => ({ type: 'result', id: 'r', ok: true }))
+  _useBridge(recorder.bridge)
+  const client = new RpcClient()
+  client.setProject('/work/p')
+
+  await client.send({ type: 'status' })
+  await client.send({ type: 'hello' })
+  await client.send({ type: 'project', op: 'switch', root: '/work/q' })
+
+  assert.deepEqual(
+    recorder.invokes.map((call) => call.args),
+    [
+      { payload: { type: 'status', project: '/work/p', id: 'r1' }, timeoutMs: null },
+      { payload: { type: 'hello', id: 'r2' }, timeoutMs: null },
+      {
+        payload: { type: 'project', op: 'switch', root: '/work/q', id: 'r3' },
+        timeoutMs: null,
+      },
+    ],
+  )
+})
+
+test('handshake adopts the host’s active project for later requests', async () => {
+  const recorder = record(() => ({
+    type: 'result',
+    id: 'r1',
+    ok: true,
+    protocol_version: 2,
+    active: '/work/q',
+  }))
+  _useBridge(recorder.bridge)
+  const client = new RpcClient()
+
+  assert.equal(await client.handshake(), '/work/q')
+  assert.equal(client.activeProject(), '/work/q')
+
+  await client.send({ type: 'status' })
+  assert.deepEqual(recorder.invokes.at(-1)?.args, {
+    payload: { type: 'status', project: '/work/q', id: 'r2' },
+    timeoutMs: null,
+  })
+})
