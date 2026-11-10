@@ -583,15 +583,19 @@ export function installBridge(state: BridgeState) {
         }
         return { type: 'error', id: payload.id, message: 'unknown mcp op' }
       }
-      case 'tools':
-        return {
-          type: 'result',
-          id: payload.id,
-          ok: true,
-          tools: state.tools ?? [
-            { name: 'read_file', description: 'Read a file', approval: 'read' },
-          ],
+      case 'terminal':
+        if (payload.op === 'start') {
+          return {
+            type: 'result',
+            id: payload.id,
+            ok: true,
+            shell: '/bin/zsh',
+            cwd: payload.cwd ?? '/work',
+            cols: payload.cols ?? 80,
+            rows: payload.rows ?? 24,
+          }
         }
+        return { type: 'result', id: payload.id, ok: true }
       case 'ask':
         return { type: 'result', id: payload.id, ok: true }
       case 'commands':

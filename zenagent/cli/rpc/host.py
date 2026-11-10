@@ -18,6 +18,7 @@ from zenagent.app.bootstrap import prepare
 from zenagent.cli.rpc.codec import PROTOCOL_VERSION
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
 from zenagent.cli.rpc.slot import RuntimeSlot
+from zenagent.cli.rpc.terminal import TerminalError, TerminalSession, clamp_dim
 from zenagent.project import find_project_root, project_key
 
 if TYPE_CHECKING:
@@ -54,6 +55,7 @@ class RpcHost:
         self._slots: OrderedDict[str, RuntimeSlot] = OrderedDict()
         self._active: RuntimeSlot | None = None
         self._closed = False
+        self._terminal = TerminalSession(self._send)
         if initial is not None:
             self._slots[initial.key] = initial
             self._active = initial
@@ -122,6 +124,9 @@ class RpcHost:
         if kind == "project":
             await self._project(request, request_id)
             return True
+        if kind == "terminal":
+            self._terminal_op(request, request_id)
+            return True
 
         slot = self._slot_for(request, prefer_id=kind in ("approval", "ask"))
         if slot is None:
@@ -138,6 +143,70 @@ class RpcHost:
         if kind == "ask":
             return slot.server._resolve_ask(request)
         return await slot.server._handle_line(line)
+
+    # -- terminal -----------------------------------------------------------
+
+    def _terminal_op(self, request: dict, request_id) -> None:
+        """Serve one terminal op. The shell lives at host level: opening a
+        project neither creates nor stops it, and the client token keeps a
+        replaced shell's late frames out of its successor's pane."""
+        op = request.get("op")
+        label = str(op or "")
+        token = request.get("session")
+        try:
+            if not isinstance(token, str) or token == "":
+                raise Refusal("terminal needs a session token")
+            if op == "start":
+                cwd = request.get("cwd")
+                if cwd is not None and not isinstance(cwd, str):
+                    raise Refusal("terminal cwd must be a string")
+                info = self._terminal.start(
+                    token,
+                    cwd or None,
+                    clamp_dim(request.get("cols"), 80),
+                    clamp_dim(request.get("rows"), 24),
+                )
+                self._send({"type": "result", "id": request_id, "ok": True, **info})
+                return
+            if op == "write":
+                data = request.get("data")
+                if not isinstance(data, str):
+                    raise Refusal("terminal write needs data")
+                self._terminal.write(token, data)
+            elif op == "resize":
+                self._terminal.resize(
+                    token,
+                    clamp_dim(request.get("cols"), 80),
+                    clamp_dim(request.get("rows"), 24),
+                )
+            elif op == "close":
+                self._terminal.close(token)
+            else:
+                raise Refusal(f"unknown terminal op: {op}")
+            self._send({"type": "result", "id": request_id, "ok": True})
+        except Refusal as exc:
+            self._send(
+                error_frame(
+                    request_id,
+                    str(exc),
+                    exc.code or "terminal_invalid",
+                    {"op": label},
+                )
+            )
+        except TerminalError as exc:
+            self._send(
+                error_frame(request_id, str(exc), "terminal_failed", {"op": label})
+            )
+        except Exception as exc:  # noqa: BLE001 - a bad op is a result, not a crash
+            self._send(
+                failure_frame(
+                    request_id,
+                    code="terminal_failed",
+                    message="terminal failed",
+                    exc=exc,
+                    op=label,
+                )
+            )
 
     # -- slot registry ------------------------------------------------------
 
@@ -323,6 +392,7 @@ class RpcHost:
         if self._closed:
             return
         self._closed = True
+        self._terminal.close()
         slots = list(self._slots.values())
         self._slots.clear()
         self._active = None

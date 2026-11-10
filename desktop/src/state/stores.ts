@@ -204,7 +204,14 @@ export const usePaletteStore = create<PaletteState>((set) => ({
 
 // ---- work panel -------------------------------------------------------------
 
-export type WorkPanelTabKind = 'review' | 'files' | 'worktree' | 'memory' | 'taiji' | 'subagent'
+export type WorkPanelTabKind =
+  | 'review'
+  | 'files'
+  | 'worktree'
+  | 'memory'
+  | 'taiji'
+  | 'terminal'
+  | 'subagent'
 
 export interface WorkPanelTab {
   id: string
@@ -227,7 +234,7 @@ interface WorkPanelState {
   activeId: string
   openPanel(): void
   closePanel(): void
-  showTab(kind: 'review' | 'files' | 'worktree' | 'memory' | 'taiji'): void
+  showTab(kind: 'review' | 'files' | 'worktree' | 'memory' | 'taiji' | 'terminal'): void
   activate(id: string): void
   openSubagent(target: SubagentPanelTarget): void
   closeTab(id: string): void
@@ -481,7 +488,7 @@ export type ThemeMode = 'light' | 'dark' | 'auto'
 export type ThemeId = 'zen' | 'vscode' | 'github' | 'tokyonight'
 export const THEME_IDS: readonly ThemeId[] = ['zen', 'vscode', 'github', 'tokyonight']
 export type Locale = 'en' | 'zh'
-export type AppView = 'chat' | 'settings' | 'tools'
+export type AppView = 'chat' | 'settings'
 
 export const FONT_SCALE_MIN = 0.9
 export const FONT_SCALE_MAX = 1.2

@@ -1,20 +1,19 @@
-/** Conversation chrome: project crumb · inline-rename title on the left, new
- * session and search on the right. The bar is a Tauri drag region; each control
+/** Conversation chrome: project crumb · inline-rename title on the left, the
+ * terminal and search on the right. The bar is a Tauri drag region; each control
  * is its own hit target. Session actions (undo, compact) live in the sidebar's
  * current-row menu, not here. */
 
 import { useState, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useAppStore } from '../state/appStore'
-import { usePaletteStore, useSessionStore } from '../state/stores'
+import { usePaletteStore, useSessionStore, useWorkPanelStore } from '../state/stores'
 import { useT } from '../i18n/locale'
-import { FolderIcon, PanelLeftIcon, PlusIcon, SearchIcon } from './icons'
+import { FolderIcon, PanelLeftIcon, SearchIcon, TerminalIcon } from './icons'
 import { Tooltip } from './primitives'
 import css from './ConversationTopbar.module.css'
 
 interface ConversationTopbarProps {
   collapsed: boolean
   onExpandSidebar(): void
-  onNewSession(): void
 }
 
 export function ConversationTopbar(props: ConversationTopbarProps) {
@@ -115,14 +114,16 @@ export function ConversationTopbar(props: ConversationTopbarProps) {
         </div>
       </div>
       <div className={css.right}>
-        <button
-          type="button"
-          className={css.button}
-          onClick={props.onNewSession}
-          aria-label={t('topbar.new')}
-        >
-          <PlusIcon size={15} />
-        </button>
+        <Tooltip label={t('panel.terminal')}>
+          <button
+            type="button"
+            className={css.button}
+            aria-label={t('panel.terminal')}
+            onClick={() => useWorkPanelStore.getState().showTab('terminal')}
+          >
+            <TerminalIcon size={15} />
+          </button>
+        </Tooltip>
         <Tooltip label="⌘K">
           <button
             type="button"

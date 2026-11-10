@@ -30,13 +30,10 @@ import css from './App.module.css'
 const SIDEBAR_KEY = 'zen.sidebar.width'
 const RIGHTBAR_KEY = 'zen.rightbar.width'
 
-// Secondary surfaces stay out of the boot chunk: settings, tools, the work
-// panel and the palette load on first use, behind a null fallback.
+// Secondary surfaces stay out of the boot chunk: settings, the work panel and
+// the palette load on first use, behind a null fallback.
 const SettingsPage = lazy(() =>
   import('./ui/pages/SettingsPage').then((module) => ({ default: module.SettingsPage })),
-)
-const ToolsPage = lazy(() =>
-  import('./ui/pages/ToolsPage').then((module) => ({ default: module.ToolsPage })),
 )
 const RightPanel = lazy(() =>
   import('./ui/rightbar/RightPanel').then((module) => ({ default: module.RightPanel })),
@@ -251,14 +248,6 @@ export function App() {
       </Suspense>
     )
   }
-  if (view === 'tools') {
-    return (
-      <Suspense fallback={null}>
-        <ToolsPage />
-      </Suspense>
-    )
-  }
-
   return (
     <>
       <AppFrame
@@ -285,11 +274,7 @@ export function App() {
         </Suspense>
       }
     >
-      <ConversationTopbar
-        collapsed={collapsed}
-        onExpandSidebar={() => setCollapsed(false)}
-        onNewSession={() => void useAppStore.getState().newSession()}
-      />
+      <ConversationTopbar collapsed={collapsed} onExpandSidebar={() => setCollapsed(false)} />
       {switching !== null && (
         <div
           className={css.switchingBar}

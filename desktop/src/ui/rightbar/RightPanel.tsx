@@ -1,6 +1,7 @@
 /** Work panel — pi's docked right rail: a 46px tab strip with review, files,
- * worktree and per-subagent tabs, a launcher for the tool tabs, a close
- * control and a resizable left edge. */
+ * worktree and per-subagent tabs, a terminal tab whose shell outlives tab
+ * switches, a launcher for the tool tabs, a close control and a resizable
+ * left edge. */
 
 import {
   Suspense,
@@ -26,6 +27,7 @@ import {
   FolderIcon,
   PlusIcon,
   SparkIcon,
+  TerminalIcon,
   XIcon,
 } from '../icons'
 import css from './RightPanel.module.css'
@@ -50,6 +52,9 @@ const WorktreePanel = lazy(() =>
 const TaijiPanel = lazy(() =>
   import('./TaijiPanel').then((module) => ({ default: module.TaijiPanel })),
 )
+const TerminalPanel = lazy(() =>
+  import('./TerminalPanel').then((module) => ({ default: module.TerminalPanel })),
+)
 
 export interface RightPanelProps {
   width: number
@@ -70,6 +75,7 @@ const TOOL_TABS = [
   { kind: 'worktree', label: 'panel.worktree', Icon: BranchIcon },
   { kind: 'memory', label: 'panel.memory', Icon: SparkIcon },
   { kind: 'taiji', label: 'panel.taiji', Icon: BranchIcon },
+  { kind: 'terminal', label: 'panel.terminal', Icon: TerminalIcon },
 ] as const
 
 function clampPanel(px: number): number {
@@ -273,7 +279,14 @@ export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
       </div>
       <div className={css.body} data-selectable data-embed="">
         <Suspense fallback={null}>
-          {activeTab === undefined ? null : activeTab.kind === 'subagent' ? (
+          {/* The shell survives tab switches: hiding the pane keeps xterm's
+              buffer (and the PTY) alive while another tab is on screen. */}
+          {tabs.some((tab) => tab.kind === 'terminal') && (
+            <div className={css.terminalPane} hidden={activeTab?.kind !== 'terminal'}>
+              <TerminalPanel active={activeTab?.kind === 'terminal'} />
+            </div>
+          )}
+          {activeTab === undefined || activeTab.kind === 'terminal' ? null : activeTab.kind === 'subagent' ? (
             <SubagentTranscript
               target={{ callId: activeTab.callId ?? '', name: activeTab.name ?? '' }}
             />

@@ -66,6 +66,7 @@ export const REQUEST_KINDS = [
   'steer',
   'subagent_transcript',
   'taiji',
+  'terminal',
   'tools',
   'transcript',
   'usage',
@@ -768,6 +769,7 @@ export interface AgentEventFrame {
     | 'approval_request'
     | 'ask_request'
     | 'ask_cancel'
+    | 'terminal'
   message?: MessageProjection
   assistant_event?: AssistantEvent
   new_messages?: (MessageView | ToolCallView)[]
@@ -782,7 +784,11 @@ export interface AgentEventFrame {
   duration_ms?: number
   // approval_request / ask_request extras
   request_id?: string
-  kind?: 'confirm'
+  // terminal extras
+  kind?: 'confirm' | 'output' | 'exit'
+  data?: string
+  code?: number | null
+  session?: string
   risk?: string | null
   target?: string | null
   reason?: string | null

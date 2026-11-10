@@ -18,8 +18,8 @@ test('settings carry pi defaults and the shell view', () => {
   assert.equal(settings.fontScale, 1)
   assert.equal(settings.sessionTime, true)
   assert.equal(settings.view, 'chat')
-  settings.setView('tools')
-  assert.equal(useSettingsStore.getState().view, 'tools')
+  settings.setView('settings')
+  assert.equal(useSettingsStore.getState().view, 'settings')
   useSettingsStore.getState().setView('chat')
 })
 

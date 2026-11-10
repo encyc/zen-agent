@@ -39,7 +39,6 @@ import {
   PlusIcon,
   SettingsIcon,
   SunIcon,
-  TerminalIcon,
   XIcon,
 } from './icons'
 import { formatAge } from './format'
@@ -795,9 +794,9 @@ function Footer() {
   const setView = useSettingsStore((state) => state.setView)
   const theme = useSettingsStore((state) => state.theme)
   const setTheme = useSettingsStore((state) => state.setTheme)
-  const openPage = (view: 'settings' | 'tools') => {
+  const openSettings = () => {
     captureChatState()
-    setView(view)
+    setView('settings')
   }
 
   const nextTheme = theme === 'light' ? 'dark' : theme === 'dark' ? 'auto' : 'light'
@@ -820,7 +819,7 @@ function Footer() {
             type="button"
             className={css.footerButton}
             aria-label={t('settings.title')}
-            onClick={() => openPage('settings')}
+            onClick={openSettings}
           >
             <SettingsIcon size={14} />
           </button>
@@ -833,16 +832,6 @@ function Footer() {
             onClick={() => setTheme(nextTheme)}
           >
             {themeIcon}
-          </button>
-        </Tooltip>
-        <Tooltip label={t('tools.title')}>
-          <button
-            type="button"
-            className={css.footerButton}
-            aria-label={t('tools.title')}
-            onClick={() => openPage('tools')}
-          >
-            <TerminalIcon size={14} />
           </button>
         </Tooltip>
         <Notifications />

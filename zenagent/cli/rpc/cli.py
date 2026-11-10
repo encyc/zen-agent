@@ -5,7 +5,12 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+import threading
 from pathlib import Path
+
+#: The terminal reader is a thread, so every wire frame shares this lock:
+#: interleaved half-lines would corrupt the JSONL stream.
+_stdout_lock = threading.Lock()
 
 
 async def _stdin_line() -> str | None:
@@ -14,8 +19,9 @@ async def _stdin_line() -> str | None:
 
 
 def _stdout_line(text: str) -> None:
-    sys.stdout.write(text + "\n")
-    sys.stdout.flush()
+    with _stdout_lock:
+        sys.stdout.write(text + "\n")
+        sys.stdout.flush()
 
 
 async def _run(args) -> int:

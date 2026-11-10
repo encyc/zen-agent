@@ -1681,7 +1681,7 @@ test('the font size setting scales chat and settings together', async ({ page })
   assert.equal(await fontOf('nav button'), '15.6px')
 })
 
-test('settings and tools replace the shell and return to chat', async ({ page }) => {
+test('settings replaces the shell and returns to chat', async ({ page }) => {
   await boot(page, initialState())
   await page.getByRole('button', { name: '设置' }).click()
   await expect(page.getByRole('heading', { name: '外观' })).toBeVisible()
@@ -1699,12 +1699,84 @@ test('settings and tools replace the shell and return to chat', async ({ page })
   await page.getByRole('button', { name: '外观: 深色' }).click()
   await expect(page.getByRole('button', { name: '外观: 跟随系统' })).toBeVisible()
   await expect(page.locator('body')).not.toHaveAttribute('data-ds-dark-theme', '')
+})
 
-  await page.getByRole('button', { name: '工具' }).click()
-  await expect(page.getByText('read_file')).toBeVisible()
-  await expect(page.getByText('Read a file')).toBeVisible()
-  await page.getByRole('button', { name: '返回' }).click()
-  await expect(page.locator('[data-shell-composer]')).toBeVisible()
+test('the topbar terminal opens a shell in the work panel', async ({ page }) => {
+  // A fixed light start makes the palette flip deterministic.
+  await page.addInitScript(() => localStorage.setItem('zen.theme', JSON.stringify('light')))
+  await boot(page, initialState())
+  // The old new-session seat is gone; the terminal owns the topbar's right edge.
+  const topbar = page.getByRole('toolbar', { name: '会话' })
+  await expect(topbar.getByRole('button', { name: '新会话' })).toHaveCount(0)
+  await page.getByRole('button', { name: '终端' }).click()
+  await expect(page.locator('[data-work-panel]')).toHaveAttribute('data-tab', 'terminal')
+
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__ZEN_E2E__.calls.some((call) => call.type === 'terminal' && call.op === 'start'),
+      ),
+    )
+    .toBe(true)
+  // React's dev double-mount starts one shell per pass; the live pane owns the
+  // last token.
+  const session = await page.evaluate(() =>
+    String(
+      window.__ZEN_E2E__.calls
+        .filter((call) => call.type === 'terminal' && call.op === 'start')
+        .at(-1)?.session ?? '',
+    ),
+  )
+  await page.evaluate(
+    ({ token }) => {
+      window.__ZEN_E2E_EMIT__('rpc:frame', {
+        event: 'rpc:frame',
+        id: 1,
+        payload: {
+          frame: {
+            type: 'event',
+            event: { type: 'terminal', session: token, kind: 'output', data: 'zen@work % ' },
+          },
+        },
+      })
+    },
+    { token: session },
+  )
+  await expect(page.locator('[data-terminal-host]')).toContainText('zen@work %')
+
+  // The xterm pane follows the shell palette: the footer theme cycle repaints
+  // the viewport through the body attributes, without remounting the shell.
+  // xterm paints the theme background on its scrollable element.
+  const viewport = page.locator('[data-terminal-host] .xterm-scrollable-element')
+  const viewportColor = () =>
+    viewport.evaluate((node) => getComputedStyle(node).backgroundColor)
+  await expect.poll(viewportColor).toBe('rgb(255, 255, 255)')
+  await page.getByRole('button', { name: '外观: 浅色' }).click()
+  await expect(page.locator('body')).toHaveAttribute('data-ds-dark-theme', '')
+  await expect.poll(viewportColor).toBe('rgb(21, 21, 23)')
+
+  await page.locator('[data-terminal-host]').click()
+  await page.keyboard.type('ls')
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__ZEN_E2E__.calls
+          .filter((call) => call.type === 'terminal' && call.op === 'write')
+          .map((call) => String(call.data ?? ''))
+          .join(''),
+      ),
+    )
+    .toBe('ls')
+
+  // Closing the tab tells the host to end the shell.
+  await page.getByRole('button', { name: '关闭 终端' }).click()
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__ZEN_E2E__.calls.some((call) => call.type === 'terminal' && call.op === 'close'),
+      ),
+    )
+    .toBe(true)
 })
 
 test('model settings saves a provider key without echoing it', async ({ page }) => {
