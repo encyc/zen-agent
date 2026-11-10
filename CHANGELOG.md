@@ -5,24 +5,7 @@ matches the release tag; older history is in the repository tags and commits.
 
 ## Unreleased
 
-- **Architecture diagrams as a first-class asset** (`docs/architecture-simplify.html`,
-  `docs/architecture-full.html`): two standalone interactive HTML diagrams of the
-  whole system — a module-level simplify view and a per-file full view (64 nodes,
-  58 edges; hover any node for its merged file list and details, and to highlight
-  its edges). Governance now lives in `docs/architecture.md` §架构图资产:
-  architecture/requirement discussions must go through the diagrams, and every
-  changelog entry must state what changed on them. (Diagram deltas for this
-  entry: **added** both files as new assets, then cross-checked against
-  `scripts/import_graph.py` — coverage gaps folded into node tooltips
-  (`error_notice` → chat, `project` / `registry` consumer notes). Design
-  review **added** 2 edges (`prep→config`, `runtime→observability`), per-node
-  fan-in badges, a hover/click layer that reveals non-drawn import relations
-  as blue dotted lines annotated with the calling methods (AST-extracted),
-  and a presentation pass (visual-sample legend, provenance line, column
-  hairline rules, tiered badges, focus-dim softening, reduced-motion
-  fallback). The checker also surfaced a 4-module import cycle inside the
-  kernel, `agent.loop ↔ tool_exec ↔ result_budget ↔ timeouts`, which the
-  diagram intentionally hides by merging them into one node.)
+## v0.11.1 — 2026-11-10
 
 ### Plugins — declarative connector packs
 
