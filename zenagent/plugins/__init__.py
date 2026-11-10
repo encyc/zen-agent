@@ -8,6 +8,8 @@ free of imports from ``mcp/``, ``app/`` and ``cli/``.
 
 from __future__ import annotations
 
+from zenagent.plugins.discovery import discover_plugins, installed_root
+from zenagent.plugins.install import install_plugin, uninstall_plugin
 from zenagent.plugins.manifest import CredentialSpec, PluginManifest, parse_manifest
 from zenagent.plugins.state import (
     PLUGIN_STATE_PREF,
@@ -29,9 +31,13 @@ __all__ = [
     "clear_plugin",
     "credential_name",
     "credentials_for",
+    "discover_plugins",
+    "install_plugin",
+    "installed_root",
     "is_enabled",
     "parse_manifest",
     "resolve",
     "set_credentials",
     "set_enabled",
+    "uninstall_plugin",
 ]

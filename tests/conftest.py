@@ -53,6 +53,14 @@ def isolated_tui_history(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def isolated_plugins_root(tmp_path, monkeypatch):
+    """Never discover or install into the developer's real ~/.zenagent/plugins."""
+    from zenagent.plugins import discovery
+
+    monkeypatch.setattr(discovery, "installed_root", lambda: tmp_path / "plugins")
+
+
+@pytest.fixture(autouse=True)
 def isolated_update_check(tmp_path, monkeypatch):
     """Update checks never run or touch the real cache file in tests."""
     monkeypatch.setenv("ZENAGENT_NO_UPDATE_CHECK", "1")
