@@ -656,6 +656,7 @@ Create `tests/test_rpc_slot.py`:
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 
 from zenagent.app.bootstrap import PreparedFrontend
@@ -732,13 +733,20 @@ def _prepared(root: Path) -> tuple[PreparedFrontend, FakeRuntime, FakeBroker]:
     )
 
 
+def _collect(writes: list[dict]):
+    def write(line: str) -> None:
+        writes.append(json.loads(line))
+
+    return write
+
+
 def _adopt(root: Path, writes: list[dict], monkeypatch) -> RuntimeSlot:
     prepared, runtime, broker = _prepared(root)
     claim = TaijiClaim(root=root.resolve(), owned=False)
     monkeypatch.setattr(
         "zenagent.cli.rpc.slot.claim_taiji_host", lambda _runtime: claim
     )
-    slot = RuntimeSlot.adopt(prepared, write_line=writes.append)
+    slot = RuntimeSlot.adopt(prepared, write_line=_collect(writes))
     assert broker.confirm == slot.server.confirm
     assert runtime.ask_handler == slot.server.ask
     return slot
@@ -976,7 +984,7 @@ class RuntimeSlot:
             return False
         return any(
             record.status in ("running", "queued")
-            for record in supervisor.registry.records.values()
+            for record in supervisor.list_workers()
         )
 
     async def close(self) -> None:

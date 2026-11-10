@@ -5,7 +5,7 @@
     "zenagent/cli/repl.py": 1027,
     "zenagent/cli/tui/screens/modals.py": 1042,
     "zenagent/cli/rpc/ops_config.py": 940,
-    "zenagent/cli/rpc/server.py": 803
+    "zenagent/cli/rpc/server.py": 812
   },
   "ts": {
     "desktop/src/ui/Sidebar.tsx": 854,

@@ -28,6 +28,7 @@ from zenagent.cli.rpc.ops_session import SessionOps
 from zenagent.cli.rpc.ops_taiji import TaijiOps
 from zenagent.events import AgentEvent
 from zenagent.limits import LimitsWriteError
+from zenagent.project import project_key
 from zenagent.types import (
     AssistantMessage,
     TextContent,
@@ -231,6 +232,7 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
         sessions=None,
         commands=None,
         approval_timeout_s: float = _APPROVAL_TIMEOUT_S,
+        project: str | None = None,
     ) -> None:
         self.runtime = runtime
         self._agent = agent
@@ -239,6 +241,8 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
         self.sessions = sessions
         self.commands = commands
         self.approval_timeout_s = approval_timeout_s
+        self.project = str(Path(project).resolve()) if project else ""
+        self.project_key = project_key(self.project) if self.project else ""
         self._read_line = read_line
         self._write_line = write_line
         self._task: asyncio.Task | None = None
@@ -277,8 +281,11 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
         return self.runtime.cwd if self.runtime is not None else Path.cwd()
 
     def _send(self, payload: dict) -> None:
-        if self._write_line is not None:
-            self._write_line(json.dumps(payload, ensure_ascii=False, default=str))
+        if self._write_line is None:
+            return
+        if self.project:
+            payload = {**payload, "project": self.project}
+        self._write_line(json.dumps(payload, ensure_ascii=False, default=str))
 
     def _on_event(self, event: AgentEvent) -> None:
         if (
@@ -323,7 +330,8 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
 
     async def confirm(self, tool_name: str, arguments: dict, verdict=None) -> str:
         """Ask the client to approve one tool call; ``deny`` on timeout."""
-        request_id = f"a{self._approval_seq}"
+        prefix = f"{self.project_key}:" if self.project_key else ""
+        request_id = f"{prefix}a{self._approval_seq}"
         self._approval_seq += 1
         try:
             args = json.dumps(arguments, ensure_ascii=False, default=str)[:_ARGS_CHARS]
@@ -386,7 +394,8 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
         serving lines while the client renders the card and answers with
         ``{"type": "ask", "answers": [["label", ...] | null, ...]}``.
         """
-        request_id = f"q{self._ask_seq}"
+        prefix = f"{self.project_key}:" if self.project_key else ""
+        request_id = f"{prefix}q{self._ask_seq}"
         self._ask_seq += 1
         self._send(
             {
