@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 from zenagent.app.bootstrap import prepare
 from zenagent.cli.rpc.codec import PROTOCOL_VERSION
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
+from zenagent.cli.rpc.ops_swarm import SwarmOps
 from zenagent.cli.rpc.slot import RuntimeSlot
 from zenagent.cli.rpc.terminal import TerminalError, TerminalSession, clamp_dim
 from zenagent.project import find_project_root, project_key
@@ -32,7 +33,7 @@ if TYPE_CHECKING:
 MAX_RESIDENT_SLOTS = 4
 
 
-class RpcHost:
+class RpcHost(SwarmOps):
     """Reads requests, routes them to a project slot, and owns slot lifetime."""
 
     def __init__(
@@ -62,6 +63,10 @@ class RpcHost:
         #: Per project, the slot its own requests land on.
         self._active_by_project: dict[str, RuntimeSlot] = {}
         self._closed = False
+        #: The swarm manager is created on the first swarm request: a session
+        #: that never enters swarm mode never pays for resident role runtimes.
+        self._swarm = None
+        self._swarm_started = False
         self._terminal = TerminalSession(self._send)
         if initial is not None:
             self._slots[initial.key] = initial
@@ -137,6 +142,14 @@ class RpcHost:
             return True
         if kind == "session" and request.get("op") == "resume":
             await self._session_resume(request, request_id)
+            return True
+        if kind == "swarm":
+            await self._swarm_op(request, request_id)
+            return True
+        if kind in ("approval", "ask") and str(
+            request.get("request_id") or ""
+        ).startswith("swarm:"):
+            self._resolve_swarm_prompt(request, kind)
             return True
 
         slot = self._slot_for(request, prefer_id=kind in ("approval", "ask"))
@@ -540,6 +553,9 @@ class RpcHost:
             return
         self._closed = True
         self._terminal.close()
+        if self._swarm is not None:
+            await self._swarm.close()
+            self._swarm = None
         slots = list(self._slots.values())
         self._slots.clear()
         self._active = None

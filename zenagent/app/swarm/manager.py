@@ -186,13 +186,13 @@ class SwarmManager:
         records = sorted(
             self.store.tasks.values(), key=lambda task: (task.created_at, task.id)
         )
-        payload = []
-        for task in records:
-            record = _task_record(task)
-            record.pop("type", None)
-            record.pop("version", None)
-            payload.append(record)
-        return payload
+        return [self.task_view(task) for task in records]
+
+    def task_view(self, task: TaskRecord) -> dict:
+        record = _task_record(task)
+        record.pop("type", None)
+        record.pop("version", None)
+        return record
 
     def messages(self, since: int | None = None) -> list[dict]:
         start = 0 if since is None else max(0, int(since))
@@ -684,7 +684,7 @@ class SwarmManager:
             task_id = agent.current_task if agent is not None else None
             request_id = f"swarm:a{self._approval_seq}"
             self._approval_seq += 1
-            payload: dict = {
+            event: dict = {
                 "type": "approval_request",
                 "swarm": True,
                 "agent": role_id,
@@ -694,13 +694,13 @@ class SwarmManager:
                 "args": json.dumps(arguments, ensure_ascii=False, default=str),
             }
             if verdict is not None:
-                payload["kind"] = verdict.kind
-                payload["risk"] = verdict.risk
-                payload["target"] = verdict.target
-                payload["reason"] = verdict.reason
+                event["kind"] = verdict.kind
+                event["risk"] = verdict.risk
+                event["target"] = verdict.target
+                event["reason"] = verdict.reason
             future: asyncio.Future = asyncio.get_running_loop().create_future()
             self._approvals[request_id] = future
-            self._write(payload)
+            self._write({"type": "event", "event": event})
             try:
                 return await asyncio.wait_for(future, APPROVAL_TIMEOUT_S)
             except TimeoutError:
