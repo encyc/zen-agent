@@ -9,6 +9,8 @@ import type {
   CommandEntry,
   McpServerRow,
   ModelEntry,
+  PluginCatalogRow,
+  PluginRow,
   PendingMessage,
   SecretProviderRow,
   SessionSummary,
@@ -338,6 +340,30 @@ export const useMcpStore = create<McpState>((set) => ({
   servers: [],
   problem: null,
   setServers: (servers, problem) => set({ servers, problem }),
+}))
+
+// ---- plugins ----------------------------------------------------------------
+
+export interface PluginState {
+  plugins: PluginRow[]
+  catalog: PluginCatalogRow[]
+  problem: string | null
+  applyPending: boolean
+  setView(
+    plugins: PluginRow[],
+    catalog: PluginCatalogRow[],
+    problem: string | null,
+    applyPending?: boolean,
+  ): void
+}
+
+export const usePluginStore = create<PluginState>((set) => ({
+  plugins: [],
+  catalog: [],
+  problem: null,
+  applyPending: false,
+  setView: (plugins, catalog, problem, applyPending = false) =>
+    set({ plugins, catalog, problem, applyPending }),
 }))
 
 // ---- approvals ---------------------------------------------------------------

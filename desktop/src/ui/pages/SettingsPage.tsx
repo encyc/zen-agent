@@ -31,20 +31,8 @@ import {
   CHAT_WIDTH_MIN,
   clampChatWidth,
 } from '../columns'
-import {
-  ArrowLeftIcon,
-  ChatIcon,
-  CheckIcon,
-  ChevronDownIcon,
-  FileIcon,
-  FolderIcon,
-  InfoIcon,
-  ActivityIcon,
-  PaletteIcon,
-  SearchIcon,
-  SparkIcon,
-  TerminalIcon,
-} from '../icons'
+import { ArrowLeftIcon, CheckIcon, ChevronDownIcon, SearchIcon } from '../icons'
+import { NAV_GROUPS, NAV_ITEMS, type Tab } from './settingsNav'
 import { ZenWordmark } from '../ZenWordmark'
 import css from './SettingsPage.module.css'
 
@@ -62,120 +50,12 @@ const LimitSettings = lazy(() =>
 const McpSettings = lazy(() =>
   import('./McpSettings').then((module) => ({ default: module.McpSettings })),
 )
+const PluginSettings = lazy(() =>
+  import('./PluginSettings').then((module) => ({ default: module.PluginSettings })),
+)
 const ProjectSettings = lazy(() =>
   import('./ProjectSettings').then((module) => ({ default: module.ProjectSettings })),
 )
-
-type Tab =
-  | 'appearance'
-  | 'models'
-  | 'conversation'
-  | 'skills'
-  | 'limits'
-  | 'mcp'
-  | 'projects'
-  | 'about'
-type NavGroup = 'preferences' | 'resources' | 'system'
-
-interface NavItem {
-  id: Tab
-  labelKey: string
-  hintKey: string
-  icon: ReactNode
-  group: NavGroup
-  keywords: string[]
-}
-
-const NAV_ITEMS: NavItem[] = [
-  {
-    id: 'appearance',
-    labelKey: 'settings.appearance',
-    hintKey: 'settings.appearanceHint',
-    icon: <PaletteIcon size={14} />,
-    group: 'preferences',
-    keywords: ['settings.theme', 'settings.themePalette', 'settings.language', 'settings.fontScale'],
-  },
-  {
-    id: 'models',
-    labelKey: 'settings.models',
-    hintKey: 'settings.modelsHint',
-    icon: <SparkIcon size={14} />,
-    group: 'preferences',
-    keywords: [
-      'settings.modelProviders',
-      'settings.searchProviders',
-      'settings.configured',
-      'settings.testConnection',
-    ],
-  },
-  {
-    id: 'conversation',
-    labelKey: 'settings.conversation',
-    hintKey: 'settings.conversationHint',
-    icon: <ChatIcon size={14} />,
-    group: 'preferences',
-    keywords: [
-      'settings.sessionTime',
-      'settings.chatWidth',
-      'settings.showThinking',
-      'settings.autoCollapseThinking',
-      'settings.contextUsageDisplay',
-      'settings.enterToSend',
-    ],
-  },
-  {
-    id: 'skills',
-    labelKey: 'settings.skills',
-    hintKey: 'settings.skillsHint',
-    icon: <FileIcon size={14} />,
-    group: 'resources',
-    keywords: ['settings.skillsList', 'settings.skillProject', 'settings.skillGlobal'],
-  },
-  {
-    id: 'limits',
-    labelKey: 'settings.limits',
-    hintKey: 'settings.limitsHint',
-    icon: <ActivityIcon size={14} />,
-    group: 'system',
-    keywords: [
-      'settings.limitFile',
-      'settings.limit.skills.max_index_bytes',
-      'settings.limit.task.max_turns',
-      'settings.limitGroup.subagents',
-      'settings.limitGroup.tools',
-    ],
-  },
-  {
-    id: 'mcp',
-    labelKey: 'settings.mcp',
-    hintKey: 'settings.mcpHint',
-    icon: <TerminalIcon size={14} />,
-    group: 'resources',
-    keywords: ['settings.mcpServers', 'settings.mcpAdd', 'settings.mcpLayer'],
-  },
-  {
-    id: 'projects',
-    labelKey: 'settings.projects',
-    hintKey: 'settings.projectsHint',
-    icon: <FolderIcon size={14} />,
-    group: 'resources',
-    keywords: ['settings.projectsList', 'settings.projectAdd', 'settings.projectNewSession'],
-  },
-  {
-    id: 'about',
-    labelKey: 'settings.about',
-    hintKey: 'settings.aboutHint',
-    icon: <InfoIcon size={14} />,
-    group: 'system',
-    keywords: ['settings.aboutVersion'],
-  },
-]
-
-const NAV_GROUPS: { id: NavGroup; labelKey: string }[] = [
-  { id: 'preferences', labelKey: 'settings.groupPreferences' },
-  { id: 'resources', labelKey: 'settings.groupResources' },
-  { id: 'system', labelKey: 'settings.groupSystem' },
-]
 
 const THEMES: { value: ThemeMode; labelKey: string }[] = [
   { value: 'auto', labelKey: 'theme.auto' },
@@ -676,6 +556,12 @@ export function SettingsPage() {
           {tab === 'mcp' && (
             <Suspense fallback={null}>
               <McpSettings />
+            </Suspense>
+          )}
+
+          {tab === 'plugins' && (
+            <Suspense fallback={null}>
+              <PluginSettings />
             </Suspense>
           )}
 
