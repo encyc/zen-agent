@@ -569,7 +569,7 @@ def test_no_mcp_flag_never_constructs_a_manager(monkeypatch):
     def explode(*args, **kwargs):
         raise AssertionError("McpManager must not be constructed with --no-mcp")
 
-    monkeypatch.setattr("zenagent.app.runtime.McpManager", explode)
+    monkeypatch.setattr("zenagent.app.plugin_wiring.McpManager", explode)
     _patch_bootstrap(monkeypatch, fake_stream("ok"), {})
     assert cli_main.main(["-p", "hi", "--no-mcp"]) == 0
 
@@ -604,7 +604,7 @@ def test_mcp_server_filter_selects_only_named_servers(monkeypatch, tmp_path):
         async def close(self):
             return None
 
-    monkeypatch.setattr("zenagent.app.runtime.McpManager", FakeManager)
+    monkeypatch.setattr("zenagent.app.plugin_wiring.McpManager", FakeManager)
     _patch_bootstrap(monkeypatch, fake_stream("ok"), {})
 
     assert cli_main.main(["-p", "hi", "--mcp-file", str(config),

@@ -6,13 +6,22 @@
  * Playwright-only navigation helper. */
 
 import { expect, type Page } from '@playwright/test'
-import { installBridge, type BridgeState } from '../src/dev/bridge'
+import { type BridgeState } from '../src/dev/bridge'
 
-export { installBridge, initialState } from '../src/dev/bridge'
+export { initialState } from '../src/dev/bridge'
 export type { BridgeState, MemoryEntryMock } from '../src/dev/bridge'
 
+/** Hand the page its scripted state before the app boots; the dev bootstrap
+ * in `main.tsx` then installs the module-resolved bridge itself, so the
+ * bridge may keep ordinary module imports. */
+export async function presetState(page: Page, state: BridgeState) {
+  await page.addInitScript((preset) => {
+    window.__ZEN_E2E__ = preset
+  }, state)
+}
+
 export async function boot(page: Page, state: BridgeState) {
-  await page.addInitScript(installBridge, state)
+  await presetState(page, state)
   await page.goto('/')
   await expect(page.locator('[data-topbar-title]')).toHaveText(state.title)
 }

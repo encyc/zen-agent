@@ -13,7 +13,12 @@ export function listPlugins(): Promise<PluginsResult> {
 }
 
 export function installPlugin(source: { id?: string; path?: string }): Promise<PluginsResult> {
-  return send({ type: 'plugins', op: 'install', ...source })
+  return send({
+    type: 'plugins',
+    op: 'install',
+    ...(source.id ? { plugin: source.id } : {}),
+    ...(source.path ? { path: source.path } : {}),
+  })
 }
 
 export function uninstallPlugin(id: string): Promise<PluginsResult> {

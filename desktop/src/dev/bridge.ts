@@ -1,11 +1,10 @@
 /** Scripted Tauri bridge for the e2e harness and the dev-browser shim.
- *
  * Installs `window.__TAURI_INTERNALS__` (the surface `invoke`/`listen` read),
  * so the real React shell boots with scripted RPC answers and no `zen` binary
  * or Rust side. Kept free of Node/Playwright imports: `main.tsx` loads it
- * dynamically under `import.meta.env.DEV`, so production bundles must be able
- * to drop it, while `e2e/harness.ts` imports it for Playwright specs. */
+ * dynamically under `import.meta.env.DEV`; Playwright loads it via harness. */
 
+import { handlePlugins, type PluginMockState } from './pluginsMock'
 type Lane = 'queue' | 'steer'
 
 interface PendingItemMock {
@@ -25,7 +24,7 @@ export interface MemoryEntryMock {
   source: string
 }
 
-export interface BridgeState {
+export interface BridgeState extends PluginMockState {
   running: boolean
   pending: PendingItemMock[]
   calls: Record<string, unknown>[]
@@ -476,6 +475,7 @@ export function installBridge(state: BridgeState) {
         state.limitExplicit = [...explicit]
         return result()
       }
+      case 'plugins': return handlePlugins(state, payload)
       case 'mcp': {
         const rows = () =>
           state.mcpServers ?? [

@@ -27,7 +27,7 @@ window.addEventListener('unhandledrejection', (event) => {
 async function bootstrap(root: HTMLElement): Promise<void> {
   if (import.meta.env.DEV && !window.__TAURI_INTERNALS__) {
     const { installBridge, initialState } = await import('./dev/bridge')
-    installBridge(initialState())
+    installBridge(window.__ZEN_E2E__ || initialState())
   }
   createRoot(root).render(
     <React.StrictMode>

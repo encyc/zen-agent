@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict'
 import { expect, test, type Page } from '@playwright/test'
 
-import { boot, installBridge, initialState, type BridgeState } from './harness'
+import { boot, initialState, presetState, type BridgeState } from './harness'
 async function emitEvent(page: Page, event: Record<string, unknown>) {
   await page.evaluate((payload) => {
     window.__ZEN_E2E_EMIT__('rpc:frame', {
@@ -27,7 +27,7 @@ const sidebarKey = process.platform === 'darwin' ? 'Meta+b' : 'Control+b'
 
 test('a returning user lands on the home hero and auto-connects', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('zen.last.cwd', '/work'))
-  await page.addInitScript(installBridge, initialState())
+  await presetState(page, initialState())
   await page.goto('/')
   await expect(page.getByRole('heading', { level: 1, name: /ZenAgent/ })).toBeVisible()
   await expect(page.locator('[data-shell-composer]')).toBeVisible()
@@ -36,7 +36,7 @@ test('a returning user lands on the home hero and auto-connects', async ({ page 
 
 test('the home hero shows the padded app icon', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('zen.last.cwd', '/work'))
-  await page.addInitScript(installBridge, initialState())
+  await presetState(page, initialState())
   await page.goto('/')
   const logo = page.locator('[data-home-hero] [data-home-logo]')
   await expect(logo).toBeVisible()
@@ -162,7 +162,7 @@ test('a running tool turn rotates the mark in the process header', async ({ page
 })
 
 test('a first launch goes straight into the chat shell', async ({ page }) => {
-  await page.addInitScript(installBridge, initialState())
+  await presetState(page, initialState())
   await page.goto('/')
   await expect(page.locator('[data-shell-composer]')).toBeVisible()
   await expect
@@ -177,7 +177,7 @@ test('a first launch goes straight into the chat shell', async ({ page }) => {
 test('a shell that never reaches ready still reveals its window', async ({ page }) => {
   // `rpc_start` never settles, so the ready tree (and its show) never runs.
   // The unconditional boot fail-safe must reveal the window anyway.
-  await page.addInitScript(installBridge, initialState({ startHangs: true }))
+  await presetState(page, initialState({ startHangs: true }))
   await page.goto('/')
   await expect(page.locator('[data-topbar-title]')).toHaveCount(0)
   await expect
@@ -1516,7 +1516,7 @@ test('escaping a row menu neither cancels the run nor traps the keyboard', async
 })
 
 test('a recorded project root stays openable without a current session', async ({ page }) => {
-  await page.addInitScript(installBridge, initialState({ noCurrent: true }))
+  await presetState(page, initialState({ noCurrent: true }))
   await page.goto('/')
   await expect(page.locator('[data-session-path="/sessions/a.jsonl"]')).toBeVisible()
   await expect(page.locator('[data-session-path="/sessions/a.jsonl"]')).not.toHaveAttribute('aria-disabled', 'true')
