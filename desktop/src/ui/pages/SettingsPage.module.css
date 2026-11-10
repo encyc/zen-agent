@@ -641,9 +641,14 @@
   cursor: pointer;
 }
 
-.reset:hover {
+.reset:hover:not(:disabled) {
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
+}
+
+.reset:disabled {
+  color: var(--dsw-alias-label-tertiary);
+  cursor: default;
 }
 
 .switch {

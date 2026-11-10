@@ -18,12 +18,15 @@ import {
   FONT_SCALE_MAX,
   FONT_SCALE_MIN,
   clampFontScale,
+  useApprovalStore,
   useSettingsStore,
   type Locale,
   type ThemeId,
   type ThemeMode,
 } from '../../state/stores'
+import { useAppStore } from '../../state/appStore'
 import { useT } from '../../i18n/locale'
+import { compareVersions } from '../../state/update'
 import { useUpdateStore } from '../../state/updateStore'
 import {
   CHAT_WIDTH_DEFAULT,
@@ -279,11 +282,28 @@ function PalettePicker(props: {
 }
 
 /** Manual check: ignores the cache and says what happened, unlike the silent
- * boot check. Install still goes through the sidebar notification. */
+ * boot check. The adjacent button installs a found release in place, with the
+ * same mid-run guard as the sidebar notification. */
 function UpdateCheckButton() {
   const t = useT()
   const [result, setResult] = useState<'latest' | 'available' | 'failed' | null>(null)
   const [running, setRunning] = useState(false)
+  const phase = useUpdateStore((state) => state.phase)
+  const cache = useUpdateStore((state) => state.cache)
+  const selfUpdatable = useUpdateStore((state) => state.selfUpdatable)
+  const busy = useAppStore((state) => state.busy)
+  const pendingApprovals = useApprovalStore((state) => state.queue.length)
+  // The cache, not the phase: a dismissed notification must not hide the
+  // update from someone who came to Settings to install it deliberately.
+  const available = cache !== null && compareVersions(cache.latest, __APP_VERSION__) > 0
+  const installing = phase === 'installing'
+  const canInstall =
+    available &&
+    !installing &&
+    !running &&
+    phase !== 'checking' &&
+    !busy &&
+    pendingApprovals === 0
   return (
     <div className={css.aboutCheck}>
       <button
@@ -302,6 +322,18 @@ function UpdateCheckButton() {
       >
         {running ? t('update.checking') : t('update.check')}
       </button>
+      {selfUpdatable && (
+        <button
+          type="button"
+          className={css.reset}
+          disabled={!canInstall}
+          onClick={() => void useUpdateStore.getState().install({ busy, pendingApprovals })}
+        >
+          {installing
+            ? t('update.installing', { version: cache?.latest ?? '' })
+            : t('update.apply')}
+        </button>
+      )}
       {result !== null && (
         <span className={css.value}>
           {result === 'latest'

@@ -91,6 +91,57 @@ test('the about page carries the ZEN wordmark', async ({ page }) => {
   await expect(mark).toHaveAttribute('aria-label', 'ZEN')
 })
 
+test('the about page offers an update button beside the manual check', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'zen.update.cache',
+      JSON.stringify({ checkedAt: Date.now(), latest: '99.0.0', notified: null }),
+    )
+  })
+  await boot(page, initialState({ running: false }))
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '信息' }).click()
+  const about = page.locator('[data-page="settings"]')
+  await expect(about.getByRole('button', { name: '检查更新' })).toBeVisible()
+  await expect(about.getByRole('button', { name: '更新', exact: true })).toBeEnabled()
+})
+
+test('the about update button stays disabled without a newer release', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'zen.update.cache',
+      JSON.stringify({ checkedAt: Date.now(), latest: '0.0.1', notified: null }),
+    )
+  })
+  await boot(page, initialState({ running: false }))
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '信息' }).click()
+  await expect(
+    page.locator('[data-page="settings"]').getByRole('button', { name: '更新', exact: true }),
+  ).toBeDisabled()
+})
+
+test('the about update button waits while a turn is running', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'zen.update.cache',
+      JSON.stringify({ checkedAt: Date.now(), latest: '99.0.0', notified: null }),
+    )
+  })
+  await boot(
+    page,
+    initialState({
+      running: true,
+      transcript: [{ kind: 'user', id: 'u1', text: 'go', timestamp: 1 }],
+    }),
+  )
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '信息' }).click()
+  await expect(
+    page.locator('[data-page="settings"]').getByRole('button', { name: '更新', exact: true }),
+  ).toBeDisabled()
+})
+
 test('the sidebar brand keeps the ZEN wordmark in the DOM', async ({ page }) => {
   await boot(page, initialState({ running: false }))
   // The brand row is hidden on macOS; on other platforms the same mark shows.
