@@ -815,16 +815,6 @@ function Footer() {
   return (
     <div className={css.footer} data-sidebar-footer>
       <div className={css.footerActions}>
-        <Tooltip label={`${t('menu.theme')}: ${themeLabel}`}>
-          <button
-            type="button"
-            className={css.footerButton}
-            aria-label={`${t('menu.theme')}: ${themeLabel}`}
-            onClick={() => setTheme(nextTheme)}
-          >
-            {themeIcon}
-          </button>
-        </Tooltip>
         <Tooltip label={t('settings.title')}>
           <button
             type="button"
@@ -833,6 +823,16 @@ function Footer() {
             onClick={() => openPage('settings')}
           >
             <SettingsIcon size={14} />
+          </button>
+        </Tooltip>
+        <Tooltip label={`${t('menu.theme')}: ${themeLabel}`}>
+          <button
+            type="button"
+            className={css.footerButton}
+            aria-label={`${t('menu.theme')}: ${themeLabel}`}
+            onClick={() => setTheme(nextTheme)}
+          >
+            {themeIcon}
           </button>
         </Tooltip>
         <Tooltip label={t('tools.title')}>
