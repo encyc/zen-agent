@@ -33,6 +33,7 @@ __all__ = [
     "load_mcp_config",
     "load_mcp_layers",
     "make_transport",
+    "parse_server",
     "remove_mcp_server",
     "save_mcp_server",
     "save_server",
@@ -265,3 +266,8 @@ def make_transport(config: McpServerConfig) -> Transport:
         return HttpTransport(config.url, headers=config.headers)
     assert config.command is not None
     return StdioTransport(config.command, env=config.env)
+
+
+def parse_server(name: str, raw: object) -> McpServerConfig:
+    """Public validator wrapper for plugin manifests."""
+    return _parse_server(name, raw)

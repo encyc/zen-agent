@@ -25,6 +25,7 @@ from typing import Any, Protocol, Self
 import httpx
 
 from zenagent.http_client import async_client
+from zenagent.mcp.redact import redact_text
 
 __all__ = [
     "DEFAULT_PROTOCOL_VERSION",
@@ -310,14 +311,16 @@ class HttpTransport:
         except httpx.TimeoutException as exc:
             raise McpTimeout(f"{method} timed out after {timeout_s}s") from exc
         except httpx.HTTPError as exc:
-            raise McpTransportError(f"http transport error: {exc}") from exc
+            raise McpTransportError(f"http transport error: {redact_text(str(exc))}") from exc
 
         session_id = response.headers.get("mcp-session-id")
         if session_id:
             self._session_id = session_id
 
         if response.status_code >= 400:
-            raise McpError(f"http {response.status_code}: {response.text[:200]}")
+            raise McpError(
+                f"http {response.status_code}: {redact_text(response.text[:200])}"
+            )
 
         message = self._parse_message(response, self._next_id)
         if "error" in message:

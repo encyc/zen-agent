@@ -24,6 +24,7 @@ from zenagent.mcp.client import (
     McpTransportError,
 )
 from zenagent.mcp.config import McpServerConfig, make_transport
+from zenagent.mcp.redact import redact_text
 from zenagent.types import ImageContent, TextContent
 
 __all__ = ["McpManager", "McpStatus", "tool_name_for"]
@@ -128,7 +129,7 @@ class McpManager:
             try:
                 tools = await server.client.list_tools()
             except McpError as exc:
-                server.error = f"{type(exc).__name__}: {exc}"
+                server.error = f"{type(exc).__name__}: {redact_text(str(exc))}"
                 continue
             server.tools = tools
         return before != [tool.name for tool in self.tool_defs()]
@@ -151,7 +152,7 @@ class McpManager:
             await client.start()
             server.tools = await client.list_tools()
         except (McpError, OSError, ValueError) as exc:
-            server.error = f"{type(exc).__name__}: {exc}"
+            server.error = f"{type(exc).__name__}: {redact_text(str(exc))}"
             server.tools = []
             if client is not None:
                 with contextlib.suppress(Exception):
