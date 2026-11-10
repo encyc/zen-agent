@@ -12,7 +12,7 @@
   gap: 6px;
   width: 100%;
   height: 26px;
-  padding: 0 6px;
+  padding: 0 8px;
   border: none;
   border-radius: var(--dsw-radius-sm);
   background: transparent;
@@ -28,6 +28,7 @@
 
 .row[data-active] {
   background: var(--dsw-alias-interactive-bg-hover);
+  box-shadow: inset 2px 0 var(--dsw-alias-state-business-primary);
   color: var(--dsw-alias-label-primary);
 }
 
@@ -36,11 +37,80 @@
   outline-offset: -2px;
 }
 
+/* One rail per ancestor level, aligned under the parent's caret. Grouped so
+   the row gap applies once, keeping the indent step at exactly 14px. */
+.guides {
+  display: flex;
+  flex: none;
+  align-self: stretch;
+}
+
+.guide {
+  flex: none;
+  width: 14px;
+  border-left: 1px solid var(--dsw-alias-border-l1);
+}
+
 .caret {
   display: inline-grid;
   flex: none;
   width: 12px;
   color: var(--dsw-alias-label-tertiary);
+}
+
+.caretSpacer {
+  flex: none;
+  width: 12px;
+}
+
+/* Fixed slot so file badges and folder glyphs keep names on one column. */
+.typeSlot {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.folderIcon {
+  color: var(--dsw-alias-label-caption);
+}
+
+/* A file-type badge: a static tone, so a type keeps its colour in both modes. */
+.badge {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 14px;
+  border-radius: 3px;
+  font-family: var(--ds-font-family-code);
+  font-size: 8px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--badge-tone);
+  background: color-mix(in oklab, var(--badge-tone) 14%, transparent);
+}
+
+.badge[data-tone='blue'] {
+  --badge-tone: var(--dsw-static-blue-500);
+}
+
+.badge[data-tone='amber'] {
+  --badge-tone: var(--dsw-static-amber-500);
+}
+
+.badge[data-tone='green'] {
+  --badge-tone: var(--dsw-static-green-500);
+}
+
+.badge[data-tone='red'] {
+  --badge-tone: var(--dsw-static-red-500);
+}
+
+.badge[data-tone='neutral'] {
+  --badge-tone: var(--dsw-alias-label-tertiary);
 }
 
 .name {
@@ -113,15 +183,40 @@
   color: var(--dsw-alias-label-primary);
 }
 
-.path {
+.breadcrumb {
+  display: flex;
   flex: 1;
+  align-items: center;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--dsw-alias-label-secondary);
   font-family: var(--ds-font-family-code);
   font-size: var(--ds-font-11-5);
+}
+
+.crumb {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  min-width: 0;
+}
+
+.crumbPart {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.crumbLast {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  text-overflow: ellipsis;
+}
+
+.crumbSep {
+  display: inline-grid;
+  place-items: center;
+  margin: 0 2px;
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .size {

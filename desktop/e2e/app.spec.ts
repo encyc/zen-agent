@@ -694,6 +694,46 @@ test('an absolute folder path and a slashed folder token both reveal in the tree
   await expect(panel).not.toContainText('读取失败')
 })
 
+test('the file tree paints type badges and the viewer shows a breadcrumb', async ({ page }) => {
+  await boot(
+    page,
+    initialState({
+      fsEntries: {
+        '': [
+          { name: 'src', path: 'src', kind: 'dir', size: 0, hidden: false },
+          { name: 'README.md', path: 'README.md', kind: 'file', size: 8, hidden: false },
+        ],
+        src: [
+          { name: 'a.ts', path: 'src/a.ts', kind: 'file', size: 20, hidden: false },
+          { name: 'b.py', path: 'src/b.py', kind: 'file', size: 6, hidden: false },
+        ],
+      },
+      fsFiles: {
+        'src/a.ts': {
+          path: 'src/a.ts',
+          kind: 'text',
+          size: 20,
+          text: 'const a = 1\nexport { a }\n',
+          total_lines: 2,
+          truncated: false,
+        },
+      },
+    }),
+  )
+
+  await page.getByRole('button', { name: '打开工作面板' }).click()
+  const panel = page.locator('[data-work-panel]')
+  await expect(panel.locator('[data-tone="blue"]', { hasText: 'MD' })).toBeVisible()
+  await panel.getByRole('button', { name: 'src' }).click()
+  await expect(panel.locator('[data-tone="blue"]', { hasText: 'TS' })).toBeVisible()
+  await expect(panel.locator('[data-tone="blue"]', { hasText: 'PY' })).toBeVisible()
+
+  await panel.getByRole('button', { name: 'a.ts' }).click()
+  const crumbs = panel.locator('[data-breadcrumb]')
+  await expect(crumbs).toContainText('src')
+  await expect(crumbs.locator('[data-crumb-last]')).toHaveText('a.ts')
+})
+
 test('the worktree tab lists worktrees and marks the current one', async ({ page }) => {
   await boot(
     page,

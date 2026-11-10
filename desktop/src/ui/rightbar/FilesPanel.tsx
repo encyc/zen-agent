@@ -12,6 +12,7 @@ import chatCss from '../chat/AssistantNodeView.module.css'
 import type { FsListResult, FsReadResult, WorkspaceEntry, WorkspaceFile } from '../../rpc/types'
 import { frameErrorNotice, type ReplyLike } from '../../rpc/frames'
 import { toWorkspacePath } from './workspacePath'
+import { fileBadge } from './fileBadge'
 import {
   ensureLang,
   highlightLines,
@@ -48,6 +49,19 @@ function formatSize(size: number): string {
   if (size < 1024) return `${size} B`
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
   return `${(size / (1024 * 1024)).toFixed(1)} MB`
+}
+
+/** A type badge slot: the short label for a known extension, the generic file
+ * glyph otherwise. Both live in a fixed-width slot so file and folder names
+ * align at every depth. */
+function FileTypeBadge({ path }: { path: string }) {
+  const badge = fileBadge(path)
+  if (badge === null) return <FileIcon size={14} />
+  return (
+    <span className={css.badge} data-tone={badge.tone} aria-hidden>
+      {badge.label}
+    </span>
+  )
 }
 
 export function FilesPanel() {
@@ -170,14 +184,14 @@ export function FilesPanel() {
     const state = dirs[rel]
     if (state === undefined) {
       return (
-        <div key={`${rel}:loading`} className={css.note} style={{ paddingLeft: 12 + depth * 14 }}>
+        <div key={`${rel}:loading`} className={css.note} style={{ paddingLeft: 20 + depth * 14 }}>
           {t('panel.files.loading')}
         </div>
       )
     }
     if (state.entries.length === 0) {
       return (
-        <div key={`${rel}:empty`} className={css.note} style={{ paddingLeft: 12 + depth * 14 }}>
+        <div key={`${rel}:empty`} className={css.note} style={{ paddingLeft: 20 + depth * 14 }}>
           {state.error === true ? t('panel.files.error') : t('panel.files.empty')}
         </div>
       )
@@ -188,21 +202,28 @@ export function FilesPanel() {
       FILES_REVEAL_BATCH,
     )
     const hidden = state.entries.length - shown
+    // One guide per ancestor level, like an editor's indent rails. Grouped so
+    // the row's flex gap does not add to every level.
+    const guides = (
+      <span className={css.guides} aria-hidden>
+        {Array.from({ length: depth }, (_, index) => (
+          <span key={index} className={css.guide} />
+        ))}
+      </span>
+    )
     const rows = state.entries.slice(0, shown).map((entry) => {
       if (entry.kind === 'dir') {
         const open = expanded.has(entry.path)
         return (
           <div key={entry.path}>
-            <button
-              type="button"
-              className={css.row}
-              style={{ paddingLeft: 12 + depth * 14 }}
-              onClick={() => toggleDir(entry.path)}
-            >
+            <button type="button" className={css.row} onClick={() => toggleDir(entry.path)}>
+              {guides}
               <span className={css.caret}>
                 {open ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
               </span>
-              <FolderIcon size={14} />
+              <span className={`${css.typeSlot} ${css.folderIcon}`}>
+                <FolderIcon size={14} />
+              </span>
               <span className={css.name}>{entry.name}</span>
             </button>
             {open && renderDir(entry.path, depth + 1)}
@@ -216,11 +237,14 @@ export function FilesPanel() {
           className={css.row}
           data-active={selected === entry.path || undefined}
           data-file-path={entry.path}
-          style={{ paddingLeft: 12 + depth * 14 + 18 }}
           title={entry.path}
           onClick={() => void openFile(entry.path)}
         >
-          <FileIcon size={14} />
+          {guides}
+          <span className={css.caretSpacer} />
+          <span className={css.typeSlot}>
+            <FileTypeBadge path={entry.path} />
+          </span>
           <span className={css.name}>{entry.name}</span>
         </button>
       )
@@ -232,7 +256,7 @@ export function FilesPanel() {
         key={`${rel}:more`}
         type="button"
         className={css.more}
-        style={{ paddingLeft: 12 + depth * 14 }}
+        style={{ paddingLeft: 20 + depth * 14 }}
         onClick={() =>
           setDirPages((value) => ({ ...value, [rel]: (value[rel] ?? 1) + 1 }))
         }
@@ -243,6 +267,7 @@ export function FilesPanel() {
   }
 
   if (selected !== null) {
+    const crumbs = selected.split('/').filter((segment) => segment !== '')
     return (
       <div className={css.viewer}>
         <div className={css.viewerHeader}>
@@ -261,8 +286,28 @@ export function FilesPanel() {
           >
             <ArrowLeftIcon size={14} />
           </button>
-          <span className={css.path} title={selected}>
-            {selected}
+          <span className={css.typeSlot}>
+            <FileTypeBadge path={selected} />
+          </span>
+          <span className={css.breadcrumb} title={selected} data-breadcrumb>
+            {crumbs.map((segment, index) => {
+              const last = index === crumbs.length - 1
+              return (
+                <span key={`${index}:${segment}`} className={css.crumb}>
+                  {index > 0 && (
+                    <span className={css.crumbSep} aria-hidden>
+                      <ChevronRightIcon size={10} />
+                    </span>
+                  )}
+                  <span
+                    className={last ? css.crumbLast : css.crumbPart}
+                    data-crumb-last={last || undefined}
+                  >
+                    {segment}
+                  </span>
+                </span>
+              )
+            })}
           </span>
           {file !== null && <span className={css.size}>{formatSize(file.size)}</span>}
         </div>
