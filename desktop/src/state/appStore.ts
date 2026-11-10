@@ -14,11 +14,13 @@ import type {
   LimitsResult,
   McpServerRow,
   Mode,
+  RosterItem,
   SecretProviderRow,
   ServerFrame,
   SkillRow,
   StatusResult,
   Usage,
+  ZenUiMode,
 } from '../rpc/types'
 import {
   useApprovalStore,
@@ -36,6 +38,7 @@ import {
   useWorkPanelStore,
 } from './stores'
 import { useChatStore } from './chatStore'
+import { useZenStore } from './zenStore'
 import { nextDraft } from './pending'
 import { latestSessionForProject } from './latestSession'
 import { loadPrefs, replayFrames, savePref, spawnArgs } from './prefs'
@@ -148,6 +151,11 @@ interface AppState {
   clearPending(): Promise<void>
   compactNow(): Promise<void>
   undoLast(): Promise<void>
+  /** Zen mode: sync fleet state with the persisted toggle (boot/switch). */
+  syncZenState(): Promise<void>
+  setZenMode(mode: ZenUiMode): Promise<void>
+  /** A worker's read-only transcript (zen_fleet op=transcript). */
+  zenTranscript(path: string, before?: number): Promise<Record<string, unknown> | null>
 }
 
 let client: RpcClient | null = null
@@ -226,6 +234,8 @@ async function bootChild(
   const fellBack =
     resumed !== undefined && useStatusStore.getState().status?.session !== resumed
   if ((!loaded || fellBack) && opts.fromSwitch) useChatStore.getState().reset()
+  // Zen replay: a persisted 'zen' toggle re-arms the fleet on every boot.
+  void get().syncZenState()
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -952,6 +962,71 @@ export const useAppStore = create<AppState>((set, get) => ({
       refreshAfterSessionChange(get),
     )
   },
+
+  async syncZenState() {
+    let frame: Record<string, unknown>
+    try {
+      frame = await get().client().send({ type: 'zen_fleet', op: 'state' })
+    } catch {
+      return // a pre-zen child: the toggle just stays off
+    }
+    if (frame.type !== 'result' || !frame.ok) return
+    const enabled = Boolean(frame.enabled)
+    if (useSettingsStore.getState().zenMode === 'zen' && !enabled) {
+      await get().setZenMode('zen')
+      return
+    }
+    useZenStore.getState().applyRoster(
+      enabled,
+      Array.isArray(frame.roster) ? (frame.roster as RosterItem[]) : [],
+    )
+  },
+
+  async setZenMode(mode) {
+    useSettingsStore.getState().setZenMode(mode)
+    const zen = useZenStore.getState()
+    try {
+      const frame = await get().client().send({
+        type: 'zen_fleet',
+        op: mode === 'zen' ? 'enable' : 'disable',
+      })
+      if (frame.type !== 'result' || !frame.ok) {
+        showFrameError(frame as Record<string, unknown>)
+        // Revert the toggle when the backend refused (busy slot, v2 child).
+        useSettingsStore.getState().setZenMode(mode === 'zen' ? 'coding' : 'zen')
+        return
+      }
+      const roster = Array.isArray(frame.roster) ? (frame.roster as RosterItem[]) : []
+      zen.applyRoster(mode === 'zen', roster)
+      if (mode === 'zen' && zen.workerPath !== null) zen.closeWorker()
+      // Enable/disable moved the slot to another session server-side; the
+      // result carries which one, so the UI follows it like a resume.
+      const session = typeof frame.session === 'string' ? frame.session : null
+      if (session) {
+        useSessionStore.getState().setCurrent(session)
+        void get().refreshTranscript()
+      }
+      void get().refreshSessions()
+    } catch (error) {
+      showActionError(error)
+      useSettingsStore.getState().setZenMode(mode === 'zen' ? 'coding' : 'zen')
+    }
+  },
+
+  async zenTranscript(path, before) {
+    try {
+      const frame = await get().client().send({
+        type: 'zen_fleet',
+        op: 'transcript',
+        path,
+        ...(before !== undefined ? { before } : {}),
+      })
+      if (frame.type === 'result' && frame.ok) return frame
+      return null
+    } catch {
+      return null
+    }
+  },
 }))
 
 async function runSessionOp(
@@ -1091,6 +1166,10 @@ function handleFrame(frame: ServerFrame, handling: FrameHandling): void {
     return
   }
   if (!frameBelongsTo(frame, handling.get().project)) return
+  if (frame.type === 'zen_fleet') {
+    useZenStore.getState().applyRoster(frame.enabled, frame.roster ?? [])
+    return
+  }
   if (!frameSessionBelongsTo(frame, useSessionStore.getState().currentPath)) return
   handleResultFrame(frame as Record<string, unknown>, handling)
 }

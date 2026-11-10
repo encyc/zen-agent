@@ -106,6 +106,7 @@ class ZenOps:
                 "ok": True,
                 "enabled": True,
                 "router": str(runtime.session.path),
+                "session": str(runtime.session.path),
                 "roster": fleet.roster(),
             }
         )
@@ -142,6 +143,7 @@ class ZenOps:
                 "id": request_id,
                 "ok": True,
                 "enabled": False,
+                "session": str(runtime.session.path),
                 "roster": [],
             }
         )

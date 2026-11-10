@@ -735,7 +735,28 @@ export interface EventFrame {
   event: AgentEventFrame
 }
 
-export type ServerFrame = ResultFrame | EventFrame
+export type ZenUiMode = 'coding' | 'zen'
+
+/** One row of the project's zen fleet roster (zenagent/app/zen/fleet.py). */
+export interface RosterItem {
+  path: string
+  title: string
+  focus: string
+  role: string
+  status: string
+  last_report: string
+}
+
+/** Server-initiated: the fleet roster changed (or enable/disable happened). */
+export interface ZenFleetFrame {
+  type: 'zen_fleet'
+  enabled: boolean
+  roster: RosterItem[]
+  project?: string
+  session?: string
+}
+
+export type ServerFrame = ResultFrame | EventFrame | ZenFleetFrame
 
 export function isEventFrame(frame: ServerFrame): frame is EventFrame {
   return frame.type === 'event'

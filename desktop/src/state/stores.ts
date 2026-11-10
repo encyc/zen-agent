@@ -16,6 +16,7 @@ import type {
   SessionSummary,
   SkillRow,
   StatusResult,
+  ZenUiMode,
 } from '../rpc/types'
 import type { AskDraft } from './askDraft.ts'
 
@@ -539,7 +540,9 @@ interface SettingsState {
   autoCollapseThinking: boolean
   contextUsageDisplay: ContextUsageDisplay
   enterToSend: boolean
+  zenMode: ZenUiMode
   view: AppView
+  setZenMode(mode: ZenUiMode): void
   setTheme(theme: ThemeMode): void
   setThemeId(themeId: ThemeId): void
   setLocale(locale: Locale): void
@@ -594,7 +597,12 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     ? 'used'
     : 'remaining',
   enterToSend: load('zen.composer.enterToSend', true),
+  zenMode: load<'coding' | 'zen'>('zen.ui.mode', 'coding') === 'zen' ? 'zen' : 'coding',
   view: 'chat',
+  setZenMode: (zenMode) => {
+    persist('zen.ui.mode', zenMode)
+    set({ zenMode })
+  },
   setTheme: (theme) => {
     persist('zen.theme', theme)
     set({ theme })
