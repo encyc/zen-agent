@@ -14,7 +14,6 @@ import type {
   LimitsResult,
   McpServerRow,
   Mode,
-  RosterItem,
   SecretProviderRow,
   ServerFrame,
   SkillRow,
@@ -39,6 +38,7 @@ import {
 } from './stores'
 import { useChatStore } from './chatStore'
 import { useZenStore } from './zenStore'
+import { setZenMode, syncZenState, zenTranscript } from './zenActions'
 import { nextDraft } from './pending'
 import { latestSessionForProject } from './latestSession'
 import { loadPrefs, replayFrames, savePref, spawnArgs } from './prefs'
@@ -964,69 +964,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   async syncZenState() {
-    let frame: Record<string, unknown>
-    try {
-      frame = await get().client().send({ type: 'zen_fleet', op: 'state' })
-    } catch {
-      return // a pre-zen child: the toggle just stays off
-    }
-    if (frame.type !== 'result' || !frame.ok) return
-    const enabled = Boolean(frame.enabled)
-    if (useSettingsStore.getState().zenMode === 'zen' && !enabled) {
-      await get().setZenMode('zen')
-      return
-    }
-    useZenStore.getState().applyRoster(
-      enabled,
-      Array.isArray(frame.roster) ? (frame.roster as RosterItem[]) : [],
-    )
+    await syncZenState(get)
   },
 
   async setZenMode(mode) {
-    useSettingsStore.getState().setZenMode(mode)
-    const zen = useZenStore.getState()
-    try {
-      const frame = await get().client().send({
-        type: 'zen_fleet',
-        op: mode === 'zen' ? 'enable' : 'disable',
-      })
-      if (frame.type !== 'result' || !frame.ok) {
-        showFrameError(frame as Record<string, unknown>)
-        // Revert the toggle when the backend refused (busy slot, v2 child).
-        useSettingsStore.getState().setZenMode(mode === 'zen' ? 'coding' : 'zen')
-        return
-      }
-      const roster = Array.isArray(frame.roster) ? (frame.roster as RosterItem[]) : []
-      zen.applyRoster(mode === 'zen', roster)
-      if (mode === 'zen' && zen.workerPath !== null) zen.closeWorker()
-      // Enable/disable moved the slot to another session server-side; the
-      // result carries which one, so the UI follows it like a resume.
-      const session = typeof frame.session === 'string' ? frame.session : null
-      if (session) {
-        useSessionStore.getState().setCurrent(session)
-        void get().refreshTranscript()
-      }
-      void get().refreshSessions()
-    } catch (error) {
-      showActionError(error)
-      useSettingsStore.getState().setZenMode(mode === 'zen' ? 'coding' : 'zen')
-    }
+    await setZenMode(get, mode)
   },
 
   async zenTranscript(path, before) {
-    try {
-      const frame = await get().client().send({
-        type: 'zen_fleet',
-        op: 'transcript',
-        path,
-        ...(before !== undefined ? { before } : {}),
-      })
-      if (frame.type === 'result' && frame.ok) return frame
-      return null
-    } catch {
-      return null
-    }
-  },
+    return zenTranscript(get, path, before)
+    },
 }))
 
 async function runSessionOp(

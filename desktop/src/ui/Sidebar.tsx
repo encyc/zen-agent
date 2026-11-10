@@ -23,7 +23,8 @@ import {
 } from '../state/sessionGroups'
 import { armDelete, deleteArmed } from '../state/armedDelete'
 import { useZenStore } from '../state/zenStore'
-import { splitRoster, zenStatusKey, zenStatusTone } from '../state/zenSidebar'
+import { ZenRoster } from './ZenRoster'
+import { ZenToggle } from './ZenToggle'
 import { useT } from '../i18n/locale'
 import type { SessionSummary } from '../rpc/types'
 import { Tooltip } from './primitives'
@@ -40,7 +41,6 @@ import {
   PinIcon,
   PlusIcon,
   SettingsIcon,
-  SparkIcon,
   SunIcon,
   XIcon,
 } from './icons'
@@ -74,11 +74,7 @@ function readClosedSections(): string[] {
 
 export function Sidebar(props: { onCollapse(): void }) {
   const t = useT()
-  const zenMode = useSettingsStore((state) => state.zenMode)
-  const setZenMode = useAppStore((state) => state.setZenMode)
   const zenEnabled = useZenStore((state) => state.enabled)
-  const zenRoster = useZenStore((state) => state.roster)
-  const openWorker = useZenStore((state) => state.openWorker)
   const sessions = useSessionStore((state) => state.sessions)
   const currentPath = useSessionStore((state) => state.currentPath)
   const collapsedProjects = useSessionStore((state) => state.collapsedProjects)
@@ -124,7 +120,6 @@ export function Sidebar(props: { onCollapse(): void }) {
   )
   const menuSession = menu === null ? null : sessions.find((session) => session.path === menu.path) ?? null
   const empty = pinned.length === 0 && standalone.length === 0 && projects.length === 0
-  const zenSplit = useMemo(() => splitRoster(zenRoster), [zenRoster])
 
   const openMenu = (event: MouseEvent<HTMLButtonElement>, path: string) => {
     event.stopPropagation()
@@ -344,18 +339,7 @@ export function Sidebar(props: { onCollapse(): void }) {
           </div>
           <ZenWordmark height={13} />
         </div>
-        <Tooltip label={t('zen.toggleHint')}>
-          <button
-            type="button"
-            className={css.zenToggle}
-            data-zen-toggle
-            data-zen-active={zenMode === 'zen' || undefined}
-            aria-label={t('zen.toggleHint')}
-            onClick={() => void setZenMode(zenMode === 'zen' ? 'coding' : 'zen')}
-          >
-            <SparkIcon size={15} />
-          </button>
-        </Tooltip>
+        <ZenToggle />
         <Tooltip label="⌘B">
           <button
             type="button"
@@ -410,41 +394,7 @@ export function Sidebar(props: { onCollapse(): void }) {
               />
             </div>
             {zenEnabled ? (
-              <div className={css.zenRoster} data-zen-roster>
-                {zenSplit.router !== null && (
-                  <div className={css.zenRouterRow} data-zen-router>
-                    <span className={css.zenRouterBadge}>{t('zen.router')}</span>
-                    <span className={css.zenWorkerTitle}>{zenSplit.router.title}</span>
-                  </div>
-                )}
-                <div className={css.zenWorkersLabel}>{t('zen.workers')}</div>
-                <div className={css.zenWorkerList}>
-                  {zenSplit.workers.length > 0 ? (
-                    zenSplit.workers.map((worker) => (
-                      <button
-                        key={worker.path}
-                        type="button"
-                        className={css.zenWorkerRow}
-                        data-worker-row={worker.path}
-                        onClick={() => openWorker(worker.path)}
-                      >
-                        <span
-                          className={css.zenDot}
-                          data-tone={zenStatusTone(worker.status)}
-                          aria-hidden
-                        />
-                        <span className={css.zenWorkerTitle}>{worker.title}</span>
-                        {worker.focus !== '' && (
-                          <span className={css.zenFocus}>{worker.focus}</span>
-                        )}
-                        <span className={css.zenStatus}>{t(zenStatusKey(worker.status))}</span>
-                      </button>
-                    ))
-                  ) : (
-                    <div className={css.sectionEmpty}>{t('sidebar.empty')}</div>
-                  )}
-                </div>
-              </div>
+              <ZenRoster />
             ) : (
               <div className={css.standaloneList}>
                 {standalone.length > 0 ? (
