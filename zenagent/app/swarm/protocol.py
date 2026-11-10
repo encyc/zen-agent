@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from zenagent.agent.protocol import AgentTool, ToolResultAgent
 from zenagent.app.swarm.room import RoomMessage, TaskRecord

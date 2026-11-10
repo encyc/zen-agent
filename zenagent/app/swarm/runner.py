@@ -8,8 +8,8 @@ injected prompt, the termination mapping and the chain-cost accounting.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import replace
-from typing import Callable
 
 from zenagent.agent.agent import Agent
 from zenagent.agent.session import Session
@@ -39,8 +39,12 @@ class TaskRunner:
         self.session = session
         self.role = role
         self.post_message = post_message
+        #: Terminal outcome the manager pins before aborting a run it owns
+        #: (role removal, approval timeout, shutdown). ``None`` = user cancel.
+        self.abort_outcome: tuple[str, str] | None = None
 
     async def run(self, task: TaskRecord, message: RoomMessage) -> TaskRecord:
+        self.abort_outcome = None
         running = replace(task, state="running", updated_at=int(time.time()))
         self.store.append_task(running)
 
@@ -60,8 +64,12 @@ class TaskRunner:
             posted = self.post_message(text, "agent")
             updated = replace(updated, state="done", result_message_id=posted.id)
         elif termination == "aborted":
-            self.post_message(f"Task {task.id} cancelled", "system")
-            updated = replace(updated, state="cancelled", reason="aborted")
+            state, reason = self.abort_outcome or ("cancelled", "aborted")
+            if state == "cancelled":
+                self.post_message(f"Task {task.id} cancelled", "system")
+            else:
+                self.post_message(f"Task {task.id} failed: {reason}", "system")
+            updated = replace(updated, state=state, reason=reason)
         else:
             self.post_message(f"Task {task.id} failed: {termination}", "system")
             updated = replace(updated, state="failed", reason=termination)

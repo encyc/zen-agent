@@ -42,13 +42,9 @@ class Router:
         self.max_chain_cost = max_chain_cost
         self.inbox_cap = inbox_cap
 
-    def admit(
-        self, message: RoomMessage, *, inbox_sizes: dict[str, int]
-    ) -> Admission:
+    def admit(self, message: RoomMessage, *, inbox_sizes: dict[str, int]) -> Admission:
         admission = Admission()
-        source = (
-            self.store.tasks.get(message.task_id) if message.task_id else None
-        )
+        source = self.store.tasks.get(message.task_id) if message.task_id else None
         chain_id = source.chain_id if source is not None else self.new_chain_id()
         chain_cost = source.chain_cost if source is not None else 0.0
         chain_depth = message.chain_depth + 1
