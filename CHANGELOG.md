@@ -24,6 +24,49 @@ matches the release tag; older history is in the repository tags and commits.
   kernel, `agent.loop ↔ tool_exec ↔ result_budget ↔ timeouts`, which the
   diagram intentionally hides by merging them into one node.)
 
+### Plugins — declarative connector packs
+
+- **A plugin is a package, a connector is a product** (`zenagent/plugins/`): a
+  directory with a strictly validated `manifest.json` (id, version,
+  `contributes.mcpServers` / `skills` / `extension`, `credentials`,
+  `setup.requiresRuntime`) plus optional skill and extension files. Install is
+  the strict gate (fields named on error, zip path-traversal and size checks);
+  discovery re-checks defensively and skips only the broken plugin.
+- **One-way by design**: zen → plugin MCP server → external app. `zenagent/plugins/`
+  never imports `mcp` / `app` / `cli` / `agent` / `tools` / `providers`; only
+  `zenagent/app/plugin_wiring.py` translates contributions into the existing MCP
+  manager (`tests/test_plugin_layering.py`). Plugin servers are named
+  `<plugin-id>.<server-key>`.
+- **Three official connectors** ship in-package and install from Settings →
+  Plugins: 钉钉 (MCP service URL), 飞书 (App ID/Secret via `npx
+  @larksuiteoapi/lark-mcp`, Node 18+), 企业微信 (robot MCP URL, 7-day document
+  grant). Each carries its own `setup.md` guide and skill.
+- **Desktop Settings → Plugins** (`PluginSettings.tsx`, `pluginApi.ts`, new
+  `plugins` RPC op): catalog cards, install from catalog or local path, enable
+  toggle, two-step uninstall that names the credential deletion, credential
+  drawer (secret masked, "saved — leave blank to keep"), status badges
+  (`待配置` / `连接失败` / `已连接` / `就绪` / `已停用`), and a
+  "本轮对话结束后生效" banner when a streaming turn defers the apply.
+- **Credentials stay local and silent**: only `~/.zenagent/settings.json` (0600)
+  under `plugin:<id>:<KEY>`; manifests, project files and the environment cannot
+  supply plugin credentials; values never echo through logs, RPC frames or the
+  UI, and key-embedded URLs are masked at the MCP error source
+  (`zenagent/mcp/redact.py`).
+
+### Architecture diagrams
+
+- `docs/arch-gov/manifest.json` v3 — **41 nodes / 190 edges**:
+  **added** node `plugins` (`data-node="plugins"`, base cluster, 6 files,
+  symbols `PluginManifest` / `ResolvedContributions`);
+  **added** edges `app.assembly → plugins` and `cli.rpc → plugins` (import),
+  `plugins → settings` (credentials, hidden);
+  **changed** `app.assembly` (+`plugin_wiring.py`), `cli.rpc`
+  (+`ops_plugins.py`, +`errors.py`), `mcp` (+`redact.py`); registered the app
+  package cycle's new member and the `plugins ↔ plugins.install` facade cycle;
+  **added** invariant: one-way plugin calling + the `plugins/` import ban.
+- The interactive HTML assets are not refreshed in this entry; the node/edge
+  data above is authoritative in `docs/arch-gov/graph.html`.
+
 ## v0.11.0 — 2026-11-10
 
 **A hardened IPC boundary, a startup path that always reveals, and paged

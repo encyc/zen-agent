@@ -1,0 +1,85 @@
+{
+ "date": "2026-11-10",
+ "manifest_version": 3,
+ "new_errors": 0,
+ "new_warns": 0,
+ "worse": 0,
+ "improved": 0,
+ "resolved": 0,
+ "total": 111,
+ "baseline_size": 111,
+ "by_node": {
+  "(unmapped)": {
+   "errors": 8,
+   "warns": 27
+  },
+  "config": {
+   "errors": 0,
+   "warns": 2
+  },
+  "limits": {
+   "errors": 0,
+   "warns": 1
+  },
+  "agent.loop": {
+   "errors": 0,
+   "warns": 2
+  },
+  "agent.rt": {
+   "errors": 0,
+   "warns": 3
+  },
+  "app.chat": {
+   "errors": 2,
+   "warns": 5
+  },
+  "app.transcript": {
+   "errors": 1,
+   "warns": 1
+  },
+  "app.assembly": {
+   "errors": 2,
+   "warns": 4
+  },
+  "app.taiji": {
+   "errors": 1,
+   "warns": 2
+  },
+  "cli": {
+   "errors": 1,
+   "warns": 7
+  },
+  "cli.rpc": {
+   "errors": 3,
+   "warns": 9
+  },
+  "cli.tui": {
+   "errors": 1,
+   "warns": 2
+  },
+  "cli.tui.app_parts": {
+   "errors": 0,
+   "warns": 1
+  },
+  "cli.tui.screens": {
+   "errors": 1,
+   "warns": 1
+  },
+  "cli.tui.widgets": {
+   "errors": 1,
+   "warns": 2
+  },
+  "providers": {
+   "errors": 0,
+   "warns": 5
+  },
+  "tools": {
+   "errors": 0,
+   "warns": 9
+  },
+  "(cycles)": {
+   "errors": 7,
+   "warns": 0
+  }
+ }
+}
