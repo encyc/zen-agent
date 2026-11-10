@@ -24,3 +24,13 @@
 - 删：9 条边（`app.assembly → app.taiji`、`app.taiji →` agent.loop/agent.rt/app.assembly/app.chat/project/prompts/types、`cli.rpc → app.taiji`）
 - 删：`cycles_seen` 中的 `app.taiji ↔ app.taiji.supervisor`；基线中 7 条 taiji 违规随节点消失而解除
 - 熵增：refresh deps 暴露 v0.12.1 合并后的存量漂移（`runtime.py`、`server.py`、`test_session.py` 等行数增长，非本次删除引入），按当前值 `--update-baseline` 重登记；基线 112→109（taiji 解除 7 项，漂移新增/恶化按现值登记）
+
+## [v5] 2026-11-11 — 多角色 swarm 运行时
+
+- 增：节点 `app.swarm`（8 文件：`__init__` / `manager` / `protocol` / `roles` / `room` / `roster` / `router` / `runner`），符号 `RoleManifest` / `SwarmStore` / `Router` / `TaskRunner` / `SwarmManager`
+- 增：11 条出边 `app.swarm →` `agent.loop`（工具协议）、`agent.rt`（Agent/Session）、`app.assembly`（Runtime.bootstrap）、`app.transcript`（压缩）、`config`、`mcp`、`plugins`、`project`（工作区围栏）、`settings`、`skills`、`types`；`config` / `settings` / `types` 为 hidden
+- 增：边 `cli.rpc → app.swarm`（`ops_swarm.py` 的 `swarm` 请求族与 `swarm:` 审批前缀路由）
+- 改：`cli.rpc` 并入 `host.py`、`ops_swarm.py`、`slot.py`、`terminal.py`（此前未登记，`gov_diff` 报未映射）
+- 改：不变量 +1（swarm 只在 app 层组合既有内核：角色 runtime 经 `Runtime.bootstrap` 装配、插件仍单向外呼、凭据只存 `~/.zenagent/settings.json`，manifest 只放 `${KEY}` 占位）
+- 改：14 个既有未映射文件（13 个 tests + `scripts/demo_age.py`）登记为 `unmapped`，`gov_diff` 归零；`app.swarm/__init__.py` 作为 facade 孤儿登记豁免
+- 熵增：基线 109→113（`app.swarm` 1 错 3 警 + `cli.rpc` 新增文件 3 项 + 未映射整理），无新增/恶化项超出登记

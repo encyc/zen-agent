@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-11-10T09:07:45+00:00",
- "root": "/Users/mac/zen-agent",
+ "generated_at": "2026-11-10T17:12:42+00:00",
+ "root": "/Users/mac/zen-agent/.worktrees/swarm-runtime",
  "files": {
   "examples.custom_tool": {
    "path": "examples/custom_tool.py",
@@ -2085,6 +2085,29 @@
    "fan_in": 0,
    "fan_out": 3
   },
+  "tests.test_rpc_swarm": {
+   "path": "tests/test_rpc_swarm.py",
+   "loc": 263,
+   "classes": {
+    "FakeSwarm": {
+     "loc": 78,
+     "methods": 16
+    }
+   },
+   "long_funcs": [
+    {
+     "name": "test_swarm_frames_are_global",
+     "loc": 44
+    }
+   ],
+   "imports": [
+    "zenagent.app.runtime",
+    "zenagent.app.swarm.room",
+    "zenagent.cli.rpc.host"
+   ],
+   "fan_in": 0,
+   "fan_out": 3
+  },
   "tests.test_rpc_v2": {
    "path": "tests/test_rpc_v2.py",
    "loc": 2169,
@@ -2151,6 +2174,18 @@
    ],
    "fan_in": 0,
    "fan_out": 1
+  },
+  "tests.test_runtime_role_assembly": {
+   "path": "tests/test_runtime_role_assembly.py",
+   "loc": 38,
+   "classes": {},
+   "long_funcs": [],
+   "imports": [
+    "zenagent.agent.protocol",
+    "zenagent.types"
+   ],
+   "fan_in": 0,
+   "fan_out": 2
   },
   "tests.test_safety": {
    "path": "tests/test_safety.py",
@@ -2341,6 +2376,80 @@
    ],
    "fan_in": 0,
    "fan_out": 3
+  },
+  "tests.test_swarm_manager": {
+   "path": "tests/test_swarm_manager.py",
+   "loc": 285,
+   "classes": {},
+   "long_funcs": [
+    {
+     "name": "test_restart_marks_nonterminal_interrupted",
+     "loc": 61
+    },
+    {
+     "name": "test_retry_creates_derived_task",
+     "loc": 51
+    }
+   ],
+   "imports": [
+    "zenagent.app.swarm.manager",
+    "zenagent.app.swarm.roles",
+    "zenagent.app.swarm.room",
+    "zenagent.events",
+    "zenagent.types"
+   ],
+   "fan_in": 0,
+   "fan_out": 5
+  },
+  "tests.test_swarm_roles": {
+   "path": "tests/test_swarm_roles.py",
+   "loc": 129,
+   "classes": {},
+   "long_funcs": [],
+   "imports": [
+    "zenagent.app.swarm.roles"
+   ],
+   "fan_in": 0,
+   "fan_out": 1
+  },
+  "tests.test_swarm_room": {
+   "path": "tests/test_swarm_room.py",
+   "loc": 107,
+   "classes": {},
+   "long_funcs": [],
+   "imports": [
+    "zenagent.app.swarm.room"
+   ],
+   "fan_in": 0,
+   "fan_out": 1
+  },
+  "tests.test_swarm_router": {
+   "path": "tests/test_swarm_router.py",
+   "loc": 106,
+   "classes": {},
+   "long_funcs": [],
+   "imports": [
+    "zenagent.app.swarm.room",
+    "zenagent.app.swarm.router"
+   ],
+   "fan_in": 0,
+   "fan_out": 2
+  },
+  "tests.test_swarm_runner": {
+   "path": "tests/test_swarm_runner.py",
+   "loc": 212,
+   "classes": {},
+   "long_funcs": [],
+   "imports": [
+    "zenagent.app.swarm.roles",
+    "zenagent.app.swarm.room",
+    "zenagent.app.swarm.router",
+    "zenagent.app.swarm.runner",
+    "zenagent.events",
+    "zenagent.types"
+   ],
+   "fan_in": 0,
+   "fan_out": 6
   },
   "tests.test_task": {
    "path": "tests/test_task.py",
@@ -3493,7 +3602,7 @@
     "zenagent.providers.registry",
     "zenagent.providers.stream_options"
    ],
-   "fan_in": 57,
+   "fan_in": 58,
    "fan_out": 3
   },
   "zenagent.__main__": {
@@ -3552,7 +3661,7 @@
     "zenagent.providers.catalog",
     "zenagent.types"
    ],
-   "fan_in": 24,
+   "fan_in": 25,
    "fan_out": 5
   },
   "zenagent.context_files": {
@@ -3612,7 +3721,7 @@
    "imports": [
     "zenagent.types"
    ],
-   "fan_in": 76,
+   "fan_in": 78,
    "fan_out": 1
   },
   "zenagent.export": {
@@ -3730,7 +3839,7 @@
     }
    ],
    "imports": [],
-   "fan_in": 28,
+   "fan_in": 29,
    "fan_out": 0
   },
   "zenagent.retry": {
@@ -3762,7 +3871,7 @@
    },
    "long_funcs": [],
    "imports": [],
-   "fan_in": 26,
+   "fan_in": 27,
    "fan_out": 0
   },
   "zenagent.skills": {
@@ -3793,7 +3902,7 @@
     "zenagent.prompts.render",
     "zenagent.types"
    ],
-   "fan_in": 15,
+   "fan_in": 16,
    "fan_out": 7
   },
   "zenagent.telemetry": {
@@ -3910,7 +4019,7 @@
     }
    ],
    "imports": [],
-   "fan_in": 131,
+   "fan_in": 136,
    "fan_out": 0
   },
   "zenagent.update_check": {
@@ -3985,7 +4094,7 @@
     "zenagent.providers.registry",
     "zenagent.types"
    ],
-   "fan_in": 2,
+   "fan_in": 4,
    "fan_out": 7
   },
   "zenagent.agent.artifacts": {
@@ -4087,7 +4196,7 @@
     "zenagent.events",
     "zenagent.types"
    ],
-   "fan_in": 6,
+   "fan_in": 8,
    "fan_out": 2
   },
   "zenagent.agent.registry": {
@@ -4151,7 +4260,7 @@
     "zenagent.project",
     "zenagent.types"
    ],
-   "fan_in": 35,
+   "fan_in": 37,
    "fan_out": 3
   },
   "zenagent.agent.subagents": {
@@ -4496,7 +4605,7 @@
     "zenagent.providers.stream_options",
     "zenagent.types"
    ],
-   "fan_in": 5,
+   "fan_in": 6,
    "fan_out": 8
   },
   "zenagent.app.context": {
@@ -4655,7 +4764,7 @@
     "zenagent.i18n",
     "zenagent.prompts.registry"
    ],
-   "fan_in": 11,
+   "fan_in": 12,
    "fan_out": 2
   },
   "zenagent.app.pending": {
@@ -4708,7 +4817,7 @@
     "zenagent.i18n",
     "zenagent.types"
    ],
-   "fan_in": 11,
+   "fan_in": 12,
    "fan_out": 4
   },
   "zenagent.app.plugin_wiring": {
@@ -4734,7 +4843,7 @@
     "zenagent.plugins.discovery",
     "zenagent.plugins.state"
    ],
-   "fan_in": 3,
+   "fan_in": 4,
    "fan_out": 6
   },
   "zenagent.app.probes": {
@@ -4830,29 +4939,29 @@
   },
   "zenagent.app.runtime": {
    "path": "zenagent/app/runtime.py",
-   "loc": 1015,
+   "loc": 1032,
    "classes": {
     "RuntimeOptions": {
-     "loc": 37,
+     "loc": 43,
      "methods": 0
     },
     "Runtime": {
-     "loc": 868,
+     "loc": 879,
      "methods": 33
     }
    },
    "long_funcs": [
     {
      "name": "bootstrap",
-     "loc": 230
+     "loc": 233
     },
     {
      "name": "__init__",
-     "loc": 83
+     "loc": 86
     },
     {
      "name": "_recompose",
-     "loc": 59
+     "loc": 62
     },
     {
      "name": "rediscover",
@@ -4905,7 +5014,7 @@
     "zenagent.tools.todo",
     "zenagent.trace"
    ],
-   "fan_in": 27,
+   "fan_in": 29,
    "fan_out": 43
   },
   "zenagent.app.safety": {
@@ -5187,6 +5296,176 @@
    ],
    "fan_in": 3,
    "fan_out": 1
+  },
+  "zenagent.app.swarm": {
+   "path": "zenagent/app/swarm/__init__.py",
+   "loc": 2,
+   "classes": {},
+   "long_funcs": [],
+   "imports": [],
+   "fan_in": 0,
+   "fan_out": 0
+  },
+  "zenagent.app.swarm.manager": {
+   "path": "zenagent/app/swarm/manager.py",
+   "loc": 752,
+   "classes": {
+    "SwarmAgent": {
+     "loc": 8,
+     "methods": 0
+    },
+    "SwarmManager": {
+     "loc": 663,
+     "methods": 37
+    }
+   },
+   "long_funcs": [
+    {
+     "name": "_build_agent",
+     "loc": 67
+    },
+    {
+     "name": "delete_role",
+     "loc": 52
+    },
+    {
+     "name": "close",
+     "loc": 41
+    }
+   ],
+   "imports": [
+    "zenagent.agent.agent",
+    "zenagent.agent.session",
+    "zenagent.app.permissions",
+    "zenagent.app.plugin_wiring",
+    "zenagent.app.runtime",
+    "zenagent.app.swarm.protocol",
+    "zenagent.app.swarm.roles",
+    "zenagent.app.swarm.room",
+    "zenagent.app.swarm.roster",
+    "zenagent.app.swarm.router",
+    "zenagent.app.swarm.runner",
+    "zenagent.config",
+    "zenagent.mcp.config",
+    "zenagent.skills"
+   ],
+   "fan_in": 2,
+   "fan_out": 14
+  },
+  "zenagent.app.swarm.protocol": {
+   "path": "zenagent/app/swarm/protocol.py",
+   "loc": 59,
+   "classes": {},
+   "long_funcs": [],
+   "imports": [
+    "zenagent.agent.protocol",
+    "zenagent.app.swarm.room",
+    "zenagent.types"
+   ],
+   "fan_in": 2,
+   "fan_out": 3
+  },
+  "zenagent.app.swarm.roles": {
+   "path": "zenagent/app/swarm/roles.py",
+   "loc": 258,
+   "classes": {
+    "RoleManifest": {
+     "loc": 16,
+     "methods": 0
+    }
+   },
+   "long_funcs": [
+    {
+     "name": "parse_role",
+     "loc": 104
+    }
+   ],
+   "imports": [
+    "zenagent",
+    "zenagent.app.modes",
+    "zenagent.mcp.config",
+    "zenagent.plugins.discovery",
+    "zenagent.plugins.state",
+    "zenagent.project",
+    "zenagent.settings"
+   ],
+   "fan_in": 6,
+   "fan_out": 7
+  },
+  "zenagent.app.swarm.room": {
+   "path": "zenagent/app/swarm/room.py",
+   "loc": 257,
+   "classes": {
+    "RoomMessage": {
+     "loc": 9,
+     "methods": 0
+    },
+    "TaskRecord": {
+     "loc": 15,
+     "methods": 0
+    },
+    "SwarmStore": {
+     "loc": 147,
+     "methods": 13
+    }
+   },
+   "long_funcs": [],
+   "imports": [],
+   "fan_in": 9,
+   "fan_out": 0
+  },
+  "zenagent.app.swarm.roster": {
+   "path": "zenagent/app/swarm/roster.py",
+   "loc": 86,
+   "classes": {},
+   "long_funcs": [],
+   "imports": [
+    "zenagent.app.swarm.roles"
+   ],
+   "fan_in": 1,
+   "fan_out": 1
+  },
+  "zenagent.app.swarm.router": {
+   "path": "zenagent/app/swarm/router.py",
+   "loc": 84,
+   "classes": {
+    "Admission": {
+     "loc": 3,
+     "methods": 0
+    },
+    "Router": {
+     "loc": 55,
+     "methods": 3
+    }
+   },
+   "long_funcs": [],
+   "imports": [
+    "zenagent.app.swarm.room"
+   ],
+   "fan_in": 3,
+   "fan_out": 1
+  },
+  "zenagent.app.swarm.runner": {
+   "path": "zenagent/app/swarm/runner.py",
+   "loc": 101,
+   "classes": {
+    "TaskRunner": {
+     "loc": 55,
+     "methods": 2
+    }
+   },
+   "long_funcs": [],
+   "imports": [
+    "zenagent.agent.agent",
+    "zenagent.agent.session",
+    "zenagent.app.compact",
+    "zenagent.app.swarm.protocol",
+    "zenagent.app.swarm.roles",
+    "zenagent.app.swarm.room",
+    "zenagent.types"
+   ],
+   "fan_in": 2,
+   "fan_out": 7
   },
   "zenagent.cli": {
    "path": "zenagent/cli/__init__.py",
@@ -5574,19 +5853,23 @@
     }
    ],
    "imports": [],
-   "fan_in": 6,
+   "fan_in": 7,
    "fan_out": 0
   },
   "zenagent.cli.rpc.host": {
    "path": "zenagent/cli/rpc/host.py",
-   "loc": 552,
+   "loc": 568,
    "classes": {
     "RpcHost": {
-     "loc": 518,
+     "loc": 533,
      "methods": 23
     }
    },
    "long_funcs": [
+    {
+     "name": "_handle_line",
+     "loc": 62
+    },
     {
      "name": "_terminal_op",
      "loc": 61
@@ -5594,10 +5877,6 @@
     {
      "name": "_session_resume",
      "loc": 59
-    },
-    {
-     "name": "_handle_line",
-     "loc": 54
     }
    ],
    "imports": [
@@ -5605,12 +5884,13 @@
     "zenagent.app.runtime",
     "zenagent.cli.rpc.codec",
     "zenagent.cli.rpc.errors",
+    "zenagent.cli.rpc.ops_swarm",
     "zenagent.cli.rpc.slot",
     "zenagent.cli.rpc.terminal",
     "zenagent.project"
    ],
-   "fan_in": 4,
-   "fan_out": 7
+   "fan_in": 5,
+   "fan_out": 8
   },
   "zenagent.cli.rpc.ops_config": {
    "path": "zenagent/cli/rpc/ops_config.py",
@@ -5759,6 +6039,28 @@
    ],
    "fan_in": 1,
    "fan_out": 3
+  },
+  "zenagent.cli.rpc.ops_swarm": {
+   "path": "zenagent/cli/rpc/ops_swarm.py",
+   "loc": 159,
+   "classes": {
+    "SwarmOps": {
+     "loc": 132,
+     "methods": 4
+    }
+   },
+   "long_funcs": [
+    {
+     "name": "_swarm_op",
+     "loc": 66
+    }
+   ],
+   "imports": [
+    "zenagent.app.swarm.manager",
+    "zenagent.cli.rpc.errors"
+   ],
+   "fan_in": 1,
+   "fan_out": 2
   },
   "zenagent.cli.rpc.server": {
    "path": "zenagent/cli/rpc/server.py",
@@ -7104,7 +7406,7 @@
     "zenagent.mcp.client",
     "zenagent.project"
    ],
-   "fan_in": 13,
+   "fan_in": 15,
    "fan_out": 3
   },
   "zenagent.mcp.manager": {
@@ -7183,7 +7485,7 @@
    "imports": [
     "zenagent.plugins.manifest"
    ],
-   "fan_in": 8,
+   "fan_in": 9,
    "fan_out": 1
   },
   "zenagent.plugins.install": {
@@ -7242,7 +7544,7 @@
     "zenagent.plugins.manifest",
     "zenagent.settings"
    ],
-   "fan_in": 8,
+   "fan_in": 9,
    "fan_out": 3
   },
   "zenagent.prompts": {
@@ -12026,6 +12328,27 @@
    ]
   },
   {
+   "src": "tests.test_rpc_swarm",
+   "dst": "zenagent.app.runtime",
+   "calls": [
+    "RuntimeOptions"
+   ]
+  },
+  {
+   "src": "tests.test_rpc_swarm",
+   "dst": "zenagent.app.swarm.room",
+   "calls": [
+    "TaskRecord"
+   ]
+  },
+  {
+   "src": "tests.test_rpc_swarm",
+   "dst": "zenagent.cli.rpc.host",
+   "calls": [
+    "RpcHost"
+   ]
+  },
+  {
    "src": "tests.test_rpc_v2",
    "dst": "zenagent.app.chat",
    "calls": [
@@ -12122,6 +12445,21 @@
    "src": "tests.test_runtime_memory",
    "dst": "zenagent.agent.memory_store",
    "calls": []
+  },
+  {
+   "src": "tests.test_runtime_role_assembly",
+   "dst": "zenagent.agent.protocol",
+   "calls": [
+    "AgentTool",
+    "ToolResultAgent"
+   ]
+  },
+  {
+   "src": "tests.test_runtime_role_assembly",
+   "dst": "zenagent.types",
+   "calls": [
+    "TextContent"
+   ]
   },
   {
    "src": "tests.test_safety",
@@ -12402,6 +12740,131 @@
     "TextContent",
     "Usage",
     "UserMessage"
+   ]
+  },
+  {
+   "src": "tests.test_swarm_manager",
+   "dst": "zenagent.app.swarm.manager",
+   "calls": [
+    "SwarmManager"
+   ]
+  },
+  {
+   "src": "tests.test_swarm_manager",
+   "dst": "zenagent.app.swarm.roles",
+   "calls": [
+    "agents_root",
+    "state_root"
+   ]
+  },
+  {
+   "src": "tests.test_swarm_manager",
+   "dst": "zenagent.app.swarm.room",
+   "calls": [
+    "RoomMessage",
+    "SwarmStore",
+    "TaskRecord"
+   ]
+  },
+  {
+   "src": "tests.test_swarm_manager",
+   "dst": "zenagent.events",
+   "calls": [
+    "Aborted",
+    "AssistantEvent"
+   ]
+  },
+  {
+   "src": "tests.test_swarm_manager",
+   "dst": "zenagent.types",
+   "calls": [
+    "AssistantMessage",
+    "TextContent",
+    "Usage"
+   ]
+  },
+  {
+   "src": "tests.test_swarm_roles",
+   "dst": "zenagent.app.swarm.roles",
+   "calls": [
+    "agents_root",
+    "discover_roles",
+    "parse_role",
+    "workspaces_root"
+   ]
+  },
+  {
+   "src": "tests.test_swarm_room",
+   "dst": "zenagent.app.swarm.room",
+   "calls": [
+    "RoomMessage",
+    "SwarmStore",
+    "TaskRecord",
+    "is_terminal",
+    "parse_mentions"
+   ]
+  },
+  {
+   "src": "tests.test_swarm_router",
+   "dst": "zenagent.app.swarm.room",
+   "calls": [
+    "RoomMessage",
+    "SwarmStore",
+    "TaskRecord"
+   ]
+  },
+  {
+   "src": "tests.test_swarm_router",
+   "dst": "zenagent.app.swarm.router",
+   "calls": [
+    "Router"
+   ]
+  },
+  {
+   "src": "tests.test_swarm_runner",
+   "dst": "zenagent.app.swarm.roles",
+   "calls": []
+  },
+  {
+   "src": "tests.test_swarm_runner",
+   "dst": "zenagent.app.swarm.room",
+   "calls": [
+    "RoomMessage",
+    "SwarmStore",
+    "TaskRecord",
+    "parse_mentions"
+   ]
+  },
+  {
+   "src": "tests.test_swarm_runner",
+   "dst": "zenagent.app.swarm.router",
+   "calls": [
+    "Router"
+   ]
+  },
+  {
+   "src": "tests.test_swarm_runner",
+   "dst": "zenagent.app.swarm.runner",
+   "calls": [
+    "TaskRunner"
+   ]
+  },
+  {
+   "src": "tests.test_swarm_runner",
+   "dst": "zenagent.events",
+   "calls": [
+    "Aborted",
+    "AssistantEvent"
+   ]
+  },
+  {
+   "src": "tests.test_swarm_runner",
+   "dst": "zenagent.types",
+   "calls": [
+    "AssistantMessage",
+    "Cost",
+    "TextContent",
+    "Usage"
    ]
   },
   {
@@ -16054,6 +16517,231 @@
    "calls": []
   },
   {
+   "src": "zenagent.app.swarm.manager",
+   "dst": "zenagent.agent.agent",
+   "calls": []
+  },
+  {
+   "src": "zenagent.app.swarm.manager",
+   "dst": "zenagent.agent.session",
+   "calls": []
+  },
+  {
+   "src": "zenagent.app.swarm.manager",
+   "dst": "zenagent.app.permissions",
+   "calls": [
+    "build_broker_for"
+   ]
+  },
+  {
+   "src": "zenagent.app.swarm.manager",
+   "dst": "zenagent.app.plugin_wiring",
+   "calls": [
+    "start_mcp"
+   ]
+  },
+  {
+   "src": "zenagent.app.swarm.manager",
+   "dst": "zenagent.app.runtime",
+   "calls": [
+    "Runtime.bootstrap",
+    "RuntimeOptions"
+   ]
+  },
+  {
+   "src": "zenagent.app.swarm.manager",
+   "dst": "zenagent.app.swarm.protocol",
+   "calls": [
+    "build_swarm_post_tool"
+   ]
+  },
+  {
+   "src": "zenagent.app.swarm.manager",
+   "dst": "zenagent.app.swarm.roles",
+   "calls": [
+    "discover_roles",
+    "state_root"
+   ]
+  },
+  {
+   "src": "zenagent.app.swarm.manager",
+   "dst": "zenagent.app.swarm.room",
+   "calls": [
+    "RoomMessage",
+    "SwarmStore",
+    "TaskRecord",
+    "_message_record",
+    "_task_record",
+    "is_terminal"
+   ]
+  },
+  {
+   "src": "zenagent.app.swarm.manager",
+   "dst": "zenagent.app.swarm.roster",
+   "calls": [
+    "remove_role_dir",
+    "role_signature",
+    "role_view",
+    "write_role"
+   ]
+  },
+  {
+   "src": "zenagent.app.swarm.manager",
+   "dst": "zenagent.app.swarm.router",
+   "calls": [
+    "Router"
+   ]
+  },
+  {
+   "src": "zenagent.app.swarm.manager",
+   "dst": "zenagent.app.swarm.runner",
+   "calls": [
+    "TaskRunner"
+   ]
+  },
+  {
+   "src": "zenagent.app.swarm.manager",
+   "dst": "zenagent.config",
+   "calls": [
+    "load_user_config"
+   ]
+  },
+  {
+   "src": "zenagent.app.swarm.manager",
+   "dst": "zenagent.mcp.config",
+   "calls": [
+    "parse_server"
+   ]
+  },
+  {
+   "src": "zenagent.app.swarm.manager",
+   "dst": "zenagent.skills",
+   "calls": [
+    "discover_skills"
+   ]
+  },
+  {
+   "src": "zenagent.app.swarm.protocol",
+   "dst": "zenagent.agent.protocol",
+   "calls": [
+    "AgentTool",
+    "ToolResultAgent"
+   ]
+  },
+  {
+   "src": "zenagent.app.swarm.protocol",
+   "dst": "zenagent.app.swarm.room",
+   "calls": []
+  },
+  {
+   "src": "zenagent.app.swarm.protocol",
+   "dst": "zenagent.types",
+   "calls": [
+    "TextContent"
+   ]
+  },
+  {
+   "src": "zenagent.app.swarm.roles",
+   "dst": "zenagent",
+   "calls": []
+  },
+  {
+   "src": "zenagent.app.swarm.roles",
+   "dst": "zenagent.app.modes",
+   "calls": []
+  },
+  {
+   "src": "zenagent.app.swarm.roles",
+   "dst": "zenagent.mcp.config",
+   "calls": [
+    "parse_server"
+   ]
+  },
+  {
+   "src": "zenagent.app.swarm.roles",
+   "dst": "zenagent.plugins.discovery",
+   "calls": [
+    "discover_plugins"
+   ]
+  },
+  {
+   "src": "zenagent.app.swarm.roles",
+   "dst": "zenagent.plugins.state",
+   "calls": [
+    "credentials_for",
+    "is_enabled",
+    "resolve"
+   ]
+  },
+  {
+   "src": "zenagent.app.swarm.roles",
+   "dst": "zenagent.project",
+   "calls": [
+    "zenagent_home"
+   ]
+  },
+  {
+   "src": "zenagent.app.swarm.roles",
+   "dst": "zenagent.settings",
+   "calls": [
+    "get_api_key"
+   ]
+  },
+  {
+   "src": "zenagent.app.swarm.roster",
+   "dst": "zenagent.app.swarm.roles",
+   "calls": [
+    "agents_root",
+    "parse_role"
+   ]
+  },
+  {
+   "src": "zenagent.app.swarm.router",
+   "dst": "zenagent.app.swarm.room",
+   "calls": [
+    "TaskRecord"
+   ]
+  },
+  {
+   "src": "zenagent.app.swarm.runner",
+   "dst": "zenagent.agent.agent",
+   "calls": []
+  },
+  {
+   "src": "zenagent.app.swarm.runner",
+   "dst": "zenagent.agent.session",
+   "calls": []
+  },
+  {
+   "src": "zenagent.app.swarm.runner",
+   "dst": "zenagent.app.compact",
+   "calls": [
+    "maybe_auto_compact"
+   ]
+  },
+  {
+   "src": "zenagent.app.swarm.runner",
+   "dst": "zenagent.app.swarm.protocol",
+   "calls": [
+    "injected_prompt"
+   ]
+  },
+  {
+   "src": "zenagent.app.swarm.runner",
+   "dst": "zenagent.app.swarm.roles",
+   "calls": []
+  },
+  {
+   "src": "zenagent.app.swarm.runner",
+   "dst": "zenagent.app.swarm.room",
+   "calls": []
+  },
+  {
+   "src": "zenagent.app.swarm.runner",
+   "dst": "zenagent.types",
+   "calls": []
+  },
+  {
    "src": "zenagent.app.views",
    "dst": "zenagent.agent.loop",
    "calls": []
@@ -16704,6 +17392,11 @@
   },
   {
    "src": "zenagent.cli.rpc.host",
+   "dst": "zenagent.cli.rpc.ops_swarm",
+   "calls": []
+  },
+  {
+   "src": "zenagent.cli.rpc.host",
    "dst": "zenagent.cli.rpc.slot",
    "calls": [
     "RuntimeSlot.adopt"
@@ -16909,6 +17602,22 @@
   },
   {
    "src": "zenagent.cli.rpc.ops_session",
+   "dst": "zenagent.cli.rpc.errors",
+   "calls": [
+    "Refusal",
+    "error_frame",
+    "failure_frame"
+   ]
+  },
+  {
+   "src": "zenagent.cli.rpc.ops_swarm",
+   "dst": "zenagent.app.swarm.manager",
+   "calls": [
+    "SwarmManager"
+   ]
+  },
+  {
+   "src": "zenagent.cli.rpc.ops_swarm",
    "dst": "zenagent.cli.rpc.errors",
    "calls": [
     "Refusal",
@@ -19798,8 +20507,8 @@
   ]
  ],
  "stats": {
-  "files": 416,
-  "edges": 1700,
+  "files": 432,
+  "edges": 1756,
   "cycles": 6,
   "errors": []
  }
