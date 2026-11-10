@@ -209,7 +209,6 @@ export type WorkPanelTabKind =
   | 'files'
   | 'worktree'
   | 'memory'
-  | 'taiji'
   | 'terminal'
   | 'subagent'
 
@@ -244,7 +243,7 @@ interface WorkPanelState {
   fileRequest: FileOpenRequest | null
   openPanel(): void
   closePanel(): void
-  showTab(kind: 'review' | 'files' | 'worktree' | 'memory' | 'taiji' | 'terminal'): void
+  showTab(kind: 'review' | 'files' | 'worktree' | 'memory' | 'terminal'): void
   openFile(path: string): void
   consumeFileRequest(): void
   activate(id: string): void

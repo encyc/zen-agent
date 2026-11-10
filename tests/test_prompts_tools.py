@@ -33,8 +33,6 @@ def test_tool_blocks_cover_every_tool() -> None:
 
 def test_no_orphan_tool_blocks() -> None:
     on_disk = {path.stem for path in TOOLS_DIR.glob("*.md")}
-    # The taiji Router tools register outside TOOL_BLOCK_NAMES (they compose
-    # only for the taiji session), so the no-orphan pin reads the registry.
     registered = {
         block_id.removeprefix("tool.")
         for block_id in BLOCKS

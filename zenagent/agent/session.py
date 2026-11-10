@@ -742,12 +742,11 @@ def list_sessions(limit: int = 20, *, scope: str = "project") -> list[SessionInf
             except (ValueError, OSError):
                 continue
             # Header-only leftovers from older builds are not conversations.
-            # The taiji singleton, a pinned file and an explicitly named one
-            # are deliberate and stay visible.
+            # A pinned file and an explicitly named one are deliberate and
+            # stay visible.
             if (
                 info.messages == 0
                 and info.title == "(empty)"
-                and path.stem != "taiji"
                 and path.name not in pins
             ):
                 continue

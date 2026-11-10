@@ -4,6 +4,12 @@ Every content change bumps `PROMPT_VERSION` (`zenagent/prompts/spec.py`) and get
 one entry here: what changed, why, and the experiment/report that justified it.
 P0 extracted the v0.4.1 text verbatim — no behavior change.
 
+## 2026-11-10.1 — remove the taiji Router prompt surface
+
+- Removed the `taiji_router` block and the five `tool.*_worker` blocks with
+  the taiji feature. The base prompt is back to the project context, skills,
+  extensions and mode notes only.
+
 ## 2026-11-08.1 — the taiji Router directs, workers edit
 
 - New session-gated block `taiji_router` (rendered only while the taiji

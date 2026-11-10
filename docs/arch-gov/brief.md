@@ -1,6 +1,6 @@
 # zen-agent 架构简报（Agent 首读）
 
-> 由 manifest.json 单源生成（`scaffold.py render`），勿手改。manifest v3 · 2026-11-10 · 41 节点 / 190 边。讨论架构：本文件 + nodes.md + deps.json 三件套为准。
+> 由 manifest.json 单源生成（`scaffold.py render`），勿手改。manifest v3 · 2026-11-10 · 40 节点 / 181 边。讨论架构：本文件 + nodes.md + deps.json 三件套为准。
 
 ## 1. 项目定位
 zen-agent 是零第三方依赖（仅 httpx）的终端 AI 编码代理。四个前端（REPL / headless -p / JSONL RPC / Textual TUI）共用 app 层唯一装配序列 bootstrap.prepare；agent 内核以「事件流 + 工具永远返回结果 + 取消是协议内状态」为契约；providers 适配多家 LLM；插件（声明式连接器包，经 MCP 单向外呼）与 MCP/skills/模板/扩展/桌面 GUI(经 RPC) 都在内核之上接线不改内核。
@@ -20,30 +20,29 @@ zen-agent 是零第三方依赖（仅 httpx）的终端 AI 编码代理。四个
 - `http_client` **http_client.py** — 进程级共享 httpx.AsyncClient 构造（抗敌意 shell 环境）（1 文件，被 4 节点依赖）
 - `limits` **limits.py** — [limits]/[task] 预算唯一注册表与外科手术式写盘（write_managed 唯一写路径）（1 文件，被 4 节点依赖）
 - `plugins` **plugins** — 声明式能力包：manifest 校验、发现、安装/卸载、启停与凭据、贡献解析（6 文件，被 2 节点依赖）
-- `project` **project.py** — 项目身份与目录布局：<root>/.zenagent/ 随仓库 vs ~/.zenagent/projects/ 本机状态（1 文件，被 11 节点依赖）
+- `project` **project.py** — 项目身份与目录布局：<root>/.zenagent/ 随仓库 vs ~/.zenagent/projects/ 本机状态（1 文件，被 10 节点依赖）
 - `retry` **retry.py** — 通用重试 helper（与 providers/message 级重试无关）（1 文件，被 1 节点依赖）
 - `settings` **settings.py** — settings.json(0600)：API keys 与 UI 偏好，优先级高于环境变量（1 文件，被 8 节点依赖）
 - `skills` **skills.py** — 文件即扩展：SKILL.md 发现 + skill 工具构造（1 文件，被 3 节点依赖）
 - `telemetry` **telemetry.py** — （职责待 enrich）（1 文件，被 1 节点依赖）
 - `templates` **templates.py** — prompt 模板展开（expand）（1 文件，被 3 节点依赖）
 - `trace` **trace.py** — append-only JSONL 执行 trace：工具/参数/结果/耗时（1 文件，被 1 节点依赖）
-- `types` **types.py** — 全部数据类型：消息/内容块/用量/成本（全图 fan-in 最高）（1 文件，被 20 节点依赖）
+- `types` **types.py** — 全部数据类型：消息/内容块/用量/成本（全图 fan-in 最高）（1 文件，被 19 节点依赖）
 - `update_check` **update_check.py** — TUI 专用 PyPI 版本检查（后台、静默失败）（1 文件，被 1 节点依赖）
 - `usage` **usage.py** — 用量聚合 collect_usage（四前端唯一一份）（1 文件，被 2 节点依赖）
 
 ### 簇 运行时内核（`agent`）
-- `agent.loop` **无状态执行内核** — 无状态执行器：agent_loop 组装请求、流式调 provider、终止判定；tool_exec 工具调度（权限门→校验→并行/串行）与结果回写；result_budget/timeouts/guard 循环护栏。已知常量回指环在本节点内部（cycles_seen）（8 文件，被 11 节点依赖）
-- `agent.rt` **有状态运行时** — 有状态运行时：Agent（历史/订阅者/steering/abort）、Session JSONL 持久化、子代理运行时（task 工具的背后）、memory_store/artifacts（6 文件，被 11 节点依赖）
+- `agent.loop` **无状态执行内核** — 无状态执行器：agent_loop 组装请求、流式调 provider、终止判定；tool_exec 工具调度（权限门→校验→并行/串行）与结果回写；result_budget/timeouts/guard 循环护栏。已知常量回指环在本节点内部（cycles_seen）（8 文件，被 10 节点依赖）
+- `agent.rt` **有状态运行时** — 有状态运行时：Agent（历史/订阅者/steering/abort）、Session JSONL 持久化、子代理运行时（task 工具的背后）、memory_store/artifacts（6 文件，被 10 节点依赖）
 
 ### 簇 应用层（`app`）
-- `app.assembly` **装配与防线** — 装配与防线：bootstrap.prepare（四前端唯一装配序列）、Runtime（对象槽位/工具注入）、PermissionGate/Broker 权限门、safety 风险模型、modes、error_notice 失败文案统一（15 文件，被 7 节点依赖）
-- `app.chat` **会话交互** — 会话交互控制：ChatController（run 生命周期/last_error）、slash 命令注册表与补全、views UI 无关视图模型、模型切换、子代理跟踪（13 文件，被 8 节点依赖）
-- `app.taiji` **taiji** — Taiji 编排面：Router 会话(taiji.jsonl)+锁、TaijiSupervisor、5 个 worker 工具；workers = `zen rpc --cwd worktree --yes` 子进程（11 文件，被 2 节点依赖）
+- `app.assembly` **装配与防线** — 装配与防线：bootstrap.prepare（四前端唯一装配序列）、Runtime（对象槽位/工具注入）、PermissionGate/Broker 权限门、safety 风险模型、modes、error_notice 失败文案统一（15 文件，被 6 节点依赖）
+- `app.chat` **会话交互** — 会话交互控制：ChatController（run 生命周期/last_error）、slash 命令注册表与补全、views UI 无关视图模型、模型切换、子代理跟踪（13 文件，被 7 节点依赖）
 - `app.transcript` **会话历史与恢复** — 会话文件与历史操作：sessions/records 词汇表、session_meta 边车、journal 写快照(/restore)、compact 摘要边界、shake 卸载、rewind（9 文件，被 6 节点依赖）
 
 ### 簇 交互层（`cli`）
 - `cli` **cli** — 交互层入口：main 参数分发、repl、render/doctor/export/usage/theme/keybindings（15 文件，被 3 节点依赖）
-- `cli.rpc` **rpc** — JSONL RPC 服务器与 ops 分派（hello 协议握手、[limits] 契约）（10 文件，被 1 节点依赖）
+- `cli.rpc` **rpc** — JSONL RPC 服务器与 ops 分派（hello 协议握手、[limits] 契约）（9 文件，被 1 节点依赖）
 - `cli.tui` **tui** — Textual TUI 应用壳与 run（11 文件，被 4 节点依赖）
 - `cli.tui.app_parts` **app_parts** — TUI 主应用组成部件（display/commands/sessions/views…）（11 文件，被 1 节点依赖）
 - `cli.tui.screens` **screens** — TUI 全屏界面（info/todo/job_log/modals/pickers…）（11 文件，被 2 节点依赖）
@@ -56,7 +55,7 @@ zen-agent 是零第三方依赖（仅 httpx）的终端 AI 编码代理。四个
 - `mcp` **mcp** — MCP 客户端与生命周期：Stdio/Http transport、McpManager；工具包装成 AgentTool 注入（5 文件，被 3 节点依赖）
 
 ### 簇 提示词（`prompts`）
-- `prompts` **prompts** — prompt 子系统：blocks/*.md 块文件 + compose_system 唯一组装契约 + catalog（4 文件，被 8 节点依赖）
+- `prompts` **prompts** — prompt 子系统：blocks/*.md 块文件 + compose_system 唯一组装契约 + catalog（4 文件，被 7 节点依赖）
 
 ### 簇 协议层（`providers`）
 - `providers` **providers** — 协议层：StreamFn 契约、safe_stream（永不抛）、4 家适配器、transport（共享连接池/取消）+ message 级 retry、catalog/compat（12 文件，被 10 节点依赖）
@@ -65,7 +64,7 @@ zen-agent 是零第三方依赖（仅 httpx）的终端 AI 编码代理。四个
 - `tools` **tools** — 内置工具面：read/write/edit/list_dir/bash/wait/ask/glob/grep + todo/task/memory/checkpoint/lsp/github（15 文件，被 6 节点依赖）
 - `tools.web` **web** — 网络工具：web_search 多供应商链 + fetch（7 文件，被 6 节点依赖）
 
-**簇间依赖**：`agent` → `base`（7 条边）；`agent` → `providers`（2 条边）；`app` → `agent`（8 条边）；`app` → `base`（23 条边）；`app` → `i18n`（3 条边）；`app` → `mcp`（1 条边）；`app` → `prompts`（3 条边）；`app` → `providers`（3 条边）；`app` → `tools`（4 条边）；`base` → `agent`（4 条边）；`base` → `cli`（1 条边）；`base` → `prompts`（2 条边）；`base` → `providers`（2 条边）；`cli` → `agent`（5 条边）；`cli` → `app`（15 条边）；`cli` → `base`（29 条边）；`cli` → `i18n`（6 条边）；`cli` → `mcp`（2 条边）；`cli` → `prompts`（1 条边）；`cli` → `providers`（1 条边）；`cli` → `tools`（6 条边）；`mcp` → `agent`（1 条边）；`mcp` → `base`（3 条边）；`prompts` → `providers`（1 条边）；`providers` → `base`（3 条边）；`tools` → `agent`（3 条边）；`tools` → `base`（5 条边）；`tools` → `prompts`（2 条边）；`tools` → `providers`（1 条边）
+**簇间依赖**：`agent` → `base`（7 条边）；`agent` → `providers`（2 条边）；`app` → `agent`（6 条边）；`app` → `base`（21 条边）；`app` → `i18n`（3 条边）；`app` → `mcp`（1 条边）；`app` → `prompts`（2 条边）；`app` → `providers`（3 条边）；`app` → `tools`（4 条边）；`base` → `agent`（4 条边）；`base` → `cli`（1 条边）；`base` → `prompts`（2 条边）；`base` → `providers`（2 条边）；`cli` → `agent`（5 条边）；`cli` → `app`（14 条边）；`cli` → `base`（29 条边）；`cli` → `i18n`（6 条边）；`cli` → `mcp`（2 条边）；`cli` → `prompts`（1 条边）；`cli` → `providers`（1 条边）；`cli` → `tools`（6 条边）；`mcp` → `agent`（1 条边）；`mcp` → `base`（3 条边）；`prompts` → `providers`（1 条边）；`providers` → `base`（3 条边）；`tools` → `agent`（3 条边）；`tools` → `base`（5 条边）；`tools` → `prompts`（2 条边）；`tools` → `providers`（1 条边）
 
 ## 3. 边表
 | from | to | 语义 |
@@ -84,7 +83,6 @@ zen-agent 是零第三方依赖（仅 httpx）的终端 AI 编码代理。四个
 | `app.assembly` | `agent.loop` | ToolRegistry |
 | `app.assembly` | `agent.rt` | Runtime 构造 Agent、挂 ask_handler/订阅者 |
 | `app.assembly` | `app.chat` | AppServices、ChatController、build_default_commands、git_status |
-| `app.assembly` | `app.taiji` | is_taiji_session、router_tool_gate、runtime_taiji_provider、taiji_tools_for |
 | `app.assembly` | `app.transcript` | RewindState、SessionManager、SessionMetaRecorder、attach_journal |
 | `app.assembly` | `config` | ContextGuard、UserConfig、apply_user_config、load_user_config |
 | `app.assembly` | `context_files` | discover_context_files、load_context_files |
@@ -117,13 +115,6 @@ zen-agent 是零第三方依赖（仅 httpx）的终端 AI 编码代理。四个
 | `app.chat` | `tools` | coerce_todo_phases、get_job_manager、load_todo_phases |
 | `app.chat` | `tools.web` | default_provider、format_results、run_search |
 | `app.chat` | `types` | Cost、SystemMessage、Usage、UserMessage |
-| `app.taiji` | `agent.loop` | AgentTool、ToolResultAgent |
-| `app.taiji` | `agent.rt` | set_session_title |
-| `app.taiji` | `app.assembly` | worktree_overview |
-| `app.taiji` | `app.chat` | git_status |
-| `app.taiji` | `project` | find_project_root、project_dir、project_key、project_sessions_dir |
-| `app.taiji` | `prompts` | tool_description |
-| `app.taiji` | `types` | TextContent |
 | `app.transcript` | `agent.loop` | AgentTool、ToolResultAgent |
 | `app.transcript` | `agent.rt` | Session、carry_task_dir、get_task_manager、list_sessions |
 | `app.transcript` | `app.assembly` | — |
@@ -160,7 +151,6 @@ zen-agent 是零第三方依赖（仅 httpx）的终端 AI 编码代理。四个
 | `cli.rpc` | `agent.rt` | MemoryStore |
 | `cli.rpc` | `app.assembly` | RuntimeOptions、list_directory、prepare、probe_mcp_server |
 | `cli.rpc` | `app.chat` | build_skill_submission、parse_skill_display、usage_total |
-| `cli.rpc` | `app.taiji` | close_taiji、ensure_taiji_session、existing_taiji、own_taiji_lock |
 | `cli.rpc` | `app.transcript` | is_compaction |
 | `cli.rpc` | `attachments` | read_image_argument |
 | `cli.rpc` | `cli` | add_runtime_flags |
@@ -271,8 +261,8 @@ zen-agent 是零第三方依赖（仅 httpx）的终端 AI 编码代理。四个
 - 插件只做单向外呼：zen → 插件 MCP 进程 → 外部应用；plugins/ 不 import mcp/app/cli/agent/tools/providers（tests/test_plugin_layering.py 钉住），只有 app/plugin_wiring.py 把插件贡献翻译成 MCP 配置
 
 ## 5. 健康红点
-最近 gov_health（2026-11-10）：违规 112 项，新增 error 0，恶化 0，基线 112 项。
-红点节点：`(unmapped)`(8E/27W)、`cli.rpc`(3E/9W)、`tools`(0E/9W)、`cli`(1E/7W)、`app.chat`(2E/5W)、`(cycles)`(7E/0W)、`app.assembly`(2E/4W)、`providers`(0E/5W)
+最近 gov_health（2026-11-10）：违规 109 项，新增 error 1，恶化 15，基线 109 项。
+红点节点：`(unmapped)`(8E/29W)、`cli.rpc`(4E/6W)、`tools`(0E/9W)、`cli`(1E/7W)、`app.chat`(2E/5W)、`app.assembly`(2E/5W)、`(cycles)`(6E/0W)、`providers`(0E/5W)
 
 ## 6. 最近治理（deltas.md 最后一条）
 ## [v3] 2026-11-10 — 插件系统接入

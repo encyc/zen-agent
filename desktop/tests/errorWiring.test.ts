@@ -21,23 +21,23 @@ const read = (rel: string) => readFileSync(join(here, '..', 'src', rel), 'utf8')
 test('an error frame keeps its code and params for localization', () => {
   const frame = {
     type: 'error',
-    message: '合并未执行: dirty',
-    code: 'taiji.merge_blocked',
-    params: { reason: 'dirty' },
+    message: 'read failed: a.txt',
+    code: 'fs_error',
+    params: { op: 'read', file: 'a.txt' },
   }
 
   assert.deepEqual(frameErrorDetail(frame), {
-    message: '合并未执行: dirty',
-    code: 'taiji.merge_blocked',
-    params: { reason: 'dirty' },
+    message: 'read failed: a.txt',
+    code: 'fs_error',
+    params: { op: 'read', file: 'a.txt' },
   })
-  assert.equal(frameError(frame), '合并未执行: dirty')
+  assert.equal(frameError(frame), 'read failed: a.txt')
 })
 
 test('a refused result carries a reason and a code too', () => {
-  assert.deepEqual(frameErrorDetail({ type: 'result', ok: false, reason: 'no', code: 'taiji.inactive' }), {
+  assert.deepEqual(frameErrorDetail({ type: 'result', ok: false, reason: 'no', code: 'project_invalid' }), {
     message: 'no',
-    code: 'taiji.inactive',
+    code: 'project_invalid',
   })
 })
 
@@ -57,13 +57,13 @@ test('frameErrorNotice localizes a known code and falls back to the message', ()
     frameErrorNotice(
       {
         type: 'error',
-        message: 'worker 不存在: w1',
-        code: 'taiji.worker_missing',
-        params: { name: 'w1' },
+        message: 'op read failed on w1',
+        code: 'fs_error',
+        params: { op: 'read', file: 'w1' },
       },
       'en',
     ),
-    'No such worker: w1',
+    'read failed: w1',
   )
   assert.equal(
     frameErrorNotice({ type: 'error', message: 'boom', code: 'brand.new' }, 'zh'),
@@ -75,12 +75,11 @@ test('frameErrorNotice localizes a known code and falls back to the message', ()
 
 test('localizeError alone still falls back to the raw message', () => {
   assert.equal(localizeError({ message: 'raw', code: 'unheard.of' }, 'en'), 'raw')
-  assert.equal(localizeError({ code: 'taiji.inactive' }, 'zh'), 'taiji 未在此宿主启用')
+  assert.equal(localizeError({ code: 'session_failed' }, 'zh'), '会话操作失败，详情见服务端日志')
 })
 
-test('the action-error entry and the taiji panel render through the mapper', () => {
+test('the action-error entry renders through the mapper', () => {
   assert.match(read('state/appStore.ts'), /frameErrorNotice/)
-  assert.match(read('ui/rightbar/TaijiPanel.tsx'), /localizeError/)
 })
 
 test('a failed prompt and a failed file read reach the localized notice', () => {

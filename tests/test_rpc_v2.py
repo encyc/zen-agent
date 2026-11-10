@@ -1714,38 +1714,6 @@ async def test_a_failed_command_crosses_as_a_code(runtime_factory, tmp_path):
     assert str(tmp_path) not in json.dumps(payload)
 
 
-async def test_a_failed_taiji_message_crosses_as_a_code(
-    runtime_factory, tmp_path, monkeypatch
-):
-    _runtime, server, writes, queue = await build(runtime_factory)
-    secret = tmp_path / "inbox.json"
-
-    class FakeSupervisor:
-        def has_running(self, name):
-            return False
-
-        async def message(self, name, text):
-            raise RuntimeError(f"cannot write {secret}")
-
-    monkeypatch.setattr(
-        "zenagent.app.taiji.supervisor.existing_taiji",
-        lambda root=None: FakeSupervisor(),
-    )
-
-    await run_lines(
-        server,
-        queue,
-        [{"type": "taiji", "id": "t", "op": "message", "name": "w1", "text": "hi"}],
-    )
-
-    payload = decode(writes)[0]
-    assert payload["type"] == "error"
-    assert payload["code"] == "taiji.message_failed"
-    assert payload["message"] == "message failed"
-    assert payload["params"] == {"op": "message", "name": "w1"}
-    assert str(tmp_path) not in json.dumps(payload)
-
-
 async def test_a_failure_scenario_never_leaks_the_tmp_path(
     runtime_factory, tmp_path, monkeypatch
 ):

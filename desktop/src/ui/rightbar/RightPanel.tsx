@@ -49,9 +49,6 @@ const SubagentTranscript = lazy(() =>
 const WorktreePanel = lazy(() =>
   import('./WorktreePanel').then((module) => ({ default: module.WorktreePanel })),
 )
-const TaijiPanel = lazy(() =>
-  import('./TaijiPanel').then((module) => ({ default: module.TaijiPanel })),
-)
 const TerminalPanel = lazy(() =>
   import('./TerminalPanel').then((module) => ({ default: module.TerminalPanel })),
 )
@@ -74,7 +71,6 @@ const TOOL_TABS = [
   { kind: 'files', label: 'panel.files', Icon: FolderIcon },
   { kind: 'worktree', label: 'panel.worktree', Icon: BranchIcon },
   { kind: 'memory', label: 'panel.memory', Icon: SparkIcon },
-  { kind: 'taiji', label: 'panel.taiji', Icon: BranchIcon },
   { kind: 'terminal', label: 'panel.terminal', Icon: TerminalIcon },
 ] as const
 
@@ -296,8 +292,6 @@ export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
             <FilesPanel />
           ) : activeTab.kind === 'worktree' ? (
             <WorktreePanel />
-          ) : activeTab.kind === 'taiji' ? (
-            <TaijiPanel />
           ) : (
             <div className={css.reviewWrap}>
               <ReviewPanel />

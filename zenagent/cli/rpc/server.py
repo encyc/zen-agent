@@ -1,6 +1,6 @@
 """The RpcServer core: child state, dispatch, and the chat/run wire handlers.
 
-Composed from the domain mixins: FilesOps, TaijiOps, SessionOps, ConfigOps.
+Composed from the domain mixins: FilesOps, SessionOps, ConfigOps.
 Pure relocation from the pre-split ``cli/rpc.py`` — zero behavior change.
 """
 
@@ -26,7 +26,6 @@ from zenagent.cli.rpc.ops_config import ConfigOps
 from zenagent.cli.rpc.ops_files import FilesOps
 from zenagent.cli.rpc.ops_plugins import PluginsOps
 from zenagent.cli.rpc.ops_session import SessionOps
-from zenagent.cli.rpc.ops_taiji import TaijiOps
 from zenagent.events import AgentEvent
 from zenagent.limits import LimitsWriteError
 from zenagent.project import project_key
@@ -218,7 +217,7 @@ def _usage(agent: Agent) -> dict:
     }
 
 
-class RpcServer(TaijiOps, FilesOps, SessionOps, PluginsOps, ConfigOps):
+class RpcServer(FilesOps, SessionOps, PluginsOps, ConfigOps):
     """Reads requests, streams agent events, writes one result per request."""
 
     def __init__(
@@ -631,9 +630,6 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, PluginsOps, ConfigOps):
                     "worktree": worktree_overview(self.cwd),
                 }
             )
-            return True
-        if kind == "taiji":
-            await self._taiji_request(request, request_id)
             return True
         if kind == "secrets":
             await self._secrets(request, request_id)

@@ -208,7 +208,7 @@ def test_listing_hides_header_only_sessions(isolated_sessions):
 
 def test_listing_keeps_intentional_empty_sessions(isolated_sessions):
     isolated_sessions.mkdir(parents=True)
-    for name in ("taiji.jsonl", "named.jsonl", "pinned.jsonl"):
+    for name in ("named.jsonl", "pinned.jsonl"):
         (isolated_sessions / name).write_text(
             json.dumps({"type": "session", "version": 1, "createdAt": 1}) + "\n",
             encoding="utf-8",
@@ -217,7 +217,7 @@ def test_listing_keeps_intentional_empty_sessions(isolated_sessions):
     set_session_pin(isolated_sessions / "pinned.jsonl", True)
 
     names = {info.path.name for info in list_sessions()}
-    assert names == {"taiji.jsonl", "named.jsonl", "pinned.jsonl"}
+    assert names == {"named.jsonl", "pinned.jsonl"}
 
 
 async def test_fork_at_copies_the_prefix_without_touching_the_source(isolated_sessions):

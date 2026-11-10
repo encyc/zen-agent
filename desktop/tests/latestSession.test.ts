@@ -35,15 +35,6 @@ test('latestSessionForProject ignores sessions that never held a message', () =>
   assert.equal(latestSessionForProject(sessions, '/work/p'), '/sessions/real.jsonl')
 })
 
-test('latestSessionForProject leaves the taiji router out of the normal flow', () => {
-  const sessions = [
-    row({ path: '/sessions/taiji.jsonl', name: 'taiji', updated_at: 500 }),
-    row({ path: '/sessions/real.jsonl', updated_at: 10 }),
-  ]
-  assert.equal(latestSessionForProject(sessions, '/work/p'), '/sessions/real.jsonl')
-  assert.equal(latestSessionForProject([row({ path: '/sessions/taiji.jsonl', name: 'taiji' })], '/work/p'), null)
-})
-
 test('latestSessionForProject returns null when the project has nothing to resume', () => {
   assert.equal(latestSessionForProject([], '/work/p'), null)
   assert.equal(latestSessionForProject([row({ path: '/sessions/c.jsonl', project_path: '/work/q' })], '/work/p'), null)

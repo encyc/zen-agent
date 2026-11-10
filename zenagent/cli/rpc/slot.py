@@ -1,9 +1,9 @@
-"""One resident runtime: its RPC server and taiji claim.
+"""One resident runtime and its RPC server.
 
 A slot is the unit the host opens and evicts. Everything that used to be
 process-scoped in ``zen rpc`` — the in-flight run, text buffer, approval and
-ask futures, taiji host lock — belongs to a slot now. A project may own
-several slots (one per live session); only the first claims the taiji host.
+ask futures — belongs to a slot now. A project may own several slots, one per
+live session.
 """
 
 from __future__ import annotations
@@ -12,11 +12,6 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from zenagent.app.taiji import (
-    TaijiClaim,
-    claim_taiji_host,
-    release_taiji_host,
-)
 from zenagent.cli.rpc.server import RpcServer
 from zenagent.project import project_key
 
@@ -36,7 +31,6 @@ class RuntimeSlot:
         *,
         root: Path,
         server: RpcServer,
-        claim: TaijiClaim,
         key: str | None = None,
         opened_at: float | None = None,
     ) -> None:
@@ -45,7 +39,6 @@ class RuntimeSlot:
         #: ``<project key>#2``, ``#3``… for extra sessions of the same project.
         self.key = key or project_key(self.root)
         self.server = server
-        self.claim = claim
         self.opened_at = time.monotonic() if opened_at is None else opened_at
 
     @property
@@ -60,13 +53,8 @@ class RuntimeSlot:
         write_line,
         approval_timeout_s: float = DEFAULT_APPROVAL_TIMEOUT_S,
         key: str | None = None,
-        claim_host: bool = True,
     ) -> RuntimeSlot:
-        """Wire one prepared frontend into a slot and claim its taiji host.
-
-        ``claim_host=False`` is for a project's second live session: the taiji
-        fleet and lock are project-wide, so only the first slot claims them.
-        """
+        """Wire one prepared frontend into a slot."""
         runtime = prepared.runtime
         root = Path(runtime.root).resolve()
         chat = prepared.chat
@@ -85,13 +73,7 @@ class RuntimeSlot:
         )
         prepared.broker.set_confirm(server.confirm)
         runtime.ask_handler = server.ask
-        runtime.taiji_chat = chat
-        claim = (
-            claim_taiji_host(runtime)
-            if claim_host
-            else TaijiClaim(root=root, owned=False)
-        )
-        return cls(root=root, server=server, claim=claim, key=key)
+        return cls(root=root, server=server, key=key)
 
     @property
     def runtime(self) -> Runtime:
@@ -109,41 +91,10 @@ class RuntimeSlot:
     @property
     def pinned(self) -> bool:
         """True while the slot must not be evicted."""
-        if self.busy:
-            return True
-        from zenagent.app.taiji.supervisor import existing_taiji
-
-        supervisor = existing_taiji(self.root)
-        if supervisor is None:
-            return False
-        return any(
-            record.status in ("running", "queued")
-            for record in supervisor.list_workers()
-        )
+        return self.busy
 
     async def close(self) -> None:
-        """Deny pending prompts, release the taiji claim and close the runtime."""
+        """Deny pending prompts and close the runtime."""
         await self.server._shutdown()
-        self._unbind_taiji_chat()
-        await release_taiji_host(self.claim)
         self.runtime.ask_handler = None
         await self.runtime.close()
-
-    def _unbind_taiji_chat(self) -> None:
-        """Stop milestone injection into a chat that is about to close.
-
-        The fleet is project-wide but its chat target is one slot: closing
-        this slot must leave the supervisor without that target instead of
-        holding a dead ChatController.
-        """
-        from zenagent.app.taiji.session import is_taiji_session
-        from zenagent.app.taiji.supervisor import existing_taiji
-
-        if not is_taiji_session(
-            getattr(getattr(self.runtime, "session", None), "path", None)
-        ):
-            return
-        supervisor = existing_taiji(self.root)
-        if supervisor is not None and supervisor.chat is self.chat:
-            supervisor.chat = None
-            supervisor.mode_of = lambda: "ask"

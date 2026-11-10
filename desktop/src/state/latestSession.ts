@@ -16,9 +16,8 @@ export function latestSessionForProject(
   for (const session of sessions) {
     if (root === '' || session.project_path !== root) continue
     // An idle launch leaves a lazy, message-less session behind; it is not a
-    // conversation to come back to. The taiji router is its own entry point
-    // (`enterTaiji`), never the project's default landing.
-    if (session.messages <= 0 || session.name === 'taiji') continue
+    // conversation to come back to.
+    if (session.messages <= 0) continue
     if (best === null || (session.updated_at ?? 0) > (best.updated_at ?? 0)) best = session
   }
   return best?.path ?? null

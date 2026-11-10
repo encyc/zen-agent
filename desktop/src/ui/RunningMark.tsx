@@ -1,4 +1,4 @@
-/** The taiji mark as a running indicator: the disc spins while a turn is live. */
+/** The yin-yang mark as a running indicator: the disc spins while a turn is live. */
 
 import runningMark from '../assets/running-mark.png'
 import css from './RunningMark.module.css'

@@ -5,6 +5,22 @@ matches the release tag; older history is in the repository tags and commits.
 
 ## Unreleased
 
+**Taiji removed.** The 太极 multi-worker orchestration layer is gone; zen is back
+to a single-agent coding harness. Entries below that describe how taiji worked
+are kept as history. Per-project runtime slots, background session runs,
+project ops, and the yin-yang brand mark are unaffected.
+
+### Removed
+
+- **Orchestration backend**: `zenagent/app/taiji/` (router session, per-root
+  `TaijiSupervisor`, worker worktrees/branches, deterministic merge gate,
+  dispatch board) and its RPC surface (`ops_taiji.py`, `TaijiOps`, the `taiji`
+  request kinds), plus the router prompt block and the five Router-only tools.
+- **Desktop**: the right-rail dispatch board, the ☯ composer chip, `taijiStore`,
+  taiji error codes and strings, taiji bridge fixtures, and their unit/e2e tests.
+- **Docs**: the taiji brief, design spec (D1–D7), and P0–P3 plans; the generated
+  architecture manifest/diagram no longer list an `app.taiji` node or its edges.
+
 ## v0.12.1 — 2026-11-10
 
 **Background-parallel sessions.** Switching sessions inside one project no longer

@@ -82,7 +82,7 @@ def isolated_git_identity(monkeypatch):
 
     A bare CI runner has no ``user.name``/``user.email`` and a dotless hostname,
     so git cannot even auto-detect an author and the commit dies with exit 128
-    ("Author identity unknown") — which is how the taiji worktree tests went red
+    ("Author identity unknown") — which is how the worktree-heavy tests went red
     on ubuntu while the identical code stayed green on macOS. The env vars win
     over any config file, so every runner commits the same way.
     """

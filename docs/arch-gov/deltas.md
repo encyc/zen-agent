@@ -17,3 +17,10 @@
 - 改：不变量 +1（插件单向外呼、`plugins/` 禁 import 上层、只有 `app/plugin_wiring.py` 桥接）
 - 熵增：refresh deps 暴露 2026-11-09 基线之后的存量漂移（`ops_config.py` 854→941、`server.py` 744→792 等 10 项，非本分支引入），随本次 `--update-baseline` 按当前值重登记；基线 110→111（+plugins 环、+test_plugin_layering 孤儿，-scripts.import_graph 孤儿）
 - 合并 `main@202d6f9`（无缝切换/懒加载会话）：`agent/session.py` 767 行使 `Session` 越过上帝类阈值、runtime/server/test 行数增长；均为 main 侧改动，按当前值一并重登记（基线 111→112），后续如需降熵另开任务拆 `Session`
+
+## [v4] 2026-11-10 — 移除 taiji
+
+- 删：节点 `app.taiji`（11 文件）与 `cli.rpc` 中的 `ops_taiji.py` / `TaijiOps`
+- 删：9 条边（`app.assembly → app.taiji`、`app.taiji →` agent.loop/agent.rt/app.assembly/app.chat/project/prompts/types、`cli.rpc → app.taiji`）
+- 删：`cycles_seen` 中的 `app.taiji ↔ app.taiji.supervisor`；基线中 7 条 taiji 违规随节点消失而解除
+- 熵增：refresh deps 暴露 v0.12.1 合并后的存量漂移（`runtime.py`、`server.py`、`test_session.py` 等行数增长，非本次删除引入），按当前值 `--update-baseline` 重登记；基线 112→109（taiji 解除 7 项，漂移新增/恶化按现值登记）

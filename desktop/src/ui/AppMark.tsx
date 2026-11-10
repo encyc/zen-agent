@@ -1,4 +1,4 @@
-/** The brand mark: the bundled app icon, falling back to a drawn taiji when
+/** The brand mark: the bundled app icon, falling back to a drawn yin-yang when
  * the asset can't load. A stale webview cache can keep 404ing the old hashed
  * asset forever — a broken-image glyph must never stand in for the brand. */
 

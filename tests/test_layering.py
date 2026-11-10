@@ -134,16 +134,3 @@ def test_root_package_exports_the_kernel_facade():
     assert StreamOptions is not None
 
 
-def test_taiji_modules_are_split():
-    """The supervisor sheds its second concerns: the worker RPC runner, the
-    merge gate and the worktree housekeeping are modules of their own
-    (2026-11-08 review: one file held nine responsibilities)."""
-    from zenagent.app.taiji import merge_gate, rpc_runner, worktree
-    from zenagent.app.taiji.merge_gate import AUTO_MERGE_MAX_DIFF_LINES
-    from zenagent.app.taiji.supervisor import RpcRunner as SupervisorRunner
-    from zenagent.app.taiji.supervisor import TurnResult as SupervisorTurnResult
-
-    assert rpc_runner.RpcRunner is SupervisorRunner
-    assert rpc_runner.TurnResult is SupervisorTurnResult
-    assert merge_gate.AUTO_MERGE_MAX_DIFF_LINES == AUTO_MERGE_MAX_DIFF_LINES
-    assert worktree.BRANCH_PREFIX == "task/"

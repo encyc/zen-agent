@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -11,8 +12,6 @@ import pytest
 from zenagent import project
 from zenagent.app.bootstrap import prepare
 from zenagent.app.runtime import RuntimeOptions
-from zenagent.app.taiji import existing_taiji
-from zenagent.app.taiji.supervisor import _git
 from zenagent.cli.rpc.host import RpcHost
 from zenagent.cli.rpc.slot import RuntimeSlot
 from zenagent.config import UserConfig
@@ -20,6 +19,10 @@ from zenagent.config import UserConfig
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None, reason="git is not installed"
 )
+
+
+def _git(root: Path, *args: str) -> None:
+    subprocess.run(["git", *args], cwd=root, check=True, capture_output=True)
 
 
 def _repo(tmp_path: Path, name: str) -> Path:
@@ -120,10 +123,6 @@ async def test_two_projects_share_one_host_without_leaking(host):
     assert "read_file" in names
     assert alpha_tools["project"] == str(alpha.resolve())
 
-    assert existing_taiji(alpha) is not None
-    assert existing_taiji(beta) is not None
-    assert existing_taiji(alpha) is not existing_taiji(beta)
-
 
 async def test_close_releases_the_project_and_relocate_then_succeeds(host):
     instance, writes, alpha, beta, _, tmp_path = host
@@ -152,10 +151,6 @@ async def test_close_releases_the_project_and_relocate_then_succeeds(host):
         {"type": "project", "op": "close", "root": str(alpha), "id": "c"},
     )
     assert closed["closed"] is True
-    assert existing_taiji(alpha) is None
-    assert not (
-        project.project_dir(root=alpha) / "taiji.lock"
-    ).exists()
 
     moved = await call(
         instance,
@@ -174,7 +169,7 @@ async def test_close_releases_the_project_and_relocate_then_succeeds(host):
     assert moved["moved"] is True
 
 
-async def test_lru_caps_residents_and_releases_the_evicted_taiji(host):
+async def test_lru_caps_residents(host):
     instance, writes, alpha, beta, gamma, _ = host
     await call(
         instance, writes, {"type": "project", "op": "open", "root": str(beta), "id": "b"}
@@ -185,4 +180,3 @@ async def test_lru_caps_residents_and_releases_the_evicted_taiji(host):
     assert project.project_key(alpha) not in instance._slots
     assert project.project_key(beta) in instance._slots
     assert project.project_key(gamma) in instance._slots
-    assert existing_taiji(alpha) is None

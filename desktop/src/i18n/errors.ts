@@ -5,11 +5,6 @@
 import { translate, type Locale } from './messages.ts'
 
 const CODE_KEYS: Record<string, string> = {
-  'taiji.inactive': 'taiji.error.inactive',
-  'taiji.merge_blocked': 'taiji.error.mergeBlocked',
-  'taiji.worker_missing': 'taiji.error.workerMissing',
-  'taiji.bad_limit': 'taiji.error.badLimit',
-  'taiji.message_failed': 'taiji.error.messageFailed',
   'prompt_failed': 'rpc.error.promptFailed',
   'fs_error': 'rpc.error.fsFailed',
   'session_failed': 'rpc.error.sessionFailed',

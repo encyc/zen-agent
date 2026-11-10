@@ -1,13 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-import { dirname, join } from 'node:path'
 import { zh, en } from '../src/i18n/messages.ts'
 import { localizeError } from '../src/i18n/errors.ts'
-
-const here = dirname(fileURLToPath(import.meta.url))
-const read = (rel: string) => readFileSync(join(here, '..', 'src', rel), 'utf8')
 
 test('the two dictionaries carry the same key set', () => {
   assert.deepEqual(Object.keys(zh).sort(), Object.keys(en).sort())
@@ -20,12 +14,11 @@ test('no dictionary value is empty', () => {
 
 test('localizeError prefers the code and interpolates params', () => {
   const text = localizeError({
-    message: 'worker 不存在: w1',
-    code: 'taiji.worker_missing',
-    params: { name: 'w1' },
+    message: 'op read failed on w1',
+    code: 'fs_error',
+    params: { op: 'read', file: 'w1' },
   })
-  assert.ok(!text.includes('不存在'), 'raw Chinese leaked through')
-  assert.ok(text.includes('w1'))
+  assert.equal(text, 'read failed: w1')
 })
 
 test('localizeError falls back to the raw message without a code', () => {
@@ -73,7 +66,6 @@ test('every sanitized RPC code renders localized copy in both locales', () => {
     'project_invalid',
     'command_failed',
     'image_read_failed',
-    'taiji.message_failed',
   ]) {
     const en = localizeError({ message: 'server text', code }, 'en')
     const zh = localizeError({ message: 'server text', code }, 'zh')
@@ -98,16 +90,6 @@ test('authored busy and invalid refusals render actionable copy', () => {
     assert.ok(!en.includes('server english text'), `${code} fell back to the server message`)
     assert.ok(!zh.includes('服务端英文'), `${code} fell back to the server message`)
   }
-})
-
-test('the taiji panel composes no Chinese protocol strings of its own', () => {
-  const panel = read('ui/rightbar/TaijiPanel.tsx')
-  const cjkLines = panel.split('\n').filter((line) => {
-    const trimmed = line.trim()
-    if (trimmed.startsWith('*') || trimmed.startsWith('//') || trimmed.startsWith('/*')) return false
-    return [...line].some((c) => c >= '\u4e00' && c <= '\u9fff')
-  })
-  assert.deepEqual(cjkLines, [], `CJK literals crept back:\n${cjkLines.join('\n')}`)
 })
 
 test('the sanitized server error codes render localized copy', () => {

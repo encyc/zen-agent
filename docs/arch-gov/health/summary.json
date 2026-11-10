@@ -6,12 +6,12 @@
  "worse": 0,
  "improved": 0,
  "resolved": 0,
- "total": 112,
- "baseline_size": 112,
+ "total": 109,
+ "baseline_size": 109,
  "by_node": {
   "(unmapped)": {
    "errors": 8,
-   "warns": 27
+   "warns": 29
   },
   "config": {
    "errors": 0,
@@ -39,19 +39,15 @@
   },
   "app.assembly": {
    "errors": 2,
-   "warns": 4
-  },
-  "app.taiji": {
-   "errors": 1,
-   "warns": 2
+   "warns": 5
   },
   "cli": {
    "errors": 1,
    "warns": 7
   },
   "cli.rpc": {
-   "errors": 3,
-   "warns": 9
+   "errors": 4,
+   "warns": 6
   },
   "cli.tui": {
    "errors": 1,
@@ -78,7 +74,7 @@
    "warns": 9
   },
   "(cycles)": {
-   "errors": 7,
+   "errors": 6,
    "warns": 0
   }
  }

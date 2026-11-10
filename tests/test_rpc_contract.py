@@ -50,15 +50,6 @@ def test_protocol_version_pinned_both_sides():
     assert "PROTOCOL_VERSION = 2" in TS_PATH.read_text()
 
 
-def test_rpc_never_touches_supervisor_internals():
-    """The wire layer consumes the taiji supervisor's public API only — the
-    2026-11-08 review found it reading ``registry.records`` and calling the
-    private ``_record``; board projection lives in ``app/taiji/board.py``."""
-    rpc = RPC_PATH
-    assert "registry.records" not in rpc
-    assert "._record(" not in rpc
-
-
 def _ok_stream():
     from zenagent.events import AssistantEvent
     from zenagent.types import AssistantMessage, TextContent, Usage
@@ -161,60 +152,6 @@ def test_hello_result_shape_matches_ts():
     assert hello_result
     for field in ("ok: true", "protocol_version: number"):
         assert field in hello_result.group(0)
-
-
-def _board_worker_keys() -> set[str]:
-    board = (
-        Path(__file__).resolve().parents[1] / "zenagent" / "app" / "taiji" / "board.py"
-    ).read_text()
-    match = re.search(r"def project_worker\(.*?\n(.*?)\n\n", board, re.DOTALL)
-    assert match, "board.project_worker moved"
-    return set(re.findall(r'"([a-z_]+)":', match.group(1)))
-
-
-def _ts_interface_fields(name: str) -> set[str]:
-    ts = TS_PATH.read_text()
-    match = re.search(rf"export interface {name} \{{([^}}]+)\}}", ts)
-    assert match, f"types.ts lost {name}"
-    return set(re.findall(r"^\s{2}(\w+)", match.group(1), re.MULTILINE))
-
-
-def test_taiji_worker_shape_matches_ts():
-    """The third hand-maintained projection (supervisor record → board dict →
-    TaijiWorker) gets the same drift alarm the request kinds have."""
-    py = _board_worker_keys()
-    ts = _ts_interface_fields("TaijiWorker")
-    assert py, "board.project_worker lost its dict"
-    assert py == ts, f"drift: py-only={sorted(py - ts)} ts-only={sorted(ts - py)}"
-
-
-def test_taiji_board_shape_matches_ts():
-    board = (
-        Path(__file__).resolve().parents[1] / "zenagent" / "app" / "taiji" / "board.py"
-    ).read_text()
-    match = re.search(r"def project_board\(.*?return \{(.*?)\}", board, re.DOTALL)
-    assert match, "board.project_board lost its dict"
-    py = set(re.findall(r'"([a-z_]+)":', match.group(1)))
-    ts = _ts_interface_fields("TaijiBoard")
-    assert py == ts, f"drift: py-only={sorted(py - ts)} ts-only={sorted(ts - py)}"
-
-
-def test_taiji_error_codes_agree_both_sides():
-    """Server taiji errors cross the wire as codes + params; the desktop
-    dictionary must carry a key for every code the server can send."""
-    py_codes = _wire_codes(r"taiji\.")
-    assert py_codes == {
-        "taiji.inactive",
-        "taiji.merge_blocked",
-        "taiji.worker_missing",
-        "taiji.bad_limit",
-        "taiji.message_failed",
-    }
-    errors_ts = (
-        Path(__file__).resolve().parents[1] / "desktop" / "src" / "i18n" / "errors.ts"
-    ).read_text()
-    ts_keys = set(re.findall(r"'(taiji\.[a-z_]+)':", errors_ts))
-    assert ts_codes_ok(py_codes, ts_keys)
 
 
 def test_sanitized_error_codes_agree_both_sides():

@@ -11,7 +11,6 @@ import pytest
 
 from zenagent.app.bootstrap import PreparedFrontend
 from zenagent.app.runtime import RuntimeOptions
-from zenagent.app.taiji import TaijiClaim
 from zenagent.cli.rpc.host import RpcHost
 from zenagent.cli.rpc.slot import RuntimeSlot
 from zenagent.project import project_key
@@ -51,7 +50,6 @@ class FakeRuntime:
         self.agent = FakeAgent(self.root.name)
         self.session = SimpleNamespace(path=self.root / "sessions" / "s.jsonl")
         self.ask_handler = None
-        self.taiji_chat = None
         self.mode = "ask"
         self.warnings: list[str] = []
         self.closed = False
@@ -106,15 +104,6 @@ async def host_env(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr("zenagent.cli.rpc.host.prepare", fake_prepare)
-    monkeypatch.setattr(
-        "zenagent.cli.rpc.slot.claim_taiji_host",
-        lambda runtime: TaijiClaim(root=runtime.root, owned=False),
-    )
-
-    async def fake_release(claim) -> None:
-        return None
-
-    monkeypatch.setattr("zenagent.cli.rpc.slot.release_taiji_host", fake_release)
 
     alpha = _repo(tmp_path, "alpha")
     beta = _repo(tmp_path, "beta")
@@ -422,22 +411,6 @@ async def test_resume_into_a_busy_slot_spawns_a_sibling_and_keeps_the_run(
     assert original.chat.busy is True
     assert host.active is sibling
     assert host._active_by_project[key] is sibling
-
-
-async def test_only_a_projects_first_slot_claims_the_taiji_host(
-    host_env, monkeypatch
-):
-    host = host_env.build()
-    claims: list = []
-
-    def claim(runtime):
-        claims.append(runtime)
-        return TaijiClaim(root=runtime.root, owned=True)
-
-    monkeypatch.setattr("zenagent.cli.rpc.slot.claim_taiji_host", claim)
-    sibling = await _spawn_sibling(host, host_env)
-    assert claims == []
-    assert sibling.claim.owned is False
 
 
 async def test_resume_of_a_held_session_activates_its_slot_without_switching(

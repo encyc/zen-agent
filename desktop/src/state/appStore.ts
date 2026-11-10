@@ -92,9 +92,6 @@ interface AppState {
   /** Set while a project switch is replacing the runtime; the shell stays
    * mounted so the switch reads as a content swap, not a reload. */
   switching: { path: string } | null
-  /** Where the ☯ toggle came from: the session and mode to restore on exit.
-   * Taiji is a session + a mode default (spec D2/D5), not a runtime mode. */
-  taijiReturn: { path: string; mode: Mode } | null
   exitCode: number | null
   stderrTail: string[]
   startFailure: StartFailure | null
@@ -141,8 +138,6 @@ interface AppState {
   forkSession(): Promise<void>
   openSession(path: string): Promise<void>
   resumeSession(path: string): Promise<void>
-  enterTaiji(): Promise<void>
-  exitTaiji(): Promise<void>
   deleteSession(path: string): Promise<void>
   renameSession(title: string): Promise<void>
   togglePin(pinned: boolean): Promise<void>
@@ -237,7 +232,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   connection: 'idle',
   project: null,
   switching: null,
-  taijiReturn: null,
   exitCode: null,
   stderrTail: [],
   startFailure: null,
@@ -868,38 +862,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     const effective = typeof frame.path === 'string' && frame.path !== '' ? frame.path : path
     useSessionStore.getState().setCurrent(effective)
     await refreshAfterSessionChange(get)
-  },
-
-  async enterTaiji() {
-    // The taiji session is a project singleton the host creates at boot;
-    // a host without it (a linked worktree) simply has no ☯ chip.
-    const session = useSessionStore
-      .getState()
-      .sessions.find((entry) => entry.name === 'taiji')
-    if (session === undefined) return
-    const current = useSessionStore.getState().currentPath
-    if (current !== session.path && get().taijiReturn === null) {
-      set({
-        taijiReturn: {
-          path: current ?? '',
-          mode: useStatusStore.getState().status?.mode ?? 'zen',
-        },
-      })
-    }
-    if (session.path !== current) await get().openSession(session.path)
-    if ((useStatusStore.getState().status?.mode ?? 'zen') !== 'zen') {
-      await get().setMode('zen') // 默认全自动（用户在太极里仍可改回 ask）
-    }
-    useWorkPanelStore.getState().showTab('taiji')
-  },
-
-  async exitTaiji() {
-    const back = get().taijiReturn
-    set({ taijiReturn: null })
-    if (back === null) return
-    if (back.path !== '') await get().openSession(back.path)
-    const mode = useStatusStore.getState().status?.mode ?? 'zen'
-    if (mode !== back.mode) await get().setMode(back.mode)
   },
 
   async deleteSession(path) {

@@ -379,11 +379,6 @@ class RpcHost:
             write_line=self._write_line,
             approval_timeout_s=self._approval_timeout_s,
             key=key,
-            # The taiji fleet and lock are project-wide: only the project's
-            # first slot claims them.
-            claim_host=not any(
-                other.project_key == base for other in self._slots.values()
-            ),
         )
         self._slots[key] = slot
         return slot
@@ -407,14 +402,6 @@ class RpcHost:
             return
         for key, slot in list(self._slots.items()):
             if slot.pinned:
-                continue
-            # Closing the taiji owner would take a sibling session's fleet
-            # with it; leave it for a project with a single slot.
-            if slot.claim.owned and any(
-                other.project_key == slot.project_key
-                for other in self._slots.values()
-                if other is not slot
-            ):
                 continue
             await self._drop(key)
             return

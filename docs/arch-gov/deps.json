@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-11-10T04:19:41+00:00",
- "root": "/Users/mac/zen-agent/.worktrees/plugin-system",
+ "generated_at": "2026-11-10T09:07:45+00:00",
+ "root": "/Users/mac/zen-agent",
  "files": {
   "examples.custom_tool": {
    "path": "examples/custom_tool.py",
@@ -106,6 +106,15 @@
    "fan_in": 0,
    "fan_out": 0
   },
+  "scripts.demo_age": {
+   "path": "scripts/demo_age.py",
+   "loc": 58,
+   "classes": {},
+   "long_funcs": [],
+   "imports": [],
+   "fan_in": 0,
+   "fan_out": 0
+  },
   "scripts.eval": {
    "path": "scripts/eval.py",
    "loc": 597,
@@ -155,6 +164,20 @@
    "fan_in": 0,
    "fan_out": 16
   },
+  "scripts.import_graph": {
+   "path": "scripts/import_graph.py",
+   "loc": 501,
+   "classes": {},
+   "long_funcs": [
+    {
+     "name": "build_graph",
+     "loc": 44
+    }
+   ],
+   "imports": [],
+   "fan_in": 0,
+   "fan_out": 0
+  },
   "scripts.prompt_goldens": {
    "path": "scripts/prompt_goldens.py",
    "loc": 144,
@@ -196,7 +219,7 @@
   },
   "tests.conftest": {
    "path": "tests/conftest.py",
-   "loc": 290,
+   "loc": 291,
    "classes": {},
    "long_funcs": [],
    "imports": [
@@ -281,7 +304,7 @@
   },
   "tests.test_app_chat": {
    "path": "tests/test_app_chat.py",
-   "loc": 1180,
+   "loc": 1203,
    "classes": {},
    "long_funcs": [
     {
@@ -324,10 +347,11 @@
     "zenagent.app.views",
     "zenagent.events",
     "zenagent.i18n",
+    "zenagent.tools.jobs",
     "zenagent.types"
    ],
    "fan_in": 0,
-   "fan_out": 11
+   "fan_out": 12
   },
   "tests.test_app_chat_attachments": {
    "path": "tests/test_app_chat_attachments.py",
@@ -343,7 +367,7 @@
   },
   "tests.test_app_commands": {
    "path": "tests/test_app_commands.py",
-   "loc": 500,
+   "loc": 519,
    "classes": {},
    "long_funcs": [
     {
@@ -485,7 +509,7 @@
   },
   "tests.test_app_runtime": {
    "path": "tests/test_app_runtime.py",
-   "loc": 567,
+   "loc": 599,
    "classes": {},
    "long_funcs": [],
    "imports": [
@@ -535,7 +559,7 @@
   },
   "tests.test_app_sessions": {
    "path": "tests/test_app_sessions.py",
-   "loc": 433,
+   "loc": 437,
    "classes": {},
    "long_funcs": [
     {
@@ -678,9 +702,14 @@
   },
   "tests.test_bootstrap": {
    "path": "tests/test_bootstrap.py",
-   "loc": 94,
+   "loc": 96,
    "classes": {},
-   "long_funcs": [],
+   "long_funcs": [
+    {
+     "name": "fake_stack",
+     "loc": 40
+    }
+   ],
    "imports": [
     "zenagent.app.bootstrap",
     "zenagent.app.runtime"
@@ -716,7 +745,7 @@
   },
   "tests.test_cli": {
    "path": "tests/test_cli.py",
-   "loc": 1011,
+   "loc": 1013,
    "classes": {},
    "long_funcs": [
     {
@@ -768,7 +797,7 @@
   },
   "tests.test_compact": {
    "path": "tests/test_compact.py",
-   "loc": 301,
+   "loc": 303,
    "classes": {},
    "long_funcs": [],
    "imports": [
@@ -946,7 +975,7 @@
   },
   "tests.test_extensions": {
    "path": "tests/test_extensions.py",
-   "loc": 190,
+   "loc": 194,
    "classes": {},
    "long_funcs": [
     {
@@ -994,7 +1023,7 @@
   },
   "tests.test_headless_parity": {
    "path": "tests/test_headless_parity.py",
-   "loc": 346,
+   "loc": 351,
    "classes": {},
    "long_funcs": [
     {
@@ -1013,10 +1042,11 @@
     "zenagent.tools",
     "zenagent.tools.fs",
     "zenagent.tools.jobs",
+    "zenagent.tools.lsp",
     "zenagent.types"
    ],
    "fan_in": 0,
-   "fan_out": 11
+   "fan_out": 12
   },
   "tests.test_history_replay": {
    "path": "tests/test_history_replay.py",
@@ -1137,7 +1167,7 @@
   },
   "tests.test_layering": {
    "path": "tests/test_layering.py",
-   "loc": 150,
+   "loc": 137,
    "classes": {},
    "long_funcs": [],
    "imports": [
@@ -1146,17 +1176,12 @@
     "zenagent.agent",
     "zenagent.agent.loop",
     "zenagent.agent.protocol",
-    "zenagent.app.taiji",
-    "zenagent.app.taiji.merge_gate",
-    "zenagent.app.taiji.rpc_runner",
-    "zenagent.app.taiji.supervisor",
-    "zenagent.app.taiji.worktree",
     "zenagent.providers",
     "zenagent.providers.openai_completions",
     "zenagent.providers.stream_options"
    ],
    "fan_in": 0,
-   "fan_out": 12
+   "fan_out": 7
   },
   "tests.test_limits": {
    "path": "tests/test_limits.py",
@@ -1537,7 +1562,7 @@
   },
   "tests.test_project_rpc": {
    "path": "tests/test_project_rpc.py",
-   "loc": 102,
+   "loc": 135,
    "classes": {},
    "long_funcs": [],
    "imports": [
@@ -1547,6 +1572,20 @@
    ],
    "fan_in": 0,
    "fan_out": 3
+  },
+  "tests.test_project_scoped_runtime": {
+   "path": "tests/test_project_scoped_runtime.py",
+   "loc": 99,
+   "classes": {},
+   "long_funcs": [],
+   "imports": [
+    "zenagent",
+    "zenagent.app.runtime",
+    "zenagent.config",
+    "zenagent.project"
+   ],
+   "fan_in": 0,
+   "fan_out": 4
   },
   "tests.test_project_scoping": {
    "path": "tests/test_project_scoping.py",
@@ -1611,7 +1650,7 @@
   },
   "tests.test_prompts_compose": {
    "path": "tests/test_prompts_compose.py",
-   "loc": 117,
+   "loc": 109,
    "classes": {},
    "long_funcs": [],
    "imports": [
@@ -1679,7 +1718,7 @@
   },
   "tests.test_prompts_tools": {
    "path": "tests/test_prompts_tools.py",
-   "loc": 89,
+   "loc": 87,
    "classes": {},
    "long_funcs": [],
    "imports": [
@@ -1756,7 +1795,7 @@
   },
   "tests.test_repl_commands": {
    "path": "tests/test_repl_commands.py",
-   "loc": 479,
+   "loc": 483,
    "classes": {},
    "long_funcs": [],
    "imports": [
@@ -1778,7 +1817,7 @@
   },
   "tests.test_repl_logic": {
    "path": "tests/test_repl_logic.py",
-   "loc": 976,
+   "loc": 982,
    "classes": {},
    "long_funcs": [
     {
@@ -1791,7 +1830,7 @@
     },
     {
      "name": "test_reload_discovers_skills_added_mid_session",
-     "loc": 45
+     "loc": 47
     }
    ],
    "imports": [
@@ -1913,7 +1952,7 @@
   },
   "tests.test_rpc_contract": {
    "path": "tests/test_rpc_contract.py",
-   "loc": 256,
+   "loc": 193,
    "classes": {},
    "long_funcs": [],
    "imports": [
@@ -1924,6 +1963,77 @@
     "zenagent.cli.rpc",
     "zenagent.events",
     "zenagent.types"
+   ],
+   "fan_in": 0,
+   "fan_out": 7
+  },
+  "tests.test_rpc_host": {
+   "path": "tests/test_rpc_host.py",
+   "loc": 581,
+   "classes": {
+    "FakeAgent": {
+     "loc": 14,
+     "methods": 3
+    },
+    "FakeChat": {
+     "loc": 9,
+     "methods": 3
+    },
+    "FakeRuntime": {
+     "loc": 16,
+     "methods": 3
+    },
+    "FakeBroker": {
+     "loc": 3,
+     "methods": 1
+    },
+    "FakeServices": {
+     "loc": 3,
+     "methods": 0
+    }
+   },
+   "long_funcs": [
+    {
+     "name": "test_relocate_refuses_a_resident_project_and_delegates_otherwise",
+     "loc": 50
+    },
+    {
+     "name": "host_env",
+     "loc": 46
+    },
+    {
+     "name": "test_approval_ids_name_the_exact_slot_of_a_project",
+     "loc": 46
+    }
+   ],
+   "imports": [
+    "zenagent.app.bootstrap",
+    "zenagent.app.runtime",
+    "zenagent.cli.rpc.host",
+    "zenagent.cli.rpc.slot",
+    "zenagent.project"
+   ],
+   "fan_in": 0,
+   "fan_out": 5
+  },
+  "tests.test_rpc_host_e2e": {
+   "path": "tests/test_rpc_host_e2e.py",
+   "loc": 182,
+   "classes": {},
+   "long_funcs": [
+    {
+     "name": "test_close_releases_the_project_and_relocate_then_succeeds",
+     "loc": 43
+    }
+   ],
+   "imports": [
+    "zenagent",
+    "zenagent.app.bootstrap",
+    "zenagent.app.runtime",
+    "zenagent.cli.rpc.host",
+    "zenagent.cli.rpc.slot",
+    "zenagent.config",
+    "zenagent.project"
    ],
    "fan_in": 0,
    "fan_out": 7
@@ -1941,9 +2051,43 @@
    "fan_in": 0,
    "fan_out": 3
   },
+  "tests.test_rpc_slot": {
+   "path": "tests/test_rpc_slot.py",
+   "loc": 155,
+   "classes": {
+    "FakeAgent": {
+     "loc": 12,
+     "methods": 3
+    },
+    "FakeChat": {
+     "loc": 8,
+     "methods": 2
+    },
+    "FakeRuntime": {
+     "loc": 13,
+     "methods": 3
+    },
+    "FakeBroker": {
+     "loc": 6,
+     "methods": 2
+    },
+    "FakeServices": {
+     "loc": 3,
+     "methods": 0
+    }
+   },
+   "long_funcs": [],
+   "imports": [
+    "zenagent.app.bootstrap",
+    "zenagent.cli.rpc.slot",
+    "zenagent.project"
+   ],
+   "fan_in": 0,
+   "fan_out": 3
+  },
   "tests.test_rpc_v2": {
    "path": "tests/test_rpc_v2.py",
-   "loc": 2200,
+   "loc": 2169,
    "classes": {},
    "long_funcs": [
     {
@@ -2041,7 +2185,7 @@
   },
   "tests.test_session": {
    "path": "tests/test_session.py",
-   "loc": 1157,
+   "loc": 1186,
    "classes": {},
    "long_funcs": [],
    "imports": [
@@ -2198,266 +2342,6 @@
    "fan_in": 0,
    "fan_out": 3
   },
-  "tests.test_taiji_board": {
-   "path": "tests/test_taiji_board.py",
-   "loc": 121,
-   "classes": {
-    "_StubSupervisor": {
-     "loc": 16,
-     "methods": 4
-    }
-   },
-   "long_funcs": [],
-   "imports": [
-    "zenagent.app.taiji",
-    "zenagent.app.taiji.board",
-    "zenagent.app.taiji.registry"
-   ],
-   "fan_in": 0,
-   "fan_out": 3
-  },
-  "tests.test_taiji_loop": {
-   "path": "tests/test_taiji_loop.py",
-   "loc": 115,
-   "classes": {},
-   "long_funcs": [],
-   "imports": [
-    "tests.test_taiji_supervisor",
-    "zenagent.app.taiji",
-    "zenagent.project"
-   ],
-   "fan_in": 0,
-   "fan_out": 3
-  },
-  "tests.test_taiji_registry": {
-   "path": "tests/test_taiji_registry.py",
-   "loc": 86,
-   "classes": {},
-   "long_funcs": [],
-   "imports": [
-    "zenagent.app.taiji.registry"
-   ],
-   "fan_in": 0,
-   "fan_out": 1
-  },
-  "tests.test_taiji_rpc": {
-   "path": "tests/test_taiji_rpc.py",
-   "loc": 333,
-   "classes": {
-    "StubRunner": {
-     "loc": 16,
-     "methods": 2
-    }
-   },
-   "long_funcs": [],
-   "imports": [
-    "tests.test_taiji_supervisor",
-    "zenagent",
-    "zenagent.app.git",
-    "zenagent.app.taiji",
-    "zenagent.app.taiji.supervisor",
-    "zenagent.cli.rpc",
-    "zenagent.project"
-   ],
-   "fan_in": 0,
-   "fan_out": 7
-  },
-  "tests.test_taiji_session": {
-   "path": "tests/test_taiji_session.py",
-   "loc": 105,
-   "classes": {},
-   "long_funcs": [],
-   "imports": [
-    "zenagent.app.taiji",
-    "zenagent.app.taiji.session"
-   ],
-   "fan_in": 0,
-   "fan_out": 2
-  },
-  "tests.test_taiji_supervisor": {
-   "path": "tests/test_taiji_supervisor.py",
-   "loc": 1553,
-   "classes": {
-    "StubRunner": {
-     "loc": 29,
-     "methods": 2
-    },
-    "TestSupervisor": {
-     "loc": 97,
-     "methods": 6
-    },
-    "FakeChat": {
-     "loc": 11,
-     "methods": 2
-    },
-    "TestMilestonesAndMerge": {
-     "loc": 131,
-     "methods": 6
-    },
-    "TestReviewFixes": {
-     "loc": 137,
-     "methods": 6
-    },
-    "TestCrossReviewFixes": {
-     "loc": 49,
-     "methods": 2
-    },
-    "TestMergeThreshold": {
-     "loc": 53,
-     "methods": 2
-    },
-    "GatedRunner": {
-     "loc": 16,
-     "methods": 3
-    },
-    "TestWorkerSlots": {
-     "loc": 93,
-     "methods": 3
-    },
-    "AttentionRunner": {
-     "loc": 11,
-     "methods": 2
-    },
-    "TestAttention": {
-     "loc": 72,
-     "methods": 2
-    },
-    "AskingLoopback": {
-     "loc": 49,
-     "methods": 5
-    },
-    "AskedThenDoneTransport": {
-     "loc": 34,
-     "methods": 5
-    },
-    "ResumeFailTransport": {
-     "loc": 12,
-     "methods": 1
-    },
-    "TestMessageInbox": {
-     "loc": 94,
-     "methods": 5
-    },
-    "TestSlotsState": {
-     "loc": 35,
-     "methods": 1
-    },
-    "TestDiffstatAndMergeReasons": {
-     "loc": 77,
-     "methods": 5
-    },
-    "OptionsAskLoopback": {
-     "loc": 22,
-     "methods": 1
-    },
-    "SlowChat": {
-     "loc": 10,
-     "methods": 2
-    },
-    "TestEmitWindowRace": {
-     "loc": 35,
-     "methods": 1
-    },
-    "TestDurability": {
-     "loc": 67,
-     "methods": 2
-    }
-   },
-   "long_funcs": [
-    {
-     "name": "test_merge_runs_git_off_loop",
-     "loc": 46
-    },
-    {
-     "name": "test_attention_is_persisted_and_relayed_and_blocks_merge",
-     "loc": 41
-    },
-    {
-     "name": "test_inbox_survives_supervisor_restart",
-     "loc": 41
-    }
-   ],
-   "imports": [
-    "zenagent.app.git",
-    "zenagent.app.taiji",
-    "zenagent.app.taiji.merge_gate",
-    "zenagent.app.taiji.registry",
-    "zenagent.app.taiji.supervisor",
-    "zenagent.app.taiji.worker_client",
-    "zenagent.app.taiji.worktree",
-    "zenagent.project"
-   ],
-   "fan_in": 2,
-   "fan_out": 8
-  },
-  "tests.test_taiji_tools": {
-   "path": "tests/test_taiji_tools.py",
-   "loc": 228,
-   "classes": {
-    "_NamedTool": {
-     "loc": 5,
-     "methods": 1
-    },
-    "LoopbackTransport": {
-     "loc": 22,
-     "methods": 5
-    }
-   },
-   "long_funcs": [
-    {
-     "name": "test_rpc_runner_maps_a_failed_turn_to_error",
-     "loc": 40
-    }
-   ],
-   "imports": [
-    "zenagent.agent",
-    "zenagent.agent.Agent",
-    "zenagent.app.chat",
-    "zenagent.app.taiji",
-    "zenagent.app.taiji.tools",
-    "zenagent.app.taiji.worker_client",
-    "zenagent.cli.rpc",
-    "zenagent.events",
-    "zenagent.types"
-   ],
-   "fan_in": 0,
-   "fan_out": 8
-  },
-  "tests.test_taiji_transcript": {
-   "path": "tests/test_taiji_transcript.py",
-   "loc": 66,
-   "classes": {},
-   "long_funcs": [],
-   "imports": [
-    "zenagent.app.taiji.transcript"
-   ],
-   "fan_in": 0,
-   "fan_out": 1
-  },
-  "tests.test_taiji_worker_client": {
-   "path": "tests/test_taiji_worker_client.py",
-   "loc": 263,
-   "classes": {
-    "LoopbackTransport": {
-     "loc": 31,
-     "methods": 5
-    }
-   },
-   "long_funcs": [],
-   "imports": [
-    "zenagent.agent",
-    "zenagent.agent.Agent",
-    "zenagent.app.sessions",
-    "zenagent.app.taiji.worker_client",
-    "zenagent.cli.rpc",
-    "zenagent.events",
-    "zenagent.providers.catalog",
-    "zenagent.providers.compat",
-    "zenagent.types"
-   ],
-   "fan_in": 0,
-   "fan_out": 8
-  },
   "tests.test_task": {
    "path": "tests/test_task.py",
    "loc": 851,
@@ -2515,12 +2399,12 @@
   },
   "tests.test_templates": {
    "path": "tests/test_templates.py",
-   "loc": 140,
+   "loc": 144,
    "classes": {},
    "long_funcs": [
     {
      "name": "test_repl_slash_command_expands_a_template",
-     "loc": 43
+     "loc": 47
     }
    ],
    "imports": [
@@ -2534,6 +2418,24 @@
    ],
    "fan_in": 0,
    "fan_out": 7
+  },
+  "tests.test_terminal": {
+   "path": "tests/test_terminal.py",
+   "loc": 165,
+   "classes": {},
+   "long_funcs": [
+    {
+     "name": "test_terminal_start_write_resize_close",
+     "loc": 61
+    }
+   ],
+   "imports": [
+    "zenagent.app.runtime",
+    "zenagent.cli.rpc.host",
+    "zenagent.cli.rpc.terminal"
+   ],
+   "fan_in": 0,
+   "fan_out": 3
   },
   "tests.test_theme": {
    "path": "tests/test_theme.py",
@@ -2678,6 +2580,18 @@
    ],
    "fan_in": 0,
    "fan_out": 1
+  },
+  "tests.test_tools_scoped": {
+   "path": "tests/test_tools_scoped.py",
+   "loc": 89,
+   "classes": {},
+   "long_funcs": [],
+   "imports": [
+    "zenagent.tools",
+    "zenagent.tools.ask"
+   ],
+   "fan_in": 0,
+   "fan_out": 2
   },
   "tests.test_tools_search": {
    "path": "tests/test_tools_search.py",
@@ -3579,7 +3493,7 @@
     "zenagent.providers.registry",
     "zenagent.providers.stream_options"
    ],
-   "fan_in": 58,
+   "fan_in": 57,
    "fan_out": 3
   },
   "zenagent.__main__": {
@@ -3638,7 +3552,7 @@
     "zenagent.providers.catalog",
     "zenagent.types"
    ],
-   "fan_in": 22,
+   "fan_in": 24,
    "fan_out": 5
   },
   "zenagent.context_files": {
@@ -3698,7 +3612,7 @@
    "imports": [
     "zenagent.types"
    ],
-   "fan_in": 78,
+   "fan_in": 76,
    "fan_out": 1
   },
   "zenagent.export": {
@@ -3996,7 +3910,7 @@
     }
    ],
    "imports": [],
-   "fan_in": 134,
+   "fan_in": 131,
    "fan_out": 0
   },
   "zenagent.update_check": {
@@ -4040,7 +3954,7 @@
     "zenagent.agent.agent",
     "zenagent.agent.loop"
    ],
-   "fan_in": 19,
+   "fan_in": 17,
    "fan_out": 2
   },
   "zenagent.agent.agent": {
@@ -4173,7 +4087,7 @@
     "zenagent.events",
     "zenagent.types"
    ],
-   "fan_in": 7,
+   "fan_in": 6,
    "fan_out": 2
   },
   "zenagent.agent.registry": {
@@ -4211,14 +4125,14 @@
   },
   "zenagent.agent.session": {
    "path": "zenagent/agent/session.py",
-   "loc": 766,
+   "loc": 786,
    "classes": {
     "SessionInfo": {
      "loc": 14,
      "methods": 0
     },
     "Session": {
-     "loc": 333,
+     "loc": 350,
      "methods": 15
     }
    },
@@ -4237,7 +4151,7 @@
     "zenagent.project",
     "zenagent.types"
    ],
-   "fan_in": 36,
+   "fan_in": 35,
    "fan_out": 3
   },
   "zenagent.agent.subagents": {
@@ -4415,7 +4329,7 @@
   },
   "zenagent.app.bootstrap": {
    "path": "zenagent/app/bootstrap.py",
-   "loc": 99,
+   "loc": 102,
    "classes": {
     "PreparedFrontend": {
      "loc": 13,
@@ -4425,7 +4339,7 @@
    "long_funcs": [
     {
      "name": "prepare",
-     "loc": 46
+     "loc": 48
     }
    ],
    "imports": [
@@ -4438,7 +4352,7 @@
     "zenagent.config",
     "zenagent.providers.registry"
    ],
-   "fan_in": 5,
+   "fan_in": 10,
    "fan_out": 8
   },
   "zenagent.app.btw": {
@@ -4458,10 +4372,10 @@
   },
   "zenagent.app.chat": {
    "path": "zenagent/app/chat.py",
-   "loc": 663,
+   "loc": 669,
    "classes": {
     "ChatController": {
-     "loc": 606,
+     "loc": 612,
      "methods": 42
     }
    },
@@ -4496,7 +4410,7 @@
     "zenagent.tools.todo",
     "zenagent.types"
    ],
-   "fan_in": 20,
+   "fan_in": 19,
    "fan_out": 19
   },
   "zenagent.app.clipboard": {
@@ -4634,7 +4548,7 @@
    },
    "long_funcs": [],
    "imports": [],
-   "fan_in": 8,
+   "fan_in": 4,
    "fan_out": 0
   },
   "zenagent.app.journal": {
@@ -4855,7 +4769,7 @@
   },
   "zenagent.app.records": {
    "path": "zenagent/app/records.py",
-   "loc": 222,
+   "loc": 227,
    "classes": {},
    "long_funcs": [],
    "imports": [
@@ -4878,7 +4792,7 @@
   },
   "zenagent.app.retry": {
    "path": "zenagent/app/retry.py",
-   "loc": 62,
+   "loc": 66,
    "classes": {},
    "long_funcs": [],
    "imports": [
@@ -4916,33 +4830,33 @@
   },
   "zenagent.app.runtime": {
    "path": "zenagent/app/runtime.py",
-   "loc": 1002,
+   "loc": 1015,
    "classes": {
     "RuntimeOptions": {
-     "loc": 34,
+     "loc": 37,
      "methods": 0
     },
     "Runtime": {
-     "loc": 852,
+     "loc": 868,
      "methods": 33
     }
    },
    "long_funcs": [
     {
      "name": "bootstrap",
-     "loc": 215
+     "loc": 230
     },
     {
      "name": "__init__",
-     "loc": 76
+     "loc": 83
     },
     {
      "name": "_recompose",
-     "loc": 73
+     "loc": 59
     },
     {
      "name": "rediscover",
-     "loc": 52
+     "loc": 54
     }
    ],
    "imports": [
@@ -4966,8 +4880,6 @@
     "zenagent.app.safety",
     "zenagent.app.session_meta",
     "zenagent.app.support",
-    "zenagent.app.taiji.session",
-    "zenagent.app.taiji.tools",
     "zenagent.app.views",
     "zenagent.config",
     "zenagent.context_files",
@@ -4993,8 +4905,8 @@
     "zenagent.tools.todo",
     "zenagent.trace"
    ],
-   "fan_in": 21,
-   "fan_out": 45
+   "fan_in": 27,
+   "fan_out": 43
   },
   "zenagent.app.safety": {
    "path": "zenagent/app/safety.py",
@@ -5044,14 +4956,14 @@
   },
   "zenagent.app.sessions": {
    "path": "zenagent/app/sessions.py",
-   "loc": 292,
+   "loc": 300,
    "classes": {
     "SessionEntry": {
      "loc": 13,
      "methods": 0
     },
     "SessionManager": {
-     "loc": 172,
+     "loc": 180,
      "methods": 15
     }
    },
@@ -5073,7 +4985,7 @@
     "zenagent.i18n",
     "zenagent.project"
    ],
-   "fan_in": 17,
+   "fan_in": 16,
    "fan_out": 10
   },
   "zenagent.app.shake": {
@@ -5273,203 +5185,8 @@
    "imports": [
     "zenagent.app.git"
    ],
-   "fan_in": 4,
-   "fan_out": 1
-  },
-  "zenagent.app.taiji": {
-   "path": "zenagent/app/taiji/__init__.py",
-   "loc": 29,
-   "classes": {},
-   "long_funcs": [],
-   "imports": [
-    "zenagent.app.taiji.session",
-    "zenagent.app.taiji.supervisor"
-   ],
-   "fan_in": 10,
-   "fan_out": 2
-  },
-  "zenagent.app.taiji.board": {
-   "path": "zenagent/app/taiji/board.py",
-   "loc": 66,
-   "classes": {},
-   "long_funcs": [],
-   "imports": [
-    "zenagent.app.taiji.registry"
-   ],
    "fan_in": 3,
    "fan_out": 1
-  },
-  "zenagent.app.taiji.merge_gate": {
-   "path": "zenagent/app/taiji/merge_gate.py",
-   "loc": 75,
-   "classes": {},
-   "long_funcs": [],
-   "imports": [
-    "zenagent.app.git",
-    "zenagent.app.taiji.registry",
-    "zenagent.app.taiji.worktree"
-   ],
-   "fan_in": 3,
-   "fan_out": 3
-  },
-  "zenagent.app.taiji.registry": {
-   "path": "zenagent/app/taiji/registry.py",
-   "loc": 102,
-   "classes": {
-    "WorkerRecord": {
-     "loc": 17,
-     "methods": 0
-    },
-    "TaijiRegistry": {
-     "loc": 61,
-     "methods": 3
-    }
-   },
-   "long_funcs": [],
-   "imports": [],
-   "fan_in": 6,
-   "fan_out": 0
-  },
-  "zenagent.app.taiji.rpc_runner": {
-   "path": "zenagent/app/taiji/rpc_runner.py",
-   "loc": 145,
-   "classes": {
-    "TurnResult": {
-     "loc": 6,
-     "methods": 0
-    },
-    "RpcRunner": {
-     "loc": 120,
-     "methods": 2
-    }
-   },
-   "long_funcs": [
-    {
-     "name": "run_turn",
-     "loc": 99
-    }
-   ],
-   "imports": [
-    "zenagent.app.taiji.worker_client"
-   ],
-   "fan_in": 2,
-   "fan_out": 1
-  },
-  "zenagent.app.taiji.session": {
-   "path": "zenagent/app/taiji/session.py",
-   "loc": 124,
-   "classes": {
-    "TaijiHostLocked": {
-     "loc": 2,
-     "methods": 0
-    }
-   },
-   "long_funcs": [],
-   "imports": [
-    "zenagent",
-    "zenagent.agent.session",
-    "zenagent.app.workspace"
-   ],
-   "fan_in": 4,
-   "fan_out": 3
-  },
-  "zenagent.app.taiji.supervisor": {
-   "path": "zenagent/app/taiji/supervisor.py",
-   "loc": 564,
-   "classes": {
-    "WorkerRunner": {
-     "loc": 4,
-     "methods": 1
-    },
-    "TaijiSupervisor": {
-     "loc": 461,
-     "methods": 25
-    }
-   },
-   "long_funcs": [
-    {
-     "name": "_run_turn",
-     "loc": 75
-    },
-    {
-     "name": "merge",
-     "loc": 43
-    }
-   ],
-   "imports": [
-    "zenagent.app.git",
-    "zenagent.app.taiji",
-    "zenagent.app.taiji.board",
-    "zenagent.app.taiji.merge_gate",
-    "zenagent.app.taiji.registry",
-    "zenagent.app.taiji.rpc_runner",
-    "zenagent.app.taiji.worktree",
-    "zenagent.project"
-   ],
-   "fan_in": 6,
-   "fan_out": 8
-  },
-  "zenagent.app.taiji.tools": {
-   "path": "zenagent/app/taiji/tools.py",
-   "loc": 244,
-   "classes": {},
-   "long_funcs": [
-    {
-     "name": "build_taiji_tools",
-     "loc": 146
-    }
-   ],
-   "imports": [
-    "zenagent",
-    "zenagent.agent.protocol",
-    "zenagent.app.taiji.session",
-    "zenagent.app.taiji.supervisor",
-    "zenagent.project",
-    "zenagent.prompts",
-    "zenagent.types"
-   ],
-   "fan_in": 3,
-   "fan_out": 7
-  },
-  "zenagent.app.taiji.transcript": {
-   "path": "zenagent/app/taiji/transcript.py",
-   "loc": 66,
-   "classes": {},
-   "long_funcs": [],
-   "imports": [],
-   "fan_in": 2,
-   "fan_out": 0
-  },
-  "zenagent.app.taiji.worker_client": {
-   "path": "zenagent/app/taiji/worker_client.py",
-   "loc": 183,
-   "classes": {
-    "WorkerTransport": {
-     "loc": 6,
-     "methods": 3
-    },
-    "SubprocessTransport": {
-     "loc": 47,
-     "methods": 5
-    },
-    "WorkerRpcClient": {
-     "loc": 89,
-     "methods": 8
-    }
-   },
-   "long_funcs": [],
-   "imports": [],
-   "fan_in": 4,
-   "fan_out": 0
-  },
-  "zenagent.app.taiji.worktree": {
-   "path": "zenagent/app/taiji/worktree.py",
-   "loc": 83,
-   "classes": {},
-   "long_funcs": [],
-   "imports": [],
-   "fan_in": 4,
-   "fan_out": 0
   },
   "zenagent.cli": {
    "path": "zenagent/cli/__init__.py",
@@ -5796,31 +5513,29 @@
     "zenagent.cli.rpc.codec",
     "zenagent.cli.rpc.server"
    ],
-   "fan_in": 13,
+   "fan_in": 10,
    "fan_out": 3
   },
   "zenagent.cli.rpc.cli": {
    "path": "zenagent/cli/rpc/cli.py",
-   "loc": 151,
+   "loc": 123,
    "classes": {},
    "long_funcs": [
     {
      "name": "_run",
-     "loc": 84
+     "loc": 63
     }
    ],
    "imports": [
     "zenagent.app.bootstrap",
     "zenagent.app.modes",
     "zenagent.app.runtime",
-    "zenagent.app.taiji",
-    "zenagent.app.taiji.tools",
     "zenagent.cli.flags",
-    "zenagent.cli.rpc.server",
-    "zenagent.project"
+    "zenagent.cli.rpc.host",
+    "zenagent.cli.rpc.slot"
    ],
    "fan_in": 2,
-   "fan_out": 8
+   "fan_out": 6
   },
   "zenagent.cli.rpc.codec": {
    "path": "zenagent/cli/rpc/codec.py",
@@ -5840,7 +5555,7 @@
     "zenagent.events",
     "zenagent.types"
    ],
-   "fan_in": 1,
+   "fan_in": 2,
    "fan_out": 5
   },
   "zenagent.cli.rpc.errors": {
@@ -5861,6 +5576,41 @@
    "imports": [],
    "fan_in": 6,
    "fan_out": 0
+  },
+  "zenagent.cli.rpc.host": {
+   "path": "zenagent/cli/rpc/host.py",
+   "loc": 552,
+   "classes": {
+    "RpcHost": {
+     "loc": 518,
+     "methods": 23
+    }
+   },
+   "long_funcs": [
+    {
+     "name": "_terminal_op",
+     "loc": 61
+    },
+    {
+     "name": "_session_resume",
+     "loc": 59
+    },
+    {
+     "name": "_handle_line",
+     "loc": 54
+    }
+   ],
+   "imports": [
+    "zenagent.app.bootstrap",
+    "zenagent.app.runtime",
+    "zenagent.cli.rpc.codec",
+    "zenagent.cli.rpc.errors",
+    "zenagent.cli.rpc.slot",
+    "zenagent.cli.rpc.terminal",
+    "zenagent.project"
+   ],
+   "fan_in": 4,
+   "fan_out": 7
   },
   "zenagent.cli.rpc.ops_config": {
    "path": "zenagent/cli/rpc/ops_config.py",
@@ -5925,7 +5675,7 @@
   },
   "zenagent.cli.rpc.ops_files": {
    "path": "zenagent/cli/rpc/ops_files.py",
-   "loc": 156,
+   "loc": 152,
    "classes": {
     "FilesOps": {
      "loc": 123,
@@ -5941,11 +5691,10 @@
    "imports": [
     "zenagent.agent.memory_store",
     "zenagent.app.workspace",
-    "zenagent.cli.rpc.errors",
-    "zenagent.project"
+    "zenagent.cli.rpc.errors"
    ],
    "fan_in": 1,
-   "fan_out": 4
+   "fan_out": 3
   },
   "zenagent.cli.rpc.ops_plugins": {
    "path": "zenagent/cli/rpc/ops_plugins.py",
@@ -6011,52 +5760,27 @@
    "fan_in": 1,
    "fan_out": 3
   },
-  "zenagent.cli.rpc.ops_taiji": {
-   "path": "zenagent/cli/rpc/ops_taiji.py",
-   "loc": 200,
-   "classes": {
-    "TaijiOps": {
-     "loc": 186,
-     "methods": 3
-    }
-   },
-   "long_funcs": [
-    {
-     "name": "_taiji_request",
-     "loc": 122
-    },
-    {
-     "name": "_taiji_action",
-     "loc": 47
-    }
-   ],
-   "imports": [
-    "zenagent.app.taiji",
-    "zenagent.app.taiji.board",
-    "zenagent.app.taiji.supervisor",
-    "zenagent.app.taiji.transcript",
-    "zenagent.cli.rpc.errors"
-   ],
-   "fan_in": 1,
-   "fan_out": 5
-  },
   "zenagent.cli.rpc.server": {
    "path": "zenagent/cli/rpc/server.py",
-   "loc": 798,
+   "loc": 825,
    "classes": {
     "RpcServer": {
-     "loc": 578,
-     "methods": 18
+     "loc": 605,
+     "methods": 20
     }
    },
    "long_funcs": [
     {
      "name": "_handle_line",
-     "loc": 185
+     "loc": 182
     },
     {
      "name": "serialize_event",
      "loc": 58
+    },
+    {
+     "name": "__init__",
+     "loc": 43
     },
     {
      "name": "_status_result",
@@ -6075,13 +5799,59 @@
     "zenagent.cli.rpc.ops_files",
     "zenagent.cli.rpc.ops_plugins",
     "zenagent.cli.rpc.ops_session",
-    "zenagent.cli.rpc.ops_taiji",
     "zenagent.events",
     "zenagent.limits",
+    "zenagent.project",
     "zenagent.types"
    ],
    "fan_in": 2,
    "fan_out": 14
+  },
+  "zenagent.cli.rpc.slot": {
+   "path": "zenagent/cli/rpc/slot.py",
+   "loc": 101,
+   "classes": {
+    "RuntimeSlot": {
+     "loc": 75,
+     "methods": 8
+    }
+   },
+   "long_funcs": [],
+   "imports": [
+    "zenagent.app.bootstrap",
+    "zenagent.app.runtime",
+    "zenagent.cli.rpc.server",
+    "zenagent.project"
+   ],
+   "fan_in": 5,
+   "fan_out": 4
+  },
+  "zenagent.cli.rpc.terminal": {
+   "path": "zenagent/cli/rpc/terminal.py",
+   "loc": 238,
+   "classes": {
+    "TerminalError": {
+     "loc": 2,
+     "methods": 0
+    },
+    "TerminalSession": {
+     "loc": 184,
+     "methods": 9
+    }
+   },
+   "long_funcs": [
+    {
+     "name": "start",
+     "loc": 49
+    },
+    {
+     "name": "_pump",
+     "loc": 44
+    }
+   ],
+   "imports": [],
+   "fan_in": 2,
+   "fan_out": 0
   },
   "zenagent.cli.tui": {
    "path": "zenagent/cli/tui/__init__.py",
@@ -7477,7 +7247,7 @@
   },
   "zenagent.prompts": {
    "path": "zenagent/prompts/__init__.py",
-   "loc": 222,
+   "loc": 215,
    "classes": {
     "RenderedBlock": {
      "loc": 9,
@@ -7488,14 +7258,14 @@
      "methods": 0
     },
     "PromptContext": {
-     "loc": 25,
+     "loc": 22,
      "methods": 0
     }
    },
    "long_funcs": [
     {
      "name": "compose_system",
-     "loc": 62
+     "loc": 58
     }
    ],
    "imports": [
@@ -7504,7 +7274,7 @@
     "zenagent.prompts.spec",
     "zenagent.providers.limits"
    ],
-   "fan_in": 25,
+   "fan_in": 24,
    "fan_out": 4
   },
   "zenagent.prompts.registry": {
@@ -7535,7 +7305,7 @@
   },
   "zenagent.prompts.spec": {
    "path": "zenagent/prompts/spec.py",
-   "loc": 249,
+   "loc": 227,
    "classes": {
     "BlockSpec": {
      "loc": 10,
@@ -7606,7 +7376,7 @@
     "zenagent.providers.compat",
     "zenagent.types"
    ],
-   "fan_in": 43,
+   "fan_in": 42,
    "fan_out": 2
   },
   "zenagent.providers.compat": {
@@ -7620,7 +7390,7 @@
    },
    "long_funcs": [],
    "imports": [],
-   "fan_in": 23,
+   "fan_in": 22,
    "fan_out": 0
   },
   "zenagent.providers.google_generative_ai": {
@@ -7790,9 +7560,14 @@
   },
   "zenagent.tools": {
    "path": "zenagent/tools/__init__.py",
-   "loc": 75,
+   "loc": 116,
    "classes": {},
-   "long_funcs": [],
+   "long_funcs": [
+    {
+     "name": "base_tools",
+     "loc": 47
+    }
+   ],
    "imports": [
     "zenagent.agent.protocol",
     "zenagent.tools.bash",
@@ -7801,7 +7576,7 @@
     "zenagent.tools.wait",
     "zenagent.tools.web"
    ],
-   "fan_in": 12,
+   "fan_in": 13,
    "fan_out": 6
   },
   "zenagent.tools._result": {
@@ -7839,21 +7614,21 @@
     "zenagent.prompts",
     "zenagent.tools._result"
    ],
-   "fan_in": 4,
+   "fan_in": 5,
    "fan_out": 3
   },
   "zenagent.tools.bash": {
    "path": "zenagent/tools/bash.py",
-   "loc": 265,
+   "loc": 270,
    "classes": {},
    "long_funcs": [
     {
      "name": "_bash",
-     "loc": 120
+     "loc": 121
     },
     {
      "name": "build_bash_tool",
-     "loc": 54
+     "loc": 58
     }
    ],
    "imports": [
@@ -7916,7 +7691,7 @@
   },
   "zenagent.tools.jobs": {
    "path": "zenagent/tools/jobs.py",
-   "loc": 439,
+   "loc": 442,
    "classes": {
     "JobStartError": {
      "loc": 2,
@@ -7927,11 +7702,11 @@
      "methods": 2
     },
     "Job": {
-     "loc": 30,
+     "loc": 32,
      "methods": 3
     },
     "JobManager": {
-     "loc": 270,
+     "loc": 271,
      "methods": 16
     }
    },
@@ -7939,12 +7714,12 @@
    "imports": [
     "zenagent.tools.shell"
    ],
-   "fan_in": 10,
+   "fan_in": 11,
    "fan_out": 1
   },
   "zenagent.tools.lsp": {
    "path": "zenagent/tools/lsp.py",
-   "loc": 577,
+   "loc": 596,
    "classes": {
     "ServerSpec": {
      "loc": 6,
@@ -7965,7 +7740,7 @@
     "zenagent.agent.loop",
     "zenagent.tools._result"
    ],
-   "fan_in": 2,
+   "fan_in": 3,
    "fan_out": 2
   },
   "zenagent.tools.memory": {
@@ -8028,7 +7803,7 @@
   },
   "zenagent.tools.shell": {
    "path": "zenagent/tools/shell.py",
-   "loc": 261,
+   "loc": 262,
    "classes": {
     "ShellError": {
      "loc": 2,
@@ -8861,6 +8636,13 @@
    "dst": "zenagent.i18n",
    "calls": [
     "t"
+   ]
+  },
+  {
+   "src": "tests.test_app_chat",
+   "dst": "zenagent.tools.jobs",
+   "calls": [
+    "get_job_manager"
    ]
   },
   {
@@ -10224,6 +10006,11 @@
   },
   {
    "src": "tests.test_headless_parity",
+   "dst": "zenagent.tools.lsp",
+   "calls": []
+  },
+  {
+   "src": "tests.test_headless_parity",
    "dst": "zenagent.types",
    "calls": [
     "AssistantMessage",
@@ -10545,31 +10332,6 @@
   {
    "src": "tests.test_layering",
    "dst": "zenagent.agent.protocol",
-   "calls": []
-  },
-  {
-   "src": "tests.test_layering",
-   "dst": "zenagent.app.taiji",
-   "calls": []
-  },
-  {
-   "src": "tests.test_layering",
-   "dst": "zenagent.app.taiji.merge_gate",
-   "calls": []
-  },
-  {
-   "src": "tests.test_layering",
-   "dst": "zenagent.app.taiji.rpc_runner",
-   "calls": []
-  },
-  {
-   "src": "tests.test_layering",
-   "dst": "zenagent.app.taiji.supervisor",
-   "calls": []
-  },
-  {
-   "src": "tests.test_layering",
-   "dst": "zenagent.app.taiji.worktree",
    "calls": []
   },
   {
@@ -11263,6 +11025,33 @@
     "project_root_for_sessions_dir",
     "project_sessions_dir",
     "write_project_meta"
+   ]
+  },
+  {
+   "src": "tests.test_project_scoped_runtime",
+   "dst": "zenagent",
+   "calls": []
+  },
+  {
+   "src": "tests.test_project_scoped_runtime",
+   "dst": "zenagent.app.runtime",
+   "calls": [
+    "Runtime.bootstrap",
+    "RuntimeOptions"
+   ]
+  },
+  {
+   "src": "tests.test_project_scoped_runtime",
+   "dst": "zenagent.config",
+   "calls": [
+    "UserConfig"
+   ]
+  },
+  {
+   "src": "tests.test_project_scoped_runtime",
+   "dst": "zenagent.project",
+   "calls": [
+    "project_sessions_dir"
    ]
   },
   {
@@ -12114,6 +11903,89 @@
    ]
   },
   {
+   "src": "tests.test_rpc_host",
+   "dst": "zenagent.app.bootstrap",
+   "calls": [
+    "PreparedFrontend"
+   ]
+  },
+  {
+   "src": "tests.test_rpc_host",
+   "dst": "zenagent.app.runtime",
+   "calls": [
+    "RuntimeOptions"
+   ]
+  },
+  {
+   "src": "tests.test_rpc_host",
+   "dst": "zenagent.cli.rpc.host",
+   "calls": [
+    "RpcHost"
+   ]
+  },
+  {
+   "src": "tests.test_rpc_host",
+   "dst": "zenagent.cli.rpc.slot",
+   "calls": [
+    "RuntimeSlot.adopt"
+   ]
+  },
+  {
+   "src": "tests.test_rpc_host",
+   "dst": "zenagent.project",
+   "calls": [
+    "project_key"
+   ]
+  },
+  {
+   "src": "tests.test_rpc_host_e2e",
+   "dst": "zenagent",
+   "calls": []
+  },
+  {
+   "src": "tests.test_rpc_host_e2e",
+   "dst": "zenagent.app.bootstrap",
+   "calls": [
+    "prepare"
+   ]
+  },
+  {
+   "src": "tests.test_rpc_host_e2e",
+   "dst": "zenagent.app.runtime",
+   "calls": [
+    "RuntimeOptions"
+   ]
+  },
+  {
+   "src": "tests.test_rpc_host_e2e",
+   "dst": "zenagent.cli.rpc.host",
+   "calls": [
+    "RpcHost"
+   ]
+  },
+  {
+   "src": "tests.test_rpc_host_e2e",
+   "dst": "zenagent.cli.rpc.slot",
+   "calls": [
+    "RuntimeSlot.adopt"
+   ]
+  },
+  {
+   "src": "tests.test_rpc_host_e2e",
+   "dst": "zenagent.config",
+   "calls": [
+    "UserConfig"
+   ]
+  },
+  {
+   "src": "tests.test_rpc_host_e2e",
+   "dst": "zenagent.project",
+   "calls": [
+    "project_key",
+    "project_sessions_dir"
+   ]
+  },
+  {
    "src": "tests.test_rpc_plugins",
    "dst": "zenagent",
    "calls": []
@@ -12130,6 +12002,27 @@
    "dst": "zenagent.settings",
    "calls": [
     "load"
+   ]
+  },
+  {
+   "src": "tests.test_rpc_slot",
+   "dst": "zenagent.app.bootstrap",
+   "calls": [
+    "PreparedFrontend"
+   ]
+  },
+  {
+   "src": "tests.test_rpc_slot",
+   "dst": "zenagent.cli.rpc.slot",
+   "calls": [
+    "RuntimeSlot.adopt"
+   ]
+  },
+  {
+   "src": "tests.test_rpc_slot",
+   "dst": "zenagent.project",
+   "calls": [
+    "project_key"
    ]
   },
   {
@@ -12512,308 +12405,6 @@
    ]
   },
   {
-   "src": "tests.test_taiji_board",
-   "dst": "zenagent.app.taiji",
-   "calls": []
-  },
-  {
-   "src": "tests.test_taiji_board",
-   "dst": "zenagent.app.taiji.board",
-   "calls": [
-    "parse_attention",
-    "project_board",
-    "project_worker"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_board",
-   "dst": "zenagent.app.taiji.registry",
-   "calls": [
-    "WorkerRecord"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_loop",
-   "dst": "tests.test_taiji_supervisor",
-   "calls": [
-    "FakeChat",
-    "StubRunner"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_loop",
-   "dst": "zenagent.app.taiji",
-   "calls": [
-    "close_taiji",
-    "ensure_taiji_session",
-    "get_taiji"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_loop",
-   "dst": "zenagent.project",
-   "calls": [
-    "project_key"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_registry",
-   "dst": "zenagent.app.taiji.registry",
-   "calls": [
-    "TaijiRegistry",
-    "WorkerRecord"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_rpc",
-   "dst": "tests.test_taiji_supervisor",
-   "calls": [
-    "GatedRunner"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_rpc",
-   "dst": "zenagent",
-   "calls": []
-  },
-  {
-   "src": "tests.test_taiji_rpc",
-   "dst": "zenagent.app.git",
-   "calls": [
-    "reset_cache"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_rpc",
-   "dst": "zenagent.app.taiji",
-   "calls": []
-  },
-  {
-   "src": "tests.test_taiji_rpc",
-   "dst": "zenagent.app.taiji.supervisor",
-   "calls": [
-    "TaijiSupervisor"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_rpc",
-   "dst": "zenagent.cli.rpc",
-   "calls": [
-    "RpcServer"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_rpc",
-   "dst": "zenagent.project",
-   "calls": [
-    "project_dir",
-    "project_sessions_dir"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_session",
-   "dst": "zenagent.app.taiji",
-   "calls": [
-    "acquire_taiji_lock",
-    "ensure_taiji_session",
-    "is_taiji_session",
-    "own_taiji_lock",
-    "release_taiji_lock",
-    "taiji_session_path"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_session",
-   "dst": "zenagent.app.taiji.session",
-   "calls": [
-    "should_init_taiji"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_supervisor",
-   "dst": "zenagent.app.git",
-   "calls": [
-    "GitStatus",
-    "reset_cache"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_supervisor",
-   "dst": "zenagent.app.taiji",
-   "calls": []
-  },
-  {
-   "src": "tests.test_taiji_supervisor",
-   "dst": "zenagent.app.taiji.merge_gate",
-   "calls": []
-  },
-  {
-   "src": "tests.test_taiji_supervisor",
-   "dst": "zenagent.app.taiji.registry",
-   "calls": [
-    "WorkerRecord"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_supervisor",
-   "dst": "zenagent.app.taiji.supervisor",
-   "calls": [
-    "RpcRunner",
-    "TaijiSupervisor",
-    "TurnResult",
-    "close_taiji",
-    "existing_taiji",
-    "get_taiji"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_supervisor",
-   "dst": "zenagent.app.taiji.worker_client",
-   "calls": [
-    "WorkerRpcClient"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_supervisor",
-   "dst": "zenagent.app.taiji.worktree",
-   "calls": [
-    "_git_async"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_supervisor",
-   "dst": "zenagent.project",
-   "calls": [
-    "project_key"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_tools",
-   "dst": "zenagent.agent",
-   "calls": []
-  },
-  {
-   "src": "tests.test_taiji_tools",
-   "dst": "zenagent.app.chat",
-   "calls": [
-    "ChatController"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_tools",
-   "dst": "zenagent.app.taiji",
-   "calls": [
-    "close_taiji"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_tools",
-   "dst": "zenagent.app.taiji.tools",
-   "calls": [
-    "RpcRunner",
-    "build_taiji_tools",
-    "router_tool_gate",
-    "runtime_taiji_provider",
-    "taiji_tools_for"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_tools",
-   "dst": "zenagent.app.taiji.worker_client",
-   "calls": [
-    "WorkerRpcClient"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_tools",
-   "dst": "zenagent.cli.rpc",
-   "calls": [
-    "RpcServer"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_tools",
-   "dst": "zenagent.events",
-   "calls": [
-    "AssistantEvent"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_tools",
-   "dst": "zenagent.types",
-   "calls": [
-    "AssistantMessage",
-    "TextContent",
-    "Usage"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_transcript",
-   "dst": "zenagent.app.taiji.transcript",
-   "calls": [
-    "peek_tail"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_worker_client",
-   "dst": "zenagent.agent",
-   "calls": []
-  },
-  {
-   "src": "tests.test_taiji_worker_client",
-   "dst": "zenagent.app.sessions",
-   "calls": [
-    "SessionManager"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_worker_client",
-   "dst": "zenagent.app.taiji.worker_client",
-   "calls": [
-    "SubprocessTransport",
-    "WorkerRpcClient",
-    "worker_command"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_worker_client",
-   "dst": "zenagent.cli.rpc",
-   "calls": [
-    "RpcServer"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_worker_client",
-   "dst": "zenagent.events",
-   "calls": [
-    "AssistantEvent"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_worker_client",
-   "dst": "zenagent.providers.catalog",
-   "calls": [
-    "Model"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_worker_client",
-   "dst": "zenagent.providers.compat",
-   "calls": [
-    "CompatFlags"
-   ]
-  },
-  {
-   "src": "tests.test_taiji_worker_client",
-   "dst": "zenagent.types",
-   "calls": [
-    "AssistantMessage",
-    "Cost",
-    "TextContent",
-    "Usage"
-   ]
-  },
-  {
    "src": "tests.test_task",
    "dst": "zenagent.agent.loop",
    "calls": [
@@ -12976,6 +12567,27 @@
     "AssistantMessage",
     "TextContent",
     "Usage"
+   ]
+  },
+  {
+   "src": "tests.test_terminal",
+   "dst": "zenagent.app.runtime",
+   "calls": [
+    "RuntimeOptions"
+   ]
+  },
+  {
+   "src": "tests.test_terminal",
+   "dst": "zenagent.cli.rpc.host",
+   "calls": [
+    "RpcHost"
+   ]
+  },
+  {
+   "src": "tests.test_terminal",
+   "dst": "zenagent.cli.rpc.terminal",
+   "calls": [
+    "TerminalSession"
    ]
   },
   {
@@ -13231,6 +12843,20 @@
    "calls": [
     "clip",
     "text_result"
+   ]
+  },
+  {
+   "src": "tests.test_tools_scoped",
+   "dst": "zenagent.tools",
+   "calls": [
+    "base_tools"
+   ]
+  },
+  {
+   "src": "tests.test_tools_scoped",
+   "dst": "zenagent.tools.ask",
+   "calls": [
+    "build_ask_tool"
    ]
   },
   {
@@ -16014,22 +15640,6 @@
   },
   {
    "src": "zenagent.app.runtime",
-   "dst": "zenagent.app.taiji.session",
-   "calls": [
-    "is_taiji_session"
-   ]
-  },
-  {
-   "src": "zenagent.app.runtime",
-   "dst": "zenagent.app.taiji.tools",
-   "calls": [
-    "router_tool_gate",
-    "runtime_taiji_provider",
-    "taiji_tools_for"
-   ]
-  },
-  {
-   "src": "zenagent.app.runtime",
    "dst": "zenagent.app.views",
    "calls": [
     "last_request_usage"
@@ -16174,8 +15784,9 @@
    "src": "zenagent.app.runtime",
    "dst": "zenagent.tools.lsp",
    "calls": [
+    "acquire_clients",
     "build_lsp_tool",
-    "shutdown_clients"
+    "release_clients"
    ]
   },
   {
@@ -16441,172 +16052,6 @@
    "src": "zenagent.app.support",
    "dst": "zenagent.types",
    "calls": []
-  },
-  {
-   "src": "zenagent.app.taiji",
-   "dst": "zenagent.app.taiji.session",
-   "calls": []
-  },
-  {
-   "src": "zenagent.app.taiji",
-   "dst": "zenagent.app.taiji.supervisor",
-   "calls": []
-  },
-  {
-   "src": "zenagent.app.taiji.board",
-   "dst": "zenagent.app.taiji.registry",
-   "calls": []
-  },
-  {
-   "src": "zenagent.app.taiji.merge_gate",
-   "dst": "zenagent.app.git",
-   "calls": [
-    "git_status"
-   ]
-  },
-  {
-   "src": "zenagent.app.taiji.merge_gate",
-   "dst": "zenagent.app.taiji.registry",
-   "calls": []
-  },
-  {
-   "src": "zenagent.app.taiji.merge_gate",
-   "dst": "zenagent.app.taiji.worktree",
-   "calls": [
-    "_git"
-   ]
-  },
-  {
-   "src": "zenagent.app.taiji.rpc_runner",
-   "dst": "zenagent.app.taiji.worker_client",
-   "calls": [
-    "WorkerRpcClient"
-   ]
-  },
-  {
-   "src": "zenagent.app.taiji.session",
-   "dst": "zenagent",
-   "calls": []
-  },
-  {
-   "src": "zenagent.app.taiji.session",
-   "dst": "zenagent.agent.session",
-   "calls": [
-    "set_session_title"
-   ]
-  },
-  {
-   "src": "zenagent.app.taiji.session",
-   "dst": "zenagent.app.workspace",
-   "calls": [
-    "worktree_overview"
-   ]
-  },
-  {
-   "src": "zenagent.app.taiji.supervisor",
-   "dst": "zenagent.app.git",
-   "calls": []
-  },
-  {
-   "src": "zenagent.app.taiji.supervisor",
-   "dst": "zenagent.app.taiji",
-   "calls": []
-  },
-  {
-   "src": "zenagent.app.taiji.supervisor",
-   "dst": "zenagent.app.taiji.board",
-   "calls": [
-    "parse_attention"
-   ]
-  },
-  {
-   "src": "zenagent.app.taiji.supervisor",
-   "dst": "zenagent.app.taiji.merge_gate",
-   "calls": [
-    "compute_diffstat",
-    "diff_lines"
-   ]
-  },
-  {
-   "src": "zenagent.app.taiji.supervisor",
-   "dst": "zenagent.app.taiji.registry",
-   "calls": [
-    "TaijiRegistry",
-    "WorkerRecord"
-   ]
-  },
-  {
-   "src": "zenagent.app.taiji.supervisor",
-   "dst": "zenagent.app.taiji.rpc_runner",
-   "calls": []
-  },
-  {
-   "src": "zenagent.app.taiji.supervisor",
-   "dst": "zenagent.app.taiji.worktree",
-   "calls": [
-    "_git",
-    "_git_async",
-    "_slug",
-    "worktrees_root"
-   ]
-  },
-  {
-   "src": "zenagent.app.taiji.supervisor",
-   "dst": "zenagent.project",
-   "calls": [
-    "project_key"
-   ]
-  },
-  {
-   "src": "zenagent.app.taiji.tools",
-   "dst": "zenagent",
-   "calls": []
-  },
-  {
-   "src": "zenagent.app.taiji.tools",
-   "dst": "zenagent.agent.protocol",
-   "calls": [
-    "AgentTool",
-    "ToolResultAgent"
-   ]
-  },
-  {
-   "src": "zenagent.app.taiji.tools",
-   "dst": "zenagent.app.taiji.session",
-   "calls": [
-    "is_taiji_session"
-   ]
-  },
-  {
-   "src": "zenagent.app.taiji.tools",
-   "dst": "zenagent.app.taiji.supervisor",
-   "calls": [
-    "RpcRunner",
-    "get_taiji"
-   ]
-  },
-  {
-   "src": "zenagent.app.taiji.tools",
-   "dst": "zenagent.project",
-   "calls": [
-    "find_project_root",
-    "project_dir",
-    "project_sessions_dir"
-   ]
-  },
-  {
-   "src": "zenagent.app.taiji.tools",
-   "dst": "zenagent.prompts",
-   "calls": [
-    "tool_description"
-   ]
-  },
-  {
-   "src": "zenagent.app.taiji.tools",
-   "dst": "zenagent.types",
-   "calls": [
-    "TextContent"
-   ]
   },
   {
    "src": "zenagent.app.views",
@@ -17183,24 +16628,6 @@
   },
   {
    "src": "zenagent.cli.rpc.cli",
-   "dst": "zenagent.app.taiji",
-   "calls": [
-    "close_taiji",
-    "ensure_taiji_session",
-    "own_taiji_lock",
-    "release_taiji_lock",
-    "should_init_taiji"
-   ]
-  },
-  {
-   "src": "zenagent.cli.rpc.cli",
-   "dst": "zenagent.app.taiji.tools",
-   "calls": [
-    "taiji_supervisor_for"
-   ]
-  },
-  {
-   "src": "zenagent.cli.rpc.cli",
    "dst": "zenagent.cli.flags",
    "calls": [
     "add_runtime_flags"
@@ -17208,17 +16635,16 @@
   },
   {
    "src": "zenagent.cli.rpc.cli",
-   "dst": "zenagent.cli.rpc.server",
+   "dst": "zenagent.cli.rpc.host",
    "calls": [
-    "RpcServer"
+    "RpcHost"
    ]
   },
   {
    "src": "zenagent.cli.rpc.cli",
-   "dst": "zenagent.project",
+   "dst": "zenagent.cli.rpc.slot",
    "calls": [
-    "project_dir",
-    "project_sessions_dir"
+    "RuntimeSlot.adopt"
    ]
   },
   {
@@ -17249,6 +16675,55 @@
    "src": "zenagent.cli.rpc.codec",
    "dst": "zenagent.types",
    "calls": []
+  },
+  {
+   "src": "zenagent.cli.rpc.host",
+   "dst": "zenagent.app.bootstrap",
+   "calls": [
+    "prepare"
+   ]
+  },
+  {
+   "src": "zenagent.cli.rpc.host",
+   "dst": "zenagent.app.runtime",
+   "calls": []
+  },
+  {
+   "src": "zenagent.cli.rpc.host",
+   "dst": "zenagent.cli.rpc.codec",
+   "calls": []
+  },
+  {
+   "src": "zenagent.cli.rpc.host",
+   "dst": "zenagent.cli.rpc.errors",
+   "calls": [
+    "Refusal",
+    "error_frame",
+    "failure_frame"
+   ]
+  },
+  {
+   "src": "zenagent.cli.rpc.host",
+   "dst": "zenagent.cli.rpc.slot",
+   "calls": [
+    "RuntimeSlot.adopt"
+   ]
+  },
+  {
+   "src": "zenagent.cli.rpc.host",
+   "dst": "zenagent.cli.rpc.terminal",
+   "calls": [
+    "TerminalSession",
+    "clamp_dim"
+   ]
+  },
+  {
+   "src": "zenagent.cli.rpc.host",
+   "dst": "zenagent.project",
+   "calls": [
+    "find_project_root",
+    "project_key"
+   ]
   },
   {
    "src": "zenagent.cli.rpc.ops_config",
@@ -17381,13 +16856,6 @@
    ]
   },
   {
-   "src": "zenagent.cli.rpc.ops_files",
-   "dst": "zenagent.project",
-   "calls": [
-    "find_project_root"
-   ]
-  },
-  {
    "src": "zenagent.cli.rpc.ops_plugins",
    "dst": "zenagent.cli.rpc.errors",
    "calls": [
@@ -17445,37 +16913,6 @@
    "calls": [
     "Refusal",
     "error_frame",
-    "failure_frame"
-   ]
-  },
-  {
-   "src": "zenagent.cli.rpc.ops_taiji",
-   "dst": "zenagent.app.taiji",
-   "calls": []
-  },
-  {
-   "src": "zenagent.cli.rpc.ops_taiji",
-   "dst": "zenagent.app.taiji.board",
-   "calls": []
-  },
-  {
-   "src": "zenagent.cli.rpc.ops_taiji",
-   "dst": "zenagent.app.taiji.supervisor",
-   "calls": [
-    "existing_taiji"
-   ]
-  },
-  {
-   "src": "zenagent.cli.rpc.ops_taiji",
-   "dst": "zenagent.app.taiji.transcript",
-   "calls": [
-    "peek_tail"
-   ]
-  },
-  {
-   "src": "zenagent.cli.rpc.ops_taiji",
-   "dst": "zenagent.cli.rpc.errors",
-   "calls": [
     "failure_frame"
    ]
   },
@@ -17541,11 +16978,6 @@
   },
   {
    "src": "zenagent.cli.rpc.server",
-   "dst": "zenagent.cli.rpc.ops_taiji",
-   "calls": []
-  },
-  {
-   "src": "zenagent.cli.rpc.server",
    "dst": "zenagent.events",
    "calls": []
   },
@@ -17556,8 +16988,39 @@
   },
   {
    "src": "zenagent.cli.rpc.server",
+   "dst": "zenagent.project",
+   "calls": [
+    "project_key"
+   ]
+  },
+  {
+   "src": "zenagent.cli.rpc.server",
    "dst": "zenagent.types",
    "calls": []
+  },
+  {
+   "src": "zenagent.cli.rpc.slot",
+   "dst": "zenagent.app.bootstrap",
+   "calls": []
+  },
+  {
+   "src": "zenagent.cli.rpc.slot",
+   "dst": "zenagent.app.runtime",
+   "calls": []
+  },
+  {
+   "src": "zenagent.cli.rpc.slot",
+   "dst": "zenagent.cli.rpc.server",
+   "calls": [
+    "RpcServer"
+   ]
+  },
+  {
+   "src": "zenagent.cli.rpc.slot",
+   "dst": "zenagent.project",
+   "calls": [
+    "project_key"
+   ]
   },
   {
    "src": "zenagent.cli.sessionscmd",
@@ -20271,10 +19734,6 @@
    "zenagent.agent.tool_exec"
   ],
   [
-   "zenagent.app.taiji",
-   "zenagent.app.taiji.supervisor"
-  ],
-  [
    "zenagent.tools.web",
    "zenagent.tools.web.providers",
    "zenagent.tools.web.registry",
@@ -20339,9 +19798,9 @@
   ]
  ],
  "stats": {
-  "files": 426,
-  "edges": 1744,
-  "cycles": 7,
+  "files": 416,
+  "edges": 1700,
+  "cycles": 6,
   "errors": []
  }
 }

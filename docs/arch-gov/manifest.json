@@ -169,32 +169,6 @@
    ]
   },
   {
-   "id": "app.taiji",
-   "title": "taiji",
-   "cluster": "app",
-   "files": [
-    "zenagent/app/taiji/__init__.py",
-    "zenagent/app/taiji/board.py",
-    "zenagent/app/taiji/merge_gate.py",
-    "zenagent/app/taiji/registry.py",
-    "zenagent/app/taiji/rpc_runner.py",
-    "zenagent/app/taiji/session.py",
-    "zenagent/app/taiji/supervisor.py",
-    "zenagent/app/taiji/tools.py",
-    "zenagent/app/taiji/transcript.py",
-    "zenagent/app/taiji/worker_client.py",
-    "zenagent/app/taiji/worktree.py"
-   ],
-   "resp": "Taiji 编排面：Router 会话(taiji.jsonl)+锁、TaijiSupervisor、5 个 worker 工具；workers = `zen rpc --cwd worktree --yes` 子进程",
-   "symbols": [
-    "TaijiRegistry",
-    "WorkerRecord",
-    "RpcRunner",
-    "TurnResult",
-    "TaijiHostLocked"
-   ]
-  },
-  {
    "id": "app.transcript",
    "title": "会话历史与恢复",
    "cluster": "app",
@@ -539,7 +513,6 @@
     "zenagent/cli/rpc/ops_files.py",
     "zenagent/cli/rpc/ops_plugins.py",
     "zenagent/cli/rpc/ops_session.py",
-    "zenagent/cli/rpc/ops_taiji.py",
     "zenagent/cli/rpc/server.py"
    ],
    "resp": "JSONL RPC 服务器与 ops 分派（hello 协议握手、[limits] 契约）",
@@ -547,7 +520,6 @@
     "ConfigOps",
     "FilesOps",
     "SessionOps",
-    "TaijiOps",
     "RpcServer"
    ]
   },
@@ -883,12 +855,6 @@
   },
   {
    "from": "app.assembly",
-   "to": "app.taiji",
-   "desc": "is_taiji_session、router_tool_gate、runtime_taiji_provider、taiji_tools_for",
-   "kind": "import"
-  },
-  {
-   "from": "app.assembly",
    "to": "app.transcript",
    "desc": "RewindState、SessionManager、SessionMetaRecorder、attach_journal",
    "kind": "import"
@@ -1086,48 +1052,6 @@
    "from": "app.chat",
    "to": "types",
    "desc": "Cost、SystemMessage、Usage、UserMessage",
-   "kind": "import"
-  },
-  {
-   "from": "app.taiji",
-   "to": "agent.loop",
-   "desc": "AgentTool、ToolResultAgent",
-   "kind": "import"
-  },
-  {
-   "from": "app.taiji",
-   "to": "agent.rt",
-   "desc": "set_session_title",
-   "kind": "import"
-  },
-  {
-   "from": "app.taiji",
-   "to": "app.assembly",
-   "desc": "worktree_overview",
-   "kind": "import"
-  },
-  {
-   "from": "app.taiji",
-   "to": "app.chat",
-   "desc": "git_status",
-   "kind": "import"
-  },
-  {
-   "from": "app.taiji",
-   "to": "project",
-   "desc": "find_project_root、project_dir、project_key、project_sessions_dir",
-   "kind": "import"
-  },
-  {
-   "from": "app.taiji",
-   "to": "prompts",
-   "desc": "tool_description",
-   "kind": "import"
-  },
-  {
-   "from": "app.taiji",
-   "to": "types",
-   "desc": "TextContent",
    "kind": "import"
   },
   {
@@ -1361,12 +1285,6 @@
    "from": "cli.rpc",
    "to": "app.chat",
    "desc": "build_skill_submission、parse_skill_display、usage_total",
-   "kind": "import"
-  },
-  {
-   "from": "cli.rpc",
-   "to": "app.taiji",
-   "desc": "close_taiji、ensure_taiji_session、existing_taiji、own_taiji_lock",
    "kind": "import"
   },
   {
@@ -2557,42 +2475,6 @@
    "reason": "outside src_root: tests"
   },
   {
-   "file": "tests/test_taiji_board.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_taiji_loop.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_taiji_registry.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_taiji_rpc.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_taiji_session.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_taiji_supervisor.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_taiji_tools.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_taiji_transcript.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_taiji_worker_client.py",
-   "reason": "outside src_root: tests"
-  },
-  {
    "file": "tests/test_task.py",
    "reason": "outside src_root: tests"
   },
@@ -2875,10 +2757,6 @@
    "zenagent.agent.result_budget",
    "zenagent.agent.timeouts",
    "zenagent.agent.tool_exec"
-  ],
-  [
-   "zenagent.app.taiji",
-   "zenagent.app.taiji.supervisor"
   ],
   [
    "zenagent.tools.web",

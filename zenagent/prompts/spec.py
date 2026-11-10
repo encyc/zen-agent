@@ -106,14 +106,6 @@ BLOCKS: dict[str, BlockSpec] = {
         budget_chars=700,
         optional=True,
     ),
-    "taiji_router": BlockSpec(
-        id="taiji_router",
-        path="taiji_router.md",
-        version=PROMPT_VERSION,
-        cache_class="session",
-        budget_chars=900,
-        optional=True,
-    ),
     "context_files": BlockSpec(
         id="context_files",
         path="context_files.md",
@@ -215,20 +207,6 @@ _TOOL_VARS: dict[str, tuple[str, ...]] = {
 }
 
 for _tool_name in TOOL_BLOCK_NAMES:
-    BLOCKS[f"tool.{_tool_name}"] = BlockSpec(
-        id=f"tool.{_tool_name}",
-        path=f"tools/{_tool_name}.md",
-        version=PROMPT_VERSION,
-        cache_class="stable",
-        budget_chars=900,
-        required_vars=_TOOL_VARS.get(_tool_name, ()),
-    )
-
-
-# Taiji's Router tools are composed only for the taiji session, so they sit
-# outside the standard tool block set (and the golden parity pin) but share
-# the same registry, budgets and validation.
-for _tool_name in ("spawn_worker", "message_worker", "kill_worker", "merge_worker", "list_workers"):
     BLOCKS[f"tool.{_tool_name}"] = BlockSpec(
         id=f"tool.{_tool_name}",
         path=f"tools/{_tool_name}.md",

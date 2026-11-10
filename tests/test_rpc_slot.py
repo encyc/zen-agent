@@ -7,7 +7,6 @@ import json
 from pathlib import Path
 
 from zenagent.app.bootstrap import PreparedFrontend
-from zenagent.app.taiji import TaijiClaim
 from zenagent.cli.rpc.slot import RuntimeSlot
 from zenagent.project import project_key
 
@@ -42,7 +41,6 @@ class FakeRuntime:
         self.cwd = self.root
         self.agent = FakeAgent()
         self.ask_handler = None
-        self.taiji_chat = None
         self.closed = False
 
     def _note(self, text: str) -> None:
@@ -87,23 +85,19 @@ def _collect(writes: list[dict]):
     return write
 
 
-def _adopt(root: Path, writes: list[dict], monkeypatch) -> RuntimeSlot:
+def _adopt(root: Path, writes: list[dict]) -> RuntimeSlot:
     prepared, runtime, broker = _prepared(root)
-    claim = TaijiClaim(root=root.resolve(), owned=False)
-    monkeypatch.setattr(
-        "zenagent.cli.rpc.slot.claim_taiji_host", lambda _runtime: claim
-    )
     slot = RuntimeSlot.adopt(prepared, write_line=_collect(writes))
     assert broker.confirm == slot.server.confirm
     assert runtime.ask_handler == slot.server.ask
     return slot
 
 
-async def test_slot_tags_frames_and_scopes_approval_ids(tmp_path, monkeypatch):
+async def test_slot_tags_frames_and_scopes_approval_ids(tmp_path):
     root = tmp_path / "proj"
     root.mkdir()
     writes: list[dict] = []
-    slot = _adopt(root, writes, monkeypatch)
+    slot = _adopt(root, writes)
 
     pending = asyncio.create_task(slot.server.confirm("bash", {"command": "ls"}))
     await asyncio.sleep(0)
@@ -120,11 +114,11 @@ async def test_slot_tags_frames_and_scopes_approval_ids(tmp_path, monkeypatch):
     assert writes[-1]["ok"] is True
 
 
-async def test_slot_scopes_ask_ids_too(tmp_path, monkeypatch):
+async def test_slot_scopes_ask_ids_too(tmp_path):
     root = tmp_path / "proj"
     root.mkdir()
     writes: list[dict] = []
-    slot = _adopt(root, writes, monkeypatch)
+    slot = _adopt(root, writes)
     questions = [
         {"id": "q1", "question": "Continue?", "options": [{"label": "Yes"}]}
     ]
@@ -140,34 +134,21 @@ async def test_slot_scopes_ask_ids_too(tmp_path, monkeypatch):
     assert await pending == [{"id": "q1", "selected": ["Yes"]}]
 
 
-async def test_slot_id_uses_the_project_key(tmp_path, monkeypatch):
+async def test_slot_id_uses_the_project_key(tmp_path):
     root = tmp_path / "proj"
     root.mkdir()
-    slot = _adopt(root, [], monkeypatch)
+    slot = _adopt(root, [])
     assert slot.key == project_key(root.resolve())
     assert slot.server.project == str(root.resolve())
 
 
-async def test_slot_close_releases_the_claim_and_the_runtime(tmp_path, monkeypatch):
+async def test_slot_close_closes_the_runtime(tmp_path):
     root = tmp_path / "proj"
     root.mkdir()
-    released: list[TaijiClaim] = []
-
-    async def fake_release(claim: TaijiClaim) -> None:
-        released.append(claim)
-
     prepared, runtime, _broker = _prepared(root)
-    claim = TaijiClaim(root=root.resolve(), owned=True)
-    monkeypatch.setattr(
-        "zenagent.cli.rpc.slot.claim_taiji_host", lambda _runtime: claim
-    )
-    monkeypatch.setattr(
-        "zenagent.cli.rpc.slot.release_taiji_host", fake_release
-    )
     slot = RuntimeSlot.adopt(prepared, write_line=[].append)
 
     await slot.close()
 
-    assert released == [claim]
     assert runtime.ask_handler is None
     assert runtime.closed is True

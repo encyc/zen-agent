@@ -1,4 +1,4 @@
-"""``python -m zenagent`` — the spawn entry for taiji worker subprocesses."""
+"""``python -m zenagent`` — run the command-line entry point."""
 
 from zenagent.cli.main import main
 

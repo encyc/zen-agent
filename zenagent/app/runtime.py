@@ -44,12 +44,6 @@ from zenagent.app.support import (
     resolve_task_model,
     session_id_for,
 )
-from zenagent.app.taiji.session import is_taiji_session
-from zenagent.app.taiji.tools import (
-    router_tool_gate,
-    runtime_taiji_provider,
-    taiji_tools_for,
-)
 from zenagent.app.views import last_request_usage
 from zenagent.config import (
     ContextGuard,
@@ -629,7 +623,6 @@ class Runtime:
             if self.memory_store is not None
             else ""
         )
-        session_in_context = getattr(self, "_session", None)
         context = PromptContext(
             cwd=self.cwd,
             tool_names=tuple(tool.name for tool in tools),
@@ -641,9 +634,6 @@ class Runtime:
             ),
             include_context=self._context_files,
             include_mode=False,
-            include_taiji_router=is_taiji_session(
-                session_in_context.path if session_in_context is not None else None
-            ),
         )
         rendered = compose_system(context)
         self._base_prompt_report = rendered
@@ -703,21 +693,6 @@ class Runtime:
                 build_skill_tool(self.skills, max_body_bytes=self.limits.max_body_bytes)
             )
         tools.extend(self._extension_tools)
-        session_in_context = getattr(self, "_session", None)
-        session_path = (
-            session_in_context.path if session_in_context is not None else None
-        )
-        # The Router directs, workers edit: the taiji session loses the
-        # execution tools (see ROUTER_EXCLUDED_TOOLS) the same turn it gains
-        # the worker tools, so the fleet split holds at the tool layer too.
-        if is_taiji_session(session_path):
-            tools = router_tool_gate(tools)
-        tools.extend(
-            taiji_tools_for(
-                session_path,
-                runtime_taiji_provider(self),
-            )
-        )
         self._skill_entries = format_skill_entries(
             self.skills, max_bytes=self.limits.max_index_bytes
         )
@@ -1025,7 +1000,6 @@ class Runtime:
         messages = session.load()
         self.agent.replace_messages(messages)
         self.session = session
-        self._sync_taiji_chat()
         if self.todo_tool is not None:
             if carried:
                 save_todo_phases(session.path, carried)
@@ -1035,27 +1009,6 @@ class Runtime:
         # Reseed from the loaded transcript: the last assistant turn is the
         # request that sized the context, and compaction/pruning read it.
         self.guard.last_usage = last_request_usage(messages)
-        # The tool set is session-gated (taiji tools ride the taiji session),
-        # so a switch must recompose, not just rebind.
+        # A switch rebinds the loaded transcript and the per-session sidecars,
+        # so rebuild rather than patch the previous binding.
         self._recompose()
-
-    def _sync_taiji_chat(self) -> None:
-        """Point the shared fleet's chat at this runtime only while it hosts taiji.
-
-        The supervisor is per project, but milestone injection needs a target
-        chat: with several sessions resident, following the runtime that owns
-        the taiji session is what keeps worker reports in the Router's pane.
-        """
-        if getattr(self, "taiji_chat", None) is None:
-            return
-        from zenagent.app.taiji.supervisor import existing_taiji
-
-        supervisor = existing_taiji(self.root)
-        if supervisor is None:
-            return
-        if is_taiji_session(self.session.path):
-            supervisor.chat = self.taiji_chat
-            supervisor.mode_of = lambda: self.mode
-        elif supervisor.chat is self.taiji_chat:
-            supervisor.chat = None
-            supervisor.mode_of = lambda: "ask"

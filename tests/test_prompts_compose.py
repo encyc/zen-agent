@@ -56,14 +56,6 @@ def test_zen_note_only_in_zen_mode() -> None:
     assert "ZEN MODE:" in zen
 
 
-def test_taiji_router_note_only_for_the_router() -> None:
-    plain = compose_system(PromptContext(cwd=CWD, tool_names=())).text
-    router = compose_system(
-        PromptContext(cwd=CWD, tool_names=(), include_taiji_router=True)
-    ).text
-    assert "TAIJI ROUTER:" not in plain
-    assert router.startswith(plain)
-    assert "TAIJI ROUTER:" in router
 
 
 def test_optional_parts_keep_their_order() -> None:

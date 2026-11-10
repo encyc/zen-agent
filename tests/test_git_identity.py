@@ -2,7 +2,7 @@
 
 CI's ubuntu runners have no ``user.name``/``user.email`` and a dotless
 hostname, so git cannot auto-detect an author there and ``git commit`` exits
-128 — which is exactly how the taiji worktree tests went red on ubuntu while
+128 — which is exactly how the worktree-heavy tests went red on ubuntu while
 the same code stayed green on macOS. ``tests/conftest.py`` puts the identity in
 the environment; this test pins that contract.
 """

@@ -127,8 +127,8 @@ Python 扩展加载与 ExtensionAPI
 
 - 文件：`zenagent/project.py`
 - 关键符号：`ProjectRelocation`、`ProjectMeta`
-- 入边：`agent.rt` →（all_session_dirs、legacy_sessions_dir、project_key_for_session、project_sessions_dir）；`app.assembly` →（find_project_root、project_key、project_key_for_session、write_project_meta）；`app.taiji` →（find_project_root、project_dir、project_key、project_sessions_dir）；`app.transcript` →（legacy_sessions_dir、project_backups_dir、project_root_for_sessions_dir、project_sessions_dir）；`cli` →（legacy_sessions_dir、project_config_path）；`cli.rpc` →（find_project_root、project_config_path、project_dir、project_key）；`cli.tui.app_parts` →（find_project_root、project_key、project_key_for_session）；`config` →（project_config_path）；`mcp` →（project_mcp_path）；`skills` →（find_project_root）；`templates` →（find_project_root）
-- 依赖强度：被 11 个节点 import；依赖 0 个节点
+- 入边：`agent.rt` →（all_session_dirs、legacy_sessions_dir、project_key_for_session、project_sessions_dir）；`app.assembly` →（find_project_root、project_key、project_key_for_session、write_project_meta）；`app.transcript` →（legacy_sessions_dir、project_backups_dir、project_root_for_sessions_dir、project_sessions_dir）；`cli` →（legacy_sessions_dir、project_config_path）；`cli.rpc` →（find_project_root、project_config_path、project_dir、project_key）；`cli.tui.app_parts` →（find_project_root、project_key、project_key_for_session）；`config` →（project_config_path）；`mcp` →（project_mcp_path）；`skills` →（find_project_root）；`templates` →（find_project_root）
+- 依赖强度：被 10 个节点 import；依赖 0 个节点
 
 ### `retry` — retry.py
 
@@ -194,8 +194,8 @@ append-only JSONL 执行 trace：工具/参数/结果/耗时
 
 - 文件：`zenagent/types.py`
 - 关键符号：`AssistantMessage`、`Cost`、`ToolCall`、`Usage`、`UserMessage`
-- 入边：`agent.loop` →（SystemMessage、TextContent、ToolDef、ToolResultMessage）；`agent.rt` →（TextContent、UserMessage、message_from_json）；`app.assembly` →（UserMessage）；`app.chat` →（Cost、SystemMessage、Usage、UserMessage）；`app.taiji` →（TextContent）；`app.transcript` →（SystemMessage、TextContent、UserMessage）；`attachments` →（ImageContent）；`cli` →（—）；`cli.rpc` →（—）；`cli.tui.widgets` →（—）；`config` →（—）；`events` →（—）；`export` →（—）；`mcp` →（ImageContent、TextContent）；`providers` →（AssistantMessage、Cost、TextContent、ThinkingContent）；`retry` →（—）；`skills` →（TextContent）；`telemetry` →（Usage）；`tools` →（TextContent）；`usage` →（message_from_json）
-- 依赖强度：被 20 个节点 import；依赖 0 个节点
+- 入边：`agent.loop` →（SystemMessage、TextContent、ToolDef、ToolResultMessage）；`agent.rt` →（TextContent、UserMessage、message_from_json）；`app.assembly` →（UserMessage）；`app.chat` →（Cost、SystemMessage、Usage、UserMessage）；`app.transcript` →（SystemMessage、TextContent、UserMessage）；`attachments` →（ImageContent）；`cli` →（—）；`cli.rpc` →（—）；`cli.tui.widgets` →（—）；`config` →（—）；`events` →（—）；`export` →（—）；`mcp` →（ImageContent、TextContent）；`providers` →（AssistantMessage、Cost、TextContent、ThinkingContent）；`retry` →（—）；`skills` →（TextContent）；`telemetry` →（Usage）；`tools` →（TextContent）；`usage` →（message_from_json）
+- 依赖强度：被 19 个节点 import；依赖 0 个节点
 
 ### `update_check` — update_check.py
 
@@ -225,8 +225,8 @@ TUI 专用 PyPI 版本检查（后台、静默失败）
 - 文件：`zenagent/agent/loop.py`、`zenagent/agent/tool_exec.py`、`zenagent/agent/result_budget.py`、`zenagent/agent/timeouts.py`、`zenagent/agent/guard.py`、`zenagent/agent/validate.py`、`zenagent/agent/protocol.py`、`zenagent/agent/registry.py`
 - 关键符号：`AgentConfig`、`AgentState`、`ToolOutcome`、`AgentTool`、`ToolResultAgent`
 - 出边：→ `events`（AgentEvent）；→ `providers`（stream_with_retry → safe_stream → adapter.stream → transport）；→ `retry`（stream_with_retry）；→ `types`（SystemMessage、TextContent、ToolDef、ToolResultMessage）
-- 入边：`agent.rt` →（Agent.prompt → _drive → agent_loop（每 run 一个 task））；`app.assembly` →（ToolRegistry）；`app.chat` →（—）；`app.taiji` →（AgentTool、ToolResultAgent）；`app.transcript` →（AgentTool、ToolResultAgent）；`cli` →（—）；`extensions` →（—）；`mcp` →（AgentTool、ToolResultAgent）；`skills` →（AgentTool、ToolResultAgent）；`tools` →（AgentTool、ToolResultAgent）；`tools.web` →（—）
-- 依赖强度：被 11 个节点 import；依赖 4 个节点
+- 入边：`agent.rt` →（Agent.prompt → _drive → agent_loop（每 run 一个 task））；`app.assembly` →（ToolRegistry）；`app.chat` →（—）；`app.transcript` →（AgentTool、ToolResultAgent）；`cli` →（—）；`extensions` →（—）；`mcp` →（AgentTool、ToolResultAgent）；`skills` →（AgentTool、ToolResultAgent）；`tools` →（AgentTool、ToolResultAgent）；`tools.web` →（—）
+- 依赖强度：被 10 个节点 import；依赖 4 个节点
 - 🔴 健康红点：0 error / 2 warn（见 health/report.md）
 
 ### `agent.rt` — 有状态运行时
@@ -236,8 +236,8 @@ TUI 专用 PyPI 版本检查（后台、静默失败）
 - 文件：`zenagent/agent/agent.py`、`zenagent/agent/session.py`、`zenagent/agent/subagents.py`、`zenagent/agent/subagents_runtime.py`、`zenagent/agent/memory_store.py`、`zenagent/agent/artifacts.py`
 - 关键符号：`Agent`、`_Run`、`Session`、`SessionInfo`、`SubagentStore`
 - 出边：→ `agent.loop`（Agent.prompt → _drive → agent_loop（每 run 一个 task））；→ `config`（ContextGuard）；→ `events`（AbortToken）；→ `project`（all_session_dirs、legacy_sessions_dir、project_key_for_session、project_sessions_dir）；→ `providers`（—）；→ `types`（TextContent、UserMessage、message_from_json）
-- 入边：`app.assembly` →（Runtime 构造 Agent、挂 ask_handler/订阅者）；`app.chat` →（Session、SubagentStore、carry_task_dir、get_task_manager）；`app.taiji` →（set_session_title）；`app.transcript` →（Session、carry_task_dir、get_task_manager、list_sessions）；`cli` →（latest_session、list_sessions、sessions_dir、split_title_body）；`cli.rpc` →（MemoryStore）；`cli.tui.app_parts` →（session_title）；`cli.tui.screens` →（—）；`export` →（Session）；`tools` →（task 工具背后 = subagents_runtime）；`usage` →（all_session_dirs、sessions_dir）
-- 依赖强度：被 11 个节点 import；依赖 6 个节点
+- 入边：`app.assembly` →（Runtime 构造 Agent、挂 ask_handler/订阅者）；`app.chat` →（Session、SubagentStore、carry_task_dir、get_task_manager）；`app.transcript` →（Session、carry_task_dir、get_task_manager、list_sessions）；`cli` →（latest_session、list_sessions、sessions_dir、split_title_body）；`cli.rpc` →（MemoryStore）；`cli.tui.app_parts` →（session_title）；`cli.tui.screens` →（—）；`export` →（Session）；`tools` →（task 工具背后 = subagents_runtime）；`usage` →（all_session_dirs、sessions_dir）
+- 依赖强度：被 10 个节点 import；依赖 6 个节点
 - 🔴 健康红点：1 error / 3 warn（见 health/report.md）
 
 ## 簇：应用层（`app`）
@@ -248,10 +248,10 @@ TUI 专用 PyPI 版本检查（后台、静默失败）
 
 - 文件：`zenagent/app/bootstrap.py`、`zenagent/app/runtime.py`、`zenagent/app/permissions.py`、`zenagent/app/safety.py`、`zenagent/app/modes.py`、`zenagent/app/support.py`、`zenagent/app/metrics.py`、`zenagent/app/probes.py`、`zenagent/app/workspace.py`、`zenagent/app/error_notice.py`、`zenagent/app/plugin_wiring.py`、`zenagent/app/retry.py`、`zenagent/app/models.py`、`zenagent/app/__init__.py`、`zenagent/agent/__init__.py`
 - 关键符号：`PreparedFrontend`、`Runtime`、`RuntimeOptions`、`PermissionGate`、`PermissionBroker`
-- 出边：→ `agent.loop`（ToolRegistry）；→ `agent.rt`（Runtime 构造 Agent、挂 ask_handler/订阅者）；→ `app.chat`（AppServices、ChatController、build_default_commands、git_status）；→ `app.taiji`（is_taiji_session、router_tool_gate、runtime_taiji_provider、taiji_tools_for）；→ `app.transcript`（RewindState、SessionManager、SessionMetaRecorder、attach_journal）；→ `config`（ContextGuard、UserConfig、apply_user_config、load_user_config）；→ `context_files`（discover_context_files、load_context_files）；→ `extensions`（load_extensions）；→ `i18n`（t、t.startswith）；→ `limits`（—）；→ `mcp`（Runtime 注入 MCP 工具）；→ `plugins`（plugin_wiring 把插件贡献翻译成 MCP 配置）；→ `project`（find_project_root、project_key、project_key_for_session、write_project_meta）；→ `prompts`（compose_system 组装 system prompt）；→ `providers`（StreamOptions、estimate_text_tokens、find_model、load_catalog）；→ `settings`（disabled_skills、get_api_key）；→ `skills`（build_skill_tool、default_skill_roots、discover_skills、format_skill_entries）；→ `telemetry`（MetricsRecorder、append_metrics）；→ `templates`（default_template_roots、discover_templates）；→ `tools`（Runtime 注入 base_tools + todo/task/memory/checkpoint/lsp/github）；→ `tools.web`（SearchRequest）；→ `trace`（TraceRecorder）；→ `types`（UserMessage）
-- 入边：`app.chat` →（ChatController 驱动 Runtime）；`app.taiji` →（worktree_overview）；`app.transcript` →（—）；`cli` →（RuntimeOptions、api_key_for、describe_modes、prepare）；`cli.rpc` →（RuntimeOptions、list_directory、prepare、probe_mcp_server）；`cli.tui` →（ModelManager、tool_target）；`cli.tui.screens` →（—）
-- 依赖强度：被 7 个节点 import；依赖 23 个节点
-- 🔴 健康红点：2 error / 4 warn（见 health/report.md）
+- 出边：→ `agent.loop`（ToolRegistry）；→ `agent.rt`（Runtime 构造 Agent、挂 ask_handler/订阅者）；→ `app.chat`（AppServices、ChatController、build_default_commands、git_status）；→ `app.transcript`（RewindState、SessionManager、SessionMetaRecorder、attach_journal）；→ `config`（ContextGuard、UserConfig、apply_user_config、load_user_config）；→ `context_files`（discover_context_files、load_context_files）；→ `extensions`（load_extensions）；→ `i18n`（t、t.startswith）；→ `limits`（—）；→ `mcp`（Runtime 注入 MCP 工具）；→ `plugins`（plugin_wiring 把插件贡献翻译成 MCP 配置）；→ `project`（find_project_root、project_key、project_key_for_session、write_project_meta）；→ `prompts`（compose_system 组装 system prompt）；→ `providers`（StreamOptions、estimate_text_tokens、find_model、load_catalog）；→ `settings`（disabled_skills、get_api_key）；→ `skills`（build_skill_tool、default_skill_roots、discover_skills、format_skill_entries）；→ `telemetry`（MetricsRecorder、append_metrics）；→ `templates`（default_template_roots、discover_templates）；→ `tools`（Runtime 注入 base_tools + todo/task/memory/checkpoint/lsp/github）；→ `tools.web`（SearchRequest）；→ `trace`（TraceRecorder）；→ `types`（UserMessage）
+- 入边：`app.chat` →（ChatController 驱动 Runtime）；`app.transcript` →（—）；`cli` →（RuntimeOptions、api_key_for、describe_modes、prepare）；`cli.rpc` →（RuntimeOptions、list_directory、prepare、probe_mcp_server）；`cli.tui` →（ModelManager、tool_target）；`cli.tui.screens` →（—）
+- 依赖强度：被 6 个节点 import；依赖 22 个节点
+- 🔴 健康红点：2 error / 5 warn（见 health/report.md）
 
 ### `app.chat` — 会话交互
 
@@ -260,20 +260,9 @@ TUI 专用 PyPI 版本检查（后台、静默失败）
 - 文件：`zenagent/app/chat.py`、`zenagent/app/commands.py`、`zenagent/app/views.py`、`zenagent/app/skill_commands.py`、`zenagent/app/slash_args.py`、`zenagent/app/pending.py`、`zenagent/app/btw.py`、`zenagent/app/links.py`、`zenagent/app/clipboard.py`、`zenagent/app/git.py`、`zenagent/app/appearance.py`、`zenagent/app/attachments_state.py`、`zenagent/app/subagent_tracker.py`
 - 关键符号：`ChatController`、`CommandRegistry`、`CommandResult`、`AppServices`、`Command`
 - 出边：→ `agent.loop`（—）；→ `agent.rt`（Session、SubagentStore、carry_task_dir、get_task_manager）；→ `app.assembly`（ChatController 驱动 Runtime）；→ `app.transcript`（build_context_report、compact、is_compaction、is_tool_end）；→ `attachments`（read_image_argument）；→ `events`（—）；→ `frontmatter`（parse_frontmatter）；→ `i18n`（t）；→ `providers`（StreamOptions、safe_stream、stream_fn_for）；→ `skills`（—）；→ `tools`（coerce_todo_phases、get_job_manager、load_todo_phases）；→ `tools.web`（default_provider、format_results、run_search）；→ `types`（Cost、SystemMessage、Usage、UserMessage）
-- 入边：`app.assembly` →（AppServices、ChatController、build_default_commands、git_status）；`app.taiji` →（git_status）；`cli` →（TranscriptBuilder、argument_values、build_skill_submission、resolve_theme）；`cli.rpc` →（build_skill_submission、parse_skill_display、usage_total）；`cli.tui` →（AppServices、ChatController、build_default_commands、resolve_theme）；`cli.tui.app_parts` →（AppServices、build_default_commands、build_skill_submission、read_clipboard_text）；`cli.tui.screens` →（argument_values）；`cli.tui.widgets` →（—）
-- 依赖强度：被 8 个节点 import；依赖 13 个节点
+- 入边：`app.assembly` →（AppServices、ChatController、build_default_commands、git_status）；`cli` →（TranscriptBuilder、argument_values、build_skill_submission、resolve_theme）；`cli.rpc` →（build_skill_submission、parse_skill_display、usage_total）；`cli.tui` →（AppServices、ChatController、build_default_commands、resolve_theme）；`cli.tui.app_parts` →（AppServices、build_default_commands、build_skill_submission、read_clipboard_text）；`cli.tui.screens` →（argument_values）；`cli.tui.widgets` →（—）
+- 依赖强度：被 7 个节点 import；依赖 13 个节点
 - 🔴 健康红点：2 error / 5 warn（见 health/report.md）
-
-### `app.taiji` — taiji
-
-Taiji 编排面：Router 会话(taiji.jsonl)+锁、TaijiSupervisor、5 个 worker 工具；workers = `zen rpc --cwd worktree --yes` 子进程
-
-- 文件：`zenagent/app/taiji/__init__.py`、`zenagent/app/taiji/board.py`、`zenagent/app/taiji/merge_gate.py`、`zenagent/app/taiji/registry.py`、`zenagent/app/taiji/rpc_runner.py`、`zenagent/app/taiji/session.py`、`zenagent/app/taiji/supervisor.py`、`zenagent/app/taiji/tools.py`、`zenagent/app/taiji/transcript.py`、`zenagent/app/taiji/worker_client.py`、`zenagent/app/taiji/worktree.py`
-- 关键符号：`TaijiRegistry`、`WorkerRecord`、`RpcRunner`、`TurnResult`、`TaijiHostLocked`
-- 出边：→ `agent.loop`（AgentTool、ToolResultAgent）；→ `agent.rt`（set_session_title）；→ `app.assembly`（worktree_overview）；→ `app.chat`（git_status）；→ `project`（find_project_root、project_dir、project_key、project_sessions_dir）；→ `prompts`（tool_description）；→ `types`（TextContent）
-- 入边：`app.assembly` →（is_taiji_session、router_tool_gate、runtime_taiji_provider、taiji_tools_for）；`cli.rpc` →（close_taiji、ensure_taiji_session、existing_taiji、own_taiji_lock）
-- 依赖强度：被 2 个节点 import；依赖 7 个节点
-- 🔴 健康红点：1 error / 2 warn（见 health/report.md）
 
 ### `app.transcript` — 会话历史与恢复
 
@@ -303,12 +292,12 @@ Taiji 编排面：Router 会话(taiji.jsonl)+锁、TaijiSupervisor、5 个 worke
 
 JSONL RPC 服务器与 ops 分派（hello 协议握手、[limits] 契约）
 
-- 文件：`zenagent/cli/rpc/__init__.py`、`zenagent/cli/rpc/cli.py`、`zenagent/cli/rpc/codec.py`、`zenagent/cli/rpc/errors.py`、`zenagent/cli/rpc/ops_config.py`、`zenagent/cli/rpc/ops_files.py`、`zenagent/cli/rpc/ops_plugins.py`、`zenagent/cli/rpc/ops_session.py`、`zenagent/cli/rpc/ops_taiji.py`、`zenagent/cli/rpc/server.py`
-- 关键符号：`ConfigOps`、`FilesOps`、`SessionOps`、`TaijiOps`、`RpcServer`
-- 出边：→ `agent.rt`（MemoryStore）；→ `app.assembly`（RuntimeOptions、list_directory、prepare、probe_mcp_server）；→ `app.chat`（build_skill_submission、parse_skill_display、usage_total）；→ `app.taiji`（close_taiji、ensure_taiji_session、existing_taiji、own_taiji_lock）；→ `app.transcript`（is_compaction）；→ `attachments`（read_image_argument）；→ `cli`（add_runtime_flags）；→ `config`（config_path、load_user_config）；→ `events`（—）；→ `i18n`（set_locale）；→ `limits`（KNOB_BY_KEY.get、coerce_value、read_managed、write_managed）；→ `mcp`（load_mcp_layers、remove_mcp_server、save_mcp_server）；→ `plugins`（ops_plugins：内置目录、发现、安装/卸载、启停与凭据）；→ `project`（find_project_root、project_config_path、project_dir、project_key）；→ `settings`（describe、disabled_skills、get_api_key、set_api_key）；→ `skills`（default_skill_roots、discover_skills）；→ `tools.web`（KEY_ENVS.items、KEY_ENVS.values、LABELS.get）；→ `types`（—）
+- 文件：`zenagent/cli/rpc/__init__.py`、`zenagent/cli/rpc/cli.py`、`zenagent/cli/rpc/codec.py`、`zenagent/cli/rpc/errors.py`、`zenagent/cli/rpc/ops_config.py`、`zenagent/cli/rpc/ops_files.py`、`zenagent/cli/rpc/ops_plugins.py`、`zenagent/cli/rpc/ops_session.py`、`zenagent/cli/rpc/server.py`
+- 关键符号：`ConfigOps`、`FilesOps`、`SessionOps`、`RpcServer`
+- 出边：→ `agent.rt`（MemoryStore）；→ `app.assembly`（RuntimeOptions、list_directory、prepare、probe_mcp_server）；→ `app.chat`（build_skill_submission、parse_skill_display、usage_total）；→ `app.transcript`（is_compaction）；→ `attachments`（read_image_argument）；→ `cli`（add_runtime_flags）；→ `config`（config_path、load_user_config）；→ `events`（—）；→ `i18n`（set_locale）；→ `limits`（KNOB_BY_KEY.get、coerce_value、read_managed、write_managed）；→ `mcp`（load_mcp_layers、remove_mcp_server、save_mcp_server）；→ `plugins`（ops_plugins：内置目录、发现、安装/卸载、启停与凭据）；→ `project`（find_project_root、project_config_path、project_dir、project_key）；→ `settings`（describe、disabled_skills、get_api_key、set_api_key）；→ `skills`（default_skill_roots、discover_skills）；→ `tools.web`（KEY_ENVS.items、KEY_ENVS.values、LABELS.get）；→ `types`（—）
 - 入边：`cli` →（main）
-- 依赖强度：被 1 个节点 import；依赖 18 个节点
-- 🔴 健康红点：3 error / 9 warn（见 health/report.md）
+- 依赖强度：被 1 个节点 import；依赖 17 个节点
+- 🔴 健康红点：4 error / 6 warn（见 health/report.md）
 
 ### `cli.tui` — tui
 
@@ -385,8 +374,8 @@ prompt 子系统：blocks/*.md 块文件 + compose_system 唯一组装契约 + c
 - 文件：`zenagent/prompts/__init__.py`、`zenagent/prompts/registry.py`、`zenagent/prompts/render.py`、`zenagent/prompts/spec.py`
 - 关键符号：`PromptContext`、`RenderedBlock`、`RenderedPrompt`、`PromptRenderError`、`BlockSpec`
 - 出边：→ `providers`（estimate_text_tokens）
-- 入边：`app.assembly` →（compose_system 组装 system prompt）；`app.taiji` →（tool_description）；`app.transcript` →（compact_result、compose_compact）；`cli` →（PromptContext、compose_system、read_block）；`context_files` →（read_block、render）；`skills` →（read_block、render、tool_description）；`tools` →（read_block、render、tool_description）；`tools.web` →（—）
-- 依赖强度：被 8 个节点 import；依赖 1 个节点
+- 入边：`app.assembly` →（compose_system 组装 system prompt）；`app.transcript` →（compact_result、compose_compact）；`cli` →（PromptContext、compose_system、read_block）；`context_files` →（read_block、render）；`skills` →（read_block、render、tool_description）；`tools` →（read_block、render、tool_description）；`tools.web` →（—）
+- 依赖强度：被 7 个节点 import；依赖 1 个节点
 
 ## 簇：协议层（`providers`）
 
