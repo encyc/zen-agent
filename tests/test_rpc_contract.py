@@ -46,8 +46,8 @@ def test_request_kinds_match_ts_contract_list():
 
 
 def test_protocol_version_pinned_both_sides():
-    assert "PROTOCOL_VERSION = 2" in RPC_PATH
-    assert "PROTOCOL_VERSION = 2" in TS_PATH.read_text()
+    assert "PROTOCOL_VERSION = 3" in RPC_PATH
+    assert "PROTOCOL_VERSION = 3" in TS_PATH.read_text()
 
 
 def _ok_stream():

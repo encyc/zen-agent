@@ -146,7 +146,7 @@ class ZenFleet:
 
     def spawn(self, focus: str) -> str:
         """Create a new lazy worker session, tracked under ``focus``."""
-        path = unique_session_path(root=self.sessions_dir)
+        path = unique_session_path(root=self.root)
         open_session(path, lazy=True, cwd=self.root)
         roster_set_focus(self.sessions_dir, path.stem, focus)
         self._handles[str(path)] = WorkerHandle(str(path), path.stem, focus)

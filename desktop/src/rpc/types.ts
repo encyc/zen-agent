@@ -38,7 +38,7 @@ export type ResultFrame =
 // kinds; this list mirrors it and is pinned by tests/test_rpc_contract.py so
 // a one-sided change goes red instead of failing at runtime.
 
-export const PROTOCOL_VERSION = 2
+export const PROTOCOL_VERSION = 3
 
 export const REQUEST_KINDS = [
   'approval',
@@ -71,6 +71,7 @@ export const REQUEST_KINDS = [
   'tools',
   'transcript',
   'usage',
+  'zen_fleet',
 ] as const
 
 export type RequestKind = (typeof REQUEST_KINDS)[number]
