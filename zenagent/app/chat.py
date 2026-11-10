@@ -140,7 +140,7 @@ class ChatController:
             context_occupancy(last, agent.model.api) if last is not None else 0
         )
         subagents = self._subagent_views()
-        git = git_status(Path.cwd())
+        git = git_status(self.runtime.cwd)
         return RunStatus(
             model_id=agent.model.id,
             thinking=agent.thinking,
@@ -160,7 +160,7 @@ class ChatController:
             steering=agent.pending_steering,
             pending=self._pending_queue.items,
             session_name=Path(self.runtime.session.path).stem,
-            cwd=str(Path.cwd()),
+            cwd=str(self.runtime.cwd),
             mode=self.runtime.mode,
             git_branch=git.branch if git else "",
             git_staged=git.staged if git else 0,

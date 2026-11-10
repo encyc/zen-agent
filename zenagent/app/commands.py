@@ -761,7 +761,7 @@ async def _remove_dir(services: AppServices, argument: str) -> CommandResult:
 
 @_command("dirs")
 async def _dirs(services: AppServices, argument: str) -> CommandResult:
-    dirs = [str(Path.cwd()), *(str(path) for path in services.runtime.extra_dirs)]
+    dirs = [str(services.runtime.cwd), *(str(path) for path in services.runtime.extra_dirs)]
     return CommandResult(message=t("cmdmsg.dirs", dirs="\n".join(dirs)))
 
 
@@ -789,7 +789,7 @@ async def _handoff(services: AppServices, argument: str) -> CommandResult:
         for block in getattr(message, "content", [])
         if isinstance(block, TextContent)
     ).strip()
-    document = Path.cwd() / f"handoff-{time.strftime('%Y%m%d-%H%M%S')}.md"
+    document = services.runtime.cwd / f"handoff-{time.strftime('%Y%m%d-%H%M%S')}.md"
     try:
         document.write_text(f"# Handoff\n\n{summary}\n", encoding="utf-8")
     except OSError as exc:

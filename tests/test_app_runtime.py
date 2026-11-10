@@ -588,3 +588,11 @@ async def test_bootstrap_rejects_a_missing_root(tmp_path):
         await Runtime.bootstrap(
             RuntimeOptions(root=missing, mcp=False, skills=False, templates=False)
         )
+
+
+async def test_status_reports_the_runtime_cwd(runtime_factory, tmp_path):
+    from zenagent.app.chat import ChatController
+
+    runtime = await runtime_factory(root=tmp_path)
+
+    assert ChatController(runtime).status.cwd == str(tmp_path.resolve())

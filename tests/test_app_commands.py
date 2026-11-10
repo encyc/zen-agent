@@ -497,3 +497,22 @@ async def test_shake_tools_does_not_carry_tool_end_records(services):
     reloaded = Session(runtime.session.path)
     reloaded.load()
     assert not [item for item in reloaded.records if item["type"] == "tool_end"]
+
+
+async def test_dirs_lists_the_runtime_cwd(runtime_factory, tmp_path):
+    from zenagent.app.chat import ChatController
+    from zenagent.app.commands import AppServices, build_default_commands
+    from zenagent.app.models import ModelManager
+    from zenagent.app.sessions import SessionManager
+
+    runtime = await runtime_factory(root=tmp_path)
+    services = AppServices(
+        runtime=runtime,
+        chat=ChatController(runtime),
+        models=ModelManager(runtime),
+        sessions=SessionManager(runtime),
+    )
+
+    result = await build_default_commands(services).dispatch("dirs", "")
+
+    assert str(tmp_path.resolve()) in result.message
