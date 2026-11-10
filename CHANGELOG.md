@@ -3,12 +3,16 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased
+## v0.12.2 — 2026-11-10
 
 **Taiji removed.** The 太极 multi-worker orchestration layer is gone; zen is back
 to a single-agent coding harness. Entries below that describe how taiji worked
 are kept as history. Per-project runtime slots, background session runs,
 project ops, and the yin-yang brand mark are unaffected.
+
+**In-place update from Settings.** The About page now carries an update button
+beside the manual check, so a found release can be installed without going
+through the sidebar notification.
 
 ### Removed
 
@@ -42,6 +46,15 @@ project ops, and the yin-yang brand mark are unaffected.
   band. The health baseline was re-registered 112 → 109: seven taiji violations
   resolved, and the pre-existing v0.12.1 LOC drift (runtime/server/session and
   tests) recorded at today's values.
+
+### Desktop
+
+- **Update button on the About page** (`desktop/src/ui/pages/SettingsPage.tsx`):
+  beside 检查更新, a same-style 更新 button installs a found release in place
+  through the shared updater store (download + restart), with the same guards
+  as the sidebar notification — disabled while a turn runs, an approval waits,
+  or no newer release is cached. Installs that cannot replace themselves
+  (.deb) keep the notification's download link instead.
 
 ## v0.12.1 — 2026-11-10
 

@@ -4828,7 +4828,7 @@ dependencies = [
 
 [[package]]
 name = "zenagent-desktop"
-version = "0.12.1"
+version = "0.12.2"
 dependencies = [
  "serde",
  "serde_json",
