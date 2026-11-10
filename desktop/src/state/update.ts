@@ -1,6 +1,6 @@
 /** Whether to look for a new release, whether the cached answer still counts,
- * and what the banner above the transcript should say. Pure decisions only:
- * the network call and the installer live in `updateStore.ts`. */
+ * and what the sidebar notification should say. Pure decisions only: the
+ * network call and the installer live in `updateStore.ts`. */
 
 export const UPDATE_TTL_MS = 60 * 60 * 1000
 
@@ -15,7 +15,7 @@ export interface UpdateCache {
 
 export type UpdatePhase = 'idle' | 'checking' | 'available' | 'installing' | 'failed'
 
-export type UpdateBanner =
+export type UpdateNotice =
   | { kind: 'hidden' }
   | { kind: 'available'; version: string }
   /** The running install cannot replace itself (a .deb): link to the download. */
@@ -72,7 +72,7 @@ export function cacheAfterFailure(
 }
 
 /** Installing restarts the app, so never offer it mid-turn or over an approval. */
-export function bannerFor(input: {
+export function updateNotice(input: {
   cache: UpdateCache | null
   current: string
   enabled: boolean
@@ -81,7 +81,7 @@ export function bannerFor(input: {
   phase: UpdatePhase
   /** False when this install cannot be replaced in place (e.g. a .deb). */
   selfUpdatable?: boolean
-}): UpdateBanner {
+}): UpdateNotice {
   const offer =
     input.cache !== null && shouldOffer(input.cache, input.current) ? input.cache.latest : null
   if (input.phase === 'installing') {

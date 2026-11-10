@@ -407,7 +407,7 @@ export const zh: Dict = {
   'update.checkFailed': '检查失败',
   'update.checking': '检查中…',
   'update.toggle': '自动检查更新',
-  'update.toggleHint': '启动后查询新版本，发现时在对话上方提示。',
+  'update.toggleHint': '启动后查询新版本，发现时在侧栏通知中提示。',
   'settings.limits': '参数与预算',
   'settings.limitsHint': '上下文预算、循环护栏与子代理开销，写给开发者自己调。',
   'settings.limitFile': '配置文件',
@@ -960,7 +960,8 @@ export const en: Dict = {
   'update.checkFailed': 'Check failed',
   'update.checking': 'Checking…',
   'update.toggle': 'Check for updates automatically',
-  'update.toggleHint': 'Look for a new version after launch and show a notice above the chat.',
+  'update.toggleHint':
+    'Look for a new version after launch and show a notice in the sidebar notifications.',
   'settings.limits': 'Limits & budgets',
   'settings.limitsHint': 'Context budgets, loop guardrails and subagent spend, for developers to tune.',
   'settings.limitFile': 'Config file',

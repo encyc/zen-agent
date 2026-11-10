@@ -17,6 +17,7 @@ from zenagent.agent.session import (
     read_session_titles,
     session_path,
     session_title,
+    set_session_pin,
     set_session_title,
 )
 from zenagent.app import records
@@ -155,6 +156,65 @@ def test_list_sessions_honours_the_limit(isolated_sessions):
     from zenagent.agent.session import list_sessions
 
     assert len(list_sessions(limit=2)) == 2
+
+
+async def test_a_lazy_session_writes_nothing_until_the_first_message(tmp_path):
+    path = tmp_path / "lazy.jsonl"
+    session = Session(path, lazy=True)
+
+    session.append_meta({"type": "mode", "mode": "ask"})
+    assert not path.exists()
+
+    await session.append(user("hello"))
+
+    lines = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert [line["type"] for line in lines[:2]] == ["session", "mode"]
+    assert lines[2]["role"] == "user" and lines[2]["content"] == "hello"
+
+
+async def test_a_lazy_session_loads_empty_without_materializing(tmp_path):
+    path = tmp_path / "lazy.jsonl"
+    session = Session(path, lazy=True)
+    session.append_meta({"type": "mode", "mode": "ask"})
+
+    assert session.load() == []
+    assert not path.exists()
+
+    await session.append(user("after load"))
+    assert path.is_file()
+
+
+def test_listing_hides_header_only_sessions(isolated_sessions):
+    isolated_sessions.mkdir(parents=True)
+    _write_session(isolated_sessions, "real.jsonl", ["chat"], mtime=2)
+    junk = isolated_sessions / "junk.jsonl"
+    junk.write_text(
+        "\n".join(
+            json.dumps(record)
+            for record in (
+                {"type": "session", "version": 1, "createdAt": 1},
+                {"type": "mode", "mode": "ask", "timestamp": 1},
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    assert [info.path.name for info in list_sessions()] == ["real.jsonl"]
+
+
+def test_listing_keeps_intentional_empty_sessions(isolated_sessions):
+    isolated_sessions.mkdir(parents=True)
+    for name in ("taiji.jsonl", "named.jsonl", "pinned.jsonl"):
+        (isolated_sessions / name).write_text(
+            json.dumps({"type": "session", "version": 1, "createdAt": 1}) + "\n",
+            encoding="utf-8",
+        )
+    set_session_title(isolated_sessions / "named.jsonl", "Kept by name")
+    set_session_pin(isolated_sessions / "pinned.jsonl", True)
+
+    names = {info.path.name for info in list_sessions()}
+    assert names == {"taiji.jsonl", "named.jsonl", "pinned.jsonl"}
 
 
 async def test_fork_at_copies_the_prefix_without_touching_the_source(isolated_sessions):

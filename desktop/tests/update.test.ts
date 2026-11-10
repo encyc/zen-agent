@@ -1,15 +1,15 @@
 /** Update policy: pure decisions about whether to look for a release, whether
- * the cached answer still counts, and what the banner should say. */
+ * the cached answer still counts, and what the sidebar notification says. */
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   UPDATE_TTL_MS,
-  bannerFor,
   cacheAfterFailure,
   cacheIsFresh,
   compareVersions,
   shouldOffer,
+  updateNotice,
   type UpdateCache,
 } from '../src/state/update.ts'
 
@@ -37,7 +37,7 @@ test('the cache goes stale after an hour', () => {
   assert.equal(cacheIsFresh(cache('0.9.0', null, 1_000), 1_000 + UPDATE_TTL_MS), false)
 })
 
-test('the banner waits for an idle app before offering to restart', () => {
+test('the notice waits for an idle app before offering to restart', () => {
   const input = {
     cache: cache('0.9.0'),
     current: '0.8.1',
@@ -46,17 +46,17 @@ test('the banner waits for an idle app before offering to restart', () => {
     pendingApprovals: 0,
     phase: 'available' as const,
   }
-  assert.deepEqual(bannerFor(input), { kind: 'blocked', version: '0.9.0' })
+  assert.deepEqual(updateNotice(input), { kind: 'blocked', version: '0.9.0' })
 })
 
 test('a disabled switch hides everything except an explicit install in flight', () => {
   const base = { cache: cache('0.9.0'), current: '0.8.1', busy: false, pendingApprovals: 0 }
-  assert.deepEqual(bannerFor({ ...base, enabled: false, phase: 'available' }), { kind: 'hidden' })
-  assert.deepEqual(bannerFor({ ...base, enabled: true, phase: 'available' }), {
+  assert.deepEqual(updateNotice({ ...base, enabled: false, phase: 'available' }), { kind: 'hidden' })
+  assert.deepEqual(updateNotice({ ...base, enabled: true, phase: 'available' }), {
     kind: 'available',
     version: '0.9.0',
   })
-  assert.deepEqual(bannerFor({ ...base, enabled: true, phase: 'failed' }), {
+  assert.deepEqual(updateNotice({ ...base, enabled: true, phase: 'failed' }), {
     kind: 'failed',
     message: 'update.failed',
   })
@@ -64,7 +64,7 @@ test('a disabled switch hides everything except an explicit install in flight', 
 
 test('a stale cache does not resurrect a version the user already installed', () => {
   assert.deepEqual(
-    bannerFor({
+    updateNotice({
       cache: cache('0.8.1'),
       current: '0.8.1',
       enabled: true,
@@ -78,8 +78,8 @@ test('a stale cache does not resurrect a version the user already installed', ()
 
 test('a failed check is silent when the switch is off', () => {
   const base = { cache: null, current: '0.8.1', busy: false, pendingApprovals: 0, phase: 'failed' as const }
-  assert.deepEqual(bannerFor({ ...base, enabled: false }), { kind: 'hidden' })
-  assert.deepEqual(bannerFor({ ...base, enabled: true }), { kind: 'failed', message: 'update.failed' })
+  assert.deepEqual(updateNotice({ ...base, enabled: false }), { kind: 'hidden' })
+  assert.deepEqual(updateNotice({ ...base, enabled: true }), { kind: 'failed', message: 'update.failed' })
 })
 
 test('a failed check still stamps the cache so the next launch waits the TTL', () => {
@@ -98,7 +98,7 @@ test('a failure with no cache records the running version, not a phantom release
 
 test('a pending approval blocks the restart as firmly as a running turn', () => {
   assert.deepEqual(
-    bannerFor({
+    updateNotice({
       cache: cache('0.9.0'),
       current: '0.8.1',
       enabled: true,
@@ -120,6 +120,6 @@ test('an install the updater cannot replace offers the download page instead', (
     phase: 'available' as const,
     selfUpdatable: false,
   }
-  assert.deepEqual(bannerFor(base), { kind: 'manual', version: '0.9.0' })
-  assert.deepEqual(bannerFor({ ...base, busy: true }), { kind: 'blocked', version: '0.9.0' })
+  assert.deepEqual(updateNotice(base), { kind: 'manual', version: '0.9.0' })
+  assert.deepEqual(updateNotice({ ...base, busy: true }), { kind: 'blocked', version: '0.9.0' })
 })

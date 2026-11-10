@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import asdict
 from pathlib import Path
 
@@ -187,6 +188,9 @@ class SessionOps:
             return {"path": str(path), "name": path.stem}
         if op == "list":
             scope = "all" if request.get("scope") == "all" else "project"
+            # Listing parses every transcript in every project; off the loop it
+            # cannot stall streaming events or the next request behind it.
+            entries = await asyncio.to_thread(self.sessions.entries, scope=scope)
             return {
                 "scope": scope,
                 "sessions": [
@@ -204,7 +208,7 @@ class SessionOps:
                         "model": entry.model,
                         "derived_from": entry.derived_from,
                     }
-                    for entry in self.sessions.entries(scope=scope)
+                    for entry in entries
                 ],
             }
         if op == "new":

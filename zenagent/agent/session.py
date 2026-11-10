@@ -97,18 +97,26 @@ def session_path(prefix: str = "") -> Path:
     return sessions_dir() / f"{stamp}{suffix}.jsonl"
 
 
+#: Paths handed out by :func:`unique_session_path` in this process. A lazy
+#: session reserves its name without creating the file, so existence alone
+#: cannot keep two same-second "new session" calls apart.
+_RESERVED_PATHS: set[Path] = set()
+
+
 def unique_session_path(prefix: str = "") -> Path:
-    """Like :func:`session_path`, but never returns an existing file.
+    """Like :func:`session_path`, but never returns an existing (or reserved) file.
 
     The timestamp has second resolution, so two sessions started in the same
     second would otherwise share a filename -- and a "new" session would load
-    the existing transcript instead of starting empty.
+    the existing transcript instead of starting empty. Lazy sessions hold their
+    path before the file exists, so the reservation set tracks them too.
     """
     path = session_path(prefix)
     counter = 0
-    while path.exists():
+    while path.exists() or path in _RESERVED_PATHS:
         counter += 1
         path = path.with_name(f"{path.stem}-{counter}{path.suffix}")
+    _RESERVED_PATHS.add(path)
     return path
 
 
@@ -366,8 +374,13 @@ class Session:
     #: Offset of the replayed segment within the full message list; ``None``
     #: when replay was not cut (no boundary, or none effective).
     segment_start: int | None = field(default=None, repr=False, compare=False)
+    #: New runtime sessions are lazy: they keep their header and starting meta
+    #: records in memory until the first message, so an idle launch (or a
+    #: project switch that never chats) leaves no ``(empty)`` row on disk.
+    lazy: bool = field(default=False, repr=False, compare=False)
     _header_ensured: bool = field(default=False, repr=False, compare=False)
     _messages: list[Message] | None = field(default=None, repr=False, compare=False)
+    _pending_records: list[dict] = field(default_factory=list, repr=False, compare=False)
     #: Serializes off-loop writes; created lazily (may be no running loop at construction).
     _append_lock: asyncio.Lock | None = field(default=None, repr=False, compare=False)
 
@@ -427,10 +440,18 @@ class Session:
         ``OSError`` is swallowed: a full disk or an unwritable directory must
         not abort the run over auxiliary metadata (message appends still fail
         loudly). A first record on a new file writes the session header first.
+
+        On a :attr:`lazy` session whose file does not exist yet, records are
+        buffered instead: metadata alone must not turn a launch into a transcript.
         """
         try:
-            self._ensure_header()
             payload = {"timestamp": int(time.time()), **record}
+            if self.lazy and not self.path.exists():
+                self._pending_records.append(payload)
+                if self._messages is not None:
+                    self.records.append(payload)
+                return
+            self._ensure_header()
             self._write_line(payload)
             if self._messages is not None:
                 # Keep the loaded cache truthful for live readers (RPC snapshot,
@@ -439,9 +460,29 @@ class Session:
         except OSError:
             return
 
+    def materialize(self) -> None:
+        """Give a lazy session its file without writing a message.
+
+        Explicit naming or pinning makes an empty conversation real, so the
+        sidecars have a file to attach to. Ordinary playback never calls this.
+        """
+        try:
+            self._ensure_header()
+            self._flush_pending()
+        except OSError:
+            return
+
+    def _flush_pending(self) -> None:
+        pending, self._pending_records = self._pending_records, []
+        for record in pending:
+            self._write_line(record)
+
     def _append_sync(self, message: Message) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._ensure_header()
+        # A lazy session held its header/mode records back; the first message
+        # is what turns them into a transcript, in their original order.
+        self._flush_pending()
         self._write_line(message.to_json())
         if self._messages is not None:
             self._messages.append(message)
@@ -674,11 +715,22 @@ def list_sessions(limit: int = 20, *, scope: str = "project") -> list[SessionInf
         if not directory.is_dir():
             continue
         titles = read_session_titles(directory)
+        pins = read_session_pins(directory)
         label = _project_label(directory)
         for path in directory.glob("*.jsonl"):
             try:
                 info = Session(path).read_info(titles=titles)
             except (ValueError, OSError):
+                continue
+            # Header-only leftovers from older builds are not conversations.
+            # The taiji singleton, a pinned file and an explicitly named one
+            # are deliberate and stay visible.
+            if (
+                info.messages == 0
+                and info.title == "(empty)"
+                and path.stem != "taiji"
+                and path.name not in pins
+            ):
                 continue
             info.project = label
             infos.append(info)

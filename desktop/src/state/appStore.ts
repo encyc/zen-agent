@@ -36,6 +36,7 @@ import {
 } from './stores'
 import { useChatStore } from './chatStore'
 import { nextDraft } from './pending'
+import { latestSessionForProject } from './latestSession'
 import { loadPrefs, replayFrames, savePref, spawnArgs } from './prefs'
 import { frameErrorNotice, type ReplyLike } from '../rpc/frames'
 import { reportRefreshFailure } from './refresh'
@@ -112,7 +113,10 @@ interface AppState {
   removeMcpServer(name: string, layer: McpLayer): Promise<Record<string, unknown>>
   testMcpServer(name: string): Promise<Record<string, unknown>>
   relocateProject(from: string, to: string): Promise<Record<string, unknown>>
-  openProject(path: string): Promise<void>
+  /** Switch the runtime to another project. `target` is the session the new
+   * child opens with: a path resumes it on spawn, `null` starts fresh, and
+   * the default lands on the project's newest real conversation. */
+  openProject(path: string, target?: string | null): Promise<void>
   refreshTranscript(): Promise<boolean>
   loadOlderTranscript(): Promise<boolean>
   submit(): Promise<void>
@@ -162,6 +166,10 @@ interface BootOptions {
   bin?: string
   cwd?: string
   args?: string[]
+  /** The session the new child opens with (`--resume`). Its transcript is
+   * already loaded at the handshake, so the switch never paints a blank
+   * conversation first. */
+  resume?: string
   /** A switch must not leave the previous project's transcript on screen if it fails to load. */
   fromSwitch: boolean
 }
@@ -186,14 +194,26 @@ async function bootChild(
     // ignore
   }
   if (opts.cwd !== undefined && opts.cwd !== '') useProjectStore.getState().addProject(opts.cwd)
-  // The three boot reads are independent requests, id-correlated on the wire:
-  // run them together so the first paint waits for the slowest, not the sum.
+  // The boot reads are independent requests, id-correlated on the wire: run
+  // them together so the first paint waits for the slowest, not the sum.
+  // A resumed child already carries the target session, so the global list
+  // only feeds the sidebar and must not gate the swap.
+  const resumed = opts.resume
   const [loaded] = await Promise.all([
     get().refreshTranscript(),
     restorePrefs(get),
-    get().refreshSessions(),
+    resumed === undefined ? get().refreshSessions() : Promise.resolve(),
   ])
-  if (!loaded && opts.fromSwitch) useChatStore.getState().reset()
+  if (resumed !== undefined) {
+    useSessionStore.getState().setCurrent(resumed)
+    void get().refreshSessions()
+  }
+  // A resume the child refused (the file vanished between list and click)
+  // falls back to a fresh session: never leave the previous project's
+  // transcript on screen in that case.
+  const fellBack =
+    resumed !== undefined && useStatusStore.getState().status?.session !== resumed
+  if ((!loaded || fellBack) && opts.fromSwitch) useChatStore.getState().reset()
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -464,12 +484,22 @@ export const useAppStore = create<AppState>((set, get) => ({
     return frame
   },
 
-  async openProject(path) {
+  async openProject(path, target = 'latest') {
     if (path === '') return
     if (path === lastProjectCwd() && get().connection === 'ready') return
+    // Resolve what the replacement child opens with. Resuming on spawn is the
+    // difference between "a new runtime at the same folder" and "my work,
+    // still there": the target transcript arrives with the handshake, so no
+    // blank session is ever created or painted on the way.
+    const resume =
+      target === null
+        ? null
+        : target === 'latest'
+          ? latestSessionForProject(useSessionStore.getState().sessions, path)
+          : target
     // Nothing to preserve before the first connection: a plain start.
     if (get().connection !== 'ready') {
-      await get().connect(undefined, path)
+      await get().connect(undefined, path, spawnArgs(resume))
       return
     }
     if (get().switching !== null) return
@@ -484,7 +514,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     useChatStore.getState().finalize()
 
     try {
-      await bootChild(set, get, { cwd: path, args: spawnArgs(), fromSwitch: true })
+      await bootChild(set, get, {
+        cwd: path,
+        args: spawnArgs(resume),
+        resume: resume ?? undefined,
+        fromSwitch: true,
+      })
       set({ connection: 'ready', switching: null, exitCode: null, startFailure: null })
     } catch (error) {
       const failure = startFailureOf(error)
@@ -715,9 +750,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     const root = session?.project_path ?? ''
     // The runtime is cwd-bound. A session recorded in another project needs
     // the process restarted there before it can be resumed (pi does the same
-    // through selectSession → activateProject). openProject keeps the shell
-    // mounted while it happens.
-    if (root !== '' && lastProjectCwd() !== root) await get().openProject(root)
+    // through selectSession → activateProject). openProject resumes it on
+    // spawn, so this is one replacement, not a blank boot plus an RPC resume.
+    if (root !== '' && lastProjectCwd() !== root) {
+      await get().openProject(root, path)
+      return
+    }
     await get().resumeSession(path)
   },
 
@@ -898,9 +936,11 @@ function showFrameError(frame: ReplyLike): boolean {
 }
 
 async function refreshAfterSessionChange(get: () => AppState): Promise<void> {
-  await get().refreshTranscript()
-  await get().refreshStatus()
-  await get().refreshSessions()
+  // The transcript and status are id-correlated on the wire; the global
+  // session list only feeds the sidebar, so it must not add a serial round
+  // trip to every switch.
+  await Promise.all([get().refreshTranscript(), get().refreshStatus()])
+  void get().refreshSessions()
 }
 
 /** Re-apply the user's mode/model/thinking onto a freshly spawned child.

@@ -131,13 +131,18 @@ class SessionManager:
             pass
 
     def current(self) -> Path:
-        """The active session file; created eagerly so listings/fork can read it."""
+        """The active session path; listing it never creates the file.
+
+        Runtime-created sessions are lazy: the file appears with the first
+        message, so a read-only path query must not materialize one.
+        """
         self._touch_project_meta()
-        path = self.runtime.session.path
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if not path.exists():
-            path.touch()
-        return path
+        return self.runtime.session.path
+
+    def _materialize_current(self, target: Path) -> None:
+        """An explicit rename/pin is intent to keep the session: give it a file."""
+        if target == self.runtime.session.path and not target.exists():
+            self.runtime.session.materialize()
 
     def entries(self, *, scope: str = "project") -> list[SessionEntry]:
         current = self.current()
@@ -178,11 +183,14 @@ class SessionManager:
 
     def set_pin(self, path: Path, pinned: bool) -> bool:
         """Pin/unpin one saved session; ``ValueError`` for a non-session path."""
-        return set_session_pin(Path(path), pinned)
+        target = Path(path)
+        self._materialize_current(target)
+        return set_session_pin(target, pinned)
 
     def toggle_pin(self, path: Path) -> bool:
         """Flip the pinned flag of one saved session; returns the new state."""
         target = Path(path)
+        self._materialize_current(target)
         if not target.is_file():
             raise ValueError(t("session.not_found", target=target))
         currently = target.name in read_session_pins(target.parent)
@@ -199,9 +207,15 @@ class SessionManager:
         Returns the normalized title that was stored.
         """
         target = Path(path)
-        if not target.is_file():
+        is_current = target == self.runtime.session.path
+        if not target.is_file() and not is_current:
             raise ValueError(f"session not found: {target}")
-        return set_session_title(target, title)
+        # Validate the title before materializing: a rejected rename must not
+        # turn an unsaved conversation into an empty file.
+        stored = set_session_title(target, title)
+        if is_current and not target.exists():
+            self.runtime.session.materialize()
+        return stored
 
     async def new(self) -> Path:
         self._touch_project_meta()
@@ -253,14 +267,20 @@ class SessionManager:
         return dropped, new_path
 
     def delete(self, path: Path) -> Path:
-        """Move a session file to the trash; never unlink a transcript."""
+        """Move a session file to the trash; never unlink a transcript.
+
+        A lazy current session has no file yet: deleting it only starts a new
+        one, and there is nothing to move.
+        """
         target = Path(path)
         trash = target.parent / ".trash"
-        trash.mkdir(parents=True, exist_ok=True)
-        destination = trash / target.name
-        if destination.exists():
-            destination = trash / f"{target.stem}-{time.strftime('%H%M%S')}.jsonl"
-        target.replace(destination)
+        destination = target
+        if target.exists():
+            trash.mkdir(parents=True, exist_ok=True)
+            destination = trash / target.name
+            if destination.exists():
+                destination = trash / f"{target.stem}-{time.strftime('%H%M%S')}.jsonl"
+            target.replace(destination)
         trash_task_dir(target, trash)
         if self.runtime.session.path == target:
             self.runtime.use_new_session()

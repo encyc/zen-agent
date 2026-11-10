@@ -308,6 +308,7 @@ async def test_ask_for_an_unknown_request_is_an_error(runtime_factory):
 
 async def test_session_current_list_and_new(runtime_factory):
     runtime, server, writes, queue = await build(runtime_factory)
+    await runtime.session.append(UserMessage(content="hello", timestamp=1))
     await run_lines(
         server,
         queue,
@@ -319,9 +320,32 @@ async def test_session_current_list_and_new(runtime_factory):
     )
     messages = {message["id"]: message for message in decode(writes)}
     assert messages["s1"]["path"].endswith(".jsonl")
-    assert messages["s2"]["sessions"]
+    assert [entry["path"] for entry in messages["s2"]["sessions"]] == [
+        messages["s1"]["path"]
+    ]
     assert messages["s3"]["path"] != messages["s1"]["path"]
     assert str(runtime.session.path) == messages["s3"]["path"]
+    # The fresh session stays out of listings until it has something to say.
+    assert not runtime.session.path.exists()
+
+
+async def test_a_child_booted_on_a_session_serves_its_transcript_first(
+    runtime_factory,
+):
+    """The GUI's first paint after a cross-project switch is the conversation.
+
+    ``--resume`` loads the messages into the agent; the wire snapshot must
+    show them without an RPC resume, or the switch paints an empty chat."""
+    first = await runtime_factory()
+    await first.session.append(UserMessage(content="earlier question", timestamp=1))
+    path = first.session.path
+
+    _runtime, server, writes, queue = await build(runtime_factory, resume=path)
+    await run_lines(server, queue, [{"type": "transcript", "id": "t", "limit": 50}])
+    payload = decode(writes)[0]
+    assert [
+        view["text"] for view in payload["transcript"] if view.get("kind") == "user"
+    ] == ["earlier question"]
 
 
 async def test_session_compact_keeps_the_file(runtime_factory):

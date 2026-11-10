@@ -248,6 +248,12 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
         self._asks: dict[str, asyncio.Future] = {}
         self._ask_seq = 0
         self._closed = False
+        if chat is not None:
+            # A child started with --resume already holds the session's
+            # messages; seed the wire transcript from them so the first
+            # `transcript` request (a GUI's first paint after a switch) is the
+            # conversation, not an empty builder waiting for an RPC resume.
+            chat.reload_transcript()
         self.agent.subscribe(self._on_event)
 
     # -- wire ---------------------------------------------------------------

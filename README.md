@@ -9,10 +9,10 @@ English · [简体中文](https://github.com/encyc/zen-agent/blob/main/README.zh
 A coding agent you can read, embed and change: one pure-Python kernel, one
 runtime dependency (`httpx`), four ways to drive it. It reads and edits files,
 runs commands, searches the web, delegates to read-only subagents and keeps a
-project todo list — from a terminal, from a headless one-shot, or from your own
-program.
-
+project todo list — from a terminal, a headless one-shot, or your own program.
 Repo <https://github.com/encyc/zen-agent> · PyPI `zenagent-py` (imports as `zenagent`)
+
+![ZenAgent desktop: a coding session with tool cards and an inline diff](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-chat.png)
 
 ## Install
 
@@ -47,7 +47,7 @@ API keys are read from the environment, named per provider in
 | `opencode-go` | `OPENCODE_API_KEY` |
 
 Overseas and China endpoints are separate providers sharing one key (`moonshotai` /
-`moonshotai-cn`). Token-plan endpoints (`zai-coding-cn`, `xiaomi-token-plan-*`) bill 0.
+`moonshotai-cn`); token-plan endpoints (`zai-coding-cn`, `xiaomi-token-plan-*`) bill 0.
 
 A `[providers.custom.<id>]` table points the same kernel at any OpenAI-compatible
 endpoint, a local server included — see
@@ -66,26 +66,17 @@ exists; `-p`/`--json` never check. `ZENAGENT_NO_UPDATE_CHECK=1` turns it off.
 ## What this is, and why
 
 Coding agents are either closed and vendor-tied, or large enough that changing one
-layer means reading ten. ZenAgent is the small one: a Python kernel you can read in
-an evening, embed in an afternoon, and change without permission.
+layer means reading ten. ZenAgent is the small one: a Python kernel you can read
+in an evening, embed in an afternoon, and change without permission.
 
-- **One dependency.** `types`, `events`, `providers`, `agent` and `tools` import
-  `httpx` and nothing else. The wheel is ~440 KB; `zen --version` takes ~0.1 s.
-- **Pure Python.** No node runtime, no build step, no daemon in the middle —
-  `pip install`, then run it.
-- **One kernel, four surfaces.** TUI, REPL, headless (`-p`/`--json`) and `zen rpc`
-  (a JSONL protocol) all drive the same runtime the same way.
-- **A GUI is a client, not a rewrite.** The RPC surface already exists, so the
-  planned Tauri app is coming.
-- **Embed it in 30 lines.** `Agent(model=..., tools=..., api_key=...)` plus one
-  subscribe callback: your tools, your storage, your event loop.
-- **Extend without restarting.** Skills, prompt templates, extensions, MCP servers
-  and custom providers are all files; `/reload` picks them up mid-session.
-- **No vendor lock-in.** Two protocol adapters (`openai-completions`, including the
-  zai/deepseek dialects, and `anthropic-messages`) plus a packaged catalog carrying
-  prices and context windows.
-- **Costs you can see.** `zen usage`, `/usage`, per-request cost in the transcript,
-  and `--max-cost` as a hard stop.
+- **One dependency.** `types`, `events`, `providers`, `agent` and `tools` import `httpx` and nothing else; the wheel is ~440 KB and `zen --version` takes ~0.1 s.
+- **Pure Python.** No node runtime, no build step, no daemon in the middle — `pip install`, then run it.
+- **One kernel, four surfaces.** TUI, REPL, headless (`-p`/`--json`) and `zen rpc` (a JSONL protocol) all drive the same runtime the same way.
+- **A GUI is a client, not a rewrite.** The RPC surface already existed, so the Tauri desktop app reuses the same kernel instead of forking one — installers for macOS, Windows and Linux.
+- **Embed it in 30 lines.** `Agent(model=..., tools=..., api_key=...)` plus one subscribe callback: your tools, your storage, your event loop.
+- **Extend without restarting.** Skills, prompt templates, extensions, MCP servers and custom providers are all files; `/reload` picks them up mid-session.
+- **No vendor lock-in.** Two protocol adapters (`openai-completions`, including the zai/deepseek dialects, and `anthropic-messages`) plus a packaged catalog carrying prices and context windows.
+- **Costs you can see.** `zen usage`, `/usage`, per-request cost in the transcript, and `--max-cost` as a hard stop.
 
 ## Features
 
@@ -97,6 +88,17 @@ an evening, embed in an afternoon, and change without permission.
 | **48 commands** | one slash-command surface shared by the TUI and the REPL, with Tab completion | [commands](https://github.com/encyc/zen-agent/blob/main/docs/guide/commands.md) |
 | **Extend it** | skills, templates, extensions, MCP servers, custom providers — all file-driven | [extensions](https://github.com/encyc/zen-agent/blob/main/docs/guide/extensions.md) · [MCP](https://github.com/encyc/zen-agent/blob/main/docs/guide/mcp.md) |
 | **Embed it** | `Agent` + `subscribe` in Python; `zen rpc` for every other language | [RPC & SDK](https://github.com/encyc/zen-agent/blob/main/docs/guide/rpc-sdk.md) |
+| **Desktop app** | A Tauri shell over the same `zen rpc`: sessions, work panel, approvals, self-update | [desktop](https://github.com/encyc/zen-agent/blob/main/desktop/README.md) |
+
+### Desktop
+
+The same kernel behind a Tauri shell: streaming tool cards, inline diffs, a
+review and files work panel, and a notification bell that carries release
+offers. Diffs and files stay beside the conversation; a waiting release lands
+in the bell instead of a strip above the composer.
+
+![Review panel with an inline diff](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-review.png)
+![Update offer in the sidebar notifications](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-notifications.png)
 
 ## Contributing
 

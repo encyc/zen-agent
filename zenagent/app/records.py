@@ -150,15 +150,19 @@ def compaction(tokens_before: int, reason: str) -> dict:
     }
 
 
-def open_session(path: Path) -> Session:
+def open_session(path: Path, *, lazy: bool = False) -> Session:
     """A session whose replay cuts at compaction boundaries (model context).
 
     Every context consumer opens sessions through this — resume, switch, undo,
     retry seed the Agent from the compacted segment only — while listings,
     titles and export keep the whole file (bare ``Session``). The display reads
     the full view and positions the divider from ``Session.segment_start``.
+
+    ``lazy`` is for sessions the runtime itself just created: their header and
+    starting records stay in memory until the first message (see
+    :meth:`Session.materialize`), so an idle launch writes no transcript.
     """
-    return Session(path, boundary=is_compaction)
+    return Session(path, boundary=is_compaction, lazy=lazy)
 
 
 def run_start() -> dict:

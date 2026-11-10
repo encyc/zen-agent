@@ -12,6 +12,8 @@
 
 仓库 <https://github.com/encyc/zen-agent> · PyPI 包名 `zenagent-py`（import 名 `zenagent`）
 
+![ZenAgent 桌面端：带工具卡和内联 diff 的编码会话](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-chat.png)
+
 ## 安装
 
 ```bash
@@ -70,8 +72,8 @@ TUI 每小时最多查一次 PyPI，有新版本时安静打一行；`-p`/`--jso
 - **纯 Python。** 没有 node runtime、没有编译步骤、中间没有 daemon —— `pip install` 就跑。
 - **一套内核，四个入口。** TUI、REPL、headless（`-p`/`--json`）和 `zen rpc`（JSONL 协议）
   驱动的是同一个运行时，行为一致。
-- **做 GUI 是写客户端，不是重写。** RPC 面已经存在，所以规划中的 Tauri 应用会复用它，
-  而不是 fork 一份内核。
+- **做 GUI 是写客户端，不是重写。** RPC 面已经存在，所以 Tauri 桌面端复用它，
+  而不是 fork 一份内核 —— 提供 macOS、Windows、Linux 安装包。
 - **三十行嵌进你的程序。** `Agent(model=..., tools=..., api_key=...)` 加一个 subscribe 回调：
   你的工具、你的存储、你的事件循环。
 - **扩展不用重启。** skills、提示词模板、扩展、MCP server、自定义 provider 全是文件，
@@ -90,6 +92,16 @@ TUI 每小时最多查一次 PyPI，有新版本时安静打一行；`-p`/`--jso
 | **48 条命令** | TUI 与 REPL 共用同一套斜杠命令，支持 Tab 补全 | [斜杠命令](https://github.com/encyc/zen-agent/blob/main/docs/guide/commands.md) |
 | **可扩展** | skills、模板、扩展、MCP server、自定义 provider —— 全是文件驱动 | [扩展](https://github.com/encyc/zen-agent/blob/main/docs/guide/extensions.md) · [MCP](https://github.com/encyc/zen-agent/blob/main/docs/guide/mcp.md) |
 | **可嵌入** | Python 里用 `Agent` + `subscribe`；其它语言用 `zen rpc` | [RPC 与 SDK](https://github.com/encyc/zen-agent/blob/main/docs/guide/rpc-sdk.md) |
+| **桌面端** | 同一个 `zen rpc` 之上的 Tauri 外壳：会话、工作面板、审批、自动更新 | [desktop](https://github.com/encyc/zen-agent/blob/main/desktop/README.md) |
+
+### 桌面端
+
+同一个内核，套一层 Tauri 外壳：流式工具卡、内联 diff、审查与文件工作面板，
+还有一个负责新版本提示的通知铃。diff 和文件留在对话旁边，新版本落在铃里，
+而不是输入框上方的一条横幅。
+
+![审查面板与内联 diff](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-review.png)
+![侧栏通知里的更新提示](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-notifications.png)
 
 ## 参与贡献
 

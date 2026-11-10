@@ -233,7 +233,9 @@ export function Sidebar(props: { onCollapse(): void }) {
   }
 
   const newSessionIn = async (path: string) => {
-    await openProject(path)
+    // A deliberate new conversation: boot that project fresh rather than
+    // resuming its latest and switching away one frame later.
+    await openProject(path, null)
     await newSession()
   }
 

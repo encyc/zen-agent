@@ -58,9 +58,10 @@ cannot do is attest where it came from.
 
 Updates are checked in the background after launch (cached for an hour, silent
 on failure) and can be turned off in Settings → Conversation. When a new
-version exists, a banner above the chat offers *Update and restart*; it stays
-disabled while a turn is running or an approval is waiting, because installing
-restarts the app. The `.deb` cannot self-update — download the new package.
+version exists, the sidebar notification bell offers *Update and restart*; the
+button stays hidden while a turn is running or an approval is waiting, because
+installing restarts the app. The `.deb` cannot self-update — download the new
+package.
 
 Only builds published with an update signature can self-update; a release whose
 notes say "no update signature" must be downloaded manually.
