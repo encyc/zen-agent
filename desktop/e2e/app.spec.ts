@@ -2755,6 +2755,61 @@ test('a warm project switch still resumes the requested session', async ({ page 
   assert.equal(await page.evaluate(() => window.__ZEN_E2E__.starts.length), 1)
 })
 
+test('switching sessions in one project resumes without a project switch', async ({
+  page,
+}) => {
+  // Both a and b live in /work/p; the switch must stay inside its slot.
+  await page.addInitScript(() => localStorage.setItem('zen.last.cwd', '/work/p'))
+  await boot(page, initialState())
+  await page.locator('[data-session-path="/sessions/b.jsonl"]').click()
+  // Same resident runtime: the shell addresses the session directly, and the
+  // host keeps whatever the other session is doing.
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__ZEN_E2E__.calls
+          .filter((call) => call.type === 'session' && call.op === 'resume')
+          .map((call) => call.path),
+      ),
+    )
+    .toEqual(['/sessions/b.jsonl'])
+  assert.equal(await page.evaluate(() => window.__ZEN_E2E__.projectOps?.length ?? 0), 0)
+  assert.equal(await page.evaluate(() => window.__ZEN_E2E__.starts.length), 1)
+})
+
+test('a sibling session frame cannot paint the visible transcript', async ({ page }) => {
+  await boot(page, initialState())
+  // The session list lands asynchronously after boot; its rows prove the
+  // active session is pinned before the frame assertions below.
+  await expect(page.locator('[data-session-path="/sessions/b.jsonl"]')).toBeVisible()
+
+  const emit = (session: string, text: string) =>
+    page.evaluate(
+      ({ session, text }) => {
+        window.__ZEN_E2E_EMIT__('rpc:frame', {
+          event: 'rpc:frame',
+          id: 1,
+          payload: {
+            frame: {
+              type: 'event',
+              session,
+              event: {
+                type: 'message_start',
+                message: { role: 'user', text },
+              },
+            },
+          },
+        })
+      },
+      { session, text },
+    )
+
+  await emit('/sessions/b.jsonl', '后台会话的进度')
+  await expect(page.getByText('后台会话的进度')).toHaveCount(0)
+  await emit('/sessions/a.jsonl', '当前会话的消息')
+  await expect(page.getByText('当前会话的消息')).toBeVisible()
+})
+
 test('a fresh runtime is put back onto the last mode, model and thinking', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('zen.pref.mode', 'plan')

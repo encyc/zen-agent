@@ -405,6 +405,8 @@ export interface PendingApproval {
   reason: string | null
   /** The slot that asked; null for a host-level or v2-server frame. */
   project?: string | null
+  /** The session that asked; a background sibling stays queued. */
+  session?: string | null
 }
 
 interface ApprovalState {
@@ -429,6 +431,8 @@ export interface PendingAsk {
   questions: AskQuestion[]
   /** The slot that asked; null for a host-level or v2-server frame. */
   project?: string | null
+  /** The session that asked; a background sibling stays queued. */
+  session?: string | null
 }
 
 interface AskState {

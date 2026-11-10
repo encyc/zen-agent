@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { frameBelongsTo, frameError } from '../src/rpc/frames.ts'
+import {
+  frameBelongsTo,
+  frameError,
+  frameSessionBelongsTo,
+} from '../src/rpc/frames.ts'
 
 test('error frames and rejected results both yield a message', () => {
   assert.equal(frameError({ type: 'error', message: 'boom' }), 'boom')
@@ -18,4 +22,19 @@ test('a frame belongs when untagged or tagged with the active project', () => {
 
 test('without an active project every frame passes', () => {
   assert.equal(frameBelongsTo({ project: '/work/q' }, null), true)
+})
+
+test('a frame belongs to the session on screen, or passes untagged', () => {
+  assert.equal(frameSessionBelongsTo({}, '/work/p/s1.jsonl'), true)
+  assert.equal(frameSessionBelongsTo({ session: '' }, '/work/p/s1.jsonl'), true)
+  assert.equal(
+    frameSessionBelongsTo({ session: '/work/p/s1.jsonl' }, '/work/p/s1.jsonl'),
+    true,
+  )
+  // A sibling session of the same project must not paint this pane.
+  assert.equal(
+    frameSessionBelongsTo({ session: '/work/p/s2.jsonl' }, '/work/p/s1.jsonl'),
+    false,
+  )
+  assert.equal(frameSessionBelongsTo({ session: '/work/p/s2.jsonl' }, null), true)
 })

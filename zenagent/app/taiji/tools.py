@@ -228,7 +228,7 @@ def taiji_supervisor_for(runtime: Any) -> TaijiSupervisor:
 
     root = project.find_project_root(runtime.root)
     worker_model = os.environ.get("ZENAGENT_WORKER_MODEL") or None
-    return get_taiji(
+    supervisor = get_taiji(
         repo_root=root,
         sessions_dir=project.project_sessions_dir(root=root),
         registry_path=project.project_dir(root=root) / "taiji.json",
@@ -236,6 +236,12 @@ def taiji_supervisor_for(runtime: Any) -> TaijiSupervisor:
         chat=getattr(runtime, "taiji_chat", None),
         mode_of=lambda: runtime.mode,
     )
+    # A project can run several sessions; the fleet is shared, so messages it
+    # injects must follow whichever runtime is actually on the taiji session.
+    if is_taiji_session(getattr(getattr(runtime, "session", None), "path", None)):
+        supervisor.chat = getattr(runtime, "taiji_chat", None)
+        supervisor.mode_of = lambda: runtime.mode
+    return supervisor
 
 
 def runtime_taiji_provider(runtime: Any) -> SUPERVISOR_PROVIDER:

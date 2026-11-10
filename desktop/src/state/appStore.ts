@@ -18,6 +18,7 @@ import type {
   ServerFrame,
   SkillRow,
   StatusResult,
+  Usage,
 } from '../rpc/types'
 import {
   useApprovalStore,
@@ -39,7 +40,12 @@ import { nextDraft } from './pending'
 import { latestSessionForProject } from './latestSession'
 import { loadPrefs, replayFrames, savePref, spawnArgs } from './prefs'
 import { PaneCache } from './projectPanes'
-import { frameBelongsTo, frameErrorNotice, type ReplyLike } from '../rpc/frames'
+import {
+  frameBelongsTo,
+  frameErrorNotice,
+  frameSessionBelongsTo,
+  type ReplyLike,
+} from '../rpc/frames'
 import { reportRefreshFailure } from './refresh'
 
 export type ConnectionState = 'idle' | 'starting' | 'ready' | 'exited'
@@ -157,8 +163,10 @@ let olderInFlight = false
 /** Frame listeners register once per process: connect() may run again after
  * an exit, and stacked handlers would duplicate every node in the chat. */
 let wired = false
-/** Last seen cumulative usage, for computing a turn's delta row. */
-let lastUsage: { input: number; output: number; cache_read: number; cache_write: number; cost: number } | null = null
+/** Last seen cumulative usage per session, for computing a turn's delta row.
+ * Sessions of one project run in parallel, so one global baseline would read
+ * the other session's totals. */
+const usageBaselines = new Map<string, Usage>()
 /** Transcript panes kept across project switches (pi-desktop's retained
  * panes; three covers the usual back-and-forth). */
 const paneCache = new PaneCache()
@@ -207,15 +215,16 @@ async function bootChild(
   // A resumed child already carries the target session, so the global list
   // only feeds the sidebar and must not gate the swap.
   const resumed = opts.resume
+  // Pin the target session before the snapshot: live frames are filtered by
+  // session, so a resumed child's first deltas must not be mistaken for a
+  // background session's.
+  if (resumed !== undefined) useSessionStore.getState().setCurrent(resumed)
   const [loaded] = await Promise.all([
     get().refreshTranscript(),
     restorePrefs(get),
     resumed === undefined ? get().refreshSessions() : Promise.resolve(),
   ])
-  if (resumed !== undefined) {
-    useSessionStore.getState().setCurrent(resumed)
-    void get().refreshSessions()
-  }
+  if (resumed !== undefined) void get().refreshSessions()
   // A resume the child refused (the file vanished between list and click)
   // falls back to a fresh session: never leave the previous project's
   // transcript on screen in that case.
@@ -312,9 +321,22 @@ export const useAppStore = create<AppState>((set, get) => ({
       .send<StatusResult>({ type: 'status' })
       .then((status) => {
         if (status.type === 'result' && status.ok) {
+          // A request sent before a session switch can answer for the session
+          // that was on screen then; landing it would flip the composer's
+          // busy state to the wrong session's.
+          const active = useSessionStore.getState().currentPath
+          if (
+            active !== null &&
+            typeof status.session === 'string' &&
+            status.session !== active
+          ) {
+            return
+          }
           useStatusStore.getState().set(status)
           set({ busy: Boolean(status.running) })
-          if (status.usage !== undefined) lastUsage = status.usage
+          if (status.usage !== undefined) {
+            usageBaselines.set(status.session ?? '', status.usage)
+          }
         }
       })
       .catch((error) => reportRefreshFailure('status', error))
@@ -531,8 +553,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (canPaint) useChatStore.getState().restorePane(cached.pane)
 
     set({ switching: { path }, busy: false })
-    // Usage deltas are per session; a new project starts a new baseline.
-    lastUsage = null
 
     const rpc = get().client()
     try {
@@ -562,8 +582,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       useProjectStore.getState().addProject(root)
 
-      // A resident slot ignores `resume` (the host keeps what it had), so the
-      // requested session is resumed explicitly when it differs.
+      // The host answers with the session its slot holds now: an exact holder
+      // is already on `resume`, while an idle slot may still be on the old
+      // session, so the requested one is resumed explicitly when it differs.
       const serverSession =
         typeof frame.session === 'string' && frame.session !== '' ? frame.session : null
       let effective = serverSession
@@ -673,7 +694,18 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (images.length > 0) payload.images = images.map((image) => image.path)
     try {
       const frame = await get().client().send(payload)
-      handleResultFrame(frame, { set, get })
+      // The person may have switched sessions while this turn ran: its result
+      // (and usage row) belongs to the session it was sent to, not the pane
+      // that is on screen now.
+      if (
+        frameBelongsTo(frame, get().project) &&
+        frameSessionBelongsTo(frame, useSessionStore.getState().currentPath)
+      ) {
+        handleResultFrame(frame, { set, get })
+      } else {
+        void get().refreshStatus()
+        void get().refreshSessions()
+      }
     } catch {
       // transport-level failure: the exit listener already flagged it
     }
@@ -824,9 +856,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   async resumeSession(path) {
-    await runSessionOp(get, { type: 'session', op: 'resume', path }, () =>
-      refreshAfterSessionChange(get),
-    )
+    let frame: Record<string, unknown>
+    try {
+      frame = await get().client().send({ type: 'session', op: 'resume', path })
+    } catch (error) {
+      showActionError(error)
+      return
+    }
+    if (showFrameError(frame)) return
+    // The host may answer with the canonical path of the session it activated.
+    const effective = typeof frame.path === 'string' && frame.path !== '' ? frame.path : path
+    useSessionStore.getState().setCurrent(effective)
+    await refreshAfterSessionChange(get)
   },
 
   async enterTaiji() {
@@ -1036,17 +1077,21 @@ async function restorePrefs(get: () => AppState): Promise<void> {
 }
 
 function handleFrame(frame: ServerFrame, handling: FrameHandling): void {
+  const project =
+    typeof frame.project === 'string' && frame.project !== '' ? frame.project : null
+  const session =
+    typeof frame.session === 'string' && frame.session !== '' ? frame.session : null
   if (frame.type === 'event') {
     const event = frame.event
-    const project =
-      typeof frame.project === 'string' && frame.project !== '' ? frame.project : null
     // Prompts are answered by prefix-routed ids; a background slot's question
-    // must stay in the queue even while another project is on screen.
+    // must stay in the queue even while another project or session is on
+    // screen.
     if (event.type === 'ask_request' && event.request_id) {
       useAskStore.getState().push({
         requestId: event.request_id,
         questions: event.questions ?? [],
         project,
+        session,
       })
       return
     }
@@ -1063,12 +1108,20 @@ function handleFrame(frame: ServerFrame, handling: FrameHandling): void {
         target: event.target ?? null,
         reason: event.reason ?? null,
         project,
+        session,
       })
       return
     }
-    // Chat events from a background slot belong to its own pane, which is
-    // refreshed from its snapshot when the person switches back.
+    // Chat events from a background slot or session belong to its own pane,
+    // which is refreshed from its snapshot when the person switches back.
     if (!frameBelongsTo(frame, handling.get().project)) return
+    if (!frameSessionBelongsTo(frame, useSessionStore.getState().currentPath)) {
+      // A background session still changes the sidebar (titles, activity).
+      if (event.type === 'agent_end' || event.type === 'turn_end') {
+        void handling.get().refreshSessions()
+      }
+      return
+    }
     useChatStore.getState().applyEvent(event)
     if (event.type === 'agent_end' || event.type === 'turn_end') {
       void handling.get().refreshStatus()
@@ -1076,6 +1129,7 @@ function handleFrame(frame: ServerFrame, handling: FrameHandling): void {
     return
   }
   if (!frameBelongsTo(frame, handling.get().project)) return
+  if (!frameSessionBelongsTo(frame, useSessionStore.getState().currentPath)) return
   handleResultFrame(frame as Record<string, unknown>, handling)
 }
 
@@ -1094,23 +1148,19 @@ function handleResultFrame(frame: Record<string, unknown>, handling: FrameHandli
   // A prompt result closes a turn: land its usage row (the delta since the
   // previous snapshot — the wire usage is session-cumulative) and refresh.
   if ('termination' in frame && 'usage' in frame) {
-    const total = frame.usage as {
-      input: number
-      output: number
-      cache_read: number
-      cache_write: number
-      cost: number
-    }
-    const delta = lastUsage === null
+    const total = frame.usage as Usage
+    const key = typeof frame.session === 'string' ? frame.session : ''
+    const previous = usageBaselines.get(key)
+    const delta = previous === undefined
       ? total
       : {
-          input: Math.max(0, total.input - lastUsage.input),
-          output: Math.max(0, total.output - lastUsage.output),
-          cache_read: Math.max(0, total.cache_read - lastUsage.cache_read),
-          cache_write: Math.max(0, total.cache_write - lastUsage.cache_write),
-          cost: Math.max(0, total.cost - lastUsage.cost),
+          input: Math.max(0, total.input - previous.input),
+          output: Math.max(0, total.output - previous.output),
+          cache_read: Math.max(0, total.cache_read - previous.cache_read),
+          cache_write: Math.max(0, total.cache_write - previous.cache_write),
+          cost: Math.max(0, total.cost - previous.cost),
         }
-    lastUsage = total
+    usageBaselines.set(key, total)
     useChatStore.getState().pushUsage(
       delta,
       null,
