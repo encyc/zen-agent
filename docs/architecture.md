@@ -180,8 +180,9 @@ agent_end 事件
 |---|---|---|
 | [`architecture-simplify.html`](architecture-simplify.html) | 模块级（~30 节点） | 快速理解与对外介绍；单列版式，窄窗口可用 |
 | [`architecture-full.html`](architecture-full.html) | 逐文件级（64 节点 / 58 边） | 架构设计与需求评审的工作底图；悬停任意节点可见该节点合并的文件清单与关键行为 |
+| [`architecture-full-v2.html`](architecture-full-v2.html) | 同 full（60 节点 / 50 边，原生渲染） | 演示/评审用渲染版（Archify 生成：聚焦视图 + 源码行级证据，经 validate/deliver/check/browser-check 门禁）；v1 仍是逐文件 tooltip 索引 |
 
-两图均为独立 HTML（无构建、无外部依赖、跟随系统亮暗主题），悬停节点显示细节并高亮其全部连线。
+三图均为独立 HTML（无构建、无外部依赖、跟随系统亮暗主题），悬停/聚焦节点显示细节。v2 与 v1 语义一致，少数连线（结果回填回边、persist→session、mcp→tools、工具描述块等）转为卡片与子标签说明；`retry` 并入 providers/registry 节点。
 
 **治理规则**（对人与 agent 同样生效）：
 

@@ -1,0 +1,708 @@
+<!doctype html>
+<!-- ZenAgent 架构图 · 完整版（full）
+     逐文件粒度：全仓运行时模块 → 64 节点 / 每节点悬停可见合并文件与关键细节。
+     本文件由 docs/architecture-simplify.html 逐层丰富而来；治理约定见
+     docs/architecture.md「架构图资产」：架构/需求设计须经图讨论，
+     CHANGELOG 每版须注明对图的增(node)/删(node)/改(node·edge) 。 -->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ZenAgent 架构 · 完整版</title>
+<style>
+:root{
+  color-scheme: light dark;
+  --background:#ffffff; --foreground:#18181b; --card:#ffffff;
+  --popover:#ffffff; --popover-foreground:#18181b;
+  --primary:#2563eb; --muted:#f4f4f5; --muted-foreground:#71717a;
+  --border:#e4e4e7; --orange:#d97706;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --background:#101013; --foreground:#e9e9ec; --card:#17171c;
+    --popover:#1d1d24; --popover-foreground:#e9e9ec;
+    --primary:#6aa2ff; --muted:#1f1f26; --muted-foreground:#9d9da8;
+    --border:#2e2e37; --orange:#f59e0b;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0 auto; max-width:1280px; padding:24px 20px 48px; overflow-x:auto;
+  font:14px/1.55 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  background:var(--background); color:var(--foreground);}
+h2{font-size:19px;font-weight:600;letter-spacing:-.01em;margin:0}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--muted);padding:0 3px;border-radius:4px}
+b{font-weight:500}
+.zf-tip{position:fixed; z-index:99; max-width:360px; background:var(--popover); color:var(--popover-foreground);
+  border:1px solid var(--border); border-radius:10px; padding:8px 11px; font-size:12px; line-height:1.5;
+  pointer-events:none; box-shadow:0 6px 20px rgba(0,0,0,.15);}
+
+/* —— 图本体 —— */
+#zenfull{ --zf-edge: color-mix(in srgb, var(--foreground) 42%, transparent);
+  --zf-imp: color-mix(in srgb, var(--primary) 62%, transparent); }
+#zenfull h2{margin:0}
+#zenfull .zf-meta{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;
+  color:var(--muted-foreground);font-size:12px;margin:3px 0 0}
+#zenfull .zf-meta a{color:inherit}
+#zenfull .zf-legend{display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px;
+  margin:13px 0 16px;padding:9px 14px;border:1px solid var(--border);border-radius:10px;
+  background:color-mix(in srgb, var(--muted) 30%, transparent)}
+#zenfull .zf-legend .key{display:inline-flex;align-items:center;gap:7px;font-size:12px}
+#zenfull .zf-legend .key.mut{color:var(--muted-foreground)}
+#zenfull .zf-legend i.ln{display:inline-block;width:26px;height:0;border-top:2px solid var(--zf-edge);border-radius:1px}
+#zenfull .zf-legend i.ln.imp{border-top:1.5px dashed var(--zf-imp)}
+#zenfull .zf-legend i.ln.tj{border-top:2px dashed color-mix(in srgb, var(--orange) 72%, transparent)}
+#zenfull .zf-legend i.sq{display:inline-block;width:11px;height:11px;border:1px dashed var(--muted-foreground);border-radius:3px}
+#zenfull .zf-legend i.fi-sample{display:inline-block;font-size:11px;line-height:1.4;color:var(--muted-foreground);
+  background:var(--card);border:1px solid var(--border);border-radius:7px;padding:0 5px;font-style:normal}
+#zenfull .zf-canvas{position:relative;padding:8px 64px 14px 34px;min-width:1180px}
+#zenfull .zf-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;overflow:visible}
+#zenfull .zf-labels{position:absolute;inset:0;pointer-events:none;z-index:2}
+#zenfull .zf-row{display:flex;flex-wrap:wrap;justify-content:center;gap:10px}
+#zenfull .zf-mid{display:flex;justify-content:center;margin:30px 0 32px}
+#zenfull .zf-node{
+  position:relative;z-index:1;cursor:default;outline:none;
+  background:var(--card);border:1px solid var(--border);border-radius:9px;
+  padding:7px 11px;display:flex;flex-direction:column;gap:2px;
+  overflow-wrap:anywhere;transition:border-color .15s, box-shadow .15s;}
+#zenfull .zf-node:hover, #zenfull .zf-node:focus-visible{
+  border-color:color-mix(in srgb, var(--primary) 55%, var(--border));
+  box-shadow:0 2px 10px color-mix(in srgb, var(--foreground) 10%, transparent);}
+#zenfull .zf-node .t{font-weight:500;font-size:12.5px;line-height:1.3}
+#zenfull .zf-node .d{color:var(--muted-foreground);font-size:11.5px;line-height:1.35}
+#zenfull .zf-node .t code{background:none;padding:0}
+#zenfull .zf-node.ext{background:transparent;border-style:dashed}
+#zenfull .zf-node.store{background:color-mix(in srgb, var(--muted) 60%, transparent);border-style:dashed}
+#zenfull .zf-node.wide{max-width:470px}
+#zenfull .zf-node .fi{position:absolute;top:-10px;right:9px;font-size:11px;line-height:1.4;
+  color:var(--muted-foreground);background:var(--card);border:1px solid var(--border);
+  border-radius:7px;padding:0 6px;font-variant-numeric:tabular-nums}
+#zenfull .zf-node .fi.fi-hot{color:var(--primary);border-color:color-mix(in srgb, var(--primary) 45%, var(--border))}
+#zenfull .zf-node.zf-pin{border-color:color-mix(in srgb, var(--primary) 70%, var(--border));
+  box-shadow:0 0 0 1.5px color-mix(in srgb, var(--primary) 40%, transparent)}
+#zenfull .zf-grid{display:grid;grid-template-columns:repeat(5, minmax(150px, 1fr));column-gap:96px}
+#zenfull .zf-col{display:flex;flex-direction:column;align-items:stretch;gap:24px}
+#zenfull .zf-cap{color:var(--muted-foreground);font-size:11px;font-weight:500;letter-spacing:.05em;
+  margin:0 0 -17px;min-height:13px;padding-bottom:6px;
+  border-bottom:1px solid color-mix(in srgb, var(--border) 72%, transparent)}
+#zenfull .zf-cap.tj{color:var(--orange);border-bottom-color:color-mix(in srgb, var(--orange) 30%, transparent)}
+#zenfull .zf-taiji{
+  margin-top:36px;border-radius:12px;padding:10px 14px 44px;
+  border:1px dashed color-mix(in srgb, var(--orange) 55%, var(--border));
+  background:color-mix(in srgb, var(--orange) 4%, transparent);}
+#zenfull .zf-taiji .zf-row{flex-wrap:nowrap}
+#zenfull .zf-taiji .zf-node{flex:1 1 0;min-width:0;background:color-mix(in srgb, var(--orange) 7%, var(--card))}
+#zenfull .zf-taiji .zf-node .t{white-space:nowrap;font-size:12.5px}
+#zenfull .zf-band2{
+  margin-top:28px;border-radius:12px;padding:10px 14px 64px;
+  border:1px solid var(--border);
+  background:color-mix(in srgb, var(--muted) 35%, transparent);}
+#zenfull .zf-band2 .zf-row{flex-wrap:nowrap}
+#zenfull .zf-band2 .zf-node{flex:1 1 0;min-width:0}
+#zenfull .zf-band2 .zf-node .t{white-space:nowrap;font-size:12.5px}
+#zenfull .zf-note{color:var(--muted-foreground);font-size:12px;margin:14px 0 0;padding-top:11px;
+  border-top:1px solid color-mix(in srgb, var(--border) 60%, transparent)}
+
+#zenfull path.zf-e{fill:none;stroke:var(--zf-edge);stroke-width:1.5;transition:opacity .15s}
+#zenfull path.zf-e.tj{stroke:color-mix(in srgb, var(--orange) 80%, transparent)}
+#zenfull path.zf-e.ext{stroke-dasharray:5 4}
+#zenfull .zf-arw{fill:var(--zf-edge)}
+#zenfull .zf-arw-tj{fill:color-mix(in srgb, var(--orange) 80%, transparent)}
+#zenfull path.zf-h{fill:none;stroke:var(--zf-imp);stroke-width:1.4;stroke-dasharray:4 3;transition:opacity .15s}
+#zenfull .zf-arw-h{fill:var(--zf-imp)}
+#zenfull .elabel{position:absolute;transform:translate(-50%,-50%);white-space:nowrap;
+  background:var(--popover);color:var(--popover-foreground);border:1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  border-radius:6px;padding:1px 6px;font-size:11px;line-height:1.4;transition:opacity .15s}
+#zenfull .elabel.tj{background:color-mix(in srgb, var(--orange) 12%, var(--popover))}
+#zenfull .zf-clabel{position:absolute;transform:translate(-50%,-50%);white-space:nowrap;
+  font-size:11px;line-height:1.4;color:var(--primary);background:var(--popover);
+  border:1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+  border-radius:5px;padding:0 5px;pointer-events:none}
+#zenfull.zf-focus path.zf-e:not(.hot){opacity:.16}
+#zenfull.zf-focus .elabel:not(.hot){opacity:.15}
+#zenfull.zf-focus path.zf-h:not(.hot){opacity:.05}
+@media (max-width:700px){
+  #zenfull .zf-grid{grid-template-columns:1fr}
+  #zenfull .zf-svg, #zenfull .zf-labels{display:none}
+  #zenfull .zf-taiji .zf-row{flex-wrap:wrap}
+  #zenfull .zf-taiji .zf-node{flex:1 1 46%}
+  #zenfull .zf-band2 .zf-row{flex-wrap:wrap}
+  #zenfull .zf-band2 .zf-node{flex:1 1 46%}
+}
+@media (prefers-reduced-motion: reduce){#zenfull *{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div id="zenfull">
+  <p class="sr-only">ZenAgent 完整版模块关系图：界面行（cli 四前端 + Tauri 桌面）→ bootstrap.prepare → 五列（会话存储 / 对话控制与内核 / 权限工具子代理 / 扩展源与提示词 / 基础配置观测）→ 太极编排带 → 协议层横带。悬停任意节点查看合并文件与关键细节，并高亮其连线。</p>
+
+  <h2>ZenAgent 模块关系图（完整版）</h2>
+  <p class="zf-meta">结构快照 2026-11-09 · 经 <code>scripts/import_graph.py</code> 全量核对 · 简化版 <a href="architecture-simplify.html"><code>architecture-simplify.html</code></a></p>
+  <div class="zf-legend" role="list" aria-label="图例">
+    <span class="key" role="listitem"><i class="ln solid"></i>调用 / 数据流</span>
+    <span class="key" role="listitem"><i class="ln imp"></i>静态 import（箭头指向被依赖方，悬停标调用方法）</span>
+    <span class="key" role="listitem"><i class="ln tj"></i>太极编排面</span>
+    <span class="key" role="listitem"><i class="sq"></i>外部 / 存储</span>
+    <span class="key mut" role="listitem"><i class="fi-sample">⟵12</i>被引文件数 · 悬停看细节 · 点击钉住</span>
+  </div>
+
+  <div class="zf-canvas">
+    <!-- 界面行 -->
+    <div class="zf-row">
+      <div class="zf-node" data-node="main" data-tooltip="cli/main.py · 入口：参数解析+子命令路由(rpc/sessions/prompts/usage/export/doctor)+-p/--json headless；安装 crash hook。并入：flags·doctor·exportcmd·usagecmd·sessionscmd·prompts_cmd"><span class="t"><code>cli/main.py</code></span><span class="d">入口 · headless -p/--json</span><span class="fi" aria-hidden="true">⟵7</span></div>
+      <div class="zf-node" data-node="repl" data-tooltip="cli/repl.py · prompt_toolkit+rich 行式 REPL；并入 render(事件→rich)·theme·keybindings·editor·attachments；运行中输入=steering"><span class="t"><code>cli/repl.py</code></span><span class="d">REPL · 行式</span><span class="fi" aria-hidden="true">⟵7</span></div>
+      <div class="zf-node" data-node="tui" data-tooltip="cli/tui/ · ZenAgentApp(Textual)：app_parts 10 Mixin(drafts/queue/commands/sessions/models/display/views/hints/appearance/update_notice) + widgets(transcript/tool_card/sidebar/prompt_input/status_band/todo_hud/rows/markdown_stream…) + screens(palette/modals/pickers/secrets/providers/memory_manager/job_log/context_breakdown/todo_list) + palette/textutil 色源"><span class="t"><code>cli/tui/</code></span><span class="d">TUI · Textual 全屏</span><span class="fi" aria-hidden="true">⟵6</span></div>
+      <div class="zf-node" data-node="rpc" data-tooltip="cli/rpc/ · cli.py 装配(prepare+broker.set_confirm+ask_handler+taiji 引导)；server.py 分发：ops_config(secrets/skills/mcp/limits/model/mode/project+probes)·ops_files(fs_list/read/index+memory)·ops_session(session/transcript/fork/undo)·ops_taiji(board/message/merge/kill/peek+transcript)；codec.serialize_event 协议 v2"><span class="t"><code>cli/rpc/</code></span><span class="d">zen rpc · JSONL v2</span><span class="fi fi-hot" aria-hidden="true">⟵10</span></div>
+      <div class="zf-node" data-node="drpc" data-tooltip="desktop/src-tauri/src/rpc.rs+lib.rs · rpc_start(解析 zen 二进制/sidecar·login-shell env 3s 超时)·rpc_send·rpc_stop(shutdown 帧→kill)；result/error 按 id 关联，其余 emit rpc:frame，stderr→rpc:stderr，退出→rpc:exit；runtime_missing 二分类；托盘/窗口/更新由 lib.rs 管"><span class="t">src-tauri</span><span class="d">Tauri RPC 桥 · Rust</span></div>
+      <div class="zf-node ext" data-node="desk" data-tooltip="desktop/src · App/Sidebar/ChatView/InputBar(+ApprovalPanel/AskCard)/RightPanel(Taiji·Files·Memory·Review·Worktree)/SettingsPage/CommandPalette；state：appStore 编排 12 store(chatStore/taijiStore/approval/ask/composer/catalog/secrets/skills/mcp…)；rpc/client.ts+i18n(zh/en)+styles 设计令牌"><span class="t">桌面 GUI</span><span class="d">Tauri · React 前端</span></div>
+    </div>
+
+    <!-- 装配 -->
+    <div class="zf-mid">
+      <div class="zf-node wide" data-node="prep" data-tooltip="app/bootstrap.py · 四前端唯一装配序列：build_broker_for → Runtime.bootstrap → ChatController → AppServices(models/sessions) → build_default_commands；headless views=False 只建 runtime+broker"><span class="t"><code>bootstrap.prepare()</code></span><span class="d">broker → Runtime → Chat → Services → commands</span><span class="fi" aria-hidden="true">⟵5</span></div>
+    </div>
+
+    <!-- 五列 -->
+    <div class="zf-grid">
+      <div class="zf-col">
+        <p class="zf-cap">CLI 支撑 · 会话 · 存储</p>
+        <div class="zf-node" data-col="1" data-node="completion" data-tooltip="cli/completion.py · ReplCompleter：斜杠命令与 @ 路径补全；slash_commands() 直接从活注册表派生；被 repl 与 tui.app_parts.hints 共享"><span class="t"><code>cli/completion</code></span><span class="d">补全 · repl+TUI 共享</span><span class="fi" aria-hidden="true">⟵2</span></div>
+        <div class="zf-node" data-col="1" data-node="skillcmds" data-tooltip="app/skill_commands.py · parse/render_skill_prompt·build_skill_submission；被 views、cli.completion、cli.rpc(codec/server/ops_config) 共享"><span class="t"><code>app/skill_commands</code></span><span class="d">/skill: 解析·渲染</span><span class="fi" aria-hidden="true">⟵5</span></div>
+        <div class="zf-node" data-col="1" data-node="evsub" data-tooltip="AgentEvent 订阅者：各前端 partial 渲染 · guard · tracer · metrics；TUI/RPC/REPL 各自挂订阅回调"><span class="t">事件订阅者</span><span class="d">渲染 · guard · tracer</span></div>
+        <div class="zf-node" data-col="1" data-node="persist" data-tooltip="agent_end → session.append 追加 JSONL；SnapshotJournal(app/journal.py，内容寻址 blobs) 记录写文件前值供 /restore"><span class="t"><code>persist</code></span><span class="d">落盘订阅者 · journal</span><span class="fi" aria-hidden="true">⟵9</span></div>
+        <div class="zf-node" data-col="1" data-node="sess" data-tooltip="agent/session.py · Session：追加式 JSONL + 边信道记录(tool_end/compaction/run/mode/retry)；断行跳过进 warnings；boundary 支持压缩回放；latest_session/list_sessions/.titles/.pins sidecar"><span class="t"><code>agent/session</code></span><span class="d">JSONL 转录</span><span class="fi fi-hot" aria-hidden="true">⟵12</span></div>
+        <div class="zf-node" data-col="1" data-node="smgr" data-tooltip="app/sessions.py · SessionManager：resume/new/fork(携带 task 目录)/undo(截断重写新文件)/delete(.trash)/rename/adopt/export；经 runtime.switch_session 生效"><span class="t"><code>app/sessions</code></span><span class="d">SessionManager</span><span class="fi" aria-hidden="true">⟵4</span></div>
+        <div class="zf-node" data-col="1" data-node="journal" data-tooltip="app/journal.py SnapshotJournal(backups/ 内容寻址) + app/rewind.py checkpoint/rewind 工具与 transform；/restore 由 commands 调用；消费者 runtime/tools，连线从略"><span class="t"><code>journal · rewind</code></span><span class="d">快照 · 回退</span><span class="fi" aria-hidden="true">⟵4</span></div>
+        <div class="zf-node" data-col="1" data-node="workspace" data-tooltip="app/workspace.py · list_directory/read_file/workspace_files(git ls-files 索引)/worktree_overview；路径限定项目根内；RPC fs_* op 的后端；依赖 app/git 缓存"><span class="t"><code>app/workspace</code></span><span class="d">桌面只读工作区</span><span class="fi" aria-hidden="true">⟵2</span></div>
+        <div class="zf-node" data-col="1" data-node="git" data-tooltip="app/git.py · 带 TTL 的 git_status；chat 状态条、workspace、taiji.supervisor 三处共用（跨层小节点）"><span class="t"><code>app/git</code></span><span class="d">git 状态缓存</span><span class="fi" aria-hidden="true">⟵3</span></div>
+        <div class="zf-node" data-col="1" data-node="proj" data-tooltip="project.py · 项目根=向上最近 .git；状态目录 ~/.zenagent/projects/&lt;slug&gt;-&lt;hash8&gt;/（meta.json·sessions·taiji.json·lock·backups）；relocate_project 随目录改名迁移；被 config/skills/templates/sessions/mcp/taiji/cli 广泛消费（定位 config.toml·记忆·模板·会话目录）"><span class="t"><code>project.py</code></span><span class="d">项目根 · 状态目录</span><span class="fi fi-hot" aria-hidden="true">⟵17</span></div>
+        <div class="zf-node store" data-col="1" data-node="disk" data-tooltip="projects/&lt;key&gt;/sessions/*.jsonl(含 taiji.jsonl) · backups/ · taiji.json·taiji.lock · worktrees/；settings/config 键值与 mcp.json 另见 settings/project 节点"><span class="t"><code>~/.zenagent/</code></span><span class="d">磁盘布局</span></div>
+      </div>
+
+      <div class="zf-col">
+        <p class="zf-cap">对话控制 → 内核</p>
+        <div class="zf-node" data-col="2" data-node="chat" data-tooltip="app/chat.py · ChatController：submit/steer/abort/retry/queue_follow_up；并入 pending(队列)/attachments_state(/image)/subagent_tracker(子代理视图)/retry(截断重试)/error_notice(运行失败→可行动通知：余额·密钥·bug 分类，TUI 横幅/REPL 行/RPC last_error 共用)；依赖 jobs 后台任务"><span class="t"><code>app/chat</code></span><span class="d">ChatController</span><span class="fi" aria-hidden="true">⟵8</span></div>
+        <div class="zf-node" data-col="2" data-node="views" data-tooltip="app/views.py · TranscriptBuilder/messages_to_views/RunStatus/job_views —— UI 无关视图层；app/context.py(上下文占用报告) 并入；被全部前端与 rpc codec 消费"><span class="t"><code>app/views</code></span><span class="d">视图模型层</span><span class="fi" aria-hidden="true">⟵8</span></div>
+        <div class="zf-node" data-col="2" data-node="cmds" data-tooltip="app/commands.py · CommandRegistry+build_default_commands；并入 models(切换)/restore/shake(/shake 降级新会话)/btw(/btw 侧问)/links(/urls)；slash_args·appearance·clipboard 属 UI 细节"><span class="t"><code>app/commands</code></span><span class="d">命令注册表</span><span class="fi" aria-hidden="true">⟵2</span></div>
+        <div class="zf-node" data-col="2" data-node="compact" data-tooltip="app/compact.py · /compact 原地摘要 + should_auto_compact；单次 providers 请求；chat(自动)·commands(/compact)·main(headless 收尾) 三方调用"><span class="t"><code>app/compact</code></span><span class="d">上下文压缩</span><span class="fi" aria-hidden="true">⟵3</span></div>
+        <div class="zf-node" data-col="2" data-node="rt" data-tooltip="app/runtime.py · bootstrap()：config→catalog→model→mode→gate→session→journal→todo→MCP→skills→templates→extensions→context_files→task→_recompose→Agent→订阅(metrics/session_meta/tracer)；switch_session/rediscover/refresh_mcp/close；metrics.py·session_meta.py 并入"><span class="t"><code>app/runtime</code></span><span class="d">Runtime · 装配中枢</span><span class="fi fi-hot" aria-hidden="true">⟵11</span></div>
+        <div class="zf-node" data-col="2" data-node="rec" data-tooltip="_recompose()：base_tools + checkpoint/github/lsp/memory(+memory_write)/todo/task/MCP/read_skill/扩展 + taiji 门禁(taiji 会话剔除 edit/write·注入 5 Router 工具)；system prompt 由 prompts.compose_system 组装；skills/templates/extensions/context_files 的装配连线从略（见右二列各节点）"><span class="t"><code>_recompose()</code></span><span class="d">工具集 + 系统提示词</span><span class="fi" aria-hidden="true">⟵9</span></div>
+        <div class="zf-node" data-col="2" data-node="ag" data-tooltip="agent/agent.py · 长期状态：消息历史/订阅者/steering 队列/abort/wait_for_idle；流式输出时仍可输入；把一次 run 包成 task"><span class="t"><code>agent/agent</code></span><span class="d">Agent · 状态机</span><span class="fi" aria-hidden="true">⟵1</span></div>
+        <div class="zf-node" data-col="2" data-node="lp" data-tooltip="agent/loop.py · agent_loop 纯函数式：prompt+state→事件流；并入 tool_exec(并行+串行独占批)·validate(JSON-schema)·result_budget(截断安全网)·timeouts(每工具预算)·guard(防循环，非权限)；工具失败=错误结果喂回模型"><span class="t"><code>agent/loop</code></span><span class="d">agent_loop · 无状态执行器</span><span class="fi fi-hot" aria-hidden="true">⟵10</span></div>
+      </div>
+
+      <div class="zf-col">
+        <p class="zf-cap">权限 · 工具 · 子代理</p>
+        <div class="zf-node" data-col="3" data-node="broker" data-tooltip="app/permissions.py · PermissionBroker：交互确认层，set_confirm 回调(asyncio 锁串行化弹窗)；REPL/TUI/RPC 各挂实现，headless=deny_all"><span class="t"><code>PermissionBroker</code></span><span class="d">交互确认层</span><span class="fi" aria-hidden="true">⟵6</span></div>
+        <div class="zf-node" data-col="3" data-node="gate" data-tooltip="app/permissions.py · PermissionGate.assess 固定优先级：灾难命令→deny→plan→确认级(破坏性/受保护路径/树外)→放行；before_tool_call 可 block 或重写 args；目标级授权按路径/完整命令；safety.py(GuardPolicy·classify_write_path)·modes.py(plan/ask/zen) 并入。注意 agent/guard.py 是防循环守卫，不在此"><span class="t"><code>PermissionGate</code></span><span class="d">plan · ask · zen 判定</span><span class="fi fi-hot" aria-hidden="true">⟵11</span></div>
+        <div class="zf-node" data-col="3" data-node="tools" data-tooltip="tools/ · fs(read/write/edit/list_dir+read_state 指纹门)·bash·search(glob/grep)·wait·ask·task·todo·memory(+memory_write)·github(只读 gh)·lsp；web_search/fetch 见 web 节点；内部支撑 _result(结果构造)·shell(进程组)·jobs(后台 JobManager) 并入；approval read/write/exec，write/exec 串行独占"><span class="t"><code>tools/</code> 工具集</span><span class="d">base_tools + 注入</span><span class="fi" aria-hidden="true">⟵6</span></div>
+        <div class="zf-node" data-col="3" data-node="subrt" data-tooltip="agent/subagents_runtime.py · TaskManager·run_child·construct_child：watchdog 超时(子侧 abort)·_TaskRecorder 转录持久化·files_touched 统计；非 zen 模式子代理只拿只读工具，仍走父级权限门"><span class="t"><code>subagents_runtime</code></span><span class="d">task 子代理运行时</span><span class="fi" aria-hidden="true">⟵6</span></div>
+        <div class="zf-node" data-col="3" data-node="substore" data-tooltip="agent/subagents.py · SubagentStore：每 task 一个 JSONL(tasks/&lt;session&gt;/)；SubagentLimits 预算；carry_task_dir 跨会话携带(fork)"><span class="t"><code>agent/subagents</code></span><span class="d">子代理转录存储</span><span class="fi" aria-hidden="true">⟵7</span></div>
+        <div class="zf-node" data-col="3" data-node="artifacts" data-tooltip="agent/artifacts.py · ArtifactStore/ArtifactSink：超长工具结果全量落盘 artifacts/，模型侧只见截断引用；Runtime 经 sink 注入内核与子代理"><span class="t"><code>agent/artifacts</code></span><span class="d">超长结果落盘</span><span class="fi" aria-hidden="true">⟵5</span></div>
+        <div class="zf-node" data-col="3" data-node="registry" data-tooltip="agent/registry.py · ToolRegistry：hidden/default_inactive·按名激活覆盖·指纹=(name,description,schema,approval)；reconcile→active() 即 agent.tools"><span class="t"><code>agent/registry</code></span><span class="d">ToolRegistry</span><span class="fi" aria-hidden="true">⟵3</span></div>
+        <div class="zf-node" data-col="3" data-node="protocol" data-tooltip="agent/protocol.py · AgentTool/ToolContext/ToolResultAgent —— 工具协议；MCP/skills/extensions/Taiji 工具等扩展面的唯一 import 目标"><span class="t"><code>agent/protocol</code></span><span class="d">工具协议契约</span><span class="fi" aria-hidden="true">⟵3</span></div>
+        <div class="zf-node" data-col="3" data-node="mcp" data-tooltip="mcp/ · config(mcp.json 全局+项目双层·make_transport)·client(JSON-RPC stdio/HTTP 双传输)·manager(生命周期·失败重连·refresh)；工具桥接为 mcp__&lt;server&gt;__&lt;tool&gt;，read_only 声明→read 级；bootstrap 时启动"><span class="t"><code>mcp/</code></span><span class="d">MCP 客户端·管理</span><span class="fi" aria-hidden="true">⟵5</span></div>
+        <div class="zf-node" data-col="3" data-node="memstore" data-tooltip="agent/memory_store.py · MemoryStore：&lt;root&gt;/.zenagent/memory journal+entries/*.md；memory/memory_write 工具与 TUI 管理屏、RPC memory op 共用"><span class="t"><code>agent/memory_store</code></span><span class="d">项目记忆</span><span class="fi" aria-hidden="true">⟵7</span></div>
+      </div>
+
+      <div class="zf-col">
+        <p class="zf-cap">扩展源 · 提示词 · web ← _recompose 装配</p>
+        <div class="zf-node" data-col="4" data-node="web" data-tooltip="tools/web/ · web_search/fetch(tools.py)→SearchChain(registry 配置顺序·缓存)→providers(deepseek/tavily/brave/bing/无 key 抓取)→query(Google 风格解析)→net(唯一 HTTP 缝)；types 数据契约并入；key 与顺序来自 settings"><span class="t"><code>tools/web/</code></span><span class="d">搜索链 · fetch</span><span class="fi" aria-hidden="true">⟵4</span></div>
+        <div class="zf-node" data-col="4" data-node="ctxfiles" data-tooltip="context_files.py · discover/load_context_files(AGENTS.md 等)→system_prompt_with_context；volatile 提示块"><span class="t"><code>context_files</code></span><span class="d">AGENTS.md 注入</span><span class="fi" aria-hidden="true">⟵3</span></div>
+        <div class="zf-node" data-col="4" data-node="prompts" data-tooltip="prompts/ · spec(block 元数据：缓存类 stable/session/volatile·预算)·registry(包内 blocks+overlay 读取)·render({{var}})·__init__(compose_system 按 SYSTEM_BLOCK_ORDER 拼接·tool_description·compose_compact)；预算：总 9000 chars·工具块 5200；blocks/*.md 正文并入；config.ContextGuard 借 limits 估算预算"><span class="t"><code>prompts/</code></span><span class="d">提示词组装</span><span class="fi fi-hot" aria-hidden="true">⟵12</span></div>
+        <div class="zf-node" data-col="4" data-node="skills" data-tooltip="skills.py · discover_skills(SKILL.md·default_skill_roots)·build_skill_tool(read_skill)·skills_prompt_index；frontmatter 解析并入"><span class="t"><code>skills.py</code></span><span class="d">SKILL.md 发现</span><span class="fi" aria-hidden="true">⟵6</span></div>
+        <div class="zf-node" data-col="4" data-node="templates" data-tooltip="templates.py · PromptTemplate discover/expand：斜杠 prompt 模板(frontmatter+参数)；frontmatter 解析并入"><span class="t"><code>templates.py</code></span><span class="d">斜杠 prompt 模板</span><span class="fi" aria-hidden="true">⟵5</span></div>
+        <div class="zf-node" data-col="4" data-node="exts" data-tooltip="extensions.py · load_extensions/ExtensionAPI/ExtensionCommand：用户 Python 扩展命令与工具，Runtime 装配"><span class="t"><code>extensions.py</code></span><span class="d">Python 扩展</span><span class="fi" aria-hidden="true">⟵3</span></div>
+        <div class="zf-node" data-col="4" data-node="support" data-tooltip="app/support.py · system_prompt/resolve_model/api_key_for/context_occupancy/cache_hit_ratio；被 chat/models/commands/runtime/repl/main 六处引用（连线从略）"><span class="t"><code>app/support</code></span><span class="d">共享支撑</span><span class="fi" aria-hidden="true">⟵7</span></div>
+      </div>
+
+      <div class="zf-col">
+        <p class="zf-cap">基础 · 配置 · 观测（底座 —— 被各列消费，连线从略，见角标）</p>
+        <div class="zf-node" data-col="5" data-node="types" data-tooltip="types.py · AssistantMessage/ToolCall/Usage/Cost/ImageContent —— 全系统零依赖数据类型"><span class="t"><code>types.py</code></span><span class="d">数据类型</span><span class="fi fi-hot" aria-hidden="true">⟵32</span></div>
+        <div class="zf-node" data-col="5" data-node="events" data-tooltip="events.py · AssistantEvent(模型流)/AgentEvent(run 级)两层事件 + AbortToken；Aborted 而非 CancelledError(不穿透 task 监管)"><span class="t"><code>events.py</code></span><span class="d">两层事件 · AbortToken</span><span class="fi fi-hot" aria-hidden="true">⟵15</span></div>
+        <div class="zf-node" data-col="5" data-node="config" data-tooltip="config.py · load_user_config/apply_user_config(config.toml 双层合并)·ContextGuard(预算守卫·token_estimate)；limits.py(可调预算注册表 LIMITS/TASK_KNOBS + parse_limits + write_managed 外科手术式写盘·[limits]/[task] 唯一写路径)·safety/bootstrap/runtime/subagents 共用；bootstrap 首步即 load_user_config（连线从略）"><span class="t"><code>config.py</code></span><span class="d">配置合并 · ContextGuard</span><span class="fi fi-hot" aria-hidden="true">⟵10</span></div>
+        <div class="zf-node" data-col="5" data-node="settings" data-tooltip="settings.py · ~/.zenagent 键值存储：API key·mode/model 偏好·disabled_skills·web provider key；repl/tui 多屏/rpc ops_config/web 直连"><span class="t"><code>settings.py</code></span><span class="d">偏好 · key 存储</span><span class="fi" aria-hidden="true">⟵9</span></div>
+        <div class="zf-node" data-col="5" data-node="obsrun" data-tooltip="telemetry.py MetricsRecorder(每运行一行 JSONL，经 app/metrics 会话包装) + trace.py TraceRecorder(--trace 逐事件)；由 Runtime 装配（连线从略）；app/metrics.py·session_meta.py 并入 runtime 侧"><span class="t"><code>telemetry · trace</code></span><span class="d">运行观测</span><span class="fi" aria-hidden="true">⟵3</span></div>
+        <div class="zf-node" data-col="5" data-node="obscli" data-tooltip="usage.py(会话聚合报表→usagecmd/tui)·export.py(md/html→exportcmd/sessions)·crash.py(excepthook+崩溃日志，cli/main 安装)·update_check.py(PyPI 节流检查→http_client，tui 弹通知)；evals_runner 仅 scripts/eval.py 使用，不画"><span class="t"><code>usage·export·crash·update</code></span><span class="d">CLI 直连横切</span><span class="fi" aria-hidden="true">⟵3</span></div>
+      </div>
+    </div>
+
+    <!-- 太极 -->
+    <div class="zf-band">
+      <p class="zf-cap tj">太极编排面 · 内核零感知 · import：cli → app.taiji → app.runtime → agent</p>
+      <div class="zf-row">
+        <div class="zf-node" data-node="tjboot" data-tooltip="cli/rpc 启动时：should_init_taiji(仅主 checkout 宿主)→ensure_taiji_session→own_taiji_lock(pid 活锁互斥)；退出 close_taiji+释放锁"><span class="t">RPC 宿主引导</span><span class="d">taiji.lock 宿主互斥</span></div>
+        <div class="zf-node" data-node="tjsess" data-tooltip="app/taiji/session.py · 项目唯一 taiji.jsonl Router 会话；打开即太极模式；taiji.lock 写 pid，死 pid 覆盖陈锁"><span class="t">Router 会话</span><span class="d">taiji.jsonl · 项目唯一</span><span class="fi" aria-hidden="true">⟵4</span></div>
+        <div class="zf-node" data-node="tjtools" data-tooltip="app/taiji/tools.py · Router 五工具 spawn_worker/message_worker/kill_worker/merge_worker/list_workers(approval=read·sequential)；router_tool_gate 剔除 edit_file/write_file；taiji_supervisor_for 惰性绑定 runtime(mode/chat/project)"><span class="t"><code>taiji/tools</code></span><span class="d">Router 工具面 · 门禁</span><span class="fi" aria-hidden="true">⟵5</span></div>
+        <div class="zf-node" data-node="tjwork" data-tooltip="spawn_worker：git branch task/&lt;slug&gt;(查注册表+refs 防撞名)+worktree add ~/.zenagent/worktrees；RpcRunner 每回合新起 `zen rpc --cwd worktree --yes` 子进程(sys.executable -m zenagent 兜底)，resume 旧转录；ask→attention 项"><span class="t">worker 子进程</span><span class="d">task/&lt;slug&gt; 分支+worktree</span><span class="fi" aria-hidden="true">⟵1</span></div>
+        <div class="zf-node" data-node="tjsup" data-tooltip="app/taiji/supervisor.py TaijiSupervisor(进程内单例·≤3 worker)：spawn/回合生命周期/合并门 merge_gate(确定性 diff 记账·失败 abort)/registry(原子写 taiji.json+重启 reconcile)/board(project_board wire 契约→桌面右栏)；worktree.py·merge_gate.py·registry.py·board.py 并入；回合末里程碑经 taiji_chat 注入 Router 会话"><span class="t"><code>TaijiSupervisor</code></span><span class="d">舰队编排 · board 契约</span><span class="fi" aria-hidden="true">⟵2</span></div>
+      </div>
+    </div>
+
+    <!-- 协议层 -->
+    <div class="zf-band2">
+      <p class="zf-cap">协议层 providers —— 一次流式请求的通路（loop → retry → registry → 适配器 → transport → httpx）</p>
+      <div class="zf-row">
+        <div class="zf-node" data-node="retry" data-tooltip="zenagent/retry.py · stream_with_retry/is_retryable：loop 与 registry 之间的 message 级重试环"><span class="t"><code>retry.py</code></span><span class="d">message 级重试</span><span class="fi" aria-hidden="true">⟵1</span></div>
+        <div class="zf-node" data-node="prov" data-tooltip="providers/registry.py · StreamFn 契约(永不抛异常)·safe_stream(一切异常→终局 error 事件)·_REGISTRY(api→适配器)·register_stream_fn 外部扩展；stream_options.py 并入；消费方：loop/retry/Agent/btw/compact/task/probes/bootstrap"><span class="t"><code>providers/registry</code></span><span class="d">StreamFn 中枢</span><span class="fi fi-hot" aria-hidden="true">⟵14</span></div>
+        <div class="zf-node" data-node="catalog" data-tooltip="providers/catalog.py · catalog.yaml→Model/ProviderConfig(16 provider+custom)；compat.py(方言标志·thinking 归一·sniff) 并入；config.ContextGuard 借 limits 估算预算（连线从略）"><span class="t"><code>providers/catalog</code></span><span class="d">模型目录 · compat</span><span class="fi fi-hot" aria-hidden="true">⟵13</span></div>
+        <div class="zf-node" data-node="adapters" data-tooltip="openai_completions·anthropic_messages·google_generative_ai·openai_responses；共享 history.replayable(转录→可重放消息)·limits.fit_max_tokens·compat 方言"><span class="t">4 个协议适配器</span><span class="d">+history·limits 前置</span><span class="fi" aria-hidden="true">⟵6</span></div>
+        <div class="zf-node" data-node="transport" data-tooltip="providers/transport.py · post_stream(建连幂等重试)+iter_sse_data+parse_usage；进程级共享 httpx.AsyncClient(get_shared_async_client)"><span class="t"><code>providers/transport</code></span><span class="d">HTTP · SSE</span><span class="fi" aria-hidden="true">⟵2</span></div>
+        <div class="zf-node ext" data-node="api" data-tooltip="16 provider 端点 + [providers.custom.*] 任意 OpenAI 兼容端点；key 来自环境变量/settings"><span class="t">LLM API</span><span class="d">外部服务</span></div>
+        <div class="zf-node" data-node="httpc" data-tooltip="http_client.py · async_client 工厂(本地代理豁免)：providers/transport·mcp/client·web/net·update_check 四条网络的共同底座（mcp/web 侧连线从略）"><span class="t"><code>http_client</code></span><span class="d">共享 httpx</span><span class="fi" aria-hidden="true">⟵4</span></div>
+      </div>
+    </div>
+    <p class="zf-note">import：cli → app.taiji → app.runtime → agent → providers → types/events · 无守护进程，宿主退出即全停 · worker 也是一台「zen rpc」，回到同一套 Runtime / agent 栈 · scripts/ 门禁（check.sh·check_architecture LOC≤800·release-check）与 eval 链（eval.py→evals_runner）为开发侧工具，不入运行时图</p>
+
+    <svg class="zf-svg" aria-hidden="true"></svg>
+    <div class="zf-labels" aria-hidden="true"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var root = document.getElementById('zenfull');
+  var canvas = root.querySelector('.zf-canvas');
+  var svg = root.querySelector('.zf-svg');
+  var labelLayer = root.querySelector('.zf-labels');
+  var SVGNS = 'http://www.w3.org/2000/svg';
+
+  // route:
+  //  v=纵向(同列直线或走廊弯折)  h=同排水平(方向自适应)  rowBelow{slot}=经下方走廊
+  //  vG{gap,k}=列间通道竖降进入目标侧面  gL/gR{gap,k}=列间通道  gSame{gap,k}=同列跨行走旁通道
+  //  dropL/dropR{lane,slot}=先降走廊再走边道  chL{gap,k,tf}=太极带→网格  chM{lane}=太极带→界面
+  var EDGES = [
+    { f: 'main', t: 'prep' }, { f: 'repl', t: 'prep' }, { f: 'tui', t: 'prep' }, { f: 'rpc', t: 'prep' },
+    { f: 'desk', t: 'drpc', label: 'invoke rpc_*', ext: true, route: 'rowBelow', slot: 0 },
+    { f: 'drpc', t: 'rpc', label: 'spawn zen rpc', route: 'rowBelow', slot: 1 },
+    { f: 'rpc', t: 'tjboot', label: '宿主引导', route: 'dropL', lane: 8, slot: 2, tj: true },
+    { f: 'main', t: 'obscli', label: 'usage·export·crash', route: 'dropR', mi: 1, slot: 1 },
+
+    { f: 'prep', t: 'chat', label: 'ChatController' },
+    { f: 'prep', t: 'rt', label: 'bootstrap()', route: 'vG', gap: 1, k: 0, sf: 'bottom', tf: 'left' },
+    { f: 'prep', t: 'broker', label: '构建确认层', route: 'vG', gap: 2, k: 0, sf: 'bottom', tf: 'left' },
+    { f: 'prep', t: 'config', label: 'load_user_config', route: 'dropR', mi: 0, slot: 0 },
+    { f: 'rt', t: 'obsrun', label: 'metrics · trace', route: 'upR', gap: 1, k: 7, mi: 2, slot: 1 },
+
+    { f: 'chat', t: 'views', label: '视图模型' },
+    { f: 'chat', t: 'compact', label: '自动压缩', route: 'gL', gap: 1, k: 7, sf: 'left', tf: 'right' },
+    { f: 'cmds', t: 'compact', label: '/compact', route: 'gL', gap: 1, k: 8, sf: 'left', tf: 'right' },
+    { f: 'rt', t: 'rec', label: '装配' },
+    { f: 'rec', t: 'ag', label: 'tools+prompt' },
+    { f: 'ag', t: 'lp', label: 'prompt()' },
+
+    { f: 'broker', t: 'gate', label: '包裹' },
+    { f: 'tools', t: 'subrt' },
+    { f: 'subrt', t: 'substore' },
+    { f: 'mcp', t: 'protocol', label: 'AgentTool 契约' },
+    { f: 'gate', t: 'lp', label: 'before_tool_call', route: 'gL', gap: 2, k: 3, sf: 'left', tf: 'right' },
+    { f: 'lp', t: 'tools', label: '工具调用', route: 'gL', gap: 2, k: 4, sf: 'right', tf: 'left' },
+    { f: 'tools', t: 'lp', label: '结果回填', route: 'gL', gap: 2, k: 5, sf: 'left', tf: 'right' },
+    { f: 'rec', t: 'tools', label: '组装工具集', route: 'gL', gap: 2, k: 2, sf: 'right', tf: 'left' },
+    { f: 'rt', t: 'registry', label: 'reconcile', route: 'gL', gap: 2, k: 1, sf: 'right', tf: 'left' },
+    { f: 'subrt', t: 'ag', label: '子代理回环', route: 'gL', gap: 2, k: 6, sf: 'left', tf: 'right' },
+    { f: 'rt', t: 'artifacts', label: 'sink 注入', route: 'gL', gap: 2, k: 7, sf: 'right', tf: 'left' },
+    { f: 'tools', t: 'memstore', route: 'gL', gap: 2, k: 8, sf: 'right', tf: 'left' },
+    { f: 'mcp', t: 'tools', label: '注入 mcp__*', route: 'gSame', gap: 3, k: 0 },
+    { f: 'tools', t: 'prompts', label: 'tool.* 描述', route: 'gR', gap: 3, k: 1, sf: 'right', tf: 'left' },
+
+    { f: 'ctxfiles', t: 'prompts' },
+    { f: 'skills', t: 'prompts' },
+    { f: 'web', t: 'settings', label: 'key/顺序', route: 'gR', gap: 4, k: 0, sf: 'right', tf: 'left' },
+
+    { f: 'lp', t: 'evsub', label: 'AgentEvent', route: 'gL', gap: 1, k: 1, sf: 'left', tf: 'right' },
+    { f: 'lp', t: 'persist', label: 'agent_end', route: 'gL', gap: 1, k: 2, sf: 'left', tf: 'right' },
+    { f: 'smgr', t: 'rt', label: '会话切换', route: 'gL', gap: 1, k: 3, sf: 'right', tf: 'left' },
+    { f: 'completion', t: 'skillcmds' },
+    { f: 'smgr', t: 'sess', label: 'resume/fork/undo' },
+    { f: 'persist', t: 'sess', label: 'JSONL' },
+    { f: 'proj', t: 'disk' },
+    { f: 'sess', t: 'disk', route: 'mL', lane: 27 },
+
+    { f: 'tjsess', t: 'rec', label: '会话门禁', route: 'chL', gap: 1, k: 4, tf: 'left', tj: true },
+    { f: 'tjsup', t: 'git', route: 'chL', gap: 1, k: 5, tf: 'right', tj: true },
+    { f: 'tjsup', t: 'disk', route: 'chL', gap: 1, k: 6, tf: 'right', tj: true },
+    { f: 'tjwork', t: 'rpc', label: '↩ --cwd worktree --yes', route: 'chM', lane: 15, tj: true },
+    { f: 'tjboot', t: 'tjsess', label: '唯一会话+锁', route: 'rowBelow', slot: 3, tj: true },
+    { f: 'tjboot', t: 'tjsup', label: '构造舰队', route: 'rowBelow', slot: 5, tj: true },
+    { f: 'tjtools', t: 'tjsup', label: '绑定 get_taiji', route: 'rowBelow', slot: 3, tj: true },
+    { f: 'tjsup', t: 'tjwork', label: 'spawn_worker', route: 'rowBelow', slot: 4, tj: true },
+
+    { f: 'lp', t: 'retry', label: 'stream_with_retry', route: 'mL', lane: 21, sf: 'left', tf: 'left' },
+    { f: 'retry', t: 'prov', label: 'safe_stream', route: 'rowBelow', slot: 0 },
+    { f: 'catalog', t: 'prov', label: 'Model', route: 'rowBelow', slot: 1 },
+    { f: 'catalog', t: 'adapters', label: 'CompatFlags', route: 'rowBelow', slot: 2 },
+    { f: 'prov', t: 'adapters', label: 'api 分发', route: 'rowBelow', slot: 3 },
+    { f: 'adapters', t: 'transport', route: 'h' },
+    { f: 'transport', t: 'api', label: 'HTTP / SSE', route: 'rowBelow', slot: 4 },
+    { f: 'transport', t: 'httpc', route: 'rowBelow', slot: 5 }
+  ];
+
+  // 悬停显示的隐藏引用边（静态 import，簇级聚合；已画边除外）
+  // 悬停显示的隐藏引用边（静态 import，簇级聚合；calls=调用方函数，上限 8）
+  var HIDDEN = {"adapters": [{"t": "catalog", "n": 7, "dir": "out", "calls": ["_apply_thinking_dialect", "_assistant_request_message", "_events_from_chunks", "_with_cost", "build_params", "build_request", "fit_max_tokens", "fit_stream_options"]}, {"t": "events", "n": 4, "dir": "out", "calls": ["_events_from_chunks", "stream"]}, {"t": "prov", "n": 4, "dir": "out", "calls": ["_apply_thinking_dialect", "build_params", "build_request", "stream"]}, {"t": "types", "n": 6, "dir": "out", "calls": ["_Block", "_ToolBlock", "_assistant_blocks", "_assistant_request_message", "_block_tokens", "_events_from_chunks", "_finalize_tool_arguments", "_map_finish_reason"]}, {"t": "persist", "n": 1, "dir": "in", "calls": ["Runtime._prompt_with_mode"]}, {"t": "prompts", "n": 1, "dir": "in", "calls": ["_block_tokens"]}, {"t": "rec", "n": 1, "dir": "in", "calls": ["Runtime._prompt_with_mode"]}, {"t": "rt", "n": 1, "dir": "in", "calls": ["Runtime._prompt_with_mode"]}, {"t": "views", "n": 1, "dir": "in", "calls": ["build_context_report"]}], "catalog": [{"t": "adapters", "n": 7, "dir": "in", "calls": ["_apply_thinking_dialect", "_assistant_request_message", "_events_from_chunks", "_with_cost", "build_params", "build_request", "fit_max_tokens", "fit_stream_options"]}, {"t": "ag", "n": 1, "dir": "in", "calls": ["Agent.__init__"]}, {"t": "types", "n": 1, "dir": "out", "calls": ["Model", "_cost_from"]}, {"t": "cmds", "n": 1, "dir": "in", "calls": ["apply_model_switch"]}, {"t": "config", "n": 1, "dir": "in", "calls": ["UserConfig", "_load_config_file", "_parse_custom_providers", "apply_user_config"]}, {"t": "lp", "n": 1, "dir": "in", "calls": ["AgentConfig"]}, {"t": "main", "n": 1, "dir": "in", "calls": ["collect_checks"]}, {"t": "persist", "n": 1, "dir": "in", "calls": ["Runtime.__init__", "Runtime.bootstrap"]}, {"t": "prov", "n": 1, "dir": "in", "calls": ["_error_partial", "_terminal_error", "safe_stream", "stream_fn_for"]}, {"t": "rec", "n": 1, "dir": "in", "calls": ["Runtime.__init__", "Runtime.bootstrap"]}, {"t": "rt", "n": 1, "dir": "in", "calls": ["Runtime.__init__", "Runtime.bootstrap"]}, {"t": "subrt", "n": 1, "dir": "in", "calls": ["construct_child"]}, {"t": "support", "n": 1, "dir": "in", "calls": ["api_key_for", "resolve_model", "resolve_task_model", "session_id_for"]}, {"t": "tools", "n": 1, "dir": "in", "calls": ["build_task_tool"]}], "events": [{"t": "adapters", "n": 4, "dir": "in", "calls": ["_events_from_chunks", "stream"]}, {"t": "ag", "n": 1, "dir": "in", "calls": ["Agent._dispatch", "Agent._drive", "_Run"]}, {"t": "chat", "n": 1, "dir": "in", "calls": ["ChatController._on_event"]}, {"t": "types", "n": 1, "dir": "out", "calls": ["AgentEvent", "AssistantEvent"]}, {"t": "lp", "n": 2, "dir": "in", "calls": ["agent_loop", "agent_loop.emit_update", "execute_tool", "run_tool", "run_tool_batch", "run_tool_batch.run_one.forward"]}, {"t": "main", "n": 1, "dir": "in", "calls": ["_PlainOutput.__call__"]}, {"t": "obsrun", "n": 2, "dir": "in", "calls": ["MetricsRecorder.__call__", "TraceRecorder.__call__", "TraceRecorder._record"]}, {"t": "protocol", "n": 1, "dir": "in", "calls": ["AgentTool"]}, {"t": "prov", "n": 2, "dir": "in", "calls": ["StreamOptions", "_terminal_error", "safe_stream"]}, {"t": "repl", "n": 2, "dir": "in", "calls": ["AssistantLiveRenderer.feed", "_EventPrinter.__call__", "_EventPrinter._progress", "repl.on_event"]}, {"t": "retry", "n": 1, "dir": "in", "calls": ["stream_with_retry"]}, {"t": "rpc", "n": 2, "dir": "in", "calls": ["RpcServer._on_event", "serialize_event"]}, {"t": "rt", "n": 1, "dir": "in", "calls": ["SessionMetaRecorder.__call__"]}, {"t": "tools", "n": 1, "dir": "in", "calls": ["_bash", "build_bash_tool.execute"]}, {"t": "transport", "n": 1, "dir": "in", "calls": ["_sleep", "post_stream"]}, {"t": "views", "n": 1, "dir": "in", "calls": ["TranscriptBuilder.apply"]}], "prov": [{"t": "adapters", "n": 4, "dir": "in", "calls": ["_apply_thinking_dialect", "build_params", "build_request", "stream"]}, {"t": "ag", "n": 1, "dir": "in", "calls": ["Agent.__init__"]}, {"t": "cmds", "n": 2, "dir": "in", "calls": ["ask_side_question"]}, {"t": "compact", "n": 2, "dir": "in", "calls": ["compact", "maybe_auto_compact"]}, {"t": "lp", "n": 2, "dir": "in", "calls": ["AgentConfig", "agent_loop"]}, {"t": "main", "n": 1, "dir": "in", "calls": ["run_headless"]}, {"t": "persist", "n": 1, "dir": "in", "calls": ["Runtime.bootstrap"]}, {"t": "prep", "n": 1, "dir": "in", "calls": ["prepare"]}, {"t": "catalog", "n": 1, "dir": "out", "calls": ["_error_partial", "_terminal_error", "safe_stream", "stream_fn_for"]}, {"t": "events", "n": 2, "dir": "out", "calls": ["StreamOptions", "_terminal_error", "safe_stream"]}, {"t": "transport", "n": 1, "dir": "out", "calls": []}, {"t": "types", "n": 1, "dir": "out", "calls": ["_error_partial", "_terminal_error", "safe_stream"]}, {"t": "rec", "n": 1, "dir": "in", "calls": ["Runtime.bootstrap"]}, {"t": "repl", "n": 1, "dir": "in", "calls": ["repl"]}, {"t": "rt", "n": 1, "dir": "in", "calls": ["Runtime.bootstrap"]}, {"t": "subrt", "n": 1, "dir": "in", "calls": ["construct_child"]}, {"t": "tools", "n": 1, "dir": "in", "calls": ["build_task_tool"]}], "types": [{"t": "adapters", "n": 6, "dir": "in", "calls": ["_Block", "_ToolBlock", "_assistant_blocks", "_assistant_request_message", "_block_tokens", "_events_from_chunks", "_finalize_tool_arguments", "_map_finish_reason"]}, {"t": "ag", "n": 1, "dir": "in", "calls": ["Agent.__init__", "Agent._drain_steering", "Agent._drive", "Agent.messages", "Agent.prompt", "Agent.replace_messages", "_terminal_error"]}, {"t": "broker", "n": 1, "dir": "in", "calls": ["PermissionBroker.before_tool_call", "PermissionGate.before_tool_call"]}, {"t": "catalog", "n": 1, "dir": "in", "calls": ["Model", "_cost_from"]}, {"t": "chat", "n": 4, "dir": "in", "calls": ["Attachments.__init__", "Attachments.add", "Attachments.all", "Attachments.prepend", "Attachments.take", "ChatController._add_pending", "ChatController._run", "ChatController.attach_image"]}, {"t": "cmds", "n": 3, "dir": "in", "calls": ["_handoff", "_strip_images", "_strip_thinking", "ask_side_question", "shake"]}, {"t": "compact", "n": 1, "dir": "in", "calls": ["_last_usage", "compact", "should_auto_compact"]}, {"t": "config", "n": 1, "dir": "in", "calls": ["ContextGuard", "ContextGuard.on_event", "ContextGuard.transform", "_estimate_chars", "_split_turns", "naive_overflow_prune", "token_estimate"]}, {"t": "events", "n": 1, "dir": "in", "calls": ["AgentEvent", "AssistantEvent"]}, {"t": "gate", "n": 1, "dir": "in", "calls": ["PermissionBroker.before_tool_call", "PermissionGate.before_tool_call"]}, {"t": "journal", "n": 2, "dir": "in", "calls": ["RewindState.transform", "SnapshotJournal._note", "build_checkpoint_tools._checkpoint", "build_checkpoint_tools._rewind"]}, {"t": "lp", "n": 4, "dir": "in", "calls": ["AgentConfig", "AgentState", "ToolOutcome", "_run_cost", "agent_loop", "apply_result_budget", "calls_signature", "execute_tool"]}, {"t": "main", "n": 1, "dir": "in", "calls": ["_PlainOutput.__call__", "_read_images", "_usage_and_counts"]}, {"t": "mcp", "n": 1, "dir": "in", "calls": ["McpManager._make_tool.execute", "_to_result"]}, {"t": "obscli", "n": 2, "dir": "in", "calls": ["ModelUsage.add", "_blocks", "collect_usage", "export_html", "export_markdown"]}, {"t": "obsrun", "n": 1, "dir": "in", "calls": ["MetricsRecorder.__call__", "MetricsRecorder.__init__"]}, {"t": "protocol", "n": 1, "dir": "in", "calls": ["ToolResultAgent", "_error_result"]}, {"t": "prov", "n": 1, "dir": "in", "calls": ["_error_partial", "_terminal_error", "safe_stream"]}, {"t": "repl", "n": 2, "dir": "in", "calls": ["AssistantLiveRenderer", "AssistantLiveRenderer.feed", "_first_line", "aggregate_usage", "context_percent", "repl", "status_line", "tool_progress_line"]}, {"t": "retry", "n": 1, "dir": "in", "calls": ["is_retryable", "stream_with_retry"]}, {"t": "rpc", "n": 2, "dir": "in", "calls": ["RpcServer._final_text", "_message_projection", "_text_of"]}, {"t": "rt", "n": 1, "dir": "in", "calls": ["_terminal_detail", "make_retry_recorder", "make_retry_recorder.on_retry"]}, {"t": "sess", "n": 1, "dir": "in", "calls": ["Session", "Session._append_sync", "Session.append", "Session.carry_records", "Session.fork_at", "Session.load", "Session.messages", "Session.read_info"]}, {"t": "skills", "n": 1, "dir": "in", "calls": ["build_skill_tool.execute"]}, {"t": "subrt", "n": 1, "dir": "in", "calls": ["_TaskRecorder._push_progress", "_child_usage", "_files_touched", "_final_text", "run_child"]}, {"t": "substore", "n": 1, "dir": "in", "calls": ["SubagentStore.append", "SubagentStore.load"]}, {"t": "support", "n": 1, "dir": "in", "calls": ["cache_hit_ratio", "context_occupancy"]}, {"t": "tjtools", "n": 1, "dir": "in", "calls": ["_error", "_text"]}, {"t": "tools", "n": 4, "dir": "in", "calls": ["_TodoState.execute", "_bash.emit_progress", "build_task_tool.execute", "text_result"]}, {"t": "transport", "n": 1, "dir": "in", "calls": ["parse_usage"]}, {"t": "tui", "n": 1, "dir": "in", "calls": ["AttachmentChips.set_attachments"]}, {"t": "views", "n": 2, "dir": "in", "calls": ["MessageView", "TranscriptBuilder._apply_metadata", "TranscriptBuilder._message_end", "TranscriptBuilder._message_start", "TranscriptBuilder.apply", "TranscriptBuilder.load", "_assistant_text", "_assistant_thinking"]}], "ag": [{"t": "catalog", "n": 1, "dir": "out", "calls": ["Agent.__init__"]}, {"t": "events", "n": 1, "dir": "out", "calls": ["Agent._dispatch", "Agent._drive", "_Run"]}, {"t": "prov", "n": 1, "dir": "out", "calls": ["Agent.__init__"]}, {"t": "types", "n": 1, "dir": "out", "calls": ["Agent.__init__", "Agent._drain_steering", "Agent._drive", "Agent.messages", "Agent.prompt", "Agent.replace_messages", "_terminal_error"]}], "broker": [{"t": "types", "n": 1, "dir": "out", "calls": ["PermissionBroker.before_tool_call", "PermissionGate.before_tool_call"]}, {"t": "persist", "n": 1, "dir": "in", "calls": ["Runtime.__init__", "Runtime.bootstrap"]}, {"t": "rec", "n": 1, "dir": "in", "calls": ["Runtime.__init__", "Runtime.bootstrap"]}, {"t": "repl", "n": 1, "dir": "in", "calls": ["repl.confirm_via_stdin"]}, {"t": "rt", "n": 1, "dir": "in", "calls": ["Runtime.__init__", "Runtime.bootstrap"]}, {"t": "tui", "n": 1, "dir": "in", "calls": ["ZenAgentApp.request_tool_approval"]}], "chat": [{"t": "events", "n": 1, "dir": "out", "calls": ["ChatController._on_event"]}, {"t": "git", "n": 1, "dir": "out", "calls": ["ChatController.status"]}, {"t": "persist", "n": 1, "dir": "out", "calls": ["ChatController.__init__"]}, {"t": "rec", "n": 1, "dir": "out", "calls": ["ChatController.__init__"]}, {"t": "rt", "n": 1, "dir": "out", "calls": ["ChatController.__init__"]}, {"t": "sess", "n": 2, "dir": "out", "calls": ["ChatController.reload_transcript", "prepare_retry"]}, {"t": "subrt", "n": 2, "dir": "out", "calls": ["SubagentTracker.views", "_inflight_task_ids"]}, {"t": "substore", "n": 2, "dir": "out", "calls": ["ChatController.retry", "SubagentTracker.transcript", "SubagentTracker.views"]}, {"t": "support", "n": 1, "dir": "out", "calls": ["ChatController._before_tokens", "ChatController.status"]}, {"t": "tools", "n": 2, "dir": "out", "calls": ["ChatController.__init__", "ChatController._job_views", "ChatController._on_event", "ChatController.job_log", "ChatController.reload_todos", "ChatController.reload_transcript", "ChatController.retry"]}, {"t": "types", "n": 4, "dir": "out", "calls": ["Attachments.__init__", "Attachments.add", "Attachments.all", "Attachments.prepend", "Attachments.take", "ChatController._add_pending", "ChatController._run", "ChatController.attach_image"]}, {"t": "cmds", "n": 1, "dir": "in", "calls": ["AppServices"]}, {"t": "tui", "n": 1, "dir": "in", "calls": ["ZenAgentApp.__init__"]}], "git": [{"t": "chat", "n": 1, "dir": "in", "calls": ["ChatController.status"]}, {"t": "workspace", "n": 1, "dir": "in", "calls": ["_status_payload", "worktree_overview"]}], "persist": [{"t": "chat", "n": 1, "dir": "in", "calls": ["ChatController.__init__"]}, {"t": "cmds", "n": 2, "dir": "in", "calls": ["AppServices", "ModelManager.__init__"]}, {"t": "main", "n": 1, "dir": "in", "calls": ["main", "run_headless"]}, {"t": "adapters", "n": 1, "dir": "out", "calls": ["Runtime._prompt_with_mode"]}, {"t": "artifacts", "n": 1, "dir": "out", "calls": ["Runtime.session"]}, {"t": "broker", "n": 1, "dir": "out", "calls": ["Runtime.__init__", "Runtime.bootstrap"]}, {"t": "catalog", "n": 1, "dir": "out", "calls": ["Runtime.__init__", "Runtime.bootstrap"]}, {"t": "config", "n": 1, "dir": "out", "calls": ["Runtime.__init__", "Runtime.bootstrap"]}, {"t": "ctxfiles", "n": 1, "dir": "out", "calls": ["Runtime._build_prompt"]}, {"t": "exts", "n": 1, "dir": "out", "calls": ["Runtime.bootstrap", "Runtime.rediscover"]}, {"t": "gate", "n": 3, "dir": "out", "calls": ["Runtime.__init__", "Runtime._prompt_with_mode", "Runtime.bootstrap", "Runtime.set_mode"]}, {"t": "journal", "n": 2, "dir": "out", "calls": ["Runtime.__init__", "Runtime._recompose", "Runtime.bootstrap"]}, {"t": "mcp", "n": 2, "dir": "out", "calls": ["Runtime.__init__", "Runtime._start_mcp"]}, {"t": "memstore", "n": 1, "dir": "out", "calls": ["Runtime.__init__", "Runtime._build_prompt", "Runtime._recompose"]}, {"t": "obsrun", "n": 1, "dir": "out", "calls": ["Runtime.__init__", "Runtime.bootstrap"]}, {"t": "proj", "n": 1, "dir": "out", "calls": ["Runtime._note_session_scope", "Runtime._recompose", "Runtime._touch_project"]}, {"t": "prompts", "n": 1, "dir": "out", "calls": ["Runtime.__init__", "Runtime._build_prompt", "Runtime._prompt_with_mode"]}, {"t": "prov", "n": 1, "dir": "out", "calls": ["Runtime.bootstrap"]}, {"t": "registry", "n": 1, "dir": "out", "calls": ["Runtime.__init__"]}, {"t": "rt", "n": 2, "dir": "out", "calls": ["Runtime.__init__", "Runtime.bootstrap", "Runtime.set_mode"]}, {"t": "settings", "n": 1, "dir": "out", "calls": ["_active_skills"]}, {"t": "skills", "n": 1, "dir": "out", "calls": ["Runtime._recompose", "Runtime.bootstrap", "Runtime.rediscover", "Runtime.refresh_skills"]}, {"t": "subrt", "n": 1, "dir": "out", "calls": ["Runtime.__init__"]}, {"t": "substore", "n": 1, "dir": "out", "calls": ["Runtime.bootstrap"]}, {"t": "support", "n": 1, "dir": "out", "calls": ["Runtime.bootstrap", "Runtime.reload_api_key"]}, {"t": "templates", "n": 1, "dir": "out", "calls": ["Runtime.__init__", "Runtime.bootstrap", "Runtime.rediscover"]}, {"t": "tjsess", "n": 1, "dir": "out", "calls": ["Runtime._build_prompt", "Runtime._recompose"]}, {"t": "tjtools", "n": 1, "dir": "out", "calls": ["Runtime._recompose"]}, {"t": "tools", "n": 7, "dir": "out", "calls": ["Runtime.__init__", "Runtime._recompose", "Runtime.bootstrap", "Runtime.close", "Runtime.switch_session"]}, {"t": "views", "n": 1, "dir": "out", "calls": ["Runtime.bootstrap", "Runtime.switch_session"]}, {"t": "prep", "n": 1, "dir": "in", "calls": ["PreparedFrontend", "prepare"]}, {"t": "repl", "n": 1, "dir": "in", "calls": ["repl"]}, {"t": "rpc", "n": 1, "dir": "in", "calls": ["_run"]}, {"t": "smgr", "n": 1, "dir": "in", "calls": ["SessionManager.__init__"]}, {"t": "tjboot", "n": 1, "dir": "in", "calls": ["_run"]}, {"t": "tui", "n": 1, "dir": "in", "calls": ["ZenAgentApp.__init__"]}], "rec": [{"t": "chat", "n": 1, "dir": "in", "calls": ["ChatController.__init__"]}, {"t": "cmds", "n": 2, "dir": "in", "calls": ["AppServices", "ModelManager.__init__"]}, {"t": "main", "n": 1, "dir": "in", "calls": ["main", "run_headless"]}, {"t": "prep", "n": 1, "dir": "in", "calls": ["PreparedFrontend", "prepare"]}, {"t": "adapters", "n": 1, "dir": "out", "calls": ["Runtime._prompt_with_mode"]}, {"t": "artifacts", "n": 1, "dir": "out", "calls": ["Runtime.session"]}, {"t": "broker", "n": 1, "dir": "out", "calls": ["Runtime.__init__", "Runtime.bootstrap"]}, {"t": "catalog", "n": 1, "dir": "out", "calls": ["Runtime.__init__", "Runtime.bootstrap"]}, {"t": "config", "n": 1, "dir": "out", "calls": ["Runtime.__init__", "Runtime.bootstrap"]}, {"t": "ctxfiles", "n": 1, "dir": "out", "calls": ["Runtime._build_prompt"]}, {"t": "exts", "n": 1, "dir": "out", "calls": ["Runtime.bootstrap", "Runtime.rediscover"]}, {"t": "gate", "n": 3, "dir": "out", "calls": ["Runtime.__init__", "Runtime._prompt_with_mode", "Runtime.bootstrap", "Runtime.set_mode"]}, {"t": "journal", "n": 2, "dir": "out", "calls": ["Runtime.__init__", "Runtime._recompose", "Runtime.bootstrap"]}, {"t": "mcp", "n": 2, "dir": "out", "calls": ["Runtime.__init__", "Runtime._start_mcp"]}, {"t": "memstore", "n": 1, "dir": "out", "calls": ["Runtime.__init__", "Runtime._build_prompt", "Runtime._recompose"]}, {"t": "obsrun", "n": 1, "dir": "out", "calls": ["Runtime.__init__", "Runtime.bootstrap"]}, {"t": "proj", "n": 1, "dir": "out", "calls": ["Runtime._note_session_scope", "Runtime._recompose", "Runtime._touch_project"]}, {"t": "prompts", "n": 1, "dir": "out", "calls": ["Runtime.__init__", "Runtime._build_prompt", "Runtime._prompt_with_mode"]}, {"t": "prov", "n": 1, "dir": "out", "calls": ["Runtime.bootstrap"]}, {"t": "registry", "n": 1, "dir": "out", "calls": ["Runtime.__init__"]}, {"t": "rt", "n": 2, "dir": "out", "calls": ["Runtime.__init__", "Runtime.bootstrap", "Runtime.set_mode"]}, {"t": "sess", "n": 1, "dir": "out", "calls": ["Runtime.__init__", "Runtime._drop_unused_session", "Runtime._open_session", "Runtime.session", "Runtime.use_new_session"]}, {"t": "settings", "n": 1, "dir": "out", "calls": ["_active_skills"]}, {"t": "skills", "n": 1, "dir": "out", "calls": ["Runtime._recompose", "Runtime.bootstrap", "Runtime.rediscover", "Runtime.refresh_skills"]}, {"t": "subrt", "n": 1, "dir": "out", "calls": ["Runtime.__init__"]}, {"t": "substore", "n": 1, "dir": "out", "calls": ["Runtime.bootstrap"]}, {"t": "support", "n": 1, "dir": "out", "calls": ["Runtime.bootstrap", "Runtime.reload_api_key"]}, {"t": "templates", "n": 1, "dir": "out", "calls": ["Runtime.__init__", "Runtime.bootstrap", "Runtime.rediscover"]}, {"t": "tjsess", "n": 1, "dir": "out", "calls": ["Runtime._build_prompt", "Runtime._recompose"]}, {"t": "tjtools", "n": 1, "dir": "out", "calls": ["Runtime._recompose"]}, {"t": "views", "n": 1, "dir": "out", "calls": ["Runtime.bootstrap", "Runtime.switch_session"]}, {"t": "repl", "n": 1, "dir": "in", "calls": ["repl"]}, {"t": "rpc", "n": 1, "dir": "in", "calls": ["_run"]}, {"t": "smgr", "n": 1, "dir": "in", "calls": ["SessionManager.__init__"]}, {"t": "tjboot", "n": 1, "dir": "in", "calls": ["_run"]}, {"t": "tui", "n": 1, "dir": "in", "calls": ["ZenAgentApp.__init__"]}], "rt": [{"t": "chat", "n": 1, "dir": "in", "calls": ["ChatController.__init__"]}, {"t": "cmds", "n": 2, "dir": "in", "calls": ["AppServices", "ModelManager.__init__"]}, {"t": "main", "n": 1, "dir": "in", "calls": ["main", "run_headless"]}, {"t": "persist", "n": 2, "dir": "in", "calls": ["Runtime.__init__", "Runtime.bootstrap", "Runtime.set_mode"]}, {"t": "rec", "n": 2, "dir": "in", "calls": ["Runtime.__init__", "Runtime.bootstrap", "Runtime.set_mode"]}, {"t": "repl", "n": 1, "dir": "in", "calls": ["repl"]}, {"t": "rpc", "n": 1, "dir": "in", "calls": ["_run"]}, {"t": "adapters", "n": 1, "dir": "out", "calls": ["Runtime._prompt_with_mode"]}, {"t": "broker", "n": 1, "dir": "out", "calls": ["Runtime.__init__", "Runtime.bootstrap"]}, {"t": "catalog", "n": 1, "dir": "out", "calls": ["Runtime.__init__", "Runtime.bootstrap"]}, {"t": "config", "n": 1, "dir": "out", "calls": ["Runtime.__init__", "Runtime.bootstrap"]}, {"t": "ctxfiles", "n": 1, "dir": "out", "calls": ["Runtime._build_prompt"]}, {"t": "events", "n": 1, "dir": "out", "calls": ["SessionMetaRecorder.__call__"]}, {"t": "exts", "n": 1, "dir": "out", "calls": ["Runtime.bootstrap", "Runtime.rediscover"]}, {"t": "gate", "n": 3, "dir": "out", "calls": ["Runtime.__init__", "Runtime._prompt_with_mode", "Runtime.bootstrap", "Runtime.set_mode"]}, {"t": "journal", "n": 2, "dir": "out", "calls": ["Runtime.__init__", "Runtime._recompose", "Runtime.bootstrap"]}, {"t": "mcp", "n": 2, "dir": "out", "calls": ["Runtime.__init__", "Runtime._start_mcp"]}, {"t": "memstore", "n": 1, "dir": "out", "calls": ["Runtime.__init__", "Runtime._build_prompt", "Runtime._recompose"]}, {"t": "proj", "n": 1, "dir": "out", "calls": ["Runtime._note_session_scope", "Runtime._recompose", "Runtime._touch_project"]}, {"t": "prompts", "n": 1, "dir": "out", "calls": ["Runtime.__init__", "Runtime._build_prompt", "Runtime._prompt_with_mode"]}, {"t": "prov", "n": 1, "dir": "out", "calls": ["Runtime.bootstrap"]}, {"t": "sess", "n": 2, "dir": "out", "calls": ["Runtime.__init__", "Runtime._drop_unused_session", "Runtime._open_session", "Runtime.session", "Runtime.use_new_session", "SessionMetaRecorder.__init__", "make_retry_recorder"]}, {"t": "settings", "n": 1, "dir": "out", "calls": ["_active_skills"]}, {"t": "skills", "n": 1, "dir": "out", "calls": ["Runtime._recompose", "Runtime.bootstrap", "Runtime.rediscover", "Runtime.refresh_skills"]}, {"t": "subrt", "n": 1, "dir": "out", "calls": ["Runtime.__init__"]}, {"t": "substore", "n": 1, "dir": "out", "calls": ["Runtime.bootstrap"]}, {"t": "support", "n": 1, "dir": "out", "calls": ["Runtime.bootstrap", "Runtime.reload_api_key"]}, {"t": "templates", "n": 1, "dir": "out", "calls": ["Runtime.__init__", "Runtime.bootstrap", "Runtime.rediscover"]}, {"t": "tjsess", "n": 1, "dir": "out", "calls": ["Runtime._build_prompt", "Runtime._recompose"]}, {"t": "tjtools", "n": 1, "dir": "out", "calls": ["Runtime._recompose"]}, {"t": "tools", "n": 7, "dir": "out", "calls": ["Runtime.__init__", "Runtime._recompose", "Runtime.bootstrap", "Runtime.close", "Runtime.switch_session"]}, {"t": "types", "n": 1, "dir": "out", "calls": ["_terminal_detail", "make_retry_recorder", "make_retry_recorder.on_retry"]}, {"t": "views", "n": 1, "dir": "out", "calls": ["Runtime.bootstrap", "Runtime.switch_session"]}, {"t": "tjboot", "n": 1, "dir": "in", "calls": ["_run"]}, {"t": "tui", "n": 1, "dir": "in", "calls": ["ZenAgentApp.__init__"]}], "sess": [{"t": "chat", "n": 2, "dir": "in", "calls": ["ChatController.reload_transcript", "prepare_retry"]}, {"t": "cmds", "n": 2, "dir": "in", "calls": ["_pin", "_rename", "shake"]}, {"t": "compact", "n": 1, "dir": "in", "calls": ["compact", "maybe_auto_compact"]}, {"t": "main", "n": 4, "dir": "in", "calls": ["_check_sessions_writable", "_list", "main", "run_export"]}, {"t": "obscli", "n": 2, "dir": "in", "calls": ["export_session", "session_paths"]}, {"t": "rec", "n": 1, "dir": "in", "calls": ["Runtime.__init__", "Runtime._drop_unused_session", "Runtime._open_session", "Runtime.session", "Runtime.use_new_session"]}, {"t": "repl", "n": 2, "dir": "in", "calls": ["_render_settings", "session_header"]}, {"t": "rt", "n": 2, "dir": "in", "calls": ["Runtime.__init__", "Runtime._drop_unused_session", "Runtime._open_session", "Runtime.session", "Runtime.use_new_session", "SessionMetaRecorder.__init__", "make_retry_recorder"]}, {"t": "proj", "n": 1, "dir": "out", "calls": ["SessionInfo", "_project_key_for_directory", "_project_label", "all_session_dirs", "sessions_dir"]}, {"t": "types", "n": 1, "dir": "out", "calls": ["Session", "Session._append_sync", "Session.append", "Session.carry_records", "Session.fork_at", "Session.load", "Session.messages", "Session.read_info"]}, {"t": "tjsess", "n": 1, "dir": "in", "calls": ["ensure_taiji_session"]}, {"t": "tui", "n": 1, "dir": "in", "calls": ["SessionsMixin._apply_session_action"]}], "subrt": [{"t": "chat", "n": 2, "dir": "in", "calls": ["SubagentTracker.views", "_inflight_task_ids"]}, {"t": "persist", "n": 1, "dir": "in", "calls": ["Runtime.__init__"]}, {"t": "rec", "n": 1, "dir": "in", "calls": ["Runtime.__init__"]}, {"t": "rt", "n": 1, "dir": "in", "calls": ["Runtime.__init__"]}, {"t": "smgr", "n": 1, "dir": "in", "calls": ["_inflight_task_ids"]}, {"t": "artifacts", "n": 1, "dir": "out", "calls": ["construct_child"]}, {"t": "catalog", "n": 1, "dir": "out", "calls": ["construct_child"]}, {"t": "config", "n": 1, "dir": "out", "calls": ["construct_child"]}, {"t": "lp", "n": 1, "dir": "out", "calls": ["_TaskRecorder._push_progress", "child_allowed", "child_tool_names", "construct_child"]}, {"t": "prov", "n": 1, "dir": "out", "calls": ["construct_child"]}, {"t": "types", "n": 1, "dir": "out", "calls": ["_TaskRecorder._push_progress", "_child_usage", "_files_touched", "_final_text", "run_child"]}], "substore": [{"t": "chat", "n": 2, "dir": "in", "calls": ["ChatController.retry", "SubagentTracker.transcript", "SubagentTracker.views"]}, {"t": "persist", "n": 1, "dir": "in", "calls": ["Runtime.bootstrap"]}, {"t": "rec", "n": 1, "dir": "in", "calls": ["Runtime.bootstrap"]}, {"t": "rt", "n": 1, "dir": "in", "calls": ["Runtime.bootstrap"]}, {"t": "smgr", "n": 1, "dir": "in", "calls": ["SessionManager.delete", "SessionManager.fork", "SessionManager.undo"]}, {"t": "config", "n": 1, "dir": "out", "calls": ["SubagentLimits.from_user_config"]}, {"t": "types", "n": 1, "dir": "out", "calls": ["SubagentStore.append", "SubagentStore.load"]}, {"t": "tools", "n": 1, "dir": "in", "calls": ["build_task_tool", "build_task_tool.execute"]}], "support": [{"t": "chat", "n": 1, "dir": "in", "calls": ["ChatController._before_tokens", "ChatController.status"]}, {"t": "cmds", "n": 2, "dir": "in", "calls": ["ModelManager.entries", "_tools", "apply_model_switch"]}, {"t": "main", "n": 1, "dir": "in", "calls": []}, {"t": "persist", "n": 1, "dir": "in", "calls": ["Runtime.bootstrap", "Runtime.reload_api_key"]}, {"t": "rec", "n": 1, "dir": "in", "calls": ["Runtime.bootstrap", "Runtime.reload_api_key"]}, {"t": "repl", "n": 1, "dir": "in", "calls": ["repl"]}, {"t": "rt", "n": 1, "dir": "in", "calls": ["Runtime.bootstrap", "Runtime.reload_api_key"]}, {"t": "catalog", "n": 1, "dir": "out", "calls": ["api_key_for", "resolve_model", "resolve_task_model", "session_id_for"]}, {"t": "prompts", "n": 1, "dir": "out", "calls": ["system_prompt"]}, {"t": "settings", "n": 1, "dir": "out", "calls": ["api_key_for"]}, {"t": "types", "n": 1, "dir": "out", "calls": ["cache_hit_ratio", "context_occupancy"]}], "tools": [{"t": "chat", "n": 2, "dir": "in", "calls": ["ChatController.__init__", "ChatController._job_views", "ChatController._on_event", "ChatController.job_log", "ChatController.reload_todos", "ChatController.reload_transcript", "ChatController.retry"]}, {"t": "cmds", "n": 1, "dir": "in", "calls": ["_jobs"]}, {"t": "persist", "n": 7, "dir": "in", "calls": ["Runtime.__init__", "Runtime._recompose", "Runtime.bootstrap", "Runtime.close", "Runtime.switch_session"]}, {"t": "rt", "n": 7, "dir": "in", "calls": ["Runtime.__init__", "Runtime._recompose", "Runtime.bootstrap", "Runtime.close", "Runtime.switch_session"]}, {"t": "artifacts", "n": 1, "dir": "out", "calls": ["build_task_tool"]}, {"t": "catalog", "n": 1, "dir": "out", "calls": ["build_task_tool"]}, {"t": "config", "n": 1, "dir": "out", "calls": ["build_task_tool"]}, {"t": "events", "n": 1, "dir": "out", "calls": ["_bash", "build_bash_tool.execute"]}, {"t": "protocol", "n": 1, "dir": "out", "calls": ["build_ask_tool", "build_ask_tool._ask"]}, {"t": "prov", "n": 1, "dir": "out", "calls": ["build_task_tool"]}, {"t": "substore", "n": 1, "dir": "out", "calls": ["build_task_tool", "build_task_tool.execute"]}, {"t": "types", "n": 4, "dir": "out", "calls": ["_TodoState.execute", "_bash.emit_progress", "build_task_tool.execute", "text_result"]}, {"t": "web", "n": 5, "dir": "out", "calls": ["_fetch", "format_results", "run_search"]}, {"t": "tui", "n": 3, "dir": "in", "calls": ["TodoHud.set_todos", "open_todo_editor.edited", "preview_diff"]}], "cmds": [{"t": "catalog", "n": 1, "dir": "out", "calls": ["apply_model_switch"]}, {"t": "chat", "n": 1, "dir": "out", "calls": ["AppServices"]}, {"t": "gate", "n": 1, "dir": "out", "calls": ["_mode"]}, {"t": "journal", "n": 1, "dir": "out", "calls": ["_format_list", "format_restore_report", "run_restore_command"]}, {"t": "persist", "n": 2, "dir": "out", "calls": ["AppServices", "ModelManager.__init__"]}, {"t": "prov", "n": 2, "dir": "out", "calls": ["ask_side_question"]}, {"t": "rec", "n": 2, "dir": "out", "calls": ["AppServices", "ModelManager.__init__"]}, {"t": "rt", "n": 2, "dir": "out", "calls": ["AppServices", "ModelManager.__init__"]}, {"t": "sess", "n": 2, "dir": "out", "calls": ["_pin", "_rename", "shake"]}, {"t": "smgr", "n": 1, "dir": "out", "calls": ["AppServices"]}, {"t": "support", "n": 2, "dir": "out", "calls": ["ModelManager.entries", "_tools", "apply_model_switch"]}, {"t": "tools", "n": 1, "dir": "out", "calls": ["_jobs"]}, {"t": "types", "n": 3, "dir": "out", "calls": ["_handoff", "_strip_images", "_strip_thinking", "ask_side_question", "shake"]}, {"t": "web", "n": 1, "dir": "out", "calls": ["_search"]}, {"t": "prep", "n": 2, "dir": "in", "calls": ["PreparedFrontend", "prepare"]}, {"t": "tui", "n": 4, "dir": "in", "calls": ["CommandsMixin._rebuild_commands", "ModelPicker.__init__", "ZenAgentApp.__init__"]}], "gate": [{"t": "cmds", "n": 1, "dir": "in", "calls": ["_mode"]}, {"t": "proj", "n": 1, "dir": "out", "calls": ["workspace_root"]}, {"t": "prompts", "n": 1, "dir": "out", "calls": ["mode_prompt_note"]}, {"t": "types", "n": 1, "dir": "out", "calls": ["PermissionBroker.before_tool_call", "PermissionGate.before_tool_call"]}, {"t": "main", "n": 2, "dir": "in", "calls": ["add_runtime_flags", "main"]}, {"t": "persist", "n": 3, "dir": "in", "calls": ["Runtime.__init__", "Runtime._prompt_with_mode", "Runtime.bootstrap", "Runtime.set_mode"]}, {"t": "prep", "n": 1, "dir": "in", "calls": ["PreparedFrontend", "prepare"]}, {"t": "rec", "n": 3, "dir": "in", "calls": ["Runtime.__init__", "Runtime._prompt_with_mode", "Runtime.bootstrap", "Runtime.set_mode"]}, {"t": "repl", "n": 2, "dir": "in", "calls": ["render_command_result", "repl.confirm_via_stdin", "repl.set_mode"]}, {"t": "rpc", "n": 1, "dir": "in", "calls": ["_run"]}, {"t": "rt", "n": 3, "dir": "in", "calls": ["Runtime.__init__", "Runtime._prompt_with_mode", "Runtime.bootstrap", "Runtime.set_mode"]}, {"t": "tjboot", "n": 1, "dir": "in", "calls": ["_run"]}, {"t": "tui", "n": 2, "dir": "in", "calls": ["ToolApproval.__init__", "ZenAgentApp.request_tool_approval"]}], "journal": [{"t": "cmds", "n": 1, "dir": "in", "calls": ["_format_list", "format_restore_report", "run_restore_command"]}, {"t": "lp", "n": 2, "dir": "out", "calls": ["SnapshotJournal._note", "SnapshotJournal.after_tool_call", "build_checkpoint_tools", "build_checkpoint_tools._checkpoint", "build_checkpoint_tools._rewind"]}, {"t": "proj", "n": 1, "dir": "out", "calls": ["journal_for"]}, {"t": "types", "n": 2, "dir": "out", "calls": ["RewindState.transform", "SnapshotJournal._note", "build_checkpoint_tools._checkpoint", "build_checkpoint_tools._rewind"]}, {"t": "persist", "n": 2, "dir": "in", "calls": ["Runtime.__init__", "Runtime._recompose", "Runtime.bootstrap"]}, {"t": "rec", "n": 2, "dir": "in", "calls": ["Runtime.__init__", "Runtime._recompose", "Runtime.bootstrap"]}, {"t": "rt", "n": 2, "dir": "in", "calls": ["Runtime.__init__", "Runtime._recompose", "Runtime.bootstrap"]}], "smgr": [{"t": "cmds", "n": 1, "dir": "in", "calls": ["AppServices"]}, {"t": "main", "n": 1, "dir": "in", "calls": ["_adopt"]}, {"t": "prep", "n": 1, "dir": "in", "calls": ["prepare"]}, {"t": "obscli", "n": 1, "dir": "out", "calls": ["SessionManager.export"]}, {"t": "persist", "n": 1, "dir": "out", "calls": ["SessionManager.__init__"]}, {"t": "proj", "n": 1, "dir": "out", "calls": ["SessionEntry", "SessionManager._touch_project_meta", "SessionManager.entries", "adopt_legacy_session"]}, {"t": "rec", "n": 1, "dir": "out", "calls": ["SessionManager.__init__"]}, {"t": "subrt", "n": 1, "dir": "out", "calls": ["_inflight_task_ids"]}, {"t": "substore", "n": 1, "dir": "out", "calls": ["SessionManager.delete", "SessionManager.fork", "SessionManager.undo"]}, {"t": "tui", "n": 2, "dir": "in", "calls": ["SessionPicker.__init__", "ZenAgentApp.__init__"]}], "web": [{"t": "cmds", "n": 1, "dir": "in", "calls": ["_search"]}, {"t": "rpc", "n": 1, "dir": "in", "calls": ["ConfigOps._known_secret_envs", "ConfigOps._secrets_result", "ConfigOps._secrets_test"]}, {"t": "tools", "n": 5, "dir": "in", "calls": ["_fetch", "format_results", "run_search"]}, {"t": "tui", "n": 3, "dir": "in", "calls": ["ModelsMixin._search_providers", "SearchProviderPicker.__init__"]}, {"t": "httpc", "n": 1, "dir": "out", "calls": ["_client"]}], "compact": [{"t": "prompts", "n": 1, "dir": "out", "calls": ["compact"]}, {"t": "prov", "n": 2, "dir": "out", "calls": ["compact", "maybe_auto_compact"]}, {"t": "sess", "n": 1, "dir": "out", "calls": ["compact", "maybe_auto_compact"]}, {"t": "types", "n": 1, "dir": "out", "calls": ["_last_usage", "compact", "should_auto_compact"]}, {"t": "main", "n": 1, "dir": "in", "calls": ["run_headless"]}], "prompts": [{"t": "compact", "n": 1, "dir": "in", "calls": ["compact"]}, {"t": "gate", "n": 1, "dir": "in", "calls": ["mode_prompt_note"]}, {"t": "main", "n": 2, "dir": "in", "calls": ["_estimate", "_list", "_show"]}, {"t": "persist", "n": 1, "dir": "in", "calls": ["Runtime.__init__", "Runtime._build_prompt", "Runtime._prompt_with_mode"]}, {"t": "adapters", "n": 1, "dir": "out", "calls": ["_block_tokens"]}, {"t": "rec", "n": 1, "dir": "in", "calls": ["Runtime.__init__", "Runtime._build_prompt", "Runtime._prompt_with_mode"]}, {"t": "rt", "n": 1, "dir": "in", "calls": ["Runtime.__init__", "Runtime._build_prompt", "Runtime._prompt_with_mode"]}, {"t": "support", "n": 1, "dir": "in", "calls": ["system_prompt"]}, {"t": "tjtools", "n": 1, "dir": "in", "calls": ["build_taiji_tools"]}, {"t": "views", "n": 1, "dir": "in", "calls": ["build_context_report"]}], "config": [{"t": "catalog", "n": 1, "dir": "out", "calls": ["UserConfig", "_load_config_file", "_parse_custom_providers", "apply_user_config"]}, {"t": "proj", "n": 1, "dir": "out", "calls": ["load_user_config"]}, {"t": "types", "n": 1, "dir": "out", "calls": ["ContextGuard", "ContextGuard.on_event", "ContextGuard.transform", "_estimate_chars", "_split_turns", "naive_overflow_prune", "token_estimate"]}, {"t": "main", "n": 1, "dir": "in", "calls": ["_check_secrets", "collect_checks", "collect_report"]}, {"t": "persist", "n": 1, "dir": "in", "calls": ["Runtime.__init__", "Runtime.bootstrap"]}, {"t": "rec", "n": 1, "dir": "in", "calls": ["Runtime.__init__", "Runtime.bootstrap"]}, {"t": "repl", "n": 1, "dir": "in", "calls": ["_render_settings"]}, {"t": "rpc", "n": 1, "dir": "in", "calls": ["ConfigOps._adopt_limits", "ConfigOps._knob_value", "ConfigOps._limits", "ConfigOps._limits_result"]}, {"t": "rt", "n": 1, "dir": "in", "calls": ["Runtime.__init__", "Runtime.bootstrap"]}, {"t": "subrt", "n": 1, "dir": "in", "calls": ["construct_child"]}, {"t": "substore", "n": 1, "dir": "in", "calls": ["SubagentLimits.from_user_config"]}, {"t": "tools", "n": 1, "dir": "in", "calls": ["build_task_tool"]}], "proj": [{"t": "config", "n": 1, "dir": "in", "calls": ["load_user_config"]}, {"t": "gate", "n": 1, "dir": "in", "calls": ["workspace_root"]}, {"t": "journal", "n": 1, "dir": "in", "calls": ["journal_for"]}, {"t": "main", "n": 1, "dir": "in", "calls": ["_check_sessions_writable", "collect_checks"]}, {"t": "mcp", "n": 1, "dir": "in", "calls": ["layer_path", "load_mcp_config", "load_mcp_layers"]}, {"t": "persist", "n": 1, "dir": "in", "calls": ["Runtime._note_session_scope", "Runtime._recompose", "Runtime._touch_project"]}, {"t": "rec", "n": 1, "dir": "in", "calls": ["Runtime._note_session_scope", "Runtime._recompose", "Runtime._touch_project"]}, {"t": "rpc", "n": 3, "dir": "in", "calls": ["ConfigOps._limits_result", "ConfigOps._project", "FilesOps._memory_request", "_run"]}, {"t": "rt", "n": 1, "dir": "in", "calls": ["Runtime._note_session_scope", "Runtime._recompose", "Runtime._touch_project"]}, {"t": "sess", "n": 1, "dir": "in", "calls": ["SessionInfo", "_project_key_for_directory", "_project_label", "all_session_dirs", "sessions_dir"]}, {"t": "skills", "n": 1, "dir": "in", "calls": ["default_skill_roots"]}, {"t": "smgr", "n": 1, "dir": "in", "calls": ["SessionEntry", "SessionManager._touch_project_meta", "SessionManager.entries", "adopt_legacy_session"]}, {"t": "templates", "n": 1, "dir": "in", "calls": ["default_template_roots"]}, {"t": "tjboot", "n": 1, "dir": "in", "calls": ["_run"]}, {"t": "tjsup", "n": 1, "dir": "in", "calls": ["TaijiSupervisor.spawn"]}, {"t": "tjtools", "n": 1, "dir": "in", "calls": ["taiji_supervisor_for"]}, {"t": "tui", "n": 1, "dir": "in", "calls": ["SessionsMixin._apply_session_action"]}], "exts": [{"t": "lp", "n": 1, "dir": "out", "calls": ["ExtensionAPI.__init__", "ExtensionAPI.register_tool", "LoadedExtensions"]}, {"t": "persist", "n": 1, "dir": "in", "calls": ["Runtime.bootstrap", "Runtime.rediscover"]}, {"t": "rec", "n": 1, "dir": "in", "calls": ["Runtime.bootstrap", "Runtime.rediscover"]}, {"t": "rt", "n": 1, "dir": "in", "calls": ["Runtime.bootstrap", "Runtime.rediscover"]}], "lp": [{"t": "exts", "n": 1, "dir": "in", "calls": ["ExtensionAPI.__init__", "ExtensionAPI.register_tool", "LoadedExtensions"]}, {"t": "journal", "n": 2, "dir": "in", "calls": ["SnapshotJournal._note", "SnapshotJournal.after_tool_call", "build_checkpoint_tools", "build_checkpoint_tools._checkpoint", "build_checkpoint_tools._rewind"]}, {"t": "catalog", "n": 1, "dir": "out", "calls": ["AgentConfig"]}, {"t": "events", "n": 2, "dir": "out", "calls": ["agent_loop", "agent_loop.emit_update", "execute_tool", "run_tool", "run_tool_batch", "run_tool_batch.run_one.forward"]}, {"t": "protocol", "n": 2, "dir": "out", "calls": ["AgentConfig", "ToolOutcome", "execute_tool", "is_exclusive", "run_tool", "run_tool.forward", "run_tool_batch.run_one.forward", "truncated_call_outcome"]}, {"t": "prov", "n": 2, "dir": "out", "calls": ["AgentConfig", "agent_loop"]}, {"t": "types", "n": 4, "dir": "out", "calls": ["AgentConfig", "AgentState", "ToolOutcome", "_run_cost", "agent_loop", "apply_result_budget", "calls_signature", "execute_tool"]}, {"t": "mcp", "n": 1, "dir": "in", "calls": ["McpManager._make_tool", "McpManager._make_tool.execute", "McpManager.tool_defs", "_to_result"]}, {"t": "registry", "n": 1, "dir": "in", "calls": ["ToolRegistry.__init__", "ToolRegistry.active", "ToolRegistry.all_tools", "ToolRegistry.get", "ToolRegistry.is_active", "ToolRegistry.reconcile", "ToolRegistry.register", "ToolRegistry.register_all"]}, {"t": "repl", "n": 1, "dir": "in", "calls": ["_first_line", "tool_progress_line", "tool_result_line"]}, {"t": "skills", "n": 1, "dir": "in", "calls": ["build_skill_tool", "build_skill_tool.execute"]}, {"t": "subrt", "n": 1, "dir": "in", "calls": ["_TaskRecorder._push_progress", "child_allowed", "child_tool_names", "construct_child"]}, {"t": "views", "n": 1, "dir": "in", "calls": ["messages_to_views"]}], "protocol": [{"t": "lp", "n": 2, "dir": "in", "calls": ["AgentConfig", "ToolOutcome", "execute_tool", "is_exclusive", "run_tool", "run_tool.forward", "run_tool_batch.run_one.forward", "truncated_call_outcome"]}, {"t": "events", "n": 1, "dir": "out", "calls": ["AgentTool"]}, {"t": "types", "n": 1, "dir": "out", "calls": ["ToolResultAgent", "_error_result"]}, {"t": "tjtools", "n": 1, "dir": "in", "calls": ["_error", "_text", "build_taiji_tools", "build_taiji_tools.kill_worker", "build_taiji_tools.list_workers", "build_taiji_tools.merge_worker", "build_taiji_tools.message_worker", "build_taiji_tools.spawn_worker"]}, {"t": "tools", "n": 1, "dir": "in", "calls": ["build_ask_tool", "build_ask_tool._ask"]}], "main": [{"t": "catalog", "n": 1, "dir": "out", "calls": ["collect_checks"]}, {"t": "compact", "n": 1, "dir": "out", "calls": ["run_headless"]}, {"t": "config", "n": 1, "dir": "out", "calls": ["_check_secrets", "collect_checks", "collect_report"]}, {"t": "events", "n": 1, "dir": "out", "calls": ["_PlainOutput.__call__"]}, {"t": "gate", "n": 2, "dir": "out", "calls": ["add_runtime_flags", "main"]}, {"t": "persist", "n": 1, "dir": "out", "calls": ["main", "run_headless"]}, {"t": "proj", "n": 1, "dir": "out", "calls": ["_check_sessions_writable", "collect_checks"]}, {"t": "prompts", "n": 2, "dir": "out", "calls": ["_estimate", "_list", "_show"]}, {"t": "prov", "n": 1, "dir": "out", "calls": ["run_headless"]}, {"t": "rec", "n": 1, "dir": "out", "calls": ["main", "run_headless"]}, {"t": "repl", "n": 1, "dir": "out", "calls": ["main"]}, {"t": "rt", "n": 1, "dir": "out", "calls": ["main", "run_headless"]}, {"t": "sess", "n": 4, "dir": "out", "calls": ["_check_sessions_writable", "_list", "main", "run_export"]}, {"t": "settings", "n": 1, "dir": "out", "calls": ["_check_secrets", "collect_checks"]}, {"t": "smgr", "n": 1, "dir": "out", "calls": ["_adopt"]}, {"t": "support", "n": 1, "dir": "out", "calls": []}, {"t": "tui", "n": 2, "dir": "out", "calls": ["_tui_app_class", "main.run_tui_session"]}, {"t": "types", "n": 1, "dir": "out", "calls": ["_PlainOutput.__call__", "_read_images", "_usage_and_counts"]}, {"t": "views", "n": 1, "dir": "out", "calls": ["_usage_and_counts"]}, {"t": "repl", "n": 1, "dir": "in", "calls": ["repl.dispatch_slash"]}, {"t": "rpc", "n": 1, "dir": "in", "calls": ["main"]}, {"t": "tjboot", "n": 1, "dir": "in", "calls": ["main"]}], "repl": [{"t": "main", "n": 1, "dir": "in", "calls": ["main"]}, {"t": "broker", "n": 1, "dir": "out", "calls": ["repl.confirm_via_stdin"]}, {"t": "completion", "n": 1, "dir": "out", "calls": ["_make_default_reader", "repl"]}, {"t": "config", "n": 1, "dir": "out", "calls": ["_render_settings"]}, {"t": "events", "n": 2, "dir": "out", "calls": ["AssistantLiveRenderer.feed", "_EventPrinter.__call__", "_EventPrinter._progress", "repl.on_event"]}, {"t": "gate", "n": 2, "dir": "out", "calls": ["render_command_result", "repl.confirm_via_stdin", "repl.set_mode"]}, {"t": "lp", "n": 1, "dir": "out", "calls": ["_first_line", "tool_progress_line", "tool_result_line"]}, {"t": "main", "n": 1, "dir": "out", "calls": ["repl.dispatch_slash"]}, {"t": "memstore", "n": 1, "dir": "out", "calls": ["_memory_editor_flow"]}, {"t": "persist", "n": 1, "dir": "out", "calls": ["repl"]}, {"t": "prov", "n": 1, "dir": "out", "calls": ["repl"]}, {"t": "rec", "n": 1, "dir": "out", "calls": ["repl"]}, {"t": "rt", "n": 1, "dir": "out", "calls": ["repl"]}, {"t": "sess", "n": 2, "dir": "out", "calls": ["_render_settings", "session_header"]}, {"t": "settings", "n": 1, "dir": "out", "calls": ["_render_settings", "_saved_language", "_saved_theme", "repl.set_language", "repl.set_theme"]}, {"t": "skillcmds", "n": 1, "dir": "out", "calls": ["repl"]}, {"t": "support", "n": 1, "dir": "out", "calls": ["repl"]}, {"t": "templates", "n": 1, "dir": "out", "calls": ["repl"]}, {"t": "types", "n": 2, "dir": "out", "calls": ["AssistantLiveRenderer", "AssistantLiveRenderer.feed", "_first_line", "aggregate_usage", "context_percent", "repl", "status_line", "tool_progress_line"]}, {"t": "views", "n": 2, "dir": "out", "calls": ["_EventPrinter.__init__", "aggregate_usage"]}], "settings": [{"t": "main", "n": 1, "dir": "in", "calls": ["_check_secrets", "collect_checks"]}, {"t": "persist", "n": 1, "dir": "in", "calls": ["_active_skills"]}, {"t": "rec", "n": 1, "dir": "in", "calls": ["_active_skills"]}, {"t": "repl", "n": 1, "dir": "in", "calls": ["_render_settings", "_saved_language", "_saved_theme", "repl.set_language", "repl.set_theme"]}, {"t": "rpc", "n": 1, "dir": "in", "calls": ["ConfigOps._secrets", "ConfigOps._secrets_result", "ConfigOps._skill_rows", "ConfigOps._skills"]}, {"t": "rt", "n": 1, "dir": "in", "calls": ["_active_skills"]}, {"t": "support", "n": 1, "dir": "in", "calls": ["api_key_for"]}, {"t": "tui", "n": 5, "dir": "in", "calls": ["AppearanceMixin.set_appearance", "AppearanceMixin.set_language", "ModelsMixin._model_providers", "ModelsMixin._prompt_secret.entered", "ModelsMixin._search_providers", "SettingsPicker.__init__", "_saved_language", "_saved_theme"]}], "tui": [{"t": "main", "n": 2, "dir": "in", "calls": ["_tui_app_class", "main.run_tui_session"]}, {"t": "broker", "n": 1, "dir": "out", "calls": ["ZenAgentApp.request_tool_approval"]}, {"t": "chat", "n": 1, "dir": "out", "calls": ["ZenAgentApp.__init__"]}, {"t": "cmds", "n": 4, "dir": "out", "calls": ["CommandsMixin._rebuild_commands", "ModelPicker.__init__", "ZenAgentApp.__init__"]}, {"t": "completion", "n": 1, "dir": "out", "calls": ["HintsMixin._argument_values", "HintsMixin._command_matches", "HintsMixin._hint_context", "HintsMixin._skill_matches"]}, {"t": "gate", "n": 2, "dir": "out", "calls": ["ToolApproval.__init__", "ZenAgentApp.request_tool_approval"]}, {"t": "mcp", "n": 1, "dir": "out", "calls": ["open_mcp_add.added"]}, {"t": "memstore", "n": 1, "dir": "out", "calls": ["MemoryEditor.__init__", "MemoryManager.__init__", "MemoryManager._delete", "MemoryManager._selected"]}, {"t": "obscli", "n": 2, "dir": "out", "calls": ["UpdateNoticeMixin._maybe_show_cached_update", "UpdateNoticeMixin._refresh_update_check", "UpdateNoticeMixin._show_update_notice", "UpdateNoticeMixin._start_update_check", "open_usage_dashboard"]}, {"t": "persist", "n": 1, "dir": "out", "calls": ["ZenAgentApp.__init__"]}, {"t": "proj", "n": 1, "dir": "out", "calls": ["SessionsMixin._apply_session_action"]}, {"t": "rec", "n": 1, "dir": "out", "calls": ["ZenAgentApp.__init__"]}, {"t": "rt", "n": 1, "dir": "out", "calls": ["ZenAgentApp.__init__"]}, {"t": "sess", "n": 1, "dir": "out", "calls": ["SessionsMixin._apply_session_action"]}, {"t": "settings", "n": 5, "dir": "out", "calls": ["AppearanceMixin.set_appearance", "AppearanceMixin.set_language", "ModelsMixin._model_providers", "ModelsMixin._prompt_secret.entered", "ModelsMixin._search_providers", "SettingsPicker.__init__", "_saved_language", "_saved_theme"]}, {"t": "skillcmds", "n": 1, "dir": "out", "calls": ["DraftsMixin.on_prompt_input_submitted"]}, {"t": "smgr", "n": 2, "dir": "out", "calls": ["SessionPicker.__init__", "ZenAgentApp.__init__"]}, {"t": "templates", "n": 1, "dir": "out", "calls": ["DraftsMixin.on_prompt_input_submitted"]}, {"t": "tools", "n": 3, "dir": "out", "calls": ["TodoHud.set_todos", "open_todo_editor.edited", "preview_diff"]}, {"t": "types", "n": 1, "dir": "out", "calls": ["AttachmentChips.set_attachments"]}, {"t": "views", "n": 10, "dir": "out", "calls": ["ContextBreakdownScreen.__init__", "JobLogScreen.__init__", "JobLogScreen.set_view", "PendingBand.set_pending", "SegmentContext", "SkillBlock.__init__", "StatusBand.__init__", "StatusBand.update_status"]}, {"t": "web", "n": 3, "dir": "out", "calls": ["ModelsMixin._search_providers", "SearchProviderPicker.__init__"]}], "views": [{"t": "main", "n": 1, "dir": "in", "calls": ["_usage_and_counts"]}, {"t": "persist", "n": 1, "dir": "in", "calls": ["Runtime.bootstrap", "Runtime.switch_session"]}, {"t": "rec", "n": 1, "dir": "in", "calls": ["Runtime.bootstrap", "Runtime.switch_session"]}, {"t": "repl", "n": 2, "dir": "in", "calls": ["_EventPrinter.__init__", "aggregate_usage"]}, {"t": "rpc", "n": 2, "dir": "in", "calls": ["_usage"]}, {"t": "rt", "n": 1, "dir": "in", "calls": ["Runtime.bootstrap", "Runtime.switch_session"]}, {"t": "tui", "n": 10, "dir": "in", "calls": ["ContextBreakdownScreen.__init__", "JobLogScreen.__init__", "JobLogScreen.set_view", "PendingBand.set_pending", "SegmentContext", "SkillBlock.__init__", "StatusBand.__init__", "StatusBand.update_status"]}, {"t": "adapters", "n": 1, "dir": "out", "calls": ["build_context_report"]}, {"t": "events", "n": 1, "dir": "out", "calls": ["TranscriptBuilder.apply"]}, {"t": "lp", "n": 1, "dir": "out", "calls": ["messages_to_views"]}, {"t": "prompts", "n": 1, "dir": "out", "calls": ["build_context_report"]}, {"t": "skillcmds", "n": 1, "dir": "out", "calls": ["user_view"]}, {"t": "types", "n": 2, "dir": "out", "calls": ["MessageView", "TranscriptBuilder._apply_metadata", "TranscriptBuilder._message_end", "TranscriptBuilder._message_start", "TranscriptBuilder.apply", "TranscriptBuilder.load", "_assistant_text", "_assistant_thinking"]}], "mcp": [{"t": "httpc", "n": 1, "dir": "out", "calls": ["HttpTransport.start"]}, {"t": "lp", "n": 1, "dir": "out", "calls": ["McpManager._make_tool", "McpManager._make_tool.execute", "McpManager.tool_defs", "_to_result"]}, {"t": "proj", "n": 1, "dir": "out", "calls": ["layer_path", "load_mcp_config", "load_mcp_layers"]}, {"t": "types", "n": 1, "dir": "out", "calls": ["McpManager._make_tool.execute", "_to_result"]}, {"t": "persist", "n": 2, "dir": "in", "calls": ["Runtime.__init__", "Runtime._start_mcp"]}, {"t": "rec", "n": 2, "dir": "in", "calls": ["Runtime.__init__", "Runtime._start_mcp"]}, {"t": "rpc", "n": 1, "dir": "in", "calls": ["ConfigOps._effective_mcp", "ConfigOps._mcp", "ConfigOps._mcp_rows"]}, {"t": "rt", "n": 2, "dir": "in", "calls": ["Runtime.__init__", "Runtime._start_mcp"]}, {"t": "tui", "n": 1, "dir": "in", "calls": ["open_mcp_add.added"]}], "httpc": [{"t": "mcp", "n": 1, "dir": "in", "calls": ["HttpTransport.start"]}, {"t": "obscli", "n": 1, "dir": "in", "calls": ["fetch_latest"]}, {"t": "web", "n": 1, "dir": "in", "calls": ["_client"]}], "obscli": [{"t": "httpc", "n": 1, "dir": "out", "calls": ["fetch_latest"]}, {"t": "sess", "n": 2, "dir": "out", "calls": ["export_session", "session_paths"]}, {"t": "types", "n": 2, "dir": "out", "calls": ["ModelUsage.add", "_blocks", "collect_usage", "export_html", "export_markdown"]}, {"t": "smgr", "n": 1, "dir": "in", "calls": ["SessionManager.export"]}, {"t": "tui", "n": 2, "dir": "in", "calls": ["UpdateNoticeMixin._maybe_show_cached_update", "UpdateNoticeMixin._refresh_update_check", "UpdateNoticeMixin._show_update_notice", "UpdateNoticeMixin._start_update_check", "open_usage_dashboard"]}], "obsrun": [{"t": "events", "n": 2, "dir": "out", "calls": ["MetricsRecorder.__call__", "TraceRecorder.__call__", "TraceRecorder._record"]}, {"t": "types", "n": 1, "dir": "out", "calls": ["MetricsRecorder.__call__", "MetricsRecorder.__init__"]}, {"t": "persist", "n": 1, "dir": "in", "calls": ["Runtime.__init__", "Runtime.bootstrap"]}, {"t": "rec", "n": 1, "dir": "in", "calls": ["Runtime.__init__", "Runtime.bootstrap"]}], "artifacts": [{"t": "persist", "n": 1, "dir": "in", "calls": ["Runtime.session"]}, {"t": "rec", "n": 1, "dir": "in", "calls": ["Runtime.session"]}, {"t": "subrt", "n": 1, "dir": "in", "calls": ["construct_child"]}, {"t": "tools", "n": 1, "dir": "in", "calls": ["build_task_tool"]}], "ctxfiles": [{"t": "persist", "n": 1, "dir": "in", "calls": ["Runtime._build_prompt"]}, {"t": "rec", "n": 1, "dir": "in", "calls": ["Runtime._build_prompt"]}, {"t": "rt", "n": 1, "dir": "in", "calls": ["Runtime._build_prompt"]}], "memstore": [{"t": "persist", "n": 1, "dir": "in", "calls": ["Runtime.__init__", "Runtime._build_prompt", "Runtime._recompose"]}, {"t": "rec", "n": 1, "dir": "in", "calls": ["Runtime.__init__", "Runtime._build_prompt", "Runtime._recompose"]}, {"t": "repl", "n": 1, "dir": "in", "calls": ["_memory_editor_flow"]}, {"t": "rpc", "n": 1, "dir": "in", "calls": ["FilesOps._memory_request"]}, {"t": "rt", "n": 1, "dir": "in", "calls": ["Runtime.__init__", "Runtime._build_prompt", "Runtime._recompose"]}, {"t": "tui", "n": 1, "dir": "in", "calls": ["MemoryEditor.__init__", "MemoryManager.__init__", "MemoryManager._delete", "MemoryManager._selected"]}], "registry": [{"t": "persist", "n": 1, "dir": "in", "calls": ["Runtime.__init__"]}, {"t": "rec", "n": 1, "dir": "in", "calls": ["Runtime.__init__"]}, {"t": "lp", "n": 1, "dir": "out", "calls": ["ToolRegistry.__init__", "ToolRegistry.active", "ToolRegistry.all_tools", "ToolRegistry.get", "ToolRegistry.is_active", "ToolRegistry.reconcile", "ToolRegistry.register", "ToolRegistry.register_all"]}], "skills": [{"t": "persist", "n": 1, "dir": "in", "calls": ["Runtime._recompose", "Runtime.bootstrap", "Runtime.rediscover", "Runtime.refresh_skills"]}, {"t": "rec", "n": 1, "dir": "in", "calls": ["Runtime._recompose", "Runtime.bootstrap", "Runtime.rediscover", "Runtime.refresh_skills"]}, {"t": "rpc", "n": 1, "dir": "in", "calls": ["ConfigOps._discover", "ConfigOps._skills"]}, {"t": "rt", "n": 1, "dir": "in", "calls": ["Runtime._recompose", "Runtime.bootstrap", "Runtime.rediscover", "Runtime.refresh_skills"]}, {"t": "skillcmds", "n": 2, "dir": "in", "calls": ["SkillSubmission", "build_skill_submission", "load_skill_body", "render_skill_prompt", "skill_command_name"]}, {"t": "lp", "n": 1, "dir": "out", "calls": ["build_skill_tool", "build_skill_tool.execute"]}, {"t": "proj", "n": 1, "dir": "out", "calls": ["default_skill_roots"]}, {"t": "types", "n": 1, "dir": "out", "calls": ["build_skill_tool.execute"]}, {"t": "templates", "n": 1, "dir": "in", "calls": ["discover_templates"]}], "templates": [{"t": "persist", "n": 1, "dir": "in", "calls": ["Runtime.__init__", "Runtime.bootstrap", "Runtime.rediscover"]}, {"t": "rec", "n": 1, "dir": "in", "calls": ["Runtime.__init__", "Runtime.bootstrap", "Runtime.rediscover"]}, {"t": "repl", "n": 1, "dir": "in", "calls": ["repl"]}, {"t": "rt", "n": 1, "dir": "in", "calls": ["Runtime.__init__", "Runtime.bootstrap", "Runtime.rediscover"]}, {"t": "proj", "n": 1, "dir": "out", "calls": ["default_template_roots"]}, {"t": "skills", "n": 1, "dir": "out", "calls": ["discover_templates"]}, {"t": "tui", "n": 1, "dir": "in", "calls": ["DraftsMixin.on_prompt_input_submitted"]}], "tjsess": [{"t": "persist", "n": 1, "dir": "in", "calls": ["Runtime._build_prompt", "Runtime._recompose"]}, {"t": "rec", "n": 1, "dir": "in", "calls": ["Runtime._build_prompt", "Runtime._recompose"]}, {"t": "rt", "n": 1, "dir": "in", "calls": ["Runtime._build_prompt", "Runtime._recompose"]}, {"t": "sess", "n": 1, "dir": "out", "calls": ["ensure_taiji_session"]}, {"t": "workspace", "n": 1, "dir": "out", "calls": ["should_init_taiji"]}, {"t": "tjtools", "n": 1, "dir": "in", "calls": ["taiji_tools_for"]}], "tjtools": [{"t": "persist", "n": 1, "dir": "in", "calls": ["Runtime._recompose"]}, {"t": "rec", "n": 1, "dir": "in", "calls": ["Runtime._recompose"]}, {"t": "rpc", "n": 1, "dir": "in", "calls": ["_run"]}, {"t": "rt", "n": 1, "dir": "in", "calls": ["Runtime._recompose"]}, {"t": "tjboot", "n": 1, "dir": "in", "calls": ["_run"]}, {"t": "proj", "n": 1, "dir": "out", "calls": ["taiji_supervisor_for"]}, {"t": "prompts", "n": 1, "dir": "out", "calls": ["build_taiji_tools"]}, {"t": "protocol", "n": 1, "dir": "out", "calls": ["_error", "_text", "build_taiji_tools", "build_taiji_tools.kill_worker", "build_taiji_tools.list_workers", "build_taiji_tools.merge_worker", "build_taiji_tools.message_worker", "build_taiji_tools.spawn_worker"]}, {"t": "tjsess", "n": 1, "dir": "out", "calls": ["taiji_tools_for"]}, {"t": "types", "n": 1, "dir": "out", "calls": ["_error", "_text"]}], "prep": [{"t": "cmds", "n": 2, "dir": "out", "calls": ["PreparedFrontend", "prepare"]}, {"t": "gate", "n": 1, "dir": "out", "calls": ["PreparedFrontend", "prepare"]}, {"t": "persist", "n": 1, "dir": "out", "calls": ["PreparedFrontend", "prepare"]}, {"t": "prov", "n": 1, "dir": "out", "calls": ["prepare"]}, {"t": "rec", "n": 1, "dir": "out", "calls": ["PreparedFrontend", "prepare"]}, {"t": "smgr", "n": 1, "dir": "out", "calls": ["prepare"]}, {"t": "tjboot", "n": 1, "dir": "in", "calls": ["_run"]}], "transport": [{"t": "prov", "n": 1, "dir": "in", "calls": []}, {"t": "events", "n": 1, "dir": "out", "calls": ["_sleep", "post_stream"]}, {"t": "types", "n": 1, "dir": "out", "calls": ["parse_usage"]}], "completion": [{"t": "repl", "n": 1, "dir": "in", "calls": ["_make_default_reader", "repl"]}, {"t": "tui", "n": 1, "dir": "in", "calls": ["HintsMixin._argument_values", "HintsMixin._command_matches", "HintsMixin._hint_context", "HintsMixin._skill_matches"]}], "skillcmds": [{"t": "repl", "n": 1, "dir": "in", "calls": ["repl"]}, {"t": "rpc", "n": 3, "dir": "in", "calls": ["ConfigOps._command", "ConfigOps._skill_command", "_message_projection"]}, {"t": "skills", "n": 2, "dir": "out", "calls": ["SkillSubmission", "build_skill_submission", "load_skill_body", "render_skill_prompt", "skill_command_name"]}, {"t": "tui", "n": 1, "dir": "in", "calls": ["DraftsMixin.on_prompt_input_submitted"]}, {"t": "views", "n": 1, "dir": "in", "calls": ["user_view"]}], "retry": [{"t": "events", "n": 1, "dir": "out", "calls": ["stream_with_retry"]}, {"t": "types", "n": 1, "dir": "out", "calls": ["is_retryable", "stream_with_retry"]}], "rpc": [{"t": "config", "n": 1, "dir": "out", "calls": ["ConfigOps._adopt_limits", "ConfigOps._knob_value", "ConfigOps._limits", "ConfigOps._limits_result"]}, {"t": "events", "n": 2, "dir": "out", "calls": ["RpcServer._on_event", "serialize_event"]}, {"t": "gate", "n": 1, "dir": "out", "calls": ["_run"]}, {"t": "main", "n": 1, "dir": "out", "calls": ["main"]}, {"t": "mcp", "n": 1, "dir": "out", "calls": ["ConfigOps._effective_mcp", "ConfigOps._mcp", "ConfigOps._mcp_rows"]}, {"t": "memstore", "n": 1, "dir": "out", "calls": ["FilesOps._memory_request"]}, {"t": "persist", "n": 1, "dir": "out", "calls": ["_run"]}, {"t": "proj", "n": 3, "dir": "out", "calls": ["ConfigOps._limits_result", "ConfigOps._project", "FilesOps._memory_request", "_run"]}, {"t": "rec", "n": 1, "dir": "out", "calls": ["_run"]}, {"t": "rt", "n": 1, "dir": "out", "calls": ["_run"]}, {"t": "settings", "n": 1, "dir": "out", "calls": ["ConfigOps._secrets", "ConfigOps._secrets_result", "ConfigOps._skill_rows", "ConfigOps._skills"]}, {"t": "skillcmds", "n": 3, "dir": "out", "calls": ["ConfigOps._command", "ConfigOps._skill_command", "_message_projection"]}, {"t": "skills", "n": 1, "dir": "out", "calls": ["ConfigOps._discover", "ConfigOps._skills"]}, {"t": "tjsup", "n": 2, "dir": "out", "calls": ["TaijiOps._taiji_request"]}, {"t": "tjtools", "n": 1, "dir": "out", "calls": ["_run"]}, {"t": "types", "n": 2, "dir": "out", "calls": ["RpcServer._final_text", "_message_projection", "_text_of"]}, {"t": "views", "n": 2, "dir": "out", "calls": ["_usage"]}, {"t": "web", "n": 1, "dir": "out", "calls": ["ConfigOps._known_secret_envs", "ConfigOps._secrets_result", "ConfigOps._secrets_test"]}, {"t": "workspace", "n": 2, "dir": "out", "calls": ["FilesOps._fs_index", "FilesOps._fs_request", "RpcServer._handle_line"]}, {"t": "tjboot", "n": 1, "dir": "in", "calls": ["_run"]}], "tjsup": [{"t": "rpc", "n": 2, "dir": "in", "calls": ["TaijiOps._taiji_request"]}, {"t": "proj", "n": 1, "dir": "out", "calls": ["TaijiSupervisor.spawn"]}], "workspace": [{"t": "rpc", "n": 2, "dir": "in", "calls": ["FilesOps._fs_index", "FilesOps._fs_request", "RpcServer._handle_line"]}, {"t": "tjsess", "n": 1, "dir": "in", "calls": ["should_init_taiji"]}, {"t": "git", "n": 1, "dir": "out", "calls": ["_status_payload", "worktree_overview"]}], "tjboot": [{"t": "gate", "n": 1, "dir": "out", "calls": ["_run"]}, {"t": "main", "n": 1, "dir": "out", "calls": ["main"]}, {"t": "persist", "n": 1, "dir": "out", "calls": ["_run"]}, {"t": "prep", "n": 1, "dir": "out", "calls": ["_run"]}, {"t": "proj", "n": 1, "dir": "out", "calls": ["_run"]}, {"t": "rec", "n": 1, "dir": "out", "calls": ["_run"]}, {"t": "rpc", "n": 1, "dir": "out", "calls": ["_run"]}, {"t": "rt", "n": 1, "dir": "out", "calls": ["_run"]}, {"t": "tjtools", "n": 1, "dir": "out", "calls": ["_run"]}]};
+  var R = {}, W = 0, H = 0, colB = {}, maxR = 0, chanY = 0;
+  var sideTotal = {}, spreadCount = {}, placedRects = [];
+
+  function rectOf(el) {
+    var c = canvas.getBoundingClientRect();
+    var r = el.getBoundingClientRect();
+    return {
+      left: r.left - c.left, top: r.top - c.top,
+      right: r.right - c.left, bottom: r.bottom - c.top,
+      w: r.width, h: r.height,
+      cx: r.left - c.left + r.width / 2, cy: r.top - c.top + r.height / 2
+    };
+  }
+  function nid(id) { return root.querySelector('[data-node="' + id + '"]'); }
+
+  function anchors(id, side, fixedFrac) {
+    var rc = R[id];
+    var frac = fixedFrac != null ? fixedFrac : spread(id + ':' + side, sideTotal[id + ':' + side] || 1);
+    if (side === 'top') return [rc.left + rc.w * frac, rc.top];
+    if (side === 'bottom') return [rc.left + rc.w * frac, rc.bottom];
+    if (side === 'left') return [rc.left, rc.top + rc.h * frac];
+    return [rc.right, rc.top + rc.h * frac];
+  }
+  function spread(key, total) {
+    var i = spreadCount[key] || 0;
+    spreadCount[key] = i + 1;
+    return (i + 1) / (total + 1);
+  }
+
+  function laneX(g, k, fromRightCol) {
+    return fromRightCol ? colB[g].right + 12 + k * 9 : colB[g + 1].left - 12 - k * 9;
+  }
+
+  function resolveSides(e) {
+    var r = e.route || 'v', out = {};
+    var srcCol = R[e.f].col || 0, dstCol = R[e.t].col || 0;
+    var below = R[e.t].cy > R[e.f].cy + 4, above = R[e.t].cy < R[e.f].cy - 4;
+    if (r === 'gL' || r === 'gR' || r === 'vG') {
+      var s2t = srcCol <= dstCol;
+      if (!e.sf) out.f = s2t ? 'right' : 'left';
+      if (!e.tf) out.t = s2t ? 'left' : 'right';
+      if (r === 'vG') out.f = e.sf || 'bottom';
+    } else if (r === 'gSame') { out.f = 'right'; out.t = 'right'; }
+    else if (r === 'chL') { out.f = 'top'; out.t = e.tf || 'left'; }
+    else if (r === 'upR') { out.f = 'left'; out.t = 'right'; }
+    else if (r === 'chM') { out.f = 'top'; out.t = 'bottom'; }
+    else if (r === 'dropL') { out.f = 'bottom'; out.t = 'left'; }
+    else if (r === 'dropR') { out.f = 'bottom'; out.t = 'right'; }
+    else if (r === 'rowBelow') { out.f = 'bottom'; out.t = 'bottom'; }
+    else if (r === 'h') {
+      var l2r = R[e.f].cx <= R[e.t].cx;
+      out.f = l2r ? 'right' : 'left'; out.t = l2r ? 'left' : 'right';
+    }
+    else {
+      out.f = below ? 'bottom' : (above ? 'top' : 'bottom');
+      out.t = below ? 'top' : (above ? 'bottom' : 'bottom');
+    }
+    if (e.sf) out.f = e.sf;
+    if (e.tf) out.t = e.tf;
+    return out;
+  }
+
+  function buildPts(e, s) {
+    var A = R[e.f], B = R[e.t], r = e.route || 'v';
+    var p0 = anchors(e.f, s.f, e.ffrac), p1 = anchors(e.t, s.t, e.tfrac);
+    var srcCol = A.col || 0, dstCol = B.col || 0;
+    if (r === 'gL' || r === 'gR') {
+      var x = laneX(e.gap, e.k, srcCol > dstCol);
+      return [p0, [x, p0[1]], [x, p1[1]], p1];
+    }
+    if (r === 'gSame') {
+      var xs = colB[e.gap + 1].left - 12 - e.k * 9;
+      return [p0, [xs, p0[1]], [xs, p1[1]], p1];
+    }
+    if (r === 'vG') {
+      var x2 = laneX(e.gap, e.k, srcCol > dstCol);
+      var topY = Math.min(A.bottom + 14, p1[1]);
+      return [p0, [p0[0], topY], [x2, topY], [x2, p1[1]], p1];
+    }
+    if (r === 'chL') {
+      var x3 = colB[e.gap + 1].left - 12 - e.k * 9;
+      return [p0, [p0[0], chanY], [x3, chanY], [x3, p1[1]], p1];
+    }
+    if (r === 'upR') {
+      // 源列 → 经列间通道上行至 prep 走廊 → 右边道下行进入目标
+      var xu = colB[e.gap + 1].left - 12 - e.k * 9;
+      var corrY = R.prep.bottom + 10 + (e.slot || 0) * 9;
+      var xmU = Math.min(maxR + 14 + e.mi * 10, W - 4);
+      return [p0, [xu, p0[1]], [xu, corrY], [xmU, corrY], [xmU, p1[1]], p1];
+    }
+    if (r === 'chM') {
+      var ey = B.bottom + 16;
+      return [p0, [p0[0], chanY], [e.lane, chanY], [e.lane, ey], [B.cx, ey], [B.cx, B.bottom]];
+    }
+    if (r === 'dropL') {
+      var cy = A.bottom + 12 + (e.slot || 0) * 9;
+      return [p0, [p0[0], cy], [e.lane, cy], [e.lane, p1[1]], p1];
+    }
+    if (r === 'dropR') {
+      var cy2 = A.bottom + 12 + (e.slot || 0) * 9;
+      var xm = Math.min(maxR + 14 + e.mi * 10, W - 4);
+      return [p0, [p0[0], cy2], [xm, cy2], [xm, p1[1]], p1];
+    }
+    if (r === 'mL') return [p0, [e.lane, p0[1]], [e.lane, p1[1]], p1];
+    if (r === 'rowBelow') {
+      var yb = Math.max(A.bottom, B.bottom) + 12 + (e.slot || 0) * 9;
+      return [p0, [p0[0], yb], [p1[0], yb], p1];
+    }
+    if (r === 'h') return [p0, p1];
+    // 默认 v
+    var below = B.cy > A.cy + 4;
+    if (Math.abs(p0[0] - p1[0]) < 26) return [p0, p1];
+    var midY = below ? (A.bottom + B.top) / 2 : (B.bottom + A.top) / 2;
+    return [p0, [p0[0], midY], [p1[0], midY], p1];
+  }
+
+  function segMid(a, b) { return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; }
+
+  function draw() {
+    W = canvas.clientWidth; H = canvas.clientHeight;
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    labelLayer.textContent = '';
+    R = {};
+    root.querySelectorAll('[data-node]').forEach(function (el) {
+      var rc = rectOf(el);
+      var colAttr = el.getAttribute('data-col');
+      rc.col = colAttr ? parseInt(colAttr, 10) : 0;
+      R[el.dataset.node] = rc;
+    });
+    colB = {};
+    for (var id in R) {
+      var col = R[id].col;
+      if (!col) continue;
+      if (!colB[col]) colB[col] = { left: R[id].left, right: R[id].right };
+      colB[col].left = Math.min(colB[col].left, R[id].left);
+      colB[col].right = Math.max(colB[col].right, R[id].right);
+    }
+    maxR = 0;
+    for (id in R) maxR = Math.max(maxR, R[id].right);
+    var band = root.querySelector('.zf-band').getBoundingClientRect();
+    var cbox = canvas.getBoundingClientRect();
+    chanY = band.top - cbox.top - 11;
+
+    sideTotal = {}; spreadCount = {}; placedRects = [];
+    var sides = EDGES.map(resolveSides);
+    EDGES.forEach(function (e, i) {
+      sideTotal[e.f + ':' + sides[i].f] = (sideTotal[e.f + ':' + sides[i].f] || 0) + 1;
+      sideTotal[e.t + ':' + sides[i].t] = (sideTotal[e.t + ':' + sides[i].t] || 0) + 1;
+    });
+
+    var defs = document.createElementNS(SVGNS, 'defs');
+    [['zf-arw', 'zf-arw'], ['zf-arw-tj', 'zf-arw-tj'], ['zf-arw-h', 'zf-arw-h']].forEach(function (pair) {
+      var m = document.createElementNS(SVGNS, 'marker');
+      m.setAttribute('id', pair[0]);
+      m.setAttribute('viewBox', '0 0 10 10');
+      m.setAttribute('refX', '8'); m.setAttribute('refY', '5');
+      m.setAttribute('markerWidth', '6.5'); m.setAttribute('markerHeight', '6.5');
+      m.setAttribute('orient', 'auto-start-reverse');
+      var mk = document.createElementNS(SVGNS, 'path');
+      mk.setAttribute('d', 'M0 0 L10 5 L0 10 z');
+      mk.setAttribute('class', pair[1]);
+      m.appendChild(mk); defs.appendChild(m);
+    });
+    svg.appendChild(defs);
+
+    EDGES.forEach(function (e, i) {
+      var pts = buildPts(e, sides[i]);
+      if (!pts) return;
+      addEdge(e, pts);
+    });
+    if (viewId && R[viewId]) showHidden(viewId);
+  }
+
+  function addEdge(e, pts) {
+    var d = pts.map(function (p, i) { return (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1); }).join(' ');
+    var path = document.createElementNS(SVGNS, 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('class', 'zf-e' + (e.tj ? ' tj' : '') + (e.ext ? ' ext' : ''));
+    path.setAttribute('marker-end', 'url(#zf-arw' + (e.tj ? '-tj' : '') + ')');
+    path.dataset.f = e.f; path.dataset.t = e.t;
+    svg.appendChild(path);
+
+    if (!e.label) return;
+    var el = document.createElement('span');
+    el.className = 'elabel' + (e.tj ? ' tj' : '');
+    el.textContent = e.label;
+    el.dataset.f = e.f; el.dataset.t = e.t;
+    labelLayer.appendChild(el);
+    var ew = el.offsetWidth, eh = el.offsetHeight;
+
+    var cands = [];
+    var order = pts.map(function (p, i) { return i; })
+      .sort(function (a, b) {
+        if (a >= pts.length - 1 || b >= pts.length - 1) return a - b;
+        var la = Math.hypot(pts[a + 1][0] - pts[a][0], pts[a + 1][1] - pts[a][1]);
+        var lb = Math.hypot(pts[b + 1][0] - pts[b][0], pts[b + 1][1] - pts[b][1]);
+        return lb - la;
+      });
+    order.forEach(function (i) {
+      if (i >= pts.length - 1) return;
+      var m = segMid(pts[i], pts[i + 1]);
+      cands.push(m, [m[0], m[1] - 12], [m[0], m[1] + 12]);
+      var vert = Math.abs(pts[i + 1][0] - pts[i][0]) < 2;
+      if (vert) { cands.push([m[0] + ew / 2 + 7, m[1]], [m[0] - ew / 2 - 7, m[1]]); }
+    });
+
+    var chosen = cands[0];
+    for (var ci = 0; ci < cands.length; ci++) {
+      var c = cands[ci];
+      if (c[0] < ew / 2 + 2 || c[0] > W - ew / 2 - 2) continue;
+      if (c[1] < eh / 2 + 2 || c[1] > H - eh / 2 - 2) continue;
+      var hit = false;
+      for (var id in R) {
+        if (id === e.f || id === e.t) continue;
+        var rc = R[id];
+        if (c[0] + ew / 2 > rc.left - 3 && c[0] - ew / 2 < rc.right + 3 &&
+            c[1] + eh / 2 > rc.top - 3 && c[1] - eh / 2 < rc.bottom + 3) { hit = true; break; }
+      }
+      if (!hit) for (var pi = 0; pi < placedRects.length; pi++) {
+        var pr = placedRects[pi];
+        if (c[0] + ew / 2 > pr[0] - 2 && c[0] - ew / 2 < pr[2] + 2 &&
+            c[1] + eh / 2 > pr[1] - 2 && c[1] - eh / 2 < pr[3] + 2) { hit = true; break; }
+      }
+      if (!hit) { chosen = c; break; }
+    }
+    // 兜底：仍压节点/标签时上下逐步挪
+    function overlaps(x, y) {
+      if (x < ew / 2 + 2 || x > W - ew / 2 - 2 || y < eh / 2 + 2 || y > H - eh / 2 - 2) return true;
+      for (var id in R) {
+        if (id === e.f || id === e.t) continue;
+        var rc = R[id];
+        if (x + ew / 2 > rc.left - 3 && x - ew / 2 < rc.right + 3 &&
+            y + eh / 2 > rc.top - 3 && y - eh / 2 < rc.bottom + 3) return true;
+      }
+      for (var pi = 0; pi < placedRects.length; pi++) {
+        var pr = placedRects[pi];
+        if (x + ew / 2 > pr[0] - 2 && x - ew / 2 < pr[2] + 2 &&
+            y + eh / 2 > pr[1] - 2 && y - eh / 2 < pr[3] + 2) return true;
+      }
+      return false;
+    }
+    if (overlaps(chosen[0], chosen[1])) {
+      for (var t = 1; t <= 8; t++) {
+        var dy = (t % 2 ? 1 : -1) * Math.ceil(t / 2) * 12;
+        if (!overlaps(chosen[0], chosen[1] + dy)) { chosen = [chosen[0], chosen[1] + dy]; break; }
+      }
+    }
+    placedRects.push([chosen[0] - ew / 2, chosen[1] - eh / 2, chosen[0] + ew / 2, chosen[1] + eh / 2]);
+    el.style.left = chosen[0] + 'px';
+    el.style.top = chosen[1] + 'px';
+  }
+
+  // 悬停高亮
+  var pinnedId = null, viewId = null;
+  root.querySelectorAll('[data-node]').forEach(function (el) {
+    el.addEventListener('mouseenter', function () { highlight(el.dataset.node); });
+    el.addEventListener('mouseleave', clear);
+    el.addEventListener('click', function (e) {
+      e.stopPropagation();
+      pinnedId = (pinnedId === el.dataset.node) ? null : el.dataset.node;
+      pinMark();
+      if (pinnedId) { highlight(pinnedId); showTip(el); } else { clear(); hideTip(); }
+    });
+  });
+  canvas.addEventListener('click', function () { unpin(); });
+  window.addEventListener('keydown', function (e) { if (e.key === 'Escape') unpin(); });
+  function unpin() { pinnedId = null; pinMark(); clear(); hideTip(); }
+  function pinMark() {
+    root.querySelectorAll('[data-node]').forEach(function (el) {
+      el.classList.toggle('zf-pin', el.dataset.node === pinnedId);
+    });
+  }
+  function clipToRect(rc, x, y) {
+    var dx = x - rc.cx, dy = y - rc.cy;
+    if (!dx && !dy) return [rc.cx, rc.cy];
+    var t = Math.min(rc.w / 2 / Math.abs(dx || 1e-9), rc.h / 2 / Math.abs(dy || 1e-9));
+    return [rc.cx + dx * t, rc.cy + dy * t];
+  }
+  function showHidden(id) {
+    hideHidden();
+    var items = HIDDEN[id]; if (!items) return;
+    items.forEach(function (it) {
+      var a = R[id], b = R[it.t]; if (!a || !b) return;
+      var from = it.dir === 'in' ? b : a, to = it.dir === 'in' ? a : b;
+      var p1 = clipToRect(from, to.cx, to.cy), p2 = clipToRect(to, from.cx, from.cy);
+      var path = document.createElementNS(SVGNS, 'path');
+      path.setAttribute('d', 'M' + p1[0].toFixed(1) + ' ' + p1[1].toFixed(1) + ' L' + p2[0].toFixed(1) + ' ' + p2[1].toFixed(1));
+      path.setAttribute('class', 'zf-h hot');
+      path.setAttribute('stroke-width', it.n >= 5 ? 1.6 : 1);
+      path.setAttribute('marker-end', 'url(#zf-arw-h)');
+      path.dataset.f = from === a ? id : it.t; path.dataset.t = from === a ? it.t : id;
+      var title = document.createElementNS(SVGNS, 'title');
+      title.textContent = (it.dir === 'out' ? id + ' → ' + it.t : it.t + ' → ' + id) + ' · ' + it.n + ' 个文件引用'
+        + (it.calls && it.calls.length ? ' · ' + it.calls.join(' / ') : '');
+      path.appendChild(title);
+      svg.appendChild(path);
+      if (it.calls && it.calls.length && Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) >= 150) {
+        var lab = document.createElement('span');
+        lab.className = 'zf-clabel';
+        lab.textContent = it.calls.slice(0, 2).join(' · ') + (it.calls.length > 2 ? ' +' + (it.calls.length - 2) : '');
+        lab.style.left = ((p1[0] + p2[0]) / 2) + 'px';
+        lab.style.top = ((p1[1] + p2[1]) / 2) + 'px';
+        labelLayer.appendChild(lab);
+      }
+    });
+  }
+  function hideHidden() {
+    svg.querySelectorAll('path.zf-h').forEach(function (p) { p.remove(); });
+    labelLayer.querySelectorAll('.zf-clabel').forEach(function (l) { l.remove(); });
+  }
+  function highlight(id) {
+    viewId = id;
+    root.classList.add('zf-focus');
+    showHidden(id);
+    svg.querySelectorAll('path.zf-e').forEach(function (p) {
+      p.classList.toggle('hot', p.dataset.f === id || p.dataset.t === id);
+    });
+    labelLayer.querySelectorAll('.elabel').forEach(function (l) {
+      l.classList.toggle('hot', l.dataset.f === id || l.dataset.t === id);
+    });
+  }
+  function clear() {
+    if (pinnedId) { highlight(pinnedId); return; }
+    viewId = null;
+    root.classList.remove('zf-focus');
+    hideHidden();
+    svg.querySelectorAll('path.zf-e.hot').forEach(function (p) { p.classList.remove('hot'); });
+    labelLayer.querySelectorAll('.elabel.hot').forEach(function (l) { l.classList.remove('hot'); });
+  }
+
+  requestAnimationFrame(function () { draw(); requestAnimationFrame(draw); });
+  if ('ResizeObserver' in window) new ResizeObserver(function () { draw(); }).observe(canvas);
+  window.addEventListener('load', draw);
+
+  // 悬停提示（独立运行，不依赖宿主）
+  var tip = null;
+  function showTip(el) {
+    hideTip();
+    tip = document.createElement('div');
+    tip.className = 'zf-tip';
+    tip.textContent = el.getAttribute('data-tooltip');
+    document.body.appendChild(tip);
+    var r = el.getBoundingClientRect();
+    var tw = tip.offsetWidth, th = tip.offsetHeight;
+    var x = Math.max(8, Math.min(window.innerWidth - tw - 8, r.left + r.width / 2 - tw / 2));
+    var y = r.top - th - 8;
+    if (y < 8) y = r.bottom + 8;
+    tip.style.left = x + 'px';
+    tip.style.top = y + 'px';
+  }
+  function hideTip() { if (tip) { tip.remove(); tip = null; } }
+  root.querySelectorAll('[data-tooltip]').forEach(function (el) {
+    el.tabIndex = 0;
+    el.addEventListener('mouseenter', function () { showTip(el); });
+    el.addEventListener('mouseleave', hideTip);
+    el.addEventListener('focus', function () { showTip(el); });
+    el.addEventListener('blur', hideTip);
+  });
+  window.addEventListener('scroll', hideTip, true);
+})();
+</script>
+</body>
+</html>
