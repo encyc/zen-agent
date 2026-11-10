@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "zen.dingtalk",
+  "name": "钉钉",
+  "version": "0.1.0",
+  "description": "钉钉官方 MCP 连接器：消息、日程、文档与待办",
+  "contributes": {
+    "mcpServers": {
+      "dingtalk": {
+        "url": "${MCP_URL}"
+      }
+    },
+    "skills": "skills",
+    "extension": null
+  },
+  "credentials": [
+    {
+      "key": "MCP_URL",
+      "label": "MCP 服务 URL",
+      "secret": true,
+      "help": "在钉钉 MCP 广场生成后复制整条连接地址",
+      "url": "https://mcp.dingtalk.com"
+    }
+  ],
+  "setup": {
+    "guide": "setup.md",
+    "requiresRuntime": null
+  }
+}

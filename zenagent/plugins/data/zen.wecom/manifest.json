@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "zen.wecom",
+  "name": "企业微信",
+  "version": "0.1.0",
+  "description": "企业微信智能机器人 MCP 连接器：消息、文档、日程与会议",
+  "contributes": {
+    "mcpServers": {
+      "wecom": {
+        "url": "${MCP_URL}"
+      }
+    },
+    "skills": "skills",
+    "extension": null
+  },
+  "credentials": [
+    {
+      "key": "MCP_URL",
+      "label": "MCP 服务 URL",
+      "secret": true,
+      "help": "管理页创建智能机器人并授权后，扫码得到的连接地址",
+      "url": "https://work.weixin.qq.com"
+    }
+  ],
+  "setup": {
+    "guide": "setup.md",
+    "requiresRuntime": null
+  }
+}

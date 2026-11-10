@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "id": "zen.feishu",
+  "name": "飞书",
+  "version": "0.1.0",
+  "description": "飞书官方 MCP 连接器：IM、文档与日历",
+  "contributes": {
+    "mcpServers": {
+      "feishu": {
+        "command": [
+          "npx",
+          "-y",
+          "@larksuiteoapi/lark-mcp",
+          "-t",
+          "preset.im.default,preset.doc.default,preset.calendar.default"
+        ],
+        "env": {
+          "APP_ID": "${APP_ID}",
+          "APP_SECRET": "${APP_SECRET}"
+        }
+      }
+    },
+    "skills": "skills",
+    "extension": null
+  },
+  "credentials": [
+    {
+      "key": "APP_ID",
+      "label": "App ID",
+      "secret": false,
+      "help": "飞书开放平台应用的 App ID",
+      "url": "https://open.feishu.cn/app"
+    },
+    {
+      "key": "APP_SECRET",
+      "label": "App Secret",
+      "secret": true,
+      "help": "飞书开放平台应用的 App Secret，只保存在本机",
+      "url": "https://open.feishu.cn/app"
+    }
+  ],
+  "setup": {
+    "guide": "setup.md",
+    "requiresRuntime": "Node.js 18+（npx）"
+  }
+}
