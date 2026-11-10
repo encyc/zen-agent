@@ -7,19 +7,6 @@ import asyncio
 import sys
 from pathlib import Path
 
-from zenagent.app.taiji import (
-    close_taiji,
-    ensure_taiji_session,
-    own_taiji_lock,
-    release_taiji_lock,
-    should_init_taiji,
-)
-from zenagent.cli.rpc.server import RpcServer
-from zenagent.project import (
-    project_dir,
-    project_sessions_dir,
-)
-
 
 async def _stdin_line() -> str | None:
     line = await asyncio.to_thread(sys.stdin.readline)
@@ -35,6 +22,8 @@ async def _run(args) -> int:
     from zenagent.app.bootstrap import prepare
     from zenagent.app.modes import resolve_mode
     from zenagent.app.runtime import RuntimeOptions
+    from zenagent.cli.rpc.host import RpcHost
+    from zenagent.cli.rpc.slot import RuntimeSlot
 
     # Resolve the mode exactly like the other frontends: an explicit --mode
     # wins, then --read-only (plan), then --yes (zen). Passing the raw
@@ -76,46 +65,22 @@ async def _run(args) -> int:
     except (RuntimeError, LookupError) as exc:
         print(f"zenagent: {exc}", file=sys.stderr)
         return 2
-    runtime = prepared.runtime
-    chat = prepared.chat
-    services = prepared.services
-    for warning in runtime.warnings:
+    for warning in prepared.runtime.warnings:
         print(f"zenagent: {warning}", file=sys.stderr)
 
-    server = RpcServer(
-        runtime=runtime,
+    initial = RuntimeSlot.adopt(prepared, write_line=_stdout_line)
+    host = RpcHost(
+        initial=initial,
+        options=options,
         read_line=_stdin_line,
         write_line=_stdout_line,
-        chat=chat,
-        models=services.models,
-        sessions=services.sessions,
-        commands=prepared.commands,
+        assume_yes=args.yes,
+        warn=lambda text: print(f"zenagent: {text}", file=sys.stderr),
     )
-    prepared.broker.set_confirm(server.confirm)
-    runtime.ask_handler = server.ask
-    runtime.taiji_chat = chat
-    taiji_project_dir = project_dir(Path.cwd())
-    taiji_hosts = should_init_taiji(Path.cwd())
-    if taiji_hosts:
-        ensure_taiji_session(project_sessions_dir(Path.cwd()))
-    taiji_owned = taiji_hosts and own_taiji_lock(taiji_project_dir)
-    if not taiji_owned:
-        runtime._note("taiji: 另一个宿主已持有本项目的太极锁")
-    elif taiji_hosts:
-        # The lock holder constructs the fleet at boot: the registry
-        # reconciles immediately, so the panel sees the truth from its
-        # very first board poll (spec 附录 C.3).
-        from zenagent.app.taiji.tools import taiji_supervisor_for
-
-        taiji_supervisor_for(runtime)
     try:
-        return await server.run()
+        return await host.run()
     finally:
-        runtime.ask_handler = None
-        await close_taiji()
-        if taiji_owned:
-            release_taiji_lock(taiji_project_dir)
-        await runtime.close()
+        await host.close()
 
 
 def main(argv: list[str] | None = None) -> int:

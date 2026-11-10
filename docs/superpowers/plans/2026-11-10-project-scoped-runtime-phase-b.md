@@ -1140,19 +1140,25 @@ async def host_env(tmp_path, monkeypatch):
 
     monkeypatch.setattr("zenagent.cli.rpc.slot.release_taiji_host", fake_release)
 
+    def _collect(writes: list[dict]):
+        def write(line: str) -> None:
+            writes.append(json.loads(line))
+
+        return write
+
     alpha = _repo(tmp_path, "alpha")
     beta = _repo(tmp_path, "beta")
     gamma = _repo(tmp_path, "gamma")
     writes: list[dict] = []
     prepared = await fake_prepare(RuntimeOptions(root=alpha))
-    slot = RuntimeSlot.adopt(prepared, write_line=writes.append)
+    slot = RuntimeSlot.adopt(prepared, write_line=_collect(writes))
 
     def build(max_slots: int = 4) -> RpcHost:
         return RpcHost(
             initial=slot,
             options=RuntimeOptions(root=alpha),
             read_line=None,
-            write_line=writes.append,
+            write_line=_collect(writes),
             max_slots=max_slots,
         )
 
@@ -1400,7 +1406,7 @@ from typing import TYPE_CHECKING, Callable
 
 from zenagent.app.bootstrap import prepare
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
-from zenagent.cli.rpc.server import PROTOCOL_VERSION
+from zenagent.cli.rpc.codec import PROTOCOL_VERSION
 from zenagent.cli.rpc.slot import RuntimeSlot
 from zenagent.project import find_project_root, project_key
 
@@ -1908,12 +1914,12 @@ async def host(monkeypatch, tmp_path):
     gamma = _repo(tmp_path, "gamma")
     prepared = await prepare(_options(alpha), assume_yes=True)
     writes: list[dict] = []
-    initial = RuntimeSlot.adopt(prepared, write_line=writes.append)
+    initial = RuntimeSlot.adopt(prepared, write_line=_collect(writes))
     instance = RpcHost(
         initial=initial,
         options=_options(alpha),
         read_line=None,
-        write_line=writes.append,
+        write_line=_collect(writes),
         assume_yes=True,
         max_slots=2,
     )
