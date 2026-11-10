@@ -12,8 +12,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
-import re
-import shutil
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -30,9 +28,7 @@ from zenagent.app.swarm.protocol import (
 )
 from zenagent.app.swarm.roles import (
     RoleManifest,
-    agents_root,
     discover_roles,
-    parse_role,
     state_root,
 )
 from zenagent.app.swarm.room import (
@@ -44,6 +40,12 @@ from zenagent.app.swarm.room import (
     is_terminal,
     parse_mentions,
 )
+from zenagent.app.swarm.roster import (
+    remove_role_dir,
+    role_signature,
+    role_view,
+    write_role,
+)
 from zenagent.app.swarm.router import Router
 from zenagent.app.swarm.runner import TaskRunner
 from zenagent.config import load_user_config
@@ -53,7 +55,6 @@ from zenagent.skills import discover_skills
 __all__ = ["APPROVAL_TIMEOUT_S", "SwarmAgent", "SwarmManager"]
 
 APPROVAL_TIMEOUT_S = 120.0
-_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 
 
 @dataclass
@@ -166,7 +167,7 @@ class SwarmManager:
 
     def roles(self) -> list[dict]:
         return [
-            _role_view(agent.pending_apply or agent.role)
+            role_view(agent.pending_apply or agent.role)
             for agent in self.agents.values()
         ]
 
@@ -282,7 +283,7 @@ class SwarmManager:
     # -- role lifecycle -----------------------------------------------------
 
     async def update_role(self, role_id: str, manifest: dict) -> RoleManifest:
-        role = self._write_role(role_id, manifest)
+        role = write_role(role_id, manifest)
         self.role_ids.add(role_id)
         if self.router is not None:
             self.router.role_ids = set(self.role_ids)
@@ -340,7 +341,7 @@ class SwarmManager:
                         updated_at=_now(),
                     )
                 )
-        self._remove_role_dir(role_id)
+        remove_role_dir(role_id)
 
     async def reload(self) -> list[str]:
         roles, warnings = discover_roles()
@@ -358,7 +359,7 @@ class SwarmManager:
             if existing is None:
                 await self._build_agent(role)
                 notes.append(f"added {role_id}")
-            elif _role_signature(existing.role) != _role_signature(role):
+            elif role_signature(existing.role) != role_signature(role):
                 await self._apply_role(role)
                 notes.append(f"updated {role_id}")
         return notes
@@ -634,34 +635,6 @@ class SwarmManager:
         self._emit_message(message)
         return message
 
-    # -- role files ---------------------------------------------------------
-
-    def _write_role(self, role_id: str, manifest: dict) -> RoleManifest:
-        if not _ID_RE.fullmatch(role_id):
-            raise ValueError(f"invalid role id {role_id!r}")
-        payload = dict(manifest)
-        prompt = payload.pop("systemPrompt", None)
-        payload["id"] = role_id
-        role_dir = agents_root() / role_id
-        role_dir.mkdir(parents=True, exist_ok=True)
-        (role_dir / "manifest.json").write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        if prompt is not None:
-            (role_dir / "prompt.md").write_text(str(prompt), encoding="utf-8")
-        role, warnings = parse_role(role_dir)
-        if role is None:
-            raise ValueError("; ".join(warnings) or f"invalid role {role_id}")
-        return role
-
-    def _remove_role_dir(self, role_id: str) -> None:
-        base = agents_root()
-        role_dir = base / role_id
-        if role_dir.parent != base:
-            return
-        with contextlib.suppress(OSError):
-            shutil.rmtree(role_dir)
-
     # -- agent sessions -----------------------------------------------------
 
     def _session_path(self, role_id: str, *, fresh: bool = False) -> Path:
@@ -776,36 +749,3 @@ def _latest_session(directory: Path) -> Path | None:
     return max(files)[1]
 
 
-def _role_signature(role: RoleManifest) -> tuple:
-    return (
-        role.name,
-        role.description,
-        role.model,
-        role.thinking,
-        role.system_prompt,
-        tuple(str(path) for path in role.skill_roots),
-        tuple(sorted(role.mcp_servers)),
-        tuple(role.tools or ()),
-        str(role.root),
-        role.inherit_project,
-        role.max_turns,
-        role.max_cost,
-        role.mode,
-    )
-
-
-def _role_view(role: RoleManifest) -> dict:
-    return {
-        "id": role.id,
-        "name": role.name,
-        "description": role.description,
-        "model": role.model,
-        "thinking": role.thinking,
-        "mode": role.mode,
-        "root": str(role.root),
-        "tools": list(role.tools) if role.tools is not None else None,
-        "inheritProject": role.inherit_project,
-        "maxTurns": role.max_turns,
-        "maxCost": role.max_cost,
-        "missingCredentials": list(role.missing_credentials),
-    }

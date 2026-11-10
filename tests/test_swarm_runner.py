@@ -2,6 +2,7 @@ import asyncio
 import time
 
 import pytest
+from conftest import text_stream, tool_then_text_stream
 
 from zenagent.app.swarm.roles import RoleManifest
 from zenagent.app.swarm.room import (
@@ -19,8 +20,6 @@ from zenagent.types import (
     TextContent,
     Usage,
 )
-
-from conftest import text_stream, tool_then_text_stream
 
 ROLE = RoleManifest(id="research", name="Research")
 
@@ -64,19 +63,19 @@ def _message(store: SwarmStore, text: str = "@research 查一下") -> RoomMessag
 
 
 def _task(store: SwarmStore, **overrides) -> TaskRecord:
-    fields = dict(
-        id=store.new_id("t"),
-        assignee="research",
-        state="queued",
-        source_message_id="m0",
-        created_by_kind="user",
-        created_by_id="you",
-        chain_id=store.new_id("c"),
-        chain_depth=0,
-        chain_cost=0.0,
-        created_at=1,
-        updated_at=1,
-    )
+    fields = {
+        "id": store.new_id("t"),
+        "assignee": "research",
+        "state": "queued",
+        "source_message_id": "m0",
+        "created_by_kind": "user",
+        "created_by_id": "you",
+        "chain_id": store.new_id("c"),
+        "chain_depth": 0,
+        "chain_cost": 0.0,
+        "created_at": 1,
+        "updated_at": 1,
+    }
     fields.update(overrides)
     task = TaskRecord(**fields)
     store.append_task(task)
@@ -95,7 +94,7 @@ def _runner(runtime, store, post) -> TaskRunner:
 
 async def test_final_text_is_posted_and_task_done(tmp_path, runtime_factory):
     runtime = await runtime_factory(stream_fn=text_stream("结论是 Z"))
-    store, router, current, post = _bind(tmp_path)
+    store, _router, current, post = _bind(tmp_path)
     task = _task(store)
     current["task"] = task
 
@@ -106,7 +105,7 @@ async def test_final_text_is_posted_and_task_done(tmp_path, runtime_factory):
     assert record.state == "done"
     assert store.tasks[task.id].state == "done"
     assert record.result_message_id is not None
-    posted = [m for m in store.messages if m.id == record.result_message_id][0]
+    posted = next(m for m in store.messages if m.id == record.result_message_id)
     assert posted.author_kind == "agent"
     assert posted.author_id == "research"
     assert posted.text == "结论是 Z"
@@ -115,7 +114,7 @@ async def test_final_text_is_posted_and_task_done(tmp_path, runtime_factory):
 
 async def test_mentions_in_result_create_tasks(tmp_path, runtime_factory):
     runtime = await runtime_factory(stream_fn=text_stream("结论是 Z。@coder 改 Y"))
-    store, router, current, post = _bind(tmp_path)
+    store, _router, current, post = _bind(tmp_path)
     task = _task(store)
     current["task"] = task
 
@@ -134,7 +133,7 @@ async def test_max_turns_marks_failed(tmp_path, runtime_factory):
     runtime = await runtime_factory(
         stream_fn=tool_then_text_stream(), max_turns=1
     )
-    store, router, current, post = _bind(tmp_path)
+    store, _router, current, post = _bind(tmp_path)
     task = _task(store)
     current["task"] = task
 
@@ -167,7 +166,7 @@ async def test_abort_marks_cancelled(tmp_path, runtime_factory):
         raise Aborted("cancelled by user")
 
     runtime = await runtime_factory(stream_fn=abortable)
-    store, router, current, post = _bind(tmp_path)
+    store, _router, current, post = _bind(tmp_path)
     task = _task(store)
     current["task"] = task
     runner = _runner(runtime, store, post)
@@ -199,7 +198,7 @@ async def test_chain_cost_accumulates(tmp_path, runtime_factory):
         return stream
 
     runtime = await runtime_factory(stream_fn=cost_stream(0.4))
-    store, router, current, post = _bind(tmp_path)
+    store, _router, current, post = _bind(tmp_path)
     task = _task(store, chain_cost=1.0)
     current["task"] = task
 

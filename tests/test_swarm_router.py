@@ -5,16 +5,16 @@ from zenagent.app.swarm.router import Router
 
 
 def _message(**overrides) -> RoomMessage:
-    fields = dict(
-        id="m1",
-        ts=1,
-        author_kind="user",
-        author_id="you",
-        text="hi",
-        mentions=[],
-        task_id=None,
-        chain_depth=0,
-    )
+    fields = {
+        "id": "m1",
+        "ts": 1,
+        "author_kind": "user",
+        "author_id": "you",
+        "text": "hi",
+        "mentions": [],
+        "task_id": None,
+        "chain_depth": 0,
+    }
     fields.update(overrides)
     return RoomMessage(**fields)
 

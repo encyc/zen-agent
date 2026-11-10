@@ -12,34 +12,34 @@ from zenagent.app.swarm.room import (
 
 
 def _message(**overrides) -> RoomMessage:
-    fields = dict(
-        id="m1",
-        ts=1,
-        author_kind="user",
-        author_id="you",
-        text="hi",
-        mentions=[],
-        task_id=None,
-        chain_depth=0,
-    )
+    fields = {
+        "id": "m1",
+        "ts": 1,
+        "author_kind": "user",
+        "author_id": "you",
+        "text": "hi",
+        "mentions": [],
+        "task_id": None,
+        "chain_depth": 0,
+    }
     fields.update(overrides)
     return RoomMessage(**fields)
 
 
 def _task(**overrides) -> TaskRecord:
-    fields = dict(
-        id="t1",
-        assignee="research",
-        state="queued",
-        source_message_id="m1",
-        created_by_kind="user",
-        created_by_id="you",
-        chain_id="c1",
-        chain_depth=0,
-        chain_cost=0.0,
-        created_at=1,
-        updated_at=1,
-    )
+    fields = {
+        "id": "t1",
+        "assignee": "research",
+        "state": "queued",
+        "source_message_id": "m1",
+        "created_by_kind": "user",
+        "created_by_id": "you",
+        "chain_id": "c1",
+        "chain_depth": 0,
+        "chain_cost": 0.0,
+        "created_at": 1,
+        "updated_at": 1,
+    }
     fields.update(overrides)
     return TaskRecord(**fields)
 
