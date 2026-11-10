@@ -43,6 +43,7 @@ import {
 } from './icons'
 import { formatAge } from './format'
 import { Notifications } from './Notifications'
+import { ModeSwitcher } from './ModeSwitcher'
 import { captureChatState } from './pages/navigation'
 import { pickProjectFolder, pickSessionFileToOpen } from './sessions/fileDialog'
 import { AppMark } from './AppMark'
@@ -346,6 +347,8 @@ export function Sidebar(props: { onCollapse(): void }) {
           </button>
         </Tooltip>
       </div>
+
+      <ModeSwitcher />
 
       {pinned.length > 0 && (
         <section className={css.pinned} data-sidebar-section="pinned" aria-labelledby="pinned-label">

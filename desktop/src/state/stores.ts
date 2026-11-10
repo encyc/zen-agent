@@ -513,6 +513,11 @@ export type ThemeId = 'zen' | 'vscode' | 'github' | 'tokyonight'
 export const THEME_IDS: readonly ThemeId[] = ['zen', 'vscode', 'github', 'tokyonight']
 export type Locale = 'en' | 'zh'
 export type AppView = 'chat' | 'settings'
+/** Top-level surfaces: the coding chat, the swarm room, the zen placeholder.
+ * The switcher stays mounted across all three. */
+export type WorkspaceMode = 'coding' | 'zen' | 'swarm'
+
+export const WORKSPACE_MODES: readonly WorkspaceMode[] = ['coding', 'zen', 'swarm']
 
 export const FONT_SCALE_MIN = 0.9
 export const FONT_SCALE_MAX = 1.2
@@ -540,6 +545,7 @@ interface SettingsState {
   contextUsageDisplay: ContextUsageDisplay
   enterToSend: boolean
   view: AppView
+  workspaceMode: WorkspaceMode
   setTheme(theme: ThemeMode): void
   setThemeId(themeId: ThemeId): void
   setLocale(locale: Locale): void
@@ -553,6 +559,7 @@ interface SettingsState {
   setContextUsageDisplay(display: ContextUsageDisplay): void
   setEnterToSend(enabled: boolean): void
   setView(view: AppView): void
+  setWorkspaceMode(mode: WorkspaceMode): void
 }
 
 function load<T>(key: string, fallback: T): T {
@@ -579,6 +586,15 @@ function loadThemeId(): ThemeId {
   return (THEME_IDS as readonly string[]).includes(value) ? (value as ThemeId) : 'zen'
 }
 
+/** A foreign persisted mode (a build without that surface) falls back to the
+ * coding chat instead of rendering an unnameable surface. */
+function loadWorkspaceMode(): WorkspaceMode {
+  const value = load<string>('zen.workspaceMode', 'coding')
+  return (WORKSPACE_MODES as readonly string[]).includes(value)
+    ? (value as WorkspaceMode)
+    : 'coding'
+}
+
 export const useSettingsStore = create<SettingsState>((set) => ({
   theme: load('zen.theme', 'auto' as ThemeMode),
   themeId: loadThemeId(),
@@ -595,6 +611,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     : 'remaining',
   enterToSend: load('zen.composer.enterToSend', true),
   view: 'chat',
+  workspaceMode: loadWorkspaceMode(),
   setTheme: (theme) => {
     persist('zen.theme', theme)
     set({ theme })
@@ -645,6 +662,10 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     set({ enterToSend })
   },
   setView: (view) => set({ view }),
+  setWorkspaceMode: (workspaceMode) => {
+    persist('zen.workspaceMode', workspaceMode)
+    set({ workspaceMode })
+  },
 }))
 
 export function currentPending(status: StatusResult | null): PendingMessage[] {

@@ -16,6 +16,8 @@ import { AppFrame } from './ui/AppFrame'
 import { Sidebar } from './ui/Sidebar'
 import { ChatView } from './ui/chat/ChatView'
 import { InputBar } from './ui/composer/InputBar'
+import { RoomPage } from './ui/pages/RoomPage'
+import { ZenPlaceholder } from './ui/pages/ZenPlaceholder'
 import { restoreChatState } from './ui/pages/navigation'
 import { isRuntimeMissing, type RuntimeProbe } from './state/startFailure.ts'
 import { shouldShowWindow } from './state/shellWindow.ts'
@@ -70,6 +72,7 @@ export function App() {
   const chatWidth = useSettingsStore((state) => state.chatWidth)
   const fontScale = useSettingsStore((state) => state.fontScale)
   const view = useSettingsStore((state) => state.view)
+  const workspaceMode = useSettingsStore((state) => state.workspaceMode)
   const previousView = useRef(view)
   const updateChecked = useRef(false)
   // The shell opens straight into a chat: the last project, else the user's
@@ -274,7 +277,33 @@ export function App() {
         </Suspense>
       }
     >
-      <ConversationTopbar collapsed={collapsed} onExpandSidebar={() => setCollapsed(false)} />
+      {workspaceMode === 'coding' ? (
+        <>
+          <ConversationTopbar collapsed={collapsed} onExpandSidebar={() => setCollapsed(false)} />
+          <ChatView />
+          <div ref={dockRef} className={css.composerDock} data-shell-composer>
+            <InputBar />
+          </div>
+          <button
+            type="button"
+            className={css.workPanelToggle}
+            aria-label={t('panel.open')}
+            aria-expanded={rightbarOpen}
+            data-active={rightbarOpen || undefined}
+            onClick={() => {
+              const panel = useWorkPanelStore.getState()
+              if (panel.open) panel.closePanel()
+              else panel.openPanel()
+            }}
+          >
+            <PanelRightIcon size={15} />
+          </button>
+        </>
+      ) : workspaceMode === 'swarm' ? (
+        <RoomPage />
+      ) : (
+        <ZenPlaceholder />
+      )}
       {switching !== null && (
         <div
           className={css.switchingBar}
@@ -292,24 +321,6 @@ export function App() {
         </div>
       )}
       <NoticeBanner />
-      <ChatView />
-      <div ref={dockRef} className={css.composerDock} data-shell-composer>
-        <InputBar />
-      </div>
-      <button
-        type="button"
-        className={css.workPanelToggle}
-        aria-label={t('panel.open')}
-        aria-expanded={rightbarOpen}
-        data-active={rightbarOpen || undefined}
-        onClick={() => {
-          const panel = useWorkPanelStore.getState()
-          if (panel.open) panel.closePanel()
-          else panel.openPanel()
-        }}
-      >
-        <PanelRightIcon size={15} />
-      </button>
       </AppFrame>
       <Suspense fallback={null}>
         <CommandPalette />
