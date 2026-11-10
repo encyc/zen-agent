@@ -452,7 +452,7 @@ class Runtime:
         # parent's live tool set and permission mode at each dispatch.
         runtime.task_tool = build_task_tool(
             model=lambda: runtime.agent.model,
-            base_tools=base_tools(runtime.ask_tool),
+            base_tools=base_tools(runtime.ask_tool, cwd=runtime.cwd),
             get_observer=lambda: runtime.subagent_observer,
             api_key=lambda: runtime.agent.api_key,
             stream_fn=stream_fn,
@@ -679,6 +679,7 @@ class Runtime:
         tools = base_tools(
             self.ask_tool,
             shell_max_output_bytes=self.limits.shell_max_output_bytes,
+            cwd=self.cwd,
         )
         tools.extend(
             build_checkpoint_tools(lambda: getattr(self, "agent", None), self.rewind)
