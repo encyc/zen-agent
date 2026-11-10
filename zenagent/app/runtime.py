@@ -21,7 +21,7 @@ from zenagent.agent.registry import ToolRegistry
 from zenagent.agent.session import Session, latest_session, unique_session_path
 from zenagent.agent.subagents import SubagentLimits
 from zenagent.agent.subagents_runtime import SubagentObserver
-from zenagent.app import records
+from zenagent.app import plugin_wiring, records
 from zenagent.app.journal import attach_journal, journal_for, load_backup_policy
 from zenagent.app.metrics import MetricsSession
 from zenagent.app.modes import (
@@ -64,7 +64,6 @@ from zenagent.context_files import (
 from zenagent.extensions import load_extensions
 from zenagent.i18n import t
 from zenagent.limits import Limits
-from zenagent.mcp.config import load_mcp_config
 from zenagent.mcp.manager import McpManager
 from zenagent.prompts import (
     PromptContext,
@@ -164,6 +163,10 @@ class Runtime:
         self.warnings: list[str] = []
         self.skills: list = []
         self.templates: list[PromptTemplate] = []
+        #: Plugin id → ready / needs_credentials / disabled (Settings → Plugins).
+        self.plugin_statuses: dict[str, str] = {}
+        self._plugin_skill_roots: list[Path] = []
+        self._plugin_extension_files: list[str] = []
         self.hooks: dict[str, list] = {}
         self.extension_files: list[str] = []
         self.before_switch: SwitchHook | None = None
@@ -390,12 +393,15 @@ class Runtime:
 
         runtime._jobs_acquired = True
         acquire_job_manager()
-        if options.mcp and options.tools is None:
-            runtime.mcp = await runtime._start_mcp(options)
+        assembly = None
+        if options.tools is None:
+            assembly = await plugin_wiring.start_plugins(runtime, options)
 
         if options.skills and options.tools is None:
-            runtime.skills, warnings = discover_skills(default_skill_roots(Path.cwd()))
-            runtime.skills = _active_skills(runtime.skills)
+            skills, warnings = discover_skills(
+                [*default_skill_roots(Path.cwd()), *(assembly.skill_roots if assembly else [])]
+            )
+            runtime.skills = _active_skills(skills)
             runtime.warnings.extend(f"skills {warning}" for warning in warnings)
 
         if options.templates:
@@ -407,6 +413,7 @@ class Runtime:
         runtime.extension_files = [
             *runtime.user_config.extensions,
             *options.extension_paths,
+            *(assembly.extension_files if assembly else []),
         ]
         if runtime.extension_files:
             loaded = load_extensions(runtime.extension_files)
@@ -525,20 +532,6 @@ class Runtime:
             f"session {warning}" for warning in runtime.session.warnings
         )
         return runtime
-
-    async def _start_mcp(self, options: RuntimeOptions) -> McpManager | None:
-        configs = load_mcp_config(options.mcp_file)
-        if options.mcp_servers:
-            configs = {
-                name: config
-                for name, config in configs.items()
-                if name in options.mcp_servers
-            }
-        if not configs:
-            return None
-        manager = McpManager(configs, retry_interval_s=options.mcp_retry_interval_s)
-        self.warnings.extend(f"mcp {warning}" for warning in await manager.start())
-        return manager
 
     def _open_session(self, resume: Path | str | None) -> Session:
         if resume is not None:
@@ -857,7 +850,9 @@ class Runtime:
         notes: list[str] = []
 
         if options is None or options.skills:
-            skills, warnings = discover_skills(default_skill_roots(Path.cwd()))
+            skills, warnings = discover_skills(
+                [*default_skill_roots(Path.cwd()), *self._plugin_skill_roots]
+            )
             skills = _active_skills(skills)
             for warning in warnings:
                 self._note(f"skills {warning}")
@@ -890,6 +885,10 @@ class Runtime:
         if hasattr(self, "agent"):
             self._subscribe_hooks()
         return notes or ["nothing changed"]
+
+    async def reconfigure_plugins(self) -> list[str]:
+        """Re-apply plugin contributions to the live runtime."""
+        return await plugin_wiring.reconfigure(self)
 
     # -- lifecycle ----------------------------------------------------------
 

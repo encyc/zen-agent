@@ -375,9 +375,9 @@ async def test_mcp_manager_receives_the_retry_interval(runtime_factory, monkeypa
         async def close(self):
             return None
 
-    monkeypatch.setattr("zenagent.app.runtime.McpManager", FakeManager)
+    monkeypatch.setattr("zenagent.app.plugin_wiring.McpManager", FakeManager)
     monkeypatch.setattr(
-        "zenagent.app.runtime.load_mcp_config", lambda *a, **k: {"srv": object()}
+        "zenagent.app.plugin_wiring.load_mcp_config", lambda *a, **k: {"srv": object()}
     )
 
     await runtime_factory(mcp=True, mcp_retry_interval_s=0.25)
