@@ -217,7 +217,11 @@ test('a new project joins the rail and can be removed', async ({ page }) => {
   await boot(page, initialState({ running: false, dialogSelection: '/work/newproj' }))
   await page.getByRole('button', { name: '新建项目' }).click()
   await expect(page.locator('[data-sidebar-project-group="newproj"]')).toBeVisible()
-  await expect.poll(() => page.evaluate(() => window.__ZEN_E2E__.starts.length)).toBe(2)
+  await expect.poll(() => page.evaluate(() => window.__ZEN_E2E__.projectOps?.length ?? 0)).toBe(1)
+  assert.equal(
+    await page.evaluate(() => window.__ZEN_E2E__.projectOps?.at(-1)?.root),
+    '/work/newproj',
+  )
   await page.locator('[data-sidebar-project-group="newproj"] [data-remove-project]').click()
   await expect(page.locator('[data-sidebar-project-group="newproj"]')).toHaveCount(0)
 })
@@ -738,11 +742,12 @@ test('the taiji chip switches to the router session in zen mode and back', async
   // to another project, so the replacement child opens it on spawn.
   const panel = page.locator('[data-work-panel]')
   await expect(panel.getByRole('tab', { name: '太极' })).toHaveAttribute('aria-selected', 'true')
-  assert.equal(
-    await page.evaluate(() =>
-      window.__ZEN_E2E__.starts.at(-1)?.args?.includes('/sessions/taiji.jsonl'),
-    ),
-    true,
+  assert.deepEqual(
+    await page.evaluate(() => {
+      const op = window.__ZEN_E2E__.projectOps?.at(-1)
+      return { root: op?.root, resume: op?.resume }
+    }),
+    { root: '/work/p', resume: '/sessions/taiji.jsonl' },
   )
   assert.equal(
     await page.evaluate(() =>
@@ -1320,7 +1325,7 @@ test('a filtered, collapsed project stays collapsed and loads more on demand', a
   await expect(visibleRows).toHaveCount(12)
 })
 
-test('opening another project’s session restarts the runtime there with that session', async ({ page }) => {
+test('opening another project’s session switches the runtime there with that session', async ({ page }) => {
   await boot(page, initialState())
   await expect
     .poll(() =>
@@ -1333,16 +1338,16 @@ test('opening another project’s session restarts the runtime there with that s
   const cross = page.locator('[data-session-path="/sessions/c.jsonl"]')
   await expect(cross).not.toHaveAttribute('aria-disabled', 'true')
   await cross.click()
-  // The replacement opens the target session on spawn: one process, one
-  // transcript snapshot, no blank boot followed by an RPC resume.
+  // The resident host takes the request: one project op, no replacement
+  // process, no separate resume round-trip for a cold slot.
   await expect
     .poll(() =>
       page.evaluate(() => {
-        const start = window.__ZEN_E2E__.starts.at(-1)
-        return { cwd: start?.cwd, args: start?.args }
+        const op = window.__ZEN_E2E__.projectOps?.at(-1)
+        return { root: op?.root, resume: op?.resume }
       }),
     )
-    .toEqual({ cwd: '/work/q', args: ['--mode', 'ask', '--no-mcp', '--resume', '/sessions/c.jsonl'] })
+    .toEqual({ root: '/work/q', resume: '/sessions/c.jsonl' })
   assert.equal(
     await page.evaluate(() =>
       window.__ZEN_E2E__.calls.some(
@@ -1351,14 +1356,12 @@ test('opening another project’s session restarts the runtime there with that s
     ),
     false,
   )
+  assert.equal(await page.evaluate(() => window.__ZEN_E2E__.starts.length), 1)
 
-  // The stopped process reports its exit after the replacement is already
-  // ready; that stale event must not be mistaken for the live process dying.
-  const pids = await page.evaluate(() => window.__ZEN_E2E__.starts.map((start) => start.pid))
-  const stale = pids[0]
-  const live = pids[pids.length - 1]
-  assert.notEqual(stale, live)
-  const emitExit = (pid: number | undefined) =>
+  // A late exit from a pid the shell no longer tracks must not end the run;
+  // the tracked pid still does.
+  const live = await page.evaluate(() => window.__ZEN_E2E__.starts[0]?.pid ?? 0)
+  const emitExit = (pid: number) =>
     page.evaluate(
       (value) =>
         window.__ZEN_E2E_EMIT__('rpc:exit', {
@@ -1368,7 +1371,7 @@ test('opening another project’s session restarts the runtime there with that s
         }),
       pid,
     )
-  await emitExit(stale)
+  await emitExit(live + 999)
   await expect(page.locator('[data-shell-composer]')).toBeVisible()
   await expect(page.getByText(/会话进程已退出/)).toHaveCount(0)
 
@@ -1383,11 +1386,13 @@ test('a project discovered from sessions can start its own session', async ({ pa
   await expect
     .poll(() =>
       page.evaluate(() => {
-        const starts = window.__ZEN_E2E__.starts
-        return starts[starts.length - 1]?.cwd
+        const op = window.__ZEN_E2E__.projectOps?.at(-1)
+        return op === undefined
+          ? null
+          : { root: op.root ?? null, resume: op.resume ?? null }
       }),
     )
-    .toBe('/work/q')
+    .toEqual({ root: '/work/q', resume: null })
   await expect
     .poll(() =>
       page.evaluate(() =>
@@ -1629,11 +1634,11 @@ test('the palette opens with the keyboard and resumes a matching session', async
   await expect
     .poll(() =>
       page.evaluate(() => {
-        const start = window.__ZEN_E2E__.starts.at(-1)
-        return { cwd: start?.cwd, args: start?.args }
+        const op = window.__ZEN_E2E__.projectOps?.at(-1)
+        return { root: op?.root, resume: op?.resume }
       }),
     )
-    .toEqual({ cwd: '/work/p', args: ['--mode', 'ask', '--no-mcp', '--resume', '/sessions/b.jsonl'] })
+    .toEqual({ root: '/work/p', resume: '/sessions/b.jsonl' })
   await expect(dialog).toBeHidden()
 })
 
@@ -1985,19 +1990,18 @@ test('project settings lists folders, opens one and forgets another', async ({ p
   await expect(current.getByRole('button', { name: '更改目录' })).toBeDisabled()
   await expect(other.getByRole('button', { name: '更改目录' })).toBeEnabled()
 
-  // Opening another folder restarts the runtime there and returns to chat,
-  // landing on that project's newest conversation instead of a blank one.
+  // Opening another folder switches the resident runtime there and returns to
+  // chat, landing on that project's newest conversation instead of a blank one.
   await other.getByRole('button', { name: '打开' }).click()
   await expect(page.locator('[data-shell-composer]')).toBeVisible()
-  const starts = await page.evaluate(() => window.__ZEN_E2E__.starts)
-  assert.equal(starts.at(-1)?.cwd, '/work/q')
-  assert.deepEqual(starts.at(-1)?.args, [
-    '--mode',
-    'ask',
-    '--no-mcp',
-    '--resume',
-    '/sessions/c.jsonl',
-  ])
+  assert.deepEqual(
+    await page.evaluate(() => {
+      const op = window.__ZEN_E2E__.projectOps?.at(-1)
+      return { root: op?.root, resume: op?.resume }
+    }),
+    { root: '/work/q', resume: '/sessions/c.jsonl' },
+  )
+  assert.equal(await page.evaluate(() => window.__ZEN_E2E__.starts.length), 1)
 
   await page.getByRole('button', { name: '设置' }).click()
   await page.getByRole('button', { name: '项目' }).click()
@@ -2200,11 +2204,11 @@ test('a palette session from another project switches the runtime and resumes', 
   await expect
     .poll(() =>
       page.evaluate(() => {
-        const start = window.__ZEN_E2E__.starts.at(-1)
-        return { cwd: start?.cwd, args: start?.args }
+        const op = window.__ZEN_E2E__.projectOps?.at(-1)
+        return { root: op?.root, resume: op?.resume }
       }),
     )
-    .toEqual({ cwd: '/work/q', args: ['--mode', 'ask', '--no-mcp', '--resume', '/sessions/c.jsonl'] })
+    .toEqual({ root: '/work/q', resume: '/sessions/c.jsonl' })
 })
 
 test('the memory tab lists, filters, creates, edits and deletes project notes', async ({ page }) => {
@@ -2332,8 +2336,73 @@ test('a project switch keeps the shell mounted and shows a progress strip', asyn
 
   await expect(page.locator('[data-switching]')).toHaveCount(0)
   await expect
-    .poll(() => page.evaluate(() => window.__ZEN_E2E__.starts.at(-1)?.cwd))
+    .poll(() => page.evaluate(() => window.__ZEN_E2E__.projectOps?.at(-1)?.root))
     .toBe('/work/q')
+})
+
+test('switching back to a project paints its cached transcript before revalidating', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('zen.last.cwd', '/work/p')
+  })
+  await boot(
+    page,
+    initialState({
+      transcripts: {
+        '/work/p': [{ kind: 'user', id: 'p1', text: 'P 项目的对话', timestamp: 1 }],
+        '/work/q': [{ kind: 'user', id: 'q1', text: 'Q 项目的对话', timestamp: 1 }],
+      },
+      transcriptDelayMs: 800,
+    }),
+  )
+  await expect(page.getByText('P 项目的对话')).toBeVisible()
+
+  await page.locator('[data-session-path="/sessions/c.jsonl"]').click()
+  await expect(page.getByText('Q 项目的对话')).toBeVisible()
+
+  // What the server would revalidate now carries one more row, so the cached
+  // pane and the fresh snapshot differ.
+  await page.evaluate(() => {
+    const state = window.__ZEN_E2E__
+    state.transcripts = state.transcripts ?? {}
+    state.transcripts['/work/p'] = [
+      { kind: 'user', id: 'p1', text: 'P 项目的对话', timestamp: 1 },
+      { kind: 'user', id: 'p2', text: '后台重新校验的行', timestamp: 2 },
+    ]
+  })
+  await page.locator('[data-session-path="/sessions/a.jsonl"]').click()
+
+  // Cached paint lands immediately; the delayed snapshot arrives after.
+  await expect(page.getByText('P 项目的对话')).toBeVisible()
+  await expect(page.getByText('后台重新校验的行')).toHaveCount(0)
+  await expect(page.getByText('后台重新校验的行')).toBeVisible()
+  assert.equal(await page.evaluate(() => window.__ZEN_E2E__.starts.length), 1)
+})
+
+test('a warm project switch still resumes the requested session', async ({ page }) => {
+  await boot(page, initialState())
+  // b: cold slot for /work/p, resumed by the project op.
+  await page.locator('[data-session-path="/sessions/b.jsonl"]').click()
+  await expect
+    .poll(() => page.evaluate(() => window.__ZEN_E2E__.projectOps?.at(-1)?.root))
+    .toBe('/work/p')
+  // c: cold slot for /work/q.
+  await page.locator('[data-session-path="/sessions/c.jsonl"]').click()
+  await expect
+    .poll(() => page.evaluate(() => window.__ZEN_E2E__.projectOps?.at(-1)?.root))
+    .toBe('/work/q')
+
+  // Back to p is warm: the host keeps b, so the shell follows up with a resume.
+  await page.locator('[data-session-path="/sessions/a.jsonl"]').click()
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__ZEN_E2E__.calls
+          .filter((call) => call.type === 'session' && call.op === 'resume')
+          .map((call) => call.path),
+      ),
+    )
+    .toEqual(['/sessions/a.jsonl'])
+  assert.equal(await page.evaluate(() => window.__ZEN_E2E__.starts.length), 1)
 })
 
 test('a fresh runtime is put back onto the last mode, model and thinking', async ({ page }) => {

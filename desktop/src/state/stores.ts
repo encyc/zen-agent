@@ -349,6 +349,8 @@ export interface PendingApproval {
   risk: string | null
   target: string | null
   reason: string | null
+  /** The slot that asked; null for a host-level or v2-server frame. */
+  project?: string | null
 }
 
 interface ApprovalState {
@@ -371,6 +373,8 @@ export const useApprovalStore = create<ApprovalState>((set) => ({
 export interface PendingAsk {
   requestId: string
   questions: AskQuestion[]
+  /** The slot that asked; null for a host-level or v2-server frame. */
+  project?: string | null
 }
 
 interface AskState {
