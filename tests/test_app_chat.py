@@ -1177,3 +1177,26 @@ async def test_a_plain_non_zero_exit_still_settles_as_ok(runtime_factory):
     card = chat.transcript[-1]
     assert isinstance(card, ToolCallView)
     assert card.status == "ok"
+
+
+async def test_job_views_stay_inside_their_workspace(runtime_factory, tmp_path):
+    alpha = tmp_path / "alpha"
+    beta = tmp_path / "beta"
+    (alpha / "sub").mkdir(parents=True)
+    beta.mkdir()
+    a = await runtime_factory(root=alpha)
+    b = await runtime_factory(root=beta)
+    from zenagent.tools.jobs import get_job_manager
+
+    manager = get_job_manager()
+    one = await manager.start("sleep 30", cwd=alpha)
+    two = await manager.start("sleep 30", cwd=alpha / "sub")
+    try:
+        assert [view.id for view in ChatController(a)._job_views()] == [
+            two.id,
+            one.id,
+        ]
+        assert ChatController(b)._job_views() == []
+    finally:
+        await manager.kill(one.id)
+        await manager.kill(two.id)

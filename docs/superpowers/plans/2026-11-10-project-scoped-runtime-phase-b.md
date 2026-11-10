@@ -557,8 +557,8 @@ async def test_job_views_stay_inside_their_workspace(runtime_factory, tmp_path):
     two = await manager.start("sleep 30", cwd=alpha / "sub")
     try:
         assert [view.id for view in ChatController(a)._job_views()] == [
-            one.id,
             two.id,
+            one.id,
         ]
         assert ChatController(b)._job_views() == []
     finally:

@@ -187,12 +187,19 @@ class ChatController:
     # -- work-in-progress snapshots -----------------------------------------
 
     def _job_views(self) -> list[JobView]:
-        """Background jobs for the sidebar; empty when no loop owns a manager."""
+        """Background jobs started inside this runtime's workspace."""
         try:
             manager = get_job_manager()
         except RuntimeError:  # no running loop (headless, sync tests)
             return []
-        return sort_jobs(job_views(manager.list()))
+        workspace = Path(self.runtime.root).resolve()
+        visible = [
+            job
+            for job in manager.list()
+            if not getattr(job, "cwd", "")
+            or Path(job.cwd).resolve().is_relative_to(workspace)
+        ]
+        return sort_jobs(job_views(visible))
 
     def _subagent_views(self) -> list[SubagentView]:
         return self._subagents.views(
