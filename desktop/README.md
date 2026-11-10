@@ -71,7 +71,7 @@ notes say "no update signature" must be downloaded manually.
 | dsh concept | Here |
 |---|---|
 | Electron shell + desktop-host | `src-tauri` Rust shell |
-| Host spawn (`DesktopHostProcess`) | `rpc_start` command spawning `zen rpc --cwd <dir>` |
+| Host spawn (`DesktopHostProcess`) | one `rpc_start` command spawning `zen rpc --cwd <dir>`; project switches go through the host's resident slots instead of respawning |
 | `JsonRpcLineTransport` (JSONL, id-correlated) | `rpc_send` + pending map keyed by request id |
 | `session.follow` snapshot + journal frames | `transcript` RPC snapshot + streamed agent events |
 | `session.control` projections | `status` polling (2s) — zen rpc has no push channel |
@@ -89,6 +89,13 @@ Requests: `prompt`, `cancel`, `steer`, `status`, `transcript`, `models`,
 
 `models` / `commands` / `transcript` are additive methods added to
 `zenagent/cli/rpc.py` for this frontend (the TUI reads them in-process).
+
+`project` (op: `open`/`switch`/`close`/`relocate`) drives the resident host
+added in the Phase B backend work: one child keeps up to four project slots,
+every frame is tagged with its project, and switching projects sends
+`{type: 'project', op: 'switch', root}` instead of restarting the process.
+The shell retains up to three transcript panes so switching back paints the
+previous conversation before the fresh snapshot lands.
 
 ## Develop
 
