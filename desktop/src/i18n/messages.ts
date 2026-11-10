@@ -2,6 +2,7 @@
  * node --test loads this file directly to pin zh/en parity. */
 import { pluginsEn, pluginsZh } from './messages-plugins.ts'
 import { settingsEn, settingsZh } from './messages-settings.ts'
+import { swarmEn, swarmZh } from './messages-swarm.ts'
 
 type Dict = Record<string, string>
 
@@ -10,12 +11,12 @@ export type Locale = 'zh' | 'en'
 export const zh: Dict = {
   ...settingsZh,
   ...pluginsZh,
+  ...swarmZh,
   'brand.subtitle': '桌面端',
   'workspace.switcher': '工作区模式',
   'workspace.coding': '编程',
   'workspace.zen': 'Zen',
   'workspace.swarm': '集群',
-  'room.empty': '集群大厅还是空的',
   'zen.placeholder': 'Zen 面板将在合并后提供',
   'sidebar.search': '搜索会话',
   'sidebar.new': '新会话',
@@ -319,12 +320,12 @@ export const zh: Dict = {
 export const en: Dict = {
   ...settingsEn,
   ...pluginsEn,
+  ...swarmEn,
   'brand.subtitle': 'Desktop',
   'workspace.switcher': 'Workspace mode',
   'workspace.coding': 'Coding',
   'workspace.zen': 'Zen',
   'workspace.swarm': 'Swarm',
-  'room.empty': 'The swarm room is empty',
   'zen.placeholder': 'The Zen surface arrives after the merge',
   'sidebar.search': 'Search sessions',
   'sidebar.new': 'New session',
