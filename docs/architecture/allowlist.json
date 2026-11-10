@@ -1,10 +1,11 @@
 {
   "python": {
-    "zenagent/app/runtime.py": 1002,
+    "zenagent/app/runtime.py": 1030,
     "zenagent/app/commands.py": 866,
     "zenagent/cli/repl.py": 1027,
     "zenagent/cli/tui/screens/modals.py": 1042,
-    "zenagent/cli/rpc/ops_config.py": 940
+    "zenagent/cli/rpc/ops_config.py": 940,
+    "zenagent/cli/rpc/server.py": 803
   },
   "ts": {
     "desktop/src/ui/Sidebar.tsx": 854,
