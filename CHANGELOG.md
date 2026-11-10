@@ -12,14 +12,36 @@ project ops, and the yin-yang brand mark are unaffected.
 
 ### Removed
 
-- **Orchestration backend**: `zenagent/app/taiji/` (router session, per-root
-  `TaijiSupervisor`, worker worktrees/branches, deterministic merge gate,
-  dispatch board) and its RPC surface (`ops_taiji.py`, `TaijiOps`, the `taiji`
-  request kinds), plus the router prompt block and the five Router-only tools.
-- **Desktop**: the right-rail dispatch board, the ☯ composer chip, `taijiStore`,
-  taiji error codes and strings, taiji bridge fixtures, and their unit/e2e tests.
-- **Docs**: the taiji brief, design spec (D1–D7), and P0–P3 plans; the generated
-  architecture manifest/diagram no longer list an `app.taiji` node or its edges.
+- **Orchestration backend**: `zenagent/app/taiji/` — the Router session
+  singleton, per-root `TaijiSupervisor`, worker worktrees/branches,
+  deterministic merge gate, dispatch board and its registry/claim/transcript
+  layers — along with the runtime hooks that armed them (`router_tool_gate`,
+  worker milestone injection, fleet/lock claims, `TaijiClaim` on every slot).
+- **Router prompt surface**: the session-gated `taiji_router` block and the five
+  worker tools (`spawn_worker`, `message_worker`, `kill_worker`,
+  `merge_worker`, `list_workers`). `PROMPT_VERSION` moves to 2026-11-10.1; the
+  remaining blocks are unchanged.
+- **RPC surface**: `ops_taiji.py` / `TaijiOps` and the `taiji` request kinds.
+  The host and slot lose their claim plumbing: eviction no longer reserves a
+  slot for a project's taiji claim, `project close` closes every slot of the
+  project, and session-resume routing behaves as before.
+- **Desktop**: the right-rail dispatch board, the ☯ composer chip,
+  `taijiStore`, the taiji error codes and strings, the dev-bridge fixtures and
+  their unit/e2e tests. `REQUEST_KINDS` no longer advertises `taiji`.
+- **Docs**: the taiji brief, design spec (D1–D7), P0–P3 plans, and the worker
+  demo.
+
+### Internal
+
+- **Tests**: the ten `tests/test_taiji_*.py` modules are gone; the host/slot,
+  RPC-contract, layering, prompt and session suites now exercise ordinary
+  sessions only.
+- **Architecture**: `manifest.json` drops the `app.taiji` node, its nine edges
+  and its `cycles_seen` entry, and `deps.json`, `brief.md`, `nodes.md`,
+  `graph.html` and `architecture-full.html` were regenerated without the taiji
+  band. The health baseline was re-registered 112 → 109: seven taiji violations
+  resolved, and the pre-existing v0.12.1 LOC drift (runtime/server/session and
+  tests) recorded at today's values.
 
 ## v0.12.1 — 2026-11-10
 
