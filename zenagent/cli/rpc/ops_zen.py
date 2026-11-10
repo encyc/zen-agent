@@ -76,6 +76,22 @@ class ZenOps:
             raise Refusal("zen needs an idle session", code="zen_busy")
 
     async def _zen_enable(self, request_id) -> None:
+        fleet = self._zen_fleet()
+        if fleet is not None:
+            # Already zen: answer with the current state instead of rebuilding
+            # (a rebuild would orphan the live fleet and its workers).
+            self._send(
+                {
+                    "type": "result",
+                    "id": request_id,
+                    "ok": True,
+                    "enabled": True,
+                    "router": str(self.runtime.session.path),
+                    "session": str(self.runtime.session.path),
+                    "roster": fleet.roster(),
+                }
+            )
+            return
         self._require_idle()
         runtime = self.runtime
         sessions_dir = project_sessions_dir(runtime.root)
@@ -95,9 +111,14 @@ class ZenOps:
             sessions_dir=sessions_dir,
             router_path=str(runtime.session.path),
             on_change=self._send_fleet_roster,
+            confirm=self.confirm,
+            mode=getattr(runtime, "mode", None),
         )
         runtime.zen_fleet = fleet
         runtime._recompose()
+        chat = self.chat
+        if chat is not None and hasattr(chat, "reload_transcript"):
+            chat.reload_transcript(drop_pending=True)
         self._send_fleet_roster()
         self._send(
             {
@@ -136,6 +157,9 @@ class ZenOps:
         else:
             runtime.use_new_session()
         runtime._recompose()
+        chat = self.chat
+        if chat is not None and hasattr(chat, "reload_transcript"):
+            chat.reload_transcript(drop_pending=True)
         self._send_fleet_roster()
         self._send(
             {

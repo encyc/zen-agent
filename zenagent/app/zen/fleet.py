@@ -67,6 +67,8 @@ class ZenFleet:
         router_path: str,
         max_concurrent: int = 3,
         on_change: Callable[[], None] | None = None,
+        confirm: Callable | None = None,
+        mode: str | None = None,
     ) -> None:
         self.chat = chat
         self.root = Path(root)
@@ -74,6 +76,12 @@ class ZenFleet:
         self.router_path = str(router_path)
         self.max_concurrent = max(1, int(max_concurrent))
         self.on_change = on_change
+        #: The owning slot's confirm callback: a worker's mutating tool calls
+        #: surface as approvals in the UI, tagged with the router's frames.
+        self.confirm = confirm
+        #: Workers inherit the router's permission mode so the project's
+        #: autonomy choice applies to its workers too.
+        self.mode = mode
         self._handles: dict[str, WorkerHandle] = {}
         self._sem = asyncio.Semaphore(self.max_concurrent)
         self._closing = False
@@ -201,7 +209,10 @@ class ZenFleet:
             handle.status = "working"
             self._notify()
             try:
-                runtime = await self._build_worker(handle)
+                prepared = await self._build_worker(handle)
+                # prepare returns the PreparedFrontend envelope; the worker is
+                # the Runtime inside it (agent/close live there).
+                runtime = prepared.runtime
                 handle.agent = runtime.agent
                 handle.runtime = runtime
                 if handle.stopped:
@@ -234,10 +245,14 @@ class ZenFleet:
                 self._notify()
 
     async def _build_worker(self, handle: WorkerHandle) -> Any:
-        return await prepare(
-            RuntimeOptions(root=self.root, resume=handle.path),
+        prepared = await prepare(
+            RuntimeOptions(root=self.root, resume=handle.path, mode=self.mode),
             views=False,
         )
+        if self.confirm is not None:
+            # Worker write/exec calls ask the router's UI for approval.
+            prepared.broker.set_confirm(self.confirm)
+        return prepared
 
     @staticmethod
     def _last_report(agent: Any) -> str:

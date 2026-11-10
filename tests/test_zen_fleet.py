@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -50,6 +51,16 @@ class FakeWorkerAgent:
             raise RuntimeError(self.factory.errors.pop(self.path))
 
 
+class FakePreparedBroker:
+    """The broker inside a real ``PreparedFrontend``; records confirm wiring."""
+
+    def __init__(self) -> None:
+        self.confirmed: object = None
+
+    def set_confirm(self, fn) -> None:
+        self.confirmed = fn
+
+
 class FakeWorkerRuntime:
     """The runtime a dispatch builds for one worker session."""
 
@@ -76,17 +87,23 @@ class FakeWorkerFactory:
     def __init__(self, root: Path) -> None:
         self.root = root
         self.runtimes: dict[str, FakeWorkerRuntime] = {}
+        self.brokers: dict[str, FakePreparedBroker] = {}
+        self.modes: dict[str, str | None] = {}
         self.prompts: list[tuple[Path, str]] = []
         self.gates: dict[Path, object] = {}
         self.errors: dict[Path, str] = {}
         self.calls: list[dict] = []
 
-    async def prepare(self, options, **kwargs) -> FakeWorkerRuntime:
+    async def prepare(self, options, **kwargs) -> SimpleNamespace:
+        """Match the real ``prepare``: a PreparedFrontend envelope, not a bare Runtime."""
         self.calls.append({"root": str(options.root), "resume": options.resume})
         path = Path(options.resume)
         rt = FakeWorkerRuntime(self, path)
+        broker = FakePreparedBroker()
         self.runtimes[str(path)] = rt
-        return rt
+        self.brokers[str(path)] = broker
+        self.modes[str(path)] = getattr(options, "mode", None)
+        return SimpleNamespace(runtime=rt, broker=broker)
 
 
 class FakeChat:
@@ -117,6 +134,7 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
     monkeypatch.setattr("zenagent.app.zen.fleet.prepare", factory.prepare)
     chat = FakeChat()
     changes: list[int] = []
+    confirm = lambda *a, **k: "allow"
     fleet = ZenFleet(
         chat=chat,
         root=tmp_path / "project",
@@ -124,6 +142,8 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
         router_path=str(paths["router"]),
         max_concurrent=2,
         on_change=lambda: changes.append(1),
+        confirm=confirm,
+        mode="ask",
     )
     return {
         "fleet": fleet,
@@ -272,3 +292,25 @@ async def test_has_active_tracks_lifecycle(env) -> None:
     gate.set_result(None)
     await fleet.wait_all()
     assert fleet.has_active() is False
+
+
+async def test_worker_runtime_is_unwrapped_from_prepared_frontend(env) -> None:
+    """The real prepare returns PreparedFrontend; the fleet must unwrap
+    .runtime (and not treat the envelope as the runtime)."""
+    fleet: ZenFleet = env["fleet"]
+    path = env["paths"]["w1"]
+    await fleet.dispatch(str(path), "修复")
+    await fleet.wait_all()
+    prepared = env["factory"].runtimes[str(path)]
+    assert prepared.closed is True  # the Runtime was closed, not the envelope
+    broker = env["factory"].brokers[str(path)]
+    assert broker.confirmed is not None
+
+
+async def test_worker_inherits_confirm_and_mode(env) -> None:
+    fleet: ZenFleet = env["fleet"]
+    await fleet.dispatch(str(env["paths"]["w2"]), "修复")
+    await fleet.wait_all()
+    broker = env["factory"].brokers[str(env["paths"]["w2"])]
+    assert broker.confirmed is not None
+    assert env["factory"].modes[str(env["paths"]["w2"])] == "ask"

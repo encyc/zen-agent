@@ -30,12 +30,13 @@ class FakeChat:
     def __init__(self) -> None:
         self.busy = False
         self.steered: list[str] = []
+        self.reloaded: list[dict] = []
 
     def steer(self, text: str) -> None:
         self.steered.append(text)
 
-    def reload_transcript(self) -> None:
-        pass
+    def reload_transcript(self, *, drop_pending: bool = False) -> None:
+        self.reloaded.append({"drop_pending": drop_pending})
 
     async def wait_for_idle(self) -> None:
         pass
@@ -239,3 +240,26 @@ async def test_slot_close_shuts_the_fleet_down(slot_env):
 async def test_unknown_zen_op_is_a_refusal(slot_env):
     result = await slot_env.call({"type": "zen_fleet", "op": "dance", "id": "z14"})
     assert result["type"] == "error"
+
+
+async def test_enable_and_disable_reload_transcript_dropping_pending(slot_env):
+    await slot_env.call({"type": "zen_fleet", "op": "enable", "id": "z15"})
+    assert slot_env.chat.reloaded[-1] == {"drop_pending": True}
+    await slot_env.call({"type": "zen_fleet", "op": "disable", "id": "z16"})
+    assert slot_env.chat.reloaded[-1] == {"drop_pending": True}
+
+
+async def test_enable_is_idempotent_and_never_orphans_the_fleet(slot_env):
+    await slot_env.call({"type": "zen_fleet", "op": "enable", "id": "z17"})
+    first = slot_env.runtime.zen_fleet
+    first_session = slot_env.runtime.session.path
+    result = await slot_env.call({"type": "zen_fleet", "op": "enable", "id": "z18"})
+    assert result["ok"] is True
+    assert slot_env.runtime.zen_fleet is first
+    assert slot_env.runtime.session.path == first_session
+    assert slot_env.runtime.recomposed == 1
+
+
+async def test_worker_fleet_carries_the_slot_confirm(slot_env):
+    await slot_env.call({"type": "zen_fleet", "op": "enable", "id": "z19"})
+    assert slot_env.runtime.zen_fleet.confirm == slot_env.slot.server.confirm

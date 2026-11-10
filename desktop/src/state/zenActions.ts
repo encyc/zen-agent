@@ -2,11 +2,11 @@
  * here so `appStore.ts` stays under its architecture budget. Each function
  * takes the store getter, exactly like the inline methods it replaces. */
 
-import { useSettingsStore } from './stores'
-import { useSessionStore } from './stores'
-import { useZenStore } from './zenStore'
-import type { RosterItem } from '../rpc/types'
-import type { ZenUiMode } from '../rpc/types'
+import { useSettingsStore } from './stores.ts'
+import { useSessionStore } from './stores.ts'
+import { useZenStore } from './zenStore.ts'
+import type { RosterItem } from '../rpc/types.ts'
+import type { ZenUiMode } from '../rpc/types.ts'
 
 type AppGetter = () => {
   client(): { send(payload: Record<string, unknown>): Promise<Record<string, unknown> & { type?: string; ok?: boolean }> }
