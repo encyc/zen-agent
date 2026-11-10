@@ -894,14 +894,15 @@ async def test_boundary_without_following_messages_is_not_yet_effective(isolated
     assert cut.segment_start is None
 
 
-def test_trailing_carried_boundary_replays_everything(isolated_sessions):
+async def test_trailing_carried_boundary_replays_everything(isolated_sessions):
     """Rewrite/fork files carry compaction records at the tail; they replay fully."""
     source = Session(isolated_sessions / "s.jsonl", boundary=records.is_compaction)
     for message in [user("one"), user("two")]:
-        source.append(message)
+        await source.append(message)
     source.append_meta({"type": "compaction", "tokensBefore": 10})
-    source.append(user("summary"))
+    await source.append(user("summary"))
     live = list(source.messages)
+    assert [m.content for m in live if isinstance(m, UserMessage)] == ["summary"]
 
     rewritten = Session(
         source.rewrite(live, keep=records.keep_for_rewrite()),
@@ -943,11 +944,11 @@ async def test_append_after_cut_extends_the_replayed_segment(isolated_sessions):
     assert expected.segment_start == 1
 
 
-def test_carry_records_keeps_live_calls_and_compactions(isolated_sessions):
+async def test_carry_records_keeps_live_calls_and_compactions(isolated_sessions):
     source = Session(isolated_sessions / "source.jsonl")
     messages = [user("go"), assistant_call("c1")]
     for message in messages:
-        source.append(message)
+        await source.append(message)
     source.append_meta({"type": "tool_end", "call_id": "c1", "duration_ms": 5})
     source.append_meta({"type": "tool_end", "call_id": "gone", "duration_ms": 6})
     source.append_meta({"type": "compaction", "tokensBefore": 10})
@@ -961,11 +962,11 @@ def test_carry_records_keeps_live_calls_and_compactions(isolated_sessions):
     ]
 
 
-def test_carry_records_can_skip_tool_end(isolated_sessions):
+async def test_carry_records_can_skip_tool_end(isolated_sessions):
     source = Session(isolated_sessions / "source.jsonl")
     messages = [user("go"), assistant_call("c1")]
     for message in messages:
-        source.append(message)
+        await source.append(message)
     source.append_meta({"type": "tool_end", "call_id": "c1", "duration_ms": 5})
     source.append_meta({"type": "compaction", "tokensBefore": 10})
 
@@ -976,11 +977,11 @@ def test_carry_records_can_skip_tool_end(isolated_sessions):
     assert [record["type"] for record in carried] == ["compaction"]
 
 
-def test_rewrite_carries_records_for_kept_calls(isolated_sessions):
+async def test_rewrite_carries_records_for_kept_calls(isolated_sessions):
     source = Session(isolated_sessions / "source.jsonl")
     messages = [user("go"), assistant_call("c1")]
     for message in messages:
-        source.append(message)
+        await source.append(message)
     source.append_meta({"type": "tool_end", "call_id": "c1", "duration_ms": 5})
     source.append_meta({"type": "compaction", "tokensBefore": 10})
 
@@ -1019,11 +1020,11 @@ def test_read_info_falls_back_to_mtime_without_a_header(isolated_sessions):
     assert info.derived_from == ""
 
 
-def test_carry_records_sees_records_appended_after_load(isolated_sessions):
+async def test_carry_records_sees_records_appended_after_load(isolated_sessions):
     source = Session(isolated_sessions / "s.jsonl")
     messages = [user("go"), assistant_call("c1")]
     for message in messages:
-        source.append(message)
+        await source.append(message)
     source.load()
     source.append_meta({"type": "tool_end", "call_id": "c1", "duration_ms": 5})
 
@@ -1032,12 +1033,12 @@ def test_carry_records_sees_records_appended_after_load(isolated_sessions):
     assert [record["type"] for record in carried] == ["tool_end"]
 
 
-def test_carry_records_default_carries_structurally(isolated_sessions):
+async def test_carry_records_default_carries_structurally(isolated_sessions):
     """Without a predicate the kernel only applies the call-id rule."""
     source = Session(isolated_sessions / "source.jsonl")
     messages = [user("go"), assistant_call("c1")]
     for message in messages:
-        source.append(message)
+        await source.append(message)
     source.append_meta({"type": "tool_end", "call_id": "c1"})
     source.append_meta({"type": "tool_end", "call_id": "gone"})
     source.append_meta({"type": "compaction", "tokensBefore": 10})

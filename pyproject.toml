@@ -60,6 +60,13 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+# A test that calls an async helper without awaiting it still "passes"; the
+# coroutine is only finalized later and pytest reports it as unraisable. Make
+# that loud so the suite can never accumulate silently-skipped setup again.
+filterwarnings = [
+    "error:coroutine .* was never awaited:RuntimeWarning",
+    "error:Exception ignored while finalizing coroutine:Warning",
+]
 
 [tool.ruff]
 target-version = "py311"
