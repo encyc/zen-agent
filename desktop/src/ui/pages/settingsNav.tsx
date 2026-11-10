@@ -9,6 +9,7 @@ import {
   FileIcon,
   FolderIcon,
   InfoIcon,
+  ListTodoIcon,
   PaletteIcon,
   SparkIcon,
   TerminalIcon,
@@ -22,6 +23,7 @@ export type Tab =
   | 'limits'
   | 'mcp'
   | 'plugins'
+  | 'agents'
   | 'projects'
   | 'about'
 export type NavGroup = 'preferences' | 'resources' | 'system'
@@ -113,6 +115,14 @@ export const NAV_ITEMS: NavItem[] = [
       'settings.pluginsInstalledSection',
       'settings.pluginsApplyPending',
     ],
+  },
+  {
+    id: 'agents',
+    labelKey: 'settings.agents',
+    hintKey: 'settings.agentsHint',
+    icon: <ListTodoIcon size={14} />,
+    group: 'resources',
+    keywords: ['swarm.rolesList', 'swarm.roleNew', 'swarm.rolePrompt', 'swarm.roleRoot'],
   },
   {
     id: 'projects',

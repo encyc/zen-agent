@@ -110,7 +110,9 @@ class SwarmOps:
         action = request.get("action") or "list"
         if action == "list":
             return {"roles": manager.roles()}
-        role_id = _need(request, "id")
+        # `id` is the request-correlation id every RPC carries; the role's own
+        # id travels as `roleId` so creating a role cannot shadow the answer.
+        role_id = _need(request, "roleId")
         if action in ("create", "update"):
             manifest = request.get("manifest")
             if not isinstance(manifest, dict):

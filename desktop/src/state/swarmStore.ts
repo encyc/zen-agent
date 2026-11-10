@@ -53,6 +53,12 @@ interface SwarmState {
   cancel(id: string): Promise<void>
   retry(id: string): Promise<void>
   reset(agentId: string): Promise<void>
+  /** Create/update/delete a role; the panel refreshes with `load` after. */
+  saveRole(
+    action: 'create' | 'update' | 'delete',
+    id: string,
+    manifest?: Record<string, unknown>,
+  ): Promise<Record<string, unknown>>
   applyFrame(frame: ServerFrame): void
 }
 
@@ -114,5 +120,17 @@ export const useSwarmStore = create<SwarmState>((set) => ({
 
   async reset(agentId) {
     await send({ type: 'swarm', op: 'reset', agentId })
+  },
+
+  async saveRole(action, id, manifest) {
+    const answer = (await send({
+      type: 'swarm',
+      op: 'roles',
+      action,
+      roleId: id,
+      ...(manifest === undefined ? {} : { manifest }),
+    })) as unknown as { ok?: boolean; roles?: SwarmRole[] }
+    if (answer.ok === true && Array.isArray(answer.roles)) set({ roles: answer.roles })
+    return answer as unknown as Record<string, unknown>
   },
 }))

@@ -44,3 +44,34 @@ test('cancel a running task', async ({ page }) => {
   const cancel = calls.find((call) => call.type === 'swarm' && call.op === 'cancel')
   assert.equal(cancel?.taskId, 't_seed')
 })
+
+test('create a role from settings', async ({ page }) => {
+  await boot(page, initialState(swarmFixture()))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '角色' }).click()
+  await page.getByRole('button', { name: '新建角色' }).click()
+
+  await page.locator('#agent-id').fill('reviewer')
+  await page.locator('#agent-name').fill('Reviewer')
+  await page.locator('#agent-description').fill('审查改动')
+  await page.locator('#agent-prompt').fill('You review code.')
+  await page.locator('#agent-root').fill('/tmp/reviewer')
+  await page.getByRole('button', { name: '保存' }).click()
+
+  await expect(page.locator('[data-agent-role="reviewer"]')).toBeVisible()
+  const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
+  const save = calls.find(
+    (call) => call.type === 'swarm' && call.op === 'roles' && call.action === 'create',
+  )
+  assert.equal(save?.roleId, 'reviewer')
+  const manifest = save?.manifest as Record<string, unknown> | undefined
+  assert.equal(manifest?.name, 'Reviewer')
+  assert.equal(manifest?.systemPrompt, 'You review code.')
+  assert.equal(manifest?.root, '/tmp/reviewer')
+
+  // The refresh after the save lands the new agent in the room's roster.
+  await page.getByRole('button', { name: '返回' }).click()
+  await expect(page.locator('[data-swarm-agent="reviewer"]')).toBeVisible()
+})

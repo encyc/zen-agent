@@ -177,9 +177,10 @@ function appendMessage(
 function setAgent(rows: Room, id: string, state: SwarmAgentState['state'], task: string | null) {
   const index = rows.swarmAgents.findIndex((agent) => agent.agent === id)
   const known = index >= 0 ? rows.swarmAgents[index] : undefined
+  const role = rows.swarmRoles.find((entry) => entry.id === id)
   const row: SwarmAgentState = {
     agent: id,
-    name: known?.name ?? id,
+    name: role?.name ?? known?.name ?? id,
     state,
     task,
     pendingApply: known?.pendingApply ?? false,
@@ -187,6 +188,33 @@ function setAgent(rows: Room, id: string, state: SwarmAgentState['state'], task:
   if (index >= 0) rows.swarmAgents[index] = row
   else rows.swarmAgents.push(row)
   emit({ ...row, type: 'swarm_agent', swarm: true })
+}
+
+/** A role view built the way the host builds one from a saved manifest. */
+function roleView(rows: Room, id: string, manifest: Record<string, unknown>): SwarmRole {
+  const prior = rows.swarmRoles.find((role) => role.id === id)
+  const limits = (manifest.limits ?? {}) as Record<string, unknown>
+  const tools = Array.isArray(manifest.tools) ? manifest.tools.map(String) : null
+  return {
+    id,
+    name: String(manifest.name ?? prior?.name ?? id),
+    description: String(manifest.description ?? ''),
+    model: typeof manifest.model === 'string' ? manifest.model : (prior?.model ?? ''),
+    thinking: typeof manifest.thinking === 'string' ? manifest.thinking : (prior?.thinking ?? ''),
+    mode: String(manifest.mode ?? 'ask'),
+    root: String(manifest.root ?? `/Users/e2e/.zenagent-workspaces/${id}`),
+    tools,
+    inheritProject: manifest.inheritProject === true,
+    maxTurns: typeof limits.maxTurns === 'number' ? limits.maxTurns : null,
+    maxCost: typeof limits.maxCost === 'number' ? limits.maxCost : null,
+    missingCredentials: prior?.missingCredentials ?? [],
+  }
+}
+
+function upsertRole(rows: Room, role: SwarmRole) {
+  const index = rows.swarmRoles.findIndex((entry) => entry.id === role.id)
+  if (index >= 0) rows.swarmRoles[index] = role
+  else rows.swarmRoles.push(role)
 }
 
 function addTask(
@@ -340,6 +368,21 @@ export function handleSwarm(
   }
 
   if (op === 'roles') {
+    const action = String(payload.action ?? 'list')
+    if (action !== 'list') {
+      const id = String(payload.roleId ?? '')
+      if (action === 'delete') {
+        rows.swarmRoles = rows.swarmRoles.filter((role) => role.id !== id)
+        rows.swarmAgents = rows.swarmAgents.filter((agent) => agent.agent !== id)
+      } else {
+        const manifest = (payload.manifest ?? {}) as Record<string, unknown>
+        const role = roleView(rows, id, manifest)
+        upsertRole(rows, role)
+        // The host builds (create) or rebuilds (update) the agent, which
+        // pushes a swarm_agent frame of its own.
+        setAgent(rows, id, 'idle', null)
+      }
+    }
     return ok({ roles: copy(rows.swarmRoles) })
   }
 

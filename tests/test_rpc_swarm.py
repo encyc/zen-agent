@@ -41,6 +41,8 @@ class FakeSwarm:
         self.started = False
         self.posts: list[str] = []
         self.approvals: list[tuple[str, str]] = []
+        self.role_updates: list[tuple[str, dict]] = []
+        self.role_deletes: list[str] = []
 
     async def start(self) -> None:
         self.started = True
@@ -98,10 +100,10 @@ class FakeSwarm:
         return True
 
     async def update_role(self, role_id: str, manifest: dict):
-        return None
+        self.role_updates.append((role_id, manifest))
 
     async def delete_role(self, role_id: str) -> None:
-        return None
+        self.role_deletes.append(role_id)
 
     async def reload(self) -> list[str]:
         return []
@@ -156,6 +158,43 @@ async def test_post_creates_tasks(tmp_path):
     assert result["ok"] is True
     assert [task["id"] for task in result["tasks"]] == ["t_1"]
     assert result["tasks"][0]["assignee"] == "research"
+
+
+async def test_roles_create_uses_role_id_not_request_id(tmp_path):
+    host, writes = _host(tmp_path)
+    fake = FakeSwarm()
+    host._swarm = fake  # type: ignore[assignment]
+
+    await _call(
+        host,
+        {
+            "type": "swarm",
+            "op": "roles",
+            "action": "create",
+            "id": "r7",
+            "roleId": "reviewer",
+            "manifest": {"name": "Reviewer"},
+        },
+    )
+
+    result = writes[-1]
+    assert result["ok"] is True
+    assert result["id"] == "r7"
+    assert fake.role_updates == [("reviewer", {"name": "Reviewer"})]
+
+
+async def test_roles_delete_uses_role_id_not_request_id(tmp_path):
+    host, writes = _host(tmp_path)
+    fake = FakeSwarm()
+    host._swarm = fake  # type: ignore[assignment]
+
+    await _call(
+        host,
+        {"type": "swarm", "op": "roles", "action": "delete", "id": "r8", "roleId": "reviewer"},
+    )
+
+    assert writes[-1]["ok"] is True
+    assert fake.role_deletes == ["reviewer"]
 
 
 async def test_swarm_frames_are_global(tmp_path, monkeypatch):
