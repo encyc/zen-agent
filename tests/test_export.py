@@ -117,7 +117,7 @@ def test_export_session_unknown_format_is_rejected(tmp_path):
 @pytest.fixture(autouse=True)
 def isolated(tmp_path, monkeypatch):
     sessions = tmp_path / "sessions"
-    monkeypatch.setattr(session_module, "sessions_dir", lambda: sessions)
+    monkeypatch.setattr(session_module, "sessions_dir", lambda *, root=None: sessions)
     return sessions
 
 

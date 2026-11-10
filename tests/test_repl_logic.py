@@ -28,7 +28,9 @@ from zenagent.types import (
 @pytest.fixture(autouse=True)
 def isolate_user_config(monkeypatch):
     """Tests must not read the developer's real ~/.zenagent/config.toml."""
-    monkeypatch.setattr("zenagent.app.bootstrap.load_user_config", lambda: UserConfig())
+    monkeypatch.setattr(
+        "zenagent.app.bootstrap.load_user_config", lambda *a, **k: UserConfig()
+    )
     monkeypatch.setattr(
         "zenagent.app.runtime.load_user_config",
         lambda *args, **kwargs: UserConfig(),
@@ -92,9 +94,11 @@ def scripted_input(*lines: str, settle: float = 0.0):
 
 @pytest.fixture(autouse=True)
 def isolated_sessions(tmp_path, monkeypatch):
-    root = tmp_path / "sessions"
-    monkeypatch.setattr(session_module, "sessions_dir", lambda: root)
-    return root
+    sessions_root = tmp_path / "sessions"
+    monkeypatch.setattr(
+        session_module, "sessions_dir", lambda *, root=None: sessions_root
+    )
+    return sessions_root
 
 
 # ---------------------------------------------------------------------------
@@ -265,7 +269,9 @@ async def test_repl_reconnects_a_late_mcp_server(tmp_path, isolated_sessions):
 async def test_reload_discovers_skills_added_mid_session(tmp_path, monkeypatch):
     from zenagent.config import UserConfig
 
-    monkeypatch.setattr("zenagent.app.bootstrap.load_user_config", lambda: UserConfig())
+    monkeypatch.setattr(
+        "zenagent.app.bootstrap.load_user_config", lambda *a, **k: UserConfig()
+    )
     monkeypatch.setattr(
         "zenagent.app.runtime.load_user_config",
         lambda *args, **kwargs: UserConfig(),

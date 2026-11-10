@@ -23,7 +23,9 @@ from zenagent.types import AssistantMessage, Cost, TextContent, Usage
 
 @pytest.fixture(autouse=True)
 def isolate_config(monkeypatch):
-    monkeypatch.setattr("zenagent.app.bootstrap.load_user_config", lambda: UserConfig())
+    monkeypatch.setattr(
+        "zenagent.app.bootstrap.load_user_config", lambda *a, **k: UserConfig()
+    )
     monkeypatch.setattr(
         "zenagent.app.runtime.load_user_config",
         lambda *args, **kwargs: UserConfig(),
@@ -32,9 +34,11 @@ def isolate_config(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def isolated_sessions(tmp_path, monkeypatch):
-    root = tmp_path / "sessions"
-    monkeypatch.setattr(session_module, "sessions_dir", lambda: root)
-    return root
+    sessions_root = tmp_path / "sessions"
+    monkeypatch.setattr(
+        session_module, "sessions_dir", lambda *, root=None: sessions_root
+    )
+    return sessions_root
 
 
 def model() -> Model:
