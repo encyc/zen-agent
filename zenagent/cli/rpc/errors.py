@@ -79,9 +79,20 @@ def failure_frame(
     """
     label = op or code
     if path is not None and str(path) != "":
-        logger.warning("%s failed for %r: %s", label, path, exc, exc_info=True)
+        logger.warning(
+            "%s failed for %r: %s",
+            label,
+            path,
+            exc,
+            exc_info=True,  # noqa: LOG014 - callers pass a caught exception
+        )
     else:
-        logger.warning("%s failed: %s", label, exc, exc_info=True)
+        logger.warning(
+            "%s failed: %s",
+            label,
+            exc,
+            exc_info=True,  # noqa: LOG014 - callers pass a caught exception
+        )
     merged = dict(params or {})
     if op is not None:
         merged.setdefault("op", op)
