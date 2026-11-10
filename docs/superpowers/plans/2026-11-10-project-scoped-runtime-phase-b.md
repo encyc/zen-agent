@@ -76,7 +76,7 @@ Errors use the existing sanitized frames: `{"type": "error", "id": ..., "message
   - `async release_taiji_host(claim: TaijiClaim) -> None`
   - `ensure_taiji_session(sessions_dir, *, cwd: Path | None = None) -> Path`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `tests/test_taiji_supervisor.py`, replace `test_get_taiji_is_a_per_loop_singleton` (line 192) with the registry tests:
 
@@ -278,12 +278,12 @@ async def test_claim_is_inert_outside_a_main_checkout(
     await release_taiji_host(claim)
 ```
 
-- [ ] **Step 2: Run the new tests and watch them fail**
+- [x] **Step 2: Run the new tests and watch them fail**
 
 Run: `uv run pytest tests/test_taiji_supervisor.py::test_get_taiji_keeps_one_supervisor_per_root tests/test_taiji_claim.py -q`
 Expected: FAIL — `_SUPERVISORS` / `claim` module / `cwd` parameter missing.
 
-- [ ] **Step 3: Implement the registry in `supervisor.py`**
+- [x] **Step 3: Implement the registry in `supervisor.py`**
 
 Replace the tail of `zenagent/app/taiji/supervisor.py` (from `_SINGLETON` to EOF):
 
@@ -334,7 +334,7 @@ async def close_taiji(root: Path | str | None = None) -> None:
         await supervisor.close()
 ```
 
-- [ ] **Step 4: Add the session cwd override**
+- [x] **Step 4: Add the session cwd override**
 
 In `zenagent/app/taiji/session.py`, change the signature and header:
 
@@ -361,7 +361,7 @@ def ensure_taiji_session(
     return path
 ```
 
-- [ ] **Step 5: Point the supervisor seam at the runtime root**
+- [x] **Step 5: Point the supervisor seam at the runtime root**
 
 Replace `taiji_supervisor_for` in `zenagent/app/taiji/tools.py`:
 
@@ -390,7 +390,7 @@ def taiji_supervisor_for(runtime: Any) -> TaijiSupervisor:
     )
 ```
 
-- [ ] **Step 6: Add the claim helper**
+- [x] **Step 6: Add the claim helper**
 
 Create `zenagent/app/taiji/claim.py`:
 
@@ -455,7 +455,7 @@ async def release_taiji_host(claim: TaijiClaim) -> None:
     release_taiji_lock(project.project_dir(root=claim.root))
 ```
 
-- [ ] **Step 7: Export the new surface**
+- [x] **Step 7: Export the new surface**
 
 Replace `zenagent/app/taiji/__init__.py`:
 
@@ -499,7 +499,7 @@ __all__ = [
 ]
 ```
 
-- [ ] **Step 8: Route the taiji panel by the server's project**
+- [x] **Step 8: Route the taiji panel by the server's project**
 
 In `zenagent/cli/rpc/ops_taiji.py`, change the lookup (line 28):
 
@@ -507,7 +507,7 @@ In `zenagent/cli/rpc/ops_taiji.py`, change the lookup (line 28):
         supervisor = existing_taiji(self.root)
 ```
 
-- [ ] **Step 9: Run the affected tests**
+- [x] **Step 9: Run the affected tests**
 
 Run:
 
@@ -517,7 +517,7 @@ uv run pytest tests/test_taiji_supervisor.py tests/test_taiji_claim.py tests/tes
 
 Expected: PASS. If `test_taiji_rpc.py` still mutates `_SINGLETON`, the fixture edit was missed.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add zenagent/app/taiji zenagent/cli/rpc/ops_taiji.py tests/test_taiji_supervisor.py tests/test_taiji_rpc.py tests/test_rpc_v2.py tests/test_taiji_claim.py
@@ -537,7 +537,7 @@ git commit -m "feat(taiji): keep one supervisor and host lock per project root"
 - Consumes: `JobManager.list()`, `ChatController.runtime.root` (Phase A).
 - Produces: `Job.cwd: str` (spawn directory, `""` when unknown), `ChatController._job_views()` filtered to jobs whose cwd is inside `runtime.root`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `tests/test_app_chat.py`:
 
@@ -566,12 +566,12 @@ async def test_job_views_stay_inside_their_workspace(runtime_factory, tmp_path):
         await manager.kill(two.id)
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `uv run pytest tests/test_app_chat.py::test_job_views_stay_inside_their_workspace -q`
 Expected: FAIL — neither `Job` nor `JobManager.start` records a cwd; both chats list both jobs.
 
-- [ ] **Step 3: Record the spawn directory on the job**
+- [x] **Step 3: Record the spawn directory on the job**
 
 In `zenagent/tools/jobs.py`, add the field after `error: str = ""`:
 
@@ -591,7 +591,7 @@ In `JobManager.start`, pass it when constructing the job:
         )
 ```
 
-- [ ] **Step 4: Filter the chat's job views**
+- [x] **Step 4: Filter the chat's job views**
 
 Replace `_job_views` in `zenagent/app/chat.py`:
 
@@ -612,7 +612,7 @@ Replace `_job_views` in `zenagent/app/chat.py`:
         return sort_jobs(job_views(visible))
 ```
 
-- [ ] **Step 5: Run the job suites**
+- [x] **Step 5: Run the job suites**
 
 Run:
 
@@ -622,7 +622,7 @@ uv run pytest tests/test_app_chat.py tests/test_jobs.py tests/test_bash_tool.py 
 
 Expected: PASS. If `tests/test_app_chat.py` has no `runtime_factory` fixture yet, it is defined in `tests/conftest.py` and available automatically.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add zenagent/tools/jobs.py zenagent/app/chat.py tests/test_app_chat.py
@@ -646,7 +646,7 @@ git commit -m "fix(jobs): scope background job views to the runtime workspace"
   - Every outgoing server frame carries `"project": <root>` when `project` is set.
   - `RuntimeSlot(root, key, server, claim, opened_at)` with `runtime`, `chat`, `busy`, `pinned`, `close()`, `adopt(prepared, *, write_line, approval_timeout_s=120.0)`.
 
-- [ ] **Step 1: Write the failing slot/server tests**
+- [x] **Step 1: Write the failing slot/server tests**
 
 Create `tests/test_rpc_slot.py`:
 
@@ -826,12 +826,12 @@ async def test_slot_close_releases_the_claim_and_the_runtime(tmp_path, monkeypat
     assert runtime.closed is True
 ```
 
-- [ ] **Step 2: Run them and watch them fail**
+- [x] **Step 2: Run them and watch them fail**
 
 Run: `uv run pytest tests/test_rpc_slot.py -q`
 Expected: FAIL — `zenagent.cli.rpc.slot` does not exist; `RpcServer` has no `project` parameter.
 
-- [ ] **Step 3: Tag and scope the server**
+- [x] **Step 3: Tag and scope the server**
 
 In `zenagent/cli/rpc/server.py`, add the import at the top:
 
@@ -879,7 +879,7 @@ In `ask`, do the same:
 
 No other change: `_resolve_approval` / `_resolve_ask` already match ids verbatim.
 
-- [ ] **Step 4: Add `RuntimeSlot`**
+- [x] **Step 4: Add `RuntimeSlot`**
 
 Create `zenagent/cli/rpc/slot.py`:
 
@@ -995,12 +995,12 @@ class RuntimeSlot:
         await self.runtime.close()
 ```
 
-- [ ] **Step 5: Run the slot tests**
+- [x] **Step 5: Run the slot tests**
 
 Run: `uv run pytest tests/test_rpc_slot.py tests/test_rpc.py tests/test_rpc_v2.py -q`
 Expected: PASS.
 
-- [ ] **Step 6: Register the measured server size**
+- [x] **Step 6: Register the measured server size**
 
 ```bash
 wc -l < zenagent/cli/rpc/server.py
@@ -1008,7 +1008,7 @@ wc -l < zenagent/cli/rpc/server.py
 
 Set `zenagent/cli/rpc/server.py` in `docs/architecture/allowlist.json` to that exact integer (repo convention: register the measured size so the gate stays green), then run `python3 scripts/check_architecture.py`. Expected: `architecture budget ok`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add zenagent/cli/rpc/server.py zenagent/cli/rpc/slot.py tests/test_rpc_slot.py docs/architecture/allowlist.json
@@ -1028,7 +1028,7 @@ git commit -m "feat(rpc): tag frames and approval ids with their project"
 - Consumes: `RuntimeSlot`, `prepare`, `RuntimeOptions`, `find_project_root`, `project_key`, `RpcServer.PROTOCOL_VERSION`, `Refusal`, `error_frame`, `failure_frame`, `relocate_project` (via the active slot's `ConfigOps._project`).
 - Produces: `RpcHost(initial, options, read_line, write_line, *, assume_yes=False, stream_fn=None, max_slots=4, approval_timeout_s=120.0, warn=None)` with `run()`, `close()`, `active`, `resident`.
 
-- [ ] **Step 1: Write the failing host tests**
+- [x] **Step 1: Write the failing host tests**
 
 Create `tests/test_rpc_host.py`:
 
@@ -1378,12 +1378,12 @@ async def test_approval_routes_by_its_prefixed_id_even_when_project_names_beta(
     assert await pending == "allow"
 ```
 
-- [ ] **Step 2: Run the host tests and watch them fail**
+- [x] **Step 2: Run the host tests and watch them fail**
 
 Run: `uv run pytest tests/test_rpc_host.py -q`
 Expected: FAIL — `zenagent.cli.rpc.host` does not exist.
 
-- [ ] **Step 3: Implement `RpcHost`**
+- [x] **Step 3: Implement `RpcHost`**
 
 Create `zenagent/cli/rpc/host.py`:
 
@@ -1730,7 +1730,7 @@ class RpcHost:
             )
 ```
 
-- [ ] **Step 4: Wire the CLI to the host**
+- [x] **Step 4: Wire the CLI to the host**
 
 Replace the body of `_run` in `zenagent/cli/rpc/cli.py` from `runtime = prepared.runtime` to the end of the function, and drop the now-unused taiji imports at the top:
 
@@ -1817,7 +1817,7 @@ from zenagent.project import (
 )
 ```
 
-- [ ] **Step 5: Run the host, slot and CLI tests**
+- [x] **Step 5: Run the host, slot and CLI tests**
 
 Run:
 
@@ -1827,7 +1827,7 @@ uv run pytest tests/test_rpc_host.py tests/test_rpc_slot.py tests/test_rpc_v2.py
 
 Expected: PASS. The documented smoke client (`status`, `shutdown`) still works because the active slot answers both.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add zenagent/cli/rpc/host.py zenagent/cli/rpc/cli.py tests/test_rpc_host.py
@@ -1846,7 +1846,7 @@ git commit -m "feat(rpc): host resident project slots behind one stdio loop"
 - Consumes everything from Tasks 1-4 plus real `prepare`, real `Runtime.bootstrap`, real `TaijiSupervisor`.
 - Produces: the acceptance gate from the audit: one child serves A and B; status/tools route; taiji is per root; close releases; LRU evicts; relocate refuses resident and works after close.
 
-- [ ] **Step 1: Write the acceptance test**
+- [x] **Step 1: Write the acceptance test**
 
 Create `tests/test_rpc_host_e2e.py`:
 
@@ -2034,14 +2034,14 @@ async def test_lru_caps_residents_and_releases_the_evicted_taiji(host):
     assert existing_taiji(alpha) is None
 ```
 
-- [ ] **Step 2: Run it and fix only real leaks**
+- [x] **Step 2: Run it and fix only real leaks**
 
 Run: `uv run pytest tests/test_rpc_host_e2e.py -q`
 Expected: PASS. If it fails because two runtimes share a session file, a
 project root was not resolved consistently — fix `_options`/`RuntimeSlot`
 root handling, not the test.
 
-- [ ] **Step 3: Run the full gate**
+- [x] **Step 3: Run the full gate**
 
 ```bash
 uv run ruff check .
@@ -2053,7 +2053,7 @@ Expected: ruff clean, `architecture budget ok`, the full suite green
 (Phase A baseline: `2594 passed`). If `docs/architecture/allowlist.json`
 reports a grown allowlisted file, register its measured size and re-run.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/test_rpc_host_e2e.py docs/architecture/allowlist.json
