@@ -225,16 +225,28 @@ export interface SubagentPanelTarget {
   name: string
 }
 
+/** One chat file reference asking the Files tab to open a path. The nonce lets
+ * the same path be requested twice without the viewer swallowing the repeat. */
+export interface FileOpenRequest {
+  path: string
+  nonce: number
+}
+
 const REVIEW_TAB: WorkPanelTab = { id: 'review', kind: 'review' }
 const FILES_TAB: WorkPanelTab = { id: 'files', kind: 'files' }
+
+let fileRequestSeq = 0
 
 interface WorkPanelState {
   open: boolean
   tabs: WorkPanelTab[]
   activeId: string
+  fileRequest: FileOpenRequest | null
   openPanel(): void
   closePanel(): void
   showTab(kind: 'review' | 'files' | 'worktree' | 'memory' | 'taiji' | 'terminal'): void
+  openFile(path: string): void
+  consumeFileRequest(): void
   activate(id: string): void
   openSubagent(target: SubagentPanelTarget): void
   closeTab(id: string): void
@@ -248,6 +260,7 @@ export const useWorkPanelStore = create<WorkPanelState>((set) => ({
   open: false,
   tabs: [REVIEW_TAB, FILES_TAB],
   activeId: FILES_TAB.id,
+  fileRequest: null,
   // Every fresh open lands on files: the rail is a browsing surface first, so
   // a review (or subagent) tab left active must not swallow the next open.
   openPanel: () =>
@@ -263,6 +276,14 @@ export const useWorkPanelStore = create<WorkPanelState>((set) => ({
       tabs: withTab(state.tabs, { id: kind, kind }),
       activeId: kind,
     })),
+  openFile: (path) =>
+    set((state) => ({
+      open: true,
+      tabs: withTab(state.tabs, FILES_TAB),
+      activeId: FILES_TAB.id,
+      fileRequest: { path, nonce: (fileRequestSeq += 1) },
+    })),
+  consumeFileRequest: () => set({ fileRequest: null }),
   activate: (id) =>
     set((state) =>
       state.tabs.some((tab) => tab.id === id) ? { open: true, activeId: id } : state,

@@ -40,3 +40,72 @@ test('copy labels are attribute-escaped', () => {
   assert.match(html, /data-copy-label="A &quot;quote&quot; &amp; more"/)
   assert.match(html, /data-copied-label="it&#39;s done"/)
 })
+
+test('file paths in inline code become file links when enabled', () => {
+  const html = markdownToHtml('see `src/a.ts` now', labels, { fileLinks: true })
+
+  assert.match(
+    html,
+    /<code class="md-file-ref" data-file-path="src\/a.ts" role="link" tabindex="0">src\/a\.ts<\/code>/,
+  )
+})
+
+test('file links are opt-in', () => {
+  const html = markdownToHtml('see `src/a.ts` now', labels)
+  assert.match(html, /<code>src\/a\.ts<\/code>/)
+})
+
+test('ordinary inline code is never a file link', () => {
+  const html = markdownToHtml('run `npm test` first', labels, { fileLinks: true })
+  assert.match(html, /<code>npm test<\/code>/)
+})
+
+test('a markdown link naming a file becomes a file link', () => {
+  const html = markdownToHtml(
+    '[host](zenagent/cli/rpc/host.py)',
+    labels,
+    { fileLinks: true },
+  )
+
+  assert.match(html, /class="md-file-ref" data-file-path="zenagent\/cli\/rpc\/host\.py"/)
+})
+
+test('a markdown link to a folder is an explicit file link too', () => {
+  // An explicit destination is a reference even without an extension: the
+  // Files panel decides whether the path is a file or a folder.
+  const html = markdownToHtml('[rpc](zenagent/cli/rpc)', labels, { fileLinks: true })
+
+  assert.match(
+    html,
+    /<code class="md-file-ref" data-file-path="zenagent\/cli\/rpc" role="link" tabindex="0">rpc<\/code>/,
+  )
+})
+
+test('a link destination is decoded and dot-relative paths are normalized', () => {
+  const html = markdownToHtml('[a](./src/my%20file.ts)', labels, { fileLinks: true })
+
+  assert.match(html, /data-file-path="src\/my file\.ts"/)
+})
+
+test('without file links a local destination keeps only its label', () => {
+  // The md viewer paints markdown but wires no panel handler; a native anchor
+  // there would navigate the shell, so the link wrapper is dropped.
+  const html = markdownToHtml('see [rpc](zenagent/cli/rpc) now', labels)
+
+  assert.doesNotMatch(html, /<a /)
+  assert.match(html, /see rpc now/)
+})
+
+test('http links stay ordinary anchors and never take the shell away', () => {
+  const html = markdownToHtml('[docs](https://example.com/a.ts)', labels, { fileLinks: true })
+  assert.match(
+    html,
+    /<a target="_blank" rel="noreferrer" href="https:\/\/example\.com\/a\.ts">docs<\/a>/,
+  )
+})
+
+test('a fragment link keeps the page and needs no new window', () => {
+  const html = markdownToHtml('[top](#top)', labels, { fileLinks: true })
+  assert.match(html, /<a href="#top">top<\/a>/)
+})
+

@@ -503,6 +503,197 @@ test('the work panel opens on files and renders review hunks', async ({ page }) 
   await expect(panel.getByRole('tab', { name: '审核' })).toHaveCount(0)
 })
 
+test('a file mentioned in the reply opens in the work panel', async ({ page }) => {
+  await boot(
+    page,
+    initialState({
+      transcript: [
+        { kind: 'user', id: 'u1', text: '改了哪里？', timestamp: 1 },
+        {
+          kind: 'assistant',
+          id: 'a1',
+          text: '我改了 `src/a.ts`，不是 `store.messages`。',
+          timestamp: 2,
+        },
+      ],
+      fsFiles: {
+        'src/a.ts': {
+          path: 'src/a.ts',
+          kind: 'text',
+          size: 20,
+          text: 'const a = 1\nexport { a }\n',
+          total_lines: 2,
+          truncated: false,
+        },
+      },
+    }),
+  )
+
+  // Only the real path becomes a link; the dotted identifier stays text.
+  const ref = page.locator('[data-file-path="src/a.ts"]')
+  await expect(ref).toHaveText('src/a.ts')
+  await expect(page.locator('[data-file-path="store.messages"]')).toHaveCount(0)
+
+  await ref.click()
+  const panel = page.locator('[data-work-panel]')
+  await expect(panel.getByRole('tab', { name: '文件' })).toHaveAttribute('aria-selected', 'true')
+  await expect(panel).toContainText('export { a }')
+  await expect(panel.getByRole('button', { name: '返回文件列表' })).toBeVisible()
+
+  // Back to the tree, then the same reference reopens the viewer.
+  await panel.getByRole('button', { name: '返回文件列表' }).click()
+  await expect(panel.getByRole('button', { name: '返回文件列表' })).toHaveCount(0)
+  await ref.click()
+  await expect(panel).toContainText('export { a }')
+})
+
+test('the file viewer highlights source with the matching grammar', async ({ page }) => {
+  await boot(
+    page,
+    initialState({
+      transcript: [
+        { kind: 'user', id: 'u1', text: '入口在哪？', timestamp: 1 },
+        { kind: 'assistant', id: 'a1', text: '入口在 `src/main.py`。', timestamp: 2 },
+      ],
+      fsFiles: {
+        'src/main.py': {
+          path: 'src/main.py',
+          kind: 'text',
+          size: 44,
+          text: 'def greet(name):\n    return f"hi {name}"\n',
+          total_lines: 2,
+          truncated: false,
+        },
+      },
+    }),
+  )
+
+  await page.locator('[data-file-path="src/main.py"]').click()
+  const panel = page.locator('[data-work-panel]')
+  const code = panel.locator('[data-lang="python"]')
+  await expect(code).toBeVisible()
+  await expect(code).toContainText('return f"hi {name}"')
+  // The grammar loads lazily; the keyword paints with a theme color once ready.
+  await expect(code.locator('[data-line="1"] span[style*="color"]', { hasText: 'def' })).toHaveCount(1)
+})
+
+test('a folder mentioned in the reply lands in the tree, never on a new page', async ({
+  page,
+}) => {
+  await boot(
+    page,
+    initialState({
+      transcript: [
+        { kind: 'user', id: 'u1', text: 'rpc 在哪？', timestamp: 1 },
+        {
+          kind: 'assistant',
+          id: 'a1',
+          text: '目录是 [zenagent/cli/rpc](zenagent/cli/rpc)。',
+          timestamp: 2,
+        },
+      ],
+      fsEntries: {
+        '': [{ name: 'zenagent', path: 'zenagent', kind: 'dir', size: 0, hidden: false }],
+        zenagent: [{ name: 'cli', path: 'zenagent/cli', kind: 'dir', size: 0, hidden: false }],
+        'zenagent/cli': [
+          { name: 'rpc', path: 'zenagent/cli/rpc', kind: 'dir', size: 0, hidden: false },
+        ],
+        'zenagent/cli/rpc': [
+          {
+            name: 'host.py',
+            path: 'zenagent/cli/rpc/host.py',
+            kind: 'file',
+            size: 6,
+            hidden: false,
+          },
+        ],
+      },
+      fsFiles: {
+        'zenagent/cli/rpc/host.py': {
+          path: 'zenagent/cli/rpc/host.py',
+          kind: 'text',
+          size: 6,
+          text: 'x = 1\n',
+          total_lines: 1,
+          truncated: false,
+        },
+      },
+    }),
+  )
+
+  const ref = page.locator('[data-file-path="zenagent/cli/rpc"]')
+  await expect(ref).toHaveText('zenagent/cli/rpc')
+  await ref.click()
+
+  // The click must never navigate the webview: the shell stays mounted.
+  expect(new URL(page.url()).pathname).toBe('/')
+  await expect(page.locator('[data-shell-composer]')).toBeVisible()
+  const panel = page.locator('[data-work-panel]')
+  await expect(panel.getByRole('tab', { name: '文件' })).toHaveAttribute('aria-selected', 'true')
+  // The folder opened in place: its ancestors and its contents are in the tree.
+  await expect(panel.getByRole('button', { name: 'zenagent' })).toBeVisible()
+  await expect(panel.getByRole('button', { name: 'host.py' })).toBeVisible()
+})
+
+test('an absolute folder path and a slashed folder token both reveal in the tree', async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem('zen.last.cwd', '/work/zen'))
+  await boot(
+    page,
+    initialState({
+      transcript: [
+        { kind: 'user', id: 'u1', text: 'agent 在哪？', timestamp: 1 },
+        {
+          kind: 'assistant',
+          id: 'a1',
+          text: '目录 `zenagent/agent/`，见 [rpc](/work/zen/zenagent/agent)。',
+          timestamp: 2,
+        },
+      ],
+      fsEntries: {
+        '': [{ name: 'zenagent', path: 'zenagent', kind: 'dir', size: 0, hidden: false }],
+        zenagent: [
+          { name: 'agent', path: 'zenagent/agent', kind: 'dir', size: 0, hidden: false },
+        ],
+        'zenagent/agent': [
+          {
+            name: 'core.py',
+            path: 'zenagent/agent/core.py',
+            kind: 'file',
+            size: 6,
+            hidden: false,
+          },
+        ],
+      },
+      fsFiles: {
+        'zenagent/agent/core.py': {
+          path: 'zenagent/agent/core.py',
+          kind: 'text',
+          size: 6,
+          text: 'x = 1\n',
+          total_lines: 1,
+          truncated: false,
+        },
+      },
+    }),
+  )
+
+  // A trailing slash links a folder; an absolute link is a reference too.
+  await expect(page.locator('[data-file-path="zenagent/agent"]')).toHaveText(
+    'zenagent/agent/',
+  )
+  const absolute = page.locator('[data-file-path="/work/zen/zenagent/agent"]')
+  await expect(absolute).toHaveText('rpc')
+
+  await absolute.click()
+  const panel = page.locator('[data-work-panel]')
+  // Folded to the project-relative key: the folder reveals in place instead
+  // of failing the ancestor-by-ancestor read.
+  await expect(panel.getByRole('button', { name: 'core.py' })).toBeVisible()
+  await expect(panel).not.toContainText('读取失败')
+})
+
 test('the worktree tab lists worktrees and marks the current one', async ({ page }) => {
   await boot(
     page,

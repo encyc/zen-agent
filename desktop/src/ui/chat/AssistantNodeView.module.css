@@ -258,6 +258,16 @@
   text-decoration: underline;
 }
 
+/* A workspace file in inline code is a door to the Files tab, not just text. */
+.markdown :global(code.md-file-ref) {
+  cursor: pointer;
+}
+
+.markdown :global(code.md-file-ref:hover),
+.markdown :global(code.md-file-ref:focus-visible) {
+  text-decoration: underline;
+}
+
 .markdown hr {
   border: none;
   border-top: 1px solid var(--dsw-alias-border-l2);

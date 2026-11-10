@@ -2,15 +2,24 @@
  * single-pane browse → open → back flow. The backend serves only paths inside
  * the runtime's project root. */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { useAppStore } from '../../state/appStore'
 import { FILES_REVEAL_BATCH, revealedCount } from '../../state/reveal'
-import { useNoticeStore, useSettingsStore } from '../../state/stores'
+import { useNoticeStore, useSettingsStore, useWorkPanelStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
 import { useMarkdown } from '../chat/markdown'
 import chatCss from '../chat/AssistantNodeView.module.css'
 import type { FsListResult, FsReadResult, WorkspaceEntry, WorkspaceFile } from '../../rpc/types'
 import { frameErrorNotice, type ReplyLike } from '../../rpc/frames'
+import { toWorkspacePath } from './workspacePath'
+import {
+  ensureLang,
+  highlightLines,
+  langForPath,
+  useHighlightVersion,
+  useThemeMode,
+  type ThemedToken,
+} from './highlight'
 import {
   ArrowLeftIcon,
   ChevronDownIcon,
@@ -52,21 +61,25 @@ export function FilesPanel() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
   const generation = useRef(0)
+  const handledRequest = useRef(0)
+  const fileRequest = useWorkPanelStore((state) => state.fileRequest)
 
-  const loadDir = useCallback(async (rel: string) => {
+  const loadDir = useCallback(async (rel: string, quiet = false): Promise<boolean> => {
     try {
       const result = await useAppStore
         .getState()
         .client()
         .send<FsListResult>({ type: 'fs_list', path: rel }, REQUEST_TIMEOUT_MS)
       if (result.ok !== true) {
-        reportFsFailure(result)
+        if (!quiet) reportFsFailure(result)
         setDirs((prev) => ({ ...prev, [rel]: { entries: [], error: true } }))
-        return
+        return false
       }
       setDirs((prev) => ({ ...prev, [rel]: { entries: result.entries ?? [] } }))
+      return true
     } catch {
       setDirs((prev) => ({ ...prev, [rel]: { entries: [], error: true } }))
+      return false
     }
   }, [])
 
@@ -84,30 +97,74 @@ export function FilesPanel() {
     if (dirs[rel] === undefined) void loadDir(rel)
   }
 
-  const openFile = async (path: string) => {
+  /** Expand a reference's folder in place: every ancestor level is loaded so
+   * the tree can paint it, and a path that is not a directory reports false. */
+  const revealDir = async (path: string): Promise<boolean> => {
+    const segments = path
+      .replaceAll('\\', '/')
+      .replace(/\/+$/u, '')
+      .split('/')
+      .filter((segment) => segment !== '' && segment !== '.')
+    if (segments.length === 0 || segments.includes('..')) return false
+    const prefixes = segments.map((_, index) => segments.slice(0, index + 1).join('/'))
+    for (const prefix of prefixes) {
+      const known = dirs[prefix]
+      if (known !== undefined && known.error !== true) continue
+      if (!(await loadDir(prefix, true))) return false
+    }
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      for (const prefix of prefixes) next.add(prefix)
+      return next
+    })
+    return true
+  }
+
+  const openFile = async (path: string, revealFolders = false) => {
     const seq = (generation.current += 1)
     setSelected(path)
     setFile(null)
     setError(false)
     setLoading(true)
+    let result: FsReadResult | null = null
     try {
-      const result = await useAppStore
+      result = await useAppStore
         .getState()
         .client()
         .send<FsReadResult>({ type: 'fs_read', path }, REQUEST_TIMEOUT_MS)
-      if (seq !== generation.current) return
-      if (result.ok !== true) {
-        reportFsFailure(result)
-        setError(true)
-        return
-      }
-      setFile(result.file)
     } catch {
-      if (seq === generation.current) setError(true)
-    } finally {
-      if (seq === generation.current) setLoading(false)
+      result = null
     }
+    if (seq !== generation.current) return
+    if (result !== null && result.ok === true) {
+      setFile(result.file)
+      setLoading(false)
+      return
+    }
+    // A chat reference may name a folder: opening it means expanding it in
+    // the tree, not previewing bytes that will never arrive.
+    if (revealFolders && (await revealDir(path)) && seq === generation.current) {
+      setSelected(null)
+      setLoading(false)
+      return
+    }
+    if (seq !== generation.current) return
+    if (result !== null) reportFsFailure(result)
+    setError(true)
+    setLoading(false)
   }
+
+  // A chat file reference asks this viewer for one path: opening it here keeps
+  // the tree state for the back button, and consuming the request stops a tab
+  // switch from reopening it. A reference may be an absolute path from the
+  // project root; the tree and the reveal walk are keyed by relative paths.
+  useEffect(() => {
+    if (fileRequest === null || fileRequest.nonce === handledRequest.current) return
+    handledRequest.current = fileRequest.nonce
+    useWorkPanelStore.getState().consumeFileRequest()
+    const path = toWorkspacePath(fileRequest.path, useAppStore.getState().project)
+    void openFile(path, true)
+  }, [fileRequest, openFile])
 
   const renderDir = (rel: string, depth: number): React.ReactNode => {
     const state = dirs[rel]
@@ -233,6 +290,18 @@ export function FilesPanel() {
   return <div className={css.tree}>{renderDir('', 0)}</div>
 }
 
+/** Shiki token flags: italic 1, bold 2, underline 4. */
+function tokenStyle(token: ThemedToken): CSSProperties {
+  const flags = token.fontStyle ?? 0
+  const parts: string[] = []
+  if (flags & 1) parts.push('italic')
+  if (flags & 2) parts.push('bold')
+  if (flags & 4) parts.push('underline')
+  const style: CSSProperties = { color: token.color }
+  if (parts.length > 0) style.fontStyle = parts.join(' ')
+  return style
+}
+
 function TextFile({
   path,
   file,
@@ -242,11 +311,32 @@ function TextFile({
 }) {
   const t = useT()
   const labels = { copy: t('chat.copy'), copied: t('chat.copied') }
-  const markdown = useMarkdown(/\.(?:md|markdown)$/i.test(path) ? file.text : '', labels)
-  const lines = file.text.split('\n')
+  const isMarkdown = /\.(?:md|markdown)$/i.test(path)
+  const markdown = useMarkdown(isMarkdown ? file.text : '', labels)
+  const lines = useMemo(() => file.text.split('\n'), [file.text])
   const capped = lines.length > VIEWER_LINE_CAP
+  const shown = capped ? lines.slice(0, VIEWER_LINE_CAP) : lines
 
-  if (/\.(?:md|markdown)$/i.test(path)) {
+  // Source files render through the lazy highlighter: the grammar loads in the
+  // background, `useHighlightVersion` repaints once it is ready, and files over
+  // the size guard keep the plain-text fallback.
+  const lang = langForPath(path)
+  if (lang !== null) ensureLang(lang)
+  const version = useHighlightVersion()
+  const theme = useThemeMode()
+  const tokens = useMemo(
+    () =>
+      lang === null
+        ? null
+        : highlightLines(
+            capped ? lines.slice(0, VIEWER_LINE_CAP).join('\n') : file.text,
+            lang,
+            theme,
+          ),
+    [capped, lines, file.text, lang, theme, version],
+  )
+
+  if (isMarkdown) {
     return (
       <div
         className={`${chatCss.markdown} ${css.markdown}`}
@@ -256,13 +346,26 @@ function TextFile({
   }
 
   return (
-    <div className={css.code}>
-      {(capped ? lines.slice(0, VIEWER_LINE_CAP) : lines).map((line, index) => (
-        <div key={index} className={css.line} data-line={index + 1}>
-          <span className={css.gutter}>{index + 1}</span>
-          <span className={css.text}>{line === '' ? ' ' : line}</span>
-        </div>
-      ))}
+    <div className={css.code} data-lang={lang ?? undefined}>
+      {shown.map((line, index) => {
+        const row = tokens?.[index]
+        return (
+          <div key={index} className={css.line} data-line={index + 1}>
+            <span className={css.gutter}>{index + 1}</span>
+            <span className={css.text}>
+              {row === undefined || row.length === 0
+                ? line === ''
+                  ? ' '
+                  : line
+                : row.map((token, tokenIndex) => (
+                    <span key={tokenIndex} style={tokenStyle(token)}>
+                      {token.content}
+                    </span>
+                  ))}
+            </span>
+          </div>
+        )
+      })}
       {capped && (
         <p className={css.note}>{t('panel.files.lineCap', { count: VIEWER_LINE_CAP })}</p>
       )}

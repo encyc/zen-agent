@@ -1,10 +1,10 @@
 /** Assistant turn: reasoning row (dsh ReasoningRow shape — collapsed summary
  * with shimmer while streaming) + markdown body with copy affordances. */
 
-import { useEffect, useMemo, useState, type MouseEvent } from 'react'
+import { useEffect, useMemo, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import clsx from 'clsx'
 import type { AssistantNode } from '../../state/chatStore'
-import { useSettingsStore } from '../../state/stores'
+import { useSettingsStore, useWorkPanelStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
 import { copyText } from '../clipboard'
 import { ChevronRightIcon, SparkIcon } from '../icons'
@@ -28,13 +28,29 @@ export function AssistantNodeView({
   const t = useT()
   const showThinking = useSettingsStore((state) => state.showThinking)
   const autoCollapseThinking = useSettingsStore((state) => state.autoCollapseThinking)
-  const html = useMarkdown(node.text, { copy: t('chat.copy'), copied: t('chat.copied') })
+  const html = useMarkdown(
+    node.text,
+    { copy: t('chat.copy'), copied: t('chat.copied') },
+    { fileLinks: true },
+  )
   const hasThinking = node.thinking !== null && node.thinking.trim() !== ''
   const duration = node.durationMs !== null ? formatDuration(node.durationMs) : ''
 
-  // Code blocks are injected markup, so their copy buttons are handled by
-  // delegation rather than a React listener per block.
+  // A file reference opens the rail's Files tab; code blocks are injected
+  // markup, so copy buttons and file refs are handled by delegation rather
+  // than a React listener per block.
+  const fileRefAt = (target: EventTarget | null): string | null => {
+    if (!(target instanceof HTMLElement)) return null
+    return target.closest<HTMLElement>('[data-file-path]')?.dataset.filePath ?? null
+  }
+
   const onMarkdownClick = (event: MouseEvent<HTMLDivElement>) => {
+    const path = fileRefAt(event.target)
+    if (path !== null) {
+      event.preventDefault()
+      useWorkPanelStore.getState().openFile(path)
+      return
+    }
     const target = event.target
     if (!(target instanceof HTMLElement)) return
     const button = target.closest<HTMLElement>('[data-copy-code]')
@@ -48,6 +64,14 @@ export function AssistantNodeView({
         delete button.dataset.copied
       }, 1500)
     })
+  }
+
+  const onMarkdownKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Enter') return
+    const path = fileRefAt(event.target)
+    if (path === null) return
+    event.preventDefault()
+    useWorkPanelStore.getState().openFile(path)
   }
 
   return (
@@ -71,6 +95,7 @@ export function AssistantNodeView({
           className={css.markdown}
           data-selectable
           onClick={onMarkdownClick}
+          onKeyDown={onMarkdownKeyDown}
           dangerouslySetInnerHTML={{ __html: html }}
         />
       )}
