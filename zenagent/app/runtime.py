@@ -140,6 +140,12 @@ class RuntimeOptions:
     auto_compact: bool = True
     #: Explicit tool list (embedding/test seam); ``None`` = compose the default.
     tools: list | None = None
+    #: Role assembly: keep only these tool names (``None`` = the default set).
+    tools_allow: list[str] | None = None
+    #: Role assembly: tools appended after the allowlist filter.
+    extra_tools: list | None = None
+    #: Role assembly: persona text appended as an extension prompt fragment.
+    extra_prompt: str | None = None
     #: Retry cadence for late MCP servers.
     mcp_retry_interval_s: float = 10.0
 
@@ -224,6 +230,9 @@ class Runtime:
         #: Project memory library (<root>/.zenagent/memory/); set per-recompose.
         self.memory_store: MemoryStore | None = None
         self._extension_prompt = ""
+        self._extra_prompt = ""
+        self._tools_allow: list[str] | None = None
+        self._extra_tools: list = []
         self._extension_tools: list = []
         #: Slash commands contributed by extensions (name → ExtensionCommand).
         self.extension_commands: dict = {}
@@ -445,6 +454,9 @@ class Runtime:
             runtime._extension_prompt = loaded.prompt_text
 
         runtime._options = options
+        runtime._tools_allow = options.tools_allow
+        runtime._extra_tools = list(options.extra_tools or [])
+        runtime._extra_prompt = options.extra_prompt or ""
         runtime._context_files = options.context_files
         runtime.auto_compact = options.auto_compact
         runtime._custom_tools = (
@@ -629,8 +641,10 @@ class Runtime:
             context_text=context_text,
             skill_entries=self._skill_entries,
             memory_index=memory_index,
-            extension_fragments=(
-                (self._extension_prompt,) if self._extension_prompt else ()
+            extension_fragments=tuple(
+                fragment
+                for fragment in (self._extension_prompt, self._extra_prompt)
+                if fragment
             ),
             include_context=self._context_files,
             include_mode=False,
@@ -693,6 +707,9 @@ class Runtime:
                 build_skill_tool(self.skills, max_body_bytes=self.limits.max_body_bytes)
             )
         tools.extend(self._extension_tools)
+        if self._tools_allow is not None:
+            tools = [tool for tool in tools if tool.name in self._tools_allow]
+        tools = [*tools, *self._extra_tools]
         self._skill_entries = format_skill_entries(
             self.skills, max_bytes=self.limits.max_index_bytes
         )
