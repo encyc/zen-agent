@@ -205,6 +205,10 @@ class Runtime:
         self._base_tools: list = []
         #: Desired set + activation policy for the model-visible tool list.
         self.tool_registry = ToolRegistry()
+        #: Zen mode fleet (zenagent.app.zen.fleet.ZenFleet) when enabled;
+        #: None in coding mode. Importing zen.fleet here would cycle through
+        #: bootstrap, so the type lives only in the ops layer and comments.
+        self.zen_fleet = None
         #: Checkpoint/rewind markers (context projection; transcript stays intact).
         self.rewind = RewindState()
         #: Extra workspace roots tracked by /add-dir (display only for now).
@@ -281,6 +285,11 @@ class Runtime:
 
     def _prompt_with_mode(self) -> str:
         note = mode_prompt_note(self._mode)
+        if self.zen_fleet is not None:
+            from zenagent.app.zen.prompts import ROUTER_PROMPT_NOTE
+
+            zen = ROUTER_PROMPT_NOTE
+            note = f"{note}\n\n{zen}" if note else zen
         report = self._base_prompt_report
         if report is not None:
             blocks = report.blocks
@@ -686,6 +695,10 @@ class Runtime:
             tools.append(self.todo_tool)
         if self.task_tool is not None:
             tools.append(self.task_tool)
+        if self.zen_fleet is not None:
+            from zenagent.app.zen.tools import fleet_tools
+
+            tools.extend(fleet_tools(lambda: self.zen_fleet))
         if self.mcp is not None:
             tools.extend(self.mcp.tool_defs())
         if self.skills:

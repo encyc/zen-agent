@@ -12,15 +12,18 @@ queue.
 from __future__ import annotations
 
 import asyncio
+import contextlib
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from zenagent.agent.session import read_session_titles, unique_session_path
 from zenagent.app.bootstrap import prepare
 from zenagent.app.records import open_session
 from zenagent.app.runtime import RuntimeOptions
 from zenagent.app.zen.prompts import worker_prompt
-from zenagent.app.zen.roster import read_roster, set_focus as roster_set_focus
+from zenagent.app.zen.roster import read_roster
+from zenagent.app.zen.roster import set_focus as roster_set_focus
 
 if TYPE_CHECKING:
     from zenagent.app.chat import ChatController
@@ -58,7 +61,7 @@ class ZenFleet:
     def __init__(
         self,
         *,
-        chat: "ChatController | None",
+        chat: ChatController | None,
         root: Path,
         sessions_dir: Path,
         router_path: str,
@@ -152,10 +155,9 @@ class ZenFleet:
 
     def _notify(self) -> None:
         if self.on_change is not None:
-            try:
+            # A UI hiccup must not break dispatch.
+            with contextlib.suppress(Exception):
                 self.on_change()
-            except Exception:  # noqa: BLE001 - a UI hiccup must not break dispatch
-                pass
 
     def _resolve(self, session: str) -> Path:
         candidate = Path(session).expanduser()
@@ -226,10 +228,9 @@ class ZenFleet:
                 self._inject(handle, handle.last_report)
             finally:
                 if handle.runtime is not None:
-                    try:
+                    # Closing must not raise.
+                    with contextlib.suppress(Exception):
                         await handle.runtime.close()
-                    except Exception:  # noqa: BLE001 - closing must not raise
-                        pass
                 self._notify()
 
     async def _build_worker(self, handle: WorkerHandle) -> Any:
@@ -246,7 +247,7 @@ class ZenFleet:
             chunks = [
                 block.text
                 for block in getattr(message, "content", []) or []
-                if getattr(block, "type", None) == "text" and getattr(block, "text", "")
+                if getattr(block, "text", "")
             ]
             if chunks:
                 return "\n".join(chunks)[:REPORT_LIMIT]
@@ -255,10 +256,9 @@ class ZenFleet:
     def _inject(self, handle: WorkerHandle, text: str) -> None:
         if self.chat is None:
             return
-        try:
+        # A dead router must not kill workers.
+        with contextlib.suppress(Exception):
             self.chat.steer(f"[zen:worker {handle.title}] {text}")
-        except Exception:  # noqa: BLE001 - a dead router must not kill workers
-            pass
 
     async def stop(self, session_path: str) -> bool:
         """Abort one worker's run; True when a live run was stopped."""
@@ -289,10 +289,9 @@ class ZenFleet:
         self._closing = True
         for handle in self._handles.values():
             if handle.agent is not None:
-                try:
+                # Teardown must not raise.
+                with contextlib.suppress(Exception):
                     handle.agent.abort()
-                except Exception:  # noqa: BLE001 - teardown must not raise
-                    pass
             if handle.status in ("working", "queued"):
                 handle.status = "blocked"
         self._notify()

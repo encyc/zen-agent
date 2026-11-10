@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 __all__ = [
@@ -46,7 +46,7 @@ def _roster_path(sessions_dir: Path) -> Path:
 
 def now_stamp() -> str:
     """UTC timestamp the roster sorts recency by."""
-    return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+    return datetime.now(UTC).isoformat(timespec="milliseconds")
 
 
 def _read(sessions_dir: Path) -> dict:

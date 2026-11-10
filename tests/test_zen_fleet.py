@@ -2,18 +2,13 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import TYPE_CHECKING
-
 import asyncio
+from pathlib import Path
 
 import pytest
 
 from zenagent.app.zen.fleet import ZenFleet
 from zenagent.types import AssistantMessage, TextContent, Usage
-
-if TYPE_CHECKING:
-    pass
 
 
 def _assistant(text: str) -> AssistantMessage:
@@ -30,7 +25,7 @@ def _assistant(text: str) -> AssistantMessage:
 class FakeWorkerAgent:
     """A worker agent whose run is awaitable and records subscribers."""
 
-    def __init__(self, factory: "FakeWorkerFactory", path: Path) -> None:
+    def __init__(self, factory: FakeWorkerFactory, path: Path) -> None:
         self.factory = factory
         self.path = path
         self.messages: list = []
@@ -39,13 +34,13 @@ class FakeWorkerAgent:
         self._listeners: list = []
         self.abort_called = False
 
-    def subscribe(self, listener) -> None:  # noqa: ANN001 - matches Agent.subscribe
+    def subscribe(self, listener) -> None:
         self._listeners.append(listener)
 
     def abort(self) -> None:
         self.abort_called = True
 
-    async def prompt(self, text: str, images=None) -> None:  # noqa: ANN001
+    async def prompt(self, text: str, images=None) -> None:
         self.factory.prompts.append((self.path, text))
         gate = self.factory.gates.pop(self.path, None)
         if gate is not None:
@@ -58,7 +53,7 @@ class FakeWorkerAgent:
 class FakeWorkerRuntime:
     """The runtime a dispatch builds for one worker session."""
 
-    def __init__(self, factory: "FakeWorkerFactory", path: Path) -> None:
+    def __init__(self, factory: FakeWorkerFactory, path: Path) -> None:
         self.factory = factory
         self.root = factory.root
         self.cwd = factory.root
@@ -86,7 +81,7 @@ class FakeWorkerFactory:
         self.errors: dict[Path, str] = {}
         self.calls: list[dict] = []
 
-    async def prepare(self, options, **kwargs) -> FakeWorkerRuntime:  # noqa: ANN001
+    async def prepare(self, options, **kwargs) -> FakeWorkerRuntime:
         self.calls.append({"root": str(options.root), "resume": options.resume})
         path = Path(options.resume)
         rt = FakeWorkerRuntime(self, path)
