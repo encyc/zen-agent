@@ -536,28 +536,47 @@ class TaijiSupervisor:
         self._save()
 
 
-_SINGLETON: TaijiSupervisor | None = None
+#: One supervisor per project root: a host with several resident projects
+#: runs one fleet per root, never a process-wide fleet.
+_SUPERVISORS: dict[Path, TaijiSupervisor] = {}
 
 
-def get_taiji(**kwargs: Any) -> TaijiSupervisor:
-    """The process-wide supervisor; first call's arguments win."""
-    global _SINGLETON
-    if _SINGLETON is None:
-        _SINGLETON = TaijiSupervisor(**kwargs)
-    return _SINGLETON
+def _root_key(root: Path | str) -> Path:
+    return Path(root).expanduser().resolve()
 
 
-def existing_taiji() -> TaijiSupervisor | None:
-    """The live supervisor, or None when this host never started taiji.
+def get_taiji(*, repo_root: Path | str, **kwargs: Any) -> TaijiSupervisor:
+    """The supervisor for ``repo_root``; the first construction wins."""
+    key = _root_key(repo_root)
+    supervisor = _SUPERVISORS.get(key)
+    if supervisor is None:
+        supervisor = TaijiSupervisor(repo_root=key, **kwargs)
+        _SUPERVISORS[key] = supervisor
+    return supervisor
 
-    RPC panel ops consult this: a worker subprocess or a linked worktree
-    must read ``active: false``, never silently construct a bare fleet.
+
+def existing_taiji(root: Path | str | None = None) -> TaijiSupervisor | None:
+    """The live supervisor for ``root``; ``None`` when this host never started it.
+
+    Without a root, answer only when the registry is unambiguous (one live
+    project): the taiji panel and worker client must never guess between
+    fleets, and a worker subprocess must read ``active: false``.
     """
-    return _SINGLETON
+    if root is not None:
+        return _SUPERVISORS.get(_root_key(root))
+    if len(_SUPERVISORS) == 1:
+        return next(iter(_SUPERVISORS.values()))
+    return None
 
 
-async def close_taiji() -> None:
-    global _SINGLETON
-    if _SINGLETON is not None:
-        await _SINGLETON.close()
-        _SINGLETON = None
+async def close_taiji(root: Path | str | None = None) -> None:
+    """Close one project's fleet, or every fleet when no root is given."""
+    if root is not None:
+        supervisor = _SUPERVISORS.pop(_root_key(root), None)
+        if supervisor is not None:
+            await supervisor.close()
+        return
+    supervisors = list(_SUPERVISORS.values())
+    _SUPERVISORS.clear()
+    for supervisor in supervisors:
+        await supervisor.close()

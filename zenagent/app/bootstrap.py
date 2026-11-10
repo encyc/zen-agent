@@ -18,6 +18,7 @@ run needs no view models.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from zenagent.app.chat import ChatController
@@ -65,8 +66,9 @@ async def prepare(
     Bootstrap warnings stay with the caller (each frontend formats them its
     own way).
     """
+    project_cwd = Path(options.root) if options.root is not None else None
     broker = build_broker_for(
-        user_config=load_user_config(),
+        user_config=load_user_config(cwd=project_cwd),
         mode=options.mode or "ask",
         read_only=options.read_only,
         assume_yes=assume_yes,
@@ -74,6 +76,7 @@ async def prepare(
         allow_outside=options.allow_outside,
         allow_destructive=options.allow_destructive,
         allow_protected=options.allow_protected,
+        cwd=project_cwd,
     )
     runtime = await Runtime.bootstrap(
         options,

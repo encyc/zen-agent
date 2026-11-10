@@ -114,6 +114,9 @@ def _active_skills(skills: list) -> list:
 class RuntimeOptions:
     """Everything bootstrap needs; plain values so any frontend can build it."""
 
+    #: Working/project directory this runtime is scoped to. ``None`` keeps the
+    #: historical behaviour: discover from the process cwd.
+    root: Path | str | None = None
     model_id: str | None = None
     thinking: str | None = None
     resume: Path | str | None = None
@@ -154,6 +157,11 @@ class Runtime:
         self.agent: Agent
         self._session: Session
         self.model = None
+        #: Directory tools resolve relative paths against and status reports.
+        self.cwd: Path = Path.cwd()
+        #: Project identity root (nearest ``.git``): sessions, config, MCP,
+        #: skills, templates, memory and the permission policy hang off it.
+        self.root: Path = self.cwd
         #: Env var the current model needs when the app started without a key.
         self.missing_api_key: str | None = None
         self.catalog: dict[str, ProviderConfig] = {}
@@ -327,7 +335,16 @@ class Runtime:
         allow_missing_key: bool = False,
     ) -> Runtime:
         runtime = cls()
-        runtime.user_config = load_user_config()
+        requested = (
+            Path(options.root).expanduser()
+            if options.root is not None
+            else Path.cwd()
+        )
+        runtime.cwd = requested.resolve()
+        if not runtime.cwd.is_dir():
+            raise RuntimeError(f"project root is not a directory: {runtime.cwd}")
+        runtime.root = project.find_project_root(runtime.cwd)
+        runtime.user_config = load_user_config(cwd=runtime.root)
         runtime.catalog = apply_user_config(
             load_catalog(), runtime.user_config, runtime.warnings
         )
@@ -358,7 +375,7 @@ class Runtime:
 
         policy = GuardPolicy.from_config(
             runtime.user_config,
-            cwd=Path.cwd(),
+            cwd=runtime.root,
             allow_outside=options.allow_outside,
             allow_destructive=options.allow_destructive,
             allow_protected=options.allow_protected,
@@ -399,14 +416,14 @@ class Runtime:
 
         if options.skills and options.tools is None:
             skills, warnings = discover_skills(
-                [*default_skill_roots(Path.cwd()), *(assembly.skill_roots if assembly else [])]
+                [*default_skill_roots(runtime.root), *(assembly.skill_roots if assembly else [])]
             )
             runtime.skills = _active_skills(skills)
             runtime.warnings.extend(f"skills {warning}" for warning in warnings)
 
         if options.templates:
             runtime.templates, warnings = discover_templates(
-                default_template_roots(Path.cwd())
+                default_template_roots(runtime.root)
             )
             runtime.warnings.extend(f"templates {warning}" for warning in warnings)
 
@@ -440,7 +457,7 @@ class Runtime:
         # parent's live tool set and permission mode at each dispatch.
         runtime.task_tool = build_task_tool(
             model=lambda: runtime.agent.model,
-            base_tools=base_tools(runtime.ask_tool),
+            base_tools=base_tools(runtime.ask_tool, cwd=runtime.cwd),
             get_observer=lambda: runtime.subagent_observer,
             api_key=lambda: runtime.agent.api_key,
             stream_fn=stream_fn,
@@ -535,10 +552,14 @@ class Runtime:
 
     def _open_session(self, resume: Path | str | None) -> Session:
         if resume is not None:
-            path = latest_session() if resume == "latest" else Path(resume)
+            path = (
+                latest_session(root=self.root)
+                if resume == "latest"
+                else Path(resume)
+            )
             if path is not None and Path(path).is_file():
                 self._note_session_scope(Path(path))
-                return records.open_session(Path(path))
+                return records.open_session(Path(path), cwd=self.root)
             self.warnings.append(t("runtime.no_resume", resume=resume))
         self._touch_project()
         return self.use_new_session()
@@ -552,7 +573,9 @@ class Runtime:
         ``(empty)`` transcript behind; :meth:`close` still cleans up for
         frontends that materialized one without messaging.
         """
-        self.session = records.open_session(unique_session_path(), lazy=True)
+        self.session = records.open_session(
+            unique_session_path(root=self.root), lazy=True, cwd=self.root
+        )
         # The project's session directory is cheap and keeps exports, task
         # sidecars and journals working before the first message; the file
         # itself stays absent until there is something to write.
@@ -564,7 +587,7 @@ class Runtime:
     def _touch_project(self) -> None:
         """Record the project root/last_used; never fail a run over metadata."""
         with contextlib.suppress(OSError):
-            project.write_project_meta()
+            project.write_project_meta(root=self.root)
 
     def _note_session_scope(self, path: Path) -> None:
         """Warn when a resumed session belongs to another project (or legacy).
@@ -574,20 +597,20 @@ class Runtime:
         config/context re-discovery rather than chdir'ing mid-run.
         """
         owner = project.project_key_for_session(path)
-        current = project.project_key(project.find_project_root())
+        current = project.project_key(self.root)
         if owner is not None and owner != current:
             self.warnings.append(
-                f"session belongs to project {owner}; tools still run in {Path.cwd()}"
+                f"session belongs to project {owner}; tools still run in {self.cwd}"
             )
         elif owner is None:
             self.warnings.append(
-                f"legacy (unscoped) session; tools run in {Path.cwd()}"
+                f"legacy (unscoped) session; tools run in {self.cwd}"
             )
 
     def _build_prompt(self, tools: list) -> str:
         context_text = (
             load_context_files(
-                discover_context_files(Path.cwd()),
+                discover_context_files(self.cwd),
                 max_bytes=self.limits.max_context_bytes,
             )
             if self._context_files
@@ -600,7 +623,7 @@ class Runtime:
         )
         session_in_context = getattr(self, "_session", None)
         context = PromptContext(
-            cwd=Path.cwd(),
+            cwd=self.cwd,
             tool_names=tuple(tool.name for tool in tools),
             context_text=context_text,
             skill_entries=self._skill_entries,
@@ -647,6 +670,7 @@ class Runtime:
         tools = base_tools(
             self.ask_tool,
             shell_max_output_bytes=self.limits.shell_max_output_bytes,
+            cwd=self.cwd,
         )
         tools.extend(
             build_checkpoint_tools(lambda: getattr(self, "agent", None), self.rewind)
@@ -657,7 +681,7 @@ class Runtime:
         tools.append(build_lsp_tool())
         # Project memory: always registered; the tools operate on
         # <root>/.zenagent/memory/ and an empty library is not an error.
-        self.memory_store = MemoryStore(project.find_project_root(Path.cwd()))
+        self.memory_store = MemoryStore(self.root)
         tools.append(build_memory_tool(self.memory_store))
         tools.append(build_memory_write_tool(self.memory_store))
         if self.todo_tool is not None:
@@ -790,7 +814,7 @@ class Runtime:
         """
         if not self.skills_enabled:
             return []
-        skills, warnings = discover_skills(default_skill_roots(Path.cwd()))
+        skills, warnings = discover_skills(default_skill_roots(self.root))
         skills = _active_skills(skills)
         for warning in warnings:
             self._note(f"skills {warning}")
@@ -857,7 +881,7 @@ class Runtime:
 
         if options is None or options.skills:
             skills, warnings = discover_skills(
-                [*default_skill_roots(Path.cwd()), *self._plugin_skill_roots]
+                [*default_skill_roots(self.root), *self._plugin_skill_roots]
             )
             skills = _active_skills(skills)
             for warning in warnings:
@@ -867,7 +891,9 @@ class Runtime:
             self.skills = skills
 
         if options is None or options.templates:
-            templates, warnings = discover_templates(default_template_roots(Path.cwd()))
+            templates, warnings = discover_templates(
+                default_template_roots(self.root)
+            )
             for warning in warnings:
                 self._note(f"templates {warning}")
             if self._signature(templates) != self._signature(self.templates):
@@ -980,7 +1006,7 @@ class Runtime:
         await self.agent.wait_for_idle()
         if path is not None:
             self._note_session_scope(Path(path))
-            session = records.open_session(path)
+            session = records.open_session(path, cwd=self.root)
         else:
             self._touch_project()
             session = self.use_new_session()

@@ -80,9 +80,9 @@ RECORD_VERSION = 1
 HEADER_TYPE = "session"
 
 
-def sessions_dir() -> Path:
-    """Session files for the current project (never created here)."""
-    return project.project_sessions_dir()
+def sessions_dir(*, root: Path | str | None = None) -> Path:
+    """Session files for one project (never created here)."""
+    return project.project_sessions_dir(root=root)
 
 
 def all_session_dirs() -> list[Path]:
@@ -90,11 +90,11 @@ def all_session_dirs() -> list[Path]:
     return project.all_session_dirs()
 
 
-def session_path(prefix: str = "") -> Path:
+def session_path(prefix: str = "", *, root: Path | str | None = None) -> Path:
     """A fresh session path: ``<date>-<time>[-prefix].jsonl``."""
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     suffix = f"-{prefix}" if prefix else ""
-    return sessions_dir() / f"{stamp}{suffix}.jsonl"
+    return sessions_dir(root=root) / f"{stamp}{suffix}.jsonl"
 
 
 #: Paths handed out by :func:`unique_session_path` in this process. A lazy
@@ -103,7 +103,9 @@ def session_path(prefix: str = "") -> Path:
 _RESERVED_PATHS: set[Path] = set()
 
 
-def unique_session_path(prefix: str = "") -> Path:
+def unique_session_path(
+    prefix: str = "", *, root: Path | str | None = None
+) -> Path:
     """Like :func:`session_path`, but never returns an existing (or reserved) file.
 
     The timestamp has second resolution, so two sessions started in the same
@@ -111,7 +113,7 @@ def unique_session_path(prefix: str = "") -> Path:
     the existing transcript instead of starting empty. Lazy sessions hold their
     path before the file exists, so the reservation set tracks them too.
     """
-    path = session_path(prefix)
+    path = session_path(prefix, root=root)
     counter = 0
     while path.exists() or path in _RESERVED_PATHS:
         counter += 1
@@ -360,6 +362,9 @@ class Session:
     path: Path
     warnings: list[str] = field(default_factory=list)
     derived_from: str = ""
+    #: Project root recorded in a new file's header; ``None`` records the
+    #: process cwd (the pre-root behaviour).
+    cwd: Path | str | None = None
     #: Optional structural predicate marking replay boundaries (record dicts),
     #: injected by the app layer — the kernel never knows record kinds. When
     #: set, :meth:`load` replays only the last boundary-delimited segment that
@@ -408,7 +413,7 @@ class Session:
                 "version": RECORD_VERSION,
                 "id": self.path.stem,
                 "createdAt": int(time.time()),
-                "cwd": os.getcwd(),
+                "cwd": str(self.cwd) if self.cwd is not None else os.getcwd(),
                 "app": "zenagent",
                 "appVersion": __version__,
             }
@@ -603,7 +608,9 @@ class Session:
             derived_from=derived_from,
         )
 
-    def fork_at(self, index: int, *, keep: Callable[[dict], bool]) -> Path:
+    def fork_at(
+        self, index: int, *, keep: Callable[[dict], bool], root: Path | None = None
+    ) -> Path:
         """Copy the transcript up to (and including) user message ``index``.
 
         ``index`` is 1-based over user messages. The new file is written; this
@@ -620,7 +627,11 @@ class Session:
                 f"fork index {index} out of range (1..{len(user_positions)})"
             )
         prefix = messages[: user_positions[index - 1] + 1]
-        forked = Session(unique_session_path(f"fork{index}"), derived_from=self.path.stem)
+        forked = Session(
+            unique_session_path(f"fork{index}", root=root),
+            derived_from=self.path.stem,
+            cwd=root,
+        )
         for message in prefix:
             forked._append_sync(message)
         for record in self.carry_records(prefix, keep=keep):
@@ -628,10 +639,18 @@ class Session:
         return forked.path
 
     def rewrite(
-        self, messages: list[Message], *, keep: Callable[[dict], bool]
+        self,
+        messages: list[Message],
+        *,
+        keep: Callable[[dict], bool],
+        root: Path | None = None,
     ) -> Path:
         """Write ``messages`` to a *new* session file and return its path."""
-        rewritten = Session(unique_session_path("rewrite"), derived_from=self.path.stem)
+        rewritten = Session(
+            unique_session_path("rewrite", root=root),
+            derived_from=self.path.stem,
+            cwd=root,
+        )
         for message in messages:
             rewritten._append_sync(message)
         for record in self.carry_records(messages, keep=keep):
@@ -738,7 +757,9 @@ def list_sessions(limit: int = 20, *, scope: str = "project") -> list[SessionInf
     return infos[:limit]
 
 
-def latest_session(*, scope: str = "project") -> Path | None:
+def latest_session(
+    *, scope: str = "project", root: Path | str | None = None
+) -> Path | None:
     """Most recent session file for ``scope``, if any.
 
     ``scope="project"`` keeps the historical name ordering (session filenames
@@ -749,7 +770,7 @@ def latest_session(*, scope: str = "project") -> Path | None:
     if scope not in _SCOPES:
         raise ValueError(f"unknown session scope: {scope!r} (choose project|all)")
     if scope == "project":
-        directory = sessions_dir()
+        directory = sessions_dir(root=root)
         if not directory.is_dir():
             return None
         files = sorted(directory.glob("*.jsonl"))

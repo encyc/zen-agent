@@ -1,15 +1,17 @@
 {
   "python": {
-    "zenagent/app/runtime.py": 1002,
+    "zenagent/app/runtime.py": 1030,
     "zenagent/app/commands.py": 866,
     "zenagent/cli/repl.py": 1027,
     "zenagent/cli/tui/screens/modals.py": 1042,
-    "zenagent/cli/rpc/ops_config.py": 940
+    "zenagent/cli/rpc/ops_config.py": 940,
+    "zenagent/cli/rpc/server.py": 816
   },
   "ts": {
     "desktop/src/ui/Sidebar.tsx": 854,
-    "desktop/src/state/appStore.ts": 1051,
-    "desktop/src/dev/bridge.ts": 934,
+    "desktop/src/state/appStore.ts": 1125,
+    "desktop/src/dev/bridge.ts": 994,
+    "desktop/src/rpc/types.ts": 803,
     "desktop/src/i18n/locale.ts": 20,
     "desktop/e2e/app.spec.ts": 2611,
     "desktop/src/i18n/messages.ts": 1123,

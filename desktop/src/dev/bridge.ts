@@ -62,6 +62,16 @@ export interface BridgeState extends PluginMockState {
   sessionProjects?: string[]
   relocations?: { from: string; to: string }[]
   relocateError?: string
+  /** The project the fake host is serving; set by `rpc_start` and project ops. */
+  activeRoot?: string
+  /** Project ops the shell sent (the resident-host switch path). */
+  projectOps?: { op: string; root: string; resume?: string; background?: boolean }[]
+  /** Transcript per project root; falls back to `transcript`. */
+  transcripts?: Record<string, Record<string, unknown>[]>
+  /** Milliseconds transcript answers wait, so cache-then-revalidate is observable. */
+  transcriptDelayMs?: number
+  /** Transcript requests for this root never resolve (only the cache can paint). */
+  hangTranscriptFrom?: string
   fsEntries?: Record<string, Record<string, unknown>[]>
   fsIndex?: { path: string; kind: 'dir' | 'file' }[]
   fsFiles?: Record<string, Record<string, unknown>>
@@ -117,6 +127,9 @@ export function installBridge(state: BridgeState) {
   /** The fake tracks the current session so a resume flips the list. */
   let currentMode = state.statusMode ?? 'zen'
   let currentSessionPath = state.noCurrent === true ? '' : '/sessions/a.jsonl'
+  /** Resolved project root → the session its resident slot is on. A warm slot
+   * ignores `resume`, exactly like `RpcHost._ensure`. */
+  const slotSessions = new Map<string, string>()
 
   const sessions = (id: unknown, scope: unknown) => ({
     type: 'result',
@@ -221,10 +234,16 @@ export function installBridge(state: BridgeState) {
     ],
   })
 
-  const respond = (payload: Record<string, unknown>) => {
+  const respond = async (payload: Record<string, unknown>) => {
     switch (payload.type) {
       case 'hello':
-        return { type: 'result', id: payload.id, ok: true, protocol_version: 2 }
+        return {
+          type: 'result',
+          id: payload.id,
+          ok: true,
+          protocol_version: 2,
+          active: state.activeRoot ?? '',
+        }
       case 'status':
         return {
           type: 'result',
@@ -256,15 +275,23 @@ export function installBridge(state: BridgeState) {
             free_tokens: 96000,
           },
         }
-      case 'transcript':
+      case 'transcript': {
+        const root = typeof payload.project === 'string' ? payload.project : ''
+        if (state.hangTranscriptFrom !== undefined && root === state.hangTranscriptFrom) {
+          await new Promise<never>(() => {})
+        }
+        if (state.transcriptDelayMs !== undefined) {
+          await new Promise((resolve) => setTimeout(resolve, state.transcriptDelayMs))
+        }
         return {
           type: 'result',
           id: payload.id,
           ok: true,
-          transcript: state.transcript ?? [],
+          transcript: state.transcripts?.[root] ?? state.transcript ?? [],
           notices: [],
           compactions: [],
         }
+      }
       case 'subagent_transcript': {
         const transcript = state.subagentTranscripts?.[String(payload.call_id ?? '')]
         return {
@@ -594,6 +621,9 @@ export function installBridge(state: BridgeState) {
             return sessions(payload.id, payload.scope)
           case 'resume':
             currentSessionPath = String(payload.path)
+            if (state.activeRoot !== undefined) {
+              slotSessions.set(state.activeRoot, currentSessionPath)
+            }
             return { type: 'result', id: payload.id, ok: true }
           case 'export': {
             if (state.failExport) return { type: 'error', message: '导出失败' }
@@ -790,25 +820,55 @@ export function installBridge(state: BridgeState) {
         return { type: 'error', id: payload.id, message: `unknown taiji op: ${op}` }
       }
       case 'project': {
-        if (payload.op !== 'relocate') {
+        if (payload.op === 'relocate') {
+          if (state.relocateError !== undefined) {
+            return { type: 'error', id: payload.id, message: state.relocateError }
+          }
+          const from = String(payload.from ?? '')
+          const to = String(payload.to ?? '')
+          state.relocations = [...(state.relocations ?? []), { from, to }]
+          return {
+            type: 'result',
+            id: payload.id,
+            ok: true,
+            old_root: from,
+            new_root: to,
+            old_key: 'old-key',
+            new_key: 'new-key',
+            sessions: 2,
+            moved: true,
+          }
+        }
+        if (payload.op !== 'open' && payload.op !== 'switch') {
           return { type: 'error', id: payload.id, message: 'unknown project op' }
         }
-        if (state.relocateError !== undefined) {
-          return { type: 'error', id: payload.id, message: state.relocateError }
+        const root = String(payload.root ?? '')
+        const resume =
+          typeof payload.resume === 'string' && payload.resume !== ''
+            ? payload.resume
+            : undefined
+        state.projectOps = [
+          ...(state.projectOps ?? []),
+          { op: payload.op, root, ...(resume !== undefined ? { resume } : {}) },
+        ]
+        if (state.switchDelayMs !== undefined) {
+          await new Promise((resolve) => setTimeout(resolve, state.switchDelayMs))
         }
-        const from = String(payload.from ?? '')
-        const to = String(payload.to ?? '')
-        state.relocations = [...(state.relocations ?? []), { from, to }]
+        const warm = slotSessions.has(root)
+        if (!warm) slotSessions.set(root, resume ?? '/sessions/a.jsonl')
+        if (payload.background !== true) {
+          state.activeRoot = root
+          currentSessionPath = slotSessions.get(root) ?? currentSessionPath
+        }
         return {
           type: 'result',
           id: payload.id,
           ok: true,
-          old_root: from,
-          new_root: to,
-          old_key: 'old-key',
-          new_key: 'new-key',
-          sessions: 2,
-          moved: true,
+          root,
+          key: root,
+          session: slotSessions.get(root) ?? '',
+          active: state.activeRoot ?? '',
+          resident: [...slotSessions.keys()],
         }
       }
       default:
@@ -859,16 +919,16 @@ export function installBridge(state: BridgeState) {
         // The real child opens the resumed session while it boots, so the
         // list's `current` flag must agree with the spawn flags.
         const resumeAt = flags.indexOf('--resume')
-        if (resumeAt >= 0 && flags[resumeAt + 1] !== undefined) {
-          currentSessionPath = flags[resumeAt + 1]
+        const resumed =
+          resumeAt >= 0 && flags[resumeAt + 1] !== undefined ? flags[resumeAt + 1] : ''
+        const cwd = options.cwd ?? ''
+        if (cwd !== '') {
+          state.activeRoot = cwd
+          slotSessions.set(cwd, resumed !== '' ? resumed : '/sessions/a.jsonl')
+          currentSessionPath = slotSessions.get(cwd) ?? currentSessionPath
         }
         if (state.startHangs === true) {
           await new Promise<never>(() => {})
-        }
-        // A real child takes a few hundred ms to replace; the delay makes that
-        // window observable instead of a race the spec would usually lose.
-        if (state.switchDelayMs !== undefined) {
-          await new Promise((resolve) => setTimeout(resolve, state.switchDelayMs))
         }
         return { pid }
       }

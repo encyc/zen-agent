@@ -79,8 +79,12 @@ def test_repl_slash_command_expands_a_template(tmp_path, monkeypatch):
     from zenagent.cli.repl import repl
     from zenagent.config import UserConfig
 
-    monkeypatch.setattr(session_module, "sessions_dir", lambda: tmp_path / "sessions")
-    monkeypatch.setattr("zenagent.app.bootstrap.load_user_config", lambda: UserConfig())
+    monkeypatch.setattr(
+        session_module, "sessions_dir", lambda *, root=None: tmp_path / "sessions"
+    )
+    monkeypatch.setattr(
+        "zenagent.app.bootstrap.load_user_config", lambda *a, **k: UserConfig()
+    )
     monkeypatch.chdir(tmp_path)
     write(tmp_path / ".zenagent" / "commands", "review", "Review {{args}} with care.")
 

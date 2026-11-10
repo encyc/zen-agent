@@ -92,13 +92,17 @@ async def test_extension_command_runs_via_repl(tmp_path, monkeypatch):
     import zenagent.agent.session as session_module
     from zenagent.config import UserConfig
 
-    monkeypatch.setattr("zenagent.app.bootstrap.load_user_config", lambda: UserConfig())
+    monkeypatch.setattr(
+        "zenagent.app.bootstrap.load_user_config", lambda *a, **k: UserConfig()
+    )
     monkeypatch.setattr(
         "zenagent.app.runtime.load_user_config",
         lambda *args, **kwargs: UserConfig(),
     )
     monkeypatch.setattr(
-        session_module, "sessions_dir", lambda: tmp_path / "sessions"
+        session_module,
+        "sessions_dir",
+        lambda *, root=None: tmp_path / "sessions",
     )
 
     async def stream(model_, messages, tools, options):

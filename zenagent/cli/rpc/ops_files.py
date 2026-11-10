@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import asdict
-from pathlib import Path
 
 from zenagent.agent.memory_store import MemoryStore
 from zenagent.app.workspace import (
@@ -13,9 +12,6 @@ from zenagent.app.workspace import (
     workspace_files,
 )
 from zenagent.cli.rpc.errors import failure_frame
-from zenagent.project import (
-    find_project_root,
-)
 
 
 def _fs_error(request_id, op: str, exc: BaseException, path: str) -> dict:
@@ -44,9 +40,9 @@ class FilesOps:
             return True
         try:
             if op == "list":
-                payload = list_directory(Path.cwd(), path)
+                payload = list_directory(self.cwd, path)
             else:
-                payload = {"file": read_file(Path.cwd(), path)}
+                payload = {"file": read_file(self.cwd, path)}
         except (OSError, ValueError) as exc:
             self._send(_fs_error(request_id, op, exc, path))
             return True
@@ -56,7 +52,7 @@ class FilesOps:
 
     async def _fs_index(self, request_id) -> None:
         try:
-            payload = await asyncio.to_thread(workspace_files, Path.cwd())
+            payload = await asyncio.to_thread(workspace_files, self.cwd)
         except (OSError, ValueError) as exc:
             self._send(_fs_error(request_id, "index", exc, ""))
             return
@@ -68,7 +64,7 @@ class FilesOps:
         store = (
             self.runtime.memory_store
             if self.runtime is not None
-            else MemoryStore(find_project_root(Path.cwd()))
+            else MemoryStore(self.root)
         )
         op = request.get("op")
         if op == "list":

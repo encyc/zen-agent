@@ -97,6 +97,8 @@ class Job:
     timed_out: bool = False
     duration_ms: int | None = None
     error: str = ""
+    #: Spawn directory; scopes the sidebar's job view to one project.
+    cwd: str = ""
     _buffer: OutputBuffer = field(default_factory=OutputBuffer, repr=False)
     _proc: asyncio.subprocess.Process | None = field(default=None, repr=False)
     _task: asyncio.Task | None = field(default=None, repr=False)
@@ -161,6 +163,7 @@ class JobManager:
             id=f"bg_{next(self._counter)}",
             command=command,
             timeout_s=timeout_s,
+            cwd=str(target),
         )
         try:
             proc = await spawn_shell_process(

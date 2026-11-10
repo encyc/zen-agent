@@ -126,7 +126,7 @@ class SessionManager:
     def _touch_project_meta(self) -> None:
         """Record the project root/last_used; never fail a session over it."""
         try:
-            project.write_project_meta()
+            project.write_project_meta(root=self.runtime.root)
         except OSError:
             pass
 
@@ -228,7 +228,11 @@ class SessionManager:
         source = self.current()
         source_session = Session(source)
         messages = source_session.load()
-        target = Session(unique_session_path("fork"), derived_from=source.stem)
+        target = Session(
+            unique_session_path("fork", root=self.runtime.root),
+            derived_from=source.stem,
+            cwd=self.runtime.root,
+        )
         for message in messages:
             target._append_sync(message)
         for record in source_session.carry_records(
@@ -242,7 +246,7 @@ class SessionManager:
 
     def adopt(self, path: Path) -> Path:
         """Move a legacy session into this project; see :func:`adopt_legacy_session`."""
-        return adopt_legacy_session(path)
+        return adopt_legacy_session(path, cwd=self.runtime.root)
 
     def undo(self) -> tuple[int, Path] | None:
         """Drop the last user turn (message + everything after it), on disk too.
@@ -259,11 +263,15 @@ class SessionManager:
         self.runtime.agent.replace_messages(truncated)
         source = self.current()
         new_path = Session(source).rewrite(
-            truncated, keep=records.keep_for_rewrite()
+            truncated,
+            keep=records.keep_for_rewrite(),
+            root=self.runtime.root,
         )
         # The truncated history keeps its subagent transcripts.
         carry_task_dir(source, new_path, skip=_inflight_task_ids())
-        self.runtime.session = records.open_session(new_path)
+        self.runtime.session = records.open_session(
+            new_path, cwd=self.runtime.root
+        )
         return dropped, new_path
 
     def delete(self, path: Path) -> Path:

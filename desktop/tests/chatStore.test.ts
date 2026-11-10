@@ -271,6 +271,27 @@ test('streaming deltas land on the current assistant node after long history', (
   assert.ok(revision > before)
 })
 
+test('pane() snapshots the transcript and restorePane() brings it back', () => {
+  useChatStore.getState().loadSnapshot({
+    ...empty,
+    transcript: [userView('v1'), userView('v2')],
+    hasMoreBefore: true,
+    total: 9,
+  })
+  const pane = useChatStore.getState().pane()
+
+  useChatStore.getState().reset()
+  assert.equal(useChatStore.getState().nodes.length, 0)
+
+  useChatStore.getState().restorePane(pane)
+  assert.deepEqual(
+    useChatStore.getState().nodes.map((node) => node.id),
+    ['v1', 'v2'],
+  )
+  assert.equal(useChatStore.getState().hasMoreBefore, true)
+  assert.equal(useChatStore.getState().firstLoadedIndex, pane.firstLoadedIndex)
+})
+
 function userView(id: string): TranscriptResult['transcript'][number] {
   return { kind: 'user', id, text: `q-${id}`, timestamp: 1, steering: false }
 }

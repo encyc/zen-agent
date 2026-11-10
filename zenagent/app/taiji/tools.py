@@ -218,15 +218,15 @@ def taiji_supervisor_for(runtime: Any) -> TaijiSupervisor:
     """This host's supervisor for ``runtime``'s project, mode and chat.
 
     The public seam for both the Router's tool provider and the RPC panel
-    ops; the first call wins the process singleton, so serve() may construct
-    it eagerly at boot and later calls (tools, ops) just rebind.
+    ops; construction is per project root, so a multi-project host keeps one
+    fleet per root.
     """
+    import os
+
     from zenagent import project
     from zenagent.app.taiji.supervisor import get_taiji
 
-    root = project.find_project_root(Path.cwd())
-    import os
-
+    root = project.find_project_root(runtime.root)
     worker_model = os.environ.get("ZENAGENT_WORKER_MODEL") or None
     return get_taiji(
         repo_root=root,

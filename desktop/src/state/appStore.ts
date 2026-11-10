@@ -38,7 +38,8 @@ import { useChatStore } from './chatStore'
 import { nextDraft } from './pending'
 import { latestSessionForProject } from './latestSession'
 import { loadPrefs, replayFrames, savePref, spawnArgs } from './prefs'
-import { frameErrorNotice, type ReplyLike } from '../rpc/frames'
+import { PaneCache } from './projectPanes'
+import { frameBelongsTo, frameErrorNotice, type ReplyLike } from '../rpc/frames'
 import { reportRefreshFailure } from './refresh'
 
 export type ConnectionState = 'idle' | 'starting' | 'ready' | 'exited'
@@ -80,6 +81,8 @@ export function lastProjectCwd(): string {
 
 interface AppState {
   connection: ConnectionState
+  /** The project the resident host is serving (from hello / project ops). */
+  project: string | null
   /** Set while a project switch is replacing the runtime; the shell stays
    * mounted so the switch reads as a content swap, not a reload. */
   switching: { path: string } | null
@@ -156,6 +159,9 @@ let olderInFlight = false
 let wired = false
 /** Last seen cumulative usage, for computing a turn's delta row. */
 let lastUsage: { input: number; output: number; cache_read: number; cache_write: number; cost: number } | null = null
+/** Transcript panes kept across project switches (pi-desktop's retained
+ * panes; three covers the usual back-and-forth). */
+const paneCache = new PaneCache()
 
 interface FrameHandling {
   set: (partial: Partial<Pick<AppState, 'busy'>>) => void
@@ -187,13 +193,15 @@ async function bootChild(
   // default; the user's own mode is replayed from prefs (see restorePrefs).
   const pid = await rpc.start({ bin: opts.bin, cwd: opts.cwd, args: opts.args })
   set({ pid })
-  await rpc.handshake()
+  const active = await rpc.handshake()
+  if (active !== '') set({ project: active })
+  const root = active !== '' ? active : opts.cwd ?? ''
   try {
-    localStorage.setItem(LAST_CWD_KEY, opts.cwd ?? '')
+    localStorage.setItem(LAST_CWD_KEY, root)
   } catch {
     // ignore
   }
-  if (opts.cwd !== undefined && opts.cwd !== '') useProjectStore.getState().addProject(opts.cwd)
+  if (root !== '') useProjectStore.getState().addProject(root)
   // The boot reads are independent requests, id-correlated on the wire: run
   // them together so the first paint waits for the slowest, not the sum.
   // A resumed child already carries the target session, so the global list
@@ -218,6 +226,7 @@ async function bootChild(
 
 export const useAppStore = create<AppState>((set, get) => ({
   connection: 'idle',
+  project: null,
   switching: null,
   taijiReturn: null,
   exitCode: null,
@@ -236,6 +245,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       connection: 'starting',
       switching: null,
+      project: null,
       exitCode: null,
       stderrTail: [],
       startFailure: null,
@@ -486,11 +496,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async openProject(path, target = 'latest') {
     if (path === '') return
-    if (path === lastProjectCwd() && get().connection === 'ready') return
-    // Resolve what the replacement child opens with. Resuming on spawn is the
-    // difference between "a new runtime at the same folder" and "my work,
-    // still there": the target transcript arrives with the handshake, so no
-    // blank session is ever created or painted on the way.
+    const current = get().project ?? lastProjectCwd()
+    if (path === current && get().connection === 'ready') return
+    // Resolve what the target slot should open with. On a cold slot the host
+    // resumes during prepare; on a warm one the shell follows up with a
+    // `session resume` (see below).
     const resume =
       target === null
         ? null
@@ -504,30 +514,84 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     if (get().switching !== null) return
 
-    // The runtime is cwd-bound, so a project switch replaces the child. The
-    // difference from connect() is what the user sees: the shell stays
-    // mounted, the old transcript keeps painting until the new snapshot
-    // lands, and the whole swap is a progress bar instead of a boot screen.
-    set({ switching: { path }, busy: false })
-    useApprovalStore.getState().clear()
-    useAskStore.getState().clear()
-    useChatStore.getState().finalize()
-
-    try {
-      await bootChild(set, get, {
-        cwd: path,
-        args: spawnArgs(resume),
-        resume: resume ?? undefined,
-        fromSwitch: true,
+    // Retain the pane we are leaving so switching back paints it instantly.
+    const chat = useChatStore.getState()
+    chat.finalize()
+    const previous = get().project
+    if (previous !== null && previous !== path) {
+      paneCache.set(previous, {
+        session: useSessionStore.getState().currentPath,
+        pane: chat.pane(),
       })
-      set({ connection: 'ready', switching: null, exitCode: null, startFailure: null })
+    }
+    const cached = paneCache.get(path)
+    // A cached pane is only valid for the very session this switch targets;
+    // anything else would paint the wrong conversation for a moment.
+    const canPaint = resume !== null && cached !== undefined && cached.session === resume
+    if (canPaint) useChatStore.getState().restorePane(cached.pane)
+
+    set({ switching: { path }, busy: false })
+    // Usage deltas are per session; a new project starts a new baseline.
+    lastUsage = null
+
+    const rpc = get().client()
+    try {
+      const frame = await rpc.send<Record<string, unknown>>({
+        type: 'project',
+        op: 'switch',
+        root: path,
+        ...(resume !== null ? { resume } : {}),
+      })
+      if (frame.type !== 'result' || frame.ok !== true) {
+        // A refusal keeps the old slot active: put its pane back and say why.
+        if (previous !== null) {
+          const old = paneCache.get(previous)
+          if (old !== undefined) useChatStore.getState().restorePane(old.pane)
+        }
+        set({ switching: null })
+        showFrameError(frame)
+        return
+      }
+      const root = typeof frame.root === 'string' && frame.root !== '' ? frame.root : path
+      rpc.setProject(root)
+      set({ project: root, switching: null, exitCode: null, startFailure: null })
+      try {
+        localStorage.setItem(LAST_CWD_KEY, root)
+      } catch {
+        // ignore
+      }
+      useProjectStore.getState().addProject(root)
+
+      // A resident slot ignores `resume` (the host keeps what it had), so the
+      // requested session is resumed explicitly when it differs.
+      const serverSession =
+        typeof frame.session === 'string' && frame.session !== '' ? frame.session : null
+      let effective = serverSession
+      if (resume !== null && serverSession !== resume) {
+        const answer = await rpc.send({ type: 'session', op: 'resume', path: resume })
+        if (answer.type === 'result' && answer.ok === true) effective = resume
+      }
+      if (effective !== null) useSessionStore.getState().setCurrent(effective)
+
+      // The cached pane stays until the snapshot lands; a switch that could
+      // not hit its target must not leave another project's rows on screen.
+      if (!(canPaint && effective === resume)) useChatStore.getState().reset()
+      const loaded = await get().refreshTranscript()
+      await Promise.all([restorePrefs(get), get().refreshSessions()])
+      if (!loaded) useChatStore.getState().reset()
+      paneCache.set(root, {
+        session: effective,
+        pane: useChatStore.getState().pane(),
+      })
     } catch (error) {
       const failure = startFailureOf(error)
       set({ connection: 'exited', switching: null, startFailure: failure, exitCode: null })
       set((state) => ({
         stderrTail: [
           ...state.stderrTail,
-          failure === null ? String(error) : `failed to start ${failure.bin} rpc: ${failure.osError}`,
+          failure === null
+            ? String(error)
+            : `failed to reach ${failure.bin} rpc: ${failure.osError}`,
         ],
       }))
     }
@@ -748,11 +812,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   async openSession(path) {
     const session = useSessionStore.getState().sessions.find((entry) => entry.path === path)
     const root = session?.project_path ?? ''
-    // The runtime is cwd-bound. A session recorded in another project needs
-    // the process restarted there before it can be resumed (pi does the same
-    // through selectSession → activateProject). openProject resumes it on
-    // spawn, so this is one replacement, not a blank boot plus an RPC resume.
-    if (root !== '' && lastProjectCwd() !== root) {
+    // The runtime serves a project slot. A session recorded in another project
+    // needs the host pointed there first (pi does the same through
+    // selectSession → activateProject). openProject resumes it in one step,
+    // so this is one switch, not a blank boot plus an RPC resume.
+    if (root !== '' && (get().project ?? lastProjectCwd()) !== root) {
       await get().openProject(root, path)
       return
     }
@@ -974,10 +1038,15 @@ async function restorePrefs(get: () => AppState): Promise<void> {
 function handleFrame(frame: ServerFrame, handling: FrameHandling): void {
   if (frame.type === 'event') {
     const event = frame.event
+    const project =
+      typeof frame.project === 'string' && frame.project !== '' ? frame.project : null
+    // Prompts are answered by prefix-routed ids; a background slot's question
+    // must stay in the queue even while another project is on screen.
     if (event.type === 'ask_request' && event.request_id) {
       useAskStore.getState().push({
         requestId: event.request_id,
         questions: event.questions ?? [],
+        project,
       })
       return
     }
@@ -993,15 +1062,20 @@ function handleFrame(frame: ServerFrame, handling: FrameHandling): void {
         risk: event.risk ?? null,
         target: event.target ?? null,
         reason: event.reason ?? null,
+        project,
       })
       return
     }
+    // Chat events from a background slot belong to its own pane, which is
+    // refreshed from its snapshot when the person switches back.
+    if (!frameBelongsTo(frame, handling.get().project)) return
     useChatStore.getState().applyEvent(event)
     if (event.type === 'agent_end' || event.type === 'turn_end') {
       void handling.get().refreshStatus()
     }
     return
   }
+  if (!frameBelongsTo(frame, handling.get().project)) return
   handleResultFrame(frame as Record<string, unknown>, handling)
 }
 

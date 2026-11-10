@@ -18,6 +18,8 @@ export interface ErrorFrame {
   type: 'error'
   id: string | null
   message: string
+  /** The slot that emitted the frame (host tag, absent on a v2 server). */
+  project?: string
   /** Machine-readable code (i18n on the client); optional for old servers. */
   code?: string
   params?: Record<string, string>
@@ -25,7 +27,7 @@ export interface ErrorFrame {
 
 export type ResultFrame =
   | ({ type: 'result'; id: string; ok: true } & Record<string, unknown>)
-  | { type: 'result'; id: string; ok: false; reason?: string }
+  | { type: 'result'; id: string; ok: false; reason?: string; project?: string }
   | ErrorFrame
 
 // ---- wire contract -------------------------------------------------------
@@ -789,6 +791,8 @@ export interface AgentEventFrame {
 
 export interface EventFrame {
   type: 'event'
+  /** The slot that emitted the frame (host tag, absent on a v2 server). */
+  project?: string
   event: AgentEventFrame
 }
 

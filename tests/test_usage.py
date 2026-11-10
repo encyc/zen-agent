@@ -36,7 +36,7 @@ def write_session(sessions, name: str, messages: list) -> None:
 @pytest.fixture(autouse=True)
 def isolated(tmp_path, monkeypatch):
     sessions = tmp_path / "sessions"
-    monkeypatch.setattr(session_module, "sessions_dir", lambda: sessions)
+    monkeypatch.setattr(session_module, "sessions_dir", lambda *, root=None: sessions)
     return sessions
 
 

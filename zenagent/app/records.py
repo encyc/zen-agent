@@ -150,7 +150,12 @@ def compaction(tokens_before: int, reason: str) -> dict:
     }
 
 
-def open_session(path: Path, *, lazy: bool = False) -> Session:
+def open_session(
+    path: Path,
+    *,
+    lazy: bool = False,
+    cwd: Path | str | None = None,
+) -> Session:
     """A session whose replay cuts at compaction boundaries (model context).
 
     Every context consumer opens sessions through this — resume, switch, undo,
@@ -162,7 +167,7 @@ def open_session(path: Path, *, lazy: bool = False) -> Session:
     starting records stay in memory until the first message (see
     :meth:`Session.materialize`), so an idle launch writes no transcript.
     """
-    return Session(path, boundary=is_compaction, lazy=lazy)
+    return Session(path, boundary=is_compaction, lazy=lazy, cwd=cwd)
 
 
 def run_start() -> dict:

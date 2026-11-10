@@ -102,6 +102,15 @@ export type ChatNode =
   | CommandNode
   | UsageNode
 
+/** One transcript as the switch cache retains it. */
+export interface ChatPane {
+  nodes: ChatNode[]
+  cards: Record<string, string>
+  currentAssistantId: string | null
+  hasMoreBefore: boolean
+  firstLoadedIndex: number
+}
+
 /** The last assistant turn, when it is settled and carries answer text — the
  * one turn a regenerate action may target. */
 export function retryableNodeId(nodes: ChatNode[]): string | null {
@@ -135,6 +144,10 @@ interface ChatState {
   pushCommand(name: string, argument: string, message: string | null): void
   pushUsage(usage: Usage | null, turnMs: number | null, termination: string | null): void
   finalize(): void
+  /** Snapshot the loaded transcript; switching away stores it per project. */
+  pane(): ChatPane
+  /** Paint a retained pane before the server snapshot is revalidated. */
+  restorePane(pane: ChatPane): void
   reset(): void
 }
 
@@ -535,6 +548,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
       revision: get().revision + 1,
       hasMoreBefore: false,
       firstLoadedIndex: 0,
+    })
+  },
+
+  pane() {
+    const state = get()
+    return {
+      nodes: state.nodes,
+      cards: state.cards,
+      currentAssistantId: state.currentAssistantId,
+      hasMoreBefore: state.hasMoreBefore,
+      firstLoadedIndex: state.firstLoadedIndex,
+    }
+  },
+
+  restorePane(pane) {
+    set({
+      nodes: pane.nodes,
+      cards: pane.cards,
+      currentAssistantId: pane.currentAssistantId,
+      hasMoreBefore: pane.hasMoreBefore,
+      firstLoadedIndex: pane.firstLoadedIndex,
+      revision: get().revision + 1,
     })
   },
 }))

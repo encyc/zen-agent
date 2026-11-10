@@ -140,7 +140,7 @@ class ChatController:
             context_occupancy(last, agent.model.api) if last is not None else 0
         )
         subagents = self._subagent_views()
-        git = git_status(Path.cwd())
+        git = git_status(self.runtime.cwd)
         return RunStatus(
             model_id=agent.model.id,
             thinking=agent.thinking,
@@ -160,7 +160,7 @@ class ChatController:
             steering=agent.pending_steering,
             pending=self._pending_queue.items,
             session_name=Path(self.runtime.session.path).stem,
-            cwd=str(Path.cwd()),
+            cwd=str(self.runtime.cwd),
             mode=self.runtime.mode,
             git_branch=git.branch if git else "",
             git_staged=git.staged if git else 0,
@@ -187,12 +187,19 @@ class ChatController:
     # -- work-in-progress snapshots -----------------------------------------
 
     def _job_views(self) -> list[JobView]:
-        """Background jobs for the sidebar; empty when no loop owns a manager."""
+        """Background jobs started inside this runtime's workspace."""
         try:
             manager = get_job_manager()
         except RuntimeError:  # no running loop (headless, sync tests)
             return []
-        return sort_jobs(job_views(manager.list()))
+        workspace = Path(self.runtime.root).resolve()
+        visible = [
+            job
+            for job in manager.list()
+            if not getattr(job, "cwd", "")
+            or Path(job.cwd).resolve().is_relative_to(workspace)
+        ]
+        return sort_jobs(job_views(visible))
 
     def _subagent_views(self) -> list[SubagentView]:
         return self._subagents.views(
@@ -490,7 +497,9 @@ class ChatController:
             return None
         self.drop_pending()
         old_path = self.runtime.session.path
-        prepared = prepare_retry(self.runtime.agent, self.runtime.session)
+        prepared = prepare_retry(
+            self.runtime.agent, self.runtime.session, root=self.runtime.root
+        )
         if prepared is None:
             return None
         text, new_session = prepared

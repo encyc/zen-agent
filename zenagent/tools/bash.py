@@ -89,6 +89,7 @@ async def _bash(
     on_update=None,
     *,
     max_output_bytes: int = MAX_OUTPUT_BYTES,
+    base_cwd: Path | None = None,
 ) -> ToolResultAgent:
     command = args["command"]
     is_async = args.get("async", False)
@@ -96,7 +97,7 @@ async def _bash(
         is_async = False
     if not isinstance(is_async, bool):
         return text_result("async must be a boolean", is_error=True)
-    cwd = resolve_cwd(args.get("cwd"))
+    cwd = resolve_cwd(args.get("cwd"), base_cwd)
     if isinstance(cwd, str):
         return text_result(cwd, is_error=True)
     if is_async:
@@ -204,13 +205,16 @@ async def _bash(
     )
 
 
-def build_bash_tool(max_output_bytes: int = MAX_OUTPUT_BYTES) -> AgentTool:
-    """The ``bash`` tool with its own output budget.
+def build_bash_tool(
+    max_output_bytes: int | None = None, *, cwd: Path | None = None
+) -> AgentTool:
+    """The ``bash`` tool with its own output budget and default directory.
 
     The budget comes from ``[limits.tools].shell_max_output_bytes``, so the
     tool is built per Runtime; ``BASH`` stays the default instance every
     existing caller (and test) uses.
     """
+    budget = MAX_OUTPUT_BYTES if max_output_bytes is None else max_output_bytes
 
     async def execute(
         tool_call_id: str, args: dict, abort: AbortToken | None, on_update=None
@@ -220,7 +224,8 @@ def build_bash_tool(max_output_bytes: int = MAX_OUTPUT_BYTES) -> AgentTool:
             args,
             abort,
             on_update,
-            max_output_bytes=max_output_bytes,
+            max_output_bytes=budget,
+            base_cwd=cwd,
         )
 
     return AgentTool(

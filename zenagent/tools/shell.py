@@ -139,16 +139,17 @@ def command_env() -> dict[str, str]:
     return env
 
 
-def resolve_cwd(raw: object) -> Path | str:
+def resolve_cwd(raw: object, base: Path | None = None) -> Path | str:
     """Resolve the optional ``cwd`` argument; returns an error string if bad."""
+    root = Path(os.getcwd()) if base is None else base
     if raw is None or raw == "":
-        return Path(os.getcwd())
+        return root
     try:
         path = Path(str(raw)).expanduser()
     except (TypeError, ValueError):
         return f"invalid cwd: {raw!r}"
     if not path.is_absolute():
-        path = Path(os.getcwd()) / path
+        path = root / path
     if not path.is_dir():
         return f"cwd does not exist or is not a directory: {path}"
     return path

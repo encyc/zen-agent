@@ -79,7 +79,7 @@ def attach_plugins(runtime: Runtime, options: RuntimeOptions) -> PluginAssembly:
     """Bootstrap step: assemble plugins and hand the result to the runtime."""
     user_configs: dict[str, McpServerConfig] = {}
     if options.mcp:
-        user_configs = load_mcp_config(options.mcp_file)
+        user_configs = load_mcp_config(options.mcp_file, cwd=runtime.root)
         if options.mcp_servers:
             user_configs = {
                 name: config

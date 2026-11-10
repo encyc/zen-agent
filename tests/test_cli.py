@@ -22,7 +22,9 @@ from zenagent.types import AssistantMessage, TextContent, ToolCall, Usage
 @pytest.fixture(autouse=True)
 def isolate_user_config(monkeypatch):
     """Tests must not read the developer's real ~/.zenagent/config.toml."""
-    monkeypatch.setattr("zenagent.app.bootstrap.load_user_config", lambda: UserConfig())
+    monkeypatch.setattr(
+        "zenagent.app.bootstrap.load_user_config", lambda *a, **k: UserConfig()
+    )
     # Assembly moved into the Runtime, so that is where the config is read.
     monkeypatch.setattr(
         "zenagent.app.runtime.load_user_config", lambda *a, **k: UserConfig()
@@ -300,7 +302,7 @@ async def test_headless_resume_loads_the_previous_transcript(monkeypatch, tmp_pa
     from zenagent.types import UserMessage
 
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
-    monkeypatch.setattr(session_module, "sessions_dir", lambda: tmp_path)
+    monkeypatch.setattr(session_module, "sessions_dir", lambda *, root=None: tmp_path)
     path = tmp_path / "s.jsonl"
     await Session(path).append(UserMessage(content="earlier question", timestamp=1))
 
@@ -321,7 +323,7 @@ def test_headless_run_persists_a_session(monkeypatch, tmp_path):
     from zenagent.agent.session import Session
 
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
-    monkeypatch.setattr(session_module, "sessions_dir", lambda: tmp_path)
+    monkeypatch.setattr(session_module, "sessions_dir", lambda *, root=None: tmp_path)
     _patch_bootstrap(monkeypatch, fake_stream("persisted"), {})
 
     assert cli_main.main(["-p", "hi"]) == 0
@@ -463,7 +465,7 @@ def test_missing_image_file_fails_before_the_session_is_created(
     import zenagent.agent.session as session_module
 
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
-    monkeypatch.setattr(session_module, "sessions_dir", lambda: tmp_path)
+    monkeypatch.setattr(session_module, "sessions_dir", lambda *, root=None: tmp_path)
     captured: dict = {}
     _patch_bootstrap(monkeypatch, fake_stream(), captured)
 

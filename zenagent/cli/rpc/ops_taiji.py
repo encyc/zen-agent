@@ -25,7 +25,7 @@ class TaijiOps:
         """
         from zenagent.app.taiji.supervisor import existing_taiji
 
-        supervisor = existing_taiji()
+        supervisor = existing_taiji(self.root)
         op = request.get("op")
 
         if op == "board":

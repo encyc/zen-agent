@@ -72,3 +72,12 @@ export function frameErrorNotice(frame: ReplyLike, locale: Locale = 'en'): strin
   const detail = frameErrorDetail(frame)
   return detail === null ? null : localizeError(detail, locale)
 }
+
+/** Whether a frame belongs in the active project's view. Untagged frames
+ * (host-level answers, a v2 server) always pass; a tagged frame from a
+ * background slot must not leak into the active transcript. */
+export function frameBelongsTo(frame: object, active: string | null): boolean {
+  if (active === null || active === '') return true
+  const tag = (frame as { project?: unknown }).project
+  return typeof tag !== 'string' || tag === '' || tag === active
+}
