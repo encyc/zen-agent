@@ -5,6 +5,8 @@ matches the release tag; older history is in the repository tags and commits.
 
 ## Unreleased
 
+## v0.12.1 — 2026-11-10
+
 **Background-parallel sessions.** Switching sessions inside one project no longer
 aborts the run in flight: the old session keeps executing in its own resident
 slot while the new one can be read and prompted.
