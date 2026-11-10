@@ -1,6 +1,6 @@
 # 熵增报告（2026-11-10 · manifest v3）
 
-结论：PASS —— 违规 111 项（error 28 / warn 83），基线 111 项（只许降）。
+结论：PASS —— 违规 112 项（error 29 / warn 83），基线 112 项（只许降）。
 
 ## 全部违规明细
 - [error] **循环依赖** `zenagent.agent.loop ↔ zenagent.agent.result_budget ↔ zenagent.agent.timeouts ↔ zenagent.agent.tool_exec` — 限 不允许（或登记 cycles_seen）（基线 4）
@@ -14,21 +14,22 @@
 - [error] **上帝文件** `tests/test_cli.py` — 限 ≤800 行（实际 1011）（基线 1011）
 - [error] **上帝文件** `tests/test_loop.py` — 限 ≤800 行（实际 1634）（基线 1634）
 - [error] **上帝文件** `tests/test_repl_logic.py` — 限 ≤800 行（实际 976）（基线 976）
-- [error] **上帝文件** `tests/test_rpc_v2.py` — 限 ≤800 行（实际 2176）（基线 2176）
-- [error] **上帝文件** `tests/test_session.py` — 限 ≤800 行（实际 1097）（基线 1097）
+- [error] **上帝文件** `tests/test_rpc_v2.py` — 限 ≤800 行（实际 2200）（基线 2200）
+- [error] **上帝文件** `tests/test_session.py` — 限 ≤800 行（实际 1157）（基线 1157）
 - [error] **上帝文件** `tests/test_taiji_supervisor.py` — 限 ≤800 行（实际 1553）（基线 1553）
 - [error] **上帝文件** `tests/test_task.py` — 限 ≤800 行（实际 851）（基线 851）
 - [error] **上帝文件** `zenagent/app/commands.py` — 限 ≤800 行（实际 866）（基线 866）
-- [error] **上帝文件** `zenagent/app/runtime.py` — 限 ≤800 行（实际 996）（基线 996）
+- [error] **上帝文件** `zenagent/app/runtime.py` — 限 ≤800 行（实际 1002）（基线 1002）
 - [error] **上帝文件** `zenagent/cli/repl.py` — 限 ≤800 行（实际 1028）（基线 1028）
 - [error] **上帝文件** `zenagent/cli/rpc/ops_config.py` — 限 ≤800 行（实际 941）（基线 941）
 - [error] **上帝文件** `zenagent/cli/tui/screens/modals.py` — 限 ≤800 行（实际 1043）（基线 1043）
+- [error] **上帝类** `zenagent/agent/session.py::Session` — 限 loc≤300 且 methods≤20（实际 333 行 / 15 方法）（基线 333）
 - [error] **上帝类** `zenagent/app/chat.py::ChatController` — 限 loc≤300 且 methods≤20（实际 606 行 / 42 方法）（基线 606）
 - [error] **上帝类** `zenagent/app/journal.py::SnapshotJournal` — 限 loc≤300 且 methods≤20（实际 366 行 / 20 方法）（基线 366）
-- [error] **上帝类** `zenagent/app/runtime.py::Runtime` — 限 loc≤300 且 methods≤20（实际 846 行 / 33 方法）（基线 846）
+- [error] **上帝类** `zenagent/app/runtime.py::Runtime` — 限 loc≤300 且 methods≤20（实际 852 行 / 33 方法）（基线 852）
 - [error] **上帝类** `zenagent/app/taiji/supervisor.py::TaijiSupervisor` — 限 loc≤300 且 methods≤20（实际 461 行 / 25 方法）（基线 461）
 - [error] **上帝类** `zenagent/cli/rpc/ops_config.py::ConfigOps` — 限 loc≤300 且 methods≤20（实际 902 行 / 27 方法）（基线 902）
-- [error] **上帝类** `zenagent/cli/rpc/server.py::RpcServer` — 限 loc≤300 且 methods≤20（实际 572 行 / 18 方法）（基线 572）
+- [error] **上帝类** `zenagent/cli/rpc/server.py::RpcServer` — 限 loc≤300 且 methods≤20（实际 578 行 / 18 方法）（基线 578）
 - [error] **上帝类** `zenagent/cli/tui/app.py::ZenAgentApp` — 限 loc≤300 且 methods≤20（实际 683 行 / 52 方法）（基线 683）
 - [error] **上帝类** `zenagent/cli/tui/widgets/transcript.py::TranscriptView` — 限 loc≤300 且 methods≤20（实际 328 行 / 30 方法）（基线 328）
 - [warn] **跨簇混杂** `zenagent/app/runtime.py → agent、base、i18n、mcp、prompts、providers、tools` — 限 ≤4 簇（实际 7）（基线 7）
@@ -40,13 +41,13 @@
 - [warn] **大文件** `tests/test_config.py` — 限 ≤600 行（实际 750）（基线 750）
 - [warn] **大文件** `tests/test_todo.py` — 限 ≤600 行（实际 728）（基线 728）
 - [warn] **大文件** `tests/test_tools_fs.py` — 限 ≤600 行（实际 729）（基线 729）
-- [warn] **大文件** `zenagent/agent/session.py` — 限 ≤600 行（实际 714）（基线 714）
+- [warn] **大文件** `zenagent/agent/session.py` — 限 ≤600 行（实际 766）（基线 766）
 - [warn] **大文件** `zenagent/agent/subagents_runtime.py` — 限 ≤600 行（实际 618）（基线 618）
 - [warn] **大文件** `zenagent/app/chat.py` — 限 ≤600 行（实际 663）（基线 663）
 - [warn] **大文件** `zenagent/app/permissions.py` — 限 ≤600 行（实际 617）（基线 617）
 - [warn] **大文件** `zenagent/app/views.py` — 限 ≤600 行（实际 747）（基线 747）
 - [warn] **大文件** `zenagent/cli/main.py` — 限 ≤600 行（实际 616）（基线 616）
-- [warn] **大文件** `zenagent/cli/rpc/server.py` — 限 ≤600 行（实际 792）（基线 792）
+- [warn] **大文件** `zenagent/cli/rpc/server.py` — 限 ≤600 行（实际 798）（基线 798）
 - [warn] **大文件** `zenagent/cli/tui/app.py` — 限 ≤600 行（实际 759）（基线 759）
 - [warn] **大文件** `zenagent/config.py` — 限 ≤600 行（实际 646）（基线 646）
 - [warn] **大文件** `zenagent/limits.py` — 限 ≤600 行（实际 665）（基线 665）
@@ -76,7 +77,7 @@
 - [warn] **长函数** `zenagent/cli/rpc/ops_config.py::_mcp` — 限 ≤80 行（实际 122）（基线 122）
 - [warn] **长函数** `zenagent/cli/rpc/ops_config.py::_skills` — 限 ≤80 行（实际 89）（基线 89）
 - [warn] **长函数** `zenagent/cli/rpc/ops_files.py::_memory_request` — 限 ≤80 行（实际 90）（基线 90）
-- [warn] **长函数** `zenagent/cli/rpc/ops_session.py::_session_op` — 限 ≤80 行（实际 118）（基线 118）
+- [warn] **长函数** `zenagent/cli/rpc/ops_session.py::_session_op` — 限 ≤80 行（实际 121）（基线 121）
 - [warn] **长函数** `zenagent/cli/rpc/ops_taiji.py::_taiji_request` — 限 ≤80 行（实际 122）（基线 122）
 - [warn] **长函数** `zenagent/cli/rpc/server.py::_handle_line` — 限 ≤80 行（实际 185）（基线 185）
 - [warn] **长函数** `zenagent/cli/tui/widgets/sidebar.py::refresh_contents` — 限 ≤80 行（实际 116）（基线 116）

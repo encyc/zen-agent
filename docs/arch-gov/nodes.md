@@ -238,7 +238,7 @@ TUI 专用 PyPI 版本检查（后台、静默失败）
 - 出边：→ `agent.loop`（Agent.prompt → _drive → agent_loop（每 run 一个 task））；→ `config`（ContextGuard）；→ `events`（AbortToken）；→ `project`（all_session_dirs、legacy_sessions_dir、project_key_for_session、project_sessions_dir）；→ `providers`（—）；→ `types`（TextContent、UserMessage、message_from_json）
 - 入边：`app.assembly` →（Runtime 构造 Agent、挂 ask_handler/订阅者）；`app.chat` →（Session、SubagentStore、carry_task_dir、get_task_manager）；`app.taiji` →（set_session_title）；`app.transcript` →（Session、carry_task_dir、get_task_manager、list_sessions）；`cli` →（latest_session、list_sessions、sessions_dir、split_title_body）；`cli.rpc` →（MemoryStore）；`cli.tui.app_parts` →（session_title）；`cli.tui.screens` →（—）；`export` →（Session）；`tools` →（task 工具背后 = subagents_runtime）；`usage` →（all_session_dirs、sessions_dir）
 - 依赖强度：被 11 个节点 import；依赖 6 个节点
-- 🔴 健康红点：0 error / 3 warn（见 health/report.md）
+- 🔴 健康红点：1 error / 3 warn（见 health/report.md）
 
 ## 簇：应用层（`app`）
 

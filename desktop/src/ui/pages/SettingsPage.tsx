@@ -279,7 +279,7 @@ function PalettePicker(props: {
 }
 
 /** Manual check: ignores the cache and says what happened, unlike the silent
- * boot check. Install still goes through the banner. */
+ * boot check. Install still goes through the sidebar notification. */
 function UpdateCheckButton() {
   const t = useT()
   const [result, setResult] = useState<'latest' | 'available' | 'failed' | null>(null)

@@ -67,6 +67,17 @@ test('spawnArgs pins the released-binary-safe defaults', () => {
   assert.deepEqual(spawnArgs(), ['--mode', 'ask', '--no-mcp'])
 })
 
+test('spawnArgs resumes a session on the child that replaces another project', () => {
+  assert.deepEqual(spawnArgs('/sessions/c.jsonl'), [
+    '--mode',
+    'ask',
+    '--no-mcp',
+    '--resume',
+    '/sessions/c.jsonl',
+  ])
+  assert.deepEqual(spawnArgs(null), ['--mode', 'ask', '--no-mcp'])
+})
+
 test('replayFrames order: mode, then model, thinking last', () => {
   const frames = replayFrames(
     { mode: 'zen', model: 'glm-5.3', thinking: 'high' },

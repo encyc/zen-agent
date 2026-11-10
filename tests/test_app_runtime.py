@@ -479,16 +479,31 @@ async def test_bootstrap_honours_read_only_even_in_zen_mode(runtime_factory):
         "write_file", {"path": "blocked.txt", "content": "x"}
     )
     assert verdict is not None and verdict.get("block") is True
-async def test_an_unused_session_leaves_no_file_behind(runtime_factory):
-    """Bootstrap writes the header eagerly; a launch with no conversation is not
-    a transcript, so close removes the file instead of trashing it."""
+async def test_a_launch_with_no_conversation_never_creates_a_session_file(runtime_factory):
+    """A session exists in memory from bootstrap; only a real message gives it
+    a file, so an idle launch (even one that is killed) leaves nothing to list."""
     runtime = await runtime_factory()
     path = runtime.session.path
-    assert path.is_file(), "the header plus the starting mode record are on disk"
+    assert not path.exists(), "bootstrap must not materialize the session"
 
     await runtime.close()
 
     assert not path.exists()
+
+
+async def test_the_first_message_materializes_the_session(runtime_factory):
+    from zenagent.types import UserMessage
+
+    runtime = await runtime_factory()
+    path = runtime.session.path
+    assert not path.exists()
+
+    await runtime.session.append(UserMessage(content="hello", timestamp=1))
+
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert '"type": "session"' in lines[0]
+    assert '"type": "mode"' in lines[1]
+    assert '"role": "user"' in lines[2]
 
 
 async def test_a_session_with_a_message_is_kept(runtime_factory):

@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-10T03:55:17+00:00",
+ "generated_at": "2026-11-10T04:09:05+00:00",
  "root": "/Users/mac/zen-agent/.worktrees/plugin-system",
  "files": {
   "examples.custom_tool": {
@@ -485,7 +485,7 @@
   },
   "tests.test_app_runtime": {
    "path": "tests/test_app_runtime.py",
-   "loc": 552,
+   "loc": 567,
    "classes": {},
    "long_funcs": [],
    "imports": [
@@ -514,7 +514,7 @@
   },
   "tests.test_app_session_meta": {
    "path": "tests/test_app_session_meta.py",
-   "loc": 381,
+   "loc": 387,
    "classes": {
     "FakeStore": {
      "loc": 10,
@@ -535,7 +535,7 @@
   },
   "tests.test_app_sessions": {
    "path": "tests/test_app_sessions.py",
-   "loc": 395,
+   "loc": 433,
    "classes": {},
    "long_funcs": [
     {
@@ -1754,7 +1754,7 @@
   },
   "tests.test_repl_commands": {
    "path": "tests/test_repl_commands.py",
-   "loc": 477,
+   "loc": 479,
    "classes": {},
    "long_funcs": [],
    "imports": [
@@ -1941,7 +1941,7 @@
   },
   "tests.test_rpc_v2": {
    "path": "tests/test_rpc_v2.py",
-   "loc": 2176,
+   "loc": 2200,
    "classes": {},
    "long_funcs": [
     {
@@ -2039,7 +2039,7 @@
   },
   "tests.test_session": {
    "path": "tests/test_session.py",
-   "loc": 1097,
+   "loc": 1157,
    "classes": {},
    "long_funcs": [],
    "imports": [
@@ -3177,17 +3177,18 @@
   },
   "tests.test_tui_sessions": {
    "path": "tests/test_tui_sessions.py",
-   "loc": 159,
+   "loc": 165,
    "classes": {},
    "long_funcs": [],
    "imports": [
     "zenagent.agent.session",
     "zenagent.app.sessions",
     "zenagent.cli.tui.app",
-    "zenagent.cli.tui.screens.modals"
+    "zenagent.cli.tui.screens.modals",
+    "zenagent.types"
    ],
    "fan_in": 0,
-   "fan_out": 4
+   "fan_out": 5
   },
   "tests.test_tui_sidebar": {
    "path": "tests/test_tui_sidebar.py",
@@ -3993,7 +3994,7 @@
     }
    ],
    "imports": [],
-   "fan_in": 133,
+   "fan_in": 134,
    "fan_out": 0
   },
   "zenagent.update_check": {
@@ -4208,15 +4209,15 @@
   },
   "zenagent.agent.session": {
    "path": "zenagent/agent/session.py",
-   "loc": 714,
+   "loc": 766,
    "classes": {
     "SessionInfo": {
      "loc": 14,
      "methods": 0
     },
     "Session": {
-     "loc": 300,
-     "methods": 13
+     "loc": 333,
+     "methods": 15
     }
    },
    "long_funcs": [
@@ -4852,7 +4853,7 @@
   },
   "zenagent.app.records": {
    "path": "zenagent/app/records.py",
-   "loc": 218,
+   "loc": 222,
    "classes": {},
    "long_funcs": [],
    "imports": [
@@ -4913,14 +4914,14 @@
   },
   "zenagent.app.runtime": {
    "path": "zenagent/app/runtime.py",
-   "loc": 996,
+   "loc": 1002,
    "classes": {
     "RuntimeOptions": {
      "loc": 34,
      "methods": 0
     },
     "Runtime": {
-     "loc": 846,
+     "loc": 852,
      "methods": 33
     }
    },
@@ -5041,15 +5042,15 @@
   },
   "zenagent.app.sessions": {
    "path": "zenagent/app/sessions.py",
-   "loc": 272,
+   "loc": 292,
    "classes": {
     "SessionEntry": {
      "loc": 13,
      "methods": 0
     },
     "SessionManager": {
-     "loc": 152,
-     "methods": 14
+     "loc": 172,
+     "methods": 15
     }
    },
    "long_funcs": [
@@ -5975,21 +5976,21 @@
   },
   "zenagent.cli.rpc.ops_session": {
    "path": "zenagent/cli/rpc/ops_session.py",
-   "loc": 300,
+   "loc": 304,
    "classes": {
     "MissingSessionFile": {
      "loc": 7,
      "methods": 1
     },
     "SessionOps": {
-     "loc": 253,
+     "loc": 256,
      "methods": 4
     }
    },
    "long_funcs": [
     {
      "name": "_session_op",
-     "loc": 118
+     "loc": 121
     },
     {
      "name": "_transcript_result",
@@ -6039,10 +6040,10 @@
   },
   "zenagent.cli.rpc.server": {
    "path": "zenagent/cli/rpc/server.py",
-   "loc": 792,
+   "loc": 798,
    "classes": {
     "RpcServer": {
-     "loc": 572,
+     "loc": 578,
      "methods": 18
     }
    },
@@ -14139,6 +14140,13 @@
    ]
   },
   {
+   "src": "tests.test_tui_sessions",
+   "dst": "zenagent.types",
+   "calls": [
+    "UserMessage"
+   ]
+  },
+  {
    "src": "tests.test_tui_sidebar",
    "dst": "zenagent",
    "calls": []
@@ -20317,7 +20325,7 @@
  ],
  "stats": {
   "files": 426,
-  "edges": 1741,
+  "edges": 1742,
   "cycles": 7,
   "errors": []
  }

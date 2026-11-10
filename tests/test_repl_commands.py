@@ -224,7 +224,9 @@ async def test_repl_sessions_usage_context_and_hotkeys_render(isolated_sessions)
         "glm-5.3",
         stream_fn=scripted_stream(),
         api_key="k",
-        input_fn=scripted_input("/sessions", "/usage", "/context", "/hotkeys", "/exit"),
+        input_fn=scripted_input(
+            "hello", "/sessions", "/usage", "/context", "/hotkeys", "/exit"
+        ),
         print_fn=lines.append,
     )
     assert code == 0

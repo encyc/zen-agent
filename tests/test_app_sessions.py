@@ -33,12 +33,23 @@ async def test_fork_copies_messages_and_switches(session_runtime):
 async def test_delete_moves_to_trash_instead_of_unlink(session_runtime):
     runtime = session_runtime
     manager = SessionManager(runtime)
+    await runtime.agent.prompt("hello")
     path = manager.current()
 
     trashed = manager.delete(path)
 
     assert not path.exists()
     assert trashed.exists() and trashed.parent.name == ".trash"
+
+
+async def test_deleting_an_unsaved_session_starts_a_new_one(session_runtime):
+    manager = SessionManager(session_runtime)
+    path = manager.current()
+    assert not path.exists()
+
+    manager.delete(path)
+
+    assert manager.current() != path
 
 
 async def test_rename_updates_the_listed_title(session_runtime):
@@ -204,6 +215,30 @@ def test_adopt_rejects_repeats_and_non_legacy_paths(tmp_path, monkeypatch):
         adopt_legacy_session(stray)
 
 
+async def test_a_new_session_has_no_file_until_the_first_message(session_runtime):
+    manager = SessionManager(session_runtime)
+    path = await manager.new()
+
+    assert not path.exists()
+    assert manager.current() == path
+
+    await session_runtime.agent.prompt("hello")
+
+    assert path.is_file()
+
+
+async def test_renaming_an_unsaved_session_materializes_it(session_runtime):
+    manager = SessionManager(session_runtime)
+    path = manager.current()
+    assert not path.exists()
+
+    stored = manager.rename(path, "Named before typing")
+
+    assert stored == "Named before typing"
+    assert path.is_file()
+    assert manager.entries()[0].title == "Named before typing"
+
+
 async def test_entries_defaults_to_the_current_project(
     session_runtime, tmp_path, monkeypatch
 ):
@@ -211,6 +246,7 @@ async def test_entries_defaults_to_the_current_project(
     _rebind_sessions_to_projects(monkeypatch)
     manager = SessionManager(session_runtime)
     await manager.new()
+    await session_runtime.agent.prompt("alpha chat")
 
     other = tmp_path / "beta"
     (other / ".git").mkdir(parents=True)
@@ -235,6 +271,7 @@ async def test_entries_all_view_labels_each_project(
     _rebind_sessions_to_projects(monkeypatch)
     manager = SessionManager(session_runtime)
     current = await manager.new()
+    await session_runtime.agent.prompt("alpha chat")
 
     other = tmp_path / "beta"
     (other / ".git").mkdir(parents=True)
@@ -310,6 +347,7 @@ async def test_delete_trashes_subagent_transcripts(session_runtime):
 
     runtime = session_runtime
     manager = SessionManager(runtime)
+    await runtime.agent.prompt("hello")
     path = manager.current()
     store = SubagentStore(path)
     store.begin("c1", "research", "m")

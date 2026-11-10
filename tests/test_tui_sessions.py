@@ -46,9 +46,12 @@ async def test_session_picker_new_switches_to_a_fresh_session(picker_app):
 
 
 async def test_session_picker_fork_switches_to_a_copy(picker_app):
+    from zenagent.types import UserMessage
+
     app = picker_app
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
+        await app.runtime.session.append(UserMessage(content="hello", timestamp=1))
         before = app.runtime.session.path
         app.open_session_picker()
         await _wait_for_screen(app, SessionPicker)
@@ -58,9 +61,12 @@ async def test_session_picker_fork_switches_to_a_copy(picker_app):
 
 
 async def test_session_picker_delete_needs_confirmation(picker_app):
+    from zenagent.types import UserMessage
+
     app = picker_app
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
+        await app.runtime.session.append(UserMessage(content="hello", timestamp=1))
         current = app.runtime.session.path
 
         app.open_session_picker()

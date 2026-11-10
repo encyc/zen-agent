@@ -22,7 +22,6 @@ import { shouldShowWindow } from './state/shellWindow.ts'
 import { runtimeProbe } from './rpc/client.ts'
 import { ConversationTopbar } from './ui/ConversationTopbar'
 import { NoticeBanner } from './ui/NoticeBanner'
-import { UpdateBanner } from './ui/UpdateBanner'
 import { useUpdateStore } from './state/updateStore'
 import { SIDEBAR_DEFAULT, RIGHTBAR_DEFAULT, clampChatWidth } from './ui/columns'
 import { PanelRightIcon } from './ui/icons'
@@ -308,7 +307,6 @@ export function App() {
         </div>
       )}
       <NoticeBanner />
-      <UpdateBanner />
       <ChatView />
       <div ref={dockRef} className={css.composerDock} data-shell-composer>
         <InputBar />

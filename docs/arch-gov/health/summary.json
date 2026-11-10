@@ -6,8 +6,8 @@
  "worse": 0,
  "improved": 0,
  "resolved": 0,
- "total": 111,
- "baseline_size": 111,
+ "total": 112,
+ "baseline_size": 112,
  "by_node": {
   "(unmapped)": {
    "errors": 8,
@@ -26,7 +26,7 @@
    "warns": 2
   },
   "agent.rt": {
-   "errors": 0,
+   "errors": 1,
    "warns": 3
   },
   "app.chat": {

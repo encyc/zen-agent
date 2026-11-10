@@ -163,6 +163,12 @@ async def test_a_run_persists_header_run_records_and_mode(session_runtime):
 async def test_set_mode_appends_a_mode_record(session_runtime):
     runtime = session_runtime
     runtime.set_mode("plan")
+    # A lazy session holds its starting records in memory; the first message
+    # materializes them in order, so an idle launch leaves no empty transcript.
+    assert not runtime.session.path.exists()
+
+    await runtime.agent.prompt("hello")
+
     reloaded = Session(runtime.session.path)
     reloaded.load()
     modes = [record for record in reloaded.records if record["type"] == "mode"]

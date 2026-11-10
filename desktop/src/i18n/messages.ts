@@ -313,7 +313,7 @@ export const zh: Dict = {
   'update.checkFailed': '检查失败',
   'update.checking': '检查中…',
   'update.toggle': '自动检查更新',
-  'update.toggleHint': '启动后查询新版本，发现时在对话上方提示。',
+  'update.toggleHint': '启动后查询新版本，发现时在侧栏通知中提示。',
   'tools.title': '工具',
   'tools.loading': '正在加载工具…',
   'tools.empty': '当前代理没有注册工具',
@@ -676,7 +676,8 @@ export const en: Dict = {
   'update.checkFailed': 'Check failed',
   'update.checking': 'Checking…',
   'update.toggle': 'Check for updates automatically',
-  'update.toggleHint': 'Look for a new version after launch and show a notice above the chat.',
+  'update.toggleHint':
+    'Look for a new version after launch and show a notice in the sidebar notifications.',
   'tools.title': 'Tools',
   'tools.loading': 'Loading tools…',
   'tools.empty': 'The agent exposes no tools',

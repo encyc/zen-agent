@@ -79,9 +79,15 @@ export function savePref(field: keyof SessionPrefs, value: string | null): void 
  *
  * `--mode ask` is the released-binary-compatible default (old zen binaries
  * crash without an explicit mode); the user's own mode travels as a replay
- * frame once the child is up, so a stale pref can never fail a spawn. */
-export function spawnArgs(): string[] {
-  return ['--mode', 'ask', '--no-mcp']
+ * frame once the child is up, so a stale pref can never fail a spawn.
+ *
+ * `resume` opens that session as the child boots: a project switch then
+ * arrives with its transcript already attached, instead of booting a blank
+ * session and replacing it with an RPC resume one round trip later. */
+export function spawnArgs(resume?: string | null): string[] {
+  const args = ['--mode', 'ask', '--no-mcp']
+  if (resume) args.push('--resume', resume)
+  return args
 }
 
 /** The frames that bring a fresh child onto the user's last choices.

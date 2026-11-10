@@ -97,6 +97,34 @@ test('the sidebar brand keeps the ZEN wordmark in the DOM', async ({ page }) => 
   await expect(page.locator('[data-shell-sidebar] [data-zen-wordmark]')).toHaveCount(1)
 })
 
+test('a waiting release lives in the sidebar notifications, not above the chat', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('zen.locale', JSON.stringify('en'))
+    localStorage.setItem(
+      'zen.update.cache',
+      JSON.stringify({ checkedAt: Date.now(), latest: '99.0.0', notified: null }),
+    )
+  })
+  await boot(page, initialState({ running: false }))
+
+  const bell = page.getByRole('button', { name: 'Notifications' })
+  await expect(page.getByTestId('notification-dot')).toBeVisible()
+  await expect(page.getByText('ZenAgent 99.0.0 is available')).toHaveCount(0)
+
+  await bell.click()
+  const notice = page.locator('[data-update-notice="available"]')
+  await expect(notice).toBeVisible()
+  await expect(notice.getByText('ZenAgent 99.0.0 is available')).toBeVisible()
+  await expect(notice.getByRole('button', { name: 'Update and restart' })).toBeVisible()
+
+  // Dismissing clears both the card and the bell badge.
+  await notice.getByRole('button', { name: 'Dismiss' }).click()
+  await expect(page.locator('[data-update-notice]')).toHaveCount(0)
+  await expect(page.getByTestId('notification-dot')).toHaveCount(0)
+})
+
 test('a running turn rotates the app mark', async ({ page }) => {
   await boot(
     page,
@@ -706,12 +734,13 @@ test('the taiji chip switches to the router session in zen mode and back', async
   await chip.click()
 
   // The compound: resume the taiji session, default the mode to zen, open
-  // the dispatch board — one click, no sidebar hunting.
+  // the dispatch board — one click, no sidebar hunting. The session belongs
+  // to another project, so the replacement child opens it on spawn.
   const panel = page.locator('[data-work-panel]')
   await expect(panel.getByRole('tab', { name: '太极' })).toHaveAttribute('aria-selected', 'true')
   assert.equal(
     await page.evaluate(() =>
-      window.__ZEN_E2E__.calls.some((call) => call.type === 'session' && call.op === 'resume' && call.path === '/sessions/taiji.jsonl'),
+      window.__ZEN_E2E__.starts.at(-1)?.args?.includes('/sessions/taiji.jsonl'),
     ),
     true,
   )
@@ -1291,7 +1320,7 @@ test('a filtered, collapsed project stays collapsed and loads more on demand', a
   await expect(visibleRows).toHaveCount(12)
 })
 
-test('opening another project’s session restarts the runtime there, then resumes', async ({ page }) => {
+test('opening another project’s session restarts the runtime there with that session', async ({ page }) => {
   await boot(page, initialState())
   await expect
     .poll(() =>
@@ -1304,23 +1333,24 @@ test('opening another project’s session restarts the runtime there, then resum
   const cross = page.locator('[data-session-path="/sessions/c.jsonl"]')
   await expect(cross).not.toHaveAttribute('aria-disabled', 'true')
   await cross.click()
+  // The replacement opens the target session on spawn: one process, one
+  // transcript snapshot, no blank boot followed by an RPC resume.
   await expect
     .poll(() =>
       page.evaluate(() => {
-        const starts = window.__ZEN_E2E__.starts
-        return starts[starts.length - 1]?.cwd
+        const start = window.__ZEN_E2E__.starts.at(-1)
+        return { cwd: start?.cwd, args: start?.args }
       }),
     )
-    .toBe('/work/q')
-  await expect
-    .poll(() =>
-      page.evaluate(() =>
-        window.__ZEN_E2E__.calls.some(
-          (call) => call.type === 'session' && call.op === 'resume' && call.path === '/sessions/c.jsonl',
-        ),
+    .toEqual({ cwd: '/work/q', args: ['--mode', 'ask', '--no-mcp', '--resume', '/sessions/c.jsonl'] })
+  assert.equal(
+    await page.evaluate(() =>
+      window.__ZEN_E2E__.calls.some(
+        (call) => call.type === 'session' && call.op === 'resume',
       ),
-    )
-    .toBe(true)
+    ),
+    false,
+  )
 
   // The stopped process reports its exit after the replacement is already
   // ready; that stale event must not be mistaken for the live process dying.
@@ -1598,13 +1628,12 @@ test('the palette opens with the keyboard and resumes a matching session', async
   await page.getByRole('option', { name: /另一个会话/ }).click()
   await expect
     .poll(() =>
-      page.evaluate(() =>
-        window.__ZEN_E2E__.calls.some(
-          (call) => call.type === 'session' && call.op === 'resume' && call.path === '/sessions/b.jsonl',
-        ),
-      ),
+      page.evaluate(() => {
+        const start = window.__ZEN_E2E__.starts.at(-1)
+        return { cwd: start?.cwd, args: start?.args }
+      }),
     )
-    .toBe(true)
+    .toEqual({ cwd: '/work/p', args: ['--mode', 'ask', '--no-mcp', '--resume', '/sessions/b.jsonl'] })
   await expect(dialog).toBeHidden()
 })
 
@@ -1956,11 +1985,19 @@ test('project settings lists folders, opens one and forgets another', async ({ p
   await expect(current.getByRole('button', { name: '更改目录' })).toBeDisabled()
   await expect(other.getByRole('button', { name: '更改目录' })).toBeEnabled()
 
-  // Opening another folder restarts the runtime there and returns to chat.
+  // Opening another folder restarts the runtime there and returns to chat,
+  // landing on that project's newest conversation instead of a blank one.
   await other.getByRole('button', { name: '打开' }).click()
   await expect(page.locator('[data-shell-composer]')).toBeVisible()
   const starts = await page.evaluate(() => window.__ZEN_E2E__.starts)
   assert.equal(starts.at(-1)?.cwd, '/work/q')
+  assert.deepEqual(starts.at(-1)?.args, [
+    '--mode',
+    'ask',
+    '--no-mcp',
+    '--resume',
+    '/sessions/c.jsonl',
+  ])
 
   await page.getByRole('button', { name: '设置' }).click()
   await page.getByRole('button', { name: '项目' }).click()
@@ -2163,20 +2200,11 @@ test('a palette session from another project switches the runtime and resumes', 
   await expect
     .poll(() =>
       page.evaluate(() => {
-        const starts = window.__ZEN_E2E__.starts
-        return starts[starts.length - 1]?.cwd
+        const start = window.__ZEN_E2E__.starts.at(-1)
+        return { cwd: start?.cwd, args: start?.args }
       }),
     )
-    .toBe('/work/q')
-  await expect
-    .poll(() =>
-      page.evaluate(() =>
-        window.__ZEN_E2E__.calls.some(
-          (call) => call.type === 'session' && call.op === 'resume' && call.path === '/sessions/c.jsonl',
-        ),
-      ),
-    )
-    .toBe(true)
+    .toEqual({ cwd: '/work/q', args: ['--mode', 'ask', '--no-mcp', '--resume', '/sessions/c.jsonl'] })
 })
 
 test('the memory tab lists, filters, creates, edits and deletes project notes', async ({ page }) => {

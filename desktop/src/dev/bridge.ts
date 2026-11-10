@@ -28,7 +28,7 @@ export interface BridgeState extends PluginMockState {
   running: boolean
   pending: PendingItemMock[]
   calls: Record<string, unknown>[]
-  starts: { cwd?: string | null; pid?: number }[]
+  starts: { cwd?: string | null; pid?: number; args?: string[] }[]
   dialogSelection: string | string[] | null
   title: string
   failExport?: boolean
@@ -848,10 +848,20 @@ export function installBridge(state: BridgeState) {
       }
       if (cmd === 'plugin:event|unlisten') return null
       if (cmd === 'rpc_start') {
-        const options = (args.options ?? {}) as { cwd?: string | null }
+        const options = (args.options ?? {}) as {
+          cwd?: string | null
+          args?: string[]
+        }
         const pid = nextPid
         nextPid += 1
-        state.starts.push({ cwd: options.cwd ?? null, pid })
+        const flags = options.args ?? []
+        state.starts.push({ cwd: options.cwd ?? null, pid, args: flags })
+        // The real child opens the resumed session while it boots, so the
+        // list's `current` flag must agree with the spawn flags.
+        const resumeAt = flags.indexOf('--resume')
+        if (resumeAt >= 0 && flags[resumeAt + 1] !== undefined) {
+          currentSessionPath = flags[resumeAt + 1]
+        }
         if (state.startHangs === true) {
           await new Promise<never>(() => {})
         }

@@ -544,14 +544,20 @@ class Runtime:
         return self.use_new_session()
 
     def use_new_session(self) -> Session:
-        """Attach a fresh session file and remember that this process made it.
+        """Attach a fresh, lazy session and remember that this process made it.
 
         Frontends that start a new conversation (bootstrap, /new, deleting the
-        current session) go through here, which is what lets :meth:`close`
-        remove the file when nothing was ever written to it -- including files
-        abandoned by switching to another session later in the same process.
+        current session) go through here. The file appears only when the first
+        message is written, so an idle launch or an abandoned switch leaves no
+        ``(empty)`` transcript behind; :meth:`close` still cleans up for
+        frontends that materialized one without messaging.
         """
-        self.session = records.open_session(unique_session_path())
+        self.session = records.open_session(unique_session_path(), lazy=True)
+        # The project's session directory is cheap and keeps exports, task
+        # sidecars and journals working before the first message; the file
+        # itself stays absent until there is something to write.
+        with contextlib.suppress(OSError):
+            self.session.path.parent.mkdir(parents=True, exist_ok=True)
         self._created_sessions.add(self.session.path)
         return self.session
 

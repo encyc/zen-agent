@@ -170,7 +170,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
   },
 
   async install(guard: { busy?: boolean; pendingApprovals?: number } = {}) {
-    // Restarting mid-turn drops the run and any pending approval; the banner
+    // Restarting mid-turn drops the run and any pending approval; the notice
     // hides the button, and this keeps a stale click from slipping through.
     if (!get().selfUpdatable) return
     if (guard.busy === true || (guard.pendingApprovals ?? 0) > 0) return
