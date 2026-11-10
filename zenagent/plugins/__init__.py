@@ -8,4 +8,30 @@ free of imports from ``mcp/``, ``app/`` and ``cli/``.
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from zenagent.plugins.manifest import CredentialSpec, PluginManifest, parse_manifest
+from zenagent.plugins.state import (
+    PLUGIN_STATE_PREF,
+    ResolvedContributions,
+    clear_plugin,
+    credential_name,
+    credentials_for,
+    is_enabled,
+    resolve,
+    set_credentials,
+    set_enabled,
+)
+
+__all__ = [
+    "PLUGIN_STATE_PREF",
+    "CredentialSpec",
+    "PluginManifest",
+    "ResolvedContributions",
+    "clear_plugin",
+    "credential_name",
+    "credentials_for",
+    "is_enabled",
+    "parse_manifest",
+    "resolve",
+    "set_credentials",
+    "set_enabled",
+]
