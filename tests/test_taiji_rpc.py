@@ -79,7 +79,7 @@ def bind_supervisor(
         chat=None,
         mode_of=lambda: "ask",
     )
-    supervisor_module._SINGLETON = supervisor
+    supervisor_module._SUPERVISORS[repo.resolve()] = supervisor
     return supervisor
 
 
@@ -87,9 +87,9 @@ def bind_supervisor(
 def clean_singleton():
     from zenagent.app.taiji import supervisor as supervisor_module
 
-    supervisor_module._SINGLETON = None
+    supervisor_module._SUPERVISORS.clear()
     yield
-    supervisor_module._SINGLETON = None
+    supervisor_module._SUPERVISORS.clear()
 
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")

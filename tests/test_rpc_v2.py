@@ -1728,7 +1728,8 @@ async def test_a_failed_taiji_message_crosses_as_a_code(
             raise RuntimeError(f"cannot write {secret}")
 
     monkeypatch.setattr(
-        "zenagent.app.taiji.supervisor.existing_taiji", lambda: FakeSupervisor()
+        "zenagent.app.taiji.supervisor.existing_taiji",
+        lambda root=None: FakeSupervisor(),
     )
 
     await run_lines(

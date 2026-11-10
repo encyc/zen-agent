@@ -16,6 +16,7 @@ from zenagent.app.taiji.supervisor import (
     TaijiSupervisor,
     TurnResult,
     close_taiji,
+    existing_taiji,
     get_taiji,
     supervisor_summary,
 )
@@ -189,26 +190,62 @@ class TestSupervisor:
             await supervisor.message("ghost", "hi")
 
 
-async def test_get_taiji_is_a_per_loop_singleton(repo: Path, tmp_path: Path) -> None:
+async def test_get_taiji_keeps_one_supervisor_per_root(
+    repo: Path, tmp_path: Path
+) -> None:
+    other = tmp_path / "other"
+    other.mkdir()
     runner = StubRunner()
-    one = get_taiji(
-        repo_root=repo,
-        sessions_dir=tmp_path / "s",
-        registry_path=tmp_path / "s" / "taiji.json",
-        runner=runner,
-        chat=None,
-        mode_of=lambda: "ask",
-    )
-    two = get_taiji(
-        repo_root=repo,
-        sessions_dir=tmp_path / "s",
-        registry_path=tmp_path / "s" / "taiji.json",
-        runner=runner,
-        chat=None,
-        mode_of=lambda: "ask",
-    )
-    assert one is two
-    await close_taiji()
+
+    def make(root: Path):
+        return get_taiji(
+            repo_root=root,
+            sessions_dir=tmp_path / "s",
+            registry_path=tmp_path / "s" / "taiji.json",
+            runner=runner,
+            chat=None,
+            mode_of=lambda: "ask",
+        )
+
+    one = make(repo)
+    again = make(repo)
+    two = make(other)
+    try:
+        assert one is again
+        assert two is not one
+        assert existing_taiji(repo) is one
+        assert existing_taiji(other) is two
+        await close_taiji(repo)
+        assert existing_taiji(repo) is None
+        assert existing_taiji(other) is two
+    finally:
+        await close_taiji()
+    assert existing_taiji() is None
+
+
+async def test_existing_taiji_without_a_root_only_answers_when_unambiguous(
+    repo: Path, tmp_path: Path
+) -> None:
+    other = tmp_path / "other"
+    other.mkdir()
+
+    def make(root: Path):
+        return get_taiji(
+            repo_root=root,
+            sessions_dir=tmp_path / "s",
+            registry_path=tmp_path / "s" / "taiji.json",
+            runner=StubRunner(),
+            chat=None,
+            mode_of=lambda: "ask",
+        )
+
+    one = make(repo)
+    try:
+        assert existing_taiji() is one
+        make(other)
+        assert existing_taiji() is None
+    finally:
+        await close_taiji()
 
 
 class FakeChat:
@@ -1058,7 +1095,7 @@ async def test_a_failed_resume_is_a_failed_turn() -> None:
 async def test_existing_taiji_returns_none_before_any_construction() -> None:
     from zenagent.app.taiji import supervisor as supervisor_module
 
-    supervisor_module._SINGLETON = None
+    supervisor_module._SUPERVISORS.clear()
     try:
         assert supervisor_module.existing_taiji() is None
     finally:

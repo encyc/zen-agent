@@ -33,7 +33,9 @@ def is_taiji_session(path: Path | None) -> bool:
     return path is not None and Path(path).stem == TAIJI_SESSION_STEM
 
 
-def ensure_taiji_session(sessions_dir: Path) -> Path:
+def ensure_taiji_session(
+    sessions_dir: Path, *, cwd: Path | None = None
+) -> Path:
     """The taiji session file, created with its header and title on first use."""
     path = taiji_session_path(sessions_dir)
     if not path.exists() or path.stat().st_size == 0:
@@ -43,7 +45,7 @@ def ensure_taiji_session(sessions_dir: Path) -> Path:
             "version": RECORD_VERSION,
             "id": path.stem,
             "createdAt": int(time.time()),
-            "cwd": os.getcwd(),
+            "cwd": str(Path(cwd).resolve()) if cwd is not None else os.getcwd(),
             "app": "zenagent",
             "appVersion": __version__,
         }
