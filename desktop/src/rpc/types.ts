@@ -53,6 +53,7 @@ export const REQUEST_KINDS = [
   'mode',
   'model',
   'models',
+  'plugins',
   'project',
   'prompt',
   'secrets',
@@ -296,6 +297,53 @@ export interface ToolsResult {
   id: string
   ok: true
   tools: ToolRow[]
+}
+
+// ---- plugins -------------------------------------------------------------
+
+export interface PluginCredentialRow {
+  key: string
+  label: string
+  secret: boolean
+  help: string | null
+  url: string | null
+  set: boolean
+}
+
+export interface PluginServerRow {
+  name: string
+  state: 'connected' | 'failed' | 'off'
+  tools: string[]
+  error: string | null
+}
+
+export interface PluginRow {
+  id: string
+  name: string
+  version: string
+  description: string
+  enabled: boolean
+  status: 'disabled' | 'needs_credentials' | 'failed' | 'connected' | 'ready'
+  credentials: PluginCredentialRow[]
+  servers: PluginServerRow[]
+}
+
+export interface PluginCatalogRow {
+  id: string
+  name: string
+  description: string
+  requires_runtime: string | null
+  installed: boolean
+}
+
+export interface PluginsResult {
+  type: 'result'
+  id: string
+  ok: true
+  plugins: PluginRow[]
+  catalog: PluginCatalogRow[]
+  problem: string | null
+  apply_pending: boolean
 }
 
 // ---- mcp -----------------------------------------------------------------

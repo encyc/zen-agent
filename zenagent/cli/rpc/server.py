@@ -24,6 +24,7 @@ from zenagent.app.workspace import (
 from zenagent.cli.rpc.errors import failure_frame
 from zenagent.cli.rpc.ops_config import ConfigOps
 from zenagent.cli.rpc.ops_files import FilesOps
+from zenagent.cli.rpc.ops_plugins import PluginsOps
 from zenagent.cli.rpc.ops_session import SessionOps
 from zenagent.cli.rpc.ops_taiji import TaijiOps
 from zenagent.events import AgentEvent
@@ -216,7 +217,7 @@ def _usage(agent: Agent) -> dict:
     }
 
 
-class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
+class RpcServer(TaijiOps, FilesOps, SessionOps, PluginsOps, ConfigOps):
     """Reads requests, streams agent events, writes one result per request."""
 
     def __init__(
@@ -619,6 +620,9 @@ class RpcServer(TaijiOps, FilesOps, SessionOps, ConfigOps):
                         op=str(request.get("op") or ""),
                     )
                 )
+            return True
+        if kind == "plugins":
+            await self._plugins(request, request_id)
             return True
         if kind == "mcp":
             await self._mcp(request, request_id)
