@@ -58,7 +58,7 @@ export function AgentEditor(props: {
   const [skills, setSkills] = useState((row?.skills ?? []).join(', '))
   const [plugins, setPlugins] = useState((row?.plugins ?? []).join(', '))
   const [mcpText, setMcpText] = useState(serversOf(row))
-  const [inheritProject, setInheritProject] = useState(row?.inheritProject ?? false)
+  const [inheritProject, setInheritProject] = useState(row?.inheritProject ?? true)
   const [tools, setTools] = useState(row?.tools?.join(', ') ?? '')
   const [root, setRoot] = useState(row?.root ?? '')
   const [mode, setMode] = useState<string>(row?.mode ?? 'ask')

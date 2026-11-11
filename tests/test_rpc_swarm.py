@@ -444,6 +444,23 @@ async def test_idle_room_cap_evicts_only_idle_rooms(tmp_path):
         await host.close()
 
 
+async def test_project_close_tears_down_its_swarm_room(tmp_path):
+    project = tmp_path / "proj"
+    _seed_role(project, "alpha")
+    host, writes = _host(project)
+    manager = await host._swarm_manager(project)
+    assert project_key(project) in host._swarm
+
+    await _call(
+        host,
+        {"type": "project", "op": "close", "root": str(project), "id": "p1"},
+    )
+
+    assert project_key(project) not in host._swarm
+    assert manager.started is False
+    assert writes[-1]["type"] == "result" and writes[-1]["ok"] is True
+
+
 async def test_roles_library_lists_global_roles_and_copy_lands_in_the_project(tmp_path):
     library = agents_root() / "research"
     library.mkdir(parents=True)

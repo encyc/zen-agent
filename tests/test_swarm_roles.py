@@ -380,6 +380,56 @@ def test_copy_role_lands_project_local_and_leaves_library(tmp_path, home):
     assert role.root == root.resolve()
 
 
+def test_copy_resets_library_defaults_materialized_by_the_old_editor(tmp_path, home):
+    lib = agents_root() / "research"
+    lib.mkdir(parents=True)
+    (lib / "manifest.json").write_text(
+        json.dumps(
+            {
+                "id": "research",
+                "name": "R",
+                # The pre-project Settings editor wrote the library's computed
+                # defaults back into the manifest.
+                "root": str(workspaces_root() / "research"),
+                "inheritProject": False,
+                "mcpServers": {"x": {"env": {"K": "${MY_KEY}"}}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    root = tmp_path / "proj"
+    root.mkdir()
+
+    role = copy_role("research", root=root)
+
+    copied = json.loads(
+        (root / ".zenagent" / "agents" / "research" / "manifest.json").read_text()
+    )
+    assert "root" not in copied
+    assert "inheritProject" not in copied
+    assert "${MY_KEY}" in json.dumps(copied)  # credentials stay placeholders
+    assert role.root == root.resolve()
+    assert role.inherit_project is True
+
+
+def test_copy_keeps_a_pinned_root_and_its_isolation(tmp_path, home):
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    lib = agents_root() / "research"
+    lib.mkdir(parents=True)
+    (lib / "manifest.json").write_text(
+        json.dumps({"id": "research", "root": str(shared), "inheritProject": False}),
+        encoding="utf-8",
+    )
+    root = tmp_path / "proj"
+    root.mkdir()
+
+    role = copy_role("research", root=root)
+
+    assert role.root == shared.resolve()
+    assert role.inherit_project is False
+
+
 def test_copy_refuses_to_clobber(tmp_path, home):
     (agents_root() / "r").mkdir(parents=True)
     (agents_root() / "r" / "manifest.json").write_text(

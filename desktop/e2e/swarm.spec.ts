@@ -70,6 +70,8 @@ test('create a role from settings', async ({ page }) => {
   assert.equal(manifest?.name, 'Reviewer')
   assert.equal(manifest?.systemPrompt, 'You review code.')
   assert.equal(manifest?.root, '/tmp/reviewer')
+  // A role created inside a project inherits its context unless opted out.
+  assert.equal(manifest?.inheritProject, true)
 
   // The refresh after the save lands the new agent in the room's roster.
   await page.getByRole('button', { name: '返回' }).click()

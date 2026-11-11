@@ -13,12 +13,14 @@ import copy
 import json
 import re
 import shutil
+from pathlib import Path
 
 from zenagent.app.swarm.roles import (
     RoleManifest,
     agents_root,
     parse_role,
     project_agents_root,
+    workspaces_root,
 )
 
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
@@ -60,11 +62,38 @@ def write_role(role_id: str, manifest: dict, *, root) -> RoleManifest:
     return role
 
 
+def _project_copy_manifest(source, role_id: str) -> dict | None:
+    """Strip defaults the old global editor wrote into the library manifest.
+
+    The pre-project Settings form read the *computed* library root and always
+    saved `inheritProject`, so those values are indistinguishable from user
+    choices unless they still equal the library defaults. Copying them
+    verbatim would point every project's copy at one shared workspace with no
+    project context; only the materialised defaults are dropped, so a pinned
+    root or isolation choice survives.
+    """
+    raw = _read_manifest(source / "manifest.json")
+    root = raw.get("root")
+    if not isinstance(root, str) or not root.strip():
+        return None
+    try:
+        pinned = Path(root).expanduser().resolve()
+    except (OSError, RuntimeError):
+        return None
+    if pinned != (workspaces_root() / role_id).resolve():
+        return None
+    raw.pop("root", None)
+    if raw.get("inheritProject") is False:
+        raw.pop("inheritProject", None)
+    return raw
+
+
 def copy_role(role_id: str, *, root) -> RoleManifest:
     """Copy a library role into the project, leaving the library untouched.
 
     Bytes are copied verbatim: ``${KEY}`` credential placeholders stay
-    unresolved on disk, exactly as they are stored in the library.
+    unresolved on disk, exactly as they are stored in the library. Only the
+    library's materialised defaults are removed (see ``_project_copy_manifest``).
     """
     if not _ID_RE.fullmatch(role_id):
         raise ValueError(f"invalid role id {role_id!r}")
@@ -76,6 +105,11 @@ def copy_role(role_id: str, *, root) -> RoleManifest:
         raise ValueError(f"role {role_id} already exists in this project")
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(source, target)
+    manifest = _project_copy_manifest(source, role_id)
+    if manifest is not None:
+        (target / "manifest.json").write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
     role, warnings = parse_role(target, project_root=root)
     if role is None:
         raise ValueError("; ".join(warnings) or f"invalid role {role_id}")

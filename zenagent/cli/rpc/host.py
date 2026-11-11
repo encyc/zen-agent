@@ -516,6 +516,11 @@ class RpcHost(SwarmOps):
             raise Refusal("project is busy", code="project_busy")
         for slot in targets:
             await self._drop(slot.key)
+        # The room is independent of interactive slots, so it must be torn
+        # down explicitly: otherwise its role runtimes outlive the project.
+        manager = self._swarm.pop(project_key(find_project_root(root)), None)
+        if manager is not None:
+            await manager.close()
         self._send(
             {
                 "type": "result",
