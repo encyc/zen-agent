@@ -131,6 +131,7 @@ export interface SwarmAgentFrame extends SwarmAgentState {
 /** An agent mentioned @you: surface it as a notification, not in the room. */
 export interface SwarmNoticeFrame {
   type: 'swarm_notice'
+  swarm: true
   agent: string
   text: string
 }
