@@ -3,6 +3,38 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## v0.13.1 — 2026-11-12
+
+**Desktop shell restyle, a clearable todo dock, and a README that explains the
+three modes.** One new session op; no other kernel API changes.
+
+### Added
+
+- **Clear todos** (`clear_todos` session op): agents sometimes end a turn with
+  rows left in the checklist HUD, so the dock now carries a clear button that
+  empties the tool's memory and the session sidecar together
+  (`zenagent/app/chat.py`, `ops_session.py`, desktop dock).
+- **Coding / Zen / Swarm in the README**: the Desktop section introduces each
+  mode and ships re-captured English screenshots (hero, Zen, Swarm, review).
+  The notification-bell shot was dropped — the bell is not a feature worth a
+  landing-page shot. The dev bridge can stub the session list for fixtures.
+
+### Fixed
+
+- **Terminal black seam**: xterm.css paints `.xterm-viewport` `#000` while the
+  themed background rides on the scrollable element above it, so the sub-row
+  remainder FitAddon leaves at the bottom showed as a black line. The legacy
+  layer now follows the palette, and both layers are pinned in e2e.
+
+### Desktop
+
+- **Layered shell**: a derived `--ds-*` layer (surfaces, hairline, tint, radius,
+  shadow, motion) built with `color-mix` over the existing `--dsw-*` palette, so
+  every theme keeps its tone. Sidebar and conversation column read as one shell
+  with a rounded-cut seam and a soft cast shadow instead of divider lines, and
+  the mode switcher moves a single thumb. Settings, composer, transcript and the
+  right panel adopt the same layer; `pnpm lint:tokens` gates the new files.
+
 ## v0.13.0 — 2026-11-12
 
 **Zen 模式 × Swarm 多角色运行时（双分支集成 + 按项目房间 + 模式感知侧边栏）**
