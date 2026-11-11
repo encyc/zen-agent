@@ -570,6 +570,15 @@ html[data-platform='darwin'] .brand {
   padding: 4px 10px 12px;
 }
 
+.swarmBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0 0;
+}
+
 /* Zen roster: the project's single router plus its focused workers. */
 .zenRoster {
   display: flex;

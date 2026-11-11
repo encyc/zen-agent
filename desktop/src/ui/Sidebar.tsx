@@ -1,6 +1,7 @@
 /** The sidebar shell: a brand header, the workspace mode switcher, the body
  * for the active mode, and the footer. The coding body lives in SidebarCoding;
- * zen and swarm bodies are dispatched here as they land. */
+ * the zen and swarm bodies (ZenSidebar / SwarmSidebar) each open with the
+ * compact project switcher. */
 
 import { useSettingsStore } from '../state/stores'
 import { useT } from '../i18n/locale'
@@ -19,6 +20,7 @@ import { AppMark } from './AppMark'
 import { ZenWordmark } from './ZenWordmark'
 import { SidebarCoding } from './SidebarCoding'
 import { ZenSidebar } from './ZenSidebar'
+import { SwarmSidebar } from './SwarmSidebar'
 import css from './Sidebar.module.css'
 
 export function Sidebar(props: { onCollapse(): void }) {
@@ -47,7 +49,7 @@ export function Sidebar(props: { onCollapse(): void }) {
 
       <ModeSwitcher />
 
-      {workspaceMode === 'zen' ? <ZenSidebar /> : workspaceMode === 'swarm' ? <SidebarCoding /> : <SidebarCoding />}
+      {workspaceMode === 'zen' ? <ZenSidebar /> : workspaceMode === 'swarm' ? <SwarmSidebar /> : <SidebarCoding />}
 
       <Footer />
     </div>

@@ -244,3 +244,40 @@ test('a collapsed sidebar can be restored from the room', async ({ page }) => {
   await expect(page.locator('[data-sidebar-collapsed]')).toHaveCount(0)
   await expect(page.locator('[data-shell-sidebar]')).toBeVisible()
 })
+
+test('switching project reloads the room and closes the old task detail', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('zen.projects', JSON.stringify([{ path: '/work/q', name: 'q', at: 1 }]))
+  })
+  await boot(page, initialState(swarmFixture({ runningTask: true })))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  await page.locator('[data-swarm-task-toggle]').first().click()
+  await expect(page.locator('[data-swarm-main] [data-swarm-task-detail]')).toBeVisible()
+  const before = (await page.evaluate(() => window.__ZEN_E2E__.calls))
+    .filter((call) => call.type === 'swarm' && call.op === 'list').length
+
+  await page.locator('[data-project-switcher]').click()
+  await page.locator('[data-project-option="/work/q"]').click()
+
+  await expect(page.locator('[data-swarm-task-detail]')).toHaveCount(0)
+  await expect(page.locator('[data-swarm-feed]')).toBeVisible()
+  const lists = (await page.evaluate(() => window.__ZEN_E2E__.calls))
+    .filter((call) => call.type === 'swarm' && call.op === 'list')
+  assert.ok(lists.length > before, 'project switch must re-list the room')
+  assert.equal(lists.at(-1)?.project, '/work/q')
+})
+
+test('saving a role keeps the open task detail', async ({ page }) => {
+  await boot(page, initialState(swarmFixture({ runningTask: true })))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+  await page.locator('[data-swarm-task-toggle]').first().click()
+  const detail = page.locator('[data-swarm-main] [data-swarm-task-detail]')
+  await expect(detail).toBeVisible()
+
+  await page.locator('[data-swarm-configure="research"]').click()
+  const modal = page.locator('[data-swarm-role-modal]')
+  await modal.getByRole('button', { name: '保存' }).click()
+  await expect(modal).toHaveCount(0)
+  await expect(detail).toBeVisible()
+})
