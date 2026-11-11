@@ -1,3 +1,5 @@
+import json
+import os
 from dataclasses import replace
 
 import pytest
@@ -6,6 +8,7 @@ from zenagent.app.swarm.room import (
     RoomMessage,
     SwarmStore,
     TaskRecord,
+    _message_record,
     is_terminal,
     parse_mentions,
 )
@@ -130,3 +133,26 @@ def test_reconcile_fails_every_nonterminal_task(tmp_path):
 
 def test_parse_mentions_dedupes_and_keeps_order():
     assert parse_mentions("@research 和 @coder，再 @research") == ["research", "coder"]
+
+
+def test_append_fsyncs(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(os, "fsync", lambda fd: calls.append(fd))
+    store = SwarmStore(tmp_path)
+    store.append_message(_message(id="m1"))
+    assert calls, "append must fsync"
+
+
+def test_load_truncates_unterminated_tail(tmp_path):
+    store = SwarmStore(tmp_path)
+    good = json.dumps(_message_record(_message(id="m1")), ensure_ascii=False)
+    store.room_path.write_text(
+        good + "\n" + '{"type": "message", "id": "torn"', encoding="utf-8"
+    )
+
+    store.load()
+
+    assert store.room_path.read_text().endswith("\n")
+    assert "torn" not in store.room_path.read_text()
+    store.append_message(_message(id="m2"))
+    assert len(store.room_path.read_text().splitlines()) == 2

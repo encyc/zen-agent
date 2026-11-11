@@ -9,6 +9,7 @@ the room.
 from __future__ import annotations
 
 import json
+import os
 import re
 import secrets
 import threading
@@ -103,6 +104,8 @@ class SwarmStore:
             self.chain_spend = {}
             self._message_ids = set()
             self.warnings = []
+            self._repair_tail(self.room_path)
+            self._repair_tail(self.tasks_path)
             self._replay(self.room_path, self._apply_message)
             self._replay(self.tasks_path, self._apply_task)
             self.loaded = True
@@ -238,10 +241,30 @@ class SwarmStore:
             except (KeyError, TypeError, ValueError) as exc:
                 self.warnings.append(f"{path.name}: skipped record: {exc}")
 
+    def _repair_tail(self, path: Path) -> None:
+        # A crash mid-append can leave a partial last line. Drop everything
+        # after the final newline so the next append starts on a clean boundary
+        # instead of concatenating onto the torn record.
+        try:
+            data = path.read_bytes()
+        except FileNotFoundError:
+            return
+        except OSError as exc:
+            self.warnings.append(f"{path.name}: {exc}")
+            return
+        if not data or data.endswith(b"\n"):
+            return
+        cut = data.rfind(b"\n") + 1
+        with path.open("r+b") as handle:
+            handle.truncate(cut)
+            handle.flush()
+            os.fsync(handle.fileno())
+
     def _append_line(self, path: Path, payload: dict) -> None:
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
             handle.flush()
+            os.fsync(handle.fileno())
 
 
 def _message_record(message: RoomMessage) -> dict:
