@@ -12,7 +12,7 @@ from conftest import text_stream
 from zenagent.app.swarm.manager import SwarmManager
 from zenagent.app.swarm.roles import agents_root, state_root
 from zenagent.app.swarm.room import RoomMessage, SwarmStore, TaskRecord
-from zenagent.events import Aborted, AssistantEvent
+from zenagent.events import Aborted, AgentEvent, AssistantEvent
 from zenagent.types import (
     AssistantMessage,
     TextContent,
@@ -641,3 +641,48 @@ def test_task_transcript_is_unavailable_without_a_task_or_agent():
 
     assert manager.task_transcript("t_1") == {"available": False, "transcript": []}
     assert manager.task_transcript("t_missing") == {"available": False, "transcript": []}
+
+
+async def test_role_events_flow_to_the_sink_stamped_with_the_active_task():
+    _write_role("research", "You research.")
+    seen: list[tuple[str, str, str]] = []  # (role, task, event type)
+
+    def sink(role_id: str, task_id: str, event: object) -> None:
+        seen.append((role_id, task_id, getattr(event, "type", "?")))
+
+    manager = SwarmManager(
+        stream_fn_factory=lambda role: text_stream("done"),
+        event_sink=sink,
+    )
+    await manager.start()
+    try:
+        [task] = await manager.post("@research hi")
+        await _wait_for(lambda: _states(manager).get(task.id) == "done")
+        assert seen, "no events reached the sink"
+        assert {role for role, _, _ in seen} == {"research"}
+        # every event is stamped with the run's task, never a stray id
+        assert {task_id for _, task_id, _ in seen} == {task.id}
+        assert "turn_start" in {etype for _, _, etype in seen}
+    finally:
+        await manager.close()
+
+
+async def test_sink_errors_never_break_a_run_and_stray_taps_are_dropped():
+    _write_role("research", "You research.")
+
+    def boom(role_id: str, task_id: str, event: object) -> None:
+        raise RuntimeError("sink exploded")
+
+    manager = SwarmManager(
+        stream_fn_factory=lambda role: text_stream("ok"),
+        event_sink=boom,
+    )
+    await manager.start()
+    try:
+        [task] = await manager.post("@research hi")
+        await _wait_for(lambda: _states(manager).get(task.id) == "done")
+        assert _states(manager)[task.id] == "done"
+    finally:
+        await manager.close()
+    # a tap with no active task (between runs, after close) is dropped quietly
+    manager._tap_role_event("research", AgentEvent(type="turn_start"))
