@@ -196,6 +196,69 @@ test('reset clears the room and marks it unloaded', () => {
   assert.equal(state.loaded, false)
 })
 
+test('libraryRoles lists the global role library', async () => {
+  reset()
+  const sent = fakeClient(() => ({
+    type: 'result',
+    id: '12',
+    ok: true,
+    roles: [
+      { id: 'research', name: 'Research' },
+      { id: 'builder', name: 'Builder' },
+    ],
+    warnings: [],
+  }))
+
+  const roles = await useSwarmStore.getState().libraryRoles()
+
+  assert.deepEqual(sent, [{ type: 'swarm', op: 'roles', action: 'library' }])
+  assert.deepEqual(
+    roles.map((role) => role.id),
+    ['research', 'builder'],
+  )
+})
+
+test('copyRole copies a library role then reloads the room', async () => {
+  reset()
+  const sent = fakeClient((request) =>
+    request.action === 'copy'
+      ? { type: 'result', id: '13', ok: true, roles: [], warnings: [] }
+      : {
+          type: 'result',
+          id: '14',
+          ok: true,
+          roles: [{ id: 'research', name: 'Research' }],
+          agents: [],
+          tasks: [],
+          messages: [],
+          warnings: [],
+        },
+  )
+
+  const answer = await useSwarmStore.getState().copyRole('research')
+
+  assert.deepEqual(sent, [
+    { type: 'swarm', op: 'roles', action: 'copy', roleId: 'research' },
+    { type: 'swarm', op: 'list' },
+  ])
+  assert.equal(answer.ok, true)
+  assert.deepEqual(
+    useSwarmStore.getState().roles.map((role) => role.id),
+    ['research'],
+  )
+})
+
+test('copyRole surfaces a refusal without reloading', async () => {
+  reset()
+  const sent = fakeClient(() => ({ ok: false, message: 'role research already exists in this project' }))
+
+  const answer = await useSwarmStore.getState().copyRole('research')
+
+  assert.equal(answer.ok, false)
+  assert.equal(answer.message, 'role research already exists in this project')
+  assert.equal(sent.length, 1, 'a refused copy does not reload')
+})
+
 test('load and reload surface manager warnings', async () => {
   reset()
   const sent = fakeClient((request) =>

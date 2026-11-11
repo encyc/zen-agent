@@ -78,6 +78,10 @@ interface SwarmState {
     id: string,
     manifest?: Record<string, unknown>,
   ): Promise<Record<string, unknown>>
+  /** The global role library (a read-only template for this project's room). */
+  libraryRoles(): Promise<SwarmRole[]>
+  /** Copy a library role into this project's room, then reload it. */
+  copyRole(id: string): Promise<{ ok: boolean; message?: string }>
   /** Live rows of a running task's detail (taskId → views). */
   runRows: Record<string, RunView[]>
   /** Drop a task's live rows (the settled transcript is authoritative). */
@@ -220,5 +224,31 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
       })
     }
     return answer as unknown as Record<string, unknown>
+  },
+
+  async libraryRoles() {
+    const answer = (await send({
+      type: 'swarm',
+      op: 'roles',
+      action: 'library',
+    })) as unknown as { ok?: boolean; roles?: SwarmRole[] }
+    return answer.ok === true && Array.isArray(answer.roles) ? answer.roles : []
+  },
+
+  async copyRole(id) {
+    const answer = (await send({
+      type: 'swarm',
+      op: 'roles',
+      action: 'copy',
+      roleId: id,
+    })) as unknown as { ok?: boolean; message?: string }
+    if (answer.ok !== true) {
+      return {
+        ok: false,
+        message: typeof answer.message === 'string' ? answer.message : undefined,
+      }
+    }
+    await get().load()
+    return { ok: true }
   },
 }))

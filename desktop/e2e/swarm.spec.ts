@@ -244,3 +244,67 @@ test('a collapsed sidebar can be restored from the room', async ({ page }) => {
   await expect(page.locator('[data-sidebar-collapsed]')).toHaveCount(0)
   await expect(page.locator('[data-shell-sidebar]')).toBeVisible()
 })
+
+test('copy a library role into one project and not the other', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('zen.last.cwd', '/work/p')
+    localStorage.setItem(
+      'zen.projects',
+      JSON.stringify([
+        { path: '/work/p', name: 'p', at: 1 },
+        { path: '/work/q', name: 'q', at: 1 },
+      ]),
+    )
+  })
+  await boot(
+    page,
+    initialState(swarmFixture({ swarmProject: '/work/p', swarmRoles: [], swarmAgents: [] })),
+  )
+  await page.locator('[data-workspace-mode="swarm"]').click()
+  await expect(page.locator('[data-swarm-page]')).toBeVisible()
+  await expect(page.locator('[data-swarm-agent]')).toHaveCount(0)
+
+  await page.locator('[data-swarm-copy-role]').click()
+  const picker = page.locator('[data-library-picker]')
+  await expect(picker.locator('[data-library-role="research"]')).toBeVisible()
+  await picker.locator('[data-library-copy="research"]').click()
+  await expect(page.locator('[data-swarm-agent="research"]')).toBeVisible()
+  // The row now reads as already present: copying twice stays disabled.
+  await expect(picker.locator('[data-library-copy="research"]')).toBeDisabled()
+
+  const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
+  const copy = calls.find(
+    (call) => call.type === 'swarm' && call.op === 'roles' && call.action === 'copy',
+  )
+  assert.equal(copy?.roleId, 'research')
+
+  await picker.getByRole('button', { name: '关闭' }).click()
+  await expect(picker).toHaveCount(0)
+
+  // Project B owns a separate room: the copied role never leaks there.
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '项目' }).click()
+  await page.locator('[data-project="/work/q"]').getByRole('button', { name: '打开' }).click()
+  await page.locator('[data-workspace-mode="swarm"]').click()
+  await expect(page.locator('[data-swarm-page]')).toBeVisible()
+  await expect(page.locator('[data-swarm-agent="research"]')).toHaveCount(0)
+})
+
+test('copy from the role library is reachable from Settings', async ({ page }) => {
+  await boot(page, initialState(swarmFixture({ swarmRoles: [], swarmAgents: [] })))
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: 'Swarm', exact: true }).click()
+  await expect(page.locator('[data-settings-swarm]')).toBeVisible()
+
+  await page.locator('[data-settings-copy-role]').click()
+  const picker = page.locator('[data-library-picker]')
+  await expect(picker.locator('[data-library-role="builder"]')).toBeVisible()
+  await picker.locator('[data-library-copy="builder"]').click()
+  await expect(picker.locator('[data-library-role="builder"]')).toContainText('已在这个项目里')
+
+  const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
+  const copy = calls.find(
+    (call) => call.type === 'swarm' && call.op === 'roles' && call.action === 'copy',
+  )
+  assert.equal(copy?.roleId, 'builder')
+})

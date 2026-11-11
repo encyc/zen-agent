@@ -5,8 +5,10 @@
  * Self-contained like AgentSettings — SettingsPage keeps its own
  * Row/Switch internals, so this file carries its own primitives. */
 
+import { useState } from 'react'
 import { useT } from '../../i18n/locale'
 import { useSettingsStore } from '../../state/stores'
+import { LibraryPicker } from './LibraryPicker'
 import type { Tab } from './settingsNav'
 import css from './WorkspaceSettings.module.css'
 
@@ -51,6 +53,7 @@ export function ZenSettings() {
 
 export function SwarmSettings(props: { onNavigate(tab: Tab): void }) {
   const t = useT()
+  const [picking, setPicking] = useState(false)
   return (
     <div className={css.stack} data-settings-swarm>
       <section className={css.cardBlock}>
@@ -60,14 +63,25 @@ export function SwarmSettings(props: { onNavigate(tab: Tab): void }) {
             <p className={css.cardCaption}>{t('swarm.settings.desc')}</p>
           </div>
         </div>
-        <button
-          type="button"
-          className={css.action}
-          onClick={() => props.onNavigate('agents')}
-        >
-          {t('swarm.settings.manageAgents')}
-        </button>
+        <div className={css.cardActions}>
+          <button
+            type="button"
+            className={css.action}
+            data-settings-copy-role
+            onClick={() => setPicking(true)}
+          >
+            {t('swarm.copyFromLibrary')}
+          </button>
+          <button
+            type="button"
+            className={css.action}
+            onClick={() => props.onNavigate('agents')}
+          >
+            {t('swarm.settings.manageAgents')}
+          </button>
+        </div>
       </section>
+      {picking && <LibraryPicker onClose={() => setPicking(false)} onCopied={() => {}} />}
     </div>
   )
 }

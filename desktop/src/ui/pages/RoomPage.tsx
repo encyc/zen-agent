@@ -19,6 +19,7 @@ import { AssistantNodeView } from '../chat/AssistantNodeView'
 import { SkillMessage, UserMessage } from '../chat/MessageItem'
 import { ToolRowView } from '../chat/ToolRowView'
 import { AgentModal } from './agentEditor'
+import { LibraryPicker } from './LibraryPicker'
 import css from './RoomPage.module.css'
 
 type TaskNumbers = ReadonlyMap<string, number>
@@ -39,6 +40,7 @@ export function RoomPage() {
   const load = useSwarmStore((state) => state.load)
   const saveRole = useSwarmStore((state) => state.saveRole)
   const [editing, setEditing] = useState<SwarmRole | 'new' | null>(null)
+  const [picking, setPicking] = useState(false)
   const [selectedTask, setSelectedTask] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const feed = useRef<HTMLDivElement>(null)
@@ -128,6 +130,7 @@ export function RoomPage() {
           busy={busy}
           onConfigure={setEditing}
           onCreate={() => setEditing('new')}
+          onCopy={() => setPicking(true)}
         />
         <TaskStrip
           tasks={tasks}
@@ -143,6 +146,9 @@ export function RoomPage() {
           onClose={() => setEditing(null)}
           onSave={save}
         />
+      )}
+      {picking && (
+        <LibraryPicker onClose={() => setPicking(false)} onCopied={() => void load()} />
       )}
     </div>
   )
@@ -314,6 +320,7 @@ function Roster({
   busy,
   onConfigure,
   onCreate,
+  onCopy,
 }: {
   agents: SwarmAgentState[]
   roles: SwarmRole[]
@@ -321,6 +328,7 @@ function Roster({
   busy: boolean
   onConfigure(role: SwarmRole): void
   onCreate(): void
+  onCopy(): void
 }) {
   const t = useT()
   const resetAgent = useSwarmStore((state) => state.resetAgent)
@@ -338,6 +346,15 @@ function Roster({
             onClick={onCreate}
           >
             {t('swarm.roleNew')}
+          </button>
+          <button
+            type="button"
+            className={css.ghost}
+            data-swarm-copy-role
+            disabled={busy}
+            onClick={onCopy}
+          >
+            {t('swarm.copyFromLibrary')}
           </button>
           <button
             type="button"

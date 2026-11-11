@@ -24,6 +24,11 @@ export interface SwarmMockState {
   swarmWarnings?: string[]
   /** Fail the transcript op, the way a reset/compacted role session does. */
   swarmFailTranscript?: boolean
+  /** The project this fixture's room belongs to; other projects start empty,
+   * mirroring the host's per-project rooms. */
+  swarmProject?: string
+  /** The global role library served for `roles action=library`. */
+  swarmLibrary?: SwarmRole[]
 }
 
 export interface SwarmFixtureOptions extends Partial<SwarmMockState> {
@@ -82,12 +87,15 @@ type Room = Required<SwarmMockState>
 
 /** A frame the shell would have received from the host. The event payload is
  * the Tauri envelope the client's listener unwraps (`payload.frame`). */
-function emit(frame: ServerFrame): void {
+function emit(rows: Room, frame: ServerFrame): void {
   if (typeof window === 'undefined') return
   const send = (window as unknown as { __ZEN_E2E_EMIT__?: (event: string, payload: unknown) => void })
     .__ZEN_E2E_EMIT__
   if (send !== undefined) {
-    send('rpc:frame', { event: 'rpc:frame', id: 1, payload: { frame } })
+    const project = ROOM_PROJECT.get(rows)
+    const tagged =
+      project === undefined || project === '' ? frame : { ...frame, project }
+    send('rpc:frame', { event: 'rpc:frame', id: 1, payload: { frame: tagged } })
   }
 }
 
@@ -150,7 +158,38 @@ function room(state: SwarmMockState): Room {
   state.swarmTasks ??= []
   state.swarmMessages ??= []
   state.swarmWarnings ??= []
+  state.swarmProject ??= ''
+  state.swarmLibrary ??= ROLES
   return state as Room
+}
+
+/** One project's room: the fixture snapshot belongs to `swarmProject`; a
+ * project the fixture never names starts with an empty room. */
+const OTHER_ROOMS = new Map<string, SwarmMockState>()
+const ROOM_PROJECT = new WeakMap<object, string>()
+
+function roomFor(state: SwarmMockState, payload: Record<string, unknown>): Room {
+  const project = typeof payload.project === 'string' ? payload.project : ''
+  const home = state.swarmProject ?? ''
+  let rows: Room
+  if (project === '' || home === '' || project === home) {
+    rows = room(state)
+  } else {
+    let other = OTHER_ROOMS.get(project)
+    if (other === undefined) {
+      other = {
+        swarmRoles: [],
+        swarmAgents: [],
+        swarmTasks: [],
+        swarmMessages: [],
+        swarmWarnings: [],
+      }
+      OTHER_ROOMS.set(project, other)
+    }
+    rows = room(other)
+  }
+  ROOM_PROJECT.set(rows, project)
+  return rows
 }
 
 function copy<T extends object>(rows: T[]): T[] {
@@ -186,11 +225,11 @@ function appendMessage(
     chainDepth: fields.depth ?? 0,
   }
   rows.swarmMessages.push(message)
-  emit({ ...message, type: 'swarm_message', swarm: true })
+  emit(rows, { ...message, type: 'swarm_message', swarm: true })
   // An agent reporting back to the user surfaces as a notice, mirroring the
   // host's _admit notice (swarm:true so the shell routes it to the swarm UI).
   if (fields.author.kind === 'agent' && /@you\b/.test(fields.text)) {
-    emit({
+    emit(rows, {
       type: 'swarm_notice',
       swarm: true,
       agent: fields.author.id,
@@ -213,7 +252,7 @@ function setAgent(rows: Room, id: string, state: SwarmAgentState['state'], task:
   }
   if (index >= 0) rows.swarmAgents[index] = row
   else rows.swarmAgents.push(row)
-  emit({ ...row, type: 'swarm_agent', swarm: true })
+  emit(rows, { ...row, type: 'swarm_agent', swarm: true })
 }
 
 /** A role view built the way the host builds one from a saved manifest. */
@@ -282,15 +321,20 @@ function addTask(
     derivedFrom: spec.derivedFrom ?? null,
   }
   rows.swarmTasks.push(task)
-  emit({ ...task, type: 'swarm_task', swarm: true })
+  emit(rows, { ...task, type: 'swarm_task', swarm: true })
   return task
 }
 
-function transition(task: SwarmTask, state: SwarmTask['state'], reason: string | null = null) {
+function transition(
+  rows: Room,
+  task: SwarmTask,
+  state: SwarmTask['state'],
+  reason: string | null = null,
+) {
   task.state = state
   task.reason = reason
   task.updatedAt = Date.now()
-  emit({ ...task, type: 'swarm_task', swarm: true })
+  emit(rows, { ...task, type: 'swarm_task', swarm: true })
 }
 
 /** The scripted run: busy → live step events → report (its @ starts the next
@@ -298,7 +342,7 @@ function transition(task: SwarmTask, state: SwarmTask['state'], reason: string |
  * panel to observe the stream, the way a real role run lasts seconds. */
 async function run(rows: Room, task: SwarmTask, depth: number): Promise<void> {
   setAgent(rows, task.assignee, 'running', task.id)
-  transition(task, 'running')
+  transition(rows, task, 'running')
   // The runner injects the task prompt as a user message; the detail must
   // hide it live exactly as the settled transcript slices it out.
   const source = rows.swarmMessages.find((message) => message.id === task.sourceMessageId)
@@ -306,38 +350,38 @@ async function run(rows: Room, task: SwarmTask, depth: number): Promise<void> {
     `[swarm] from user:you\ntask: ${task.id} · chain: ${task.chainId} · depth: ${depth}\n\n` +
     `Team room protocol:\n- Your final message is posted to the room as this task's result.\n\n` +
     `Message:\n${source?.text ?? ''}`
-  emitRunEvent(task, { type: 'message_start', message: { role: 'user', text: injected } })
-  emitRunEvent(task, { type: 'message_end', message: { role: 'user', text: injected } })
+  emitRunEvent(rows, task, { type: 'message_start', message: { role: 'user', text: injected } })
+  emitRunEvent(rows, task, { type: 'message_end', message: { role: 'user', text: injected } })
   const text = `${task.assignee} 查完了`
-  emitRunEvent(task, {
+  emitRunEvent(rows, task, {
     type: 'tool_execution_start',
     tool_call_id: 'call_1',
     tool_name: 'read_skill',
     args: '{"name":"risk-policy-expert"}',
   })
   await sleep(300)
-  emitRunEvent(task, {
+  emitRunEvent(rows, task, {
     type: 'tool_execution_update',
     tool_call_id: 'call_1',
     partial_result: 'reading…',
   })
   await sleep(300)
-  emitRunEvent(task, {
+  emitRunEvent(rows, task, {
     type: 'tool_execution_end',
     tool_call_id: 'call_1',
     result_text: 'skill body',
     is_error: false,
     duration_ms: 12,
   })
-  emitRunEvent(task, { type: 'message_start', message: { role: 'assistant', text: '' } })
+  emitRunEvent(rows, task, { type: 'message_start', message: { role: 'assistant', text: '' } })
   for (const delta of [text.slice(0, 6), text.slice(6)]) {
-    emitRunEvent(task, {
+    emitRunEvent(rows, task, {
       type: 'message_update',
       assistant_event: { type: 'text_delta', delta },
     })
     await sleep(200)
   }
-  emitRunEvent(task, { type: 'message_end', message: { role: 'assistant', text } })
+  emitRunEvent(rows, task, { type: 'message_end', message: { role: 'assistant', text } })
   await sleep(300)
   const reply = SCRIPT[task.assignee]
   let result: SwarmMessage | null = null
@@ -350,7 +394,7 @@ async function run(rows: Room, task: SwarmTask, depth: number): Promise<void> {
     })
     task.resultMessageId = result.id
   }
-  transition(task, 'done')
+  transition(rows, task, 'done')
   setAgent(rows, task.assignee, 'idle', null)
   if (result === null) return
   for (const roleId of result.mentions) {
@@ -369,8 +413,8 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-function emitRunEvent(task: SwarmTask, event: AgentEventFrame): void {
-  emit({ type: 'swarm_event', swarm: true, agent: task.assignee, task: task.id, event })
+function emitRunEvent(rows: Room, task: SwarmTask, event: AgentEventFrame): void {
+  emit(rows, { type: 'swarm_event', swarm: true, agent: task.assignee, task: task.id, event })
 }
 
 /** The scripted run's activity, in the coding transcript's view shapes. */
@@ -409,7 +453,7 @@ export function handleSwarm(
   state: SwarmMockState,
   payload: Record<string, unknown>,
 ): Record<string, unknown> {
-  const rows = room(state)
+  const rows = roomFor(state, payload)
   const ok = (fields: Record<string, unknown>) => ({
     type: 'result',
     id: payload.id,
@@ -450,7 +494,7 @@ export function handleSwarm(
     const taskId = String(payload.taskId ?? '')
     const task = rows.swarmTasks.find((row) => row.id === taskId)
     if (task === undefined || TERMINAL.has(task.state)) return ok({ taskId, cancelled: false })
-    transition(task, 'cancelled', 'aborted')
+    transition(rows, task, 'cancelled', 'aborted')
     setAgent(rows, task.assignee, 'idle', null)
     return ok({ taskId, cancelled: true })
   }
@@ -505,7 +549,26 @@ export function handleSwarm(
 
   if (op === 'roles') {
     const action = String(payload.action ?? 'list')
-    if (action !== 'list') {
+    if (action === 'library') {
+      return ok({ roles: copy(rows.swarmLibrary), warnings: [] })
+    }
+    if (action === 'copy') {
+      const id = String(payload.roleId ?? '')
+      const source = rows.swarmLibrary.find((role) => role.id === id)
+      if (source === undefined) {
+        return { type: 'error', id: payload.id, ok: false, message: `no library role ${id}` }
+      }
+      if (rows.swarmRoles.some((role) => role.id === id)) {
+        return {
+          type: 'error',
+          id: payload.id,
+          ok: false,
+          message: `role ${id} already exists in this project`,
+        }
+      }
+      upsertRole(rows, { ...source })
+      setAgent(rows, id, 'idle', null)
+    } else if (action !== 'list') {
       const id = String(payload.roleId ?? '')
       if (action === 'delete') {
         rows.swarmRoles = rows.swarmRoles.filter((role) => role.id !== id)

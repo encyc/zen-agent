@@ -43,6 +43,13 @@
   cursor: pointer;
 }
 
+.cardActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
 .action:hover {
   background: var(--dsw-alias-interactive-bg-hover);
 }
