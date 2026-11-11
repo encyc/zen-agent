@@ -1,6 +1,6 @@
 {
  "project": "zen-agent",
- "version": 4,
+ "version": 5,
  "updated": "2026-11-11",
  "overview": "zen-agent 是零第三方依赖（仅 httpx）的终端 AI 编码代理。四个前端（REPL / headless -p / JSONL RPC / Textual TUI）共用 app 层唯一装配序列 bootstrap.prepare；agent 内核以「事件流 + 工具永远返回结果 + 取消是协议内状态」为契约；providers 适配多家 LLM；插件（声明式连接器包，经 MCP 单向外呼）与 MCP/skills/模板/扩展/桌面 GUI(经 RPC) 都在内核之上接线不改内核。",
  "policy": {
@@ -200,21 +200,43 @@
    "cluster": "app",
    "files": [
     "zenagent/app/swarm/__init__.py",
+    "zenagent/app/swarm/events_tap.py",
     "zenagent/app/swarm/manager.py",
     "zenagent/app/swarm/protocol.py",
     "zenagent/app/swarm/roles.py",
     "zenagent/app/swarm/room.py",
     "zenagent/app/swarm/roster.py",
     "zenagent/app/swarm/router.py",
-    "zenagent/app/swarm/runner.py"
+    "zenagent/app/swarm/runner.py",
+    "zenagent/app/swarm/transcript.py"
    ],
-   "resp": "常驻多角色运行时：角色清单（人设/模型/工具/预算）→ 每角色独立 Runtime+Session；房间 JSONL 是唯一消息源，@ 是唯一路由原语；Router 做入站闸门，TaskRunner 以协议块约束任务边界与预算，SwarmManager 持有调度与审批。",
+   "resp": "常驻多角色运行时：角色清单（人设/模型/工具/预算）→ 每角色独立 Runtime+Session；房间 JSONL 是唯一消息源，@ 是唯一路由原语；Router 做入站闸门，TaskRunner 以协议块约束任务边界与预算，SwarmManager 持有调度与审批。events_tap 把角色 run 事件广播为全局 swarm_event 帧，transcript 投影任务详情。",
    "symbols": [
     "RoleManifest",
     "SwarmStore",
     "Router",
     "TaskRunner",
     "SwarmManager"
+   ]
+  },
+  {
+   "id": "app.zen",
+   "title": "zen 路由与舰队",
+   "cluster": "app",
+   "files": [
+    "zenagent/app/zen/__init__.py",
+    "zenagent/app/zen/fleet.py",
+    "zenagent/app/zen/prompts.py",
+    "zenagent/app/zen/roster.py",
+    "zenagent/app/zen/tools.py"
+   ],
+   "resp": "zen 模式：一个 router 会话 + 该项目其余会话作为 worker，fleet 属于单个项目 slot。ZenFleet 经 bootstrap.prepare 为每个 worker 装配完整 runtime 并 resume 到其会话，跑任务提示后经 chat.steer 把最终文本注入 router 对话（结果自到、不等待）；信号量限并发，超额排队。roster 边车记录角色/焦点，prompts 组装 worker 提示，tools 提供 zen 派发工具。",
+   "symbols": [
+    "ZenFleet",
+    "WorkerHandle",
+    "RosterRow",
+    "worker_statuses",
+    "read_roster"
    ]
   },
   {
@@ -541,10 +563,11 @@
     "zenagent/cli/rpc/server.py",
     "zenagent/cli/rpc/host.py",
     "zenagent/cli/rpc/ops_swarm.py",
+    "zenagent/cli/rpc/ops_zen.py",
     "zenagent/cli/rpc/slot.py",
     "zenagent/cli/rpc/terminal.py"
    ],
-   "resp": "JSONL RPC 服务器与 ops 分派（hello 协议握手、[limits] 契约、项目 slot；swarm 角色与房间分派）",
+   "resp": "JSONL RPC 服务器与 ops 分派（hello 协议握手、[limits] 契约、项目 slot；swarm 角色与房间分派；zen 舰队启停与 roster）",
    "symbols": [
     "ConfigOps",
     "FilesOps",
@@ -2026,6 +2049,49 @@
    "to": "app.swarm",
    "desc": "SwarmManager、SwarmOps 分派",
    "kind": "import"
+  },
+  {
+   "from": "app.zen",
+   "to": "agent.loop",
+   "desc": "AgentTool、ToolResultAgent（zen 派发工具）",
+   "kind": "import"
+  },
+  {
+   "from": "app.zen",
+   "to": "agent.rt",
+   "desc": "read_session_titles、unique_session_path（worker 会话）",
+   "kind": "import"
+  },
+  {
+   "from": "app.zen",
+   "to": "app.assembly",
+   "desc": "bootstrap.prepare、RuntimeOptions（每 worker 装配 runtime）",
+   "kind": "import"
+  },
+  {
+   "from": "app.zen",
+   "to": "app.transcript",
+   "desc": "open_session（resume worker 会话）",
+   "kind": "import"
+  },
+  {
+   "from": "app.zen",
+   "to": "app.chat",
+   "desc": "ChatController（chat.steer 注入 router，TYPE_CHECKING）",
+   "kind": "import",
+   "hidden": true
+  },
+  {
+   "from": "app.zen",
+   "to": "tools",
+   "desc": "text_result（zen 工具结果）",
+   "kind": "import"
+  },
+  {
+   "from": "cli.rpc",
+   "to": "app.zen",
+   "desc": "ZenFleet、latest_router、set_role（zen 启停与 roster）",
+   "kind": "import"
   }
  ],
  "invariants": [
@@ -2036,7 +2102,8 @@
   "bootstrap.prepare 是四个前端唯一装配序列；broker 与 runtime 读同一 RuntimeOptions（参数化测试钉死）",
   "已知常量回指环 loop↔tool_exec↔result_budget↔timeouts 在 agent.loop 节点内部，cycles_seen 登记",
   "插件只做单向外呼：zen → 插件 MCP 进程 → 外部应用；plugins/ 不 import mcp/app/cli/agent/tools/providers（tests/test_plugin_layering.py 钉住），只有 app/plugin_wiring.py 把插件贡献翻译成 MCP 配置",
-  "swarm 只在 app 层组合既有内核：角色 runtime 经 Runtime.bootstrap 装配，插件仍单向外呼，密码只存 ~/.zenagent/settings.json（manifest 只放 ${KEY} 占位）"
+  "swarm 只在 app 层组合既有内核：角色 runtime 经 Runtime.bootstrap 装配，插件仍单向外呼，密码只存 ~/.zenagent/settings.json（manifest 只放 ${KEY} 占位）",
+  "zen 只在 app 层组合既有内核：worker runtime 经 bootstrap.prepare 装配并 resume 到项目会话，结果经 chat.steer 注入 router（结果自到、不等待）；fleet 属于单个项目 slot，不跨项目"
  ],
  "unmapped": [
   {
