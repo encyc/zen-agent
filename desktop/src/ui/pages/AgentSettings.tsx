@@ -6,7 +6,7 @@ import clsx from 'clsx'
 import { useLocale, useT } from '../../i18n/locale'
 import type { SwarmRole } from '../../rpc/types'
 import { useAppStore } from '../../state/appStore'
-import { useSwarmStore } from '../../state/swarmStore'
+import { swarmLoadPlan, useSwarmStore } from '../../state/swarmStore'
 import { AgentEditor, roleNotice } from './agentEditor'
 import css from './AgentSettings.module.css'
 
@@ -75,6 +75,8 @@ export function AgentSettings() {
   const locale = useLocale()
   const project = useAppStore((state) => state.project)
   const roles = useSwarmStore((state) => state.roles)
+  const loaded = useSwarmStore((state) => state.loaded)
+  const loadedProject = useSwarmStore((state) => state.loadedProject)
   const load = useSwarmStore((state) => state.load)
   const saveRole = useSwarmStore((state) => state.saveRole)
   const [editing, setEditing] = useState<SwarmRole | 'new' | null>(null)
@@ -84,8 +86,11 @@ export function AgentSettings() {
   const busy = pending !== null
 
   useEffect(() => {
-    void load(project)
-  }, [load, project])
+    const plan = swarmLoadPlan(loaded, loadedProject, project)
+    if (plan === 'none') return
+    if (plan === 'switch') useSwarmStore.getState().clearRoomUi()
+    void useSwarmStore.getState().load(project)
+  }, [project, loaded, loadedProject])
 
   async function save(
     action: 'create' | 'update',

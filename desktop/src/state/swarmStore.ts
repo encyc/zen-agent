@@ -186,6 +186,9 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
 
   async load(project) {
     const token = ++loadSeq
+    // client.send injects its current project over this field, so the wire names
+    // the right room via appStore's setProject-before-set ordering, not this field
+    // alone; the per-project backend task owns making the field authoritative.
     const answer = (await send({
       type: 'swarm',
       op: 'list',

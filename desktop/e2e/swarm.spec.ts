@@ -282,6 +282,31 @@ test('saving a role keeps the open task detail', async ({ page }) => {
   await expect(detail).toBeVisible()
 })
 
+test('the settings detour clears the old task detail when the project switched', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('zen.last.cwd', '/work/p')
+    localStorage.setItem('zen.projects', JSON.stringify([{ path: '/work/q', name: 'q', at: 1 }]))
+  })
+  await boot(page, initialState(swarmFixture({ runningTask: true })))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+  await page.locator('[data-swarm-task-toggle]').first().click()
+  await expect(page.locator('[data-swarm-main] [data-swarm-task-detail]')).toBeVisible()
+
+  // Leave swarm (its sidebar unmounts), switch project in zen, then detour
+  // through Settings → Agents: that view loads the room too, and must clear
+  // the old room's selection on a project switch just like the sidebar does.
+  await page.locator('[data-workspace-mode="zen"]').click()
+  await page.locator('[data-project-switcher]').click()
+  await page.locator('[data-project-option="/work/q"]').click()
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '角色' }).click()
+  await page.getByRole('button', { name: '返回' }).click()
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  await expect(page.locator('[data-swarm-task-detail]')).toHaveCount(0)
+  await expect(page.locator('[data-swarm-feed]')).toBeVisible()
+})
+
 test('the swarm tab badge counts live tasks without eager-loading the room', async ({ page }) => {
   await boot(page, initialState(swarmFixture({ runningTask: true })))
   // 未进 swarm：不预载，徽标不显示
