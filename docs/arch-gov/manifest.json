@@ -1,6 +1,6 @@
 {
  "project": "zen-agent",
- "version": 5,
+ "version": 6,
  "updated": "2026-11-11",
  "overview": "zen-agent 是零第三方依赖（仅 httpx）的终端 AI 编码代理。四个前端（REPL / headless -p / JSONL RPC / Textual TUI）共用 app 层唯一装配序列 bootstrap.prepare；agent 内核以「事件流 + 工具永远返回结果 + 取消是协议内状态」为契约；providers 适配多家 LLM；插件（声明式连接器包，经 MCP 单向外呼）与 MCP/skills/模板/扩展/桌面 GUI(经 RPC) 都在内核之上接线不改内核。",
  "policy": {
@@ -201,6 +201,7 @@
    "files": [
     "zenagent/app/swarm/__init__.py",
     "zenagent/app/swarm/events_tap.py",
+    "zenagent/app/swarm/frames.py",
     "zenagent/app/swarm/manager.py",
     "zenagent/app/swarm/protocol.py",
     "zenagent/app/swarm/roles.py",

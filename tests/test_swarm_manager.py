@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from conftest import text_stream
 
+from zenagent.app.runtime import Runtime
 from zenagent.app.swarm.events_tap import subscribe_events, tap
 from zenagent.app.swarm.manager import SwarmManager
 from zenagent.app.swarm.roles import agents_root, state_root
@@ -196,7 +197,7 @@ async def test_agent_mentioning_you_raises_a_notification():
         notices = [frame for frame in frames if frame.get("type") == "swarm_notice"]
         assert len(notices) == 1
         assert notices[0]["text"] == "@research: @you 结论是 Z"
-        assert "swarm" not in notices[0]
+        assert notices[0]["swarm"] is True
     finally:
         await manager.close()
 
@@ -715,3 +716,107 @@ def test_subscribe_events_forwards_stamped_events_and_no_ops_without_a_sink():
     quiet = FakeAgent()
     subscribe_events(quiet, "research", sink=None, task_of=lambda role: "t_9")
     assert quiet.listeners == []
+
+
+def _track_runtimes(monkeypatch):
+    """Record every Runtime built and closed so an orphaned runtime (built but
+    never closed) is visible. Observes real lifecycle, not mock internals."""
+    built: list[Runtime] = []
+    closed: list[Runtime] = []
+    bootstrap = Runtime.bootstrap.__func__
+    close = Runtime.close
+
+    async def tracked_bootstrap(cls, options, **kwargs):
+        # Force a suspension point so concurrent rebuilds genuinely overlap;
+        # without it the fake runtime's build may run to completion unyielded.
+        await asyncio.sleep(0)
+        runtime = await bootstrap(cls, options, **kwargs)
+        built.append(runtime)
+        return runtime
+
+    async def tracked_close(self):
+        closed.append(self)
+        await close(self)
+
+    monkeypatch.setattr(Runtime, "bootstrap", classmethod(tracked_bootstrap))
+    monkeypatch.setattr(Runtime, "close", tracked_close)
+    return built, closed
+
+
+async def test_delete_role_mid_run_leaks_no_runtime(monkeypatch):
+    _write_role("victim", "You are v1.")
+    built, closed = _track_runtimes(monkeypatch)
+    frames: list[dict] = []
+    manager = SwarmManager(write_frame=frames.append, stream_fn_factory=_slow_stream)
+    await manager.start()
+    try:
+        [task] = await manager.post("@victim work")
+        await _wait_for(lambda: _states(manager)[task.id] == "running")
+        await manager.update_role(
+            "victim",
+            {"id": "victim", "name": "Victim v2", "systemPrompt": "You are v2."},
+        )
+        assert manager.agents["victim"].pending_apply is not None
+
+        before = len(frames)
+        await manager.delete_role("victim")
+
+        assert "victim" not in manager.agents
+        assert _states(manager)[task.id] == "cancelled"
+        # Every runtime that was built got closed — no orphan left open.
+        assert set(built) == set(closed)
+        # The deleted role broadcasts no agent frame after the delete began.
+        assert not [
+            frame
+            for frame in frames[before:]
+            if frame.get("type") == "swarm_agent" and frame.get("agent") == "victim"
+        ]
+    finally:
+        await manager.close()
+
+
+async def test_pending_apply_survives_a_run():
+    _write_role("slow", "You are v1.")
+    frames: list[dict] = []
+    manager = SwarmManager(write_frame=frames.append, stream_fn_factory=_slow_stream)
+    await manager.start()
+    try:
+        [task] = await manager.post("@slow work")
+        await _wait_for(lambda: _states(manager)[task.id] == "running")
+        await manager.update_role(
+            "slow",
+            {"id": "slow", "name": "Slow v2", "systemPrompt": "You are v2."},
+        )
+        # The queued apply is advertised while the run is still in flight.
+        assert any(
+            frame.get("type") == "swarm_agent"
+            and frame.get("agent") == "slow"
+            and frame.get("pendingApply") is True
+            for frame in frames
+        )
+        assert await manager.cancel(task.id) is True
+        await _wait_for(
+            lambda: manager.agents.get("slow") is not None
+            and manager.agents["slow"].pending_apply is None
+        )
+        assert manager.agents["slow"].role.name == "Slow v2"
+        assert "You are v2." in manager.agents["slow"].agent.system_prompt
+    finally:
+        await manager.close()
+
+
+async def test_concurrent_rebuilds_serialize(monkeypatch):
+    _write_role("r", "You are v1.")
+    built, closed = _track_runtimes(monkeypatch)
+    manager = SwarmManager(stream_fn_factory=lambda role: text_stream("ok"))
+    await manager.start()
+    try:
+        await asyncio.gather(
+            manager.update_role("r", {"id": "r", "name": "R v2", "systemPrompt": "v2"}),
+            manager.update_role("r", {"id": "r", "name": "R v3", "systemPrompt": "v3"}),
+        )
+        # Serialized close+build orphans nothing: all but the current runtime closed.
+        assert set(built) == set(closed) | {manager.agents["r"].runtime}
+        assert manager.agents["r"].role.name in {"R v2", "R v3"}
+    finally:
+        await manager.close()

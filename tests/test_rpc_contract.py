@@ -203,7 +203,7 @@ def _backend_source() -> str:
     frame literal the desktop's ServerFrame union must cover."""
     pkg = Path(__file__).resolve().parents[1] / "zenagent"
     parts = [RPC_PATH]
-    for rel in ("app/swarm/manager.py", "app/zen/fleet.py"):
+    for rel in ("app/swarm/manager.py", "app/swarm/frames.py", "app/zen/fleet.py"):
         parts.append((pkg / rel).read_text())
     return "\n".join(parts)
 
