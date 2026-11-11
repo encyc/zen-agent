@@ -1,10 +1,12 @@
 # 模式感知侧边栏设计（ZEN / SWARM sidebar）
 
 日期：2026-11-11
-状态：待批准
+状态：已批准（用户确认与 fix 计划无冲突后授权并行实施）
 分支：`feat/mode-sidebars`（worktree `.worktrees/feat-mode-sidebars`，从 main `16edfbd` 出发）
 前置：zen×swarm 合并已落 main（见 `2026-11-11-zen-swarm-merge-design.md`），三态切换器
-与 fleet 后台语义均已拍板，本设计不推翻。
+与 fleet 后台语义均已拍板，本设计不推翻。本分支已并入 `fix/zen-swarm-review` 的已提交
+tip（merge `6e2f1ce`）：zen e2e 依赖其 zenMock，paused/resume 语义以其 ZenRoster 为准；
+fix 余下任务均为后端文件，与本设计零交集，继续并行。
 
 ## 意图与动因
 
@@ -23,7 +25,7 @@ TaskStrip 挤在 RoomPage 自带的右侧 aside 里——swarm 实际有两根�
 
 - coding 侧边栏原样保留（含 fleet 后台启用时名册换肤的既有行为——由 `zenStore.enabled`
   驱动，合并时已拍板）。
-- ZEN 侧边栏 = 项目下拉 + fleet 名册；fleet 停用时给显式启用入口。
+- ZEN 侧边栏 = 项目下拉 + fleet 名册；停用态复用 fix 分支的 paused/resume。
 - SWARM 侧边栏 = 项目下拉 + Roster + TaskStrip（从 RoomPage aside 原样搬移，全部
   操作随迁）；主区变纯 feed + composer + 任务详情。
 - 两个模式的项目切换语义与今天点侧边栏项目完全一致（复用 `openProject`）。
@@ -45,7 +47,7 @@ TaskStrip 挤在 RoomPage 自带的右侧 aside 里——swarm 实际有两根�
 
 ## 约束（实测）
 
-- **行数预算**：`Sidebar.tsx` 852/854，仅 2 行余量 → 必须拆分；`appStore.ts`
+- **行数预算**：`Sidebar.tsx` 853/854，仅 1 行余量 → 必须拆分；`appStore.ts`
   1175/1175 **零余量，一行不能加**；未列名文件 DEFAULT_CAP = 800
   （`scripts/check_architecture.py`）；`bridge.ts` 919/998、`e2e/harness.ts`
   27/886 均有余量，新 e2e mock 可直接加。
@@ -84,8 +86,8 @@ manifest 已消失的角色并取消其未完成任务），不适合自动触�
 按 `workspaceMode` 分发 + `<Footer />`（三模式共用）+ `data-shell-sidebar`。
 
 coding 主体（置顶区、sessions 区、项目分组、行菜单、SessionTools、SessionRow）
-**原样**迁入 `ui/SidebarCoding.tsx`（估 ~700 行 < 800）。名册换肤条件
-（`zenEnabled ? <ZenRoster /> : 独立会话列表`）留在 SidebarCoding 内不动。
+**原样**迁入 `ui/SidebarCoding.tsx`（估 ~700 行 < 800）。名册换肤条件维持 fix 分支
+契约（`zenEnabled || workspaceMode === 'zen'`），留在 SidebarCoding 内不动。
 
 分发：`coding → SidebarCoding`；`zen → ZenSidebar`；`swarm → SwarmSidebar`。
 
@@ -102,9 +104,9 @@ coding 主体（置顶区、sessions 区、项目分组、行菜单、SessionToo
 ### 3. ZenSidebar（`ui/ZenSidebar.tsx`）
 
 - ProjectSwitcher + 现有 `ZenRoster`（原样复用：router 行 + 停止钮、worker 行 →
-  WorkerDrawer，抽屉全局挂载不动）。
-- `zenStore.enabled === false`（如显式停用后仍留在 zen 模式）→ 空态 + "启用 Zen"
-  按钮，点击调 `switchWorkspaceMode('zen')`（重入即 enable，现有路径）。
+  WorkerDrawer，抽屉全局挂载不动）。zen 模式下无条件渲染 ZenRoster——停用态由
+  fix 分支的 paused 横幅 + resume 按钮承载（`data-zen-paused`/`data-zen-resume`），
+  不再另做启用空态，避免重复入口。
 - 不含会话历史/搜索/导入导出——Coding 段是会话表面，一次点击可达。
 
 ### 4. SwarmSidebar（`ui/SwarmSidebar.tsx`）与面板搬移
@@ -141,16 +143,17 @@ coding 主体（置顶区、sessions 区、项目分组、行菜单、SessionToo
 ### 6. i18n
 
 新键 zh/en 成对：`sidebar.projectSwitcher`、`sidebar.openFolder`、
-`zen.enableFleet`、ModeSwitcher 徽标 aria 文案 → `messages.ts`（sidebar.*/zen.*
-已在其中，余量充足）；swarm 面板复用现有 `swarm.*` 键（messages-swarm.ts），
-不新增。
+ModeSwitcher 徽标 aria 文案 → `messages.ts`（余量充足）；zen 停用/恢复复用 fix
+分支已加的 `zen.paused*` 键；swarm 面板复用现有 `swarm.*` 键
+（messages-swarm.ts），不新增。
 
 ### 7. 测试
 
 单元（新增/更新）：
 - Sidebar 壳分发：三模式渲染对应主体，Footer 常在。
 - ProjectSwitcher：开合、键盘导航、选择调 openProject、打开文件夹路径。
-- ZenSidebar：enabled=false 显示启用按钮，点击走 enable（mock sender）。
+- ZenSidebar：zen 模式渲染 ProjectSwitcher + ZenRoster；停用态 paused 横幅
+  可见（fix 契约，不重复造启用入口）。
 - swarmStore：selectTask toggle、loadedProject 按请求发起项目记录、过期应答
   丢弃（latest-request guard）。
 - SwarmSidebar：项目变更清空 selection/runRows 并发出 list 请求（sender seam
@@ -164,17 +167,24 @@ e2e：
   补侧边栏展开前提）；任务详情断言（`[data-swarm-main] [data-swarm-task-detail]`、
   列表内无详情）天然继续成立。
 - 新增：zen 侧边栏项目下拉切换（复用 bridge 现有 project switch mock）、
-  swarm 切项目发出 list 请求并清旧选择、zen 停用后的启用按钮、ModeSwitcher 徽标。
+  swarm 切项目发出 list 请求并清旧选择、ModeSwitcher 徽标。zen 停用/恢复路径
+  由 fix 分支 `zen.spec.ts` 覆盖，不重复。
 - `app.spec.ts` coding 侧边栏全量回归，验证壳拆分无行为变化。
 
 门禁：`scripts/check.sh`、desktop `pnpm test && pnpm build`、style tokens、
 `pnpm e2e`（或仓库现行 e2e 命令）。
 
-### 8. 后续项（不在本设计内）
+### 8. 后续项与并行协调（不在本设计内）
 
-- 用户：swarm 后端按项目化（房间数据与帧按项目归属）。
-- 后端落地时：swarmWiring 若帧带 project 标签则补过滤；SwarmSettings"房间为
-  全局"文案随改；可选消费 `resident` 给项目下拉标 fleet 点。
+- 用户：swarm 后端按项目化（`2026-11-11-project-scoped-swarm-design.md` 草案，
+  fix 落地后另开分支）。其 §7.4 推荐的"单活房间 + 切项目 resync"正是本设计的
+  load-on-switch 接缝；其桌面任务 4 扩展 swarmStore/swarmWiring 路由时，本设计
+  的 `load(project)`/`loadedProject` 契约可直接承接。
+- "从角色库复制"入口（该草案 §3.4）将随 Roster 落在 SwarmSidebar
+  （`data-swarm-new-role` 旁），实现时按新位置挂载。
+- 后端落地时：swarmWiring 按帧 project 标签路由；SwarmSettings"房间为全局"
+  文案随改；可选消费 `resident` 给项目下拉标 fleet 点。
+- fix 分支剩余任务（T12–T14，后端）与本分支并行；合流时再并一次 fix tip。
 
 ## 风险与对策
 
