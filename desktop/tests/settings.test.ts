@@ -2,10 +2,27 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   clampFontScale,
+  loadZenBackgroundRun,
   useNoticeStore,
   useNotificationStore,
   useSettingsStore,
 } from '../src/state/stores.ts'
+
+async function withStorage(body: (store: Map<string, string>) => Promise<void> | void): Promise<void> {
+  const store = new Map<string, string>()
+  const fake = {
+    getItem: (key: string) => (store.has(key) ? store.get(key)! : null),
+    setItem: (key: string, value: string) => void store.set(key, value),
+    removeItem: (key: string) => void store.delete(key),
+  }
+  const saved = (globalThis as { localStorage?: unknown }).localStorage
+  ;(globalThis as { localStorage?: unknown }).localStorage = fake
+  try {
+    await body(store)
+  } finally {
+    ;(globalThis as { localStorage?: unknown }).localStorage = saved
+  }
+}
 
 test('settings clamp the font scale', () => {
   assert.equal(clampFontScale(0.5), 0.9)
@@ -56,4 +73,13 @@ test('showing a notice records a notification', () => {
   assert.equal(useNotificationStore.getState().unread, 0)
   useNotificationStore.getState().clear()
   assert.equal(useNotificationStore.getState().items.length, 0)
+})
+
+test('zenBackgroundRun falls back to true for a foreign persisted value', async () => {
+  await withStorage((store) => {
+    store.set('zen.fleet.background', '"yes"')
+    assert.equal(loadZenBackgroundRun(), true)
+    store.set('zen.fleet.background', 'false')
+    assert.equal(loadZenBackgroundRun(), false)
+  })
 })
