@@ -76,6 +76,60 @@ test('create a role from settings', async ({ page }) => {
   await expect(page.locator('[data-swarm-agent="reviewer"]')).toBeVisible()
 })
 
+test('configure an agent from the room roster', async ({ page }) => {
+  await boot(page, initialState(swarmFixture()))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  await page.locator('[data-swarm-configure="research"]').click()
+  const modal = page.locator('[data-swarm-role-modal]')
+  await expect(modal).toBeVisible()
+  await expect(modal.locator('#agent-id')).toHaveValue('research')
+  await expect(modal.locator('#agent-skills')).toHaveValue('skills')
+  await expect(modal.locator('#agent-mcp')).toHaveValue(/echo/)
+
+  // Invalid MCP JSON stays in the editor with an error.
+  await modal.locator('#agent-mcp').fill('not json')
+  await modal.getByRole('button', { name: '保存' }).click()
+  await expect(modal.getByText('MCP 服务器需要是 JSON 对象。')).toBeVisible()
+
+  await modal.locator('#agent-plugins').fill('zen.feishu')
+  await modal.locator('#agent-mcp').fill('{"local": {"command": ["echo", "v2"]}}')
+  await modal.locator('#agent-inherit-project').check()
+  await modal.getByRole('button', { name: '保存' }).click()
+
+  await expect(modal).toHaveCount(0)
+  const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
+  const save = calls.find(
+    (call) => call.type === 'swarm' && call.op === 'roles' && call.action === 'update',
+  )
+  assert.equal(save?.roleId, 'research')
+  const manifest = save?.manifest as Record<string, unknown> | undefined
+  assert.deepEqual(manifest?.skills, ['skills'])
+  assert.deepEqual(manifest?.plugins, ['zen.feishu'])
+  assert.deepEqual(manifest?.mcpServers, { local: { command: ['echo', 'v2'] } })
+  assert.equal(manifest?.inheritProject, true)
+})
+
+test('create an agent from the room roster', async ({ page }) => {
+  await boot(page, initialState(swarmFixture()))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  await page.locator('[data-swarm-new-role]').click()
+  const modal = page.locator('[data-swarm-role-modal]')
+  await modal.locator('#agent-id').fill('reviewer')
+  await modal.locator('#agent-name').fill('Reviewer')
+  await modal.getByRole('button', { name: '保存' }).click()
+
+  await expect(modal).toHaveCount(0)
+  await expect(page.locator('[data-swarm-agent="reviewer"]')).toBeVisible()
+
+  const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
+  const save = calls.find(
+    (call) => call.type === 'swarm' && call.op === 'roles' && call.action === 'create',
+  )
+  assert.equal(save?.roleId, 'reviewer')
+})
+
 test('show role warnings above the room and reload them away', async ({ page }) => {
   await boot(
     page,

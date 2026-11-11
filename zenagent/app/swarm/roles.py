@@ -42,6 +42,12 @@ class RoleManifest:
     model: str | None = None
     thinking: str | None = None
     system_prompt: str = ""
+    # Raw manifest entries, kept for the Settings editor. `skill_roots` and
+    # `mcp_servers` are resolved (and the latter holds credentials), so the
+    # editor reads these instead and only ever echoes placeholders.
+    skills: list[str] = field(default_factory=list)
+    plugins: list[str] = field(default_factory=list)
+    mcp_manifest: dict[str, Any] = field(default_factory=dict)
     skill_roots: list[Path] = field(default_factory=list)
     mcp_servers: dict[str, dict] = field(default_factory=dict)
     tools: list[str] | None = None
@@ -86,8 +92,9 @@ def parse_role(role_dir: Path) -> tuple[RoleManifest | None, list[str]]:
         system_prompt = ""
         warnings.append(f"role {role_id}: cannot read prompt {prompt_file}: {exc}")
 
+    skill_entries = _str_list(raw.get("skills"))
     skill_roots: list[Path] = []
-    for entry in _str_list(raw.get("skills")):
+    for entry in skill_entries:
         path = role_dir / entry
         if path.is_dir():
             skill_roots.append(path)
@@ -100,7 +107,8 @@ def parse_role(role_dir: Path) -> tuple[RoleManifest | None, list[str]]:
     if raw_servers is not None and not isinstance(raw_servers, dict):
         warnings.append(f"role {role_id}: mcpServers must be an object")
         raw_servers = {}
-    for name, entry in (raw_servers or {}).items():
+    mcp_manifest = {str(name): entry for name, entry in (raw_servers or {}).items()}
+    for name, entry in mcp_manifest.items():
         missing: list[str] = []
         filled = _fill(entry, missing)
         if missing:
@@ -116,8 +124,9 @@ def parse_role(role_dir: Path) -> tuple[RoleManifest | None, list[str]]:
             continue
         mcp_servers[str(name)] = filled
 
-    plugins = _load_plugins(role_id, _str_list(raw.get("plugins")), warnings)
-    for manifest, contributions in plugins:
+    plugins = _str_list(raw.get("plugins"))
+    loaded_plugins = _load_plugins(role_id, plugins, warnings)
+    for manifest, contributions in loaded_plugins:
         skill_roots.extend(contributions.skill_roots)
         for name, entry in contributions.servers.items():
             if name in mcp_servers:
@@ -158,6 +167,9 @@ def parse_role(role_dir: Path) -> tuple[RoleManifest | None, list[str]]:
         model=str(raw["model"]) if raw.get("model") else None,
         thinking=str(raw["thinking"]) if raw.get("thinking") else None,
         system_prompt=system_prompt,
+        skills=skill_entries,
+        plugins=plugins,
+        mcp_manifest=mcp_manifest,
         skill_roots=skill_roots,
         mcp_servers=mcp_servers,
         tools=tools,

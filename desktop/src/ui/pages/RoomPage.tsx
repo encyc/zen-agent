@@ -8,6 +8,7 @@ import { useT } from '../../i18n/locale'
 import { detectMention } from '../../state/mentions'
 import { useSwarmStore } from '../../state/swarmStore'
 import { ApprovalPanel } from '../approval/ApprovalPanel'
+import { AgentModal } from './agentEditor'
 import css from './RoomPage.module.css'
 
 type TaskNumbers = ReadonlyMap<string, number>
@@ -21,6 +22,9 @@ export function RoomPage() {
   const warnings = useSwarmStore((state) => state.warnings)
   const loaded = useSwarmStore((state) => state.loaded)
   const load = useSwarmStore((state) => state.load)
+  const saveRole = useSwarmStore((state) => state.saveRole)
+  const [editing, setEditing] = useState<SwarmRole | 'new' | null>(null)
+  const [busy, setBusy] = useState(false)
   const feed = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -36,6 +40,26 @@ export function RoomPage() {
     () => new Map(tasks.map((task, index): [string, number] => [task.id, index + 1])),
     [tasks],
   )
+
+  async function save(
+    action: 'create' | 'update',
+    id: string,
+    manifest: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    setBusy(true)
+    try {
+      const answer = await saveRole(action, id, manifest)
+      if (answer.ok === true) {
+        setEditing(null)
+        await load()
+      }
+      return answer
+    } catch (cause) {
+      return { ok: false, message: cause instanceof Error ? cause.message : String(cause) }
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <div className={css.root} data-swarm-page>
@@ -71,9 +95,24 @@ export function RoomPage() {
         <Composer roles={roles} />
       </div>
       <aside className={css.side}>
-        <Roster agents={agents} numbers={numbers} />
+        <Roster
+          agents={agents}
+          roles={roles}
+          numbers={numbers}
+          busy={busy}
+          onConfigure={setEditing}
+          onCreate={() => setEditing('new')}
+        />
         <TaskStrip tasks={tasks} numbers={numbers} />
       </aside>
+      {editing !== null && (
+        <AgentModal
+          row={editing === 'new' ? null : editing}
+          busy={busy}
+          onClose={() => setEditing(null)}
+          onSave={save}
+        />
+      )}
     </div>
   )
 }
@@ -237,7 +276,21 @@ function Composer({ roles }: { roles: SwarmRole[] }) {
   )
 }
 
-function Roster({ agents, numbers }: { agents: SwarmAgentState[]; numbers: TaskNumbers }) {
+function Roster({
+  agents,
+  roles,
+  numbers,
+  busy,
+  onConfigure,
+  onCreate,
+}: {
+  agents: SwarmAgentState[]
+  roles: SwarmRole[]
+  numbers: TaskNumbers
+  busy: boolean
+  onConfigure(role: SwarmRole): void
+  onCreate(): void
+}) {
   const t = useT()
   const reset = useSwarmStore((state) => state.reset)
   const reload = useSwarmStore((state) => state.reload)
@@ -245,14 +298,25 @@ function Roster({ agents, numbers }: { agents: SwarmAgentState[]; numbers: TaskN
     <section className={css.block}>
       <div className={css.blockHead}>
         <h2 className={css.title}>{t('swarm.agents')}</h2>
-        <button
-          type="button"
-          className={css.ghost}
-          data-swarm-reload
-          onClick={() => void reload()}
-        >
-          {t('swarm.reload')}
-        </button>
+        <div className={css.rosterActions}>
+          <button
+            type="button"
+            className={css.ghost}
+            data-swarm-new-role
+            disabled={busy}
+            onClick={onCreate}
+          >
+            {t('swarm.roleNew')}
+          </button>
+          <button
+            type="button"
+            className={css.ghost}
+            data-swarm-reload
+            onClick={() => void reload()}
+          >
+            {t('swarm.reload')}
+          </button>
+        </div>
       </div>
       {agents.length === 0 ? (
         <p className={css.blockEmpty}>{t('swarm.noAgents')}</p>
@@ -260,6 +324,7 @@ function Roster({ agents, numbers }: { agents: SwarmAgentState[]; numbers: TaskN
         <ul className={css.rows} data-swarm-roster>
           {agents.map((agent) => {
             const number = agent.task === null ? undefined : numbers.get(agent.task)
+            const role = roles.find((entry) => entry.id === agent.agent)
             return (
               <li
                 key={agent.agent}
@@ -276,15 +341,28 @@ function Roster({ agents, numbers }: { agents: SwarmAgentState[]; numbers: TaskN
                   </span>
                 </div>
                 {agent.pendingApply && <span className={css.badge}>{t('swarm.pendingApply')}</span>}
-                <button
-                  type="button"
-                  className={css.ghost}
-                  data-swarm-reset
-                  disabled={agent.state === 'running'}
-                  onClick={() => void reset(agent.agent)}
-                >
-                  {t('swarm.reset')}
-                </button>
+                <div className={css.rowActions}>
+                  <button
+                    type="button"
+                    className={css.ghost}
+                    data-swarm-configure={agent.agent}
+                    disabled={busy || role === undefined}
+                    onClick={() => {
+                      if (role !== undefined) onConfigure(role)
+                    }}
+                  >
+                    {t('swarm.roleConfigure')}
+                  </button>
+                  <button
+                    type="button"
+                    className={css.ghost}
+                    data-swarm-reset
+                    disabled={agent.state === 'running'}
+                    onClick={() => void reset(agent.agent)}
+                  >
+                    {t('swarm.reset')}
+                  </button>
+                </div>
               </li>
             )
           })}

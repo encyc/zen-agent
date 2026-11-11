@@ -11,6 +11,10 @@ export interface SwarmRole {
   model: string | null
   thinking: string | null
   systemPrompt: string
+  skills: string[]
+  plugins: string[]
+  /** Raw manifest entries: `${KEY}` placeholders, never resolved values. */
+  mcpServers: Record<string, unknown>
   mode: string
   root: string
   tools: string[] | null

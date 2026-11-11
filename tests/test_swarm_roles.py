@@ -9,7 +9,7 @@ from zenagent.app.swarm.roles import (
     parse_role,
     workspaces_root,
 )
-from zenagent.app.swarm.roster import role_view, write_role
+from zenagent.app.swarm.roster import role_signature, role_view, write_role
 
 
 @pytest.fixture
@@ -139,6 +139,83 @@ def test_role_view_carries_the_persona_for_editing(home):
 
     assert role is not None
     assert role_view(role)["systemPrompt"] == "You are a role."
+
+
+def test_role_view_carries_raw_manifest_entries_for_editing(home, monkeypatch):
+    monkeypatch.setenv("SWARM_TEST_APP_ID", "secret-app-id")
+    role_dir = _write_role(
+        "research",
+        _manifest(
+            skills=["skills", "extra"],
+            plugins=["zen.feishu"],
+            inheritProject=True,
+            mcpServers={
+                "feishu": {
+                    "command": ["npx", "lark"],
+                    "env": {"APP_ID": "${SWARM_TEST_APP_ID}"},
+                }
+            },
+        ),
+    )
+    role, _ = parse_role(role_dir)
+
+    assert role is not None
+    assert role.mcp_servers["feishu"]["env"]["APP_ID"] == "secret-app-id"
+    view = role_view(role)
+    assert view["skills"] == ["skills", "extra"]
+    assert view["plugins"] == ["zen.feishu"]
+    assert view["inheritProject"] is True
+    # The editor round-trips the manifest, so it sees placeholders, not secrets.
+    assert view["mcpServers"]["feishu"]["env"]["APP_ID"] == "${SWARM_TEST_APP_ID}"
+
+
+def test_write_role_round_trips_the_full_config_surface(home):
+    _write_role("research", _manifest())
+
+    write_role(
+        "research",
+        {
+            "schemaVersion": 1,
+            "name": "Research",
+            "mode": "ask",
+            "systemPrompt": "You research.",
+            "skills": ["skills"],
+            "plugins": [],
+            "inheritProject": True,
+            "mcpServers": {"local": {"command": ["echo"]}},
+        },
+    )
+
+    role, _ = parse_role(agents_root() / "research")
+    assert role is not None
+    view = role_view(role)
+    assert view["skills"] == ["skills"]
+    assert view["plugins"] == []
+    assert view["mcpServers"] == {"local": {"command": ["echo"]}}
+    assert view["inheritProject"] is True
+
+
+def test_role_signature_tracks_mcp_values_and_plugins(home):
+    role_dir = _write_role(
+        "research",
+        _manifest(mcpServers={"local": {"command": ["echo", "a"]}}),
+    )
+    first, _ = parse_role(role_dir)
+    assert first is not None
+
+    (role_dir / "manifest.json").write_text(
+        json.dumps(
+            _manifest(
+                plugins=["zen.feishu"],
+                mcpServers={"local": {"command": ["echo", "b"]}},
+            )
+        ),
+        encoding="utf-8",
+    )
+    second, _ = parse_role(role_dir)
+    assert second is not None
+
+    assert role_signature(first) != role_signature(second)
 
 
 def test_role_config_beats_plugin_contribution(home, tmp_path):

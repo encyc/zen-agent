@@ -68,9 +68,12 @@ Swarm 不接入 IM，也不常驻后台守护进程：房间和任务的真相�
 
 角色 session 落在 `~/.zenagent/swarm/agents/<id>/sessions/`，**不进**普通项目会话列表。
 
-桌面端在 **Settings → Agents** 管理角色：列表带 ready / needs-credentials 徽标，
-抽屉里新建/编辑（id 校验、prompt、模型、思考档位、工具、root、mode、轮数/成本上限），
-删除为两段式确认。手工编辑上面的文件与 GUI 管理完全等价。
+桌面端有两个入口配置角色：**Settings → Agents**（列表带 ready / needs-credentials 徽标、
+两段式删除）和 **Swarm 房间右侧的角色面板**——每个角色旁的「配置」与面板头的
+「新建角色」打开同一个完整表单：id、人设、模型/思考、skills、plugins、MCP 服务器、
+工具白名单、root、inheritProject、mode、轮数/成本上限。MCP 编辑框回显 manifest 里的
+`${KEY}` 占位符，解析后的凭据不会回传给界面；JSON 不合法时停留在表单并提示。
+手工编辑上面的文件与 GUI 管理完全等价。
 
 ## 房间协议
 

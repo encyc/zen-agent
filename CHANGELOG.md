@@ -52,10 +52,17 @@ the other branch.
   pills and system notes; `@` autocomplete in the composer; right-side roster,
   task strip with cancel/retry, and the shared approval panel above the composer.
   Role build problems are listed above the feed, and the roster's **Reload
-  agents** action re-reads manifests at any time.
+  agents** action re-reads manifests at any time. Each roster row's **Configure**
+  action and the roster header's **New agent** open the full role editor in a
+  modal, so agents are managed where they run.
+- **Role editor** (`agentEditor.tsx`, shared by the room and Settings): the
+  complete manifest surface — validated id, persona, model/thinking, skills,
+  plugins, MCP servers as validated JSON, tool allowlist, root, `inheritProject`,
+  mode and turn/cost limits. MCP entries round-trip the manifest's `${KEY}`
+  placeholders; resolved credentials never reach the desktop.
 - **Settings → Agents** (`AgentSettings.tsx`): role list with
-  ready / needs-credentials badges, a create/edit drawer (validated id, prompt,
-  model, thinking, tools, root, mode, turn/cost limits) and two-step delete.
+  ready / needs-credentials badges, the same create/edit editor and two-step
+  delete.
 
 ### Security
 

@@ -220,6 +220,19 @@
   gap: 8px;
 }
 
+.rosterActions {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+
+.rowActions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
 .warnings {
   display: flex;
   flex-direction: column;

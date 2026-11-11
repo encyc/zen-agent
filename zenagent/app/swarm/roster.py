@@ -9,6 +9,7 @@ names of missing credentials, never their values.
 from __future__ import annotations
 
 import contextlib
+import copy
 import json
 import re
 import shutil
@@ -74,6 +75,14 @@ def role_signature(role: RoleManifest) -> tuple:
         role.model,
         role.thinking,
         role.system_prompt,
+        tuple(role.skills),
+        tuple(role.plugins),
+        # Resolved servers flatten credentials, so compare the raw manifest
+        # entries too: editing a command or env must rebuild the runtime.
+        tuple(
+            (name, json.dumps(entry, sort_keys=True, default=str))
+            for name, entry in sorted(role.mcp_manifest.items())
+        ),
         tuple(str(path) for path in role.skill_roots),
         tuple(sorted(role.mcp_servers)),
         tuple(role.tools or ()),
@@ -93,6 +102,9 @@ def role_view(role: RoleManifest) -> dict:
         "model": role.model,
         "thinking": role.thinking,
         "systemPrompt": role.system_prompt,
+        "skills": list(role.skills),
+        "plugins": list(role.plugins),
+        "mcpServers": copy.deepcopy(role.mcp_manifest),
         "mode": role.mode,
         "root": str(role.root),
         "tools": list(role.tools) if role.tools is not None else None,

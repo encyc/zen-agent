@@ -257,6 +257,53 @@
   resize: vertical;
 }
 
+.code {
+  font-family: var(--ds-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--ds-font-11-5);
+}
+
+.checkRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--ds-font-12-5);
+  cursor: pointer;
+}
+
+.checkRow input {
+  accent-color: var(--dsw-alias-label-primary);
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 8vh 16px 16px;
+  background: var(--dsw-alias-bg-mask-1);
+}
+
+.modal {
+  width: 620px;
+  max-width: 100%;
+  max-height: 84vh;
+  overflow-y: auto;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--ds-radius-14);
+  background: var(--dsw-specific-menu);
+  box-shadow: var(--dsw-elevation-prominent);
+}
+
+.modal .drawer {
+  border-radius: 0;
+  padding: 16px;
+  background: transparent;
+}
+
 .modeRow {
   display: flex;
   gap: 4px;

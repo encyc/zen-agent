@@ -34,6 +34,9 @@ const ROLES: SwarmRole[] = [
     model: 'deepseek-chat',
     thinking: 'medium',
     systemPrompt: 'You research.',
+    skills: ['skills'],
+    plugins: [],
+    mcpServers: { local: { command: ['echo', 'research'] } },
     mode: 'ask',
     root: '/Users/e2e/.zenagent-workspaces/research',
     tools: null,
@@ -49,6 +52,9 @@ const ROLES: SwarmRole[] = [
     model: 'deepseek-chat',
     thinking: 'medium',
     systemPrompt: 'You build.',
+    skills: [],
+    plugins: [],
+    mcpServers: {},
     mode: 'ask',
     root: '/Users/e2e/.zenagent-workspaces/builder',
     tools: null,
@@ -200,6 +206,13 @@ function roleView(rows: Room, id: string, manifest: Record<string, unknown>): Sw
   const prior = rows.swarmRoles.find((role) => role.id === id)
   const limits = (manifest.limits ?? {}) as Record<string, unknown>
   const tools = Array.isArray(manifest.tools) ? manifest.tools.map(String) : null
+  const rawServers = manifest.mcpServers
+  const mcpServers =
+    rawServers === null
+      ? {}
+      : typeof rawServers === 'object' && !Array.isArray(rawServers)
+        ? (rawServers as Record<string, unknown>)
+        : (prior?.mcpServers ?? {})
   return {
     id,
     name: String(manifest.name ?? prior?.name ?? id),
@@ -207,6 +220,9 @@ function roleView(rows: Room, id: string, manifest: Record<string, unknown>): Sw
     model: typeof manifest.model === 'string' ? manifest.model : (prior?.model ?? null),
     thinking: typeof manifest.thinking === 'string' ? manifest.thinking : (prior?.thinking ?? null),
     systemPrompt: typeof manifest.systemPrompt === 'string' ? manifest.systemPrompt : (prior?.systemPrompt ?? ''),
+    skills: Array.isArray(manifest.skills) ? manifest.skills.map(String) : (prior?.skills ?? []),
+    plugins: Array.isArray(manifest.plugins) ? manifest.plugins.map(String) : (prior?.plugins ?? []),
+    mcpServers,
     mode: String(manifest.mode ?? 'ask'),
     root: String(manifest.root ?? `/Users/e2e/.zenagent-workspaces/${id}`),
     tools,
