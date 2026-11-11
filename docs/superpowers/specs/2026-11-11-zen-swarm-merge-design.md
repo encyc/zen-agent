@@ -66,8 +66,10 @@ main。备选：直接在 main 上合并（省一步但无验证缓冲，弃）�
 在新 key 缺失时读旧 key（值 'zen' → 'zen'，其他 → 'coding'），读到即写新 key。
 备选：双开关并存（两状态打架，弃）；zenMode 收编 swarm（三态退化二态，弃）。
 
-**跨模式 fleet 语义** —— 后台继续跑（用户选）：模式切换只影响 UI，不触发
-disable；代价是必须有显式关闭入口（见设计 §2）。备选：离开即停（用户否）。
+**跨模式 fleet 语义** —— 用户可配置，默认后台继续跑（用户定）：Settings→Zen
+提供开关 `zen.fleet.background`（默认 **true** = 离开 zen 只切 UI 不停
+worker）；切到 false 即回到"离开即停"。显式停止入口（名册 router 行按钮）
+在两种取值下都存在。备选：硬编码后台（用户改为可配置）；硬编码即停（否）。
 
 **合并输入** —— 执行时分支 tip（用户确认：swarm 后续增量小、不影响架构
 方向，不阻塞计划）。执行开始时快照当时 SHA 并锁定，中途分支再动不追；
@@ -117,6 +119,23 @@ b17b307+，e2e 已 6→7 例，均属小增量）。备选：钉死调研 SHA（
   点击调 `stopFleet`。后台运行可见性（ModeSwitcher zen 段活动点）记为可选
   打磨，不阻塞。
 
+### 2b. Settings 页新增 Zen / Swarm 区域
+
+- Settings 导航新增两个 tab（`zen`、`swarm`，排在 agents 附近）。
+- **ZenSettings**（`ui/pages/ZenSettings.tsx`）：一个开关绑定
+  `SettingsState.zenBackgroundRun`（persist `zen.fleet.background`，默认
+  true，非法存量值回落 true）——开=允许后台继续，关=离开 zen 即停；附一句
+  "显式停止始终可用"。开关只影响**下次离开 zen 的迁移**（`onZenModeLeft`）：
+  运行中改开关不立即启停 fleet。
+- **SwarmSettings**（`ui/pages/SwarmSettings.tsx`）：v1 是说明卡（房间为
+  全局、跨项目常驻；数据落在 `~/.zenagent/swarm/`）+ "管理 Agents" 按钮
+  跳转 agents tab（`onNavigate` prop 由 SettingsPage 注入）。并发上限等
+  swarm 专属设置需要后端配置面，留给公共抽象阶段。
+- 离开迁移逻辑收敛在 `zenActions.onZenModeLeft(get)`：
+  `zenBackgroundRun === false` 时执行 `stopFleet`（含跟随恢复 session），
+  否则不发任何 RPC；`appStore.switchWorkspaceMode` 在 `prev === 'zen' &&
+  mode !== 'zen'` 时调用它。
+
 ### 3. 后端
 
 **零行为改动。** 合并即得：`server.py` 分发 `zen_fleet`（slot 层），
@@ -146,7 +165,10 @@ slot.close 内关），顺序安全。
   enable / 离开发 nothing）、`stopFleet` disable 流、`syncZenState` 改读
   workspaceMode。
 - `desktop/tests/workspaceMode.test.ts`：加迁移用例
-  （无新 key + 旧 key `'zen'` → workspaceMode 'zen' 且写回新 key）。
+  （无新 key + 旧 key `'zen'` → workspaceMode 'zen' 且写回新 key）与
+  `zenBackgroundRun` 默认值/persist 用例。
+- `desktop/tests/zenActions.test.ts` 加 `onZenModeLeft`：关开关 → 发
+  disable 并跟随恢复 session；开开关 → 零请求；运行中改开关不影响当次状态。
 - `tests/test_rpc_contract.py`：预期无需改（swarm 未触碰该文件，合并直接取
   zen 的 v3 断言；kind 并集后 py==ts 自然成立——grep 同时覆盖 server.py 的
   `zen_fleet` 与 host.py 的 `swarm`）。若 fail 再按实情补。
@@ -167,7 +189,9 @@ slot.close 内关），顺序安全。
   画法，规模从简：swarm 包 → host/roles/room 三四节点）。
 - `docs/README.md`（swarm 改过）核对 zen 指南链接在列。
 - 两份 guide（zen-mode.md / swarm.md）互相各加一句"另一种多 agent 形态"
-  的指引（各一行，不展开）。
+  的指引（各一行，不展开）；zen-mode.md 说明离开行为开关的位置与默认值。
+- CHANGELOG 合并说明补一句：zen 离开行为从"toggle 即停"改为"默认后台继续
+  + Settings 可配回即停"（对老用户是行为变化，需显式告知）。
 
 ## 风险与对策
 
