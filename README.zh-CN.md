@@ -12,7 +12,7 @@
 
 仓库 <https://github.com/encyc/zen-agent> · PyPI 包名 `zenagent-py`（import 名 `zenagent`）
 
-![ZenAgent 桌面端：带工具卡和内联 diff 的编码会话](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-chat.png)
+![ZenAgent 桌面端 Coding 模式：带工具行与内联 diff 的会话](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-chat.png)
 
 ## 安装
 
@@ -96,12 +96,19 @@ TUI 每小时最多查一次 PyPI，有新版本时安静打一行；`-p`/`--jso
 
 ### 桌面端
 
-同一个内核，套一层 Tauri 外壳：流式工具卡、内联 diff、审查与文件工作面板，
-还有一个负责新版本提示的通知铃。diff 和文件留在对话旁边，新版本落在铃里，
-而不是输入框上方的一条横幅。
+同一个内核，套一层 Tauri 外壳：流式工具卡、内联 diff，以及审查与文件工作面板。
+diff 和文件留在对话旁边。
+
+会话列表上方的切换器决定一个项目怎么跑 —— 本页顶端那张是 **Coding**：
+
+- **Coding**：一个会话、一个 agent。你直接和它对话，它读、改、跑；工作面板把 diff 和文件留在对话旁边。
+- **Zen**：每个项目一个 Router 会话。Router 把任务派给后台 worker 会话，每个 worker 有自己的焦点和状态；它们的报告会唤醒 Router，汇总回同一个对话。
+- **Swarm**：每个项目一个房间、每个角色一个成员。你和角色在同一个信息流里发言：`@角色` 派活，报告作为消息回到房间，任务索引保留整条链。
+
+![Zen 模式：Router 会话与侧栏里的 worker 名册](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-zen.png)
+![Swarm 模式：项目房间里的角色、任务索引与回报](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-swarm.png)
 
 ![审查面板与内联 diff](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-review.png)
-![侧栏通知里的更新提示](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-notifications.png)
 
 ## 参与贡献
 

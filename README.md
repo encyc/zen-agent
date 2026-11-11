@@ -12,7 +12,7 @@ runs commands, searches the web, delegates to read-only subagents and keeps a
 project todo list — from a terminal, a headless one-shot, or your own program.
 Repo <https://github.com/encyc/zen-agent> · PyPI `zenagent-py` (imports as `zenagent`)
 
-![ZenAgent desktop: a coding session with tool cards and an inline diff](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-chat.png)
+![ZenAgent desktop in Coding mode: a session with tool rows and an inline diff](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-chat.png)
 
 ## Install
 
@@ -92,13 +92,25 @@ in an evening, embed in an afternoon, and change without permission.
 
 ### Desktop
 
-The same kernel behind a Tauri shell: streaming tool cards, inline diffs, a
-review and files work panel, and a notification bell that carries release
-offers. Diffs and files stay beside the conversation; a waiting release lands
-in the bell instead of a strip above the composer.
+The same kernel behind a Tauri shell: streaming tool cards, inline diffs, and a
+review and files work panel. Diffs and files stay beside the conversation.
+
+The switcher above the session list decides how a project is run — the shot at
+the top of this page is **Coding**:
+
+- **Coding** — one session, one agent. You talk to it directly; it reads, edits
+  and runs, and the work panel keeps diffs and files beside the conversation.
+- **Zen** — one router session per project. The router dispatches to background
+  worker sessions, each with a focus and a status; their reports wake the
+  router, which folds them into a single conversation.
+- **Swarm** — one room per project, one member per role. You and the roles post
+  into the same feed: `@role` hands out a task, the report returns as a
+  message, and the task index keeps the chain.
+
+![Zen mode: a router session with the worker roster in the sidebar](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-zen.png)
+![Swarm mode: a project room with role agents, a task index and reports](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-swarm.png)
 
 ![Review panel with an inline diff](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-review.png)
-![Update offer in the sidebar notifications](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-notifications.png)
 
 ## Contributing
 
