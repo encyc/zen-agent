@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import { useLocale, useT } from '../../i18n/locale'
 import type { SwarmRole } from '../../rpc/types'
+import { useAppStore } from '../../state/appStore'
 import { useSwarmStore } from '../../state/swarmStore'
 import { AgentEditor, roleNotice } from './agentEditor'
 import css from './AgentSettings.module.css'
@@ -72,6 +73,7 @@ function RoleRow(props: {
 export function AgentSettings() {
   const t = useT()
   const locale = useLocale()
+  const project = useAppStore((state) => state.project)
   const roles = useSwarmStore((state) => state.roles)
   const load = useSwarmStore((state) => state.load)
   const saveRole = useSwarmStore((state) => state.saveRole)
@@ -82,8 +84,8 @@ export function AgentSettings() {
   const busy = pending !== null
 
   useEffect(() => {
-    void load()
-  }, [load])
+    void load(project)
+  }, [load, project])
 
   async function save(
     action: 'create' | 'update',
@@ -96,7 +98,7 @@ export function AgentSettings() {
       const answer = await saveRole(action, id, manifest)
       if (answer.ok === true) {
         setEditing(null)
-        await load()
+        await load(project)
       }
       return answer
     } catch (cause) {
@@ -113,7 +115,7 @@ export function AgentSettings() {
     setArmed(null)
     try {
       const answer = await saveRole('delete', id)
-      if (answer.ok === true) await load()
+      if (answer.ok === true) await load(project)
       else setError(roleNotice(answer, locale, t('swarm.roleSaveFailed', { message: '' })))
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))

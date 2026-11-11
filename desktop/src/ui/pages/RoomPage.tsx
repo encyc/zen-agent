@@ -10,6 +10,7 @@ import type {
   SwarmTask,
 } from '../../rpc/types'
 import { useT } from '../../i18n/locale'
+import { useAppStore } from '../../state/appStore'
 import { detectMention } from '../../state/mentions'
 import { nodesFromViews, type ChatNode } from '../../state/chatStore'
 import type { RunView } from '../../state/swarmRun'
@@ -30,6 +31,7 @@ const NO_ROWS: RunView[] = []
 
 export function RoomPage() {
   const t = useT()
+  const project = useAppStore((state) => state.project)
   const messages = useSwarmStore((state) => state.messages)
   const tasks = useSwarmStore((state) => state.tasks)
   const agents = useSwarmStore((state) => state.agents)
@@ -44,8 +46,8 @@ export function RoomPage() {
   const feed = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (!loaded) void load()
-  }, [loaded, load])
+    if (!loaded) void load(project)
+  }, [loaded, load, project])
 
   useEffect(() => {
     const node = feed.current
@@ -68,7 +70,7 @@ export function RoomPage() {
       const answer = await saveRole(action, id, manifest)
       if (answer.ok === true) {
         setEditing(null)
-        await load()
+        await load(project)
       }
       return answer
     } catch (cause) {
