@@ -2,9 +2,10 @@
  *
  * Swarm frames carry the project they belong to; `appStore.handleFrame`
  * applies them only after its project filter, so the store always shows the
- * active room. The store never imports `appStore`: that module's entry drags
- * the whole shell graph and cannot load under `node --test`, so `appStore`
- * registers the sender instead.
+ * active room. A `list` request names the project it was issued for and the
+ * latest-request guard keeps a stale A→B answer from landing as B. The store
+ * never imports `appStore`: that module's entry drags the whole shell graph
+ * and cannot load under `node --test`, so `appStore` registers the sender.
  */
 
 import { create } from 'zustand'
@@ -29,6 +30,9 @@ export interface SwarmSender {
 
 let sender: SwarmSender | null = null
 
+/** Only the newest `list` request may land; a stale answer is dropped. */
+let loadSeq = 0
+
 /** Test seam, and the app's wiring point (see the end of `appStore`). */
 export function _useSwarmSender(next: SwarmSender): void {
   sender = next
@@ -44,6 +48,22 @@ function send(request: Record<string, unknown>): Promise<Record<string, unknown>
 /** Notification text a frame should surface, or null when it is room traffic. */
 export function swarmNoticeText(frame: ServerFrame): string | null {
   return frame.type === 'swarm_notice' && frame.text !== '' ? frame.text : null
+}
+
+/** What a mounted room should do: first load, stay, or switch projects. */
+export function swarmLoadPlan(
+  loaded: boolean,
+  loadedProject: string | null,
+  project: string | null,
+): 'none' | 'load' | 'switch' {
+  if (!loaded) return 'load'
+  return loadedProject === project ? 'none' : 'switch'
+}
+
+/** Live tasks for the mode badge; an unloaded room claims nothing. */
+export function swarmActiveCount(loaded: boolean, tasks: SwarmTask[]): number {
+  if (!loaded) return 0
+  return tasks.filter((task) => task.state === 'running' || task.state === 'queued').length
 }
 
 function replaceBy<T>(rows: T[], row: T, key: (value: T) => string): T[] {
@@ -62,8 +82,12 @@ interface SwarmState {
   warnings: string[]
   /** True once a `list` snapshot landed. */
   loaded: boolean
+  /** The project the last successful `list` was requested for. */
+  loadedProject: string | null
+  /** The task whose detail panel is open; null when none. */
+  selectedTask: string | null
   post(text: string): Promise<void>
-  load(): Promise<void>
+  load(project: string | null): Promise<void>
   reload(): Promise<void>
   cancel(id: string): Promise<void>
   retry(id: string): Promise<void>
@@ -84,6 +108,10 @@ interface SwarmState {
   copyRole(id: string): Promise<{ ok: boolean; message?: string }>
   /** Live rows of a running task's detail (taskId → views). */
   runRows: Record<string, RunView[]>
+  /** Open/close a task detail (same id toggles it off). */
+  selectTask(id: string): void
+  /** Drop the selection and live rows when leaving a room; keep room data. */
+  clearRoomUi(): void
   /** Drop a task's live rows (the settled transcript is authoritative). */
   clearRun(taskId: string): void
   applyFrame(frame: ServerFrame): void
@@ -96,7 +124,17 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
   roles: [],
   warnings: [],
   loaded: false,
+  loadedProject: null,
+  selectedTask: null,
   runRows: {},
+
+  selectTask(id) {
+    set((state) => ({ selectedTask: state.selectedTask === id ? null : id }))
+  },
+
+  clearRoomUi() {
+    set({ selectedTask: null, runRows: {} })
+  },
 
   clearRun(taskId) {
     set((state) => {
@@ -151,11 +189,17 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
     await send({ type: 'swarm', op: 'post', text })
   },
 
-  async load() {
+  async load(project) {
+    const token = ++loadSeq
+    // client.send injects its current project over this field; naming the
+    // request's project too keeps the guard honest when the answer arrives
+    // after a switch (A→B): A's snapshot is dropped, not labelled B.
     const answer = (await send({
       type: 'swarm',
       op: 'list',
+      ...(project !== null ? { project } : {}),
     })) as unknown as SwarmListResult
+    if (token !== loadSeq) return
     if (answer.ok !== true) return
     set({
       roles: answer.roles,
@@ -164,6 +208,7 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
       messages: answer.messages,
       warnings: answer.warnings,
       loaded: true,
+      loadedProject: project,
     })
   },
 
@@ -193,6 +238,8 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
       warnings: [],
       runRows: {},
       loaded: false,
+      loadedProject: null,
+      selectedTask: null,
     })
   },
 
@@ -248,7 +295,7 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
         message: typeof answer.message === 'string' ? answer.message : undefined,
       }
     }
-    await get().load()
+    await get().load(get().loadedProject)
     return { ok: true }
   },
 }))

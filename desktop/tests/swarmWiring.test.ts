@@ -190,12 +190,13 @@ test('syncSwarmState resets stale rows and reloads the active room', async () =>
       }
     },
   })
-  await syncSwarmState()
-  assert.deepEqual(sent, [{ type: 'swarm', op: 'list' }])
+  await syncSwarmState('/p/a')
+  assert.deepEqual(sent, [{ type: 'swarm', op: 'list', project: '/p/a' }])
   const state = useSwarmStore.getState()
   assert.deepEqual(state.messages.map((message) => message.id), ['m2'])
   assert.deepEqual(state.runRows, {})
   assert.equal(state.loaded, true)
+  assert.equal(state.loadedProject, '/p/a')
 })
 
 test('syncSwarmState is a no-op outside swarm mode', async () => {

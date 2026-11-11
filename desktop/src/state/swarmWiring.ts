@@ -39,10 +39,9 @@ export function applySwarmFrame(
 }
 
 /** Re-point the room store at the active project: clear the room it is
- * leaving, then load the active project's snapshot (the client stamps the
- * request with its project). A no-op outside swarm mode. */
-export async function syncSwarmState(): Promise<void> {
+ * leaving, then load that project's snapshot. A no-op outside swarm mode. */
+export async function syncSwarmState(project: string | null = null): Promise<void> {
   if (useSettingsStore.getState().workspaceMode !== 'swarm') return
   useSwarmStore.getState().reset()
-  await useSwarmStore.getState().load()
+  await useSwarmStore.getState().load(project)
 }

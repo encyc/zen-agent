@@ -82,9 +82,9 @@ manifest（`root` 指向库工作区、`inheritProject: false`），复制时会
 **不进**普通项目会话列表。
 
 桌面端有两个角色入口，管理的是**当前项目**的角色：**Settings → 角色**（列表带
-ready / needs-credentials 徽标、两段式删除，与房间共用同一个编辑器）和 **Swarm 房间
-右侧的角色面板**。**Settings → Swarm** 是集中入口：「从角色库复制」打开房间里的同一个
-选择器，并可跳到「角色」页。房间里的「配置」与「新建角色」打开完整表单：id、人设、
+ready / needs-credentials 徽标、两段式删除，与侧边栏共用同一个编辑器）和 **Swarm 模式
+左侧边栏的角色面板**（「新建角色」旁即「从角色库复制」）。**Settings → Swarm** 是集中
+入口：打开同一个库选择器，并可跳到「角色」页。侧边栏的「配置」与「新建角色」打开完整表单：id、人设、
 模型/思考、skills、plugins、MCP 服务器、工具白名单、root、inheritProject、mode、
 轮数/成本上限。MCP 编辑框回显 manifest 里的 `${KEY}` 占位符，解析后的凭据不会回传给
 界面；JSON 不合法时停留在表单并提示。项目角色手工编辑上面的文件与 GUI 管理完全等价；
@@ -115,9 +115,9 @@ ready / needs-credentials 徽标、两段式删除，与房间共用同一个编
 
 链的可追溯性由 `sourceMessageId` + 消息里的 mentions 派生：任务由哪条消息产生、
 产出哪条结果都能从日志还原。`chainId` 在链的第一跳生成，后续继承；`chainCost`
-是该链累计花费。点击房间右侧任务列表的任意一行，会在**中间对话栏**打开该任务的
+是该链累计花费。点击 Swarm 侧边栏任务列表的任意一行，会在**中间对话栏**打开该任务的
 卡片（房间消息流让位，收起卡片后恢复）：任务 ID、创建者、链深与链上花费、来源消息、
-失败/取消原因以及重试来源；右侧该行高亮，列表本身保持紧凑，再点一次或点「收起」关闭。
+失败/取消原因以及重试来源；侧边栏该行高亮，列表本身保持紧凑，再点一次或点「收起」关闭。
 每次状态转换（含 `done` / `failed` / `cancelled`）都会以 `swarm_task` 帧实时推到界面。
 
 卡片里的**执行过程**与 coding 用同一套 `nodesFromViews` 与工具卡/助手消息组件渲染
@@ -195,4 +195,4 @@ ready / needs-credentials 徽标、两段式删除，与房间共用同一个编
 | 角色运行时装配、调度、审批、生命周期 | `zenagent/app/swarm/manager.py` |
 | 角色文件写回 / 删除 | `zenagent/app/swarm/roster.py` |
 | RPC 请求族 | `zenagent/cli/rpc/ops_swarm.py` |
-| 桌面房间与角色管理 | `desktop/src/ui/pages/RoomPage.tsx`、`AgentSettings.tsx` |
+| 桌面房间与角色管理 | `desktop/src/ui/pages/RoomPage.tsx`、`desktop/src/ui/SwarmSidebar.tsx`、`AgentSettings.tsx` |

@@ -186,6 +186,38 @@ each result back into the router conversation.
   `legacy global room archived at ~/.zenagent/swarm/; new rooms are per project`；
   已有消息的项目房间不再提示。
 
+### 模式感知侧边栏（Mode-aware sidebars）
+
+**Mode-aware sidebars.** 侧边栏按 `workspaceMode` 三态分发：coding 保留原会话/
+项目栏（`SidebarCoding`），zen 与 swarm 各自换成「紧凑项目下拉 + 模式内容」。
+项目下拉（`ProjectSwitcher`）为 zen/swarm 共享，复用既有 `openProject` 切换与
+`pickProjectFolder` 打开文件夹，键盘可达（ArrowUp/Down/Enter/Esc）。swarm 的
+名册与任务索引从房间右栏搬入侧边栏，房间页改为单列（只留消息流/任务详情/输入框）。
+`swarmStore.load(project)` 按请求项目加载并记录 `loadedProject`（latest-request
+令牌丢弃过期应答），与按项目隔离的后端房间（见上）对齐：切项目只重放目标项目的房间。
+ModeSwitcher 增加跨模式活动指示：zen fleet 运行时的圆点、swarm 进行中任务计数
+徽标（只读 store，不预载房间）。
+
+#### Added
+
+- **Desktop** `ProjectSwitcher` / `ZenSidebar` / `SwarmSidebar` / `SwarmRoster` /
+  `SwarmTasks`（+ `SwarmPanels.module.css`）：zen/swarm 侧边栏与搬移后的面板。
+- **Desktop** `swarmStore`：`load(project)`、`loadedProject`、`selectedTask` /
+  `selectTask`、`clearRoomUi`，纯函数 `swarmLoadPlan` / `swarmActiveCount`。
+- **Desktop** ModeSwitcher 活动指示（`data-zen-active` 圆点 / `data-swarm-badge`
+  计数）与 `workspace.zenActive` / `workspace.swarmActive` 文案（zh/en）。
+- **Test** e2e：zen 项目切换/打开文件夹、swarm 切项目重列并关旧详情、存角色保留
+  打开的详情、两枚活动指示；`playwright.config.ts` 端口可配（`ZEN_E2E_PORT`），
+  并行 worktree 各跑各的 dev server，不再误复用兄弟检出的服务。
+
+#### Changed
+
+- **Desktop** `Sidebar` 拆壳：coding 主体原样迁出至 `SidebarCoding`，壳只留
+  header / ModeSwitcher / 分发 / footer；swarm 分支由 coding 侧边栏改 `SwarmSidebar`。
+- **Desktop** `RoomPage` 瘦身至 428 行：删名册/任务条/角色编辑/右栏，任务选择态
+  改读 store，单列布局；房间加载职责移交 `SwarmSidebar`（房间页不再自行加载），
+  `Settings → Agents` 视图复用同一 load-on-switch 清房纪律。
+
 ## v0.12.2 — 2026-11-10
 
 **Taiji removed.** The 太极 multi-worker orchestration layer is gone; zen is back

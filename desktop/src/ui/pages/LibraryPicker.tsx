@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useT } from '../../i18n/locale'
 import type { SwarmRole } from '../../rpc/types'
+import { useAppStore } from '../../state/appStore'
 import { useSwarmStore } from '../../state/swarmStore'
 import css from './AgentSettings.module.css'
 
@@ -15,6 +16,7 @@ export function LibraryPicker(props: { onClose(): void; onCopied(): void }) {
   const current = useSwarmStore((state) => state.roles)
   const loaded = useSwarmStore((state) => state.loaded)
   const load = useSwarmStore((state) => state.load)
+  const project = useAppStore((state) => state.project)
   const [rows, setRows] = useState<SwarmRole[] | null>(null)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
@@ -25,8 +27,8 @@ export function LibraryPicker(props: { onClose(): void; onCopied(): void }) {
   // Reached from Settings too, where the room was never loaded: the
   // already-there check needs this project's roles.
   useEffect(() => {
-    if (!loaded) void load()
-  }, [loaded, load])
+    if (!loaded) void load(project)
+  }, [loaded, load, project])
 
   useEffect(() => {
     let alive = true

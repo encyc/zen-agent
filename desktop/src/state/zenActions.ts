@@ -25,6 +25,7 @@ type AppGetter = () => {
   client(): { send(payload: Record<string, unknown>): Promise<Record<string, unknown> & { type?: string; ok?: boolean }> }
   refreshTranscript(): Promise<boolean>
   refreshSessions(): Promise<void>
+  project: string | null
 }
 
 /** Consume a zen_fleet roster frame; false means "not mine, keep flowing".
@@ -104,7 +105,7 @@ export function switchWorkspaceMode(get: AppGetter, mode: WorkspaceMode): void {
   if (mode === 'zen') void switchZenPresence(get, true)
   else if (prev === 'zen') void onZenModeLeft(get)
   // Entering swarm loads the active project's room (no-op in other modes).
-  if (mode === 'swarm') void syncSwarmState()
+  if (mode === 'swarm') void syncSwarmState(get().project)
 }
 
 export async function syncZenState(get: AppGetter): Promise<void> {
@@ -134,7 +135,7 @@ export async function syncZenState(get: AppGetter): Promise<void> {
  * roster and the swarm room both belong to the project on screen. */
 export async function syncProjectState(get: AppGetter): Promise<void> {
   await syncZenState(get)
-  await syncSwarmState()
+  await syncSwarmState(get().project)
 }
 
 export async function zenTranscript(

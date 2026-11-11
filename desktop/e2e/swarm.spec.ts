@@ -310,3 +310,78 @@ test('copy from the role library is reachable from Settings', async ({ page }) =
   )
   assert.equal(copy?.roleId, 'builder')
 })
+
+test('switching project reloads the room and closes the old task detail', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('zen.projects', JSON.stringify([{ path: '/work/q', name: 'q', at: 1 }]))
+  })
+  await boot(page, initialState(swarmFixture({ runningTask: true })))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  await page.locator('[data-swarm-task-toggle]').first().click()
+  await expect(page.locator('[data-swarm-main] [data-swarm-task-detail]')).toBeVisible()
+  const before = (await page.evaluate(() => window.__ZEN_E2E__.calls))
+    .filter((call) => call.type === 'swarm' && call.op === 'list').length
+
+  await page.locator('[data-project-switcher]').click()
+  await page.locator('[data-project-option="/work/q"]').click()
+
+  await expect(page.locator('[data-swarm-task-detail]')).toHaveCount(0)
+  await expect(page.locator('[data-swarm-feed]')).toBeVisible()
+  const lists = (await page.evaluate(() => window.__ZEN_E2E__.calls))
+    .filter((call) => call.type === 'swarm' && call.op === 'list')
+  assert.ok(lists.length > before, 'project switch must re-list the room')
+  assert.equal(lists.at(-1)?.project, '/work/q')
+})
+
+test('saving a role keeps the open task detail', async ({ page }) => {
+  await boot(page, initialState(swarmFixture({ runningTask: true })))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+  await page.locator('[data-swarm-task-toggle]').first().click()
+  const detail = page.locator('[data-swarm-main] [data-swarm-task-detail]')
+  await expect(detail).toBeVisible()
+
+  await page.locator('[data-swarm-configure="research"]').click()
+  const modal = page.locator('[data-swarm-role-modal]')
+  await modal.getByRole('button', { name: '保存' }).click()
+  await expect(modal).toHaveCount(0)
+  await expect(detail).toBeVisible()
+})
+
+test('the settings detour clears the old task detail when the project switched', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('zen.last.cwd', '/work/p')
+    localStorage.setItem('zen.projects', JSON.stringify([{ path: '/work/q', name: 'q', at: 1 }]))
+  })
+  await boot(page, initialState(swarmFixture({ runningTask: true })))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+  await page.locator('[data-swarm-task-toggle]').first().click()
+  await expect(page.locator('[data-swarm-main] [data-swarm-task-detail]')).toBeVisible()
+
+  // Leave swarm (its sidebar unmounts), switch project in zen, then detour
+  // through Settings → Agents: that view loads the room too, and must clear
+  // the old room's selection on a project switch just like the sidebar does.
+  await page.locator('[data-workspace-mode="zen"]').click()
+  await page.locator('[data-project-switcher]').click()
+  await page.locator('[data-project-option="/work/q"]').click()
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '角色' }).click()
+  await page.getByRole('button', { name: '返回' }).click()
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  await expect(page.locator('[data-swarm-task-detail]')).toHaveCount(0)
+  await expect(page.locator('[data-swarm-feed]')).toBeVisible()
+})
+
+test('the swarm tab badge counts live tasks without eager-loading the room', async ({ page }) => {
+  await boot(page, initialState(swarmFixture({ runningTask: true })))
+  // 未进 swarm：不预载，徽标不显示
+  const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
+  assert.ok(!calls.some((call) => call.type === 'swarm' && call.op === 'list'))
+  await expect(page.locator('[data-swarm-badge]')).toHaveCount(0)
+
+  await page.locator('[data-workspace-mode="swarm"]').click()
+  await expect(page.locator('[data-swarm-badge]')).toHaveText('1')
+  await page.locator('[data-workspace-mode="coding"]').click()
+  await expect(page.locator('[data-swarm-badge]')).toHaveText('1')
+})

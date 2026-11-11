@@ -1,0 +1,194 @@
+/* The swarm roster and task index, moved out of the room page into the
+   sidebar. Shared classes (ghost/rowCaption/taskState/blockEmpty) are also
+   imported by RoomPage for the task detail card. */
+
+.side {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px 10px 12px;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.blockHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rosterActions {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+
+.rowActions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--ds-font-11);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dsw-alias-label-caption);
+}
+
+.blockEmpty {
+  margin: 0;
+  font-size: var(--ds-font-12);
+  color: var(--dsw-alias-label-caption);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agentRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--ds-radius-8);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.taskItem {
+  border-radius: var(--ds-radius-8);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.taskItem[data-selected] {
+  box-shadow: inset 0 0 0 1px var(--dsw-alias-border-l2);
+}
+
+.taskRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.taskToggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rowMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rowTitle {
+  overflow: hidden;
+  font-size: var(--ds-font-12);
+  color: var(--dsw-alias-label-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowCaption {
+  font-size: var(--ds-font-11);
+  color: var(--dsw-alias-label-caption);
+}
+
+.stateDot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--ds-radius-full);
+  background: var(--dsw-alias-state-idle-primary);
+}
+
+.stateDot[data-state='running'] {
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.stateDot[data-state='rebuilding'] {
+  background: var(--dsw-alias-state-warn-primary);
+}
+
+.taskState {
+  flex: none;
+  font-size: var(--ds-font-11);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.taskState[data-state='running'] {
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.taskState[data-state='done'] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.taskState[data-state='failed'] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.taskState[data-state='cancelled'] {
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.badge {
+  flex: none;
+  padding: 0 6px;
+  border-radius: var(--ds-radius-4);
+  background: var(--dsw-alias-bg-layer-3);
+  font-size: var(--ds-font-10-5);
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.ghost {
+  flex: none;
+  height: 24px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--ds-radius-6);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--ds-font-11);
+  cursor: pointer;
+}
+
+.ghost:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.ghost:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

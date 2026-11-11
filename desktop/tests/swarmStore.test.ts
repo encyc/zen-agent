@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { _useSwarmSender, swarmNoticeText, useSwarmStore } from '../src/state/swarmStore.ts'
+import { _useSwarmSender, swarmActiveCount, swarmLoadPlan, swarmNoticeText, useSwarmStore } from '../src/state/swarmStore.ts'
 import type {
   SwarmAgentFrame,
   SwarmAgentState,
@@ -73,7 +73,23 @@ function reset(): void {
     roles: [] as SwarmRole[],
     warnings: [] as string[],
     loaded: false,
+    selectedTask: null,
+    loadedProject: null,
+    runRows: {},
   })
+}
+
+function listAnswer(tag = 'a') {
+  return {
+    type: 'result',
+    id: '1',
+    ok: true,
+    roles: [],
+    agents: [],
+    tasks: [],
+    messages: [messageFrame(`m_${tag}`, tag)],
+    warnings: [],
+  }
 }
 
 function fakeClient(script: (request: Record<string, unknown>) => unknown) {
@@ -147,7 +163,7 @@ test('load seeds the room from the list answer', async () => {
     warnings: [],
   }))
 
-  await useSwarmStore.getState().load()
+  await useSwarmStore.getState().load(null)
 
   const state = useSwarmStore.getState()
   assert.equal(state.loaded, true)
@@ -283,7 +299,7 @@ test('load and reload surface manager warnings', async () => {
         },
   )
 
-  await useSwarmStore.getState().load()
+  await useSwarmStore.getState().load(null)
   assert.deepEqual(useSwarmStore.getState().warnings, ['role research: bad manifest'])
 
   await useSwarmStore.getState().reload()
@@ -339,4 +355,84 @@ test('a terminal task frame releases its live rows even with no panel open', () 
   assert.equal(useSwarmStore.getState().runRows['t_1'].length, 1, 'live rows survive a running transition')
   useSwarmStore.getState().applyFrame(taskFrame('t_1', 'done'))
   assert.equal(useSwarmStore.getState().runRows['t_1'], undefined, 'settling releases the rows')
+})
+
+test('selectTask toggles the selection', () => {
+  reset()
+  useSwarmStore.getState().selectTask('t_1')
+  assert.equal(useSwarmStore.getState().selectedTask, 't_1')
+  useSwarmStore.getState().selectTask('t_1')
+  assert.equal(useSwarmStore.getState().selectedTask, null)
+  useSwarmStore.getState().selectTask('t_1')
+  useSwarmStore.getState().selectTask('t_2')
+  assert.equal(useSwarmStore.getState().selectedTask, 't_2')
+})
+
+test('load records the requesting project and sends it on the wire', async () => {
+  reset()
+  const sent = fakeClient(() => listAnswer())
+  await useSwarmStore.getState().load('/work/a')
+  assert.equal(useSwarmStore.getState().loadedProject, '/work/a')
+  assert.deepEqual(sent[0], { type: 'swarm', op: 'list', project: '/work/a' })
+  await useSwarmStore.getState().load(null)
+  assert.equal(useSwarmStore.getState().loadedProject, null)
+  assert.deepEqual(sent[1], { type: 'swarm', op: 'list' })
+})
+
+test('a stale load answer is dropped', async () => {
+  reset()
+  let resolveA!: (value: unknown) => void
+  fakeClient((request) =>
+    request.project === '/a'
+      ? new Promise((resolve) => { resolveA = resolve })
+      : listAnswer('b'),
+  )
+  const a = useSwarmStore.getState().load('/a')
+  const b = useSwarmStore.getState().load('/b')
+  await b
+  resolveA(listAnswer('a'))
+  await a
+  const state = useSwarmStore.getState()
+  assert.equal(state.loadedProject, '/b')
+  assert.equal(state.messages[0].id, 'm_b')
+})
+
+test('load keeps an open task selection (save refresh)', async () => {
+  reset()
+  fakeClient(() => listAnswer())
+  useSwarmStore.getState().selectTask('t_1')
+  await useSwarmStore.getState().load('/work/a')
+  assert.equal(useSwarmStore.getState().selectedTask, 't_1')
+})
+
+test('clearRoomUi drops selection and live rows but keeps room data', async () => {
+  reset()
+  fakeClient(() => listAnswer())
+  await useSwarmStore.getState().load('/work/a')
+  useSwarmStore.getState().selectTask('t_1')
+  useSwarmStore.getState().applyFrame({
+    type: 'swarm_event', swarm: true, agent: 'research', task: 't_1',
+    event: { type: 'tool_execution_start', tool_call_id: 'c1', tool_name: 'bash' },
+  } as never)
+  useSwarmStore.getState().clearRoomUi()
+  const state = useSwarmStore.getState()
+  assert.equal(state.selectedTask, null)
+  assert.deepEqual(state.runRows, {})
+  assert.equal(state.loaded, true)
+  assert.equal(state.messages.length, 1)
+})
+
+test('swarmLoadPlan: boot loads, same project stays, different switches', () => {
+  assert.equal(swarmLoadPlan(false, null, null), 'load')
+  assert.equal(swarmLoadPlan(false, null, '/a'), 'load')
+  assert.equal(swarmLoadPlan(true, '/a', '/a'), 'none')
+  assert.equal(swarmLoadPlan(true, null, '/a'), 'switch')
+  assert.equal(swarmLoadPlan(true, '/a', '/b'), 'switch')
+})
+
+test('swarmActiveCount only counts live tasks once loaded', () => {
+  const tasks = [taskFrame('t_1', 'running'), taskFrame('t_2', 'queued'), taskFrame('t_3', 'done')]
+  assert.equal(swarmActiveCount(false, tasks), 0)
+  assert.equal(swarmActiveCount(true, tasks), 2)
+  assert.equal(swarmActiveCount(true, []), 0)
 })

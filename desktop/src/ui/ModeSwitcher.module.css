@@ -11,6 +11,10 @@
 .tab {
   flex: 1;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   padding: 4px 6px;
   border: none;
   border-radius: var(--ds-radius-4);
@@ -19,10 +23,14 @@
   font: inherit;
   font-size: var(--ds-font-11);
   line-height: 1.4;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   cursor: pointer;
+}
+
+.tabLabel {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .tab:hover {
@@ -32,4 +40,23 @@
 .tab[data-active] {
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
+}
+
+.zenDot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--ds-radius-full);
+  background: var(--dsw-alias-state-business-primary);
+}
+
+.swarmBadge {
+  flex: none;
+  min-width: 14px;
+  padding: 0 5px;
+  border-radius: var(--ds-radius-4);
+  background: var(--dsw-alias-bg-layer-3);
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--ds-font-10-5);
+  text-align: center;
 }
