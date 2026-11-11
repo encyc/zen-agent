@@ -59,6 +59,12 @@ const PluginSettings = lazy(() =>
 const AgentSettings = lazy(() =>
   import('./AgentSettings').then((module) => ({ default: module.AgentSettings })),
 )
+const ZenSettings = lazy(() =>
+  import('./WorkspaceSettings').then((module) => ({ default: module.ZenSettings })),
+)
+const SwarmSettings = lazy(() =>
+  import('./WorkspaceSettings').then((module) => ({ default: module.SwarmSettings })),
+)
 const ProjectSettings = lazy(() =>
   import('./ProjectSettings').then((module) => ({ default: module.ProjectSettings })),
 )
@@ -603,6 +609,18 @@ export function SettingsPage() {
           {tab === 'agents' && (
             <Suspense fallback={null}>
               <AgentSettings />
+            </Suspense>
+          )}
+
+          {tab === 'zen' && (
+            <Suspense fallback={null}>
+              <ZenSettings />
+            </Suspense>
+          )}
+
+          {tab === 'swarm' && (
+            <Suspense fallback={null}>
+              <SwarmSettings onNavigate={setTab} />
             </Suspense>
           )}
 
