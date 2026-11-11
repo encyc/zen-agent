@@ -149,6 +149,7 @@ interface AppState {
   promotePending(id: number): Promise<void>
   dequeuePending(): Promise<void>
   clearPending(): Promise<void>
+  clearTodos(): Promise<void>
   compactNow(): Promise<void>
   undoLast(): Promise<void>
   switchWorkspaceMode(mode: WorkspaceMode): void
@@ -947,6 +948,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     await runSessionOp(get, { type: 'session', op: 'clear_pending' }, () =>
       get().refreshStatus(),
     )
+  },
+
+  async clearTodos() {
+    await runSessionOp(get, { type: 'session', op: 'clear_todos' }, () => get().refreshStatus())
   },
 
   async compactNow() {

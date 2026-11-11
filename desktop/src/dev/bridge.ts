@@ -651,6 +651,12 @@ export function installBridge(state: BridgeState) {
             state.pending = []
             return { type: 'result', id: payload.id, ok: true, cleared }
           }
+          case 'clear_todos': {
+            const phases = (state.todos ?? []) as { tasks?: unknown[] }[]
+            const cleared = phases.reduce((sum, phase) => sum + (phase.tasks?.length ?? 0), 0)
+            state.todos = []
+            return { type: 'result', id: payload.id, ok: true, cleared }
+          }
           default:
             return { type: 'result', id: payload.id, ok: true }
         }

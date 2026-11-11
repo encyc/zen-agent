@@ -498,6 +498,21 @@ class ChatController:
         self._todos = []
         self._notify()
 
+    def clear_todos(self) -> int:
+        """Drop the todo list (tool state and sidecar) without touching the run.
+
+        Agents sometimes finish a turn without emptying their list, which
+        leaves stale rows in the HUD; the user gets a direct clear. Returns how
+        many tasks were dropped.
+        """
+        dropped = sum(len(phase.get("tasks") or []) for phase in self._todos)
+        todo_tool = getattr(self.runtime, "todo_tool", None)
+        if todo_tool is not None:
+            todo_tool.clear()
+        self._todos = []
+        self._notify()
+        return dropped
+
     def retry(self) -> str | None:
         """Drop everything after the last user message and run that turn again.
 

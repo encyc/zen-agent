@@ -13,7 +13,7 @@ import { useSettingsStore, useStatusStore } from '../../state/stores'
 import type { PendingMessage } from '../../rpc/types'
 import { useT } from '../../i18n/locale'
 import { formatCompactTokens } from '../format'
-import { CheckIcon, ChevronDownIcon } from '../icons'
+import { CheckIcon, ChevronDownIcon, XIcon } from '../icons'
 import { contextMeterView } from './contextUsage'
 import { flattenTodos, todoProgress, type TodoStatus, type TodoTask } from './todos'
 import css from './Docks.module.css'
@@ -26,6 +26,7 @@ const NO_PENDING: never[] = []
 export function TodoDock() {
   const t = useT()
   const phases = useStatusStore((state) => state.status?.todos ?? NO_TODOS)
+  const clearTodos = useAppStore((state) => state.clearTodos)
   const [expanded, setExpanded] = useState(false)
   const contentId = useId()
   const tasks = useMemo(() => flattenTodos(phases), [phases])
@@ -59,6 +60,15 @@ export function TodoDock() {
             </span>
           )}
         </div>
+        <button
+          type="button"
+          className={css.todoClear}
+          aria-label={t('chat.todo.clear')}
+          title={t('chat.todo.clear')}
+          onClick={() => void clearTodos()}
+        >
+          <XIcon size={14} />
+        </button>
         <button
           type="button"
           className={css.todoToggle}

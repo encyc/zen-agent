@@ -300,4 +300,8 @@ class SessionOps:
             if self.chat is None:
                 raise Refusal("clear_pending needs a runtime")
             return {"cleared": self.chat.clear_pending()}
+        if op == "clear_todos":
+            if self.chat is None:
+                raise Refusal("clear_todos needs a runtime")
+            return {"cleared": self.chat.clear_todos()}
         raise Refusal(f"unknown session op: {op}")

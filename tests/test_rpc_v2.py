@@ -1812,6 +1812,24 @@ async def test_session_pending_ops_dequeue_and_clear(runtime_factory):
     assert results["c"]["cleared"] == 1
 
 
+async def test_session_clear_todos_drops_the_list_and_sidecar(runtime_factory):
+    runtime, server, writes, queue = await build(runtime_factory)
+    tool = runtime.todo_tool
+    assert tool is not None
+    await tool.execute("t1", {"op": "init", "items": ["one", "two"], "phase": "Tasks"})
+    server.chat.reload_todos()
+    assert server.chat.status.todos != []
+
+    await run_lines(server, queue, [{"type": "session", "id": "c", "op": "clear_todos"}])
+
+    result = decode(writes)[-1]
+    assert result["ok"] is True
+    assert result["cleared"] == 2
+    assert server.chat.status.todos == []
+    view = await tool.execute("t2", {"op": "view"})
+    assert view.details["phases"] == []
+
+
 async def test_session_promote_moves_a_queued_item_to_steering(runtime_factory):
     runtime, server, writes, _queue = await build(
         runtime_factory, stream_fn=await slow_stream()
@@ -1863,6 +1881,7 @@ async def test_session_pending_ops_need_a_chat(runtime_factory):
             {"type": "session", "id": "p", "op": "promote", "pending_id": 1},
             {"type": "session", "id": "d", "op": "dequeue"},
             {"type": "session", "id": "c", "op": "clear_pending"},
+            {"type": "session", "id": "t", "op": "clear_todos"},
         ],
     )
     results = {message["id"]: message for message in decode(writes)}
@@ -1872,6 +1891,7 @@ async def test_session_pending_ops_need_a_chat(runtime_factory):
     assert results["d"]["message"] == "dequeue needs a runtime"
     assert results["c"]["type"] == "error"
     assert results["c"]["message"] == "clear_pending needs a runtime"
+    assert results["t"]["message"] == "clear_todos needs a runtime"
 
 
 async def test_session_promote_rejects_images(runtime_factory):

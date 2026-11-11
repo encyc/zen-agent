@@ -356,6 +356,9 @@ test('the todo dock sits above the composer with progress and an expandable list
     await page.getByText('读取会话').evaluate((el) => getComputedStyle(el).textDecorationLine),
     'line-through',
   )
+
+  await page.getByRole('button', { name: '清除任务清单' }).click()
+  await expect(dock).toHaveCount(0)
 })
 
 test('an approval stacks above a still-mounted composer', async ({ page }) => {
