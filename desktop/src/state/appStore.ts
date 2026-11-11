@@ -38,7 +38,7 @@ import {
 } from './stores'
 import { useChatStore } from './chatStore'
 import { applyFleetFrame, stopFleet, switchWorkspaceMode, syncZenState, zenTranscript } from './zenActions'
-import { applySwarmFrame, registerSwarmSender } from './swarmWiring'
+import { applySwarmFrame, registerSwarmSender, syncSwarmState } from './swarmWiring'
 import { nextDraft } from './pending'
 import { latestSessionForProject } from './latestSession'
 import { loadPrefs, replayFrames, savePref, spawnArgs } from './prefs'
@@ -153,6 +153,8 @@ interface AppState {
   undoLast(): Promise<void>
   /** Zen mode: sync fleet state with the persisted toggle (boot/switch). */
   syncZenState(): Promise<void>
+  /** Swarm mode: drop the room a switch left and load the active project's. */
+  syncSwarmState(): Promise<void>
   switchWorkspaceMode(mode: WorkspaceMode): void
   stopFleet(): Promise<void>
   /** A worker's read-only transcript (zen_fleet op=transcript). */
@@ -237,6 +239,8 @@ async function bootChild(
   if ((!loaded || fellBack) && opts.fromSwitch) useChatStore.getState().reset()
   // Zen replay: a persisted 'zen' toggle re-arms the fleet on every boot.
   void get().syncZenState()
+  // The room is per project: a persisted swarm mode boots into this one's.
+  void get().syncSwarmState()
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -605,6 +609,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (!loaded) useChatStore.getState().reset()
       // The fleet belongs to the project we left; the roster store follows the switch.
       void get().syncZenState()
+      // The room is per project too: drop the old one, load this one's.
+      void get().syncSwarmState()
       paneCache.set(root, {
         session: effective,
         pane: useChatStore.getState().pane(),
@@ -967,6 +973,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   async syncZenState() {
     await syncZenState(get)
   },
+  async syncSwarmState() {
+    await syncSwarmState()
+  },
 
   switchWorkspaceMode(mode) {
     switchWorkspaceMode(get, mode)
@@ -1072,9 +1081,6 @@ async function restorePrefs(get: () => AppState): Promise<void> {
 }
 
 function handleFrame(frame: ServerFrame, handling: FrameHandling): void {
-  // The swarm room spans every project slot: its untagged frames must land
-  // before the filters below drop them (notices become notifications).
-  if (applySwarmFrame(frame)) return
   const tagged = frame as { project?: unknown; session?: unknown }
   const project =
     typeof tagged.project === 'string' && tagged.project !== '' ? tagged.project : null
@@ -1128,6 +1134,9 @@ function handleFrame(frame: ServerFrame, handling: FrameHandling): void {
     return
   }
   if (!frameBelongsTo(frame, handling.get().project)) return
+  // Swarm rooms are per project: only the active project's room frames and
+  // @you notices may reach the screen.
+  if (applySwarmFrame(frame, handling.get().project)) return
   if (applyFleetFrame(frame)) return
   if (!frameSessionBelongsTo(frame, useSessionStore.getState().currentPath)) return
   handleResultFrame(frame as Record<string, unknown>, handling)

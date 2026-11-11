@@ -323,7 +323,7 @@ function Roster({
   onCreate(): void
 }) {
   const t = useT()
-  const reset = useSwarmStore((state) => state.reset)
+  const resetAgent = useSwarmStore((state) => state.resetAgent)
   const reload = useSwarmStore((state) => state.reload)
   return (
     <section className={css.block}>
@@ -389,7 +389,7 @@ function Roster({
                     className={css.ghost}
                     data-swarm-reset
                     disabled={agent.state === 'running'}
-                    onClick={() => void reset(agent.agent)}
+                    onClick={() => void resetAgent(agent.agent)}
                   >
                     {t('swarm.reset')}
                   </button>

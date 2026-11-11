@@ -157,19 +157,43 @@ test('load seeds the room from the list answer', async () => {
   assert.equal(state.messages[0].id, 'm_1')
 })
 
-test('cancel retry and reset send their task and agent ids', async () => {
+test('cancel retry and resetAgent send their task and agent ids', async () => {
   reset()
   const sent = fakeClient(() => ({ type: 'result', id: '9', ok: true }))
 
   await useSwarmStore.getState().cancel('t_1')
   await useSwarmStore.getState().retry('t_1')
-  await useSwarmStore.getState().reset('research')
+  await useSwarmStore.getState().resetAgent('research')
 
   assert.deepEqual(sent, [
     { type: 'swarm', op: 'cancel', taskId: 't_1' },
     { type: 'swarm', op: 'retry', taskId: 't_1' },
     { type: 'swarm', op: 'reset', agentId: 'research' },
   ])
+})
+
+test('reset clears the room and marks it unloaded', () => {
+  reset()
+  useSwarmStore.setState({
+    messages: [messageFrame('m_1', 'hi')],
+    tasks: [taskFrame('t_1', 'running')],
+    agents: [agentFrame('running')],
+    roles: [{ id: 'research' } as SwarmRole],
+    warnings: ['broken role'],
+    runRows: { t_1: [{ kind: 'assistant', id: 'v1', text: 'x' } as never] },
+    loaded: true,
+  })
+
+  useSwarmStore.getState().reset()
+
+  const state = useSwarmStore.getState()
+  assert.deepEqual(state.messages, [])
+  assert.deepEqual(state.tasks, [])
+  assert.deepEqual(state.agents, [])
+  assert.deepEqual(state.roles, [])
+  assert.deepEqual(state.warnings, [])
+  assert.deepEqual(state.runRows, {})
+  assert.equal(state.loaded, false)
 })
 
 test('load and reload surface manager warnings', async () => {

@@ -1,9 +1,10 @@
-/** The swarm room store: global frames in, room commands out.
+/** The swarm room store: active-room frames in, room commands out.
  *
- * Swarm frames carry no project or session tag, so `appStore.handleFrame`
- * diverts them here before any project/session filtering. The store never
- * imports `appStore`: that module's entry drags the whole shell graph and
- * cannot load under `node --test`, so `appStore` registers the sender instead.
+ * Swarm frames carry the project they belong to; `appStore.handleFrame`
+ * applies them only after its project filter, so the store always shows the
+ * active room. The store never imports `appStore`: that module's entry drags
+ * the whole shell graph and cannot load under `node --test`, so `appStore`
+ * registers the sender instead.
  */
 
 import { create } from 'zustand'
@@ -66,7 +67,9 @@ interface SwarmState {
   reload(): Promise<void>
   cancel(id: string): Promise<void>
   retry(id: string): Promise<void>
-  reset(agentId: string): Promise<void>
+  /** Drop the active room before switching projects (the room is per project). */
+  reset(): void
+  resetAgent(agentId: string): Promise<void>
   /** One task's run steps; null when the request failed. */
   transcript(taskId: string): Promise<SwarmTranscriptResult | null>
   /** Create/update/delete a role; the panel refreshes with `load` after. */
@@ -177,7 +180,19 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
     await send({ type: 'swarm', op: 'retry', taskId: id })
   },
 
-  async reset(agentId) {
+  reset() {
+    set({
+      messages: [],
+      tasks: [],
+      agents: [],
+      roles: [],
+      warnings: [],
+      runRows: {},
+      loaded: false,
+    })
+  },
+
+  async resetAgent(agentId) {
     await send({ type: 'swarm', op: 'reset', agentId })
   },
 

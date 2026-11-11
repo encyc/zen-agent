@@ -116,22 +116,27 @@ export interface SwarmOkResult {
 export interface SwarmMessageFrame extends SwarmMessage {
   type: 'swarm_message'
   swarm: true
+  /** The room this frame belongs to; a v2 server sends none. */
+  project?: string
 }
 
 export interface SwarmTaskFrame extends SwarmTask {
   type: 'swarm_task'
   swarm: true
+  project?: string
 }
 
 export interface SwarmAgentFrame extends SwarmAgentState {
   type: 'swarm_agent'
   swarm: true
+  project?: string
 }
 
 /** An agent mentioned @you: surface it as a notification, not in the room. */
 export interface SwarmNoticeFrame {
   type: 'swarm_notice'
   swarm: true
+  project?: string
   agent: string
   text: string
 }
@@ -141,6 +146,7 @@ export interface SwarmNoticeFrame {
 export interface SwarmEventFrame {
   type: 'swarm_event'
   swarm: true
+  project?: string
   agent: string
   task: string
   event: AgentEventFrame

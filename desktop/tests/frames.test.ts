@@ -38,3 +38,8 @@ test('a frame belongs to the session on screen, or passes untagged', () => {
   )
   assert.equal(frameSessionBelongsTo({ session: '/work/p/s2.jsonl' }, null), true)
 })
+
+test('a swarm frame tagged for a background project does not belong', () => {
+  assert.equal(frameBelongsTo({ swarm: true, project: '/work/q' }, '/work/p'), false)
+  assert.equal(frameBelongsTo({ swarm: true, project: '/work/p' }, '/work/p'), true)
+})

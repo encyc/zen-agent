@@ -9,6 +9,7 @@
 import { useSettingsStore, type WorkspaceMode } from './stores.ts'
 import { useSessionStore } from './stores.ts'
 import { useNoticeStore } from './stores.ts'
+import { syncSwarmState } from './swarmWiring.ts'
 import { useZenStore } from './zenStore.ts'
 import type { RosterItem, ServerFrame } from '../rpc/types.ts'
 import { frameErrorNotice } from '../rpc/frames.ts'
@@ -102,6 +103,8 @@ export function switchWorkspaceMode(get: AppGetter, mode: WorkspaceMode): void {
   useSettingsStore.getState().setWorkspaceMode(mode)
   if (mode === 'zen') void switchZenPresence(get, true)
   else if (prev === 'zen') void onZenModeLeft(get)
+  // Entering swarm loads the active project's room (no-op in other modes).
+  if (mode === 'swarm') void syncSwarmState()
 }
 
 export async function syncZenState(get: AppGetter): Promise<void> {

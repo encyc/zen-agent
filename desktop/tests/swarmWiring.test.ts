@@ -2,14 +2,19 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-import { applySwarmFrame, registerSwarmSender } from '../src/state/swarmWiring.ts'
+import {
+  applySwarmFrame,
+  registerSwarmSender,
+  syncSwarmState,
+} from '../src/state/swarmWiring.ts'
 import { _useSwarmSender } from '../src/state/swarmStore.ts'
 import { useSwarmStore } from '../src/state/swarmStore.ts'
-import { useNotificationStore } from '../src/state/stores.ts'
+import { useNotificationStore, useSettingsStore } from '../src/state/stores.ts'
 
-/** Swarm frames are untagged and global: applySwarmFrame must consume them
- * before appStore's project/session filters would drop them. These tests pin
- * the exact consumption contract the handleFrame head delegates to. */
+/** Swarm frames carry the project they belong to: only the active room's
+ * frames may land in the store, and only its @you notices become
+ * notifications. These tests pin the exact consumption contract the
+ * handleFrame head delegates to. */
 
 function reset(): void {
   useSwarmStore.setState({
@@ -18,6 +23,7 @@ function reset(): void {
     agents: [],
     roles: [],
     warnings: [],
+    runRows: {},
     loaded: false,
   })
   useNotificationStore.setState({ items: [], unread: 0 })
@@ -117,4 +123,91 @@ test('every swarm_* frame type in the union has a handler', () => {
   for (const t of swarmTypes) {
     assert.ok(handled.includes(`'${t}'`), `${t} has no handler — would be silently swallowed`)
   }
+})
+
+test('a tagged swarm frame for a background project is not applied', () => {
+  reset()
+  const applied = applySwarmFrame({ ...messageFrame, project: '/p/b' }, '/p/a')
+  assert.equal(applied, false)
+  assert.equal(useSwarmStore.getState().messages.length, 0)
+})
+
+test('a tagged swarm frame for the active project is applied', () => {
+  reset()
+  const applied = applySwarmFrame({ ...messageFrame, project: '/p/a' }, '/p/a')
+  assert.equal(applied, true)
+  assert.equal(useSwarmStore.getState().messages.length, 1)
+})
+
+test('a notice from a background project does not surface', () => {
+  reset()
+  const applied = applySwarmFrame(
+    {
+      type: 'swarm_notice',
+      swarm: true,
+      project: '/p/b',
+      agent: 'research',
+      text: 'you were mentioned',
+    },
+    '/p/a',
+  )
+  assert.equal(applied, false)
+  assert.equal(useNotificationStore.getState().items.length, 0)
+})
+
+test('syncSwarmState resets stale rows and reloads the active room', async () => {
+  reset()
+  useSettingsStore.setState({ workspaceMode: 'swarm' })
+  // runRows come from live events only, so `load` alone cannot clear them:
+  // they prove the reset ran before the snapshot landed.
+  useSwarmStore.setState({
+    messages: [messageFrame],
+    runRows: { t_old: [{ kind: 'assistant', id: 'v1', text: 'stale' } as never] },
+    loaded: true,
+  })
+  const sent: Array<Record<string, unknown>> = []
+  _useSwarmSender({
+    send: async (request) => {
+      sent.push(request)
+      return {
+        type: 'result',
+        ok: true,
+        roles: [],
+        agents: [],
+        tasks: [],
+        messages: [
+          {
+            id: 'm2',
+            ts: 1,
+            author: { kind: 'system', id: 'system' },
+            text: 'other room',
+            mentions: [],
+            taskId: null,
+            chainDepth: 0,
+          },
+        ],
+        warnings: [],
+      }
+    },
+  })
+  await syncSwarmState()
+  assert.deepEqual(sent, [{ type: 'swarm', op: 'list' }])
+  const state = useSwarmStore.getState()
+  assert.deepEqual(state.messages.map((message) => message.id), ['m2'])
+  assert.deepEqual(state.runRows, {})
+  assert.equal(state.loaded, true)
+})
+
+test('syncSwarmState is a no-op outside swarm mode', async () => {
+  reset()
+  useSettingsStore.setState({ workspaceMode: 'coding' })
+  let calls = 0
+  _useSwarmSender({
+    send: async () => {
+      calls += 1
+      return { type: 'result', ok: true }
+    },
+  })
+  await syncSwarmState()
+  assert.equal(calls, 0)
 })
