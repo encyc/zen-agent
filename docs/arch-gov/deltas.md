@@ -34,3 +34,13 @@
 - 改：不变量 +1（swarm 只在 app 层组合既有内核：角色 runtime 经 `Runtime.bootstrap` 装配、插件仍单向外呼、凭据只存 `~/.zenagent/settings.json`，manifest 只放 `${KEY}` 占位）
 - 改：14 个既有未映射文件（13 个 tests + `scripts/demo_age.py`）登记为 `unmapped`，`gov_diff` 归零；`app.swarm/__init__.py` 作为 facade 孤儿登记豁免
 - 熵增：基线 109→113（`app.swarm` 1 错 3 警 + `cli.rpc` 新增文件 3 项 + 未映射整理），无新增/恶化项超出登记
+
+## [v6] 2026-11-11 — zen 节点登记 + 评审修复合入
+
+- 增：节点 `app.zen`（5 文件：`__init__` / `fleet` / `prompts` / `roster` / `tools`），符号 `ZenFleet` / `WorkerHandle` / `RosterRow` / `worker_statuses` / `read_roster`
+- 增：6 条出边 `app.zen →` `agent.loop`（派发工具协议）、`agent.rt`（worker 会话）、`app.assembly`（`bootstrap.prepare`/`RuntimeOptions`）、`app.transcript`（`open_session` resume）、`app.chat`（`chat.steer` 注入 router，TYPE_CHECKING，hidden）、`tools`（`text_result`）；按实际 import 核定，zen 不直接 import config/settings/types
+- 增：边 `cli.rpc → app.zen`（`ops_zen.py` 的 `ZenFleet`/`latest_router`/`set_role`）
+- 改：`app.swarm` 补 `events_tap.py` / `transcript.py`（此前未登记）；`cli.rpc` 补 `ops_zen.py`；manifest `version` 4→5
+- 改：不变量 +1（zen 只在 app 层组合既有内核：worker 经 `bootstrap.prepare` 装配并 resume 到项目会话，结果经 `chat.steer` 注入 router、不等待；fleet 属于单个项目 slot）
+- 评审修复（fix/zen-swarm-review 分支）：`swarm_notice` 补 `swarm:true` 并钉住服务端帧契约（union + 每帧 flag + handler 覆盖）；角色 prompt/skills 路径围栏（`_within`）；房间 append `fsync` + load 修复未终止尾行；桌面 worker drawer 失败文案/稳定 key + `zenBackgroundRun` 布尔白名单
+- 熵增：`scripts/check_architecture.py` 仅校验 LOC 预算（对 `docs/architecture/allowlist.json`），本次无文件越限，门禁绿；manifest 为治理文档，不参与 LOC 门禁

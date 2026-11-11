@@ -12,7 +12,7 @@ import type {
   SwarmRole,
   SwarmTask,
   ToolCallView,
-} from '../rpc/types'
+} from '../rpc/types.ts'
 
 export interface SwarmMockState {
   /** Room snapshot served for `swarm list`; the fake appends to these. */
@@ -73,7 +73,7 @@ const ROLES: SwarmRole[] = [
 /** What each role reports back; the @ in a report starts the next chain leg. */
 const SCRIPT: Record<string, string> = {
   research: '结论是 Z。@builder 复核一下',
-  builder: '复核完毕：结论成立。',
+  builder: '复核完毕：结论成立。@you 请查收',
 }
 
 const TERMINAL = new Set(['done', 'failed', 'cancelled'])
@@ -187,6 +187,16 @@ function appendMessage(
   }
   rows.swarmMessages.push(message)
   emit({ ...message, type: 'swarm_message', swarm: true })
+  // An agent reporting back to the user surfaces as a notice, mirroring the
+  // host's _admit notice (swarm:true so the shell routes it to the swarm UI).
+  if (fields.author.kind === 'agent' && /@you\b/.test(fields.text)) {
+    emit({
+      type: 'swarm_notice',
+      swarm: true,
+      agent: fields.author.id,
+      text: `@${fields.author.id}: ${fields.text.slice(0, 280)}`,
+    })
+  }
   return message
 }
 

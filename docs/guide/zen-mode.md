@@ -61,7 +61,7 @@ blocked 受阻 · failed 失败`。
 - 名册（谁 Router、谁的焦点是什么）存在项目 sessions 目录的 `.zen.json`
   侧车里，与会话文件同寿命；worker 的 transcript 就是普通 session JSONL，
   退出 Zen 后仍可按普通会话浏览。
-- fleet 并发上限默认 3（`config.toml [zen] max_concurrent` 预留）；超过的
-  派工排队。
+- fleet 并发上限默认 3，可在 `config.toml` 的 `[zen] max_concurrent` 调整
+  （仅全局层生效）；超过的派工排队。
 - Zen 是**每项目**的：切换项目后由前端按持久化开关自动重新启用；一个项目
   的 fleet 不影响另一个。

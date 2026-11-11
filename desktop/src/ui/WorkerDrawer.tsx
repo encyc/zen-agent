@@ -80,13 +80,13 @@ export function WorkerDrawer() {
         </div>
         <div className={css.body} data-zen-drawer-body>
           {failed ? (
-            <div className={css.empty}>{t('zen.drawerClose')}</div>
+            <div className={css.empty}>{t('zen.drawerFailed')}</div>
           ) : rows.length === 0 ? (
             <div className={css.empty}>…</div>
           ) : (
             rows.map((row, index) => (
               <div
-                key={index}
+                key={`${row.kind ?? 'tool'}-${row.name ?? row.text ?? index}`}
                 className={css.row}
                 data-kind={row.kind ?? 'tool'}
               >

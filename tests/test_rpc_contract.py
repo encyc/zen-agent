@@ -190,3 +190,45 @@ def test_transcript_paging_fields_are_additive_and_camel_case():
 
 def ts_codes_ok(py_codes: set[str], ts_keys: set[str]) -> bool:
     return py_codes <= set(ts_keys)
+
+
+SERVER_FRAME_TYPES = {
+    "result", "error", "event", "zen_fleet",
+    "swarm_message", "swarm_task", "swarm_agent", "swarm_notice", "swarm_event",
+}
+
+
+def _backend_source() -> str:
+    """The wire package plus the swarm/zen frame emitters: every server-initiated
+    frame literal the desktop's ServerFrame union must cover."""
+    pkg = Path(__file__).resolve().parents[1] / "zenagent"
+    parts = [RPC_PATH]
+    for rel in ("app/swarm/manager.py", "app/swarm/frames.py", "app/zen/fleet.py"):
+        parts.append((pkg / rel).read_text())
+    return "\n".join(parts)
+
+
+def test_server_frame_union_matches_backend_literals():
+    # The ServerFrame union spans types.ts and types-swarm.ts (the swarm frame
+    # interfaces are re-exported from the latter).
+    src = TS_PATH.read_text() + (TS_PATH.parent / "types-swarm.ts").read_text()
+    ts = set(re.findall(r"type:\s*'([a-z_]+)'", src))
+    assert SERVER_FRAME_TYPES <= ts, f"TS union missing {sorted(SERVER_FRAME_TYPES - ts)}"
+    backend = _backend_source()
+    for lit in SERVER_FRAME_TYPES:
+        assert f'"type": "{lit}"' in backend or f'type="{lit}"' in backend, (
+            f"backend never emits {lit}"
+        )
+
+
+def test_swarm_frames_carry_swarm_flag():
+    """Every swarm_* emission sets swarm=True so the desktop diverts it ahead of
+    the session filter. Match both spellings: a dict literal (``"type": "x"``)
+    and the frame-helper keyword form (``record.update(type="x", swarm=True)``)."""
+    backend = _backend_source()
+    for lit in ("swarm_message", "swarm_task", "swarm_agent", "swarm_notice", "swarm_event"):
+        sites = list(re.finditer(rf'(?:"type":\s*"{lit}"|type="{lit}")', backend))
+        assert sites, f"no emission site found for {lit}"
+        for m in sites:
+            window = backend[m.start(): m.start() + 240]
+            assert "swarm=True" in window or '"swarm": True' in window, f"{lit} missing swarm flag"

@@ -4,9 +4,10 @@
  * or Rust side. Kept free of Node/Playwright imports: `main.tsx` loads it
  * dynamically under `import.meta.env.DEV`; Playwright loads it via harness. */
 
-import { PROTOCOL_VERSION } from '../rpc/types'
-import { handlePlugins, type PluginMockState } from './pluginsMock'
-import { handleSwarm, type SwarmMockState } from './swarmMock'
+import { PROTOCOL_VERSION } from '../rpc/types.ts'
+import { handlePlugins, type PluginMockState } from './pluginsMock.ts'
+import { handleSwarm, type SwarmMockState } from './swarmMock.ts'
+import { handleZenFleet, type ZenMockState } from './zenMock.ts'
 type Lane = 'queue' | 'steer'
 
 interface PendingItemMock {
@@ -26,7 +27,7 @@ export interface MemoryEntryMock {
   source: string
 }
 
-export interface BridgeState extends PluginMockState, SwarmMockState {
+export interface BridgeState extends PluginMockState, SwarmMockState, ZenMockState {
   running: boolean
   pending: PendingItemMock[]
   calls: Record<string, unknown>[]
@@ -478,6 +479,7 @@ export function installBridge(state: BridgeState) {
       }
       case 'plugins': return handlePlugins(state, payload)
       case 'swarm': return handleSwarm(state, payload)
+      case 'zen_fleet': return handleZenFleet(state, payload)
       case 'mcp': {
         const rows = () =>
           state.mcpServers ?? [
@@ -797,7 +799,7 @@ export function installBridge(state: BridgeState) {
         }
       }
       default:
-        return { type: 'result', id: payload.id, ok: true }
+        return { type: 'error', id: payload.id, message: `unknown request kind: ${String(payload.type)}` }
     }
   }
 

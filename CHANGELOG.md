@@ -61,8 +61,9 @@ matches the release tag; older history is in the repository tags and commits.
 **A multi-role swarm runtime.** A team room where several configured agents work
 side by side: each role has its own manifest, session and workspace, tasks are
 assigned by `@` mentions, and finished runs post their result back to the room.
-The desktop gains a Coding / ZEN / Swarm mode switcher; ZEN is a placeholder for
-the other branch.
+The desktop gains a Coding / ZEN / Swarm mode switcher; ZEN is a per-project
+router session whose worker fleet runs the project's other sessions and reports
+each result back into the router conversation.
 
 #### Swarm
 
@@ -103,8 +104,10 @@ the other branch.
 #### Desktop
 
 - **Mode switcher** (`Sidebar`): segmented Coding / ZEN / Swarm control backed by
-  the persisted `workspaceMode`; ZEN renders a placeholder page for the other
-  branch. Collapsing the sidebar on a surface without a conversation topbar
+  the persisted `workspaceMode`; ZEN opens the router conversation with a worker
+  roster and a read-only drawer over each worker's transcript, and worker tool
+  approvals surface in the shared approval panel. Collapsing the sidebar on a
+  surface without a conversation topbar
   leaves a floating expand control in the topbar's lead seat, so the way back
   no longer disappears with the sidebar.
 - **Swarm room** (`RoomPage`): message feed with per-role status dots, task
