@@ -17,6 +17,13 @@
   height: 100%;
 }
 
+/* xterm.css still paints its legacy viewport layer #000 while the themed
+ * scrollable element above it carries the real background; the sub-row
+ * remainder FitAddon leaves at the bottom then reads as a black seam. */
+.host :global(.xterm) :global(.xterm-viewport) {
+  background-color: var(--dsw-alias-bg-base);
+}
+
 .overlay {
   position: absolute;
   inset: 0;

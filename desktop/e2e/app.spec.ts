@@ -1837,9 +1837,17 @@ test('the topbar terminal opens a shell in the work panel', async ({ page }) => 
   const viewportColor = () =>
     viewport.evaluate((node) => getComputedStyle(node).backgroundColor)
   await expect.poll(viewportColor).toBe('rgb(255, 255, 255)')
+  // xterm.css still paints the legacy scroll viewport #000; it has to follow the
+  // palette as well, or the sub-row remainder FitAddon leaves at the bottom
+  // shows through as a black seam.
+  const legacyViewport = page.locator('[data-terminal-host] .xterm-viewport')
+  const legacyColor = () =>
+    legacyViewport.evaluate((node) => getComputedStyle(node).backgroundColor)
+  await expect.poll(legacyColor).toBe('rgb(255, 255, 255)')
   await page.getByRole('button', { name: '外观: 浅色' }).click()
   await expect(page.locator('body')).toHaveAttribute('data-ds-dark-theme', '')
   await expect.poll(viewportColor).toBe('rgb(21, 21, 23)')
+  await expect.poll(legacyColor).toBe('rgb(21, 21, 23)')
 
   await page.locator('[data-terminal-host]').click()
   await page.keyboard.type('ls')
