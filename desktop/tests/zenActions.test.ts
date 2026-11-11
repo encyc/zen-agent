@@ -11,6 +11,7 @@ import {
 } from '../src/state/zenActions.ts'
 import { useSettingsStore } from '../src/state/stores.ts'
 import { useSessionStore } from '../src/state/stores.ts'
+import { useNoticeStore } from '../src/state/stores.ts'
 import { useZenStore } from '../src/state/zenStore.ts'
 
 /** A fake app-store getter: captures every wire payload, replies via
@@ -42,7 +43,10 @@ function resetStores(): void {
   useSettingsStore.getState().setWorkspaceMode('coding')
   useSettingsStore.getState().setZenBackgroundRun(true)
   useSessionStore.setState({ currentPath: null })
+  useNoticeStore.setState({ notice: null })
 }
+
+const busyRefusal = { type: 'error', code: 'zen_busy', message: 'zen needs an idle session' }
 
 const okState = (enabled: boolean) => ({
   type: 'result',
@@ -107,10 +111,20 @@ test("switchZenPresence entering enables, follows the session and refreshes", as
 test('switchZenPresence entering reverts workspaceMode when the backend refuses (busy slot)', async () => {
   resetStores()
   useSettingsStore.getState().setWorkspaceMode('zen')
-  const env = makeEnv(() => ({ type: 'error', code: 'zen_busy', message: 'zen needs an idle session' }))
+  const env = makeEnv(() => ({ ...busyRefusal }))
   await switchZenPresence(env.get, true)
   assert.equal(useSettingsStore.getState().workspaceMode, 'coding')
   assert.equal(useZenStore.getState().enabled, false)
+})
+
+test('a refused stop surfaces on the notice banner instead of failing silently', async () => {
+  resetStores()
+  useZenStore.getState().applyRoster(true, [])
+  const env = makeEnv(() => ({ ...busyRefusal }))
+  await stopFleet(env.get)
+  // The fleet is untouched and the user sees why.
+  assert.equal(useZenStore.getState().enabled, true)
+  assert.equal(useNoticeStore.getState().notice?.kind, 'error')
 })
 
 test('switchZenPresence leaving sends nothing: the fleet keeps running in the background', async () => {

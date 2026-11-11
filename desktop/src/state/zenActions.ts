@@ -8,8 +8,17 @@
 
 import { useSettingsStore, type WorkspaceMode } from './stores.ts'
 import { useSessionStore } from './stores.ts'
+import { useNoticeStore } from './stores.ts'
 import { useZenStore } from './zenStore.ts'
 import type { RosterItem, ServerFrame } from '../rpc/types.ts'
+import { frameErrorNotice } from '../rpc/frames.ts'
+
+/** Surface a refusal on the notice banner: fleet actions must never fail
+ * silently (a busy router is a normal operating state, not an edge). */
+function showRefusal(frame: Record<string, unknown>): void {
+  const text = frameErrorNotice(frame, useSettingsStore.getState().locale)
+  if (text !== null) useNoticeStore.getState().show({ kind: 'error', text })
+}
 
 type AppGetter = () => {
   client(): { send(payload: Record<string, unknown>): Promise<Record<string, unknown> & { type?: string; ok?: boolean }> }
@@ -55,6 +64,7 @@ export async function switchZenPresence(get: AppGetter, entering: boolean): Prom
   }
   if (frame.type !== 'result' || !frame.ok) {
     useSettingsStore.getState().setWorkspaceMode('coding')
+    showRefusal(frame)
     return
   }
   applyToggleResult(get, true, frame)
@@ -68,7 +78,10 @@ export async function stopFleet(get: AppGetter): Promise<void> {
   } catch {
     return
   }
-  if (frame.type !== 'result' || !frame.ok) return
+  if (frame.type !== 'result' || !frame.ok) {
+    showRefusal(frame)
+    return
+  }
   applyToggleResult(get, false, frame)
 }
 

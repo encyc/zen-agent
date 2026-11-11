@@ -588,8 +588,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       useProjectStore.getState().addProject(root)
 
       // The host answers with the session its slot holds now: an exact holder
-      // is already on `resume`, while an idle slot may still be on the old
-      // session, so the requested one is resumed explicitly when it differs.
+      // is already on `resume`; an idle slot still on the old session gets an
+      // explicit resume here.
       const serverSession =
         typeof frame.session === 'string' && frame.session !== '' ? frame.session : null
       let effective = serverSession
@@ -598,13 +598,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (answer.type === 'result' && answer.ok === true) effective = resume
       }
       if (effective !== null) useSessionStore.getState().setCurrent(effective)
-
-      // The cached pane stays until the snapshot lands; a switch that could
-      // not hit its target must not leave another project's rows on screen.
+      // The cached pane stays until the snapshot lands; a missed target must not show stale rows.
       if (!(canPaint && effective === resume)) useChatStore.getState().reset()
       const loaded = await get().refreshTranscript()
       await Promise.all([restorePrefs(get), get().refreshSessions()])
       if (!loaded) useChatStore.getState().reset()
+      // The fleet belongs to the project we left; the roster store follows the switch.
+      void get().syncZenState()
       paneCache.set(root, {
         session: effective,
         pane: useChatStore.getState().pane(),
