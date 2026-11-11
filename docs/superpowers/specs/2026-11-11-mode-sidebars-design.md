@@ -47,8 +47,8 @@ TaskStrip 挤在 RoomPage 自带的右侧 aside 里——swarm 实际有两根�
 
 - **行数预算**：`Sidebar.tsx` 852/854，仅 2 行余量 → 必须拆分；`appStore.ts`
   1175/1175 **零余量，一行不能加**；未列名文件 DEFAULT_CAP = 800
-  （`scripts/check_architecture.py`）；`bridge.ts` 998/998、`e2e/harness.ts`
-  886/886 均零余量——新 e2e 尽量复用现有 mock 路径，确需新 mock 先抽离再增。
+  （`scripts/check_architecture.py`）；`bridge.ts` 919/998、`e2e/harness.ts`
+  27/886 均有余量，新 e2e mock 可直接加。
 - **模块边界**：`swarmStore`/`swarmWiring` 永不 import `appStore`（node --test
   加载约束）→ 项目变更重载不能挂 wiring，放 UI 组件 effect（组件可读 appStore）。
 - **挂载行为**：AppFrame 折叠时侧边栏宽度归 0 但组件保持挂载 → SwarmSidebar 的
@@ -69,9 +69,12 @@ TaskStrip 挤在 RoomPage 自带的右侧 aside 里——swarm 实际有两根�
 设计）。备选"swarm 不放项目入口"弃：它基于错误的全局语义。备选"等后端改完再加"
 弃：用户明确 UI 先行。
 
-**swarm 过渡接缝** —— reload-on-switch + `loadedProject` 跟踪（实现者定：最便宜的
-前瞻兼容——当前全局后端下重载返回同一份数据，无害；后端按项目化后天然正确，无需
-再改 UI）。备选"客户端按项目缓存/分区"弃：假语义，返工。
+**swarm 过渡接缝** —— load-on-switch + `loadedProject` 跟踪（实现者定）。
+Builder check 实测：`reload`（op=reload）只刷 roles/warnings，且有副作用（删除
+manifest 已消失的角色并取消其未完成任务），不适合自动触发；只有 `load`
+（op=list）取房间全量快照——接缝必须用 load。当前全局后端下重 list 返回同一份
+数据，无害；后端按项目化后天然正确，无需再改 UI。备选"客户端按项目缓存/分区"
+弃：假语义，返工。
 
 ## 设计
 
@@ -117,10 +120,17 @@ coding 主体（置顶区、sessions 区、项目分组、行菜单、SessionToo
   `selectTask(id)` toggle）：TaskStrip 写、RoomPage 的 TaskDetailPanel 读。
 - RoomPage：删 aside 与两个面板函数，`.root` 变单列；保留 feed、composer、
   warnings、ApprovalPanel、TaskDetailPanel。
-- **项目变更接缝**：`swarmStore` 增 `loadedProject: string | null`，load/reload
-  成功时记录当时项目；SwarmSidebar effect 读 `appStore.project`，
-  `loaded && loadedProject !== project` → `reload()`。组件常挂载（折叠也在），
-  无挂载时序死角；当前全局后端下重载幂等无害。
+- **项目变更接缝**（builder check 后定稿的契约）：
+  - `swarmStore.load(project: string)`：调用方传入**请求发起时**的项目；成功时
+    `loadedProject` 记为该请求项目，而非应答时的当前项目。内部请求令牌保证只有
+    最新请求的应答生效（A→B 切换时 load(A) 在途：A 的应答被丢弃，防止旧数据被
+    标成 B 后永不补载）。
+  - SwarmSidebar effect 读 `appStore.project`：`loaded && loadedProject !== project`
+    → 先清 `selectedTask` 与 `runRows`（房间级 UI 状态随旧房间留在原地），再
+    `load(project)`。组件常挂载（折叠也在），无挂载时序死角。
+  - 其余调用点同步传当前项目：RoomPage 挂载加载、saveRole 成功后的刷新（后者
+    不清选择，保住详情面板）。
+  - 当前全局后端下重 list 返回同一份数据，无害；后端按项目化后天然正确。
 
 ### 5. ModeSwitcher 活动指示
 
@@ -141,8 +151,10 @@ coding 主体（置顶区、sessions 区、项目分组、行菜单、SessionToo
 - Sidebar 壳分发：三模式渲染对应主体，Footer 常在。
 - ProjectSwitcher：开合、键盘导航、选择调 openProject、打开文件夹路径。
 - ZenSidebar：enabled=false 显示启用按钮，点击走 enable（mock sender）。
-- swarmStore：selectTask toggle、loadedProject 记录。
-- SwarmSidebar：项目变更触发 reload（sender seam 断言请求）。
+- swarmStore：selectTask toggle、loadedProject 按请求发起项目记录、过期应答
+  丢弃（latest-request guard）。
+- SwarmSidebar：项目变更清空 selection/runRows 并发出 list 请求（sender seam
+  断言）。
 - ModeSwitcher：zen 点 / swarm 计数的显示条件。
 - 既有 `zenSidebar.test.ts`（纯函数）、workspaceMode、zenActions、swarmRun、
   swarmWiring 测试不改，照跑验证不破坏。
@@ -152,7 +164,7 @@ e2e：
   补侧边栏展开前提）；任务详情断言（`[data-swarm-main] [data-swarm-task-detail]`、
   列表内无详情）天然继续成立。
 - 新增：zen 侧边栏项目下拉切换（复用 bridge 现有 project switch mock）、
-  swarm 切项目发出 reload 请求、zen 停用后的启用按钮、ModeSwitcher 徽标。
+  swarm 切项目发出 list 请求并清旧选择、zen 停用后的启用按钮、ModeSwitcher 徽标。
 - `app.spec.ts` coding 侧边栏全量回归，验证壳拆分无行为变化。
 
 门禁：`scripts/check.sh`、desktop `pnpm test && pnpm build`、style tokens、
@@ -170,10 +182,9 @@ e2e：
 |---|---|
 | 壳拆分破坏既有选择器/行为 | data-* 原样保留；app.spec.ts 全量回归 |
 | appStore 零余量 | 一行不加；新逻辑全在新组件与 swarmStore |
-| 全局后端下 reload 接缝空转 | 幂等无害；loadedProject 防重复重载 |
+| 全局后端下 load 接缝重 list | 返回同一份数据，无害；loadedProject 防重复加载；latest-request guard 防旧应答标错项目 |
 | 折叠时 roster/task 不可达 | 与 coding 会话语义一致；ExpandSidebar 既有恢复入口 |
 | e2e 对 DOM 位置敏感 | 选择器稳定，断言随搬移同提交更新 |
-| bridge/harness 零余量 | 新 e2e 复用现有 mock；确需新增先抽离 |
 | 样式搬移触发 token lint | 类原样迁移，不写新裸值 |
 
 ## 交付物
