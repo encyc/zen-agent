@@ -156,3 +156,21 @@ def test_load_truncates_unterminated_tail(tmp_path):
     assert "torn" not in store.room_path.read_text()
     store.append_message(_message(id="m2"))
     assert len(store.room_path.read_text().splitlines()) == 2
+
+
+def test_load_truncates_parseable_unterminated_tail(tmp_path):
+    # A crash after the JSON body but before its newline leaves a tail that
+    # parses yet is uncommitted; load must still drop it, or the next append
+    # concatenates onto it and merges two records into one malformed line.
+    store = SwarmStore(tmp_path)
+    good = json.dumps(_message_record(_message(id="m1")), ensure_ascii=False)
+    torn = json.dumps(_message_record(_message(id="m2")), ensure_ascii=False)
+    store.room_path.write_text(good + "\n" + torn, encoding="utf-8")
+
+    store.load()
+
+    assert store.room_path.read_text().endswith("\n")
+    assert [message.id for message in store.messages] == ["m1"]
+    store.append_message(_message(id="m3"))
+    lines = store.room_path.read_text().splitlines()
+    assert [json.loads(line)["id"] for line in lines] == ["m1", "m3"]
