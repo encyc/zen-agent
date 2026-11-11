@@ -747,3 +747,39 @@ def test_task_total_budget_must_cover_one_transcript(tmp_path):
                 "[task]\nmax_transcript_bytes = 1024\nmax_transcript_file_bytes = 8192\n",
             )
         )
+
+
+# ---------------------------------------------------------------------------
+# [zen] section (global-only): the fleet's worker concurrency cap
+# ---------------------------------------------------------------------------
+
+
+def test_zen_max_concurrent_parsed(tmp_path):
+    config = load_user_config(write_config(tmp_path, "[zen]\nmax_concurrent = 5\n"))
+    assert config.zen_max_concurrent == 5
+
+
+def test_zen_max_concurrent_default(tmp_path):
+    config = load_user_config(tmp_path / "absent.toml")
+    assert config.zen_max_concurrent == 3
+
+
+def test_zen_max_concurrent_must_be_positive(tmp_path):
+    with pytest.raises(ValueError, match="zen.max_concurrent"):
+        load_user_config(write_config(tmp_path, "[zen]\nmax_concurrent = 0\n"))
+
+
+def test_zen_unknown_key_is_rejected(tmp_path):
+    with pytest.raises(ValueError, match="unknown keys"):
+        load_user_config(write_config(tmp_path, "[zen]\nnope = 1\n"))
+
+
+def test_project_layer_may_not_set_zen(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    project_cfg = tmp_path / "proj" / ".zenagent" / "config.toml"
+    project_cfg.parent.mkdir(parents=True)
+    project_cfg.write_text("[zen]\nmax_concurrent = 9\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="global-only"):
+        load_user_config(cwd=tmp_path / "proj")

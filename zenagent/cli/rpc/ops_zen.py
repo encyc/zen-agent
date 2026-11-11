@@ -19,6 +19,7 @@ from zenagent.app.zen.fleet import ZenFleet
 from zenagent.app.zen.roster import latest_router, set_role
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
 from zenagent.cli.rpc.ops_session import _optional_count, _page_views
+from zenagent.config import load_user_config
 from zenagent.project import project_sessions_dir
 
 __all__ = ["ZenOps"]
@@ -105,11 +106,13 @@ class ZenOps:
         else:
             await runtime.switch_session(sessions_dir / f"{router_stem}.jsonl")
         set_role(sessions_dir, Path(runtime.session.path).stem, "router")
+        config = getattr(runtime, "user_config", None) or load_user_config()
         fleet = ZenFleet(
             chat=self.chat,
             root=runtime.root,
             sessions_dir=sessions_dir,
             router_path=str(runtime.session.path),
+            max_concurrent=config.zen_max_concurrent,
             on_change=self._send_fleet_roster,
             confirm=self.confirm,
             mode=getattr(runtime, "mode", None),

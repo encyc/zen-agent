@@ -263,3 +263,19 @@ async def test_enable_is_idempotent_and_never_orphans_the_fleet(slot_env):
 async def test_worker_fleet_carries_the_slot_confirm(slot_env):
     await slot_env.call({"type": "zen_fleet", "op": "enable", "id": "z19"})
     assert slot_env.runtime.zen_fleet.confirm == slot_env.slot.server.confirm
+
+
+async def test_enable_passes_configured_max_concurrent(slot_env):
+    from zenagent.config import UserConfig
+
+    slot_env.runtime.user_config = UserConfig(zen_max_concurrent=5)
+    await slot_env.call({"type": "zen_fleet", "op": "enable", "id": "z20"})
+    assert slot_env.runtime.zen_fleet.max_concurrent == 5
+
+
+async def test_enable_defaults_max_concurrent_to_three(slot_env):
+    from zenagent.config import UserConfig
+
+    slot_env.runtime.user_config = UserConfig()
+    await slot_env.call({"type": "zen_fleet", "op": "enable", "id": "z21"})
+    assert slot_env.runtime.zen_fleet.max_concurrent == 3

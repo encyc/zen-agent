@@ -100,6 +100,11 @@ DEFAULT_TASK_MAX_TRANSCRIPT_BYTES = 32 * 1024 * 1024
 #: Default per-transcript cap; a larger transcript is cut and marked.
 DEFAULT_TASK_MAX_TRANSCRIPT_FILE_BYTES = 8 * 1024 * 1024
 
+#: Keys accepted inside ``[zen]`` (fleet concurrency, global-only).
+_ZEN_KEYS = frozenset({"max_concurrent"})
+#: Default number of zen workers running at once.
+DEFAULT_ZEN_MAX_CONCURRENT = 3
+
 
 def _absolute_path(raw: str, target: Path) -> str:
     """Normalize one config path: ``~`` expands, relatives resolve next to the file."""
@@ -338,6 +343,8 @@ class UserConfig:
     task_max_transcript_file_bytes: int = DEFAULT_TASK_MAX_TRANSCRIPT_FILE_BYTES
     #: ``[limits]``: prompt/loop budgets (global-only; see zenagent.limits)
     limits: Limits = field(default_factory=Limits)
+    #: ``[zen]``: workers running at once (global-only)
+    zen_max_concurrent: int = DEFAULT_ZEN_MAX_CONCURRENT
 
 
 def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfig:
@@ -357,7 +364,7 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
         raise ValueError(f"cannot read config {target}: {exc}") from exc
 
     global_only = [
-        name for name in ("safety", "backup", "task", "limits") if name in data
+        name for name in ("safety", "backup", "task", "limits", "zen") if name in data
     ]
     if project_layer and global_only:
         listed = ", ".join(f"[{name}]" for name in global_only)
@@ -440,6 +447,11 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
         task_max_transcript_file_bytes,
     ) = _parse_task(_section_table(data, "task", target), target)
     limits = parse_limits(data.get("limits"), target)
+    zen_table = _section_table(data, "zen", target)
+    _unknown_section_keys(zen_table, _ZEN_KEYS, "zen", target)
+    zen_max_concurrent = _positive_int(
+        zen_table, "max_concurrent", DEFAULT_ZEN_MAX_CONCURRENT, "zen", target
+    )
     return UserConfig(
         default_model=default_model,
         provider_overrides=overrides,
@@ -460,6 +472,7 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
         task_max_transcript_bytes=task_max_transcript_bytes,
         task_max_transcript_file_bytes=task_max_transcript_file_bytes,
         limits=limits,
+        zen_max_concurrent=zen_max_concurrent,
     )
 
 
@@ -505,6 +518,7 @@ def _merge_user_configs(base: UserConfig, override: UserConfig) -> UserConfig:
         task_max_transcript_bytes=base.task_max_transcript_bytes,
         task_max_transcript_file_bytes=base.task_max_transcript_file_bytes,
         limits=base.limits,
+        zen_max_concurrent=base.zen_max_concurrent,
     )
 
 
