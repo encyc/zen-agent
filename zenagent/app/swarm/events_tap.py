@@ -26,7 +26,7 @@ def tap(role_id: str, event: AgentEvent, *, sink: EventSink | None, task_id: str
         return
     try:
         sink(role_id, task_id, event)
-    except Exception:  # noqa: BLE001 - observers are best-effort
+    except Exception:
         logger.debug("swarm event sink failed", exc_info=True)
 
 
