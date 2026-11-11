@@ -11,7 +11,8 @@ matches the release tag; older history is in the repository tags and commits.
 
 ### Zen 模式（Router 统筹，dsh super-agent 双层架构）
 
-**Zen mode.** sidebar 顶部新增 Coding ↔ Zen 切换（✨，持久化于 `zen.ui.mode`）。
+**Zen mode.** 三态切换器（Coding/Zen/Swarm）切到 Zen 启用；持久化于
+`zen.workspaceMode`（zen 分支旧 key `zen.ui.mode` 自动迁移）。
 进入 Zen 后每个项目只有一个交互会话（Router session），项目下其余会话成为持有
 任务焦点的 worker：Router 通过六个 fleet 工具异步派工、查状态、停止、设焦点、
 新建 worker；worker 回合结束后报告以 `[zen:worker …]` 消息自动回注 Router
@@ -39,7 +40,7 @@ matches the release tag; older history is in the repository tags and commits.
   项目 Router 会话（复用最新或新建并写入名册），disable 关 fleet 并恢复原
   会话；slot 在 fleet 有活跃 worker 时 pinned（不被 LRU 驱逐），slot 关闭先
   收尾 fleet。
-- **Desktop**：sidebar 头部 ✨ 切换按钮（`data-zen-toggle`）；Zen 开启时会话
+- **Desktop**：Zen 开启时（三态切换器）sidebar 会话区换成名册
   区渲染项目名册（Router 行 + worker 行：状态点/焦点/状态，`data-worker-row`）；
   只读 worker transcript 抽屉（`zen_fleet op=transcript`，ESC/点击遮罩关闭）；
   `zenStore`/`zenSidebar` 纯函数与 `syncZenState`（boot/切换按持久化开关重放

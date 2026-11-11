@@ -6,17 +6,24 @@ Zen 模式是 zen-agent 的第二种交互形态：每个项目只保留**一个
 
 设计依据见
 [`docs/superpowers/specs/2026-11-10-zen-mode-design.md`](../superpowers/specs/2026-11-10-zen-mode-design.md)
-（参考 DeepSeek dsh super-agent 原型的双层架构）。
+（参考 DeepSeek dsh super-agent 原型的双层架构）；与
+[多角色 Swarm](swarm.md) 是同框架下的两种多 agent 形态（Swarm 全局房间 +
+常驻角色，Zen 每项目一个 Router + 项目内 worker）。
 
 ## 打开与关闭
 
-sidebar 右上角（⌘B 按钮旁）的 ✨ 按钮在 **Coding ↔ Zen** 之间切换；选择
-持久化在 `zen.ui.mode`，重启后自动恢复。切换要求当前会话空闲（正在运行时
-按钮会失败并回退，`zen_busy`）。
+sidebar 顶部的三态切换器（**Coding / Zen / Swarm**）切到 **Zen**；选择持久化
+在 `zen.workspaceMode`（zen 分支旧 key `zen.ui.mode` 会自动迁移），重启后自动
+恢复。切换要求当前会话空闲（正在运行时切换会失败并回退，`zen_busy`）。
 
 - **进入 Zen**：当前会话切换为项目的 Router 会话（有历史则复用上次的
   Router，延续全局记忆；没有则新建），其余会话进入名册。
-- **退出 Zen**：恢复进入前的会话；在跑的 worker 会被停止并标记受阻。
+- **离开 Zen**（切到 Coding 或 Swarm）：**默认 fleet 在后台继续跑**——worker
+  照常执行，报告照常回注 Router 会话，切回 Zen 即可看到汇总。此行为可在
+  **Settings → Zen** 的"离开 Zen 模式时允许后台继续"开关切换：关掉后，
+  离开即停止 worker 并恢复进入前的会话。
+- **显式停止**：名册 Router 行右侧的停止按钮任何时候都可停掉 fleet
+  （与上述开关无关）。
 
 ## 在 Router 会话里工作
 

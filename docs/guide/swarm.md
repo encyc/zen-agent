@@ -5,7 +5,8 @@ manifest、session 和工作区，在同一个房间聊天室里接收任务、�
 任务靠 `@` 派发，没有额外的调度器、没有自动回执——`@` 是唯一的路由原语。
 
 桌面端 sidebar 顶部的 Coding / ZEN / Swarm 切换器进入这个模式：
-**Coding** 是普通单会话；**Swarm** 是本文；**ZEN** 是另一分支的编排实现（当前为占位页）。
+**Coding** 是普通单会话；**Swarm** 是本文；**ZEN** 是另一种多 agent 形态
+（[Zen 模式](zen-mode.md)：每项目一个 Router 统筹项目内 worker，而非全局房间）。
 
 ## 与 coding / zen 的区别
 
@@ -13,7 +14,7 @@ manifest、session 和工作区，在同一个房间聊天室里接收任务、�
 |---|---|---|
 | Coding | 一个会话、一个 agent | 你和它直接对话 |
 | Swarm | 一个房间、多个角色 | 角色之间用 `@` 派活、回报；你也是房间里的一个成员 |
-| ZEN | 另一分支的多 worker 编排 | 占位；与 swarm 共享切换器和状态，概念不混线 |
+| ZEN | 每项目一个 Router 统筹项目内 worker | [Zen 模式](zen-mode.md)；与 swarm 共享三态切换器，fleet 与房间互不干扰 |
 
 Swarm 不接入 IM，也不常驻后台守护进程：房间和任务的真相都在本地 JSONL 日志里，
 运行发生在桌面宿主进程内。
