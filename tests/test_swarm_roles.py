@@ -7,6 +7,9 @@ from zenagent.app.swarm.roles import (
     agents_root,
     discover_roles,
     parse_role,
+    project_agents_root,
+    project_state_root,
+    role_session_path,
     workspaces_root,
 )
 from zenagent.app.swarm.roster import role_signature, role_view, write_role
@@ -20,12 +23,66 @@ def home(tmp_path, monkeypatch):
     return home
 
 
-def _write_role(role_id: str, manifest: dict, prompt: str = "You are a role.") -> Path:
-    role_dir = agents_root() / role_id
+@pytest.fixture
+def proj(tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    return root
+
+
+def _write_role(
+    role_id: str,
+    manifest: dict,
+    prompt: str = "You are a role.",
+    *,
+    root: Path | None = None,
+) -> Path:
+    role_dir = (agents_root() if root is None else project_agents_root(root)) / role_id
     role_dir.mkdir(parents=True)
     (role_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     (role_dir / "prompt.md").write_text(prompt, encoding="utf-8")
     return role_dir
+
+
+def test_project_state_root_is_under_the_project_dir(home, proj):
+    from zenagent import project
+
+    assert project_state_root(proj) == project.project_dir(proj) / "swarm"
+
+
+def test_discover_roles_reads_the_project_local_agents_dir(home, proj):
+    _write_role("research", {"id": "research", "name": "R"}, root=proj)
+
+    roles, warnings = discover_roles(proj)
+
+    assert [role.id for role in roles] == ["research"]
+    # project-local default: workspace is the project root, inherit_project on
+    assert roles[0].root == proj.resolve()
+    assert roles[0].inherit_project is True
+    assert warnings == []
+
+
+def test_library_role_keeps_isolated_defaults(home):
+    _write_role("coder", {"id": "coder", "name": "C"})
+
+    roles, _ = discover_roles(None)
+
+    assert [role.id for role in roles] == ["coder"]
+    assert roles[0].inherit_project is False
+    assert roles[0].root == (workspaces_root() / "coder").resolve()
+
+
+def test_role_session_path_is_per_project(home, tmp_path):
+    r1, r2 = tmp_path / "a", tmp_path / "b"
+    r1.mkdir()
+    r2.mkdir()
+
+    p1 = role_session_path("research", root=r1)
+    p2 = role_session_path("research", root=r2)
+
+    assert p1.parent != p2.parent
+    assert p1.is_relative_to(project_state_root(r1) / "agents" / "research")
+    assert p1.exists()
 
 
 def _manifest(role_id: str = "research", **overrides) -> dict:
@@ -97,7 +154,7 @@ def test_workspace_defaults_outside_protected_home(home):
     assert role.root.is_dir()
 
 
-def test_write_role_keeps_fields_the_client_did_not_send(home):
+def test_write_role_keeps_fields_the_client_did_not_send(home, proj):
     role_dir = _write_role(
         "research",
         _manifest(
@@ -106,11 +163,13 @@ def test_write_role_keeps_fields_the_client_did_not_send(home):
             plugins=["zen.feishu"],
             inheritProject=True,
         ),
+        root=proj,
     )
 
     write_role(
         "research",
         {"schemaVersion": 1, "name": "Renamed", "mode": "ask", "systemPrompt": "v2"},
+        root=proj,
     )
 
     raw = json.loads((role_dir / "manifest.json").read_text(encoding="utf-8"))
@@ -123,10 +182,16 @@ def test_write_role_keeps_fields_the_client_did_not_send(home):
     assert (role_dir / "prompt.md").read_text(encoding="utf-8") == "v2"
 
 
-def test_write_role_null_deletes_a_field(home):
-    role_dir = _write_role("research", _manifest(model="deepseek-chat", tools=["bash"]))
+def test_write_role_null_deletes_a_field(home, proj):
+    role_dir = _write_role(
+        "research", _manifest(model="deepseek-chat", tools=["bash"]), root=proj
+    )
 
-    write_role("research", {"schemaVersion": 1, "name": "Research", "model": None, "tools": None})
+    write_role(
+        "research",
+        {"schemaVersion": 1, "name": "Research", "model": None, "tools": None},
+        root=proj,
+    )
 
     raw = json.loads((role_dir / "manifest.json").read_text(encoding="utf-8"))
     assert "model" not in raw
@@ -169,8 +234,8 @@ def test_role_view_carries_raw_manifest_entries_for_editing(home, monkeypatch):
     assert view["mcpServers"]["feishu"]["env"]["APP_ID"] == "${SWARM_TEST_APP_ID}"
 
 
-def test_write_role_round_trips_the_full_config_surface(home):
-    _write_role("research", _manifest())
+def test_write_role_round_trips_the_full_config_surface(home, proj):
+    _write_role("research", _manifest(), root=proj)
 
     write_role(
         "research",
@@ -184,9 +249,10 @@ def test_write_role_round_trips_the_full_config_surface(home):
             "inheritProject": True,
             "mcpServers": {"local": {"command": ["echo"]}},
         },
+        root=proj,
     )
 
-    role, _ = parse_role(agents_root() / "research")
+    role, _ = parse_role(project_agents_root(proj) / "research", project_root=proj)
     assert role is not None
     view = role_view(role)
     assert view["skills"] == ["skills"]
@@ -255,6 +321,19 @@ def test_prompt_file_traversal_is_refused(home):
     (role_dir.parent / "secret.txt").write_text("leak", encoding="utf-8")
 
     manifest, warnings = parse_role(role_dir)
+
+    assert manifest is not None
+    assert manifest.system_prompt == ""
+    assert any("prompt" in w for w in warnings)
+
+
+def test_project_role_prompt_traversal_is_refused(home, proj):
+    role_dir = _write_role(
+        "r", {"id": "r", "systemPromptFile": "../secret.txt"}, root=proj
+    )
+    (role_dir.parent / "secret.txt").write_text("leak", encoding="utf-8")
+
+    manifest, warnings = parse_role(role_dir, project_root=proj)
 
     assert manifest is not None
     assert manifest.system_prompt == ""

@@ -16,8 +16,8 @@ import shutil
 
 from zenagent.app.swarm.roles import (
     RoleManifest,
-    agents_root,
     parse_role,
+    project_agents_root,
 )
 
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
@@ -31,13 +31,13 @@ def _read_manifest(path) -> dict:
     return raw if isinstance(raw, dict) else {}
 
 
-def write_role(role_id: str, manifest: dict) -> RoleManifest:
+def write_role(role_id: str, manifest: dict, *, root) -> RoleManifest:
     if not _ID_RE.fullmatch(role_id):
         raise ValueError(f"invalid role id {role_id!r}")
     payload = dict(manifest)
     prompt = payload.pop("systemPrompt", None)
     payload["id"] = role_id
-    role_dir = agents_root() / role_id
+    role_dir = project_agents_root(root) / role_id
     role_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = role_dir / "manifest.json"
     # Settings sends only the fields it shows; everything else in the file
@@ -53,14 +53,14 @@ def write_role(role_id: str, manifest: dict) -> RoleManifest:
     )
     if prompt is not None:
         (role_dir / "prompt.md").write_text(str(prompt), encoding="utf-8")
-    role, warnings = parse_role(role_dir)
+    role, warnings = parse_role(role_dir, project_root=root)
     if role is None:
         raise ValueError("; ".join(warnings) or f"invalid role {role_id}")
     return role
 
 
-def remove_role_dir(role_id: str) -> None:
-    base = agents_root()
+def remove_role_dir(role_id: str, *, root) -> None:
+    base = project_agents_root(root)
     role_dir = base / role_id
     if role_dir.parent != base:
         return

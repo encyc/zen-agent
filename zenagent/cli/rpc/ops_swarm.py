@@ -9,11 +9,13 @@ the per-slot servers use.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from zenagent.app.swarm.manager import SwarmManager
 from zenagent.cli.rpc.codec import serialize_event
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
 from zenagent.events import AgentEvent
+from zenagent.project import find_project_root
 
 #: Server-side diagnostics; raw exception detail never crosses the wire.
 logger = logging.getLogger(__name__)
@@ -114,12 +116,20 @@ class SwarmOps:
     async def _swarm_manager(self) -> SwarmManager:
         if self._swarm is None:
             self._swarm = SwarmManager(
-                write_frame=self._send, event_sink=self._send_role_event
+                root=self._swarm_root(),
+                write_frame=self._send,
+                event_sink=self._send_role_event,
             )
         if not self._swarm_started:
             await self._swarm.start()
             self._swarm_started = True
         return self._swarm
+
+    def _swarm_root(self) -> Path:
+        """The project this room belongs to: the active slot's, else startup's."""
+        if self._active is not None:
+            return find_project_root(self._active.server.project)
+        return find_project_root(self._options.root)
 
     def _send_role_event(self, role_id: str, task_id: str, event: AgentEvent) -> None:
         """One role-run event as a global frame: the desktop streams a task's

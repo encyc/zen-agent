@@ -225,7 +225,13 @@ async def test_swarm_frames_are_global(tmp_path, monkeypatch):
 
     class FrameManager:
         def __init__(
-            self, *, write_frame=None, stream_fn_factory=None, event_sink=None, max_concurrent=3
+            self,
+            *,
+            root=None,
+            write_frame=None,
+            stream_fn_factory=None,
+            event_sink=None,
+            max_concurrent=3,
         ):
             self.write_frame = write_frame
             self.event_sink = event_sink

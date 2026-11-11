@@ -12,7 +12,7 @@ from conftest import text_stream
 from zenagent.app.runtime import Runtime
 from zenagent.app.swarm.events_tap import subscribe_events, tap
 from zenagent.app.swarm.manager import SwarmManager
-from zenagent.app.swarm.roles import agents_root, state_root
+from zenagent.app.swarm.roles import project_agents_root, project_state_root
 from zenagent.app.swarm.room import RoomMessage, SwarmStore, TaskRecord
 from zenagent.events import Aborted, AgentEvent, AssistantEvent
 from zenagent.types import (
@@ -23,17 +23,37 @@ from zenagent.types import (
     Usage,
 )
 
+_PROJECT_ROOT: Path | None = None
+
 
 @pytest.fixture(autouse=True)
 def isolated_home(tmp_path, monkeypatch):
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(Path, "home", lambda: home)
-    return home
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    global _PROJECT_ROOT
+    _PROJECT_ROOT = project_root
+    yield home
+    _PROJECT_ROOT = None
+
+
+def _project_root() -> Path:
+    assert _PROJECT_ROOT is not None
+    return _PROJECT_ROOT
+
+
+def _manager(**kwargs) -> SwarmManager:
+    return SwarmManager(root=_project_root(), **kwargs)
+
+
+def _role_dir(role_id: str) -> Path:
+    return project_agents_root(_project_root()) / role_id
 
 
 def _write_role(role_id: str, prompt: str = "You are a role.") -> Path:
-    role_dir = agents_root() / role_id
+    role_dir = _role_dir(role_id)
     role_dir.mkdir(parents=True)
     (role_dir / "manifest.json").write_text(
         json.dumps({"id": role_id, "name": role_id.title()}), encoding="utf-8"
@@ -86,7 +106,7 @@ def _states(manager: SwarmManager) -> dict[str, str]:
 
 async def test_close_fails_pending_approvals():
     _write_role("research", "You research.")
-    manager = SwarmManager(stream_fn_factory=lambda role: text_stream("ok"))
+    manager = _manager(stream_fn_factory=lambda role: text_stream("ok"))
     await manager.start()
     try:
         confirm = manager._confirm_callback("research")
@@ -112,7 +132,7 @@ async def test_two_role_chain():
             "查完了 @coder 改 Y" if role.id == "research" else "改完了 @you 验收"
         )
 
-    manager = SwarmManager(stream_fn_factory=factory)
+    manager = _manager(stream_fn_factory=factory)
     await manager.start()
     try:
         tasks = await manager.post("@research 查 X")
@@ -134,7 +154,7 @@ async def test_two_role_chain():
 
 async def test_unbuildable_role_is_skipped_with_a_room_note():
     _write_role("research", "You research.")
-    broken = agents_root() / "broken"
+    broken = _role_dir("broken")
     broken.mkdir(parents=True)
     (broken / "manifest.json").write_text(
         json.dumps({"id": "broken", "name": "Broken", "model": "no-such-model"}),
@@ -142,7 +162,7 @@ async def test_unbuildable_role_is_skipped_with_a_room_note():
     )
     (broken / "prompt.md").write_text("You break.", encoding="utf-8")
 
-    manager = SwarmManager(stream_fn_factory=lambda role: text_stream("ok"))
+    manager = _manager(stream_fn_factory=lambda role: text_stream("ok"))
     await manager.start()
     try:
         assert "research" in manager.agents
@@ -161,7 +181,7 @@ async def test_unbuildable_role_is_skipped_with_a_room_note():
 
 async def test_reload_clears_a_fixed_role_warning():
     _write_role("research", "You research.")
-    broken = agents_root() / "broken"
+    broken = _role_dir("broken")
     broken.mkdir(parents=True)
     (broken / "manifest.json").write_text(
         json.dumps({"id": "broken", "name": "Broken", "model": "no-such-model"}),
@@ -169,7 +189,7 @@ async def test_reload_clears_a_fixed_role_warning():
     )
     (broken / "prompt.md").write_text("You break.", encoding="utf-8")
 
-    manager = SwarmManager(stream_fn_factory=lambda role: text_stream("ok"))
+    manager = _manager(stream_fn_factory=lambda role: text_stream("ok"))
     await manager.start()
     try:
         assert any(warning.startswith("role broken:") for warning in manager.warnings)
@@ -187,7 +207,7 @@ async def test_reload_clears_a_fixed_role_warning():
 
 async def test_close_is_safe_after_start_failure():
     _write_role("research", "You research.")
-    broken = agents_root() / "broken"
+    broken = _role_dir("broken")
     broken.mkdir(parents=True)
     (broken / "manifest.json").write_text(
         json.dumps({"id": "broken", "name": "Broken", "model": "no-such-model"}),
@@ -195,7 +215,7 @@ async def test_close_is_safe_after_start_failure():
     )
     (broken / "prompt.md").write_text("You break.", encoding="utf-8")
 
-    manager = SwarmManager(stream_fn_factory=lambda role: text_stream("ok"))
+    manager = _manager(stream_fn_factory=lambda role: text_stream("ok"))
     await manager.start()
     await manager.close()
     await manager.close()
@@ -205,7 +225,7 @@ async def test_close_is_safe_after_start_failure():
 async def test_agent_mentioning_you_raises_a_notification():
     _write_role("research", "You research.")
     frames: list[dict] = []
-    manager = SwarmManager(
+    manager = _manager(
         write_frame=frames.append,
         stream_fn_factory=lambda role: text_stream("@you 结论是 Z"),
     )
@@ -224,7 +244,7 @@ async def test_agent_mentioning_you_raises_a_notification():
 async def test_user_mentioning_you_does_not_notify():
     _write_role("research", "You research.")
     frames: list[dict] = []
-    manager = SwarmManager(
+    manager = _manager(
         write_frame=frames.append,
         stream_fn_factory=lambda role: text_stream("ok"),
     )
@@ -238,7 +258,7 @@ async def test_user_mentioning_you_does_not_notify():
 
 async def test_cancel_running_task():
     _write_role("slow")
-    manager = SwarmManager(stream_fn_factory=_slow_stream)
+    manager = _manager(stream_fn_factory=_slow_stream)
     await manager.start()
     try:
         [task] = await manager.post("@slow 慢慢做")
@@ -251,7 +271,7 @@ async def test_cancel_running_task():
 
 async def test_retry_creates_derived_task():
     _write_role("worker")
-    store = SwarmStore(state_root())
+    store = SwarmStore(project_state_root(_project_root()))
     store.load()
     store.append_message(
         RoomMessage(
@@ -289,7 +309,7 @@ async def test_retry_creates_derived_task():
         )
     )
 
-    manager = SwarmManager(stream_fn_factory=lambda role: text_stream("done"))
+    manager = _manager(stream_fn_factory=lambda role: text_stream("done"))
     await manager.start()
     try:
         retried = await manager.retry("t_fail")
@@ -304,7 +324,7 @@ async def test_retry_creates_derived_task():
 
 async def test_restart_marks_nonterminal_interrupted():
     _write_role("worker")
-    store = SwarmStore(state_root())
+    store = SwarmStore(project_state_root(_project_root()))
     store.load()
     store.append_message(
         RoomMessage(
@@ -353,7 +373,7 @@ async def test_restart_marks_nonterminal_interrupted():
         )
     )
 
-    manager = SwarmManager(stream_fn_factory=lambda role: text_stream("done"))
+    manager = _manager(stream_fn_factory=lambda role: text_stream("done"))
     await manager.start()
     try:
         tasks = {task["id"]: task for task in manager.tasks()}
@@ -367,7 +387,7 @@ async def test_restart_marks_nonterminal_interrupted():
 
 async def test_role_update_applies_after_run():
     _write_role("slow", "You are v1.")
-    manager = SwarmManager(stream_fn_factory=_slow_stream)
+    manager = _manager(stream_fn_factory=_slow_stream)
     await manager.start()
     try:
         [task] = await manager.post("@slow work")
@@ -396,7 +416,7 @@ async def test_role_update_applies_after_run():
 
 async def test_delete_role_cancels_tasks():
     _write_role("victim")
-    manager = SwarmManager(stream_fn_factory=_slow_stream)
+    manager = _manager(stream_fn_factory=_slow_stream)
     await manager.start()
     try:
         [running_task] = await manager.post("@victim one")
@@ -410,7 +430,7 @@ async def test_delete_role_cancels_tasks():
             assert tasks[task_id]["state"] == "cancelled"
             assert tasks[task_id]["reason"] == "role_removed"
         assert "victim" not in manager.agents
-        assert not (agents_root() / "victim").exists()
+        assert not _role_dir("victim").exists()
     finally:
         await manager.close()
 
@@ -460,7 +480,7 @@ def _approval_request(frames: list[dict]) -> dict | None:
 async def test_unknown_mention_lands_in_the_room_without_a_task():
     _write_role("research")
     frames: list[dict] = []
-    manager = SwarmManager(
+    manager = _manager(
         write_frame=frames.append, stream_fn_factory=lambda role: text_stream("ok")
     )
     await manager.start()
@@ -477,7 +497,7 @@ async def test_unknown_mention_lands_in_the_room_without_a_task():
 async def test_mutual_mentions_stop_at_the_depth_cap():
     _write_role("ping")
     _write_role("pong")
-    manager = SwarmManager(
+    manager = _manager(
         stream_fn_factory=lambda role: text_stream(
             "@pong again" if role.id == "ping" else "@ping again"
         )
@@ -518,7 +538,7 @@ async def test_approval_allow_lets_the_write_run():
         encoding="utf-8",
     )
     frames: list[dict] = []
-    manager = SwarmManager(
+    manager = _manager(
         write_frame=frames.append,
         stream_fn_factory=lambda role: _write_then_text_stream(),
     )
@@ -549,7 +569,7 @@ async def test_approval_timeout_fails_the_task(monkeypatch):
         ),
         encoding="utf-8",
     )
-    manager = SwarmManager(
+    manager = _manager(
         stream_fn_factory=lambda role: _write_then_text_stream()
     )
     await manager.start()
@@ -571,7 +591,7 @@ async def test_swarm_approval_deny_marks_task():
         encoding="utf-8",
     )
     frames: list[dict] = []
-    manager = SwarmManager(
+    manager = _manager(
         write_frame=frames.append,
         stream_fn_factory=lambda role: _write_then_text_stream(),
     )
@@ -627,7 +647,7 @@ async def test_swarm_concurrency_cap_queues():
     _write_role("alpha")
     _write_role("beta")
     gates = {"alpha": asyncio.Event(), "beta": asyncio.Event()}
-    manager = SwarmManager(
+    manager = _manager(
         max_concurrent=1, stream_fn_factory=_gated_stream(gates)
     )
     await manager.start()
@@ -652,7 +672,7 @@ async def test_swarm_concurrency_cap_queues():
 
 async def test_inbox_cap_rejects_the_overflow_posts():
     _write_role("slow")
-    manager = SwarmManager(stream_fn_factory=_slow_stream)
+    manager = _manager(stream_fn_factory=_slow_stream)
     await manager.start()
     try:
         [running] = await manager.post("@slow one")
@@ -673,7 +693,7 @@ async def test_inbox_cap_rejects_the_overflow_posts():
 
 async def test_built_role_sessions_do_not_report_the_unscoped_warning():
     _write_role("research", "You research.")
-    manager = SwarmManager(stream_fn_factory=lambda role: text_stream("ok"))
+    manager = _manager(stream_fn_factory=lambda role: text_stream("ok"))
     await manager.start()
     try:
         assert "research" in manager.agents
@@ -695,7 +715,7 @@ def _task_states(frames: list[dict], task_id: str) -> list[str]:
 async def test_terminal_task_state_is_emitted_to_the_room():
     _write_role("research", "You research.")
     frames: list[dict] = []
-    manager = SwarmManager(
+    manager = _manager(
         write_frame=frames.append,
         stream_fn_factory=lambda role: text_stream("完成"),
     )
@@ -711,7 +731,7 @@ async def test_terminal_task_state_is_emitted_to_the_room():
 async def test_cancelled_task_state_is_emitted_to_the_room():
     _write_role("slow")
     frames: list[dict] = []
-    manager = SwarmManager(write_frame=frames.append, stream_fn_factory=_slow_stream)
+    manager = _manager(write_frame=frames.append, stream_fn_factory=_slow_stream)
     await manager.start()
     try:
         [task] = await manager.post("@slow 长任务")
@@ -725,7 +745,7 @@ async def test_cancelled_task_state_is_emitted_to_the_room():
 
 async def test_task_transcript_replays_the_run_from_the_role_session():
     _write_role("research", "You research.")
-    manager = SwarmManager(stream_fn_factory=lambda role: text_stream("完成"))
+    manager = _manager(stream_fn_factory=lambda role: text_stream("完成"))
     await manager.start()
     try:
         [task] = await manager.post("@research 做")
@@ -743,7 +763,7 @@ async def test_task_transcript_replays_the_run_from_the_role_session():
 
 
 def test_task_transcript_is_unavailable_without_a_task_or_agent():
-    manager = SwarmManager()
+    manager = _manager()
     manager.store.tasks["t_1"] = TaskRecord(
         id="t_1", assignee="research", state="done", chain_id="c_1", chain_depth=1
     )
@@ -759,7 +779,7 @@ async def test_role_events_flow_to_the_sink_stamped_with_the_active_task():
     def sink(role_id: str, task_id: str, event: object) -> None:
         seen.append((role_id, task_id, getattr(event, "type", "?")))
 
-    manager = SwarmManager(
+    manager = _manager(
         stream_fn_factory=lambda role: text_stream("done"),
         event_sink=sink,
     )
@@ -782,7 +802,7 @@ async def test_sink_errors_never_break_a_run_and_stray_taps_are_dropped():
     def boom(role_id: str, task_id: str, event: object) -> None:
         raise RuntimeError("sink exploded")
 
-    manager = SwarmManager(
+    manager = _manager(
         stream_fn_factory=lambda role: text_stream("ok"),
         event_sink=boom,
     )
@@ -854,7 +874,7 @@ async def test_delete_role_mid_run_leaks_no_runtime(monkeypatch):
     _write_role("victim", "You are v1.")
     built, closed = _track_runtimes(monkeypatch)
     frames: list[dict] = []
-    manager = SwarmManager(write_frame=frames.append, stream_fn_factory=_slow_stream)
+    manager = _manager(write_frame=frames.append, stream_fn_factory=_slow_stream)
     await manager.start()
     try:
         [task] = await manager.post("@victim work")
@@ -885,7 +905,7 @@ async def test_delete_role_mid_run_leaks_no_runtime(monkeypatch):
 async def test_pending_apply_survives_a_run():
     _write_role("slow", "You are v1.")
     frames: list[dict] = []
-    manager = SwarmManager(write_frame=frames.append, stream_fn_factory=_slow_stream)
+    manager = _manager(write_frame=frames.append, stream_fn_factory=_slow_stream)
     await manager.start()
     try:
         [task] = await manager.post("@slow work")
@@ -915,7 +935,7 @@ async def test_pending_apply_survives_a_run():
 async def test_concurrent_rebuilds_serialize(monkeypatch):
     _write_role("r", "You are v1.")
     built, closed = _track_runtimes(monkeypatch)
-    manager = SwarmManager(stream_fn_factory=lambda role: text_stream("ok"))
+    manager = _manager(stream_fn_factory=lambda role: text_stream("ok"))
     await manager.start()
     try:
         await asyncio.gather(
@@ -927,3 +947,36 @@ async def test_concurrent_rebuilds_serialize(monkeypatch):
         assert manager.agents["r"].role.name in {"R v2", "R v3"}
     finally:
         await manager.close()
+
+
+async def test_two_projects_get_isolated_rooms(tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    for root, role in ((a, "alpha"), (b, "beta")):
+        (root / ".zenagent" / "agents" / role).mkdir(parents=True)
+        (root / ".zenagent" / "agents" / role / "manifest.json").write_text(
+            json.dumps({"id": role, "name": role}), encoding="utf-8"
+        )
+        (root / ".zenagent" / "agents" / role / "prompt.md").write_text(
+            "hi", encoding="utf-8"
+        )
+
+    ma = SwarmManager(root=a, stream_fn_factory=lambda role: text_stream("done"))
+    mb = SwarmManager(root=b, stream_fn_factory=lambda role: text_stream("done"))
+    await ma.start()
+    await mb.start()
+    try:
+        assert set(ma.role_ids) == {"alpha"}
+        assert set(mb.role_ids) == {"beta"}
+        assert ma.store.root != mb.store.root
+        assert ma.agents["alpha"].role.root == a.resolve()
+
+        [task] = await ma.post("@alpha hi")
+        await _wait_for(lambda: _states(ma).get(task.id) == "done")
+
+        texts = [message["text"] for message in ma.messages()]
+        assert texts[:2] == ["@alpha hi", "done"]
+        assert mb.messages() == []
+        assert mb.tasks() == []
+    finally:
+        await ma.close()
+        await mb.close()

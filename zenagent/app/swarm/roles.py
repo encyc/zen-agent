@@ -26,6 +26,8 @@ __all__ = [
     "agents_root",
     "discover_roles",
     "parse_role",
+    "project_agents_root",
+    "project_state_root",
     "role_session_path",
     "state_root",
     "workspaces_root",
@@ -65,22 +67,33 @@ def agents_root() -> Path:
     return project.zenagent_home() / "agents"
 
 
+def project_agents_root(root: Path) -> Path:
+    """Project-local role config: committable, travels with the repo."""
+    return Path(root) / ".zenagent" / "agents"
+
+
 def workspaces_root() -> Path:
     return Path.home() / ".zenagent-workspaces"
 
 
 def state_root() -> Path:
+    """The pre-project global room; read only, kept for archive detection."""
     return project.zenagent_home() / "swarm"
 
 
-def role_session_path(role_id: str, *, fresh: bool = False) -> Path:
+def project_state_root(root: Path) -> Path:
+    """Machine-local swarm state for one project (room logs, role sessions)."""
+    return project.project_dir(root) / "swarm"
+
+
+def role_session_path(role_id: str, *, root: Path, fresh: bool = False) -> Path:
     """The role's session file: the newest existing, or a fresh empty one.
 
     Kept out of the project session dirs on purpose (design §7): role
     transcripts never appear in the normal session list, which is why the role
     runtime sets ``project_sessions=False``.
     """
-    directory = state_root() / "agents" / role_id / "sessions"
+    directory = project_state_root(root) / "agents" / role_id / "sessions"
     directory.mkdir(parents=True, exist_ok=True)
     if not fresh:
         latest = _latest_session(directory)
@@ -108,7 +121,9 @@ def _within(role_dir: Path, candidate: Path) -> bool:
     return candidate.resolve().is_relative_to(role_dir.resolve())
 
 
-def parse_role(role_dir: Path) -> tuple[RoleManifest | None, list[str]]:
+def parse_role(
+    role_dir: Path, *, project_root: Path | None = None
+) -> tuple[RoleManifest | None, list[str]]:
     role_dir = Path(role_dir)
     warnings: list[str] = []
     try:
@@ -186,6 +201,9 @@ def parse_role(role_dir: Path) -> tuple[RoleManifest | None, list[str]]:
     explicit_root = raw.get("root")
     if explicit_root:
         root = Path(str(explicit_root)).expanduser().resolve()
+    elif project_root is not None:
+        # A project-local role works in the project it belongs to.
+        root = Path(project_root).resolve()
     else:
         root = (workspaces_root() / role_id).resolve()
     try:
@@ -205,6 +223,10 @@ def parse_role(role_dir: Path) -> tuple[RoleManifest | None, list[str]]:
     tools_raw = raw.get("tools")
     tools = [str(item) for item in tools_raw] if isinstance(tools_raw, list) else None
 
+    inherit = raw.get("inheritProject")
+    if inherit is None:
+        inherit = project_root is not None
+
     role = RoleManifest(
         id=role_id,
         name=str(raw.get("name") or role_id),
@@ -219,7 +241,7 @@ def parse_role(role_dir: Path) -> tuple[RoleManifest | None, list[str]]:
         mcp_servers=mcp_servers,
         tools=tools,
         root=root,
-        inherit_project=bool(raw.get("inheritProject", False)),
+        inherit_project=bool(inherit),
         max_turns=_as_int(limits.get("maxTurns")),
         max_cost=_as_float(limits.get("maxCost")),
         mode=mode,
@@ -228,8 +250,13 @@ def parse_role(role_dir: Path) -> tuple[RoleManifest | None, list[str]]:
     return role, warnings
 
 
-def discover_roles() -> tuple[list[RoleManifest], list[str]]:
-    base = agents_root()
+def discover_roles(root: Path | None = None) -> tuple[list[RoleManifest], list[str]]:
+    """Load roles for one project, or the global library when ``root`` is None.
+
+    A project's room only ever sees its own roles; the library is surfaced
+    solely through the browse/copy actions.
+    """
+    base = agents_root() if root is None else project_agents_root(root)
     roles: list[RoleManifest] = []
     warnings: list[str] = []
     if not base.is_dir():
@@ -239,7 +266,7 @@ def discover_roles() -> tuple[list[RoleManifest], list[str]]:
             continue
         if not (entry / "manifest.json").is_file():
             continue
-        role, role_warnings = parse_role(entry)
+        role, role_warnings = parse_role(entry, project_root=root)
         warnings.extend(role_warnings)
         if role is not None:
             roles.append(role)

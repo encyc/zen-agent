@@ -15,6 +15,7 @@ import json
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from pathlib import Path
 
 from zenagent.agent.agent import Agent
 from zenagent.agent.session import Session
@@ -30,8 +31,8 @@ from zenagent.app.swarm.protocol import (
 from zenagent.app.swarm.roles import (
     RoleManifest,
     discover_roles,
+    project_state_root,
     role_session_path,
-    state_root,
 )
 from zenagent.app.swarm.room import (
     RoomMessage,
@@ -79,16 +80,18 @@ class SwarmManager(SwarmFrames):
     def __init__(
         self,
         *,
+        root: Path,
         write_frame: Callable[[dict], None] | None = None,
         stream_fn_factory: Callable[[RoleManifest], object] | None = None,
         event_sink: EventSink | None = None,
         max_concurrent: int = 3,
     ) -> None:
+        self.root = Path(root)
         self._write_frame = write_frame
         self._stream_fn_factory = stream_fn_factory
         self._event_sink = event_sink
         self._sem = asyncio.Semaphore(max_concurrent)
-        self.store = SwarmStore(state_root())
+        self.store = SwarmStore(project_state_root(self.root))
         self.router: Router | None = None
         self.agents: dict[str, SwarmAgent] = {}
         self.runners: dict[str, TaskRunner] = {}
@@ -119,7 +122,7 @@ class SwarmManager(SwarmFrames):
             for message in reconcile_message:
                 self._emit_message(message)
 
-        roles, warnings = discover_roles()
+        roles, warnings = discover_roles(self.root)
         self.warnings.extend(warnings)
         for role in roles:
             await self._try_build_agent(role)
@@ -316,7 +319,7 @@ class SwarmManager(SwarmFrames):
         return self._role_locks.setdefault(role_id, asyncio.Lock())
 
     async def update_role(self, role_id: str, manifest: dict) -> RoleManifest:
-        role = write_role(role_id, manifest)
+        role = write_role(role_id, manifest, root=self.root)
         self.role_ids.add(role_id)
         if self.router is not None:
             self.router.role_ids = set(self.role_ids)
@@ -370,10 +373,10 @@ class SwarmManager(SwarmFrames):
         if self.router is not None:
             self.router.role_ids = set(self.role_ids)
         self._cancel_pending(role_id)
-        remove_role_dir(role_id)
+        remove_role_dir(role_id, root=self.root)
 
     async def reload(self) -> list[str]:
-        roles, warnings = discover_roles()
+        roles, warnings = discover_roles(self.root)
         # A reload is the authoritative re-read: drop stale discovery/build
         # warnings, keeping room-log warnings and healthy runtimes' diagnostics.
         self.warnings = list(self.store.warnings)
@@ -434,7 +437,7 @@ class SwarmManager(SwarmFrames):
     async def _build_agent(
         self, role: RoleManifest, *, fresh_session: bool = False
     ) -> SwarmAgent:
-        session_path = role_session_path(role.id, fresh=fresh_session)
+        session_path = role_session_path(role.id, root=self.root, fresh=fresh_session)
         config = load_user_config(cwd=role.root)
         broker = build_broker_for(
             user_config=config,
