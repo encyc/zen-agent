@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 
 import { applySwarmFrame, registerSwarmSender } from '../src/state/swarmWiring.ts'
 import { _useSwarmSender } from '../src/state/swarmStore.ts'
@@ -101,4 +102,19 @@ test('applySwarmFrame consumes swarm_event frames into live run rows', () => {
   })
   assert.equal(consumed, true)
   assert.equal(useSwarmStore.getState().runRows['t_1'].length, 1)
+})
+
+test('every swarm_* frame type in the union has a handler', () => {
+  // The swarm frame interfaces live in types-swarm.ts (re-exported by types.ts),
+  // so the union spans both files. applySwarmFrame consumes *any* swarm:true
+  // frame: a new swarm_* type added without a handler is silently swallowed.
+  const types = ['../src/rpc/types.ts', '../src/rpc/types-swarm.ts']
+    .map((p) => readFileSync(new URL(p, import.meta.url), 'utf8')).join('\n')
+  const swarmTypes = [...types.matchAll(/type:\s*'(swarm_[a-z_]+)'/g)].map((m) => m[1])
+  assert.ok(swarmTypes.length >= 5, 'union lost swarm_* members')
+  const handled = ['../src/state/swarmStore.ts', '../src/state/swarmWiring.ts']
+    .map((p) => readFileSync(new URL(p, import.meta.url), 'utf8')).join('\n')
+  for (const t of swarmTypes) {
+    assert.ok(handled.includes(`'${t}'`), `${t} has no handler — would be silently swallowed`)
+  }
 })

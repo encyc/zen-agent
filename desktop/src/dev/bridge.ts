@@ -4,9 +4,9 @@
  * or Rust side. Kept free of Node/Playwright imports: `main.tsx` loads it
  * dynamically under `import.meta.env.DEV`; Playwright loads it via harness. */
 
-import { PROTOCOL_VERSION } from '../rpc/types'
-import { handlePlugins, type PluginMockState } from './pluginsMock'
-import { handleSwarm, type SwarmMockState } from './swarmMock'
+import { PROTOCOL_VERSION } from '../rpc/types.ts'
+import { handlePlugins, type PluginMockState } from './pluginsMock.ts'
+import { handleSwarm, type SwarmMockState } from './swarmMock.ts'
 type Lane = 'queue' | 'steer'
 
 interface PendingItemMock {

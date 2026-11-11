@@ -12,7 +12,7 @@ import type {
   SwarmRole,
   SwarmTask,
   ToolCallView,
-} from '../rpc/types'
+} from '../rpc/types.ts'
 
 export interface SwarmMockState {
   /** Room snapshot served for `swarm list`; the fake appends to these. */

@@ -653,13 +653,10 @@ class SwarmManager:
     def _admit(self, message: RoomMessage) -> list[TaskRecord]:
         assert self.router is not None
         if message.author_kind == "agent" and "you" in message.mentions:
-            self._write(
-                {
-                    "type": "swarm_notice",
-                    "agent": message.author_id,
-                    "text": f"@{message.author_id}: {message.text[:280]}",
-                }
-            )
+            self._write({
+                "type": "swarm_notice", "swarm": True, "agent": message.author_id,
+                "text": f"@{message.author_id}: {message.text[:280]}",
+            })
         admission = self.router.admit(message, inbox_sizes=self._inbox_sizes())
         for role_id, reason in admission.rejected:
             self._system_note(f"Delegation to @{role_id} rejected: {reason}")
