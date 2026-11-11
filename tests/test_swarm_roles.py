@@ -12,7 +12,7 @@ from zenagent.app.swarm.roles import (
     role_session_path,
     workspaces_root,
 )
-from zenagent.app.swarm.roster import role_signature, role_view, write_role
+from zenagent.app.swarm.roster import copy_role, role_signature, role_view, write_role
 
 
 @pytest.fixture
@@ -349,3 +349,44 @@ def test_skills_traversal_is_refused(home):
     assert manifest is not None
     assert manifest.skill_roots == []
     assert any("skills" in w for w in warnings)
+
+
+def test_copy_role_lands_project_local_and_leaves_library(tmp_path, home):
+    lib = agents_root() / "research"
+    lib.mkdir(parents=True)
+    (lib / "manifest.json").write_text(
+        json.dumps(
+            {
+                "id": "research",
+                "name": "R",
+                "mcpServers": {"x": {"env": {"K": "${MY_KEY}"}}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (lib / "prompt.md").write_text("be nice", encoding="utf-8")
+    root = tmp_path / "proj"
+    root.mkdir()
+
+    role = copy_role("research", root=root)
+
+    copied = root / ".zenagent" / "agents" / "research"
+    assert copied.is_dir()
+    assert (copied / "prompt.md").read_text() == "be nice"
+    assert (lib / "manifest.json").exists()  # library untouched
+    # credential placeholder preserved verbatim on disk
+    assert "${MY_KEY}" in (copied / "manifest.json").read_text()
+    assert role.id == "research"
+    assert role.root == root.resolve()
+
+
+def test_copy_refuses_to_clobber(tmp_path, home):
+    (agents_root() / "r").mkdir(parents=True)
+    (agents_root() / "r" / "manifest.json").write_text(
+        json.dumps({"id": "r"}), encoding="utf-8"
+    )
+    root = tmp_path / "proj"
+    (root / ".zenagent" / "agents" / "r").mkdir(parents=True)
+
+    with pytest.raises(ValueError):
+        copy_role("r", root=root)

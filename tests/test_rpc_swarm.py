@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 
 from zenagent.app.runtime import RuntimeOptions
+from zenagent.app.swarm.roles import agents_root
 from zenagent.app.swarm.room import TaskRecord
 from zenagent.cli.rpc.host import RpcHost
 from zenagent.events import AgentEvent
@@ -440,4 +441,39 @@ async def test_idle_room_cap_evicts_only_idle_rooms(tmp_path):
             manager_a._running.clear()
         if manager_c is not None:
             manager_c._running.clear()
+        await host.close()
+
+
+async def test_roles_library_lists_global_roles_and_copy_lands_in_the_project(tmp_path):
+    library = agents_root() / "research"
+    library.mkdir(parents=True)
+    (library / "manifest.json").write_text(
+        json.dumps({"id": "research", "name": "Library Research"}), encoding="utf-8"
+    )
+    (library / "prompt.md").write_text("be nice", encoding="utf-8")
+    project = tmp_path / "proj"
+    project.mkdir()
+    host, writes = _host(project)
+    try:
+        await _call(
+            host, {"type": "swarm", "op": "roles", "action": "library", "id": "l1"}
+        )
+        assert writes[-1]["ok"] is True
+        assert [role["id"] for role in writes[-1]["roles"]] == ["research"]
+
+        await _call(
+            host,
+            {
+                "type": "swarm",
+                "op": "roles",
+                "action": "copy",
+                "id": "c1",
+                "roleId": "research",
+            },
+        )
+        assert writes[-1]["ok"] is True
+        assert [role["id"] for role in writes[-1]["roles"]] == ["research"]
+        copied = project / ".zenagent" / "agents" / "research"
+        assert (copied / "prompt.md").read_text() == "be nice"
+    finally:
         await host.close()

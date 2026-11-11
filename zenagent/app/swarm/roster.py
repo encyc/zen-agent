@@ -16,6 +16,7 @@ import shutil
 
 from zenagent.app.swarm.roles import (
     RoleManifest,
+    agents_root,
     parse_role,
     project_agents_root,
 )
@@ -54,6 +55,28 @@ def write_role(role_id: str, manifest: dict, *, root) -> RoleManifest:
     if prompt is not None:
         (role_dir / "prompt.md").write_text(str(prompt), encoding="utf-8")
     role, warnings = parse_role(role_dir, project_root=root)
+    if role is None:
+        raise ValueError("; ".join(warnings) or f"invalid role {role_id}")
+    return role
+
+
+def copy_role(role_id: str, *, root) -> RoleManifest:
+    """Copy a library role into the project, leaving the library untouched.
+
+    Bytes are copied verbatim: ``${KEY}`` credential placeholders stay
+    unresolved on disk, exactly as they are stored in the library.
+    """
+    if not _ID_RE.fullmatch(role_id):
+        raise ValueError(f"invalid role id {role_id!r}")
+    source = agents_root() / role_id
+    if not source.is_dir():
+        raise ValueError(f"no library role {role_id}")
+    target = project_agents_root(root) / role_id
+    if target.exists():
+        raise ValueError(f"role {role_id} already exists in this project")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source, target)
+    role, warnings = parse_role(target, project_root=root)
     if role is None:
         raise ValueError("; ".join(warnings) or f"invalid role {role_id}")
     return role

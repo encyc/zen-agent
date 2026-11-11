@@ -14,6 +14,8 @@ from collections import OrderedDict
 from pathlib import Path
 
 from zenagent.app.swarm.manager import SwarmManager
+from zenagent.app.swarm.roles import discover_roles
+from zenagent.app.swarm.roster import copy_role, role_view
 from zenagent.cli.rpc.codec import serialize_event
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
 from zenagent.events import AgentEvent
@@ -51,7 +53,8 @@ class SwarmOps:
         op = request.get("op")
         label = str(op or "")
         try:
-            manager = await self._swarm_manager(self._swarm_root(request))
+            root = self._swarm_root(request)
+            manager = await self._swarm_manager(root)
             if op == "list":
                 payload = {
                     "roles": manager.roles(),
@@ -93,7 +96,7 @@ class SwarmOps:
                     **manager.task_transcript(task_id),
                 }
             elif op == "roles":
-                payload = await self._swarm_roles(manager, request)
+                payload = await self._swarm_roles(manager, request, root)
             elif op == "reload":
                 notes = await manager.reload()
                 payload = {
@@ -197,10 +200,18 @@ class SwarmOps:
             }
         )
 
-    async def _swarm_roles(self, manager: SwarmManager, request: dict) -> dict:
+    async def _swarm_roles(
+        self, manager: SwarmManager, request: dict, root: Path
+    ) -> dict:
         action = request.get("action") or "list"
         if action == "list":
             return {"roles": manager.roles(), "warnings": list(manager.warnings)}
+        if action == "library":
+            roles, warnings = discover_roles(None)
+            return {
+                "roles": [role_view(role) for role in roles],
+                "warnings": list(warnings),
+            }
         # `id` is the request-correlation id every RPC carries; the role's own
         # id travels as `roleId` so creating a role cannot shadow the answer.
         role_id = _need(request, "roleId")
@@ -211,6 +222,12 @@ class SwarmOps:
             await manager.update_role(role_id, manifest)
         elif action == "delete":
             await manager.delete_role(role_id)
+        elif action == "copy":
+            try:
+                copy_role(role_id, root=root)
+            except ValueError as exc:
+                raise Refusal(str(exc)) from exc
+            await manager.reload()
         else:
             raise Refusal(f"unknown roles action: {action}")
         return {"roles": manager.roles(), "warnings": list(manager.warnings)}
