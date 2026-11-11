@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { applySwarmFrame } from '../src/state/swarmWiring.ts'
+import { applySwarmFrame, registerSwarmSender } from '../src/state/swarmWiring.ts'
+import { _useSwarmSender } from '../src/state/swarmStore.ts'
 import { useSwarmStore } from '../src/state/swarmStore.ts'
 import { useNotificationStore } from '../src/state/stores.ts'
 
@@ -65,4 +66,25 @@ test('applySwarmFrame leaves empty notices and non-swarm frames unconsumed', () 
   assert.equal(applySwarmFrame({ type: 'zen_fleet', enabled: true, roster: [] }), false)
   assert.equal(useNotificationStore.getState().items.length, 0)
   assert.equal(useSwarmStore.getState().messages.length, 0)
+})
+
+test('registerSwarmSender wires the app client into the swarm store', async () => {
+  reset()
+  const sent: Array<Record<string, unknown>> = []
+  registerSwarmSender({
+    send: async (request) => {
+      sent.push(request)
+      return { type: 'result', ok: true }
+    },
+  })
+  await useSwarmStore.getState().post('hello room')
+  assert.equal(sent.length, 1)
+  assert.equal(sent[0].type, 'swarm')
+  assert.equal(sent[0].op, 'post')
+  // Restore the module-level sender seam for the other tests.
+  _useSwarmSender({
+    send: async () => {
+      throw new Error('no client')
+    },
+  })
 })

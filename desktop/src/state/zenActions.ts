@@ -1,12 +1,15 @@
 /** Zen mode actions shared by the app store: the fleet RPC round-trips live
  * here so `appStore.ts` stays under its architecture budget. Each function
- * takes the store getter, exactly like the inline methods it replaces. */
+ * takes the store getter, exactly like the inline methods it replaces.
+ *
+ * The workspace mode owns the UI; the fleet is independent of it. Entering
+ * zen enables the fleet (refusing busy slots reverts the UI), leaving zen
+ * only stops the fleet when the user turned background running off. */
 
-import { useSettingsStore } from './stores.ts'
+import { useSettingsStore, type WorkspaceMode } from './stores.ts'
 import { useSessionStore } from './stores.ts'
 import { useZenStore } from './zenStore.ts'
 import type { RosterItem, ServerFrame } from '../rpc/types.ts'
-import type { ZenUiMode } from '../rpc/types.ts'
 
 type AppGetter = () => {
   client(): { send(payload: Record<string, unknown>): Promise<Record<string, unknown> & { type?: string; ok?: boolean }> }
@@ -22,6 +25,69 @@ export function applyFleetFrame(frame: ServerFrame): boolean {
   return true
 }
 
+/** Follow an enable/disable result: apply the roster, adopt the returned
+ * session (the slot moved server-side) and refresh both views. */
+function applyToggleResult(
+  get: AppGetter,
+  enabled: boolean,
+  frame: Record<string, unknown>,
+): void {
+  const zen = useZenStore.getState()
+  const roster = Array.isArray(frame.roster) ? (frame.roster as RosterItem[]) : []
+  zen.applyRoster(enabled, roster)
+  if (zen.workerPath !== null) zen.closeWorker()
+  const session = typeof frame.session === 'string' ? frame.session : null
+  if (session) {
+    useSessionStore.getState().setCurrent(session)
+  }
+  void get().refreshTranscript()
+  void get().refreshSessions()
+}
+
+export async function switchZenPresence(get: AppGetter, entering: boolean): Promise<void> {
+  if (!entering) return // leaving zen only switches the UI; workers keep running
+  let frame: Record<string, unknown>
+  try {
+    frame = await get().client().send({ type: 'zen_fleet', op: 'enable' })
+  } catch {
+    useSettingsStore.getState().setWorkspaceMode('coding')
+    return
+  }
+  if (frame.type !== 'result' || !frame.ok) {
+    useSettingsStore.getState().setWorkspaceMode('coding')
+    return
+  }
+  applyToggleResult(get, true, frame)
+}
+
+/** Explicitly stop the fleet and restore the pre-zen session. */
+export async function stopFleet(get: AppGetter): Promise<void> {
+  let frame: Record<string, unknown>
+  try {
+    frame = await get().client().send({ type: 'zen_fleet', op: 'disable' })
+  } catch {
+    return
+  }
+  if (frame.type !== 'result' || !frame.ok) return
+  applyToggleResult(get, false, frame)
+}
+
+/** The leave-zen transition: only stops the fleet when background running
+ * is off. Changing the setting never acts on a running fleet immediately. */
+export async function onZenModeLeft(get: AppGetter): Promise<void> {
+  if (useSettingsStore.getState().zenBackgroundRun) return
+  await stopFleet(get)
+}
+
+/** One place for the mode switcher: persist the mode, then run the zen-side
+ * transitions (enable on enter, gated stop on leave). */
+export function switchWorkspaceMode(get: AppGetter, mode: WorkspaceMode): void {
+  const prev = useSettingsStore.getState().workspaceMode
+  useSettingsStore.getState().setWorkspaceMode(mode)
+  if (mode === 'zen') void switchZenPresence(get, true)
+  else if (prev === 'zen') void onZenModeLeft(get)
+}
+
 export async function syncZenState(get: AppGetter): Promise<void> {
   let frame: Record<string, unknown>
   try {
@@ -31,46 +97,14 @@ export async function syncZenState(get: AppGetter): Promise<void> {
   }
   if (frame.type !== 'result' || !frame.ok) return
   const enabled = Boolean(frame.enabled)
-  if (useSettingsStore.getState().zenMode === 'zen' && !enabled) {
-    await setZenMode(get, 'zen')
+  if (useSettingsStore.getState().workspaceMode === 'zen' && !enabled) {
+    await switchZenPresence(get, true)
     return
   }
   useZenStore.getState().applyRoster(
     enabled,
     Array.isArray(frame.roster) ? (frame.roster as RosterItem[]) : [],
   )
-}
-
-export async function setZenMode(get: AppGetter, mode: ZenUiMode): Promise<void> {
-  useSettingsStore.getState().setZenMode(mode)
-  const revert = () =>
-    useSettingsStore.getState().setZenMode(mode === 'zen' ? 'coding' : 'zen')
-  let frame: Record<string, unknown>
-  try {
-    frame = await get().client().send({
-      type: 'zen_fleet',
-      op: mode === 'zen' ? 'enable' : 'disable',
-    })
-  } catch {
-    revert()
-    return
-  }
-  if (frame.type !== 'result' || !frame.ok) {
-    revert()
-    return
-  }
-  const zen = useZenStore.getState()
-  const roster = Array.isArray(frame.roster) ? (frame.roster as RosterItem[]) : []
-  zen.applyRoster(mode === 'zen', roster)
-  if (mode === 'zen' && zen.workerPath !== null) zen.closeWorker()
-  // Enable/disable moved the slot to another session server-side; the result
-  // carries which one, so the UI follows it like a resume.
-  const session = typeof frame.session === 'string' ? frame.session : null
-  if (session) {
-    useSessionStore.getState().setCurrent(session)
-    void get().refreshTranscript()
-  }
-  void get().refreshSessions()
 }
 
 export async function zenTranscript(

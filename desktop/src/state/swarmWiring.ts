@@ -6,9 +6,17 @@
  * tagged room frames land in the swarm store. Keeping this out of
  * `appStore.ts` holds its LOC budget. This module never imports appStore. */
 
-import { swarmNoticeText, useSwarmStore } from './swarmStore.ts'
+import { _useSwarmSender, swarmNoticeText, useSwarmStore } from './swarmStore.ts'
 import { useNotificationStore } from './stores.ts'
 import type { ServerFrame } from '../rpc/types.ts'
+
+/** Wire the app's client into the swarm store's request seam, so appStore
+ * holds one registration line instead of the shape. */
+export function registerSwarmSender(client: {
+  send(request: Record<string, unknown>): Promise<Record<string, unknown>>
+}): void {
+  _useSwarmSender({ send: (request) => client.send(request) })
+}
 
 /** Consume a global swarm frame; false means "not mine, keep flowing". */
 export function applySwarmFrame(frame: ServerFrame): boolean {

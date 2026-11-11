@@ -1,7 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { syncZenState, setZenMode, zenTranscript, applyFleetFrame } from '../src/state/zenActions.ts'
+import {
+  applyFleetFrame,
+  onZenModeLeft,
+  stopFleet,
+  switchZenPresence,
+  syncZenState,
+  zenTranscript,
+} from '../src/state/zenActions.ts'
 import { useSettingsStore } from '../src/state/stores.ts'
 import { useSessionStore } from '../src/state/stores.ts'
 import { useZenStore } from '../src/state/zenStore.ts'
@@ -32,7 +39,8 @@ function makeEnv(respond: (payload: Record<string, unknown>) => unknown) {
 function resetStores(): void {
   useZenStore.getState().reset()
   useZenStore.getState().closeWorker()
-  useSettingsStore.getState().setZenMode('coding')
+  useSettingsStore.getState().setWorkspaceMode('coding')
+  useSettingsStore.getState().setZenBackgroundRun(true)
   useSessionStore.setState({ currentPath: null })
 }
 
@@ -45,9 +53,9 @@ const okState = (enabled: boolean) => ({
     : [],
 })
 
-test('syncZenState auto-enables when the persisted toggle is zen and the fleet is off', async () => {
+test('syncZenState auto-enables when workspaceMode is zen and the fleet is off', async () => {
   resetStores()
-  useSettingsStore.getState().setZenMode('zen')
+  useSettingsStore.getState().setWorkspaceMode('zen')
   const env = makeEnv((payload) =>
     payload.op === 'state' ? okState(false) : { type: 'result', ok: true, session: '/p/r.jsonl', roster: [] },
   )
@@ -56,7 +64,7 @@ test('syncZenState auto-enables when the persisted toggle is zen and the fleet i
   assert.equal(useZenStore.getState().enabled, true)
 })
 
-test('syncZenState never auto-disables: toggle coding leaves the fleet alone', async () => {
+test('syncZenState never auto-disables: leaving zen mode alone leaves the fleet alone', async () => {
   resetStores()
   const env = makeEnv(() => okState(true))
   await syncZenState(env.get)
@@ -66,7 +74,7 @@ test('syncZenState never auto-disables: toggle coding leaves the fleet alone', a
 
 test('syncZenState with the fleet already on just applies the roster', async () => {
   resetStores()
-  useSettingsStore.getState().setZenMode('zen')
+  useSettingsStore.getState().setWorkspaceMode('zen')
   const env = makeEnv(() => okState(true))
   await syncZenState(env.get)
   assert.ok(!env.sent.some((payload) => payload.op === 'enable'), 'no re-enable sent')
@@ -82,7 +90,7 @@ test('syncZenState survives a pre-zen child that errors on unknown kinds', async
   assert.equal(useZenStore.getState().enabled, false)
 })
 
-test("setZenMode zen enables, follows the session and refreshes", async () => {
+test("switchZenPresence entering enables, follows the session and refreshes", async () => {
   resetStores()
   const env = makeEnv(() => ({
     type: 'result',
@@ -90,29 +98,65 @@ test("setZenMode zen enables, follows the session and refreshes", async () => {
     session: '/p/router.jsonl',
     roster: [{ path: '/p/router.jsonl', title: 'r', focus: '', role: 'router', status: 'idle', last_report: '' }],
   }))
-  await setZenMode(env.get, 'zen')
-  assert.equal(useSettingsStore.getState().zenMode, 'zen')
+  await switchZenPresence(env.get, true)
   assert.equal(useZenStore.getState().enabled, true)
   assert.equal(useSessionStore.getState().currentPath, '/p/router.jsonl')
   assert.ok(env.refreshed.includes('transcript') && env.refreshed.includes('sessions'))
 })
 
-test('setZenMode reverts the toggle when the backend refuses (busy slot)', async () => {
+test('switchZenPresence entering reverts workspaceMode when the backend refuses (busy slot)', async () => {
   resetStores()
+  useSettingsStore.getState().setWorkspaceMode('zen')
   const env = makeEnv(() => ({ type: 'error', code: 'zen_busy', message: 'zen needs an idle session' }))
-  await setZenMode(env.get, 'zen')
-  assert.equal(useSettingsStore.getState().zenMode, 'coding')
+  await switchZenPresence(env.get, true)
+  assert.equal(useSettingsStore.getState().workspaceMode, 'coding')
   assert.equal(useZenStore.getState().enabled, false)
 })
 
-test("setZenMode coding disables and clears the fleet view", async () => {
+test('switchZenPresence leaving sends nothing: the fleet keeps running in the background', async () => {
   resetStores()
-  useSettingsStore.getState().setZenMode('zen')
-  useZenStore.getState().applyRoster(true, [])
-  const env = makeEnv(() => ({ type: 'result', ok: true, session: '/p/old.jsonl', roster: [] }))
-  await setZenMode(env.get, 'coding')
-  assert.equal(useSettingsStore.getState().zenMode, 'coding')
+  const env = makeEnv(() => ({ type: 'result', ok: true, roster: [] }))
+  await switchZenPresence(env.get, false)
+  assert.equal(env.sent.length, 0)
+})
+
+test('onZenModeLeft stops the fleet when background running is off', async () => {
+  resetStores()
+  useSettingsStore.getState().setZenBackgroundRun(false)
+  const env = makeEnv(() => ({
+    type: 'result',
+    ok: true,
+    session: '/p/old.jsonl',
+    roster: [],
+  }))
+  await onZenModeLeft(env.get)
+  assert.ok(env.sent.some((payload) => payload.op === 'disable'), 'disable was sent')
   assert.equal(useZenStore.getState().enabled, false)
+  assert.equal(useSessionStore.getState().currentPath, '/p/old.jsonl')
+})
+
+test('onZenModeLeft sends nothing while background running is on', async () => {
+  resetStores()
+  const env = makeEnv(() => ({ type: 'result', ok: true, roster: [] }))
+  await onZenModeLeft(env.get)
+  assert.equal(env.sent.length, 0)
+  assert.equal(useZenStore.getState().enabled, false)
+})
+
+test('stopFleet sends disable, clears the fleet and follows the restored session', async () => {
+  resetStores()
+  useZenStore.getState().applyRoster(true, [])
+  const env = makeEnv(() => ({
+    type: 'result',
+    ok: true,
+    session: '/p/old.jsonl',
+    roster: [],
+  }))
+  await stopFleet(env.get)
+  assert.equal(env.sent[0].op, 'disable')
+  assert.equal(useZenStore.getState().enabled, false)
+  assert.equal(useSessionStore.getState().currentPath, '/p/old.jsonl')
+  assert.ok(env.refreshed.includes('transcript') && env.refreshed.includes('sessions'))
 })
 
 test('applyFleetFrame applies zen roster frames and reports them consumed', () => {

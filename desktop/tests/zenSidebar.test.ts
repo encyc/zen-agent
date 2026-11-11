@@ -50,13 +50,13 @@ test('zenStatusTone buckets statuses for the roster dot', () => {
 
 test('zen i18n keys exist in both locales with parity', () => {
   const keys = [
-    'zen.toggle',
-    'zen.toggleHint',
     'zen.router',
     'zen.workers',
     'zen.workerDrawer',
     'zen.drawerClose',
     'zen.focusLabel',
+    'zen.stopFleet',
+    'zen.stopFleetTitle',
     'zen.status.idle',
     'zen.status.queued',
     'zen.status.working',

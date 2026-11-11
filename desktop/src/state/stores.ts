@@ -16,7 +16,6 @@ import type {
   SessionSummary,
   SkillRow,
   StatusResult,
-  ZenUiMode,
 } from '../rpc/types'
 import type { AskDraft } from './askDraft.ts'
 
@@ -545,10 +544,11 @@ interface SettingsState {
   autoCollapseThinking: boolean
   contextUsageDisplay: ContextUsageDisplay
   enterToSend: boolean
-  zenMode: ZenUiMode
   view: AppView
-  setZenMode(mode: ZenUiMode): void
   workspaceMode: WorkspaceMode
+  /** Whether the zen fleet keeps running when the user leaves zen mode. */
+  zenBackgroundRun: boolean
+  setZenBackgroundRun(enabled: boolean): void
   setTheme(theme: ThemeMode): void
   setThemeId(themeId: ThemeId): void
   setLocale(locale: Locale): void
@@ -592,9 +592,15 @@ function loadThemeId(): ThemeId {
 /** A foreign persisted mode (a build without that surface) falls back to the
  * coding chat instead of rendering an unnameable surface. */
 function loadWorkspaceMode(): WorkspaceMode {
-  const value = load<string>('zen.workspaceMode', 'coding')
-  return (WORKSPACE_MODES as readonly string[]).includes(value)
-    ? (value as WorkspaceMode)
+  const stored = load<string | null>('zen.workspaceMode', null)
+  if (stored === null && load<string | null>('zen.ui.mode', null) === 'zen') {
+    // One-time migration from the zen branch's own key; the old key is left
+    // in place but never read again.
+    persist('zen.workspaceMode', 'zen')
+    return 'zen'
+  }
+  return (WORKSPACE_MODES as readonly string[]).includes(stored as WorkspaceMode)
+    ? (stored as WorkspaceMode)
     : 'coding'
 }
 
@@ -613,13 +619,13 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     ? 'used'
     : 'remaining',
   enterToSend: load('zen.composer.enterToSend', true),
-  zenMode: load<'coding' | 'zen'>('zen.ui.mode', 'coding') === 'zen' ? 'zen' : 'coding',
   view: 'chat',
-  setZenMode: (zenMode) => {
-    persist('zen.ui.mode', zenMode)
-    set({ zenMode })
-  },
   workspaceMode: loadWorkspaceMode(),
+  zenBackgroundRun: load('zen.fleet.background', true),
+  setZenBackgroundRun: (enabled) => {
+    persist('zen.fleet.background', enabled)
+    set({ zenBackgroundRun: enabled })
+  },
   setTheme: (theme) => {
     persist('zen.theme', theme)
     set({ theme })

@@ -19,7 +19,6 @@ import type {
   SkillRow,
   StatusResult,
   Usage,
-  ZenUiMode,
 } from '../rpc/types'
 import {
   useApprovalStore,
@@ -35,11 +34,11 @@ import {
   useSkillsStore,
   useStatusStore,
   useWorkPanelStore,
+  type WorkspaceMode,
 } from './stores'
 import { useChatStore } from './chatStore'
-import { applyFleetFrame, setZenMode, syncZenState, zenTranscript } from './zenActions'
-import { _useSwarmSender } from './swarmStore'
-import { applySwarmFrame } from './swarmWiring'
+import { applyFleetFrame, stopFleet, switchWorkspaceMode, syncZenState, zenTranscript } from './zenActions'
+import { applySwarmFrame, registerSwarmSender } from './swarmWiring'
 import { nextDraft } from './pending'
 import { latestSessionForProject } from './latestSession'
 import { loadPrefs, replayFrames, savePref, spawnArgs } from './prefs'
@@ -154,7 +153,8 @@ interface AppState {
   undoLast(): Promise<void>
   /** Zen mode: sync fleet state with the persisted toggle (boot/switch). */
   syncZenState(): Promise<void>
-  setZenMode(mode: ZenUiMode): Promise<void>
+  switchWorkspaceMode(mode: WorkspaceMode): void
+  stopFleet(): Promise<void>
   /** A worker's read-only transcript (zen_fleet op=transcript). */
   zenTranscript(path: string, before?: number): Promise<Record<string, unknown> | null>
 }
@@ -968,8 +968,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     await syncZenState(get)
   },
 
-  async setZenMode(mode) {
-    await setZenMode(get, mode)
+  switchWorkspaceMode(mode) {
+    switchWorkspaceMode(get, mode)
+  },
+
+  async stopFleet() {
+    await stopFleet(get)
   },
 
   async zenTranscript(path, before) {
@@ -979,7 +983,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 // The swarm store sends through this module's client seam instead of importing
 // `appStore`, which keeps its module graph loadable under `node --test`.
-_useSwarmSender({
+registerSwarmSender({
   send: (request) => useAppStore.getState().client().send(request),
 })
 

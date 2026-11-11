@@ -560,29 +560,6 @@ html[data-platform='darwin'] .brand {
 }
 
 /* Zen roster: the project's single router plus its focused workers. */
-.zenToggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  cursor: pointer;
-}
-
-.zenToggle:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
-}
-
-.zenToggle[data-zen-active] {
-  color: var(--dsw-alias-brand-text);
-  background: var(--dsw-alias-button-ghost-active-fill);
-}
-
 .zenRoster {
   display: flex;
   flex-direction: column;

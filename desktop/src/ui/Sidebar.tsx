@@ -24,7 +24,6 @@ import {
 import { armDelete, deleteArmed } from '../state/armedDelete'
 import { useZenStore } from '../state/zenStore'
 import { ZenRoster } from './ZenRoster'
-import { ZenToggle } from './ZenToggle'
 import { useT } from '../i18n/locale'
 import type { SessionSummary } from '../rpc/types'
 import { Tooltip } from './primitives'
@@ -340,7 +339,6 @@ export function Sidebar(props: { onCollapse(): void }) {
           </div>
           <ZenWordmark height={13} />
         </div>
-        <ZenToggle />
         <Tooltip label="⌘B">
           <button
             type="button"

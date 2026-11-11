@@ -21,20 +21,24 @@ function row(overrides: Partial<RosterItem> = {}): RosterItem {
 function resetStores(): void {
   useZenStore.getState().reset()
   useZenStore.getState().closeWorker()
-  useSettingsStore.getState().setZenMode('coding')
+  useSettingsStore.getState().setWorkspaceMode('coding')
 }
 
-test('REQUEST_KINDS carries zen_fleet at protocol version 3', () => {
-  assert.ok((REQUEST_KINDS as readonly string[]).includes('zen_fleet'))
+test('REQUEST_KINDS carries zen_fleet and swarm at protocol version 3', () => {
+  const kinds = REQUEST_KINDS as readonly string[]
+  assert.ok(kinds.includes('zen_fleet'))
+  assert.ok(kinds.includes('swarm'))
   assert.equal(PROTOCOL_VERSION, 3)
 })
 
-test('zenMode flips between coding and zen', () => {
+test('the workspace mode flips through the settings store', () => {
   resetStores()
-  useSettingsStore.getState().setZenMode('zen')
-  assert.equal(useSettingsStore.getState().zenMode, 'zen')
-  useSettingsStore.getState().setZenMode('coding')
-  assert.equal(useSettingsStore.getState().zenMode, 'coding')
+  useSettingsStore.getState().setWorkspaceMode('zen')
+  assert.equal(useSettingsStore.getState().workspaceMode, 'zen')
+  useSettingsStore.getState().setWorkspaceMode('swarm')
+  assert.equal(useSettingsStore.getState().workspaceMode, 'swarm')
+  useSettingsStore.getState().setWorkspaceMode('coding')
+  assert.equal(useSettingsStore.getState().workspaceMode, 'coding')
 })
 
 test('applyRoster stores enabled flag and rows', () => {
