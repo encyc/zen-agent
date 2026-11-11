@@ -597,6 +597,34 @@ html[data-platform='darwin'] .brand {
   color: var(--dsw-alias-label-primary);
 }
 
+/* The fleet is stopped by user intent: a paused banner with a resume affordance. */
+.zenPaused {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-button-ghost-active-fill);
+}
+
+.zenResume {
+  margin-left: auto;
+  border: none;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  background: transparent;
+  color: var(--dsw-alias-brand-text);
+  cursor: pointer;
+  flex: none;
+}
+
+.zenResume:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
 .zenRouterBadge {
   font-size: 10px;
   font-weight: 600;

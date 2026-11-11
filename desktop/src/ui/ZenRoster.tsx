@@ -7,6 +7,7 @@ import { useMemo } from 'react'
 
 import { useAppStore } from '../state/appStore'
 import { useZenStore } from '../state/zenStore'
+import { useSettingsStore } from '../state/stores'
 import { splitRoster, zenStatusKey, zenStatusTone } from '../state/zenSidebar'
 import { useT } from '../i18n/locale'
 import { StopIcon } from './icons'
@@ -16,11 +17,27 @@ export function ZenRoster() {
   const t = useT()
   const openWorker = useZenStore((state) => state.openWorker)
   const zenRoster = useZenStore((state) => state.roster)
+  const stoppedByUser = useZenStore((state) => state.stoppedByUser)
   const stopFleet = useAppStore((state) => state.stopFleet)
+  const switchMode = useAppStore((state) => state.switchWorkspaceMode)
+  const workspaceMode = useSettingsStore((state) => state.workspaceMode)
   const zenSplit = useMemo(() => splitRoster(zenRoster), [zenRoster])
 
   return (
     <div className={css.zenRoster} data-zen-roster>
+      {stoppedByUser && workspaceMode === 'zen' && (
+        <div className={css.zenPaused} data-zen-paused>
+          <span>{t('zen.paused')}</span>
+          <button
+            type="button"
+            className={css.zenResume}
+            data-zen-resume
+            onClick={() => switchMode('zen')}
+          >
+            {t('zen.pausedResume')}
+          </button>
+        </div>
+      )}
       {zenSplit.router !== null && (
         <div className={css.zenRouterRow} data-zen-router>
           <span className={css.zenRouterBadge}>{t('zen.router')}</span>

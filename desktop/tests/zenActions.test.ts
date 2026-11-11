@@ -205,3 +205,29 @@ test('zenTranscript returns the ok frame or null', async () => {
   const errEnv = makeEnv(() => ({ type: 'error', code: 'zen_invalid', message: 'no' }))
   assert.equal(await zenTranscript(errEnv.get, '/p/w1.jsonl'), null)
 })
+
+test('syncZenState does not auto-enable after the user stopped the fleet', async () => {
+  resetStores()
+  useSettingsStore.getState().setWorkspaceMode('zen')
+  useZenStore.getState().markStopped()
+  const env = makeEnv((p) => (p.op === 'state' ? okState(false) : { type: 'result', ok: true }))
+  await syncZenState(env.get)
+  assert.ok(!env.sent.some((p) => p.op === 'enable'), 'no revival while stopped')
+  assert.equal(useZenStore.getState().enabled, false)
+})
+
+test('explicit zen entry clears the stopped flag and enables', async () => {
+  resetStores()
+  useZenStore.getState().markStopped()
+  const env = makeEnv(() => ({ type: 'result', ok: true, session: '/p/r.jsonl', roster: [] }))
+  await switchZenPresence(env.get, true)
+  assert.equal(useZenStore.getState().stoppedByUser, false)
+  assert.equal(useZenStore.getState().enabled, true)
+})
+
+test('stopFleet marks the fleet stopped', async () => {
+  resetStores()
+  const env = makeEnv(() => ({ type: 'result', ok: true, roster: [] }))
+  await stopFleet(env.get)
+  assert.equal(useZenStore.getState().stoppedByUser, true)
+})

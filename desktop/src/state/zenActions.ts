@@ -55,6 +55,8 @@ function applyToggleResult(
 
 export async function switchZenPresence(get: AppGetter, entering: boolean): Promise<void> {
   if (!entering) return // leaving zen only switches the UI; workers keep running
+  // Explicit re-entry is the only thing that re-arms auto-enable after a stop.
+  useZenStore.setState({ stoppedByUser: false })
   let frame: Record<string, unknown>
   try {
     frame = await get().client().send({ type: 'zen_fleet', op: 'enable' })
@@ -83,6 +85,7 @@ export async function stopFleet(get: AppGetter): Promise<void> {
     return
   }
   applyToggleResult(get, false, frame)
+  useZenStore.getState().markStopped()
 }
 
 /** The leave-zen transition: only stops the fleet when background running
@@ -110,7 +113,11 @@ export async function syncZenState(get: AppGetter): Promise<void> {
   }
   if (frame.type !== 'result' || !frame.ok) return
   const enabled = Boolean(frame.enabled)
-  if (useSettingsStore.getState().workspaceMode === 'zen' && !enabled) {
+  if (
+    useSettingsStore.getState().workspaceMode === 'zen' &&
+    !enabled &&
+    !useZenStore.getState().stoppedByUser
+  ) {
     await switchZenPresence(get, true)
     return
   }
