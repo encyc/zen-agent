@@ -63,6 +63,9 @@ export interface BridgeState extends PluginMockState, SwarmMockState, ZenMockSta
   mcpProblem?: string
   mcpTests?: Record<string, { connected: boolean; tools?: string[]; message?: string }>
   sessionProjects?: string[]
+  /** Replaces the whole `sessions` answer (screenshot and demo fixtures); the
+   * default two project sessions stand in when absent. */
+  sessionRows?: Record<string, unknown>[]
   relocations?: { from: string; to: string }[]
   relocateError?: string
   /** The project the fake host is serving; set by `rpc_start` and project ops. */
@@ -129,7 +132,7 @@ export function installBridge(state: BridgeState) {
     id,
     ok: true,
     scope: scope === 'all' ? 'all' : 'project',
-    sessions: [
+    sessions: state.sessionRows ?? [
       {
         path: '/sessions/a.jsonl',
         name: 'a',
