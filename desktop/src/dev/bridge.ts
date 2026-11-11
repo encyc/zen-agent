@@ -4,6 +4,7 @@
  * or Rust side. Kept free of Node/Playwright imports: `main.tsx` loads it
  * dynamically under `import.meta.env.DEV`; Playwright loads it via harness. */
 
+import { PROTOCOL_VERSION } from '../rpc/types'
 import { handlePlugins, type PluginMockState } from './pluginsMock'
 import { handleSwarm, type SwarmMockState } from './swarmMock'
 type Lane = 'queue' | 'steer'
@@ -214,7 +215,7 @@ export function installBridge(state: BridgeState) {
           type: 'result',
           id: payload.id,
           ok: true,
-          protocol_version: 2,
+          protocol_version: PROTOCOL_VERSION,
           active: state.activeRoot ?? '',
         }
       case 'status':

@@ -95,7 +95,10 @@ the other branch.
   (`list` / `post` / `cancel` / `retry` / `reset` / `transcript` / `roles` /
   `reload`); a role
   is addressed by `roleId` because `id` is the request correlation id. Host-level
-  `swarm:`-prefixed approval ids route before project slot lookup.
+  `swarm:`-prefixed approval ids route before project slot lookup. A running
+  role's agent events are broadcast as global `swarm_event` frames (task-stamped,
+  same payload shape as coding's event frames), so the task detail can stream
+  the run live — the role's session file only lands when the run ends.
 
 #### Desktop
 
@@ -110,10 +113,12 @@ the other branch.
   Each task row keeps the list compact; selecting one opens its ID, creator,
   chain depth/cost, the source message, failure/cancel reason and retry
   origin as the conversation column itself — the room feed steps aside until the
-  card is closed — with the row highlighted and a collapse action. The card's **run activity** replays the run
-  from the role's own session with the coding transcript's own row components —
+  card is closed — with the row highlighted and a collapse action. The card's **run activity** streams live while the task runs: role events arrive as
+  `swarm_event` frames and fold into the coding transcript's own row components —
   collapsible tool cards with input/output bodies, markdown text and reasoning —
-  refreshed while the task runs; the final reply appears there as the run's last
+  typewriter text and tool cards updating in place; when the task settles, the
+  panel reconciles against the role session's transcript (the authoritative full
+  view, sliced by the task's `[swarm]` anchor). The final reply appears there as the run's last
   turn rather than a second result block, and a reset or compacted role
   session reports the record as unavailable instead of failing. Every task
   transition — including `done`, `failed` and `cancelled` — now reaches the room

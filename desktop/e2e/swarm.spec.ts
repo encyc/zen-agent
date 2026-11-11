@@ -182,6 +182,32 @@ test('open a task detail in the conversation column', async ({ page }) => {
   await expect(task).not.toHaveAttribute('data-selected', 'true')
 })
 
+test('a running task detail streams live steps before the run ends', async ({ page }) => {
+  await boot(page, initialState(swarmFixture()))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  const composer = page.locator('[data-swarm-input]')
+  await composer.fill('@research 查 X')
+  await composer.press('Enter')
+
+  const task = page.locator('[data-swarm-task]').first()
+  await task.locator('[data-swarm-task-toggle]').click()
+  const detail = page.locator('[data-swarm-main] [data-swarm-task-detail]')
+  await expect(detail).toBeVisible()
+
+  // The role's session file has not landed yet: these rows can only come
+  // from swarm_event frames, and they must arrive before the task settles.
+  const steps = detail.locator('[data-swarm-task-steps]')
+  await expect(steps).toContainText('read_skill')
+  await expect(task).toHaveAttribute('data-state', 'running')
+  await expect(steps).toContainText('research 查完了')
+
+  // Settling reconciles against the file transcript; the content survives.
+  await expect(task).toHaveAttribute('data-state', 'done')
+  await expect(steps).toContainText('read_skill')
+  await expect(steps).toContainText('research 查完了')
+})
+
 test('a collapsed sidebar can be restored from the room', async ({ page }) => {
   await boot(page, initialState(swarmFixture()))
   await page.locator('[data-workspace-mode="swarm"]').click()

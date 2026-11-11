@@ -3,6 +3,7 @@
  * plays a small post→task→report chain, frames included. */
 
 import type {
+  AgentEventFrame,
   MessageView,
   ServerFrame,
   SwarmAgentState,
@@ -280,10 +281,43 @@ function transition(task: SwarmTask, state: SwarmTask['state'], reason: string |
   emit({ ...task, type: 'swarm_task', swarm: true })
 }
 
-/** The scripted run: busy → report (its @ starts the next leg) → done. */
-function run(rows: Room, task: SwarmTask, depth: number): void {
+/** The scripted run: busy → live step events → report (its @ starts the next
+ * leg) → done. The pauses keep the task running long enough for a detail
+ * panel to observe the stream, the way a real role run lasts seconds. */
+async function run(rows: Room, task: SwarmTask, depth: number): Promise<void> {
   setAgent(rows, task.assignee, 'running', task.id)
   transition(task, 'running')
+  const text = `${task.assignee} 查完了`
+  emitRunEvent(task, {
+    type: 'tool_execution_start',
+    tool_call_id: 'call_1',
+    tool_name: 'read_skill',
+    args: '{"name":"risk-policy-expert"}',
+  })
+  await sleep(300)
+  emitRunEvent(task, {
+    type: 'tool_execution_update',
+    tool_call_id: 'call_1',
+    partial_result: 'reading…',
+  })
+  await sleep(300)
+  emitRunEvent(task, {
+    type: 'tool_execution_end',
+    tool_call_id: 'call_1',
+    result_text: 'skill body',
+    is_error: false,
+    duration_ms: 12,
+  })
+  emitRunEvent(task, { type: 'message_start', message: { role: 'assistant', text: '' } })
+  for (const delta of [text.slice(0, 6), text.slice(6)]) {
+    emitRunEvent(task, {
+      type: 'message_update',
+      assistant_event: { type: 'text_delta', delta },
+    })
+    await sleep(200)
+  }
+  emitRunEvent(task, { type: 'message_end', message: { role: 'assistant', text } })
+  await sleep(300)
   const reply = SCRIPT[task.assignee]
   let result: SwarmMessage | null = null
   if (reply !== undefined) {
@@ -306,8 +340,16 @@ function run(rows: Room, task: SwarmTask, depth: number): void {
       chainId: task.chainId,
       depth: depth + 1,
     })
-    run(rows, child, depth + 1)
+    await run(rows, child, depth + 1)
   }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function emitRunEvent(task: SwarmTask, event: AgentEventFrame): void {
+  emit({ type: 'swarm_event', swarm: true, agent: task.assignee, task: task.id, event })
 }
 
 /** The scripted run's activity, in the coding transcript's view shapes. */
@@ -378,7 +420,7 @@ export function handleSwarm(
         depth: message.chainDepth + 1,
       })
       created.push(task)
-      run(rows, task, message.chainDepth + 1)
+      void run(rows, task, message.chainDepth + 1)
     }
     return ok({ tasks: copy(created) })
   }
@@ -406,17 +448,20 @@ export function handleSwarm(
       depth: task.chainDepth,
       derivedFrom: task.id,
     })
-    run(rows, retried, task.chainDepth)
+    void run(rows, retried, task.chainDepth)
     return ok({ taskId, retried: true, task: { ...retried } })
   }
 
   if (op === 'transcript') {
     const taskId = String(payload.taskId ?? '')
     const task = rows.swarmTasks.find((row) => row.id === taskId)
+    // The role's session file only lands when its run ends — a live task has
+    // no readable transcript, exactly like the host.
+    const settled = task !== undefined && TERMINAL.has(task.state)
     return ok({
       taskId,
-      available: task !== undefined,
-      transcript: task === undefined ? [] : transcriptRows(task),
+      available: settled,
+      transcript: settled ? transcriptRows(task) : [],
     })
   }
 
