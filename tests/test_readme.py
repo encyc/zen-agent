@@ -11,10 +11,13 @@ README = ROOT / "README.md"
 TEXT = README.read_text(encoding="utf-8")
 SECTIONS = ["## Install", "## What this is, and why", "## Features", "## Contributing"]
 BLOB = "https://github.com/encyc/zen-agent/blob/main/"
+# The desktop section carries the three-mode introduction and its shots; both
+# landing pages stay well under this without turning into a manual.
+MAX_LINES = 140
 
 
 def test_readme_is_a_landing_page_with_four_parts():
-    assert len(TEXT.splitlines()) <= 130
+    assert len(TEXT.splitlines()) <= MAX_LINES
     headings = re.findall(r"^## .+$", TEXT, re.MULTILINE)
     assert headings == SECTIONS
 
@@ -30,7 +33,7 @@ def test_readme_links_are_absolute_and_resolve():
 def test_chinese_readme_mirrors_the_landing_page():
     """README.zh-CN.md is a translation, not a second manual."""
     zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
-    assert len(zh.splitlines()) <= 130
+    assert len(zh.splitlines()) <= MAX_LINES
     assert len(re.findall(r"^## .+$", zh, re.MULTILINE)) == len(SECTIONS)
     assert not re.findall(r"\]\((?!https?://)[^)]", zh)
     for target in re.findall(re.escape(BLOB) + r"([^)\s]+)", zh):
