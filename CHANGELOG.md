@@ -192,7 +192,8 @@ ModeSwitcher 增加跨模式活动指示：zen fleet 运行时的圆点、swarm 
 - **Desktop** `Sidebar` 拆壳：coding 主体原样迁出至 `SidebarCoding`，壳只留
   header / ModeSwitcher / 分发 / footer；swarm 分支由 coding 侧边栏改 `SwarmSidebar`。
 - **Desktop** `RoomPage` 瘦身至 428 行：删名册/任务条/角色编辑/右栏，任务选择态
-  改读 store，单列布局；房间加载职责移交 `SwarmSidebar`（单一加载者）。
+  改读 store，单列布局；房间加载职责移交 `SwarmSidebar`（房间页不再自行加载），
+  `Settings → Agents` 视图复用同一 load-on-switch 清房纪律。
 
 ## v0.12.2 — 2026-11-10
 
