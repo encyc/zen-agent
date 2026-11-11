@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { syncZenState, setZenMode, zenTranscript } from '../src/state/zenActions.ts'
+import { syncZenState, setZenMode, zenTranscript, applyFleetFrame } from '../src/state/zenActions.ts'
 import { useSettingsStore } from '../src/state/stores.ts'
 import { useSessionStore } from '../src/state/stores.ts'
 import { useZenStore } from '../src/state/zenStore.ts'
@@ -113,6 +113,28 @@ test("setZenMode coding disables and clears the fleet view", async () => {
   await setZenMode(env.get, 'coding')
   assert.equal(useSettingsStore.getState().zenMode, 'coding')
   assert.equal(useZenStore.getState().enabled, false)
+})
+
+test('applyFleetFrame applies zen roster frames and reports them consumed', () => {
+  resetStores()
+  const consumed = applyFleetFrame({
+    type: 'zen_fleet',
+    enabled: true,
+    roster: [
+      { path: '/p/w1.jsonl', title: 'w1', focus: 'research', role: 'worker', status: 'working', last_report: '' },
+    ],
+  })
+  assert.equal(consumed, true)
+  assert.equal(useZenStore.getState().enabled, true)
+  assert.equal(useZenStore.getState().roster.length, 1)
+  assert.equal(useZenStore.getState().roster[0].focus, 'research')
+})
+
+test('applyFleetFrame leaves non-fleet frames for the normal path', () => {
+  resetStores()
+  assert.equal(applyFleetFrame({ type: 'swarm_notice', agent: 'research', text: 'hi' }), false)
+  assert.equal(useZenStore.getState().enabled, false)
+  assert.equal(useZenStore.getState().roster.length, 0)
 })
 
 test('zenTranscript returns the ok frame or null', async () => {

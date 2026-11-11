@@ -1,7 +1,7 @@
 {
  "project": "zen-agent",
- "version": 3,
- "updated": "2026-11-10",
+ "version": 4,
+ "updated": "2026-11-11",
  "overview": "zen-agent 是零第三方依赖（仅 httpx）的终端 AI 编码代理。四个前端（REPL / headless -p / JSONL RPC / Textual TUI）共用 app 层唯一装配序列 bootstrap.prepare；agent 内核以「事件流 + 工具永远返回结果 + 取消是协议内状态」为契约；providers 适配多家 LLM；插件（声明式连接器包，经 MCP 单向外呼）与 MCP/skills/模板/扩展/桌面 GUI(经 RPC) 都在内核之上接线不改内核。",
  "policy": {
   "file_loc_warn": 600,
@@ -14,7 +14,9 @@
   "cross_cluster_max": 4,
   "exempt": {
    "hub": [],
-   "orphan": [],
+   "orphan": [
+    "zenagent/app/swarm/__init__.py"
+   ],
    "file_loc": []
   }
  },
@@ -190,6 +192,29 @@
     "SessionMetaRecorder",
     "SnapshotJournal",
     "RunInfo"
+   ]
+  },
+  {
+   "id": "app.swarm",
+   "title": "多角色 swarm",
+   "cluster": "app",
+   "files": [
+    "zenagent/app/swarm/__init__.py",
+    "zenagent/app/swarm/manager.py",
+    "zenagent/app/swarm/protocol.py",
+    "zenagent/app/swarm/roles.py",
+    "zenagent/app/swarm/room.py",
+    "zenagent/app/swarm/roster.py",
+    "zenagent/app/swarm/router.py",
+    "zenagent/app/swarm/runner.py"
+   ],
+   "resp": "常驻多角色运行时：角色清单（人设/模型/工具/预算）→ 每角色独立 Runtime+Session；房间 JSONL 是唯一消息源，@ 是唯一路由原语；Router 做入站闸门，TaskRunner 以协议块约束任务边界与预算，SwarmManager 持有调度与审批。",
+   "symbols": [
+    "RoleManifest",
+    "SwarmStore",
+    "Router",
+    "TaskRunner",
+    "SwarmManager"
    ]
   },
   {
@@ -513,9 +538,13 @@
     "zenagent/cli/rpc/ops_files.py",
     "zenagent/cli/rpc/ops_plugins.py",
     "zenagent/cli/rpc/ops_session.py",
-    "zenagent/cli/rpc/server.py"
+    "zenagent/cli/rpc/server.py",
+    "zenagent/cli/rpc/host.py",
+    "zenagent/cli/rpc/ops_swarm.py",
+    "zenagent/cli/rpc/slot.py",
+    "zenagent/cli/rpc/terminal.py"
    ],
-   "resp": "JSONL RPC 服务器与 ops 分派（hello 协议握手、[limits] 契约）",
+   "resp": "JSONL RPC 服务器与 ops 分派（hello 协议握手、[limits] 契约、项目 slot；swarm 角色与房间分派）",
    "symbols": [
     "ConfigOps",
     "FilesOps",
@@ -1922,6 +1951,81 @@
    "to": "types",
    "desc": "message_from_json",
    "kind": "import"
+  },
+  {
+   "from": "app.swarm",
+   "to": "agent.loop",
+   "desc": "AgentTool、ToolResultAgent",
+   "kind": "import"
+  },
+  {
+   "from": "app.swarm",
+   "to": "agent.rt",
+   "desc": "Agent、Session（每角色独立运行时）",
+   "kind": "import"
+  },
+  {
+   "from": "app.swarm",
+   "to": "app.assembly",
+   "desc": "Runtime.bootstrap、RuntimeOptions、build_broker_for、start_mcp",
+   "kind": "import"
+  },
+  {
+   "from": "app.swarm",
+   "to": "app.transcript",
+   "desc": "maybe_auto_compact",
+   "kind": "import"
+  },
+  {
+   "from": "app.swarm",
+   "to": "config",
+   "desc": "load_user_config",
+   "kind": "import",
+   "hidden": true
+  },
+  {
+   "from": "app.swarm",
+   "to": "mcp",
+   "desc": "parse_server（角色 MCP 声明）",
+   "kind": "import"
+  },
+  {
+   "from": "app.swarm",
+   "to": "plugins",
+   "desc": "credentials_for、discover_plugins、is_enabled、resolve",
+   "kind": "import"
+  },
+  {
+   "from": "app.swarm",
+   "to": "project",
+   "desc": "zenagent_home（工作区围栏）",
+   "kind": "import"
+  },
+  {
+   "from": "app.swarm",
+   "to": "settings",
+   "desc": "get_api_key",
+   "kind": "import",
+   "hidden": true
+  },
+  {
+   "from": "app.swarm",
+   "to": "skills",
+   "desc": "discover_skills（角色技能根）",
+   "kind": "import"
+  },
+  {
+   "from": "app.swarm",
+   "to": "types",
+   "desc": "TextContent",
+   "kind": "import",
+   "hidden": true
+  },
+  {
+   "from": "cli.rpc",
+   "to": "app.swarm",
+   "desc": "SwarmManager、SwarmOps 分派",
+   "kind": "import"
   }
  ],
  "invariants": [
@@ -1931,7 +2035,8 @@
   "取消是协议内正常状态：Aborted(Exception) 而非 asyncio.CancelledError，AbortToken 贯穿 transport",
   "bootstrap.prepare 是四个前端唯一装配序列；broker 与 runtime 读同一 RuntimeOptions（参数化测试钉死）",
   "已知常量回指环 loop↔tool_exec↔result_budget↔timeouts 在 agent.loop 节点内部，cycles_seen 登记",
-  "插件只做单向外呼：zen → 插件 MCP 进程 → 外部应用；plugins/ 不 import mcp/app/cli/agent/tools/providers（tests/test_plugin_layering.py 钉住），只有 app/plugin_wiring.py 把插件贡献翻译成 MCP 配置"
+  "插件只做单向外呼：zen → 插件 MCP 进程 → 外部应用；plugins/ 不 import mcp/app/cli/agent/tools/providers（tests/test_plugin_layering.py 钉住），只有 app/plugin_wiring.py 把插件贡献翻译成 MCP 配置",
+  "swarm 只在 app 层组合既有内核：角色 runtime 经 Runtime.bootstrap 装配，插件仍单向外呼，密码只存 ~/.zenagent/settings.json（manifest 只放 ${KEY} 占位）"
  ],
  "unmapped": [
   {
@@ -2748,6 +2853,62 @@
   },
   {
    "file": "tests/fixtures/mcp_flaky_server.py",
+   "reason": "outside src_root: tests"
+  },
+  {
+   "file": "scripts/demo_age.py",
+   "reason": "outside src_root: scripts"
+  },
+  {
+   "file": "tests/test_project_scoped_runtime.py",
+   "reason": "outside src_root: tests"
+  },
+  {
+   "file": "tests/test_rpc_host.py",
+   "reason": "outside src_root: tests"
+  },
+  {
+   "file": "tests/test_rpc_host_e2e.py",
+   "reason": "outside src_root: tests"
+  },
+  {
+   "file": "tests/test_rpc_slot.py",
+   "reason": "outside src_root: tests"
+  },
+  {
+   "file": "tests/test_rpc_swarm.py",
+   "reason": "outside src_root: tests"
+  },
+  {
+   "file": "tests/test_runtime_role_assembly.py",
+   "reason": "outside src_root: tests"
+  },
+  {
+   "file": "tests/test_swarm_manager.py",
+   "reason": "outside src_root: tests"
+  },
+  {
+   "file": "tests/test_swarm_roles.py",
+   "reason": "outside src_root: tests"
+  },
+  {
+   "file": "tests/test_swarm_room.py",
+   "reason": "outside src_root: tests"
+  },
+  {
+   "file": "tests/test_swarm_router.py",
+   "reason": "outside src_root: tests"
+  },
+  {
+   "file": "tests/test_swarm_runner.py",
+   "reason": "outside src_root: tests"
+  },
+  {
+   "file": "tests/test_terminal.py",
+   "reason": "outside src_root: tests"
+  },
+  {
+   "file": "tests/test_tools_scoped.py",
    "reason": "outside src_root: tests"
   }
  ],

@@ -16,6 +16,8 @@ import { AppFrame } from './ui/AppFrame'
 import { Sidebar } from './ui/Sidebar'
 import { ChatView } from './ui/chat/ChatView'
 import { InputBar } from './ui/composer/InputBar'
+import { RoomPage } from './ui/pages/RoomPage'
+import { ZenPlaceholder } from './ui/pages/ZenPlaceholder'
 import { restoreChatState } from './ui/pages/navigation'
 import { isRuntimeMissing, type RuntimeProbe } from './state/startFailure.ts'
 import { shouldShowWindow } from './state/shellWindow.ts'
@@ -24,7 +26,7 @@ import { ConversationTopbar } from './ui/ConversationTopbar'
 import { NoticeBanner } from './ui/NoticeBanner'
 import { useUpdateStore } from './state/updateStore'
 import { SIDEBAR_DEFAULT, RIGHTBAR_DEFAULT, clampChatWidth } from './ui/columns'
-import { PanelRightIcon } from './ui/icons'
+import { PanelLeftIcon, PanelRightIcon } from './ui/icons'
 import css from './App.module.css'
 
 const SIDEBAR_KEY = 'zen.sidebar.width'
@@ -73,6 +75,7 @@ export function App() {
   const chatWidth = useSettingsStore((state) => state.chatWidth)
   const fontScale = useSettingsStore((state) => state.fontScale)
   const view = useSettingsStore((state) => state.view)
+  const workspaceMode = useSettingsStore((state) => state.workspaceMode)
   const previousView = useRef(view)
   const updateChecked = useRef(false)
   // The shell opens straight into a chat: the last project, else the user's
@@ -277,7 +280,39 @@ export function App() {
         </Suspense>
       }
     >
-      <ConversationTopbar collapsed={collapsed} onExpandSidebar={() => setCollapsed(false)} />
+      {workspaceMode === 'coding' ? (
+        <>
+          <ConversationTopbar collapsed={collapsed} onExpandSidebar={() => setCollapsed(false)} />
+          <ChatView />
+          <div ref={dockRef} className={css.composerDock} data-shell-composer>
+            <InputBar />
+          </div>
+          <button
+            type="button"
+            className={css.workPanelToggle}
+            aria-label={t('panel.open')}
+            aria-expanded={rightbarOpen}
+            data-active={rightbarOpen || undefined}
+            onClick={() => {
+              const panel = useWorkPanelStore.getState()
+              if (panel.open) panel.closePanel()
+              else panel.openPanel()
+            }}
+          >
+            <PanelRightIcon size={15} />
+          </button>
+        </>
+      ) : workspaceMode === 'swarm' ? (
+        <>
+          {collapsed && <ExpandSidebar onExpand={() => setCollapsed(false)} />}
+          <RoomPage />
+        </>
+      ) : (
+        <>
+          {collapsed && <ExpandSidebar onExpand={() => setCollapsed(false)} />}
+          <ZenPlaceholder />
+        </>
+      )}
       {switching !== null && (
         <div
           className={css.switchingBar}
@@ -295,30 +330,29 @@ export function App() {
         </div>
       )}
       <NoticeBanner />
-      <ChatView />
-      <div ref={dockRef} className={css.composerDock} data-shell-composer>
-        <InputBar />
-      </div>
-      <button
-        type="button"
-        className={css.workPanelToggle}
-        aria-label={t('panel.open')}
-        aria-expanded={rightbarOpen}
-        data-active={rightbarOpen || undefined}
-        onClick={() => {
-          const panel = useWorkPanelStore.getState()
-          if (panel.open) panel.closePanel()
-          else panel.openPanel()
-        }}
-      >
-        <PanelRightIcon size={15} />
-      </button>
       </AppFrame>
       <Suspense fallback={null}>
         <WorkerDrawer />
       <CommandPalette />
       </Suspense>
     </>
+  )
+}
+
+/** Coding mode's topbar owns its expand seat; every other surface has no
+ * topbar, so the collapsed sidebar would otherwise leave no way back. */
+function ExpandSidebar({ onExpand }: { onExpand(): void }) {
+  const t = useT()
+  return (
+    <button
+      type="button"
+      className={css.sidebarExpand}
+      aria-label={t('topbar.expandSidebar')}
+      data-shell-expand
+      onClick={onExpand}
+    >
+      <PanelLeftIcon size={15} />
+    </button>
   )
 }
 

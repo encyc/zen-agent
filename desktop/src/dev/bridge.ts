@@ -5,6 +5,7 @@
  * dynamically under `import.meta.env.DEV`; Playwright loads it via harness. */
 
 import { handlePlugins, type PluginMockState } from './pluginsMock'
+import { handleSwarm, type SwarmMockState } from './swarmMock'
 type Lane = 'queue' | 'steer'
 
 interface PendingItemMock {
@@ -24,7 +25,7 @@ export interface MemoryEntryMock {
   source: string
 }
 
-export interface BridgeState extends PluginMockState {
+export interface BridgeState extends PluginMockState, SwarmMockState {
   running: boolean
   pending: PendingItemMock[]
   calls: Record<string, unknown>[]
@@ -475,6 +476,7 @@ export function installBridge(state: BridgeState) {
         return result()
       }
       case 'plugins': return handlePlugins(state, payload)
+      case 'swarm': return handleSwarm(state, payload)
       case 'mcp': {
         const rows = () =>
           state.mcpServers ?? [

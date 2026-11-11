@@ -37,8 +37,9 @@ import {
   useWorkPanelStore,
 } from './stores'
 import { useChatStore } from './chatStore'
-import { useZenStore } from './zenStore'
-import { setZenMode, syncZenState, zenTranscript } from './zenActions'
+import { applyFleetFrame, setZenMode, syncZenState, zenTranscript } from './zenActions'
+import { _useSwarmSender } from './swarmStore'
+import { applySwarmFrame } from './swarmWiring'
 import { nextDraft } from './pending'
 import { latestSessionForProject } from './latestSession'
 import { loadPrefs, replayFrames, savePref, spawnArgs } from './prefs'
@@ -976,6 +977,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     },
 }))
 
+// The swarm store sends through this module's client seam instead of importing
+// `appStore`, which keeps its module graph loadable under `node --test`.
+_useSwarmSender({
+  send: (request) => useAppStore.getState().client().send(request),
+})
+
 async function runSessionOp(
   get: () => AppState,
   payload: Record<string, unknown>,
@@ -1061,10 +1068,14 @@ async function restorePrefs(get: () => AppState): Promise<void> {
 }
 
 function handleFrame(frame: ServerFrame, handling: FrameHandling): void {
+  // The swarm room spans every project slot: its untagged frames must land
+  // before the filters below drop them (notices become notifications).
+  if (applySwarmFrame(frame)) return
+  const tagged = frame as { project?: unknown; session?: unknown }
   const project =
-    typeof frame.project === 'string' && frame.project !== '' ? frame.project : null
+    typeof tagged.project === 'string' && tagged.project !== '' ? tagged.project : null
   const session =
-    typeof frame.session === 'string' && frame.session !== '' ? frame.session : null
+    typeof tagged.session === 'string' && tagged.session !== '' ? tagged.session : null
   if (frame.type === 'event') {
     const event = frame.event
     // Prompts are answered by prefix-routed ids; a background slot's question
@@ -1113,10 +1124,7 @@ function handleFrame(frame: ServerFrame, handling: FrameHandling): void {
     return
   }
   if (!frameBelongsTo(frame, handling.get().project)) return
-  if (frame.type === 'zen_fleet') {
-    useZenStore.getState().applyRoster(frame.enabled, frame.roster ?? [])
-    return
-  }
+  if (applyFleetFrame(frame)) return
   if (!frameSessionBelongsTo(frame, useSessionStore.getState().currentPath)) return
   handleResultFrame(frame as Record<string, unknown>, handling)
 }

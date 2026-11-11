@@ -5,13 +5,21 @@
 import { useSettingsStore } from './stores.ts'
 import { useSessionStore } from './stores.ts'
 import { useZenStore } from './zenStore.ts'
-import type { RosterItem } from '../rpc/types.ts'
+import type { RosterItem, ServerFrame } from '../rpc/types.ts'
 import type { ZenUiMode } from '../rpc/types.ts'
 
 type AppGetter = () => {
   client(): { send(payload: Record<string, unknown>): Promise<Record<string, unknown> & { type?: string; ok?: boolean }> }
   refreshTranscript(): Promise<boolean>
   refreshSessions(): Promise<void>
+}
+
+/** Consume a zen_fleet roster frame; false means "not mine, keep flowing".
+ * Extracted from appStore.handleFrame to hold its LOC budget. */
+export function applyFleetFrame(frame: ServerFrame): boolean {
+  if (frame.type !== 'zen_fleet') return false
+  useZenStore.getState().applyRoster(frame.enabled, frame.roster ?? [])
+  return true
 }
 
 export async function syncZenState(get: AppGetter): Promise<void> {

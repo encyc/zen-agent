@@ -56,6 +56,9 @@ const McpSettings = lazy(() =>
 const PluginSettings = lazy(() =>
   import('./PluginSettings').then((module) => ({ default: module.PluginSettings })),
 )
+const AgentSettings = lazy(() =>
+  import('./AgentSettings').then((module) => ({ default: module.AgentSettings })),
+)
 const ProjectSettings = lazy(() =>
   import('./ProjectSettings').then((module) => ({ default: module.ProjectSettings })),
 )
@@ -594,6 +597,12 @@ export function SettingsPage() {
           {tab === 'plugins' && (
             <Suspense fallback={null}>
               <PluginSettings />
+            </Suspense>
+          )}
+
+          {tab === 'agents' && (
+            <Suspense fallback={null}>
+              <AgentSettings />
             </Suspense>
           )}
 

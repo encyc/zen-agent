@@ -3,7 +3,13 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased — Zen 模式（Router 统筹，dsh super-agent 双层架构）
+## Unreleased — Zen 模式 × Swarm 多角色运行时（双分支集成）
+
+**Merge note.** 集成 feat/zen-mode 与 feat/swarm-runtime；模式状态统一为
+`workspaceMode` 三态（zen 的 ✨ 开关由三态切换器收编）；zen 离开行为默认改为
+后台继续，可在 Settings→Zen 切回"离开即停"（老用户可见的行为变化）。
+
+### Zen 模式（Router 统筹，dsh super-agent 双层架构）
 
 **Zen mode.** sidebar 顶部新增 Coding ↔ Zen 切换（✨，持久化于 `zen.ui.mode`）。
 进入 Zen 后每个项目只有一个交互会话（Router session），项目下其余会话成为持有
@@ -17,7 +23,7 @@ matches the release tag; older history is in the repository tags and commits.
 的 taiji 编排层的重建：fleet 挂在 slot 上而非进程级单例，没有 worktree/合并门，
 没有派工面板——编排逻辑主要活在提示词与工具里。
 
-### Added
+#### Added
 
 - **Backend** `zenagent/app/zen/`：`roster.py`（`.zen.json` 名册侧车：role/focus，
   与 `.titles.json` 同族）、`fleet.py`（`ZenFleet`：`dispatch/stop/focus/spawn/
@@ -40,7 +46,7 @@ matches the release tag; older history is in the repository tags and commits.
   enable，绝不自动 disable）。
 - **Docs**：`docs/guide/zen-mode.md`（用户指南）。
 
-### 架构图（architecture-full.html / architecture.md）
+#### 架构图（architecture-full.html / architecture.md）
 
 - **增**：app 层新节点 `zen`（`app/zen/`，tooltip 含 fleet/roster/tools/prompts
   四文件职责）；三条新边 `rt→zen`（zen_fleet 槽位）、`zen→prep`（worker
@@ -48,6 +54,105 @@ matches the release tag; older history is in the repository tags and commits.
 - **改**：`rpc` 节点 tooltip 增 `ops_zen(zen_fleet …)`，协议 v2 → v3；模块表
   新增 `zenagent/app/zen/` 行。
 - **删**：无。
+
+### Swarm 多角色运行时
+
+**A multi-role swarm runtime.** A team room where several configured agents work
+side by side: each role has its own manifest, session and workspace, tasks are
+assigned by `@` mentions, and finished runs post their result back to the room.
+The desktop gains a Coding / ZEN / Swarm mode switcher; ZEN is a placeholder for
+the other branch.
+
+#### Swarm
+
+- **Role manifests** (`zenagent/app/swarm/roles.py`): `~/.zenagent/agents/<id>/`
+  holds `manifest.json`, `prompt.md` and optional `skills/`. A role pins its
+  model, thinking level, system prompt, skills, MCP servers, plugin references,
+  tool allowlist, root, turn/cost limits and mode. `${KEY}` placeholders resolve
+  from `~/.zenagent/settings.json`; a missing key only skips that MCP server.
+  `inheritProject` defaults to `false`, so a role is an isolated profile; its
+  default root is `~/.zenagent-workspaces/<id>/`, outside the protected
+  `~/.zenagent` fence. A role whose runtime cannot be built (unknown model,
+  broken MCP) is skipped with a room note; the other roles keep working.
+- **Room and task log** (`room.py`): `~/.zenagent/swarm/room.jsonl` and
+  `tasks.jsonl` are append-only; startup replays them into memory, and every
+  non-terminal task is appended as `failed(interrupted)` with a room note
+  (never silently resumed or rerun). Role sessions live under
+  `~/.zenagent/swarm/agents/<id>/sessions/`, not in the project session list.
+- **Delegation by `@`** (`router.py`, `protocol.py`): any room message that
+  mentions `@role` creates a queued task with `chainDepth = parent + 1`;
+  unknown mentions are kept as text. Each agent runs one task at a time
+  (global cap 3). The run's final text is automatically posted as the result;
+  `swarm_post` posts mid-run. There is no automatic receipt — @ the role you
+  want to see the result, exactly like any other delegation. An agent message
+  that mentions `@you` raises a desktop notification; it creates no task.
+- **Structural gates**: chain depth 8, chain budget $5, per-agent inbox 16,
+  concurrency 3. A refusal is a room system message and creates no task.
+  Tool approvals reuse the existing approval channel, tagged with `agent` and
+  `task`, with a 120 s timeout (refused under `ask`, auto-approved under `zen`).
+- **RPC** (`cli/rpc/ops_swarm.py`): one `swarm` request family
+  (`list` / `post` / `cancel` / `retry` / `reset` / `transcript` / `roles` /
+  `reload`); a role
+  is addressed by `roleId` because `id` is the request correlation id. Host-level
+  `swarm:`-prefixed approval ids route before project slot lookup.
+
+#### Desktop
+
+- **Mode switcher** (`Sidebar`): segmented Coding / ZEN / Swarm control backed by
+  the persisted `workspaceMode`; ZEN renders a placeholder page for the other
+  branch. Collapsing the sidebar on a surface without a conversation topbar
+  leaves a floating expand control in the topbar's lead seat, so the way back
+  no longer disappears with the sidebar.
+- **Swarm room** (`RoomPage`): message feed with per-role status dots, task
+  pills and system notes; `@` autocomplete in the composer; right-side roster,
+  task strip with cancel/retry, and the shared approval panel above the composer.
+  Each task row keeps the list compact; selecting one opens its ID, creator,
+  chain depth/cost, the source message, failure/cancel reason and retry
+  origin as the conversation column itself — the room feed steps aside until the
+  card is closed — with the row highlighted and a collapse action. The card's **run activity** replays the run
+  from the role's own session with the coding transcript's own row components —
+  collapsible tool cards with input/output bodies, markdown text and reasoning —
+  refreshed while the task runs; the final reply appears there as the run's last
+  turn rather than a second result block, and a reset or compacted role
+  session reports the record as unavailable instead of failing. Every task
+  transition — including `done`, `failed` and `cancelled` — now reaches the room
+  as a `swarm_task` frame, so cancel no longer leaves the row on running.
+  Role build problems are listed above the feed, and the roster's **Reload
+  agents** action re-reads manifests at any time. Each roster row's **Configure**
+  action and the roster header's **New agent** open the full role editor in a
+  modal, so agents are managed where they run.
+- **Role editor** (`agentEditor.tsx`, shared by the room and Settings): the
+  complete manifest surface — validated id, persona, model/thinking, skills,
+  plugins, MCP servers as validated JSON, tool allowlist, root, `inheritProject`,
+  mode and turn/cost limits. MCP entries round-trip the manifest's `${KEY}`
+  placeholders; resolved credentials never reach the desktop.
+- **Settings → Agents** (`AgentSettings.tsx`): role list with
+  ready / needs-credentials badges, the same create/edit editor and two-step
+  delete.
+
+#### Security
+
+- Room messages are treated as external input and every tool call still goes
+  through the permission gate; swarm does not relax it. Credentials stay only in
+  `~/.zenagent/settings.json` (0600) — manifests hold `${KEY}` placeholders, and
+  logs, RPC frames and room messages never echo secrets. A role's root is the
+  cwd boundary of its tools; a role with bash/write tools is local code
+  execution, and the form states so. A role runtime assembles only what its
+  manifest declares — global plugins, skills and templates never load into it.
+
+#### Architecture diagrams
+
+- `docs/arch-gov/manifest.json` v4 — **41 nodes / 193 edges**:
+  **added** node `app.swarm` (app cluster, 8 files, symbols `RoleManifest` /
+  `SwarmStore` / `Router` / `TaskRunner` / `SwarmManager`); **added** edges
+  from `app.swarm` to the agent kernel (`agent.loop`, `agent.rt`) and the app
+  layer (`app.assembly`, `app.transcript`, `mcp`, `plugins`, `project`,
+  `skills`, `config`, `settings`, `types`), plus `cli.rpc → app.swarm`;
+  **changed** `cli.rpc` (+`host.py`, +`ops_swarm.py`, +`slot.py`,
+  +`terminal.py`); **added** invariant: swarm only composes the existing kernel
+  in the app layer, plugins stay one-way and credentials stay in settings.
+- The interactive HTML assets are not refreshed in this entry; the node/edge
+  data above is authoritative in `docs/arch-gov/graph.html`.
 
 ## v0.12.2 — 2026-11-10
 

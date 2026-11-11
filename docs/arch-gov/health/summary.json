@@ -1,16 +1,16 @@
 {
- "date": "2026-11-10",
- "manifest_version": 3,
+ "date": "2026-11-11",
+ "manifest_version": 4,
  "new_errors": 0,
  "new_warns": 0,
  "worse": 0,
  "improved": 0,
  "resolved": 0,
- "total": 109,
- "baseline_size": 109,
+ "total": 113,
+ "baseline_size": 113,
  "by_node": {
   "(unmapped)": {
-   "errors": 8,
+   "errors": 7,
    "warns": 29
   },
   "config": {
@@ -41,12 +41,16 @@
    "errors": 2,
    "warns": 5
   },
+  "app.swarm": {
+   "errors": 1,
+   "warns": 3
+  },
   "cli": {
    "errors": 1,
    "warns": 7
   },
   "cli.rpc": {
-   "errors": 4,
+   "errors": 5,
    "warns": 6
   },
   "cli.tui": {

@@ -119,6 +119,9 @@ class RuntimeOptions:
     mcp_servers: list[str] | None = None
     skills: bool = True
     templates: bool = True
+    #: Global plugin assembly. Role runtimes turn this off: their capabilities
+    #: come from the role manifest, not from whatever the user enabled globally.
+    plugins: bool = True
     extension_paths: list[str] = field(default_factory=list)
     context_files: bool = True
     read_only: bool = False
@@ -140,8 +143,18 @@ class RuntimeOptions:
     auto_compact: bool = True
     #: Explicit tool list (embedding/test seam); ``None`` = compose the default.
     tools: list | None = None
+    #: Role assembly: keep only these tool names (``None`` = the default set).
+    tools_allow: list[str] | None = None
+    #: Role assembly: tools appended after the allowlist filter.
+    extra_tools: list | None = None
+    #: Role assembly: persona text appended as an extension prompt fragment.
+    extra_prompt: str | None = None
     #: Retry cadence for late MCP servers.
     mcp_retry_interval_s: float = 10.0
+    #: Whether resumed transcripts live under a project's sessions directory.
+    #: Role runtimes keep per-role sessions in the swarm state dir, which has
+    #: no project owner to compare, so the scope warning does not apply.
+    project_sessions: bool = True
 
 
 class Runtime:
@@ -156,6 +169,9 @@ class Runtime:
         #: Project identity root (nearest ``.git``): sessions, config, MCP,
         #: skills, templates, memory and the permission policy hang off it.
         self.root: Path = self.cwd
+        #: False when sessions belong to the embedder (swarm roles), so the
+        #: project-scope resume check has nothing to compare against.
+        self.project_sessions = True
         #: Env var the current model needs when the app started without a key.
         self.missing_api_key: str | None = None
         self.catalog: dict[str, ProviderConfig] = {}
@@ -228,6 +244,9 @@ class Runtime:
         #: Project memory library (<root>/.zenagent/memory/); set per-recompose.
         self.memory_store: MemoryStore | None = None
         self._extension_prompt = ""
+        self._extra_prompt = ""
+        self._tools_allow: list[str] | None = None
+        self._extra_tools: list = []
         self._extension_tools: list = []
         #: Slash commands contributed by extensions (name → ExtensionCommand).
         self.extension_commands: dict = {}
@@ -349,6 +368,7 @@ class Runtime:
         if not runtime.cwd.is_dir():
             raise RuntimeError(f"project root is not a directory: {runtime.cwd}")
         runtime.root = project.find_project_root(runtime.cwd)
+        runtime.project_sessions = options.project_sessions
         runtime.user_config = load_user_config(cwd=runtime.root)
         runtime.catalog = apply_user_config(
             load_catalog(), runtime.user_config, runtime.warnings
@@ -422,7 +442,7 @@ class Runtime:
         runtime._lsp_acquired = True
         acquire_clients()
         assembly = None
-        if options.tools is None:
+        if options.tools is None and options.plugins:
             assembly = await plugin_wiring.start_plugins(runtime, options)
 
         if options.skills and options.tools is None:
@@ -454,6 +474,9 @@ class Runtime:
             runtime._extension_prompt = loaded.prompt_text
 
         runtime._options = options
+        runtime._tools_allow = options.tools_allow
+        runtime._extra_tools = list(options.extra_tools or [])
+        runtime._extra_prompt = options.extra_prompt or ""
         runtime._context_files = options.context_files
         runtime.auto_compact = options.auto_compact
         runtime._custom_tools = (
@@ -606,7 +629,13 @@ class Runtime:
         This slice deliberately keeps the tools' cwd unchanged; omp switches
         project directories on cross-project resume, which we will layer on with
         config/context re-discovery rather than chdir'ing mid-run.
+
+        Embedders that own their sessions (swarm roles) set
+        ``project_sessions=False``: their transcripts live outside the project
+        tree, so there is no owner to compare and no warning to raise.
         """
+        if not self.project_sessions:
+            return
         owner = project.project_key_for_session(path)
         current = project.project_key(self.root)
         if owner is not None and owner != current:
@@ -638,8 +667,10 @@ class Runtime:
             context_text=context_text,
             skill_entries=self._skill_entries,
             memory_index=memory_index,
-            extension_fragments=(
-                (self._extension_prompt,) if self._extension_prompt else ()
+            extension_fragments=tuple(
+                fragment
+                for fragment in (self._extension_prompt, self._extra_prompt)
+                if fragment
             ),
             include_context=self._context_files,
             include_mode=False,
@@ -706,6 +737,9 @@ class Runtime:
                 build_skill_tool(self.skills, max_body_bytes=self.limits.max_body_bytes)
             )
         tools.extend(self._extension_tools)
+        if self._tools_allow is not None:
+            tools = [tool for tool in tools if tool.name in self._tools_allow]
+        tools = [*tools, *self._extra_tools]
         self._skill_entries = format_skill_entries(
             self.skills, max_bytes=self.limits.max_index_bytes
         )

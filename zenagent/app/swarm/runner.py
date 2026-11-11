@@ -1,0 +1,109 @@
+"""Run one queued task with a role's agent and record the terminal outcome.
+
+Message creation, mention admission and approval routing live in the manager
+(which owns inbox sizes and the gate broker); the runner contributes the
+injected prompt, the termination mapping and the chain-cost accounting.
+"""
+
+from __future__ import annotations
+
+import time
+from collections.abc import Callable
+from dataclasses import replace
+
+from zenagent.agent.agent import Agent
+from zenagent.agent.session import Session
+from zenagent.app.compact import maybe_auto_compact
+from zenagent.app.swarm.protocol import injected_prompt
+from zenagent.app.swarm.roles import RoleManifest
+from zenagent.app.swarm.room import RoomMessage, TaskRecord
+from zenagent.types import AssistantMessage, TextContent
+
+__all__ = ["TaskRunner"]
+
+SUCCESS_TERMINATIONS = {"stop", "tool_terminate"}
+
+
+class TaskRunner:
+    def __init__(
+        self,
+        *,
+        record_task: Callable[[TaskRecord], None],
+        agent: Agent,
+        session: Session,
+        role: RoleManifest,
+        post_message: Callable[[str, str], RoomMessage],
+        admit_message: Callable[[RoomMessage], object],
+    ) -> None:
+        #: Records a task transition; the manager owns it so every state the
+        #: room sees (queued → running → terminal) also reaches the UI as a
+        #: ``swarm_task`` frame.
+        self.record_task = record_task
+        self.agent = agent
+        self.session = session
+        self.role = role
+        self.post_message = post_message
+        self.admit_message = admit_message
+        #: Terminal outcome the manager pins before aborting a run it owns
+        #: (role removal, approval timeout, shutdown). ``None`` = user cancel.
+        self.abort_outcome: tuple[str, str] | None = None
+
+    async def run(self, task: TaskRecord, message: RoomMessage) -> TaskRecord:
+        self.abort_outcome = None
+        running = replace(task, state="running", updated_at=int(time.time()))
+        self.record_task(running)
+
+        before = len(self.agent.messages)
+        await self.agent.prompt(injected_prompt(message, running))
+        await self.agent.wait_for_idle()
+
+        termination = self.agent.termination or "stop"
+        new_messages = self.agent.messages[before:]
+        updated = replace(
+            running,
+            chain_cost=round(running.chain_cost + _run_cost(new_messages), 6),
+            updated_at=int(time.time()),
+        )
+        if termination in SUCCESS_TERMINATIONS:
+            text = _final_text(new_messages) or "(no output)"
+            posted = self.post_message(text, "agent")
+            updated = replace(updated, state="done", result_message_id=posted.id)
+            # Record this run's cost before admitting its mentions: the router
+            # gates on the chain aggregate, which the terminal append updates.
+            self.record_task(updated)
+            self.admit_message(posted)
+        elif termination == "aborted":
+            state, reason = self.abort_outcome or ("cancelled", "aborted")
+            if state == "cancelled":
+                self.post_message(f"Task {task.id} cancelled", "system")
+            else:
+                self.post_message(f"Task {task.id} failed: {reason}", "system")
+            updated = replace(updated, state=state, reason=reason)
+            self.record_task(updated)
+        else:
+            self.post_message(f"Task {task.id} failed: {termination}", "system")
+            updated = replace(updated, state="failed", reason=termination)
+            self.record_task(updated)
+        await maybe_auto_compact(
+            self.agent, self.session, print_fn=lambda _message: None
+        )
+        return updated
+
+
+def _run_cost(messages: list) -> float:
+    return sum(
+        message.usage.cost.total
+        for message in messages
+        if isinstance(message, AssistantMessage)
+    )
+
+
+def _final_text(messages: list) -> str:
+    for message in reversed(messages):
+        if isinstance(message, AssistantMessage):
+            return "".join(
+                block.text
+                for block in message.content
+                if isinstance(block, TextContent)
+            )
+    return ""
