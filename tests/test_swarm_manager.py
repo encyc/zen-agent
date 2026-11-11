@@ -562,6 +562,94 @@ async def test_approval_timeout_fails_the_task(monkeypatch):
         await manager.close()
 
 
+async def test_swarm_approval_deny_marks_task():
+    role_dir = _write_role("writer")
+    (role_dir / "manifest.json").write_text(
+        json.dumps(
+            {"id": "writer", "name": "Writer", "tools": ["write_file"]}
+        ),
+        encoding="utf-8",
+    )
+    frames: list[dict] = []
+    manager = SwarmManager(
+        write_frame=frames.append,
+        stream_fn_factory=lambda role: _write_then_text_stream(),
+    )
+    await manager.start()
+    try:
+        [task] = await manager.post("@writer 写个文件")
+        await _wait_for(lambda: _approval_request(frames) is not None)
+        request = _approval_request(frames)
+        assert request is not None
+        assert manager.resolve_approval(request["request_id"], "deny") is True
+        # The agent finishes its turn after the refused tool, but the mutation
+        # must not have run.
+        await _wait_for(lambda: _states(manager)[task.id] == "done")
+        root = manager.agents["writer"].role.root
+        assert not (root / "note.txt").exists()
+    finally:
+        await manager.close()
+
+
+def _gated_stream(gates: dict):
+    """A per-role stream that stays running until its gate Event is set."""
+
+    def factory(role):
+        async def stream(model, messages, tools, options):
+            partial = AssistantMessage(
+                content=[TextContent(text="working")],
+                provider="p",
+                model="m",
+                usage=Usage(),
+                stop_reason="pending",
+                timestamp=0,
+            )
+            yield AssistantEvent(type="start", partial=partial)
+            abort = asyncio.create_task(options.abort.wait())
+            gate = asyncio.create_task(gates[role.id].wait())
+            done, pending = await asyncio.wait(
+                {abort, gate}, return_when=asyncio.FIRST_COMPLETED
+            )
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+            if abort in done:
+                raise Aborted("cancelled")
+            partial.stop_reason = "stop"
+            yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+        return stream
+
+    return factory
+
+
+async def test_swarm_concurrency_cap_queues():
+    _write_role("alpha")
+    _write_role("beta")
+    gates = {"alpha": asyncio.Event(), "beta": asyncio.Event()}
+    manager = SwarmManager(
+        max_concurrent=1, stream_fn_factory=_gated_stream(gates)
+    )
+    await manager.start()
+    try:
+        [ta] = await manager.post("@alpha a")
+        [tb] = await manager.post("@beta b")
+        # Latch: alpha holds the only slot; beta must wait, never run alongside.
+        await _wait_for(lambda: _states(manager)[ta.id] == "running")
+        assert _states(manager)[tb.id] == "queued"
+        assert manager.agents["beta"].state != "running"
+        # Free alpha's slot; beta then acquires it and runs.
+        gates["alpha"].set()
+        await _wait_for(lambda: _states(manager)[ta.id] == "done")
+        await _wait_for(lambda: _states(manager)[tb.id] == "running")
+        gates["beta"].set()
+        await _wait_for(lambda: _states(manager)[tb.id] == "done")
+    finally:
+        gates["alpha"].set()
+        gates["beta"].set()
+        await manager.close()
+
+
 async def test_inbox_cap_rejects_the_overflow_posts():
     _write_role("slow")
     manager = SwarmManager(stream_fn_factory=_slow_stream)

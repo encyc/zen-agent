@@ -46,6 +46,16 @@ class FakeWorkerAgent:
         gate = self.factory.gates.pop(self.path, None)
         if gate is not None:
             await gate
+        # Model a mutating tool gated by the wired confirm, as the real broker
+        # gates write/exec: a denial stops the mutation. No confirm = no gate.
+        broker = self.factory.brokers.get(str(self.path))
+        confirm = getattr(broker, "confirmed", None)
+        decision = "allow"
+        if confirm is not None:
+            result = confirm("write_file", {"path": "note.txt", "content": "hi"})
+            decision = await result if asyncio.iscoroutine(result) else result
+        if decision in ("allow", "always"):
+            self.factory.mutations.append(str(self.path))
         self.messages.append(_assistant(f"did: {text.splitlines()[0]}"))
         if self.factory.errors.get(self.path):
             raise RuntimeError(self.factory.errors.pop(self.path))
@@ -94,6 +104,7 @@ class FakeWorkerFactory:
         self.build_gates: dict[Path, object] = {}
         self.errors: dict[Path, str] = {}
         self.calls: list[dict] = []
+        self.mutations: list[str] = []
 
     async def prepare(self, options, **kwargs) -> SimpleNamespace:
         """Match the real ``prepare``: a PreparedFrontend envelope, not a bare Runtime."""
@@ -238,6 +249,23 @@ async def _await_runtime(factory: FakeWorkerFactory, path: Path) -> None:
             return
         await asyncio.sleep(0)
     raise AssertionError("worker runtime never built")
+
+
+async def _await_flush_armed(fleet: ZenFleet) -> None:
+    """Yield until a report is buffered and the flush sleeps in its batch window.
+
+    A latch, not a wall-clock guess: once the window is armed a second report
+    released now joins the same batch deterministically.
+    """
+    for _ in range(200):
+        if (
+            fleet._wake_task is not None
+            and not fleet._wake_task.done()
+            and fleet._report_buffer
+        ):
+            return
+        await asyncio.sleep(0)
+    raise AssertionError("batch window never armed")
 
 
 async def test_worker_failure_marks_failed_and_injects(env) -> None:
@@ -420,6 +448,23 @@ async def test_plan_router_workers_inherit_plan(env) -> None:
     assert env["factory"].modes[str(env["paths"]["w2"])] == "plan"
 
 
+async def test_zen_approval_deny(env) -> None:
+    fleet: ZenFleet = env["fleet"]
+    asked: list[str] = []
+
+    async def deny(tool_name, arguments, verdict=None):
+        asked.append(tool_name)
+        return "deny"
+
+    fleet.confirm = deny
+    await fleet.dispatch(str(env["paths"]["w1"]), "写文件")
+    await fleet.wait_all()
+    # The worker consulted the router's wired confirm and the denial stuck.
+    assert asked == ["write_file"]
+    assert env["factory"].mutations == []
+    assert fleet.status_of(str(env["paths"]["w1"])) == "waiting"
+
+
 async def test_same_moment_reports_arrive_as_one_batch(env) -> None:
     """dsh batching: reports completing together reach the router merged,
     so one run reviews all of them instead of one run per report."""
@@ -450,7 +495,9 @@ async def test_reports_within_the_batch_window_merge(env) -> None:
     await fleet.dispatch(str(env["paths"]["w1"]), "a")
     await fleet.dispatch(str(env["paths"]["w2"]), "b")
     gates[0].set_result(None)
-    await asyncio.sleep(0.02)  # staggered, still inside the window
+    # Latch until w1's report is buffered and the flush is sleeping in its
+    # window, then release w2 so it joins the same batch — no wall-clock race.
+    await _await_flush_armed(fleet)
     gates[1].set_result(None)
     await fleet.wait_all()
     joined = [
