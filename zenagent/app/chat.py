@@ -330,6 +330,21 @@ class ChatController:
         """Append one pending entry and return its view-model snapshot."""
         return self._pending_queue.add(text, images, lane)
 
+    async def deliver(self, text: str) -> None:
+        """Deliver an externally-originated message (a zen worker report).
+
+        Streaming: steer into the running turn's next step boundary. Idle:
+        wake the conversation with a run of its own — a report must not sit in
+        the follow-up queue waiting for the person to type. ``submit``'s own
+        busy fallback (compaction, a run that just finished) queues the text.
+        """
+        if not text.strip():
+            return
+        if self.runtime.agent.is_streaming:
+            self.steer(text)
+            return
+        await self.submit(text)
+
     def steer(self, text: str) -> None:
         """Deliver ``text`` at the running turn's next step boundary.
 

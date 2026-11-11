@@ -153,7 +153,7 @@ test('handshake adopts the host’s active project for later requests', async ()
     type: 'result',
     id: 'r1',
     ok: true,
-    protocol_version: 2,
+    protocol_version: 3,
     active: '/work/q',
   }))
   _useBridge(recorder.bridge)

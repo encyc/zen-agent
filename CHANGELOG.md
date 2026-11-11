@@ -3,6 +3,52 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased — Zen 模式（Router 统筹，dsh super-agent 双层架构）
+
+**Zen mode.** sidebar 顶部新增 Coding ↔ Zen 切换（✨，持久化于 `zen.ui.mode`）。
+进入 Zen 后每个项目只有一个交互会话（Router session），项目下其余会话成为持有
+任务焦点的 worker：Router 通过六个 fleet 工具异步派工、查状态、停止、设焦点、
+新建 worker；worker 回合结束后报告以 `[zen:worker …]` 消息自动回注 Router
+会话并**唤醒新回合**（`ChatController.deliver`：流式中 steer 注入当前回合，
+空闲时 submit 开新回合，压缩/忙态排队），且**同窗完成的多个报告合并为一条
+消息**（fleet 层 `batch_window_s` 缓冲 + flush，dsh 批处理：一个回合点评整批
+而非一条报告一个回合）——Router 无需用户介入即可消化 worker 结果；Router
+侧纪律提示词禁止等待与轮询。这是对 v0.12.2 移除
+的 taiji 编排层的重建：fleet 挂在 slot 上而非进程级单例，没有 worktree/合并门，
+没有派工面板——编排逻辑主要活在提示词与工具里。
+
+### Added
+
+- **Backend** `zenagent/app/zen/`：`roster.py`（`.zen.json` 名册侧车：role/focus，
+  与 `.titles.json` 同族）、`fleet.py`（`ZenFleet`：`dispatch/stop/focus/spawn/
+  roster/close`，`asyncio.Semaphore` 并发上限默认 3，worker 经
+  `prepare(views=False)` 复用既有 session 文件落盘）、`tools.py`（`fleet_list/
+  fleet_dispatch/fleet_status/fleet_stop/fleet_focus/fleet_spawn`，无 fleet 时
+  降级文本）、`prompts.py`（Router 纪律与 worker 派工提示词）。
+- **Runtime**：`runtime.zen_fleet` 槽位；`_recompose` 在 fleet 存在时并入
+  fleet 工具；`_prompt_with_mode` 追加 Router 纪律块。
+- **RPC 协议 v3**（`PROTOCOL_VERSION` 2→3，双端同步）：新 request kind
+  `zen_fleet`（ops：`enable/disable/state/transcript`；busy 时 `zen_busy`
+  拒绝）与服务端主动 `zen_fleet` 名册帧（fleet 状态变化即推送）。enable 切到
+  项目 Router 会话（复用最新或新建并写入名册），disable 关 fleet 并恢复原
+  会话；slot 在 fleet 有活跃 worker 时 pinned（不被 LRU 驱逐），slot 关闭先
+  收尾 fleet。
+- **Desktop**：sidebar 头部 ✨ 切换按钮（`data-zen-toggle`）；Zen 开启时会话
+  区渲染项目名册（Router 行 + worker 行：状态点/焦点/状态，`data-worker-row`）；
+  只读 worker transcript 抽屉（`zen_fleet op=transcript`，ESC/点击遮罩关闭）；
+  `zenStore`/`zenSidebar` 纯函数与 `syncZenState`（boot/切换按持久化开关重放
+  enable，绝不自动 disable）。
+- **Docs**：`docs/guide/zen-mode.md`（用户指南）。
+
+### 架构图（architecture-full.html / architecture.md）
+
+- **增**：app 层新节点 `zen`（`app/zen/`，tooltip 含 fleet/roster/tools/prompts
+  四文件职责）；三条新边 `rt→zen`（zen_fleet 槽位）、`zen→prep`（worker
+  prepare()）、`zen→chat`（报告回注 steer）。
+- **改**：`rpc` 节点 tooltip 增 `ops_zen(zen_fleet …)`，协议 v2 → v3；模块表
+  新增 `zenagent/app/zen/` 行。
+- **删**：无。
+
 ## v0.12.2 — 2026-11-10
 
 **Taiji removed.** The 太极 multi-worker orchestration layer is gone; zen is back

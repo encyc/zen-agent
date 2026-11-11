@@ -141,7 +141,7 @@ async def call(host: RpcHost, writes: list[dict], request: dict) -> dict:
 async def test_hello_lists_the_active_project_and_residents(host_env):
     host = host_env.build()
     frame = await call(host, host_env.writes, {"type": "hello", "id": "h"})
-    assert frame["protocol_version"] == 2
+    assert frame["protocol_version"] == 3
     assert frame["active"] == str(host_env.alpha.resolve())
     assert [item["key"] for item in frame["projects"]] == [
         project_key(host_env.alpha)

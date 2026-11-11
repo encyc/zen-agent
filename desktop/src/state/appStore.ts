@@ -19,6 +19,7 @@ import type {
   SkillRow,
   StatusResult,
   Usage,
+  ZenUiMode,
 } from '../rpc/types'
 import {
   useApprovalStore,
@@ -36,6 +37,8 @@ import {
   useWorkPanelStore,
 } from './stores'
 import { useChatStore } from './chatStore'
+import { useZenStore } from './zenStore'
+import { setZenMode, syncZenState, zenTranscript } from './zenActions'
 import { nextDraft } from './pending'
 import { latestSessionForProject } from './latestSession'
 import { loadPrefs, replayFrames, savePref, spawnArgs } from './prefs'
@@ -148,6 +151,11 @@ interface AppState {
   clearPending(): Promise<void>
   compactNow(): Promise<void>
   undoLast(): Promise<void>
+  /** Zen mode: sync fleet state with the persisted toggle (boot/switch). */
+  syncZenState(): Promise<void>
+  setZenMode(mode: ZenUiMode): Promise<void>
+  /** A worker's read-only transcript (zen_fleet op=transcript). */
+  zenTranscript(path: string, before?: number): Promise<Record<string, unknown> | null>
 }
 
 let client: RpcClient | null = null
@@ -226,6 +234,8 @@ async function bootChild(
   const fellBack =
     resumed !== undefined && useStatusStore.getState().status?.session !== resumed
   if ((!loaded || fellBack) && opts.fromSwitch) useChatStore.getState().reset()
+  // Zen replay: a persisted 'zen' toggle re-arms the fleet on every boot.
+  void get().syncZenState()
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -952,6 +962,18 @@ export const useAppStore = create<AppState>((set, get) => ({
       refreshAfterSessionChange(get),
     )
   },
+
+  async syncZenState() {
+    await syncZenState(get)
+  },
+
+  async setZenMode(mode) {
+    await setZenMode(get, mode)
+  },
+
+  async zenTranscript(path, before) {
+    return zenTranscript(get, path, before)
+    },
 }))
 
 async function runSessionOp(
@@ -1091,6 +1113,10 @@ function handleFrame(frame: ServerFrame, handling: FrameHandling): void {
     return
   }
   if (!frameBelongsTo(frame, handling.get().project)) return
+  if (frame.type === 'zen_fleet') {
+    useZenStore.getState().applyRoster(frame.enabled, frame.roster ?? [])
+    return
+  }
   if (!frameSessionBelongsTo(frame, useSessionStore.getState().currentPath)) return
   handleResultFrame(frame as Record<string, unknown>, handling)
 }

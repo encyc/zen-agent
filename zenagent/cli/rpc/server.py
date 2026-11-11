@@ -26,6 +26,7 @@ from zenagent.cli.rpc.ops_config import ConfigOps
 from zenagent.cli.rpc.ops_files import FilesOps
 from zenagent.cli.rpc.ops_plugins import PluginsOps
 from zenagent.cli.rpc.ops_session import SessionOps
+from zenagent.cli.rpc.ops_zen import ZenOps
 from zenagent.events import AgentEvent
 from zenagent.limits import LimitsWriteError
 from zenagent.project import project_key
@@ -42,7 +43,7 @@ WriteLine = Callable[[str], None]
 #: Server-side diagnostics; raw exception detail never crosses the wire.
 logger = logging.getLogger(__name__)
 
-PROTOCOL_VERSION = 2
+PROTOCOL_VERSION = 3
 
 _PARTIAL_RESULT_CHARS = 4000
 #: Bound for one JSON-encoded tool argument blob in an event.
@@ -217,7 +218,7 @@ def _usage(agent: Agent) -> dict:
     }
 
 
-class RpcServer(FilesOps, SessionOps, PluginsOps, ConfigOps):
+class RpcServer(FilesOps, SessionOps, PluginsOps, ConfigOps, ZenOps):
     """Reads requests, streams agent events, writes one result per request."""
 
     def __init__(
@@ -608,6 +609,9 @@ class RpcServer(FilesOps, SessionOps, PluginsOps, ConfigOps):
             return self._resolve_ask(request)
         if kind == "session":
             await self._session(request, request_id)
+            return True
+        if kind == "zen_fleet":
+            await self._zen(request, request_id)
             return True
         if kind == "command":
             return await self._command(request, request_id)

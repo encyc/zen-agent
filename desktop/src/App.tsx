@@ -41,6 +41,9 @@ const RightPanel = lazy(() =>
 const CommandPalette = lazy(() =>
   import('./ui/palette/CommandPalette').then((module) => ({ default: module.CommandPalette })),
 )
+const WorkerDrawer = lazy(() =>
+  import('./ui/WorkerDrawer').then((module) => ({ default: module.WorkerDrawer })),
+)
 
 function loadWidth(key: string, fallback: number): number {
   try {
@@ -312,7 +315,8 @@ export function App() {
       </button>
       </AppFrame>
       <Suspense fallback={null}>
-        <CommandPalette />
+        <WorkerDrawer />
+      <CommandPalette />
       </Suspense>
     </>
   )

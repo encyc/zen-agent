@@ -22,6 +22,9 @@ import {
   type SidebarProjectGroup,
 } from '../state/sessionGroups'
 import { armDelete, deleteArmed } from '../state/armedDelete'
+import { useZenStore } from '../state/zenStore'
+import { ZenRoster } from './ZenRoster'
+import { ZenToggle } from './ZenToggle'
 import { useT } from '../i18n/locale'
 import type { SessionSummary } from '../rpc/types'
 import { Tooltip } from './primitives'
@@ -71,6 +74,7 @@ function readClosedSections(): string[] {
 
 export function Sidebar(props: { onCollapse(): void }) {
   const t = useT()
+  const zenEnabled = useZenStore((state) => state.enabled)
   const sessions = useSessionStore((state) => state.sessions)
   const currentPath = useSessionStore((state) => state.currentPath)
   const collapsedProjects = useSessionStore((state) => state.collapsedProjects)
@@ -335,6 +339,7 @@ export function Sidebar(props: { onCollapse(): void }) {
           </div>
           <ZenWordmark height={13} />
         </div>
+        <ZenToggle />
         <Tooltip label="⌘B">
           <button
             type="button"
@@ -388,13 +393,17 @@ export function Sidebar(props: { onCollapse(): void }) {
                 spellCheck={false}
               />
             </div>
-            <div className={css.standaloneList}>
-              {standalone.length > 0 ? (
-                standalone.map((session) => renderRow(session))
-              ) : (
-                <div className={css.sectionEmpty}>{t('sidebar.standalone')}</div>
-              )}
-            </div>
+            {zenEnabled ? (
+              <ZenRoster />
+            ) : (
+              <div className={css.standaloneList}>
+                {standalone.length > 0 ? (
+                  standalone.map((session) => renderRow(session))
+                ) : (
+                  <div className={css.sectionEmpty}>{t('sidebar.standalone')}</div>
+                )}
+              </div>
+            )}
           </>
         )}
       </section>
