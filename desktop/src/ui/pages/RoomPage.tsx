@@ -46,7 +46,7 @@ export function RoomPage() {
   useEffect(() => {
     const node = feed.current
     if (node !== null) node.scrollTop = node.scrollHeight
-  }, [messages.length])
+  }, [messages.length, selectedTask])
 
   const numbers = useMemo(
     () => new Map(tasks.map((task, index): [string, number] => [task.id, index + 1])),
@@ -89,29 +89,32 @@ export function RoomPage() {
             </ul>
           </section>
         )}
-        {detail !== null && (
-          <TaskDetailPanel
-            task={detail}
-            messages={messages}
-            numbers={numbers}
-            onClose={() => setSelectedTask(null)}
-          />
+        {detail !== null ? (
+          <div className={css.detail} data-swarm-task-detail-scroll>
+            <TaskDetailPanel
+              task={detail}
+              messages={messages}
+              numbers={numbers}
+              onClose={() => setSelectedTask(null)}
+            />
+          </div>
+        ) : (
+          <div
+            ref={feed}
+            className={css.feed}
+            data-swarm-feed
+            role="log"
+            aria-label={t('swarm.feed')}
+          >
+            {messages.length === 0 ? (
+              <div className={css.empty}>{t('swarm.empty')}</div>
+            ) : (
+              messages.map((message) => (
+                <MessageRow key={message.id} message={message} roles={roles} numbers={numbers} />
+              ))
+            )}
+          </div>
         )}
-        <div
-          ref={feed}
-          className={css.feed}
-          data-swarm-feed
-          role="log"
-          aria-label={t('swarm.feed')}
-        >
-          {messages.length === 0 ? (
-            <div className={css.empty}>{t('swarm.empty')}</div>
-          ) : (
-            messages.map((message) => (
-              <MessageRow key={message.id} message={message} roles={roles} numbers={numbers} />
-            ))
-          )}
-        </div>
         <ApprovalPanel />
         <Composer roles={roles} />
       </div>

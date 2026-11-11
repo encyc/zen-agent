@@ -15,6 +15,12 @@
   padding: 16px 16px 12px;
 }
 
+/* The shell's floating expand control owns the top-left corner while the
+   sidebar is collapsed; keep the room content out from under it. */
+:global([data-sidebar-collapsed]) .main {
+  padding-top: 44px;
+}
+
 .feed {
   flex: 1;
   min-height: 0;
@@ -22,6 +28,15 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  padding-right: 4px;
+}
+
+/* The detail card owns the conversation column while it is open: the room
+   feed steps aside, so the run transcript is the only thing scrolling. */
+.detail {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   padding-right: 4px;
 }
 
@@ -325,7 +340,6 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-width: 760px;
   padding: 12px;
   border-radius: var(--ds-radius-10);
   background: var(--dsw-alias-bg-layer-1);
@@ -415,9 +429,6 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 320px;
-  padding-right: 2px;
-  overflow-y: auto;
 }
 
 .rowMain {

@@ -164,6 +164,8 @@ test('open a task detail in the conversation column', async ({ page }) => {
 
   const detail = page.locator('[data-swarm-main] [data-swarm-task-detail]')
   await expect(detail).toBeVisible()
+  // The detail owns the conversation column; the room feed steps aside.
+  await expect(page.locator('[data-swarm-feed]')).toHaveCount(0)
   await expect(detail).toContainText('任务 ID')
   await expect(detail).toContainText('t_1')
   await expect(detail).toContainText('查 X')
@@ -176,6 +178,7 @@ test('open a task detail in the conversation column', async ({ page }) => {
 
   await detail.locator('[data-swarm-task-detail-close]').click()
   await expect(detail).toHaveCount(0)
+  await expect(page.locator('[data-swarm-feed]')).toBeVisible()
   await expect(task).not.toHaveAttribute('data-selected', 'true')
 })
 

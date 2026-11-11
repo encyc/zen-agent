@@ -56,8 +56,8 @@ the other branch.
   task strip with cancel/retry, and the shared approval panel above the composer.
   Each task row keeps the list compact; selecting one opens its ID, creator,
   chain depth/cost, the source message, failure/cancel reason and retry
-  origin as a pinned card at the top of the conversation column, with the row
-  highlighted and a collapse action. The card's **run activity** replays the run
+  origin as the conversation column itself — the room feed steps aside until the
+  card is closed — with the row highlighted and a collapse action. The card's **run activity** replays the run
   from the role's own session with the coding transcript's own row components —
   collapsible tool cards with input/output bodies, markdown text and reasoning —
   refreshed while the task runs; the final reply appears there as the run's last
