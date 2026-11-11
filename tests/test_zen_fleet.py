@@ -109,9 +109,18 @@ class FakeWorkerFactory:
 class FakeChat:
     def __init__(self) -> None:
         self.steered: list[str] = []
+        self.delivered: list[str] = []
+        self.steering = False
 
     def steer(self, text: str) -> None:
         self.steered.append(text)
+
+    async def deliver(self, text: str) -> None:
+        """Mirror the real ChatController.deliver the fleet must prefer."""
+        if self.steering:
+            self.steer(text)
+        else:
+            self.delivered.append(text)
 
 
 def _worker_files(tmp_path: Path, names: list[str]) -> dict[str, Path]:
@@ -144,6 +153,7 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
         on_change=lambda: changes.append(1),
         confirm=confirm,
         mode="ask",
+        batch_window_s=0.05,
     )
     return {
         "fleet": fleet,
@@ -162,8 +172,16 @@ async def test_dispatch_runs_worker_and_injects_report(env) -> None:
     assert status == "working"
     await fleet.wait_all()
     assert fleet.status_of(str(path)) == "waiting"
-    assert "[zen:worker" in env["chat"].steered[0]
-    assert env["changes"]
+    assert "[zen:worker" in env["chat"].delivered[0], "idle router must be woken"
+
+
+async def test_report_steers_only_while_router_streams(env) -> None:
+    fleet: ZenFleet = env["fleet"]
+    env["chat"].steering = True
+    await fleet.dispatch(str(env["paths"]["w2"]), "a")
+    await fleet.wait_all()
+    assert env["chat"].steered and "[zen:worker" in env["chat"].steered[0]
+    assert env["chat"].delivered == []
 
 
 async def test_worker_prompt_carries_focus_and_task(env) -> None:
@@ -224,7 +242,7 @@ async def test_worker_failure_marks_failed_and_injects(env) -> None:
     await fleet.dispatch(str(env["paths"]["w1"]), "a")
     await fleet.wait_all()
     assert fleet.status_of(str(env["paths"]["w1"])) == "failed"
-    assert any("boom" in s for s in env["chat"].steered)
+    assert any("boom" in s for s in env["chat"].delivered)
 
 
 async def test_stop_aborts_running_worker(env) -> None:
@@ -314,3 +332,69 @@ async def test_worker_inherits_confirm_and_mode(env) -> None:
     broker = env["factory"].brokers[str(env["paths"]["w2"])]
     assert broker.confirmed is not None
     assert env["factory"].modes[str(env["paths"]["w2"])] == "ask"
+
+
+async def test_same_moment_reports_arrive_as_one_batch(env) -> None:
+    """dsh batching: reports completing together reach the router merged,
+    so one run reviews all of them instead of one run per report."""
+    fleet: ZenFleet = env["fleet"]
+    loop = asyncio.get_running_loop()
+    gates = [loop.create_future() for _ in range(2)]
+    env["factory"].gates[env["paths"]["w1"]] = gates[0]
+    env["factory"].gates[env["paths"]["w2"]] = gates[1]
+    await fleet.dispatch(str(env["paths"]["w1"]), "a")
+    await fleet.dispatch(str(env["paths"]["w2"]), "b")
+    gates[0].set_result(None)
+    gates[1].set_result(None)
+    await fleet.wait_all()
+    joined = [
+        s
+        for s in env["chat"].delivered
+        if "[zen:worker w1]" in s and "[zen:worker w2]" in s
+    ]
+    assert len(joined) == 1, f"expected one merged message, got {env['chat'].delivered}"
+
+
+async def test_reports_within_the_batch_window_merge(env) -> None:
+    fleet: ZenFleet = env["fleet"]
+    loop = asyncio.get_running_loop()
+    gates = [loop.create_future() for _ in range(2)]
+    env["factory"].gates[env["paths"]["w1"]] = gates[0]
+    env["factory"].gates[env["paths"]["w2"]] = gates[1]
+    await fleet.dispatch(str(env["paths"]["w1"]), "a")
+    await fleet.dispatch(str(env["paths"]["w2"]), "b")
+    gates[0].set_result(None)
+    await asyncio.sleep(0.02)  # staggered, still inside the window
+    gates[1].set_result(None)
+    await fleet.wait_all()
+    joined = [
+        s
+        for s in env["chat"].delivered
+        if "[zen:worker w1]" in s and "[zen:worker w2]" in s
+    ]
+    assert len(joined) == 1
+    per_report = [s for s in env["chat"].delivered if "[zen:worker" in s]
+    assert len(per_report) == 1, f"one message per report leaked: {per_report}"
+
+
+async def test_report_arriving_mid_delivery_batches_into_the_next_flush(env) -> None:
+    """A report completing while the router turn is running waits for the
+    next flush instead of chaining an immediate extra run per report."""
+    fleet: ZenFleet = env["fleet"]
+    loop = asyncio.get_running_loop()
+    gates = [loop.create_future() for _ in range(3)]
+    for gate, key in zip(gates, ("w1", "w2", "w3")):
+        env["factory"].gates[env["paths"][key]] = gate
+    for key in ("w1", "w2", "w3"):
+        await fleet.dispatch(str(env["paths"][key]), "a")
+    gates[0].set_result(None)
+    await asyncio.sleep(0.12)  # w1's report flushes alone (window 0.05s)
+    assert len(env["chat"].delivered) == 1
+    assert "[zen:worker w1]" in env["chat"].delivered[0]
+
+    # w2 completes; w3 follows inside the window: they must merge, not chain
+    gates[1].set_result(None)
+    gates[2].set_result(None)
+    await fleet.wait_all()
+    batch = [s for s in env["chat"].delivered if "[zen:worker w2]" in s]
+    assert len(batch) == 1 and "[zen:worker w3]" in batch[0]

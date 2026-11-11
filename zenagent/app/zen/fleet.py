@@ -69,6 +69,7 @@ class ZenFleet:
         on_change: Callable[[], None] | None = None,
         confirm: Callable | None = None,
         mode: str | None = None,
+        batch_window_s: float = 0.5,
     ) -> None:
         self.chat = chat
         self.root = Path(root)
@@ -83,6 +84,12 @@ class ZenFleet:
         #: autonomy choice applies to its workers too.
         self.mode = mode
         self._handles: dict[str, WorkerHandle] = {}
+        #: Reports completing within this window reach the router as ONE
+        #: message (dsh batching): one run reviews the whole burst instead of
+        #: one run per report. 0 disables the window (same-tick still merges).
+        self.batch_window_s = max(0.0, float(batch_window_s))
+        self._report_buffer: list[str] = []
+        self._wake_task: asyncio.Task | None = None
         self._sem = asyncio.Semaphore(self.max_concurrent)
         self._closing = False
 
@@ -269,11 +276,47 @@ class ZenFleet:
         return ""
 
     def _inject(self, handle: WorkerHandle, text: str) -> None:
+        """Buffer one worker report and schedule the batch flush.
+
+        A wake task so a finished worker run never blocks the semaphore lane:
+        ``ChatController.deliver`` steers into a streaming turn, wakes an idle
+        router with a run of its own, and queues under compaction — the dsh
+        rule that results arrive on their own. Reports arriving inside the
+        batch window (or during an in-flight delivery) ride the same message.
+        """
         if self.chat is None:
             return
-        # A dead router must not kill workers.
+        self._report_buffer.append(f"[zen:worker {handle.title}] {text}")
+        if self._wake_task is None or self._wake_task.done():
+            self._wake_task = asyncio.get_running_loop().create_task(
+                self._flush_reports()
+            )
+
+    async def _flush_reports(self) -> None:
+        """Deliver buffered reports as one merged message, in a loop so a
+        report arriving mid-delivery is never delivered one-per-run."""
+        try:
+            while self._report_buffer and not self._closing:
+                if self.batch_window_s:
+                    await asyncio.sleep(self.batch_window_s)
+                batch, self._report_buffer = self._report_buffer[:], []
+                joined = "\n\n".join(batch)
+                deliver = getattr(self.chat, "deliver", None)
+                if deliver is not None:
+                    await self._safe_deliver(deliver, joined)
+                else:
+                    # A dead router must not kill workers.
+                    with contextlib.suppress(Exception):
+                        self.chat.steer(joined)
+        finally:
+            if self._report_buffer and not self._closing:
+                self._wake_task = asyncio.get_running_loop().create_task(
+                    self._flush_reports()
+                )
+
+    async def _safe_deliver(self, deliver, message: str) -> None:
         with contextlib.suppress(Exception):
-            self.chat.steer(f"[zen:worker {handle.title}] {text}")
+            await deliver(message)
 
     async def stop(self, session_path: str) -> bool:
         """Abort one worker's run; True when a live run was stopped."""
@@ -294,9 +337,21 @@ class ZenFleet:
         return True
 
     async def wait_all(self) -> None:
-        """Test/drain helper: wait for every dispatch task to settle."""
-        tasks = [h.task for h in self._handles.values() if h.task is not None]
-        if tasks:
+        """Test/drain helper: wait until dispatch and report-flush settle.
+
+        Loops because a flush cycle may schedule its successor (or workers
+        may schedule the first flush) while we wait.
+        """
+        while True:
+            tasks = [
+                h.task
+                for h in self._handles.values()
+                if h.task is not None and not h.task.done()
+            ]
+            if self._wake_task is not None and not self._wake_task.done():
+                tasks.append(self._wake_task)
+            if not tasks:
+                return
             await asyncio.gather(*tasks, return_exceptions=True)
 
     async def close(self) -> None:

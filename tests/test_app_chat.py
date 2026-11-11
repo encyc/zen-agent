@@ -3,6 +3,7 @@
 import asyncio
 
 import pytest
+from conftest import text_stream
 
 from zenagent.app.chat import ChatController
 from zenagent.events import AssistantEvent
@@ -1200,3 +1201,35 @@ async def test_job_views_stay_inside_their_workspace(runtime_factory, tmp_path):
     finally:
         await manager.kill(one.id)
         await manager.kill(two.id)
+
+
+async def test_deliver_wakes_an_idle_conversation_with_a_new_run(runtime_factory):
+    """A worker report arriving while the router is idle starts a run of its
+    own instead of sitting in the follow-up queue until the person types."""
+    runtime = await runtime_factory(stream_fn=text_stream())
+    chat = ChatController(runtime)
+    assert chat.busy is False
+
+    await chat.deliver("[zen:worker w1] 修复完成，测试通过")
+
+    assert chat.busy is True, "deliver must wake the idle conversation"
+    await chat.wait_for_idle()
+    texts = [view.text for view in chat.transcript if getattr(view, "kind", "") == "user"]
+    assert any("[zen:worker w1]" in text for text in texts)
+
+
+async def test_deliver_steers_into_a_streaming_turn(runtime_factory):
+    gate = asyncio.Event()
+    runtime = await runtime_factory(stream_fn=gated_stream(gate))
+    chat = ChatController(runtime)
+    task = asyncio.create_task(chat.submit("running"))
+    await asyncio.sleep(0.05)
+    assert runtime.agent.is_streaming is True
+
+    await chat.deliver("[zen:worker w1] 中途进展")
+
+    assert len(runtime.agent._steering) == 1
+    gate.set()
+    await task
+
+

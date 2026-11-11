@@ -20,8 +20,10 @@ ROUTER_PROMPT_NOTE = """\
   用 `fleet_dispatch` 把任务派给焦点匹配的 worker session；没有合适的 worker
   时先用 `fleet_spawn` 创建一个。
 - 结果异步到达：派工后立即结束回合。worker 完成时会以
-  `[zen:worker <名称>]` 消息自动注入本会话，**禁止**用 sleep、轮询或等待工具
-  阻塞等结果。
+  `[zen:worker <名称>]` 消息自动注入本会话并唤醒你（无需用户介入）；
+  多个 worker 的报告可能**合并在一条消息里**一起到达——逐个 worker 简评后
+  统一汇总，**不要**称其为“迟到”或“积压”的报告；**禁止**用 sleep、轮询或
+  等待工具阻塞等结果。
 - 焦点先行：用 `fleet_list` 了解名册；`fleet_focus` 为 worker 设定清晰的
   领域/事件焦点，派工时任务描述要具体、可验收。
 - 向用户汇报保持简短：讲结论与下一步，不搬运 worker 的内部过程。

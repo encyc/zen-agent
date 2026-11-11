@@ -9,7 +9,11 @@ matches the release tag; older history is in the repository tags and commits.
 进入 Zen 后每个项目只有一个交互会话（Router session），项目下其余会话成为持有
 任务焦点的 worker：Router 通过六个 fleet 工具异步派工、查状态、停止、设焦点、
 新建 worker；worker 回合结束后报告以 `[zen:worker …]` 消息自动回注 Router
-会话（`chat.steer`），Router 侧纪律提示词禁止等待与轮询。这是对 v0.12.2 移除
+会话并**唤醒新回合**（`ChatController.deliver`：流式中 steer 注入当前回合，
+空闲时 submit 开新回合，压缩/忙态排队），且**同窗完成的多个报告合并为一条
+消息**（fleet 层 `batch_window_s` 缓冲 + flush，dsh 批处理：一个回合点评整批
+而非一条报告一个回合）——Router 无需用户介入即可消化 worker 结果；Router
+侧纪律提示词禁止等待与轮询。这是对 v0.12.2 移除
 的 taiji 编排层的重建：fleet 挂在 slot 上而非进程级单例，没有 worktree/合并门，
 没有派工面板——编排逻辑主要活在提示词与工具里。
 
