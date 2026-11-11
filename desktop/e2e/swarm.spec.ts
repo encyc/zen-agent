@@ -147,3 +147,26 @@ test('show role warnings above the room and reload them away', async ({ page }) 
   const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
   assert.ok(calls.some((call) => call.type === 'swarm' && call.op === 'reload'))
 })
+
+test('open a task detail from the task list', async ({ page }) => {
+  await boot(page, initialState(swarmFixture()))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  const composer = page.locator('[data-swarm-input]')
+  await composer.fill('@research 查 X')
+  await composer.press('Enter')
+
+  const task = page.locator('[data-swarm-task]').first()
+  await expect(task).toHaveAttribute('data-state', 'done')
+
+  await task.locator('[data-swarm-task-toggle]').click()
+  const detail = task.locator('[data-swarm-task-detail]')
+  await expect(detail).toBeVisible()
+  await expect(detail).toContainText('任务 ID')
+  await expect(detail).toContainText('t_1')
+  await expect(detail).toContainText('查 X')
+  await expect(detail).toContainText('结论是 Z')
+
+  await task.locator('[data-swarm-task-toggle]').click()
+  await expect(detail).toHaveCount(0)
+})

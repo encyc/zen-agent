@@ -281,14 +281,71 @@
   list-style: none;
 }
 
-.agentRow,
-.taskRow {
+.agentRow {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
   border-radius: var(--ds-radius-8);
   background: var(--dsw-alias-bg-layer-1);
+}
+
+.taskItem {
+  border-radius: var(--ds-radius-8);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.taskRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.taskToggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.taskDetail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.taskDetailRow {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 8px;
+  font-size: var(--ds-font-11);
+  line-height: 16px;
+}
+
+.taskDetailKey {
+  color: var(--dsw-alias-label-caption);
+}
+
+.taskDetailValue {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  overflow-wrap: anywhere;
+}
+
+.taskDetailText {
+  white-space: pre-wrap;
 }
 
 .rowMain {

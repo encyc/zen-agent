@@ -103,7 +103,7 @@ export function RoomPage() {
           onConfigure={setEditing}
           onCreate={() => setEditing('new')}
         />
-        <TaskStrip tasks={tasks} numbers={numbers} />
+        <TaskStrip tasks={tasks} messages={messages} numbers={numbers} />
       </aside>
       {editing !== null && (
         <AgentModal
@@ -372,10 +372,19 @@ function Roster({
   )
 }
 
-function TaskStrip({ tasks, numbers }: { tasks: SwarmTask[]; numbers: TaskNumbers }) {
+function TaskStrip({
+  tasks,
+  messages,
+  numbers,
+}: {
+  tasks: SwarmTask[]
+  messages: SwarmMessage[]
+  numbers: TaskNumbers
+}) {
   const t = useT()
   const cancel = useSwarmStore((state) => state.cancel)
   const retry = useSwarmStore((state) => state.retry)
+  const [openId, setOpenId] = useState<string | null>(null)
   return (
     <section className={css.block}>
       <h2 className={css.title}>{t('swarm.tasks')}</h2>
@@ -383,47 +392,134 @@ function TaskStrip({ tasks, numbers }: { tasks: SwarmTask[]; numbers: TaskNumber
         <p className={css.blockEmpty}>{t('swarm.noTasks')}</p>
       ) : (
         <ul className={css.rows} data-swarm-tasks>
-          {tasks.map((task) => (
-            <li
-              key={task.id}
-              className={css.taskRow}
-              data-swarm-task
-              data-task-id={task.id}
-              data-state={task.state}
-            >
-              <div className={css.rowMain}>
-                <span className={css.rowTitle}>
-                  {t('swarm.taskLabel', { n: numbers.get(task.id) ?? 0 })}
-                </span>
-                <span className={css.rowCaption}>@{task.assignee}</span>
-              </div>
-              <span className={css.taskState} data-state={task.state}>
-                {t(`swarm.task.${task.state}`)}
-              </span>
-              {(task.state === 'queued' || task.state === 'running') && (
-                <button
-                  type="button"
-                  className={css.ghost}
-                  data-swarm-cancel
-                  onClick={() => void cancel(task.id)}
-                >
-                  {t('swarm.cancel')}
-                </button>
-              )}
-              {(task.state === 'failed' || task.state === 'cancelled') && (
-                <button
-                  type="button"
-                  className={css.ghost}
-                  data-swarm-retry
-                  onClick={() => void retry(task.id)}
-                >
-                  {t('swarm.retry')}
-                </button>
-              )}
-            </li>
-          ))}
+          {tasks.map((task) => {
+            const open = openId === task.id
+            return (
+              <li
+                key={task.id}
+                className={css.taskItem}
+                data-swarm-task
+                data-task-id={task.id}
+                data-state={task.state}
+                data-open={open || undefined}
+              >
+                <div className={css.taskRow}>
+                  <button
+                    type="button"
+                    className={css.taskToggle}
+                    data-swarm-task-toggle
+                    aria-expanded={open}
+                    onClick={() => setOpenId(open ? null : task.id)}
+                  >
+                    <div className={css.rowMain}>
+                      <span className={css.rowTitle}>
+                        {t('swarm.taskLabel', { n: numbers.get(task.id) ?? 0 })}
+                      </span>
+                      <span className={css.rowCaption}>@{task.assignee}</span>
+                    </div>
+                    <span className={css.taskState} data-state={task.state}>
+                      {t(`swarm.task.${task.state}`)}
+                    </span>
+                  </button>
+                  {(task.state === 'queued' || task.state === 'running') && (
+                    <button
+                      type="button"
+                      className={css.ghost}
+                      data-swarm-cancel
+                      onClick={() => void cancel(task.id)}
+                    >
+                      {t('swarm.cancel')}
+                    </button>
+                  )}
+                  {(task.state === 'failed' || task.state === 'cancelled') && (
+                    <button
+                      type="button"
+                      className={css.ghost}
+                      data-swarm-retry
+                      onClick={() => void retry(task.id)}
+                    >
+                      {t('swarm.retry')}
+                    </button>
+                  )}
+                </div>
+                {open && (
+                  <TaskDetail task={task} messages={messages} numbers={numbers} />
+                )}
+              </li>
+            )
+          })}
         </ul>
       )}
     </section>
+  )
+}
+
+function TaskDetail({
+  task,
+  messages,
+  numbers,
+}: {
+  task: SwarmTask
+  messages: SwarmMessage[]
+  numbers: TaskNumbers
+}) {
+  const t = useT()
+  const source = messages.find((message) => message.id === task.sourceMessageId)
+  const result = messages.find((message) => message.id === task.resultMessageId)
+  const author =
+    task.createdBy.kind === 'user'
+      ? t('swarm.you')
+      : task.createdBy.kind === 'system'
+        ? t('swarm.system')
+        : `@${task.createdBy.id}`
+  const retryOf =
+    task.derivedFrom === null
+      ? null
+      : numbers.has(task.derivedFrom)
+        ? `#${numbers.get(task.derivedFrom)}`
+        : task.derivedFrom
+  return (
+    <dl className={css.taskDetail} data-swarm-task-detail>
+      <TaskDetailRow label={t('swarm.taskDetailId')} value={task.id} />
+      <TaskDetailRow label={t('swarm.taskDetailBy')} value={author} />
+      <TaskDetailRow
+        label={t('swarm.taskDetailChain')}
+        value={t('swarm.taskDetailChainValue', {
+          depth: task.chainDepth,
+          cost: task.chainCost.toFixed(2),
+        })}
+      />
+      {source !== undefined && (
+        <TaskDetailRow label={t('swarm.taskDetailSource')} value={source.text} multiline />
+      )}
+      {result !== undefined && (
+        <TaskDetailRow label={t('swarm.taskDetailResult')} value={result.text} multiline />
+      )}
+      {task.reason !== null && (
+        <TaskDetailRow label={t('swarm.taskDetailReason')} value={task.reason} />
+      )}
+      {retryOf !== null && <TaskDetailRow label={t('swarm.taskDetailRetryOf')} value={retryOf} />}
+    </dl>
+  )
+}
+
+function TaskDetailRow({
+  label,
+  value,
+  multiline = false,
+}: {
+  label: string
+  value: string
+  multiline?: boolean
+}) {
+  return (
+    <div className={css.taskDetailRow}>
+      <dt className={css.taskDetailKey}>{label}</dt>
+      <dd
+        className={multiline ? `${css.taskDetailValue} ${css.taskDetailText}` : css.taskDetailValue}
+      >
+        {value}
+      </dd>
+    </div>
   )
 }
