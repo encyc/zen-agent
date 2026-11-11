@@ -612,3 +612,32 @@ async def test_cancelled_task_state_is_emitted_to_the_room():
         assert _task_states(frames, task.id)[-1] == "cancelled"
     finally:
         await manager.close()
+
+
+async def test_task_transcript_replays_the_run_from_the_role_session():
+    _write_role("research", "You research.")
+    manager = SwarmManager(stream_fn_factory=lambda role: text_stream("完成"))
+    await manager.start()
+    try:
+        [task] = await manager.post("@research 做")
+        await _wait_for(lambda: _states(manager).get(task.id) == "done")
+
+        transcript = manager.task_transcript(task.id)
+
+        assert transcript["available"] is True
+        assert any(
+            row["kind"] == "assistant" and row["text"] == "完成"
+            for row in transcript["transcript"]
+        )
+    finally:
+        await manager.close()
+
+
+def test_task_transcript_is_unavailable_without_a_task_or_agent():
+    manager = SwarmManager()
+    manager.store.tasks["t_1"] = TaskRecord(
+        id="t_1", assignee="research", state="done", chain_id="c_1", chain_depth=1
+    )
+
+    assert manager.task_transcript("t_1") == {"available": False, "transcript": []}
+    assert manager.task_transcript("t_missing") == {"available": False, "transcript": []}

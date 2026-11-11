@@ -39,7 +39,8 @@ the other branch.
   Tool approvals reuse the existing approval channel, tagged with `agent` and
   `task`, with a 120 s timeout (refused under `ask`, auto-approved under `zen`).
 - **RPC** (`cli/rpc/ops_swarm.py`): one `swarm` request family
-  (`list` / `post` / `cancel` / `retry` / `reset` / `roles` / `reload`); a role
+  (`list` / `post` / `cancel` / `retry` / `reset` / `transcript` / `roles` /
+  `reload`); a role
   is addressed by `roleId` because `id` is the request correlation id. Host-level
   `swarm:`-prefixed approval ids route before project slot lookup.
 
@@ -54,9 +55,13 @@ the other branch.
   Each task row keeps the list compact; selecting one opens its ID, creator,
   chain depth/cost, source and result messages, failure/cancel reason and retry
   origin as a pinned card at the top of the conversation column, with the row
-  highlighted and a collapse action. Every task transition — including `done`,
-  `failed` and `cancelled` — now reaches the room as a `swarm_task` frame, so
-  cancel no longer leaves the row on running.
+  highlighted and a collapse action. The card's **run activity** replays the run
+  from the role's own session with the coding transcript's own row components —
+  collapsible tool cards with input/output bodies, markdown text and reasoning —
+  refreshed while the task runs; a reset or compacted role
+  session reports the record as unavailable instead of failing. Every task
+  transition — including `done`, `failed` and `cancelled` — now reaches the room
+  as a `swarm_task` frame, so cancel no longer leaves the row on running.
   Role build problems are listed above the feed, and the roster's **Reload
   agents** action re-reads manifests at any time. Each roster row's **Configure**
   action and the roster header's **New agent** open the full role editor in a

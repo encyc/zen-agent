@@ -91,6 +91,12 @@ class FakeSwarm:
             "chainDepth": task.chain_depth,
         }
 
+    def task_transcript(self, task_id: str) -> dict:
+        return {
+            "available": task_id == "t_1",
+            "transcript": [{"kind": "assistant", "id": "v1", "text": "hi"}],
+        }
+
     async def cancel(self, task_id: str) -> bool:
         return True
 
@@ -159,6 +165,21 @@ async def test_post_creates_tasks(tmp_path):
     assert result["ok"] is True
     assert [task["id"] for task in result["tasks"]] == ["t_1"]
     assert result["tasks"][0]["assignee"] == "research"
+
+
+async def test_transcript_returns_the_run_steps(tmp_path):
+    host, writes = _host(tmp_path)
+    fake = FakeSwarm()
+    host._swarm = fake  # type: ignore[assignment]
+
+    await _call(host, {"type": "swarm", "op": "transcript", "id": "s3", "taskId": "t_1"})
+
+    result = writes[-1]
+    assert result["ok"] is True
+    assert result["id"] == "s3"
+    assert result["taskId"] == "t_1"
+    assert result["available"] is True
+    assert result["transcript"][0]["text"] == "hi"
 
 
 async def test_roles_create_uses_role_id_not_request_id(tmp_path):

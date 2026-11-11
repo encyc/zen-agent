@@ -3,11 +3,22 @@
  * this page owns the whole main surface and reads only the swarm store. */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { SwarmAgentState, SwarmMessage, SwarmRole, SwarmTask } from '../../rpc/types'
+import type {
+  MessageView,
+  SwarmAgentState,
+  SwarmMessage,
+  SwarmRole,
+  SwarmTask,
+  ToolCallView,
+} from '../../rpc/types'
 import { useT } from '../../i18n/locale'
 import { detectMention } from '../../state/mentions'
+import { nodesFromViews, type ChatNode } from '../../state/chatStore'
 import { useSwarmStore } from '../../state/swarmStore'
 import { ApprovalPanel } from '../approval/ApprovalPanel'
+import { AssistantNodeView } from '../chat/AssistantNodeView'
+import { SkillMessage, UserMessage } from '../chat/MessageItem'
+import { ToolRowView } from '../chat/ToolRowView'
 import { AgentModal } from './agentEditor'
 import css from './RoomPage.module.css'
 
@@ -483,6 +494,33 @@ function TaskDetailPanel({
   const t = useT()
   const source = messages.find((message) => message.id === task.sourceMessageId)
   const result = messages.find((message) => message.id === task.resultMessageId)
+  const fetchTranscript = useSwarmStore((state) => state.transcript)
+  const [steps, setSteps] = useState<(MessageView | ToolCallView)[]>([])
+  const [recorded, setRecorded] = useState<boolean | null>(null)
+  const active = task.state === 'running' || task.state === 'queued'
+  const runNodes = useMemo(() => nodesFromViews(steps), [steps])
+
+  // A running role appends to its own session, so the panel polls the slice
+  // while the task is live and fetches once when it settles.
+  useEffect(() => {
+    let alive = true
+    setSteps([])
+    setRecorded(null)
+    const refresh = async (): Promise<void> => {
+      const answer = await fetchTranscript(task.id).catch(() => null)
+      if (!alive || answer === null) return
+      setSteps(answer.transcript)
+      setRecorded(answer.available)
+    }
+    void refresh()
+    if (!active) return () => { alive = false }
+    const timer = window.setInterval(() => void refresh(), 1500)
+    return () => {
+      alive = false
+      window.clearInterval(timer)
+    }
+  }, [task.id, active, fetchTranscript])
+
   const author =
     task.createdBy.kind === 'user'
       ? t('swarm.you')
@@ -537,6 +575,22 @@ function TaskDetailPanel({
           <blockquote className={css.taskQuoteText}>{source.text}</blockquote>
         </figure>
       )}
+      <section className={css.taskRun}>
+        <h3 className={css.taskRunTitle}>{t('swarm.execution')}</h3>
+        {runNodes.length === 0 ? (
+          <p className={css.blockEmpty}>
+            {recorded === false && !active
+              ? t('swarm.executionUnavailable')
+              : t('swarm.executionEmpty')}
+          </p>
+        ) : (
+          <div className={css.taskRunBody} data-swarm-task-steps>
+            {runNodes.map((node) => (
+              <TaskRunRow key={node.id} node={node} />
+            ))}
+          </div>
+        )}
+      </section>
       {result !== undefined && (
         <figure className={css.taskQuote}>
           <figcaption className={css.taskQuoteLabel}>{t('swarm.taskDetailResult')}</figcaption>
@@ -554,4 +608,21 @@ function TaskDetailRow({ label, value }: { label: string; value: string }) {
       <dd className={css.taskDetailValue}>{value}</dd>
     </div>
   )
+}
+
+/** One row of a task's run: the same components the coding transcript uses,
+ * so tool cards, markdown and reasoning render identically. */
+function TaskRunRow({ node }: { node: ChatNode }) {
+  switch (node.kind) {
+    case 'user':
+      return <UserMessage text={node.text} steering={node.steering} />
+    case 'assistant':
+      return <AssistantNodeView node={node} />
+    case 'tool':
+      return <ToolRowView node={node} />
+    case 'skill':
+      return <SkillMessage name={node.name} args={node.args} body={node.body} />
+    default:
+      return null
+  }
 }

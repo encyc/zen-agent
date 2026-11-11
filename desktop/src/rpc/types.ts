@@ -558,6 +558,19 @@ export interface SubagentTranscriptResult {
   total?: number
 }
 
+/** A task's run activity (`swarm transcript`), in the coding transcript's
+ * own view shapes so the room replays it with the same row components.
+ * `available` is false when the run is not in the assignee's current session
+ * (reset or compacted). */
+export interface SwarmTranscriptResult {
+  type: 'result'
+  id: string
+  ok: true
+  taskId: string
+  available: boolean
+  transcript: (MessageView | ToolCallView)[]
+}
+
 // ---- workspace ---------------------------------------------------------------
 
 export interface WorkspaceEntry {

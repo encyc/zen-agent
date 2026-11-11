@@ -398,6 +398,28 @@
   overflow-wrap: anywhere;
 }
 
+.taskRun {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.taskRunTitle {
+  margin: 0;
+  font-size: var(--ds-font-11);
+  font-weight: 600;
+  color: var(--dsw-alias-label-caption);
+}
+
+.taskRunBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  padding-right: 2px;
+  overflow-y: auto;
+}
+
 .rowMain {
   flex: 1;
   min-width: 0;

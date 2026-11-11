@@ -3,12 +3,14 @@
  * plays a small post→task→report chain, frames included. */
 
 import type {
+  MessageView,
   ServerFrame,
   SwarmAgentState,
   SwarmAuthor,
   SwarmMessage,
   SwarmRole,
   SwarmTask,
+  ToolCallView,
 } from '../rpc/types'
 
 export interface SwarmMockState {
@@ -308,6 +310,38 @@ function run(rows: Room, task: SwarmTask, depth: number): void {
   }
 }
 
+/** The scripted run's activity, in the coding transcript's view shapes. */
+function transcriptRows(task: SwarmTask): (MessageView | ToolCallView)[] {
+  return [
+    {
+      kind: 'tool',
+      call_id: 'call_1',
+      id: 'v1',
+      name: 'read_skill',
+      args_preview: '{"name":"risk-policy-expert"}',
+      args: { name: 'risk-policy-expert' },
+      details: {},
+      status: 'ok',
+      progress: '',
+      result_text: 'skill body',
+      is_error: false,
+      duration_ms: 12,
+      diff: null,
+    },
+    {
+      kind: 'assistant',
+      id: 'v2',
+      text: `${task.assignee} 查完了`,
+      thinking: null,
+      timestamp: 0,
+      model: 'deepseek-chat',
+      provider: 'mock',
+      usage: null,
+      duration_ms: 8,
+    },
+  ]
+}
+
 export function handleSwarm(
   state: SwarmMockState,
   payload: Record<string, unknown>,
@@ -374,6 +408,16 @@ export function handleSwarm(
     })
     run(rows, retried, task.chainDepth)
     return ok({ taskId, retried: true, task: { ...retried } })
+  }
+
+  if (op === 'transcript') {
+    const taskId = String(payload.taskId ?? '')
+    const task = rows.swarmTasks.find((row) => row.id === taskId)
+    return ok({
+      taskId,
+      available: task !== undefined,
+      transcript: task === undefined ? [] : transcriptRows(task),
+    })
   }
 
   if (op === 'reset') {

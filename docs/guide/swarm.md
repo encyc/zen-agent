@@ -105,6 +105,13 @@ Swarm 不接入 IM，也不常驻后台守护进程：房间和任务的真相�
 右侧该行高亮，列表本身保持紧凑，再点一次或点「收起」关闭。每次状态转换（含
 `done` / `failed` / `cancelled`）都会以 `swarm_task` 帧实时推到界面。
 
+卡片里的**执行过程**来自角色自己的 session：每个任务的注入提示以 `[swarm]` 开头并
+带 task id，后端按这两个提示切出该任务那一段，原样返回 coding 模式的视图，桌面端用
+同一套 `nodesFromViews` 与工具卡/助手消息组件渲染（工具调用及可展开的输入输出、markdown
+正文、思考折叠）。任务运行时面板每 1.5 秒重读一次，结束后再取一次；房间消息流
+不会因为这些步骤变吵。角色会话被 `reset` 或压缩后旧任务会显示「执行记录不可用」——
+完整原文仍在该角色目录下的 session JSONL 里。
+
 ## 结构性闸门（不依赖提示词）
 
 | 闸门 | 默认 | 行为 |
@@ -155,6 +162,7 @@ Swarm 不接入 IM，也不常驻后台守护进程：房间和任务的真相�
 | `@` 解析与三道闸门 | `zenagent/app/swarm/router.py` |
 | 房间协议文本、`swarm_post` 工具 | `zenagent/app/swarm/protocol.py` |
 | 任务执行与终态映射 | `zenagent/app/swarm/runner.py` |
+| 任务执行过程切片（读角色 session） | `zenagent/app/swarm/transcript.py` |
 | 角色运行时装配、调度、审批、生命周期 | `zenagent/app/swarm/manager.py` |
 | 角色文件写回 / 删除 | `zenagent/app/swarm/roster.py` |
 | RPC 请求族 | `zenagent/cli/rpc/ops_swarm.py` |

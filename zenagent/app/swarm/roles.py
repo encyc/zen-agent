@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,7 @@ __all__ = [
     "agents_root",
     "discover_roles",
     "parse_role",
+    "role_session_path",
     "state_root",
     "workspaces_root",
 ]
@@ -69,6 +71,37 @@ def workspaces_root() -> Path:
 
 def state_root() -> Path:
     return project.zenagent_home() / "swarm"
+
+
+def role_session_path(role_id: str, *, fresh: bool = False) -> Path:
+    """The role's session file: the newest existing, or a fresh empty one.
+
+    Kept out of the project session dirs on purpose (design §7): role
+    transcripts never appear in the normal session list, which is why the role
+    runtime sets ``project_sessions=False``.
+    """
+    directory = state_root() / "agents" / role_id / "sessions"
+    directory.mkdir(parents=True, exist_ok=True)
+    if not fresh:
+        latest = _latest_session(directory)
+        if latest is not None:
+            return latest
+    stamp = time.strftime("%Y%m%dT%H%M%S", time.localtime())
+    path = directory / f"{stamp}-{time.time_ns() % 1_000_000_000}.jsonl"
+    path.touch()
+    return path
+
+
+def _latest_session(directory: Path) -> Path | None:
+    files = []
+    for path in directory.glob("*.jsonl"):
+        try:
+            files.append((path.stat().st_mtime, path))
+        except OSError:
+            continue
+    if not files:
+        return None
+    return max(files)[1]
 
 
 def parse_role(role_dir: Path) -> tuple[RoleManifest | None, list[str]]:

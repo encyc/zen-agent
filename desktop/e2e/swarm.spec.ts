@@ -168,6 +168,10 @@ test('open a task detail in the conversation column', async ({ page }) => {
   await expect(detail).toContainText('t_1')
   await expect(detail).toContainText('查 X')
   await expect(detail).toContainText('结论是 Z')
+  // The run's steps (tool calls, interim text) come from the role session.
+  await expect(detail.locator('[data-swarm-task-steps]')).toBeVisible()
+  await expect(detail.locator('[data-swarm-task-steps]')).toContainText('read_skill')
+  await expect(detail.locator('[data-swarm-task-steps]')).toContainText('research 查完了')
   // The task list stays a compact index; nothing expands inside it.
   await expect(page.locator('[data-swarm-tasks] [data-swarm-task-detail]')).toHaveCount(0)
 

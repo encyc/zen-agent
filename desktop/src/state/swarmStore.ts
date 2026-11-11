@@ -15,6 +15,7 @@ import type {
   SwarmReloadResult,
   SwarmRole,
   SwarmTask,
+  SwarmTranscriptResult,
 } from '../rpc/types'
 
 export interface SwarmSender {
@@ -62,6 +63,8 @@ interface SwarmState {
   cancel(id: string): Promise<void>
   retry(id: string): Promise<void>
   reset(agentId: string): Promise<void>
+  /** One task's run steps; null when the request failed. */
+  transcript(taskId: string): Promise<SwarmTranscriptResult | null>
   /** Create/update/delete a role; the panel refreshes with `load` after. */
   saveRole(
     action: 'create' | 'update' | 'delete',
@@ -140,6 +143,15 @@ export const useSwarmStore = create<SwarmState>((set) => ({
 
   async reset(agentId) {
     await send({ type: 'swarm', op: 'reset', agentId })
+  },
+
+  async transcript(taskId) {
+    const answer = (await send({
+      type: 'swarm',
+      op: 'transcript',
+      taskId,
+    })) as unknown as SwarmTranscriptResult
+    return answer.ok === true ? answer : null
   },
 
   async saveRole(action, id, manifest) {

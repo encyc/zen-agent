@@ -70,6 +70,12 @@ class SwarmOps:
                     "agentId": agent_id,
                     "reset": await manager.reset(agent_id),
                 }
+            elif op == "transcript":
+                task_id = _need(request, "taskId")
+                payload = {
+                    "taskId": task_id,
+                    **manager.task_transcript(task_id),
+                }
             elif op == "roles":
                 payload = await self._swarm_roles(manager, request)
             elif op == "reload":

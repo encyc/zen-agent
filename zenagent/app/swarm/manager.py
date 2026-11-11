@@ -15,7 +15,6 @@ import json
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from pathlib import Path
 
 from zenagent.agent.agent import Agent
 from zenagent.agent.session import Session
@@ -29,6 +28,7 @@ from zenagent.app.swarm.protocol import (
 from zenagent.app.swarm.roles import (
     RoleManifest,
     discover_roles,
+    role_session_path,
     state_root,
 )
 from zenagent.app.swarm.room import (
@@ -48,6 +48,7 @@ from zenagent.app.swarm.roster import (
 )
 from zenagent.app.swarm.router import Router
 from zenagent.app.swarm.runner import TaskRunner
+from zenagent.app.swarm.transcript import read_task_transcript
 from zenagent.config import load_user_config
 from zenagent.mcp.config import parse_server
 from zenagent.skills import discover_skills
@@ -204,6 +205,22 @@ class SwarmManager:
             record.pop("version", None)
             payload.append(record)
         return payload
+
+    def task_transcript(self, task_id: str) -> dict:
+        """The steps of one run, read from its assignee's session.
+
+        A task survives its role (the room log is older), so a missing agent
+        or a reset session reports ``available: False`` instead of failing:
+        the detail card then says the record is gone rather than erroring.
+        """
+        task = self.store.tasks.get(task_id)
+        agent = self.agents.get(task.assignee) if task is not None else None
+        if task is None or agent is None:
+            return {"available": False, "transcript": []}
+        available, rows = read_task_transcript(
+            agent.session.path, task_id, running=task.state == "running"
+        )
+        return {"available": available, "transcript": rows}
 
     # -- room commands ------------------------------------------------------
 
@@ -405,7 +422,7 @@ class SwarmManager:
     async def _build_agent(
         self, role: RoleManifest, *, fresh_session: bool = False
     ) -> SwarmAgent:
-        session_path = self._session_path(role.id, fresh=fresh_session)
+        session_path = role_session_path(role.id, fresh=fresh_session)
         broker = build_broker_for(
             user_config=load_user_config(cwd=role.root),
             mode=role.mode,
@@ -682,23 +699,6 @@ class SwarmManager:
         self._emit_message(message)
         return message
 
-    # -- agent sessions -----------------------------------------------------
-
-    def _session_path(self, role_id: str, *, fresh: bool = False) -> Path:
-        # Kept out of the project session dirs on purpose (design §7): role
-        # transcripts never appear in the normal session list, which is why
-        # the role runtime sets project_sessions=False.
-        directory = state_root() / "agents" / role_id / "sessions"
-        directory.mkdir(parents=True, exist_ok=True)
-        if not fresh:
-            latest = _latest_session(directory)
-            if latest is not None:
-                return latest
-        stamp = time.strftime("%Y%m%dT%H%M%S", time.localtime())
-        path = directory / f"{stamp}-{time.time_ns() % 1_000_000_000}.jsonl"
-        path.touch()
-        return path
-
     # -- broker callbacks ---------------------------------------------------
 
     def _confirm_callback(self, role_id: str):
@@ -785,17 +785,5 @@ class SwarmManager:
     def _append_task(self, task: TaskRecord) -> None:
         self.store.append_task(task)
         self._emit_task(task)
-
-
-def _latest_session(directory: Path) -> Path | None:
-    files = []
-    for path in directory.glob("*.jsonl"):
-        try:
-            files.append((path.stat().st_mtime, path))
-        except OSError:
-            continue
-    if not files:
-        return None
-    return max(files)[1]
 
 
