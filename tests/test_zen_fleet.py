@@ -334,6 +334,25 @@ async def test_worker_inherits_confirm_and_mode(env) -> None:
     assert env["factory"].modes[str(env["paths"]["w2"])] == "ask"
 
 
+async def test_zen_router_workers_run_in_ask_mode(env) -> None:
+    """A zen router keeps its autonomy, but its workers downgrade to ask so
+    mutating tool calls surface as approvals instead of auto-approving."""
+    fleet: ZenFleet = env["fleet"]
+    fleet.mode = "zen"
+    await fleet.dispatch(str(env["paths"]["w1"]), "修复")
+    await fleet.wait_all()
+    assert env["factory"].modes[str(env["paths"]["w1"])] == "ask"
+
+
+async def test_plan_router_workers_inherit_plan(env) -> None:
+    """Only the zen bypass is downgraded; a plan router's workers keep plan."""
+    fleet: ZenFleet = env["fleet"]
+    fleet.mode = "plan"
+    await fleet.dispatch(str(env["paths"]["w2"]), "修复")
+    await fleet.wait_all()
+    assert env["factory"].modes[str(env["paths"]["w2"])] == "plan"
+
+
 async def test_same_moment_reports_arrive_as_one_batch(env) -> None:
     """dsh batching: reports completing together reach the router merged,
     so one run reviews all of them instead of one run per report."""

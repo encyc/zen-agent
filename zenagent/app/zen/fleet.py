@@ -80,8 +80,9 @@ class ZenFleet:
         #: The owning slot's confirm callback: a worker's mutating tool calls
         #: surface as approvals in the UI, tagged with the router's frames.
         self.confirm = confirm
-        #: Workers inherit the router's permission mode so the project's
-        #: autonomy choice applies to its workers too.
+        #: The router's permission mode. Workers inherit it except for zen:
+        #: the zen bypass auto-approves mutations, so workers downgrade to ask
+        #: at the build boundary and their mutating tools surface as approvals.
         self.mode = mode
         self._handles: dict[str, WorkerHandle] = {}
         #: Reports completing within this window reach the router as ONE
@@ -252,8 +253,11 @@ class ZenFleet:
                 self._notify()
 
     async def _build_worker(self, handle: WorkerHandle) -> Any:
+        # Workers never inherit the router's zen bypass: zen auto-approves
+        # mutations, so a worker is downgraded to ask to surface approvals.
+        mode = "ask" if self.mode == "zen" else self.mode
         prepared = await prepare(
-            RuntimeOptions(root=self.root, resume=handle.path, mode=self.mode),
+            RuntimeOptions(root=self.root, resume=handle.path, mode=mode),
             views=False,
         )
         if self.confirm is not None:
