@@ -10,9 +10,10 @@
 .bubble {
   width: max-content;
   max-width: 100%;
-  background: color-mix(in oklab, var(--dsw-alias-label-primary) 8%, transparent);
-  border-radius: var(--ds-radius-18);
-  border-bottom-right-radius: var(--ds-radius-8);
+  border: 1px solid var(--ds-hairline);
+  background: var(--dsw-specific-bubble);
+  border-radius: var(--ds-radius-bubble);
+  border-bottom-right-radius: 6px;
   padding: 10px 15px;
   font-size: var(--dsh-content-font-size, 14px);
   line-height: 1.55;
@@ -41,8 +42,9 @@
 .skillCard {
   width: max-content;
   max-width: 100%;
-  border-radius: var(--ds-radius-18);
-  background: color-mix(in oklab, var(--dsw-alias-label-primary) 8%, transparent);
+  border: 1px solid var(--ds-hairline);
+  border-radius: var(--ds-radius-bubble);
+  background: var(--ds-surface-1);
   padding: 10px 15px;
 }
 

@@ -33,7 +33,8 @@
   flex: 0 0 var(--settings-nav-width);
   flex-direction: column;
   overflow: hidden;
-  background: var(--dsw-specific-sidebar-fill);
+  border-right: 1px solid var(--ds-hairline);
+  background: var(--ds-surface-sidebar);
 }
 
 /* Traffic-light clearance plus the rail's own control grid. */
@@ -63,20 +64,31 @@
   height: 32px;
   border: 0;
   border-radius: var(--ds-radius-full);
-  background: var(--dsw-specific-selector);
+  background: var(--ds-surface-2);
+  box-shadow: inset 0 0 0 1px var(--ds-hairline);
   color: var(--dsw-alias-label-primary);
   padding: 0 12px 0 30px;
   font-family: inherit;
   font-size: var(--ds-font-13);
   outline: none;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    box-shadow var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .search::placeholder {
   color: var(--dsw-alias-label-tertiary);
 }
 
+.search:hover {
+  background: var(--ds-surface-3);
+}
+
 .search:focus {
-  box-shadow: 0 0 0 2px var(--dsw-alias-interactive-bg-active);
+  background: var(--ds-surface-raised);
+  box-shadow:
+    inset 0 0 0 1px var(--ds-hairline-strong),
+    0 0 0 3px color-mix(in srgb, var(--ds-accent) 16%, transparent);
 }
 
 .navScroll {
@@ -117,7 +129,7 @@
   align-items: center;
   gap: 10px;
   border: 0;
-  border-radius: var(--ds-radius-12);
+  border-radius: 9px;
   padding: 7px 10px;
   background: transparent;
   color: var(--dsw-alias-label-secondary);
@@ -132,12 +144,13 @@
 }
 
 .navItem:hover {
-  background: var(--dsw-specific-sidebar-nav-item-hover);
+  background: var(--ds-surface-hover);
   color: var(--dsw-alias-label-primary);
 }
 
 .navItem[data-active] {
   background: color-mix(in oklab, var(--ds-accent) 12%, var(--dsw-specific-sidebar-nav-item-active));
+  box-shadow: inset 0 0 0 1px var(--ds-hairline);
   color: var(--dsw-alias-label-primary);
 }
 
@@ -180,7 +193,7 @@
   align-items: center;
   gap: 2px;
   border: 0;
-  border-radius: var(--ds-radius-8);
+  border-radius: 9px;
   padding: 0 8px 0 4px;
   background: transparent;
   color: var(--dsw-alias-label-secondary);
@@ -194,7 +207,7 @@
 }
 
 .back:hover {
-  background: var(--dsw-specific-sidebar-nav-item-hover);
+  background: var(--ds-surface-hover);
   color: var(--dsw-alias-label-primary);
 }
 
@@ -329,9 +342,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  border-radius: var(--ds-radius-14);
+  border: 1px solid var(--ds-hairline);
+  border-radius: var(--ds-radius-card);
   padding: 14px 16px;
-  background: color-mix(in oklab, var(--dsw-alias-label-primary) 3.5%, transparent);
+  background: var(--ds-surface-1);
 }
 
 /* A row that exists only because the row above it is on indents one step. */
@@ -385,19 +399,23 @@
   height: 32px;
   align-items: center;
   gap: 6px;
-  border: 0;
+  border: 1px solid var(--ds-hairline);
   border-radius: var(--ds-radius-full);
   padding: 0 10px;
-  background: var(--dsw-alias-button-elevated-fill);
-  box-shadow: var(--dsw-elevation-panel);
+  background: var(--ds-surface-1);
+  box-shadow: var(--ds-shadow-soft);
   color: var(--dsw-alias-label-primary);
   font-family: inherit;
   font-size: var(--ds-font-13);
   cursor: pointer;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    border-color var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .pickerTrigger:hover {
-  background: var(--dsw-alias-interactive-bg-hover-solid);
+  background: var(--ds-surface-2);
+  border-color: var(--ds-hairline-strong);
 }
 
 .pickerTrigger > svg {
@@ -425,11 +443,11 @@
   flex-direction: column;
   gap: 2px;
   overflow-y: auto;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: var(--ds-radius-16);
-  padding: 4px;
-  background: var(--dsw-specific-menu);
-  box-shadow: var(--dsw-elevation-prominent);
+  border: 1px solid var(--ds-hairline);
+  border-radius: var(--ds-radius-card);
+  padding: 5px;
+  background: var(--ds-surface-raised);
+  box-shadow: var(--ds-shadow-raised);
   backdrop-filter: var(--dsw-menu-backdrop-filter);
 }
 
@@ -440,7 +458,7 @@
   justify-content: space-between;
   gap: 10px;
   border: 0;
-  border-radius: var(--ds-radius-8);
+  border-radius: 8px;
   padding: 7px 10px;
   background: transparent;
   color: var(--dsw-alias-label-primary);
@@ -451,7 +469,7 @@
 }
 
 .pickerOption:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--ds-surface-1);
 }
 
 .pickerOption > svg {
@@ -463,9 +481,10 @@
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  border: 1px solid var(--ds-hairline);
   border-radius: var(--ds-radius-full);
   padding: 2px;
-  background: color-mix(in oklab, var(--dsw-alias-label-primary) 6%, transparent);
+  background: var(--ds-surface-2);
 }
 
 .segmentItem {
@@ -479,6 +498,9 @@
   line-height: 1.2;
   cursor: pointer;
   white-space: nowrap;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    color var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .segmentItem:hover {
@@ -486,9 +508,9 @@
 }
 
 .segmentItem[aria-pressed='true'] {
-  background: var(--dsw-alias-button-elevated-fill);
+  background: var(--ds-surface-raised);
   color: var(--dsw-alias-label-primary);
-  box-shadow: var(--dsw-elevation-panel);
+  box-shadow: var(--ds-shadow-thumb);
 }
 
 /* Palette row: stacks the four previews under the copy, full row width. */
@@ -514,24 +536,27 @@
   min-width: 0;
   flex-direction: column;
   gap: 6px;
-  border: 0;
-  border-radius: var(--ds-radius-12);
+  border: 1px solid transparent;
+  border-radius: 10px;
   padding: 5px;
   background: transparent;
   font-family: inherit;
   cursor: pointer;
   transition:
     box-shadow var(--ds-transition-duration-fast) var(--ds-ease-in-out),
-    background var(--ds-transition-duration-fast) var(--ds-ease-in-out);
+    background var(--ds-transition-duration-fast) var(--ds-ease-in-out),
+    border-color var(--ds-transition-duration-fast) var(--ds-ease-in-out);
 }
 
 .paletteItem:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--ds-surface-1);
+  border-color: var(--ds-hairline);
 }
 
 .paletteItem[aria-pressed='true'] {
-  background: var(--dsw-alias-interactive-bg-hover);
-  box-shadow: 0 0 0 1.5px var(--dsw-alias-state-business-primary);
+  background: var(--ds-surface-1);
+  border-color: var(--dsw-alias-state-business-primary);
+  box-shadow: 0 0 0 1px var(--dsw-alias-state-business-primary);
 }
 
 /* The miniature canvas: two prose lines over an accent chip, drawn in the

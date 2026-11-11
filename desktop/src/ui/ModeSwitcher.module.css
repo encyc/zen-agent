@@ -1,29 +1,59 @@
 .root {
+  position: relative;
   display: flex;
   gap: 2px;
   flex: none;
   margin: 0 10px 8px;
-  padding: 2px;
-  border-radius: var(--ds-radius-6);
-  background: var(--dsw-alias-bg-layer-2);
+  padding: 3px;
+  border: 1px solid var(--ds-hairline);
+  border-radius: var(--ds-radius-full);
+  background: var(--ds-surface-2);
+}
+
+/* One raised thumb slides between the equal-width tabs; the tabs themselves
+ * stay transparent so the travel reads as a single continuous move. */
+.thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 10px) / 3);
+  border-radius: var(--ds-radius-full);
+  background: var(--ds-surface-raised);
+  box-shadow: var(--ds-shadow-thumb);
+  transition: transform var(--ds-motion) var(--ds-ease-spring);
+}
+
+.thumb[data-mode='zen'] {
+  transform: translateX(calc(100% + 2px));
+}
+
+.thumb[data-mode='swarm'] {
+  transform: translateX(calc((100% + 2px) * 2));
 }
 
 .tab {
+  position: relative;
+  z-index: 1;
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
-  padding: 4px 6px;
+  padding: 3px 8px;
   border: none;
-  border-radius: var(--ds-radius-4);
+  border-radius: var(--ds-radius-full);
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   font: inherit;
   font-size: var(--ds-font-11);
+  font-weight: 500;
   line-height: 1.4;
   cursor: pointer;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    color var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .tabLabel {
@@ -33,12 +63,12 @@
   text-overflow: ellipsis;
 }
 
-.tab:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+.tab:not([data-active]):hover {
+  background: var(--ds-surface-hover);
+  color: var(--dsw-alias-label-primary);
 }
 
 .tab[data-active] {
-  background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
 }
 
@@ -47,16 +77,17 @@
   width: 6px;
   height: 6px;
   border-radius: var(--ds-radius-full);
-  background: var(--dsw-alias-state-business-primary);
+  background: var(--dsw-alias-state-success-primary);
 }
 
 .swarmBadge {
   flex: none;
   min-width: 14px;
   padding: 0 5px;
-  border-radius: var(--ds-radius-4);
-  background: var(--dsw-alias-bg-layer-3);
+  border-radius: var(--ds-radius-full);
+  background: var(--ds-surface-3);
   color: var(--dsw-alias-label-secondary);
   font-size: var(--ds-font-10-5);
+  font-variant-numeric: tabular-nums;
   text-align: center;
 }

@@ -3,6 +3,7 @@
   display: grid;
   height: 100%;
   width: 100%;
+  background: var(--ds-surface-sidebar);
   transition: grid-template-columns var(--ds-transition-duration) var(--ds-ease-in-out);
 }
 
@@ -17,13 +18,19 @@
   overflow: hidden;
 }
 
+/* The main pane reads as a panel set against the shell: no divider lines; the
+ * tint behind its rounded corners plus a soft cast shadow draw both seams. */
 .centerCol {
   position: relative;
+  z-index: 1;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  border-radius: var(--ds-radius-card);
+  background: var(--ds-surface-raised);
+  box-shadow: var(--ds-shadow-panel);
 }
 
 .rightbarCol {
@@ -31,7 +38,7 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border-left: 1px solid var(--dsw-alias-border-l1);
+  background: var(--ds-surface-sidebar);
 }
 
 /* Hover-reveal drag handles between the columns. */
@@ -49,7 +56,7 @@
   content: '';
   position: absolute;
   inset: 0 4px;
-  background: var(--dsw-alias-border-l1);
+  background: var(--ds-hairline-strong);
   opacity: 0;
   transition: opacity 120ms ease;
 }

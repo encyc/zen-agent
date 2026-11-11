@@ -30,9 +30,10 @@
   max-width: min(100%, 42rem);
   color: var(--dsw-alias-label-primary);
   font-size: var(--ds-font-28);
-  font-weight: 400;
-  letter-spacing: -0.01em;
+  font-weight: 500;
+  letter-spacing: -0.015em;
   line-height: 36px;
+  text-wrap: balance;
 }
 
 .projectAnchor {
@@ -51,7 +52,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: inherit;
+  color: var(--dsw-alias-state-business-primary);
   font: inherit;
   letter-spacing: inherit;
   line-height: inherit;
@@ -61,8 +62,9 @@
   text-decoration: underline dotted;
   text-decoration-thickness: 1px;
   text-underline-offset: 4px;
-  text-decoration-color: var(--dsw-alias-label-tertiary);
+  text-decoration-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 45%, transparent);
   cursor: pointer;
+  transition: color var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .projectButton:hover,
@@ -73,7 +75,7 @@
 .projectButton:focus-visible {
   outline: 2px solid var(--dsw-alias-state-business-primary);
   outline-offset: 3px;
-  border-radius: var(--ds-radius-4);
+  border-radius: 6px;
 }
 
 .menu {
@@ -86,11 +88,12 @@
   width: min(280px, calc(100vw - 24px));
   max-height: min(420px, calc(100vh - 24px));
   overflow-y: auto;
-  padding: 6px;
+  padding: 5px;
   transform: translateX(-50%);
-  border-radius: var(--ds-radius-10);
-  background: var(--dsw-specific-menu);
-  box-shadow: var(--dsw-elevation-prominent);
+  border: 1px solid var(--ds-hairline);
+  border-radius: var(--ds-radius-card);
+  background: var(--ds-surface-raised);
+  box-shadow: var(--ds-shadow-raised);
   text-align: left;
 }
 
@@ -117,7 +120,7 @@
   padding: 0 10px;
   overflow: hidden;
   border: none;
-  border-radius: var(--ds-radius-4);
+  border-radius: 8px;
   background: transparent;
   color: var(--dsw-alias-label-primary);
   font-family: inherit;
@@ -129,7 +132,7 @@
 
 .menuItem:hover,
 .menuItem:focus-visible {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--ds-surface-1);
 }
 
 .menuPath {
@@ -144,9 +147,10 @@
   width: min(100%, 520px);
   margin-top: 4px;
   padding: 12px 14px;
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: var(--ds-radius-10);
-  background: var(--dsw-alias-bg-layer-2);
+  border: 1px solid var(--ds-hairline);
+  border-radius: var(--ds-radius-card);
+  background: var(--ds-surface-1);
+  box-shadow: var(--ds-shadow-soft);
   text-align: left;
 }
 
@@ -156,7 +160,8 @@
   justify-content: space-between;
   color: var(--dsw-alias-label-secondary);
   font-size: var(--ds-font-12-5);
-  font-weight: 500;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .dismiss {
@@ -165,14 +170,17 @@
   width: 20px;
   height: 20px;
   border: none;
-  border-radius: var(--ds-radius-4);
+  border-radius: 7px;
   background: transparent;
   color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    color var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .dismiss:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--ds-surface-hover);
   color: var(--dsw-alias-label-primary);
 }
 
@@ -192,10 +200,12 @@
   min-width: 28px;
   height: 20px;
   padding: 0 6px;
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: var(--ds-radius-4);
-  background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-label-secondary);
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-business-primary) 22%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 9%, transparent);
+  color: var(--dsw-alias-state-business-primary);
   font-family: inherit;
   font-size: var(--ds-font-11);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }

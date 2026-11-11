@@ -45,18 +45,23 @@
 
 .earlier {
   padding: 4px 12px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 1px solid var(--ds-hairline);
   border-radius: 999px;
-  background: transparent;
+  background: var(--ds-surface-1);
   color: var(--dsw-alias-label-secondary);
   font: inherit;
   font-size: var(--ds-font-12);
   line-height: 16px;
   cursor: pointer;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    border-color var(--ds-motion-fast) var(--ds-ease-out),
+    color var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .earlier:hover {
-  background: var(--dsw-alias-button-floating-hover);
+  background: var(--ds-surface-2);
+  border-color: var(--ds-hairline-strong);
   color: var(--dsw-alias-label-primary);
 }
 
@@ -72,17 +77,25 @@
   place-items: center;
   width: 32px;
   height: 32px;
-  border: none;
+  border: 1px solid var(--ds-hairline);
   border-radius: 999px;
-  background: var(--dsw-alias-button-floating-fill);
-  box-shadow: var(--dsw-elevation-panel);
+  background: var(--ds-surface-raised);
+  box-shadow: var(--ds-shadow-raised);
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    color var(--ds-motion-fast) var(--ds-ease-out),
+    transform 90ms ease;
 }
 
 .jump:hover {
-  background: var(--dsw-alias-button-floating-hover);
+  background: var(--ds-surface-2);
   color: var(--dsw-alias-label-primary);
+}
+
+.jump:active {
+  transform: scale(0.96);
 }
 
 .runningRow {

@@ -2,8 +2,7 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--dsw-specific-sidebar-fill);
-  border-right: 1px solid var(--dsw-alias-border-l1);
+  background: var(--ds-surface-sidebar);
 }
 
 /* The header doubles as the macOS traffic-light seat. pi hides the wordmark
@@ -38,6 +37,12 @@ html[data-platform='darwin'] .brand {
   display: grid;
   place-items: center;
   flex: none;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--ds-hairline);
+  border-radius: 8px;
+  background: var(--ds-surface-raised);
+  box-shadow: var(--ds-shadow-thumb);
 }
 
 .brandMark img,
@@ -54,14 +59,17 @@ html[data-platform='darwin'] .brand {
   height: 28px;
   flex: none;
   border: none;
-  border-radius: var(--dsw-radius-sm);
+  border-radius: var(--ds-radius-control);
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    color var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .iconButton:hover {
-  background: var(--dsw-specific-sidebar-nav-item-hover);
+  background: var(--ds-surface-2);
   color: var(--dsw-alias-label-primary);
 }
 
@@ -84,14 +92,14 @@ html[data-platform='darwin'] .brand {
   margin-left: -4px;
   padding: 0 4px;
   border: none;
-  border-radius: var(--ds-radius-4);
+  border-radius: 8px;
   background: transparent;
   text-align: left;
   cursor: pointer;
 }
 
 .sectionToggle:hover {
-  background: var(--dsw-specific-sidebar-nav-item-hover);
+  background: var(--ds-surface-hover);
 }
 
 .sectionChevron {
@@ -111,6 +119,8 @@ html[data-platform='darwin'] .brand {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--ds-font-11);
+  font-weight: 600;
+  letter-spacing: 0.02em;
   line-height: 14px;
   color: var(--dsw-alias-label-caption);
 }
@@ -160,22 +170,31 @@ html[data-platform='darwin'] .brand {
 
 .search {
   width: 100%;
-  height: 28px;
+  height: 30px;
   padding: 0 10px;
-  border: none;
-  border-radius: var(--dsw-radius-sm);
-  background: var(--dsw-alias-interactive-bg-hover);
+  border: 1px solid var(--ds-hairline);
+  border-radius: var(--ds-radius-control);
+  background: var(--ds-surface-1);
   color: var(--dsw-alias-label-primary);
   font-size: var(--ds-font-12);
   outline: none;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    border-color var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .search::placeholder {
   color: var(--dsw-alias-label-caption);
 }
 
+.search:hover {
+  background: var(--ds-surface-2);
+}
+
 .search:focus-visible {
-  outline: 1px solid var(--dsw-alias-border-l4);
+  border-color: var(--ds-hairline-strong);
+  background: var(--ds-surface-raised);
+  outline: 1px solid var(--ds-hairline-strong);
 }
 
 .standaloneList {
@@ -214,16 +233,19 @@ html[data-platform='darwin'] .brand {
   height: 30px;
   padding: 0 8px;
   border: none;
-  border-radius: var(--dsw-radius-sm);
+  border-radius: var(--ds-radius-control);
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   font-family: inherit;
   font-size: var(--ds-font-12);
   cursor: pointer;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    color var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .projectToggle:hover {
-  background: var(--dsw-specific-sidebar-nav-item-hover);
+  background: var(--ds-surface-hover);
   color: var(--dsw-alias-label-primary);
 }
 
@@ -252,7 +274,8 @@ html[data-platform='darwin'] .brand {
   width: 6px;
   height: 6px;
   border-radius: var(--ds-radius-full);
-  background: var(--dsw-alias-state-business-primary);
+  background: var(--dsw-alias-state-success-primary);
+  box-shadow: 0 0 0 3px var(--ds-tint-success);
 }
 
 .projectActions {
@@ -315,17 +338,22 @@ html[data-platform='darwin'] .brand {
   gap: 8px;
   height: 40px;
   padding: 0 6px 0 8px;
-  border-radius: var(--dsw-radius-sm);
+  border: 1px solid transparent;
+  border-radius: var(--ds-radius-control);
   cursor: pointer;
   color: var(--dsw-alias-label-secondary);
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    border-color var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .sessionRow:hover {
-  background: var(--dsw-specific-sidebar-nav-item-hover);
+  background: var(--ds-surface-1);
 }
 
 .sessionRow[data-current] {
-  background: var(--dsw-specific-sidebar-nav-item-active);
+  border-color: var(--ds-hairline);
+  background: var(--ds-surface-2);
   color: var(--dsw-alias-label-primary);
 }
 
@@ -447,11 +475,11 @@ html[data-platform='darwin'] .brand {
   display: flex;
   flex-direction: column;
   width: 176px;
-  padding: 4px;
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: var(--ds-radius-8);
-  background: var(--dsw-alias-bg-layer-2);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+  padding: 5px;
+  border: 1px solid var(--ds-hairline);
+  border-radius: var(--ds-radius-card);
+  background: var(--ds-surface-raised);
+  box-shadow: var(--ds-shadow-raised);
 }
 
 .menuItem,
@@ -462,7 +490,7 @@ html[data-platform='darwin'] .brand {
   height: 30px;
   padding: 0 10px;
   border: none;
-  border-radius: var(--ds-radius-4);
+  border-radius: 8px;
   background: transparent;
   color: var(--dsw-alias-label-primary);
   font-size: var(--ds-font-12);
@@ -472,7 +500,7 @@ html[data-platform='darwin'] .brand {
 
 .menuItem:hover,
 .menuItemDanger:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--ds-surface-1);
 }
 
 .menuItem:disabled {
@@ -507,7 +535,7 @@ html[data-platform='darwin'] .brand {
   margin-top: auto;
   flex: none;
   height: var(--ds-sidebar-footer-height);
-  border-top: 1px solid var(--dsw-alias-border-l1);
+  border-top: 1px solid var(--ds-hairline);
   padding: 7px 12px 2px;
 }
 
@@ -523,14 +551,17 @@ html[data-platform='darwin'] .brand {
   width: 28px;
   height: 28px;
   border: none;
-  border-radius: var(--dsw-radius-sm);
+  border-radius: var(--ds-radius-control);
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    color var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .footerButton:hover {
-  background: var(--dsw-specific-sidebar-nav-item-hover);
+  background: var(--ds-surface-2);
   color: var(--dsw-alias-label-primary);
 }
 
@@ -552,11 +583,11 @@ html[data-platform='darwin'] .brand {
   display: flex;
   flex-direction: column;
   width: 184px;
-  padding: 4px;
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: var(--ds-radius-8);
-  background: var(--dsw-alias-bg-layer-2);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+  padding: 5px;
+  border: 1px solid var(--ds-hairline);
+  border-radius: var(--ds-radius-card);
+  background: var(--ds-surface-raised);
+  box-shadow: var(--ds-shadow-raised);
 }
 
 /* Zen sidebar body: the project switcher above the fleet roster. */
@@ -592,8 +623,9 @@ html[data-platform='darwin'] .brand {
   align-items: center;
   gap: 6px;
   padding: 5px 8px;
-  border-radius: 6px;
-  background: var(--dsw-alias-button-ghost-active-fill);
+  border: 1px solid var(--ds-hairline);
+  border-radius: var(--ds-radius-control);
+  background: var(--ds-surface-1);
 }
 
 /* The router row's explicit fleet stop (zen.stopFleet). */
@@ -623,10 +655,11 @@ html[data-platform='darwin'] .brand {
   align-items: center;
   gap: 6px;
   padding: 5px 8px;
-  border-radius: 6px;
+  border: 1px solid var(--ds-hairline);
+  border-radius: var(--ds-radius-control);
   font-size: 11px;
   color: var(--dsw-alias-label-secondary);
-  background: var(--dsw-alias-button-ghost-active-fill);
+  background: var(--ds-surface-1);
 }
 
 .zenResume {
@@ -670,7 +703,7 @@ html[data-platform='darwin'] .brand {
   gap: 6px;
   padding: 5px 8px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--ds-radius-control);
   background: transparent;
   color: var(--dsw-alias-label-primary);
   cursor: pointer;
@@ -679,7 +712,7 @@ html[data-platform='darwin'] .brand {
 }
 
 .zenWorkerRow:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--ds-surface-1);
 }
 
 .zenDot {

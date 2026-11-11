@@ -6,10 +6,10 @@
 .card {
   display: flex;
   flex-direction: column;
-  border-radius: var(--dsw-radius-panel);
+  border: 1px solid var(--ds-hairline);
+  border-radius: var(--ds-radius-composer);
   background: var(--dsw-specific-input-major);
-  box-shadow: var(--dsw-elevation-soft);
-  --dsw-elevation-stroke-color: var(--dsw-alias-border-l2);
+  box-shadow: var(--ds-shadow-raised);
   overflow: hidden;
 }
 
@@ -50,9 +50,9 @@
   flex-direction: column;
   gap: 4px;
   padding: 8px 12px;
-  border-radius: var(--dsw-radius-sm);
+  border-radius: 10px;
   background: var(--dsw-alias-markdown-code-block);
-  border: 1px solid var(--dsw-alias-border-l1);
+  border: 1px solid var(--ds-hairline);
 }
 
 .toolName {
@@ -85,10 +85,18 @@
   height: 30px;
   padding: 0 14px;
   border: none;
-  border-radius: var(--dsw-radius-sm);
+  border-radius: 9px;
   font-size: var(--ds-font-13);
   font-weight: 500;
   cursor: pointer;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    color var(--ds-motion-fast) var(--ds-ease-out),
+    transform 90ms ease;
+}
+
+.actionRow button:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .actionRow button:disabled {
@@ -97,7 +105,7 @@
 }
 
 .reject {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--ds-surface-2);
   color: var(--dsw-alias-label-secondary);
 }
 
@@ -109,16 +117,17 @@
 .always {
   background: transparent;
   color: var(--dsw-alias-label-secondary);
-  box-shadow: inset 0 0 0 1px var(--dsw-alias-border-l4);
+  box-shadow: inset 0 0 0 1px var(--ds-hairline-strong);
 }
 
 .always:hover:not(:disabled) {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--ds-surface-hover);
   color: var(--dsw-alias-label-primary);
 }
 
 .allow {
   background: var(--dsw-alias-button-info-fill);
+  box-shadow: var(--ds-shadow-thumb);
   color: var(--dsw-alias-label-primary-foreground);
 }
 

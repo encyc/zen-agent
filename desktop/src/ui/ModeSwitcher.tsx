@@ -35,6 +35,7 @@ export function ModeSwitcher() {
       aria-label={t('workspace.switcher')}
       data-workspace-switcher
     >
+      <span className={css.thumb} data-mode={mode} aria-hidden />
       {WORKSPACE_MODES.map((entry) => {
         let indicator: ReactNode = null
         let ariaLabel: string | undefined

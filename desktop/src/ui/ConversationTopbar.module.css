@@ -10,6 +10,7 @@
   padding: 0 36px 0 12px;
   flex: none;
   z-index: 5;
+  border-bottom: 1px solid var(--ds-hairline);
   --ct-lead-inset: 12px;
   transition: padding-left var(--ds-transition-duration) var(--ds-ease-in-out);
 }
@@ -67,9 +68,14 @@ html[data-platform='darwin'] .root {
 .project {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   flex: 0 1 auto;
   min-width: 0;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--ds-hairline);
+  border-radius: var(--ds-radius-full);
+  background: var(--ds-surface-1);
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--ds-font-11);
   line-height: var(--ds-font-11-5);
@@ -166,13 +172,16 @@ html[data-platform='darwin'] .root {
   width: 28px;
   height: 28px;
   border: none;
-  border-radius: var(--ds-radius-6);
+  border-radius: var(--ds-radius-control);
   background: transparent;
   color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    color var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .button:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--ds-surface-1);
   color: var(--dsw-alias-label-primary);
 }

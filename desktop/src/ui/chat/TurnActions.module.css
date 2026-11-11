@@ -25,14 +25,18 @@
   height: 22px;
   padding: 0;
   border: none;
-  border-radius: var(--dsw-radius-sm);
+  border-radius: 7px;
   background: none;
   color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    color var(--ds-motion-fast) var(--ds-ease-out),
+    transform 90ms ease;
 }
 
 .action:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--ds-surface-hover);
   color: var(--dsw-alias-label-primary);
 }
 

@@ -4,7 +4,7 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: var(--dsw-alias-bg-base);
+  background: var(--ds-surface-sidebar);
   font-size: var(--ds-font-12);
 }
 
@@ -56,8 +56,8 @@ html[data-work-panel-resizing] * {
   gap: 8px;
   height: var(--ds-toolbar-height);
   padding: 0 44px 0 10px;
-  background: var(--dsw-alias-bg-layer-1);
-  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  background: var(--ds-surface-sidebar);
+  border-bottom: 1px solid var(--ds-hairline);
 }
 
 .tabs {
@@ -76,7 +76,7 @@ html[data-work-panel-resizing] * {
   height: 28px;
   padding: 0 10px;
   border: none;
-  border-radius: var(--dsw-radius-sm);
+  border-radius: 9px;
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   font-size: var(--ds-font-12-5);
@@ -84,16 +84,20 @@ html[data-work-panel-resizing] * {
   cursor: pointer;
   white-space: nowrap;
   min-width: 0;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    color var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .tab:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--ds-surface-hover);
   color: var(--dsw-alias-label-primary);
 }
 
 .tab[aria-selected='true'] {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--ds-surface-raised);
   color: var(--dsw-alias-label-primary);
+  box-shadow: var(--ds-shadow-thumb);
 }
 
 .tab:focus-visible {
@@ -110,11 +114,12 @@ html[data-work-panel-resizing] * {
   min-width: 0;
   align-items: center;
   padding-right: 2px;
-  border-radius: var(--dsw-radius-sm);
+  border-radius: 9px;
 }
 
 .tabWrap[data-active] {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--ds-surface-raised);
+  box-shadow: var(--ds-shadow-thumb);
 }
 
 .tabWrap[data-active] .tab {
@@ -134,14 +139,14 @@ html[data-work-panel-resizing] * {
   width: 20px;
   height: 20px;
   border: none;
-  border-radius: var(--dsw-radius-sm);
+  border-radius: 7px;
   background: transparent;
   color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
 }
 
 .tabClose:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--ds-surface-hover);
   color: var(--dsw-alias-label-primary);
 }
 
@@ -152,14 +157,14 @@ html[data-work-panel-resizing] * {
   width: 24px;
   height: 24px;
   border: none;
-  border-radius: var(--dsw-radius-sm);
+  border-radius: 8px;
   background: transparent;
   color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
 }
 
 .close:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--ds-surface-1);
   color: var(--dsw-alias-label-primary);
 }
 
@@ -189,7 +194,7 @@ html[data-work-panel-resizing] * {
   width: 24px;
   height: 24px;
   border: none;
-  border-radius: var(--dsw-radius-sm);
+  border-radius: 8px;
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
@@ -197,7 +202,7 @@ html[data-work-panel-resizing] * {
 
 .iconButton:hover,
 .iconButton[aria-expanded='true'] {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--ds-surface-1);
   color: var(--dsw-alias-label-primary);
 }
 
@@ -210,11 +215,11 @@ html[data-work-panel-resizing] * {
   flex-direction: column;
   gap: 1px;
   min-width: 168px;
-  padding: 4px;
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1);
-  box-shadow: 0 8px 24px color-mix(in oklab, #000 22%, transparent);
+  padding: 5px;
+  border: 1px solid var(--ds-hairline);
+  border-radius: var(--ds-radius-card);
+  background: var(--ds-surface-raised);
+  box-shadow: var(--ds-shadow-raised);
 }
 
 .launcherRow {
@@ -224,7 +229,7 @@ html[data-work-panel-resizing] * {
   height: 28px;
   padding: 0 8px;
   border: none;
-  border-radius: var(--dsw-radius-sm);
+  border-radius: 8px;
   background: transparent;
   color: var(--dsw-alias-label-primary);
   font-size: var(--ds-font-12);
@@ -233,7 +238,7 @@ html[data-work-panel-resizing] * {
 }
 
 .launcherRow:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--ds-surface-1);
 }
 
 .launcherOpen {

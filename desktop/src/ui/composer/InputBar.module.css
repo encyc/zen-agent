@@ -17,12 +17,19 @@
   gap: 12px;
   width: min(100%, var(--ds-chat-content-width));
   padding-top: 8px;
-  border-radius: var(--dsw-radius-panel);
+  border: 1px solid var(--ds-hairline);
+  border-radius: var(--ds-radius-composer);
   background: var(--dsw-specific-input-major);
-  box-shadow: var(--dsw-elevation-soft);
-  --dsw-elevation-stroke-color: var(--dsw-alias-border-l2);
+  box-shadow: var(--ds-shadow-raised);
   font-size: var(--dsh-content-font-size, 14px);
   line-height: calc(24px + var(--dsh-content-font-delta, 0px));
+  transition:
+    border-color var(--ds-motion-fast) var(--ds-ease-out),
+    box-shadow var(--ds-motion-fast) var(--ds-ease-out);
+}
+
+.card:focus-within {
+  border-color: var(--ds-hairline-strong);
 }
 
 /* The plate's top edge doubles as a drag grip: pulling up grows the draft
@@ -127,11 +134,12 @@ html[data-composer-resizing] * {
   bottom: calc(100% + 8px);
   display: flex;
   flex-direction: column;
-  padding: 6px;
-  border-radius: var(--dsw-radius-md);
-  background: var(--dsw-specific-menu);
+  padding: 5px;
+  border: 1px solid var(--ds-hairline);
+  border-radius: var(--ds-radius-card);
+  background: var(--ds-surface-raised);
   backdrop-filter: var(--dsw-menu-backdrop-filter);
-  box-shadow: var(--dsw-elevation-panel);
+  box-shadow: var(--ds-shadow-raised);
   max-height: 320px;
   overflow-y: auto;
   z-index: 30;
@@ -143,14 +151,14 @@ html[data-composer-resizing] * {
   gap: 10px;
   padding: 6px 10px;
   border: none;
-  border-radius: var(--dsw-radius-sm);
+  border-radius: 8px;
   background: transparent;
   text-align: left;
   cursor: pointer;
 }
 
 .slashItem[data-active] {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--ds-surface-1);
 }
 
 .slashName {
@@ -213,15 +221,24 @@ html[data-composer-resizing] * {
   flex: none;
   width: 28px;
   height: 28px;
-  border: none;
+  border: 1px solid var(--ds-hairline);
   border-radius: 999px;
-  background: var(--dsw-specific-selector);
+  background: var(--ds-surface-2);
   color: var(--dsw-alias-label-primary);
   cursor: pointer;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    border-color var(--ds-motion-fast) var(--ds-ease-out),
+    transform 90ms ease;
 }
 
 .add:hover {
-  background: var(--dsw-alias-interactive-bg-hover-solid);
+  background: var(--ds-surface-3);
+  border-color: var(--ds-hairline-strong);
+}
+
+.add:active {
+  transform: scale(0.94);
 }
 
 .chip {
@@ -229,9 +246,9 @@ html[data-composer-resizing] * {
   align-items: center;
   gap: 5px;
   height: 28px;
-  padding: 0 8px;
+  padding: 0 9px;
   border: none;
-  border-radius: var(--dsw-radius-sm);
+  border-radius: 999px;
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   font-size: var(--ds-font-13);
@@ -239,10 +256,14 @@ html[data-composer-resizing] * {
   font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    color var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .chip:hover {
-  background-color: var(--dsw-alias-interactive-bg-hover);
+  background-color: var(--ds-surface-hover);
+  color: var(--dsw-alias-label-primary);
 }
 
 .chipLabel {
@@ -261,8 +282,8 @@ html[data-composer-resizing] * {
   max-width: 96px;
   padding: 1px 6px;
   border-radius: 999px;
-  background: color-mix(in oklab, var(--dsw-alias-label-primary) 5%, transparent);
-  color: var(--dsw-alias-label-secondary);
+  background: var(--ds-surface-2);
+  color: var(--dsw-alias-label-tertiary);
   font-size: var(--ds-font-11);
   font-weight: 500;
   line-height: 1.3;
@@ -296,13 +317,21 @@ html[data-composer-resizing] * {
   border: none;
   border-radius: 999px;
   background: var(--dsw-alias-button-info-fill);
+  box-shadow: var(--ds-shadow-thumb);
   color: var(--dsw-alias-label-primary-foreground);
   cursor: pointer;
-  transition: background-color 100ms ease, opacity 100ms ease;
+  transition:
+    background-color 100ms ease,
+    opacity 100ms ease,
+    transform 90ms ease;
 }
 
 .primary:hover:not(:disabled) {
   background: var(--dsw-alias-button-info-hover);
+}
+
+.primary:active:not(:disabled) {
+  transform: scale(0.94);
 }
 
 .primary:disabled {
@@ -345,8 +374,9 @@ html[data-composer-resizing] * {
   gap: 6px;
   height: 20px;
   padding: 0 4px 0 2px;
-  border-radius: var(--dsw-radius-sm);
-  background: var(--dsw-alias-interactive-bg-hover);
+  border: 1px solid var(--ds-hairline);
+  border-radius: 7px;
+  background: var(--ds-surface-1);
 }
 
 .attachThumb {
@@ -355,7 +385,7 @@ html[data-composer-resizing] * {
   width: 16px;
   height: 16px;
   border-radius: 4px;
-  background: var(--dsw-alias-interactive-bg-hover-solid);
+  background: var(--ds-surface-2);
   color: var(--dsw-alias-label-secondary);
 }
 
@@ -374,7 +404,7 @@ html[data-composer-resizing] * {
   width: 18px;
   height: 18px;
   border: none;
-  border-radius: var(--dsw-radius-xs);
+  border-radius: 6px;
   background: transparent;
   color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
