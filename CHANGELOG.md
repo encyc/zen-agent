@@ -48,17 +48,20 @@ the other branch.
 
 - **Mode switcher** (`Sidebar`): segmented Coding / ZEN / Swarm control backed by
   the persisted `workspaceMode`; ZEN renders a placeholder page for the other
-  branch.
+  branch. Collapsing the sidebar on a surface without a conversation topbar
+  leaves a floating expand control in the topbar's lead seat, so the way back
+  no longer disappears with the sidebar.
 - **Swarm room** (`RoomPage`): message feed with per-role status dots, task
   pills and system notes; `@` autocomplete in the composer; right-side roster,
   task strip with cancel/retry, and the shared approval panel above the composer.
   Each task row keeps the list compact; selecting one opens its ID, creator,
-  chain depth/cost, source and result messages, failure/cancel reason and retry
+  chain depth/cost, the source message, failure/cancel reason and retry
   origin as a pinned card at the top of the conversation column, with the row
   highlighted and a collapse action. The card's **run activity** replays the run
   from the role's own session with the coding transcript's own row components —
   collapsible tool cards with input/output bodies, markdown text and reasoning —
-  refreshed while the task runs; a reset or compacted role
+  refreshed while the task runs; the final reply appears there as the run's last
+  turn rather than a second result block, and a reset or compacted role
   session reports the record as unavailable instead of failing. Every task
   transition — including `done`, `failed` and `cancelled` — now reaches the room
   as a `swarm_task` frame, so cancel no longer leaves the row on running.

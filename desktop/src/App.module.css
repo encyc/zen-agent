@@ -40,6 +40,33 @@
   color: var(--dsw-alias-label-primary);
 }
 
+/* The collapsed-sidebar way back on surfaces without a conversation topbar
+   (swarm room, zen). Sits in the seat the coding topbar's lead occupies. */
+.sidebarExpand {
+  position: fixed;
+  top: 9px;
+  left: 12px;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--ds-radius-12);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+html[data-platform='darwin'] .sidebarExpand {
+  left: 88px;
+}
+
+.sidebarExpand:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
 /* Project switch: a hairline progress bar over the topbar plus a small label.
    The shell stays mounted, so this is the whole "loading" vocabulary. */
 .switchingBar {

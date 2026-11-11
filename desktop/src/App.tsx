@@ -26,7 +26,7 @@ import { ConversationTopbar } from './ui/ConversationTopbar'
 import { NoticeBanner } from './ui/NoticeBanner'
 import { useUpdateStore } from './state/updateStore'
 import { SIDEBAR_DEFAULT, RIGHTBAR_DEFAULT, clampChatWidth } from './ui/columns'
-import { PanelRightIcon } from './ui/icons'
+import { PanelLeftIcon, PanelRightIcon } from './ui/icons'
 import css from './App.module.css'
 
 const SIDEBAR_KEY = 'zen.sidebar.width'
@@ -300,9 +300,15 @@ export function App() {
           </button>
         </>
       ) : workspaceMode === 'swarm' ? (
-        <RoomPage />
+        <>
+          {collapsed && <ExpandSidebar onExpand={() => setCollapsed(false)} />}
+          <RoomPage />
+        </>
       ) : (
-        <ZenPlaceholder />
+        <>
+          {collapsed && <ExpandSidebar onExpand={() => setCollapsed(false)} />}
+          <ZenPlaceholder />
+        </>
       )}
       {switching !== null && (
         <div
@@ -326,6 +332,23 @@ export function App() {
         <CommandPalette />
       </Suspense>
     </>
+  )
+}
+
+/** Coding mode's topbar owns its expand seat; every other surface has no
+ * topbar, so the collapsed sidebar would otherwise leave no way back. */
+function ExpandSidebar({ onExpand }: { onExpand(): void }) {
+  const t = useT()
+  return (
+    <button
+      type="button"
+      className={css.sidebarExpand}
+      aria-label={t('topbar.expandSidebar')}
+      data-shell-expand
+      onClick={onExpand}
+    >
+      <PanelLeftIcon size={15} />
+    </button>
   )
 }
 

@@ -167,7 +167,6 @@ test('open a task detail in the conversation column', async ({ page }) => {
   await expect(detail).toContainText('任务 ID')
   await expect(detail).toContainText('t_1')
   await expect(detail).toContainText('查 X')
-  await expect(detail).toContainText('结论是 Z')
   // The run's steps (tool calls, interim text) come from the role session.
   await expect(detail.locator('[data-swarm-task-steps]')).toBeVisible()
   await expect(detail.locator('[data-swarm-task-steps]')).toContainText('read_skill')
@@ -178,4 +177,18 @@ test('open a task detail in the conversation column', async ({ page }) => {
   await detail.locator('[data-swarm-task-detail-close]').click()
   await expect(detail).toHaveCount(0)
   await expect(task).not.toHaveAttribute('data-selected', 'true')
+})
+
+test('a collapsed sidebar can be restored from the room', async ({ page }) => {
+  await boot(page, initialState(swarmFixture()))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  await page.getByRole('button', { name: 'toggle sidebar' }).click()
+  await expect(page.locator('[data-sidebar-collapsed]')).toHaveCount(1)
+
+  const expand = page.locator('[data-shell-expand]')
+  await expect(expand).toBeVisible()
+  await expand.click()
+  await expect(page.locator('[data-sidebar-collapsed]')).toHaveCount(0)
+  await expect(page.locator('[data-shell-sidebar]')).toBeVisible()
 })

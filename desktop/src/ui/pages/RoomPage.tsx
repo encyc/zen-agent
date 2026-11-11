@@ -493,7 +493,6 @@ function TaskDetailPanel({
 }) {
   const t = useT()
   const source = messages.find((message) => message.id === task.sourceMessageId)
-  const result = messages.find((message) => message.id === task.resultMessageId)
   const fetchTranscript = useSwarmStore((state) => state.transcript)
   const [steps, setSteps] = useState<(MessageView | ToolCallView)[]>([])
   const [recorded, setRecorded] = useState<boolean | null>(null)
@@ -591,12 +590,6 @@ function TaskDetailPanel({
           </div>
         )}
       </section>
-      {result !== undefined && (
-        <figure className={css.taskQuote}>
-          <figcaption className={css.taskQuoteLabel}>{t('swarm.taskDetailResult')}</figcaption>
-          <blockquote className={css.taskQuoteText}>{result.text}</blockquote>
-        </figure>
-      )}
     </section>
   )
 }
