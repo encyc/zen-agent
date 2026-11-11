@@ -75,6 +75,7 @@ function readClosedSections(): string[] {
 export function Sidebar(props: { onCollapse(): void }) {
   const t = useT()
   const zenEnabled = useZenStore((state) => state.enabled)
+  const workspaceMode = useSettingsStore((state) => state.workspaceMode)
   const sessions = useSessionStore((state) => state.sessions)
   const currentPath = useSessionStore((state) => state.currentPath)
   const collapsedProjects = useSessionStore((state) => state.collapsedProjects)
@@ -394,7 +395,7 @@ export function Sidebar(props: { onCollapse(): void }) {
                 spellCheck={false}
               />
             </div>
-            {zenEnabled ? (
+            {zenEnabled || workspaceMode === 'zen' ? (
               <ZenRoster />
             ) : (
               <div className={css.standaloneList}>

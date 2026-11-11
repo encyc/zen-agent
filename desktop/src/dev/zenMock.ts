@@ -9,6 +9,8 @@ export interface ZenMockState {
   zenEnabled?: boolean
   /** Overrides the built-in router+worker roster served while enabled. */
   zenRoster?: RosterItem[]
+  /** When true, enable refuses with the host's zen_busy refusal (busy slot). */
+  zenBusy?: boolean
 }
 
 const ROUTER: RosterItem = {
@@ -46,6 +48,9 @@ export function handleZenFleet(
   })
 
   if (op === 'enable') {
+    if (state.zenBusy === true) {
+      return { type: 'error', id: payload.id, code: 'zen_busy', message: 'zen needs an idle session' }
+    }
     state.zenEnabled = true
     return ok({ enabled: true, router: ROUTER.path, session: ROUTER.path, roster: roster(state) })
   }
