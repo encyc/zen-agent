@@ -87,8 +87,16 @@ export function applyRunEvent(rows: RunView[], event: AgentEventFrame): RunView[
     }
     case 'message_update': {
       const kind = event.assistant_event?.type
-      if (kind !== 'text_start' && kind !== 'text_delta') return rows
       const delta = event.assistant_event?.delta ?? ''
+      if (kind === 'thinking_start' || kind === 'thinking_delta') {
+        const index = streamingIndex(rows)
+        if (index < 0 || delta === '') return rows
+        const row = rows[index] as MessageView
+        return patch(rows, index, {
+          thinking: (row.thinking ?? '') + delta,
+        } as Partial<MessageView>)
+      }
+      if (kind !== 'text_start' && kind !== 'text_delta') return rows
       const index = streamingIndex(rows)
       if (index < 0) {
         // A run observed from the middle: open the row on the first delta.
@@ -111,10 +119,12 @@ export function applyRunEvent(rows: RunView[], event: AgentEventFrame): RunView[
     case 'message_end': {
       const index = streamingIndex(rows)
       if (index < 0) return rows
-      const text = event.message?.text ?? (rows[index] as MessageView).text
+      const row = rows[index] as MessageView
+      const text = event.message?.text ?? row.text
       // A turn that only carried tool calls ends empty: the tool cards are
-      // its visible content (views.py drops the row the same way).
-      if (text === '') {
+      // its visible content (views.py drops the row the same way). Thinking
+      // still counts as content, exactly as coding's chatStore keeps it.
+      if (text === '' && (row.thinking ?? '').trim() === '') {
         const next = rows.slice()
         next.splice(index, 1)
         return next
@@ -122,6 +132,13 @@ export function applyRunEvent(rows: RunView[], event: AgentEventFrame): RunView[
       return patch(rows, index, { text, streaming: false } as Partial<StreamingAssistant>)
     }
     case 'tool_execution_start': {
+      let args: Record<string, unknown> = {}
+      try {
+        args = event.args ? (JSON.parse(event.args) as Record<string, unknown>) : {}
+      } catch {
+        args = {}
+      }
+      const raw = event.args ?? ''
       return [
         ...rows,
         {
@@ -129,8 +146,8 @@ export function applyRunEvent(rows: RunView[], event: AgentEventFrame): RunView[
           id: nextId(),
           call_id: event.tool_call_id ?? nextId(),
           name: event.tool_name ?? '',
-          args_preview: event.args ?? '',
-          args: {},
+          args_preview: raw.length <= 140 ? raw : raw.slice(0, 137) + '...',
+          args,
           details: {},
           status: 'running',
           progress: '',
@@ -148,12 +165,22 @@ export function applyRunEvent(rows: RunView[], event: AgentEventFrame): RunView[
     case 'tool_execution_end': {
       const index = toolIndex(rows, event.tool_call_id)
       if (index < 0) return rows
+      let details: Record<string, unknown> = {}
+      if (event.details) {
+        try {
+          details = JSON.parse(event.details) as Record<string, unknown>
+        } catch {
+          details = {}
+        }
+      }
       const failed = event.is_error === true
       return patch(rows, index, {
         status: failed ? 'error' : 'ok',
         result_text: event.result_text ?? '',
         is_error: failed,
         duration_ms: event.duration_ms ?? null,
+        details,
+        diff: typeof details.diff === 'string' && details.diff ? details.diff : null,
       })
     }
     default:

@@ -2,18 +2,17 @@
  * `swarm post`, and the roster/task side panel. Swarm frames are global, so
  * this page owns the whole main surface and reads only the swarm store. */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type {
-  MessageView,
   SwarmAgentState,
   SwarmMessage,
   SwarmRole,
   SwarmTask,
-  ToolCallView,
 } from '../../rpc/types'
 import { useT } from '../../i18n/locale'
 import { detectMention } from '../../state/mentions'
 import { nodesFromViews, type ChatNode } from '../../state/chatStore'
+import type { RunView } from '../../state/swarmRun'
 import { useSwarmStore } from '../../state/swarmStore'
 import { ApprovalPanel } from '../approval/ApprovalPanel'
 import { AssistantNodeView } from '../chat/AssistantNodeView'
@@ -23,6 +22,11 @@ import { AgentModal } from './agentEditor'
 import css from './RoomPage.module.css'
 
 type TaskNumbers = ReadonlyMap<string, number>
+
+/** Follow the tail while the reader is within this many px of the bottom
+ * (the same stickiness the subagent transcript uses). */
+const STICK_PX = 80
+const NO_ROWS: RunView[] = []
 
 export function RoomPage() {
   const t = useT()
@@ -90,14 +94,12 @@ export function RoomPage() {
           </section>
         )}
         {detail !== null ? (
-          <div className={css.detail} data-swarm-task-detail-scroll>
-            <TaskDetailPanel
-              task={detail}
-              messages={messages}
-              numbers={numbers}
-              onClose={() => setSelectedTask(null)}
-            />
-          </div>
+          <TaskDetailPanel
+            task={detail}
+            messages={messages}
+            numbers={numbers}
+            onClose={() => setSelectedTask(null)}
+          />
         ) : (
           <div
             ref={feed}
@@ -497,31 +499,53 @@ function TaskDetailPanel({
   const t = useT()
   const source = messages.find((message) => message.id === task.sourceMessageId)
   const fetchTranscript = useSwarmStore((state) => state.transcript)
-  const [steps, setSteps] = useState<(MessageView | ToolCallView)[]>([])
-  const [recorded, setRecorded] = useState<boolean | null>(null)
+  const clearRun = useSwarmStore((state) => state.clearRun)
   const active = task.state === 'running' || task.state === 'queued'
-  const runNodes = useMemo(() => nodesFromViews(steps), [steps])
+  const liveRows = useSwarmStore((state) => state.runRows[task.id])
+  const [steps, setSteps] = useState<RunView[]>([])
+  const [recorded, setRecorded] = useState<boolean | null>(null)
+  // Live rows stream in as swarm_event frames; a settled task renders the
+  // authoritative file transcript instead.
+  const rows = active ? (liveRows ?? NO_ROWS) : steps
+  const runNodes = useMemo(() => nodesFromViews(rows), [rows])
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const stick = useRef(true)
 
-  // A running role appends to its own session, so the panel polls the slice
-  // while the task is live and fetches once when it settles.
+  // The role's session file only lands when its run ends, so while the task
+  // is live the store's event rows are the whole view. Once it settles, fetch
+  // the file transcript once (it reconciles anything missed mid-stream) and
+  // release the live tail.
   useEffect(() => {
-    let alive = true
     setSteps([])
     setRecorded(null)
+    stick.current = true
+    if (active) return
+    let alive = true
     const refresh = async (): Promise<void> => {
       const answer = await fetchTranscript(task.id).catch(() => null)
       if (!alive || answer === null) return
       setSteps(answer.transcript)
       setRecorded(answer.available)
+      clearRun(task.id)
     }
     void refresh()
-    if (!active) return () => { alive = false }
-    const timer = window.setInterval(() => void refresh(), 1500)
     return () => {
       alive = false
-      window.clearInterval(timer)
     }
-  }, [task.id, active, fetchTranscript])
+  }, [task.id, active, fetchTranscript, clearRun])
+
+  useLayoutEffect(() => {
+    const element = scrollRef.current
+    if (element === null || !stick.current) return
+    element.scrollTop = element.scrollHeight
+  }, [runNodes])
+
+  const onScroll = () => {
+    const element = scrollRef.current
+    if (element === null) return
+    stick.current =
+      element.scrollHeight - element.scrollTop - element.clientHeight < STICK_PX
+  }
 
   const author =
     task.createdBy.kind === 'user'
@@ -536,7 +560,13 @@ function TaskDetailPanel({
         ? `#${numbers.get(task.derivedFrom)}`
         : task.derivedFrom
   return (
-    <section className={css.taskPanel} data-swarm-task-detail data-task-id={task.id}>
+    <div
+      className={css.detail}
+      data-swarm-task-detail-scroll
+      ref={scrollRef}
+      onScroll={onScroll}
+    >
+      <section className={css.taskPanel} data-swarm-task-detail data-task-id={task.id}>
       <header className={css.taskPanelHead}>
         <span className={css.taskPanelTitle}>
           {t('swarm.taskLabel', { n: numbers.get(task.id) ?? 0 })}
@@ -593,7 +623,8 @@ function TaskDetailPanel({
           </div>
         )}
       </section>
-    </section>
+      </section>
+    </div>
   )
 }
 

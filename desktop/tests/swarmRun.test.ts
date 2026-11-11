@@ -124,3 +124,72 @@ test('a tool update for an unknown call is dropped, not invented', () => {
   })
   assert.deepEqual(rows, [])
 })
+
+const thinkingDelta = (delta: string): AgentEventFrame => ({
+  type: 'message_update',
+  assistant_event: { type: 'thinking_delta', delta } as AgentEventFrame['assistant_event'],
+})
+
+test('thinking deltas accumulate on the streaming assistant row', () => {
+  let rows: RunView[] = []
+  rows = applyRunEvent(rows, { type: 'message_start', message: { role: 'assistant', text: '' } })
+  rows = applyRunEvent(rows, thinkingDelta('weighing '))
+  rows = applyRunEvent(rows, thinkingDelta('options'))
+  rows = applyRunEvent(rows, textDelta('answer'))
+  assert.equal(rows.length, 1)
+  assert.equal((rows[0] as MessageView).thinking, 'weighing options')
+  assert.equal((rows[0] as MessageView).text, 'answer')
+})
+
+test('a thinking-only turn keeps its row at message_end', () => {
+  let rows: RunView[] = []
+  rows = applyRunEvent(rows, { type: 'message_start', message: { role: 'assistant', text: '' } })
+  rows = applyRunEvent(rows, thinkingDelta('silent reasoning'))
+  rows = applyRunEvent(rows, { type: 'message_end', message: { role: 'assistant', text: '' } })
+  assert.equal(rows.length, 1, 'thinking content must survive an empty-text end')
+  assert.equal((rows[0] as MessageView).thinking, 'silent reasoning')
+})
+
+test('an orphan thinking delta is dropped, not invented', () => {
+  const rows: RunView[] = []
+  assert.equal(applyRunEvent(rows, thinkingDelta('stray')), rows)
+})
+
+test('tool start parses args and bounds the preview like coding', () => {
+  const long = `{"command":"${'x'.repeat(150)}"}`
+  const rows = applyRunEvent([], {
+    type: 'tool_execution_start',
+    tool_call_id: 'c1',
+    tool_name: 'bash',
+    args: long,
+  })
+  const tool = rows[0] as ToolCallView
+  assert.deepEqual(tool.args, { command: 'x'.repeat(150) })
+  assert.equal(tool.args_preview, long.slice(0, 137) + '...')
+  assert.equal(tool.args_preview.length, 140)
+})
+
+test('malformed tool args fall back to an empty object', () => {
+  const rows = applyRunEvent([], {
+    type: 'tool_execution_start',
+    tool_call_id: 'c1',
+    tool_name: 'bash',
+    args: '{not json',
+  })
+  assert.deepEqual((rows[0] as ToolCallView).args, {})
+})
+
+test('tool end parses details and lifts the diff for the card', () => {
+  let rows: RunView[] = []
+  rows = applyRunEvent(rows, { type: 'tool_execution_start', tool_call_id: 'c1', tool_name: 'edit' })
+  rows = applyRunEvent(rows, {
+    type: 'tool_execution_end',
+    tool_call_id: 'c1',
+    result_text: 'applied',
+    is_error: false,
+    details: '{"diff":"--- a/x\\n+++ b/x","path":"x.ts"}',
+  })
+  const tool = rows[0] as ToolCallView
+  assert.deepEqual(tool.details, { diff: '--- a/x\n+++ b/x', path: 'x.ts' })
+  assert.equal(tool.diff, '--- a/x\n+++ b/x')
+})
