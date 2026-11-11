@@ -215,7 +215,6 @@ async def test_run_timeout_marks_failed_and_reclaims(tmp_path, runtime_factory):
     # The outer budget keeps RED observable (a missing watchdog hangs forever).
     record = await asyncio.wait_for(runner.run(task, _message(store)), timeout=5)
 
-    assert runner.abort_outcome == ("failed", "timeout")
     assert record.state == "failed"
     assert record.reason == "timeout"
     assert store.tasks[task.id].state == "failed"
@@ -224,6 +223,31 @@ async def test_run_timeout_marks_failed_and_reclaims(tmp_path, runtime_factory):
         message.author_kind == "system" and "timeout" in message.text
         for message in store.messages
     )
+
+
+async def test_pre_run_cancel_is_not_swallowed(tmp_path, runtime_factory):
+    runtime = await runtime_factory(stream_fn=text_stream("正常完成"))
+    store, _router, current, post, admit = _bind(tmp_path)
+    runner = _runner(runtime, store, post, admit)
+    task = _task(store)
+    current["task"] = task
+
+    # A cancel issued before run() starts: the manager sets abort_outcome while
+    # the agent is idle, where agent.abort() is a no-op and _drive would mint a
+    # fresh AbortToken. The run must honor the cancel, not prompt to done.
+    runner.abort_outcome = ("cancelled", "aborted")
+    record = await runner.run(task, _message(store))
+
+    assert record.state == "cancelled"
+    assert record.reason == "aborted"
+    assert store.tasks[task.id].state == "cancelled"
+    assert not any(message.author_kind == "agent" for message in store.messages)
+
+    # A fresh run on the same runner is not short-circuited by the stale outcome.
+    task2 = _task(store)
+    current["task"] = task2
+    record2 = await runner.run(task2, _message(store))
+    assert record2.state == "done"
 
 
 async def test_chain_cost_accumulates(tmp_path, runtime_factory):

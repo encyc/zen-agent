@@ -84,6 +84,25 @@ def _states(manager: SwarmManager) -> dict[str, str]:
     return {task["id"]: task["state"] for task in manager.tasks()}
 
 
+async def test_close_fails_pending_approvals():
+    _write_role("research", "You research.")
+    manager = SwarmManager(stream_fn_factory=lambda role: text_stream("ok"))
+    await manager.start()
+    try:
+        confirm = manager._confirm_callback("research")
+        # A tool awaiting confirm, modeled as a run blocked on the approval
+        # future exactly as _confirm_callback registers it.
+        run = asyncio.create_task(confirm("write_file", {"path": "x"}))
+        manager._running["research"] = run
+        await _wait_for(lambda: len(manager._approvals) == 1)
+        # close() must fail the pending approval promptly; otherwise the gather
+        # of running tasks stalls for APPROVAL_TIMEOUT_S (120 s).
+        await asyncio.wait_for(manager.close(), timeout=5)
+        assert await asyncio.wait_for(run, timeout=5) == "deny"
+    finally:
+        await manager.close()
+
+
 async def test_two_role_chain():
     _write_role("research", "You research.")
     _write_role("coder", "You code.")

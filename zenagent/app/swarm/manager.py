@@ -139,6 +139,12 @@ class SwarmManager(SwarmFrames):
                 await self._loop_task
             self._loop_task = None
 
+        # Fail every pending approval before gathering runs: a tool awaiting
+        # confirm would otherwise block the gather for APPROVAL_TIMEOUT_S.
+        for future in self._approvals.values():
+            if not future.done():
+                future.set_result("deny")
+
         for role_id, run in list(self._running.items()):
             runner = self.runners.get(role_id)
             if runner is not None:

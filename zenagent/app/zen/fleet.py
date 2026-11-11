@@ -226,6 +226,12 @@ class ZenFleet:
                 runtime = prepared.runtime
                 handle.agent = runtime.agent
                 handle.runtime = runtime
+                # The build can take tens of seconds (MCP handshake); close()
+                # may have landed meanwhile. Tear down instead of starting a run
+                # the user already exited — the finally closes handle.runtime.
+                if self._closing:
+                    handle.status = "blocked"
+                    return
                 if handle.stopped:
                     handle.agent.abort()
                     handle.status = "blocked"
@@ -329,7 +335,14 @@ class ZenFleet:
                     with contextlib.suppress(Exception):
                         self.chat.steer(joined)
         finally:
-            if self._report_buffer and not self._closing:
+            # A flush cancelled during teardown must not spawn an orphan task on
+            # a closing loop. cancelling() (not cancelled()) reports the pending
+            # cancel while this finally runs.
+            if (
+                self._report_buffer
+                and not self._closing
+                and not asyncio.current_task().cancelling()
+            ):
                 self._wake_task = asyncio.get_running_loop().create_task(
                     self._flush_reports()
                 )

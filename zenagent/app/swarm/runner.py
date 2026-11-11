@@ -53,6 +53,11 @@ class TaskRunner:
         self.run_timeout_s = max(0.0, float(run_timeout_s))
 
     async def run(self, task: TaskRecord, message: RoomMessage) -> TaskRecord:
+        # A cancel issued before this run started: the manager sets abort_outcome
+        # while the agent is idle, where abort() is a no-op and _drive would mint
+        # a fresh AbortToken. Capture it so the run honors it instead of running
+        # to done; clear it in finally so a later run (e.g. retry) starts clean.
+        pre_cancel = self.abort_outcome
         self.abort_outcome = None
         running = replace(task, state="running", updated_at=int(time.time()))
         self.record_task(running)
@@ -63,53 +68,60 @@ class TaskRunner:
             await self.agent.prompt(injected_prompt(message, running))
             await self.agent.wait_for_idle()
 
-        timed_out = False
-        if self.run_timeout_s > 0:
-            try:
-                await asyncio.wait_for(drive(), self.run_timeout_s)
-            except TimeoutError:
-                timed_out = True
-                self.abort_outcome = ("failed", "timeout")
-                self.agent.abort()
-                await self.agent.wait_for_idle()
-        else:
-            await drive()
-
-        termination = self.agent.termination or "stop"
-        new_messages = self.agent.messages[before:]
-        updated = replace(
-            running,
-            chain_cost=round(running.chain_cost + _run_cost(new_messages), 6),
-            updated_at=int(time.time()),
-        )
-        if timed_out:
-            self.post_message(f"Task {task.id} failed: timeout", "system")
-            updated = replace(updated, state="failed", reason="timeout")
-            self.record_task(updated)
-        elif termination in SUCCESS_TERMINATIONS:
-            text = _final_text(new_messages) or "(no output)"
-            posted = self.post_message(text, "agent")
-            updated = replace(updated, state="done", result_message_id=posted.id)
-            # Record this run's cost before admitting its mentions: the router
-            # gates on the chain aggregate, which the terminal append updates.
-            self.record_task(updated)
-            self.admit_message(posted)
-        elif termination == "aborted":
-            state, reason = self.abort_outcome or ("cancelled", "aborted")
-            if state == "cancelled":
-                self.post_message(f"Task {task.id} cancelled", "system")
+        try:
+            timed_out = False
+            if pre_cancel is not None:
+                self.abort_outcome = pre_cancel
+                termination = "aborted"
             else:
-                self.post_message(f"Task {task.id} failed: {reason}", "system")
-            updated = replace(updated, state=state, reason=reason)
-            self.record_task(updated)
-        else:
-            self.post_message(f"Task {task.id} failed: {termination}", "system")
-            updated = replace(updated, state="failed", reason=termination)
-            self.record_task(updated)
-        await maybe_auto_compact(
-            self.agent, self.session, print_fn=lambda _message: None
-        )
-        return updated
+                if self.run_timeout_s > 0:
+                    try:
+                        await asyncio.wait_for(drive(), self.run_timeout_s)
+                    except TimeoutError:
+                        timed_out = True
+                        self.abort_outcome = ("failed", "timeout")
+                        self.agent.abort()
+                        await self.agent.wait_for_idle()
+                else:
+                    await drive()
+                termination = self.agent.termination or "stop"
+
+            new_messages = self.agent.messages[before:]
+            updated = replace(
+                running,
+                chain_cost=round(running.chain_cost + _run_cost(new_messages), 6),
+                updated_at=int(time.time()),
+            )
+            if timed_out:
+                self.post_message(f"Task {task.id} failed: timeout", "system")
+                updated = replace(updated, state="failed", reason="timeout")
+                self.record_task(updated)
+            elif termination in SUCCESS_TERMINATIONS:
+                text = _final_text(new_messages) or "(no output)"
+                posted = self.post_message(text, "agent")
+                updated = replace(updated, state="done", result_message_id=posted.id)
+                # Record this run's cost before admitting its mentions: the router
+                # gates on the chain aggregate, which the terminal append updates.
+                self.record_task(updated)
+                self.admit_message(posted)
+            elif termination == "aborted":
+                state, reason = self.abort_outcome or ("cancelled", "aborted")
+                if state == "cancelled":
+                    self.post_message(f"Task {task.id} cancelled", "system")
+                else:
+                    self.post_message(f"Task {task.id} failed: {reason}", "system")
+                updated = replace(updated, state=state, reason=reason)
+                self.record_task(updated)
+            else:
+                self.post_message(f"Task {task.id} failed: {termination}", "system")
+                updated = replace(updated, state="failed", reason=termination)
+                self.record_task(updated)
+            await maybe_auto_compact(
+                self.agent, self.session, print_fn=lambda _message: None
+            )
+            return updated
+        finally:
+            self.abort_outcome = None
 
 
 def _run_cost(messages: list) -> float:

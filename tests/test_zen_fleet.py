@@ -91,6 +91,7 @@ class FakeWorkerFactory:
         self.modes: dict[str, str | None] = {}
         self.prompts: list[tuple[Path, str]] = []
         self.gates: dict[Path, object] = {}
+        self.build_gates: dict[Path, object] = {}
         self.errors: dict[Path, str] = {}
         self.calls: list[dict] = []
 
@@ -98,6 +99,9 @@ class FakeWorkerFactory:
         """Match the real ``prepare``: a PreparedFrontend envelope, not a bare Runtime."""
         self.calls.append({"root": str(options.root), "resume": options.resume})
         path = Path(options.resume)
+        build_gate = self.build_gates.pop(path, None)
+        if build_gate is not None:
+            await build_gate
         rt = FakeWorkerRuntime(self, path)
         broker = FakePreparedBroker()
         self.runtimes[str(path)] = rt
@@ -282,6 +286,45 @@ async def test_worker_timeout_marks_failed_and_reclaims(env) -> None:
     # The freed slot let the queued worker run to completion.
     assert fleet.status_of(str(env["paths"]["w3"])) == "waiting"
     assert fleet.has_active() is False
+
+
+async def test_fleet_worker_built_after_close_is_torn_down(env) -> None:
+    fleet: ZenFleet = env["fleet"]
+    loop = asyncio.get_running_loop()
+    gate = loop.create_future()
+    env["factory"].build_gates[env["paths"]["w1"]] = gate
+    await fleet.dispatch(str(env["paths"]["w1"]), "a")
+    # Wait until _run is suspended inside _build_worker (prepare entered).
+    for _ in range(50):
+        if any(c["resume"] == str(env["paths"]["w1"]) for c in env["factory"].calls):
+            break
+        await asyncio.sleep(0)
+    # close() lands while the (slow) build is in flight.
+    fleet._closing = True
+    gate.set_result(None)
+    await fleet.wait_all()
+    rt = env["factory"].runtimes[str(env["paths"]["w1"])]
+    assert rt.closed
+    assert env["factory"].prompts == []
+    assert fleet.status_of(str(env["paths"]["w1"])) == "blocked"
+
+
+async def test_cancelled_flush_does_not_reschedule(env) -> None:
+    fleet: ZenFleet = env["fleet"]
+    fleet.batch_window_s = 0.2
+    fleet._report_buffer.append("[zen:worker w1] report")
+    original = asyncio.get_running_loop().create_task(fleet._flush_reports())
+    fleet._wake_task = original
+    # Let the flush enter its batch-window sleep with the buffer still full.
+    await asyncio.sleep(0.01)
+    assert fleet._report_buffer
+    original.cancel()
+    try:
+        await original
+    except asyncio.CancelledError:
+        pass
+    # A flush cancelled during teardown must not spawn an orphan successor.
+    assert fleet._wake_task is original
 
 
 async def test_focus_updates_roster(env) -> None:
