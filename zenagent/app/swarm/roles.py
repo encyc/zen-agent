@@ -104,6 +104,10 @@ def _latest_session(directory: Path) -> Path | None:
     return max(files)[1]
 
 
+def _within(role_dir: Path, candidate: Path) -> bool:
+    return candidate.resolve().is_relative_to(role_dir.resolve())
+
+
 def parse_role(role_dir: Path) -> tuple[RoleManifest | None, list[str]]:
     role_dir = Path(role_dir)
     warnings: list[str] = []
@@ -119,16 +123,24 @@ def parse_role(role_dir: Path) -> tuple[RoleManifest | None, list[str]]:
         return None, [f"role {role_dir.name}: invalid id {role_id!r}"]
 
     prompt_file = raw.get("systemPromptFile") or DEFAULT_PROMPT_FILE
-    try:
-        system_prompt = (role_dir / str(prompt_file)).read_text(encoding="utf-8")
-    except OSError as exc:
+    prompt_path = role_dir / str(prompt_file)
+    if not _within(role_dir, prompt_path):
         system_prompt = ""
-        warnings.append(f"role {role_id}: cannot read prompt {prompt_file}: {exc}")
+        warnings.append(f"role {role_id}: prompt {prompt_file!r} escapes the role directory")
+    else:
+        try:
+            system_prompt = prompt_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            system_prompt = ""
+            warnings.append(f"role {role_id}: cannot read prompt {prompt_file}: {exc}")
 
     skill_entries = _str_list(raw.get("skills"))
     skill_roots: list[Path] = []
     for entry in skill_entries:
         path = role_dir / entry
+        if not _within(role_dir, path):
+            warnings.append(f"role {role_id}: skills {entry!r} escapes the role directory")
+            continue
         if path.is_dir():
             skill_roots.append(path)
         else:

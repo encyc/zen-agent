@@ -248,3 +248,25 @@ def test_role_config_beats_plugin_contribution(home, tmp_path):
 
     assert role is not None
     assert role.mcp_servers["zen.feishu.lark"] == {"command": ["role-lark"]}
+
+
+def test_prompt_file_traversal_is_refused(home):
+    role_dir = _write_role("r", {"id": "r", "systemPromptFile": "../secret.txt"})
+    (role_dir.parent / "secret.txt").write_text("leak", encoding="utf-8")
+
+    manifest, warnings = parse_role(role_dir)
+
+    assert manifest is not None
+    assert manifest.system_prompt == ""
+    assert any("prompt" in w for w in warnings)
+
+
+def test_skills_traversal_is_refused(home):
+    role_dir = _write_role("r", {"id": "r", "skills": ["../evil"]})
+    (role_dir.parent / "evil").mkdir()
+
+    manifest, warnings = parse_role(role_dir)
+
+    assert manifest is not None
+    assert manifest.skill_roots == []
+    assert any("skills" in w for w in warnings)
