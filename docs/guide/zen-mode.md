@@ -7,8 +7,8 @@ Zen 模式是 zen-agent 的第二种交互形态：每个项目只保留**一个
 设计依据见
 [`docs/superpowers/specs/2026-11-10-zen-mode-design.md`](../superpowers/specs/2026-11-10-zen-mode-design.md)
 （参考 DeepSeek dsh super-agent 原型的双层架构）；与
-[多角色 Swarm](swarm.md) 是同框架下的两种多 agent 形态（Swarm 全局房间 +
-常驻角色，Zen 每项目一个 Router + 项目内 worker）。
+[多角色 Swarm](swarm.md) 是同框架下的两种多 agent 形态（Swarm 每项目一个
+房间 + 项目角色，Zen 每项目一个 Router + 项目内 worker）。
 
 ## 打开与关闭
 

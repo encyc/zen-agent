@@ -163,6 +163,29 @@ each result back into the router conversation.
 - The interactive HTML assets are not refreshed in this entry; the node/edge
   data above is authoritative in `docs/arch-gov/graph.html`.
 
+#### Changed — Swarm 房间按项目隔离
+
+**Per-project rooms.** 一个项目一个房间：房间日志、任务、角色 session 与项目角色
+配置都落在该项目下；`~/.zenagent/agents/` 保留为全局角色库，只作模板浏览与复制
+来源。旧的全局房间不再导入，原位归档。
+
+- **Locations**：房间与任务日志在
+  `~/.zenagent/projects/<项目>/swarm/{room,tasks}.jsonl`（`project_state_root`）；
+  角色 session 在 `.../swarm/agents/<id>/sessions/`，仍不进普通会话列表。项目角色
+  配置进 `<项目>/.zenagent/agents/<id>/`——可提交、随仓库走；全局库
+  `~/.zenagent/agents/` 只读，通过房间或 Settings 的「从角色库复制」拷入项目。
+- **Frame contract**：每个 swarm 帧（`swarm_message` / `swarm_task` /
+  `swarm_agent` / `swarm_notice` / `swarm_event`）都带 `swarm: true` 与 `project`
+  （房间根）；桌面只把帧应用到对应项目的房间。审批/提问 id 带
+  `<projectKey>:swarm:` 前缀，切到别的项目后仍能答到原房间。
+- **Lifecycle**：宿主按项目持有房间（首次请求时装配），空闲房间按 LRU 关闭，超出
+  常驻预算（`max_slots`）时回收；有 run 在飞的房间永不被回收。项目切换或进入
+  swarm 模式时桌面重放 `swarm list`，房间页、任务条和审批都不再串项目。
+- **Migration**：旧房间留在 `~/.zenagent/swarm/`，**不导入**（它的任务不属于任何
+  项目）。一个尚无消息的项目房间首次打开时，房间顶部提示
+  `legacy global room archived at ~/.zenagent/swarm/; new rooms are per project`；
+  已有消息的项目房间不再提示。
+
 ## v0.12.2 — 2026-11-10
 
 **Taiji removed.** The 太极 multi-worker orchestration layer is gone; zen is back

@@ -28,6 +28,7 @@ from zenagent.project import find_project_root, project_key
 
 if TYPE_CHECKING:
     from zenagent.app.runtime import RuntimeOptions
+    from zenagent.app.swarm.manager import SwarmManager
 
 #: Idle projects beyond this are evicted LRU (audit: cap, never unbounded).
 MAX_RESIDENT_SLOTS = 4
@@ -66,7 +67,7 @@ class RpcHost(SwarmOps):
         #: One swarm room per project key, created on that project's first
         #: swarm request: a session that never enters swarm mode never pays
         #: for resident role runtimes.
-        self._swarm: OrderedDict[str, "SwarmManager"] = OrderedDict()
+        self._swarm: OrderedDict[str, SwarmManager] = OrderedDict()
         self._terminal = TerminalSession(self._send)
         if initial is not None:
             self._slots[initial.key] = initial

@@ -31,6 +31,7 @@ from zenagent.app.swarm.protocol import (
 from zenagent.app.swarm.roles import (
     RoleManifest,
     discover_roles,
+    legacy_room_warnings,
     project_state_root,
     role_session_path,
 )
@@ -129,6 +130,7 @@ class SwarmManager(SwarmFrames):
         self._stopping = False
         self.store.load()
         self.warnings.extend(self.store.warnings)
+        self.warnings.extend(legacy_room_warnings(has_messages=bool(self.store.messages)))
         reconcile_message = self.store.reconcile()
         if reconcile_message:
             for message in reconcile_message:

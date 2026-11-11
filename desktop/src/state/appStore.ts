@@ -37,8 +37,8 @@ import {
   type WorkspaceMode,
 } from './stores'
 import { useChatStore } from './chatStore'
-import { applyFleetFrame, stopFleet, switchWorkspaceMode, syncZenState, zenTranscript } from './zenActions'
-import { applySwarmFrame, registerSwarmSender, syncSwarmState } from './swarmWiring'
+import { applyFleetFrame, stopFleet, switchWorkspaceMode, syncProjectState, zenTranscript } from './zenActions'
+import { applySwarmFrame, registerSwarmSender } from './swarmWiring'
 import { nextDraft } from './pending'
 import { latestSessionForProject } from './latestSession'
 import { loadPrefs, replayFrames, savePref, spawnArgs } from './prefs'
@@ -151,10 +151,6 @@ interface AppState {
   clearPending(): Promise<void>
   compactNow(): Promise<void>
   undoLast(): Promise<void>
-  /** Zen mode: sync fleet state with the persisted toggle (boot/switch). */
-  syncZenState(): Promise<void>
-  /** Swarm mode: drop the room a switch left and load the active project's. */
-  syncSwarmState(): Promise<void>
   switchWorkspaceMode(mode: WorkspaceMode): void
   stopFleet(): Promise<void>
   /** A worker's read-only transcript (zen_fleet op=transcript). */
@@ -237,10 +233,8 @@ async function bootChild(
   const fellBack =
     resumed !== undefined && useStatusStore.getState().status?.session !== resumed
   if ((!loaded || fellBack) && opts.fromSwitch) useChatStore.getState().reset()
-  // Zen replay: a persisted 'zen' toggle re-arms the fleet on every boot.
-  void get().syncZenState()
-  // The room is per project: a persisted swarm mode boots into this one's.
-  void get().syncSwarmState()
+  // Per-project state (fleet, swarm room) replays on every boot.
+  void syncProjectState(get)
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -607,10 +601,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       const loaded = await get().refreshTranscript()
       await Promise.all([restorePrefs(get), get().refreshSessions()])
       if (!loaded) useChatStore.getState().reset()
-      // The fleet belongs to the project we left; the roster store follows the switch.
-      void get().syncZenState()
-      // The room is per project too: drop the old one, load this one's.
-      void get().syncSwarmState()
+      // Both stores belong to the project we left; follow the switch.
+      void syncProjectState(get)
       paneCache.set(root, {
         session: effective,
         pane: useChatStore.getState().pane(),
@@ -968,13 +960,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     await runSessionOp(get, { type: 'session', op: 'undo' }, () =>
       refreshAfterSessionChange(get),
     )
-  },
-
-  async syncZenState() {
-    await syncZenState(get)
-  },
-  async syncSwarmState() {
-    await syncSwarmState()
   },
 
   switchWorkspaceMode(mode) {

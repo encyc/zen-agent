@@ -232,3 +232,78 @@ def test_swarm_frames_carry_swarm_flag():
         for m in sites:
             window = backend[m.start(): m.start() + 240]
             assert "swarm=True" in window or '"swarm": True' in window, f"{lit} missing swarm flag"
+
+
+async def test_every_swarm_frame_names_the_project_of_its_room(tmp_path, monkeypatch):
+    """A post drives every frame kind the desktop routes: each one must carry
+    ``project`` (the room it belongs to), not just the hand-made ones."""
+    from conftest import text_stream
+
+    from zenagent.app.runtime import RuntimeOptions
+    from zenagent.app.swarm.manager import SwarmManager as RealSwarmManager
+    from zenagent.cli.rpc.host import RpcHost
+    from zenagent.project import find_project_root
+
+    role_dir = tmp_path / ".zenagent" / "agents" / "research"
+    role_dir.mkdir(parents=True)
+    (role_dir / "manifest.json").write_text(
+        json.dumps({"id": "research", "name": "Research"}), encoding="utf-8"
+    )
+    (role_dir / "prompt.md").write_text("You research.", encoding="utf-8")
+
+    class ScriptedSwarmManager(RealSwarmManager):
+        def __init__(self, **kwargs):
+            kwargs["stream_fn_factory"] = lambda role: text_stream("@you done")
+            super().__init__(**kwargs)
+
+    monkeypatch.setattr(
+        "zenagent.cli.rpc.ops_swarm.SwarmManager", ScriptedSwarmManager
+    )
+
+    writes: list[dict] = []
+    host = RpcHost(
+        initial=None,
+        options=RuntimeOptions(root=tmp_path),
+        read_line=None,
+        write_line=lambda line: writes.append(json.loads(line)),
+    )
+    project = str(find_project_root(tmp_path))
+    try:
+        await host._handle_line(
+            json.dumps(
+                {
+                    "type": "swarm",
+                    "op": "post",
+                    "text": "@research hi",
+                    "id": "s1",
+                    "project": str(tmp_path),
+                }
+            )
+        )
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            if any(
+                frame.get("type") == "swarm_task" and frame.get("state") == "done"
+                for frame in writes
+            ):
+                break
+            await asyncio.sleep(0.01)
+
+        frames = [
+            frame
+            for frame in writes
+            if str(frame.get("type", "")).startswith("swarm_")
+        ]
+        assert {frame["type"] for frame in frames} == SERVER_FRAME_TYPES & {
+            "swarm_message",
+            "swarm_task",
+            "swarm_agent",
+            "swarm_notice",
+            "swarm_event",
+        }
+        assert all(frame.get("swarm") is True for frame in frames)
+        assert all(frame.get("project") == project for frame in frames), [
+            (frame.get("type"), frame.get("project")) for frame in frames
+        ]
+    finally:
+        await host.close()

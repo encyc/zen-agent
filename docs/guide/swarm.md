@@ -4,27 +4,35 @@ Swarm 是 zen-agent 的**团队房间模式**：若干预先配置的角色（ro
 manifest、session 和工作区，在同一个房间聊天室里接收任务、自主执行，并把结果发回房间。
 任务靠 `@` 派发，没有额外的调度器、没有自动回执——`@` 是唯一的路由原语。
 
+**房间按项目隔离**：每个项目有自己的房间、任务日志、角色 session 和角色配置；
+`~/.zenagent/agents/` 是全局角色库，只作模板浏览与复制来源，不直接进任何房间。
+
 桌面端 sidebar 顶部的 Coding / ZEN / Swarm 切换器进入这个模式：
 **Coding** 是普通单会话；**Swarm** 是本文；**ZEN** 是另一种多 agent 形态
-（[Zen 模式](zen-mode.md)：每项目一个 Router 统筹项目内 worker，而非全局房间）。
+（[Zen 模式](zen-mode.md)：每项目一个 Router 统筹项目内 worker）。
 
 ## 与 coding / zen 的区别
 
 | 模式 | 单位 | 协作方式 |
 |---|---|---|
 | Coding | 一个会话、一个 agent | 你和它直接对话 |
-| Swarm | 一个房间、多个角色 | 角色之间用 `@` 派活、回报；你也是房间里的一个成员 |
+| Swarm | 每项目一个房间、多个角色 | 角色之间用 `@` 派活、回报；你也是房间里的一个成员 |
 | ZEN | 每项目一个 Router 统筹项目内 worker | [Zen 模式](zen-mode.md)；与 swarm 共享三态切换器，fleet 与房间互不干扰 |
 
-Swarm 不接入 IM，也不常驻后台守护进程：房间和任务的真相都在本地 JSONL 日志里，
+Swarm 不接入 IM，也不常驻后台守护进程：房间和任务的真相都在项目内的 JSONL 日志里，
 运行发生在桌面宿主进程内。
 
 ## 角色（manifest）
 
-每个角色是一个目录：
+角色有两层：**全局角色库** `~/.zenagent/agents/<id>/`（跨项目的模板）和
+**项目角色** `<项目>/.zenagent/agents/<id>/`（只有该项目的房间能看见）。项目角色
+可以提交进仓库、随代码走。房间或 Settings 里的「从角色库复制」把库里的角色拷成
+一份项目角色；已在项目里的角色不会重复复制。手工编辑这些目录与 GUI 管理完全等价。
+
+每个角色是一个目录（两层结构相同）：
 
 ```
-~/.zenagent/agents/<id>/
+<项目>/.zenagent/agents/<id>/      # 或 ~/.zenagent/agents/<id>/（全局库）
 ├── manifest.json
 ├── prompt.md            # 人设正文（可选，也可在 manifest 里写 systemPrompt）
 └── skills/              # 可选：角色私有 skills
@@ -62,23 +70,24 @@ Swarm 不接入 IM，也不常驻后台守护进程：房间和任务的真相�
 | `mcpServers` | 空 | 与 `mcp.json` 的 server 形状相同；`${KEY}` 从 `settings.json` 替换，缺 key 只跳过该 server |
 | `plugins` | 空 | 引用已安装插件，继承其 MCP 与 skills；角色显式配置优先 |
 | `tools` | 标准工具集 + swarm 工具 | 显式列表即白名单裁剪，在 Runtime 装配时执行，不靠提示词 |
-| `root` | `~/.zenagent-workspaces/<id>/` | 角色工具的 cwd 边界；缺省目录自动创建，在 `~/.zenagent` 保护栅栏之外 |
-| `inheritProject` | `false` | `false` 是隔离 profile：不继承项目层配置、记忆、skills、AGENTS.md |
+| `root` | 项目角色缺省为项目根；全局库角色为 `~/.zenagent-workspaces/<id>/` | 角色工具的 cwd 边界；缺省目录自动创建，在 `~/.zenagent` 保护栅栏之外 |
+| `inheritProject` | 项目角色 `true`，全局库角色 `false` | `false` 是隔离 profile：不继承项目层配置、记忆、skills、AGENTS.md |
 | `limits` | 无 | `maxTurns` / `maxCost`，映射到既有 `AgentConfig` |
 | `mode` | `ask` | `plan` 只读；`ask` 变更操作弹审批；`zen` 无人值守自动通过（灾难性命令仍拒绝） |
 
-角色 session 落在 `~/.zenagent/swarm/agents/<id>/sessions/`，**不进**普通项目会话列表。
+角色 session 落在 `~/.zenagent/projects/<项目>/swarm/agents/<id>/sessions/`，
+**不进**普通项目会话列表。
 
-桌面端有两个入口配置角色：**Settings → Agents**（列表带 ready / needs-credentials 徽标、
-两段式删除）和 **Swarm 房间右侧的角色面板**——每个角色旁的「配置」与面板头的
-「新建角色」打开同一个完整表单：id、人设、模型/思考、skills、plugins、MCP 服务器、
-工具白名单、root、inheritProject、mode、轮数/成本上限。MCP 编辑框回显 manifest 里的
-`${KEY}` 占位符，解析后的凭据不会回传给界面；JSON 不合法时停留在表单并提示。
-手工编辑上面的文件与 GUI 管理完全等价。
+桌面端有两个角色入口，管理的是**当前项目**的角色：**Settings → Swarm**（列表带
+ready / needs-credentials 徽标、两段式删除、「从角色库复制」）和 **Swarm 房间右侧的
+角色面板**——每个角色旁的「配置」与面板头的「新建角色」打开同一个完整表单：id、人设、
+模型/思考、skills、plugins、MCP 服务器、工具白名单、root、inheritProject、mode、
+轮数/成本上限。MCP 编辑框回显 manifest 里的 `${KEY}` 占位符，解析后的凭据不会回传给
+界面；JSON 不合法时停留在表单并提示。手工编辑上面的文件与 GUI 管理完全等价。
 
 ## 房间协议
 
-房间是一串追加写入的消息：`~/.zenagent/swarm/room.jsonl`。
+房间是一串追加写入的消息：`~/.zenagent/projects/<项目>/swarm/room.jsonl`。
 
 - **派活**：任何一条消息（来自人或 agent）里出现 `@role`，就为该角色创建一条
   `queued` 任务，链深 = 来源消息深度 + 1。未知的 `@xxx` 原样保留为文本，不报错。
@@ -90,7 +99,7 @@ Swarm 不接入 IM，也不常驻后台守护进程：房间和任务的真相�
   就能拿到回报。每个 `@` 都是一条新任务并消耗预算，不要随手多 @。
 - **@you**：留在房间历史里，并作为桌面通知提醒你；它不创建任务。
 
-任务记录在 `~/.zenagent/swarm/tasks.jsonl`，状态每次转换追加一行，最后一条胜出：
+任务记录在 `~/.zenagent/projects/<项目>/swarm/tasks.jsonl`，状态每次转换追加一行，最后一条胜出：
 
 | 状态 | 含义 |
 |---|---|
@@ -144,6 +153,18 @@ Swarm 不接入 IM，也不常驻后台守护进程：房间和任务的真相�
 - **reset**：清空角色 session 并留一条房间系统消息，工作区文件不动。
 - **取消**：对目标任务触发对应 run 的 `AbortToken`，终态为 `cancelled`。
 
+## 项目隔离与旧房间
+
+- **一个项目一个房间**：进入 swarm 或切换项目时，桌面按当前项目重新拉取
+  `swarm list`；每个房间帧都带 `swarm: true` 与 `project`（房间根），只会应用到
+  对应项目的房间。审批/提问 id 带 `<projectKey>:swarm:` 前缀，切到别的项目后
+  仍能答到原房间。
+- **常驻与回收**：房间在第一次请求时装配并启动；空闲房间按 LRU 回收，超出常驻
+  预算（与并发槽位数一致）才关闭，有任务在跑（含等待审批）的房间永不被回收。
+- **旧房间归档**：旧的全局房间留在 `~/.zenagent/swarm/`，**不导入**——它的任务
+  不属于任何项目。一个尚无消息的项目房间首次打开时会提示旧房间已归档；
+  从全局角色库复制需要的角色即可重新开始。
+
 ## 安全与边界
 
 - 房间消息等同外部输入；每次工具调用照常走权限门禁，swarm 不放宽任何规则。
@@ -159,8 +180,9 @@ Swarm 不接入 IM，也不常驻后台守护进程：房间和任务的真相�
 
 | 关注点 | 模块 |
 |---|---|
-| manifest 解析 / 发现 / 凭据替换 | `zenagent/app/swarm/roles.py` |
+| manifest 解析 / 发现（项目角色 + 全局库）/ 凭据替换 | `zenagent/app/swarm/roles.py` |
 | 房间与任务日志、状态机、启动对账 | `zenagent/app/swarm/room.py` |
+| 项目房间的装配、帧打标、审批路由、空闲回收 | `zenagent/cli/rpc/ops_swarm.py` |
 | `@` 解析与三道闸门 | `zenagent/app/swarm/router.py` |
 | 房间协议文本、`swarm_post` 工具 | `zenagent/app/swarm/protocol.py` |
 | 任务执行与终态映射 | `zenagent/app/swarm/runner.py` |

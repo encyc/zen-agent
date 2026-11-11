@@ -130,6 +130,13 @@ export async function syncZenState(get: AppGetter): Promise<void> {
   )
 }
 
+/** Re-point the per-project stores after boot or a project switch: the fleet
+ * roster and the swarm room both belong to the project on screen. */
+export async function syncProjectState(get: AppGetter): Promise<void> {
+  await syncZenState(get)
+  await syncSwarmState()
+}
+
 export async function zenTranscript(
   get: AppGetter,
   path: string,
