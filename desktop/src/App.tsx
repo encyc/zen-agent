@@ -1,7 +1,7 @@
 /** App shell: theme presenter, connection gate (welcome → boot → frame →
  * exit banner). Keyboard: Cmd/Ctrl+B toggles the sidebar, like dsh. */
 
-import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { showShellWindow } from './state/windowShow.ts'
 import { defaultProjectCwd, lastProjectCwd, useAppStore } from './state/appStore'
 import {
@@ -86,7 +86,6 @@ export function App() {
   const [sidebarWidth, setSidebarWidth] = useState(() => loadWidth(SIDEBAR_KEY, SIDEBAR_DEFAULT))
   const rightbarOpen = useWorkPanelStore((state) => state.open)
   const [rightbarWidth, setRightbarWidth] = useState(() => loadWidth(RIGHTBAR_KEY, RIGHTBAR_DEFAULT))
-  const dockRef = useRef<HTMLDivElement | null>(null)
 
   // Theme presenter: write the snapshot to the DOM, outside React (dsh pattern).
   // The palette rides a separate attribute so both sides of every palette
@@ -172,25 +171,6 @@ export function App() {
     // runtime dies while the reveal is pending) re-runs this effect, finds
     // `windowShown` set and returns; cancelling here would leave the window
     // hidden forever. `reveal` is idempotent and the effect never unmounts.
-  }, [connection])
-
-  // The composer floats over the center column; publish its real height so
-  // the transcript reserves exactly that much and nothing is covered.
-  useEffect(() => {
-    if (connection !== 'ready') return
-    const dock = dockRef.current
-    const pane = dock?.closest<HTMLElement>('[data-shell-center]')
-    if (dock === null || dock === undefined || pane === null || pane === undefined) return
-    const publish = () => {
-      pane.style.setProperty(
-        '--composer-dock-height',
-        `${Math.round(dock.getBoundingClientRect().height)}px`,
-      )
-    }
-    publish()
-    const observer = new ResizeObserver(publish)
-    observer.observe(dock)
-    return () => observer.disconnect()
   }, [connection])
 
   const persistWidth = useCallback((key: string, value: number) => {
@@ -290,9 +270,7 @@ export function App() {
         <>
           <ConversationTopbar collapsed={collapsed} onExpandSidebar={() => setCollapsed(false)} />
           <ChatView />
-          <div ref={dockRef} className={css.composerDock} data-shell-composer>
-            <InputBar />
-          </div>
+          <ComposerDock />
           <button
             type="button"
             className={css.workPanelToggle}
@@ -332,6 +310,38 @@ export function App() {
       <CommandPalette />
       </Suspense>
     </>
+  )
+}
+
+/** The composer floats over the center column; the pane carries the dock's
+ * real height so the transcript reserves exactly that much and fades out
+ * behind it. The measurement belongs to this node's own lifecycle: a mode
+ * switch remounts it, and a dock that is being torn down reports a zero box —
+ * publishing either strands the transcript's bottom padding behind the
+ * composer. */
+function ComposerDock() {
+  const ref = useRef<HTMLDivElement | null>(null)
+  useLayoutEffect(() => {
+    const dock = ref.current
+    const pane = dock?.closest<HTMLElement>('[data-shell-center]')
+    if (dock === null || pane === null || pane === undefined) return
+    const publish = () => {
+      const height = Math.round(dock.getBoundingClientRect().height)
+      // Zero means "not laid out yet" (the window boots hidden), never a real
+      // dock; the observer repaints once the box lands.
+      if (height > 0) {
+        pane.style.setProperty('--composer-dock-height', `${height}px`)
+      }
+    }
+    publish()
+    const observer = new ResizeObserver(publish)
+    observer.observe(dock)
+    return () => observer.disconnect()
+  }, [])
+  return (
+    <div ref={ref} className={css.composerDock} data-shell-composer>
+      <InputBar />
+    </div>
   )
 }
 
