@@ -281,3 +281,16 @@ test('saving a role keeps the open task detail', async ({ page }) => {
   await expect(modal).toHaveCount(0)
   await expect(detail).toBeVisible()
 })
+
+test('the swarm tab badge counts live tasks without eager-loading the room', async ({ page }) => {
+  await boot(page, initialState(swarmFixture({ runningTask: true })))
+  // 未进 swarm：不预载，徽标不显示
+  const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
+  assert.ok(!calls.some((call) => call.type === 'swarm' && call.op === 'list'))
+  await expect(page.locator('[data-swarm-badge]')).toHaveCount(0)
+
+  await page.locator('[data-workspace-mode="swarm"]').click()
+  await expect(page.locator('[data-swarm-badge]')).toHaveText('1')
+  await page.locator('[data-workspace-mode="coding"]').click()
+  await expect(page.locator('[data-swarm-badge]')).toHaveText('1')
+})

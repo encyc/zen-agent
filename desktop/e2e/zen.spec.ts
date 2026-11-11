@@ -82,3 +82,12 @@ test('the switcher opens a new folder through the dialog', async ({ page }) => {
   assert.ok(calls.some((call) => call.type === 'project' && call.op === 'switch' && call.root === '/work/r'))
   await expect(page.locator('[data-project-switcher]')).toContainText('r')
 })
+
+test('the zen tab shows a fleet dot while the fleet is enabled', async ({ page }) => {
+  await boot(page, initialState())
+  await expect(page.locator('[data-zen-active]')).toHaveCount(0)
+  await page.locator('[data-workspace-mode="zen"]').click()
+  await expect(page.locator('[data-zen-active]')).toBeVisible()
+  await page.locator('[data-zen-stop]').click()
+  await expect(page.locator('[data-zen-active]')).toHaveCount(0)
+})
