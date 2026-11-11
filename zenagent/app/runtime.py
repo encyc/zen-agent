@@ -151,6 +151,10 @@ class RuntimeOptions:
     extra_prompt: str | None = None
     #: Retry cadence for late MCP servers.
     mcp_retry_interval_s: float = 10.0
+    #: Whether resumed transcripts live under a project's sessions directory.
+    #: Role runtimes keep per-role sessions in the swarm state dir, which has
+    #: no project owner to compare, so the scope warning does not apply.
+    project_sessions: bool = True
 
 
 class Runtime:
@@ -165,6 +169,9 @@ class Runtime:
         #: Project identity root (nearest ``.git``): sessions, config, MCP,
         #: skills, templates, memory and the permission policy hang off it.
         self.root: Path = self.cwd
+        #: False when sessions belong to the embedder (swarm roles), so the
+        #: project-scope resume check has nothing to compare against.
+        self.project_sessions = True
         #: Env var the current model needs when the app started without a key.
         self.missing_api_key: str | None = None
         self.catalog: dict[str, ProviderConfig] = {}
@@ -352,6 +359,7 @@ class Runtime:
         if not runtime.cwd.is_dir():
             raise RuntimeError(f"project root is not a directory: {runtime.cwd}")
         runtime.root = project.find_project_root(runtime.cwd)
+        runtime.project_sessions = options.project_sessions
         runtime.user_config = load_user_config(cwd=runtime.root)
         runtime.catalog = apply_user_config(
             load_catalog(), runtime.user_config, runtime.warnings
@@ -612,7 +620,13 @@ class Runtime:
         This slice deliberately keeps the tools' cwd unchanged; omp switches
         project directories on cross-project resume, which we will layer on with
         config/context re-discovery rather than chdir'ing mid-run.
+
+        Embedders that own their sessions (swarm roles) set
+        ``project_sessions=False``: their transcripts live outside the project
+        tree, so there is no owner to compare and no warning to raise.
         """
+        if not self.project_sessions:
+            return
         owner = project.project_key_for_session(path)
         current = project.project_key(self.root)
         if owner is not None and owner != current:

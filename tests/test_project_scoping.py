@@ -167,3 +167,17 @@ def test_usage_scans_every_project(tmp_path, monkeypatch):
     paths = session_paths()
     assert project.project_sessions_dir(root=here) / "20260101-000000.jsonl" in paths
     assert project.project_sessions_dir(root=other) / "20260101-000000.jsonl" in paths
+
+
+def test_role_managed_sessions_skip_the_scope_warning():
+    from zenagent.app.runtime import Runtime
+
+    legacy = project.legacy_sessions_dir()
+    legacy.mkdir(parents=True, exist_ok=True)
+    path = legacy / "20260101-000000.jsonl"
+    path.write_text("", encoding="utf-8")
+
+    runtime = Runtime()
+    runtime.project_sessions = False
+    runtime._note_session_scope(path)
+    assert runtime.warnings == []

@@ -432,6 +432,7 @@ class SwarmManager:
             ],
             extra_prompt=f"{role.system_prompt}\n\n{PROTOCOL_TEXT}",
             resume=session_path,
+            project_sessions=False,
         )
         stream_fn = (
             self._stream_fn_factory(role)
@@ -685,6 +686,9 @@ class SwarmManager:
     # -- agent sessions -----------------------------------------------------
 
     def _session_path(self, role_id: str, *, fresh: bool = False) -> Path:
+        # Kept out of the project session dirs on purpose (design §7): role
+        # transcripts never appear in the normal session list, which is why
+        # the role runtime sets project_sessions=False.
         directory = state_root() / "agents" / role_id / "sessions"
         directory.mkdir(parents=True, exist_ok=True)
         if not fresh:

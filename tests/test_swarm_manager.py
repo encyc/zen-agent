@@ -560,3 +560,16 @@ async def test_inbox_cap_rejects_the_overflow_posts():
         assert any("inbox_full" in text for text in notes)
     finally:
         await manager.close()
+
+
+async def test_built_role_sessions_do_not_report_the_unscoped_warning():
+    _write_role("research", "You research.")
+    manager = SwarmManager(stream_fn_factory=lambda role: text_stream("ok"))
+    await manager.start()
+    try:
+        assert "research" in manager.agents
+        # Role sessions live under the swarm state dir by design; the runtime
+        # must not mistake that for a legacy project transcript.
+        assert not any("legacy (unscoped)" in warning for warning in manager.warnings)
+    finally:
+        await manager.close()
