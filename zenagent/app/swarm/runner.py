@@ -16,7 +16,7 @@ from zenagent.agent.session import Session
 from zenagent.app.compact import maybe_auto_compact
 from zenagent.app.swarm.protocol import injected_prompt
 from zenagent.app.swarm.roles import RoleManifest
-from zenagent.app.swarm.room import RoomMessage, SwarmStore, TaskRecord
+from zenagent.app.swarm.room import RoomMessage, TaskRecord
 from zenagent.types import AssistantMessage, TextContent
 
 __all__ = ["TaskRunner"]
@@ -28,14 +28,17 @@ class TaskRunner:
     def __init__(
         self,
         *,
-        store: SwarmStore,
+        record_task: Callable[[TaskRecord], None],
         agent: Agent,
         session: Session,
         role: RoleManifest,
         post_message: Callable[[str, str], RoomMessage],
         admit_message: Callable[[RoomMessage], object],
     ) -> None:
-        self.store = store
+        #: Records a task transition; the manager owns it so every state the
+        #: room sees (queued → running → terminal) also reaches the UI as a
+        #: ``swarm_task`` frame.
+        self.record_task = record_task
         self.agent = agent
         self.session = session
         self.role = role
@@ -48,7 +51,7 @@ class TaskRunner:
     async def run(self, task: TaskRecord, message: RoomMessage) -> TaskRecord:
         self.abort_outcome = None
         running = replace(task, state="running", updated_at=int(time.time()))
-        self.store.append_task(running)
+        self.record_task(running)
 
         before = len(self.agent.messages)
         await self.agent.prompt(injected_prompt(message, running))
@@ -67,7 +70,7 @@ class TaskRunner:
             updated = replace(updated, state="done", result_message_id=posted.id)
             # Record this run's cost before admitting its mentions: the router
             # gates on the chain aggregate, which the terminal append updates.
-            self.store.append_task(updated)
+            self.record_task(updated)
             self.admit_message(posted)
         elif termination == "aborted":
             state, reason = self.abort_outcome or ("cancelled", "aborted")
@@ -76,11 +79,11 @@ class TaskRunner:
             else:
                 self.post_message(f"Task {task.id} failed: {reason}", "system")
             updated = replace(updated, state=state, reason=reason)
-            self.store.append_task(updated)
+            self.record_task(updated)
         else:
             self.post_message(f"Task {task.id} failed: {termination}", "system")
             updated = replace(updated, state="failed", reason=termination)
-            self.store.append_task(updated)
+            self.record_task(updated)
         await maybe_auto_compact(
             self.agent, self.session, print_fn=lambda _message: None
         )

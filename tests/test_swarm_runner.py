@@ -86,7 +86,7 @@ def _task(store: SwarmStore, **overrides) -> TaskRecord:
 
 def _runner(runtime, store, post, admit) -> TaskRunner:
     return TaskRunner(
-        store=store,
+        record_task=store.append_task,
         agent=runtime.agent,
         session=runtime.session,
         role=ROLE,

@@ -573,3 +573,42 @@ async def test_built_role_sessions_do_not_report_the_unscoped_warning():
         assert not any("legacy (unscoped)" in warning for warning in manager.warnings)
     finally:
         await manager.close()
+
+
+def _task_states(frames: list[dict], task_id: str) -> list[str]:
+    return [
+        str(frame.get("state"))
+        for frame in frames
+        if frame.get("type") == "swarm_task" and frame.get("id") == task_id
+    ]
+
+
+async def test_terminal_task_state_is_emitted_to_the_room():
+    _write_role("research", "You research.")
+    frames: list[dict] = []
+    manager = SwarmManager(
+        write_frame=frames.append,
+        stream_fn_factory=lambda role: text_stream("完成"),
+    )
+    await manager.start()
+    try:
+        [task] = await manager.post("@research 做")
+        await _wait_for(lambda: _states(manager).get(task.id) == "done")
+        assert _task_states(frames, task.id)[-1] == "done"
+    finally:
+        await manager.close()
+
+
+async def test_cancelled_task_state_is_emitted_to_the_room():
+    _write_role("slow")
+    frames: list[dict] = []
+    manager = SwarmManager(write_frame=frames.append, stream_fn_factory=_slow_stream)
+    await manager.start()
+    try:
+        [task] = await manager.post("@slow 长任务")
+        await _wait_for(lambda: _states(manager).get(task.id) == "running")
+        assert await manager.cancel(task.id) is True
+        await _wait_for(lambda: _states(manager).get(task.id) == "cancelled")
+        assert _task_states(frames, task.id)[-1] == "cancelled"
+    finally:
+        await manager.close()

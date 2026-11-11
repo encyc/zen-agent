@@ -457,7 +457,7 @@ class SwarmManager:
             raise
 
         runner = TaskRunner(
-            store=self.store,
+            record_task=self._append_task,
             agent=runtime.agent,
             session=runtime.session,
             role=role,
@@ -585,7 +585,6 @@ class SwarmManager:
             agent.state = "running"
             agent.current_task = task.id
             self._emit_agent(role_id)
-            self._emit_task(replace(task, state="running", updated_at=_now()))
             await runner.run(task, message)
         except asyncio.CancelledError:
             raise
