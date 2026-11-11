@@ -1,18 +1,22 @@
 /** The zen fleet roster the sidebar renders while zen mode is on: the
  * project's single router row plus its focused workers (status dot, focus,
- * status word). Clicking a worker opens the read-only drawer. */
+ * status word). Clicking a worker opens the read-only drawer; the router
+ * row carries the fleet's explicit stop. */
 
 import { useMemo } from 'react'
 
+import { useAppStore } from '../state/appStore'
 import { useZenStore } from '../state/zenStore'
 import { splitRoster, zenStatusKey, zenStatusTone } from '../state/zenSidebar'
 import { useT } from '../i18n/locale'
+import { StopIcon } from './icons'
 import css from './Sidebar.module.css'
 
 export function ZenRoster() {
   const t = useT()
   const openWorker = useZenStore((state) => state.openWorker)
   const zenRoster = useZenStore((state) => state.roster)
+  const stopFleet = useAppStore((state) => state.stopFleet)
   const zenSplit = useMemo(() => splitRoster(zenRoster), [zenRoster])
 
   return (
@@ -21,6 +25,16 @@ export function ZenRoster() {
         <div className={css.zenRouterRow} data-zen-router>
           <span className={css.zenRouterBadge}>{t('zen.router')}</span>
           <span className={css.zenWorkerTitle}>{zenSplit.router.title}</span>
+          <button
+            type="button"
+            className={css.zenStop}
+            aria-label={t('zen.stopFleet')}
+            title={t('zen.stopFleetTitle')}
+            data-zen-stop
+            onClick={() => void stopFleet()}
+          >
+            <StopIcon size={12} />
+          </button>
         </div>
       )}
       <div className={css.zenWorkersLabel}>{t('zen.workers')}</div>

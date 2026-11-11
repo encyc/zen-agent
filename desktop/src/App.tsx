@@ -17,7 +17,6 @@ import { Sidebar } from './ui/Sidebar'
 import { ChatView } from './ui/chat/ChatView'
 import { InputBar } from './ui/composer/InputBar'
 import { RoomPage } from './ui/pages/RoomPage'
-import { ZenPlaceholder } from './ui/pages/ZenPlaceholder'
 import { restoreChatState } from './ui/pages/navigation'
 import { isRuntimeMissing, type RuntimeProbe } from './state/startFailure.ts'
 import { shouldShowWindow } from './state/shellWindow.ts'
@@ -280,7 +279,14 @@ export function App() {
         </Suspense>
       }
     >
-      {workspaceMode === 'coding' ? (
+      {workspaceMode === 'swarm' ? (
+        <>
+          {collapsed && <ExpandSidebar onExpand={() => setCollapsed(false)} />}
+          <RoomPage />
+        </>
+      ) : (
+        // coding and zen share the conversation: in zen the sidebar swaps to
+        // the fleet roster, but the router session is the chat itself.
         <>
           <ConversationTopbar collapsed={collapsed} onExpandSidebar={() => setCollapsed(false)} />
           <ChatView />
@@ -301,16 +307,6 @@ export function App() {
           >
             <PanelRightIcon size={15} />
           </button>
-        </>
-      ) : workspaceMode === 'swarm' ? (
-        <>
-          {collapsed && <ExpandSidebar onExpand={() => setCollapsed(false)} />}
-          <RoomPage />
-        </>
-      ) : (
-        <>
-          {collapsed && <ExpandSidebar onExpand={() => setCollapsed(false)} />}
-          <ZenPlaceholder />
         </>
       )}
       {switching !== null && (

@@ -576,6 +576,27 @@ html[data-platform='darwin'] .brand {
   background: var(--dsw-alias-button-ghost-active-fill);
 }
 
+/* The router row's explicit fleet stop (zen.stopFleet). */
+.zenStop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: auto;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  flex: none;
+}
+
+.zenStop:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
 .zenRouterBadge {
   font-size: 10px;
   font-weight: 600;
