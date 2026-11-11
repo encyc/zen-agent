@@ -22,7 +22,8 @@ docs/za/
 # agent worktrees
 .worktrees/
 
-.zenagent/memory/
+.zenagent/
+.qoder/
 
 .zcode/
 # frozen zen sidecar (built by scripts/build-sidecar.py)
