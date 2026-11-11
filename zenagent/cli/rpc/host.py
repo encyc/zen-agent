@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 from zenagent.app.bootstrap import prepare
 from zenagent.cli.rpc.codec import PROTOCOL_VERSION
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
-from zenagent.cli.rpc.ops_swarm import SwarmOps
+from zenagent.cli.rpc.ops_swarm import SwarmOps, _is_swarm_request_id
 from zenagent.cli.rpc.slot import RuntimeSlot
 from zenagent.cli.rpc.terminal import TerminalError, TerminalSession, clamp_dim
 from zenagent.project import find_project_root, project_key
@@ -63,10 +63,10 @@ class RpcHost(SwarmOps):
         #: Per project, the slot its own requests land on.
         self._active_by_project: dict[str, RuntimeSlot] = {}
         self._closed = False
-        #: The swarm manager is created on the first swarm request: a session
-        #: that never enters swarm mode never pays for resident role runtimes.
-        self._swarm = None
-        self._swarm_started = False
+        #: One swarm room per project key, created on that project's first
+        #: swarm request: a session that never enters swarm mode never pays
+        #: for resident role runtimes.
+        self._swarm: OrderedDict[str, "SwarmManager"] = OrderedDict()
         self._terminal = TerminalSession(self._send)
         if initial is not None:
             self._slots[initial.key] = initial
@@ -146,9 +146,9 @@ class RpcHost(SwarmOps):
         if kind == "swarm":
             await self._swarm_op(request, request_id)
             return True
-        if kind in ("approval", "ask") and str(
-            request.get("request_id") or ""
-        ).startswith("swarm:"):
+        if kind in ("approval", "ask") and _is_swarm_request_id(
+            str(request.get("request_id") or "")
+        ):
             self._resolve_swarm_prompt(request, kind)
             return True
 
@@ -553,9 +553,10 @@ class RpcHost(SwarmOps):
             return
         self._closed = True
         self._terminal.close()
-        if self._swarm is not None:
-            await self._swarm.close()
-            self._swarm = None
+        managers = list(self._swarm.values())
+        self._swarm.clear()
+        for manager in managers:
+            await manager.close()
         slots = list(self._slots.values())
         self._slots.clear()
         self._active = None

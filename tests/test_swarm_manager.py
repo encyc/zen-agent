@@ -15,6 +15,7 @@ from zenagent.app.swarm.manager import SwarmManager
 from zenagent.app.swarm.roles import project_agents_root, project_state_root
 from zenagent.app.swarm.room import RoomMessage, SwarmStore, TaskRecord
 from zenagent.events import Aborted, AgentEvent, AssistantEvent
+from zenagent.project import project_key
 from zenagent.types import (
     AssistantMessage,
     TextContent,
@@ -549,7 +550,7 @@ async def test_approval_allow_lets_the_write_run():
         request = _approval_request(frames)
         assert request is not None
         assert request["swarm"] is True
-        assert request["request_id"].startswith("swarm:")
+        assert request["request_id"].startswith(f"{project_key(manager.root)}:swarm:")
         assert manager.resolve_approval(request["request_id"], "allow") is True
         await _wait_for(lambda: _states(manager)[task.id] == "done")
         root = manager.agents["writer"].role.root
@@ -980,3 +981,12 @@ async def test_two_projects_get_isolated_rooms(tmp_path):
     finally:
         await ma.close()
         await mb.close()
+
+
+def test_has_active_tracks_running_tasks():
+    manager = _manager()
+    assert manager.has_active() is False
+
+    manager._running["alpha"] = object()
+
+    assert manager.has_active() is True

@@ -54,6 +54,7 @@ from zenagent.app.swarm.runner import TaskRunner
 from zenagent.app.swarm.transcript import read_task_transcript
 from zenagent.config import load_user_config
 from zenagent.mcp.config import parse_server
+from zenagent.project import project_key
 from zenagent.skills import discover_skills
 
 __all__ = ["APPROVAL_TIMEOUT_S", "SwarmAgent", "SwarmManager"]
@@ -106,8 +107,19 @@ class SwarmManager(SwarmFrames):
         self._loop_task: asyncio.Task | None = None
         self._approvals: dict[str, asyncio.Future] = {}
         self._approval_seq = 0
+        # Approval ids carry the project key, so the host can route a reply to
+        # this room after the person switched to another project.
+        self._approval_prefix = f"{project_key(self.root)}:swarm:"
         self._started = False
         self._stopping = False
+
+    @property
+    def started(self) -> bool:
+        return self._started
+
+    def has_active(self) -> bool:
+        """A run in flight (a pending approval counts: its run is awaiting)."""
+        return bool(self._running)
 
     # -- lifecycle ----------------------------------------------------------
 
@@ -735,7 +747,7 @@ class SwarmManager(SwarmFrames):
         async def confirm(tool_name: str, arguments: dict, verdict=None) -> str:
             agent = self.agents.get(role_id)
             task_id = agent.current_task if agent is not None else None
-            request_id = f"swarm:a{self._approval_seq}"
+            request_id = f"{self._approval_prefix}a{self._approval_seq}"
             self._approval_seq += 1
             event: dict = {
                 "type": "approval_request",

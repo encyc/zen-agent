@@ -1,21 +1,23 @@
 """The ``swarm`` wire handlers (mixin of RpcHost).
 
-Swarm frames are global: they carry ``swarm: true`` and no project/session tag,
-because one room spans every resident slot. Approval and ask replies find the
-manager by the ``swarm:`` request-id prefix, the same prefix-routed contract
-the per-slot servers use.
+Swarm is per project: one manager (room) per project key, each rooted at that
+project's state dir. Every emitted frame carries ``swarm: true`` and
+``project``, so the desktop routes it to the active room. Approval and ask
+replies find their manager by the ``<project_key>:swarm:`` request-id prefix,
+the same prefix-routed contract the per-slot servers use.
 """
 
 from __future__ import annotations
 
 import logging
+from collections import OrderedDict
 from pathlib import Path
 
 from zenagent.app.swarm.manager import SwarmManager
 from zenagent.cli.rpc.codec import serialize_event
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
 from zenagent.events import AgentEvent
-from zenagent.project import find_project_root
+from zenagent.project import find_project_root, project_key
 
 #: Server-side diagnostics; raw exception detail never crosses the wire.
 logger = logging.getLogger(__name__)
@@ -28,18 +30,28 @@ def _need(request: dict, key: str) -> str:
     return value
 
 
+def _swarm_key_from_request_id(request_id: str) -> str | None:
+    key, sep, _ = request_id.partition(":swarm:")
+    return key if sep else None
+
+
+def _is_swarm_request_id(request_id: str) -> bool:
+    return ":swarm:" in request_id or request_id.startswith("swarm:")
+
+
 class SwarmOps:
     """Mixin: see host.py for the composed RpcHost."""
 
-    #: Built on the first swarm request; ``RpcHost.close`` disposes it.
-    _swarm: SwarmManager | None
-    _swarm_started: bool
+    #: One room per project key, built on that project's first swarm request.
+    #: ``RpcHost.close`` disposes all of them; idle rooms beyond the resident
+    #: cap are closed LRU.
+    _swarm: OrderedDict[str, SwarmManager]
 
     async def _swarm_op(self, request: dict, request_id) -> None:
         op = request.get("op")
         label = str(op or "")
         try:
-            manager = await self._swarm_manager()
+            manager = await self._swarm_manager(self._swarm_root(request))
             if op == "list":
                 payload = {
                     "roles": manager.roles(),
@@ -113,31 +125,72 @@ class SwarmOps:
                 )
             )
 
-    async def _swarm_manager(self) -> SwarmManager:
-        if self._swarm is None:
-            self._swarm = SwarmManager(
-                root=self._swarm_root(),
-                write_frame=self._send,
-                event_sink=self._send_role_event,
-            )
-        if not self._swarm_started:
-            await self._swarm.start()
-            self._swarm_started = True
-        return self._swarm
+    async def _swarm_manager(self, root: Path) -> SwarmManager:
+        """The project's room, built and started on first use.
 
-    def _swarm_root(self) -> Path:
-        """The project this room belongs to: the active slot's, else startup's."""
+        Frames are stamped with the project here, so no emission path can
+        forget the tag.
+        """
+        key = project_key(root)
+        manager = self._swarm.get(key)
+        if manager is None:
+            manager = SwarmManager(
+                root=root,
+                write_frame=lambda payload, r=root: self._send(
+                    {**payload, "project": str(r)}
+                ),
+                event_sink=lambda role_id, task_id, event, r=root: (
+                    self._send_role_event(role_id, task_id, event, r)
+                ),
+            )
+            self._swarm[key] = manager
+        else:
+            self._swarm.move_to_end(key)
+        if not manager.started:
+            await manager.start()
+        await self._evict_idle_rooms(keep=key)
+        return manager
+
+    async def _evict_idle_rooms(self, *, keep: str) -> None:
+        """Close least-recently-used idle rooms beyond the resident budget.
+
+        A room with a run in flight is never a victim (closing it would kill
+        the run), and neither is the room the current request just asked for.
+        """
+        cap = max(1, self._max_slots)
+        while len(self._swarm) > cap:
+            victim = next(
+                (
+                    key
+                    for key, manager in self._swarm.items()
+                    if key != keep and not manager.has_active()
+                ),
+                None,
+            )
+            if victim is None:
+                break  # every other resident room is busy: tolerate overshoot
+            manager = self._swarm.pop(victim)
+            await manager.close()
+
+    def _swarm_root(self, request: dict) -> Path:
+        """The project this request belongs to: named, active, else startup."""
+        project = request.get("project")
+        if isinstance(project, str) and project.strip():
+            return find_project_root(project)
         if self._active is not None:
             return find_project_root(self._active.server.project)
         return find_project_root(self._options.root)
 
-    def _send_role_event(self, role_id: str, task_id: str, event: AgentEvent) -> None:
-        """One role-run event as a global frame: the desktop streams a task's
-        detail from these (the session file only lands when the run ends)."""
+    def _send_role_event(
+        self, role_id: str, task_id: str, event: AgentEvent, root: Path
+    ) -> None:
+        """One role-run event tagged with its project: the desktop streams a
+        task's detail from these (the session file only lands at run end)."""
         self._send(
             {
                 "type": "swarm_event",
                 "swarm": True,
+                "project": str(root),
                 "agent": role_id,
                 "task": task_id,
                 "event": serialize_event(event),
@@ -163,9 +216,13 @@ class SwarmOps:
         return {"roles": manager.roles(), "warnings": list(manager.warnings)}
 
     def _resolve_swarm_prompt(self, request: dict, kind: str) -> bool:
-        """Answer an approval/ask whose id names the swarm, not a slot."""
+        """Answer an approval/ask whose id names a project's swarm room."""
         request_id = request.get("request_id")
-        if self._swarm is None:
+        key = _swarm_key_from_request_id(str(request_id))
+        if key is None:
+            key = project_key(self._swarm_root({}))
+        manager = self._swarm.get(key)
+        if manager is None:
             self._send(
                 {
                     "type": "error",
@@ -176,11 +233,11 @@ class SwarmOps:
             )
             return True
         if kind == "approval":
-            resolved = self._swarm.resolve_approval(
+            resolved = manager.resolve_approval(
                 str(request_id), request.get("decision")
             )
         else:
-            resolved = self._swarm.resolve_ask(
+            resolved = manager.resolve_ask(
                 str(request_id), request.get("answers") or []
             )
         if not resolved:

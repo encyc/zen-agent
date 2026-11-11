@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from pathlib import Path
@@ -10,6 +11,7 @@ from zenagent.app.runtime import RuntimeOptions
 from zenagent.app.swarm.room import TaskRecord
 from zenagent.cli.rpc.host import RpcHost
 from zenagent.events import AgentEvent
+from zenagent.project import find_project_root, project_key
 
 ROOT = Path(__file__).resolve().parents[1]
 TS_PATH = ROOT / "desktop" / "src" / "rpc" / "types.ts"
@@ -22,15 +24,25 @@ def _collect(writes: list[dict]):
     return write
 
 
-def _host(tmp_path: Path) -> tuple[RpcHost, list[dict]]:
+def _host(tmp_path: Path, **kwargs) -> tuple[RpcHost, list[dict]]:
     writes: list[dict] = []
     host = RpcHost(
         initial=None,
         options=RuntimeOptions(root=tmp_path),
         read_line=None,
         write_line=_collect(writes),
+        **kwargs,
     )
     return host, writes
+
+
+def _seed_role(root: Path, role_id: str) -> None:
+    directory = root / ".zenagent" / "agents" / role_id
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "manifest.json").write_text(
+        json.dumps({"id": role_id, "name": role_id}), encoding="utf-8"
+    )
+    (directory / "prompt.md").write_text("You are a role.", encoding="utf-8")
 
 
 async def _call(host: RpcHost, request: dict) -> None:
@@ -123,6 +135,9 @@ class FakeSwarm:
     def resolve_ask(self, request_id: str, answers: list) -> bool:
         return False
 
+    def has_active(self) -> bool:
+        return False
+
 
 def test_swarm_kind_contract():
     package = ROOT / "zenagent" / "cli" / "rpc"
@@ -139,7 +154,7 @@ def test_swarm_kind_contract():
 async def test_list_returns_roles_tasks_and_messages(tmp_path):
     host, writes = _host(tmp_path)
     fake = FakeSwarm()
-    host._swarm = fake  # type: ignore[assignment]
+    host._swarm[project_key(tmp_path)] = fake
 
     await _call(host, {"type": "swarm", "op": "list", "id": "s1"})
 
@@ -157,7 +172,7 @@ async def test_list_returns_roles_tasks_and_messages(tmp_path):
 async def test_post_creates_tasks(tmp_path):
     host, writes = _host(tmp_path)
     fake = FakeSwarm()
-    host._swarm = fake  # type: ignore[assignment]
+    host._swarm[project_key(tmp_path)] = fake
 
     await _call(host, {"type": "swarm", "op": "post", "id": "s2", "text": "@research hi"})
 
@@ -171,7 +186,7 @@ async def test_post_creates_tasks(tmp_path):
 async def test_transcript_returns_the_run_steps(tmp_path):
     host, writes = _host(tmp_path)
     fake = FakeSwarm()
-    host._swarm = fake  # type: ignore[assignment]
+    host._swarm[project_key(tmp_path)] = fake
 
     await _call(host, {"type": "swarm", "op": "transcript", "id": "s3", "taskId": "t_1"})
 
@@ -186,7 +201,7 @@ async def test_transcript_returns_the_run_steps(tmp_path):
 async def test_roles_create_uses_role_id_not_request_id(tmp_path):
     host, writes = _host(tmp_path)
     fake = FakeSwarm()
-    host._swarm = fake  # type: ignore[assignment]
+    host._swarm[project_key(tmp_path)] = fake
 
     await _call(
         host,
@@ -209,7 +224,7 @@ async def test_roles_create_uses_role_id_not_request_id(tmp_path):
 async def test_roles_delete_uses_role_id_not_request_id(tmp_path):
     host, writes = _host(tmp_path)
     fake = FakeSwarm()
-    host._swarm = fake  # type: ignore[assignment]
+    host._swarm[project_key(tmp_path)] = fake
 
     await _call(
         host,
@@ -220,7 +235,7 @@ async def test_roles_delete_uses_role_id_not_request_id(tmp_path):
     assert fake.role_deletes == ["reviewer"]
 
 
-async def test_swarm_frames_are_global(tmp_path, monkeypatch):
+async def test_swarm_frames_carry_the_project_tag(tmp_path, monkeypatch):
     created: list = []
 
     class FrameManager:
@@ -236,9 +251,11 @@ async def test_swarm_frames_are_global(tmp_path, monkeypatch):
             self.write_frame = write_frame
             self.event_sink = event_sink
             self.warnings: list[str] = []
+            self.started = False
             created.append(self)
 
         async def start(self) -> None:
+            self.started = True
             self.write_frame(
                 {
                     "type": "swarm_message",
@@ -271,7 +288,7 @@ async def test_swarm_frames_are_global(tmp_path, monkeypatch):
     frames = [frame for frame in writes if frame.get("type") == "swarm_message"]
     assert len(frames) == 1
     assert frames[0]["swarm"] is True
-    assert "project" not in frames[0]
+    assert frames[0]["project"] == str(find_project_root(tmp_path))
     assert "session" not in frames[0]
     assert writes[-1]["type"] == "result"
 
@@ -279,7 +296,7 @@ async def test_swarm_frames_are_global(tmp_path, monkeypatch):
 async def test_swarm_approval_routes_by_prefix(tmp_path):
     host, writes = _host(tmp_path)
     fake = FakeSwarm()
-    host._swarm = fake  # type: ignore[assignment]
+    host._swarm[project_key(tmp_path)] = fake
 
     await _call(
         host,
@@ -295,11 +312,32 @@ async def test_swarm_approval_routes_by_prefix(tmp_path):
     assert writes[-1] == {"type": "result", "id": "a1", "ok": True}
 
 
+async def test_prefixed_approval_reaches_its_background_project(tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    _seed_role(a, "alpha")
+    _seed_role(b, "beta")
+    host, writes = _host(tmp_path)
+    try:
+        manager = await host._swarm_manager(a)
+        await host._swarm_manager(b)  # the active room moved elsewhere
+        rid = f"{project_key(a)}:swarm:a1"
+        future = asyncio.get_running_loop().create_future()
+        manager._approvals[rid] = future
+
+        assert host._resolve_swarm_prompt(
+            {"request_id": rid, "id": "x", "decision": "allow"}, "approval"
+        )
+        assert future.result() == "allow"
+        assert writes[-1] == {"type": "result", "id": "x", "ok": True}
+    finally:
+        await host.close()
+
+
 async def test_list_and_roles_surface_manager_warnings(tmp_path):
     host, writes = _host(tmp_path)
     fake = FakeSwarm()
     fake.warnings = ["role broken: bad manifest"]
-    host._swarm = fake  # type: ignore[assignment]
+    host._swarm[project_key(tmp_path)] = fake
 
     await _call(host, {"type": "swarm", "op": "list", "id": "s1"})
     assert writes[-1]["warnings"] == ["role broken: bad manifest"]
@@ -308,20 +346,26 @@ async def test_list_and_roles_surface_manager_warnings(tmp_path):
     assert writes[-1]["warnings"] == ["role broken: bad manifest"]
 
 
-async def test_role_events_broadcast_as_global_swarm_event_frames(tmp_path):
+async def test_role_events_broadcast_as_project_tagged_swarm_event_frames(tmp_path):
     host, writes = _host(tmp_path)
 
-    host._send_role_event("research", "t_1", AgentEvent(type="tool_execution_start", tool_name="bash"))
+    host._send_role_event(
+        "research",
+        "t_1",
+        AgentEvent(type="tool_execution_start", tool_name="bash"),
+        tmp_path,
+    )
 
     [frame] = writes
     assert frame["type"] == "swarm_event"
     assert frame["swarm"] is True
+    assert frame["project"] == str(find_project_root(tmp_path))
     assert frame["agent"] == "research"
     assert frame["task"] == "t_1"
     assert frame["event"]["type"] == "tool_execution_start"
     assert frame["event"]["tool_name"] == "bash"
-    # global like every swarm frame: no slot tags, or the filters would drop it
-    assert "project" not in frame and "session" not in frame
+    # routed by project, never by session: the desktop filters on ``project``
+    assert "session" not in frame
 
 
 async def test_the_manager_is_built_with_the_event_sink_attached(tmp_path, monkeypatch):
@@ -338,6 +382,62 @@ async def test_the_manager_is_built_with_the_event_sink_attached(tmp_path, monke
             return None
 
     monkeypatch.setattr(ops, "SwarmManager", Probe)
-    await host._swarm_manager()
+    await host._swarm_manager(tmp_path)
     assert built and built[0]["event_sink"] is not None
-    host._swarm = None  # keep this test from closing a half-built manager
+    host._swarm.clear()  # keep this test from closing a half-built manager
+
+
+async def test_swarm_op_routes_by_project(tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    _seed_role(a, "alpha")
+    _seed_role(b, "beta")
+    host, writes = _host(tmp_path)
+    try:
+        await host._swarm_op(
+            {"type": "swarm", "op": "list", "project": str(a)}, "s1"
+        )
+        await host._swarm_op(
+            {"type": "swarm", "op": "list", "project": str(b)}, "s2"
+        )
+
+        assert set(host._swarm) == {project_key(a), project_key(b)}
+        assert {frozenset(manager.role_ids) for manager in host._swarm.values()} == {
+            frozenset({"alpha"}),
+            frozenset({"beta"}),
+        }
+        assert writes[-1]["type"] == "result" and writes[-1]["ok"] is True
+    finally:
+        await host.close()
+
+
+async def test_idle_room_cap_evicts_only_idle_rooms(tmp_path):
+    host, _writes = _host(tmp_path, max_slots=2)
+    a, b, c, d = (tmp_path / name for name in "abcd")
+    for root, role in ((a, "alpha"), (b, "beta"), (c, "gamma"), (d, "delta")):
+        _seed_role(root, role)
+    manager_a = manager_c = None
+    try:
+        manager_a = await host._swarm_manager(a)
+        await host._swarm_manager(b)
+        manager_a._running["alpha"] = object()  # a live run: never evicted
+
+        manager_c = await host._swarm_manager(c)
+        # B was the oldest idle room; A's live run kept it resident.
+        assert set(host._swarm) == {project_key(a), project_key(c)}
+
+        manager_c._running["gamma"] = object()
+        await host._swarm_manager(d)
+        # Every resident room is busy: overshoot rather than kill a run.
+        assert set(host._swarm) == {
+            project_key(a),
+            project_key(c),
+            project_key(d),
+        }
+        assert manager_a.has_active() and manager_c.has_active()
+    finally:
+        # Sentinels stand in for run tasks; clear them so close() can gather.
+        if manager_a is not None:
+            manager_a._running.clear()
+        if manager_c is not None:
+            manager_c._running.clear()
+        await host.close()
