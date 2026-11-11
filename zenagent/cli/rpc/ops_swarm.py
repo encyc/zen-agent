@@ -11,7 +11,9 @@ from __future__ import annotations
 import logging
 
 from zenagent.app.swarm.manager import SwarmManager
+from zenagent.cli.rpc.codec import serialize_event
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
+from zenagent.events import AgentEvent
 
 #: Server-side diagnostics; raw exception detail never crosses the wire.
 logger = logging.getLogger(__name__)
@@ -111,11 +113,26 @@ class SwarmOps:
 
     async def _swarm_manager(self) -> SwarmManager:
         if self._swarm is None:
-            self._swarm = SwarmManager(write_frame=self._send)
+            self._swarm = SwarmManager(
+                write_frame=self._send, event_sink=self._send_role_event
+            )
         if not self._swarm_started:
             await self._swarm.start()
             self._swarm_started = True
         return self._swarm
+
+    def _send_role_event(self, role_id: str, task_id: str, event: AgentEvent) -> None:
+        """One role-run event as a global frame: the desktop streams a task's
+        detail from these (the session file only lands when the run ends)."""
+        self._send(
+            {
+                "type": "swarm_event",
+                "swarm": True,
+                "agent": role_id,
+                "task": task_id,
+                "event": serialize_event(event),
+            }
+        )
 
     async def _swarm_roles(self, manager: SwarmManager, request: dict) -> dict:
         action = request.get("action") or "list"

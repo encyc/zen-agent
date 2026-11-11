@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from conftest import text_stream
 
+from zenagent.app.swarm.events_tap import subscribe_events, tap
 from zenagent.app.swarm.manager import SwarmManager
 from zenagent.app.swarm.roles import agents_root, state_root
 from zenagent.app.swarm.room import RoomMessage, SwarmStore, TaskRecord
@@ -685,4 +686,32 @@ async def test_sink_errors_never_break_a_run_and_stray_taps_are_dropped():
     finally:
         await manager.close()
     # a tap with no active task (between runs, after close) is dropped quietly
-    manager._tap_role_event("research", AgentEvent(type="turn_start"))
+    tap("research", AgentEvent(type="turn_start"), sink=boom, task_id=None)
+
+
+def test_subscribe_events_forwards_stamped_events_and_no_ops_without_a_sink():
+    seen: list[tuple[str, str, str]] = []
+
+    class FakeAgent:
+        def __init__(self) -> None:
+            self.listeners: list = []
+
+        def subscribe(self, listener):
+            self.listeners.append(listener)
+            return lambda: None
+
+    agent = FakeAgent()
+    subscribe_events(
+        agent,
+        "research",
+        sink=lambda role, task, event: seen.append((role, task, event.type)),
+        task_of=lambda role: "t_9",
+    )
+    for listener in agent.listeners:
+        listener(AgentEvent(type="turn_start"))
+    assert seen == [("research", "t_9", "turn_start")]
+
+    # No sink: nothing subscribes at all.
+    quiet = FakeAgent()
+    subscribe_events(quiet, "research", sink=None, task_of=lambda role: "t_9")
+    assert quiet.listeners == []

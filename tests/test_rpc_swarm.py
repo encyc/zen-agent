@@ -9,6 +9,7 @@ from pathlib import Path
 from zenagent.app.runtime import RuntimeOptions
 from zenagent.app.swarm.room import TaskRecord
 from zenagent.cli.rpc.host import RpcHost
+from zenagent.events import AgentEvent
 
 ROOT = Path(__file__).resolve().parents[1]
 TS_PATH = ROOT / "desktop" / "src" / "rpc" / "types.ts"
@@ -223,8 +224,11 @@ async def test_swarm_frames_are_global(tmp_path, monkeypatch):
     created: list = []
 
     class FrameManager:
-        def __init__(self, *, write_frame=None, stream_fn_factory=None, max_concurrent=3):
+        def __init__(
+            self, *, write_frame=None, stream_fn_factory=None, event_sink=None, max_concurrent=3
+        ):
             self.write_frame = write_frame
+            self.event_sink = event_sink
             self.warnings: list[str] = []
             created.append(self)
 
@@ -296,3 +300,38 @@ async def test_list_and_roles_surface_manager_warnings(tmp_path):
 
     await _call(host, {"type": "swarm", "op": "roles", "id": "s2", "action": "list"})
     assert writes[-1]["warnings"] == ["role broken: bad manifest"]
+
+
+async def test_role_events_broadcast_as_global_swarm_event_frames(tmp_path):
+    host, writes = _host(tmp_path)
+
+    host._send_role_event("research", "t_1", AgentEvent(type="tool_execution_start", tool_name="bash"))
+
+    [frame] = writes
+    assert frame["type"] == "swarm_event"
+    assert frame["swarm"] is True
+    assert frame["agent"] == "research"
+    assert frame["task"] == "t_1"
+    assert frame["event"]["type"] == "tool_execution_start"
+    assert frame["event"]["tool_name"] == "bash"
+    # global like every swarm frame: no slot tags, or the filters would drop it
+    assert "project" not in frame and "session" not in frame
+
+
+async def test_the_manager_is_built_with_the_event_sink_attached(tmp_path, monkeypatch):
+    host, _writes = _host(tmp_path)
+    built: list[dict] = []
+    import zenagent.cli.rpc.ops_swarm as ops
+
+    class Probe(ops.SwarmManager):  # type: ignore[misc]
+        def __init__(self, **kwargs):
+            built.append(kwargs)
+            super().__init__(**kwargs)
+
+        async def start(self) -> None:
+            return None
+
+    monkeypatch.setattr(ops, "SwarmManager", Probe)
+    await host._swarm_manager()
+    assert built and built[0]["event_sink"] is not None
+    host._swarm = None  # keep this test from closing a half-built manager

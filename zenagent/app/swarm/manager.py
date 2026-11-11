@@ -21,6 +21,7 @@ from zenagent.agent.session import Session
 from zenagent.app.permissions import build_broker_for
 from zenagent.app.plugin_wiring import start_mcp
 from zenagent.app.runtime import Runtime, RuntimeOptions
+from zenagent.app.swarm.events_tap import EventSink, subscribe_events
 from zenagent.app.swarm.protocol import (
     PROTOCOL_TEXT,
     build_swarm_post_tool,
@@ -50,7 +51,6 @@ from zenagent.app.swarm.router import Router
 from zenagent.app.swarm.runner import TaskRunner
 from zenagent.app.swarm.transcript import read_task_transcript
 from zenagent.config import load_user_config
-from zenagent.events import AgentEvent
 from zenagent.mcp.config import parse_server
 from zenagent.skills import discover_skills
 
@@ -80,7 +80,7 @@ class SwarmManager:
         *,
         write_frame: Callable[[dict], None] | None = None,
         stream_fn_factory: Callable[[RoleManifest], object] | None = None,
-        event_sink: Callable[[str, str, AgentEvent], None] | None = None,
+        event_sink: EventSink | None = None,
         max_concurrent: int = 3,
     ) -> None:
         self._write_frame = write_frame
@@ -476,10 +476,12 @@ class SwarmManager:
             await runtime.close()
             raise
         if self._event_sink is not None:
-            # Every run event for this role, stamped with the task in flight.
-            # Best-effort: a listener raising would abort the run it observes.
-            runtime.agent.subscribe(
-                lambda event, role_id=role.id: self._tap_role_event(role_id, event)
+            # Run events carry the task in flight (the file only lands at run end).
+            subscribe_events(
+                runtime.agent,
+                role.id,
+                sink=self._event_sink,
+                task_of=lambda role_id: getattr(self.agents.get(role_id), "current_task", None),
             )
 
         runner = TaskRunner(
@@ -774,25 +776,6 @@ class SwarmManager:
         record = _task_record(task)
         record.update(type="swarm_task", swarm=True)
         self._write(record)
-
-    def _tap_role_event(self, role_id: str, event: AgentEvent) -> None:
-        """Forward one role run event, stamped with the task in flight.
-
-        Silent by contract: an event arriving between runs (a rebuild, a
-        reset) has no task to attribute, and a failing sink must never
-        disturb the run it observes.
-        """
-        sink = self._event_sink
-        if sink is None:
-            return
-        agent = self.agents.get(role_id)
-        task_id = agent.current_task if agent is not None else None
-        if task_id is None:
-            return
-        try:
-            sink(role_id, task_id, event)
-        except Exception:  # noqa: BLE001 - observers are best-effort
-            pass
 
     def _emit_agent(self, role_id: str) -> None:
         agent = self.agents.get(role_id)
