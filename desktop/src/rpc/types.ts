@@ -4,6 +4,7 @@
 
 import type {
   SwarmAgentFrame,
+  SwarmEventFrame,
   SwarmMessageFrame,
   SwarmNoticeFrame,
   SwarmTaskFrame,
@@ -12,6 +13,7 @@ import type {
 export type {
   SwarmAgentFrame,
   SwarmAgentState,
+  SwarmEventFrame,
   SwarmAgentStatus,
   SwarmAuthor,
   SwarmListResult,
@@ -804,6 +806,7 @@ export type ServerFrame =
   | SwarmTaskFrame
   | SwarmAgentFrame
   | SwarmNoticeFrame
+  | SwarmEventFrame
 
 export function isEventFrame(frame: ServerFrame): frame is EventFrame {
   return frame.type === 'event'

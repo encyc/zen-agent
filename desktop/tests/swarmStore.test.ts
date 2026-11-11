@@ -209,3 +209,35 @@ test('only a swarm notice produces a user notification', () => {
   assert.equal(swarmNoticeText(messageFrame('m_1', '@you done')), null)
   assert.equal(swarmNoticeText(noticeFrame('')), null)
 })
+
+test('swarm_event frames fold into per-task run rows with a hard cap', async () => {
+  useSwarmStore.setState({ runRows: {} })
+  const toolStart = (n: number) => ({
+    type: 'swarm_event',
+    swarm: true,
+    agent: 'research',
+    task: 't_1',
+    event: { type: 'tool_execution_start', tool_call_id: `c${n}`, tool_name: 'bash' },
+  })
+  for (let i = 0; i < 1505; i += 1) {
+    useSwarmStore.getState().applyFrame(toolStart(i) as never)
+  }
+  const rows = useSwarmStore.getState().runRows['t_1']
+  assert.equal(rows.length, 1500, 'run rows are capped')
+  assert.equal((rows[rows.length - 1] as { call_id: string }).call_id, 'c1504', 'newest kept')
+
+  useSwarmStore.getState().clearRun('t_1')
+  assert.equal(useSwarmStore.getState().runRows['t_1'], undefined)
+})
+
+test('two tasks keep separate run rows', () => {
+  useSwarmStore.setState({ runRows: {} })
+  const frame = (task: string) => ({
+    type: 'swarm_event', swarm: true, agent: 'a', task,
+    event: { type: 'tool_execution_start', tool_call_id: 'c1', tool_name: 'bash' },
+  })
+  useSwarmStore.getState().applyFrame(frame('t_1') as never)
+  useSwarmStore.getState().applyFrame(frame('t_2') as never)
+  assert.equal(useSwarmStore.getState().runRows['t_1'].length, 1)
+  assert.equal(useSwarmStore.getState().runRows['t_2'].length, 1)
+})

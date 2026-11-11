@@ -1,6 +1,8 @@
 /** Swarm wire types: room messages, tasks, agents and role views. Split
  * out of types.ts so the kernel-facing contract stays one screen. */
 
+import type { AgentEventFrame } from './types.ts'
+
 export type SwarmTaskState = 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
 export type SwarmAgentStatus = 'idle' | 'running' | 'rebuilding'
 
@@ -131,4 +133,14 @@ export interface SwarmNoticeFrame {
   type: 'swarm_notice'
   agent: string
   text: string
+}
+
+/** One role-run AgentEvent stamped with its task: the task detail streams
+ * from these (the role's session file only lands when the run ends). */
+export interface SwarmEventFrame {
+  type: 'swarm_event'
+  swarm: true
+  agent: string
+  task: string
+  event: AgentEventFrame
 }

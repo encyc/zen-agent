@@ -17,6 +17,10 @@ import type {
   SwarmTask,
   SwarmTranscriptResult,
 } from '../rpc/types'
+import { applyRunEvent, type RunView } from './swarmRun.ts'
+
+/** A run's live rows are a tail: a long role run must not grow without bound. */
+const RUN_ROW_CAP = 1500
 
 export interface SwarmSender {
   send(request: Record<string, unknown>): Promise<Record<string, unknown>>
@@ -71,6 +75,10 @@ interface SwarmState {
     id: string,
     manifest?: Record<string, unknown>,
   ): Promise<Record<string, unknown>>
+  /** Live rows of a running task's detail (taskId → views). */
+  runRows: Record<string, RunView[]>
+  /** Drop a task's live rows (the settled transcript is authoritative). */
+  clearRun(taskId: string): void
   applyFrame(frame: ServerFrame): void
 }
 
@@ -81,6 +89,16 @@ export const useSwarmStore = create<SwarmState>((set) => ({
   roles: [],
   warnings: [],
   loaded: false,
+  runRows: {},
+
+  clearRun(taskId) {
+    set((state) => {
+      if (!(taskId in state.runRows)) return {}
+      const runRows = { ...state.runRows }
+      delete runRows[taskId]
+      return { runRows }
+    })
+  },
 
   applyFrame(frame) {
     if (frame.type === 'swarm_message') {
@@ -95,6 +113,19 @@ export const useSwarmStore = create<SwarmState>((set) => ({
       set((state) => ({
         tasks: replaceBy(state.tasks, frame, (task) => task.id),
       }))
+      return
+    }
+    if (frame.type === 'swarm_event') {
+      set((state) => {
+        const next = applyRunEvent(state.runRows[frame.task] ?? [], frame.event)
+        return {
+          runRows: {
+            ...state.runRows,
+            // A long run keeps its newest rows; the panel is a live tail.
+            [frame.task]: next.length > RUN_ROW_CAP ? next.slice(-RUN_ROW_CAP) : next,
+          },
+        }
+      })
       return
     }
     if (frame.type === 'swarm_agent') {

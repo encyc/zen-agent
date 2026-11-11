@@ -88,3 +88,17 @@ test('registerSwarmSender wires the app client into the swarm store', async () =
     },
   })
 })
+
+test('applySwarmFrame consumes swarm_event frames into live run rows', () => {
+  reset()
+  useSwarmStore.setState({ runRows: {} })
+  const consumed = applySwarmFrame({
+    type: 'swarm_event',
+    swarm: true,
+    agent: 'research',
+    task: 't_1',
+    event: { type: 'tool_execution_start', tool_call_id: 'c1', tool_name: 'bash' },
+  })
+  assert.equal(consumed, true)
+  assert.equal(useSwarmStore.getState().runRows['t_1'].length, 1)
+})
