@@ -183,6 +183,49 @@ async def test_abort_marks_cancelled(tmp_path, runtime_factory):
     assert store.tasks[task.id].state == "cancelled"
 
 
+async def test_run_timeout_marks_failed_and_reclaims(tmp_path, runtime_factory):
+    async def hang(model, messages, tools, options):
+        partial = AssistantMessage(
+            content=[],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="pending",
+            timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        while not options.abort.aborted:
+            await asyncio.sleep(0.001)
+        raise Aborted("cancelled")
+
+    runtime = await runtime_factory(stream_fn=hang)
+    store, _router, current, post, admit = _bind(tmp_path)
+    task = _task(store)
+    current["task"] = task
+    runner = TaskRunner(
+        record_task=store.append_task,
+        agent=runtime.agent,
+        session=runtime.session,
+        role=ROLE,
+        post_message=post,
+        admit_message=admit,
+        run_timeout_s=0.05,
+    )
+
+    # The outer budget keeps RED observable (a missing watchdog hangs forever).
+    record = await asyncio.wait_for(runner.run(task, _message(store)), timeout=5)
+
+    assert runner.abort_outcome == ("failed", "timeout")
+    assert record.state == "failed"
+    assert record.reason == "timeout"
+    assert store.tasks[task.id].state == "failed"
+    assert store.tasks[task.id].reason == "timeout"
+    assert any(
+        message.author_kind == "system" and "timeout" in message.text
+        for message in store.messages
+    )
+
+
 async def test_chain_cost_accumulates(tmp_path, runtime_factory):
     def cost_stream(total: float):
         async def stream(model, messages, tools, options):

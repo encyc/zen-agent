@@ -260,6 +260,30 @@ async def test_stop_aborts_running_worker(env) -> None:
     assert fleet.status_of(str(env["paths"]["w1"])) in ("blocked", "waiting")
 
 
+async def test_worker_timeout_marks_failed_and_reclaims(env) -> None:
+    fleet: ZenFleet = env["fleet"]
+    fleet.run_timeout_s = 0.05
+    loop = asyncio.get_running_loop()
+    gate = loop.create_future()
+    env["factory"].gates[env["paths"]["w1"]] = gate
+    # cap is 2: w1 hangs, w2 runs, w3 queues until the timeout frees w1's slot.
+    await fleet.dispatch(str(env["paths"]["w1"]), "a")
+    await _await_runtime(env["factory"], env["paths"]["w1"])
+    await fleet.dispatch(str(env["paths"]["w2"]), "b")
+    await fleet.dispatch(str(env["paths"]["w3"]), "c")
+
+    await asyncio.wait_for(fleet.wait_all(), timeout=5)
+
+    rt = env["factory"].runtimes[str(env["paths"]["w1"])]
+    assert rt.agent.abort_called
+    assert rt.closed
+    assert fleet.status_of(str(env["paths"]["w1"])) == "failed"
+    assert any("超时" in s for s in env["chat"].delivered)
+    # The freed slot let the queued worker run to completion.
+    assert fleet.status_of(str(env["paths"]["w3"])) == "waiting"
+    assert fleet.has_active() is False
+
+
 async def test_focus_updates_roster(env) -> None:
     fleet: ZenFleet = env["fleet"]
     fleet.focus(str(env["paths"]["w1"]), "性能巡检")

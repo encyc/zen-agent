@@ -429,8 +429,9 @@ class SwarmManager(SwarmFrames):
         self, role: RoleManifest, *, fresh_session: bool = False
     ) -> SwarmAgent:
         session_path = role_session_path(role.id, fresh=fresh_session)
+        config = load_user_config(cwd=role.root)
         broker = build_broker_for(
-            user_config=load_user_config(cwd=role.root),
+            user_config=config,
             mode=role.mode,
             cwd=role.root,
         )
@@ -496,6 +497,7 @@ class SwarmManager(SwarmFrames):
                 role_id, text, kind, admit=False
             ),
             admit_message=self._admit,
+            run_timeout_s=config.task_timeout_s,
         )
         agent = SwarmAgent(
             role=role,

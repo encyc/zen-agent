@@ -70,6 +70,7 @@ class ZenFleet:
         confirm: Callable | None = None,
         mode: str | None = None,
         batch_window_s: float = 0.5,
+        run_timeout_s: float = 0,
     ) -> None:
         self.chat = chat
         self.root = Path(root)
@@ -89,6 +90,8 @@ class ZenFleet:
         #: message (dsh batching): one run reviews the whole burst instead of
         #: one run per report. 0 disables the window (same-tick still merges).
         self.batch_window_s = max(0.0, float(batch_window_s))
+        #: Wall-clock budget for one worker run; ``0`` disables the watchdog.
+        self.run_timeout_s = max(0.0, float(run_timeout_s))
         self._report_buffer: list[str] = []
         self._wake_task: asyncio.Task | None = None
         self._sem = asyncio.Semaphore(self.max_concurrent)
@@ -227,7 +230,20 @@ class ZenFleet:
                     handle.agent.abort()
                     handle.status = "blocked"
                     return
-                await runtime.agent.prompt(worker_prompt(handle.focus, task))
+                if self.run_timeout_s > 0:
+                    try:
+                        await asyncio.wait_for(
+                            runtime.agent.prompt(worker_prompt(handle.focus, task)),
+                            self.run_timeout_s,
+                        )
+                    except TimeoutError:
+                        handle.agent.abort()
+                        handle.status = "failed"
+                        handle.last_report = "运行超时"
+                        self._inject(handle, handle.last_report)
+                        return
+                else:
+                    await runtime.agent.prompt(worker_prompt(handle.focus, task))
                 if self._closing:
                     return
                 report = self._last_report(handle.agent)

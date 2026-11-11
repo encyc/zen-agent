@@ -7,6 +7,7 @@ injected prompt, the termination mapping and the chain-cost accounting.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import Callable
 from dataclasses import replace
@@ -34,6 +35,7 @@ class TaskRunner:
         role: RoleManifest,
         post_message: Callable[[str, str], RoomMessage],
         admit_message: Callable[[RoomMessage], object],
+        run_timeout_s: float = 0,
     ) -> None:
         #: Records a task transition; the manager owns it so every state the
         #: room sees (queued → running → terminal) also reaches the UI as a
@@ -47,6 +49,8 @@ class TaskRunner:
         #: Terminal outcome the manager pins before aborting a run it owns
         #: (role removal, approval timeout, shutdown). ``None`` = user cancel.
         self.abort_outcome: tuple[str, str] | None = None
+        #: Wall-clock budget for one run; ``0`` disables the watchdog.
+        self.run_timeout_s = max(0.0, float(run_timeout_s))
 
     async def run(self, task: TaskRecord, message: RoomMessage) -> TaskRecord:
         self.abort_outcome = None
@@ -54,8 +58,22 @@ class TaskRunner:
         self.record_task(running)
 
         before = len(self.agent.messages)
-        await self.agent.prompt(injected_prompt(message, running))
-        await self.agent.wait_for_idle()
+
+        async def drive() -> None:
+            await self.agent.prompt(injected_prompt(message, running))
+            await self.agent.wait_for_idle()
+
+        timed_out = False
+        if self.run_timeout_s > 0:
+            try:
+                await asyncio.wait_for(drive(), self.run_timeout_s)
+            except TimeoutError:
+                timed_out = True
+                self.abort_outcome = ("failed", "timeout")
+                self.agent.abort()
+                await self.agent.wait_for_idle()
+        else:
+            await drive()
 
         termination = self.agent.termination or "stop"
         new_messages = self.agent.messages[before:]
@@ -64,7 +82,11 @@ class TaskRunner:
             chain_cost=round(running.chain_cost + _run_cost(new_messages), 6),
             updated_at=int(time.time()),
         )
-        if termination in SUCCESS_TERMINATIONS:
+        if timed_out:
+            self.post_message(f"Task {task.id} failed: timeout", "system")
+            updated = replace(updated, state="failed", reason="timeout")
+            self.record_task(updated)
+        elif termination in SUCCESS_TERMINATIONS:
             text = _final_text(new_messages) or "(no output)"
             posted = self.post_message(text, "agent")
             updated = replace(updated, state="done", result_message_id=posted.id)
