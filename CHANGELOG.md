@@ -51,10 +51,12 @@ the other branch.
 - **Swarm room** (`RoomPage`): message feed with per-role status dots, task
   pills and system notes; `@` autocomplete in the composer; right-side roster,
   task strip with cancel/retry, and the shared approval panel above the composer.
-  Each task row expands in place to its task ID, creator, chain depth/cost,
-  source and result messages, failure/cancel reason and retry origin. Every task
-  transition — including `done`, `failed` and `cancelled` — now reaches the
-  room as a `swarm_task` frame, so cancel no longer leaves the row on running.
+  Each task row keeps the list compact; selecting one opens its ID, creator,
+  chain depth/cost, source and result messages, failure/cancel reason and retry
+  origin as a pinned card at the top of the conversation column, with the row
+  highlighted and a collapse action. Every task transition — including `done`,
+  `failed` and `cancelled` — now reaches the room as a `swarm_task` frame, so
+  cancel no longer leaves the row on running.
   Role build problems are listed above the feed, and the roster's **Reload
   agents** action re-reads manifests at any time. Each roster row's **Configure**
   action and the roster header's **New agent** open the full role editor in a

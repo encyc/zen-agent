@@ -24,6 +24,7 @@ export function RoomPage() {
   const load = useSwarmStore((state) => state.load)
   const saveRole = useSwarmStore((state) => state.saveRole)
   const [editing, setEditing] = useState<SwarmRole | 'new' | null>(null)
+  const [selectedTask, setSelectedTask] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const feed = useRef<HTMLDivElement>(null)
 
@@ -40,6 +41,7 @@ export function RoomPage() {
     () => new Map(tasks.map((task, index): [string, number] => [task.id, index + 1])),
     [tasks],
   )
+  const detail = tasks.find((task) => task.id === selectedTask) ?? null
 
   async function save(
     action: 'create' | 'update',
@@ -63,7 +65,7 @@ export function RoomPage() {
 
   return (
     <div className={css.root} data-swarm-page>
-      <div className={css.main}>
+      <div className={css.main} data-swarm-main>
         {warnings.length > 0 && (
           <section className={css.warnings} data-swarm-warnings role="status">
             <span className={css.warningsTitle}>
@@ -75,6 +77,14 @@ export function RoomPage() {
               ))}
             </ul>
           </section>
+        )}
+        {detail !== null && (
+          <TaskDetailPanel
+            task={detail}
+            messages={messages}
+            numbers={numbers}
+            onClose={() => setSelectedTask(null)}
+          />
         )}
         <div
           ref={feed}
@@ -103,7 +113,12 @@ export function RoomPage() {
           onConfigure={setEditing}
           onCreate={() => setEditing('new')}
         />
-        <TaskStrip tasks={tasks} messages={messages} numbers={numbers} />
+        <TaskStrip
+          tasks={tasks}
+          numbers={numbers}
+          selectedId={selectedTask}
+          onSelect={(id) => setSelectedTask((current) => (current === id ? null : id))}
+        />
       </aside>
       {editing !== null && (
         <AgentModal
@@ -374,17 +389,18 @@ function Roster({
 
 function TaskStrip({
   tasks,
-  messages,
   numbers,
+  selectedId,
+  onSelect,
 }: {
   tasks: SwarmTask[]
-  messages: SwarmMessage[]
   numbers: TaskNumbers
+  selectedId: string | null
+  onSelect(id: string): void
 }) {
   const t = useT()
   const cancel = useSwarmStore((state) => state.cancel)
   const retry = useSwarmStore((state) => state.retry)
-  const [openId, setOpenId] = useState<string | null>(null)
   return (
     <section className={css.block}>
       <h2 className={css.title}>{t('swarm.tasks')}</h2>
@@ -393,7 +409,7 @@ function TaskStrip({
       ) : (
         <ul className={css.rows} data-swarm-tasks>
           {tasks.map((task) => {
-            const open = openId === task.id
+            const selected = selectedId === task.id
             return (
               <li
                 key={task.id}
@@ -401,15 +417,15 @@ function TaskStrip({
                 data-swarm-task
                 data-task-id={task.id}
                 data-state={task.state}
-                data-open={open || undefined}
+                data-selected={selected || undefined}
               >
                 <div className={css.taskRow}>
                   <button
                     type="button"
                     className={css.taskToggle}
                     data-swarm-task-toggle
-                    aria-expanded={open}
-                    onClick={() => setOpenId(open ? null : task.id)}
+                    aria-expanded={selected}
+                    onClick={() => onSelect(task.id)}
                   >
                     <div className={css.rowMain}>
                       <span className={css.rowTitle}>
@@ -442,9 +458,6 @@ function TaskStrip({
                     </button>
                   )}
                 </div>
-                {open && (
-                  <TaskDetail task={task} messages={messages} numbers={numbers} />
-                )}
               </li>
             )
           })}
@@ -454,14 +467,18 @@ function TaskStrip({
   )
 }
 
-function TaskDetail({
+/** The selected task opened in the conversation column: a pinned card above
+ * the feed, so the task list stays a compact index. */
+function TaskDetailPanel({
   task,
   messages,
   numbers,
+  onClose,
 }: {
   task: SwarmTask
   messages: SwarmMessage[]
   numbers: TaskNumbers
+  onClose(): void
 }) {
   const t = useT()
   const source = messages.find((message) => message.id === task.sourceMessageId)
@@ -479,47 +496,62 @@ function TaskDetail({
         ? `#${numbers.get(task.derivedFrom)}`
         : task.derivedFrom
   return (
-    <dl className={css.taskDetail} data-swarm-task-detail>
-      <TaskDetailRow label={t('swarm.taskDetailId')} value={task.id} />
-      <TaskDetailRow label={t('swarm.taskDetailBy')} value={author} />
-      <TaskDetailRow
-        label={t('swarm.taskDetailChain')}
-        value={t('swarm.taskDetailChainValue', {
-          depth: task.chainDepth,
-          cost: task.chainCost.toFixed(2),
-        })}
-      />
+    <section className={css.taskPanel} data-swarm-task-detail data-task-id={task.id}>
+      <header className={css.taskPanelHead}>
+        <span className={css.taskPanelTitle}>
+          {t('swarm.taskLabel', { n: numbers.get(task.id) ?? 0 })}
+        </span>
+        <span className={css.rowCaption}>@{task.assignee}</span>
+        <span className={css.taskState} data-state={task.state}>
+          {t(`swarm.task.${task.state}`)}
+        </span>
+        <button
+          type="button"
+          className={`${css.ghost} ${css.taskPanelClose}`}
+          data-swarm-task-detail-close
+          onClick={onClose}
+        >
+          {t('swarm.taskDetailClose')}
+        </button>
+      </header>
+      <dl className={css.taskDetail}>
+        <TaskDetailRow label={t('swarm.taskDetailId')} value={task.id} />
+        <TaskDetailRow label={t('swarm.taskDetailBy')} value={author} />
+        <TaskDetailRow
+          label={t('swarm.taskDetailChain')}
+          value={t('swarm.taskDetailChainValue', {
+            depth: task.chainDepth,
+            cost: task.chainCost.toFixed(2),
+          })}
+        />
+        {task.reason !== null && (
+          <TaskDetailRow label={t('swarm.taskDetailReason')} value={task.reason} />
+        )}
+        {retryOf !== null && (
+          <TaskDetailRow label={t('swarm.taskDetailRetryOf')} value={retryOf} />
+        )}
+      </dl>
       {source !== undefined && (
-        <TaskDetailRow label={t('swarm.taskDetailSource')} value={source.text} multiline />
+        <figure className={css.taskQuote}>
+          <figcaption className={css.taskQuoteLabel}>{t('swarm.taskDetailSource')}</figcaption>
+          <blockquote className={css.taskQuoteText}>{source.text}</blockquote>
+        </figure>
       )}
       {result !== undefined && (
-        <TaskDetailRow label={t('swarm.taskDetailResult')} value={result.text} multiline />
+        <figure className={css.taskQuote}>
+          <figcaption className={css.taskQuoteLabel}>{t('swarm.taskDetailResult')}</figcaption>
+          <blockquote className={css.taskQuoteText}>{result.text}</blockquote>
+        </figure>
       )}
-      {task.reason !== null && (
-        <TaskDetailRow label={t('swarm.taskDetailReason')} value={task.reason} />
-      )}
-      {retryOf !== null && <TaskDetailRow label={t('swarm.taskDetailRetryOf')} value={retryOf} />}
-    </dl>
+    </section>
   )
 }
 
-function TaskDetailRow({
-  label,
-  value,
-  multiline = false,
-}: {
-  label: string
-  value: string
-  multiline?: boolean
-}) {
+function TaskDetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className={css.taskDetailRow}>
       <dt className={css.taskDetailKey}>{label}</dt>
-      <dd
-        className={multiline ? `${css.taskDetailValue} ${css.taskDetailText}` : css.taskDetailValue}
-      >
-        {value}
-      </dd>
+      <dd className={css.taskDetailValue}>{value}</dd>
     </div>
   )
 }
