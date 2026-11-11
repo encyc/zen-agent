@@ -499,40 +499,47 @@ function TaskDetailPanel({
   const t = useT()
   const source = messages.find((message) => message.id === task.sourceMessageId)
   const fetchTranscript = useSwarmStore((state) => state.transcript)
-  const clearRun = useSwarmStore((state) => state.clearRun)
   const active = task.state === 'running' || task.state === 'queued'
   const liveRows = useSwarmStore((state) => state.runRows[task.id])
-  const [steps, setSteps] = useState<RunView[]>([])
+  const [steps, setSteps] = useState<RunView[] | null>(null)
   const [recorded, setRecorded] = useState<boolean | null>(null)
-  // Live rows stream in as swarm_event frames; a settled task renders the
-  // authoritative file transcript instead.
-  const rows = active ? (liveRows ?? NO_ROWS) : steps
+  // The store releases live rows when the task settles; keep the last tail
+  // so a failed transcript fetch never blanks what the reader just watched.
+  const tail = useRef<RunView[]>(NO_ROWS)
+  if (liveRows !== undefined) tail.current = liveRows
+  const rows = steps ?? liveRows ?? tail.current
   const runNodes = useMemo(() => nodesFromViews(rows), [rows])
   const scrollRef = useRef<HTMLDivElement>(null)
   const stick = useRef(true)
 
-  // The role's session file only lands when its run ends, so while the task
-  // is live the store's event rows are the whole view. Once it settles, fetch
-  // the file transcript once (it reconciles anything missed mid-stream) and
-  // release the live tail.
   useEffect(() => {
-    setSteps([])
+    setSteps(null)
     setRecorded(null)
+    tail.current = NO_ROWS
     stick.current = true
+  }, [task.id])
+
+  // The role's session file only lands when its run ends. Once the task
+  // settles, fetch it once — it is the authoritative record and reconciles
+  // anything missed mid-stream.
+  useEffect(() => {
     if (active) return
     let alive = true
     const refresh = async (): Promise<void> => {
       const answer = await fetchTranscript(task.id).catch(() => null)
-      if (!alive || answer === null) return
+      if (!alive) return
+      if (answer === null) {
+        setRecorded(false)
+        return
+      }
       setSteps(answer.transcript)
       setRecorded(answer.available)
-      clearRun(task.id)
     }
     void refresh()
     return () => {
       alive = false
     }
-  }, [task.id, active, fetchTranscript, clearRun])
+  }, [task.id, active, fetchTranscript])
 
   useLayoutEffect(() => {
     const element = scrollRef.current

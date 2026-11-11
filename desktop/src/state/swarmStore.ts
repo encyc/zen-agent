@@ -82,7 +82,7 @@ interface SwarmState {
   applyFrame(frame: ServerFrame): void
 }
 
-export const useSwarmStore = create<SwarmState>((set) => ({
+export const useSwarmStore = create<SwarmState>((set, get) => ({
   messages: [],
   tasks: [],
   agents: [],
@@ -113,6 +113,11 @@ export const useSwarmStore = create<SwarmState>((set) => ({
       set((state) => ({
         tasks: replaceBy(state.tasks, frame, (task) => task.id),
       }))
+      // Settling releases the live tail whether or not a panel is open; an
+      // open panel bridges to the file transcript with its last live rows.
+      if (frame.state === 'done' || frame.state === 'failed' || frame.state === 'cancelled') {
+        get().clearRun(frame.id)
+      }
       return
     }
     if (frame.type === 'swarm_event') {

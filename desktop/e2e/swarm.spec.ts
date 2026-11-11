@@ -201,8 +201,31 @@ test('a running task detail streams live steps before the run ends', async ({ pa
   await expect(steps).toContainText('read_skill')
   await expect(task).toHaveAttribute('data-state', 'running')
   await expect(steps).toContainText('research 查完了')
+  // The injected task prompt is protocol plumbing, never a user bubble.
+  await expect(steps).not.toContainText('[swarm]')
 
   // Settling reconciles against the file transcript; the content survives.
+  await expect(task).toHaveAttribute('data-state', 'done')
+  await expect(steps).toContainText('read_skill')
+  await expect(steps).toContainText('research 查完了')
+})
+
+test('a settled task keeps its live tail when the transcript fetch fails', async ({ page }) => {
+  await boot(page, initialState(swarmFixture({ swarmFailTranscript: true })))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  const composer = page.locator('[data-swarm-input]')
+  await composer.fill('@research 查 X')
+  await composer.press('Enter')
+
+  const task = page.locator('[data-swarm-task]').first()
+  await task.locator('[data-swarm-task-toggle]').click()
+  const detail = page.locator('[data-swarm-main] [data-swarm-task-detail]')
+  const steps = detail.locator('[data-swarm-task-steps]')
+  await expect(steps).toContainText('research 查完了')
+
+  // The transcript op fails (a reset/compacted role session): the streamed
+  // tail stays on screen instead of blanking the panel.
   await expect(task).toHaveAttribute('data-state', 'done')
   await expect(steps).toContainText('read_skill')
   await expect(steps).toContainText('research 查完了')

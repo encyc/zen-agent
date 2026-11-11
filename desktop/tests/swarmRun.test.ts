@@ -51,6 +51,21 @@ test('a user message row is appended', () => {
   assert.equal((rows[0] as MessageView).text, 'do the thing')
 })
 
+test('the injected swarm task prompt never becomes a user row', () => {
+  // The runner injects the task prompt as a user message; the settled
+  // transcript slices it out (transcript.py _INJECTED_PREFIX), so the live
+  // view must hide it too — it is internal protocol boilerplate.
+  const rows: RunView[] = []
+  const injected =
+    '[swarm] from user:you\ntask: t_1 · chain: c_1 · depth: 1\n\n' +
+    'Team room protocol:\n- Your final message is posted to the room.\n\n' +
+    'Message:\n查 X'
+  assert.equal(
+    applyRunEvent(rows, { type: 'message_start', message: { role: 'user', text: injected } }),
+    rows,
+  )
+})
+
 test('a tool call streams start → update → end on one row keyed by call_id', () => {
   let rows: RunView[] = []
   rows = applyRunEvent(rows, {

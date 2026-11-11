@@ -241,3 +241,15 @@ test('two tasks keep separate run rows', () => {
   assert.equal(useSwarmStore.getState().runRows['t_1'].length, 1)
   assert.equal(useSwarmStore.getState().runRows['t_2'].length, 1)
 })
+
+test('a terminal task frame releases its live rows even with no panel open', () => {
+  useSwarmStore.setState({ runRows: {} })
+  useSwarmStore.getState().applyFrame({
+    type: 'swarm_event', swarm: true, agent: 'research', task: 't_1',
+    event: { type: 'tool_execution_start', tool_call_id: 'c1', tool_name: 'bash' },
+  } as never)
+  useSwarmStore.getState().applyFrame(taskFrame('t_1', 'running'))
+  assert.equal(useSwarmStore.getState().runRows['t_1'].length, 1, 'live rows survive a running transition')
+  useSwarmStore.getState().applyFrame(taskFrame('t_1', 'done'))
+  assert.equal(useSwarmStore.getState().runRows['t_1'], undefined, 'settling releases the rows')
+})

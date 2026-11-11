@@ -52,6 +52,11 @@ export function applyRunEvent(rows: RunView[], event: AgentEventFrame): RunView[
     case 'message_start': {
       const role = event.message?.role
       if (role === 'user') {
+        const text = event.message?.text ?? ''
+        // The runner injects the task prompt as a user message; the settled
+        // transcript slices it out (transcript.py _INJECTED_PREFIX), so the
+        // live view hides the same protocol boilerplate.
+        if (text.startsWith('[swarm] from ')) return rows
         // A /skill: turn is a chip view, exactly as the wire projects it.
         const skill = event.message?.skill === true
         return [
@@ -59,7 +64,7 @@ export function applyRunEvent(rows: RunView[], event: AgentEventFrame): RunView[
           {
             kind: skill ? 'skill' : 'user',
             id: nextId(),
-            text: event.message?.text ?? '',
+            text,
             steering: event.message?.steering === true,
             ...(skill
               ? {

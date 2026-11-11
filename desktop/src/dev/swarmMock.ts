@@ -22,6 +22,8 @@ export interface SwarmMockState {
   swarmMessages?: SwarmMessage[]
   /** Role build problems to show above the room. */
   swarmWarnings?: string[]
+  /** Fail the transcript op, the way a reset/compacted role session does. */
+  swarmFailTranscript?: boolean
 }
 
 export interface SwarmFixtureOptions extends Partial<SwarmMockState> {
@@ -287,6 +289,15 @@ function transition(task: SwarmTask, state: SwarmTask['state'], reason: string |
 async function run(rows: Room, task: SwarmTask, depth: number): Promise<void> {
   setAgent(rows, task.assignee, 'running', task.id)
   transition(task, 'running')
+  // The runner injects the task prompt as a user message; the detail must
+  // hide it live exactly as the settled transcript slices it out.
+  const source = rows.swarmMessages.find((message) => message.id === task.sourceMessageId)
+  const injected =
+    `[swarm] from user:you\ntask: ${task.id} · chain: ${task.chainId} · depth: ${depth}\n\n` +
+    `Team room protocol:\n- Your final message is posted to the room as this task's result.\n\n` +
+    `Message:\n${source?.text ?? ''}`
+  emitRunEvent(task, { type: 'message_start', message: { role: 'user', text: injected } })
+  emitRunEvent(task, { type: 'message_end', message: { role: 'user', text: injected } })
   const text = `${task.assignee} 查完了`
   emitRunEvent(task, {
     type: 'tool_execution_start',
@@ -454,6 +465,9 @@ export function handleSwarm(
 
   if (op === 'transcript') {
     const taskId = String(payload.taskId ?? '')
+    if (rows.swarmFailTranscript === true) {
+      return { type: 'error', id: payload.id, ok: false, message: 'transcript unavailable' }
+    }
     const task = rows.swarmTasks.find((row) => row.id === taskId)
     // The role's session file only lands when its run ends — a live task has
     // no readable transcript, exactly like the host.
