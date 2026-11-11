@@ -18,6 +18,7 @@ import { captureChatState } from './pages/navigation'
 import { AppMark } from './AppMark'
 import { ZenWordmark } from './ZenWordmark'
 import { SidebarCoding } from './SidebarCoding'
+import { ZenSidebar } from './ZenSidebar'
 import css from './Sidebar.module.css'
 
 export function Sidebar(props: { onCollapse(): void }) {
@@ -46,7 +47,7 @@ export function Sidebar(props: { onCollapse(): void }) {
 
       <ModeSwitcher />
 
-      {workspaceMode === 'zen' ? <SidebarCoding /> : workspaceMode === 'swarm' ? <SidebarCoding /> : <SidebarCoding />}
+      {workspaceMode === 'zen' ? <ZenSidebar /> : workspaceMode === 'swarm' ? <SidebarCoding /> : <SidebarCoding />}
 
       <Footer />
     </div>
