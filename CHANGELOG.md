@@ -3,7 +3,9 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased — Zen 模式 × Swarm 多角色运行时（双分支集成）
+## v0.13.0 — 2026-11-12
+
+**Zen 模式 × Swarm 多角色运行时（双分支集成 + 按项目房间 + 模式感知侧边栏）**
 
 **Merge note.** 集成 feat/zen-mode 与 feat/swarm-runtime；模式状态统一为
 `workspaceMode` 三态（zen 的 ✨ 开关由三态切换器收编）；zen 离开行为默认改为
