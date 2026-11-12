@@ -193,6 +193,22 @@ export interface SwarmWorkFrame extends SwarmWork {
   project?: string
 }
 
+export interface SwarmWorksResult {
+  type: 'result'
+  id: string
+  ok: true
+  works: SwarmWork[]
+  adhoc: SwarmTask[]
+}
+
+export interface SwarmWorkResult {
+  type: 'result'
+  id: string
+  ok: true
+  work: SwarmWork
+  rounds?: SwarmTask[]
+}
+
 /** Every server-initiated swarm frame, for the ServerFrame union. */
 export type SwarmServerFrame =
   | SwarmMessageFrame

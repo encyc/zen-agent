@@ -192,3 +192,27 @@
   opacity: 0.5;
   cursor: default;
 }
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 2px;
+  border-radius: var(--ds-radius-8);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.tab {
+  flex: 1;
+  padding: 6px 8px;
+  border: none;
+  border-radius: var(--ds-radius-6);
+  background: transparent;
+  color: var(--dsw-alias-label-caption);
+  font: inherit;
+  font-size: var(--ds-font-11);
+  cursor: pointer;
+}
+
+.tab[data-active] {
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+}

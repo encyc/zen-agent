@@ -25,6 +25,8 @@ export type {
   SwarmTaskState,
   SwarmWork,
   SwarmWorkFrame,
+  SwarmWorkResult,
+  SwarmWorksResult,
   SwarmWorkState,
 } from './types-swarm.ts'
 

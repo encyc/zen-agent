@@ -19,6 +19,8 @@ import type {
   SwarmTask,
   SwarmTranscriptResult,
   SwarmWork,
+  SwarmWorkResult,
+  SwarmWorksResult,
 } from '../rpc/types'
 import { applyRunEvent, type RunView } from './swarmRun.ts'
 
@@ -79,6 +81,9 @@ interface SwarmState {
   tasks: SwarmTask[]
   agents: SwarmAgentState[]
   works: SwarmWork[]
+  /** Rounds with no work item: visible, never scored, out of the KPI. */
+  adhoc: SwarmTask[]
+  selectedWork: string | null
   roles: SwarmRole[]
   /** Role build/parse problems the host reported; shown above the room. */
   warnings: string[]
@@ -117,6 +122,14 @@ interface SwarmState {
   runRows: Record<string, RunView[]>
   /** Open/close a task detail (same id toggles it off). */
   selectTask(id: string): void
+  /** Load the work item panel (work list + ad-hoc rounds). */
+  loadWorks(project: string | null): Promise<void>
+  /** Open/close one work item's detail in the sidebar. */
+  selectWork(id: string): void
+  /** Human score; `null` clears it. Only people can score. */
+  scoreWork(id: string, score: number | null, note?: string | null): Promise<void>
+  closeWork(id: string, score?: number | null, note?: string | null): Promise<void>
+  reopenWork(id: string): Promise<void>
   /** Drop the selection and live rows when leaving a room; keep room data. */
   clearRoomUi(): void
   /** Drop a task's live rows (the settled transcript is authoritative). */
@@ -129,6 +142,8 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
   tasks: [],
   agents: [],
   works: [],
+  adhoc: [],
+  selectedWork: null,
   roles: [],
   warnings: [],
   loaded: false,
@@ -138,6 +153,64 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
 
   selectTask(id) {
     set((state) => ({ selectedTask: state.selectedTask === id ? null : id }))
+  },
+
+  async loadWorks(project) {
+    const answer = (await send({
+      type: 'swarm',
+      op: 'works',
+      action: 'list',
+      ...(project !== null ? { project } : {}),
+    })) as unknown as SwarmWorksResult
+    if (answer.ok !== true) return
+    set({ works: answer.works ?? [], adhoc: answer.adhoc ?? [] })
+  },
+
+  selectWork(id) {
+    set((state) => ({ selectedWork: state.selectedWork === id ? null : id }))
+  },
+
+  async scoreWork(id, score, note = null) {
+    const answer = (await send({
+      type: 'swarm',
+      op: 'works',
+      action: 'score',
+      workId: id,
+      score,
+      ...(note !== null ? { note } : {}),
+    })) as unknown as SwarmWorkResult
+    if (answer.ok === true && answer.work) {
+      const work = answer.work
+      set((state) => ({ works: replaceBy(state.works, work, (row) => row.id) }))
+    }
+  },
+
+  async closeWork(id, score = null, note = null) {
+    const answer = (await send({
+      type: 'swarm',
+      op: 'works',
+      action: 'close',
+      workId: id,
+      score,
+      ...(note !== null ? { note } : {}),
+    })) as unknown as SwarmWorkResult
+    if (answer.ok === true && answer.work) {
+      const work = answer.work
+      set((state) => ({ works: replaceBy(state.works, work, (row) => row.id) }))
+    }
+  },
+
+  async reopenWork(id) {
+    const answer = (await send({
+      type: 'swarm',
+      op: 'works',
+      action: 'reopen',
+      workId: id,
+    })) as unknown as SwarmWorkResult
+    if (answer.ok === true && answer.work) {
+      const work = answer.work
+      set((state) => ({ works: replaceBy(state.works, work, (row) => row.id) }))
+    }
   },
 
   clearRoomUi() {
@@ -260,6 +333,8 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
       tasks: [],
       agents: [],
       works: [],
+      adhoc: [],
+      selectedWork: null,
       roles: [],
       warnings: [],
       runRows: {},

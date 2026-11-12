@@ -609,11 +609,11 @@ git commit -m "feat(swarm): works RPC family and swarm_work frame"
 - Consumes: Task 8 的 `works` 请求与 `swarm_work` 帧
 - Produces: store 上 `works: SwarmWork[]`、`loadWorks()`、`scoreWork(id, score, note)`、`closeWork(id)`
 
-- [ ] **Step 1: 写失败测试** —— 列表渲染（有 open / review / closed 三态徽标）、选中详情显示轮次、打分后状态更新、ad-hoc 分组不出现打分按钮。
-- [ ] **Step 2: 跑测试确认失败** → `cd desktop && node --test tests/swarmWorks.test.tsx`
-- [ ] **Step 3: 实现**（沿用 `SwarmPanels.module.css` 的类名习惯；i18n 键 `swarm.works*` 双语）
-- [ ] **Step 4: 跑测试确认通过** → `node --test tests/` 与 `python -m pytest tests/test_rpc_contract.py -v`
-- [ ] **Step 5: Commit**
+- [x] **Step 1: 写失败测试** —— 列表渲染（有 open / review / closed 三态徽标）、选中详情显示轮次、打分后状态更新、ad-hoc 分组不出现打分按钮。
+- [x] **Step 2: 跑测试确认失败** → `cd desktop && node --test tests/swarmWorks.test.tsx`
+- [x] **Step 3: 实现**（沿用 `SwarmPanels.module.css` 的类名习惯；i18n 键 `swarm.works*` 双语）
+- [x] **Step 4: 跑测试确认通过** → `node --test tests/` 与 `python -m pytest tests/test_rpc_contract.py -v`
+- [x] **Step 5: Commit**
 
 ```bash
 git add desktop/ && git commit -m "feat(desktop): swarm work item panel"
