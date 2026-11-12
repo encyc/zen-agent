@@ -101,6 +101,73 @@
   color: var(--dsw-alias-label-secondary);
 }
 
+/* Quoting stays out of the way until the reader points at the message. */
+.quoteAction {
+  margin-left: auto;
+  padding: 0 6px;
+  border: none;
+  border-radius: var(--ds-radius-4);
+  background: transparent;
+  color: var(--dsw-alias-label-caption);
+  cursor: pointer;
+  font-size: var(--ds-font-10-5);
+  opacity: 0;
+  transition: opacity var(--ds-motion-fast) var(--ds-ease-out);
+}
+
+.message:hover .quoteAction,
+.message:focus-within .quoteAction,
+.quoteAction:focus-visible {
+  opacity: 1;
+}
+
+.quoteAction:hover {
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+}
+
+.quoteCard {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 8px;
+  border: none;
+  border-left: 2px solid var(--dsw-alias-label-tertiary);
+  border-radius: var(--ds-radius-6);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  font-size: var(--ds-font-11-5);
+  text-align: left;
+}
+
+.quoteCard:hover {
+  background: var(--dsw-alias-bg-layer-3);
+}
+
+.quoteCardAuthor {
+  flex: none;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+.quoteCardText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes roomFlash {
+  from {
+    background: var(--dsw-alias-bg-layer-3);
+  }
+}
+
+.message[data-flash] {
+  animation: roomFlash 1.2s var(--ds-ease-out);
+}
+
 .text {
   font-size: var(--ds-font-13);
   line-height: 20px;

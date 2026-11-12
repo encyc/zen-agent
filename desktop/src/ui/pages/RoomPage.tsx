@@ -7,6 +7,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { SwarmMessage, SwarmRole, SwarmTask } from '../../rpc/types'
 import { useT } from '../../i18n/locale'
 import { nodesFromViews, type ChatNode } from '../../state/chatStore'
+import { useComposerStore } from '../../state/stores'
 import type { RunView } from '../../state/swarmRun'
 import { useSwarmStore } from '../../state/swarmStore'
 import { RoomComposer } from '../composer/RoomComposer'
@@ -31,12 +32,23 @@ export function RoomPage() {
   const warnings = useSwarmStore((state) => state.warnings)
   const selectedTask = useSwarmStore((state) => state.selectedTask)
   const selectTask = useSwarmStore((state) => state.selectTask)
+  const project = useSwarmStore((state) => state.loadedProject) ?? ''
+  const setQuote = useComposerStore((state) => state.setRoomQuote)
+  const [flash, setFlash] = useState<string | null>(null)
   const feed = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const node = feed.current
     if (node !== null) node.scrollTop = node.scrollHeight
   }, [messages.length, selectedTask])
+
+  const jumpTo = (id: string) => {
+    const node = feed.current?.querySelector<HTMLElement>(`[data-message-id="${id}"]`)
+    if (node === null || node === undefined) return
+    node.scrollIntoView({ block: 'center' })
+    setFlash(id)
+    window.setTimeout(() => setFlash((current) => (current === id ? null : current)), 1200)
+  }
 
   const numbers = useMemo(
     () => new Map(tasks.map((task, index): [string, number] => [task.id, index + 1])),
@@ -78,7 +90,21 @@ export function RoomPage() {
               <div className={css.empty}>{t('swarm.empty')}</div>
             ) : (
               messages.map((message) => (
-                <MessageRow key={message.id} message={message} roles={roles} numbers={numbers} />
+                <MessageRow
+                  key={message.id}
+                  message={message}
+                  roles={roles}
+                  numbers={numbers}
+                  flash={flash}
+                  onQuote={(target) =>
+                    setQuote(project, {
+                      id: target.id,
+                      author: target.author,
+                      text: target.text,
+                    })
+                  }
+                  onJump={jumpTo}
+                />
               ))
             )}
           </div>
@@ -93,10 +119,16 @@ function MessageRow({
   message,
   roles,
   numbers,
+  flash,
+  onQuote,
+  onJump,
 }: {
   message: SwarmMessage
   roles: SwarmRole[]
   numbers: TaskNumbers
+  flash: string | null
+  onQuote(message: SwarmMessage): void
+  onJump(id: string): void
 }) {
   const t = useT()
   const kind = message.author.kind
@@ -107,6 +139,7 @@ function MessageRow({
         ? t('swarm.system')
         : (roles.find((role) => role.id === message.author.id)?.name ?? message.author.id)
   const number = message.taskId === null ? undefined : numbers.get(message.taskId)
+  const ref = message.ref ?? null
   return (
     <div
       className={css.message}
@@ -114,6 +147,7 @@ function MessageRow({
       data-message-id={message.id}
       data-author-kind={kind}
       data-own={kind === 'user' || undefined}
+      data-flash={flash === message.id || undefined}
     >
       <div className={css.messageHead}>
         {kind !== 'system' && <span className={css.dot} data-kind={kind} aria-hidden />}
@@ -123,7 +157,31 @@ function MessageRow({
             {t('swarm.taskPill', { n: number })}
           </span>
         )}
+        {kind !== 'system' && (
+          <button
+            type="button"
+            className={css.quoteAction}
+            data-swarm-quote
+            aria-label={t('swarm.quoteAction')}
+            onClick={() => onQuote(message)}
+          >
+            {t('swarm.quoteAction')}
+          </button>
+        )}
       </div>
+      {ref !== null && (
+        <button
+          type="button"
+          className={css.quoteCard}
+          data-swarm-quote-card
+          onClick={() => onJump(ref.id)}
+        >
+          <span className={css.quoteCardAuthor}>
+            {roles.find((role) => role.id === ref.author.id)?.name ?? ref.author.id}
+          </span>
+          <span className={css.quoteCardText}>{ref.text}</span>
+        </button>
+      )}
       <div className={css.text}>{message.text}</div>
       {message.mentions.length > 0 && (
         <div className={css.chips}>
