@@ -3,7 +3,7 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased
+## v0.13.2 — 2026-11-12
 
 **Every non-destructive multi-agent knob is now in Settings.** Zen and Swarm
 own their parameters instead of hiding them in `config.toml`, and the separate
