@@ -104,6 +104,7 @@ export const REQUEST_KINDS = [
   'steer',
   'subagent_transcript',
   'swarm',
+  'runs',
   'terminal',
   'tools',
   'transcript',
@@ -723,7 +724,6 @@ export interface ZenFleetFrame {
   project?: string
   session?: string
 }
-
 export type ServerFrame =
   | ResultFrame
   | EventFrame

@@ -117,10 +117,10 @@ Phase 1 的目标不是立刻统一三种编排器，而是先补一个**所有�
 
 ### Task 4：`runs` RPC
 
-- [ ] `tests/test_rpc_runs.py`：host 级 list/get、过滤、未知 op 拒绝。
-- [ ] 实现 `zenagent/cli/rpc/ops_runs.py`，接进 `RpcHost`。
-- [ ] `desktop/src/rpc/types.ts` 加 `'runs'`。
-- [ ] 跑 `tests/test_rpc_contract.py`。
+- [x] `tests/test_rpc_runs.py`：host 级 list/get、过滤、未知 op 拒绝。
+- [x] 实现 `zenagent/cli/rpc/ops_runs.py`，接进 `RpcHost`。
+- [x] `desktop/src/rpc/types.ts` 加 `'runs'`。
+- [x] 跑 `tests/test_rpc_contract.py`。
 
 ### Task 5：Swarm 回收
 

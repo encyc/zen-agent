@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 from zenagent.app.bootstrap import prepare
 from zenagent.cli.rpc.codec import PROTOCOL_VERSION
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
+from zenagent.cli.rpc.ops_runs import RunsOps
 from zenagent.cli.rpc.ops_swarm import SwarmOps, _is_swarm_request_id
 from zenagent.cli.rpc.ops_zen import ZenOps
 from zenagent.cli.rpc.slot import RuntimeSlot
@@ -35,7 +36,7 @@ if TYPE_CHECKING:
 MAX_RESIDENT_SLOTS = 4
 
 
-class RpcHost(SwarmOps, ZenOps):
+class RpcHost(RunsOps, SwarmOps, ZenOps):
     """Reads requests, routes them to a project slot, and owns slot lifetime."""
 
     def __init__(
@@ -146,6 +147,9 @@ class RpcHost(SwarmOps, ZenOps):
             return True
         if kind == "session" and request.get("op") == "resume":
             await self._session_resume(request, request_id)
+            return True
+        if kind == "runs":
+            await self._runs_op(request, request_id)
             return True
         if kind == "swarm":
             await self._swarm_op(request, request_id)
