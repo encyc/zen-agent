@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -26,6 +28,10 @@ from zenagent.types import (
     ToolCall,
     ToolResultMessage,
     Usage,
+)
+
+PNG_1PX = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
 )
 
 _PROJECT_ROOT: Path | None = None
@@ -1053,5 +1059,87 @@ async def test_project_room_with_messages_does_not_warn_about_the_archive():
             for warning in manager.warnings
             if warning.startswith("legacy global room archived")
         ]
+    finally:
+        await manager.close()
+
+
+async def test_unknown_ref_is_refused():
+    manager = _manager()
+    _write_role("research")
+    await manager.start()
+    try:
+        with pytest.raises(ValueError, match="unknown ref"):
+            await manager.post("@research hi", ref="m_missing")
+    finally:
+        await manager.close()
+
+
+async def test_system_notice_is_not_quotable():
+    manager = _manager()
+    _write_role("research")
+    await manager.start()
+    try:
+        notice = manager._system_note("note")
+        assert notice.author_kind == "system"
+        with pytest.raises(ValueError, match="cannot quote a system message"):
+            await manager.post("@research hi", ref=notice.id)
+    finally:
+        await manager.close()
+
+
+async def test_post_snapshots_the_quoted_message_for_every_task():
+    manager = _manager()
+    _write_role("research")
+    _write_role("coder")
+    await manager.start()
+    try:
+        first = await manager.post("@research 出结论")
+        source = manager.store.messages[-1]
+        tasks = await manager.post("@research @coder 复核", ref=source.id)
+
+        assert len(tasks) == 2
+        message = manager.store.messages[-1]
+        assert message.ref is not None
+        assert (message.ref.id, message.ref.text) == (source.id, source.text)
+        assert message.ref.author_kind == source.author_kind
+    finally:
+        await manager.close()
+
+
+async def test_images_are_refused_before_any_task_is_created(tmp_path):
+    manager = _manager()
+    _write_role("research")
+    await manager.start()
+    try:
+        with pytest.raises(ValueError, match="cannot read image"):
+            await manager.post("@research 看图", images=[str(tmp_path / "missing.png")])
+        assert manager.tasks() == []
+    finally:
+        await manager.close()
+
+
+async def test_a_non_vision_target_refuses_the_whole_post(tmp_path):
+    manager = _manager()
+    _write_role("research")
+    await manager.start()
+    try:
+        agent = manager.agents["research"]
+        agent.agent.model = replace(agent.agent.model, supports_vision=False)
+        image = tmp_path / "a.png"
+        image.write_bytes(PNG_1PX)
+
+        with pytest.raises(ValueError, match="@research cannot accept images"):
+            await manager.post("@research 看图", images=[str(image)])
+        assert manager.tasks() == []
+    finally:
+        await manager.close()
+
+
+async def test_roles_report_vision_support():
+    manager = _manager()
+    _write_role("research")
+    await manager.start()
+    try:
+        assert all("supportsVision" in role for role in manager.roles())
     finally:
         await manager.close()

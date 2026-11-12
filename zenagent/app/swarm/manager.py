@@ -37,6 +37,7 @@ from zenagent.app.swarm.roles import (
 )
 from zenagent.app.swarm.room import (
     RoomMessage,
+    RoomRef,
     SwarmStore,
     TaskRecord,
     _message_record,
@@ -57,6 +58,7 @@ from zenagent.app.swarm.router import (
 )
 from zenagent.app.swarm.runner import TaskRunner
 from zenagent.app.swarm.transcript import read_task_transcript
+from zenagent.attachments import read_image_argument
 from zenagent.config import load_user_config
 from zenagent.mcp.config import parse_server
 from zenagent.project import project_key
@@ -209,10 +211,12 @@ class SwarmManager(SwarmFrames):
     # -- queries ------------------------------------------------------------
 
     def roles(self) -> list[dict]:
-        return [
-            role_view(agent.pending_apply or agent.role)
-            for agent in self.agents.values()
-        ]
+        views = []
+        for agent in self.agents.values():
+            view = role_view(agent.pending_apply or agent.role)
+            view["supportsVision"] = agent.agent.model.supports_vision
+            views.append(view)
+        return views
 
     def agents_state(self) -> list[dict]:
         return [
@@ -266,20 +270,57 @@ class SwarmManager(SwarmFrames):
 
     # -- room commands ------------------------------------------------------
 
-    async def post(self, text: str) -> list[TaskRecord]:
+    async def post(
+        self,
+        text: str,
+        *,
+        ref: str | None = None,
+        images: list[str] | None = None,
+    ) -> list[TaskRecord]:
+        mentions = parse_mentions(text)
+        quote = self._quote_snapshot(ref)
+        paths = self._image_paths(images or [], mentions)
         message = RoomMessage(
             id=self.store.new_id("m"),
             ts=_now(),
             author_kind="user",
             author_id="you",
             text=text,
-            mentions=parse_mentions(text),
+            mentions=mentions,
             task_id=None,
             chain_depth=0,
+            ref=quote,
+            images=paths,
         )
         self.store.append_message(message)
         self._emit_message(message)
         return self._admit(message)
+
+    def _quote_snapshot(self, ref: str | None) -> RoomRef | None:
+        if ref is None:
+            return None
+        source = next((item for item in self.store.messages if item.id == ref), None)
+        if source is None:
+            raise ValueError(f"unknown ref {ref}")
+        if source.author_kind == "system":
+            raise ValueError(f"cannot quote a system message {ref}")
+        return RoomRef(
+            id=source.id,
+            author_kind=source.author_kind,
+            author_id=source.author_id,
+            text=source.text,
+        )
+
+    def _image_paths(self, images: list[str], mentions: list[str]) -> list[str]:
+        if not images:
+            return []
+        for path in images:
+            read_image_argument(Path(path))
+        for role_id in mentions:
+            agent = self.agents.get(role_id)
+            if agent is not None and not agent.agent.model.supports_vision:
+                raise ValueError(f"@{role_id} cannot accept images")
+        return list(images)
 
     async def cancel(self, task_id: str) -> bool:
         task = self.store.tasks.get(task_id)
