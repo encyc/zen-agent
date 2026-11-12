@@ -98,3 +98,33 @@ async def test_swarm_task_writes_a_swarm_run_record(tmp_path, monkeypatch):
         assert row.session
     finally:
         await manager.close()
+
+
+async def test_zen_router_scope_follows_attach_and_detach(tmp_path):
+    from types import SimpleNamespace
+
+    from zenagent.cli.rpc.ops_zen import ZenOps
+
+    class FakeRuntime:
+        def __init__(self):
+            self.root = tmp_path
+            self.session = SimpleNamespace(path=tmp_path / "router.jsonl")
+            self.zen_fleet = None
+            self.user_config = None
+
+        def _recompose(self):
+            return None
+
+    runtime = FakeRuntime()
+    slot = SimpleNamespace(
+        runtime=runtime,
+        chat=None,
+        server=SimpleNamespace(confirm=None),
+    )
+    ops = ZenOps()
+    ops._attach_fleet(tmp_path, slot)
+    assert runtime.run_scope["kind"] == "zen_router"
+    assert runtime.run_scope["agentId"] == "router"
+    await ops._detach_fleet(slot)
+    assert runtime.run_scope["kind"] == "coding"
+    assert runtime.run_scope["agentId"] == "main"
