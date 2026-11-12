@@ -25,6 +25,7 @@ from zenagent.agent.agent import Agent
 from zenagent.agent.session import Session
 from zenagent.app.permissions import build_broker_for
 from zenagent.app.plugin_wiring import start_mcp
+from zenagent.app.run_wiring import attach_swarm_run
 from zenagent.app.runtime import Runtime, RuntimeOptions
 from zenagent.app.swarm.approvals import APPROVAL_TIMEOUT_S, SwarmApprovals
 from zenagent.app.swarm.events_tap import EventSink, subscribe_events
@@ -66,7 +67,10 @@ from zenagent.app.swarm.router import (
 )
 from zenagent.app.swarm.runner import TaskRunner
 from zenagent.app.swarm.schedule import SwarmSchedule
-from zenagent.app.swarm.transcript import read_task_transcript, read_task_transcript_from_disk
+from zenagent.app.swarm.transcript import (
+    read_task_transcript,
+    read_task_transcript_from_disk,
+)
 from zenagent.app.swarm.workflow import SwarmWorkflow
 from zenagent.app.swarm.workitems import WorkItemStore
 from zenagent.attachments import read_image_argument
@@ -142,8 +146,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
         self._loop_task: asyncio.Task | None = None
         self._approvals: dict[str, asyncio.Future] = {}
         self._approval_seq = 0
-        # Approval ids carry the project key, so the host can route a reply to
-        # this room after the person switched to another project.
+        # Approval ids carry the project key, so a reply reaches this room.
         self._approval_prefix = f"{project_key(self.root)}:swarm:"
         self._started = False
         self._stopping = False
@@ -175,10 +178,8 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
         roles, warnings = discover_roles(self.root)
         self.warnings.extend(warnings)
         self._set_roles(roles)
-        # Instances are built lazily, on a round's first run: a room with twenty
-        # roles must not pay twenty runtimes (each with its own MCP children)
-        # to sit idle. Role *membership* still comes from configuration above,
-        # so @-mentions route without any instance existing.
+        # Instances are built lazily on a round's first run; role membership
+        # still comes from configuration, so @-mentions route without one.
         self.router = Router(
             self.store,
             self.role_ids,
@@ -200,8 +201,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
                 await self._loop_task
             self._loop_task = None
 
-        # Fail every pending approval before gathering runs: a tool awaiting
-        # confirm would otherwise block the gather for APPROVAL_TIMEOUT_S.
+        # Fail pending approvals first: a waiting tool would block the gather.
         for future in self._approvals.values():
             if not future.done():
                 future.set_result("deny")
@@ -333,8 +333,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
                 agent.session.path, task_id, running=task.state == "running"
             )
             return {"available": available, "transcript": rows}
-        # No live instance (lazy build, idle reclamation, or a closed work
-        # item): the session file is the fact source, so read it from disk.
+        # No live instance: the session file is the fact source; read from disk.
         rows = read_task_transcript_from_disk(
             sessions_dir(
                 task.assignee, root=self.root, work_item_id=task.work_item_id
@@ -655,6 +654,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
             gate=broker,
             allow_missing_key=True,
         )
+        attach_swarm_run(runtime, role.id, work_item_id, role.name)
         try:
             self.warnings.extend(runtime.warnings)
             await self._attach_role_tools(

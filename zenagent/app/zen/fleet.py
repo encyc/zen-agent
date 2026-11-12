@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 from zenagent.agent.session import read_session_titles, unique_session_path
 from zenagent.app.bootstrap import prepare
 from zenagent.app.records import open_session
+from zenagent.app.run_wiring import update_run_scope
 from zenagent.app.runtime import RuntimeOptions
 from zenagent.app.zen.prompts import worker_prompt
 from zenagent.app.zen.roster import read_roster
@@ -304,6 +305,16 @@ class ZenFleet:
         prepared = await prepare(
             RuntimeOptions(root=self.root, resume=handle.path, mode=mode),
             views=False,
+        )
+        router_runtime = getattr(self.chat, "runtime", None)
+        update_run_scope(
+            prepared.runtime,
+            kind="zen_worker",
+            agentId=handle.title or Path(handle.path).stem,
+            label=handle.focus,
+            parentRunId=getattr(router_runtime, "current_run_id", None),
+            workItemId=None,
+            taskId=None,
         )
         if self.confirm is not None:
             # Worker write/exec calls ask the router's UI for approval.

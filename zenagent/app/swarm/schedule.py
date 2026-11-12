@@ -15,6 +15,7 @@ import asyncio
 import time
 from dataclasses import replace
 
+from zenagent.app.run_wiring import update_run_scope
 from zenagent.app.swarm.instances import AgentKey
 from zenagent.app.swarm.room import TaskRecord, is_terminal
 
@@ -91,6 +92,7 @@ class SwarmSchedule:
                 return
             agent.state = "running"
             agent.current_task = task.id
+            update_run_scope(agent.runtime, taskId=task.id)
             self._idle.touch(key)
             self._emit_agent(key)
             await runner.run(task, message)

@@ -20,6 +20,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from zenagent.agent.session import Session
+from zenagent.app.run_wiring import update_run_scope
 from zenagent.app.views import TranscriptBuilder
 from zenagent.app.zen.fleet import ZenFleet
 from zenagent.app.zen.roster import latest_router, set_role
@@ -201,6 +202,7 @@ class ZenOps:
             worker_mode=config.zen_worker_mode,
         )
         runtime.zen_fleet = fleet
+        update_run_scope(runtime, kind="zen_router", agentId="router", label="router")
         # The role guard, the fleet tools and the router prompt note all read
         # ``zen_fleet`` at compose time, so one recompose is the whole attach.
         runtime._recompose()
@@ -215,6 +217,7 @@ class ZenOps:
         if fleet is not None:
             await fleet.close()
         slot.runtime.zen_fleet = None
+        update_run_scope(slot.runtime, kind="coding", agentId="main", label="")
         slot.runtime._recompose()
 
     # -- frames -------------------------------------------------------------

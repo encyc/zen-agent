@@ -28,7 +28,12 @@ from zenagent.app.runs import RunLedger, RunRecord, status_for_termination
 from zenagent.events import AgentEvent
 from zenagent.types import AssistantMessage
 
-__all__ = ["RunRecorder", "attach_run_recorder", "update_run_scope"]
+__all__ = [
+    "RunRecorder",
+    "attach_run_recorder",
+    "attach_swarm_run",
+    "update_run_scope",
+]
 
 
 def attach_run_recorder(runtime) -> RunLedger:
@@ -38,11 +43,7 @@ def attach_run_recorder(runtime) -> RunLedger:
         return existing
     ledger = RunLedger(project.project_dir(root=runtime.root) / "runs.jsonl")
     runtime.run_ledger = ledger
-    runtime.run_scope = {
-        "kind": "coding",
-        "agentId": "main",
-        "label": Path(runtime.session.path).stem,
-    }
+    runtime.run_scope = {"kind": "coding", "agentId": "main"}
     runtime.current_run_id = None
     runtime.agent.subscribe(RunRecorder(runtime))
     return ledger
@@ -108,7 +109,10 @@ class RunRecorder:
             work_item_id=scope.get("workItemId"),
             parent_run_id=scope.get("parentRunId"),
             task_id=scope.get("taskId"),
-            label=str(scope.get("label") or ""),
+            label=str(
+                scope.get("label")
+                or (Path(session.path).stem if session is not None else "")
+            ),
         )
         self._started_at = time.monotonic()
         self._runtime.current_run_id = self._record.id
@@ -137,3 +141,21 @@ class RunRecorder:
             duration_ms=duration_ms,
         )
         self._runtime.current_run_id = None
+
+
+def attach_swarm_run(runtime, role_id: str, work_item_id: str | None, label: str) -> RunLedger:
+    """Wire a role runtime and stamp its first scope in one call.
+
+    Swarm builds runtimes outside ``prepare``, so it owns this attachment; the
+    helper keeps the manager's line budget flat and the scope shape in one
+    place.
+    """
+    ledger = attach_run_recorder(runtime)
+    update_run_scope(
+        runtime,
+        kind="swarm",
+        agentId=role_id,
+        workItemId=work_item_id,
+        label=label,
+    )
+    return ledger

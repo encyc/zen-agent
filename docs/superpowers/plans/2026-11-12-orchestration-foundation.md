@@ -108,12 +108,12 @@ Phase 1 的目标不是立刻统一三种编排器，而是先补一个**所有�
 
 ### Task 3：zen / swarm scope
 
-- [ ] `ops_zen._attach_fleet` / `_detach_fleet` 设置与恢复 router scope。
-- [ ] `ZenFleet._build_worker` 设置 worker scope + parent run。
-- [ ] `SwarmManager._build_agent` 设置 role/work item scope；
+- [x] `ops_zen._attach_fleet` / `_detach_fleet` 设置与恢复 router scope。
+- [x] `ZenFleet._build_worker` 设置 worker scope + parent run。
+- [x] `SwarmManager._build_agent` 设置 role/work item scope；
   `SwarmSchedule._execute` 写入 task_id。
-- [ ] 测试：zen worker `_build_worker` 的 scope；swarm 一次 task 后账本出现 `kind=swarm`。
-- [ ] 保持 `manager.py` ≤ 841 行 allowlist（用等量删减换行）。
+- [x] 测试：zen worker `_build_worker` 的 scope；swarm 一次 task 后账本出现 `kind=swarm`。
+- [x] 保持 `manager.py` ≤ 841 行 allowlist（用等量删减换行）。
 
 ### Task 4：`runs` RPC
 
