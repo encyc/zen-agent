@@ -13,6 +13,19 @@ matches the release tag; older history is in the repository tags and commits.
   Rounds carry `workItemId` and `runCost`, chains rebase at the item boundary,
   and the desktop gains a work item panel with human scoring, closing and an
   ad-hoc section. Archived rounds replay from disk when no runtime is live.
+- **A project run ledger** — `~/.zenagent/projects/<key>/runs.jsonl` records
+  every top-level agent run with a stable `runId`: kind (`coding` /
+  `zen_router` / `zen_worker` / `swarm`), agent, session, work item, parent
+  run, status, termination, turns and cost. `runs op=list/get` queries it over
+  RPC across modes. The ledger is best-effort and append-only; it is the
+  foundation for a backend-owned supervisor, not a replacement for the swarm
+  task table.
+- **Swarm idle runtimes are reclaimed** — a `(role, work item)` runtime now
+  closes after `[swarm] runtime_idle_s` (default 600 s, `0` disables) once it
+  has no run in flight, no queued round and no pending manifest apply. The
+  session file remains the fact source; the next round rebuilds the runtime.
+  This stops resident runtimes and their MCP children from growing with room
+  history.
 
 **Retries no longer cost streaming, and the desktop turns them on.** v0.13.4
 learned to classify connect failures as transient, but nothing retried them:

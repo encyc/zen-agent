@@ -17,7 +17,7 @@
    - [Agent Loop](internals/agent-loop.md) → [Agent 类](internals/agent-class.md)
    - [工具内核](internals/tools-internals.md) → [Web 搜索链](internals/web-search.md) → [上下文与压缩](internals/context-compaction.md)
    - [配置持久化对照（codex/omp/dsh）](research/config-persistence.md)
-   - [护栏与校验](internals/guardrails.md) → [持久化/重试/崩溃](internals/persistence.md)
+   - [护栏与校验](internals/guardrails.md) → [持久化/重试/崩溃](internals/persistence.md) → [Run 账本](internals/run-ledger.md)
    - [MCP 内核](internals/mcp-internals.md) · [扩展内核](internals/extensions-internals.md)
 4. 速查：[核心契约](reference/contracts.md) · [事件全表](reference/events.md) · [文件地图](reference/file-map.md)
 5. [功能地图](feature-map.md)（功能 → 源码 → 测试）· [测试策略](testing.md) · [开发与发版](development.md)

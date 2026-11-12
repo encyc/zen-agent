@@ -2,7 +2,7 @@
 
 > 日期：2026-11-12 · 分支：`feat/orchestration-foundation` · 基线：`b9adc5c`
 >
-> 上游诊断：`docs/reviews/2026-11-12-architecture-diagnosis.md`（对话产出，尚未入库）。
+> 上游诊断：[`docs/reviews/2026-11-12-architecture-diagnosis.md`](../reviews/2026-11-12-architecture-diagnosis.md)。
 > 本计划只做 Phase 1，不重写内核，不迁移 zen/swarm 的全部语义。
 
 ## 1. 为什么要先做这一层
@@ -132,10 +132,10 @@ Phase 1 的目标不是立刻统一三种编排器，而是先补一个**所有�
 
 ### Task 6：文档与门禁
 
-- [ ] `docs/internals/run-ledger.md`：字段、写入点、查询方式、当前边界。
-- [ ] `CHANGELOG.md` Unreleased 条目。
-- [ ] `python scripts/check_architecture.py`、`ruff check`、目标 pytest 全绿。
-- [ ] 提交（每个 Task 一次 commit，最后汇总）。
+- [x] `docs/internals/run-ledger.md`：字段、写入点、查询方式、当前边界。
+- [x] `CHANGELOG.md` Unreleased 条目。
+- [x] `python scripts/check_architecture.py`、`ruff check`、目标 pytest 全绿。
+- [x] 提交（每个 Task 一次 commit，最后汇总）。
 
 ## 5. 验收标准
 
