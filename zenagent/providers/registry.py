@@ -63,6 +63,21 @@ _REGISTRY: dict[str, StreamFn] = {
 _MAX_ERROR_MESSAGE = 500
 
 
+def _describe_exception(exc: BaseException) -> str:
+    """``Type: detail`` for an error partial, digging out empty messages.
+
+    httpx can wrap a transport failure in an exception with no text
+    (``ConnectError('')`` around ``httpcore.ConnectError(EndOfStream())``).
+    Formatting only ``str(exc)`` stores "ConnectError: " — a message that
+    names neither the cause nor anything retry classification can match.
+    """
+    detail = str(exc).strip()
+    if not detail:
+        cause = exc.__cause__ or exc.__context__
+        detail = repr(cause) if cause is not None else repr(exc)
+    return f"{type(exc).__name__}: {detail}"[:_MAX_ERROR_MESSAGE]
+
+
 def register_stream_fn(api: str, fn: StreamFn) -> None:
     """Register (or replace) the stream fn for ``api``."""
     _REGISTRY[api] = fn
@@ -145,7 +160,7 @@ async def safe_stream(
     except Exception as exc:  # noqa: BLE001 - converting ANY fn exception is the contract
         if saw_terminal:
             return
-        error_message = f"{type(exc).__name__}: {exc}"[:_MAX_ERROR_MESSAGE]
+        error_message = _describe_exception(exc)
         yield _terminal_error(
             model, last_partial, reason="error", error_message=error_message
         )

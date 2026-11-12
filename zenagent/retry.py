@@ -28,6 +28,25 @@ _RETRYABLE = (
     "connection reset",
     "reset by peer",
     "connection error",
+    # httpx formats some transport failures as ``ConnectError: ...``; the
+    # class name has no space, so "connection error" never matches it.
+    "connecterror",
+    "connect error",
+    "connection aborted",
+    "connection closed",
+    "econnreset",
+    "econnrefused",
+    "etimedout",
+    "network is unreachable",
+    "no route to host",
+    "temporary failure in name resolution",
+    # The wrapper httpcore raises when a peer closes during the handshake or
+    # stream: ConnectError(EndOfStream()).
+    "endofstream",
+    "end of stream",
+    "unexpected eof",
+    "ssl_error",
+    "handshake failure",
     "temporarily unavailable",
     "overloaded",
     "rate limit",

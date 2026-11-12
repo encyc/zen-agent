@@ -50,6 +50,7 @@ import {
   type ReplyLike,
 } from '../rpc/frames'
 import { reportRefreshFailure } from './refresh'
+import { surfaceRunError } from './runError.ts'
 
 export type ConnectionState = 'idle' | 'starting' | 'ready' | 'exited'
 
@@ -338,6 +339,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           }
           useStatusStore.getState().set(status)
           set({ busy: Boolean(status.running) })
+          surfaceRunError(status.last_error)
           if (status.usage !== undefined) {
             usageBaselines.set(status.session ?? '', status.usage)
           }

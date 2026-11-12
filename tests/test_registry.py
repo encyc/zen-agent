@@ -252,6 +252,37 @@ async def test_safe_stream_maps_aborted_to_aborted_terminal_event():
     assert terminal.partial.content is fired[0].content
 
 
+async def test_safe_stream_names_the_cause_of_an_empty_transport_error():
+    """httpx raises ConnectError('') around the real failure.
+
+    Storing only str(exc) produced "ConnectError: " — nothing to classify,
+    nothing to debug. The cause must survive into the error partial.
+    """
+    model = _model()
+
+    async def boom(*_args, **_kwargs):
+        exc = httpx.ConnectError("")
+        exc.__cause__ = httpx.ConnectError("EndOfStream()")
+        raise exc
+        yield  # pragma: no cover
+
+    events = [event async for event in safe_stream(boom, model, [], [], StreamOptions())]
+    message = events[-1].partial.error_message or ""
+    assert message.startswith("ConnectError: ")
+    assert "EndOfStream" in message
+
+
+async def test_safe_stream_never_stores_a_blank_detail():
+    model = _model()
+
+    async def boom(*_args, **_kwargs):
+        raise httpx.ConnectError("")
+        yield  # pragma: no cover
+
+    events = [event async for event in safe_stream(boom, model, [], [], StreamOptions())]
+    assert (events[-1].partial.error_message or "").strip() != "ConnectError:"
+
+
 async def test_safe_stream_keeps_error_reason_for_other_exceptions():
     model = _model()
 

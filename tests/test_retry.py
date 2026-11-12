@@ -31,6 +31,13 @@ def test_retryable_classification():
     assert is_retryable(assistant(error="connection reset by peer"))
     assert is_retryable(assistant(error="HTTP 503 service unavailable"))
     assert is_retryable(assistant(error="rate limit exceeded, try again"))
+    # httpx transport failures: class name has no space, and the old empty
+    # detail (pre-cause-preservation) must still classify as transient.
+    assert is_retryable(assistant(error="ConnectError: "))
+    assert is_retryable(
+        assistant(error="ConnectError: ConnectError(EndOfStream())")
+    )
+    assert is_retryable(assistant(error="ssl_error_syscall during handshake"))
     assert not is_retryable(assistant(error="insufficient quota"))
     assert not is_retryable(assistant(error="unauthorized: invalid api key"))
     assert not is_retryable(assistant(error="bad request 400"))
