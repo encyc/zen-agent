@@ -22,6 +22,7 @@ export type {
   SwarmNoticeFrame,
   SwarmOkResult,
   SwarmPostResult,
+  SwarmRef,
   SwarmReloadResult,
   SwarmRole,
   SwarmRolesResult,

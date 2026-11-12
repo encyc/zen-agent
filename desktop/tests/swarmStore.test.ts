@@ -150,6 +150,29 @@ test('post sends a swarm request', async () => {
   assert.deepEqual(sent, [{ type: 'swarm', op: 'post', text: '@research hi' }])
 })
 
+test('post forwards the ref and images only when given', async () => {
+  reset()
+  const calls: Record<string, unknown>[] = []
+  _useSwarmSender({
+    send: async (request) => {
+      calls.push(request)
+      return { type: 'result', id: 'r1', ok: true, tasks: [] }
+    },
+  })
+
+  await useSwarmStore.getState().post('@research hi')
+  await useSwarmStore.getState().post('@research hi', { ref: 'm1', images: ['/tmp/a.png'] })
+
+  assert.deepEqual(calls[0], { type: 'swarm', op: 'post', text: '@research hi' })
+  assert.deepEqual(calls[1], {
+    type: 'swarm',
+    op: 'post',
+    text: '@research hi',
+    ref: 'm1',
+    images: ['/tmp/a.png'],
+  })
+})
+
 test('load seeds the room from the list answer', async () => {
   reset()
   fakeClient(() => ({

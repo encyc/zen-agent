@@ -86,7 +86,7 @@ interface SwarmState {
   loadedProject: string | null
   /** The task whose detail panel is open; null when none. */
   selectedTask: string | null
-  post(text: string): Promise<void>
+  post(text: string, options?: { ref?: string; images?: string[] }): Promise<void>
   load(project: string | null): Promise<void>
   reload(): Promise<void>
   cancel(id: string): Promise<void>
@@ -185,8 +185,16 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
     }
   },
 
-  async post(text) {
-    await send({ type: 'swarm', op: 'post', text })
+  async post(text, options = {}) {
+    await send({
+      type: 'swarm',
+      op: 'post',
+      text,
+      ...(options.ref !== undefined ? { ref: options.ref } : {}),
+      ...(options.images !== undefined && options.images.length > 0
+        ? { images: options.images }
+        : {}),
+    })
   },
 
   async load(project) {

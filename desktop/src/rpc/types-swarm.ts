@@ -24,11 +24,21 @@ export interface SwarmRole {
   maxTurns: number | null
   maxCost: number | null
   missingCredentials: string[]
+  /** The built role's model takes image input; the library view omits it. */
+  supportsVision?: boolean
 }
 
 export interface SwarmAuthor {
   kind: 'user' | 'agent' | 'system'
   id: string
+}
+
+/** A snapshot of the message a post quotes; the source may be outside the
+ * loaded window, so the card renders from this rather than a lookup. */
+export interface SwarmRef {
+  id: string
+  author: SwarmAuthor
+  text: string
 }
 
 export interface SwarmMessage {
@@ -39,6 +49,8 @@ export interface SwarmMessage {
   mentions: string[]
   taskId: string | null
   chainDepth: number
+  ref?: SwarmRef | null
+  images?: string[]
 }
 
 export interface SwarmTask {

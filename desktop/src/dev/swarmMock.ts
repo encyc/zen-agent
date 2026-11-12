@@ -9,6 +9,7 @@ import type {
   SwarmAgentState,
   SwarmAuthor,
   SwarmMessage,
+  SwarmRef,
   SwarmRole,
   SwarmTask,
   ToolCallView,
@@ -54,6 +55,7 @@ const ROLES: SwarmRole[] = [
     maxTurns: 30,
     maxCost: 1.5,
     missingCredentials: [],
+    supportsVision: true,
   },
   {
     id: 'builder',
@@ -72,6 +74,7 @@ const ROLES: SwarmRole[] = [
     maxTurns: 30,
     maxCost: 1.5,
     missingCredentials: [],
+    supportsVision: false,
   },
 ]
 
@@ -213,6 +216,8 @@ function appendMessage(
     mentions?: string[]
     taskId?: string | null
     depth?: number
+    ref?: SwarmRef | null
+    images?: string[]
   },
 ): SwarmMessage {
   const message: SwarmMessage = {
@@ -223,6 +228,8 @@ function appendMessage(
     mentions: fields.mentions ?? roleMentions(rows, fields.text),
     taskId: fields.taskId ?? null,
     chainDepth: fields.depth ?? 0,
+    ref: fields.ref ?? null,
+    images: fields.images ?? [],
   }
   rows.swarmMessages.push(message)
   emit(rows, { ...message, type: 'swarm_message', swarm: true })
@@ -284,6 +291,7 @@ function roleView(rows: Room, id: string, manifest: Record<string, unknown>): Sw
     maxTurns: typeof limits.maxTurns === 'number' ? limits.maxTurns : null,
     maxCost: typeof limits.maxCost === 'number' ? limits.maxCost : null,
     missingCredentials: prior?.missingCredentials ?? [],
+    supportsVision: prior?.supportsVision ?? false,
   }
 }
 
@@ -474,7 +482,15 @@ export function handleSwarm(
 
   if (op === 'post') {
     const text = String(payload.text ?? '')
-    const message = appendMessage(rows, { author: { kind: 'user', id: 'you' }, text })
+    const refId = typeof payload.ref === 'string' ? payload.ref : undefined
+    const source = refId === undefined ? undefined : rows.swarmMessages.find((m) => m.id === refId)
+    const images = Array.isArray(payload.images) ? payload.images.map(String) : []
+    const message = appendMessage(rows, {
+      author: { kind: 'user', id: 'you' },
+      text,
+      ref: source === undefined ? null : { id: source.id, author: source.author, text: source.text },
+      images,
+    })
     const created: SwarmTask[] = []
     for (const roleId of message.mentions) {
       const task = addTask(rows, {
