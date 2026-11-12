@@ -28,3 +28,10 @@
   border-radius: 5px;
   background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 8%, transparent);
 }
+
+/* A role mention is a dispatch target, not a file reference: tint it with the
+ * room's agent accent so the two kinds stay distinguishable in one box. */
+.box[data-token-kind='role'] {
+  border-color: var(--dsw-alias-state-success-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 8%, transparent);
+}

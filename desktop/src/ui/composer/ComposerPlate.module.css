@@ -1,0 +1,301 @@
+/* Shared composer geometry: every mode paints the same capsule, draft surface,
+ * resize grip, option menu and control row. Mode-specific chips live with the
+ * adapters. */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: min(100%, var(--ds-chat-content-width));
+  /* The room drops the plate into a plain column; auto margins keep the same
+   * centred 760px band the chat dock gets from its own layout. */
+  margin-inline: auto;
+  padding: 0 0 4px;
+  flex: none;
+}
+
+/* ---- capsule --------------------------------------------------------------- */
+
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(100%, var(--ds-chat-content-width));
+  padding-top: 8px;
+  border: 1px solid var(--ds-hairline);
+  border-radius: var(--ds-radius-composer);
+  background: var(--dsw-specific-input-major);
+  box-shadow: var(--ds-shadow-raised);
+  font-size: var(--dsh-content-font-size, 14px);
+  line-height: calc(24px + var(--dsh-content-font-delta, 0px));
+  transition:
+    border-color var(--ds-motion-fast) var(--ds-ease-out),
+    box-shadow var(--ds-motion-fast) var(--ds-ease-out);
+}
+
+.card:focus-within {
+  border-color: var(--ds-hairline-strong);
+}
+
+/* The plate's top edge doubles as a drag grip: pulling up grows the draft
+ * surface, pulling down shrinks it to two lines. */
+.resizeHandle {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 6;
+  width: 160px;
+  height: 10px;
+  transform: translateX(-50%);
+  cursor: row-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.resizeHandle::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  width: 36px;
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--dsw-alias-label-primary) 18%, transparent);
+  opacity: 0;
+  transform: translateX(-50%);
+  transition: opacity 100ms ease, width 100ms ease, background 100ms ease;
+}
+
+.resizeHandle:hover::before,
+.resizeHandle:focus-visible::before {
+  opacity: 1;
+}
+
+.resizeHandle:focus-visible {
+  outline: none;
+}
+
+.resizeHandle:focus-visible::before {
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--dsw-alias-state-business-primary) 22%, transparent);
+}
+
+html[data-composer-resizing] .resizeHandle::before {
+  opacity: 1;
+  width: 44px;
+  background: color-mix(in oklab, var(--dsw-alias-label-primary) 32%, transparent);
+}
+
+html[data-composer-resizing],
+html[data-composer-resizing] * {
+  cursor: row-resize !important;
+  user-select: none !important;
+}
+
+.scroll {
+  max-height: var(--dsh-composer-text-max-height);
+  overflow-y: auto;
+  margin-right: 4px;
+}
+
+.scroll::-webkit-scrollbar-track {
+  margin-top: 8px;
+}
+
+.input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 3lh;
+  max-height: 7lh;
+  padding: 4px 8px 0 14px;
+  border: none;
+  background: transparent;
+  resize: none;
+  outline: none;
+  overflow-y: auto;
+  font-family: var(--dsw-font-family);
+  font-size: inherit;
+  line-height: inherit;
+  color: var(--dsw-alias-label-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  caret-color: var(--dsw-alias-state-business-primary);
+}
+
+.inputWrap {
+  position: relative;
+}
+
+.input::placeholder {
+  color: var(--dsw-alias-label-caption);
+}
+
+/* ---- option menu -------------------------------------------------------------- */
+
+.menu {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(100% + 8px);
+  display: flex;
+  flex-direction: column;
+  padding: 5px;
+  border: 1px solid var(--ds-hairline);
+  border-radius: var(--ds-radius-card);
+  background: var(--ds-surface-raised);
+  backdrop-filter: var(--dsw-menu-backdrop-filter);
+  box-shadow: var(--ds-shadow-raised);
+  max-height: 320px;
+  overflow-y: auto;
+  z-index: 30;
+}
+
+.menuItem {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menuItem[data-active] {
+  background: var(--ds-surface-1);
+}
+
+.menuName {
+  flex: none;
+  font-family: var(--ds-font-family-code);
+  font-size: var(--ds-font-12-5);
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+.menuDesc {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--ds-font-12);
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- control row --------------------------------------------------------------- */
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px 8px;
+  min-width: 0;
+}
+
+.tools,
+.trailing {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.tools {
+  gap: 10px;
+}
+
+.trailing {
+  flex: none;
+  margin-left: auto;
+  gap: 12px;
+}
+
+.primary {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 999px;
+  background: var(--dsw-alias-button-info-fill);
+  box-shadow: var(--ds-shadow-thumb);
+  color: var(--dsw-alias-label-primary-foreground);
+  cursor: pointer;
+  transition:
+    background-color 100ms ease,
+    opacity 100ms ease,
+    transform 90ms ease;
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--dsw-alias-button-info-hover);
+}
+
+.primary:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.primary:disabled {
+  opacity: 0.18;
+  cursor: default;
+}
+
+/* ---- attachments ---------------------------------------------------------------- */
+
+.attachRail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 14px 0;
+}
+
+.attachChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  padding: 0 4px 0 2px;
+  border: 1px solid var(--ds-hairline);
+  border-radius: 7px;
+  background: var(--ds-surface-1);
+}
+
+.attachThumb {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: var(--ds-surface-2);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.attachName {
+  max-width: 160px;
+  font-size: var(--ds-font-12);
+  color: var(--dsw-alias-label-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attachRemove {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.attachRemove:hover {
+  color: var(--dsw-alias-state-error-primary);
+}

@@ -39,8 +39,13 @@ test('accent aliases stay monochrome and primary buttons invert safely', () => {
   assert.match(css, /--dsw-alias-state-business-primary:\s*var\(--ds-accent\);/)
   assert.match(css, /--dsw-alias-button-info-fill:\s*var\(--ds-accent\);/)
   assert.match(css, /--dsw-alias-button-info-hover:\s*var\(--ds-accent-hover\);/)
-  const inputBar = readFileSync(new URL('../src/ui/composer/InputBar.module.css', import.meta.url), 'utf8')
+  // The primary send button belongs to the shared plate, so every mode
+  // inherits the same inverted foreground.
+  const plate = readFileSync(
+    new URL('../src/ui/composer/ComposerPlate.module.css', import.meta.url),
+    'utf8',
+  )
   const boundary = readFileSync(new URL('../src/ErrorBoundary.tsx', import.meta.url), 'utf8')
-  assert.match(inputBar, /\.primary\s*\{[^}]*color:\s*var\(--dsw-alias-label-primary-foreground\)/)
+  assert.match(plate, /\.primary\s*\{[^}]*color:\s*var\(--dsw-alias-label-primary-foreground\)/)
   assert.match(boundary, /color:\s*'var\(--dsw-alias-label-primary-foreground\)'/)
 })

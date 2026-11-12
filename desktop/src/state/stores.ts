@@ -476,8 +476,12 @@ export interface AttachmentImage {
 
 interface ComposerState {
   draft: string
+  /** The room keeps its own draft so switching modes never leaks chat text
+   * into a broadcast (or the reverse). */
+  roomDraft: string
   images: AttachmentImage[]
   setDraft(draft: string): void
+  setRoomDraft(draft: string): void
   addImages(paths: string[]): void
   removeImage(id: string): void
   clearImages(): void
@@ -487,8 +491,10 @@ let imageSeq = 0
 
 export const useComposerStore = create<ComposerState>((set) => ({
   draft: '',
+  roomDraft: '',
   images: [],
   setDraft: (draft) => set({ draft }),
+  setRoomDraft: (roomDraft) => set({ roomDraft }),
   addImages: (paths) =>
     set((state) => ({
       images: [

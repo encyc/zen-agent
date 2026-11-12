@@ -1,7 +1,6 @@
-/** The composer capsule (dsh InputBar shape): attachments rail, auto-growing
- * draft surface, control row (attach · mode | context · model+thinking ·
- * send/stop), slash-command menu, plus the pending lanes and todo docks
- * stacked above the plate.
+/** The coding/zen composer: attachments rail, the shared plate, control row
+ * (attach · mode | context · model+thinking · send/stop), slash-command menu,
+ * plus the pending lanes and todo docks stacked above the plate.
  * Enter submits; while running it steers; Esc interrupts. */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -19,42 +18,25 @@ import { ApprovalPanel } from '../approval/ApprovalPanel'
 import { AskCard } from '../ask/AskCard'
 import { pickImagePaths } from './pickImages'
 import { attachDragDrop } from './dragDrop'
-import { clampInputHeight, inputHeightLimits, type InputHeightLimits } from './inputHeight'
 import { TodoDock, PendingDock, ContextMeter } from './Docks'
 import { ModelMenu, ModeMenu } from './Menus'
-import { TokenBoxes } from './TokenBoxes'
-import { ChevronDownIcon, FileIcon, PlusIcon, SendArrowUpIcon, StopIcon, XIcon } from '../icons'
+import {
+  ComposerAttachments,
+  ComposerMenu,
+  ComposerPlate,
+  ComposerRoot,
+  isSubmitKey,
+  type ComposerPrimary,
+} from './ComposerPlate'
+import { ChevronDownIcon, PlusIcon } from '../icons'
 import { Tooltip } from '../primitives'
 import css from './InputBar.module.css'
 
 const FS_INDEX_TIMEOUT_MS = 8000
 const MAX_FILE_ITEMS = 50
-const AUTO_GROW_MAX = 360
 
 interface MenuState {
   kind: 'model' | 'mode' | null
-}
-
-interface ResizeDrag {
-  pointerId: number
-  startY: number
-  startHeight: number
-  previous: number | null
-  limits: InputHeightLimits
-  current: number
-  frame: number
-}
-
-/** Limits straight from the laid-out textarea: its resolved line box and
- * padding are the only source of truth for "two lines". */
-function limitsFor(area: HTMLTextAreaElement): InputHeightLimits {
-  const styles = getComputedStyle(area)
-  return inputHeightLimits(
-    Number.parseFloat(styles.lineHeight),
-    (Number.parseFloat(styles.paddingTop) || 0) +
-      (Number.parseFloat(styles.paddingBottom) || 0),
-    window.innerHeight,
-  )
 }
 
 export function InputBar() {
@@ -88,11 +70,6 @@ export function InputBar() {
   const [mentionDismissed, setMentionDismissed] = useState(false)
   const filesRequested = useRef(false)
   const textRef = useRef<HTMLTextAreaElement | null>(null)
-  const scrollRef = useRef<HTMLDivElement | null>(null)
-  // null = auto-grow with the draft; a number is the size the user dragged.
-  const [manualHeight, setManualHeight] = useState<number | null>(null)
-  const [renderedHeight, setRenderedHeight] = useState(0)
-  const resizeDrag = useRef<ResizeDrag | null>(null)
 
   const empty = draft.trim() === '' && images.length === 0
   const entries = useMemo(
@@ -160,16 +137,6 @@ export function InputBar() {
     void refreshSkills()
   }, [refreshSkills])
 
-  // Auto-grow the textarea unless the user pinned a height by dragging the
-  // top edge; then the inline size owns the box until a reset.
-  useEffect(() => {
-    const area = textRef.current
-    if (area === null || manualHeight !== null) return
-    area.style.height = '0px'
-    area.style.height = `${Math.min(area.scrollHeight, AUTO_GROW_MAX)}px`
-    setRenderedHeight(area.offsetHeight)
-  }, [draft, manualHeight])
-
   // Tauri drag-drop: file drop events carry absolute paths. The helper's
   // cleanup unlistens even when StrictMode tears this effect down before the
   // async registration settles.
@@ -181,77 +148,6 @@ export function InputBar() {
       }),
     [addImages],
   )
-
-  useEffect(
-    () => () => {
-      document.documentElement.removeAttribute('data-composer-resizing')
-    },
-    [],
-  )
-
-  const startResize = (event: React.PointerEvent<HTMLDivElement>) => {
-    const area = textRef.current
-    if (event.button !== 0 || area === null) return
-    event.preventDefault()
-    event.currentTarget.focus({ preventScroll: true })
-    const startHeight = area.getBoundingClientRect().height
-    resizeDrag.current = {
-      pointerId: event.pointerId,
-      startY: event.clientY,
-      startHeight,
-      previous: manualHeight,
-      limits: limitsFor(area),
-      current: startHeight,
-      frame: 0,
-    }
-    document.documentElement.setAttribute('data-composer-resizing', 'true')
-    event.currentTarget.setPointerCapture(event.pointerId)
-    setManualHeight(startHeight)
-  }
-
-  const moveResize = (event: React.PointerEvent<HTMLDivElement>) => {
-    const state = resizeDrag.current
-    if (state === null || state.pointerId !== event.pointerId) return
-    state.current = clampInputHeight(
-      state.startHeight + (state.startY - event.clientY),
-      state.limits,
-    )
-    if (state.frame !== 0) return
-    state.frame = requestAnimationFrame(() => {
-      state.frame = 0
-      if (resizeDrag.current === state) setManualHeight(state.current)
-    })
-  }
-
-  const endResize = (commit: boolean) => {
-    const state = resizeDrag.current
-    if (state === null) return
-    if (state.frame !== 0) cancelAnimationFrame(state.frame)
-    resizeDrag.current = null
-    document.documentElement.removeAttribute('data-composer-resizing')
-    setManualHeight(commit ? state.current : state.previous)
-  }
-
-  const onResizeKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    const area = textRef.current
-    if (area === null) return
-    if (event.key === 'Escape' && resizeDrag.current !== null) {
-      event.preventDefault()
-      endResize(false)
-      return
-    }
-    const limits = limitsFor(area)
-    const base = manualHeight ?? area.getBoundingClientRect().height
-    const step = event.shiftKey ? limits.step * 2 : limits.step
-    let next: number | null = null
-    if (event.key === 'ArrowUp') next = base + step
-    else if (event.key === 'ArrowDown') next = base - step
-    else if (event.key === 'Home') next = limits.min
-    else if (event.key === 'End') next = limits.max
-    if (next === null) return
-    event.preventDefault()
-    setManualHeight(clampInputHeight(next, limits))
-  }
 
   const doSubmit = () => {
     setMenu({ kind: null })
@@ -283,6 +179,14 @@ export function InputBar() {
     })
   }
 
+  const pickCommand = (index: number) => {
+    const picked = entries[index]
+    if (picked === undefined) return
+    setDraft(`/${picked.name} `)
+    setSlashIndex(0)
+    textRef.current?.focus()
+  }
+
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // The composer menu (slash commands or @ files) owns these keys first.
     if (menuOpen) {
@@ -298,15 +202,8 @@ export function InputBar() {
       }
       if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
         event.preventDefault()
-        if (mentionOpen) {
-          acceptMention(activeIndex)
-        } else {
-          const picked = entries[activeIndex] ?? entries[0]
-          if (picked !== undefined) {
-            setDraft(`/${picked.name} `)
-            setSlashIndex(0)
-          }
-        }
+        if (mentionOpen) acceptMention(activeIndex)
+        else pickCommand(activeIndex)
         return
       }
       if (event.key === 'Escape') {
@@ -316,12 +213,7 @@ export function InputBar() {
         return
       }
     }
-    if (
-      event.key === 'Enter' &&
-      !event.shiftKey &&
-      !event.nativeEvent.isComposing &&
-      (enterToSend || event.metaKey || event.ctrlKey)
-    ) {
+    if (isSubmitKey(event, enterToSend)) {
       event.preventDefault()
       doSubmit()
       return
@@ -338,214 +230,126 @@ export function InputBar() {
       ? t('composer.placeholder.plan')
       : t('composer.placeholder')
 
+  const primary: ComposerPrimary = busy
+    ? empty
+      ? { kind: 'stop', disabled: false, onPress: () => void cancel() }
+      : { kind: 'steer', disabled: false, onPress: doSubmit }
+    : { kind: 'send', disabled: empty, onPress: doSubmit }
+
+  const options = mentionOpen
+    ? mentionRows.map(({ entry, match }) => ({
+        key: entry.path,
+        kind: entry.kind,
+        name: markedPath(entry, match.ranges),
+        desc: t(entry.kind === 'dir' ? 'composer.dirTag' : 'composer.fileTag'),
+      }))
+    : entries.map((entry) => ({
+        key: entry.name,
+        kind: entry.kind,
+        name: `/${entry.name}`,
+        desc:
+          entry.kind === 'skill'
+            ? `${t('composer.skillTag')} · ${entry.description}`
+            : entry.description,
+      }))
+
   return (
-    <div className={css.root}>
+    <ComposerRoot>
       {approvalCount > 0 && <ApprovalPanel />}
       {askCount > 0 && <AskCard />}
       <PendingDock />
       <TodoDock />
-      <div className={css.card} data-composer-plate>
-        <div
-          className={css.resizeHandle}
-          role="separator"
-          aria-orientation="horizontal"
-          aria-label={t('composer.resizeHeight')}
-          title={t('composer.resizeHint')}
-          aria-valuenow={manualHeight ?? renderedHeight}
-          aria-valuetext={`${manualHeight ?? renderedHeight}px`}
-          tabIndex={0}
-          onPointerDown={startResize}
-          onPointerMove={moveResize}
-          onPointerUp={(event) => {
-            if (resizeDrag.current?.pointerId !== event.pointerId) return
-            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-              event.currentTarget.releasePointerCapture(event.pointerId)
-            }
-            endResize(true)
-          }}
-          onPointerCancel={(event) => {
-            if (resizeDrag.current?.pointerId !== event.pointerId) return
-            endResize(false)
-          }}
-          onDoubleClick={() => setManualHeight(null)}
-          onKeyDown={onResizeKeyDown}
-        />
-        {images.length > 0 && (
-            <div className={css.attachRail}>
-              {images.map((image) => (
-                <div key={image.id} className={css.attachChip}>
-                  <span className={css.attachThumb} aria-hidden>
-                    <FileIcon size={12} />
-                  </span>
-                  <span className={css.attachName}>{image.name}</span>
-                  <button
-                    type="button"
-                    className={css.attachRemove}
-                    aria-label="remove attachment"
-                    onClick={() => removeImage(image.id)}
-                  >
-                    <XIcon size={10} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-          <div
-            className={css.scroll}
-            ref={scrollRef}
-            style={manualHeight === null ? undefined : { maxHeight: manualHeight }}
-          >
-            <div className={css.inputWrap}>
-              <textarea
-                ref={textRef}
-                className={css.input}
-                style={
-                  manualHeight === null
-                    ? undefined
-                    : { height: manualHeight, minHeight: 0, maxHeight: manualHeight }
-                }
-                value={draft}
-                onChange={(event) => {
-                  setDraft(event.target.value)
-                  setCursor(event.target.selectionStart)
-                  setSlashIndex(0)
-                  setMentionDismissed(false)
+      <ComposerPlate
+        value={draft}
+        boxes={boxes}
+        placeholder={placeholder}
+        inputRef={textRef}
+        onChange={(value, caret) => {
+          setDraft(value)
+          setCursor(caret)
+          setSlashIndex(0)
+          setMentionDismissed(false)
+        }}
+        onCaret={setCursor}
+        onKeyDown={onKeyDown}
+        primary={primary}
+        plateData={{ 'data-composer-plate': '' }}
+        menu={
+          menuOpen ? (
+            <ComposerMenu
+              options={options}
+              activeIndex={activeIndex}
+              onHover={setSlashIndex}
+              onPick={(index) => {
+                if (mentionOpen) acceptMention(index)
+                else pickCommand(index)
+              }}
+            />
+          ) : undefined
+        }
+        attachments={
+          images.length > 0 ? (
+            <ComposerAttachments items={images} onRemove={removeImage} />
+          ) : undefined
+        }
+        leading={
+          <>
+            <Tooltip label={t('composer.attach')}>
+              <button
+                type="button"
+                className={css.add}
+                aria-label={t('composer.attach')}
+                onClick={() => {
+                  void pickImagePaths()
+                    .then((paths) => {
+                      if (paths.length > 0) addImages(paths)
+                    })
+                    .catch(() => {})
                 }}
-                onSelect={(event) => setCursor(event.currentTarget.selectionStart)}
-                onClick={(event) => setCursor(event.currentTarget.selectionStart)}
-                onKeyDown={onKeyDown}
-                placeholder={placeholder}
-                rows={1}
-                spellCheck={false}
-                dir="auto"
-              />
-              <TokenBoxes value={draft} boxes={boxes} textareaRef={textRef} />
-            </div>
-          </div>
-          {menuOpen && (
-            <div className={css.slashMenu} role="listbox">
-              {mentionOpen
-                ? mentionRows.map(({ entry, match }, index) => (
-                    <button
-                      key={entry.path}
-                      type="button"
-                      role="option"
-                      aria-selected={index === activeIndex}
-                      className={css.slashItem}
-                      data-active={index === activeIndex || undefined}
-                      data-kind={entry.kind}
-                      onMouseEnter={() => setSlashIndex(index)}
-                      onClick={() => acceptMention(index)}
-                    >
-                      <span className={css.slashName}>
-                        {markedPath(entry, match.ranges)}
-                      </span>
-                      <span className={css.slashDesc}>
-                        {t(entry.kind === 'dir' ? 'composer.dirTag' : 'composer.fileTag')}
-                      </span>
-                    </button>
-                  ))
-                : entries.map((entry, index) => (
-                    <button
-                      key={entry.name}
-                      type="button"
-                      role="option"
-                      aria-selected={index === activeIndex}
-                      className={css.slashItem}
-                      data-active={index === activeIndex || undefined}
-                      data-kind={entry.kind}
-                      onMouseEnter={() => setSlashIndex(index)}
-                      onClick={() => {
-                        setDraft(`/${entry.name} `)
-                        textRef.current?.focus()
-                      }}
-                    >
-                      <span className={css.slashName}>/{entry.name}</span>
-                      <span className={css.slashDesc}>
-                        {entry.kind === 'skill'
-                          ? `${t('composer.skillTag')} · ${entry.description}`
-                          : entry.description}
-                      </span>
-                    </button>
-                  ))}
-            </div>
-          )}
-          <div className={css.row}>
-            <div className={css.tools}>
-              <Tooltip label={t('composer.attach')}>
-                <button
-                  type="button"
-                  className={css.add}
-                  aria-label={t('composer.attach')}
-                  onClick={() => {
-                    void pickImagePaths()
-                      .then((paths) => {
-                        if (paths.length > 0) addImages(paths)
-                      })
-                      .catch(() => {})
-                  }}
-                >
-                  <PlusIcon size={14} />
-                </button>
-              </Tooltip>
-              <div className={css.modes}>
-                <span className={css.anchor}>
-                  <ModeChip mode={mode} onOpen={() => setMenu({ kind: 'mode' })} />
-                  {menu.kind === 'mode' && (
-                    <div className={css.menuLayer}>
-                      <ModeMenu
-                        mode={mode}
-                        onPick={(picked) => {
-                          void setMode(picked)
-                          setMenu({ kind: null })
-                        }}
-                        onClose={() => setMenu({ kind: null })}
-                      />
-                    </div>
-                  )}
-                </span>
-              </div>
-            </div>
-            <div className={css.trailing}>
-              <ContextMeter />
-              <span className={css.anchor} data-align="right">
-                <ModelChip model={model} thinking={thinking} onOpen={() => setMenu({ kind: 'model' })} />
-                {menu.kind === 'model' && (
+              >
+                <PlusIcon size={14} />
+              </button>
+            </Tooltip>
+            <div className={css.modes}>
+              <span className={css.anchor}>
+                <ModeChip mode={mode} onOpen={() => setMenu({ kind: 'mode' })} />
+                {menu.kind === 'mode' && (
                   <div className={css.menuLayer}>
-                    <ModelMenu
-                      thinking={thinking}
-                      onThinkingPick={(level) => {
-                        void useAppStore.getState().setThinking(level)
+                    <ModeMenu
+                      mode={mode}
+                      onPick={(picked) => {
+                        void setMode(picked)
+                        setMenu({ kind: null })
                       }}
                       onClose={() => setMenu({ kind: null })}
                     />
                   </div>
                 )}
               </span>
-              <Tooltip label={busy ? t('composer.stop') : empty ? t('composer.send') : t('composer.steer')}>
-                <button
-                  type="button"
-                  className={css.primary}
-                  aria-label={busy ? t('composer.stop') : t('composer.send')}
-                  disabled={!busy && empty}
-                  onMouseDown={(event) => {
-                    if (busy && empty) {
-                      event.preventDefault()
-                      void cancel()
-                    }
-                  }}
-                  onClick={() => {
-                    if (busy && empty) void cancel()
-                    else doSubmit()
-                  }}
-                >
-                  {busy && empty ? <StopIcon size={14} /> : <SendArrowUpIcon size={15} />}
-                </button>
-              </Tooltip>
             </div>
-          </div>
-        </div>
-    </div>
+          </>
+        }
+        trailing={
+          <>
+            <ContextMeter />
+            <span className={css.anchor} data-align="right">
+              <ModelChip model={model} thinking={thinking} onOpen={() => setMenu({ kind: 'model' })} />
+              {menu.kind === 'model' && (
+                <div className={css.menuLayer}>
+                  <ModelMenu
+                    thinking={thinking}
+                    onThinkingPick={(level) => {
+                      void useAppStore.getState().setThinking(level)
+                    }}
+                    onClose={() => setMenu({ kind: null })}
+                  />
+                </div>
+              )}
+            </span>
+          </>
+        }
+      />
+    </ComposerRoot>
   )
 }
 

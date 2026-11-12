@@ -20,7 +20,7 @@ export interface IndexedPath {
   kind: 'dir' | 'file'
 }
 
-export type TokenKind = 'command' | 'skill' | 'file' | 'dir'
+export type TokenKind = 'command' | 'skill' | 'file' | 'dir' | 'role'
 
 export interface TokenBox {
   start: number
@@ -85,15 +85,16 @@ function pathKind(
 
 /**
  * Exact tokens the composer can resolve right now: a known `/command`, an
- * enabled `/skill:<name>`, or an `@path` present in the workspace index.
- * Partial or unknown tokens stay plain text, which is what lets the box mean
- * "this reference will be sent".
+ * enabled `/skill:<name>`, an `@path` present in the workspace index, or an
+ * `@role` configured in the current swarm room. Partial or unknown tokens stay
+ * plain text, which is what lets the box mean "this reference will be sent".
  */
 export function recognizedTokens(
   value: string,
   commands: readonly SlashCommand[],
   skills: readonly SlashSkill[],
   entries: readonly IndexedPath[],
+  agents: readonly { id: string }[] = [],
 ): TokenBox[] {
   const boxes: TokenBox[] = []
   const commandsByName = new Set(commands.map((command) => command.name))
@@ -101,6 +102,7 @@ export function recognizedTokens(
     skills.filter((skill) => skill.enabled).map((skill) => skill.name),
   )
   const index = new Map(entries.map((entry) => [entry.path, entry.kind] as const))
+  const roles = new Set(agents.map((agent) => agent.id))
 
   for (const match of value.matchAll(SLASH_TOKEN)) {
     const offset = match.index ?? 0
@@ -121,6 +123,10 @@ export function recognizedTokens(
     const start = offset + match[1].length
     const end = offset + match[0].length
     const path = match[2] ?? match[3]
+    if (roles.has(path)) {
+      boxes.push({ start, end, kind: 'role' })
+      continue
+    }
     const kind = pathKind(path, index)
     if (kind !== null) boxes.push({ start, end, kind })
   }

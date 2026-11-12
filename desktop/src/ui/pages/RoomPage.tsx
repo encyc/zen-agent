@@ -1,16 +1,15 @@
-/** The swarm room: the global message feed, the composer that posts with
- * `swarm post`, and the selected task's detail. The roster and task index
+/** The swarm room: the global message feed, the shared composer that posts
+ * with `swarm post`, and the selected task's detail. The roster and task index
  * live in the swarm sidebar now; this page owns only the conversation column
  * and reads the swarm store. The sidebar owns the project-scoped load. */
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { SwarmMessage, SwarmRole, SwarmTask } from '../../rpc/types'
 import { useT } from '../../i18n/locale'
-import { detectMention } from '../../state/mentions'
 import { nodesFromViews, type ChatNode } from '../../state/chatStore'
 import type { RunView } from '../../state/swarmRun'
 import { useSwarmStore } from '../../state/swarmStore'
-import { ApprovalPanel } from '../approval/ApprovalPanel'
+import { RoomComposer } from '../composer/RoomComposer'
 import { AssistantNodeView } from '../chat/AssistantNodeView'
 import { SkillMessage, UserMessage } from '../chat/MessageItem'
 import { ToolRowView } from '../chat/ToolRowView'
@@ -84,8 +83,7 @@ export function RoomPage() {
             )}
           </div>
         )}
-        <ApprovalPanel />
-        <Composer roles={roles} />
+        <RoomComposer roles={roles} />
       </div>
     </div>
   )
@@ -136,116 +134,6 @@ function MessageRow({
           ))}
         </div>
       )}
-    </div>
-  )
-}
-
-function Composer({ roles }: { roles: SwarmRole[] }) {
-  const t = useT()
-  const post = useSwarmStore((state) => state.post)
-  const [draft, setDraft] = useState('')
-  const [caret, setCaret] = useState(0)
-  const [active, setActive] = useState(0)
-  const [dismissed, setDismissed] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const area = useRef<HTMLTextAreaElement>(null)
-
-  const trigger = detectMention(draft, caret)
-  const options =
-    trigger === null
-      ? []
-      : roles.filter((role) =>
-          `${role.id} ${role.name}`.toLowerCase().includes(trigger.query.toLowerCase()),
-        )
-  const open = !dismissed && trigger !== null && options.length > 0
-
-  const update = (value: string, position: number) => {
-    setDraft(value)
-    setCaret(position)
-    setActive(0)
-    setDismissed(false)
-  }
-
-  const pick = (role: SwarmRole) => {
-    if (trigger === null) return
-    const next = `${draft.slice(0, trigger.tokenStart)}@${role.id} ${draft.slice(trigger.tokenEnd)}`
-    const position = trigger.tokenStart + role.id.length + 2
-    update(next, position)
-    requestAnimationFrame(() => {
-      const node = area.current
-      if (node === null) return
-      node.focus()
-      node.setSelectionRange(position, position)
-    })
-  }
-
-  const submit = async () => {
-    const text = draft.trim()
-    if (text === '' || busy) return
-    setBusy(true)
-    try {
-      await post(text)
-      update('', 0)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <div className={css.composer} data-swarm-composer>
-      {open && (
-        <ul className={css.mentionMenu} data-swarm-mentions>
-          {options.map((role, index) => (
-            <li key={role.id}>
-              <button
-                type="button"
-                className={css.mentionOption}
-                data-swarm-mention={role.id}
-                data-active={index === active || undefined}
-                onMouseDown={(event) => {
-                  event.preventDefault()
-                  pick(role)
-                }}
-              >
-                <span className={css.mentionId}>@{role.id}</span>
-                <span className={css.mentionName}>{role.name}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <textarea
-        ref={area}
-        className={css.input}
-        data-swarm-input
-        rows={1}
-        value={draft}
-        placeholder={t('swarm.placeholder')}
-        onChange={(event) => update(event.target.value, event.target.selectionStart ?? 0)}
-        onSelect={(event) => setCaret(event.currentTarget.selectionStart ?? 0)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-            event.preventDefault()
-            if (open) pick(options[Math.min(active, options.length - 1)])
-            else void submit()
-            return
-          }
-          if (!open) return
-          if (event.key === 'ArrowDown') {
-            event.preventDefault()
-            setActive((index) => (index + 1) % options.length)
-          } else if (event.key === 'ArrowUp') {
-            event.preventDefault()
-            setActive((index) => (index - 1 + options.length) % options.length)
-          } else if (event.key === 'Escape') {
-            event.preventDefault()
-            setDismissed(true)
-          }
-        }}
-      />
-      <button type="button" className={css.send} disabled={draft.trim() === '' || busy} onClick={() => void submit()}>
-        {t('swarm.send')}
-      </button>
     </div>
   )
 }

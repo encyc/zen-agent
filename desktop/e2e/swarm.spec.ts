@@ -7,6 +7,8 @@ test('switch to swarm, delegate, and see the chain', async ({ page }) => {
   await boot(page, initialState(swarmFixture()))
   await page.locator('[data-workspace-mode="swarm"]').click()
   await expect(page.locator('[data-swarm-page]')).toBeVisible()
+  // The room shares the chat/zen composer plate instead of its own IM box.
+  await expect(page.locator('[data-swarm-composer][data-composer-plate]')).toBeVisible()
 
   const composer = page.locator('[data-swarm-input]')
   await composer.fill('@research 查 X')
@@ -27,6 +29,18 @@ test('switch to swarm, delegate, and see the chain', async ({ page }) => {
   const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
   const post = calls.find((call) => call.type === 'swarm' && call.op === 'post')
   assert.equal(post?.text, '@research 查 X')
+})
+
+test('the room @ menu picks a role inside the shared plate', async ({ page }) => {
+  await boot(page, initialState(swarmFixture()))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  const composer = page.locator('[data-swarm-input]')
+  await composer.fill('@res')
+  const option = page.locator('[data-swarm-mention="research"]')
+  await expect(option).toBeVisible()
+  await composer.press('Enter')
+  await expect(composer).toHaveValue('@research ')
 })
 
 test('cancel a running task', async ({ page }) => {

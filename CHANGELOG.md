@@ -3,6 +3,23 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+**One composer across Coding, Zen and Swarm.** The room no longer ships a bare
+IM-style box next to the coding capsule.
+
+### Changed
+
+- **Desktop**: the capsule—drag-to-grow height, auto-growing draft surface,
+  token boxes, anchored option menu, attachments rail and the Enter/⌘Enter
+  policy—is one shared `ComposerPlate` (`desktop/src/ui/composer/`). Coding and
+  Zen keep their attach/mode/model/context controls; Swarm binds the same plate
+  to `swarm post`, with `@` listing room roles and role mentions boxed in the
+  agent accent. Approvals and ask cards now sit above the same plate in every
+  mode, and the room draft survives mode switches without mixing with chat.
+  `swarm.send` is gone with the old text button; the send/steer/stop labels are
+  the shared composer keys.
+
 ## v0.13.1 — 2026-11-12
 
 **Desktop shell restyle, a clearable todo dock, and a README that explains the
