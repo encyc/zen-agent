@@ -22,6 +22,19 @@ provider".
 - **The desktop spawns its child with `--retries 3`** — the GUI now rides out a
   short uplink drop instead of stopping the run. Streaming is unaffected by the
   rule above.
+- **Leaving Zen stops the fleet** — Coding and Swarm are plain sessions again:
+  the fleet is disabled and the pre-zen session restored, so no router survives
+  outside Zen. The "keep the fleet running after leaving Zen" setting is gone.
+
+### Fixed
+
+- **Zen's router surface stays on the Router** — fleet tools, the router prompt
+  note and worker reports now require the active session to be the project's
+  Router. Switching to another session (or opening a new one) no longer turns a
+  coding chat into a router.
+- **Spawned workers resume their own transcript** — the first dispatch
+  materializes the registered session path instead of letting `resume` open a
+  `-N` sibling, so worker identity and context no longer diverge.
 
 ## v0.13.4 — 2026-11-12
 

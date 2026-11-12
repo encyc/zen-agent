@@ -593,9 +593,6 @@ interface SettingsState {
   enterToSend: boolean
   view: AppView
   workspaceMode: WorkspaceMode
-  /** Whether the zen fleet keeps running when the user leaves zen mode. */
-  zenBackgroundRun: boolean
-  setZenBackgroundRun(enabled: boolean): void
   setTheme(theme: ThemeMode): void
   setThemeId(themeId: ThemeId): void
   setLocale(locale: Locale): void
@@ -651,12 +648,6 @@ function loadWorkspaceMode(): WorkspaceMode {
     : 'coding'
 }
 
-/** Only an explicit `false` disables background runs; a foreign persisted
- * value (a string, a number) defaults to true rather than a truthy non-bool. */
-export function loadZenBackgroundRun(): boolean {
-  return load<unknown>('zen.fleet.background', true) !== false
-}
-
 export const useSettingsStore = create<SettingsState>((set) => ({
   theme: load('zen.theme', 'auto' as ThemeMode),
   themeId: loadThemeId(),
@@ -674,11 +665,6 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   enterToSend: load('zen.composer.enterToSend', true),
   view: 'chat',
   workspaceMode: loadWorkspaceMode(),
-  zenBackgroundRun: loadZenBackgroundRun(),
-  setZenBackgroundRun: (enabled) => {
-    persist('zen.fleet.background', enabled)
-    set({ zenBackgroundRun: enabled })
-  },
   setTheme: (theme) => {
     persist('zen.theme', theme)
     set({ theme })

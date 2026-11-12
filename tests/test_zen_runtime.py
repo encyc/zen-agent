@@ -62,3 +62,29 @@ async def test_router_note_mentions_async_result_delivery(runtime_factory):
     finally:
         runtime.zen_fleet = None
         runtime._recompose()
+
+
+async def test_fleet_tools_follow_the_router_session_not_the_slot(runtime_factory):
+    """A session switch in the same slot must not inherit the router surface."""
+    runtime = await runtime_factory()
+    fleet = ZenFleet(
+        chat=None,
+        root=runtime.root,
+        sessions_dir=project_sessions_dir(runtime.root),
+        router_path=str(runtime.session.path),
+    )
+    runtime.zen_fleet = fleet
+    runtime._recompose()
+    try:
+        names = {tool.name for tool in runtime.agent.tools}
+        assert "fleet_list" in names
+        assert "Router 纪律" in runtime.agent.system_prompt
+
+        await runtime.switch_session(None)
+
+        names = {tool.name for tool in runtime.agent.tools}
+        assert not any(name.startswith("fleet_") for name in names)
+        assert "Router 纪律" not in runtime.agent.system_prompt
+    finally:
+        runtime.zen_fleet = None
+        runtime._recompose()

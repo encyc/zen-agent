@@ -1,16 +1,15 @@
 /** Settings → Zen and Settings → Swarm: the two multi-agent surfaces.
  *
- * Zen holds the fleet's runtime knobs plus the leave-behavior toggle. Swarm
- * owns the project's room policy, the role roster (the same CRUD the room
- * sidebar offers) and the library copy entry. Both pages edit the same
- * `[zen]`/`[swarm]` config tables, so their knobs reuse the Parameters row. */
+ * Zen holds the fleet's runtime knobs. Swarm owns the project's room policy,
+ * the role roster (the same CRUD the room sidebar offers) and the library copy
+ * entry. Both pages edit the same `[zen]`/`[swarm]` config tables, so their
+ * knobs reuse the Parameters row. */
 
 import { useState } from 'react'
 import { useT } from '../../i18n/locale'
 import type { SwarmRole } from '../../rpc/types'
 import { useAppStore } from '../../state/appStore'
 import { projectName } from '../../state/sessionGroups'
-import { useSettingsStore } from '../../state/stores'
 import { useSwarmStore } from '../../state/swarmStore'
 import { AgentSettings } from './AgentSettings'
 import { KnobPanel } from './KnobPanel'
@@ -18,25 +17,8 @@ import { LibraryPicker } from './LibraryPicker'
 import type { Tab } from './settingsNav'
 import css from './WorkspaceSettings.module.css'
 
-function Switch(props: { checked: boolean; label: string; onChange(checked: boolean): void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={props.checked}
-      aria-label={props.label}
-      className={css.switch}
-      onClick={() => props.onChange(!props.checked)}
-    >
-      <span className={css.switchThumb} />
-    </button>
-  )
-}
-
 export function ZenSettings() {
   const t = useT()
-  const backgroundRun = useSettingsStore((state) => state.zenBackgroundRun)
-  const setBackgroundRun = useSettingsStore((state) => state.setZenBackgroundRun)
   return (
     <div className={css.stack} data-settings-zen>
       <KnobPanel
@@ -45,20 +27,6 @@ export function ZenSettings() {
         title={t('zen.settings.fleetParams')}
         caption={t('zen.settings.fleetParamsHint')}
       />
-      <section className={css.cardBlock}>
-        <div className={css.cardHeadline}>
-          <div>
-            <h3 className={css.cardHeading}>{t('zen.settings.backgroundRun')}</h3>
-            <p className={css.cardCaption}>{t('zen.settings.backgroundRunHint')}</p>
-          </div>
-          <Switch
-            checked={backgroundRun}
-            label={t('zen.settings.backgroundRun')}
-            onChange={setBackgroundRun}
-          />
-        </div>
-        <p className={css.cardCaption}>{t('zen.settings.stopNote')}</p>
-      </section>
     </div>
   )
 }

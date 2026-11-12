@@ -41,7 +41,6 @@ function resetStores(): void {
   useZenStore.getState().reset()
   useZenStore.getState().closeWorker()
   useSettingsStore.getState().setWorkspaceMode('coding')
-  useSettingsStore.getState().setZenBackgroundRun(true)
   useSessionStore.setState({ currentPath: null })
   useNoticeStore.setState({ notice: null })
 }
@@ -127,16 +126,22 @@ test('a refused stop surfaces on the notice banner instead of failing silently',
   assert.equal(useNoticeStore.getState().notice?.kind, 'error')
 })
 
-test('switchZenPresence leaving sends nothing: the fleet keeps running in the background', async () => {
+test('switchZenPresence leaving stops the fleet and restores the pre-zen session', async () => {
   resetStores()
-  const env = makeEnv(() => ({ type: 'result', ok: true, roster: [] }))
+  const env = makeEnv(() => ({
+    type: 'result',
+    ok: true,
+    session: '/p/old.jsonl',
+    roster: [],
+  }))
   await switchZenPresence(env.get, false)
-  assert.equal(env.sent.length, 0)
+  assert.ok(env.sent.some((payload) => payload.op === 'disable'), 'disable was sent')
+  assert.equal(useZenStore.getState().enabled, false)
+  assert.equal(useSessionStore.getState().currentPath, '/p/old.jsonl')
 })
 
-test('onZenModeLeft stops the fleet when background running is off', async () => {
+test('onZenModeLeft stops the fleet: coding never inherits a live router', async () => {
   resetStores()
-  useSettingsStore.getState().setZenBackgroundRun(false)
   const env = makeEnv(() => ({
     type: 'result',
     ok: true,
@@ -149,12 +154,14 @@ test('onZenModeLeft stops the fleet when background running is off', async () =>
   assert.equal(useSessionStore.getState().currentPath, '/p/old.jsonl')
 })
 
-test('onZenModeLeft sends nothing while background running is on', async () => {
+test('onZenModeLeft keeps the zen surface when the backend refuses the stop', async () => {
   resetStores()
-  const env = makeEnv(() => ({ type: 'result', ok: true, roster: [] }))
+  useZenStore.getState().applyRoster(true, [])
+  const env = makeEnv(() => ({ ...busyRefusal }))
   await onZenModeLeft(env.get)
-  assert.equal(env.sent.length, 0)
-  assert.equal(useZenStore.getState().enabled, false)
+  assert.equal(useSettingsStore.getState().workspaceMode, 'zen')
+  assert.equal(useZenStore.getState().enabled, true)
+  assert.equal(useNoticeStore.getState().notice?.kind, 'error')
 })
 
 test('stopFleet sends disable, clears the fleet and follows the restored session', async () => {
