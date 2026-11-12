@@ -513,6 +513,7 @@ class ConfigOps:
         runtime.user_config.swarm_max_concurrent = fresh.swarm_max_concurrent
         runtime.user_config.swarm_max_chain_depth = fresh.swarm_max_chain_depth
         runtime.user_config.swarm_max_chain_cost = fresh.swarm_max_chain_cost
+        runtime.user_config.swarm_runtime_idle_s = fresh.swarm_runtime_idle_s
         runtime.apply_limits()
         await self._drop_idle_swarm_rooms()
 
@@ -583,9 +584,8 @@ class ConfigOps:
         try:
             await self._adopt_limits()
         except ValueError as exc:
-            # The rewrite succeeded; adopting it failed because the file as a
-            # whole does not parse (hand edit elsewhere). Report the config
-            # error — the next session will fail the same way, loudly.
+            # The rewrite succeeded but the file no longer parses elsewhere:
+            # report the config error; the next session will fail the same way.
             self._send(
                 failure_frame(
                     request_id,

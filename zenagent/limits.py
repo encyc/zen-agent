@@ -376,6 +376,18 @@ SWARM_KNOBS: tuple[Limit, ...] = (
         apply="session",
         unit="USD per chain",
     ),
+    Limit(
+        table="swarm",
+        name="runtime_idle_s",
+        section="swarm",
+        attr="swarm_runtime_idle_s",
+        default=600.0,
+        kind="float",
+        minimum=0.0,
+        maximum=86400.0,
+        apply="session",
+        unit="seconds idle before a run unit is reclaimed; 0 disables",
+    ),
 )
 
 ALL_KNOBS: tuple[Limit, ...] = LIMITS + TASK_KNOBS + ZEN_KNOBS + SWARM_KNOBS
