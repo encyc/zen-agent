@@ -156,7 +156,7 @@ Phase 1 的目标不是立刻统一三种编排器，而是先补一个**所有�
 
 ## 7. 验收记录（2026-11-12 夜）
 
-- Python 全量：`2831 passed in 264.78s`（`.venv/bin/python -m pytest tests/ -q`）。
+- Python 全量：`2831 passed in 251.24s`（`.venv/bin/python -m pytest tests/ -q`）。
 - Desktop：`pnpm test` 428 passed；`pnpm build`（tsc + vite）通过。
 - Lint：`ruff check .` 全绿。
 - 架构预算：`python scripts/check_architecture.py` → `architecture budget: ok`。
