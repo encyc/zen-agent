@@ -54,7 +54,7 @@
   - `WorkItemStore.merge(source_id, target_id) -> WorkItem`（只写 `merged_into`，不搬 session）
   - `_work_item_record(item: WorkItem) -> dict` / `_apply_work_item(raw) -> WorkItem | None`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # tests/test_swarm_workitems.py
@@ -126,12 +126,12 @@ def test_malformed_line_is_skipped_with_warning(tmp_path):
     assert items.warnings
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd /Users/mac/zen-agent/.worktrees/swarm-workitems && python -m pytest tests/test_swarm_workitems.py -v`
 Expected: FAIL — `ModuleNotFoundError: zenagent.app.swarm.workitems`
 
-- [ ] **Step 3: 实现 `zenagent/app/swarm/workitems.py`**
+- [x] **Step 3: 实现 `zenagent/app/swarm/workitems.py`**
 
 照 `room.py` 的写法：`_work_item_record` 输出的键用 camelCase（`rootMessageId` / `openedBy` / `scoreNote` / `closedAt` / `mergedInto` / `openedFrom` / `continuedFrom` / `updatedAt`），`_apply_work_item` 反向解析，坏行返回 `None` 并 push warning。`update` 用 `dataclasses.replace` 追加一条同 id 记录。状态机与报错文案：
 
@@ -143,12 +143,12 @@ _WORK_TRANSITIONS = {
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `python -m pytest tests/test_swarm_workitems.py -v`
 Expected: PASS（6 passed）
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add zenagent/app/swarm/workitems.py tests/test_swarm_workitems.py
@@ -168,7 +168,7 @@ git commit -m "feat(swarm): work item record and append-only store"
 - Produces: `TaskRecord.work_item_id: str | None = None`、`TaskRecord.run_cost: float = 0.0`；`_task_record` 输出 `workItemId` / `runCost`；`_apply_task` 读回（缺失 → `None` / `0.0`）。
 - 后续任务用 `task.work_item_id` 做调度键，用 `run_cost` 做 KPI 求和（**不用** `chain_cost`）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # 追加到 tests/test_swarm_room.py
@@ -190,21 +190,21 @@ def test_legacy_task_line_has_no_work_item(tmp_path):
     assert store.tasks["t1"].run_cost == 0.0
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `python -m pytest tests/test_swarm_room.py -k "work_item or run_cost" -v`
 Expected: FAIL — `TypeError: __init__() got an unexpected keyword argument 'work_item_id'`
 
-- [ ] **Step 3: 加字段并在 runner 里填值**
+- [x] **Step 3: 加字段并在 runner 里填值**
 
 `runner.py` 的终态 `replace(...)` 里加 `run_cost=round(_run_cost(new_messages), 6)`（与既有 `chain_cost` 累加同一处，别重复算）。
 
-- [ ] **Step 4: 跑全量 room + runner 测试**
+- [x] **Step 4: 跑全量 room + runner 测试**
 
 Run: `python -m pytest tests/test_swarm_room.py tests/test_swarm_runner.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add zenagent/app/swarm/room.py zenagent/app/swarm/runner.py tests/test_swarm_room.py
@@ -224,7 +224,7 @@ git commit -m "feat(swarm): task records carry workItemId and runCost"
   - `work_item_id` 非空 → `~/.zenagent/projects/<key>/swarm/workitems/<wi>/agents/<role>/sessions/<stamp>.jsonl`
   - `None` → 保持今天的 `.../swarm/agents/<role>/sessions/<stamp>.jsonl`（ad-hoc 历史仍可 resume，不搬目录）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # 追加到 tests/test_swarm_roles.py
@@ -244,12 +244,12 @@ def test_session_path_without_work_item_keeps_legacy_layout(tmp_path, monkeypatc
     assert "workitems" not in path.parts
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `python -m pytest tests/test_swarm_roles.py -k "work_item" -v`
 Expected: FAIL — `TypeError: role_session_path() got an unexpected keyword argument 'work_item_id'`
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `_latest_session` 与新建逻辑不变，只把目录算成：
 
@@ -261,12 +261,12 @@ directory = (
 )
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `python -m pytest tests/test_swarm_roles.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add zenagent/app/swarm/roles.py tests/test_swarm_roles.py
@@ -292,7 +292,7 @@ git commit -m "feat(swarm): per-work-item role session paths"
 - `source = store.tasks.get(message.task_id)`；`chain_id = source.chain_id if source else new`。
 - **重基**：当 `work_item_id` 非空且 `source is not None` 且 `source.work_item_id != work_item_id` → `chain_id = new_chain_id()`、`chain_depth = 1`、`chain_cost = 0.0`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # 追加到 tests/test_swarm_router.py
@@ -333,19 +333,19 @@ def test_same_work_item_keeps_the_chain(tmp_path):
     assert task.chain_depth == 3
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `python -m pytest tests/test_swarm_router.py -k "work_item or rebase" -v`
 Expected: FAIL — `TypeError: __init__() missing keyword-only argument 'work_items'`
 
-- [ ] **Step 3: 实现重基规则**
+- [x] **Step 3: 实现重基规则**
 
-- [ ] **Step 4: 跑测试确认通过（含既有 router 测试全部，确保默认参数兼容）**
+- [x] **Step 4: 跑测试确认通过（含既有 router 测试全部，确保默认参数兼容）**
 
 Run: `python -m pytest tests/test_swarm_router.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add zenagent/app/swarm/router.py tests/test_swarm_router.py
