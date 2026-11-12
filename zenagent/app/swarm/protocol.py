@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 
 from zenagent.agent.protocol import AgentTool, ToolResultAgent
 from zenagent.app.swarm.room import RoomMessage, TaskRecord
@@ -20,12 +21,23 @@ Team room protocol:
 
 
 def injected_prompt(message: RoomMessage, task: TaskRecord) -> str:
-    return (
+    head = (
         f"[swarm] from {message.author_kind}:{message.author_id}\n"
         f"task: {task.id} · chain: {task.chain_id} · depth: {task.chain_depth}\n\n"
         f"{PROTOCOL_TEXT}\n\n"
-        f"Message:\n{message.text}"
     )
+    extra = ""
+    if message.ref is not None:
+        extra += f"Quoted {message.ref.author_kind}:{message.ref.author_id} ({message.ref.id}):\n"
+        for line in message.ref.text.splitlines():
+            extra += f"> {line}\n"
+        extra += "\n"
+    if message.images:
+        extra += "Attached images:\n"
+        for path in message.images:
+            extra += f"- {Path(path).name}\n"
+        extra += "\n"
+    return f"{head}{extra}Message:\n{message.text}"
 
 
 def build_swarm_post_tool(post: Callable[[str], None]) -> AgentTool:
