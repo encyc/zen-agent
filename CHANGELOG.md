@@ -3,6 +3,17 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+### Added
+
+- **Swarm work items** — a room thread plus an append-only `work_items.jsonl`
+  table. The run unit becomes `(agent, work item)`: each pair owns a runtime
+  and a session, so one agent can work two jobs without sharing context.
+  Rounds carry `workItemId` and `runCost`, chains rebase at the item boundary,
+  and the desktop gains a work item panel with human scoring, closing and an
+  ad-hoc section. Archived rounds replay from disk when no runtime is live.
+
 ## v0.13.4 — 2026-11-12
 
 **Provider connection failures no longer end a run silently.** An intermittent

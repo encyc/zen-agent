@@ -6,13 +6,13 @@
     "zenagent/cli/tui/screens/modals.py": 1042,
     "zenagent/cli/rpc/ops_config.py": 969,
     "zenagent/cli/rpc/server.py": 828,
-    "zenagent/app/swarm/manager.py": 851
+    "zenagent/app/swarm/manager.py": 841
   },
   "ts": {
     "desktop/src/ui/Sidebar.tsx": 854,
     "desktop/src/state/appStore.ts": 1175,
     "desktop/src/dev/bridge.ts": 998,
-    "desktop/src/rpc/types.ts": 816,
+    "desktop/src/rpc/types.ts": 811,
     "desktop/src/i18n/locale.ts": 20,
     "desktop/e2e/app.spec.ts": 2855,
     "desktop/src/i18n/messages.ts": 1123,

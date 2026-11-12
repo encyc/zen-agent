@@ -628,10 +628,10 @@ git add desktop/ && git commit -m "feat(desktop): swarm work item panel"
 - Modify: `CHANGELOG.md`（架构小节）
 - Modify: `docs/architecture/allowlist.json`（若某文件缩小则下调其上限）
 
-- [ ] **Step 1:** `python scripts/check_architecture.py` 全绿，必要时下调 allowlist 数字
-- [ ] **Step 2:** 更新 manifest 描述与 CHANGELOG
-- [ ] **Step 3:** `python -m pytest tests/ -x -q` 全量
-- [ ] **Step 4: Commit**
+- [x] **Step 1:** `python scripts/check_architecture.py` 全绿，必要时下调 allowlist 数字
+- [x] **Step 2:** 更新 manifest 描述与 CHANGELOG
+- [x] **Step 3:** `python -m pytest tests/ -x -q` 全量
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/ CHANGELOG.md && git commit -m "docs(arch): record swarm work items in the architecture ledger"

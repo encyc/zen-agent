@@ -200,8 +200,10 @@
    "cluster": "app",
    "files": [
     "zenagent/app/swarm/__init__.py",
+    "zenagent/app/swarm/approvals.py",
     "zenagent/app/swarm/events_tap.py",
     "zenagent/app/swarm/frames.py",
+    "zenagent/app/swarm/instances.py",
     "zenagent/app/swarm/manager.py",
     "zenagent/app/swarm/protocol.py",
     "zenagent/app/swarm/roles.py",
@@ -209,15 +211,20 @@
     "zenagent/app/swarm/roster.py",
     "zenagent/app/swarm/router.py",
     "zenagent/app/swarm/runner.py",
-    "zenagent/app/swarm/transcript.py"
+    "zenagent/app/swarm/schedule.py",
+    "zenagent/app/swarm/transcript.py",
+    "zenagent/app/swarm/workflow.py",
+    "zenagent/app/swarm/workitems.py"
    ],
-   "resp": "常驻多角色运行时：角色清单（人设/模型/工具/预算）→ 每角色独立 Runtime+Session；房间 JSONL 是唯一消息源，@ 是唯一路由原语；Router 做入站闸门，TaskRunner 以协议块约束任务边界与预算，SwarmManager 持有调度与审批。events_tap 把角色 run 事件广播为全局 swarm_event 帧，transcript 投影任务详情。",
+   "resp": "常驻多角色运行时：角色是配置（人设/模型/工具/预算），运行单元是 (角色, 工单)：同名角色可并行多个工单、各自 Runtime+Session；房间 JSONL 是唯一消息源，@ 是唯一路由原语；Router 做入站闸门并在工单边界重基链，TaskRunner 约束任务边界与预算。workitems 是 append-only 工单表，workflow 负责开单/续单/请求关闭，schedule 调度每轮，instances 维护运行单元索引与空闲回收，approvals 管审批回调，events_tap 广播角色 run 事件，transcript 可从磁盘还原已归档轮次。",
    "symbols": [
     "RoleManifest",
     "SwarmStore",
     "Router",
     "TaskRunner",
-    "SwarmManager"
+    "SwarmManager",
+    "WorkItem",
+    "WorkItemStore"
    ]
   },
   {
