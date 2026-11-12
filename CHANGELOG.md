@@ -3,11 +3,26 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased
+## v0.13.3 — 2026-11-12
+
+**The swarm room composer is now the same input as coding and zen**, without
+losing the room's role/`@`-delegation model: one plate, per-project drafts,
+quotes, attachments and a command table on top of parallel task dispatch.
 
 ### Added
 
 - **Swarm composer parity** — quote a room message as context, attach images that fan out to every role a message delegates to, and use a room command table (`/reload`, `/reset`, `/stop`, `/help`).
+- **Send preview before dispatch** — the composer names the roles a post will
+  delegate to (with their models), the task count, and the surprises: a busy
+  role queues its task, a non-vision role cannot take the images. Images
+  require at least one mention, or the send is refused in the composer.
+- **Refusals stay editable** — a rejected post keeps the draft, quote and
+  images on screen and shows the host's reason under the plate.
+- **Quotes are linked context** — a quoted message travels as a snapshot into
+  every task prompt it dispatches, and its quote card names the author and
+  flashes the original message in the feed on click.
+- **Attachments are visible in the room** — posted images render as chips
+  under the message.
 
 ## v0.13.2 — 2026-11-12
 
