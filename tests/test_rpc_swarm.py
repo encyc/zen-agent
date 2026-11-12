@@ -53,7 +53,7 @@ async def _call(host: RpcHost, request: dict) -> None:
 class FakeSwarm:
     def __init__(self) -> None:
         self.started = False
-        self.posts: list[str] = []
+        self.posts: list[tuple[str, str | None, tuple[str, ...]]] = []
         self.approvals: list[tuple[str, str]] = []
         self.role_updates: list[tuple[str, dict]] = []
         self.role_deletes: list[str] = []
@@ -82,8 +82,8 @@ class FakeSwarm:
     def messages(self, since=None) -> list[dict]:
         return [{"id": "m_0", "text": "hi", "author": {"kind": "user", "id": "you"}}]
 
-    async def post(self, text: str) -> list[TaskRecord]:
-        self.posts.append(text)
+    async def post(self, text: str, *, ref=None, images=None) -> list[TaskRecord]:
+        self.posts.append((text, ref, tuple(images or ())))
         return [
             TaskRecord(
                 id="t_1",
@@ -178,10 +178,42 @@ async def test_post_creates_tasks(tmp_path):
     await _call(host, {"type": "swarm", "op": "post", "id": "s2", "text": "@research hi"})
 
     result = writes[-1]
-    assert fake.posts == ["@research hi"]
+    assert fake.posts == [("@research hi", None, ())]
     assert result["ok"] is True
     assert [task["id"] for task in result["tasks"]] == ["t_1"]
     assert result["tasks"][0]["assignee"] == "research"
+
+
+async def test_post_passes_ref_and_images(tmp_path):
+    host, writes = _host(tmp_path)
+    fake = FakeSwarm()
+    host._swarm[project_key(tmp_path)] = fake
+
+    await _call(
+        host,
+        {
+            "type": "swarm",
+            "op": "post",
+            "id": "s1",
+            "text": "@research hi",
+            "ref": "m_0",
+            "images": ["/tmp/a.png"],
+        },
+    )
+
+    assert fake.posts == [("@research hi", "m_0", ("/tmp/a.png",))]
+    assert writes[-1]["ok"] is True
+
+
+async def test_post_rejects_a_bad_ref_type(tmp_path):
+    host, writes = _host(tmp_path)
+    fake = FakeSwarm()
+    host._swarm[project_key(tmp_path)] = fake
+
+    await _call(host, {"type": "swarm", "op": "post", "id": "s1", "text": "hi", "ref": 3})
+
+    assert writes[-1]["type"] == "error"
+    assert fake.posts == []
 
 
 async def test_transcript_returns_the_run_steps(tmp_path):

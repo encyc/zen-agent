@@ -68,7 +68,19 @@ class SwarmOps:
                 text = request.get("text")
                 if not isinstance(text, str) or not text.strip():
                     raise Refusal("post needs text")
-                tasks = await manager.post(text)
+                ref = request.get("ref")
+                if ref is not None and not isinstance(ref, str):
+                    raise Refusal("post ref must be a message id")
+                images = request.get("images")
+                if images is not None and (
+                    not isinstance(images, list)
+                    or not all(isinstance(item, str) for item in images)
+                ):
+                    raise Refusal("post images must be a list of file paths")
+                try:
+                    tasks = await manager.post(text, ref=ref, images=images)
+                except ValueError as exc:
+                    raise Refusal(str(exc)) from exc
                 payload = {"tasks": [manager.task_view(task) for task in tasks]}
             elif op == "cancel":
                 task_id = _need(request, "taskId")
