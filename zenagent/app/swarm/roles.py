@@ -101,14 +101,29 @@ def legacy_room_warnings(*, has_messages: bool) -> list[str]:
     ]
 
 
-def role_session_path(role_id: str, *, root: Path, fresh: bool = False) -> Path:
-    """The role's session file: the newest existing, or a fresh empty one.
+def role_session_path(
+    role_id: str,
+    *,
+    root: Path,
+    work_item_id: str | None = None,
+    fresh: bool = False,
+) -> Path:
+    """The role's session file for one work item: newest existing, or a fresh one.
 
     Kept out of the project session dirs on purpose (design §7): role
     transcripts never appear in the normal session list, which is why the role
     runtime sets ``project_sessions=False``.
+
+    ``work_item_id`` scopes the transcript to one work item — that is what makes
+    a work item a context boundary. ``None`` keeps the pre-work-item layout so
+    ad-hoc history stays resumable instead of being orphaned by the upgrade.
     """
-    directory = project_state_root(root) / "agents" / role_id / "sessions"
+    base = project_state_root(root)
+    directory = (
+        base / "workitems" / work_item_id / "agents" / role_id / "sessions"
+        if work_item_id
+        else base / "agents" / role_id / "sessions"
+    )
     directory.mkdir(parents=True, exist_ok=True)
     if not fresh:
         latest = _latest_session(directory)

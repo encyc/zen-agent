@@ -440,3 +440,26 @@ def test_copy_refuses_to_clobber(tmp_path, home):
 
     with pytest.raises(ValueError):
         copy_role("r", root=root)
+
+
+def test_session_path_is_scoped_per_work_item(home):
+    root = home / "proj"
+    root.mkdir()
+
+    a = role_session_path("research", root=root, work_item_id="w1")
+    b = role_session_path("research", root=root, work_item_id="w2")
+    again = role_session_path("research", root=root, work_item_id="w1")
+
+    assert a.parent != b.parent
+    assert a == again
+    assert "w1" in a.parts
+
+
+def test_session_path_without_work_item_keeps_legacy_layout(home):
+    root = home / "proj"
+    root.mkdir()
+
+    path = role_session_path("research", root=root)
+
+    assert "workitems" not in path.parts
+    assert path.parent.name == "sessions"
