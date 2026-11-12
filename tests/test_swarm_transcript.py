@@ -12,7 +12,10 @@ from pathlib import Path
 
 from zenagent.app.swarm.protocol import injected_prompt
 from zenagent.app.swarm.room import RoomMessage, TaskRecord
-from zenagent.app.swarm.transcript import read_task_transcript
+from zenagent.app.swarm.transcript import (
+    read_task_transcript,
+    read_task_transcript_from_disk,
+)
 from zenagent.types import (
     AssistantMessage,
     TextContent,
@@ -159,3 +162,28 @@ def test_full_views_ship_so_the_coding_renderer_can_replay_them(tmp_path):
     assert rows[1]["args"] == {"command": "cat big"}
     assert rows[1]["call_id"] == "call_1"
     assert rows[0]["model"] == "m"
+
+
+def test_disk_resolver_scans_every_session_file_for_the_task(tmp_path):
+    sessions = tmp_path / "agents" / "research" / "sessions"
+    sessions.mkdir(parents=True)
+    _write_session(
+        sessions / "a.jsonl",
+        _run("t_1", "查 X"),
+        _assistant(TextContent(text="第一个结论")),
+    )
+    _write_session(
+        sessions / "b.jsonl",
+        _run("t_2", "查 Y"),
+        _assistant(TextContent(text="第二个结论")),
+    )
+
+    rows = read_task_transcript_from_disk(sessions, "t_2")
+
+    assert rows is not None
+    assert any(row.get("text") == "第二个结论" for row in rows)
+    assert all("第一个结论" not in json.dumps(row) for row in rows)
+
+
+def test_disk_resolver_returns_none_when_the_task_is_absent(tmp_path):
+    assert read_task_transcript_from_disk(tmp_path, "t_nope") is None

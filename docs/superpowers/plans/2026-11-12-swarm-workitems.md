@@ -514,7 +514,7 @@ git commit -m "feat(swarm): open, join and close-request a work item"
 - Produces: `read_task_transcript_from_disk(sessions_dir: Path, task_id: str) -> dict | None`（扫目录里每个 `*.jsonl`，找含该 task id 的记录；找不到返回 `None`）
 - `SwarmManager.task_transcript(task_id)`：先试活实例，失败回落到磁盘路径（由 `(assignee, work_item_id)` 推 sessions 目录）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 def test_transcript_found_on_disk_without_a_live_agent(tmp_path):
@@ -530,10 +530,10 @@ def test_transcript_absent_returns_none(tmp_path):
     assert read_task_transcript_from_disk(tmp_path, "nope") is None
 ```
 
-- [ ] **Step 2: 跑测试确认失败** → FAIL（`ImportError`）
-- [ ] **Step 3: 实现**（复用现有行解析；损坏行跳过）
-- [ ] **Step 4: 跑测试确认通过** → `python -m pytest tests/test_swarm_transcript.py -v`
-- [ ] **Step 5: Commit**
+- [x] **Step 2: 跑测试确认失败** → FAIL（`ImportError`）
+- [x] **Step 3: 实现**（复用现有行解析；损坏行跳过）
+- [x] **Step 4: 跑测试确认通过** → `python -m pytest tests/test_swarm_transcript.py -v`
+- [x] **Step 5: Commit**
 
 ```bash
 git add zenagent/app/swarm/transcript.py tests/test_swarm_transcript.py

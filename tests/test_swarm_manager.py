@@ -1250,3 +1250,19 @@ async def test_request_close_moves_the_item_to_review():
         )
     finally:
         await manager.close()
+
+
+async def test_task_transcript_falls_back_to_disk_without_a_live_runtime():
+    _write_role("research")
+    manager = _manager(stream_fn_factory=lambda role: text_stream("磁盘结论"))
+    await manager.start()
+    try:
+        [task] = await manager.post("@research 做")
+        await _wait_for(lambda: _states(manager).get(task.id) == "done")
+    finally:
+        await manager.close()
+    # Lazy instances and idle reclamation mean an archived round has no live
+    # agent; the detail panel must still replay it from the session file.
+    detail = manager.task_transcript(task.id)
+    assert detail["available"] is True
+    assert any(row.get("text") == "磁盘结论" for row in detail["transcript"])
