@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -231,6 +232,37 @@ async def test_dispatch_runs_worker_and_injects_report(env) -> None:
     await fleet.wait_all()
     assert fleet.status_of(str(path)) == "waiting"
     assert "[zen:worker" in env["chat"].delivered[0], "idle router must be woken"
+
+
+async def test_reports_never_steer_a_non_router_session(env) -> None:
+    fleet: ZenFleet = env["fleet"]
+    env["chat"].runtime = SimpleNamespace(
+        session=SimpleNamespace(path=env["paths"]["w1"])
+    )
+    await fleet.dispatch(str(env["paths"]["w2"]), "work")
+    await fleet.wait_all()
+    assert env["chat"].delivered == []
+    assert env["chat"].steered == []
+
+    # Back on the router, the next report is delivered as usual.
+    env["chat"].runtime = SimpleNamespace(
+        session=SimpleNamespace(path=env["paths"]["router"])
+    )
+    await fleet.dispatch(str(env["paths"]["w2"]), "again")
+    await fleet.wait_all()
+    assert env["chat"].delivered and "[zen:worker" in env["chat"].delivered[-1]
+
+
+async def test_dispatch_materializes_the_spawned_worker_path(env) -> None:
+    fleet: ZenFleet = env["fleet"]
+    path = Path(fleet.spawn("continuity"))
+    assert not path.exists(), "spawn keeps the session lazy"
+    await fleet.dispatch(str(path), "first task")
+    await fleet.wait_all()
+    assert path.is_file(), "dispatch must resume the registered path, not a -N sibling"
+    header = json.loads(path.read_text(encoding="utf-8").splitlines()[0])
+    assert header["type"] == "session"
+    assert header["id"] == path.stem
 
 
 async def test_report_steers_only_while_router_streams(env) -> None:

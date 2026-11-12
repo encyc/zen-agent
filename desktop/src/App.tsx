@@ -303,7 +303,6 @@ export function App() {
           </span>
         </div>
       )}
-      <NoticeBanner />
       </AppFrame>
       <Suspense fallback={null}>
         <WorkerDrawer />
@@ -340,6 +339,10 @@ function ComposerDock() {
   }, [])
   return (
     <div ref={ref} className={css.composerDock} data-shell-composer>
+      {/* The banner rides above the plate inside the measured dock, so the
+          notice never hides under the floating input and its height lands in
+          `--composer-dock-height` for the transcript's padding and fade. */}
+      <NoticeBanner />
       <InputBar />
     </div>
   )

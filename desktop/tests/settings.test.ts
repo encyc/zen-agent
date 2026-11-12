@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   clampFontScale,
-  loadZenBackgroundRun,
   useNoticeStore,
   useNotificationStore,
   useSettingsStore,
@@ -73,13 +72,4 @@ test('showing a notice records a notification', () => {
   assert.equal(useNotificationStore.getState().unread, 0)
   useNotificationStore.getState().clear()
   assert.equal(useNotificationStore.getState().items.length, 0)
-})
-
-test('zenBackgroundRun falls back to true for a foreign persisted value', async () => {
-  await withStorage((store) => {
-    store.set('zen.fleet.background', '"yes"')
-    assert.equal(loadZenBackgroundRun(), true)
-    store.set('zen.fleet.background', 'false')
-    assert.equal(loadZenBackgroundRun(), false)
-  })
 })

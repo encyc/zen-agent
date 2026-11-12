@@ -2,11 +2,20 @@
 
 The transport retries only on HTTP status codes; a provider can also answer 200
 and then fail inside the stream. This retries the *whole assistant call* when
-the terminal message looks transient, buffering each attempt so a failed try
-never leaks duplicate events to the UI.
+the terminal message looks transient.
 
-Nothing has executed yet when a call fails (tool calls run only after a
-successful assistant message), so retrying cannot replay side effects.
+Retrying is only safe while nothing has been shown, so an attempt is retried
+only if it failed before its first content event: the pre-content events a
+connection failure can produce (``start`` and anything before the first
+``text_*``/``thinking_*``/``toolcall_*``) are held back, and once content
+arrives the attempt streams straight through. A failed connection therefore
+retries invisibly *and* a streamed answer stays streamed, which is the whole
+reason these two used to exclude each other. A failure after content has
+streamed is not retried — a second attempt would duplicate output the user has
+already seen.
+
+Nothing has executed yet when a call fails before content (tool calls run only
+after a successful assistant message), so retrying cannot replay side effects.
 """
 
 from __future__ import annotations
@@ -79,6 +88,24 @@ _NON_RETRYABLE = (
 )
 
 
+#: Assistant events that put something in front of the user. Until the first of
+#: these arrives an attempt is still invisible, so it can be retried; after one
+#: it must stream through, because a second attempt would repeat it.
+_CONTENT_EVENTS = frozenset(
+    {
+        "text_start",
+        "text_delta",
+        "text_end",
+        "thinking_start",
+        "thinking_delta",
+        "thinking_end",
+        "toolcall_start",
+        "toolcall_delta",
+        "toolcall_end",
+    }
+)
+
+
 def is_retryable(message: AssistantMessage) -> bool:
     """True when a failed assistant message looks transient."""
     if message.stop_reason != "error":
@@ -106,10 +133,13 @@ async def stream_with_retry(
     """Drive ``safe_stream`` and retry transient terminal failures.
 
     With ``retries <= 0`` events pass straight through as they arrive, so a
-    streamed answer stays streamed. Buffering is only needed when a retry is
-    possible: a failed attempt's events must not leak duplicate partial output
-    to the UI, which is why enabling retries defers the text to the end of the
-    attempt.
+    streamed answer stays streamed.
+
+    With retries enabled the attempt is still streamed, not buffered: only the
+    events preceding the first content event are held back, so a failure that
+    happens while connecting retries without the consumer ever seeing the dead
+    attempt. Once content has been yielded the attempt streams through and a
+    later failure is not retried — see the module docstring.
 
     ``on_retry(message, attempt, max_retries, delay_s)`` fires just before each
     backoff sleep — the failed attempt's terminal message, the upcoming attempt
@@ -124,11 +154,25 @@ async def stream_with_retry(
 
     attempt = 0
     while True:
-        buffered: list[AssistantEvent] = []
-        async for event in safe_stream(stream_fn, model, messages, tools, options):
-            buffered.append(event)
+        held: list[AssistantEvent] = []  # pre-content events, not yet shown
+        streaming = False
+        terminal: AssistantEvent | None = None
 
-        terminal = buffered[-1] if buffered else None
+        async for event in safe_stream(stream_fn, model, messages, tools, options):
+            if event.type in ("done", "error"):
+                terminal = event
+                continue
+            if streaming:
+                yield event
+            elif event.type in _CONTENT_EVENTS:
+                for pending in held:
+                    yield pending
+                held.clear()
+                streaming = True
+                yield event
+            else:
+                held.append(event)
+
         retryable = (
             terminal is not None
             and terminal.type == "error"
@@ -137,9 +181,13 @@ async def stream_with_retry(
         )
         abort = options.abort
         aborted = abort is not None and abort.aborted
-        if not retryable or aborted or attempt >= retries:
-            for event in buffered:
-                yield event
+        # A held attempt was never shown, so retrying is invisible; once content
+        # streamed a second attempt would duplicate it, so retrying stops there.
+        if not retryable or streaming or aborted or attempt >= retries:
+            for pending in held:
+                yield pending
+            if terminal is not None:
+                yield terminal
             return
 
         attempt += 1
@@ -151,6 +199,7 @@ async def stream_with_retry(
         await sleep(delay)
         if abort is not None and abort.aborted:
             # Cancelled while backing off: surface the failure, do not retry.
-            for event in buffered:
-                yield event
+            for pending in held:
+                yield pending
+            yield terminal
             return

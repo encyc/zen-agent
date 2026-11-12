@@ -64,7 +64,7 @@ test('savePref null clears the stored value', () => {
 })
 
 test('spawnArgs pins the released-binary-safe defaults', () => {
-  assert.deepEqual(spawnArgs(), ['--mode', 'ask', '--no-mcp'])
+  assert.deepEqual(spawnArgs(), ['--mode', 'ask', '--no-mcp', '--retries', '3'])
 })
 
 test('spawnArgs resumes a session on the child that replaces another project', () => {
@@ -72,10 +72,12 @@ test('spawnArgs resumes a session on the child that replaces another project', (
     '--mode',
     'ask',
     '--no-mcp',
+    '--retries',
+    '3',
     '--resume',
     '/sessions/c.jsonl',
   ])
-  assert.deepEqual(spawnArgs(null), ['--mode', 'ask', '--no-mcp'])
+  assert.deepEqual(spawnArgs(null), ['--mode', 'ask', '--no-mcp', '--retries', '3'])
 })
 
 test('replayFrames order: mode, then model, thinking last', () => {

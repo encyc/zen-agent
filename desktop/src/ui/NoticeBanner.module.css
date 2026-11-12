@@ -1,16 +1,27 @@
+/* A floating card, not a window-wide strip: it sits in the composer dock
+ * above the plate (and above the room composer), sharing the composer's
+ * content band so it reads as part of that stack. */
+
 .root {
   display: flex;
   align-items: center;
   gap: 8px;
   flex: none;
-  padding: 6px 12px;
-  font-size: var(--ds-font-12);
+  width: min(100%, var(--ds-chat-content-width));
+  margin-inline: auto;
+  padding: 8px 12px;
+  border: 1px solid var(--ds-hairline);
+  border-radius: var(--ds-radius-12);
   background: var(--dsw-alias-bg-layer-2);
+  box-shadow: var(--ds-shadow-raised);
   color: var(--dsw-alias-label-secondary);
+  font-size: var(--ds-font-12);
+  pointer-events: auto;
 }
 
 .root[data-kind='error'] {
   background: var(--dsw-alias-interactive-bg-hover-danger);
+  border-color: var(--ds-hairline);
   color: var(--dsw-alias-state-error-primary);
 }
 

@@ -302,9 +302,27 @@ class Runtime:
             self.agent.system_prompt = self._prompt_with_mode()
         return normalized
 
+    def _router_fleet(self):
+        """The fleet only while this session is its router.
+
+        Fleet tools, the router prompt note and worker reports all belong to
+        the project's one Router session. The fleet itself is slot-scoped, so
+        without this check a session switch (or a new session) would inherit
+        the router surface and turn an ordinary coding chat into a router.
+        """
+        fleet = self.zen_fleet
+        if fleet is None:
+            return None
+        try:
+            current = Path(self.session.path).resolve()
+            router = Path(fleet.router_path).resolve()
+        except OSError:
+            return None
+        return fleet if current == router else None
+
     def _prompt_with_mode(self) -> str:
         note = mode_prompt_note(self._mode)
-        if self.zen_fleet is not None:
+        if self._router_fleet() is not None:
             from zenagent.app.zen.prompts import ROUTER_PROMPT_NOTE
 
             zen = ROUTER_PROMPT_NOTE
@@ -726,10 +744,10 @@ class Runtime:
             tools.append(self.todo_tool)
         if self.task_tool is not None:
             tools.append(self.task_tool)
-        if self.zen_fleet is not None:
+        if self._router_fleet() is not None:
             from zenagent.app.zen.tools import fleet_tools
 
-            tools.extend(fleet_tools(lambda: self.zen_fleet))
+            tools.extend(fleet_tools(self._router_fleet))
         if self.mcp is not None:
             tools.extend(self.mcp.tool_defs())
         if self.skills:

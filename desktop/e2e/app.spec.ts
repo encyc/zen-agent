@@ -1584,7 +1584,16 @@ test('a failed export surfaces in the notice banner', async ({ page }) => {
   await boot(page, initialState({ failExport: true }))
   await page.getByRole('button', { name: '导出会话' }).click()
   await page.getByRole('menuitem', { name: '导出为 Markdown' }).click()
-  await expect(page.getByRole('alert')).toHaveText('导出失败')
+  // The banner belongs to the composer dock: it must clear the floating plate
+  // instead of being painted underneath it at the window's bottom edge.
+  await expect(page.locator('[data-shell-composer] [role="alert"]')).toHaveText('导出失败')
+  const bannerBox = await page.getByRole('alert').boundingBox()
+  const plateBox = await page.locator('[data-composer-plate]').boundingBox()
+  assert.ok(bannerBox !== null && plateBox !== null)
+  assert.ok(
+    bannerBox.y + bannerBox.height <= plateBox.y,
+    `banner bottom ${bannerBox.y + bannerBox.height} must sit above the plate top ${plateBox.y}`,
+  )
 })
 
 test('a cancelled open dialog sends no import', async ({ page }) => {

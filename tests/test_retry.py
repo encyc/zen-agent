@@ -161,8 +161,8 @@ async def test_zero_retries_passes_events_through_while_streaming():
     assert [event.type for event in rest] == ["done"]
 
 
-async def test_enabled_retries_still_buffer_an_attempt():
-    """With retries>0 an attempt is buffered so a retry cannot leak events."""
+async def test_enabled_retries_hold_events_until_content():
+    """With retries>0 the pre-content events wait, so a retry leaks nothing."""
     released = asyncio.Event()
 
     async def stream(model_, messages, tools, options):
@@ -174,11 +174,58 @@ async def test_enabled_retries_still_buffer_an_attempt():
     events = stream_with_retry(stream, model(), [], [], StreamOptions(), retries=1)
     pending = asyncio.create_task(anext(events))
     await asyncio.sleep(0.1)
-    assert not pending.done(), "an attempt with retry budget must be buffered"
+    assert not pending.done(), "pre-content events must wait while a retry is possible"
     released.set()
     assert (await pending).type == "start"
     rest = [event async for event in events]
     assert [event.type for event in rest] == ["done"]
+
+
+async def test_enabled_retries_do_not_disable_streaming():
+    """Only pre-content events wait: a delta still arrives mid-attempt."""
+    released = asyncio.Event()
+    calls = 0
+
+    async def stream(model_, messages, tools, options):
+        nonlocal calls
+        calls += 1
+        partial = assistant(stop="pending")
+        yield AssistantEvent(type="start", partial=partial)
+        yield AssistantEvent(type="text_delta", partial=partial, delta="hi", content="hi")
+        await released.wait()
+        yield AssistantEvent(type="done", partial=assistant(stop="stop"), reason="stop")
+
+    events = stream_with_retry(stream, model(), [], [], StreamOptions(), retries=3)
+    assert (await asyncio.wait_for(anext(events), timeout=1.0)).type == "start"
+    delta = await asyncio.wait_for(anext(events), timeout=1.0)
+    assert delta.type == "text_delta"  # arrived while the provider was still streaming
+    released.set()
+    assert [event.type async for event in events] == ["done"]
+    assert calls == 1
+
+
+async def test_a_failure_after_content_streams_is_not_retried():
+    """A second attempt would duplicate text the user has already seen."""
+    calls = 0
+
+    async def stream(model_, messages, tools, options):
+        nonlocal calls
+        calls += 1
+        partial = assistant(stop="pending")
+        yield AssistantEvent(type="text_delta", partial=partial, delta="hi", content="hi")
+        yield AssistantEvent(
+            type="error", partial=assistant(error="connection reset"), reason="error"
+        )
+
+    events = [
+        event
+        async for event in stream_with_retry(
+            stream, model(), [], [], StreamOptions(), retries=3
+        )
+    ]
+    assert calls == 1
+    assert [event.type for event in events] == ["text_delta", "error"]
+    assert "connection reset" in (events[-1].partial.error_message or "")
 
 
 async def _null_sleep(_delay: float) -> None:

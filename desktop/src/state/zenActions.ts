@@ -56,7 +56,12 @@ function applyToggleResult(
 }
 
 export async function switchZenPresence(get: AppGetter, entering: boolean): Promise<void> {
-  if (!entering) return // leaving zen only switches the UI; workers keep running
+  if (!entering) {
+    // The router is zen-only: leaving zen tears the fleet down and restores
+    // the pre-zen session, so coding never inherits a router.
+    await stopFleet(get)
+    return
+  }
   // Explicit re-entry is the only thing that re-arms auto-enable after a stop.
   useZenStore.setState({ stoppedByUser: false })
   let frame: Record<string, unknown>
@@ -74,27 +79,29 @@ export async function switchZenPresence(get: AppGetter, entering: boolean): Prom
   applyToggleResult(get, true, frame)
 }
 
-/** Explicitly stop the fleet and restore the pre-zen session. */
-export async function stopFleet(get: AppGetter): Promise<void> {
+/** Stop the fleet and restore the pre-zen session; false when refused. */
+export async function stopFleet(get: AppGetter): Promise<boolean> {
   let frame: Record<string, unknown>
   try {
     frame = await get().client().send({ type: 'zen_fleet', op: 'disable' })
   } catch {
-    return
+    return false
   }
   if (frame.type !== 'result' || !frame.ok) {
     showRefusal(frame)
-    return
+    return false
   }
   applyToggleResult(get, false, frame)
   useZenStore.getState().markStopped()
+  return true
 }
 
-/** The leave-zen transition: only stops the fleet when background running
- * is off. Changing the setting never acts on a running fleet immediately. */
+/** Leaving zen always stops the fleet: the workspace becomes plain coding.
+ * A refusal (busy slot) reverts the surface so the UI never claims coding
+ * while the router is still live. */
 export async function onZenModeLeft(get: AppGetter): Promise<void> {
-  if (useSettingsStore.getState().zenBackgroundRun) return
-  await stopFleet(get)
+  const stopped = await stopFleet(get)
+  if (!stopped) useSettingsStore.getState().setWorkspaceMode('zen')
 }
 
 /** One place for the mode switcher: persist the mode, then run the zen-side

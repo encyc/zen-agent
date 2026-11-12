@@ -18,12 +18,10 @@ sidebar 顶部的三态切换器（**Coding / Zen / Swarm**）切到 **Zen**；�
 
 - **进入 Zen**：当前会话切换为项目的 Router 会话（有历史则复用上次的
   Router，延续全局记忆；没有则新建），其余会话进入名册。
-- **离开 Zen**（切到 Coding 或 Swarm）：**默认 fleet 在后台继续跑**——worker
-  照常执行，报告照常回注 Router 会话，切回 Zen 即可看到汇总。此行为可在
-  **Settings → Zen** 的"离开 Zen 模式时允许后台继续"开关切换：关掉后，
-  离开即停止 worker 并恢复进入前的会话。
-- **显式停止**：名册 Router 行右侧的停止按钮任何时候都可停掉 fleet
-  （与上述开关无关）。
+- **离开 Zen**（切到 Coding 或 Swarm）：停掉 fleet、中断未完成的 worker，并
+  把会话恢复到进入 Zen 之前的那个。Router 只存在于 Zen 模式；离开后就是普通
+  coding 会话，不再有 fleet 工具、Router 提示词或 worker 报告。
+- **显式停止**：名册 Router 行右侧的停止按钮同样停掉 fleet 并恢复原会话。
 
 ## 在 Router 会话里工作
 

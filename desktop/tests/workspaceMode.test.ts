@@ -1,7 +1,6 @@
 /** The workspace mode: coding is the shell's default, and every switch
  * persists so a relaunch lands back in the same surface. The zen branch's
- * legacy `zen.ui.mode` key migrates into `zen.workspaceMode` once, and the
- * fleet's leave-behavior toggle lives next to it. */
+ * legacy `zen.ui.mode` key migrates into `zen.workspaceMode` once. */
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
@@ -56,14 +55,5 @@ test('a foreign persisted workspaceMode value falls back to coding', async () =>
     const specifier = '../src/state/stores.ts?foreign=' + Date.now()
     const mod = await import(specifier)
     assert.equal(mod.useSettingsStore.getState().workspaceMode, 'coding')
-  })
-})
-
-test('zenBackgroundRun defaults to true and persists to zen.fleet.background', async () => {
-  await withStorage((store) => {
-    assert.equal(useSettingsStore.getState().zenBackgroundRun, true)
-    useSettingsStore.getState().setZenBackgroundRun(false)
-    assert.equal(useSettingsStore.getState().zenBackgroundRun, false)
-    assert.equal(store.get('zen.fleet.background'), JSON.stringify(false))
   })
 })

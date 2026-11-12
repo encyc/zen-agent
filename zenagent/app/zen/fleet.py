@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -30,6 +31,8 @@ if TYPE_CHECKING:
     from zenagent.app.chat import ChatController
 
 __all__ = ["REPORT_LIMIT", "RosterRow", "WorkerHandle", "ZenFleet", "worker_statuses"]
+
+_log = logging.getLogger(__name__)
 
 #: Worker states the roster reports. ``router`` rows carry ``idle`` status and
 #: the ``router`` role instead.
@@ -290,6 +293,14 @@ class ZenFleet:
             mode = "ask" if self.mode == "zen" else self.mode
         else:
             mode = self.worker_mode
+        path = Path(handle.path)
+        if not path.is_file():
+            # ``spawn`` registers a lazy session whose file appears only on
+            # the first message. Resuming that missing path would make the
+            # worker runtime open a brand-new session with a -N suffix, so the
+            # registered worker identity and its transcript would diverge.
+            with contextlib.suppress(OSError):
+                open_session(path, lazy=True, cwd=self.root).materialize()
         prepared = await prepare(
             RuntimeOptions(root=self.root, resume=handle.path, mode=mode),
             views=False,
@@ -329,6 +340,23 @@ class ZenFleet:
                 self._flush_reports()
             )
 
+    def _router_visible(self) -> bool:
+        """Whether the slot's visible session is this fleet's router.
+
+        Reports wake the router through the shared ChatController, which
+        follows whatever session the slot has active. Steering them into any
+        other session would let a coding chat act as the router; a chat that
+        exposes no runtime (a test double) keeps the old behaviour.
+        """
+        runtime = getattr(self.chat, "runtime", None)
+        path = getattr(getattr(runtime, "session", None), "path", None)
+        if path is None:
+            return True
+        try:
+            return Path(path).resolve() == Path(self.router_path).resolve()
+        except OSError:
+            return False
+
     async def _flush_reports(self) -> None:
         """Deliver buffered reports as one merged message, in a loop so a
         report arriving mid-delivery is never delivered one-per-run."""
@@ -336,6 +364,17 @@ class ZenFleet:
             while self._report_buffer and not self._closing:
                 if self.batch_window_s:
                     await asyncio.sleep(self.batch_window_s)
+                if not self._router_visible():
+                    # The visible session is not the router (a coding session
+                    # was opened while the fleet lives). Never steer another
+                    # chat; the handle keeps the report for the roster.
+                    _log.warning(
+                        "dropping %d zen report(s): router %s is not the active session",
+                        len(self._report_buffer),
+                        self.router_path,
+                    )
+                    self._report_buffer.clear()
+                    return
                 batch, self._report_buffer = self._report_buffer[:], []
                 joined = "\n\n".join(batch)
                 deliver = getattr(self.chat, "deliver", None)

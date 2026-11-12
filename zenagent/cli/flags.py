@@ -100,8 +100,9 @@ def add_runtime_flags(parser: argparse.ArgumentParser) -> None:
         type=int,
         default=0,
         help=(
-            "extra attempts for transient provider failures; each attempt is "
-            "buffered, so enabling retries disables token streaming (default 0)"
+            "extra attempts for failures before the first token; a retry "
+            "after output has streamed would repeat it, so those are never "
+            "retried and streaming stays on (default 0)"
         ),
     )
     parser.add_argument(

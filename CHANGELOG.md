@@ -14,6 +14,37 @@ matches the release tag; older history is in the repository tags and commits.
   and the desktop gains a work item panel with human scoring, closing and an
   ad-hoc section. Archived rounds replay from disk when no runtime is live.
 
+**Retries no longer cost streaming, and the desktop turns them on.** v0.13.4
+learned to classify connect failures as transient, but nothing retried them:
+`--retries` defaulted to 0 and the desktop child never received the flag, so a
+few seconds of packet loss still ended a run with "Cannot reach the model
+provider".
+
+### Changed
+
+- **A retry only replays an attempt nobody has seen** — the pre-content events
+  of an attempt are held until the first `text_*`/`thinking_*`/`toolcall_*`
+  event, at which point the attempt streams straight through. A connection
+  failure therefore retries invisibly, and enabling retries no longer disables
+  token streaming. A failure after content has streamed is not retried, because
+  a second attempt would repeat output already on screen.
+- **The desktop spawns its child with `--retries 3`** — the GUI now rides out a
+  short uplink drop instead of stopping the run. Streaming is unaffected by the
+  rule above.
+- **Leaving Zen stops the fleet** — Coding and Swarm are plain sessions again:
+  the fleet is disabled and the pre-zen session restored, so no router survives
+  outside Zen. The "keep the fleet running after leaving Zen" setting is gone.
+
+### Fixed
+
+- **Zen's router surface stays on the Router** — fleet tools, the router prompt
+  note and worker reports now require the active session to be the project's
+  Router. Switching to another session (or opening a new one) no longer turns a
+  coding chat into a router.
+- **Spawned workers resume their own transcript** — the first dispatch
+  materializes the registered session path instead of letting `resume` open a
+  `-N` sibling, so worker identity and context no longer diverge.
+
 ## v0.13.4 — 2026-11-12
 
 **Provider connection failures no longer end a run silently.** An intermittent
