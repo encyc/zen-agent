@@ -17,7 +17,7 @@ import { useT } from '../../i18n/locale'
 import { ApprovalPanel } from '../approval/ApprovalPanel'
 import { AskCard } from '../ask/AskCard'
 import { pickImagePaths } from './pickImages'
-import { attachDragDrop } from './dragDrop'
+import { useImageDrop } from './useImageDrop'
 import { TodoDock, PendingDock, ContextMeter } from './Docks'
 import { ModelMenu, ModeMenu } from './Menus'
 import {
@@ -137,17 +137,8 @@ export function InputBar() {
     void refreshSkills()
   }, [refreshSkills])
 
-  // Tauri drag-drop: file drop events carry absolute paths. The helper's
-  // cleanup unlistens even when StrictMode tears this effect down before the
-  // async registration settles.
-  useEffect(
-    () =>
-      attachDragDrop((paths) => {
-        const imagePaths = paths.filter((path) => /\.(png|jpe?g|gif|webp|bmp)$/i.test(path))
-        if (imagePaths.length > 0) addImages(imagePaths)
-      }),
-    [addImages],
-  )
+  // Tauri drag-drop: file drop events carry absolute paths; images only.
+  useImageDrop(addImages)
 
   const doSubmit = () => {
     setMenu({ kind: null })

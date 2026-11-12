@@ -1,0 +1,88 @@
+/* The room adapter's own strip, attach button and send preview; everything
+ * else (plate, menu, attachments rail) comes from the shared composer. */
+
+.add {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--ds-hairline);
+  border-radius: 999px;
+  background: var(--ds-surface-2);
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    border-color var(--ds-motion-fast) var(--ds-ease-out);
+}
+
+.add:hover {
+  background: var(--ds-surface-3);
+  border-color: var(--ds-hairline-strong);
+}
+
+.add:active {
+  transform: scale(0.94);
+}
+
+.quote {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 6px 10px;
+  border-left: 2px solid var(--dsw-alias-label-tertiary);
+  border-radius: var(--ds-radius-10);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.quoteAuthor {
+  flex: none;
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+.quoteText {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quoteClear {
+  flex: none;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.quoteClear:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.targets {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--dsw-alias-label-primary);
+}
+
+.warn {
+  color: var(--dsw-alias-state-warning-primary);
+}
