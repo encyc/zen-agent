@@ -79,6 +79,12 @@ class TaskRecord:
     result_message_id: str | None = None
     reason: str | None = None
     derived_from: str | None = None
+    #: The work item this round belongs to. ``None`` only for ad-hoc history
+    #: (records written before work items existed) and rounds continued from it.
+    work_item_id: str | None = None
+    #: What this round alone spent. ``chain_cost`` is a cumulative snapshot for
+    #: its chain, so summing it across rounds double-counts ancestors.
+    run_cost: float = 0.0
 
 
 def is_terminal(state: str) -> bool:
@@ -231,6 +237,8 @@ class SwarmStore:
             result_message_id=raw.get("resultMessageId"),
             reason=raw.get("reason"),
             derived_from=raw.get("derivedFrom"),
+            work_item_id=raw.get("workItemId"),
+            run_cost=float(raw.get("runCost") or 0.0),
         )
         self._record_spend(self.tasks.get(record.id), record)
         self.tasks[record.id] = record
@@ -347,4 +355,6 @@ def _task_record(task: TaskRecord) -> dict:
         "resultMessageId": task.result_message_id,
         "reason": task.reason,
         "derivedFrom": task.derived_from,
+        "workItemId": task.work_item_id,
+        "runCost": task.run_cost,
     }

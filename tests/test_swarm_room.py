@@ -10,6 +10,7 @@ from zenagent.app.swarm.room import (
     SwarmStore,
     TaskRecord,
     _message_record,
+    _task_record,
     is_terminal,
     parse_mentions,
 )
@@ -245,3 +246,24 @@ def test_a_malformed_ref_is_ignored_without_dropping_the_message(tmp_path):
     assert store.messages[0].text == "hi"
     assert store.messages[0].ref is None
     assert store.messages[0].images == []
+
+
+def test_task_roundtrip_keeps_work_item_and_run_cost():
+    task = _task(work_item_id="w1", run_cost=0.25)
+
+    raw = _task_record(task)
+
+    assert raw["workItemId"] == "w1"
+    assert raw["runCost"] == 0.25
+
+
+def test_legacy_task_line_has_no_work_item(tmp_path):
+    (tmp_path / "tasks.jsonl").write_text(
+        json.dumps({"type": "task", "id": "t1", "assignee": "a", "state": "queued"}) + "\n",
+        encoding="utf-8",
+    )
+    store = SwarmStore(tmp_path)
+    store.load()
+
+    assert store.tasks["t1"].work_item_id is None
+    assert store.tasks["t1"].run_cost == 0.0

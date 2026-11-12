@@ -100,9 +100,11 @@ class TaskRunner:
                 termination = self.agent.termination or "stop"
 
             new_messages = self.agent.messages[before:]
+            spent = _run_cost(new_messages)
             updated = replace(
                 running,
-                chain_cost=round(running.chain_cost + _run_cost(new_messages), 6),
+                chain_cost=round(running.chain_cost + spent, 6),
+                run_cost=round(spent, 6),
                 updated_at=int(time.time()),
             )
             if timed_out:
