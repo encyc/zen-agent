@@ -2,13 +2,7 @@
  * live server; the frontend mirrors the TUI reducer (zenagent/app/views.py)
  * when assembling them. */
 
-import type {
-  SwarmAgentFrame,
-  SwarmEventFrame,
-  SwarmMessageFrame,
-  SwarmNoticeFrame,
-  SwarmTaskFrame,
-} from './types-swarm.ts'
+import type { SwarmServerFrame } from './types-swarm.ts'
 
 export type {
   SwarmAgentFrame,
@@ -29,6 +23,9 @@ export type {
   SwarmTask,
   SwarmTaskFrame,
   SwarmTaskState,
+  SwarmWork,
+  SwarmWorkFrame,
+  SwarmWorkState,
 } from './types-swarm.ts'
 
 export interface Usage {
@@ -805,11 +802,7 @@ export type ServerFrame =
   | ResultFrame
   | EventFrame
   | ZenFleetFrame
-  | SwarmMessageFrame
-  | SwarmTaskFrame
-  | SwarmAgentFrame
-  | SwarmNoticeFrame
-  | SwarmEventFrame
+  | SwarmServerFrame
 
 export function isEventFrame(frame: ServerFrame): frame is EventFrame {
   return frame.type === 'event'

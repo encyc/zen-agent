@@ -67,6 +67,7 @@ from zenagent.app.swarm.router import (
 from zenagent.app.swarm.runner import TaskRunner
 from zenagent.app.swarm.schedule import SwarmSchedule
 from zenagent.app.swarm.transcript import read_task_transcript, read_task_transcript_from_disk
+from zenagent.app.swarm.workflow import SwarmWorkflow
 from zenagent.app.swarm.workitems import WorkItemStore
 from zenagent.attachments import read_image_argument
 from zenagent.config import load_user_config
@@ -98,7 +99,7 @@ def _now() -> int:
     return int(time.time())
 
 
-class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals):
+class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
     def __init__(
         self,
         *,
@@ -370,7 +371,8 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals):
         )
         self.store.append_message(message)
         self._emit_message(message)
-        return self._admit(message)
+        work_item_id = self._resolve_work_item(message, ref)
+        return self._admit(message, work_item_id=work_item_id)
 
     def _quote_snapshot(self, ref: str | None) -> RoomRef | None:
         if ref is None:
@@ -635,7 +637,8 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals):
             extra_tools=[
                 build_swarm_post_tool(
                     lambda text, key=key: self._post_from(key, text)
-                )
+                ),
+                *self.work_tools(opened_by=role.id, opened_from=work_item_id),
             ],
             extra_prompt=f"{role.system_prompt}\n\n{PROTOCOL_TEXT}",
             resume=session_path,

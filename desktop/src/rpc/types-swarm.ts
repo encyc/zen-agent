@@ -67,14 +67,37 @@ export interface SwarmTask {
   resultMessageId: string | null
   reason: string | null
   derivedFrom: string | null
+  /** The work item this round belongs to; null = ad-hoc history. */
+  workItemId: string | null
+  /** This round's own spend; chainCost is a cumulative snapshot. */
+  runCost: number
 }
 
 export interface SwarmAgentState {
   agent: string
   name: string
   state: SwarmAgentStatus
+  /** Which work item this instance is bound to; null = ad-hoc. */
+  workItem: string | null
   task: string | null
   pendingApply: boolean
+}
+
+export type SwarmWorkState = 'open' | 'review' | 'closed'
+
+/** One resumable job: a thread of rounds with its own context and score. */
+export interface SwarmWork {
+  id: string
+  title: string
+  state: SwarmWorkState
+  rootMessageId: string
+  openedBy: SwarmAuthor
+  openedAt: number
+  closedAt: number | null
+  score: number | null
+  scoreNote: string | null
+  mergedInto: string | null
+  continuedFrom: string | null
 }
 
 export interface SwarmListResult {
@@ -163,3 +186,18 @@ export interface SwarmEventFrame {
   task: string
   event: AgentEventFrame
 }
+
+export interface SwarmWorkFrame extends SwarmWork {
+  type: 'swarm_work'
+  swarm: true
+  project?: string
+}
+
+/** Every server-initiated swarm frame, for the ServerFrame union. */
+export type SwarmServerFrame =
+  | SwarmMessageFrame
+  | SwarmTaskFrame
+  | SwarmAgentFrame
+  | SwarmNoticeFrame
+  | SwarmWorkFrame
+  | SwarmEventFrame

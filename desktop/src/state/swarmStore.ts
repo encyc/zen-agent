@@ -18,6 +18,7 @@ import type {
   SwarmRole,
   SwarmTask,
   SwarmTranscriptResult,
+  SwarmWork,
 } from '../rpc/types'
 import { applyRunEvent, type RunView } from './swarmRun.ts'
 
@@ -77,6 +78,7 @@ interface SwarmState {
   messages: SwarmMessage[]
   tasks: SwarmTask[]
   agents: SwarmAgentState[]
+  works: SwarmWork[]
   roles: SwarmRole[]
   /** Role build/parse problems the host reported; shown above the room. */
   warnings: string[]
@@ -126,6 +128,7 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
   messages: [],
   tasks: [],
   agents: [],
+  works: [],
   roles: [],
   warnings: [],
   loaded: false,
@@ -186,6 +189,12 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
     if (frame.type === 'swarm_agent') {
       set((state) => ({
         agents: replaceBy(state.agents, frame, (agent) => agent.agent),
+      }))
+      return
+    }
+    if (frame.type === 'swarm_work') {
+      set((state) => ({
+        works: replaceBy(state.works, frame, (work) => work.id),
       }))
     }
   },
@@ -250,6 +259,7 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
       messages: [],
       tasks: [],
       agents: [],
+      works: [],
       roles: [],
       warnings: [],
       runRows: {},

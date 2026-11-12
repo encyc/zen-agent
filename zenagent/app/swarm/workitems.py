@@ -13,6 +13,7 @@ raises. Replay is therefore identical to a fresh write.
 from __future__ import annotations
 
 import time
+from collections import Counter
 from dataclasses import dataclass, field, replace
 
 from zenagent.app.swarm.room import SwarmStore
@@ -133,6 +134,17 @@ class WorkItemStore:
         before = len(self.store.warnings)
         self.store._replay(self.path, self._apply)
         self.warnings = list(self.store.warnings[before:])
+        # Rounds live in the task table, not in this one. Recompute both the
+        # count and the "already used" set on every load so a restart cannot
+        # make a used item look fresh to the idempotent work_open.
+        rounds = Counter(
+            task.work_item_id
+            for task in self.store.tasks.values()
+            if task.work_item_id is not None
+        )
+        self._with_rounds = set(rounds)
+        for item in self.items.values():
+            item.rounds = rounds.get(item.id, 0)
 
     def _apply(self, raw: dict) -> None:
         item = _apply_work_item(raw)
@@ -224,9 +236,24 @@ class WorkItemStore:
                 return task.work_item_id
         return None
 
+    def unused(self, *, opened_from: str | None, opened_by_id: str) -> WorkItem | None:
+        """The still-empty item an agent opened last, for an idempotent re-open."""
+        for item in self.items.values():
+            if (
+                item.state == "open"
+                and item.opened_from == opened_from
+                and item.opened_by_id == opened_by_id
+                and item.id not in self._with_rounds
+            ):
+                return item
+        return None
+
     def note_round(self, work_item_id: str | None) -> None:
         if work_item_id:
             self._with_rounds.add(work_item_id)
+            item = self.items.get(work_item_id)
+            if item is not None:
+                item.rounds += 1
 
     def _append(self, item: WorkItem) -> None:
         self.store._append_line(self.path, _work_item_record(item))

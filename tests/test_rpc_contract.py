@@ -195,6 +195,7 @@ def ts_codes_ok(py_codes: set[str], ts_keys: set[str]) -> bool:
 SERVER_FRAME_TYPES = {
     "result", "error", "event", "zen_fleet",
     "swarm_message", "swarm_task", "swarm_agent", "swarm_notice", "swarm_event",
+    "swarm_work",
 }
 
 
@@ -300,6 +301,7 @@ async def test_every_swarm_frame_names_the_project_of_its_room(tmp_path, monkeyp
             "swarm_agent",
             "swarm_notice",
             "swarm_event",
+            "swarm_work",
         }
         assert all(frame.get("swarm") is True for frame in frames)
         assert all(frame.get("project") == project for frame in frames), [

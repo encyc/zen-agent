@@ -425,20 +425,20 @@ async def test_role_update_applies_after_run():
             "slow",
             {"id": "slow", "name": "Slow v2", "systemPrompt": "You are v2."},
         )
-        pending = manager.instance("slow").pending_apply
+        pending = manager.instance("slow", task.work_item_id).pending_apply
         assert pending is not None
         assert pending.name == "Slow v2"
-        assert "You are v1." in manager.instance("slow").agent.system_prompt
+        assert "You are v1." in manager.instance("slow", task.work_item_id).agent.system_prompt
 
         assert await manager.cancel(task.id) is True
 
         def applied() -> bool:
-            agent = manager.instance("slow")
+            agent = manager.instance("slow", task.work_item_id)
             return agent is not None and agent.pending_apply is None
 
         await _wait_for(applied)
-        assert manager.instance("slow").role.name == "Slow v2"
-        assert "You are v2." in manager.instance("slow").agent.system_prompt
+        assert manager.instance("slow", task.work_item_id).role.name == "Slow v2"
+        assert "You are v2." in manager.instance("slow", task.work_item_id).agent.system_prompt
     finally:
         await manager.close()
 
@@ -581,7 +581,7 @@ async def test_approval_allow_lets_the_write_run():
         assert request["request_id"].startswith(f"{project_key(manager.root)}:swarm:")
         assert manager.resolve_approval(request["request_id"], "allow") is True
         await _wait_for(lambda: _states(manager)[task.id] == "done")
-        root = manager.instance("writer").role.root
+        root = manager.instance("writer", task.work_item_id).role.root
         assert (root / "note.txt").read_text(encoding="utf-8") == "hi"
     finally:
         await manager.close()
@@ -634,7 +634,7 @@ async def test_swarm_approval_deny_marks_task():
         # The agent finishes its turn after the refused tool, but the mutation
         # must not have run.
         await _wait_for(lambda: _states(manager)[task.id] == "done")
-        root = manager.instance("writer").role.root
+        root = manager.instance("writer", task.work_item_id).role.root
         assert not (root / "note.txt").exists()
     finally:
         await manager.close()
@@ -686,7 +686,7 @@ async def test_swarm_concurrency_cap_queues():
         # Latch: alpha holds the only slot; beta must wait, never run alongside.
         await _wait_for(lambda: _states(manager)[ta.id] == "running")
         assert _states(manager)[tb.id] == "queued"
-        assert manager.instance("beta").state != "running"
+        assert manager.instance("beta", tb.work_item_id).state != "running"
         # Free alpha's slot; beta then acquires it and runs.
         gates["alpha"].set()
         await _wait_for(lambda: _states(manager)[ta.id] == "done")
@@ -707,8 +707,14 @@ async def test_inbox_cap_rejects_the_overflow_posts():
         [running] = await manager.post("@slow one")
         await _wait_for(lambda: _states(manager)[running.id] == "running")
         accepted = 0
+        # Every follow-up quotes the same root, so they join one work item and
+        # its inbox — the cap is per (role, work item), not per room.
         for index in range(17):
-            accepted += len(await manager.post(f"@slow more {index}"))
+            accepted += len(
+                await manager.post(
+                    f"@slow more {index}", ref=running.source_message_id
+                )
+            )
         assert accepted == 16
         notes = [
             message["text"]
@@ -912,7 +918,7 @@ async def test_delete_role_mid_run_leaks_no_runtime(monkeypatch):
             "victim",
             {"id": "victim", "name": "Victim v2", "systemPrompt": "You are v2."},
         )
-        assert manager.instance("victim").pending_apply is not None
+        assert manager.instance("victim", task.work_item_id).pending_apply is not None
 
         before = len(frames)
         await manager.delete_role("victim")
@@ -952,11 +958,11 @@ async def test_pending_apply_survives_a_run():
         )
         assert await manager.cancel(task.id) is True
         await _wait_for(
-            lambda: manager.instance("slow") is not None
-            and manager.instance("slow").pending_apply is None
+            lambda: manager.instance("slow", task.work_item_id) is not None
+            and manager.instance("slow", task.work_item_id).pending_apply is None
         )
-        assert manager.instance("slow").role.name == "Slow v2"
-        assert "You are v2." in manager.instance("slow").agent.system_prompt
+        assert manager.instance("slow", task.work_item_id).role.name == "Slow v2"
+        assert "You are v2." in manager.instance("slow", task.work_item_id).agent.system_prompt
     finally:
         await manager.close()
 
@@ -1150,5 +1156,97 @@ async def test_roles_report_vision_support():
     await manager.start()
     try:
         assert all("supportsVision" in role for role in manager.roles())
+    finally:
+        await manager.close()
+
+
+async def test_first_human_mention_opens_a_work_item():
+    _write_role("research")
+    manager = _manager(stream_fn_factory=lambda role: text_stream("ok"))
+    await manager.start()
+    try:
+        [task] = await manager.post("@research 查一下竞品")
+        item = manager.work_items.items[task.work_item_id]
+        assert item.state == "open"
+        assert item.opened_by_kind == "user"
+        assert item.root_message_id == task.source_message_id
+        assert item.rounds == 1
+    finally:
+        await manager.close()
+
+
+async def test_quoting_a_closed_item_opens_a_continuation():
+    _write_role("research")
+    manager = _manager(stream_fn_factory=lambda role: text_stream("ok"))
+    await manager.start()
+    try:
+        [first] = await manager.post("@research 查竞品")
+        await _wait_for(lambda: _states(manager).get(first.id) == "done")
+        item_id = first.work_item_id
+        manager.work_items.update(item_id, state="closed")
+        [again] = await manager.post(
+            "@research 再补一条", ref=first.source_message_id
+        )
+        assert again.work_item_id != item_id
+        fresh = manager.work_items.items[again.work_item_id]
+        assert fresh.continued_from == item_id
+        assert fresh.root_message_id == again.source_message_id
+    finally:
+        await manager.close()
+
+
+async def test_agent_mention_joins_the_current_work_item():
+    _write_role("research")
+    _write_role("coder")
+    manager = _manager(stream_fn_factory=lambda role: text_stream("ok"))
+    await manager.start()
+    try:
+        [first] = await manager.post("@research 查竞品")
+        await _wait_for(lambda: _states(manager).get(first.id) == "done")
+        manager._post_from(("research", first.work_item_id), "@coder 帮我跑一下")
+        delegate = next(
+            task for task in manager.store.tasks.values() if task.assignee == "coder"
+        )
+        assert delegate.work_item_id == first.work_item_id
+    finally:
+        await manager.close()
+
+
+async def test_agent_work_open_is_idempotent_and_leaves_a_card():
+    _write_role("research")
+    manager = _manager(stream_fn_factory=lambda role: text_stream("ok"))
+    await manager.start()
+    try:
+        [first] = await manager.post("@research 查竞品")
+        opened = manager.work_open(
+            "这是一件新活", opened_by="research", opened_from=first.work_item_id
+        )
+        replayed = manager.work_open(
+            "再说一次", opened_by="research", opened_from=first.work_item_id
+        )
+        assert replayed.id == opened.id
+        assert opened.opened_from == first.work_item_id
+        card = next(
+            message
+            for message in manager.store.messages
+            if message.id == opened.root_message_id
+        )
+        assert card.author_kind == "system"
+        assert "工单已开" in card.text
+    finally:
+        await manager.close()
+
+
+async def test_request_close_moves_the_item_to_review():
+    _write_role("research")
+    manager = _manager(stream_fn_factory=lambda role: text_stream("ok"))
+    await manager.start()
+    try:
+        [task] = await manager.post("@research 做完了")
+        item = manager.request_close(task.work_item_id, "交付说明")
+        assert item.state == "review"
+        assert any(
+            "待验收" in message.text for message in manager.store.messages
+        )
     finally:
         await manager.close()

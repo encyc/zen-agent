@@ -107,6 +107,7 @@ function idleAgents(roles: SwarmRole[]): SwarmAgentState[] {
     agent: role.id,
     name: role.name,
     state: 'idle',
+    workItem: null,
     task: null,
     pendingApply: false,
   }))
@@ -143,6 +144,8 @@ export function swarmFixture(options: SwarmFixtureOptions = {}): SwarmMockState 
       resultMessageId: null,
       reason: null,
       derivedFrom: null,
+      workItemId: null,
+      runCost: 0,
     })
     agents[0] = { ...agents[0], state: 'running', task: 't_seed' }
   }
@@ -254,6 +257,7 @@ function setAgent(rows: Room, id: string, state: SwarmAgentState['state'], task:
     agent: id,
     name: role?.name ?? known?.name ?? id,
     state,
+    workItem: known?.workItem ?? null,
     task,
     pendingApply: known?.pendingApply ?? false,
   }
@@ -327,6 +331,8 @@ function addTask(
     resultMessageId: null,
     reason: null,
     derivedFrom: spec.derivedFrom ?? null,
+    workItemId: null,
+    runCost: 0,
   }
   rows.swarmTasks.push(task)
   emit(rows, { ...task, type: 'swarm_task', swarm: true })

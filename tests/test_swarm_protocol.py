@@ -1,4 +1,6 @@
-from zenagent.app.swarm.protocol import injected_prompt
+import pytest
+
+from zenagent.app.swarm.protocol import build_work_tools, injected_prompt
 from zenagent.app.swarm.room import RoomMessage, RoomRef, TaskRecord
 
 
@@ -46,3 +48,31 @@ def test_prompt_lists_attachment_names_not_absolute_paths():
 
     assert "Attached images:\n- b.png\n" in prompt
     assert "/tmp/a/b.png" not in prompt
+
+
+async def test_work_tools_open_then_request_close():
+    from types import SimpleNamespace
+
+    calls: list[tuple[str, str]] = []
+
+    def open_item(reason: str):
+        calls.append(("open", reason))
+        return SimpleNamespace(id="w1", title="新活", state="open")
+
+    def request_close(note: str):
+        calls.append(("close", note))
+        return SimpleNamespace(id="w1", title="新活", state="review")
+
+    tools = {tool.name: tool for tool in build_work_tools(open_item, request_close)}
+    result = await tools["work_open"].execute(
+        "c1", {"reason": "新活"}, None, None
+    )
+    assert "w1" in "".join(block.text for block in result.content)
+    result = await tools["work_request_close"].execute(
+        "c2", {"note": "做完了"}, None, None
+    )
+    assert "review" in "".join(block.text for block in result.content)
+    assert calls == [("open", "新活"), ("close", "做完了")]
+
+    empty = await tools["work_open"].execute("c3", {"reason": "  "}, None, None)
+    assert empty.is_error

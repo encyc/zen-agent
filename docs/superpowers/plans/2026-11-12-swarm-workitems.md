@@ -454,7 +454,7 @@ git commit -m "feat(swarm): run units are (role, work item); roster decoupled fr
   - 引用消息属 ad-hoc（无工单）→ 任务的 `work_item_id = None`。
   - Agent 的 `@` → 用该实例绑定的工单；调 `work_open(reason)` 才开新单，卡片即根消息，记 `opened_from`；幂等：已有未使用的新单则复用。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # 追加到 tests/test_swarm_manager.py
@@ -481,21 +481,21 @@ async def test_agent_mention_joins_the_current_work_item(manager):
     assert delegate.work_item_id == item_id
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `python -m pytest tests/test_swarm_manager.py -k "work_item or continuation" -v`
 Expected: FAIL
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `post()` 在构造 `RoomMessage` 之后、`_admit` 之前解析工单；`_admit` 接 `work_item_id`。卡片消息用 `author_kind="system"`，`text` 形如 `工单已开：<title>（由 @research 发起：<reason>）`。
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `python -m pytest tests/test_swarm_manager.py tests/test_swarm_protocol.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add zenagent/app/swarm/manager.py zenagent/app/swarm/protocol.py tests/
