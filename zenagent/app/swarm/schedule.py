@@ -140,11 +140,14 @@ class SwarmSchedule:
                 or self._has_pending(key)
             ):
                 return
+            # Close before dropping the index: if the manager is tearing down
+            # mid-reap, cancellation leaves the agent visible for close() to
+            # finish rather than orphaning a half-closed runtime.
+            with contextlib.suppress(Exception):
+                await agent.runtime.close()
             self.agents.pop(key, None)
             self.runners.pop(key, None)
             self._idle.forget(key)
-            with contextlib.suppress(Exception):
-                await agent.runtime.close()
 
     async def _execute(self, task: TaskRecord, agent) -> None:
         key: AgentKey = (agent.role.id, agent.work_item_id)
