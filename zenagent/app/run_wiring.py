@@ -36,11 +36,18 @@ __all__ = [
 ]
 
 
-def attach_run_recorder(runtime) -> RunLedger:
-    """Attach one recorder to ``runtime.agent``; idempotent per Runtime."""
+def attach_run_recorder(runtime) -> RunLedger | None:
+    """Attach one recorder to ``runtime.agent``; idempotent per Runtime.
+
+    A pre-built runtime passed in by an embedder/test may not carry the app
+    assembly (root/agent); that is not an error — there is simply nothing to
+    record, and the caller keeps its own bookkeeping.
+    """
     existing = getattr(runtime, "run_ledger", None)
     if existing is not None:
         return existing
+    if getattr(runtime, "root", None) is None or getattr(runtime, "agent", None) is None:
+        return None
     ledger = RunLedger(project.project_dir(root=runtime.root) / "runs.jsonl")
     runtime.run_ledger = ledger
     runtime.run_scope = {"kind": "coding", "agentId": "main"}
@@ -143,7 +150,9 @@ class RunRecorder:
         self._runtime.current_run_id = None
 
 
-def attach_swarm_run(runtime, role_id: str, work_item_id: str | None, label: str) -> RunLedger:
+def attach_swarm_run(
+    runtime, role_id: str, work_item_id: str | None, label: str
+) -> RunLedger | None:
     """Wire a role runtime and stamp its first scope in one call.
 
     Swarm builds runtimes outside ``prepare``, so it owns this attachment; the
