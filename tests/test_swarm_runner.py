@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import time
 
 import pytest
@@ -17,8 +18,10 @@ from zenagent.events import Aborted, AssistantEvent
 from zenagent.types import (
     AssistantMessage,
     Cost,
+    ImageContent,
     TextContent,
     ToolCall,
+    UserMessage,
     Usage,
 )
 
@@ -347,3 +350,27 @@ async def test_max_cost_marks_failed(tmp_path, runtime_factory):
         message.author_kind == "system" and "max_cost" in message.text
         for message in store.messages
     )
+
+
+PNG_1PX = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
+
+
+async def test_images_reach_the_agent_as_content_blocks(tmp_path, runtime_factory):
+    image_path = tmp_path / "a.png"
+    image_path.write_bytes(PNG_1PX)
+    runtime = await runtime_factory(stream_fn=text_stream("看图完毕"))
+    store, _router, current, post, admit = _bind(tmp_path)
+    task = _task(store)
+    current["task"] = task
+    message = _message(store, text="@research 看图")
+    message.images.append(str(image_path))
+
+    record = await _runner(runtime, store, post, admit).run(task, message)
+
+    assert record.state == "done"
+    first = runtime.agent.messages[0]
+    assert isinstance(first, UserMessage)
+    assert any(isinstance(block, ImageContent) for block in first.content)
+    assert any(isinstance(block, TextContent) and "看图" in block.text for block in first.content)

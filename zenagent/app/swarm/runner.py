@@ -11,6 +11,7 @@ import asyncio
 import time
 from collections.abc import Callable
 from dataclasses import replace
+from pathlib import Path
 
 from zenagent.agent.agent import Agent
 from zenagent.agent.session import Session
@@ -18,11 +19,20 @@ from zenagent.app.compact import maybe_auto_compact
 from zenagent.app.swarm.protocol import injected_prompt
 from zenagent.app.swarm.roles import RoleManifest
 from zenagent.app.swarm.room import RoomMessage, TaskRecord
+from zenagent.attachments import read_image_argument
 from zenagent.types import AssistantMessage, TextContent
 
 __all__ = ["TaskRunner"]
 
 SUCCESS_TERMINATIONS = {"stop", "tool_terminate"}
+
+
+def read_message_images(message: RoomMessage) -> list | None:
+    """Load a message's attachment paths once per task; ``None`` keeps the
+    text-only prompt path byte-identical to before images existed."""
+    if not message.images:
+        return None
+    return [read_image_argument(Path(path)) for path in message.images]
 
 
 class TaskRunner:
@@ -65,7 +75,10 @@ class TaskRunner:
         before = len(self.agent.messages)
 
         async def drive() -> None:
-            await self.agent.prompt(injected_prompt(message, running))
+            await self.agent.prompt(
+                injected_prompt(message, running),
+                images=read_message_images(message),
+            )
             await self.agent.wait_for_idle()
 
         try:
