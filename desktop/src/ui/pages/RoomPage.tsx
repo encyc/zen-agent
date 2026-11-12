@@ -11,6 +11,7 @@ import { useComposerStore } from '../../state/stores'
 import type { RunView } from '../../state/swarmRun'
 import { useSwarmStore } from '../../state/swarmStore'
 import { RoomComposer } from '../composer/RoomComposer'
+import { NoticeBanner } from '../NoticeBanner'
 import { AssistantNodeView } from '../chat/AssistantNodeView'
 import { SkillMessage, UserMessage } from '../chat/MessageItem'
 import { ToolRowView } from '../chat/ToolRowView'
@@ -109,6 +110,9 @@ export function RoomPage() {
             )}
           </div>
         )}
+        {/* Room actions answer here too; the banner sits above the composer,
+            in the room's own content band, instead of below both. */}
+        <NoticeBanner />
         <RoomComposer roles={roles} />
       </div>
     </div>
