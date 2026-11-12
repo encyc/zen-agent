@@ -1,10 +1,13 @@
 """MCP manager: late-starting servers, tool exposure, error isolation."""
 
+import asyncio
 import sys
+import time
 from pathlib import Path
 
 import pytest
 
+from zenagent.events import AbortToken
 from zenagent.mcp.config import McpServerConfig
 from zenagent.mcp.manager import McpManager, tool_name_for
 from zenagent.types import ImageContent, TextContent
@@ -81,6 +84,41 @@ async def test_tool_execution_maps_content_and_errors():
         failed = await failing.execute("c2", {}, None)
         assert failed.is_error is True
         assert failed.content[0].text == "nope"
+    finally:
+        await manager.close()
+
+
+async def test_abort_cancels_an_in_flight_mcp_call():
+    """Esc must not wait out the server: the call is cancelled immediately."""
+    manager = McpManager({"echo": stdio("echo", ECHO)})
+    await manager.start()
+    try:
+        by_name = {tool.name: tool for tool in manager.tool_defs()}
+        sleep = by_name["mcp__echo__sleep"]
+        token = AbortToken()
+        started = time.monotonic()
+        task = asyncio.create_task(sleep.execute("c1", {}, token))
+        await asyncio.sleep(0.2)
+        token.abort()
+        result = await asyncio.wait_for(task, timeout=2)
+        assert time.monotonic() - started < 2
+        assert result.details.get("aborted") is True
+        transport = manager._servers["echo"].client.transport
+        assert transport._pending == {}, "the cancelled request must not leak"
+    finally:
+        await manager.close()
+
+
+async def test_abort_before_the_call_skips_the_server():
+    manager = McpManager({"echo": stdio("echo", ECHO)})
+    await manager.start()
+    try:
+        by_name = {tool.name: tool for tool in manager.tool_defs()}
+        token = AbortToken()
+        token.abort()
+        result = await by_name["mcp__echo__echo"].execute("c1", {"text": "hi"}, token)
+        assert result.details.get("aborted") is True
+        assert result.is_error is False
     finally:
         await manager.close()
 

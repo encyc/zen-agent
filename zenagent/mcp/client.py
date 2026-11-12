@@ -94,6 +94,32 @@ class Transport(Protocol):
     async def close(self) -> None: ...
 
 
+def _schedule_cancel_notice(
+    transport: StdioTransport | HttpTransport, request_id: int, reason: str
+) -> None:
+    """Tell the server to stop working on a request we just cancelled.
+
+    Called from a ``CancelledError`` handler, so the write cannot be awaited
+    inline (the task is already unwinding). It is scheduled on the loop, its
+    failure swallowed, and the task reference kept until it finishes.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+
+    async def _send() -> None:
+        with contextlib.suppress(Exception):
+            await transport.notify(
+                "notifications/cancelled",
+                {"requestId": request_id, "reason": reason},
+            )
+
+    task = loop.create_task(_send())
+    transport._cancel_tasks.add(task)
+    task.add_done_callback(transport._cancel_tasks.discard)
+
+
 # ---------------------------------------------------------------------------
 # stdio
 # ---------------------------------------------------------------------------
@@ -117,6 +143,7 @@ class StdioTransport:
         self._reader: asyncio.Task | None = None
         self._stderr_task: asyncio.Task | None = None
         self._pending: dict[int, asyncio.Future] = {}
+        self._cancel_tasks: set[asyncio.Task] = set()
         self._next_id = 0
         self._closed = False
         self._stderr: list[str] = []
@@ -219,6 +246,12 @@ class StdioTransport:
         except TimeoutError as exc:
             self._pending.pop(request_id, None)
             raise McpTimeout(f"{method} timed out after {timeout_s}s") from exc
+        except asyncio.CancelledError:
+            # The caller aborted the run: drop the answer slot so a late
+            # response cannot leak, and tell the server to stop working.
+            self._pending.pop(request_id, None)
+            _schedule_cancel_notice(self, request_id, "client aborted")
+            raise
 
     async def notify(self, method: str, params: dict | None = None) -> None:
         if self._closed or self._process is None or self._process.stdin is None:
@@ -280,6 +313,7 @@ class HttpTransport:
         self._owns_client = client is None
         self._timeout_s = timeout_s
         self._next_id = 0
+        self._cancel_tasks: set[asyncio.Task] = set()
         self._session_id: str | None = None
         self._closed = False
 
@@ -301,7 +335,8 @@ class HttpTransport:
             await self.start()
         assert self._client is not None
         self._next_id += 1
-        payload: dict = {"jsonrpc": "2.0", "id": self._next_id, "method": method}
+        request_id = self._next_id
+        payload: dict = {"jsonrpc": "2.0", "id": request_id, "method": method}
         if params is not None:
             payload["params"] = params
         try:
@@ -312,6 +347,9 @@ class HttpTransport:
             raise McpTimeout(f"{method} timed out after {timeout_s}s") from exc
         except httpx.HTTPError as exc:
             raise McpTransportError(f"http transport error: {redact_text(str(exc))}") from exc
+        except asyncio.CancelledError:
+            _schedule_cancel_notice(self, request_id, "client aborted")
+            raise
 
         session_id = response.headers.get("mcp-session-id")
         if session_id:

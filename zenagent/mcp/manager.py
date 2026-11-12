@@ -27,12 +27,16 @@ from zenagent.mcp.config import McpServerConfig, make_transport
 from zenagent.mcp.redact import redact_text
 from zenagent.types import ImageContent, TextContent
 
-__all__ = ["McpManager", "McpStatus", "tool_name_for"]
+__all__ = ["McpAborted", "McpManager", "McpStatus", "tool_name_for"]
 
 #: Prefix for tools contributed by MCP servers (keeps built-ins unambiguous).
 TOOL_PREFIX = "mcp__"
 
 _UNSAFE = re.compile(r"[^A-Za-z0-9_-]")
+
+
+class McpAborted(McpError):
+    """The run was aborted while the server was still working on the call."""
 
 
 def tool_name_for(server: str, tool: str) -> str:
@@ -179,7 +183,12 @@ class McpManager:
 
         async def execute(call_id, args, abort, on_update=None) -> ToolResultAgent:
             try:
-                result = await manager.call(server_name, tool.name, args)
+                result = await manager.call(server_name, tool.name, args, abort=abort)
+            except McpAborted:
+                return ToolResultAgent(
+                    content=[TextContent(text="aborted by the user; MCP call cancelled")],
+                    details={"aborted": True},
+                )
             except McpError as exc:
                 return ToolResultAgent(content=[TextContent(text=str(exc))], is_error=True)
             return _to_result(result)
@@ -193,7 +202,39 @@ class McpManager:
             approval="read" if getattr(tool, "read_only", False) else "write",
         )
 
-    async def call(self, server: str, tool: str, arguments: dict) -> McpCallResult:
+    async def call(
+        self, server: str, tool: str, arguments: dict, abort=None
+    ) -> McpCallResult:
+        """Call one server tool, cancelling the request when the run is aborted.
+
+        Without ``abort`` the call is awaited inline (tests, setup probes). With
+        an ``AbortToken`` the call races the token, so Esc returns immediately
+        instead of waiting out the server's own timeout; the transport then
+        notifies the server with ``notifications/cancelled``.
+        """
+        if abort is None:
+            return await self._call(server, tool, arguments)
+        if abort.aborted:
+            raise McpAborted(f"{tool}: aborted before the call started")
+
+        work = asyncio.create_task(self._call(server, tool, arguments))
+        abort_task = asyncio.create_task(abort.wait())
+        try:
+            done, _pending = await asyncio.wait(
+                {work, abort_task}, return_when=asyncio.FIRST_COMPLETED
+            )
+            if abort_task in done and work not in done:
+                work.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await work
+                raise McpAborted(f"{tool}: cancelled by user abort")
+            return await work
+        finally:
+            abort_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await abort_task
+
+    async def _call(self, server: str, tool: str, arguments: dict) -> McpCallResult:
         state = self._servers.get(server)
         if state is None:
             raise McpError(f"unknown MCP server: {server}")
