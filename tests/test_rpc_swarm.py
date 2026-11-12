@@ -528,3 +528,109 @@ async def test_roles_library_lists_global_roles_and_copy_lands_in_the_project(tm
         assert (copied / "prompt.md").read_text() == "be nice"
     finally:
         await host.close()
+
+
+def _answer(writes: list[dict], request_id: str) -> dict:
+    for frame in reversed(writes):
+        if frame.get("id") == request_id and frame.get("type") in (
+            "result",
+            "error",
+        ):
+            return frame
+    raise AssertionError(f"no answer for {request_id}")
+
+
+async def test_works_list_detail_score_and_close(tmp_path, monkeypatch):
+    from conftest import text_stream
+
+    import zenagent.cli.rpc.ops_swarm as ops
+
+    _seed_role(tmp_path, "research")
+
+    class QuietManager(ops.SwarmManager):  # type: ignore[misc]
+        def __init__(self, **kwargs):
+            kwargs["stream_fn_factory"] = lambda role: text_stream("done")
+            super().__init__(**kwargs)
+
+    monkeypatch.setattr(ops, "SwarmManager", QuietManager)
+    host, writes = _host(tmp_path)
+    try:
+        await _call(
+            host,
+            {
+                "type": "swarm",
+                "op": "post",
+                "id": "s1",
+                "text": "@research 查竞品",
+                "project": str(tmp_path),
+            },
+        )
+        await _call(
+            host,
+            {
+                "type": "swarm",
+                "op": "works",
+                "id": "s2",
+                "action": "list",
+                "project": str(tmp_path),
+            },
+        )
+        listed = _answer(writes, "s2")
+        assert listed["ok"] is True
+        assert len(listed["works"]) == 1
+        work = listed["works"][0]
+        assert work["state"] == "open"
+        assert work["rootMessageId"]
+        assert listed["adhoc"] == []
+
+        await _call(
+            host,
+            {
+                "type": "swarm",
+                "op": "works",
+                "id": "s3",
+                "action": "score",
+                "workId": work["id"],
+                "score": 9,
+                "project": str(tmp_path),
+            },
+        )
+        bad = _answer(writes, "s3")
+        assert bad["type"] == "error" and bad["code"] == "swarm_invalid"
+
+        await _call(
+            host,
+            {
+                "type": "swarm",
+                "op": "works",
+                "id": "s4",
+                "action": "detail",
+                "workId": work["id"],
+                "project": str(tmp_path),
+            },
+        )
+        detail = _answer(writes, "s4")
+        assert detail["ok"] is True
+        assert detail["work"]["id"] == work["id"]
+        assert len(detail["rounds"]) == 1
+        assert detail["rounds"][0]["workItemId"] == work["id"]
+
+        await _call(
+            host,
+            {
+                "type": "swarm",
+                "op": "works",
+                "id": "s5",
+                "action": "close",
+                "workId": work["id"],
+                "score": 4,
+                "note": "验收通过",
+                "project": str(tmp_path),
+            },
+        )
+        closed = _answer(writes, "s5")["work"]
+        assert closed["state"] == "closed"
+        assert closed["score"] == 4
+        assert closed["closedAt"] is not None
+    finally:
+        await host.close()

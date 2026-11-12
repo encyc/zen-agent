@@ -8,12 +8,13 @@ agent may explicitly open one when a request is a genuinely new job.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 
 from zenagent.agent.protocol import AgentTool
 from zenagent.app.swarm.protocol import build_work_tools
-from zenagent.app.swarm.room import RoomMessage
-from zenagent.app.swarm.workitems import WorkItem, WorkItemStore
+from zenagent.app.swarm.room import RoomMessage, SwarmStore, TaskRecord
+from zenagent.app.swarm.workitems import WorkItem, WorkItemStore, _work_item_record
 
 __all__ = ["SwarmWorkflow"]
 
@@ -26,6 +27,8 @@ class SwarmWorkflow:
 
     work_items: WorkItemStore
     role_ids: set[str]
+    store: SwarmStore
+    task_view: Callable[[TaskRecord], dict]
     _system_note: Callable[[str], object]
     _emit_work: Callable[[WorkItem], None]
 
@@ -117,5 +120,85 @@ class SwarmWorkflow:
         self._system_note(
             f"工单请求关闭，待验收：{item.title}（{note.strip()[:200]}）"
         )
+        self._emit_work(item)
+        return item
+
+    # -- panel projections and human actions --------------------------------
+
+    def work_view(self, item: WorkItem) -> dict:
+        record = _work_item_record(item)
+        record.pop("type", None)
+        record.pop("version", None)
+        record["rounds"] = item.rounds
+        return record
+
+    def works(self) -> list[dict]:
+        items = sorted(
+            self.work_items.items.values(), key=lambda item: (item.opened_at, item.id)
+        )
+        return [self.work_view(item) for item in items]
+
+    def adhoc_tasks(self) -> list[dict]:
+        """Rounds with no work item: visible, but never scored or in the KPI."""
+        tasks = sorted(
+            (task for task in self.store.tasks.values() if task.work_item_id is None),
+            key=lambda task: (task.created_at, task.id),
+        )
+        return [self.task_view(task) for task in tasks]
+
+    def work_detail(self, work_item_id: str) -> dict:
+        item = self.work_items.items.get(work_item_id)
+        if item is None:
+            raise ValueError(f"unknown work item {work_item_id}")
+        rounds = sorted(
+            (
+                task
+                for task in self.store.tasks.values()
+                if task.work_item_id == work_item_id
+            ),
+            key=lambda task: (task.created_at, task.id),
+        )
+        return {
+            "work": self.work_view(item),
+            "rounds": [self.task_view(task) for task in rounds],
+        }
+
+    def score_work(
+        self, work_item_id: str, score: int | None, note: str | None
+    ) -> WorkItem:
+        item = self.work_items.score(work_item_id, score, note)
+        self._emit_work(item)
+        return item
+
+    def close_work(
+        self,
+        work_item_id: str,
+        *,
+        score: int | None = None,
+        note: str | None = None,
+    ) -> WorkItem:
+        item = self.work_items.update(
+            work_item_id, state="closed", closed_at=int(time.time())
+        )
+        if score is not None or note is not None:
+            item = self.work_items.score(work_item_id, score, note)
+        self._emit_work(item)
+        return item
+
+    def reopen_work(self, work_item_id: str) -> WorkItem:
+        item = self.work_items.update(work_item_id, state="open")
+        self._emit_work(item)
+        return item
+
+    def merge_works(self, source_id: str, target_id: str) -> WorkItem:
+        item = self.work_items.merge(source_id, target_id)
+        self._emit_work(item)
+        return item
+
+    def rename_work(self, work_item_id: str, title: str) -> WorkItem:
+        clean = title.strip()
+        if not clean:
+            raise ValueError("title must not be empty")
+        item = self.work_items.update(work_item_id, title=clean[:200])
         self._emit_work(item)
         return item

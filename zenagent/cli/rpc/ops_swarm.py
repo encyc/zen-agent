@@ -108,6 +108,8 @@ class SwarmOps:
                     "taskId": task_id,
                     **manager.task_transcript(task_id),
                 }
+            elif op == "works":
+                payload = self._swarm_works(manager, request)
             elif op == "roles":
                 payload = await self._swarm_roles(manager, request, root)
             elif op == "reload":
@@ -140,6 +142,49 @@ class SwarmOps:
                     op=label,
                 )
             )
+
+    def _swarm_works(self, manager: SwarmManager, request: dict) -> dict:
+        """The work item panel: list/detail plus the human's score and close."""
+        action = request.get("action") or "list"
+        if action == "list":
+            return {"works": manager.works(), "adhoc": manager.adhoc_tasks()}
+        work_id = _need(request, "workId")
+        try:
+            if action == "detail":
+                return manager.work_detail(work_id)
+            if action == "score":
+                score = request.get("score")
+                if score is not None and (
+                    not isinstance(score, int) or isinstance(score, bool)
+                ):
+                    raise Refusal("score must be 1-5 or null")
+                note = request.get("note")
+                if note is not None and not isinstance(note, str):
+                    raise Refusal("score note must be a string")
+                return {"work": manager.work_view(manager.score_work(work_id, score, note))}
+            if action == "close":
+                score = request.get("score")
+                if score is not None and (
+                    not isinstance(score, int) or isinstance(score, bool)
+                ):
+                    raise Refusal("score must be 1-5 or null")
+                note = request.get("note")
+                if note is not None and not isinstance(note, str):
+                    raise Refusal("close note must be a string")
+                item = manager.close_work(work_id, score=score, note=note)
+                return {"work": manager.work_view(item)}
+            if action == "reopen":
+                return {"work": manager.work_view(manager.reopen_work(work_id))}
+            if action == "merge":
+                target = _need(request, "targetId")
+                item = manager.merge_works(work_id, target)
+                return {"work": manager.work_view(item)}
+            if action == "rename":
+                item = manager.rename_work(work_id, _need(request, "title"))
+                return {"work": manager.work_view(item)}
+        except ValueError as exc:
+            raise Refusal(str(exc)) from exc
+        raise Refusal(f"unknown works action: {action}")
 
     async def _swarm_manager(self, root: Path) -> SwarmManager:
         """The project's room, built and started on first use.

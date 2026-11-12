@@ -559,7 +559,7 @@ git commit -m "feat(swarm): resolve a task transcript from disk when no runtime 
   - 帧：`{type: "swarm_work", swarm: true, ...SwarmWork}`
   - TS：`interface SwarmWork { id; title; state: 'open'|'review'|'closed'; rootMessageId; openedBy: SwarmAuthor; openedAt; closedAt: number|null; score: number|null; scoreNote: string|null; mergedInto: string|null; continuedFrom: string|null }`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # 追加到 tests/test_rpc_swarm.py
@@ -581,14 +581,14 @@ async def test_score_is_validated(host):
 # tests/test_rpc_contract.py 的帧清单里加入 "swarm_work"
 ```
 
-- [ ] **Step 2: 跑测试确认失败** → FAIL（未知 op / 缺帧）
-- [ ] **Step 3: 实现**（`works` 分支照 `roles` 的写法；新帧走 `self._write({..., "swarm": True})`；TS 两个文件同步）
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 2: 跑测试确认失败** → FAIL（未知 op / 缺帧）
+- [x] **Step 3: 实现**（`works` 分支照 `roles` 的写法；新帧走 `self._write({..., "swarm": True})`；TS 两个文件同步）
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `python -m pytest tests/test_rpc_swarm.py tests/test_rpc_contract.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add zenagent/cli/rpc/ops_swarm.py zenagent/app/swarm/frames.py desktop/src/rpc/ tests/
