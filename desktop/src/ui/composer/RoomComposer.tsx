@@ -10,6 +10,8 @@ import { detectMention, formatMentionInsert, recognizedTokens } from '../../stat
 import type { AttachmentImage } from '../../state/stores'
 import { useComposerStore, useSettingsStore } from '../../state/stores'
 import { roleMentions, roomSendPreview } from '../../state/roomPreview'
+import { parseRoomCommand, roomCommandMenu } from '../../state/roomCommands'
+import type { RoomCommand, RoomCommandEntry } from '../../state/roomCommands'
 import type { SwarmRole } from '../../rpc/types'
 import { useSwarmStore } from '../../state/swarmStore'
 import { ApprovalPanel } from '../approval/ApprovalPanel'
@@ -33,6 +35,10 @@ const NO_IMAGES: AttachmentImage[] = []
 export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
   const t = useT()
   const post = useSwarmStore((state) => state.post)
+  const reload = useSwarmStore((state) => state.reload)
+  const cancel = useSwarmStore((state) => state.cancel)
+  const resetAgent = useSwarmStore((state) => state.resetAgent)
+  const tasks = useSwarmStore((state) => state.tasks)
   const project = useSwarmStore((state) => state.loadedProject) ?? ''
   const agents = useSwarmStore((state) => state.agents)
   const draft = useComposerStore((state) => state.room[project]?.draft ?? '')
@@ -48,6 +54,7 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
   const [active, setActive] = useState(0)
   const [dismissed, setDismissed] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [commandError, setCommandError] = useState<string | null>(null)
   const area = useRef<HTMLTextAreaElement>(null)
 
   const trigger = detectMention(draft, caret)
@@ -58,6 +65,10 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
           `${role.id} ${role.name}`.toLowerCase().includes(trigger.query.toLowerCase()),
         )
   const open = !dismissed && trigger !== null && options.length > 0
+  const commandEntries = !open && /^\/\S*$/.test(draft) ? roomCommandMenu(draft) : []
+  const commandOpen = !dismissed && commandEntries.length > 0
+  const rowCount = open ? options.length : commandEntries.length
+  const activeIndex = rowCount === 0 ? 0 : Math.min(active, rowCount - 1)
   const boxes = useMemo(
     () => recognizedTokens(draft, [], [], [], roles),
     [draft, roles],
@@ -79,6 +90,7 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
     setCaret(position)
     setActive(0)
     setDismissed(false)
+    setCommandError(null)
   }
 
   const pick = (role: SwarmRole) => {
@@ -95,9 +107,45 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
     })
   }
 
+  const pickCommand = (entry: RoomCommandEntry) => {
+    update(entry.insert, entry.insert.length)
+    requestAnimationFrame(() => {
+      const node = area.current
+      if (node === null) return
+      node.focus()
+      node.setSelectionRange(entry.insert.length, entry.insert.length)
+    })
+  }
+
+  const runRoomCommand = async (command: RoomCommand) => {
+    if (command.kind === 'reload') return reload()
+    if (command.kind === 'stop') {
+      await Promise.all(
+        tasks
+          .filter((task) => task.state === 'running' || task.state === 'queued')
+          .map((task) => cancel(task.id)),
+      )
+      return
+    }
+    if (command.kind === 'help') {
+      update('/', 1)
+      requestAnimationFrame(() => area.current?.focus())
+      return
+    }
+    if (command.kind === 'reset') return resetAgent(command.roleId)
+    setCommandError(t('swarm.commandUnknownReset', { role: command.roleId }))
+  }
+
   const submit = async () => {
     const text = draft.trim()
-    if (text === '' || busy) return
+    if (text === '') return
+    const command = parseRoomCommand(text, roles.map((role) => role.id))
+    if (command !== null) {
+      update('', 0)
+      await runRoomCommand(command)
+      return
+    }
+    if (busy) return
     setBusy(true)
     try {
       await post(text, {
@@ -133,6 +181,28 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
       if (event.key === 'Escape') {
         event.preventDefault()
         setDismissed(true)
+        return
+      }
+    }
+    if (commandOpen) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        setActive((index) => (index + 1) % commandEntries.length)
+        return
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        setActive((index) => (index - 1 + commandEntries.length) % commandEntries.length)
+        return
+      }
+      if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
+        event.preventDefault()
+        pickCommand(commandEntries[activeIndex])
+        return
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        update('', 0)
         return
       }
     }
@@ -200,6 +270,18 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
               onHover={setActive}
               onPick={(index) => pick(options[index])}
             />
+          ) : commandOpen ? (
+            <ComposerMenu
+              options={commandEntries.map((entry) => ({
+                key: entry.text,
+                name: entry.text,
+                desc: t(entry.labelKey),
+                data: { 'data-swarm-command': entry.text },
+              }))}
+              activeIndex={activeIndex}
+              onHover={setActive}
+              onPick={(index) => pickCommand(commandEntries[index])}
+            />
           ) : undefined
         }
         leading={
@@ -245,6 +327,11 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
           </span>
         }
       />
+      {commandError !== null && (
+        <div className={css.commandError} data-swarm-command-error role="alert">
+          {commandError}
+        </div>
+      )}
     </ComposerRoot>
   )
 }

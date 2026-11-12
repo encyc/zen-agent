@@ -86,3 +86,10 @@
 .warn {
   color: var(--dsw-alias-state-warning-primary);
 }
+
+.commandError {
+  margin-top: 4px;
+  padding: 0 10px;
+  color: var(--dsw-alias-state-warning-primary);
+  font-size: 11px;
+}
