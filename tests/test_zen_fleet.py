@@ -180,6 +180,49 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
     }
 
 
+def _fleet_with(env: dict, **kwargs) -> ZenFleet:
+    return ZenFleet(
+        chat=env["chat"],
+        root=env["tmp_path"] / "project",
+        sessions_dir=env["tmp_path"] / "sessions",
+        router_path=str(env["paths"]["router"]),
+        on_change=lambda: None,
+        confirm=lambda *a, **k: "allow",
+        batch_window_s=0.05,
+        **kwargs,
+    )
+
+
+async def test_worker_mode_inherit_downgrades_zen_to_ask(env) -> None:
+    fleet = _fleet_with(env, mode="zen")
+    await fleet.dispatch(str(env["paths"]["w1"]), "a")
+    await fleet.wait_all()
+    assert env["factory"].modes[str(env["paths"]["w1"])] == "ask"
+
+
+async def test_worker_mode_inherit_keeps_other_router_modes(env) -> None:
+    fleet = _fleet_with(env, mode="plan")
+    await fleet.dispatch(str(env["paths"]["w1"]), "a")
+    await fleet.wait_all()
+    assert env["factory"].modes[str(env["paths"]["w1"])] == "plan"
+
+
+async def test_worker_mode_pins_the_worker_broker(env) -> None:
+    fleet = _fleet_with(env, mode="ask", worker_mode="zen")
+    await fleet.dispatch(str(env["paths"]["w1"]), "a")
+    await fleet.wait_all()
+    assert env["factory"].modes[str(env["paths"]["w1"])] == "zen"
+
+
+async def test_report_limit_cuts_worker_reports(env) -> None:
+    fleet = _fleet_with(env, mode="ask", report_limit=10)
+    await fleet.dispatch(str(env["paths"]["w1"]), "abcdefghij")
+    await fleet.wait_all()
+    report = env["chat"].delivered[0].removeprefix("[zen:worker w1] ")
+    assert report.startswith("did: ")
+    assert len(report) == 10
+
+
 async def test_dispatch_runs_worker_and_injects_report(env) -> None:
     fleet: ZenFleet = env["fleet"]
     path = env["paths"]["w1"]

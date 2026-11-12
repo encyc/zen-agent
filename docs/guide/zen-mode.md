@@ -61,7 +61,11 @@ blocked 受阻 · failed 失败`。
 - 名册（谁 Router、谁的焦点是什么）存在项目 sessions 目录的 `.zen.json`
   侧车里，与会话文件同寿命；worker 的 transcript 就是普通 session JSONL，
   退出 Zen 后仍可按普通会话浏览。
-- fleet 并发上限默认 3，可在 `config.toml` 的 `[zen] max_concurrent` 调整
-  （仅全局层生效）；超过的派工排队。
+- fleet 参数在 **Settings → Zen** 里调，写进全局 `config.toml` 的 `[zen]`（仅
+  全局层生效）：`max_concurrent`（默认 3）并发上限、`batch_window_s`（默认 0.5）
+  报告合批窗口、`report_limit`（默认 800）单条报告回传字符数、`worker_mode`
+  worker 权限档位（`inherit` 默认跟随主会话，zen 主会话降为 ask；`ask` / `plan` /
+  `zen` 为固定档）。同页还放 `task.timeout_s`（单次运行超时）。改动在下次启用
+  fleet 时生效。超过并发的派工排队。
 - Zen 是**每项目**的：切换项目后由前端按持久化开关自动重新启用；一个项目
   的 fleet 不影响另一个。

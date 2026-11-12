@@ -81,10 +81,11 @@ manifest（`root` 指向库工作区、`inheritProject: false`），复制时会
 角色 session 落在 `~/.zenagent/projects/<项目>/swarm/agents/<id>/sessions/`，
 **不进**普通项目会话列表。
 
-桌面端有两个角色入口，管理的是**当前项目**的角色：**Settings → 角色**（列表带
-ready / needs-credentials 徽标、两段式删除，与侧边栏共用同一个编辑器）和 **Swarm 模式
-左侧边栏的角色面板**（「新建角色」旁即「从角色库复制」）。**Settings → Swarm** 是集中
-入口：打开同一个库选择器，并可跳到「角色」页。侧边栏的「配置」与「新建角色」打开完整表单：id、人设、
+桌面端角色入口有两个，管理的是**当前项目**的角色：**Swarm 模式左侧边栏的角色
+面板**（「新建角色」旁即「从角色库复制」）和 **Settings → Swarm**。两者共用同一份
+名册与同一个编辑器；Settings 是集中入口，除名册外还带项目上下文、角色凭据体检、
+房间运行护栏（并发 / 链路深度 / 链路花销，写 `[swarm]`）以及全局库复制。侧边栏的
+「配置」与「新建角色」打开完整表单：id、人设、
 模型/思考、skills、plugins、MCP 服务器、工具白名单、root、inheritProject、mode、
 轮数/成本上限。MCP 编辑框回显 manifest 里的 `${KEY}` 占位符，解析后的凭据不会回传给
 界面；JSON 不合法时停留在表单并提示。项目角色手工编辑上面的文件与 GUI 管理完全等价；

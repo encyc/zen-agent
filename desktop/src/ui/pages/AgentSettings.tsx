@@ -1,5 +1,6 @@
-/** Settings → Agents: the resident swarm roles, their status list and the
- * shared create/edit editor. The host owns manifest validation. */
+/** The project's resident swarm roles: status list plus the shared create/edit
+ * editor. Mounted by Settings → Swarm and the room sidebar; the host owns
+ * manifest validation. */
 
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'

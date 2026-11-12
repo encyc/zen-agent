@@ -38,9 +38,17 @@ def test_every_knob_has_a_unique_key_and_attr():
     assert len(attrs) == len(set(attrs))
 
 
-def test_knobs_are_grouped_by_the_sections_the_page_shows():
+def test_knobs_are_grouped_by_the_sections_the_pages_show():
     sections = {knob.section for knob in ALL_KNOBS}
-    assert sections == {"skills", "context", "agent", "subagents", "tools"}
+    assert sections == {
+        "skills",
+        "context",
+        "agent",
+        "subagents",
+        "tools",
+        "zen",
+        "swarm",
+    }
     # Every table the writer manages has at least one knob and vice versa.
     assert set(KNOBS_BY_TABLE) == {knob.table for knob in ALL_KNOBS}
 
@@ -214,6 +222,60 @@ def test_writer_preserves_mode(tmp_path):
     path.chmod(0o600)
     write_limits(path, Limits().with_value("max_turns", 7))
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
+def test_string_knob_only_accepts_its_choices():
+    knob = KNOB_BY_KEY["zen.worker_mode"]
+    assert coerce_value(knob, "zen", Path("/tmp/config.toml")) == "zen"
+    for bad in ("nope", True, 1, None):
+        with pytest.raises(ValueError, match="zen.worker_mode"):
+            coerce_value(knob, bad, Path("/tmp/config.toml"))
+
+
+def test_zen_and_swarm_tables_round_trip_through_the_writer(tmp_path):
+    path = write_config(tmp_path, "# keep me\ndefault_model = \"x\"\n")
+    tables = read_managed(path)
+    tables["zen"] = {
+        "max_concurrent": 5,
+        "batch_window_s": 1.25,
+        "report_limit": 1200,
+        "worker_mode": "ask",
+    }
+    tables["swarm"] = {"max_concurrent": 4, "max_chain_depth": 12, "max_chain_cost": 2.5}
+    write_managed(path, tables)
+
+    text = path.read_text(encoding="utf-8")
+    assert "# keep me" in text
+    assert 'worker_mode = "ask"' in text
+    config = load_user_config(path)
+    assert config.zen_max_concurrent == 5
+    assert config.zen_batch_window_s == 1.25
+    assert config.zen_report_limit == 1200
+    assert config.zen_worker_mode == "ask"
+    assert config.swarm_max_concurrent == 4
+    assert config.swarm_max_chain_depth == 12
+    assert config.swarm_max_chain_cost == 2.5
+
+
+def test_registry_defaults_match_the_config_defaults():
+    from zenagent import config as user_config
+
+    assert KNOB_BY_KEY["zen.max_concurrent"].default == user_config.DEFAULT_ZEN_MAX_CONCURRENT
+    assert KNOB_BY_KEY["zen.batch_window_s"].default == user_config.DEFAULT_ZEN_BATCH_WINDOW_S
+    assert KNOB_BY_KEY["zen.report_limit"].default == user_config.DEFAULT_ZEN_REPORT_LIMIT
+    assert KNOB_BY_KEY["zen.worker_mode"].default == user_config.DEFAULT_ZEN_WORKER_MODE
+    assert (
+        KNOB_BY_KEY["swarm.max_concurrent"].default
+        == user_config.DEFAULT_SWARM_MAX_CONCURRENT
+    )
+    assert (
+        KNOB_BY_KEY["swarm.max_chain_depth"].default
+        == user_config.DEFAULT_SWARM_MAX_CHAIN_DEPTH
+    )
+    assert (
+        KNOB_BY_KEY["swarm.max_chain_cost"].default
+        == user_config.DEFAULT_SWARM_MAX_CHAIN_COST
+    )
 
 
 def test_user_config_defaults_do_not_share_the_limits_object():

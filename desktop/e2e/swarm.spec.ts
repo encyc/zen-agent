@@ -64,7 +64,7 @@ test('create a role from settings', async ({ page }) => {
   await page.locator('[data-workspace-mode="swarm"]').click()
 
   await page.getByRole('button', { name: '设置' }).click()
-  await page.getByRole('button', { name: '角色' }).click()
+  await page.getByRole('button', { name: 'Swarm', exact: true }).click()
   await page.getByRole('button', { name: '新建角色' }).click()
 
   await page.locator('#agent-id').fill('reviewer')
@@ -325,6 +325,48 @@ test('copy from the role library is reachable from Settings', async ({ page }) =
   assert.equal(copy?.roleId, 'builder')
 })
 
+test('swarm settings merge project context, policy and the role roster', async ({ page }) => {
+  // The card names the project the host is serving; the room fixture belongs
+  // to that same root so the roster loads.
+  await boot(page, initialState(swarmFixture({ swarmProject: '/Users/e2e' })))
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: 'Swarm', exact: true }).click()
+  await expect(page.locator('[data-settings-swarm]')).toBeVisible()
+
+  await expect(page.getByRole('heading', { name: '当前项目' })).toBeVisible()
+  await expect(page.getByText('角色凭据齐全')).toBeVisible()
+
+  const panel = page.locator('[data-knob-table="swarm"]')
+  await expect(page.locator('[data-knob="swarm.max_concurrent"]')).toContainText('3')
+  await expect(page.locator('[data-knob="swarm.max_chain_depth"]')).toContainText('8')
+  await expect(page.locator('[data-knob="swarm.max_chain_cost"]')).toContainText('5')
+
+  // The roster here is the same CRUD the room sidebar offers.
+  await expect(page.locator('[data-agent-role="research"]')).toBeVisible()
+
+  await panel.getByRole('button', { name: '修改' }).click()
+  await page.locator('[data-knob="swarm.max_concurrent"]').getByRole('textbox').fill('4')
+  await panel.getByRole('button', { name: '保存（1 项改动）' }).click()
+  const sets = (await page.evaluate(() => window.__ZEN_E2E__.calls))
+    .filter((call) => call.type === 'limits' && call.op === 'set')
+    .map(({ key, value }) => ({ key, value }))
+  assert.deepEqual(sets, [{ key: 'swarm.max_concurrent', value: 4 }])
+})
+
+test('swarm settings surface roles whose credentials are missing', async ({ page }) => {
+  const fixture = swarmFixture()
+  const roles = (fixture.swarmRoles ?? []).map((role) =>
+    role.id === 'research' ? { ...role, missingCredentials: ['DEEPSEEK_API_KEY'] } : role,
+  )
+  await boot(page, initialState({ ...fixture, swarmRoles: roles }))
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: 'Swarm', exact: true }).click()
+
+  await expect(page.getByText('角色缺少凭据：DEEPSEEK_API_KEY')).toBeVisible()
+  await page.getByRole('button', { name: '去配置模型' }).click()
+  await expect(page.locator('[data-active]')).toContainText('模型')
+})
+
 test('switching project reloads the room and closes the old task detail', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('zen.projects', JSON.stringify([{ path: '/work/q', name: 'q', at: 1 }]))
@@ -373,13 +415,13 @@ test('the settings detour clears the old task detail when the project switched',
   await expect(page.locator('[data-swarm-main] [data-swarm-task-detail]')).toBeVisible()
 
   // Leave swarm (its sidebar unmounts), switch project in zen, then detour
-  // through Settings → Agents: that view loads the room too, and must clear
+  // through Settings → Swarm: that view loads the room too, and must clear
   // the old room's selection on a project switch just like the sidebar does.
   await page.locator('[data-workspace-mode="zen"]').click()
   await page.locator('[data-project-switcher]').click()
   await page.locator('[data-project-option="/work/q"]').click()
   await page.getByRole('button', { name: '设置' }).click()
-  await page.getByRole('button', { name: '角色' }).click()
+  await page.getByRole('button', { name: 'Swarm', exact: true }).click()
   await page.getByRole('button', { name: '返回' }).click()
   await page.locator('[data-workspace-mode="swarm"]').click()
 

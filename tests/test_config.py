@@ -783,3 +783,76 @@ def test_project_layer_may_not_set_zen(tmp_path, monkeypatch):
     project_cfg.write_text("[zen]\nmax_concurrent = 9\n", encoding="utf-8")
     with pytest.raises(ValueError, match="global-only"):
         load_user_config(cwd=tmp_path / "proj")
+
+
+def test_zen_fleet_behaviour_parsed(tmp_path):
+    config = load_user_config(
+        write_config(
+            tmp_path,
+            "[zen]\nbatch_window_s = 1.5\nreport_limit = 1200\nworker_mode = \"plan\"\n",
+        )
+    )
+    assert config.zen_batch_window_s == 1.5
+    assert config.zen_report_limit == 1200
+    assert config.zen_worker_mode == "plan"
+
+
+def test_zen_fleet_behaviour_defaults(tmp_path):
+    config = load_user_config(tmp_path / "absent.toml")
+    assert config.zen_batch_window_s == 0.5
+    assert config.zen_report_limit == 800
+    assert config.zen_worker_mode == "inherit"
+
+
+def test_zen_worker_mode_rejects_unknown_choice(tmp_path):
+    with pytest.raises(ValueError, match="zen.worker_mode"):
+        load_user_config(write_config(tmp_path, "[zen]\nworker_mode = \"yolo\"\n"))
+
+
+def test_zen_batch_window_and_report_limit_validate(tmp_path):
+    with pytest.raises(ValueError, match="zen.batch_window_s"):
+        load_user_config(write_config(tmp_path, "[zen]\nbatch_window_s = -1\n"))
+    with pytest.raises(ValueError, match="zen.report_limit"):
+        load_user_config(write_config(tmp_path, "[zen]\nreport_limit = 0\n"))
+
+
+# ---------------------------------------------------------------------------
+# [swarm] section (global-only): per-room policy
+# ---------------------------------------------------------------------------
+
+
+def test_swarm_policy_parsed(tmp_path):
+    config = load_user_config(
+        write_config(
+            tmp_path,
+            "[swarm]\nmax_concurrent = 6\nmax_chain_depth = 12\nmax_chain_cost = 2.5\n",
+        )
+    )
+    assert config.swarm_max_concurrent == 6
+    assert config.swarm_max_chain_depth == 12
+    assert config.swarm_max_chain_cost == 2.5
+
+
+def test_swarm_policy_defaults(tmp_path):
+    config = load_user_config(tmp_path / "absent.toml")
+    assert config.swarm_max_concurrent == 3
+    assert config.swarm_max_chain_depth == 8
+    assert config.swarm_max_chain_cost == 5.0
+
+
+def test_swarm_policy_must_be_positive(tmp_path):
+    with pytest.raises(ValueError, match="swarm.max_concurrent"):
+        load_user_config(write_config(tmp_path, "[swarm]\nmax_concurrent = 0\n"))
+    with pytest.raises(ValueError, match="swarm.max_chain_cost"):
+        load_user_config(write_config(tmp_path, "[swarm]\nmax_chain_cost = 0\n"))
+
+
+def test_project_layer_may_not_set_swarm(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    project_cfg = tmp_path / "proj" / ".zenagent" / "config.toml"
+    project_cfg.parent.mkdir(parents=True)
+    project_cfg.write_text("[swarm]\nmax_concurrent = 9\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="global-only"):
+        load_user_config(cwd=tmp_path / "proj")

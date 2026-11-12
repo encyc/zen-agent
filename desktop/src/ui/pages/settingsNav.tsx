@@ -9,7 +9,6 @@ import {
   FileIcon,
   FolderIcon,
   InfoIcon,
-  ListTodoIcon,
   PaletteIcon,
   SparkIcon,
   TerminalIcon,
@@ -23,7 +22,6 @@ export type Tab =
   | 'limits'
   | 'mcp'
   | 'plugins'
-  | 'agents'
   | 'zen'
   | 'swarm'
   | 'projects'
@@ -119,14 +117,6 @@ export const NAV_ITEMS: NavItem[] = [
     ],
   },
   {
-    id: 'agents',
-    labelKey: 'settings.agents',
-    hintKey: 'settings.agentsHint',
-    icon: <ListTodoIcon size={14} />,
-    group: 'resources',
-    keywords: ['swarm.rolesList', 'swarm.roleNew', 'swarm.rolePrompt', 'swarm.roleRoot'],
-  },
-  {
     id: 'zen',
     labelKey: 'settings.zen',
     hintKey: 'settings.zenHint',
@@ -140,7 +130,17 @@ export const NAV_ITEMS: NavItem[] = [
     hintKey: 'settings.swarmHint',
     icon: <BotIcon size={14} />,
     group: 'resources',
-    keywords: ['swarm.settings.desc', 'swarm.settings.manageAgents'],
+    keywords: [
+      'swarm.settings.desc',
+      'swarm.settings.projectTitle',
+      'swarm.settings.credentialsOk',
+      'swarm.settings.policy',
+      'swarm.settings.library',
+      'swarm.rolesList',
+      'swarm.roleNew',
+      'swarm.rolePrompt',
+      'swarm.roleRoot',
+    ],
   },
   {
     id: 'projects',

@@ -207,6 +207,23 @@
   text-align: right;
 }
 
+.select {
+  width: 130px;
+  height: 26px;
+  border: 1px solid var(--dsw-alias-stroke-subtle);
+  border-radius: var(--ds-radius-6);
+  padding: 0 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--ds-font-mono, ui-monospace, monospace);
+  font-size: var(--ds-font-12);
+}
+
+.select:focus {
+  outline: none;
+  border-color: var(--dsw-alias-stroke-strong);
+}
+
 .input:focus {
   outline: none;
   border-color: var(--dsw-alias-stroke-strong);

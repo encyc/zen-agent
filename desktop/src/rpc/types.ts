@@ -275,14 +275,16 @@ export interface LimitKnob {
   section: string
   table: string
   name: string
-  kind: 'int' | 'float'
+  kind: 'int' | 'float' | 'str'
   nullable: boolean
   min: number
   max: number
-  default: number | null
+  default: number | string | null
   unit: string
+  /** Allowed values when `kind` is `'str'`. */
+  choices: string[]
   apply: 'immediate' | 'session'
-  value: number | null
+  value: number | string | null
   explicit: boolean
   override: string | null
 }

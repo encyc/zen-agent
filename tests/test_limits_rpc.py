@@ -56,7 +56,7 @@ async def test_get_lists_every_knob_with_defaults(runtime_factory, config_file):
     assert result["path"] == str(config_file)
     assert result["groups"] == ["skills", "context", "agent", "subagents", "tools"]
     knobs = knobs_by_key(result)
-    assert len(knobs) == 14
+    assert len(knobs) == 21
     index = knobs["limits.skills.max_index_bytes"]
     assert index["value"] == 12288
     assert index["default"] == 12288
@@ -67,6 +67,10 @@ async def test_get_lists_every_knob_with_defaults(runtime_factory, config_file):
     assert knobs["task.max_turns"]["section"] == "subagents"
     assert knobs["task.max_cost"]["value"] is None
     assert knobs["task.max_cost"]["nullable"] is True
+    # Zen/Swarm own their own pages but share the same snapshot.
+    assert knobs["zen.worker_mode"]["kind"] == "str"
+    assert knobs["zen.worker_mode"]["choices"] == ["inherit", "ask", "plan", "zen"]
+    assert knobs["swarm.max_chain_depth"]["section"] == "swarm"
 
 
 async def test_set_writes_the_file_and_adopts_the_value(runtime_factory, config_file):

@@ -50,6 +50,40 @@
   gap: 6px;
 }
 
+.projectPath {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 8px;
+  color: var(--dsw-alias-label-primary);
+  font-size: var(--ds-font-12-5);
+}
+
+.projectRoot {
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-mono, ui-monospace, monospace);
+  font-size: var(--ds-font-11-5);
+  word-break: break-all;
+}
+
+.healthRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--ds-font-12);
+}
+
+.healthRow [data-health='missing'] {
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.healthRow [data-health='ok'] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
 .action:hover {
   background: var(--dsw-alias-interactive-bg-hover);
 }

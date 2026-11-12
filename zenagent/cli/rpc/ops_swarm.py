@@ -18,6 +18,7 @@ from zenagent.app.swarm.roles import discover_roles
 from zenagent.app.swarm.roster import copy_role, role_view
 from zenagent.cli.rpc.codec import serialize_event
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
+from zenagent.config import load_user_config
 from zenagent.events import AgentEvent
 from zenagent.project import find_project_root, project_key
 
@@ -137,6 +138,11 @@ class SwarmOps:
         key = project_key(root)
         manager = self._swarm.get(key)
         if manager is None:
+            config = (
+                getattr(self.runtime, "user_config", None)
+                if getattr(self, "runtime", None) is not None
+                else None
+            ) or load_user_config()
             manager = SwarmManager(
                 root=root,
                 write_frame=lambda payload, r=root: self._send(
@@ -145,6 +151,9 @@ class SwarmOps:
                 event_sink=lambda role_id, task_id, event, r=root: (
                     self._send_role_event(role_id, task_id, event, r)
                 ),
+                max_concurrent=config.swarm_max_concurrent,
+                max_chain_depth=config.swarm_max_chain_depth,
+                max_chain_cost=config.swarm_max_chain_cost,
             )
             self._swarm[key] = manager
         else:

@@ -51,7 +51,7 @@ export interface BridgeState extends PluginMockState, SwarmMockState, ZenMockSta
   skills?: Record<string, unknown>[]
   skillsDisabled?: string[]
   /** Knob values served for `limits get`, keyed by `table.name`; absent → default. */
-  limitValues?: Record<string, number | null>
+  limitValues?: Record<string, number | string | null>
   /** Keys the fake considers written to the file (drives the "explicit" chip). */
   limitExplicit?: string[]
   /** How many times the shell asked the (faked) window plugin to show it. */
@@ -403,23 +403,30 @@ export function installBridge(state: BridgeState) {
         return { type: 'error', id: payload.id, message: 'unknown skills op' }
       }
       case 'limits': {
-        // Ranges mirror the backend registry (zenagent/limits.py LIMITS/TASK_KNOBS)
-        // so specs can rely on client-side range rejection.
+        // Ranges mirror the backend registry (zenagent/limits.py) so specs can
+        // rely on client-side range rejection.
         const knobs = [
-          ['limits.skills', 'max_index_bytes', 12288, 'int', 'immediate', 1024, 262144],
-          ['limits.skills', 'max_body_bytes', 32768, 'int', 'immediate', 1024, 1048576],
-          ['limits.context', 'max_context_bytes', 32768, 'int', 'session', 0, 1048576],
-          ['limits.context', 'compact_threshold', 0.85, 'float', 'session', 0.3, 0.99],
-          ['limits.agent', 'max_turns', 100, 'int', 'session', 1, 10000],
-          ['limits.agent', 'loop_guard_threshold', 5, 'int', 'immediate', 2, 100],
-          ['limits.agent', 'max_result_bytes', 40000, 'int', 'session', 4096, 1048576],
-          ['limits.tools', 'shell_max_output_bytes', 30000, 'int', 'immediate', 1024, 1048576],
-          ['task', 'max_turns', 300, 'int', 'session', 1, 100000],
-          ['task', 'timeout_s', 900, 'int', 'session', 0, 86400],
-          ['task', 'max_cost', null, 'float', 'session', 0.000001, 1000000],
-          ['task', 'keep_transcripts', 64, 'int', 'session', 1, 10000],
-          ['task', 'max_transcript_bytes', 33554432, 'int', 'session', 1048576, 2147483648],
-          ['task', 'max_transcript_file_bytes', 8388608, 'int', 'session', 1048576, 2147483648],
+          ['limits.skills', 'max_index_bytes', 12288, 'int', 'immediate', 1024, 262144, []],
+          ['limits.skills', 'max_body_bytes', 32768, 'int', 'immediate', 1024, 1048576, []],
+          ['limits.context', 'max_context_bytes', 32768, 'int', 'session', 0, 1048576, []],
+          ['limits.context', 'compact_threshold', 0.85, 'float', 'session', 0.3, 0.99, []],
+          ['limits.agent', 'max_turns', 100, 'int', 'session', 1, 10000, []],
+          ['limits.agent', 'loop_guard_threshold', 5, 'int', 'immediate', 2, 100, []],
+          ['limits.agent', 'max_result_bytes', 40000, 'int', 'session', 4096, 1048576, []],
+          ['limits.tools', 'shell_max_output_bytes', 30000, 'int', 'immediate', 1024, 1048576, []],
+          ['task', 'max_turns', 300, 'int', 'session', 1, 100000, []],
+          ['task', 'timeout_s', 900, 'int', 'session', 0, 86400, []],
+          ['task', 'max_cost', null, 'float', 'session', 0.000001, 1000000, []],
+          ['task', 'keep_transcripts', 64, 'int', 'session', 1, 10000, []],
+          ['task', 'max_transcript_bytes', 33554432, 'int', 'session', 1048576, 2147483648, []],
+          ['task', 'max_transcript_file_bytes', 8388608, 'int', 'session', 1048576, 2147483648, []],
+          ['zen', 'max_concurrent', 3, 'int', 'session', 1, 16, []],
+          ['zen', 'batch_window_s', 0.5, 'float', 'session', 0, 10, []],
+          ['zen', 'report_limit', 800, 'int', 'session', 200, 20000, []],
+          ['zen', 'worker_mode', 'inherit', 'str', 'session', 0, 0, ['inherit', 'ask', 'plan', 'zen']],
+          ['swarm', 'max_concurrent', 3, 'int', 'session', 1, 16, []],
+          ['swarm', 'max_chain_depth', 8, 'int', 'session', 1, 32, []],
+          ['swarm', 'max_chain_cost', 5, 'float', 'session', 0.01, 1000, []],
         ] as const
         const sections: Record<string, string> = {
           'limits.skills': 'skills',
@@ -427,23 +434,26 @@ export function installBridge(state: BridgeState) {
           'limits.agent': 'agent',
           'limits.tools': 'tools',
           task: 'subagents',
+          zen: 'zen',
+          swarm: 'swarm',
         }
         const state2 = state
-        const valueOf = (table: string, name: string, fallback: number | null) => {
+        const valueOf = (table: string, name: string, fallback: number | string | null) => {
           const values = state2.limitValues ?? {}
           const key = `${table}.${name}`
-          return key in values ? (values[key] as number | null) : fallback
+          return key in values ? values[key] : fallback
         }
         const explicitOf = (table: string, name: string) =>
           (state2.limitExplicit ?? []).includes(`${table}.${name}`)
         const overrides: Record<string, string> = { 'limits.agent.max_turns': '--max-turns 20' }
         const rows = () =>
-          knobs.map(([table, name, fallback, kind, apply, min, max]) => ({
+          knobs.map(([table, name, fallback, kind, apply, min, max, choices]) => ({
             key: `${table}.${name}`,
             section: sections[table] ?? table,
             table,
             name,
             kind,
+            choices: [...choices],
             nullable: name === 'max_cost',
             min,
             max,
@@ -460,7 +470,7 @@ export function installBridge(state: BridgeState) {
           ok,
           path: '/Users/e2e/.zenagent/config.toml',
           project_path: '/work/p/.zenagent/config.toml',
-          groups: ['skills', 'context', 'agent', 'subagents', 'tools'],
+          groups: ['skills', 'context', 'agent', 'subagents', 'tools', 'zen', 'swarm'],
           knobs: rows(),
           ...(error ? { error } : {}),
         })
@@ -470,7 +480,7 @@ export function installBridge(state: BridgeState) {
         const values = { ...(state.limitValues ?? {}) }
         const explicit = new Set(state.limitExplicit ?? [])
         if (payload.op === 'set') {
-          values[key] = payload.value as number | null
+          values[key] = payload.value as number | string | null
           explicit.add(key)  // written to the file = explicit, whatever the value
         } else {
           delete values[key]

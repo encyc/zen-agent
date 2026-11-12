@@ -128,6 +128,18 @@ async def test_close_fails_pending_approvals():
         await manager.close()
 
 
+async def test_configured_policy_reaches_the_router():
+    manager = _manager(max_concurrent=5, max_chain_depth=2, max_chain_cost=1.25)
+    await manager.start()
+    try:
+        assert manager.router is not None
+        assert manager.router.max_chain_depth == 2
+        assert manager.router.max_chain_cost == 1.25
+        assert manager._sem._value == 5
+    finally:
+        await manager.close()
+
+
 async def test_two_role_chain():
     _write_role("research", "You research.")
     _write_role("coder", "You code.")

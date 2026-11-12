@@ -24,6 +24,7 @@ from zenagent.app.runtime import RuntimeOptions
 from zenagent.app.zen.prompts import worker_prompt
 from zenagent.app.zen.roster import read_roster
 from zenagent.app.zen.roster import set_focus as roster_set_focus
+from zenagent.types import AssistantMessage
 
 if TYPE_CHECKING:
     from zenagent.app.chat import ChatController
@@ -71,6 +72,8 @@ class ZenFleet:
         mode: str | None = None,
         batch_window_s: float = 0.5,
         run_timeout_s: float = 0,
+        report_limit: int = REPORT_LIMIT,
+        worker_mode: str = "inherit",
     ) -> None:
         self.chat = chat
         self.root = Path(root)
@@ -92,6 +95,11 @@ class ZenFleet:
         self.batch_window_s = max(0.0, float(batch_window_s))
         #: Wall-clock budget for one worker run; ``0`` disables the watchdog.
         self.run_timeout_s = max(0.0, float(run_timeout_s))
+        #: One report is cut to this many characters before it reaches the router.
+        self.report_limit = max(1, int(report_limit))
+        #: ``inherit`` keeps the router's mode but downgrades zen to ask (the
+        #: historical behaviour); a concrete mode pins the worker's broker.
+        self.worker_mode = worker_mode
         self._report_buffer: list[str] = []
         self._wake_task: asyncio.Task | None = None
         self._sem = asyncio.Semaphore(self.max_concurrent)
@@ -265,7 +273,7 @@ class ZenFleet:
                 if self._closing:
                     return
                 handle.status = "failed"
-                handle.last_report = f"{type(exc).__name__}: {exc}"[:REPORT_LIMIT]
+                handle.last_report = f"{type(exc).__name__}: {exc}"[: self.report_limit]
                 self._inject(handle, handle.last_report)
             finally:
                 if handle.runtime is not None:
@@ -275,9 +283,13 @@ class ZenFleet:
                 self._notify()
 
     async def _build_worker(self, handle: WorkerHandle) -> Any:
-        # Workers never inherit the router's zen bypass: zen auto-approves
-        # mutations, so a worker is downgraded to ask to surface approvals.
-        mode = "ask" if self.mode == "zen" else self.mode
+        # The default keeps the router's mode but never inherits the zen
+        # bypass: zen auto-approves mutations, so workers are downgraded to ask
+        # to surface approvals. ``zen`` opts into the bypass explicitly.
+        if self.worker_mode == "inherit":
+            mode = "ask" if self.mode == "zen" else self.mode
+        else:
+            mode = self.worker_mode
         prepared = await prepare(
             RuntimeOptions(root=self.root, resume=handle.path, mode=mode),
             views=False,
@@ -287,10 +299,9 @@ class ZenFleet:
             prepared.broker.set_confirm(self.confirm)
         return prepared
 
-    @staticmethod
-    def _last_report(agent: Any) -> str:
+    def _last_report(self, agent: Any) -> str:
         for message in reversed(getattr(agent, "messages", [])):
-            if getattr(message, "role", None) != "assistant":
+            if not isinstance(message, AssistantMessage):
                 continue
             chunks = [
                 block.text
@@ -298,7 +309,7 @@ class ZenFleet:
                 if getattr(block, "text", "")
             ]
             if chunks:
-                return "\n".join(chunks)[:REPORT_LIMIT]
+                return "\n".join(chunks)[: self.report_limit]
         return ""
 
     def _inject(self, handle: WorkerHandle, text: str) -> None:

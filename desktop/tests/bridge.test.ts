@@ -89,3 +89,17 @@ test('an agent message mentioning you emits a swarm_notice with swarm:true', asy
   assert.equal(notice.agent, 'builder')
   assert.ok(String(notice.text).includes('@builder'))
 })
+test('limits get carries the zen and swarm tables with their choices', async () => {
+  const { invoke } = bootBridge()
+  const frame = await invoke({ type: 'limits', op: 'get', id: 'l1' })
+  const knobs = frame.knobs as Record<string, any>[]
+  const byKey = new Map(knobs.map((knob) => [knob.key, knob]))
+
+  assert.equal(byKey.get('zen.max_concurrent')?.default, 3)
+  assert.equal(byKey.get('task.timeout_s')?.table, 'task')
+  const mode = byKey.get('zen.worker_mode')
+  assert.equal(mode?.kind, 'str')
+  assert.equal(mode?.value, 'inherit')
+  assert.deepEqual(mode?.choices, ['inherit', 'ask', 'plan', 'zen'])
+  assert.equal(byKey.get('swarm.max_chain_cost')?.default, 5)
+})

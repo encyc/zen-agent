@@ -116,7 +116,10 @@ class ZenOps:
             on_change=self._send_fleet_roster,
             confirm=self.confirm,
             mode=getattr(runtime, "mode", None),
+            batch_window_s=config.zen_batch_window_s,
             run_timeout_s=config.task_timeout_s,
+            report_limit=config.zen_report_limit,
+            worker_mode=config.zen_worker_mode,
         )
         runtime.zen_fleet = fleet
         runtime._recompose()

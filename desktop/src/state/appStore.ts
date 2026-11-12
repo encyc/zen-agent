@@ -112,7 +112,7 @@ interface AppState {
   testSecret(scope: 'model' | 'search', target: string): Promise<Record<string, unknown>>
   refreshSkills(): Promise<void>
   fetchLimits(): Promise<LimitsResult | ErrorFrame>
-  setLimit(key: string, value: number | null): Promise<LimitsResult | ErrorFrame>
+  setLimit(key: string, value: number | string | null): Promise<LimitsResult | ErrorFrame>
   resetLimit(key: string): Promise<LimitsResult | ErrorFrame>
   readSkill(name: string): Promise<Record<string, unknown>>
   rescanSkills(): Promise<Record<string, unknown>>

@@ -50,7 +50,11 @@ from zenagent.app.swarm.roster import (
     role_view,
     write_role,
 )
-from zenagent.app.swarm.router import Router
+from zenagent.app.swarm.router import (
+    DEFAULT_MAX_CHAIN_COST,
+    DEFAULT_MAX_CHAIN_DEPTH,
+    Router,
+)
 from zenagent.app.swarm.runner import TaskRunner
 from zenagent.app.swarm.transcript import read_task_transcript
 from zenagent.config import load_user_config
@@ -87,12 +91,16 @@ class SwarmManager(SwarmFrames):
         stream_fn_factory: Callable[[RoleManifest], object] | None = None,
         event_sink: EventSink | None = None,
         max_concurrent: int = 3,
+        max_chain_depth: int = DEFAULT_MAX_CHAIN_DEPTH,
+        max_chain_cost: float = DEFAULT_MAX_CHAIN_COST,
     ) -> None:
         self.root = Path(root)
         self._write_frame = write_frame
         self._stream_fn_factory = stream_fn_factory
         self._event_sink = event_sink
         self._sem = asyncio.Semaphore(max_concurrent)
+        self._max_chain_depth = max_chain_depth
+        self._max_chain_cost = max_chain_cost
         self.store = SwarmStore(project_state_root(self.root))
         self.router: Router | None = None
         self.agents: dict[str, SwarmAgent] = {}
@@ -141,7 +149,12 @@ class SwarmManager(SwarmFrames):
         for role in roles:
             await self._try_build_agent(role)
         self.role_ids = set(self.agents)
-        self.router = Router(self.store, self.role_ids)
+        self.router = Router(
+            self.store,
+            self.role_ids,
+            max_chain_depth=self._max_chain_depth,
+            max_chain_cost=self._max_chain_cost,
+        )
         self._started = True
         self._loop_task = asyncio.create_task(self._schedule())
 

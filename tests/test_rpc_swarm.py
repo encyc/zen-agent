@@ -248,6 +248,8 @@ async def test_swarm_frames_carry_the_project_tag(tmp_path, monkeypatch):
             stream_fn_factory=None,
             event_sink=None,
             max_concurrent=3,
+            max_chain_depth=8,
+            max_chain_cost=5.0,
         ):
             self.write_frame = write_frame
             self.event_sink = event_sink

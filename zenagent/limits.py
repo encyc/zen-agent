@@ -35,6 +35,7 @@ counts from model metadata.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import tempfile
@@ -51,7 +52,9 @@ __all__ = [
     "KNOB_BY_KEY",
     "LIMITS",
     "MANAGED_TABLES",
+    "SWARM_KNOBS",
     "TASK_KNOBS",
+    "ZEN_KNOBS",
     "Limit",
     "Limits",
     "LimitsWriteError",
@@ -64,7 +67,7 @@ __all__ = [
     "write_managed",
 ]
 
-Kind = Literal["int", "float"]
+Kind = Literal["int", "float", "str"]
 Apply = Literal["immediate", "session"]
 
 
@@ -85,7 +88,7 @@ class Limit:
     """Field name: on :class:`Limits` for ``[limits]``, on ``UserConfig`` for
     ``[task]`` (``task_max_turns`` and friends)."""
 
-    default: int | float | None
+    default: int | float | str | None
     kind: Kind
     minimum: float
     maximum: float
@@ -95,6 +98,9 @@ class Limit:
     unit: str = ""
     nullable: bool = False
     """``None`` is legal and means "off"/"uncapped" (``task.max_cost``)."""
+
+    choices: tuple[str, ...] = ()
+    """Allowed values for ``kind="str"``."""
 
     @property
     def key(self) -> str:
@@ -278,7 +284,101 @@ TASK_KNOBS: tuple[Limit, ...] = (
     ),
 )
 
-ALL_KNOBS: tuple[Limit, ...] = LIMITS + TASK_KNOBS
+#: The ``[zen]`` registry: fleet behaviour. Defaults mirror
+#: ``zenagent.config``; both are global-only.
+ZEN_KNOBS: tuple[Limit, ...] = (
+    Limit(
+        table="zen",
+        name="max_concurrent",
+        section="zen",
+        attr="zen_max_concurrent",
+        default=3,
+        kind="int",
+        minimum=1,
+        maximum=16,
+        apply="session",
+        unit="workers running at once",
+    ),
+    Limit(
+        table="zen",
+        name="batch_window_s",
+        section="zen",
+        attr="zen_batch_window_s",
+        default=0.5,
+        kind="float",
+        minimum=0.0,
+        maximum=10.0,
+        apply="session",
+        unit="seconds; 0 disables batching",
+    ),
+    Limit(
+        table="zen",
+        name="report_limit",
+        section="zen",
+        attr="zen_report_limit",
+        default=800,
+        kind="int",
+        minimum=200,
+        maximum=20000,
+        apply="session",
+        unit="characters per worker report",
+    ),
+    Limit(
+        table="zen",
+        name="worker_mode",
+        section="zen",
+        attr="zen_worker_mode",
+        default="inherit",
+        kind="str",
+        minimum=0,
+        maximum=0,
+        apply="session",
+        unit="inherit|ask|plan|zen",
+        choices=("inherit", "ask", "plan", "zen"),
+    ),
+)
+
+#: The ``[swarm]`` registry: per-room policy. Defaults mirror ``zenagent.config``.
+SWARM_KNOBS: tuple[Limit, ...] = (
+    Limit(
+        table="swarm",
+        name="max_concurrent",
+        section="swarm",
+        attr="swarm_max_concurrent",
+        default=3,
+        kind="int",
+        minimum=1,
+        maximum=16,
+        apply="session",
+        unit="role runs in flight",
+    ),
+    Limit(
+        table="swarm",
+        name="max_chain_depth",
+        section="swarm",
+        attr="swarm_max_chain_depth",
+        default=8,
+        kind="int",
+        minimum=1,
+        maximum=32,
+        apply="session",
+        unit="delegations per chain",
+    ),
+    Limit(
+        table="swarm",
+        name="max_chain_cost",
+        section="swarm",
+        attr="swarm_max_chain_cost",
+        default=5.0,
+        kind="float",
+        minimum=0.01,
+        maximum=1000.0,
+        apply="session",
+        unit="USD per chain",
+    ),
+)
+
+ALL_KNOBS: tuple[Limit, ...] = LIMITS + TASK_KNOBS + ZEN_KNOBS + SWARM_KNOBS
 KNOB_BY_KEY: dict[str, Limit] = {knob.key: knob for knob in ALL_KNOBS}
 KNOB_BY_ATTR: dict[str, Limit] = {knob.attr: knob for knob in ALL_KNOBS}
 KNOBS_BY_TABLE: dict[str, tuple[Limit, ...]] = {
@@ -292,6 +392,8 @@ MANAGED_TABLES: tuple[str, ...] = (
     "limits.agent",
     "limits.tools",
     "task",
+    "zen",
+    "swarm",
 )
 
 #: Presentation order of the groups, shared by the page and the docs.
@@ -333,8 +435,14 @@ class LimitsWriteError(RuntimeError):
     """The file shape makes a surgical write unsafe; the message says why."""
 
 
-def coerce_value(knob: Limit, value: object, target: Path) -> int | float | None:
+def coerce_value(knob: Limit, value: object, target: Path) -> int | float | str | None:
     """Validate one raw value against its knob; returns the coerced value."""
+    if knob.kind == "str":
+        if not isinstance(value, str) or value not in knob.choices:
+            raise ValueError(
+                f"config {target}: {knob.key} must be one of {list(knob.choices)}"
+            )
+        return value
     if value is None:
         if knob.nullable:
             return None
@@ -417,6 +525,14 @@ MANAGED_NOTES: dict[str, str] = {
         "# Managed by zen's settings page (Parameters · Subagents). Global-only: "
         "subagent budgets are a machine-level guard."
     ),
+    "zen": (
+        "# Managed by zen's settings page (Zen). Global-only: fleet limits are a "
+        "machine-level guard."
+    ),
+    "swarm": (
+        "# Managed by zen's settings page (Swarm). Global-only: room policy is a "
+        "machine-level guard."
+    ),
 }
 
 
@@ -434,6 +550,8 @@ def _owned(path: str) -> bool:
 def _render_value(knob: Limit, value: object) -> str:
     if value is None:
         return ""
+    if knob.kind == "str":
+        return json.dumps(str(value))
     if knob.kind == "float":
         return repr(float(value))
     return str(int(value))
@@ -474,7 +592,7 @@ def render_limits_block(limits: Limits) -> str:
             table: {
                 knob.name: limits.value(knob.attr)
                 for knob in KNOBS_BY_TABLE[table]
-                if not table.startswith("task") and knob.attr in limits.explicit
+                if table.startswith("limits") and knob.attr in limits.explicit
             }
             for table in MANAGED_TABLES
         }
@@ -599,7 +717,7 @@ def write_limits(path: Path, limits: Limits) -> None:
     """Write only the ``[limits]`` half (the ``[task]`` half is left alone)."""
     tables = read_managed(path)
     for table in MANAGED_TABLES:
-        if table == "task":
+        if not table.startswith("limits"):
             continue
         tables[table] = {
             knob.name: limits.value(knob.attr)

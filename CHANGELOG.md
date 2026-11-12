@@ -5,6 +5,47 @@ matches the release tag; older history is in the repository tags and commits.
 
 ## Unreleased
 
+**Every non-destructive multi-agent knob is now in Settings.** Zen and Swarm
+own their parameters instead of hiding them in `config.toml`, and the separate
+Settings → Agents page is folded into Settings → Swarm.
+
+### Added
+
+- **Settings → Zen** (`[zen]` table): worker concurrency (`max_concurrent`),
+  report batching window (`batch_window_s`), per-report character cap
+  (`report_limit`) and the worker permission mode (`worker_mode`:
+  `inherit|ask|plan|zen`). `task.timeout_s` — the per-run watchdog the fleet
+  relies on — is presented on the same page.
+- **Settings → Swarm** (`[swarm]` table): room concurrency (`max_concurrent`),
+  delegation chain depth (`max_chain_depth`) and cumulative chain spend cap
+  (`max_chain_cost`).
+- Settings knobs grow a `str` kind with `choices` (rendered as a select) so
+  enum-valued config uses the same editor and managed writer as numbers.
+
+### Changed
+
+- **Settings → Swarm now hosts the role roster.** The Swarm page merges the
+  project context (path + credential health with a jump to Models), the room
+  guardrails, the project role roster (same CRUD and editor as the room
+  sidebar), and the global library copy entry. The room sidebar stays the
+  primary entry.
+- **Zen/Swarm knobs apply on next enable/rebuild**: fleet changes land the next
+  time the fleet is enabled; swarm policy changes close idle rooms so the next
+  room request rebuilds with the new policy, while running tasks keep their
+  existing limits.
+
+### Removed
+
+- **Settings → Agents tab**: roles are managed from Settings → Swarm and the
+  swarm room sidebar; the third entry duplicated the same roster and editor.
+
+### Fixed
+
+- **Worker reports reach the router as text again**: `_last_report` tested for a
+  `role` attribute the message dataclasses do not carry, so every report fell
+  back to 「worker 结束但未给出文本报告」 and `report_limit` never applied
+  (`zenagent/app/zen/fleet.py`).
+
 **One composer across Coding, Zen and Swarm.** The room no longer ships a bare
 IM-style box next to the coding capsule.
 

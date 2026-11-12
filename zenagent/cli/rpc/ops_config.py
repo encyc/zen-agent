@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import shlex
 from pathlib import Path
@@ -438,9 +439,10 @@ class ConfigOps:
     def _knob_value(runtime, knob) -> object:
         """The value this build of the session is actually running with.
 
-        ``[limits]`` knobs come from the live runtime's config; ``[task]``
-        budgets reach subagents at spawn time, so the *file* is what the next
-        subagent will see — a stale in-memory copy must not win.
+        ``[limits]`` knobs come from the live runtime's config; ``[task]``,
+        ``[zen]`` and ``[swarm]`` budgets are read when a subagent, fleet or
+        room starts, so the *file* is what the next one will see — a stale
+        in-memory copy must not win.
         """
         config = getattr(runtime, "user_config", None) or load_user_config()
         if knob.table.startswith("limits"):
@@ -470,6 +472,7 @@ class ConfigOps:
                 "max": knob.maximum,
                 "default": knob.default,
                 "unit": knob.unit,
+                "choices": list(knob.choices),
                 "apply": knob.apply,
                 "value": self._knob_value(runtime, knob),
                 "explicit": knob.key in explicit,
@@ -487,10 +490,11 @@ class ConfigOps:
             "knobs": knobs,
         }
 
-    def _adopt_limits(self) -> None:
+    async def _adopt_limits(self) -> None:
         """Push the rewritten file into the running session."""
         runtime = self.runtime
         if runtime is None:
+            await self._drop_idle_swarm_rooms()
             return
         fresh = load_user_config(global_config_path())
         runtime.user_config.limits = fresh.limits
@@ -502,7 +506,32 @@ class ConfigOps:
         runtime.user_config.task_max_transcript_file_bytes = (
             fresh.task_max_transcript_file_bytes
         )
+        runtime.user_config.zen_max_concurrent = fresh.zen_max_concurrent
+        runtime.user_config.zen_batch_window_s = fresh.zen_batch_window_s
+        runtime.user_config.zen_report_limit = fresh.zen_report_limit
+        runtime.user_config.zen_worker_mode = fresh.zen_worker_mode
+        runtime.user_config.swarm_max_concurrent = fresh.swarm_max_concurrent
+        runtime.user_config.swarm_max_chain_depth = fresh.swarm_max_chain_depth
+        runtime.user_config.swarm_max_chain_cost = fresh.swarm_max_chain_cost
         runtime.apply_limits()
+        await self._drop_idle_swarm_rooms()
+
+    async def _drop_idle_swarm_rooms(self) -> None:
+        """Close idle rooms so the next request rebuilds with the new policy.
+
+        A room with a run in flight keeps its manager (its semaphore and router
+        cannot be resized safely mid-run); the change reaches it on the next
+        rebuild, same as the settings page explains.
+        """
+        rooms = getattr(self, "_swarm", None)
+        if not rooms:
+            return
+        for key, manager in list(rooms.items()):
+            if manager.has_active():
+                continue
+            rooms.pop(key, None)
+            with contextlib.suppress(Exception):
+                await manager.close()
 
     async def _limits(self, request: dict, request_id) -> None:
         op = request.get("op")
@@ -552,7 +581,7 @@ class ConfigOps:
             )
             return
         try:
-            self._adopt_limits()
+            await self._adopt_limits()
         except ValueError as exc:
             # The rewrite succeeded; adopting it failed because the file as a
             # whole does not parse (hand edit elsewhere). Report the config

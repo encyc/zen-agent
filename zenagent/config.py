@@ -100,10 +100,28 @@ DEFAULT_TASK_MAX_TRANSCRIPT_BYTES = 32 * 1024 * 1024
 #: Default per-transcript cap; a larger transcript is cut and marked.
 DEFAULT_TASK_MAX_TRANSCRIPT_FILE_BYTES = 8 * 1024 * 1024
 
-#: Keys accepted inside ``[zen]`` (fleet concurrency, global-only).
-_ZEN_KEYS = frozenset({"max_concurrent"})
+#: Keys accepted inside ``[zen]`` (fleet behaviour, global-only).
+_ZEN_KEYS = frozenset({"max_concurrent", "batch_window_s", "report_limit", "worker_mode"})
 #: Default number of zen workers running at once.
 DEFAULT_ZEN_MAX_CONCURRENT = 3
+#: Default report batching window: reports finishing inside it become one message.
+DEFAULT_ZEN_BATCH_WINDOW_S = 0.5
+#: Default cap on one worker report injected into the router conversation.
+DEFAULT_ZEN_REPORT_LIMIT = 800
+#: How a worker's permission mode is chosen. ``inherit`` keeps the router's
+#: mode but downgrades zen to ask (the historical behaviour); the other values
+#: pin it, and ``zen`` means workers may mutate without approvals.
+DEFAULT_ZEN_WORKER_MODE = "inherit"
+ZEN_WORKER_MODES = ("inherit", "ask", "plan", "zen")
+
+#: Keys accepted inside ``[swarm]`` (room policy, global-only).
+_SWARM_KEYS = frozenset({"max_concurrent", "max_chain_depth", "max_chain_cost"})
+#: Default number of swarm role runs in flight per room.
+DEFAULT_SWARM_MAX_CONCURRENT = 3
+#: Default cap on how deep a delegation chain may grow.
+DEFAULT_SWARM_MAX_CHAIN_DEPTH = 8
+#: Default spend cap for one delegation chain, in USD.
+DEFAULT_SWARM_MAX_CHAIN_COST = 5.0
 
 
 def _absolute_path(raw: str, target: Path) -> str:
@@ -202,6 +220,37 @@ def _positive_float_or_none(
     if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
         raise ValueError(f"config {target}: {section}.{key} must be a positive number")
     return float(value)
+
+
+def _positive_float(
+    table: dict, key: str, default: float, section: str, target: Path
+) -> float:
+    value = table.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+        raise ValueError(f"config {target}: {section}.{key} must be a positive number")
+    return float(value)
+
+
+def _non_negative_float(
+    table: dict, key: str, default: float, section: str, target: Path
+) -> float:
+    value = table.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+        raise ValueError(
+            f"config {target}: {section}.{key} must be a non-negative number"
+        )
+    return float(value)
+
+
+def _choice(
+    table: dict, key: str, default: str, choices: tuple[str, ...], section: str, target: Path
+) -> str:
+    value = table.get(key, default)
+    if value not in choices:
+        raise ValueError(
+            f"config {target}: {section}.{key} must be one of {list(choices)}"
+        )
+    return value
 
 
 def _parse_task(
@@ -345,6 +394,18 @@ class UserConfig:
     limits: Limits = field(default_factory=Limits)
     #: ``[zen]``: workers running at once (global-only)
     zen_max_concurrent: int = DEFAULT_ZEN_MAX_CONCURRENT
+    #: ``[zen]``: report batching window in seconds
+    zen_batch_window_s: float = DEFAULT_ZEN_BATCH_WINDOW_S
+    #: ``[zen]``: one worker report is cut to this many characters
+    zen_report_limit: int = DEFAULT_ZEN_REPORT_LIMIT
+    #: ``[zen]``: worker permission mode (inherit|ask|plan|zen)
+    zen_worker_mode: str = DEFAULT_ZEN_WORKER_MODE
+    #: ``[swarm]``: role runs in flight per room (global-only)
+    swarm_max_concurrent: int = DEFAULT_SWARM_MAX_CONCURRENT
+    #: ``[swarm]``: delegation chain depth cap
+    swarm_max_chain_depth: int = DEFAULT_SWARM_MAX_CHAIN_DEPTH
+    #: ``[swarm]``: delegation chain spend cap in USD
+    swarm_max_chain_cost: float = DEFAULT_SWARM_MAX_CHAIN_COST
 
 
 def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfig:
@@ -352,9 +413,10 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
 
     ``project_layer=True`` marks the committable ``<root>/.zenagent/config.toml``
     layer: it may not set the global-only ``[safety]``/``[backup]``/``[task]``/
-    ``[limits]`` sections, so a repository can never grant itself permissions,
-    raise its own subagent budgets or resize the prompt budgets of the machine
-    it was cloned onto.
+    ``[limits]``/``[zen]``/``[swarm]`` sections, so a repository can never grant
+    itself permissions, raise its own subagent budgets, resize the prompt
+    budgets of the machine it was cloned onto, or widen multi-agent
+    concurrency.
     """
     if not target.is_file():
         return UserConfig()
@@ -364,7 +426,9 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
         raise ValueError(f"cannot read config {target}: {exc}") from exc
 
     global_only = [
-        name for name in ("safety", "backup", "task", "limits", "zen") if name in data
+        name
+        for name in ("safety", "backup", "task", "limits", "zen", "swarm")
+        if name in data
     ]
     if project_layer and global_only:
         listed = ", ".join(f"[{name}]" for name in global_only)
@@ -452,6 +516,43 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
     zen_max_concurrent = _positive_int(
         zen_table, "max_concurrent", DEFAULT_ZEN_MAX_CONCURRENT, "zen", target
     )
+    zen_batch_window_s = _non_negative_float(
+        zen_table, "batch_window_s", DEFAULT_ZEN_BATCH_WINDOW_S, "zen", target
+    )
+    zen_report_limit = _positive_int(
+        zen_table, "report_limit", DEFAULT_ZEN_REPORT_LIMIT, "zen", target
+    )
+    zen_worker_mode = _choice(
+        zen_table,
+        "worker_mode",
+        DEFAULT_ZEN_WORKER_MODE,
+        ZEN_WORKER_MODES,
+        "zen",
+        target,
+    )
+    swarm_table = _section_table(data, "swarm", target)
+    _unknown_section_keys(swarm_table, _SWARM_KEYS, "swarm", target)
+    swarm_max_concurrent = _positive_int(
+        swarm_table,
+        "max_concurrent",
+        DEFAULT_SWARM_MAX_CONCURRENT,
+        "swarm",
+        target,
+    )
+    swarm_max_chain_depth = _positive_int(
+        swarm_table,
+        "max_chain_depth",
+        DEFAULT_SWARM_MAX_CHAIN_DEPTH,
+        "swarm",
+        target,
+    )
+    swarm_max_chain_cost = _positive_float(
+        swarm_table,
+        "max_chain_cost",
+        DEFAULT_SWARM_MAX_CHAIN_COST,
+        "swarm",
+        target,
+    )
     return UserConfig(
         default_model=default_model,
         provider_overrides=overrides,
@@ -473,6 +574,12 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
         task_max_transcript_file_bytes=task_max_transcript_file_bytes,
         limits=limits,
         zen_max_concurrent=zen_max_concurrent,
+        zen_batch_window_s=zen_batch_window_s,
+        zen_report_limit=zen_report_limit,
+        zen_worker_mode=zen_worker_mode,
+        swarm_max_concurrent=swarm_max_concurrent,
+        swarm_max_chain_depth=swarm_max_chain_depth,
+        swarm_max_chain_cost=swarm_max_chain_cost,
     )
 
 
@@ -519,6 +626,12 @@ def _merge_user_configs(base: UserConfig, override: UserConfig) -> UserConfig:
         task_max_transcript_file_bytes=base.task_max_transcript_file_bytes,
         limits=base.limits,
         zen_max_concurrent=base.zen_max_concurrent,
+        zen_batch_window_s=base.zen_batch_window_s,
+        zen_report_limit=base.zen_report_limit,
+        zen_worker_mode=base.zen_worker_mode,
+        swarm_max_concurrent=base.swarm_max_concurrent,
+        swarm_max_chain_depth=base.swarm_max_chain_depth,
+        swarm_max_chain_cost=base.swarm_max_chain_cost,
     )
 
 
