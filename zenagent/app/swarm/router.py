@@ -12,6 +12,7 @@ import time
 from dataclasses import dataclass, field
 
 from zenagent.app.swarm.room import RoomMessage, SwarmStore, TaskRecord
+from zenagent.app.swarm.workitems import WorkItemStore
 
 __all__ = ["Admission", "Router"]
 
@@ -32,22 +33,47 @@ class Router:
         store: SwarmStore,
         role_ids: set[str],
         *,
+        work_items: WorkItemStore | None = None,
         max_chain_depth: int = DEFAULT_MAX_CHAIN_DEPTH,
         max_chain_cost: float = DEFAULT_MAX_CHAIN_COST,
         inbox_cap: int = DEFAULT_INBOX_CAP,
     ) -> None:
         self.store = store
         self.role_ids = set(role_ids)
+        #: Optional: chain rebasing needs to know which work item a round
+        #: belongs to, but a router with no work items (older callers, tests)
+        #: keeps the single-chain behaviour.
+        self.work_items = work_items
         self.max_chain_depth = max_chain_depth
         self.max_chain_cost = max_chain_cost
         self.inbox_cap = inbox_cap
 
-    def admit(self, message: RoomMessage, *, inbox_sizes: dict[str, int]) -> Admission:
+    def admit(
+        self,
+        message: RoomMessage,
+        *,
+        inbox_sizes: dict[str, int],
+        work_item_id: str | None = None,
+    ) -> Admission:
         admission = Admission()
         source = self.store.tasks.get(message.task_id) if message.task_id else None
-        chain_id = source.chain_id if source is not None else self.new_chain_id()
-        chain_cost = self.store.chain_spend.get(chain_id, 0.0)
-        chain_depth = message.chain_depth + 1
+        # A round's chain is the delegation lineage *inside one work item*. When
+        # a round lands in a different work item than its parent, the lineage is
+        # cut: inheriting it would hand a brand-new item a chain that is already
+        # deep and near its spend cap, i.e. the gate would refuse the first round
+        # of a fresh job (see the spec's rejection of "chain == work item").
+        crosses = (
+            work_item_id is not None
+            and source is not None
+            and source.work_item_id != work_item_id
+        )
+        if source is not None and not crosses:
+            chain_id = source.chain_id
+            chain_cost = self.store.chain_spend.get(chain_id, 0.0)
+        else:
+            chain_id = self.new_chain_id()
+            chain_cost = 0.0
+        chain_depth = 1 if crosses else message.chain_depth + 1
         now = int(time.time())
 
         for role_id in dict.fromkeys(message.mentions):
@@ -74,8 +100,11 @@ class Router:
                 chain_cost=chain_cost,
                 created_at=now,
                 updated_at=now,
+                work_item_id=work_item_id,
             )
             self.store.append_task(task)
+            if self.work_items is not None:
+                self.work_items.note_round(work_item_id)
             admission.accepted.append(task)
         return admission
 

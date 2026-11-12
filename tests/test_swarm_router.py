@@ -127,3 +127,58 @@ def test_tasks_keep_message_order(tmp_path):
         "research",
     ]
     assert list(store.tasks) == [first.accepted[0].id, second.accepted[0].id]
+
+
+def test_task_carries_work_item(tmp_path):
+    store = SwarmStore(tmp_path)
+    router = Router(store, {"research"}, work_items=_items(tmp_path))
+
+    admission = router.admit(
+        _message(mentions=["research"]), inbox_sizes={}, work_item_id="w1"
+    )
+
+    assert admission.accepted[0].work_item_id == "w1"
+
+
+def _items(root):
+    from zenagent.app.swarm.workitems import WorkItemStore
+
+    store = SwarmStore(root)
+    items = WorkItemStore(store)
+    items.load()
+    return items
+
+
+def test_crossing_work_items_rebases_the_chain(tmp_path):
+    store = SwarmStore(tmp_path)
+    router = Router(store, {"research", "coder"}, work_items=_items(tmp_path))
+    first = router.admit(
+        _message(mentions=["research"]), inbox_sizes={}, work_item_id="w1"
+    ).accepted[0]
+    store.append_task(replace(first, state="running"))
+    spent = replace(first, state="done", chain_depth=3, chain_cost=4.5)
+    store.append_task(spent)
+
+    follow = _message(id="m2", mentions=["coder"], task_id=first.id)
+    task = router.admit(follow, inbox_sizes={}, work_item_id="w2").accepted[0]
+
+    assert task.chain_id != spent.chain_id
+    assert task.chain_depth == 1
+    assert task.chain_cost == 0.0
+    assert task.work_item_id == "w2"
+
+
+def test_same_work_item_keeps_the_chain(tmp_path):
+    store = SwarmStore(tmp_path)
+    router = Router(store, {"research", "coder"}, work_items=_items(tmp_path))
+    first = router.admit(
+        _message(mentions=["research"]), inbox_sizes={}, work_item_id="w1"
+    ).accepted[0]
+    store.append_task(replace(first, state="running"))
+    store.append_task(replace(first, state="done", chain_depth=2, chain_cost=1.0))
+
+    follow = _message(id="m2", mentions=["coder"], task_id=first.id, chain_depth=2)
+    task = router.admit(follow, inbox_sizes={}, work_item_id="w1").accepted[0]
+
+    assert task.chain_id == first.chain_id
+    assert task.chain_depth == 3
