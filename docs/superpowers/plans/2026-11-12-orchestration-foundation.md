@@ -100,11 +100,11 @@ Phase 1 的目标不是立刻统一三种编排器，而是先补一个**所有�
 
 ### Task 2：RunRecorder 与 coding 接线
 
-- [ ] `tests/test_run_ledger.py` 增加 `prepare()` 集成：一次 coding run 落账，
+- [x] `tests/test_run_ledger.py` 增加 `prepare()` 集成：一次 coding run 落账，
   含 session、kind、status、turns、cost。
-- [ ] 实现 `zenagent/app/run_wiring.py`。
-- [ ] `bootstrap.prepare` 接线；不增加 `runtime.py` 行数。
-- [ ] 跑目标测试。
+- [x] 实现 `zenagent/app/run_wiring.py`。
+- [x] `bootstrap.prepare` 接线；不增加 `runtime.py` 行数。
+- [x] 跑目标测试。
 
 ### Task 3：zen / swarm scope
 

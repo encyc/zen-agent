@@ -25,6 +25,7 @@ from zenagent.app.chat import ChatController
 from zenagent.app.commands import AppServices, CommandRegistry, build_default_commands
 from zenagent.app.models import ModelManager
 from zenagent.app.permissions import PermissionBroker, build_broker_for
+from zenagent.app.run_wiring import attach_run_recorder
 from zenagent.app.runtime import Runtime, RuntimeOptions
 from zenagent.app.sessions import SessionManager
 from zenagent.config import load_user_config
@@ -85,6 +86,7 @@ async def prepare(
         gate=broker,
         allow_missing_key=allow_missing_key,
     )
+    attach_run_recorder(runtime)
     if not views:
         return PreparedFrontend(runtime=runtime, broker=broker)
 

@@ -124,3 +124,36 @@ def test_status_mapping():
     assert status_for_termination("max_cost") == "failed"
     assert status_for_termination("error") == "failed"
     assert status_for_termination(None) == "done"
+
+
+async def test_prepare_records_a_coding_run(app_env, monkeypatch):
+    from conftest import text_stream
+
+    from zenagent.app.bootstrap import prepare
+    from zenagent.app.runtime import RuntimeOptions
+    from zenagent.config import UserConfig
+    from zenagent.project import project_dir
+
+    monkeypatch.setattr(
+        "zenagent.app.bootstrap.load_user_config",
+        lambda *args, **kwargs: UserConfig(default_model="deepseek-flash"),
+    )
+    prepared = await prepare(
+        RuntimeOptions(root=app_env, mcp=False, skills=False, templates=False),
+        stream_fn=text_stream("ok"),
+        views=False,
+    )
+    try:
+        await prepared.runtime.agent.prompt("hello")
+        rows = RunLedger(project_dir(root=app_env) / "runs.jsonl").list(kind="coding")
+        assert len(rows) == 1
+        row = rows[0]
+        assert row.status == "done"
+        assert row.termination == "stop"
+        assert row.agent_id == "main"
+        assert row.session.endswith(".jsonl")
+        assert row.turns == 1
+        assert row.ended_at is not None
+        assert row.duration_ms is not None
+    finally:
+        await prepared.runtime.close()
