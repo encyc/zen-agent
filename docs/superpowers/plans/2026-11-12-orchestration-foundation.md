@@ -153,3 +153,23 @@ Phase 1 的目标不是立刻统一三种编排器，而是先补一个**所有�
 - Phase 3：Supervisor + AgentProfile，把 `RuntimeOptions` 里的 role 字段移出 `Runtime`。
 - Phase 4：`workspaceMode` 收到后端，模式切换变成幂等事务。
 - Phase 5：统一 zen/swarm 的 scheduler / approval / roster，RPC 收敛到 `supervisor` 请求族。
+
+## 7. 验收记录（2026-11-12 夜）
+
+- Python 全量：`2831 passed in 264.78s`（`.venv/bin/python -m pytest tests/ -q`）。
+- Desktop：`pnpm test` 428 passed；`pnpm build`（tsc + vite）通过。
+- Lint：`ruff check .` 全绿。
+- 架构预算：`python scripts/check_architecture.py` → `architecture budget: ok`。
+- 分支：`feat/orchestration-foundation`，基于 `b9adc5c`，未合并 main。
+- 提交：
+  - `526e631 feat(runs): add the project run ledger`
+  - `97045c5 feat(runs): record every prepared runtime's runs`
+  - `6d54b40 feat(runs): stamp zen and swarm run scopes`
+  - `71b022c feat(runs): query the ledger over RPC`
+  - `e4217ef feat(swarm): reclaim idle run-unit runtimes`
+  - `100f65a fix(runs): keep the recorder optional for embedders`
+  - `bf238f6 fix(swarm): make idle reaping teardown-safe`
+  - `4620b45 feat(swarm): expose runtime_idle_s in settings`
+  - `12580a9 test(runs): cover zen router scope`
+  - `e7d27a3 chore: clear the lint gate`
+  - `592c9b8 docs: record the orchestration diagnosis and run ledger`
