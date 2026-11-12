@@ -3,6 +3,26 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+**Retries no longer cost streaming, and the desktop turns them on.** v0.13.4
+learned to classify connect failures as transient, but nothing retried them:
+`--retries` defaulted to 0 and the desktop child never received the flag, so a
+few seconds of packet loss still ended a run with "Cannot reach the model
+provider".
+
+### Changed
+
+- **A retry only replays an attempt nobody has seen** — the pre-content events
+  of an attempt are held until the first `text_*`/`thinking_*`/`toolcall_*`
+  event, at which point the attempt streams straight through. A connection
+  failure therefore retries invisibly, and enabling retries no longer disables
+  token streaming. A failure after content has streamed is not retried, because
+  a second attempt would repeat output already on screen.
+- **The desktop spawns its child with `--retries 3`** — the GUI now rides out a
+  short uplink drop instead of stopping the run. Streaming is unaffected by the
+  rule above.
+
 ## v0.13.4 — 2026-11-12
 
 **Provider connection failures no longer end a run silently.** An intermittent

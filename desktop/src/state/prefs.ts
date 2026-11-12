@@ -75,6 +75,15 @@ export function savePref(field: keyof SessionPrefs, value: string | null): void 
   write(key, value)
 }
 
+/** Extra attempts the child gets per assistant call.
+ *
+ * The runtime only retries while nothing has been shown yet (see
+ * `zenagent/retry.py`), so this costs no streaming: a dropped connection
+ * before the first token is retried invisibly instead of ending the run with
+ * "Cannot reach the model provider". A flaky uplink loses a connect for a few
+ * seconds at a time, which one extra attempt does not cover. */
+export const SPAWN_RETRIES = 3
+
 /** The flags every child gets.
  *
  * `--mode ask` is the released-binary-compatible default (old zen binaries
@@ -85,7 +94,7 @@ export function savePref(field: keyof SessionPrefs, value: string | null): void 
  * arrives with its transcript already attached, instead of booting a blank
  * session and replacing it with an RPC resume one round trip later. */
 export function spawnArgs(resume?: string | null): string[] {
-  const args = ['--mode', 'ask', '--no-mcp']
+  const args = ['--mode', 'ask', '--no-mcp', '--retries', String(SPAWN_RETRIES)]
   if (resume) args.push('--resume', resume)
   return args
 }
