@@ -73,6 +73,7 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
     () => recognizedTokens(draft, [], [], [], roles),
     [draft, roles],
   )
+  const roleIds = roles.map((role) => role.id)
 
   const mentions = roleMentions(draft, roles.map((role) => role.id))
   const preview = roomSendPreview(mentions, roles, agents, images.length)
@@ -139,7 +140,7 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
   const submit = async () => {
     const text = draft.trim()
     if (text === '') return
-    const command = parseRoomCommand(text, roles.map((role) => role.id))
+    const command = parseRoomCommand(text, roleIds)
     if (command !== null) {
       update('', 0)
       await runRoomCommand(command)
@@ -197,6 +198,11 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
       }
       if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
         event.preventDefault()
+        // An exact command runs straight away; a prefix completes first.
+        if (event.key === 'Enter' && parseRoomCommand(draft, roleIds) !== null) {
+          void submit()
+          return
+        }
         pickCommand(commandEntries[activeIndex])
         return
       }

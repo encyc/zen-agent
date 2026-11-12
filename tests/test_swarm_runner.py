@@ -21,8 +21,8 @@ from zenagent.types import (
     ImageContent,
     TextContent,
     ToolCall,
-    UserMessage,
     Usage,
+    UserMessage,
 )
 
 ROLE = RoleManifest(id="research", name="Research")

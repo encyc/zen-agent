@@ -1093,7 +1093,7 @@ async def test_post_snapshots_the_quoted_message_for_every_task():
     _write_role("coder")
     await manager.start()
     try:
-        first = await manager.post("@research 出结论")
+        await manager.post("@research 出结论")
         source = manager.store.messages[-1]
         tasks = await manager.post("@research @coder 复核", ref=source.id)
 

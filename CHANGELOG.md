@@ -3,6 +3,12 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+### Added
+
+- **Swarm composer parity** — quote a room message as context, attach images that fan out to every role a message delegates to, and use a room command table (`/reload`, `/reset`, `/stop`, `/help`).
+
 ## v0.13.2 — 2026-11-12
 
 **Every non-destructive multi-agent knob is now in Settings.** Zen and Swarm

@@ -441,3 +441,57 @@ test('the swarm tab badge counts live tasks without eager-loading the room', asy
   await page.locator('[data-workspace-mode="coding"]').click()
   await expect(page.locator('[data-swarm-badge]')).toHaveText('1')
 })
+
+test('quoting a message sends its id with the post', async ({ page }) => {
+  await boot(page, initialState(swarmFixture({ runningTask: true })))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  const source = page.locator('[data-swarm-message]', { hasText: '跑一个长任务' })
+  await source.hover()
+  await source.locator('[data-swarm-quote]').click()
+  await expect(page.locator('[data-swarm-quote-strip]')).toContainText('跑一个长任务')
+
+  const composer = page.locator('[data-swarm-input]')
+  await composer.fill('@research 接着做')
+  await composer.press('Enter')
+
+  await expect(page.locator('[data-swarm-quote-strip]')).toHaveCount(0)
+  const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
+  const post = calls.filter((call) => call.type === 'swarm' && call.op === 'post').at(-1)
+  assert.equal(post?.ref, 'm_seed')
+})
+
+test('the preview says a busy role will queue', async ({ page }) => {
+  await boot(page, initialState(swarmFixture({ runningTask: true })))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  await page.locator('[data-swarm-input]').fill('@research 再来一个')
+  await expect(page.locator('[data-swarm-preview]')).toContainText('排队')
+})
+
+test('/stop cancels every live task', async ({ page }) => {
+  await boot(page, initialState(swarmFixture({ runningTask: true })))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  const composer = page.locator('[data-swarm-input]')
+  await composer.fill('/stop')
+  await composer.press('Enter')
+
+  await expect(page.locator('[data-swarm-task]')).toHaveAttribute('data-state', 'cancelled')
+  const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
+  assert.equal(
+    calls.some((call) => call.type === 'swarm' && call.op === 'cancel' && call.taskId === 't_seed'),
+    true,
+  )
+})
+
+test('a slash message that is not a room command still posts', async ({ page }) => {
+  await boot(page, initialState(swarmFixture()))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  const composer = page.locator('[data-swarm-input]')
+  await composer.fill('/usr/bin 在哪')
+  await composer.press('Enter')
+
+  await expect(page.locator('[data-swarm-message]', { hasText: '/usr/bin 在哪' })).toBeVisible()
+})
