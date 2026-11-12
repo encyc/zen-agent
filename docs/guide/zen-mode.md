@@ -14,14 +14,22 @@ Zen 模式是 zen-agent 的第二种交互形态：每个项目只保留**一个
 
 sidebar 顶部的三态切换器（**Coding / Zen / Swarm**）切到 **Zen**；选择持久化
 在 `zen.workspaceMode`（zen 分支旧 key `zen.ui.mode` 会自动迁移），重启后自动
-恢复。切换要求当前会话空闲（正在运行时切换会失败并回退，`zen_busy`）。
+恢复。
 
-- **进入 Zen**：当前会话切换为项目的 Router 会话（有历史则复用上次的
-  Router，延续全局记忆；没有则新建），其余会话进入名册。
-- **离开 Zen**（切到 Coding 或 Swarm）：停掉 fleet、中断未完成的 worker，并
-  把会话恢复到进入 Zen 之前的那个。Router 只存在于 Zen 模式；离开后就是普通
-  coding 会话，不再有 fleet 工具、Router 提示词或 worker 报告。
-- **显式停止**：名册 Router 行右侧的停止按钮同样停掉 fleet 并恢复原会话。
+- **进入 Zen**：为项目打开（或复用）一个**专用 Router slot**，Router 会话
+  （有历史就复用上次的 Router，延续全局记忆；没有则新建）与 fleet 都长在那
+  个 slot 里。当前 coding 会话所在的 slot **不被动**——正在跑的一轮继续跑完，
+  不会被中断，也不会因为“忙”被拒绝。
+- **离开 Zen**：停掉 fleet、把手里的前台交回进入 Zen 之前的那个 slot（或该项
+  目其它 slot）；Router slot 若没在跑就关闭，跑着则留驻到回合结束、由 LRU 回收。
+  Router 只存在于 Zen 模式；离开后就是普通 coding 会话，不再有 fleet 工具、
+  Router 提示词或 worker 报告。
+- **显式停止**：名册 Router 行右侧的停止按钮同样停掉 fleet 并交回前台。
+
+> 架构：Zen 是**项目级**概念，由 `RpcHost`（`zenagent/cli/rpc/ops_zen.py`）
+> 持有，和 swarm 房间同层；每个进入 Zen 的项目因此多一个常驻 runtime
+> （受 `MAX_RESIDENT_SLOTS` 约束，LRU 回收时会推 `zen_fleet enabled=false`）。
+
 
 ## 在 Router 会话里工作
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import shutil
 import subprocess
@@ -180,3 +181,157 @@ async def test_lru_caps_residents(host):
     assert project.project_key(alpha) not in instance._slots
     assert project.project_key(beta) in instance._slots
     assert project.project_key(gamma) in instance._slots
+
+async def test_zen_gives_the_router_its_own_slot(monkeypatch, tmp_path):
+    """Entering zen must not touch the coding slot's session, run or tools."""
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    for target in (
+        "zenagent.app.bootstrap.load_user_config",
+        "zenagent.app.runtime.load_user_config",
+    ):
+        monkeypatch.setattr(
+            target,
+            lambda *args, **kwargs: UserConfig(default_model="deepseek-flash"),
+        )
+    alpha = _repo(tmp_path, "alpha")
+    prepared = await prepare(_options(alpha), assume_yes=True)
+    writes: list[dict] = []
+    initial = RuntimeSlot.adopt(prepared, write_line=_collect(writes))
+    instance = RpcHost(
+        initial=initial,
+        options=_options(alpha),
+        read_line=None,
+        write_line=_collect(writes),
+        assume_yes=True,
+        max_slots=4,
+    )
+    key = project.project_key(alpha)
+    try:
+        coding = instance._slots[key]
+        coding_path = str(coding.runtime.session.path)
+
+        frame = await call(
+            instance, writes, {"type": "zen_fleet", "op": "enable", "id": "z1"}
+        )
+
+        assert frame["ok"] is True and frame["enabled"] is True
+        assert str(coding.runtime.session.path) == coding_path
+        router = instance._zen_slot_for(key)
+        assert router is not None and router is not coding
+        assert router.runtime.zen_fleet is not None
+        assert instance.active is router
+        assert frame["session"] == str(router.runtime.session.path)
+        router_tools = {tool.name for tool in router.runtime.agent.tools}
+        assert {"fleet_list", "fleet_dispatch", "fleet_spawn"} <= router_tools
+        coding_tools = {tool.name for tool in coding.runtime.agent.tools}
+        assert "fleet_dispatch" not in coding_tools
+        assert Path(router.runtime.session.path).parent == (
+            project.project_sessions_dir(root=alpha).resolve()
+        )
+
+        frame = await call(
+            instance, writes, {"type": "zen_fleet", "op": "disable", "id": "z2"}
+        )
+
+        assert frame["enabled"] is False
+        assert frame["session"] == coding_path
+        assert instance.active is coding
+        assert instance._zen_slot_for(key) is None
+        assert len(instance._slots) == 1
+        assert "fleet_dispatch" not in {tool.name for tool in coding.runtime.agent.tools}
+    finally:
+        await instance.close()
+
+
+async def _wait_for(predicate, *, timeout_s: float = 5.0) -> None:
+    deadline = asyncio.get_running_loop().time() + timeout_s
+    while asyncio.get_running_loop().time() < deadline:
+        if predicate():
+            return
+        await asyncio.sleep(0.01)
+    raise AssertionError("condition not reached in time")
+
+
+async def test_enabling_zen_does_not_abort_a_running_turn(monkeypatch, tmp_path):
+    """The mode switch runs beside the coding run instead of killing it."""
+    from zenagent.events import AssistantEvent
+    from zenagent.types import AssistantMessage, TextContent, Usage
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    for target in (
+        "zenagent.app.bootstrap.load_user_config",
+        "zenagent.app.runtime.load_user_config",
+    ):
+        monkeypatch.setattr(
+            target,
+            lambda *args, **kwargs: UserConfig(default_model="deepseek-flash"),
+        )
+    gate = asyncio.Event()
+
+    async def gated(model, messages, tools, options):
+        partial = AssistantMessage(
+            content=[TextContent(text="")],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="pending",
+            timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        await gate.wait()
+        partial.content[0].text = "done"
+        partial.stop_reason = "stop"
+        yield AssistantEvent(
+            type="text_delta", partial=partial, content_index=0, delta="done"
+        )
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    alpha = _repo(tmp_path, "alpha")
+    prepared = await prepare(_options(alpha), stream_fn=gated, assume_yes=True)
+    writes: list[dict] = []
+    initial = RuntimeSlot.adopt(prepared, write_line=_collect(writes))
+    instance = RpcHost(
+        initial=initial,
+        options=_options(alpha),
+        read_line=None,
+        write_line=_collect(writes),
+        assume_yes=True,
+        stream_fn=gated,
+        max_slots=4,
+    )
+    key = project.project_key(alpha)
+    try:
+        coding = instance._slots[key]
+        coding_path = str(coding.runtime.session.path)
+        # The prompt dispatches a run and returns; its answer is a stream of
+        # event frames plus one result, so it is not a request/result call.
+        await instance._handle_line(
+            json.dumps({"type": "prompt", "id": "p1", "text": "go"})
+        )
+        await _wait_for(lambda: coding.runtime.agent.is_streaming)
+
+        frame = await call(
+            instance, writes, {"type": "zen_fleet", "op": "enable", "id": "z1"}
+        )
+
+        assert frame["ok"] is True and frame["enabled"] is True
+        # The coding turn is still alive: same agent, same session, streaming.
+        assert coding.runtime.agent.is_streaming is True
+        assert coding.busy is True
+        assert str(coding.runtime.session.path) == coding_path
+
+        gate.set()
+        await _wait_for(
+            lambda: any(
+                f.get("id") == "p1" and f.get("type") == "result" for f in writes
+            )
+        )
+        result = next(
+            f for f in writes if f.get("id") == "p1" and f.get("type") == "result"
+        )
+        assert result["ok"] is True
+        assert result["termination"] == "stop"
+        assert result["text"] == "done"
+    finally:
+        gate.set()
+        await instance.close()

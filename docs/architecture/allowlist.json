@@ -5,7 +5,7 @@
     "zenagent/cli/repl.py": 1027,
     "zenagent/cli/tui/screens/modals.py": 1042,
     "zenagent/cli/rpc/ops_config.py": 969,
-    "zenagent/cli/rpc/server.py": 828,
+    "zenagent/cli/rpc/server.py": 709,
     "zenagent/app/swarm/manager.py": 841
   },
   "ts": {

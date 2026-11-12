@@ -2,9 +2,11 @@
  * here so `appStore.ts` stays under its architecture budget. Each function
  * takes the store getter, exactly like the inline methods it replaces.
  *
- * The workspace mode owns the UI; the fleet is independent of it. Entering
- * zen enables the fleet (refusing busy slots reverts the UI), leaving zen
- * only stops the fleet when the user turned background running off. */
+ * The workspace mode owns the UI; the fleet is independent of it. The host
+ * keeps zen in a dedicated router slot (see cli/rpc/ops_zen.py), so entering
+ * zen only asks for the fleet: the returned session is the router the host
+ * moved the foreground to. A refusal (an older child, a full slot table)
+ * reverts the UI and lands on the notice banner. */
 
 import { useSettingsStore, type WorkspaceMode } from './stores.ts'
 import { useSessionStore } from './stores.ts'

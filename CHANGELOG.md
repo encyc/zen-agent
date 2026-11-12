@@ -22,6 +22,16 @@ provider".
 
 ### Changed
 
+- **Zen lives in its own slot, so it no longer needs an idle project** — entering
+  zen used to swap the routed slot's session for the Router and therefore had to
+  refuse a busy slot (`zen_busy`, "zen needs an idle session"); a running turn
+  blocked the mode switch. Zen is now a host-level concept like the swarm room:
+  the project's Router gets a dedicated slot (the sibling-slot path `session
+  resume` already uses), the coding slot keeps its session and its run, and the
+  foreground simply moves. Leaving zen closes the fleet and hands the foreground
+  back to the pre-zen slot, closing the router slot unless it is still running a
+  turn. An evicted router slot pushes `zen_fleet enabled=false` instead of
+  leaving a stale roster on screen.
 - **A retry only replays an attempt nobody has seen** — the pre-content events
   of an attempt are held until the first `text_*`/`thinking_*`/`toolcall_*`
   event, at which point the attempt streams straight through. A connection

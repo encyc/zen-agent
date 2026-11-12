@@ -9,7 +9,8 @@ export interface ZenMockState {
   zenEnabled?: boolean
   /** Overrides the built-in router+worker roster served while enabled. */
   zenRoster?: RosterItem[]
-  /** When true, enable refuses with the host's zen_busy refusal (busy slot). */
+  /** When true, enable refuses the way a slot-level child did (`zen_busy`):
+   * the UI's revert-and-notice path still has to work for that binary. */
   zenBusy?: boolean
 }
 

@@ -22,6 +22,7 @@ from zenagent.app.bootstrap import prepare
 from zenagent.cli.rpc.codec import PROTOCOL_VERSION
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
 from zenagent.cli.rpc.ops_swarm import SwarmOps, _is_swarm_request_id
+from zenagent.cli.rpc.ops_zen import ZenOps
 from zenagent.cli.rpc.slot import RuntimeSlot
 from zenagent.cli.rpc.terminal import TerminalError, TerminalSession, clamp_dim
 from zenagent.project import find_project_root, project_key
@@ -34,7 +35,7 @@ if TYPE_CHECKING:
 MAX_RESIDENT_SLOTS = 4
 
 
-class RpcHost(SwarmOps):
+class RpcHost(SwarmOps, ZenOps):
     """Reads requests, routes them to a project slot, and owns slot lifetime."""
 
     def __init__(
@@ -68,6 +69,8 @@ class RpcHost(SwarmOps):
         #: swarm request: a session that never enters swarm mode never pays
         #: for resident role runtimes.
         self._swarm: OrderedDict[str, SwarmManager] = OrderedDict()
+        #: Per project key, the session zen took the foreground from.
+        self._zen_pre: dict[str, str] = {}
         self._terminal = TerminalSession(self._send)
         if initial is not None:
             self._slots[initial.key] = initial
@@ -146,6 +149,9 @@ class RpcHost(SwarmOps):
             return True
         if kind == "swarm":
             await self._swarm_op(request, request_id)
+            return True
+        if kind == "zen_fleet":
+            await self._zen_op(request, request_id)
             return True
         if kind in ("approval", "ask") and _is_swarm_request_id(
             str(request.get("request_id") or "")
@@ -319,6 +325,8 @@ class RpcHost(SwarmOps):
 
         A resume into the session a slot already holds is a no-op; one into an
         idle slot loads in place; one into a busy slot opens a sibling slot.
+        A zen router slot never loads in place either: its session is the
+        fleet's identity, so browsing away from the router opens a sibling.
         Only the in-place case reaches the server, where ``switch_session``
         would abort — and there it has nothing to abort.
         """
@@ -341,14 +349,26 @@ class RpcHost(SwarmOps):
                 if holder is not slot:
                     self._activate(holder)
                 self._send(
-                    {"type": "result", "id": request_id, "ok": True, "path": resume_path}
+                    {
+                        "type": "result",
+                        "id": request_id,
+                        "ok": True,
+                        "path": resume_path,
+                    }
                 )
                 return
-            if slot.busy:
-                slot = await self._spawn(root, resume=resume_path, base=slot.project_key)
+            if slot.busy or getattr(slot.runtime, "zen_fleet", None) is not None:
+                slot = await self._spawn(
+                    root, resume=resume_path, base=slot.project_key
+                )
                 self._activate(slot)
                 self._send(
-                    {"type": "result", "id": request_id, "ok": True, "path": resume_path}
+                    {
+                        "type": "result",
+                        "id": request_id,
+                        "ok": True,
+                        "path": resume_path,
+                    }
                 )
                 return
         except Refusal as exc:
@@ -428,9 +448,7 @@ class RpcHost(SwarmOps):
         if slot is None:
             return
         if self._active is slot:
-            self._active = (
-                next(reversed(self._slots.values())) if self._slots else None
-            )
+            self._active = next(reversed(self._slots.values())) if self._slots else None
         if self._active_by_project.get(slot.project_key) is slot:
             sibling = next(
                 (
@@ -444,7 +462,13 @@ class RpcHost(SwarmOps):
                 self._active_by_project[slot.project_key] = sibling
             else:
                 self._active_by_project.pop(slot.project_key, None)
+        was_zen = getattr(slot.runtime, "zen_fleet", None) is not None
         await slot.close()
+        if was_zen:
+            # An evicted router slot takes the project's zen with it; say so,
+            # or the GUI would keep showing a fleet that no longer exists.
+            self._zen_pre.pop(slot.project_key, None)
+            self._send_fleet_roster(Path(slot.runtime.root), None)
 
     # -- project ops --------------------------------------------------------
 
@@ -509,9 +533,7 @@ class RpcHost(SwarmOps):
         if not isinstance(root, str) or not root.strip():
             raise Refusal("close needs root")
         key = project_key(root)
-        targets = [
-            slot for slot in self._slots.values() if slot.project_key == key
-        ]
+        targets = [slot for slot in self._slots.values() if slot.project_key == key]
         if any(slot.pinned for slot in targets):
             raise Refusal("project is busy", code="project_busy")
         for slot in targets:
@@ -540,8 +562,7 @@ class RpcHost(SwarmOps):
         if not isinstance(new_root, str) or not new_root.strip():
             raise Refusal("relocate needs to")
         if any(
-            slot.project_key == project_key(old_root)
-            for slot in self._slots.values()
+            slot.project_key == project_key(old_root) for slot in self._slots.values()
         ):
             raise Refusal(
                 "cannot relocate an open project; close it first",
