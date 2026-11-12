@@ -45,6 +45,7 @@ from zenagent.app.support import (
     session_id_for,
 )
 from zenagent.app.views import last_request_usage
+from zenagent.app.zen.identity import router_fleet
 from zenagent.config import (
     ContextGuard,
     UserConfig,
@@ -302,31 +303,12 @@ class Runtime:
             self.agent.system_prompt = self._prompt_with_mode()
         return normalized
 
-    def _router_fleet(self):
-        """The fleet only while this session is its router.
-
-        Fleet tools, the router prompt note and worker reports all belong to
-        the project's one Router session. The fleet itself is slot-scoped, so
-        without this check a session switch (or a new session) would inherit
-        the router surface and turn an ordinary coding chat into a router.
-        """
-        fleet = self.zen_fleet
-        if fleet is None:
-            return None
-        try:
-            current = Path(self.session.path).resolve()
-            router = Path(fleet.router_path).resolve()
-        except OSError:
-            return None
-        return fleet if current == router else None
-
     def _prompt_with_mode(self) -> str:
         note = mode_prompt_note(self._mode)
-        if self._router_fleet() is not None:
+        if router_fleet(self.zen_fleet, self.session.path) is not None:
             from zenagent.app.zen.prompts import ROUTER_PROMPT_NOTE
 
-            zen = ROUTER_PROMPT_NOTE
-            note = f"{note}\n\n{zen}" if note else zen
+            note = f"{note}\n\n{ROUTER_PROMPT_NOTE}" if note else ROUTER_PROMPT_NOTE
         report = self._base_prompt_report
         if report is not None:
             blocks = report.blocks
@@ -744,10 +726,10 @@ class Runtime:
             tools.append(self.todo_tool)
         if self.task_tool is not None:
             tools.append(self.task_tool)
-        if self._router_fleet() is not None:
+        if router_fleet(self.zen_fleet, self.session.path) is not None:
             from zenagent.app.zen.tools import fleet_tools
 
-            tools.extend(fleet_tools(self._router_fleet))
+            tools.extend(fleet_tools(lambda: router_fleet(self.zen_fleet, self.session.path)))
         if self.mcp is not None:
             tools.extend(self.mcp.tool_defs())
         if self.skills:

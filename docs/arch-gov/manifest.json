@@ -234,6 +234,7 @@
    "files": [
     "zenagent/app/zen/__init__.py",
     "zenagent/app/zen/fleet.py",
+    "zenagent/app/zen/identity.py",
     "zenagent/app/zen/prompts.py",
     "zenagent/app/zen/roster.py",
     "zenagent/app/zen/tools.py"
