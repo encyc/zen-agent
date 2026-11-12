@@ -6,6 +6,7 @@ import pytest
 
 from zenagent.app.swarm.room import (
     RoomMessage,
+    RoomRef,
     SwarmStore,
     TaskRecord,
     _message_record,
@@ -174,3 +175,73 @@ def test_load_truncates_parseable_unterminated_tail(tmp_path):
     store.append_message(_message(id="m3"))
     lines = store.room_path.read_text().splitlines()
     assert [json.loads(line)["id"] for line in lines] == ["m1", "m3"]
+
+
+def test_message_record_carries_a_ref_snapshot_and_images(tmp_path):
+    store = SwarmStore(tmp_path)
+    ref = RoomRef(id="m0", author_kind="agent", author_id="research", text="结论是 Z")
+    message = _message(ref=ref, images=["/tmp/a.png"])
+    store.append_message(message)
+
+    record = _message_record(message)
+    assert record["ref"] == {
+        "id": "m0",
+        "author": {"kind": "agent", "id": "research"},
+        "text": "结论是 Z",
+    }
+    assert record["images"] == ["/tmp/a.png"]
+
+
+def test_replayed_message_restores_ref_and_images(tmp_path):
+    store = SwarmStore(tmp_path)
+    store.append_message(
+        _message(
+            id="m1",
+            ref=RoomRef(id="m0", author_kind="agent", author_id="research", text="Z"),
+            images=["/tmp/a.png", "/tmp/b.png"],
+        )
+    )
+    reloaded = SwarmStore(tmp_path)
+    reloaded.load()
+
+    message = reloaded.messages[0]
+    assert message.ref is not None
+    assert (message.ref.id, message.ref.author_id, message.ref.text) == ("m0", "research", "Z")
+    assert message.images == ["/tmp/a.png", "/tmp/b.png"]
+
+
+def test_a_pre_change_record_still_loads(tmp_path):
+    (tmp_path / "room.jsonl").write_text(
+        json.dumps({"id": "m_old", "ts": 1, "author": {"kind": "user", "id": "you"}, "text": "hi"})
+        + "\n",
+        encoding="utf-8",
+    )
+    store = SwarmStore(tmp_path)
+    store.load()
+
+    assert store.messages[0].ref is None
+    assert store.messages[0].images == []
+    assert store.warnings == []
+
+
+def test_a_malformed_ref_is_ignored_without_dropping_the_message(tmp_path):
+    (tmp_path / "room.jsonl").write_text(
+        json.dumps(
+            {
+                "id": "m1",
+                "ts": 1,
+                "author": {"kind": "user", "id": "you"},
+                "text": "hi",
+                "ref": "not-an-object",
+                "images": "nope",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    store = SwarmStore(tmp_path)
+    store.load()
+
+    assert store.messages[0].text == "hi"
+    assert store.messages[0].ref is None
+    assert store.messages[0].images == []

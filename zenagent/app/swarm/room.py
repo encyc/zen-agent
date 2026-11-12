@@ -20,6 +20,7 @@ from pathlib import Path
 __all__ = [
     "TERMINAL",
     "RoomMessage",
+    "RoomRef",
     "SwarmStore",
     "TaskRecord",
     "is_terminal",
@@ -37,6 +38,18 @@ MENTION_RE = re.compile(r"(?<![\w@])@([a-z0-9][a-z0-9._-]*)")
 
 
 @dataclass
+class RoomRef:
+    """A snapshot of the message this one quotes: the task prompt must be
+    self-contained, and the quote card must render when the source is outside
+    the loaded window."""
+
+    id: str
+    author_kind: str
+    author_id: str
+    text: str
+
+
+@dataclass
 class RoomMessage:
     id: str
     ts: int
@@ -46,6 +59,8 @@ class RoomMessage:
     mentions: list[str] = field(default_factory=list)
     task_id: str | None = None
     chain_depth: int = 0
+    ref: RoomRef | None = None
+    images: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -192,6 +207,8 @@ class SwarmStore:
             mentions=[str(entry) for entry in raw.get("mentions") or []],
             task_id=raw.get("taskId"),
             chain_depth=int(raw.get("chainDepth") or 0),
+            ref=_parse_ref(raw.get("ref")),
+            images=_parse_images(raw.get("images")),
         )
         self._remember_message(message)
 
@@ -267,8 +284,31 @@ class SwarmStore:
             os.fsync(handle.fileno())
 
 
+def _parse_images(raw) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    return [str(item) for item in raw if isinstance(item, str)]
+
+
+def _parse_ref(raw) -> RoomRef | None:
+    if not isinstance(raw, dict):
+        return None
+    author = raw.get("author")
+    if not isinstance(author, dict):
+        author = {}
+    ref_id = raw.get("id")
+    if not isinstance(ref_id, str) or not ref_id:
+        return None
+    return RoomRef(
+        id=ref_id,
+        author_kind=str(author.get("kind") or "system"),
+        author_id=str(author.get("id") or ""),
+        text=str(raw.get("text") or ""),
+    )
+
+
 def _message_record(message: RoomMessage) -> dict:
-    return {
+    record = {
         "type": "message",
         "version": RECORD_VERSION,
         "id": message.id,
@@ -279,6 +319,15 @@ def _message_record(message: RoomMessage) -> dict:
         "taskId": message.task_id,
         "chainDepth": message.chain_depth,
     }
+    if message.ref is not None:
+        record["ref"] = {
+            "id": message.ref.id,
+            "author": {"kind": message.ref.author_kind, "id": message.ref.author_id},
+            "text": message.ref.text,
+        }
+    if message.images:
+        record["images"] = list(message.images)
+    return record
 
 
 def _task_record(task: TaskRecord) -> dict:
