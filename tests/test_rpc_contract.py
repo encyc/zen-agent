@@ -33,6 +33,9 @@ def _wire_codes(prefix: str) -> set[str]:
 TS_PATH = (
     Path(__file__).resolve().parents[1] / "desktop" / "src" / "rpc" / "types.ts"
 )
+#: Event frames live in their own module (types.ts re-exports them), so the
+#: literal scan has to span every `types*.ts` file.
+TS_EVENT_TYPES_PATH = TS_PATH.parent / "types-events.ts"
 
 
 def test_request_kinds_match_ts_contract_list():
@@ -212,7 +215,11 @@ def _backend_source() -> str:
 def test_server_frame_union_matches_backend_literals():
     # The ServerFrame union spans types.ts and types-swarm.ts (the swarm frame
     # interfaces are re-exported from the latter).
-    src = TS_PATH.read_text() + (TS_PATH.parent / "types-swarm.ts").read_text()
+    src = (
+        TS_PATH.read_text()
+        + (TS_PATH.parent / "types-swarm.ts").read_text()
+        + TS_EVENT_TYPES_PATH.read_text()
+    )
     ts = set(re.findall(r"type:\s*'([a-z_]+)'", src))
     assert SERVER_FRAME_TYPES <= ts, f"TS union missing {sorted(SERVER_FRAME_TYPES - ts)}"
     backend = _backend_source()

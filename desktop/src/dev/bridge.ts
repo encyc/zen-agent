@@ -86,6 +86,8 @@ export interface BridgeState extends PluginMockState, SwarmMockState, ZenMockSta
   statusSession?: string
   /** The runtime mode the fake status answers with (default zen). */
   statusMode?: string
+  /** The last run failure the fake status reports (drives the inline row). */
+  lastError?: string
   /** Milliseconds `rpc_start` stays in flight, so a spec can watch a project
    * switch happen (the shell must never fall back to the boot screen). */
   switchDelayMs?: number
@@ -232,6 +234,7 @@ export function installBridge(state: BridgeState) {
           model: 'deepseek-flash',
           usage: { input: 0, output: 0, cache_read: 0, cache_write: 0, cost: 0 },
           termination: null,
+          last_error: state.lastError ?? '',
           mode: currentMode,
           session: state.statusSession,
           thinking: state.thinking ?? 'high',

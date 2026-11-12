@@ -3,7 +3,7 @@
 
 import asyncio
 
-from zenagent.events import AbortToken, AssistantEvent
+from zenagent.events import AbortToken, AssistantEvent, RetryAttempt
 from zenagent.providers.catalog import Model
 from zenagent.providers.compat import CompatFlags
 from zenagent.providers.openai_completions import StreamOptions
@@ -80,10 +80,18 @@ async def test_retries_a_transient_failure_and_only_emits_the_final_attempt():
     events = await collect(stream, StreamOptions(), retries=1)
 
     assert stream.calls == 2
-    assert [event.type for event in events] == ["start", "done"]
-    assert events[-1].partial.stop_reason == "stop"
+    payload = [event for event in events if isinstance(event, AssistantEvent)]
+    assert [event.type for event in payload] == ["start", "done"]
+    assert payload[-1].partial.stop_reason == "stop"
     # the failed attempt's events were buffered and discarded
-    assert not any(event.type == "error" for event in events)
+    assert not any(event.type == "error" for event in payload)
+    # ...and the retry itself is announced, between the dead attempt and the
+    # surviving one, so a live frontend can render progress.
+    markers = [event for event in events if isinstance(event, RetryAttempt)]
+    assert [(m.attempt, m.max_retries, round(m.delay_s, 3)) for m in markers] == [
+        (1, 1, 0.5)
+    ]
+    assert "request timed out" in (markers[0].message.error_message or "")
 
 
 async def test_does_not_retry_a_deterministic_failure():
@@ -141,6 +149,33 @@ async def test_loop_uses_retries_from_config():
     assert stream.calls == 2
     assert state.messages[-1].stop_reason == "stop"
     assert events[-1].type == "agent_end"
+
+
+async def test_loop_announces_retries_as_agent_events():
+    """The loop turns a swallowed attempt into a ``retry`` event so live
+    frontends render progress instead of a silent gap."""
+    from zenagent.agent.loop import AgentConfig, AgentState, agent_loop
+
+    stream = Scripted(["connection reset", "done"])
+    config = AgentConfig(model=model(), system_prompt="s", api_key="k", stream_fn=stream, retries=1)
+    state = AgentState()
+    events = [event async for event in agent_loop("hi", state, config)]
+    retries = [event for event in events if event.type == "retry_attempt"]
+    assert len(retries) == 1
+    assert retries[0].retry is not None
+    assert retries[0].retry.attempt == 1
+    assert retries[0].retry.max_retries == 1
+    assert "connection reset" in (retries[0].retry.message.error_message or "")
+    # The retry precedes the surviving attempt's stream and never enters the
+    # transcript: the run carries just the user turn and the final answer.
+    assert events.index(retries[0]) < next(
+        index for index, event in enumerate(events) if event.type == "message_update"
+    )
+    from zenagent.types import AssistantMessage as _AssistantMessage
+    from zenagent.types import UserMessage
+
+    assert [type(message) for message in state.messages] == [UserMessage, _AssistantMessage]
+    assert state.messages[-1].stop_reason == "stop"
 
 
 async def test_zero_retries_passes_events_through_while_streaming():

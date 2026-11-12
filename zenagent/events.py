@@ -51,6 +51,22 @@ class AssistantEvent:
 
 
 @dataclass
+class RetryAttempt:
+    """One swallowed provider attempt, announced before its backoff sleep.
+
+    Runtime-only: the failed attempt itself was never shown (retry only covers
+    pre-content failures), so this marker is the first thing a frontend hears
+    about the retry. ``message`` is the failed attempt's terminal message, kept
+    for its ``error_message``.
+    """
+
+    attempt: int
+    max_retries: int
+    delay_s: float
+    message: AssistantMessage
+
+
+@dataclass
 class AgentEvent:
     """UI-facing event emitted by the agent loop."""
 
@@ -65,6 +81,7 @@ class AgentEvent:
         "tool_execution_start",
         "tool_execution_update",
         "tool_execution_end",
+        "retry_attempt",
     ]
     message: Message | None = None
     assistant_event: AssistantEvent | None = None
@@ -73,6 +90,9 @@ class AgentEvent:
     args: Any | None = None
     result: Any | None = None
     partial_result: Any | None = None
+    #: The swallowed attempt's bookkeeping, attached to ``retry_attempt``
+    #: events.
+    retry: RetryAttempt | None = None
     is_error: bool = False
     duration_ms: int | None = None
     new_messages: list[Message] | None = None

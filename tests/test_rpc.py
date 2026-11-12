@@ -204,3 +204,27 @@ def test_serialize_event_carries_tool_stats_on_agent_end():
         AgentEvent(type="agent_end", tool_stats={"tools": {"bash": {"calls": 1}}})
     )
     assert payload["tool_stats"] == {"tools": {"bash": {"calls": 1}}}
+
+
+def test_serialize_event_carries_a_retry_attempt():
+    from zenagent.cli.rpc import serialize_event
+    from zenagent.events import AgentEvent, RetryAttempt
+    from zenagent.types import AssistantMessage, Usage
+
+    failed = AssistantMessage(
+        content=[], provider="p", model="m", usage=Usage(), stop_reason="error",
+        timestamp=0, error_message="connection reset",
+    )
+    payload = serialize_event(
+        AgentEvent(
+            type="retry_attempt",
+            retry=RetryAttempt(attempt=2, max_retries=3, delay_s=1.0, message=failed),
+        )
+    )
+    assert payload["type"] == "retry_attempt"
+    assert payload["attempt"] == 2
+    assert payload["max_retries"] == 3
+    assert payload["delay_ms"] == 1000
+    assert payload["model"] == "m"
+    assert payload["error"] == "connection reset"
+    assert serialize_event(AgentEvent(type="turn_start")).get("attempt") is None

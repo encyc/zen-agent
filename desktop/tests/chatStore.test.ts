@@ -405,3 +405,97 @@ test('prepending an older tool page indexes its card for live patches', () => {
   const tool = useChatStore.getState().nodes.find((node) => node.id === 'v2')
   assert.equal(tool?.kind === 'tool' && tool.resultText, 'late patch')
 })
+
+test('a retry burst grows one row and settles once the answer streams', () => {
+  const store = useChatStore.getState()
+  store.applyEvent({ type: 'message_start', message: { role: 'user', text: 'go' } })
+  store.applyEvent({
+    type: 'retry_attempt',
+    attempt: 1,
+    max_retries: 3,
+    delay_ms: 500,
+    error: 'connection reset',
+  })
+  store.applyEvent({
+    type: 'retry_attempt',
+    attempt: 2,
+    max_retries: 3,
+    delay_ms: 1000,
+    error: 'connect timeout',
+  })
+
+  const retry = () =>
+    useChatStore.getState().nodes.find((node) => node.kind === 'retry')
+  assert.equal(retry()?.kind === 'retry' && retry()?.attempts, 2)
+  assert.equal(retry()?.kind === 'retry' && retry()?.waitedMs, 1500)
+  assert.equal(retry()?.kind === 'retry' && retry()?.state, 'retrying')
+  assert.deepEqual(
+    retry()?.kind === 'retry' ? retry()?.errors : [],
+    ['connection reset', 'connect timeout'],
+  )
+
+  store.applyEvent({
+    type: 'message_update',
+    assistant_event: { type: 'text_delta', delta: 'hi' },
+  })
+  const recovered = retry()
+  assert.equal(recovered?.kind === 'retry' && recovered?.state, 'recovered')
+  assert.equal(
+    useChatStore.getState().nodes.filter((node) => node.kind === 'retry').length,
+    1,
+  )
+})
+
+test('an exhausted retry fails and the run failure lands above the usage row', () => {
+  const store = useChatStore.getState()
+  store.applyEvent({ type: 'message_start', message: { role: 'user', text: 'go' } })
+  store.applyEvent({
+    type: 'retry_attempt',
+    attempt: 3,
+    max_retries: 3,
+    delay_ms: 2000,
+    error: 'gateway timeout',
+  })
+  store.pushUsage(null, 1200, 'error')
+
+  const retry = useChatStore.getState().nodes.find((node) => node.kind === 'retry')
+  assert.equal(retry?.kind === 'retry' && retry?.state, 'failed')
+
+  store.pushFailure('无法连接模型服务 ｜ gateway timeout')
+  store.pushFailure('无法连接模型服务 ｜ gateway timeout')
+  const nodes = useChatStore.getState().nodes
+  assert.deepEqual(
+    nodes.map((node) => node.kind),
+    ['user', 'retry', 'failure', 'usage'],
+  )
+  assert.equal(
+    nodes.find((node) => node.kind === 'failure')?.kind === 'failure'
+      ? (nodes.find((node) => node.kind === 'failure') as { text: string }).text
+      : '',
+    '无法连接模型服务 ｜ gateway timeout',
+  )
+})
+
+test('a failure without any retry still lands inline', () => {
+  const store = useChatStore.getState()
+  store.applyEvent({ type: 'message_start', message: { role: 'user', text: 'go' } })
+  store.pushFailure('运行失败 ｜ HTTP 500')
+  assert.deepEqual(
+    useChatStore.getState().nodes.map((node) => node.kind),
+    ['user', 'failure'],
+  )
+})
+
+test('finalize stops a retry that a cancel interrupted', () => {
+  const store = useChatStore.getState()
+  store.applyEvent({
+    type: 'retry_attempt',
+    attempt: 1,
+    max_retries: 3,
+    delay_ms: 500,
+    error: 'timeout',
+  })
+  store.finalize()
+  const retry = useChatStore.getState().nodes[0]
+  assert.equal(retry.kind === 'retry' && retry.state, 'stopped')
+})

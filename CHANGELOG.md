@@ -31,6 +31,14 @@ provider".
 - **The desktop spawns its child with `--retries 3`** — the GUI now rides out a
   short uplink drop instead of stopping the run. Streaming is unaffected by the
   rule above.
+- **Retries are visible in the transcript, and a failed run ends inline** —
+  every swallowed attempt is announced as a `retry_attempt` event (attempt N of M, the
+  backoff, the raw provider error), so the desktop renders
+  `正在重试模型请求 (2/3) · 1s ›` with an expandable list of the failed attempts
+  instead of a silent gap. When the attempts are spent the row settles as
+  `已重试模型请求 (2/3)` and the classified run failure lands directly below it
+  as `本轮运行失败 …` — the line that used to pop up in the notice banner. The
+  banner stays for failures with no turn to sit in (boot, export, RPC refusals).
 - **Leaving Zen stops the fleet** — Coding and Swarm are plain sessions again:
   the fleet is disabled and the pre-zen session restored, so no router survives
   outside Zen. The "keep the fleet running after leaving Zen" setting is gone.

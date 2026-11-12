@@ -77,6 +77,33 @@ export interface NoticeNode {
   reason?: string | null
 }
 
+/** One retry burst inside a turn: the provider dropped the request before it
+ * showed anything, so the loop silently retried it. Rendered as a compact
+ * status row — live while backing off, settled once the run moves on. */
+export interface RetryNode {
+  kind: 'retry'
+  id: string
+  /** Retries announced so far (1-based; attempts = retries + 1). */
+  attempts: number
+  maxRetries: number
+  /** Total backoff announced so far, the `· 3.5s` the row shows. */
+  waitedMs: number
+  lastDelayMs: number
+  /** Wall clock of the latest announcement, for the live tick. */
+  lastAt: number
+  /** Raw provider text of each swallowed attempt, oldest first. */
+  errors: string[]
+  state: 'retrying' | 'recovered' | 'failed' | 'stopped'
+}
+
+/** The run died: rendered inline instead of an error popup, right where the
+ * retry row (when there was one) left off. */
+export interface FailureNode {
+  kind: 'failure'
+  id: string
+  text: string
+}
+
 export interface CommandNode {
   kind: 'command'
   id: string
@@ -99,6 +126,8 @@ export type ChatNode =
   | AssistantNode
   | ToolNode
   | NoticeNode
+  | RetryNode
+  | FailureNode
   | CommandNode
   | UsageNode
 
@@ -143,6 +172,8 @@ interface ChatState {
   applyEvent(event: AgentEventFrame): void
   pushCommand(name: string, argument: string, message: string | null): void
   pushUsage(usage: Usage | null, turnMs: number | null, termination: string | null): void
+  /** Land the run-failure line inline (the banner is only for RPC failures). */
+  pushFailure(text: string): void
   finalize(): void
   /** Snapshot the loaded transcript; switching away stores it per project. */
   pane(): ChatPane
@@ -153,6 +184,29 @@ interface ChatState {
 
 let seq = 0
 const nid = () => `n${(seq += 1)}`
+
+/** Provider events that prove a retried attempt survived (the row settles). */
+const RETRY_SETTLED_EVENTS = new Set([
+  'text_start',
+  'text_delta',
+  'thinking_start',
+  'thinking_delta',
+  'toolcall_start',
+  'toolcall_delta',
+  'toolcall_end',
+  'done',
+])
+
+/** Index of the retry burst still waiting, if the newest rows carry one. A
+ * usage footer may already sit above it (a run ends before status lands). */
+function retryingIndex(nodes: ChatNode[]): number {
+  for (let index = nodes.length - 1; index >= 0; index -= 1) {
+    const node = nodes[index]
+    if (node.kind === 'usage') continue
+    return node.kind === 'retry' && node.state === 'retrying' ? index : -1
+  }
+  return -1
+}
 
 function newAssistantNode(): AssistantNode {
   return {
@@ -375,6 +429,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const assistantEvent = event.assistant_event
         if (!assistantEvent) break
         const kind = assistantEvent.type
+        // The provider answered after one or more swallowed attempts: the
+        // retry row stops ticking where it stands and keeps its count.
+        if (RETRY_SETTLED_EVENTS.has(kind)) {
+          const retryIndex = retryingIndex(nodes)
+          if (retryIndex >= 0) {
+            nodes[retryIndex] = { ...(nodes[retryIndex] as RetryNode), state: 'recovered' }
+            changed = true
+          }
+        }
         if (currentAssistantId === null && (kind === 'text_delta' || kind === 'text_start')) {
           if (!assistantEvent.delta && kind === 'text_start') break
           const node = newAssistantNode()
@@ -491,6 +554,42 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
         break
       }
+      case 'retry_attempt': {
+        // A swallowed attempt, announced before its backoff. Consecutive
+        // announcements grow the same row; a later burst opens a new one.
+        const attempt = event.attempt ?? 0
+        if (attempt <= 0) break
+        const delay = event.delay_ms ?? 0
+        const error = (event.error ?? '').trim()
+        const maxRetries = event.max_retries ?? 0
+        const tailIndex = nodes.length - 1
+        const tail = nodes[tailIndex]
+        if (tail !== undefined && tail.kind === 'retry' && tail.state === 'retrying') {
+          nodes[tailIndex] = {
+            ...tail,
+            attempts: attempt,
+            maxRetries,
+            waitedMs: tail.waitedMs + delay,
+            lastDelayMs: delay,
+            lastAt: Date.now(),
+            errors: error === '' ? tail.errors : [...tail.errors, error],
+          }
+        } else {
+          nodes.push({
+            kind: 'retry',
+            id: nid(),
+            attempts: attempt,
+            maxRetries,
+            waitedMs: delay,
+            lastDelayMs: delay,
+            lastAt: Date.now(),
+            errors: error === '' ? [] : [error],
+            state: 'retrying',
+          })
+        }
+        changed = true
+        break
+      }
       default:
         break
     }
@@ -506,8 +605,41 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   pushUsage(usage, turnMs, termination) {
     const state = get()
+    const nodes = [...state.nodes]
+    // The run closed while a retry burst was still waiting: an error exhausts
+    // it (the failure line lands next), an abort stops it, anything else means
+    // the answer arrived without a content event the store could see.
+    const retryIndex = retryingIndex(nodes)
+    if (retryIndex >= 0) {
+      const settled =
+        termination === 'error' ? 'failed' : termination === 'aborted' ? 'stopped' : 'recovered'
+      nodes[retryIndex] = { ...(nodes[retryIndex] as RetryNode), state: settled }
+    }
     const node: UsageNode = { kind: 'usage', id: nid(), usage, turnMs, termination }
-    set({ nodes: [...state.nodes, node], revision: get().revision + 1 })
+    nodes.push(node)
+    set({ nodes, revision: get().revision + 1 })
+  },
+
+  pushFailure(text) {
+    const trimmed = text.trim()
+    if (trimmed === '') return
+    const state = get()
+    const nodes = [...state.nodes]
+    const previous = [...nodes].reverse().find((node) => node.kind === 'failure')
+    if (previous !== undefined && previous.kind === 'failure' && previous.text === trimmed) {
+      return
+    }
+    // The run is over: whatever retry burst was still waiting has failed too.
+    const retryIndex = retryingIndex(nodes)
+    if (retryIndex >= 0) {
+      nodes[retryIndex] = { ...(nodes[retryIndex] as RetryNode), state: 'failed' }
+    }
+    const node: FailureNode = { kind: 'failure', id: nid(), text: trimmed }
+    // A failed run closes with its usage footer; the failure belongs above it,
+    // right where the retry row left off.
+    if (nodes[nodes.length - 1]?.kind === 'usage') nodes.splice(nodes.length - 1, 0, node)
+    else nodes.push(node)
+    set({ nodes, revision: get().revision + 1 })
   },
 
   finalize() {
@@ -526,6 +658,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
         changed = true
       }
+    }
+    // A retry burst a cancel/exit/switch interrupted stops ticking; the row is
+    // history, not a live status any more.
+    const retryIndex = retryingIndex(nodes)
+    if (retryIndex >= 0) {
+      nodes[retryIndex] = { ...(nodes[retryIndex] as RetryNode), state: 'stopped' }
+      changed = true
     }
     // Cancelled or crashed runs leave cards without a result; a snapshot
     // refresh marks these interrupted, so settle live ones the same way.

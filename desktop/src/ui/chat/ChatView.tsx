@@ -33,6 +33,7 @@ import { TurnProcess } from './TurnProcess'
 import { ConversationMinimap } from './ConversationMinimap'
 import { ChatWidthHandles } from './ChatWidthHandles'
 import { NoticeRow, CommandCard, UsageRow } from './AuxRows'
+import { RetryRow, FailureRow } from './RetryRow'
 import { ArrowDownIcon } from '../icons'
 import { RunningMark } from '../RunningMark'
 import css from './ChatView.module.css'
@@ -416,6 +417,10 @@ function NodeSeat({
           tokensBefore={node.tokensBefore}
         />
       )
+    case 'retry':
+      return <RetryRow node={node} />
+    case 'failure':
+      return <FailureRow node={node} />
     case 'command':
       return <CommandCard name={node.name} argument={node.argument} message={node.message} />
     case 'usage':

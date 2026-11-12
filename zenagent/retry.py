@@ -24,11 +24,11 @@ import asyncio
 import contextlib
 from collections.abc import AsyncIterator, Awaitable, Callable
 
-from zenagent.events import AssistantEvent
+from zenagent.events import AssistantEvent, RetryAttempt
 from zenagent.providers.registry import StreamFn, safe_stream
 from zenagent.types import AssistantMessage, Message, ToolDef
 
-__all__ = ["is_retryable", "stream_with_retry"]
+__all__ = ["RetryAttempt", "is_retryable", "stream_with_retry"]
 
 #: Substrings that suggest a transient failure (matched case-insensitively).
 _RETRYABLE = (
@@ -129,7 +129,7 @@ async def stream_with_retry(
     base_delay: float = 0.5,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     on_retry: Callable[[AssistantMessage, int, int, float], None] | None = None,
-) -> AsyncIterator[AssistantEvent]:
+) -> AsyncIterator[AssistantEvent | RetryAttempt]:
     """Drive ``safe_stream`` and retry transient terminal failures.
 
     With ``retries <= 0`` events pass straight through as they arrive, so a
@@ -141,11 +141,12 @@ async def stream_with_retry(
     attempt. Once content has been yielded the attempt streams through and a
     later failure is not retried — see the module docstring.
 
-    ``on_retry(message, attempt, max_retries, delay_s)`` fires just before each
-    backoff sleep — the failed attempt's terminal message, the upcoming attempt
-    number, the configured cap and the computed delay. A swallowed attempt is
-    otherwise invisible to every observer (the session side-channel recorder
-    uses this to persist dsh-style retry records).
+    A :class:`RetryAttempt` is yielded just before each backoff sleep — the
+    live frontends render it, and the loop turns it into a ``retry_attempt``
+    event.
+    ``on_retry(message, attempt, max_retries, delay_s)`` also fires there for
+    observers that do not consume the stream (the session side-channel
+    recorder persists dsh-style retry records).
     """
     if retries <= 0:
         async for event in safe_stream(stream_fn, model, messages, tools, options):
@@ -196,6 +197,12 @@ async def stream_with_retry(
             # An observer must not kill the retry (BLE001/S110 by design).
             with contextlib.suppress(Exception):
                 on_retry(terminal.partial, attempt, retries, delay)
+        yield RetryAttempt(
+            attempt=attempt,
+            max_retries=retries,
+            delay_s=delay,
+            message=terminal.partial,
+        )
         await sleep(delay)
         if abort is not None and abort.aborted:
             # Cancelled while backing off: surface the failure, do not retry.

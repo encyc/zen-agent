@@ -141,6 +141,18 @@ def serialize_event(event: AgentEvent) -> dict:
             error = getattr(assistant_event.partial, "error_message", None)
             if error:
                 payload["assistant_event"]["error"] = str(error)[:_PARTIAL_RESULT_CHARS]
+    retry = getattr(event, "retry", None)
+    if retry is not None:
+        # The swallowed attempt, announced before its backoff: the client
+        # renders live retry progress (count, elapsed, last failure).
+        payload["attempt"] = retry.attempt
+        payload["max_retries"] = retry.max_retries
+        payload["delay_ms"] = round(retry.delay_s * 1000)
+        if retry.message.model:
+            payload["model"] = retry.message.model
+        error = retry.message.error_message
+        if error:
+            payload["error"] = str(error)[:_PARTIAL_RESULT_CHARS]
     message = getattr(event, "message", None)
     if message is not None:
         # The canonical turn content: clients that do not reassemble deltas

@@ -48,7 +48,7 @@ from zenagent.agent.guard import (
 from zenagent.agent.protocol import AgentTool, ToolContext, ToolResultAgent
 from zenagent.agent.result_budget import MAX_RESULT_BYTES
 from zenagent.agent.tool_exec import run_tool_batch, truncated_call_outcome
-from zenagent.events import AbortToken, AgentEvent
+from zenagent.events import AbortToken, AgentEvent, RetryAttempt
 from zenagent.providers.catalog import Model
 from zenagent.providers.registry import StreamFn, stream_fn_for
 from zenagent.providers.stream_options import StreamOptions
@@ -264,6 +264,13 @@ async def agent_loop(
                 retries=config.retries,
                 on_retry=config.on_retry,
             ):
+                if isinstance(event, RetryAttempt):
+                    # The attempt failed before anything was shown; the loop
+                    # announces the retry so live frontends can render progress
+                    # instead of a silent gap. The failed message never enters
+                    # the transcript.
+                    yield AgentEvent(type="retry_attempt", retry=event)
+                    continue
                 if not saw_message_start:
                     saw_message_start = True
                     yield AgentEvent(type="message_start", message=event.partial)
