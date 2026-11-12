@@ -18,7 +18,7 @@ from pathlib import Path
 from zenagent.app.views import messages_to_views
 from zenagent.types import Message, UserMessage, message_from_json
 
-__all__ = ["read_task_transcript"]
+__all__ = ["read_task_transcript", "read_task_transcript_from_disk"]
 
 #: The injected prompt opens with this; two of them bracket one run.
 _INJECTED_PREFIX = "[swarm] from "
@@ -98,3 +98,26 @@ def read_task_transcript(
             ):
                 row["status"] = "running"
     return True, rows
+
+
+def read_task_transcript_from_disk(sessions_dir: Path, task_id: str) -> list[dict] | None:
+    """Find one task's run in a session directory, without a live runtime.
+
+    Needed because instances are built lazily and reclaimed when idle: every
+    round of a closed work item has no runtime, so the detail panel has to read
+    the session files itself. A ``reset`` inside a work item leaves several
+    files in the directory, so each is searched rather than only the newest.
+    """
+    directory = Path(sessions_dir)
+    try:
+        files = sorted(directory.glob("*.jsonl"))
+    except OSError:
+        return None
+    for path in files:
+        try:
+            available, rows = read_task_transcript(path, task_id)
+        except OSError:
+            continue
+        if available:
+            return rows
+    return None

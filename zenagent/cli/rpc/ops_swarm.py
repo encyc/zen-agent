@@ -160,8 +160,8 @@ class SwarmOps:
                 write_frame=lambda payload, r=root: self._send(
                     {**payload, "project": str(r)}
                 ),
-                event_sink=lambda role_id, task_id, event, r=root: (
-                    self._send_role_event(role_id, task_id, event, r)
+                event_sink=lambda role_id, task_id, event, work_item_id=None, r=root: (
+                    self._send_role_event(role_id, task_id, event, r, work_item_id)
                 ),
                 max_concurrent=config.swarm_max_concurrent,
                 max_chain_depth=config.swarm_max_chain_depth,
@@ -206,7 +206,12 @@ class SwarmOps:
         return find_project_root(self._options.root)
 
     def _send_role_event(
-        self, role_id: str, task_id: str, event: AgentEvent, root: Path
+        self,
+        role_id: str,
+        task_id: str,
+        event: AgentEvent,
+        root: Path,
+        work_item_id: str | None = None,
     ) -> None:
         """One role-run event tagged with its project: the desktop streams a
         task's detail from these (the session file only lands at run end)."""
@@ -216,6 +221,7 @@ class SwarmOps:
                 "swarm": True,
                 "project": str(root),
                 "agent": role_id,
+                "workItem": work_item_id,
                 "task": task_id,
                 "event": serialize_event(event),
             }

@@ -52,7 +52,7 @@ class Router:
         self,
         message: RoomMessage,
         *,
-        inbox_sizes: dict[str, int],
+        inbox_sizes: dict[tuple[str, str | None], int],
         work_item_id: str | None = None,
     ) -> Admission:
         admission = Admission()
@@ -85,7 +85,7 @@ class Router:
             if chain_cost >= self.max_chain_cost:
                 admission.rejected.append((role_id, "chain_cost"))
                 continue
-            if inbox_sizes.get(role_id, 0) >= self.inbox_cap:
+            if inbox_sizes.get((role_id, work_item_id), 0) >= self.inbox_cap:
                 admission.rejected.append((role_id, "inbox_full"))
                 continue
             task = TaskRecord(

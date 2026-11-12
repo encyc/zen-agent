@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from zenagent.app.swarm.instances import AgentKey
 from zenagent.app.swarm.room import (
     RoomMessage,
     SwarmStore,
@@ -16,6 +17,7 @@ from zenagent.app.swarm.room import (
     _message_record,
     _task_record,
 )
+from zenagent.app.swarm.workitems import WorkItem, _work_item_record
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -29,7 +31,7 @@ class SwarmFrames:
     """Emit swarm wire frames; mixed into SwarmManager."""
 
     _write_frame: Callable[[dict], None] | None
-    agents: dict[str, SwarmAgent]
+    agents: dict[AgentKey, SwarmAgent]
     store: SwarmStore
 
     def _write(self, payload: dict) -> None:
@@ -46,21 +48,27 @@ class SwarmFrames:
         record.update(type="swarm_task", swarm=True)
         self._write(record)
 
-    def _emit_agent(self, role_id: str) -> None:
-        agent = self.agents.get(role_id)
+    def _emit_agent(self, key: AgentKey) -> None:
+        agent = self.agents.get(key)
         if agent is None:
             return
         self._write(
             {
                 "type": "swarm_agent",
                 "swarm": True,
-                "agent": role_id,
+                "agent": key[0],
+                "workItem": key[1],
                 "name": agent.role.name,
                 "state": agent.state,
                 "task": agent.current_task,
                 "pendingApply": agent.pending_apply is not None,
             }
         )
+
+    def _emit_work(self, item: WorkItem) -> None:
+        record = _work_item_record(item)
+        record.update(type="swarm_work", swarm=True)
+        self._write(record)
 
     def _append_task(self, task: TaskRecord) -> None:
         self.store.append_task(task)

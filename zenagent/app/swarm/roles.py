@@ -19,6 +19,7 @@ from zenagent.app.modes import DEFAULT_MODE, MODES
 from zenagent.mcp.config import parse_server
 from zenagent.plugins.discovery import discover_plugins
 from zenagent.plugins.state import credentials_for, is_enabled, resolve
+from zenagent.providers.catalog import load_catalog
 from zenagent.settings import get_api_key
 
 __all__ = [
@@ -30,13 +31,35 @@ __all__ = [
     "project_agents_root",
     "project_state_root",
     "role_session_path",
+    "sessions_dir",
     "state_root",
+    "supports_vision",
     "workspaces_root",
 ]
 
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 _PLACEHOLDER = re.compile(r"\$\{([A-Za-z0-9_]+)\}")
 DEFAULT_PROMPT_FILE = "prompt.md"
+
+
+def supports_vision(model_id: str | None) -> bool:
+    """Whether a role's model accepts images, without building a runtime.
+
+    Best-effort: an unknown model (no catalog entry, or the default) reports
+    False, which only makes the composer refuse an attachment rather than
+    sending one the model would reject.
+    """
+    if not model_id:
+        return False
+    try:
+        catalog = load_catalog()
+    except Exception:  # noqa: BLE001 - a broken catalog must not break the room
+        return False
+    for provider in catalog.values():
+        for model in provider.models:
+            if model.id == model_id:
+                return bool(model.supports_vision)
+    return False
 
 
 @dataclass
@@ -118,12 +141,7 @@ def role_session_path(
     a work item a context boundary. ``None`` keeps the pre-work-item layout so
     ad-hoc history stays resumable instead of being orphaned by the upgrade.
     """
-    base = project_state_root(root)
-    directory = (
-        base / "workitems" / work_item_id / "agents" / role_id / "sessions"
-        if work_item_id
-        else base / "agents" / role_id / "sessions"
-    )
+    directory = sessions_dir(role_id, root=root, work_item_id=work_item_id)
     directory.mkdir(parents=True, exist_ok=True)
     if not fresh:
         latest = _latest_session(directory)
@@ -133,6 +151,14 @@ def role_session_path(
     path = directory / f"{stamp}-{time.time_ns() % 1_000_000_000}.jsonl"
     path.touch()
     return path
+
+
+def sessions_dir(role_id: str, *, root: Path, work_item_id: str | None = None) -> Path:
+    """Where a run unit's transcripts live (no side effect, unlike the path fn)."""
+    base = project_state_root(root)
+    if work_item_id:
+        return base / "workitems" / work_item_id / "agents" / role_id / "sessions"
+    return base / "agents" / role_id / "sessions"
 
 
 def _latest_session(directory: Path) -> Path | None:

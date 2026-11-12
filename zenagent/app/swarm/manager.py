@@ -1,17 +1,21 @@
-"""SwarmManager: one runtime per role, a FIFO scheduler and room lifecycle.
+"""SwarmManager: one runtime per (role, work item), and the room lifecycle.
 
-Each role gets its own ``Runtime`` (isolated workspace, own agent session) and
-one at a time runs a task from its inbox. The manager owns everything the
-runner deliberately does not: inbox sizes for the router gates, the approval
-broker in front of each runtime, task scheduling, and the role lifecycle
-(update while running, delete, reset, reload).
+A role is a *configuration*; a work item is a *job*. The run unit is the pair:
+the same agent may be working two jobs at once, each with its own runtime and
+session, which is what makes a work item a context boundary. The manager owns
+everything the runner deliberately does not: inbox sizes for the router gates,
+the approval broker in front of each runtime, the role lifecycle (update while
+running, delete, reset, reload) and the work item table.
+
+Scheduling lives in :mod:`zenagent.app.swarm.schedule`, wire emission in
+:mod:`zenagent.app.swarm.frames`, instance identity in
+:mod:`zenagent.app.swarm.instances`.
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
-import json
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -22,8 +26,10 @@ from zenagent.agent.session import Session
 from zenagent.app.permissions import build_broker_for
 from zenagent.app.plugin_wiring import start_mcp
 from zenagent.app.runtime import Runtime, RuntimeOptions
+from zenagent.app.swarm.approvals import APPROVAL_TIMEOUT_S, SwarmApprovals
 from zenagent.app.swarm.events_tap import EventSink, subscribe_events
 from zenagent.app.swarm.frames import SwarmFrames
+from zenagent.app.swarm.instances import AgentKey, IdleTracker, agent_key
 from zenagent.app.swarm.protocol import (
     PROTOCOL_TEXT,
     build_swarm_post_tool,
@@ -34,6 +40,8 @@ from zenagent.app.swarm.roles import (
     legacy_room_warnings,
     project_state_root,
     role_session_path,
+    sessions_dir,
+    supports_vision,
 )
 from zenagent.app.swarm.room import (
     RoomMessage,
@@ -57,7 +65,9 @@ from zenagent.app.swarm.router import (
     Router,
 )
 from zenagent.app.swarm.runner import TaskRunner
-from zenagent.app.swarm.transcript import read_task_transcript
+from zenagent.app.swarm.schedule import SwarmSchedule
+from zenagent.app.swarm.transcript import read_task_transcript, read_task_transcript_from_disk
+from zenagent.app.swarm.workitems import WorkItemStore
 from zenagent.attachments import read_image_argument
 from zenagent.config import load_user_config
 from zenagent.mcp.config import parse_server
@@ -66,8 +76,6 @@ from zenagent.skills import discover_skills
 
 __all__ = ["APPROVAL_TIMEOUT_S", "SwarmAgent", "SwarmManager"]
 
-APPROVAL_TIMEOUT_S = 120.0
-
 
 @dataclass
 class SwarmAgent:
@@ -75,16 +83,22 @@ class SwarmAgent:
     runtime: Runtime
     session: Session
     agent: Agent
+    #: Which work item this instance is bound to. ``None`` = an ad-hoc run.
+    work_item_id: str | None = None
     state: str = "idle"
     current_task: str | None = None
     pending_apply: RoleManifest | None = None
+
+    @property
+    def key(self) -> AgentKey:
+        return (self.role.id, self.work_item_id)
 
 
 def _now() -> int:
     return int(time.time())
 
 
-class SwarmManager(SwarmFrames):
+class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals):
     def __init__(
         self,
         *,
@@ -95,6 +109,7 @@ class SwarmManager(SwarmFrames):
         max_concurrent: int = 3,
         max_chain_depth: int = DEFAULT_MAX_CHAIN_DEPTH,
         max_chain_cost: float = DEFAULT_MAX_CHAIN_COST,
+        runtime_idle_s: float = 600.0,
     ) -> None:
         self.root = Path(root)
         self._write_frame = write_frame
@@ -104,14 +119,22 @@ class SwarmManager(SwarmFrames):
         self._max_chain_depth = max_chain_depth
         self._max_chain_cost = max_chain_cost
         self.store = SwarmStore(project_state_root(self.root))
+        self.work_items = WorkItemStore(self.store)
         self.router: Router | None = None
-        self.agents: dict[str, SwarmAgent] = {}
-        self.runners: dict[str, TaskRunner] = {}
+        #: Run units, keyed by (role, work item): one agent may work two jobs.
+        self.agents: dict[AgentKey, SwarmAgent] = {}
+        self.runners: dict[AgentKey, TaskRunner] = {}
+        #: Role ids come from configuration (discover_roles), never from built
+        #: instances: instances are built lazily, so deriving the roster from
+        #: them would leave the router with no roles on a fresh start.
         self.role_ids: set[str] = set()
+        self._roles: dict[str, RoleManifest] = {}
+        self._idle = IdleTracker(runtime_idle_s)
+        self._vision: dict[str, bool] = {}
         self.warnings: list[str] = []
         self._pending: list[TaskRecord] = []
-        self._running: dict[str, asyncio.Task] = {}
-        self._applying: set[str] = set()
+        self._running: dict[AgentKey, asyncio.Task] = {}
+        self._applying: set[AgentKey] = set()
         self._deleting: set[str] = set()
         self._role_locks: dict[str, asyncio.Lock] = {}
         self._wake = asyncio.Event()
@@ -146,14 +169,19 @@ class SwarmManager(SwarmFrames):
             for message in reconcile_message:
                 self._emit_message(message)
 
+        self.work_items.load()
+        self.warnings.extend(self.work_items.warnings)
         roles, warnings = discover_roles(self.root)
         self.warnings.extend(warnings)
-        for role in roles:
-            await self._try_build_agent(role)
-        self.role_ids = set(self.agents)
+        self._set_roles(roles)
+        # Instances are built lazily, on a round's first run: a room with twenty
+        # roles must not pay twenty runtimes (each with its own MCP children)
+        # to sit idle. Role *membership* still comes from configuration above,
+        # so @-mentions route without any instance existing.
         self.router = Router(
             self.store,
             self.role_ids,
+            work_items=self.work_items,
             max_chain_depth=self._max_chain_depth,
             max_chain_cost=self._max_chain_cost,
         )
@@ -177,11 +205,11 @@ class SwarmManager(SwarmFrames):
             if not future.done():
                 future.set_result("deny")
 
-        for role_id, run in list(self._running.items()):
-            runner = self.runners.get(role_id)
+        for key, run in list(self._running.items()):
+            runner = self.runners.get(key)
             if runner is not None:
                 runner.abort_outcome = ("failed", "interrupted")
-            agent = self.agents.get(role_id)
+            agent = self.agents.get(key)
             if agent is not None:
                 agent.agent.abort()
         if self._running:
@@ -204,6 +232,7 @@ class SwarmManager(SwarmFrames):
             await agent.runtime.close()
         self.agents.clear()
         self.runners.clear()
+        self._idle = IdleTracker(self._idle.ttl_s)
         self._applying.clear()
         self._approvals.clear()
         self._started = False
@@ -211,18 +240,53 @@ class SwarmManager(SwarmFrames):
     # -- queries ------------------------------------------------------------
 
     def roles(self) -> list[dict]:
+        """The room's roster, read from configuration.
+
+        Not from built instances: a role that has never run has no runtime, and
+        the Settings page, the @-completion list and the vision check all need
+        to see it anyway.
+        """
         views = []
-        for agent in self.agents.values():
-            view = role_view(agent.pending_apply or agent.role)
-            view["supportsVision"] = agent.agent.model.supports_vision
+        built = {key[0]: agent for key, agent in self.agents.items()}
+        for role_id in sorted(self._roles):
+            role = self._roles[role_id]
+            agent = built.get(role_id)
+            view = role_view(agent.pending_apply or role if agent else role)
+            view["supportsVision"] = self._supports_vision(role)
             views.append(view)
         return views
+
+    def role(self, role_id: str) -> RoleManifest:
+        return self._roles[role_id]
+
+    def instance(
+        self, role_id: str, work_item_id: str | None = None
+    ) -> SwarmAgent | None:
+        """The run unit for (role, work item); ``None`` before its first round.
+
+        Work item defaults to ``None`` because that is the ad-hoc unit — the
+        one every pre-work-item room already has.
+        """
+        return self.agents.get(agent_key(role_id, work_item_id))
+
+    def _supports_vision(self, role: RoleManifest) -> bool:
+        if role.id not in self._vision:
+            self._vision[role.id] = supports_vision(role.model)
+        return self._vision[role.id]
+
+    def _set_roles(self, roles: list[RoleManifest]) -> None:
+        self._roles = {role.id: role for role in roles}
+        self.role_ids = set(self._roles)
+        self._vision = {}
+        if self.router is not None:
+            self.router.role_ids = set(self.role_ids)
 
     def agents_state(self) -> list[dict]:
         return [
             {
                 "agent": agent.role.id,
                 "name": agent.role.name,
+                "workItem": agent.work_item_id,
                 "state": agent.state,
                 "task": agent.current_task,
                 "pendingApply": agent.pending_apply is not None,
@@ -260,13 +324,25 @@ class SwarmManager(SwarmFrames):
         the detail card then says the record is gone rather than erroring.
         """
         task = self.store.tasks.get(task_id)
-        agent = self.agents.get(task.assignee) if task is not None else None
-        if task is None or agent is None:
+        if task is None:
             return {"available": False, "transcript": []}
-        available, rows = read_task_transcript(
-            agent.session.path, task_id, running=task.state == "running"
+        agent = self.agents.get((task.assignee, task.work_item_id))
+        if agent is not None:
+            available, rows = read_task_transcript(
+                agent.session.path, task_id, running=task.state == "running"
+            )
+            return {"available": available, "transcript": rows}
+        # No live instance (lazy build, idle reclamation, or a closed work
+        # item): the session file is the fact source, so read it from disk.
+        rows = read_task_transcript_from_disk(
+            sessions_dir(
+                task.assignee, root=self.root, work_item_id=task.work_item_id
+            ),
+            task_id,
         )
-        return {"available": available, "transcript": rows}
+        if rows is None:
+            return {"available": False, "transcript": []}
+        return {"available": True, "transcript": rows}
 
     # -- room commands ------------------------------------------------------
 
@@ -317,8 +393,8 @@ class SwarmManager(SwarmFrames):
         for path in images:
             read_image_argument(Path(path))
         for role_id in mentions:
-            agent = self.agents.get(role_id)
-            if agent is not None and not agent.agent.model.supports_vision:
+            role = self._roles.get(role_id)
+            if role is not None and not self._supports_vision(role):
                 raise ValueError(f"@{role_id} cannot accept images")
         return list(images)
 
@@ -332,10 +408,11 @@ class SwarmManager(SwarmFrames):
                 replace(task, state="cancelled", reason="aborted", updated_at=_now())
             )
             return True
-        agent = self.agents.get(task.assignee)
+        key = (task.assignee, task.work_item_id)
+        agent = self.agents.get(key)
         if agent is None:
             return False
-        runner = self.runners.get(task.assignee)
+        runner = self.runners.get(key)
         if runner is not None:
             runner.abort_outcome = ("cancelled", "aborted")
         agent.agent.abort()
@@ -361,21 +438,28 @@ class SwarmManager(SwarmFrames):
             created_at=now,
             updated_at=now,
             derived_from=task.id,
+            work_item_id=task.work_item_id,
         )
         self._append_task(new_task)
         self._pending.append(new_task)
         self._wake.set()
         return new_task
 
-    async def reset(self, agent_id: str) -> bool:
-        agent = self.agents.get(agent_id)
+    async def reset(self, agent_id: str, work_item_id: str | None = None) -> bool:
+        """Start a fresh session for one (agent, work item).
+
+        Scoped on purpose: resetting one job must not wipe the context of
+        another job the same agent is running.
+        """
+        key = agent_key(agent_id, work_item_id)
+        agent = self.agents.get(key)
         if agent is None or agent.state == "running":
             return False
-        self._applying.add(agent_id)
+        self._applying.add(key)
         try:
-            await self._rebuild_agent(agent_id, role=agent.role, fresh_session=True)
+            await self._rebuild_agent(key, role=agent.role, fresh_session=True)
         finally:
-            self._applying.discard(agent_id)
+            self._applying.discard(key)
             self._wake.set()
         self._system_note(f"Session reset for @{agent_id}")
         return True
@@ -388,7 +472,9 @@ class SwarmManager(SwarmFrames):
 
     async def update_role(self, role_id: str, manifest: dict) -> RoleManifest:
         role = write_role(role_id, manifest, root=self.root)
+        self._roles[role_id] = role
         self.role_ids.add(role_id)
+        self._vision.pop(role_id, None)
         if self.router is not None:
             self.router.role_ids = set(self.role_ids)
         await self._apply_role(role)
@@ -412,31 +498,39 @@ class SwarmManager(SwarmFrames):
 
     async def delete_role(self, role_id: str) -> None:
         self._deleting.add(role_id)
-        self._applying.add(role_id)
         try:
             self._cancel_pending(role_id)
             async with self._role_lock(role_id):
-                run = self._running.get(role_id)
-                if run is not None:
-                    runner = self.runners.get(role_id)
+                keys = [key for key in self.agents if key[0] == role_id]
+                runs = [
+                    (key, self._running[key])
+                    for key in keys
+                    if key in self._running
+                ]
+                for key, _run in runs:
+                    runner = self.runners.get(key)
                     if runner is not None:
                         runner.abort_outcome = ("cancelled", "role_removed")
-                    agent = self.agents.get(role_id)
+                    agent = self.agents.get(key)
                     if agent is not None:
                         agent.agent.abort()
-                    await asyncio.gather(run, return_exceptions=True)
-                # Close the CURRENT runtime, re-read after the run settled: a
+                if runs:
+                    await asyncio.gather(
+                        *[run for _key, run in runs], return_exceptions=True
+                    )
+                # Close the CURRENT runtimes, re-read after the runs settled: a
                 # rebuild that landed mid-cancel must not be orphaned by popping
                 # a new agent while closing an old runtime.
-                agent = self.agents.get(role_id)
-                if agent is not None:
+                for key in [key for key in self.agents if key[0] == role_id]:
+                    agent = self.agents.pop(key)
+                    self.runners.pop(key, None)
+                    self._idle.forget(key)
                     await agent.runtime.close()
-                self.agents.pop(role_id, None)
-                self.runners.pop(role_id, None)
         finally:
             self._deleting.discard(role_id)
-            self._applying.discard(role_id)
             self._wake.set()
+        self._roles.pop(role_id, None)
+        self._vision.pop(role_id, None)
         self.role_ids.discard(role_id)
         if self.router is not None:
             self.router.role_ids = set(self.role_ids)
@@ -453,66 +547,78 @@ class SwarmManager(SwarmFrames):
             self.warnings.extend(agent.runtime.warnings)
         notes = list(warnings)
         incoming = {role.id: role for role in roles}
-        for role_id in set(self.agents) - set(incoming):
+        for role_id in self._roles.keys() - incoming.keys():
             await self.delete_role(role_id)
             notes.append(f"removed {role_id}")
         for role_id, role in incoming.items():
-            existing = self.agents.get(role_id)
+            existing = self._roles.get(role_id)
             if existing is None:
-                added = await self._try_build_agent(role)
-                if added is not None:
-                    notes.append(f"added {role_id}")
-                else:
-                    notes.append(f"skipped {role_id}")
-            elif role_signature(existing.role) != role_signature(role):
-                await self._apply_role(role)
+                notes.append(f"added {role_id}")
+            elif role_signature(existing) != role_signature(role):
                 notes.append(f"updated {role_id}")
-        self.role_ids = set(self.agents)
-        if self.router is not None:
-            self.router.role_ids = set(self.role_ids)
+                await self._apply_role(role)
+        # Membership comes from configuration, not from what happens to be
+        # built: a role with no instance yet is still a member of the room.
+        self._set_roles(roles)
         return notes
-
-    # -- approvals ----------------------------------------------------------
-
-    def resolve_approval(self, request_id: str, decision: str) -> bool:
-        if decision not in ("allow", "always", "deny"):
-            return False
-        future = self._approvals.get(request_id)
-        if future is None or future.done():
-            return False
-        future.set_result(decision)
-        return True
-
-    def resolve_ask(self, request_id: str, answers: list) -> bool:
-        # v1 answers asks immediately (unattended semantics); nothing pends.
-        return False
 
     # -- runtime assembly ---------------------------------------------------
 
     async def _try_build_agent(
-        self, role: RoleManifest, *, fresh_session: bool = False
+        self,
+        role: RoleManifest,
+        *,
+        work_item_id: str | None = None,
+        fresh_session: bool = False,
     ) -> SwarmAgent | None:
         try:
-            return await self._build_agent(role, fresh_session=fresh_session)
+            return await self._build_agent(
+                role, work_item_id=work_item_id, fresh_session=fresh_session
+            )
         except Exception as exc:  # noqa: BLE001 - one broken role must not kill the swarm
             detail = f"{type(exc).__name__}: {exc}"
             self.warnings.append(f"role {role.id}: {detail}")
-            self.agents.pop(role.id, None)
-            self.runners.pop(role.id, None)
+            key = agent_key(role.id, work_item_id)
+            self.agents.pop(key, None)
+            self.runners.pop(key, None)
             self._system_note(f"Role @{role.id} is unavailable: {detail}")
             return None
 
+    async def _instance(
+        self, role: RoleManifest, work_item_id: str | None
+    ) -> SwarmAgent | None:
+        """The instance for one (role, work item), built on first use.
+
+        Laziness is what keeps "same agent, two work items" affordable: two
+        runtimes are only paid for when both jobs actually have a round to run.
+        """
+        key = agent_key(role.id, work_item_id)
+        agent = self.agents.get(key)
+        if agent is None:
+            agent = await self._try_build_agent(role, work_item_id=work_item_id)
+            if agent is None:
+                return None
+        self._idle.touch(key)
+        return agent
+
     async def _build_agent(
-        self, role: RoleManifest, *, fresh_session: bool = False
+        self,
+        role: RoleManifest,
+        *,
+        work_item_id: str | None = None,
+        fresh_session: bool = False,
     ) -> SwarmAgent:
-        session_path = role_session_path(role.id, root=self.root, fresh=fresh_session)
+        session_path = role_session_path(
+            role.id, root=self.root, work_item_id=work_item_id, fresh=fresh_session
+        )
         config = load_user_config(cwd=role.root)
         broker = build_broker_for(
             user_config=config,
             mode=role.mode,
             cwd=role.root,
         )
-        broker.set_confirm(self._confirm_callback(role.id))
+        key = agent_key(role.id, work_item_id)
+        broker.set_confirm(self._confirm_callback(key))
         options = RuntimeOptions(
             root=role.root,
             model_id=role.model,
@@ -528,7 +634,7 @@ class SwarmManager(SwarmFrames):
             tools_allow=role.tools,
             extra_tools=[
                 build_swarm_post_tool(
-                    lambda text, role_id=role.id: self._post_from(role_id, text)
+                    lambda text, key=key: self._post_from(key, text)
                 )
             ],
             extra_prompt=f"{role.system_prompt}\n\n{PROTOCOL_TEXT}",
@@ -562,7 +668,10 @@ class SwarmManager(SwarmFrames):
                 runtime.agent,
                 role.id,
                 sink=self._event_sink,
-                task_of=lambda role_id: getattr(self.agents.get(role_id), "current_task", None),
+                task_of=lambda _role_id, key=key: getattr(
+                    self.agents.get(key), "current_task", None
+                ),
+                work_item_of=lambda _role_id, work_item_id=work_item_id: work_item_id,
             )
 
         runner = TaskRunner(
@@ -570,8 +679,8 @@ class SwarmManager(SwarmFrames):
             agent=runtime.agent,
             session=runtime.session,
             role=role,
-            post_message=lambda text, kind, role_id=role.id: self._post_from(
-                role_id, text, kind, admit=False
+            post_message=lambda text, kind, key=key: self._post_from(
+                key, text, kind, admit=False
             ),
             admit_message=self._admit,
             run_timeout_s=config.task_timeout_s,
@@ -581,10 +690,11 @@ class SwarmManager(SwarmFrames):
             runtime=runtime,
             session=runtime.session,
             agent=runtime.agent,
+            work_item_id=work_item_id,
         )
-        self.agents[role.id] = agent
-        self.runners[role.id] = runner
-        self._emit_agent(role.id)
+        self.agents[key] = agent
+        self.runners[key] = runner
+        self._emit_agent(key)
         return agent
 
     async def _attach_role_tools(
@@ -613,141 +723,63 @@ class SwarmManager(SwarmFrames):
 
     async def _rebuild_agent(
         self,
-        role_id: str,
+        key: AgentKey,
         *,
         role: RoleManifest,
         fresh_session: bool = False,
     ) -> SwarmAgent | None:
-        old = self.agents.pop(role_id, None)
-        self.runners.pop(role_id, None)
+        old = self.agents.pop(key, None)
+        self.runners.pop(key, None)
         if old is not None:
             await old.runtime.close()
-        built = await self._try_build_agent(role, fresh_session=fresh_session)
-        if built is None:
-            self.role_ids.discard(role_id)
-            if self.router is not None:
-                self.router.role_ids = set(self.role_ids)
-        return built
+        return await self._try_build_agent(
+            role, work_item_id=key[1], fresh_session=fresh_session
+        )
 
     async def _apply_role(self, role: RoleManifest) -> None:
+        """Apply an edited manifest to every instance of that role.
+
+        A role's config is shared by all its work items, so a rebuild that only
+        touched one of them would leave two versions of the same agent running.
+        A busy instance defers to ``pending_apply`` (its run owns the runtime).
+        """
         async with self._role_lock(role.id):
             if role.id in self._deleting:
                 return
-            agent = self.agents.get(role.id)
-            if agent is None:
-                if await self._try_build_agent(role) is not None:
-                    self.role_ids.add(role.id)
-                else:
-                    self.role_ids.discard(role.id)
-                if self.router is not None:
-                    self.router.role_ids = set(self.role_ids)
+            keys = [key for key in self.agents if key[0] == role.id]
+            pending_keys = []
+            for key in keys:
+                agent = self.agents[key]
+                agent.role = role
+                if agent.state == "running":
+                    agent.pending_apply = role
+                    pending_keys.append(key)
+                    self._emit_agent(key)
+            rebuild = [key for key in keys if key not in pending_keys]
+            if not rebuild:
                 return
-            if agent.state == "running":
-                agent.pending_apply = role
-                self._emit_agent(role.id)
-                return
-            self._applying.add(role.id)
+            self._applying.update(rebuild)
             try:
-                await self._rebuild_agent(role.id, role=role)
+                for key in rebuild:
+                    await self._rebuild_agent(key, role=role)
             finally:
-                self._applying.discard(role.id)
+                self._applying.difference_update(rebuild)
                 self._wake.set()
-
-    # -- scheduling ---------------------------------------------------------
-
-    def _next_entry(self) -> tuple[TaskRecord, SwarmAgent] | None:
-        busy = set(self._running) | set(self._applying)
-        for task in self._pending:
-            if task.assignee in busy:
-                continue
-            agent = self.agents.get(task.assignee)
-            if agent is None:
-                continue
-            return task, agent
-        return None
-
-    async def _schedule(self) -> None:
-        while not self._stopping:
-            entry = self._next_entry()
-            if entry is None:
-                self._wake.clear()
-                await self._wake.wait()
-                continue
-            task, agent = entry
-            await self._sem.acquire()
-            current = self.store.tasks.get(task.id)
-            if self._stopping or current is None or current.state != "queued":
-                self._sem.release()
-                self._pending = [item for item in self._pending if item.id != task.id]
-                continue
-            self._pending = [item for item in self._pending if item.id != task.id]
-            run = asyncio.create_task(self._execute(task, agent))
-            self._running[agent.role.id] = run
-
-    async def _execute(self, task: TaskRecord, agent: SwarmAgent) -> None:
-        role_id = agent.role.id
-        message = next(
-            (item for item in self.store.messages if item.id == task.source_message_id),
-            None,
-        )
-        runner = self.runners.get(role_id)
-        try:
-            if message is None or runner is None:
-                self._fail_task(task, "missing_source")
-                return
-            agent.state = "running"
-            agent.current_task = task.id
-            self._emit_agent(role_id)
-            await runner.run(task, message)
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:  # noqa: BLE001 - one run must not kill the manager
-            self._fail_task(task, "error", detail=f"{type(exc).__name__}: {exc}")
-        finally:
-            agent.state = "idle"
-            agent.current_task = None
-            try:
-                # delete_role owns this role now: it closes+pops under the lock,
-                # so don't rebuild a doomed agent — and don't deadlock on the
-                # lock delete holds while awaiting this very run.
-                if role_id not in self._deleting:
-                    async with self._role_lock(role_id):
-                        pending = agent.pending_apply
-                        agent.pending_apply = None
-                        if pending is not None and not self._stopping:
-                            agent.state = "rebuilding"
-                            self._emit_agent(role_id)
-                            await self._rebuild_agent(role_id, role=pending)
-                        elif self.agents.get(role_id) is agent:
-                            self._emit_agent(role_id)
-            finally:
-                self._running.pop(role_id, None)
-                self._sem.release()
-                self._wake.set()
-
-    def _fail_task(
-        self, task: TaskRecord, reason: str, *, detail: str | None = None
-    ) -> None:
-        current = self.store.tasks.get(task.id)
-        if current is not None and not is_terminal(current.state):
-            self._append_task(
-                replace(current, state="failed", reason=reason, updated_at=_now())
-            )
-        text = f"Task {task.id} failed: {reason}"
-        if detail:
-            text = f"{text} ({detail})"
-        self._system_note(text)
 
     # -- posting ------------------------------------------------------------
 
-    def _admit(self, message: RoomMessage) -> list[TaskRecord]:
+    def _admit(
+        self, message: RoomMessage, *, work_item_id: str | None = None
+    ) -> list[TaskRecord]:
         assert self.router is not None
         if message.author_kind == "agent" and "you" in message.mentions:
             self._write({
                 "type": "swarm_notice", "swarm": True, "agent": message.author_id,
                 "text": f"@{message.author_id}: {message.text[:280]}",
             })
-        admission = self.router.admit(message, inbox_sizes=self._inbox_sizes())
+        admission = self.router.admit(
+            message, inbox_sizes=self._inbox_sizes(), work_item_id=work_item_id
+        )
         for role_id, reason in admission.rejected:
             self._system_note(f"Delegation to @{role_id} rejected: {reason}")
         self._pending.extend(admission.accepted)
@@ -757,23 +789,31 @@ class SwarmManager(SwarmFrames):
             self._wake.set()
         return admission.accepted
 
-    def _inbox_sizes(self) -> dict[str, int]:
-        sizes: dict[str, int] = {}
+    def _inbox_sizes(self) -> dict[AgentKey, int]:
+        """Queued rounds per run unit, so one busy job cannot flood another."""
+        sizes: dict[AgentKey, int] = {}
         for task in self._pending:
-            sizes[task.assignee] = sizes.get(task.assignee, 0) + 1
+            key = agent_key(task.assignee, task.work_item_id)
+            sizes[key] = sizes.get(key, 0) + 1
         return sizes
 
     def _post_from(
-        self, role_id: str, text: str, kind: str = "agent", *, admit: bool = True
+        self, key: AgentKey, text: str, kind: str = "agent", *, admit: bool = True
     ) -> RoomMessage:
-        agent = self.agents.get(role_id)
+        """Post on behalf of one run unit.
+
+        The instance already knows its work item, so a delegation inherits it
+        directly: an agent @-mentioning a peer is asking for help with *this*
+        job, not opening a new one.
+        """
+        agent = self.agents.get(key)
         current = agent.current_task if agent is not None else None
         source = self.store.tasks.get(current) if current else None
         message = RoomMessage(
             id=self.store.new_id("m"),
             ts=_now(),
             author_kind=kind,
-            author_id=role_id if kind == "agent" else "system",
+            author_id=key[0] if kind == "agent" else "system",
             text=text,
             mentions=parse_mentions(text) if kind == "agent" else [],
             task_id=current,
@@ -782,7 +822,7 @@ class SwarmManager(SwarmFrames):
         self.store.append_message(message)
         self._emit_message(message)
         if kind == "agent" and admit:
-            self._admit(message)
+            self._admit(message, work_item_id=key[1])
         return message
 
     def _system_note(self, text: str) -> RoomMessage:
@@ -796,56 +836,3 @@ class SwarmManager(SwarmFrames):
         self.store.append_message(message)
         self._emit_message(message)
         return message
-
-    # -- broker callbacks ---------------------------------------------------
-
-    def _confirm_callback(self, role_id: str):
-        async def confirm(tool_name: str, arguments: dict, verdict=None) -> str:
-            agent = self.agents.get(role_id)
-            task_id = agent.current_task if agent is not None else None
-            request_id = f"{self._approval_prefix}a{self._approval_seq}"
-            self._approval_seq += 1
-            event: dict = {
-                "type": "approval_request",
-                "swarm": True,
-                "agent": role_id,
-                "task": task_id,
-                "request_id": request_id,
-                "tool_name": tool_name,
-                "args": json.dumps(arguments, ensure_ascii=False, default=str),
-            }
-            if verdict is not None:
-                event["kind"] = verdict.kind
-                event["risk"] = verdict.risk
-                event["target"] = verdict.target
-                event["reason"] = verdict.reason
-            future: asyncio.Future = asyncio.get_running_loop().create_future()
-            self._approvals[request_id] = future
-            self._write({"type": "event", "event": event})
-            try:
-                return await asyncio.wait_for(future, APPROVAL_TIMEOUT_S)
-            except TimeoutError:
-                runner = self.runners.get(role_id)
-                if runner is not None:
-                    runner.abort_outcome = ("failed", "approval_timeout")
-                if agent is not None:
-                    agent.agent.abort()
-                return "deny"
-            finally:
-                self._approvals.pop(request_id, None)
-
-        return confirm
-
-    def _ask_handler(self, role_id: str):
-        async def ask(questions: list[dict]):
-            summary = ""
-            if questions:
-                summary = str(questions[0].get("question") or "")[:120]
-            self._system_note(
-                f"@{role_id} asked: {summary} — auto-dismissed (unattended)"
-            )
-            return [None for _ in questions]
-
-        return ask
-
-

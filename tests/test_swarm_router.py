@@ -109,7 +109,7 @@ def test_inbox_cap_rejects(tmp_path):
     router, _ = _router(tmp_path)
 
     admission = router.admit(
-        _message(mentions=["research"]), inbox_sizes={"research": 16}
+        _message(mentions=["research"]), inbox_sizes={("research", None): 16}
     )
 
     assert admission.accepted == []

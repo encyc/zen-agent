@@ -124,7 +124,7 @@ async def test_close_fails_pending_approvals():
         # A tool awaiting confirm, modeled as a run blocked on the approval
         # future exactly as _confirm_callback registers it.
         run = asyncio.create_task(confirm("write_file", {"path": "x"}))
-        manager._running["research"] = run
+        manager._running[("research", None)] = run
         await _wait_for(lambda: len(manager._approvals) == 1)
         # close() must fail the pending approval promptly; otherwise the gather
         # of running tasks stalls for APPROVAL_TIMEOUT_S (120 s).
@@ -188,8 +188,12 @@ async def test_unbuildable_role_is_skipped_with_a_room_note():
     manager = _manager(stream_fn_factory=lambda role: text_stream("ok"))
     await manager.start()
     try:
-        assert "research" in manager.agents
-        assert "broken" not in manager.agents
+        # Roles come from configuration, so a broken one is still a member;
+        # it only fails when its first round needs a runtime.
+        assert "broken" in manager.role_ids
+        [broken_task] = await manager.post("@broken hi")
+        await _wait_for(lambda: _states(manager).get(broken_task.id) == "failed")
+        assert manager.instance("broken") is None
         [task] = await manager.post("@research hi")
         await _wait_for(lambda: _states(manager).get(task.id) == "done")
         notes = [
@@ -215,12 +219,14 @@ async def test_reload_clears_a_fixed_role_warning():
     manager = _manager(stream_fn_factory=lambda role: text_stream("ok"))
     await manager.start()
     try:
+        # The broken manifest only fails when a round first needs a runtime.
+        assert await manager._try_build_agent(manager.role("broken")) is None
         assert any(warning.startswith("role broken:") for warning in manager.warnings)
         (broken / "manifest.json").write_text(
             json.dumps({"id": "broken", "name": "Broken"}), encoding="utf-8"
         )
         await manager.reload()
-        assert "broken" in manager.agents
+        assert await manager._try_build_agent(manager.role("broken")) is not None
         assert not any(
             warning.startswith("role broken:") for warning in manager.warnings
         )
@@ -419,20 +425,20 @@ async def test_role_update_applies_after_run():
             "slow",
             {"id": "slow", "name": "Slow v2", "systemPrompt": "You are v2."},
         )
-        pending = manager.agents["slow"].pending_apply
+        pending = manager.instance("slow").pending_apply
         assert pending is not None
         assert pending.name == "Slow v2"
-        assert "You are v1." in manager.agents["slow"].agent.system_prompt
+        assert "You are v1." in manager.instance("slow").agent.system_prompt
 
         assert await manager.cancel(task.id) is True
 
         def applied() -> bool:
-            agent = manager.agents.get("slow")
+            agent = manager.instance("slow")
             return agent is not None and agent.pending_apply is None
 
         await _wait_for(applied)
-        assert manager.agents["slow"].role.name == "Slow v2"
-        assert "You are v2." in manager.agents["slow"].agent.system_prompt
+        assert manager.instance("slow").role.name == "Slow v2"
+        assert "You are v2." in manager.instance("slow").agent.system_prompt
     finally:
         await manager.close()
 
@@ -452,7 +458,7 @@ async def test_delete_role_cancels_tasks():
         for task_id in (running_task.id, queued_task.id):
             assert tasks[task_id]["state"] == "cancelled"
             assert tasks[task_id]["reason"] == "role_removed"
-        assert "victim" not in manager.agents
+        assert manager.instance("victim") is None
         assert not _role_dir("victim").exists()
     finally:
         await manager.close()
@@ -575,16 +581,16 @@ async def test_approval_allow_lets_the_write_run():
         assert request["request_id"].startswith(f"{project_key(manager.root)}:swarm:")
         assert manager.resolve_approval(request["request_id"], "allow") is True
         await _wait_for(lambda: _states(manager)[task.id] == "done")
-        root = manager.agents["writer"].role.root
+        root = manager.instance("writer").role.root
         assert (root / "note.txt").read_text(encoding="utf-8") == "hi"
     finally:
         await manager.close()
 
 
 async def test_approval_timeout_fails_the_task(monkeypatch):
-    import zenagent.app.swarm.manager as manager_module
+    import zenagent.app.swarm.approvals as approvals_module
 
-    monkeypatch.setattr(manager_module, "APPROVAL_TIMEOUT_S", 0.05)
+    monkeypatch.setattr(approvals_module, "APPROVAL_TIMEOUT_S", 0.05)
     role_dir = _write_role("writer")
     (role_dir / "manifest.json").write_text(
         json.dumps(
@@ -628,7 +634,7 @@ async def test_swarm_approval_deny_marks_task():
         # The agent finishes its turn after the refused tool, but the mutation
         # must not have run.
         await _wait_for(lambda: _states(manager)[task.id] == "done")
-        root = manager.agents["writer"].role.root
+        root = manager.instance("writer").role.root
         assert not (root / "note.txt").exists()
     finally:
         await manager.close()
@@ -680,7 +686,7 @@ async def test_swarm_concurrency_cap_queues():
         # Latch: alpha holds the only slot; beta must wait, never run alongside.
         await _wait_for(lambda: _states(manager)[ta.id] == "running")
         assert _states(manager)[tb.id] == "queued"
-        assert manager.agents["beta"].state != "running"
+        assert manager.instance("beta").state != "running"
         # Free alpha's slot; beta then acquires it and runs.
         gates["alpha"].set()
         await _wait_for(lambda: _states(manager)[ta.id] == "done")
@@ -719,7 +725,7 @@ async def test_built_role_sessions_do_not_report_the_unscoped_warning():
     manager = _manager(stream_fn_factory=lambda role: text_stream("ok"))
     await manager.start()
     try:
-        assert "research" in manager.agents
+        assert await manager._try_build_agent(manager.role("research")) is not None
         # Role sessions live under the swarm state dir by design; the runtime
         # must not mistake that for a legacy project transcript.
         assert not any("legacy (unscoped)" in warning for warning in manager.warnings)
@@ -906,12 +912,12 @@ async def test_delete_role_mid_run_leaks_no_runtime(monkeypatch):
             "victim",
             {"id": "victim", "name": "Victim v2", "systemPrompt": "You are v2."},
         )
-        assert manager.agents["victim"].pending_apply is not None
+        assert manager.instance("victim").pending_apply is not None
 
         before = len(frames)
         await manager.delete_role("victim")
 
-        assert "victim" not in manager.agents
+        assert manager.instance("victim") is None
         assert _states(manager)[task.id] == "cancelled"
         # Every runtime that was built got closed — no orphan left open.
         assert set(built) == set(closed)
@@ -946,11 +952,11 @@ async def test_pending_apply_survives_a_run():
         )
         assert await manager.cancel(task.id) is True
         await _wait_for(
-            lambda: manager.agents.get("slow") is not None
-            and manager.agents["slow"].pending_apply is None
+            lambda: manager.instance("slow") is not None
+            and manager.instance("slow").pending_apply is None
         )
-        assert manager.agents["slow"].role.name == "Slow v2"
-        assert "You are v2." in manager.agents["slow"].agent.system_prompt
+        assert manager.instance("slow").role.name == "Slow v2"
+        assert "You are v2." in manager.instance("slow").agent.system_prompt
     finally:
         await manager.close()
 
@@ -961,13 +967,14 @@ async def test_concurrent_rebuilds_serialize(monkeypatch):
     manager = _manager(stream_fn_factory=lambda role: text_stream("ok"))
     await manager.start()
     try:
+        assert await manager._try_build_agent(manager.role("r")) is not None
         await asyncio.gather(
             manager.update_role("r", {"id": "r", "name": "R v2", "systemPrompt": "v2"}),
             manager.update_role("r", {"id": "r", "name": "R v3", "systemPrompt": "v3"}),
         )
         # Serialized close+build orphans nothing: all but the current runtime closed.
-        assert set(built) == set(closed) | {manager.agents["r"].runtime}
-        assert manager.agents["r"].role.name in {"R v2", "R v3"}
+        assert set(built) == set(closed) | {manager.instance("r").runtime}
+        assert manager.instance("r").role.name in {"R v2", "R v3"}
     finally:
         await manager.close()
 
@@ -991,7 +998,8 @@ async def test_two_projects_get_isolated_rooms(tmp_path):
         assert set(ma.role_ids) == {"alpha"}
         assert set(mb.role_ids) == {"beta"}
         assert ma.store.root != mb.store.root
-        assert ma.agents["alpha"].role.root == a.resolve()
+        alpha = await ma._try_build_agent(ma.role("alpha"))
+        assert alpha is not None and alpha.role.root == a.resolve()
 
         [task] = await ma.post("@alpha hi")
         await _wait_for(lambda: _states(ma).get(task.id) == "done")
@@ -1009,7 +1017,7 @@ def test_has_active_tracks_running_tasks():
     manager = _manager()
     assert manager.has_active() is False
 
-    manager._running["alpha"] = object()
+    manager._running[("alpha", None)] = object()
 
     assert manager.has_active() is True
 
@@ -1123,8 +1131,9 @@ async def test_a_non_vision_target_refuses_the_whole_post(tmp_path):
     _write_role("research")
     await manager.start()
     try:
-        agent = manager.agents["research"]
-        agent.agent.model = replace(agent.agent.model, supports_vision=False)
+        # No runtime has been built yet (lazy build), so the vision answer is
+        # config-derived; pin it as the model check would report it.
+        manager._vision["research"] = False
         image = tmp_path / "a.png"
         image.write_bytes(PNG_1PX)
 

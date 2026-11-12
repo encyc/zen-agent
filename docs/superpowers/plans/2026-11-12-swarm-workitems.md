@@ -374,7 +374,7 @@ git commit -m "feat(swarm): route tasks into work items and rebase chains across
   - `agents_state()` 每实例一行，含 `workItem`
   - `instances.py: class InstancePool`：`get(role, work_item_id)`、`put(...)`、`idle_keys(now, ttl_s)`、`discard(key)`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # 追加到 tests/test_swarm_manager.py
@@ -400,12 +400,12 @@ async def test_agents_state_carries_work_item(manager):
 
 （`manager` fixture 参照本文件已有的写法；`role(id)` 是本任务新增的小查询方法。）
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `python -m pytest tests/test_swarm_manager.py -k "work_item or before_any_instance" -v`
 Expected: FAIL
 
-- [ ] **Step 3: 实现换键**
+- [x] **Step 3: 实现换键**
 
 要点（逐个函数改，语义不变）：
 - `_try_build_agent(role, *, work_item_id)` → `_build_agent(..., work_item_id=...)` → `role_session_path(..., work_item_id=...)`、`RuntimeOptions(...)` 不变、`SwarmAgent(..., work_item_id=...)`。
@@ -417,17 +417,17 @@ Expected: FAIL
 - `_emit_agent(key)`：多一个 `"workItem"` 字段。
 - 空闲回收：在 `_schedule` 的等待分支里按 `InstancePool.idle_keys()` 关闭 runtime（`ttl` 读 `[swarm] work_item_runtime_idle_s`，缺省 600）。
 
-- [ ] **Step 4: 跑 swarm 全量**
+- [x] **Step 4: 跑 swarm 全量**
 
 Run: `python -m pytest tests/test_swarm_manager.py tests/test_rpc_swarm.py -v`
 Expected: PASS
 
-- [ ] **Step 5: 检查行数预算**
+- [x] **Step 5: 检查行数预算**
 
 Run: `python scripts/check_architecture.py`
 Expected: PASS，且 `manager.py` ≤ 851（不增长；若增长，先把 `_schedule`/`_execute` 抽到 `instances.py` 或 `scheduler.py`）
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add zenagent/app/swarm/ zenagent/app/swarm/manager.py tests/test_swarm_manager.py
