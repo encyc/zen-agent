@@ -50,7 +50,7 @@ import {
   type ReplyLike,
 } from '../rpc/frames'
 import { reportRefreshFailure } from './refresh'
-import { surfaceRunError } from './runError.ts'
+import { applyStatus } from './statusSnapshot.ts'
 
 export type ConnectionState = 'idle' | 'starting' | 'ready' | 'exited'
 
@@ -326,20 +326,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       .send<StatusResult>({ type: 'status' })
       .then((status) => {
         if (status.type === 'result' && status.ok) {
-          // A request sent before a session switch can answer for the session
-          // that was on screen then; landing it would flip the composer's
-          // busy state to the wrong session's.
-          const active = useSessionStore.getState().currentPath
-          if (
-            active !== null &&
-            typeof status.session === 'string' &&
-            status.session !== active
-          ) {
-            return
-          }
-          useStatusStore.getState().set(status)
+          // A stale answer from before a session switch must not land.
+          if (!applyStatus(status)) return
           set({ busy: Boolean(status.running) })
-          surfaceRunError(status.last_error)
           if (status.usage !== undefined) {
             usageBaselines.set(status.session ?? '', status.usage)
           }
