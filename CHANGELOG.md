@@ -3,6 +3,24 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## v0.13.4 — 2026-11-12
+
+**Provider connection failures no longer end a run silently.** An intermittent
+TLS reset on the gateway reached the agent as `ConnectError('')`; the run
+stopped with no banner and an error string that named nothing.
+
+### Fixed
+
+- **Empty transport errors keep their cause** — when httpx raises an exception
+  with no message, the stored error falls back to the underlying cause (e.g.
+  `EndOfStream()`), so the failure is debuggable.
+- **Connect failures are classified as transient** — `ConnectError`,
+  `EndOfStream`, `ECONNRESET` and SSL handshake failures now match the retry
+  whitelist when `--retries` is enabled.
+- **The desktop surfaces run failures** — `status.last_error` raises the
+  notice banner once per distinct message, and the next run clears it; the
+  TUI and REPL already did.
+
 ## v0.13.3 — 2026-11-12
 
 **The swarm room composer is now the same input as coding and zen**, without
