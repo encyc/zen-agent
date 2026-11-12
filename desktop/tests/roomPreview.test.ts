@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { roleMentions, roomSendPreview } from '../src/state/roomPreview.ts'
+import { imagesNeedMention, roleMentions, roomSendPreview } from '../src/state/roomPreview.ts'
 import type { SwarmAgentState, SwarmRole } from '../src/rpc/types.ts'
 
 const roles = [
@@ -33,4 +33,10 @@ test('no mention means no task and no image send', () => {
   assert.equal(preview.tasks, 0)
   assert.deepEqual(preview.queued, [])
   assert.deepEqual(preview.noVision, [])
+})
+
+test('images need at least one mention before sending', () => {
+  assert.equal(imagesNeedMention(2, []), true)
+  assert.equal(imagesNeedMention(2, ['research']), false)
+  assert.equal(imagesNeedMention(0, []), false)
 })

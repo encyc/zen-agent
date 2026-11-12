@@ -23,6 +23,12 @@ export interface RoomPreview {
   noVision: string[]
 }
 
+/** Attachments reach the room only through a delegation: without a mention
+ * there is no task to carry them. */
+export function imagesNeedMention(imageCount: number, mentions: readonly string[]): boolean {
+  return imageCount > 0 && mentions.length === 0
+}
+
 export function roomSendPreview(
   mentions: readonly string[],
   roles: readonly SwarmRole[],

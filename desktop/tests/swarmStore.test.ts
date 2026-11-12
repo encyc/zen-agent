@@ -173,6 +173,32 @@ test('post forwards the ref and images only when given', async () => {
   })
 })
 
+test('post reports a refusal so the composer keeps its draft', async () => {
+  reset()
+  fakeClient(() => ({
+    type: 'error',
+    id: 'r2',
+    ok: false,
+    code: 'swarm_invalid',
+    message: 'unknown ref m_x',
+  }))
+
+  const sent = await useSwarmStore.getState().post('@research hi', { ref: 'm_x' })
+
+  assert.equal(sent.ok, false)
+  assert.equal(sent.message, 'unknown ref m_x')
+})
+
+test('post reports success for a normal result', async () => {
+  reset()
+  fakeClient(() => ({ type: 'result', id: 'r3', ok: true, tasks: [] }))
+
+  const sent = await useSwarmStore.getState().post('@research hi')
+
+  assert.equal(sent.ok, true)
+  assert.equal(sent.message, null)
+})
+
 test('load seeds the room from the list answer', async () => {
   reset()
   fakeClient(() => ({

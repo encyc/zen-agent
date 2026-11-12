@@ -86,7 +86,12 @@ interface SwarmState {
   loadedProject: string | null
   /** The task whose detail panel is open; null when none. */
   selectedTask: string | null
-  post(text: string, options?: { ref?: string; images?: string[] }): Promise<void>
+  /** Post to the room; `ok` is false when the host refused (the composer
+   * keeps the draft so nothing typed is lost to a refusal). */
+  post(
+    text: string,
+    options?: { ref?: string; images?: string[] },
+  ): Promise<{ ok: boolean; message: string | null }>
   load(project: string | null): Promise<void>
   reload(): Promise<void>
   cancel(id: string): Promise<void>
@@ -186,7 +191,7 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
   },
 
   async post(text, options = {}) {
-    await send({
+    const answer = await send({
       type: 'swarm',
       op: 'post',
       text,
@@ -195,6 +200,9 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
         ? { images: options.images }
         : {}),
     })
+    if (answer.ok === true) return { ok: true, message: null }
+    const message = typeof answer.message === 'string' && answer.message !== '' ? answer.message : null
+    return { ok: false, message }
   },
 
   async load(project) {

@@ -495,3 +495,27 @@ test('a slash message that is not a room command still posts', async ({ page }) 
 
   await expect(page.locator('[data-swarm-message]', { hasText: '/usr/bin 在哪' })).toBeVisible()
 })
+
+test('an attachment renders as a file-name chip in the room', async ({ page }) => {
+  const fixture = swarmFixture()
+  fixture.swarmMessages = [
+    {
+      id: 'm_img',
+      ts: 1,
+      author: { kind: 'user', id: 'you' },
+      text: '@research 看看这张图',
+      mentions: ['research'],
+      taskId: null,
+      chainDepth: 0,
+      images: ['/tmp/screens/shot.png'],
+    },
+  ]
+  await boot(page, initialState(fixture))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  await expect(
+    page
+      .locator('[data-swarm-message]', { hasText: '看看这张图' })
+      .locator('[data-swarm-image]'),
+  ).toHaveText('shot.png')
+})

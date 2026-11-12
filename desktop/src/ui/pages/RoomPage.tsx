@@ -183,6 +183,15 @@ function MessageRow({
         </button>
       )}
       <div className={css.text}>{message.text}</div>
+      {(message.images ?? []).length > 0 && (
+        <div className={css.chips}>
+          {(message.images ?? []).map((path) => (
+            <span key={path} className={css.chip} data-swarm-image>
+              {path.split('/').pop() ?? path}
+            </span>
+          ))}
+        </div>
+      )}
       {message.mentions.length > 0 && (
         <div className={css.chips}>
           {message.mentions.map((mention) => (

@@ -9,7 +9,7 @@ import { useT } from '../../i18n/locale'
 import { detectMention, formatMentionInsert, recognizedTokens } from '../../state/mentions'
 import type { AttachmentImage } from '../../state/stores'
 import { useComposerStore, useSettingsStore } from '../../state/stores'
-import { roleMentions, roomSendPreview } from '../../state/roomPreview'
+import { imagesNeedMention, roleMentions, roomSendPreview } from '../../state/roomPreview'
 import { parseRoomCommand, roomCommandMenu } from '../../state/roomCommands'
 import type { RoomCommand, RoomCommandEntry } from '../../state/roomCommands'
 import type { SwarmRole } from '../../rpc/types'
@@ -146,13 +146,19 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
       await runRoomCommand(command)
       return
     }
-    if (busy) return
+    if (busy || imagesNeedMention(images.length, mentions)) return
     setBusy(true)
     try {
-      await post(text, {
+      const sent = await post(text, {
         ...(quote !== null ? { ref: quote.id } : {}),
         ...(images.length > 0 ? { images: images.map((image) => image.path) } : {}),
       })
+      // A refusal keeps everything typed: the host's reason sits under the
+      // plate until the next keystroke.
+      if (!sent.ok) {
+        setCommandError(sent.message ?? t('swarm.postFailed'))
+        return
+      }
       setDraft(project, '')
       setQuote(project, null)
       clearImages(project)
@@ -225,7 +231,7 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
 
   const primary: ComposerPrimary = {
     kind: 'send',
-    disabled: draft.trim() === '' || busy || (images.length > 0 && preview.tasks === 0),
+    disabled: draft.trim() === '' || busy || imagesNeedMention(images.length, mentions),
     onPress: () => void submit(),
   }
 
