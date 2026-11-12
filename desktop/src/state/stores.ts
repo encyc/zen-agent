@@ -16,6 +16,7 @@ import type {
   SessionSummary,
   SkillRow,
   StatusResult,
+  SwarmRef,
 } from '../rpc/types'
 import type { AskDraft } from './askDraft.ts'
 
@@ -474,14 +475,26 @@ export interface AttachmentImage {
   name: string
 }
 
+export interface RoomComposerState {
+  draft: string
+  quote: SwarmRef | null
+  images: AttachmentImage[]
+}
+
+const EMPTY_ROOM: RoomComposerState = { draft: '', quote: null, images: [] }
+
 interface ComposerState {
   draft: string
-  /** The room keeps its own draft so switching modes never leaks chat text
-   * into a broadcast (or the reverse). */
-  roomDraft: string
+  /** The room's composer state by project: a quote taken in room A must never
+   * ride into room B, where its id would be refused. */
+  room: Record<string, RoomComposerState>
   images: AttachmentImage[]
   setDraft(draft: string): void
-  setRoomDraft(draft: string): void
+  setRoomDraft(project: string, draft: string): void
+  setRoomQuote(project: string, quote: SwarmRef | null): void
+  addRoomImages(project: string, paths: string[]): void
+  removeRoomImage(project: string, id: string): void
+  clearRoomImages(project: string): void
   addImages(paths: string[]): void
   removeImage(id: string): void
   clearImages(): void
@@ -489,23 +502,51 @@ interface ComposerState {
 
 let imageSeq = 0
 
+function makeImages(paths: string[]): AttachmentImage[] {
+  return paths.map((path) => ({
+    id: `img${(imageSeq += 1)}`,
+    path,
+    name: path.split('/').pop() ?? path,
+  }))
+}
+
+const patchRoom = (
+  state: { room: Record<string, RoomComposerState> },
+  project: string,
+  next: Partial<RoomComposerState>,
+) => ({
+  room: {
+    ...state.room,
+    [project]: { ...(state.room[project] ?? EMPTY_ROOM), ...next },
+  },
+})
+
+/** The room's stored composer state, or a frozen empty one. */
+export function roomComposerState(project: string): RoomComposerState {
+  return useComposerStore.getState().room[project] ?? EMPTY_ROOM
+}
+
 export const useComposerStore = create<ComposerState>((set) => ({
   draft: '',
-  roomDraft: '',
+  room: {},
   images: [],
   setDraft: (draft) => set({ draft }),
-  setRoomDraft: (roomDraft) => set({ roomDraft }),
+  setRoomDraft: (project, draft) => set((state) => patchRoom(state, project, { draft })),
+  setRoomQuote: (project, quote) => set((state) => patchRoom(state, project, { quote })),
+  addRoomImages: (project, paths) =>
+    set((state) => {
+      const current = state.room[project] ?? EMPTY_ROOM
+      return patchRoom(state, project, { images: [...current.images, ...makeImages(paths)] })
+    }),
+  removeRoomImage: (project, id) =>
+    set((state) =>
+      patchRoom(state, project, {
+        images: (state.room[project] ?? EMPTY_ROOM).images.filter((image) => image.id !== id),
+      }),
+    ),
+  clearRoomImages: (project) => set((state) => patchRoom(state, project, { images: [] })),
   addImages: (paths) =>
-    set((state) => ({
-      images: [
-        ...state.images,
-        ...paths.map((path) => ({
-          id: `img${(imageSeq += 1)}`,
-          path,
-          name: path.split('/').pop() ?? path,
-        })),
-      ],
-    })),
+    set((state) => ({ images: [...state.images, ...makeImages(paths)] })),
   removeImage: (id) =>
     set((state) => ({ images: state.images.filter((image) => image.id !== id) })),
   clearImages: () => set({ images: [] }),

@@ -22,7 +22,8 @@ import {
 export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
   const t = useT()
   const post = useSwarmStore((state) => state.post)
-  const draft = useComposerStore((state) => state.roomDraft)
+  const project = useSwarmStore((state) => state.loadedProject) ?? ''
+  const draft = useComposerStore((state) => state.room[project]?.draft ?? '')
   const setDraft = useComposerStore((state) => state.setRoomDraft)
   const enterToSend = useSettingsStore((state) => state.enterToSend)
   const [caret, setCaret] = useState(0)
@@ -45,7 +46,7 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
   )
 
   const update = (value: string, position: number) => {
-    setDraft(value)
+    setDraft(project, value)
     setCaret(position)
     setActive(0)
     setDismissed(false)
