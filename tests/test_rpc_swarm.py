@@ -282,6 +282,7 @@ async def test_swarm_frames_carry_the_project_tag(tmp_path, monkeypatch):
             max_concurrent=3,
             max_chain_depth=8,
             max_chain_cost=5.0,
+            runtime_idle_s=600.0,
         ):
             self.write_frame = write_frame
             self.event_sink = event_sink

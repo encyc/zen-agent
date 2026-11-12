@@ -825,12 +825,13 @@ def test_swarm_policy_parsed(tmp_path):
     config = load_user_config(
         write_config(
             tmp_path,
-            "[swarm]\nmax_concurrent = 6\nmax_chain_depth = 12\nmax_chain_cost = 2.5\n",
+            "[swarm]\nmax_concurrent = 6\nmax_chain_depth = 12\nmax_chain_cost = 2.5\nruntime_idle_s = 30\n",
         )
     )
     assert config.swarm_max_concurrent == 6
     assert config.swarm_max_chain_depth == 12
     assert config.swarm_max_chain_cost == 2.5
+    assert config.swarm_runtime_idle_s == 30.0
 
 
 def test_swarm_policy_defaults(tmp_path):
@@ -838,6 +839,7 @@ def test_swarm_policy_defaults(tmp_path):
     assert config.swarm_max_concurrent == 3
     assert config.swarm_max_chain_depth == 8
     assert config.swarm_max_chain_cost == 5.0
+    assert config.swarm_runtime_idle_s == 600.0
 
 
 def test_swarm_policy_must_be_positive(tmp_path):
@@ -845,6 +847,8 @@ def test_swarm_policy_must_be_positive(tmp_path):
         load_user_config(write_config(tmp_path, "[swarm]\nmax_concurrent = 0\n"))
     with pytest.raises(ValueError, match="swarm.max_chain_cost"):
         load_user_config(write_config(tmp_path, "[swarm]\nmax_chain_cost = 0\n"))
+    with pytest.raises(ValueError, match="swarm.runtime_idle_s"):
+        load_user_config(write_config(tmp_path, "[swarm]\nruntime_idle_s = -1\n"))
 
 
 def test_project_layer_may_not_set_swarm(tmp_path, monkeypatch):

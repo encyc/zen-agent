@@ -115,13 +115,17 @@ DEFAULT_ZEN_WORKER_MODE = "inherit"
 ZEN_WORKER_MODES = ("inherit", "ask", "plan", "zen")
 
 #: Keys accepted inside ``[swarm]`` (room policy, global-only).
-_SWARM_KEYS = frozenset({"max_concurrent", "max_chain_depth", "max_chain_cost"})
+_SWARM_KEYS = frozenset(
+    {"max_concurrent", "max_chain_depth", "max_chain_cost", "runtime_idle_s"}
+)
 #: Default number of swarm role runs in flight per room.
 DEFAULT_SWARM_MAX_CONCURRENT = 3
 #: Default cap on how deep a delegation chain may grow.
 DEFAULT_SWARM_MAX_CHAIN_DEPTH = 8
 #: Default spend cap for one delegation chain, in USD.
 DEFAULT_SWARM_MAX_CHAIN_COST = 5.0
+#: Default idle time before a (role, work item) runtime is closed; 0 disables.
+DEFAULT_SWARM_RUNTIME_IDLE_S = 600.0
 
 
 def _absolute_path(raw: str, target: Path) -> str:
@@ -406,6 +410,8 @@ class UserConfig:
     swarm_max_chain_depth: int = DEFAULT_SWARM_MAX_CHAIN_DEPTH
     #: ``[swarm]``: delegation chain spend cap in USD
     swarm_max_chain_cost: float = DEFAULT_SWARM_MAX_CHAIN_COST
+    #: ``[swarm]``: idle seconds before a run unit's runtime is reclaimed
+    swarm_runtime_idle_s: float = DEFAULT_SWARM_RUNTIME_IDLE_S
 
 
 def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfig:
@@ -553,6 +559,13 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
         "swarm",
         target,
     )
+    swarm_runtime_idle_s = _non_negative_float(
+        swarm_table,
+        "runtime_idle_s",
+        DEFAULT_SWARM_RUNTIME_IDLE_S,
+        "swarm",
+        target,
+    )
     return UserConfig(
         default_model=default_model,
         provider_overrides=overrides,
@@ -580,6 +593,7 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
         swarm_max_concurrent=swarm_max_concurrent,
         swarm_max_chain_depth=swarm_max_chain_depth,
         swarm_max_chain_cost=swarm_max_chain_cost,
+        swarm_runtime_idle_s=swarm_runtime_idle_s,
     )
 
 
@@ -632,6 +646,7 @@ def _merge_user_configs(base: UserConfig, override: UserConfig) -> UserConfig:
         swarm_max_concurrent=base.swarm_max_concurrent,
         swarm_max_chain_depth=base.swarm_max_chain_depth,
         swarm_max_chain_cost=base.swarm_max_chain_cost,
+        swarm_runtime_idle_s=base.swarm_runtime_idle_s,
     )
 
 

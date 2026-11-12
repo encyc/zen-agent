@@ -12,11 +12,12 @@ rather than per role.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from dataclasses import replace
 
 from zenagent.app.run_wiring import update_run_scope
-from zenagent.app.swarm.instances import AgentKey
+from zenagent.app.swarm.instances import AgentKey, IdleTracker
 from zenagent.app.swarm.room import TaskRecord, is_terminal
 
 __all__ = ["SwarmSchedule"]
@@ -34,6 +35,7 @@ class SwarmSchedule:
     _applying: set[AgentKey]
     _deleting: set[str]
     _stopping: bool
+    _idle: IdleTracker
 
     # -- scheduling ---------------------------------------------------------
 
@@ -57,8 +59,16 @@ class SwarmSchedule:
         while not self._stopping:
             entry = self._next_entry()
             if entry is None:
+                # Clear before re-checking so a wake that landed while we were
+                # scheduling is not lost; then reap and sleep with a timeout so
+                # an idle instance cannot outlive its TTL.
                 self._wake.clear()
-                await self._wake.wait()
+                if self._next_entry() is not None:
+                    continue
+                await self._reap_idle()
+                if self._next_entry() is not None:
+                    continue
+                await self._wait_for_work()
                 continue
             task, key = entry
             agent = await self._instance(self._roles[task.assignee], key[1])
@@ -77,6 +87,64 @@ class SwarmSchedule:
             self._pending = [item for item in self._pending if item.id != task.id]
             run = asyncio.create_task(self._execute(task, agent))
             self._running[key] = run
+
+    @property
+    def _reap_interval(self) -> float:
+        ttl = self._idle.ttl_s
+        if ttl <= 0:
+            return 60.0
+        return max(0.05, min(60.0, ttl / 2))
+
+    async def _wait_for_work(self) -> None:
+        if self._idle.ttl_s <= 0:
+            await self._wake.wait()
+            return
+        try:
+            await asyncio.wait_for(self._wake.wait(), timeout=self._reap_interval)
+        except TimeoutError:
+            pass
+
+    def _has_pending(self, key: AgentKey) -> bool:
+        return any((task.assignee, task.work_item_id) == key for task in self._pending)
+
+    async def _reap_idle(self) -> None:
+        """Close runtimes that have been idle longer than the TTL.
+
+        A round in flight, a queued round, a pending manifest apply and a role
+        being deleted all pin the instance. The session file is the fact
+        source, so a reaped instance is rebuilt by ``_instance`` on the next
+        round.
+        """
+        if self._idle.ttl_s <= 0 or self._stopping:
+            return
+        for key in list(self._idle.keys()):
+            if key in self._running or key in self._applying:
+                continue
+            if key[0] in self._deleting or self._has_pending(key):
+                continue
+            agent = self.agents.get(key)
+            if agent is None or agent.pending_apply is not None:
+                continue
+            if not self._idle.idle(key):
+                continue
+            await self._reap_one(key)
+
+    async def _reap_one(self, key: AgentKey) -> None:
+        async with self._role_lock(key[0]):
+            if self._stopping or key in self._running or key in self._applying:
+                return
+            agent = self.agents.get(key)
+            if (
+                agent is None
+                or agent.pending_apply is not None
+                or self._has_pending(key)
+            ):
+                return
+            self.agents.pop(key, None)
+            self.runners.pop(key, None)
+            self._idle.forget(key)
+            with contextlib.suppress(Exception):
+                await agent.runtime.close()
 
     async def _execute(self, task: TaskRecord, agent) -> None:
         key: AgentKey = (agent.role.id, agent.work_item_id)

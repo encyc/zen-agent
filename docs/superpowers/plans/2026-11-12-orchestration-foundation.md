@@ -124,11 +124,11 @@ Phase 1 的目标不是立刻统一三种编排器，而是先补一个**所有�
 
 ### Task 5：Swarm 回收
 
-- [ ] `tests/test_swarm_reclaim.py`：TTL 后实例被关闭并移除；有 pending/在飞 run 时不回收；
+- [x] `tests/test_swarm_reclaim.py`：TTL 后实例被关闭并移除；有 pending/在飞 run 时不回收；
   `ttl=0` 不回收。
-- [ ] `SwarmSchedule._reap_idle` + 定时唤醒。
-- [ ] `config.py` 加 `[swarm] runtime_idle_s`，`ops_swarm` 传入。
-- [ ] 跑 swarm 全量目标测试。
+- [x] `SwarmSchedule._reap_idle` + 定时唤醒。
+- [x] `config.py` 加 `[swarm] runtime_idle_s`，`ops_swarm` 传入。
+- [x] 跑 swarm 全量目标测试。
 
 ### Task 6：文档与门禁
 

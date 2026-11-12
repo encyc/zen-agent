@@ -211,6 +211,7 @@ class SwarmOps:
                 max_concurrent=config.swarm_max_concurrent,
                 max_chain_depth=config.swarm_max_chain_depth,
                 max_chain_cost=config.swarm_max_chain_cost,
+                runtime_idle_s=config.swarm_runtime_idle_s,
             )
             self._swarm[key] = manager
         else:
