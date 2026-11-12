@@ -34,7 +34,7 @@ class SwarmApprovals:
     _approval_prefix: str
     _write: Callable[[dict], None]
     _system_note: Callable[[str], object]
-    agents: dict[AgentKey, "SwarmAgent"]
+    agents: dict[AgentKey, SwarmAgent]
     runners: dict[AgentKey, Any]
 
     def resolve_approval(self, request_id: str, decision: str) -> bool:

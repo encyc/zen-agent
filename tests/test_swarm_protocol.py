@@ -1,5 +1,3 @@
-import pytest
-
 from zenagent.app.swarm.protocol import build_work_tools, injected_prompt
 from zenagent.app.swarm.room import RoomMessage, RoomRef, TaskRecord
 

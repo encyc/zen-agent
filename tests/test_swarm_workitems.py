@@ -47,7 +47,7 @@ def test_score_allowed_after_close_and_nullable(tmp_path):
 
 
 def test_load_replays_and_last_wins(tmp_path):
-    room, items = _store(tmp_path)
+    _room, items = _store(tmp_path)
     item = items.open("m1", "t", opened_by_kind="user", opened_by_id="you")
     items.update(item.id, state="review")
     again = WorkItemStore(SwarmStore(tmp_path))
