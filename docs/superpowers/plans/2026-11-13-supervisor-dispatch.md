@@ -78,14 +78,14 @@ supervisor.detach_dispatcher("zen")
 
 | 旧入口 | 新入口 | 说明 |
 |---|---|---|
-| `swarm op=post` | `supervisor op=dispatch mode=swarm` | 参数同 `text` → `prompt`；返回 tasks 形状不变 |
+| `swarm op=post` | `supervisor op=dispatch mode=swarm` | 参数 `text` → `prompt`；`ref` / `images` 原样转发；桌面 composer 已切 |
 | `swarm op=cancel` | 暂不迁移 | 取消排队/运行中的 task 是房间状态机，不是 abort runtime |
 | `zen_fleet`（无直接 dispatch） | `supervisor op=dispatch mode=zen` | 必须指定 worker session/handle |
 | `approval` | `supervisor op=approve` | Phase 5 已收敛 |
 | `session prompt` (coding) | 不迁移 | coding 是单 session，不是编排 |
 
-旧入口本阶段全部保留；桌面端本轮不切，先让契约和测试站住。迁移是后续 UI 的事，
-不是这次的重写。
+旧入口本阶段全部保留；桌面只切了 swarm composer，zen/coding 仍走自己的
+`session prompt`。
 
 ## 非目标
 
@@ -100,8 +100,11 @@ supervisor.detach_dispatcher("zen")
 - `ZenDispatcher`：调用 fleet、返回 status、把 `ValueError` 上抛。
 - `SwarmDispatcher`：role 前缀、task view/taskIds、无 role 时不加前缀。
 - host `dispatch`：coding 拒绝；workspace 默认 mode；`agent` 解析；zen 缺 target 拒绝；
-  无 dispatcher 的 `dispatch_unavailable`；策略 `ValueError` 的 `dispatch_rejected`。
+  无 dispatcher 的 `dispatch_unavailable`；策略 `ValueError` 的 `dispatch_rejected`；
+  swarm `ref`/`images` 透传与校验。
 - 回归：Phase 5 的 status/approve/cancel 测试保持通过。
+- desktop：`swarmStore.post` 的 wire shape、`swarmWiring` 的 sender 接线、composer
+  的 quote/image 行为。
 
 ## 验收
 
@@ -115,6 +118,7 @@ supervisor.detach_dispatcher("zen")
 
 - [x] `app/dispatch.py` + `Supervisor` dispatcher 注册表
 - [x] host `supervisor op=dispatch` 与挂载/注销接线
+- [x] `ref` / `images` 透传，桌面 swarm composer 切换
 - [x] 测试与文档
 
 实现记录：
@@ -122,9 +126,12 @@ supervisor.detach_dispatcher("zen")
 - `Supervisor.attach_dispatcher` / `detach_dispatcher` / `dispatch`；无挂载时
   `DispatchUnavailable`。
 - `ZenOps._attach_fleet` 挂 `ZenDispatcher`，`_detach_fleet` 与 router slot 驱逐时
-  detach；`SwarmOps._swarm_manager` 挂 `SwarmDispatcher`，LRU 驱逐、配置重载、
-  项目关闭时 detach。
+  detach；`SwarmOps._swarm_manager` 挂 `SwarmDispatcher`，LRU 驱逐、项目关闭时
+  detach；配置重载关闭的 room 由 `SwarmDispatcher` 的 `started` 守卫拒绝，
+  下一次请求重建时替换。
 - host `supervisor op=dispatch`：workspace mode 默认值、coding 拒绝、zen
-  `session`/`agent` target 解析、swarm role 校验、`dispatch_unavailable` /
-  `dispatch_rejected` 映射。
-- 旧入口未动；桌面端未切换。
+  `session`/`agent` target 解析、swarm role 校验与 `ref`/`images` 校验、
+  `dispatch_unavailable` / `dispatch_rejected` 映射。
+- 桌面 `swarmStore.post` 从 `swarm op=post` 切到 `supervisor op=dispatch`；返回
+  ok/message 的形状不变，聊天室刷新仍靠既有 `swarm_*` 帧。
+- 旧入口未删；bridge 兼容测试仍走旧 `swarm post`。

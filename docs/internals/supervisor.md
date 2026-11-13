@@ -44,13 +44,14 @@ class Dispatcher(Protocol):
 - `ZenDispatcher(fleet)`：`prompt + session` -> `fleet.dispatch`，返回 worker 状态；
 - `SwarmDispatcher(manager)`：`prompt + role?` -> `manager.post`，返回 tasks/taskIds；
   未知 role 在进入房间前拒绝；
+- swarm 的 `ref` / `images` 原样转发，引用和附件不因切换入口丢失；
 - coding 不挂 dispatcher：单 session 用 `session prompt`，不是编排派活。
 
 `supervisor op=dispatch` 的 `mode` 省略时读 workspace；zen 的 target 可以是 `session`
 或 Supervisor 里 live 的 `agent` key（两者同时给且不一致时拒绝）。fleet 关闭、room
-驱逐/关闭、项目关闭都会 detach，之后 dispatch 返回 `dispatch_unavailable`，不会打到
-已关闭对象。策略拒绝（worker busy、fleet closing、未知 role）映射为
-`dispatch_rejected`。
+驱逐/项目关闭会 detach；配置重载关闭的 room 由 dispatcher 的 `started` 守卫拒绝。
+之后 dispatch 返回 `dispatch_unavailable`，不会打到已关闭对象。策略拒绝（worker busy、
+fleet closing、未知 role）映射为 `dispatch_rejected`。
 
 dispatch 回执只确认“已交给编排器”（worker status / taskIds），不伪造 `runId`：
 真正的 run 记录由 runner 在开始执行时写入 `runs.jsonl`，用 `runs` 查询面追踪。
@@ -84,7 +85,8 @@ dispatch 回执只确认“已交给编排器”（worker status / taskIds），
 - dispatch 只是入口统一：zen 的 router 调度和 swarm 的 room 调度仍是两套策略，
   `SwarmDispatcher` 不伪造工单归属，zen 也不自动挑选 worker。
 - `workspace` 只记录期望模式；启动/停止 fleet/room 仍是各编排器的动作。
-- 旧 `zen_fleet` / `swarm` / `session` / `approval` 请求族保留；桌面本轮未切换。
+- 桌面 swarm composer 已切到 `supervisor op=dispatch`；zen/coding 仍走自己的
+  `session prompt`。旧 `zen_fleet` / `swarm` / `session` / `approval` 请求族保留。
 
 ## 源码对照
 
