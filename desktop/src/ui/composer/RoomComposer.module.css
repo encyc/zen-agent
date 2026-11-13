@@ -170,3 +170,54 @@
   color: var(--dsw-alias-label-primary);
   font-weight: 600;
 }
+
+.anchor {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  min-width: 0;
+}
+
+.menuLayer {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+}
+
+.modelChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  max-width: 180px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--ds-font-12);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    color var(--ds-motion-fast) var(--ds-ease-out);
+}
+
+.modelChip:hover:not(:disabled) {
+  background-color: var(--ds-surface-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.modelChip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.modelName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

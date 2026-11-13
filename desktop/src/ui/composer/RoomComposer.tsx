@@ -29,7 +29,7 @@ import type { FsIndexResult, SwarmRole } from '../../rpc/types'
 import { useSwarmStore } from '../../state/swarmStore'
 import { ApprovalPanel } from '../approval/ApprovalPanel'
 import { AskCard } from '../ask/AskCard'
-import { PlusIcon } from '../icons'
+import { ChevronDownIcon, PlusIcon } from '../icons'
 import { Tooltip } from '../primitives'
 import { pickImagePaths } from './pickImages'
 import {
@@ -41,6 +41,7 @@ import {
   type ComposerOption,
   type ComposerPrimary,
 } from './ComposerPlate'
+import { RoleModelMenu } from './Menus'
 import { useImageDrop } from './useImageDrop'
 import css from './RoomComposer.module.css'
 
@@ -71,6 +72,7 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
   const reload = useSwarmStore((state) => state.reload)
   const cancel = useSwarmStore((state) => state.cancel)
   const resetAgent = useSwarmStore((state) => state.resetAgent)
+  const saveRole = useSwarmStore((state) => state.saveRole)
   const tasks = useSwarmStore((state) => state.tasks)
   const project = useSwarmStore((state) => state.loadedProject) ?? ''
   const agents = useSwarmStore((state) => state.agents)
@@ -90,6 +92,8 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
   const [commandError, setCommandError] = useState<string | null>(null)
   const [helpOpen, setHelpOpen] = useState(false)
   const [resetOpen, setResetOpen] = useState(false)
+  const [modelMenuOpen, setModelMenuOpen] = useState(false)
+  const [modelBusy, setModelBusy] = useState(false)
   const [files, setFiles] = useState<IndexedPath[] | null>(null)
   const filesRequested = useRef(false)
   const area = useRef<HTMLTextAreaElement>(null)
@@ -173,6 +177,19 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
       return role === undefined ? `@${id}` : `@${id} · ${roleMeta(role)}`
     })
     .join('  ')
+  const targetRoles = mentions
+    .map((id) => roles.find((entry) => entry.id === id))
+    .filter((role): role is SwarmRole => role !== undefined)
+  const modelValues = targetRoles.map((role) => role.model ?? null)
+  const modelChoices = new Set(modelValues)
+  const modelValue = modelChoices.size === 1 ? (modelValues[0] ?? null) : null
+  const modelMixed = modelChoices.size > 1
+  const modelLabel =
+    targetRoles.length === 0
+      ? t('swarm.modelPickRole')
+      : targetRoles.length === 1
+        ? (targetRoles[0].model ?? t('swarm.modelDefault'))
+        : t('swarm.modelMultiple', { n: targetRoles.length })
   const liveTasks = tasks.filter(
     (task) => task.state === 'running' || task.state === 'queued',
   )
@@ -187,6 +204,7 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
     setCommandError(null)
     setHelpOpen(false)
     setResetOpen(false)
+    setModelMenuOpen(false)
   }
 
   const focusCaret = (position: number) => {
@@ -253,6 +271,30 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
       await resetAgent(roleId)
     } finally {
       setBusy(false)
+    }
+  }
+
+  const changeModel = async (modelId: string | null) => {
+    setModelMenuOpen(false)
+    if (modelBusy || targetRoles.length === 0) return
+    setModelBusy(true)
+    setCommandError(null)
+    try {
+      for (const role of targetRoles) {
+        const answer = await saveRole('update', role.id, { model: modelId })
+        if (answer.ok !== true) {
+          const message =
+            typeof answer.message === 'string' && answer.message !== ''
+              ? answer.message
+              : t('swarm.modelFailed')
+          setCommandError(message)
+          return
+        }
+      }
+    } catch (cause) {
+      setCommandError(cause instanceof Error ? cause.message : t('swarm.modelFailed'))
+    } finally {
+      setModelBusy(false)
     }
   }
 
@@ -545,33 +587,61 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
           </Tooltip>
         }
         trailing={
-          <span
-            className={css.preview}
-            data-swarm-preview
-            data-swarm-targets={targets || undefined}
-            title={targets || undefined}
-          >
-            {targets !== '' && <span className={css.targets}>{targets}</span>}
-            <span>
-              {preview.tasks > 0
-                ? t('swarm.previewTasks', { n: preview.tasks })
-                : t('swarm.previewNoTasks')}
+          <>
+            <span className={css.anchor}>
+              <button
+                type="button"
+                className={css.modelChip}
+                data-swarm-model
+                data-swarm-model-value={modelValue ?? ''}
+                aria-label={`${t('swarm.model')}: ${modelLabel}`}
+                aria-expanded={modelMenuOpen}
+                disabled={targetRoles.length === 0 || modelBusy}
+                title={targetRoles.length === 0 ? t('swarm.modelPickRole') : t('swarm.modelHint')}
+                onClick={() => setModelMenuOpen((open) => !open)}
+              >
+                <span className={css.modelName}>{modelLabel}</span>
+                <ChevronDownIcon size={10} />
+              </button>
+              {modelMenuOpen && (
+                <div className={css.menuLayer}>
+                  <RoleModelMenu
+                    current={modelValue}
+                    mixed={modelMixed}
+                    onPick={(modelId) => void changeModel(modelId)}
+                    onClose={() => setModelMenuOpen(false)}
+                  />
+                </div>
+              )}
             </span>
-            {preview.images > 0 && <span>{t('swarm.previewImages', { n: preview.images })}</span>}
-            {preview.queued.map((role) => (
-              <span key={`q-${role}`} className={css.warn}>
-                {t('swarm.previewQueued', { role })}
+            <span
+              className={css.preview}
+              data-swarm-preview
+              data-swarm-targets={targets || undefined}
+              title={targets || undefined}
+            >
+              {targets !== '' && <span className={css.targets}>{targets}</span>}
+              <span>
+                {preview.tasks > 0
+                  ? t('swarm.previewTasks', { n: preview.tasks })
+                  : t('swarm.previewNoTasks')}
               </span>
-            ))}
-            {preview.noVision.map((role) => (
-              <span key={`v-${role}`} className={css.warn}>
-                {t('swarm.previewNoVision', { role })}
-              </span>
-            ))}
-            {images.length > 0 && preview.tasks === 0 && (
-              <span className={css.warn}>{t('swarm.imagesNeedMention')}</span>
-            )}
-          </span>
+              {preview.images > 0 && <span>{t('swarm.previewImages', { n: preview.images })}</span>}
+              {preview.queued.map((role) => (
+                <span key={`q-${role}`} className={css.warn}>
+                  {t('swarm.previewQueued', { role })}
+                </span>
+              ))}
+              {preview.noVision.map((role) => (
+                <span key={`v-${role}`} className={css.warn}>
+                  {t('swarm.previewNoVision', { role })}
+                </span>
+              ))}
+              {images.length > 0 && preview.tasks === 0 && (
+                <span className={css.warn}>{t('swarm.imagesNeedMention')}</span>
+              )}
+            </span>
+          </>
         }
       />
       {commandError !== null && (

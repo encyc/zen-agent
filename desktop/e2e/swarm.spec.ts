@@ -3,6 +3,31 @@ import { expect, test } from '@playwright/test'
 import { boot, initialState, type BridgeState } from './harness'
 import { swarmFixture } from '../src/dev/swarmMock'
 
+const roomModels = [
+  {
+    id: 'deepseek-chat',
+    provider: 'deepseek',
+    context_window: 128000,
+    max_tokens: 8192,
+    reasoning: false,
+    supports_vision: false,
+    available: true,
+    reason: null,
+    current: true,
+  },
+  {
+    id: 'deepseek-reasoner',
+    provider: 'deepseek',
+    context_window: 128000,
+    max_tokens: 8192,
+    reasoning: true,
+    supports_vision: false,
+    available: true,
+    reason: null,
+    current: false,
+  },
+]
+
 test('switch to swarm, delegate, and see the chain', async ({ page }) => {
   await boot(page, initialState(swarmFixture()))
   await page.locator('[data-workspace-mode="swarm"]').click()
@@ -604,4 +629,48 @@ test('typing @ also offers workspace files, with a quoted path', async ({ page }
   await expect(file).toBeVisible()
   await file.click()
   await expect(composer).toHaveValue('@"src/room.ts" ')
+})
+
+test('the model chip writes the chosen model to the targeted role', async ({ page }) => {
+  await boot(page, initialState({ ...swarmFixture(), models: roomModels }))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  const composer = page.locator('[data-swarm-input]')
+  await composer.fill('@research ')
+  const chip = page.locator('[data-swarm-model]')
+  await expect(chip).toContainText('deepseek-chat')
+  await chip.click()
+
+  const menu = page.locator('[data-role-model-menu]')
+  await expect(menu).toBeVisible()
+  await menu.locator('[data-model="deepseek-reasoner"]').click()
+
+  await expect(chip).toContainText('deepseek-reasoner')
+  const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
+  const update = calls.find(
+    (call) => call.type === 'swarm' && call.op === 'roles' && call.action === 'update',
+  )
+  assert.equal(update?.roleId, 'research')
+  assert.deepEqual((update?.manifest as Record<string, unknown>).model, 'deepseek-reasoner')
+})
+
+test('the model chip applies to every targeted role', async ({ page }) => {
+  await boot(page, initialState({ ...swarmFixture(), models: roomModels }))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  const composer = page.locator('[data-swarm-input]')
+  await composer.fill('@research @builder ')
+  const chip = page.locator('[data-swarm-model]')
+  await expect(chip).toContainText('2 个角色')
+  await chip.click()
+  await page.locator('[data-role-model-menu] [data-model="deepseek-reasoner"]').click()
+
+  const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
+  const updates = calls.filter(
+    (call) => call.type === 'swarm' && call.op === 'roles' && call.action === 'update',
+  )
+  assert.deepEqual(
+    updates.map((call) => call.roleId).sort(),
+    ['builder', 'research'],
+  )
 })

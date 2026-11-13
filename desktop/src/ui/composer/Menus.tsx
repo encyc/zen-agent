@@ -14,6 +14,7 @@ function MenuShell({
   footer,
   children,
   onClose,
+  data,
 }: {
   query?: string
   onQuery?(value: string): void
@@ -21,6 +22,7 @@ function MenuShell({
   footer?: React.ReactNode
   children: React.ReactNode
   onClose(): void
+  data?: Record<string, string>
 }) {
   const ref = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
@@ -38,7 +40,7 @@ function MenuShell({
     }
   }, [onClose])
   return (
-    <div className={css.menu} ref={ref} role="menu">
+    <div className={css.menu} ref={ref} role="menu" {...(data as unknown as React.HTMLAttributes<HTMLDivElement>)}>
       {onQuery !== undefined && (
         <div className={css.searchRow}>
           <SearchIcon size={12} />
@@ -138,6 +140,98 @@ export function ModelMenu({
           key={`${model.provider}/${model.id}`}
           type="button"
           className={css.item}
+          disabled
+          title={model.reason ?? undefined}
+        >
+          <span className={css.itemTitle}>{model.id}</span>
+          <span className={css.itemSub}>{model.provider}</span>
+        </button>
+      ))}
+    </MenuShell>
+  )
+}
+
+export function RoleModelMenu({
+  current,
+  mixed = false,
+  onPick,
+  onClose,
+}: {
+  /** The model all targets share; null for "role default" or mixed targets. */
+  current: string | null
+  /** Targets disagree, so no row can be checked. */
+  mixed?: boolean
+  onPick(modelId: string | null): void
+  onClose(): void
+}) {
+  const t = useT()
+  const models = useCatalogStore((state) => state.models)
+  const [query, setQuery] = useState('')
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    const list = models.filter(
+      (model) => q === '' || model.id.toLowerCase().includes(q) || model.provider.toLowerCase().includes(q),
+    )
+    const available = list.filter((model) => model.available)
+    const unavailable = list.filter((model) => !model.available)
+    return { available, unavailable: unavailable.slice(0, 12) }
+  }, [models, query])
+  const checked = (id: string | null) => !mixed && current === id
+  const custom = current !== null && !models.some((model) => model.id === current)
+
+  return (
+    <MenuShell
+      query={query}
+      onQuery={setQuery}
+      onClose={onClose}
+      data={{ 'data-role-model-menu': '' }}
+    >
+      <div className={css.groupLabel}>{t('menu.model')}</div>
+      <button
+        type="button"
+        className={css.item}
+        data-model=""
+        onClick={() => onPick(null)}
+      >
+        <span className={css.itemTitle}>{t('swarm.modelDefault')}</span>
+        <span className={css.itemSub}>{t('swarm.modelDefaultHint')}</span>
+        {checked(null) && <CheckIcon size={12} />}
+      </button>
+      {custom && (
+        <button
+          type="button"
+          className={css.item}
+          data-model={current}
+          onClick={() => onPick(current)}
+        >
+          <span className={css.itemTitle}>{current}</span>
+          {checked(current) && <CheckIcon size={12} />}
+        </button>
+      )}
+      {filtered.available.map((model) => (
+        <button
+          key={`${model.provider}/${model.id}`}
+          type="button"
+          className={css.item}
+          data-model={model.id}
+          onClick={() => onPick(model.id)}
+        >
+          <span className={css.itemTitle}>{model.id}</span>
+          <span className={css.itemSub}>
+            {model.provider} · {Math.round(model.context_window / 1000)}k
+            {model.reasoning ? ' · reasoning' : ''}
+            {model.supports_vision ? ' · vision' : ''}
+          </span>
+          {checked(model.id) && <CheckIcon size={12} />}
+        </button>
+      ))}
+      {filtered.unavailable.length > 0 && <div className={css.groupLabel}>no key</div>}
+      {filtered.unavailable.map((model) => (
+        <button
+          key={`${model.provider}/${model.id}`}
+          type="button"
+          className={css.item}
+          data-model={model.id}
           disabled
           title={model.reason ?? undefined}
         >
