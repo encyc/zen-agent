@@ -12,9 +12,10 @@ Zen 模式是 zen-agent 的第二种交互形态：每个项目只保留**一个
 
 ## 打开与关闭
 
-sidebar 顶部的三态切换器（**Coding / Zen / Swarm**）切到 **Zen**；选择持久化
-在 `zen.workspaceMode`（zen 分支旧 key `zen.ui.mode` 会自动迁移），重启后自动
-恢复。
+sidebar 顶部的三态切换器（**Coding / Zen / Swarm**）切到 **Zen**；模式由后端
+`workspace.json` 持久化，桌面通过 `workspace op=get/set` 校准，重启或切项目后以
+后端值为准。`localStorage` 里的 `zen.workspaceMode` 只是离线缓存，不再是唯一真相
+（zen 分支旧 key `zen.ui.mode` 仍会迁移到本地缓存）。
 
 - **进入 Zen**：为项目打开（或复用）一个**专用 Router slot**，Router 会话
   （有历史就复用上次的 Router，延续全局记忆；没有则新建）与 fleet 都长在那
@@ -73,5 +74,12 @@ blocked 受阻 · failed 失败`。
   worker 权限档位（`inherit` 默认跟随主会话，zen 主会话降为 ask；`ask` / `plan` /
   `zen` 为固定档）。同页还放 `task.timeout_s`（单次运行超时）。改动在下次启用
   fleet 时生效。超过并发的派工排队。
-- Zen 是**每项目**的：切换项目后由前端按持久化开关自动重新启用；一个项目
+- Zen 是**每项目**的：切换项目后由前端按持久化模式自动重新启用；一个项目
   的 fleet 不影响另一个。
+- **运行账本**：Router 的每轮 run 记 `kind=zen_router`（agent `router`），worker 的
+  每轮 run 记 `kind=zen_worker`，`parentRunId` 指向派工时 Router 的当前 run，`label`
+  是该 worker 当时的目标。它们和 coding/swarm 的 run 落在同一份项目 `runs.jsonl`，
+  可用宿主级 `runs` 查询；Zen 自己仍以名册为 worker 状态的权威。详见
+  [控制面](orchestration.md)。
+- **Worker 抽屉是只读的**：打开抽屉只读 transcript，不占用会话写者；但同一个 worker
+  会话不能同时被第二个 runtime 恢复（[单写者租约](sessions.md#单写者租约)）。

@@ -65,7 +65,7 @@
 
 - Tauri CSP 从 `null` 改为严格策略；`rpc_start` 的登录 shell 环境采集加 3s 超时
   （坏 shell 配置不再挂死每次连接）。
-- RPC 加 `hello` 协议版本握手（`PROTOCOL_VERSION = 2`），版本不符走诊断卡；
+- RPC 加 `hello` 协议版本握手（当前 `PROTOCOL_VERSION = 3`），版本不符走诊断卡；
   `tests/test_rpc_contract.py` 双向钉住 Python 分派与 TS `REQUEST_KINDS`，单边改动直接红。
 - `ToolCallView` 加 `kind` 判别字段，桌面端不再靠 `'kind' in view` 启发式分派。
 - chatStore 流式增量从全量扫描改为尾部定位（长会话不再 O(n)/delta）。

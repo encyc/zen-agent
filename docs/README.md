@@ -9,7 +9,7 @@
    - 架构图资产：[简化版](architecture-simplify.html)（模块级）· [完整版](architecture-full.html)（逐文件，悬停看细节）— 设计讨论与 CHANGELOG 增删改的工作底图，见架构总览末尾的治理规则
 2. 使用指南（先知道它怎么工作）：
    - [CLI](guide/cli.md) · [斜杠命令](guide/commands.md) · [项目与全局作用域](guide/projects.md) · [配置与目录](guide/config.md) · [工具与权限](guide/tools-permissions.md)
-   - [MCP](guide/mcp.md) · [插件与连接器](guide/plugins.md) · [Zen 模式](guide/zen-mode.md) · [多角色 Swarm](guide/swarm.md) · [Skills 与模板](guide/skills-templates.md) · [扩展](guide/extensions.md)
+   - [MCP](guide/mcp.md) · [插件与连接器](guide/plugins.md) · [Zen 模式](guide/zen-mode.md) · [多角色 Swarm](guide/swarm.md) · [控制面](guide/orchestration.md) · [Skills 与模板](guide/skills-templates.md) · [扩展](guide/extensions.md)
    - [会话/导出/用量](guide/sessions.md) · [RPC 与 Python SDK](guide/rpc-sdk.md)
    - [TUI](guide/tui.md) · [界面语言（i18n）](guide/i18n.md)
 3. 内核导读（重点，按执行顺序）：

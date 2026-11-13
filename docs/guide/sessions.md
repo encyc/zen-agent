@@ -17,6 +17,19 @@
 - 升级前的扁平 `~/.zenagent/sessions/*.jsonl` 保留为 legacy，只在 all 视图出现；`zen sessions adopt PATH` 可归入当前项目。
 - 旧文件不会被重写：压缩、`/undo`、`/fork` 都**写新文件**，保证历史可审计。
 
+## 单写者租约
+
+一个会话同一时间只允许一个写者。`Runtime` 绑定 session 时取得 `SessionLease`：
+
+- 同进程内第二个 runtime 绑定同一 session 会得到 `SessionLeaseBusy`；
+- 跨进程用 `~/.zenagent/locks/` 下的 advisory lock 兜底，第二个 CLI 进程同样被拒绝；
+- `session resume` / 切换会话在 abort 当前 run **之前**检查目标会话；忙时当前会话和它
+  的 run 都保持不动，不会出现“旧 run 已中止、新会话没打开”的半切换；
+- 只读 transcript 不受影响：桌面打开 worker 抽屉、`transcript` RPC 都不抢写者。
+
+前端把冲突显示为 `session_lease_busy`。处理方式不是重试，而是先关闭占用该会话的
+runtime / 进程，再恢复。两个终端不能同时 `--resume` 同一个会话文件，就是这条规则。
+
 ## 旁路记录（side-channel records）
 
 - 消息行之外，会话文件还混有**旁路记录**：顶层 JSON 对象带字符串 `type` 且没有 `role` 键
@@ -126,6 +139,7 @@ zen -p "..." --metrics ~/.zenagent/metrics.jsonl
 ## 源码对照
 
 - 会话：`zenagent/agent/session.py`（`Session`、`latest_session`、`truncate_last_turn`）
+- 写者租约：`zenagent/app/session_lease.py`（`SessionLease`、`SessionLeaseBusy`、`session_is_live`）
 - 旁路记录：`zenagent/app/session_meta.py`（`SessionMetaRecorder`、`make_retry_recorder`）
 - 压缩：`zenagent/app/compact.py`、`zenagent/config.py::ContextGuard`
 - 导出：`zenagent/export.py`、`zenagent/cli/exportcmd.py`

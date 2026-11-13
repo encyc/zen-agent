@@ -17,9 +17,12 @@ zen rpc [--model ID] [--yes] [--mode plan|ask|zen] [--read-only]
 同一套 `resolve_mode`。启动期模型未知或缺少 API key 打一行 stderr 后以 2 退出，
 `--cwd` 不是目录是 1，Ctrl+C 是 130。没有 `--theme`/`--image`：图片走 `prompt.images`。
 
-协议：**一行一个 JSON**；stdout 只写协议，日志走 stderr。服务器在 `Runtime` 上启动，
-所以会话持久化、MCP、skills、扩展、工具集和审批与 TUI/REPL 是同一套实现（headless `-p`
-例外，它自己装配 Agent，见[功能地图](../feature-map.md) §6.5）。
+协议：**一行一个 JSON**；stdout 只写协议，日志走 stderr。`zen rpc` 启动的是宿主
+`RpcHost`：先为一个项目创建 Runtime slot，再按需为其他项目或并行会话开 slot。每个
+slot 仍是完整的 `Runtime`，所以会话持久化、MCP、skills、扩展、工具集和审批与
+TUI/REPL 是同一套实现（headless `-p` 例外，它自己装配 Agent，见
+[功能地图](../feature-map.md) §6.5）。当前 `PROTOCOL_VERSION = 3`，握手与桌面契约由
+`tests/test_rpc_contract.py` 双向钉住。
 
 ### 请求
 
@@ -79,6 +82,33 @@ p.stdin.write(json.dumps({"type":"shutdown","id":"2"}) + "\n"); p.stdin.flush()
 {"type":"model","id":"m1","model_id":"deepseek-flash"}
 ```
 
+### 宿主级请求
+
+宿主本身处理少量跨 slot 的请求；没有 `project` 字段时落在当前激活 slot 的项目上。
+其余请求原样转发给目标 slot，并且 slot 发出的帧都带 `project`。
+
+| type | 字段 | 作用 |
+|---|---|---|
+| `hello` | — | 协议版本握手：返回 `protocol_version`、当前 `active` 项目和全部常驻 `projects` |
+| `project` | `op`, `root?`, `resume?`, `background?` | `open` / `switch` / `close` / `relocate`；打开项目或并行会话 slot |
+| `workspace` | `op`, `mode?`, `routerSession?` | `get` / `set` 项目模式（`coding` / `zen` / `swarm`） |
+| `supervisor` | `op`, `key?`, `mode?`, `prompt?`, `session?`, `agent?`, `role?`, `ref?`, `images?`, `requestId?`, `decision?` | `status` / `dispatch` / `approve` / `cancel`；live agent 注册表与统一派工入口 |
+| `runs` | `op`, `runId?`, `kind?`, `agent?`, `workItem?`, `session?`, `status?`, `since?`, `limit?` | `list` / `get` 项目 run 账本（只读） |
+| `zen_fleet` | `op` | `enable` / `disable` / `state` / `transcript`；Zen 名册与 worker 只读转录 |
+| `swarm` | `op` | 房间与任务：`list` / `post` / `cancel` / `retry` / `reset` / `roles` / `reload` |
+| `terminal` | `op` | 桌面终端会话 |
+
+```json
+{"type":"workspace","id":"w1","op":"get","project":"/repo"}
+{"type":"supervisor","id":"s1","op":"status","project":"/repo"}
+{"type":"supervisor","id":"s2","op":"dispatch","project":"/repo","mode":"swarm","prompt":"@research 对比这两个方案"}
+{"type":"runs","id":"r1","op":"list","project":"/repo","kind":"swarm","limit":20}
+```
+
+`supervisor op=dispatch` 的 `mode` 省略时读 `workspace.json`；coding 不派工（直接
+`prompt`），zen 需要 `session` 或 live `agent`，swarm 可带 `role` / `ref` / `images`。
+回执只确认“已交给编排器”，不会伪造 `runId`；用 `runs` 查真正的 run。
+
 ## Python SDK（同进程嵌入）
 
 ```python
@@ -118,7 +148,7 @@ print(agent.messages[-1].content[0].text)
 
 ## 源码对照
 
-- RPC：`zenagent/cli/rpc/`（`RpcServer`、`serialize_event`、审批往返）
+- RPC：`zenagent/cli/rpc/`（`RpcHost`、`RpcServer`、`serialize_event`、`ops_*`、审批往返）
 - SDK：`zenagent/agent/agent.py::Agent`；app 层：`zenagent/app/{runtime,chat}.py`
 - 示例：`examples/`
 - 对应测试：`tests/test_rpc.py`、`tests/test_rpc_v2.py`、`tests/test_examples.py`

@@ -2,7 +2,8 @@
 
 Swarm 是 zen-agent 的**团队房间模式**：若干预先配置的角色（role）各自拥有独立的
 manifest、session 和工作区，在同一个房间聊天室里接收任务、自主执行，并把结果发回房间。
-任务靠 `@` 派发，没有额外的调度器、没有自动回执——`@` 是唯一的路由原语。
+任务靠 `@` 派发，没有自动回执——`@` 是唯一的路由原语；角色侧由 Swarm 调度器
+按并发上限与队列执行，但不会替你决定该 @ 谁。
 
 **房间按项目隔离**：每个项目有自己的房间、任务日志、角色 session 和角色配置；
 `~/.zenagent/agents/` 是全局角色库，只作模板浏览与复制来源，不直接进任何房间。
@@ -104,6 +105,10 @@ manifest（`root` 指向库工作区、`inheritProject: false`），复制时会
 - **没有自动回执**：结果对谁有价值，就在最终文本里 `@` 谁；派活时写"完成后 @我"
   就能拿到回报。每个 `@` 都是一条新任务并消耗预算，不要随手多 @。
 - **@you**：留在房间历史里，并作为桌面通知提醒你；它不创建任务。
+- **入口**：桌面 composer 走宿主级 `supervisor op=dispatch`（`mode=swarm`），旧的
+  `swarm op=post` 请求族仍然保留；两个入口在同一个 `SwarmManager.post` 上汇合，
+  使用同一套 `@` 解析、闸门和任务表。派工回执只确认“已进房间”，真正的 run 身份
+  由 runner 在开始执行时写进 run 账本。
 
 任务记录在 `~/.zenagent/projects/<项目>/swarm/tasks.jsonl`，状态每次转换追加一行，最后一条胜出：
 
@@ -149,6 +154,10 @@ manifest（`root` 指向库工作区、`inheritProject: false`），复制时会
 - **重启对账**：启动时全量重放房间与任务日志；所有非终态任务（`queued` / `running`）
   一律追加 `failed(interrupted)` 并留一条房间系统消息——绝不静默复活、绝不自动重跑。
   需要继续时用 `retry`（以原任务来源消息复制一条新任务，`derivedFrom` 指向旧 id）。
+- **运行账本**：角色的每轮 run 另记一行到项目 `runs.jsonl`（`kind=swarm`，带
+  `workItemId` / `taskId`），可用宿主级 `runs` 查询跨模式时间线；`tasks.jsonl` 仍是
+  任务状态的权威，账本只记录 run 的归属与终态。角色 runtime 下次装配时，账本里该
+  session 残留的 `running` 行会被收口为 `interrupted`。
 - **角色更新**：运行中保存的 manifest 标记 pending-apply，在当前 run 结束后重建
   Runtime 生效；空闲时立即生效。
 - **构建失败**：某个角色的 Runtime 装配失败（如模型不存在、MCP 启动异常）只跳过
@@ -195,6 +204,8 @@ manifest（`root` 指向库工作区、`inheritProject: false`），复制时会
 | `@` 解析与三道闸门 | `zenagent/app/swarm/router.py` |
 | 房间协议文本、`swarm_post` 工具 | `zenagent/app/swarm/protocol.py` |
 | 任务执行与终态映射 | `zenagent/app/swarm/runner.py` |
+| 派工入口与模式策略 | `zenagent/app/dispatch.py`、`zenagent/app/agent_profile.py` |
+| run 归属与终态写账 | `zenagent/app/run_wiring.py` |
 | 任务执行过程切片（读角色 session） | `zenagent/app/swarm/transcript.py` |
 | 角色运行时装配、调度、审批、生命周期 | `zenagent/app/swarm/manager.py` |
 | 角色文件写回 / 删除 | `zenagent/app/swarm/roster.py` |

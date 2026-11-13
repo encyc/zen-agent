@@ -23,8 +23,11 @@ ZenAgent 区分两类数据（对齐 omp/pi 的做法）：
   config.toml  settings.json   # 全局配置与密钥
   mcp.json  themes/ keybindings.json
   sessions/                    # legacy 扁平会话（只读保留）
+  locks/                       # 会话单写者锁（advisory lock）
   projects/<key>/
     meta.json                  # 项目根、名称、最后使用时间
+    workspace.json             # 后端模式：coding | zen | swarm
+    runs.jsonl                 # run 账本（append-only）
     sessions/*.jsonl           # 会话 transcript
     sessions/.titles.json      # 会话显示名 sidecar
 ```
@@ -50,6 +53,21 @@ zen sessions adopt ~/.zenagent/sessions/20260101-000000.jsonl
 - `load_mcp_config` 先读全局 `~/.zenagent/mcp.json`，再合并项目 `.zenagent/mcp.json`，同名 server 项目覆盖；
 - **密钥永不进项目层**：凭据走环境变量或 `~/.zenagent/settings.json`；项目 MCP 里只写 `secret_ref` / 环境变量名。
 
+## 项目运行态
+
+会话文件只记录**消息**；项目的运行状态另有两份后端事实：
+
+- `workspace.json`——项目期望处于哪个模式（`coding` / `zen` / `swarm`），以及 Zen 的
+  Router 会话。桌面启动、切项目、切模式时通过 `workspace op=get/set` 读写它；`localStorage`
+  只是离线缓存。它记录期望值，不负责启动/停止 fleet 或房间。
+- `runs.jsonl`——每轮 agent run 一行，带稳定 `runId`、模式（`coding` / `zen_router` /
+  `zen_worker` / `swarm` / `subagent`）、agent、session、work item、父 run、状态、
+  终止原因、轮数和花费。宿主级 `runs op=list/get` 可以跨模式查询；文件本身只追加，
+  坏行跳过，写入失败不会中断运行。
+
+两者与[控制面](orchestration.md)一起工作：`workspace` 是模式事实，run 账本是运行
+投影，真正的任务状态仍以 Swarm 的 `tasks.jsonl` 和 Zen 的名册为准。
+
 ## 跨项目恢复的边界
 
 通过 all 视图恢复另一个项目的会话时，本期**不会**自动切换 cwd（omp 会切到那个项目目录）：会提示「跨项目会话，工具仍在当前 cwd」。要完整切项目，重新在该项目目录启动 `zen --resume PATH`。
@@ -59,4 +77,5 @@ zen sessions adopt ~/.zenagent/sessions/20260101-000000.jsonl
 - 项目身份/布局：`zenagent/project.py`（`find_project_root`、`project_key`、`project_sessions_dir`、`all_session_dirs`）
 - 会话作用域：`zenagent/agent/session.py`（`sessions_dir`、`list_sessions`、`latest_session`）
 - 项目配置：`zenagent/config.py`、`zenagent/mcp/config.py`
-- 对应测试：`tests/test_project.py`、`tests/test_session.py`、`tests/test_config.py`、`tests/test_project_scoping.py`
+- 运行态：`zenagent/app/workspace_state.py`、`zenagent/app/runs.py`、`zenagent/app/session_lease.py`
+- 对应测试：`tests/test_project.py`、`tests/test_session.py`、`tests/test_config.py`、`tests/test_project_scoping.py`、`tests/test_workspace_state.py`、`tests/test_run_ledger.py`

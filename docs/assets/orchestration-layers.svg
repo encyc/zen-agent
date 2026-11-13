@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="500" viewBox="0 0 920 500" role="img" aria-labelledby="title desc">
+  <title id="title">zen-agent 控制面分层</title>
+  <desc id="desc">桌面宿主与 CLI 前端在项目级控制面（Supervisor、WorkspaceState、RunLedger、SessionLease、ApprovalRouter）之下，接入 coding slot、zen fleet 与 swarm room，最终落到 Runtime、Agent loop 和 Session。</desc>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8a7f70"/>
+    </marker>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; fill: #2e2a25; }
+      .title { font-size: 18px; font-weight: 650; }
+      .label { font-size: 14px; font-weight: 600; }
+      .small { font-size: 12px; fill: #6b6358; }
+      .tiny { font-size: 11px; fill: #6b6358; }
+      .box { stroke-width: 1; }
+      .arrow { stroke: #8a7f70; stroke-width: 1.4; fill: none; }
+    </style>
+  </defs>
+
+  <rect width="920" height="500" fill="#ffffff"/>
+  <text class="title" x="40" y="34">zen-agent：一层控制面，三种编排</text>
+  <text class="small" x="40" y="54">控制面保存事实；调度仍归各模式自己。</text>
+
+  <!-- Frontends -->
+  <rect class="box" x="40" y="76" width="300" height="58" rx="9" fill="#f2ede4" stroke="#d8cdbb"/>
+  <text class="label" x="58" y="101">Desktop host · RpcHost</text>
+  <text class="tiny" x="58" y="119">slot / zen / swarm / project / terminal</text>
+
+  <rect class="box" x="364" y="76" width="230" height="58" rx="9" fill="#f2ede4" stroke="#d8cdbb"/>
+  <text class="label" x="382" y="101">CLI · TUI · REPL</text>
+  <text class="tiny" x="382" y="119">bootstrap 装配 Runtime</text>
+
+  <text class="small" x="620" y="101">都通过 Runtime 接线：</text>
+  <text class="small" x="620" y="119">run 账本 / 会话租约 / 工具审批</text>
+
+  <path class="arrow" d="M 190 134 L 190 156 L 460 156 L 460 174" marker-end="url(#arrow)"/>
+  <path class="arrow" d="M 479 134 L 479 174" marker-end="url(#arrow)"/>
+
+  <!-- Control plane -->
+  <rect class="box" x="40" y="178" width="840" height="128" rx="12" fill="#f7f5f0" stroke="#ddd6c9"/>
+  <text class="label" x="58" y="202">项目级控制面</text>
+  <text class="tiny" x="150" y="202">Supervisor 注册表只在宿主层；账本与租约对 CLI 同样生效</text>
+
+  <rect class="box" x="58" y="218" width="148" height="66" rx="8" fill="#ffffff" stroke="#c9bfae"/>
+  <text class="label" x="72" y="243">Supervisor</text>
+  <text class="tiny" x="72" y="261">live agent 注册表</text>
+  <text class="tiny" x="72" y="276">status / dispatch / approve</text>
+
+  <rect class="box" x="218" y="218" width="158" height="66" rx="8" fill="#ffffff" stroke="#c9bfae"/>
+  <text class="label" x="232" y="243">WorkspaceState</text>
+  <text class="tiny" x="232" y="261">coding | zen | swarm</text>
+  <text class="tiny" x="232" y="276">workspace.json（期望值）</text>
+
+  <rect class="box" x="388" y="218" width="148" height="66" rx="8" fill="#ffffff" stroke="#c9bfae"/>
+  <text class="label" x="402" y="243">RunLedger</text>
+  <text class="tiny" x="402" y="261">每次 run 一行</text>
+  <text class="tiny" x="402" y="276">runs.jsonl（可查询）</text>
+
+  <rect class="box" x="548" y="218" width="148" height="66" rx="8" fill="#ffffff" stroke="#c9bfae"/>
+  <text class="label" x="562" y="243">SessionLease</text>
+  <text class="tiny" x="562" y="261">一个会话一个写者</text>
+  <text class="tiny" x="562" y="276">内存 + 文件锁</text>
+
+  <rect class="box" x="708" y="218" width="154" height="66" rx="8" fill="#ffffff" stroke="#c9bfae"/>
+  <text class="label" x="722" y="243">ApprovalRouter</text>
+  <text class="tiny" x="722" y="261">审批按 run 归属</text>
+  <text class="tiny" x="722" y="276">agent / work item / task</text>
+
+  <!-- Orchestrators -->
+  <path class="arrow" d="M 190 306 L 190 330" marker-end="url(#arrow)"/>
+  <path class="arrow" d="M 400 306 L 400 330" marker-end="url(#arrow)"/>
+  <path class="arrow" d="M 640 306 L 640 330" marker-end="url(#arrow)"/>
+
+  <rect class="box" x="58" y="334" width="240" height="62" rx="9" fill="#eef2f5" stroke="#c3cfd8"/>
+  <text class="label" x="76" y="359">coding slot</text>
+  <text class="tiny" x="76" y="377">一个会话、一个 run</text>
+
+  <rect class="box" x="318" y="334" width="240" height="62" rx="9" fill="#eef2f5" stroke="#c3cfd8"/>
+  <text class="label" x="336" y="359">zen fleet</text>
+  <text class="tiny" x="336" y="377">Router + worker（各自的调度）</text>
+
+  <rect class="box" x="578" y="334" width="240" height="62" rx="9" fill="#eef2f5" stroke="#c3cfd8"/>
+  <text class="label" x="596" y="359">swarm room</text>
+  <text class="tiny" x="596" y="377">角色 + work item（房间调度）</text>
+
+  <!-- Runtime -->
+  <path class="arrow" d="M 178 396 L 178 424" marker-end="url(#arrow)"/>
+  <path class="arrow" d="M 438 396 L 438 424" marker-end="url(#arrow)"/>
+  <path class="arrow" d="M 698 396 L 698 424" marker-end="url(#arrow)"/>
+
+  <rect class="box" x="58" y="428" width="760" height="48" rx="9" fill="#f7f5f0" stroke="#ddd6c9"/>
+  <text class="label" x="76" y="449">Runtime → Agent loop → Session</text>
+  <text class="tiny" x="76" y="466">消息写 session；run 边界写账本；写者身份由租约保护</text>
+
+  <text class="tiny" x="818" y="449">两种编排，</text>
+  <text class="tiny" x="818" y="464">没有合并成</text>
+  <text class="tiny" x="818" y="479">一个调度器。</text>
+</svg>
