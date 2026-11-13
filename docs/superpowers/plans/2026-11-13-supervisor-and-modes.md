@@ -123,7 +123,8 @@
 
 - `workspace.set` 记录期望模式，不负责启动/停止 fleet/room；启停仍由 zen/swarm 执行。
 - `supervisor.cancel` 对 live handle 的 agent 发 abort，终态由各 runner 映射。
-- `supervisor.dispatch` 未实现；这是刻意保留的模式特有调度。
+- `supervisor.dispatch` 已由 Phase 6 的适配器补齐，见
+  `2026-11-13-supervisor-dispatch.md`；它只统一入口，模式调度仍各自保留。
 
 ## 验收记录（2026-11-13 中午）
 

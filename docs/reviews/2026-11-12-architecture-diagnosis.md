@@ -120,6 +120,7 @@ Phase 2：Session writer lease（一个 session 同时一个 writer；router 槽
 Phase 3：Supervisor + AgentProfile，把 role 字段移出 `Runtime`。
 Phase 4：`workspaceMode` 收到后端，模式切换变成幂等事务。
 Phase 5：统一 zen/swarm 的 scheduler / approval / roster，RPC 收敛到 `supervisor` 请求族。
+Phase 6：`supervisor dispatch` 适配器——一个派活入口，zen/swarm 各自保留调度策略。
 
 目标结构：
 
