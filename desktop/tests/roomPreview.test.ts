@@ -20,6 +20,10 @@ test('mentions resolve only to known roles', () => {
   assert.deepEqual(roleMentions('@research@writer', ['research', 'writer']), ['research'])
 })
 
+test('quoted file paths do not delegate', () => {
+  assert.deepEqual(roleMentions('@"src/room.ts" @research', ['research']), ['research'])
+})
+
 test('the preview counts tasks and names busy and non-vision targets', () => {
   const preview = roomSendPreview(['research', 'writer'], roles, agents, 1)
   assert.equal(preview.tasks, 2)

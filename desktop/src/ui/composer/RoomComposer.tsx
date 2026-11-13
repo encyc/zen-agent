@@ -1,18 +1,31 @@
 /** The swarm room composer: the same plate as chat, bound to the room instead
- * of a coding session. `@` lists roles (not files), Enter follows the same
- * setting, and submitting dispatches through the supervisor — there is no
- * running turn to steer, so the primary button is send only. A quote supplies context
- * for the next post; attachments fan out to every role that post delegates to. */
+ * of a coding session. `@` lists roles and workspace files, Enter follows the
+ * same setting, and submitting dispatches through the supervisor — there is no
+ * running turn to steer, so an empty plate turns into a stop control while
+ * tasks are live. A quote supplies context for the next post; attachments fan
+ * out to every role that post delegates to. */
 
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useT } from '../../i18n/locale'
-import { detectMention, formatMentionInsert, recognizedTokens } from '../../state/mentions'
+import {
+  detectMention,
+  formatMentionInsert,
+  recognizedTokens,
+} from '../../state/mentions'
+import type { IndexedPath } from '../../state/mentions'
+import { fuzzyMatchPath, selectBestMatches } from '../../state/fuzzy'
+import type { FuzzyMatch } from '../../state/fuzzy'
 import type { AttachmentImage } from '../../state/stores'
+import { useAppStore } from '../../state/appStore'
 import { useComposerStore, useSettingsStore } from '../../state/stores'
 import { imagesNeedMention, roleMentions, roomSendPreview } from '../../state/roomPreview'
-import { parseRoomCommand, roomCommandMenu } from '../../state/roomCommands'
+import {
+  parseRoomCommand,
+  roomCommandMenu,
+  ROOM_COMMANDS,
+} from '../../state/roomCommands'
 import type { RoomCommand, RoomCommandEntry } from '../../state/roomCommands'
-import type { SwarmRole } from '../../rpc/types'
+import type { FsIndexResult, SwarmRole } from '../../rpc/types'
 import { useSwarmStore } from '../../state/swarmStore'
 import { ApprovalPanel } from '../approval/ApprovalPanel'
 import { AskCard } from '../ask/AskCard'
@@ -25,12 +38,32 @@ import {
   ComposerPlate,
   ComposerRoot,
   isSubmitKey,
+  type ComposerOption,
   type ComposerPrimary,
 } from './ComposerPlate'
 import { useImageDrop } from './useImageDrop'
 import css from './RoomComposer.module.css'
 
 const NO_IMAGES: AttachmentImage[] = []
+const FS_INDEX_TIMEOUT_MS = 8000
+const MAX_FILE_MATCHES = 24
+
+type MentionChoice =
+  | { kind: 'role'; role: SwarmRole }
+  | { kind: 'file'; entry: IndexedPath }
+
+function roleMeta(role: SwarmRole): string {
+  return [role.model ?? '—', role.mode, role.thinking ?? '']
+    .filter((part) => part !== '')
+    .join(' · ')
+}
+
+/** A file mention is always quoted: the room's `@role` parser only sees bare
+ * tokens, so `@"src/room.ts"` cannot be mistaken for a role named `src`. */
+function quotedFile(path: string, kind: 'dir' | 'file'): string {
+  const target = kind === 'dir' && !path.endsWith('/') ? `${path}/` : path
+  return `@"${target}" `
+}
 
 export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
   const t = useT()
@@ -55,23 +88,80 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
   const [dismissed, setDismissed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [commandError, setCommandError] = useState<string | null>(null)
+  const [helpOpen, setHelpOpen] = useState(false)
+  const [resetOpen, setResetOpen] = useState(false)
+  const [files, setFiles] = useState<IndexedPath[] | null>(null)
+  const filesRequested = useRef(false)
   const area = useRef<HTMLTextAreaElement>(null)
 
   const trigger = detectMention(draft, caret)
-  const options =
+  const mentionQuery = trigger?.query ?? null
+
+  // Files are fetched the first time `@` opens; roles stay usable while the
+  // index is in flight (or when the backend has no slot to answer for).
+  const requestFiles = useCallback(() => {
+    if (filesRequested.current) return
+    filesRequested.current = true
+    void useAppStore
+      .getState()
+      .client()
+      .send<FsIndexResult>({ type: 'fs_index' }, FS_INDEX_TIMEOUT_MS)
+      .then((result: FsIndexResult) => {
+        if (result.ok !== true) {
+          filesRequested.current = false
+          return
+        }
+        setFiles(result.entries ?? [])
+      })
+      .catch(() => {
+        filesRequested.current = false
+      })
+  }, [])
+
+  useEffect(() => {
+    if (mentionQuery !== null) requestFiles()
+  }, [mentionQuery, requestFiles])
+
+  const roleChoices: MentionChoice[] =
     trigger === null
       ? []
-      : roles.filter((role) =>
-          `${role.id} ${role.name}`.toLowerCase().includes(trigger.query.toLowerCase()),
-        )
-  const open = !dismissed && trigger !== null && options.length > 0
-  const commandEntries = !open && /^\/\S*$/.test(draft) ? roomCommandMenu(draft) : []
+      : roles
+          .filter((role) =>
+            `${role.id} ${role.name}`.toLowerCase().includes(trigger.query.toLowerCase()),
+          )
+          .map((role) => ({ kind: 'role', role }))
+
+  // An empty `@` stays a role picker; files join once the query has a shape.
+  const fileMatches: Array<{ entry: IndexedPath; match: FuzzyMatch }> = []
+  if (
+    trigger !== null &&
+    files !== null &&
+    trigger.query.trim() !== '' &&
+    trigger.query.length > 0
+  ) {
+    for (const entry of files) {
+      const match = fuzzyMatchPath(trigger.query, entry.path, entry.kind)
+      if (match !== null) fileMatches.push({ entry, match })
+    }
+  }
+  const fileChoices: MentionChoice[] = selectBestMatches(
+    fileMatches,
+    MAX_FILE_MATCHES,
+    ({ entry, match }) => ({ score: match.score, text: entry.path }),
+  ).map(({ entry }) => ({ kind: 'file', entry }))
+
+  const choices = [...roleChoices, ...fileChoices]
+  const open = !dismissed && trigger !== null && choices.length > 0
+  const commandEntries =
+    !open && !resetOpen && /^\/\S*$/.test(draft) ? roomCommandMenu(draft) : []
   const commandOpen = !dismissed && commandEntries.length > 0
-  const rowCount = open ? options.length : commandEntries.length
-  const activeIndex = rowCount === 0 ? 0 : Math.min(active, rowCount - 1)
+  const activeIndex = choices.length === 0 ? 0 : Math.min(active, choices.length - 1)
+  const commandIndex =
+    commandEntries.length === 0 ? 0 : Math.min(active, commandEntries.length - 1)
+  const resetIndex = roles.length === 0 ? 0 : Math.min(active, roles.length - 1)
   const boxes = useMemo(
-    () => recognizedTokens(draft, [], [], [], roles),
-    [draft, roles],
+    () => recognizedTokens(draft, [], [], files ?? [], roles),
+    [draft, files, roles],
   )
   const roleIds = roles.map((role) => role.id)
 
@@ -80,9 +170,12 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
   const targets = mentions
     .map((id) => {
       const role = roles.find((entry) => entry.id === id)
-      return role === undefined ? `@${id}` : `@${id} · ${role.model ?? '—'}`
+      return role === undefined ? `@${id}` : `@${id} · ${roleMeta(role)}`
     })
     .join('  ')
+  const liveTasks = tasks.filter(
+    (task) => task.state === 'running' || task.state === 'queued',
+  )
 
   useImageDrop((paths) => addImages(project, paths))
 
@@ -92,14 +185,11 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
     setActive(0)
     setDismissed(false)
     setCommandError(null)
+    setHelpOpen(false)
+    setResetOpen(false)
   }
 
-  const pick = (role: SwarmRole) => {
-    if (trigger === null) return
-    const insert = formatMentionInsert(role.id, 'file')
-    const next = `${draft.slice(0, trigger.tokenStart)}${insert}${draft.slice(trigger.tokenEnd)}`
-    const position = trigger.tokenStart + insert.length
-    update(next, position)
+  const focusCaret = (position: number) => {
     requestAnimationFrame(() => {
       const node = area.current
       if (node === null) return
@@ -108,38 +198,79 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
     })
   }
 
+  const pick = (choice: MentionChoice) => {
+    if (trigger === null) return
+    const insert =
+      choice.kind === 'role'
+        ? formatMentionInsert(choice.role.id, 'file')
+        : quotedFile(choice.entry.path, choice.entry.kind)
+    const next = `${draft.slice(0, trigger.tokenStart)}${insert}${draft.slice(trigger.tokenEnd)}`
+    const position = trigger.tokenStart + insert.length
+    update(next, position)
+    focusCaret(position)
+  }
+
   const pickCommand = (entry: RoomCommandEntry) => {
+    if (entry.text === '/reset') {
+      openReset()
+      return
+    }
     update(entry.insert, entry.insert.length)
-    requestAnimationFrame(() => {
-      const node = area.current
-      if (node === null) return
-      node.focus()
-      node.setSelectionRange(entry.insert.length, entry.insert.length)
-    })
+    focusCaret(entry.insert.length)
+  }
+
+  const openHelp = () => {
+    update('', 0)
+    setHelpOpen(true)
+    requestAnimationFrame(() => area.current?.focus())
+  }
+
+  const openReset = () => {
+    if (roles.length === 0) {
+      setCommandError(t('swarm.noAgents'))
+      return
+    }
+    update('', 0)
+    setResetOpen(true)
+    setActive(0)
+    requestAnimationFrame(() => area.current?.focus())
+  }
+
+  const stopAll = async () => {
+    if (busy || liveTasks.length === 0) return
+    setBusy(true)
+    try {
+      await Promise.allSettled(liveTasks.map((task) => cancel(task.id)))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const resetRole = async (roleId: string) => {
+    setResetOpen(false)
+    setBusy(true)
+    try {
+      await resetAgent(roleId)
+    } finally {
+      setBusy(false)
+    }
   }
 
   const runRoomCommand = async (command: RoomCommand) => {
     if (command.kind === 'reload') return reload()
-    if (command.kind === 'stop') {
-      await Promise.all(
-        tasks
-          .filter((task) => task.state === 'running' || task.state === 'queued')
-          .map((task) => cancel(task.id)),
-      )
-      return
-    }
-    if (command.kind === 'help') {
-      update('/', 1)
-      requestAnimationFrame(() => area.current?.focus())
-      return
-    }
-    if (command.kind === 'reset') return resetAgent(command.roleId)
+    if (command.kind === 'stop') return stopAll()
+    if (command.kind === 'help') return openHelp()
+    if (command.kind === 'reset') return resetRole(command.roleId)
     setCommandError(t('swarm.commandUnknownReset', { role: command.roleId }))
   }
 
   const submit = async () => {
     const text = draft.trim()
     if (text === '') return
+    if (text === '/reset') {
+      openReset()
+      return
+    }
     const command = parseRoomCommand(text, roleIds)
     if (command !== null) {
       update('', 0)
@@ -169,20 +300,48 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
   }
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (open) {
+    if (helpOpen && event.key === 'Escape') {
+      event.preventDefault()
+      setHelpOpen(false)
+      return
+    }
+    if (resetOpen) {
       if (event.key === 'ArrowDown') {
         event.preventDefault()
-        setActive((index) => (index + 1) % options.length)
+        setActive((index) => (index + 1) % roles.length)
         return
       }
       if (event.key === 'ArrowUp') {
         event.preventDefault()
-        setActive((index) => (index - 1 + options.length) % options.length)
+        setActive((index) => (index - 1 + roles.length) % roles.length)
         return
       }
       if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
         event.preventDefault()
-        pick(options[Math.min(active, options.length - 1)])
+        const role = roles[resetIndex]
+        if (role !== undefined) void resetRole(role.id)
+        return
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setResetOpen(false)
+        return
+      }
+    }
+    if (open) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        setActive((index) => (index + 1) % choices.length)
+        return
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        setActive((index) => (index - 1 + choices.length) % choices.length)
+        return
+      }
+      if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
+        event.preventDefault()
+        pick(choices[activeIndex])
         return
       }
       if (event.key === 'Escape') {
@@ -209,7 +368,7 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
           void submit()
           return
         }
-        pickCommand(commandEntries[activeIndex])
+        pickCommand(commandEntries[commandIndex])
         return
       }
       if (event.key === 'Escape') {
@@ -223,22 +382,85 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
       setQuote(project, null)
       return
     }
+    if (event.key === 'Escape' && draft.trim() === '' && liveTasks.length > 0) {
+      event.preventDefault()
+      void stopAll()
+      return
+    }
     if (isSubmitKey(event, enterToSend)) {
       event.preventDefault()
       void submit()
     }
   }
 
-  const primary: ComposerPrimary = {
-    kind: 'send',
-    disabled: draft.trim() === '' || busy || imagesNeedMention(images.length, mentions),
-    onPress: () => void submit(),
-  }
+  const stopReady = draft.trim() === '' && liveTasks.length > 0 && !busy
+  const primary: ComposerPrimary = stopReady
+    ? { kind: 'stop', disabled: false, onPress: () => void stopAll() }
+    : {
+        kind: 'send',
+        disabled: draft.trim() === '' || busy || imagesNeedMention(images.length, mentions),
+        onPress: () => void submit(),
+      }
+
+  const menuOptions: ComposerOption[] = choices.map((choice): ComposerOption =>
+    choice.kind === 'role'
+      ? {
+          key: `role:${choice.role.id}`,
+          name: `@${choice.role.id}`,
+          desc: `${choice.role.name} · ${roleMeta(choice.role)}`,
+          kind: 'role',
+          data: { 'data-swarm-mention': choice.role.id },
+        }
+      : {
+          key: `file:${choice.entry.path}`,
+          name: choice.entry.path,
+          desc: t(choice.entry.kind === 'dir' ? 'composer.dirTag' : 'composer.fileTag'),
+          kind: choice.entry.kind,
+          data: { 'data-swarm-file-mention': choice.entry.path },
+        },
+  )
+  const resetOptions: ComposerOption[] = roles.map((role) => ({
+    key: `reset:${role.id}`,
+    name: role.name,
+    desc: `@${role.id} · ${roleMeta(role)}`,
+    kind: 'role',
+    data: { 'data-swarm-reset-role': role.id },
+  }))
 
   return (
     <ComposerRoot>
       <ApprovalPanel />
       <AskCard />
+      {helpOpen && (
+        <section className={css.help} data-swarm-help aria-label={t('swarm.helpTitle')}>
+          <div className={css.helpHead}>
+            <span>{t('swarm.helpTitle')}</span>
+            <button
+              type="button"
+              className={css.helpClose}
+              aria-label={t('swarm.helpClose')}
+              onClick={() => setHelpOpen(false)}
+            >
+              ×
+            </button>
+          </div>
+          <ul className={css.helpList}>
+            {ROOM_COMMANDS.map((entry) => (
+              <li key={entry.text}>
+                <code className={css.helpCode}>{entry.text}</code>
+                <span>{t(entry.labelKey)}</span>
+              </li>
+            ))}
+          </ul>
+          <p className={css.helpHint}>{t('swarm.helpHint')}</p>
+        </section>
+      )}
+      {resetOpen && (
+        <div className={css.resetHint} data-swarm-reset-hint>
+          <span className={css.resetTitle}>{t('swarm.resetTitle')}</span>
+          <span>{t('swarm.resetHint')}</span>
+        </div>
+      )}
       {quote !== null && (
         <div className={css.quote} data-swarm-quote-strip aria-label={t('swarm.quoteStrip')}>
           <span className={css.quoteAuthor}>{quote.author.id}</span>
@@ -272,15 +494,23 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
         menu={
           open ? (
             <ComposerMenu
-              options={options.map((role) => ({
-                key: role.id,
-                name: `@${role.id}`,
-                desc: role.name,
-                data: { 'data-swarm-mention': role.id },
-              }))}
-              activeIndex={Math.min(active, options.length - 1)}
+              options={menuOptions}
+              activeIndex={activeIndex}
               onHover={setActive}
-              onPick={(index) => pick(options[index])}
+              onPick={(index) => {
+                const choice = choices[index]
+                if (choice !== undefined) pick(choice)
+              }}
+            />
+          ) : resetOpen ? (
+            <ComposerMenu
+              options={resetOptions}
+              activeIndex={resetIndex}
+              onHover={setActive}
+              onPick={(index) => {
+                const role = roles[index]
+                if (role !== undefined) void resetRole(role.id)
+              }}
             />
           ) : commandOpen ? (
             <ComposerMenu
@@ -290,7 +520,7 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
                 desc: t(entry.labelKey),
                 data: { 'data-swarm-command': entry.text },
               }))}
-              activeIndex={activeIndex}
+              activeIndex={commandIndex}
               onHover={setActive}
               onPick={(index) => pickCommand(commandEntries[index])}
             />
@@ -315,7 +545,12 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
           </Tooltip>
         }
         trailing={
-          <span className={css.preview} data-swarm-preview>
+          <span
+            className={css.preview}
+            data-swarm-preview
+            data-swarm-targets={targets || undefined}
+            title={targets || undefined}
+          >
             {targets !== '' && <span className={css.targets}>{targets}</span>}
             <span>
               {preview.tasks > 0

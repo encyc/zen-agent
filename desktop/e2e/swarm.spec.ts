@@ -523,3 +523,85 @@ test('an attachment renders as a file-name chip in the room', async ({ page }) =
       .locator('[data-swarm-image]'),
   ).toHaveText('shot.png')
 })
+
+test('the empty plate turns into a stop control while a task runs', async ({ page }) => {
+  await boot(page, initialState(swarmFixture({ runningTask: true })))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  const stop = page.getByRole('button', { name: '停止' })
+  await expect(stop).toBeVisible()
+  await stop.click()
+  await expect(page.locator('[data-swarm-task]')).toHaveAttribute('data-state', 'cancelled')
+  const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
+  assert.ok(calls.some((call) => call.type === 'swarm' && call.op === 'cancel'))
+})
+
+test('Escape on an empty plate stops the running tasks', async ({ page }) => {
+  await boot(page, initialState(swarmFixture({ runningTask: true })))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  await page.locator('[data-swarm-input]').click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('[data-swarm-task]')).toHaveAttribute('data-state', 'cancelled')
+})
+
+test('/help lists the room commands instead of reopening the slash menu', async ({ page }) => {
+  await boot(page, initialState(swarmFixture()))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  const composer = page.locator('[data-swarm-input]')
+  await composer.fill('/help')
+  await composer.press('Enter')
+
+  const help = page.locator('[data-swarm-help]')
+  await expect(help).toBeVisible()
+  await expect(help).toContainText('/reset')
+  await expect(help).toContainText('/stop')
+  await page.getByRole('button', { name: '关闭' }).click()
+  await expect(help).toHaveCount(0)
+})
+
+test('/reset opens a role picker and resets only the chosen role', async ({ page }) => {
+  await boot(page, initialState(swarmFixture()))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  const composer = page.locator('[data-swarm-input]')
+  await composer.fill('/reset')
+  await composer.press('Enter')
+
+  const research = page.locator('[data-swarm-reset-role="research"]')
+  await expect(research).toBeVisible()
+  await research.click()
+
+  const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
+  const reset = calls.find((call) => call.type === 'swarm' && call.op === 'reset')
+  assert.equal(reset?.agentId, 'research')
+})
+
+test('a role target shows its model, mode and thinking', async ({ page }) => {
+  await boot(page, initialState(swarmFixture()))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  await page.locator('[data-swarm-input]').fill('@research ')
+
+  const targets = await page.locator('[data-swarm-preview]').getAttribute('data-swarm-targets')
+  assert.match(targets ?? '', /deepseek-chat/)
+  assert.match(targets ?? '', /\bask\b/)
+  assert.match(targets ?? '', /medium/)
+})
+
+test('typing @ also offers workspace files, with a quoted path', async ({ page }) => {
+  await boot(page, {
+    ...initialState(swarmFixture()),
+    fsIndex: [{ path: 'src/room.ts', kind: 'file' as const }],
+  })
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  const composer = page.locator('[data-swarm-input]')
+  await composer.fill('@room')
+
+  const file = page.locator('[data-swarm-file-mention="src/room.ts"]')
+  await expect(file).toBeVisible()
+  await file.click()
+  await expect(composer).toHaveValue('@"src/room.ts" ')
+})
