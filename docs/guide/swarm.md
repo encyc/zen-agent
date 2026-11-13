@@ -148,14 +148,16 @@ Enter/⌘Enter、附件栏、菜单、审批/提问卡片和通知条都是同�
 | 发送 / 插话 / 停止 | 三态；跑着时输入非空变 steer，空输入变 stop | 发送；有运行中任务且输入为空时变 stop，Esc 同样停止全部 |
 | `@` | 文件/目录 | 角色 + 工作区文件（文件自动写成 `@"path"`） |
 | `/` | 全量命令 + skills | `/reload` `/reset` `/stop` `/help`；`/help` 打开命令表，`/reset` 先选角色 |
-| 模型 / 模式 / 思考 | 可在 composer 里切 | 由角色 manifest 决定；派工目标会显示该角色的 model · mode · thinking |
+| 模型 | 可在 composer 里切 | 先 `@` 目标角色，再点模型 chip；写回目标角色 manifest，后续任务生效 |
+| 模式 / 思考 | 可在 composer 里切 | 由角色 manifest 决定，只展示；到角色编辑器改 |
 | 上下文仪表 | 有 | 无：房间是多 session，没有单一 context |
 | 引用 / 发送预览 | 无 | 房间独有：引用消息作为下一条的上下文；预览会说明任务数、排队、图片与 vision |
 | 待发送 / todo | `PendingDock` / `TodoDock` | 任务队列 / 工单面板 |
 
-没有运行中的 turn，所以没有 steer；角色会话的模型与权限档位属于 manifest，
-composer 只展示、不覆盖。除此之外，空盘停止、`/help`、`/reset` 角色选择、目标模型
-信息和 `@` 文件引用都已经补齐。
+没有运行中的 turn，所以没有 steer；模型 chip 改的是目标角色的 manifest，不是一次性
+覆盖，运行中的任务继续用旧模型，后续任务才生效。模式与思考档位仍归 manifest。
+除此之外，空盘停止、`/help`、`/reset` 角色选择、目标模型信息和 `@` 文件引用都已经
+补齐。
 
 ## 结构性闸门（不依赖提示词）
 

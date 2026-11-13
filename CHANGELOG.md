@@ -24,6 +24,11 @@ model/mode visibility, and no way to put a workspace file into a task.
 - **Target model/mode/thinking are visible** — selecting `@role` shows
   `model · mode · thinking` in the preview and in the mention menu, so a room
   post says how the chosen role will run without overriding its manifest.
+- **The room composer can switch the target role's model** — with one or more
+  `@role` targets, the model chip opens the catalog and writes `model` back to
+  the targeted role manifest(s), one role at a time. Several targets are
+  updated together; "role default" clears the override. Running tasks keep the
+  model they started with; later tasks use the new one.
 - **`@` also finds workspace files** — with a query, the room's mention menu
   lists matching files and directories after roles. Files are inserted as
   `@"path"`, which the room's role parser cannot mistake for a role; a file
