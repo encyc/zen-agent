@@ -24,13 +24,15 @@ class _Fleet:
 class _Manager:
     def __init__(self) -> None:
         self.texts: list[str] = []
+        self.options: list[dict] = []
         self.started = True
 
     def roles(self) -> list[dict]:
         return [{"id": "reviewer"}]
 
-    async def post(self, text: str) -> list[dict]:
+    async def post(self, text, *, ref=None, images=None) -> list[dict]:
         self.texts.append(text)
+        self.options.append({"ref": ref, "images": images})
         return [{"id": "t1"}]
 
     def task_view(self, task: dict) -> dict:
@@ -73,6 +75,15 @@ async def test_swarm_dispatcher_posts_without_a_role():
     manager = _Manager()
     await SwarmDispatcher(manager).dispatch(prompt="plain")
     assert manager.texts == ["plain"]
+    assert manager.options == [{"ref": None, "images": None}]
+
+
+async def test_swarm_dispatcher_forwards_quote_and_images():
+    manager = _Manager()
+    await SwarmDispatcher(manager).dispatch(
+        prompt="plain", ref="m1", images=["/tmp/a.png"]
+    )
+    assert manager.options == [{"ref": "m1", "images": ["/tmp/a.png"]}]
 
 
 async def test_supervisor_mounts_and_unmounts_dispatch(tmp_path):

@@ -86,8 +86,10 @@ test('registerSwarmSender wires the app client into the swarm store', async () =
   })
   await useSwarmStore.getState().post('hello room')
   assert.equal(sent.length, 1)
-  assert.equal(sent[0].type, 'swarm')
-  assert.equal(sent[0].op, 'post')
+  assert.equal(sent[0].type, 'supervisor')
+  assert.equal(sent[0].op, 'dispatch')
+  assert.equal(sent[0].mode, 'swarm')
+  assert.equal(sent[0].prompt, 'hello room')
   // Restore the module-level sender seam for the other tests.
   _useSwarmSender({
     send: async () => {

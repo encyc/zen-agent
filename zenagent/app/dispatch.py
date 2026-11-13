@@ -59,7 +59,15 @@ class SwarmDispatcher:
     def __init__(self, manager: Any) -> None:
         self.manager = manager
 
-    async def dispatch(self, *, prompt: str, role: str = "", **_: Any) -> dict:
+    async def dispatch(
+        self,
+        *,
+        prompt: str,
+        role: str = "",
+        ref: str | None = None,
+        images: list[str] | None = None,
+        **_: Any,
+    ) -> dict:
         if getattr(self.manager, "started", True) is False:
             raise DispatchUnavailable("swarm room is closed")
         if role:
@@ -70,7 +78,9 @@ class SwarmDispatcher:
             }
             if role not in known:
                 raise ValueError(f"unknown swarm role: {role}")
-        tasks = await self.manager.post(f"@{role} {prompt}" if role else prompt)
+        tasks = await self.manager.post(
+            f"@{role} {prompt}" if role else prompt, ref=ref, images=images
+        )
         views = [self.manager.task_view(task) for task in tasks]
         return {
             "dispatched": True,

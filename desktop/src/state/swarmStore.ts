@@ -274,9 +274,10 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
 
   async post(text, options = {}) {
     const answer = await send({
-      type: 'swarm',
-      op: 'post',
-      text,
+      type: 'supervisor',
+      op: 'dispatch',
+      mode: 'swarm',
+      prompt: text,
       ...(options.ref !== undefined ? { ref: options.ref } : {}),
       ...(options.images !== undefined && options.images.length > 0
         ? { images: options.images }

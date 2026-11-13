@@ -1,7 +1,7 @@
 /** The swarm room composer: the same plate as chat, bound to the room instead
  * of a coding session. `@` lists roles (not files), Enter follows the same
- * setting, and submitting broadcasts with `swarm post` — there is no running
- * turn to steer, so the primary button is send only. A quote supplies context
+ * setting, and submitting dispatches through the supervisor — there is no
+ * running turn to steer, so the primary button is send only. A quote supplies context
  * for the next post; attachments fan out to every role that post delegates to. */
 
 import { useMemo, useRef, useState } from 'react'

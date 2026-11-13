@@ -138,6 +138,21 @@ class SupervisorOps:
                         code="supervisor_invalid",
                     )
                 payload["role"] = role
+            ref = request.get("ref")
+            if ref is not None:
+                if not isinstance(ref, str) or not ref:
+                    raise Refusal("ref must be a message id", code="supervisor_invalid")
+                payload["ref"] = ref
+            images = request.get("images")
+            if images is not None:
+                if not isinstance(images, list) or not all(
+                    isinstance(item, str) for item in images
+                ):
+                    raise Refusal(
+                        "images must be a list of file paths",
+                        code="supervisor_invalid",
+                    )
+                payload["images"] = images
         try:
             result = await self._supervisor(root).dispatch(mode, **payload)
         except DispatchUnavailable as exc:

@@ -213,3 +213,51 @@ async def test_supervisor_dispatch_maps_strategy_refusals(tmp_path):
     frame = json.loads(writes[-1])
     assert frame["code"] == "dispatch_rejected"
     assert "worker is working" in frame["message"]
+
+
+async def test_supervisor_dispatch_forwards_swarm_quote_and_images(tmp_path):
+    writes: list[str] = []
+    host = RpcHost(
+        initial=None,
+        options=RuntimeOptions(root=tmp_path),
+        read_line=lambda: None,
+        write_line=writes.append,
+    )
+    dispatcher = _StubDispatcher("swarm")
+    host._supervisor(tmp_path).attach_dispatcher(dispatcher)
+    await host._supervisor_op(
+        {
+            "op": "dispatch",
+            "project": str(tmp_path),
+            "mode": "swarm",
+            "prompt": "look",
+            "ref": "m1",
+            "images": ["/tmp/a.png"],
+        },
+        "d5",
+    )
+    assert dispatcher.payloads == [
+        {"prompt": "look", "ref": "m1", "images": ["/tmp/a.png"]}
+    ]
+    assert json.loads(writes[-1])["mode"] == "swarm"
+
+
+async def test_supervisor_dispatch_validates_swarm_images(tmp_path):
+    writes: list[str] = []
+    host = RpcHost(
+        initial=None,
+        options=RuntimeOptions(root=tmp_path),
+        read_line=lambda: None,
+        write_line=writes.append,
+    )
+    await host._supervisor_op(
+        {
+            "op": "dispatch",
+            "project": str(tmp_path),
+            "mode": "swarm",
+            "prompt": "look",
+            "images": "not-a-list",
+        },
+        "d6",
+    )
+    assert json.loads(writes[-1])["code"] == "supervisor_invalid"

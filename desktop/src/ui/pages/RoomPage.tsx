@@ -1,6 +1,6 @@
 /** The swarm room: the global message feed, the shared composer that posts
- * with `swarm post`, and the selected task's detail. The roster and task index
- * live in the swarm sidebar now; this page owns only the conversation column
+ * through the supervisor, and the selected task's detail. The roster and task
+ * index live in the swarm sidebar now; this page owns only the conversation column
  * and reads the swarm store. The sidebar owns the project-scoped load. */
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'

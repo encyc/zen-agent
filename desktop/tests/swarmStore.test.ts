@@ -141,13 +141,20 @@ test('applying a duplicate message id is a no-op', () => {
   assert.equal(useSwarmStore.getState().messages.length, 1)
 })
 
-test('post sends a swarm request', async () => {
+test('post dispatches through the supervisor', async () => {
   reset()
   const sent = fakeClient(() => ({ type: 'result', id: '7', ok: true, tasks: [] }))
 
   await useSwarmStore.getState().post('@research hi')
 
-  assert.deepEqual(sent, [{ type: 'swarm', op: 'post', text: '@research hi' }])
+  assert.deepEqual(sent, [
+    {
+      type: 'supervisor',
+      op: 'dispatch',
+      mode: 'swarm',
+      prompt: '@research hi',
+    },
+  ])
 })
 
 test('post forwards the ref and images only when given', async () => {
@@ -163,11 +170,17 @@ test('post forwards the ref and images only when given', async () => {
   await useSwarmStore.getState().post('@research hi')
   await useSwarmStore.getState().post('@research hi', { ref: 'm1', images: ['/tmp/a.png'] })
 
-  assert.deepEqual(calls[0], { type: 'swarm', op: 'post', text: '@research hi' })
+  assert.deepEqual(calls[0], {
+    type: 'supervisor',
+    op: 'dispatch',
+    mode: 'swarm',
+    prompt: '@research hi',
+  })
   assert.deepEqual(calls[1], {
-    type: 'swarm',
-    op: 'post',
-    text: '@research hi',
+    type: 'supervisor',
+    op: 'dispatch',
+    mode: 'swarm',
+    prompt: '@research hi',
     ref: 'm1',
     images: ['/tmp/a.png'],
   })
