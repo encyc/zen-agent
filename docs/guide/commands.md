@@ -45,8 +45,8 @@ TUI 与 REPL **共用同一个** `CommandRegistry`（`zenagent/app/commands.py`�
 |---|---|
 | `/model` | 浏览并切换模型（下一轮生效） |
 | `/thinking` | 查看或设置推理等级：`off`｜`low`｜`medium`｜`high`｜`max` |
-| `/mode` | 设置运行模式：`plan`｜`ask`｜`zen` |
-| `/plan-review` | 复核 plan 模式下产出的计划，批准后切到 `zen` |
+| `/mode` | 设置运行模式：`plan`｜`ask`｜`auto` |
+| `/plan-review` | 复核 plan 模式下产出的计划，批准后切到 `auto` |
 | `/lang` | 设置界面语言：`auto`｜`en`｜`zh` |
 | `/theme` | 设置配色主题：`auto`｜`dark`｜`light`（REPL 另接受 legacy 主题名或 JSON 路径，如 `/theme solarized`） |
 

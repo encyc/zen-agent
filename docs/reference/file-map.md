@@ -56,7 +56,7 @@
 | 会话记录词汇表（`tool_end`/`compaction`/…） | `zenagent/app/records.py` |
 | 会话列表/切换/分叉/撤销 | `zenagent/app/sessions.py` |
 | 权限与风险分级 | `zenagent/app/permissions.py`、`zenagent/app/safety.py` |
-| 运行模式（plan/ask/zen） | `zenagent/app/modes.py` |
+| 运行模式（plan/ask/auto） | `zenagent/app/modes.py` |
 | 写入前快照与 `/restore` | `zenagent/app/journal.py`、`zenagent/app/restore.py` |
 | 流式渲染、状态行、diff | `zenagent/cli/render.py` |
 | 权限门 | `zenagent/app/permissions.py`（`PermissionGate`/`PermissionBroker`/`build_broker_for`；`cli/permissions.py` 只是兼容 shim） |

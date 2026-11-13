@@ -127,7 +127,7 @@ pnpm tauri build --config src-tauri/tauri.release.conf.json
 ```
 
 The default child flags are `--mode ask --no-mcp` (compatible with released
-zen binaries); the mode chip switches plan/ask/zen at runtime. GUI apps
+zen binaries); the mode chip switches plan/ask/auto at runtime. GUI apps
 inherit launchd's minimal environment, so the shell spawns `zen rpc` with the
 user's **login-shell environment** merged in (same approach as the dsh
 desktop shell).

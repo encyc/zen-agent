@@ -3,7 +3,7 @@
 ## RPC 模式（编辑器/桌面壳嵌入）
 
 ```bash
-zen rpc [--model ID] [--yes] [--mode plan|ask|zen] [--read-only]
+zen rpc [--model ID] [--yes] [--mode plan|ask|auto] [--read-only]
         [--thinking LEVEL] [--max-turns N] [--max-cost X] [--retries N]
         [--resume [SESSION]] [--no-mcp] [--mcp-file PATH] [--mcp-server NAME]
         [--no-skills] [--no-templates] [--no-auto-compact] [--extension PATH]
@@ -13,7 +13,7 @@ zen rpc [--model ID] [--yes] [--mode plan|ask|zen] [--read-only]
 ```
 
 `--mode`/`--thinking` 是 argparse choices，非法值由 argparse 以退出码 2 拒绝；不传
-`--mode` 时按 `--read-only`（plan）/`--yes`（zen）/默认 ask 解析，与 TUI/REPL/headless
+`--mode` 时按 `--read-only`（plan）/`--yes`（auto）/默认 ask 解析，与 TUI/REPL/headless
 同一套 `resolve_mode`。启动期模型未知或缺少 API key 打一行 stderr 后以 2 退出，
 `--cwd` 不是目录是 1，Ctrl+C 是 130。没有 `--theme`/`--image`：图片走 `prompt.images`。
 
@@ -35,7 +35,7 @@ TUI/REPL 是同一套实现（headless `-p` 例外，它自己装配 Agent，见
 | `steer` | `text` | 插话；空闲时进入 follow-up 排队 |
 | `tools` | — | 模型可见工具 `[{name, description, approval}]` |
 | `model` | `model_id` | 切模型（key / thinking / session id / 窗口一起更新） |
-| `mode` | `mode` | `plan` / `ask` / `zen` |
+| `mode` | `mode` | `plan` / `ask` / `auto`（旧客户端可继续发 `zen`，服务端归一为 `auto`） |
 | `usage` | — | tokens / cache / cost 汇总 |
 | `approval` | `request_id`, `decision` | 回答 `approval_request`：`allow` / `always` / `deny` |
 | `session` | `op`, `path?`, `scope?`, `format?` | `current` / `list` / `new` / `fork` / `resume` / `import` / `undo` / `delete` / `compact` / `retry` / `export` |

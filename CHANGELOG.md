@@ -5,6 +5,12 @@ matches the release tag; older history is in the repository tags and commits.
 
 ## Unreleased
 
+**The no-confirmation permission mode is now `auto` (formerly `zen`).** The
+old name collided with the Zen workspace mode in every conversation about
+"zen": a workspace mode, a router fleet and the autonomy rung all shared one
+word. The permission mode is now `plan` / `ask` / `auto`; the Zen workspace,
+its fleet and `workspace.json` are untouched.
+
 **The swarm composer closes the gap with coding and zen where the room can
 support it.** The plate was already shared; the remaining differences were the
 room's missing stop control, a command menu with no help or role picker, no
@@ -36,6 +42,13 @@ model/mode visibility, and no way to put a workspace file into a task.
 
 ### Changed
 
+- **The permission mode formerly called `zen` is now `auto`** — `--mode auto`,
+  `/mode auto`, worker `mode = "auto"` and role manifests all use the new
+  name. `--yes` maps to `auto`. The old spelling is still accepted at the
+  edges (CLI flag, `[zen] worker_mode`, role manifests and saved desktop
+  prefs) and normalizes immediately, so existing configs and roles keep
+  working; the workspace mode named Zen is a separate concept and did not
+  change. The prompt block is now `auto_mode`.
 - **The room command menu and the mention menu stay one composer flow** —
   `/reset` opens its picker from both the menu and Enter; `@` keeps roles first
   and adds files only when the query narrows them. `/help` and `/reset` return

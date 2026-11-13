@@ -10,7 +10,7 @@
 | `list_dir` | 列目录（标记目录/文件） | 只读 |
 | `bash` | 执行命令（非交互环境、`cwd`、`async` 后台作业），禁止危险模式 | 需确认 |
 | `wait` | 等待后台作业并取回结果：`bg_N`（`bash async`）与 `task_N`（`task async`，返回完整子代理信封与花费）（只读、串行） | 只读 |
-| `task` | 把自包含子任务交给子代理（独立上下文/转录与成本，深度 1）；子代理的工具面跟随会话权限模式——zen 继承主 Agent 激活工具（黑名单除外），其他模式只读；`async: true` 立即返回 `task_N` 任务号后台并发跑（**会话级寿命**：压缩/undo/fork/clear 不打断在途 child，ESC 只中止同步 child；工具面与模式在派发时冻结——此后降级不中止在途 worker，暴露上限为 `[task].timeout_s`）；`model` 为该子代理指定模型（裸 id 或 `provider/id`，撞 id 时报错列出限定写法）；worker 信封带 `files_touched` 清单（bash 侧写入不可见）；父上下文只收 `<task-result>` envelope | 只读，免确认 |
+| `task` | 把自包含子任务交给子代理（独立上下文/转录与成本，深度 1）；子代理的工具面跟随会话权限模式——auto 继承主 Agent 激活工具（黑名单除外），其他模式只读；`async: true` 立即返回 `task_N` 任务号后台并发跑（**会话级寿命**：压缩/undo/fork/clear 不打断在途 child，ESC 只中止同步 child；工具面与模式在派发时冻结——此后降级不中止在途 worker，暴露上限为 `[task].timeout_s`）；`model` 为该子代理指定模型（裸 id 或 `provider/id`，撞 id 时报错列出限定写法）；worker 信封带 `files_touched` 清单（bash 侧写入不可见）；父上下文只收 `<task-result>` envelope | 只读，免确认 |
 | `ask` | 向用户发起结构化提问（1–5 题、每题 2–6 个选项，`header`/`multi`/`recommended` 可选）；只有当前端注册了交互 handler 时才弹对话框，否则降级为「按最保守选项继续」 | 只读，免确认 |
 | `glob` | 按模式找文件；`limit`（默认 500）、`include_hidden`（.git 永远跳过）、默认跳过根 `.gitignore` 命中的路径（`include_ignored` 可关）、`sort=path|mtime` | 只读 |
 | `grep` | 正则搜内容（忽略二进制/大文件）；按文件分页：每页 20 个文件 × 每文件 20 条，`skip` 续页 | 只读 |
@@ -45,18 +45,18 @@ async def execute(tool_call_id, args, abort, on_update=None) -> ToolResultAgent
 - `on_update`：流式部分结果（bash 用它推送运行中输出，TUI 工具卡实时显示）。
 - 返回值里 `content` 给模型，`details` 给 UI/日志。
 
-## 运行模式（plan / ask / zen）
+## 运行模式（plan / ask / auto）
 
-启动由 `--mode` 决定（`--yes`→zen、`--read-only`→plan 只是兼容映射，显式 `--mode` 优先）；
+启动由 `--mode` 决定（`--yes`→auto、`--read-only`→plan 只是兼容映射，显式 `--mode` 优先）；
 会话中 `/mode` 切换，下一次工具调用立即生效；TUI 状态带显示当前模式。
 
 | 模式 | 写/执行工具 | 说明 |
 |---|---|---|
 | `plan` | 拒绝 | 只读调研；system prompt 要求先调研并给出计划 |
 | `ask` | 需确认 | REPL 终端 `[y/n/a]`；TUI 审批框（y/a/n，120s 超时=拒绝）；headless 默认拒绝 |
-| `zen` | 全部放行 | **任何操作都不再确认**（含 destructive / protected / outside，headless 同样放行）；灾难命令仍拒绝（`--allow-dangerous` 可再放行）；`[tools] deny` 永远优先；system prompt 会告诉模型直接执行、不要请示 |
+| `auto` | 全部放行 | **任何操作都不再确认**（含 destructive / protected / outside，headless 同样放行）；灾难命令仍拒绝（`--allow-dangerous` 可再放行）；`[tools] deny` 永远优先；system prompt 会告诉模型直接执行、不要请示 |
 
-优先级：危险命令、`[tools] deny`、plan、`--read-only` 属于**策略层**，优先于 zen 和会话内
+优先级：危险命令、`[tools] deny`、plan、`--read-only` 属于**策略层**，优先于 auto 和会话内
 "always allow"。`PermissionBroker` 先跑 `PermissionGate.policy_refusal`，只有 ask 才弹确认。
 
 **"always" 的记忆粒度是目标，不是工具**：文件类工具按解析后的路径记
@@ -73,16 +73,16 @@ workspace 判定；workspace = 项目根（最近 `.git`，否则 cwd，与 proj
 
 | 风险 | 触发 | 交互式 | headless |
 |---|---|---|---|
-| `outside` | 解析后不在 workspace 内 | 弹确认，带 `⚠ outside workspace`（zen 不弹） | 拒绝，提示 `--allow-outside PATH`（zen 放行） |
-| `protected` | 目标是 `~/.zenagent/**`、`~/.ssh`、`~/.aws`、`~/.config/gcloud`、`~/.kube`、`~/.docker/config.json`、`~/.git-credentials`、`~/.netrc`、`~/.npmrc`、`~/.pypirc` 或 `id_rsa*`/`id_dsa*`/`id_ecdsa*`/`id_ed25519*`/`*.p12`/`*.pfx` | 弹确认，带 `⚠ protected path`（zen 不弹） | 拒绝，提示 `--allow-protected`（zen 放行） |
-| `destructive` | bash 命中破坏性命令（见下节） | 弹确认，带 `⚠ destructive command`（zen 不弹） | 拒绝，提示 `--allow-destructive`（zen 放行） |
+| `outside` | 解析后不在 workspace 内 | 弹确认，带 `⚠ outside workspace`（auto 不弹） | 拒绝，提示 `--allow-outside PATH`（auto 放行） |
+| `protected` | 目标是 `~/.zenagent/**`、`~/.ssh`、`~/.aws`、`~/.config/gcloud`、`~/.kube`、`~/.docker/config.json`、`~/.git-credentials`、`~/.netrc`、`~/.npmrc`、`~/.pypirc` 或 `id_rsa*`/`id_dsa*`/`id_ecdsa*`/`id_ed25519*`/`*.p12`/`*.pfx` | 弹确认，带 `⚠ protected path`（auto 不弹） | 拒绝，提示 `--allow-protected`（auto 放行） |
+| `destructive` | bash 命中破坏性命令（见下节） | 弹确认，带 `⚠ destructive command`（auto 不弹） | 拒绝，提示 `--allow-destructive`（auto 放行） |
 
 - `/tmp` 与系统临时目录默认放行，避免临时文件也弹窗。
-- **ask / `--yes` 之外，confirm 级风险只有 zen 会放行**：`--yes` 只是等价于 `--mode zen` 的
+- **ask / `--yes` 之外，confirm 级风险只有 auto 会放行**：`--yes` 只是等价于 `--mode auto` 的
   兼容写法；想留在 ask 又少弹某类确认，用单项放行（见下一条）。
 - `[tools] allow` 与工具级 always 不能绕过风险判定；能放行的只有：目标的会话级 always、
   `--allow-outside PATH` / `--allow-destructive` / `--allow-protected`、
-  `[safety]` 全局配置里的对应项、以及 zen 模式本身。
+  `[safety]` 全局配置里的对应项、以及 auto 模式本身。
 - 项目内 `.env` 等日常文件不受保护（改 `.env` 是正常开发）；受保护清单在 `zenagent/app/safety.py`，
   按调用时的 `HOME` 解析（便于测试与容器）。
 - 配置放行项**只允许写在全局层**：项目层出现 `[safety]` 会启动即报错，避免仓库给自己开权限。
@@ -138,18 +138,18 @@ workspace 外写入   ──> confirm(outside)
 ```
 
 `allow` 时继续旧流程：allow 模式 → 放行；只读工具 → 放行；目标已授权 → 放行；
-zen / `--yes` → 放行；交互式 → 确认；否则拒绝。
+auto / `--yes` → 放行；交互式 → 确认；否则拒绝。
 
 关键点：
 
-1. **allowlist 救不了危险命令**：`allow = ["*"]` 也不能放行 `rm -rf /`（zen 也不行，
+1. **allowlist 救不了危险命令**：`allow = ["*"]` 也不能放行 `rm -rf /`（auto 也不行，
    只有 `--allow-dangerous` 可以）。
 2. `--read-only` 下，`write_file`、`bash` 等写/执行工具全拒；
    `read_file/grep/glob/list_dir/web_search/fetch/read_skill` 放行；
    MCP 里声明了 `readOnlyHint` 的工具也放行，其余 MCP 工具仍拒绝。
 3. 拒绝不是异常：工具调用收到 `is_error=True` 的结果，模型能看到原因并调整。
 4. 交互模式下 REPL 会问 `allow? [y/N]`；headless 没有交互，默认拒绝。
-5. `ask` 是唯一会确认的档：普通写/执行和三类风险都走 `confirm`；`zen` 在 `assess()`
+5. `ask` 是唯一会确认的档：普通写/执行和三类风险都走 `confirm`；`auto` 在 `assess()`
    里直接把 `confirm` 档降级为 `allow`，只剩策略层的拒绝。
 
 ## 工具结果的形状
@@ -187,7 +187,7 @@ bash 命令分两档，都在权限门里判定：
 `git checkout -- .`、`git restore .`、`git stash drop|clear`、`git push --force`、`sudo …`、
 `curl|wget … | sh`、解析后落在项目外/祖先目录的 `rm -rf`（`rm -rf ./build` 不触发）、
 `find -delete` / `-exec rm`、`truncate -s 0 …`、`shred …`、`dd of=<文件>`。
-ask 模式弹确认；zen 直接放行；非交互 ask 拒绝并提示 `--allow-destructive`
+ask 模式弹确认；auto 直接放行；非交互 ask 拒绝并提示 `--allow-destructive`
 （`--allow-dangerous` 同样覆盖这一档）。
 
 两条判定分别在 `zenagent/app/permissions.py` 与 `zenagent/app/safety.py`；命令解析是启发式，

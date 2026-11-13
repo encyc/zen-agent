@@ -43,7 +43,7 @@ runtime / 进程，再恢复。两个终端不能同时 `--resume` 同一个会�
   `detail`（终止 assistant 消息的 error_message）。
 - `retry`：被消息级重试吞掉的瞬态失败（每次退避前一条）——`attempt`、`max_retries`、
   `delay_ms`、`error`、`model`。不开启 `--retries` 时没有这类记录。
-- `mode`：bootstrap 时的初始权限模式，以及每次 `/mode` 切换——`mode`（zen/plan/ask）。
+- `mode`：bootstrap 时的初始权限模式，以及每次 `/mode` 切换——`mode`（auto/plan/ask；旧记录可能仍是 `zen`，读取时按 `auto` 理解）。
 - `tool_end`：每次工具调用结束写一条——`call_id`、`tool_name`、`duration_ms`、
   `is_error`、`details`（`details` 序列化上限 16 KiB；`diff` 先按 400 行截断，
   仍超限则先丢 `diff`，再逐个丢最大字段，并置 `diff_truncated`/`details_truncated`）。

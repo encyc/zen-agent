@@ -77,7 +77,7 @@ manifest（`root` 指向库工作区、`inheritProject: false`），复制时会
 | `root` | 项目角色缺省为项目根；全局库角色为 `~/.zenagent-workspaces/<id>/` | 角色工具的 cwd 边界；缺省目录自动创建，在 `~/.zenagent` 保护栅栏之外 |
 | `inheritProject` | 项目角色 `true`，全局库角色 `false` | `false` 是隔离 profile：不继承项目层配置、记忆、skills、AGENTS.md |
 | `limits` | 无 | `maxTurns` / `maxCost`，映射到既有 `AgentConfig` |
-| `mode` | `ask` | `plan` 只读；`ask` 变更操作弹审批；`zen` 无人值守自动通过（灾难性命令仍拒绝） |
+| `mode` | `ask` | `plan` 只读；`ask` 变更操作弹审批；`auto` 无人值守自动通过（灾难性命令仍拒绝；旧值 `zen` 仍兼容） |
 
 角色 session 落在 `~/.zenagent/projects/<项目>/swarm/agents/<id>/sessions/`，
 **不进**普通项目会话列表。
@@ -171,7 +171,7 @@ Enter/⌘Enter、附件栏、菜单、审批/提问卡片和通知条都是同�
 | `@` 范围 | 已配置角色 | 只能派给存在的角色；`@you` 只触发桌面通知 |
 
 工具审批复用既有审批通道，帧上带 `agent` 与 `task` 标记；超时 120 秒后按角色
-`mode` 处理（`ask` 拒绝并失败任务，`zen` 自动通过）。`swarm_post` 是只读工具，
+`mode` 处理（`ask` 拒绝并失败任务，`auto` 自动通过）。`swarm_post` 是只读工具，
 不弹审批。
 
 ## 重启、更新与删除
