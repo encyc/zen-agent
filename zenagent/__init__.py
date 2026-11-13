@@ -13,7 +13,7 @@ from zenagent.agent import Agent, AgentConfig, AgentState, AgentTool, agent_loop
 from zenagent.providers.registry import register_stream_fn
 from zenagent.providers.stream_options import StreamOptions
 
-__version__ = "0.13.4"
+__version__ = "0.13.5"
 
 __all__ = [
     "Agent",

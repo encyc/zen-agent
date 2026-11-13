@@ -3,53 +3,77 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased
+## v0.13.5 — 2026-11-13
 
-### Added
-
-- **Swarm work items** — a room thread plus an append-only `work_items.jsonl`
-  table. The run unit becomes `(agent, work item)`: each pair owns a runtime
-  and a session, so one agent can work two jobs without sharing context.
-  Rounds carry `workItemId` and `runCost`, chains rebase at the item boundary,
-  and the desktop gains a work item panel with human scoring, closing and an
-  ad-hoc section. Archived rounds replay from disk when no runtime is live.
-- **A project run ledger** — `~/.zenagent/projects/<key>/runs.jsonl` records
-  every top-level agent run with a stable `runId`: kind (`coding` /
-  `zen_router` / `zen_worker` / `swarm`), agent, session, work item, parent
-  run, status, termination, turns and cost. `runs op=list/get` queries it over
-  RPC across modes. The ledger is best-effort and append-only; it is the
-  foundation for a backend-owned supervisor, not a replacement for the swarm
-  task table.
-- **Backend workspace mode and a live-agent registry** — `AgentProfile` now
-  carries the role-side assembly policy, `Supervisor` tracks live slots, zen
-  workers and swarm run units per project, and `workspace op=get/set` persists
-  `coding|zen|swarm` under the project's state directory. Host-level
-  `supervisor op=status` returns the union of live agents, running count,
-  pending approvals and the mode; desktop boot/switch uses the backend value as
-  the source of truth.
-- **Approvals are correlated by lookup** — slot approvals and swarm approvals
-  register with a shared `ApprovalRouter` carrying `project` / `agentId` /
-  `runId` / `workItemId` / `taskId`. The host resolves `approval` and
-  `supervisor op=approve` through the registry, with the old prefix/slot path
-  retained as a compatibility fallback.
-- **A session has one writer** — `Runtime` now takes a `SessionLease` when it
-  binds a session: a second live runtime in the same process is refused with
-  `SessionLeaseBusy`, and an advisory lock under `~/.zenagent/locks/` covers a
-  second CLI process. `switch_session` checks before aborting the current run,
-  so a busy target leaves the session and its run untouched. Read-only
-  transcript snapshots are unaffected.
-- **Swarm idle runtimes are reclaimed** — a `(role, work item)` runtime now
-  closes after `[swarm] runtime_idle_s` (default 600 s, `0` disables) once it
-  has no run in flight, no queued round and no pending manifest apply. The
-  session file remains the fact source; the next round rebuilds the runtime.
-  This stops resident runtimes and their MCP children from growing with room
-  history.
+**coding, zen and swarm now sit on one control plane.** They still schedule
+differently, but a project has one live-agent registry, one workspace mode, one
+run ledger, one approval router and one dispatch entry point underneath them.
+A session also has one writer: a second runtime is refused instead of racing
+the first.
 
 **Retries no longer cost streaming, and the desktop turns them on.** v0.13.4
 learned to classify connect failures as transient, but nothing retried them:
 `--retries` defaulted to 0 and the desktop child never received the flag, so a
 few seconds of packet loss still ended a run with "Cannot reach the model
 provider".
+
+### Added
+
+- **A project control plane** — `AgentProfile` now carries role-side assembly
+  (identity, tool policy, plugins, skills, MCP, session ownership) instead of a
+  pile of role flags on `Runtime`. `Supervisor` is the per-project live-agent
+  registry: RPC slots, zen workers and swarm `(role, work item)` runtimes
+  register with it, and `supervisor op=status` returns the workspace mode, live
+  agents, running count and pending approvals. `dispatch` / `approve` / `cancel`
+  are the typed entry points on top of the same registry.
+- **Backend workspace mode** — `workspace op=get/set` persists
+  `coding|zen|swarm` under the project's state directory, with the Zen router
+  session alongside it. Desktop boot, project switches and mode switches read
+  the backend value; `localStorage` is only an offline cache. The value records
+  the desired mode, not the lifecycle: fleet/room start and stop stay with
+  their orchestrators.
+- **A project run ledger** — `~/.zenagent/projects/<key>/runs.jsonl` records
+  every top-level agent run with a stable `runId`: kind (`coding` /
+  `zen_router` / `zen_worker` / `swarm` / `subagent`), agent, session, work
+  item, parent run, status, termination, turns and cost. `runs op=list/get`
+  queries it over RPC across modes. The ledger is best-effort and append-only;
+  it is a projection for a cross-mode timeline, not a replacement for the swarm
+  task table or the zen roster.
+- **Crash recovery and subagent rows in the run ledger** — when a runtime
+  attaches it first closes stale `running` rows: its own session is safe to
+  close because it holds the writer lease, and other sessions are probed once
+  per process. Subagent dispatches append `kind=subagent` rows under the parent
+  session and parent run, so a `task` child no longer disappears from the
+  timeline.
+- **A session has one writer** — `Runtime` now takes a `SessionLease` when it
+  binds a session: a second live runtime in the same process is refused with
+  `SessionLeaseBusy`, and an advisory lock under `~/.zenagent/locks/` covers a
+  second CLI process. `switch_session` checks before aborting the current run,
+  so a busy target leaves the session and its run untouched. Read-only
+  transcript snapshots are unaffected.
+- **Approvals are correlated by lookup** — slot approvals and swarm approvals
+  register with a shared `ApprovalRouter` carrying `project` / `agentId` /
+  `runId` / `workItemId` / `taskId`. The host resolves `approval` and
+  `supervisor op=approve` through the registry, with the old prefix/slot path
+  retained as a compatibility fallback.
+- **One dispatch entry point** — `supervisor op=dispatch` mounts the mode's
+  dispatcher (`ZenDispatcher` / `SwarmDispatcher`). A refusal is typed:
+  `dispatch_rejected` for a policy refusal (unknown role, busy worker) and
+  `dispatch_unavailable` when the fleet or room is closed. The ack names worker
+  status or task ids, never a fabricated run id; the real run identity is
+  written by the runner when it starts.
+- **Swarm work items** — a room thread plus an append-only `work_items.jsonl`
+  table. The run unit becomes `(agent, work item)`: each pair owns a runtime
+  and a session, so one agent can work two jobs without sharing context.
+  Rounds carry `workItemId` and `runCost`, chains rebase at the item boundary,
+  and the desktop gains a work item panel with human scoring, closing and an
+  ad-hoc section. Archived rounds replay from disk when no runtime is live.
+- **Swarm idle runtimes are reclaimed** — a `(role, work item)` runtime now
+  closes after `[swarm] runtime_idle_s` (default 600 s, `0` disables) once it
+  has no run in flight, no queued round and no pending manifest apply. The
+  session file remains the fact source; the next round rebuilds the runtime.
+  This stops resident runtimes and their MCP children from growing with room
+  history.
 
 ### Changed
 
@@ -63,6 +87,11 @@ provider".
   back to the pre-zen slot, closing the router slot unless it is still running a
   turn. An evicted router slot pushes `zen_fleet enabled=false` instead of
   leaving a stale roster on screen.
+- **The desktop swarm composer posts through the supervisor** — the room now
+  sends `supervisor op=dispatch` with `mode=swarm`, including `ref` and
+  `images`, instead of a room-specific request. The old `swarm op=post` family
+  stays for compatibility; both meet in `SwarmManager.post`, so mentions,
+  guardrails and the task table are identical.
 - **A retry only replays an attempt nobody has seen** — the pre-content events
   of an attempt are held until the first `text_*`/`thinking_*`/`toolcall_*`
   event, at which point the attempt streams straight through. A connection
@@ -86,6 +115,13 @@ provider".
 
 ### Fixed
 
+- **`supervisor status` lists the initial slot** — the project's first coding
+  slot (the one `zen rpc` starts with) was never registered, so status reported
+  every other live slot but never the first one. It is now registered at host
+  construction.
+- **A lease conflict is a user-facing error** — the desktop maps
+  `session_lease_busy` onto the existing session error copy instead of showing
+  the raw code.
 - **Zen's router surface stays on the Router** — fleet tools, the router prompt
   note and worker reports now require the active session to be the project's
   Router. Switching to another session (or opening a new one) no longer turns a
