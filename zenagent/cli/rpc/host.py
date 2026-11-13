@@ -18,11 +18,13 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from zenagent.app.agent_profile import AgentProfile, Supervisor
 from zenagent.app.bootstrap import prepare
 from zenagent.app.session_lease import SessionLeaseBusy
 from zenagent.cli.rpc.codec import PROTOCOL_VERSION
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
 from zenagent.cli.rpc.ops_runs import RunsOps
+from zenagent.cli.rpc.ops_supervisor import SupervisorOps
 from zenagent.cli.rpc.ops_swarm import SwarmOps, _is_swarm_request_id
 from zenagent.cli.rpc.ops_zen import ZenOps
 from zenagent.cli.rpc.slot import RuntimeSlot
@@ -37,7 +39,7 @@ if TYPE_CHECKING:
 MAX_RESIDENT_SLOTS = 4
 
 
-class RpcHost(RunsOps, SwarmOps, ZenOps):
+class RpcHost(RunsOps, SupervisorOps, SwarmOps, ZenOps):
     """Reads requests, routes them to a project slot, and owns slot lifetime."""
 
     def __init__(
@@ -71,6 +73,8 @@ class RpcHost(RunsOps, SwarmOps, ZenOps):
         #: swarm request: a session that never enters swarm mode never pays
         #: for resident role runtimes.
         self._swarm: OrderedDict[str, SwarmManager] = OrderedDict()
+        #: Project-scoped live-agent registries shared by slots/zen/swarm.
+        self._supervisors: OrderedDict[str, Supervisor] = OrderedDict()
         #: Per project key, the session zen took the foreground from.
         self._zen_pre: dict[str, str] = {}
         self._terminal = TerminalSession(self._send)
@@ -151,6 +155,9 @@ class RpcHost(RunsOps, SwarmOps, ZenOps):
             return True
         if kind == "runs":
             await self._runs_op(request, request_id)
+            return True
+        if kind == "supervisor":
+            await self._supervisor_op(request, request_id)
             return True
         if kind == "swarm":
             await self._swarm_op(request, request_id)
@@ -245,6 +252,14 @@ class RpcHost(RunsOps, SwarmOps, ZenOps):
             )
 
     # -- slot registry ------------------------------------------------------
+
+    def _supervisor(self, root: Path) -> Supervisor:
+        key = project_key(find_project_root(root))
+        supervisor = self._supervisors.get(key)
+        if supervisor is None:
+            supervisor = Supervisor(root)
+            self._supervisors[key] = supervisor
+        return supervisor
 
     def _slot_for(
         self, request: dict, *, prefer_id: bool = False
@@ -423,6 +438,12 @@ class RpcHost(RunsOps, SwarmOps, ZenOps):
             key=key,
         )
         self._slots[key] = slot
+        self._supervisor(root).register(
+            key,
+            profile=AgentProfile(id=key, kind="coding", label=key),
+            runtime=slot.runtime,
+            session=slot.runtime.session,
+        )
         return slot
 
     def _free_key(self, base: str) -> str:
@@ -471,6 +492,7 @@ class RpcHost(RunsOps, SwarmOps, ZenOps):
             else:
                 self._active_by_project.pop(slot.project_key, None)
         was_zen = getattr(slot.runtime, "zen_fleet", None) is not None
+        self._supervisor(slot.root).unregister(key)
         await slot.close()
         if was_zen:
             # An evicted router slot takes the project's zen with it; say so,
@@ -551,6 +573,9 @@ class RpcHost(RunsOps, SwarmOps, ZenOps):
         manager = self._swarm.pop(project_key(find_project_root(root)), None)
         if manager is not None:
             await manager.close()
+        supervisor = self._supervisors.pop(project_key(find_project_root(root)), None)
+        if supervisor is not None:
+            await supervisor.close()
         self._send(
             {
                 "type": "result",
@@ -597,7 +622,12 @@ class RpcHost(RunsOps, SwarmOps, ZenOps):
         self._active = None
         self._active_by_project.clear()
         for slot in slots:
+            self._supervisor(slot.root).unregister(slot.key)
             await slot.close()
+        supervisors = list(self._supervisors.values())
+        self._supervisors.clear()
+        for supervisor in supervisors:
+            await supervisor.close()
 
     def _send(self, payload: dict) -> None:
         if self._write_line is not None:

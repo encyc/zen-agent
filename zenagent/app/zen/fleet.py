@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from zenagent.agent.session import read_session_titles, unique_session_path
-from zenagent.app.agent_profile import AgentProfile
+from zenagent.app.agent_profile import AgentProfile, Supervisor
 from zenagent.app.bootstrap import prepare
 from zenagent.app.records import open_session
 from zenagent.app.run_wiring import update_run_scope
@@ -35,6 +35,10 @@ if TYPE_CHECKING:
 __all__ = ["REPORT_LIMIT", "RosterRow", "WorkerHandle", "ZenFleet", "worker_statuses"]
 
 _log = logging.getLogger(__name__)
+
+
+def _supervisor_key(handle: WorkerHandle) -> str:
+    return f"zen:{Path(handle.path).stem}"
 
 #: Worker states the roster reports. ``router`` rows carry ``idle`` status and
 #: the ``router`` role instead.
@@ -79,6 +83,7 @@ class ZenFleet:
         run_timeout_s: float = 0,
         report_limit: int = REPORT_LIMIT,
         worker_mode: str = "inherit",
+        supervisor: Supervisor | None = None,
     ) -> None:
         self.chat = chat
         self.root = Path(root)
@@ -105,6 +110,7 @@ class ZenFleet:
         #: ``inherit`` keeps the router's mode but downgrades zen to ask (the
         #: historical behaviour); a concrete mode pins the worker's broker.
         self.worker_mode = worker_mode
+        self.supervisor = supervisor
         self._report_buffer: list[str] = []
         self._wake_task: asyncio.Task | None = None
         self._sem = asyncio.Semaphore(self.max_concurrent)
@@ -281,6 +287,8 @@ class ZenFleet:
                 handle.last_report = f"{type(exc).__name__}: {exc}"[: self.report_limit]
                 self._inject(handle, handle.last_report)
             finally:
+                if self.supervisor is not None:
+                    self.supervisor.unregister(_supervisor_key(handle))
                 if handle.runtime is not None:
                     # Closing must not raise.
                     with contextlib.suppress(Exception):
@@ -325,6 +333,14 @@ class ZenFleet:
         if self.confirm is not None:
             # Worker write/exec calls ask the router's UI for approval.
             prepared.broker.set_confirm(self.confirm)
+        if self.supervisor is not None:
+            self.supervisor.register(
+                _supervisor_key(handle),
+                profile=profile,
+                runtime=prepared.runtime,
+                session=prepared.runtime.session,
+                parentRunId=getattr(router_runtime, "current_run_id", None),
+            )
         return prepared
 
     def _last_report(self, agent: Any) -> str:

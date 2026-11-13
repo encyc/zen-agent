@@ -24,7 +24,13 @@ if TYPE_CHECKING:
     from zenagent.agent.session import Session
     from zenagent.app.runtime import Runtime
 
-__all__ = ["AgentHandle", "AgentProfile", "Supervisor"]
+__all__ = [
+    "AgentHandle",
+    "AgentProfile",
+    "Supervisor",
+    "register_swarm_agent",
+    "swarm_handle_key",
+]
 
 _log = logging.getLogger(__name__)
 
@@ -136,3 +142,24 @@ class Supervisor:
                 await handle.runtime.close()
             except Exception:  # noqa: BLE001 - teardown must not raise
                 _log.debug("closing %s failed", handle.key, exc_info=True)
+
+
+def swarm_handle_key(role_id: str, work_item_id: str | None) -> str:
+    """Stable supervisor key for one swarm run unit."""
+    return f"{role_id}@{work_item_id or 'adhoc'}"
+
+
+def register_swarm_agent(
+    supervisor: Supervisor,
+    profile: AgentProfile,
+    runtime: Runtime,
+    work_item_id: str | None,
+) -> AgentHandle:
+    """Register a role runtime under its ``(role, work item)`` key."""
+    return supervisor.register(
+        swarm_handle_key(profile.id, work_item_id),
+        profile=profile,
+        runtime=runtime,
+        session=runtime.session,
+        workItemId=work_item_id,
+    )

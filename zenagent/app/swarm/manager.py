@@ -20,7 +20,7 @@ from pathlib import Path
 
 from zenagent.agent.agent import Agent
 from zenagent.agent.session import Session
-from zenagent.app.agent_profile import AgentProfile
+from zenagent.app import agent_profile as agents
 from zenagent.app.permissions import build_broker_for
 from zenagent.app.plugin_wiring import start_mcp
 from zenagent.app.run_wiring import attach_swarm_run
@@ -113,6 +113,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
         max_chain_depth: int = DEFAULT_MAX_CHAIN_DEPTH,
         max_chain_cost: float = DEFAULT_MAX_CHAIN_COST,
         runtime_idle_s: float = 600.0,
+        supervisor: agents.Supervisor | None = None,
     ) -> None:
         self.root = Path(root)
         self._write_frame = write_frame
@@ -131,6 +132,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
         self.role_ids: set[str] = set()
         self._roles: dict[str, RoleManifest] = {}
         self._idle = IdleTracker(runtime_idle_s)
+        self.supervisor = supervisor or agents.Supervisor(self.root)
         self._vision: dict[str, bool] = {}
         self.warnings: list[str] = []
         self._pending: list[TaskRecord] = []
@@ -196,7 +198,6 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
                 await self._loop_task
             self._loop_task = None
 
-        # Fail pending approvals first: a waiting tool would block the gather.
         for future in self._approvals.values():
             if not future.done():
                 future.set_result("deny")
@@ -224,8 +225,9 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
                 )
         self._pending.clear()
 
-        for agent in list(self.agents.values()):
+        for key, agent in list(self.agents.items()):
             await agent.runtime.close()
+            self.supervisor.unregister(agents.swarm_handle_key(*key))
         self.agents.clear()
         self.runners.clear()
         self._idle = IdleTracker(self._idle.ttl_s)
@@ -328,7 +330,6 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
                 agent.session.path, task_id, running=task.state == "running"
             )
             return {"available": available, "transcript": rows}
-        # No live instance: the session file is the fact source; read from disk.
         rows = read_task_transcript_from_disk(
             sessions_dir(
                 task.assignee, root=self.root, work_item_id=task.work_item_id
@@ -463,7 +464,6 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
     # -- role lifecycle -----------------------------------------------------
 
     def _role_lock(self, role_id: str) -> asyncio.Lock:
-        # Serializes close+build+pop for one role across apply/rebuild/delete.
         return self._role_locks.setdefault(role_id, asyncio.Lock())
 
     async def update_role(self, role_id: str, manifest: dict) -> RoleManifest:
@@ -520,6 +520,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
                 for key in [key for key in self.agents if key[0] == role_id]:
                     agent = self.agents.pop(key)
                     self.runners.pop(key, None)
+                    self.supervisor.unregister(agents.swarm_handle_key(*key))
                     self._idle.forget(key)
                     await agent.runtime.close()
         finally:
@@ -535,7 +536,6 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
 
     async def reload(self) -> list[str]:
         roles, warnings = discover_roles(self.root)
-        # Reload is authoritative: stale discovery warnings are replaced.
         self.warnings = list(self.store.warnings)
         self.warnings.extend(warnings)
         for agent in self.agents.values():
@@ -552,7 +552,6 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
             elif role_signature(existing) != role_signature(role):
                 notes.append(f"updated {role_id}")
                 await self._apply_role(role)
-        # Membership comes from configuration, not from what happens to be built.
         self._set_roles(roles)
         return notes
 
@@ -575,6 +574,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
             key = agent_key(role.id, work_item_id)
             self.agents.pop(key, None)
             self.runners.pop(key, None)
+            self.supervisor.unregister(agents.swarm_handle_key(role.id, work_item_id))
             self._system_note(f"Role @{role.id} is unavailable: {detail}")
             return None
 
@@ -583,8 +583,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
     ) -> SwarmAgent | None:
         """The instance for one (role, work item), built on first use.
 
-        Laziness is what keeps "same agent, two work items" affordable: two
-        runtimes are only paid for when both jobs actually have a round to run.
+        Laziness keeps "same agent, two work items" affordable.
         """
         key = agent_key(role.id, work_item_id)
         agent = self.agents.get(key)
@@ -613,7 +612,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
         )
         key = agent_key(role.id, work_item_id)
         broker.set_confirm(self._confirm_callback(key))
-        profile = AgentProfile(
+        profile = agents.AgentProfile(
             id=role.id,
             kind="swarm",
             label=role.name,
@@ -654,6 +653,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
             allow_missing_key=True,
         )
         attach_swarm_run(runtime, role.id, work_item_id, role.name)
+        agents.register_swarm_agent(self.supervisor, profile, runtime, work_item_id)
         try:
             self.warnings.extend(runtime.warnings)
             await self._attach_role_tools(
@@ -732,6 +732,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
     ) -> SwarmAgent | None:
         old = self.agents.pop(key, None)
         self.runners.pop(key, None)
+        self.supervisor.unregister(agents.swarm_handle_key(*key))
         if old is not None:
             await old.runtime.close()
         return await self._try_build_agent(

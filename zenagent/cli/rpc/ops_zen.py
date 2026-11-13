@@ -20,6 +20,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from zenagent.agent.session import Session
+from zenagent.app.agent_profile import AgentProfile
 from zenagent.app.run_wiring import update_run_scope
 from zenagent.app.views import TranscriptBuilder
 from zenagent.app.zen.fleet import ZenFleet
@@ -187,6 +188,7 @@ class ZenOps:
         """Build the project's fleet on ``slot`` and enable the router surface."""
         runtime = slot.runtime
         config = getattr(runtime, "user_config", None) or load_user_config()
+        supervisor = self._supervisor(root) if hasattr(self, "_supervisor") else None
         fleet = ZenFleet(
             chat=slot.chat,
             root=Path(runtime.root),
@@ -200,8 +202,16 @@ class ZenOps:
             run_timeout_s=config.task_timeout_s,
             report_limit=config.zen_report_limit,
             worker_mode=config.zen_worker_mode,
+            supervisor=supervisor,
         )
         runtime.zen_fleet = fleet
+        if supervisor is not None:
+            supervisor.register(
+                slot.key,
+                profile=AgentProfile(id="router", kind="zen_router", label="router"),
+                runtime=runtime,
+                session=runtime.session,
+            )
         update_run_scope(runtime, kind="zen_router", agentId="router", label="router")
         # The role guard, the fleet tools and the router prompt note all read
         # ``zen_fleet`` at compose time, so one recompose is the whole attach.
@@ -217,6 +227,13 @@ class ZenOps:
         if fleet is not None:
             await fleet.close()
         slot.runtime.zen_fleet = None
+        if hasattr(self, "_supervisor"):
+            self._supervisor(Path(slot.runtime.root)).register(
+                slot.key,
+                profile=AgentProfile(id=slot.key, kind="coding", label=slot.key),
+                runtime=slot.runtime,
+                session=slot.runtime.session,
+            )
         update_run_scope(slot.runtime, kind="coding", agentId="main", label="")
         slot.runtime._recompose()
 

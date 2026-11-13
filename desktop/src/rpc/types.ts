@@ -103,6 +103,7 @@ export const REQUEST_KINDS = [
   'status',
   'steer',
   'subagent_transcript',
+  'supervisor',
   'swarm',
   'runs',
   'terminal',
@@ -111,7 +112,6 @@ export const REQUEST_KINDS = [
   'usage',
   'zen_fleet',
 ] as const
-
 export type RequestKind = (typeof REQUEST_KINDS)[number]
 
 export interface HelloResult {

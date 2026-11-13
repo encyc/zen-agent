@@ -5,9 +5,11 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from conftest import text_stream
 
+from zenagent.app.agent_profile import Supervisor
 from zenagent.app.runs import RunLedger
 from zenagent.app.swarm.manager import SwarmManager
 from zenagent.app.swarm.roles import project_agents_root
@@ -39,6 +41,7 @@ async def test_zen_worker_scope_names_the_worker(tmp_path, monkeypatch):
     class FakeRuntime:
         def __init__(self):
             self.run_scope = {}
+            self.session = SimpleNamespace(path=tmp_path / "worker.jsonl")
 
     class FakeBroker:
         def set_confirm(self, _confirm):
@@ -55,11 +58,13 @@ async def test_zen_worker_scope_names_the_worker(tmp_path, monkeypatch):
     monkeypatch.setattr(fleet_module, "prepare", fake_prepare)
     worker_path = tmp_path / "worker.jsonl"
     worker_path.write_text("", encoding="utf-8")
+    supervisor = Supervisor(tmp_path)
     fleet = ZenFleet(
         chat=None,
         root=tmp_path,
         sessions_dir=tmp_path / "sessions",
         router_path=str(tmp_path / "router.jsonl"),
+        supervisor=supervisor,
     )
     handle = WorkerHandle(str(worker_path), "worker-a", "tests")
     prepared = await fleet._build_worker(handle)
@@ -68,6 +73,7 @@ async def test_zen_worker_scope_names_the_worker(tmp_path, monkeypatch):
     assert prepared.runtime.run_scope["agentId"] == "worker-a"
     assert prepared.runtime.run_scope["label"] == "tests"
     assert prepared.runtime.run_scope["parentRunId"] is None
+    assert [handle.key for handle in supervisor.handles()] == ["zen:worker"]
 
 
 async def test_swarm_task_writes_a_swarm_run_record(tmp_path, monkeypatch):
@@ -96,13 +102,14 @@ async def test_swarm_task_writes_a_swarm_run_record(tmp_path, monkeypatch):
         assert row.work_item_id
         assert row.task_id == task.id
         assert row.session
+        assert [handle.key for handle in manager.supervisor.handles()] == [
+            f"research@{row.work_item_id}"
+        ]
     finally:
         await manager.close()
 
 
 async def test_zen_router_scope_follows_attach_and_detach(tmp_path):
-    from types import SimpleNamespace
-
     from zenagent.cli.rpc.ops_zen import ZenOps
 
     class FakeRuntime:
