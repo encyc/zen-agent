@@ -199,6 +199,7 @@ class ZenOps:
             max_concurrent=config.zen_max_concurrent,
             on_change=lambda: self._send_fleet_roster(root, slot),
             confirm=slot.server.confirm,
+            ask=slot.server.ask,
             mode=getattr(runtime, "mode", None),
             batch_window_s=config.zen_batch_window_s,
             run_timeout_s=config.task_timeout_s,

@@ -86,6 +86,7 @@ class ZenFleet:
         supervisor: Supervisor | None = None,
         max_cost: float | None = None,
         max_turns: int | None = None,
+        ask: Callable | None = None,
     ) -> None:
         self.chat = chat
         self.root = Path(root)
@@ -117,6 +118,9 @@ class ZenFleet:
         #: caps the task tool gives its children. None leaves the runtime default.
         self.max_cost = max_cost
         self.max_turns = max_turns
+        #: The slot's ask channel. A downgraded worker (auto → ask) must be able
+        #: to reach a human; without it the ask tool is a dead end.
+        self.ask = ask
         self._report_buffer: list[str] = []
         self._wake_task: asyncio.Task | None = None
         self._sem = asyncio.Semaphore(self.max_concurrent)
@@ -335,6 +339,8 @@ class ZenFleet:
             ),
             views=False,
         )
+        if self.ask is not None:
+            prepared.runtime.ask_handler = self.ask
         router_runtime = getattr(self.chat, "runtime", None)
         update_run_scope(
             prepared.runtime,

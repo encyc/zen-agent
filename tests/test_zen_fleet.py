@@ -82,6 +82,8 @@ class FakeWorkerRuntime:
         self.session = FakeWorkerSession(path)
         self.agent = FakeWorkerAgent(factory, path)
         self.closed = False
+        #: Mirrors `Runtime.ask_handler`, which the real runtime starts as None.
+        self.ask_handler = None
 
     async def close(self) -> None:
         self.closed = True
@@ -639,3 +641,34 @@ async def test_worker_without_router_falls_back_to_the_default_model(env) -> Non
     await fleet.wait_all()
     assert env["factory"].calls[-1]["model_id"] is None
     assert env["factory"].calls[-1]["thinking"] is None
+
+
+async def test_worker_gets_the_fleets_ask_handler(env) -> None:
+    async def ask(questions):
+        return {}
+
+    fleet = _fleet_with(env, ask=ask)
+    await fleet.dispatch(str(env["paths"]["w1"]), "a")
+    await fleet.wait_all()
+    runtime = env["factory"].runtimes[str(env["paths"]["w1"])]
+    assert runtime.ask_handler is ask
+
+
+async def test_downgraded_worker_still_has_an_ask_channel(env) -> None:
+    async def ask(questions):
+        return {}
+
+    fleet = _fleet_with(env, mode="auto", ask=ask)
+    await fleet.dispatch(str(env["paths"]["w1"]), "a")
+    await fleet.wait_all()
+    runtime = env["factory"].runtimes[str(env["paths"]["w1"])]
+    assert env["factory"].modes[str(env["paths"]["w1"])] == "ask"
+    assert runtime.ask_handler is ask
+
+
+async def test_worker_without_ask_channel_keeps_the_handler_empty(env) -> None:
+    fleet = _fleet_with(env)
+    await fleet.dispatch(str(env["paths"]["w1"]), "a")
+    await fleet.wait_all()
+    runtime = env["factory"].runtimes[str(env["paths"]["w1"])]
+    assert runtime.ask_handler is None
