@@ -635,3 +635,49 @@ async def test_works_list_detail_score_and_close(tmp_path, monkeypatch):
         assert closed["closedAt"] is not None
     finally:
         await host.close()
+
+
+async def test_supervisor_dispatch_posts_to_the_live_room(tmp_path):
+    host, writes = _host(tmp_path)
+    fake = FakeSwarm()
+    host._swarm[project_key(tmp_path)] = fake
+    await _call(host, {"type": "swarm", "op": "list", "id": "s1"})
+
+    await _call(
+        host,
+        {
+            "type": "supervisor",
+            "op": "dispatch",
+            "id": "d1",
+            "mode": "swarm",
+            "prompt": "look at the diff",
+            "role": "research",
+        },
+    )
+
+    result = writes[-1]
+    assert result["ok"] is True
+    assert result["mode"] == "swarm"
+    assert result["taskIds"] == ["t_1"]
+    assert fake.posts[-1][0] == "@research look at the diff"
+
+
+async def test_supervisor_dispatch_rejects_an_unknown_swarm_role(tmp_path):
+    host, writes = _host(tmp_path)
+    fake = FakeSwarm()
+    host._swarm[project_key(tmp_path)] = fake
+    await _call(host, {"type": "swarm", "op": "list", "id": "s1"})
+
+    await _call(
+        host,
+        {
+            "type": "supervisor",
+            "op": "dispatch",
+            "id": "d2",
+            "mode": "swarm",
+            "prompt": "x",
+            "role": "nobody",
+        },
+    )
+
+    assert writes[-1]["code"] == "dispatch_rejected"

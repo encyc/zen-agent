@@ -110,9 +110,14 @@ class FakeFleet:
         self.kwargs = kwargs
         self.closed = False
         self._active = 0
+        self.calls: list[tuple[str, str]] = []
 
     def has_active(self) -> bool:
         return self._active > 0
+
+    async def dispatch(self, session: str, task: str) -> str:
+        self.calls.append((session, task))
+        return "working"
 
     def roster(self) -> list[dict]:
         return [
@@ -439,3 +444,24 @@ async def test_enable_and_disable_persist_the_workspace_mode(zen_env):
 
     await zen_env.call({"type": "zen_fleet", "op": "disable", "id": "w2"})
     assert load_workspace(zen_env.root).mode == "coding"
+
+
+async def test_supervisor_dispatch_reaches_the_live_fleet(zen_env):
+    await zen_env.call({"type": "zen_fleet", "op": "enable", "id": "z1"})
+    worker = _worker_session(zen_env.sessions_dir)
+    fleet = _router(zen_env).runtime.zen_fleet
+
+    frame = await zen_env.call(
+        {
+            "type": "supervisor",
+            "op": "dispatch",
+            "id": "d1",
+            "prompt": "inspect",
+            "session": str(worker),
+        }
+    )
+
+    assert frame["ok"] is True
+    assert frame["mode"] == "zen"
+    assert frame["status"] == "working"
+    assert fleet.calls == [(str(worker), "inspect")]

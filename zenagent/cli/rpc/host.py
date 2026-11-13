@@ -22,6 +22,7 @@ from zenagent.app.agent_profile import AgentProfile, Supervisor
 from zenagent.app.approval_router import ApprovalRouter
 from zenagent.app.bootstrap import prepare
 from zenagent.app.session_lease import SessionLeaseBusy
+from zenagent.app.workspace_state import set_workspace_mode
 from zenagent.cli.rpc.codec import PROTOCOL_VERSION
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
 from zenagent.cli.rpc.ops_runs import RunsOps
@@ -507,12 +508,16 @@ class RpcHost(WorkspaceOps, RunsOps, SupervisorOps, SwarmOps, ZenOps):
             else:
                 self._active_by_project.pop(slot.project_key, None)
         was_zen = getattr(slot.runtime, "zen_fleet", None) is not None
-        self._supervisor(slot.root).unregister(key)
+        supervisor = self._supervisor(slot.root)
+        supervisor.unregister(key)
+        if was_zen:
+            supervisor.detach_dispatcher("zen")
         await slot.close()
         if was_zen:
             # An evicted router slot takes the project's zen with it; say so,
             # or the GUI would keep showing a fleet that no longer exists.
             self._zen_pre.pop(slot.project_key, None)
+            set_workspace_mode(Path(slot.runtime.root), "coding")
             self._send_fleet_roster(Path(slot.runtime.root), None)
 
     # -- project ops --------------------------------------------------------

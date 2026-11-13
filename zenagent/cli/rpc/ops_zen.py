@@ -21,6 +21,7 @@ from pathlib import Path
 
 from zenagent.agent.session import Session
 from zenagent.app.agent_profile import AgentProfile
+from zenagent.app.dispatch import ZenDispatcher
 from zenagent.app.run_wiring import update_run_scope
 from zenagent.app.views import TranscriptBuilder
 from zenagent.app.workspace_state import load_workspace, set_workspace_mode
@@ -214,6 +215,7 @@ class ZenOps:
                 runtime=runtime,
                 session=runtime.session,
             )
+            supervisor.attach_dispatcher(ZenDispatcher(fleet))
         update_run_scope(runtime, kind="zen_router", agentId="router", label="router")
         # The role guard, the fleet tools and the router prompt note all read
         # ``zen_fleet`` at compose time, so one recompose is the whole attach.
@@ -232,7 +234,9 @@ class ZenOps:
         if load_workspace(Path(slot.runtime.root)).mode == "zen":
             set_workspace_mode(slot.runtime.root, "coding")
         if hasattr(self, "_supervisor"):
-            self._supervisor(Path(slot.runtime.root)).register(
+            supervisor = self._supervisor(Path(slot.runtime.root))
+            supervisor.detach_dispatcher("zen")
+            supervisor.register(
                 slot.key,
                 profile=AgentProfile(id=slot.key, kind="coding", label=slot.key),
                 runtime=slot.runtime,

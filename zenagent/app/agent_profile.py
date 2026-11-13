@@ -8,9 +8,9 @@ used to leak into ``Runtime`` as a pile of role flags.
 
 ``Supervisor`` is the project-scoped registry of live handles. Zen workers and
 swarm role instances register here, so one query answers "which agents are
-alive in this project" without knowing which orchestrator built them. The
-schedulers stay where they are for now; the registry is the seam Phase 5 can
-build on.
+alive in this project" without knowing which orchestrator built them. It also
+mounts the mode's dispatcher, so ``supervisor dispatch`` is one entry while the
+scheduling policy stays in zen or swarm.
 """
 
 from __future__ import annotations
@@ -19,6 +19,8 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from zenagent.app.dispatch import Dispatcher, DispatchUnavailable
 
 if TYPE_CHECKING:
     from zenagent.agent.session import Session
@@ -93,14 +95,16 @@ class AgentHandle:
 class Supervisor:
     """Project-scoped registry of live agent runtimes.
 
-    It does not schedule or prompt: the owning orchestrator still does that.
-    It owns the one shared answer to "what is alive in this project", and the
-    close path that releases every runtime and its session lease.
+    It owns the one shared answer to "what is alive in this project", the close
+    path that releases every runtime and its session lease, and the dispatcher
+    the current orchestrator mounts. It does not schedule: the dispatcher does,
+    with that mode's own policy.
     """
 
     def __init__(self, root: Path | str) -> None:
         self.root = Path(root)
         self._agents: dict[str, AgentHandle] = {}
+        self._dispatchers: dict[str, Dispatcher] = {}
 
     def register(
         self,
@@ -134,9 +138,25 @@ class Supervisor:
     def snapshots(self) -> list[dict]:
         return [handle.snapshot() for handle in self._agents.values()]
 
+    # -- dispatch -----------------------------------------------------------
+
+    def attach_dispatcher(self, dispatcher: Dispatcher) -> None:
+        """Mount the mode's live dispatch strategy (replacing a stale one)."""
+        self._dispatchers[dispatcher.mode] = dispatcher
+
+    def detach_dispatcher(self, mode: str) -> Dispatcher | None:
+        return self._dispatchers.pop(mode, None)
+
+    async def dispatch(self, mode: str, **payload: Any) -> dict:
+        dispatcher = self._dispatchers.get(mode)
+        if dispatcher is None:
+            raise DispatchUnavailable(f"no live {mode} orchestrator")
+        return await dispatcher.dispatch(**payload)
+
     async def close(self) -> None:
         handles = list(self._agents.values())
         self._agents.clear()
+        self._dispatchers.clear()
         for handle in handles:
             try:
                 await handle.runtime.close()

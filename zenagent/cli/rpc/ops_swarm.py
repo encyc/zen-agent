@@ -13,6 +13,7 @@ import logging
 from collections import OrderedDict
 from pathlib import Path
 
+from zenagent.app.dispatch import SwarmDispatcher
 from zenagent.app.swarm.manager import SwarmManager
 from zenagent.app.swarm.roles import discover_roles
 from zenagent.app.swarm.roster import copy_role, role_view
@@ -218,6 +219,8 @@ class SwarmOps:
             self._swarm.move_to_end(key)
         if not manager.started:
             await manager.start()
+        if hasattr(self, "_supervisor"):
+            self._supervisor(root).attach_dispatcher(SwarmDispatcher(manager))
         await self._evict_idle_rooms(keep=key)
         return manager
 
@@ -240,6 +243,8 @@ class SwarmOps:
             if victim is None:
                 break  # every other resident room is busy: tolerate overshoot
             manager = self._swarm.pop(victim)
+            if hasattr(self, "_supervisor"):
+                self._supervisor(manager.root).detach_dispatcher("swarm")
             await manager.close()
 
     def _swarm_root(self, request: dict) -> Path:

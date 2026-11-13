@@ -1,14 +1,15 @@
-"""Host-level ``supervisor`` queries.
+"""Host-level ``supervisor`` queries and dispatch.
 
 One project has one live-agent registry; this is the mode-agnostic view of it.
-The scheduling/dispatch ops still live in ``zen_fleet`` and ``swarm`` until the
-Phase-5 adapters land, so this family is deliberately read-only for now.
+Dispatch is one entry too: the mode's dispatcher is mounted on the supervisor
+while that orchestrator is alive, so the wire shape does not fork per mode.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
+from zenagent.app.dispatch import DispatchUnavailable
 from zenagent.app.workspace_state import load_workspace
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
 from zenagent.project import find_project_root
@@ -52,9 +53,9 @@ class SupervisorOps:
                 )
                 return
             if op == "approve":
-                request_id = request.get("requestId")
+                approval_id = request.get("requestId")
                 decision = request.get("decision")
-                if not isinstance(request_id, str) or not request_id:
+                if not isinstance(approval_id, str) or not approval_id:
                     raise Refusal("approve needs requestId", code="supervisor_invalid")
                 if decision not in ("allow", "always", "deny"):
                     raise Refusal(
@@ -62,9 +63,12 @@ class SupervisorOps:
                         code="supervisor_invalid",
                     )
                 router = getattr(self, "_approvals", None)
-                if router is None or not router.resolve(request_id, str(decision)):
+                if router is None or not router.resolve(approval_id, str(decision)):
                     raise Refusal("no pending approval", code="approval_missing")
                 self._send({"type": "result", "id": request_id, "ok": True})
+                return
+            if op == "dispatch":
+                await self._supervisor_dispatch(request, request_id)
                 return
             if op != "status":
                 raise Refusal(f"unknown supervisor op: {op}", code="supervisor_invalid")
@@ -108,6 +112,72 @@ class SupervisorOps:
                     op=label,
                 )
             )
+
+    async def _supervisor_dispatch(self, request: dict, request_id) -> None:
+        root = self._supervisor_root(request)
+        mode = request.get("mode") or load_workspace(root).mode
+        if mode == "coding":
+            raise Refusal(
+                "coding is one session; prompt it instead of dispatching",
+                code="dispatch_not_orchestrated",
+            )
+        if not isinstance(mode, str) or mode not in ("zen", "swarm"):
+            raise Refusal(f"unknown dispatch mode: {mode}", code="dispatch_invalid")
+        prompt = request.get("prompt")
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise Refusal("dispatch needs prompt", code="supervisor_invalid")
+        payload: dict = {"prompt": prompt}
+        if mode == "zen":
+            payload["session"] = self._zen_dispatch_target(root, request)
+        else:
+            role = request.get("role")
+            if role is not None:
+                if not isinstance(role, str) or not role.strip():
+                    raise Refusal(
+                        "role must be a non-empty string",
+                        code="supervisor_invalid",
+                    )
+                payload["role"] = role
+        try:
+            result = await self._supervisor(root).dispatch(mode, **payload)
+        except DispatchUnavailable as exc:
+            raise Refusal(str(exc), code="dispatch_unavailable") from exc
+        except ValueError as exc:
+            raise Refusal(str(exc), code="dispatch_rejected") from exc
+        self._send(
+            {"type": "result", "id": request_id, "ok": True, "mode": mode, **result}
+        )
+
+    def _zen_dispatch_target(self, root: Path, request: dict) -> str:
+        """Resolve the worker session a zen dispatch acts on."""
+        session = request.get("session")
+        if session is not None and not isinstance(session, str):
+            raise Refusal("session must be a path", code="supervisor_invalid")
+        agent = request.get("agent") or request.get("agentId")
+        if agent is not None and not isinstance(agent, str):
+            raise Refusal("agent must be a key", code="supervisor_invalid")
+        resolved = ""
+        if agent:
+            handle = self._supervisor(root).get(agent)
+            if handle is None:
+                raise Refusal("no live agent", code="supervisor_missing")
+            if handle.profile.kind != "zen_worker":
+                raise Refusal("agent is not a zen worker", code="dispatch_invalid")
+            resolved = str(handle.session.path)
+        if session:
+            if resolved:
+                wanted = Path(session).expanduser()
+                if str(wanted) != resolved and wanted.stem != Path(resolved).stem:
+                    raise Refusal(
+                        "session and agent disagree", code="dispatch_invalid"
+                    )
+            else:
+                resolved = session
+        if not resolved:
+            raise Refusal(
+                "zen dispatch needs session or agent", code="dispatch_invalid"
+            )
+        return resolved
 
     def _supervisor_root(self, request: dict) -> Path:
         project = request.get("project")
