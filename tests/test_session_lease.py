@@ -15,6 +15,7 @@ from zenagent.app.session_lease import (
     SessionLeaseBusy,
     acquire_session,
     release_session,
+    session_is_live,
 )
 
 
@@ -164,3 +165,12 @@ async def test_host_translates_a_busy_session_to_a_refusal(runtime_factory):
         assert caught.value.code == "session_lease_busy"
     finally:
         await holder.close()
+
+
+def test_session_is_live_tracks_the_lease(tmp_path):
+    path = _lease_path(tmp_path)
+    assert session_is_live(path) is False
+    lease = acquire_session(path, object())
+    assert session_is_live(path) is True
+    release_session(lease)
+    assert session_is_live(path) is False

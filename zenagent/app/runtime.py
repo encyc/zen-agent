@@ -21,7 +21,7 @@ from zenagent.agent.registry import ToolRegistry
 from zenagent.agent.session import Session, latest_session, unique_session_path
 from zenagent.agent.subagents import SubagentLimits
 from zenagent.agent.subagents_runtime import SubagentObserver
-from zenagent.app import plugin_wiring, records
+from zenagent.app import plugin_wiring, records, subagent_runs
 from zenagent.app import session_lease as leases
 from zenagent.app.agent_profile import AgentProfile
 from zenagent.app.journal import attach_journal, journal_for, load_backup_policy
@@ -472,6 +472,7 @@ class Runtime:
             model=lambda: runtime.agent.model,
             base_tools=base_tools(runtime.ask_tool, cwd=runtime.cwd),
             get_observer=lambda: runtime.subagent_observer,
+            run_sink=subagent_runs.SubagentRunSink(runtime),
             api_key=lambda: runtime.agent.api_key,
             stream_fn=stream_fn,
             thinking=lambda: runtime.agent.thinking,

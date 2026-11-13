@@ -20,11 +20,14 @@ a scope still gets a useful row.
 
 from __future__ import annotations
 
+import logging
+import threading
 import time
 from pathlib import Path
 
 from zenagent import project
 from zenagent.app.runs import RunLedger, RunRecord, status_for_termination
+from zenagent.app.session_lease import session_is_live
 from zenagent.events import AgentEvent
 from zenagent.types import AssistantMessage
 
@@ -34,6 +37,14 @@ __all__ = [
     "attach_swarm_run",
     "update_run_scope",
 ]
+
+_log = logging.getLogger(__name__)
+
+#: Ledgers already swept in this process. A project's crash debris is closed
+#: once; later attaches only reconcile their own session, which is the cheap,
+#: lease-backed case.
+_SWEPT: set[str] = set()
+_SWEEP_LOCK = threading.Lock()
 
 
 def attach_run_recorder(runtime) -> RunLedger | None:
@@ -52,8 +63,29 @@ def attach_run_recorder(runtime) -> RunLedger | None:
     runtime.run_ledger = ledger
     runtime.run_scope = {"kind": "coding", "agentId": "main"}
     runtime.current_run_id = None
+    _reconcile(ledger, runtime)
     runtime.agent.subscribe(RunRecorder(runtime))
     return ledger
+
+
+def _reconcile(ledger: RunLedger, runtime) -> None:
+    """Close crash debris before this runtime opens its first run.
+
+    This runtime holds its session's writer lease, so any older ``running``
+    row for that session is dead. The rest of the project is swept once per
+    process, using the lease as the liveness probe.
+    """
+    try:
+        session = getattr(runtime, "session", None)
+        ledger.reconcile_session(str(getattr(session, "path", "") or ""))
+        key = str(ledger.path)
+        with _SWEEP_LOCK:
+            if key in _SWEPT:
+                return
+            _SWEPT.add(key)
+        ledger.reconcile_stale(session_is_live)
+    except Exception:  # noqa: BLE001 - recovery must never block startup
+        _log.debug("run reconciliation failed", exc_info=True)
 
 
 def update_run_scope(runtime, **changes) -> dict:

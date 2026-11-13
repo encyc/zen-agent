@@ -161,3 +161,87 @@ async def test_prepare_records_a_coding_run(app_env, monkeypatch):
         assert row.duration_ms is not None
     finally:
         await prepared.runtime.close()
+
+
+def test_reconcile_session_closes_only_its_open_runs(tmp_path):
+    ledger = _ledger(tmp_path)
+    open_a = ledger.start(kind="coding", session="/p/a.jsonl")
+    done_a = ledger.start(kind="coding", session="/p/a.jsonl")
+    ledger.finish(done_a, status="done", termination="stop")
+    open_b = ledger.start(kind="coding", session="/p/b.jsonl")
+    sessionless = ledger.start(kind="subagent")
+
+    closed = ledger.reconcile_session("/p/a.jsonl")
+
+    assert [row.id for row in closed] == [open_a.id]
+    [row] = closed
+    assert row.status == "interrupted"
+    assert row.termination == "interrupted"
+    assert row.ended_at is not None
+    assert "previous agent process" in row.error
+    rows = {item.id: item for item in ledger.load()}
+    assert rows[done_a.id].status == "done"
+    assert rows[open_b.id].status == "running"
+    assert rows[sessionless.id].status == "running"
+
+
+def test_reconcile_session_is_empty_without_a_session(tmp_path):
+    ledger = _ledger(tmp_path)
+    ledger.start(kind="subagent")
+    assert ledger.reconcile_session("") == []
+
+
+def test_reconcile_stale_skips_a_live_session(tmp_path):
+    ledger = _ledger(tmp_path)
+    live = ledger.start(kind="coding", session="/p/live.jsonl")
+    dead = ledger.start(kind="coding", session="/p/dead.jsonl")
+    sessionless = ledger.start(kind="subagent")
+
+    closed = ledger.reconcile_stale(lambda session: session == "/p/live.jsonl")
+
+    assert [row.id for row in closed] == [dead.id]
+    rows = {item.id: item for item in ledger.load()}
+    assert rows[live.id].status == "running"
+    assert rows[dead.id].status == "interrupted"
+    assert rows[sessionless.id].status == "running"
+
+
+def test_a_failing_liveness_probe_never_closes_a_run(tmp_path):
+    ledger = _ledger(tmp_path)
+    run = ledger.start(kind="coding", session="/p/a.jsonl")
+
+    def broken(_session):
+        raise OSError("probe failed")
+
+    assert ledger.reconcile_stale(broken) == []
+    assert ledger.get(run.id).status == "running"
+
+
+def test_attach_run_recorder_reconciles_crash_debris(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from zenagent.app.run_wiring import attach_run_recorder
+    from zenagent.project import project_dir
+
+    monkeypatch.setattr("zenagent.project.zenagent_home", lambda: tmp_path / "home")
+    root = tmp_path / "project"
+    session = tmp_path / "s.jsonl"
+    ledger = RunLedger(project_dir(root=root) / "runs.jsonl")
+    own = ledger.start(kind="coding", session=str(session))
+    other = ledger.start(kind="swarm", session=str(tmp_path / "other.jsonl"))
+
+    class _Agent:
+        def subscribe(self, listener):
+            self.listener = listener
+
+    runtime = SimpleNamespace(
+        root=root,
+        agent=_Agent(),
+        session=SimpleNamespace(path=session),
+    )
+    attach_run_recorder(runtime)
+
+    rows = {row.id: row for row in ledger.load()}
+    assert rows[own.id].status == "interrupted"
+    assert rows[other.id].status == "interrupted"
+    assert runtime.run_ledger.path == ledger.path

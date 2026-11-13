@@ -34,6 +34,7 @@ __all__ = [
     "ensure_session_free",
     "release_session",
     "release_session_lease",
+    "session_is_live",
 ]
 
 try:  # POSIX
@@ -181,6 +182,24 @@ def ensure_session_free(runtime, path: Path | str | None) -> None:
     owner = _REGISTRY.owner_of(resolved)
     if owner is not None and owner is not runtime:
         raise SessionLeaseBusy()
+
+
+def session_is_live(path: Path | str) -> bool:
+    """Whether some live runtime currently owns ``path``.
+
+    A read-only probe: it takes the lease for an instant and releases it. A
+    filesystem that cannot lock is reported free, the same degradation the
+    lease itself accepts.
+    """
+    resolved = _resolved(path)
+    if _REGISTRY.owner_of(resolved) is not None:
+        return True
+    try:
+        lease = acquire_session(resolved, object())
+    except SessionLeaseBusy:
+        return True
+    release_session(lease)
+    return False
 
 
 def bind_session_lease(runtime, path: Path | str) -> SessionLease:

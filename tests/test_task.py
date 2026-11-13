@@ -848,3 +848,28 @@ async def test_child_tool_calls_go_through_the_parent_gate():
     assert results and results[-1].is_error
     assert "denied by policy" in results[-1].content[0].text
     assert "wrote" not in results[-1].content[0].text  # execute never ran
+
+
+class _RunSink:
+    def __init__(self) -> None:
+        self.started: list[str] = []
+        self.finished: list[tuple[object, str | None, str]] = []
+
+    def start(self, name: str):
+        self.started.append(name)
+        return name
+
+    def finish(self, handle, details, error: str) -> None:
+        self.finished.append(
+            (handle, None if details is None else details.get("status"), error)
+        )
+
+
+async def test_task_reports_each_child_to_the_run_sink():
+    sink = _RunSink()
+    tool = _tool(ChildStream("done"), run_sink=sink)
+
+    await tool.execute("t1", {"prompt": "review it", "name": "reviewer"})
+
+    assert sink.started == ["reviewer"]
+    assert sink.finished == [("reviewer", "ok", "")]

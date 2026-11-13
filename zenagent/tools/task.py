@@ -86,6 +86,7 @@ def build_task_tool(
     limits: SubagentLimits | None = None,
     before_tool_call: Callable | None = None,
     get_observer: ObserverSource | None = None,
+    run_sink: object | None = None,
 ) -> TaskTool:
     """Build the per-run ``task`` tool (the child uses the parent's model).
 
@@ -104,6 +105,8 @@ def build_task_tool(
     consults it, so deny patterns and command policy reach subagents too
     (``None`` means no gate). A child has no user channel, so the gate can only
     allow or refuse there — it never prompts.
+    ``run_sink`` optionally observes each dispatch (``start``/``finish``) so the
+    app layer can put children in the run ledger without the tool knowing it.
     """
     store = SubagentStore(session_path, limits)
     #: Current session path (bind_session rebinds it); a background child
@@ -113,6 +116,27 @@ def build_task_tool(
     def _bind_session(path) -> None:
         session_cell["path"] = path
         store.bind_session(path)
+
+    async def _dispatch_child(**kwargs):
+        """Run one child with an optional start/finish observer."""
+        start = getattr(run_sink, "start", None)
+        handle = start(kwargs["name"]) if start is not None else None
+        details = None
+        failure = ""
+        try:
+            text, details = await run_child(**kwargs)
+            return text, details
+        except asyncio.CancelledError:
+            raise
+        except BaseException as exc:
+            failure = f"{type(exc).__name__}: {exc}"
+            raise
+        finally:
+            finish = getattr(run_sink, "finish", None)
+            if finish is not None:
+                # Observability must not break a child.
+                with contextlib.suppress(Exception):
+                    finish(handle, details, failure)
 
     async def execute(
         tool_call_id: str, args: dict, abort=None, on_update=None
@@ -200,7 +224,7 @@ def build_task_tool(
                 tool_call_id,
                 name,
                 live_model.id,
-                lambda: run_child(
+                lambda: _dispatch_child(
                     child=child,
                     prompt_body=prompt_body,
                     name=name,
@@ -263,7 +287,7 @@ def build_task_tool(
             abort_task = asyncio.create_task(watch_abort())
 
         try:
-            text, details = await run_child(
+            text, details = await _dispatch_child(
                 child=child,
                 prompt_body=prompt_body,
                 name=name,

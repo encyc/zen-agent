@@ -21,6 +21,7 @@ import logging
 import secrets
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -74,6 +75,14 @@ def status_for_termination(termination: str | None) -> str:
     if termination in _FAILED_TERMINATIONS:
         return "failed"
     return "done"
+
+
+def _safe_live(is_live: Callable[[str], bool], session: str) -> bool:
+    """Treat a failed liveness probe as live: never close a run by accident."""
+    try:
+        return bool(is_live(session))
+    except Exception:  # noqa: BLE001 - a probe failure must not fake a recovery
+        return True
 
 
 @dataclass(frozen=True)
@@ -276,6 +285,64 @@ class RunLedger:
 
     def get(self, run_id: str) -> RunRecord | None:
         return {record.id: record for record in self.load()}.get(run_id)
+
+    # -- recovery -----------------------------------------------------------
+
+    def reconcile_session(self, session: str) -> list[RunRecord]:
+        """Close runs a previous writer of ``session`` left open.
+
+        The caller owns the session's writer lease when it attaches, so any
+        older ``running`` row for the same path belongs to a process that is
+        gone: a crash, a kill, or a provider timeout that skipped ``agent_end``.
+        """
+        if not session:
+            return []
+        return self._reconcile(
+            lambda record: record.session == session,
+            "the previous agent process ended without finishing this run",
+        )
+
+    def reconcile_stale(self, is_live: Callable[[str], bool]) -> list[RunRecord]:
+        """Close sessionful runs whose session has no live writer.
+
+        ``is_live`` is supplied by the caller because liveness is a lease
+        question, not a ledger question. Rows without a session are left alone:
+        without a lease there is nothing to prove them dead.
+        """
+        return self._reconcile(
+            lambda record: bool(record.session) and not _safe_live(
+                is_live, record.session
+            ),
+            "the agent process that owned this run is gone",
+        )
+
+    def _reconcile(
+        self, matches: Callable[[RunRecord], bool], reason: str
+    ) -> list[RunRecord]:
+        now = _now()
+        orphaned = [
+            record
+            for record in self.load()
+            if record.status == "running" and matches(record)
+        ]
+        closed: list[RunRecord] = []
+        for record in orphaned:
+            interrupted = replace(
+                record,
+                status="interrupted",
+                updated_at=now,
+                ended_at=now,
+                duration_ms=(
+                    max(0, now - record.started_at) * 1000
+                    if record.started_at
+                    else None
+                ),
+                termination="interrupted",
+                error=f"interrupted: {reason}",
+            )
+            self._append(interrupted)
+            closed.append(interrupted)
+        return closed
 
     def list(
         self,
