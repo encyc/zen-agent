@@ -71,6 +71,8 @@ class FakeUserConfig:
     zen_max_concurrent = 3
     zen_batch_window_s = 0.5
     task_timeout_s = 0
+    task_max_cost: float | None = 2.0
+    task_max_turns = 9
     zen_report_limit = 800
     zen_worker_mode = "inherit"
 
@@ -379,6 +381,11 @@ async def test_fleet_is_built_from_the_router_slot(zen_env):
     assert fleet.kwargs["sessions_dir"] == zen_env.sessions_dir
     assert fleet.kwargs["max_concurrent"] == FakeUserConfig.zen_max_concurrent
     assert fleet.kwargs["mode"] == "ask"
+    # The knobs that only exist at this seam: drop either line in ops_zen and
+    # the fleet keeps working, so nothing else would notice.
+    assert fleet.kwargs["ask"] == router.server.ask
+    assert fleet.kwargs["max_cost"] == FakeUserConfig.task_max_cost
+    assert fleet.kwargs["max_turns"] == FakeUserConfig.task_max_turns
 
 
 async def test_router_slot_pins_while_workers_are_active(zen_env):

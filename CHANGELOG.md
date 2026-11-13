@@ -5,6 +5,14 @@ matches the release tag; older history is in the repository tags and commits.
 
 ## Unreleased
 
+**Zen workers now run on the router's model and can ask a human.** A worker used
+to fall back to the configured default model — so a router switched with `/model`
+spawned workers on a different brain — and carried no cost cap. Workers now
+inherit the router's model and thinking, take `[task]` budgets, and get the
+slot's ask channel; `auto` still downgrades to `ask`, but no longer lands in a
+tool call that can neither run nor ask. Swarm run units now assemble through
+`prepare()`, the same path as every frontend.
+
 **The no-confirmation permission mode is now `auto` (formerly `zen`).** The
 old name collided with the Zen workspace mode in every conversation about
 "zen": a workspace mode, a router fleet and the autonomy rung all shared one

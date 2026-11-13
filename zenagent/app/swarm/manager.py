@@ -21,8 +21,8 @@ from pathlib import Path
 from zenagent.agent.agent import Agent
 from zenagent.agent.session import Session
 from zenagent.app import agent_profile as agents
-from zenagent.app.permissions import build_broker_for
 from zenagent.app.plugin_wiring import start_mcp
+from zenagent.app.bootstrap import prepare
 from zenagent.app.run_wiring import attach_swarm_run
 from zenagent.app.runtime import Runtime, RuntimeOptions
 from zenagent.app.swarm.approvals import APPROVAL_TIMEOUT_S, SwarmApprovals
@@ -603,13 +603,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
             role.id, root=self.root, work_item_id=work_item_id, fresh=fresh_session
         )
         config = load_user_config(cwd=role.root)
-        broker = build_broker_for(
-            user_config=config,
-            mode=role.mode,
-            cwd=role.root,
-        )
         key = agent_key(role.id, work_item_id)
-        broker.set_confirm(self._confirm_callback(key))
         profile = agents.AgentProfile(
             id=role.id,
             kind="swarm",
@@ -644,12 +638,17 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
             if self._stream_fn_factory is not None
             else None
         )
-        runtime = await Runtime.bootstrap(
+        # Same assembly path as every frontend: one place wires the broker,
+        # the run recorder and the rest, so a new step there reaches swarm too.
+        prepared = await prepare(
             options,
             stream_fn=stream_fn,
-            gate=broker,
             allow_missing_key=True,
+            views=False,
         )
+        broker = prepared.broker
+        broker.set_confirm(self._confirm_callback(key))
+        runtime = prepared.runtime
         attach_swarm_run(runtime, role.id, work_item_id, role.name)
         agents.register_swarm_agent(self.supervisor, profile, runtime, work_item_id)
         try:

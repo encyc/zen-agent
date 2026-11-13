@@ -126,7 +126,7 @@ async def test_zen_router_scope_follows_attach_and_detach(tmp_path):
     slot = SimpleNamespace(
         runtime=runtime,
         chat=None,
-        server=SimpleNamespace(confirm=None),
+        server=SimpleNamespace(confirm=None, ask=None),
     )
     ops = ZenOps()
     ops._attach_fleet(tmp_path, slot)

@@ -83,6 +83,8 @@ class FakeWorkerRuntime:
         self.session = FakeWorkerSession(path)
         self.agent = FakeWorkerAgent(factory, path)
         self.closed = False
+        #: Mirrors `Runtime.ask_handler`, which the real runtime starts as None.
+        self.ask_handler = None
 
     async def close(self) -> None:
         self.closed = True
@@ -110,7 +112,16 @@ class FakeWorkerFactory:
 
     async def prepare(self, options, **kwargs) -> SimpleNamespace:
         """Match the real ``prepare``: a PreparedFrontend envelope, not a bare Runtime."""
-        self.calls.append({"root": str(options.root), "resume": options.resume})
+        self.calls.append(
+            {
+                "root": str(options.root),
+                "resume": options.resume,
+                "model_id": options.model_id,
+                "thinking": options.thinking,
+                "max_cost": options.max_cost,
+                "max_turns": options.max_turns,
+            }
+        )
         path = Path(options.resume)
         build_gate = self.build_gates.pop(path, None)
         if build_gate is not None:
@@ -186,7 +197,7 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
 
 def _fleet_with(env: dict, **kwargs) -> ZenFleet:
     return ZenFleet(
-        chat=env["chat"],
+        chat=kwargs.pop("chat", env["chat"]),
         root=env["tmp_path"] / "project",
         sessions_dir=env["tmp_path"] / "sessions",
         router_path=str(env["paths"]["router"]),
@@ -645,3 +656,69 @@ async def test_report_arriving_mid_delivery_batches_into_the_next_flush(env) -> 
     await fleet.wait_all()
     batch = [s for s in env["chat"].delivered if "[zen:worker w2]" in s]
     assert len(batch) == 1 and "[zen:worker w3]" in batch[0]
+
+
+async def test_worker_inherits_router_model_and_task_budgets(env) -> None:
+    env["chat"].runtime = SimpleNamespace(
+        agent=SimpleNamespace(
+            model=SimpleNamespace(id="router-model"), thinking="high"
+        )
+    )
+    fleet = _fleet_with(env, max_cost=2.5, max_turns=12)
+    await fleet.dispatch(str(env["paths"]["w1"]), "a")
+    await fleet.wait_all()
+    call = env["factory"].calls[-1]
+    assert call["model_id"] == "router-model"
+    assert call["thinking"] == "high"
+    assert call["max_cost"] == 2.5
+    assert call["max_turns"] == 12
+
+
+async def test_worker_without_router_falls_back_to_the_default_model(env) -> None:
+    fleet = _fleet_with(env, chat=None)
+    await fleet.dispatch(str(env["paths"]["w1"]), "a")
+    await fleet.wait_all()
+    assert env["factory"].calls[-1]["model_id"] is None
+    assert env["factory"].calls[-1]["thinking"] is None
+
+
+async def test_worker_gets_the_fleets_ask_handler(env) -> None:
+    async def ask(questions):
+        return {}
+
+    fleet = _fleet_with(env, ask=ask)
+    await fleet.dispatch(str(env["paths"]["w1"]), "a")
+    await fleet.wait_all()
+    runtime = env["factory"].runtimes[str(env["paths"]["w1"])]
+    assert runtime.ask_handler is ask
+
+
+async def test_downgraded_worker_still_has_an_ask_channel(env) -> None:
+    async def ask(questions):
+        return {}
+
+    fleet = _fleet_with(env, mode="auto", ask=ask)
+    await fleet.dispatch(str(env["paths"]["w1"]), "a")
+    await fleet.wait_all()
+    runtime = env["factory"].runtimes[str(env["paths"]["w1"])]
+    assert env["factory"].modes[str(env["paths"]["w1"])] == "ask"
+    assert runtime.ask_handler is ask
+
+
+async def test_worker_without_ask_channel_keeps_the_handler_empty(env) -> None:
+    fleet = _fleet_with(env)
+    await fleet.dispatch(str(env["paths"]["w1"]), "a")
+    await fleet.wait_all()
+    runtime = env["factory"].runtimes[str(env["paths"]["w1"])]
+    assert runtime.ask_handler is None
+
+
+async def test_worker_inherits_an_explicit_thinking_off(env) -> None:
+    """`/thinking off` stores None; the worker must see "off", not "derive one"."""
+    env["chat"].runtime = SimpleNamespace(
+        agent=SimpleNamespace(model=SimpleNamespace(id="router-model"), thinking=None)
+    )
+    fleet = _fleet_with(env)
+    await fleet.dispatch(str(env["paths"]["w1"]), "a")
+    await fleet.wait_all()
+    assert env["factory"].calls[-1]["thinking"] == "off"

@@ -12,6 +12,7 @@ from conftest import text_stream
 
 from zenagent.app.runtime import Runtime
 from zenagent.app.swarm.events_tap import subscribe_events, tap
+from zenagent.app.swarm import manager as manager_module
 from zenagent.app.swarm.manager import SwarmManager
 from zenagent.app.swarm.roles import (
     project_agents_root,
@@ -1215,3 +1216,26 @@ async def test_task_transcript_falls_back_to_disk_without_a_live_runtime():
     detail = manager.task_transcript(task.id)
     assert detail["available"] is True
     assert any(row.get("text") == "磁盘结论" for row in detail["transcript"])
+
+
+async def test_run_units_are_built_through_prepare(monkeypatch) -> None:
+    _write_role("research", "You research.")
+    calls: list[dict] = []
+    real = manager_module.prepare
+
+    async def spy(options, **kwargs):
+        calls.append(kwargs)
+        return await real(options, **kwargs)
+
+    monkeypatch.setattr(manager_module, "prepare", spy)
+    manager = _manager(stream_fn_factory=lambda role: text_stream("ok"))
+    await manager.start()
+    try:
+        [task] = await manager.post("@research hi")
+        await _wait_for(lambda: _states(manager).get(task.id) == "done")
+    finally:
+        await manager.close()
+
+    assert calls, "swarm must build run units through prepare()"
+    assert calls[0]["views"] is False
+    assert calls[0]["allow_missing_key"] is True
