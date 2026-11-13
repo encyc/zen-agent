@@ -110,7 +110,7 @@ export const REQUEST_KINDS = [
   'tools',
   'transcript',
   'usage',
-  'zen_fleet',
+  'workspace', 'zen_fleet',
 ] as const
 export type RequestKind = (typeof REQUEST_KINDS)[number]
 

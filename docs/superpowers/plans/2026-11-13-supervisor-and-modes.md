@@ -102,3 +102,25 @@
 4. approval 回复按 `project + run_id` 路由，跨项目不再靠字符串前缀；
 5. 旧 RPC 入口仍可用；新 `supervisor` 入口的契约测试全绿；
 6. 全量 pytest / desktop test / ruff / architecture gate 全绿。
+
+## 交付状态（2026-11-13）
+
+- **3a AgentProfile**：完成。`RuntimeOptions.profile` 取代 role flags；swarm/zen/CLI 显式构造。
+- **3b Supervisor**：完成。host 按项目持有 registry；slot / zen router / zen worker /
+  swarm `(role, work item)` 注册与注销；`supervisor op=status` 返回 union。
+- **4a WorkspaceState**：完成。`workspace.json` + `load/save/set`，缺失/损坏回落 coding。
+- **4b workspace RPC**：完成。`get/set` + `workspace` 帧；zen enable/disable 同步写入。
+- **4c Desktop**：完成。boot/切项目 `syncWorkspaceState` 校准；`switchWorkspaceMode`
+  写回后端；localStorage 作为离线缓存；desktop tests/build 通过。
+- **5a ApprovalRouter**：完成。slot 与 swarm 的 future 注册进共享 router；host 先查
+  router，再回退旧 prefix/slot 路径；事件补 `runId`/`agentId`/`workItemId`/`taskId`。
+- **5b Roster**：完成统一查询面（supervisor status + counts + pending approvals）；
+  zen/swarm 的详细 roster 仍是各自展示投影，未删除（兼容性选择）。
+- **5c RPC**：完成 `supervisor status/approve/cancel`；`dispatch` 仍走
+  `zen_fleet`/`swarm`（模式特有语义，不在本轮强行抽象）；旧请求族保留为兼容适配器。
+
+### 边界
+
+- `workspace.set` 记录期望模式，不负责启动/停止 fleet/room；启停仍由 zen/swarm 执行。
+- `supervisor.cancel` 对 live handle 的 agent 发 abort，终态由各 runner 映射。
+- `supervisor.dispatch` 未实现；这是刻意保留的模式特有调度。

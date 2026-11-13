@@ -114,6 +114,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
         max_chain_cost: float = DEFAULT_MAX_CHAIN_COST,
         runtime_idle_s: float = 600.0,
         supervisor: agents.Supervisor | None = None,
+        approval_router=None,
     ) -> None:
         self.root = Path(root)
         self._write_frame = write_frame
@@ -125,14 +126,13 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
         self.store = SwarmStore(project_state_root(self.root))
         self.work_items = WorkItemStore(self.store)
         self.router: Router | None = None
-        #: Run units, keyed by (role, work item): one agent may work two jobs.
         self.agents: dict[AgentKey, SwarmAgent] = {}
         self.runners: dict[AgentKey, TaskRunner] = {}
-        #: Role ids come from configuration, never from lazily built instances.
         self.role_ids: set[str] = set()
         self._roles: dict[str, RoleManifest] = {}
         self._idle = IdleTracker(runtime_idle_s)
         self.supervisor = supervisor or agents.Supervisor(self.root)
+        self._approval_router = approval_router
         self._vision: dict[str, bool] = {}
         self.warnings: list[str] = []
         self._pending: list[TaskRecord] = []

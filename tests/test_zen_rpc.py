@@ -15,6 +15,7 @@ import pytest
 
 from zenagent.app.bootstrap import PreparedFrontend
 from zenagent.app.runtime import RuntimeOptions
+from zenagent.app.workspace_state import load_workspace
 from zenagent.cli.rpc.host import RpcHost
 from zenagent.cli.rpc.slot import RuntimeSlot
 from zenagent.project import project_key, project_sessions_dir
@@ -430,3 +431,11 @@ async def test_leaving_zen_keeps_the_session_the_person_switched_to(zen_env):
     assert frame["enabled"] is False
     assert frame["session"] == str(other)
     assert _router(zen_env) is None
+
+
+async def test_enable_and_disable_persist_the_workspace_mode(zen_env):
+    await zen_env.call({"type": "zen_fleet", "op": "enable", "id": "w1"})
+    assert load_workspace(zen_env.root).mode == "zen"
+
+    await zen_env.call({"type": "zen_fleet", "op": "disable", "id": "w2"})
+    assert load_workspace(zen_env.root).mode == "coding"

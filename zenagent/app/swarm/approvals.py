@@ -16,6 +16,7 @@ import json
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+from zenagent.app.approval_router import ApprovalEntry
 from zenagent.app.swarm.instances import AgentKey
 
 if TYPE_CHECKING:
@@ -66,6 +67,9 @@ class SwarmApprovals:
                 "workItem": work_item_id,
                 "task": task_id,
                 "request_id": request_id,
+                "runId": getattr(
+                    getattr(agent, "runtime", None), "current_run_id", None
+                ),
                 "tool_name": tool_name,
                 "args": json.dumps(arguments, ensure_ascii=False, default=str),
             }
@@ -76,6 +80,21 @@ class SwarmApprovals:
                 event["reason"] = verdict.reason
             future: asyncio.Future = asyncio.get_running_loop().create_future()
             self._approvals[request_id] = future
+            router = getattr(self, "_approval_router", None)
+            if router is not None:
+                router.register(
+                    ApprovalEntry(
+                        request_id=request_id,
+                        project=self._approval_prefix.split(":swarm:", 1)[0],
+                        agent_id=role_id,
+                        run_id=getattr(
+                            getattr(agent, "runtime", None), "current_run_id", None
+                        ),
+                        work_item_id=work_item_id,
+                        task_id=task_id,
+                        future=future,
+                    )
+                )
             self._write({"type": "event", "event": event})
             try:
                 return await asyncio.wait_for(future, APPROVAL_TIMEOUT_S)
@@ -88,6 +107,8 @@ class SwarmApprovals:
                 return "deny"
             finally:
                 self._approvals.pop(request_id, None)
+                if router is not None:
+                    router.forget(request_id)
 
         return confirm
 

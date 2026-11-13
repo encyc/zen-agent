@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from zenagent.app.agent_profile import AgentProfile, Supervisor
+from zenagent.app.approval_router import ApprovalRouter
 from zenagent.app.bootstrap import prepare
 from zenagent.app.session_lease import SessionLeaseBusy
 from zenagent.cli.rpc.codec import PROTOCOL_VERSION
@@ -26,6 +27,7 @@ from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
 from zenagent.cli.rpc.ops_runs import RunsOps
 from zenagent.cli.rpc.ops_supervisor import SupervisorOps
 from zenagent.cli.rpc.ops_swarm import SwarmOps, _is_swarm_request_id
+from zenagent.cli.rpc.ops_workspace import WorkspaceOps
 from zenagent.cli.rpc.ops_zen import ZenOps
 from zenagent.cli.rpc.slot import RuntimeSlot
 from zenagent.cli.rpc.terminal import TerminalError, TerminalSession, clamp_dim
@@ -39,7 +41,7 @@ if TYPE_CHECKING:
 MAX_RESIDENT_SLOTS = 4
 
 
-class RpcHost(RunsOps, SupervisorOps, SwarmOps, ZenOps):
+class RpcHost(WorkspaceOps, RunsOps, SupervisorOps, SwarmOps, ZenOps):
     """Reads requests, routes them to a project slot, and owns slot lifetime."""
 
     def __init__(
@@ -75,6 +77,8 @@ class RpcHost(RunsOps, SupervisorOps, SwarmOps, ZenOps):
         self._swarm: OrderedDict[str, SwarmManager] = OrderedDict()
         #: Project-scoped live-agent registries shared by slots/zen/swarm.
         self._supervisors: OrderedDict[str, Supervisor] = OrderedDict()
+        #: Typed approval correlation for every slot and swarm room.
+        self._approvals = ApprovalRouter()
         #: Per project key, the session zen took the foreground from.
         self._zen_pre: dict[str, str] = {}
         self._terminal = TerminalSession(self._send)
@@ -159,12 +163,22 @@ class RpcHost(RunsOps, SupervisorOps, SwarmOps, ZenOps):
         if kind == "supervisor":
             await self._supervisor_op(request, request_id)
             return True
+        if kind == "workspace":
+            await self._workspace_op(request, request_id)
+            return True
         if kind == "swarm":
             await self._swarm_op(request, request_id)
             return True
         if kind == "zen_fleet":
             await self._zen_op(request, request_id)
             return True
+        if kind == "approval":
+            decision = request.get("decision")
+            if decision in ("allow", "always", "deny") and self._approvals.resolve(
+                str(request.get("request_id") or ""), str(decision)
+            ):
+                self._send({"type": "result", "id": request.get("id"), "ok": True})
+                return True
         if kind in ("approval", "ask") and _is_swarm_request_id(
             str(request.get("request_id") or "")
         ):
@@ -438,6 +452,7 @@ class RpcHost(RunsOps, SupervisorOps, SwarmOps, ZenOps):
             key=key,
         )
         self._slots[key] = slot
+        slot.server.approval_router = self._approvals
         self._supervisor(root).register(
             key,
             profile=AgentProfile(id=key, kind="coding", label=key),
@@ -628,6 +643,7 @@ class RpcHost(RunsOps, SupervisorOps, SwarmOps, ZenOps):
         self._supervisors.clear()
         for supervisor in supervisors:
             await supervisor.close()
+        self._approvals.clear()
 
     def _send(self, payload: dict) -> None:
         if self._write_line is not None:

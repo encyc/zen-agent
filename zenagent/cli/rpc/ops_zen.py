@@ -23,6 +23,7 @@ from zenagent.agent.session import Session
 from zenagent.app.agent_profile import AgentProfile
 from zenagent.app.run_wiring import update_run_scope
 from zenagent.app.views import TranscriptBuilder
+from zenagent.app.workspace_state import load_workspace, set_workspace_mode
 from zenagent.app.zen.fleet import ZenFleet
 from zenagent.app.zen.roster import latest_router, set_role
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
@@ -205,6 +206,7 @@ class ZenOps:
             supervisor=supervisor,
         )
         runtime.zen_fleet = fleet
+        set_workspace_mode(root, "zen", router_session=str(runtime.session.path))
         if supervisor is not None:
             supervisor.register(
                 slot.key,
@@ -227,6 +229,8 @@ class ZenOps:
         if fleet is not None:
             await fleet.close()
         slot.runtime.zen_fleet = None
+        if load_workspace(Path(slot.runtime.root)).mode == "zen":
+            set_workspace_mode(slot.runtime.root, "coding")
         if hasattr(self, "_supervisor"):
             self._supervisor(Path(slot.runtime.root)).register(
                 slot.key,

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from zenagent.app.workspace_state import load_workspace
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
 from zenagent.project import find_project_root
 
@@ -22,17 +23,70 @@ class SupervisorOps:
         op = request.get("op") or "status"
         label = str(op)
         try:
+            if op == "cancel":
+                key = request.get("key") or request.get("agentId")
+                if not isinstance(key, str) or not key:
+                    raise Refusal("cancel needs key", code="supervisor_invalid")
+                root = self._supervisor_root(request)
+                handle = next(
+                    (
+                        item
+                        for item in self._supervisor(root).handles()
+                        if item.key == key or item.profile.id == key
+                    ),
+                    None,
+                )
+                if handle is None:
+                    raise Refusal("no live agent", code="supervisor_missing")
+                running = bool(getattr(handle.runtime.agent, "is_streaming", False))
+                if running:
+                    handle.runtime.agent.abort()
+                self._send(
+                    {
+                        "type": "result",
+                        "id": request_id,
+                        "ok": True,
+                        "key": handle.key,
+                        "cancelled": running,
+                    }
+                )
+                return
+            if op == "approve":
+                request_id = request.get("requestId")
+                decision = request.get("decision")
+                if not isinstance(request_id, str) or not request_id:
+                    raise Refusal("approve needs requestId", code="supervisor_invalid")
+                if decision not in ("allow", "always", "deny"):
+                    raise Refusal(
+                        "decision must be allow|always|deny",
+                        code="supervisor_invalid",
+                    )
+                router = getattr(self, "_approvals", None)
+                if router is None or not router.resolve(request_id, str(decision)):
+                    raise Refusal("no pending approval", code="approval_missing")
+                self._send({"type": "result", "id": request_id, "ok": True})
+                return
             if op != "status":
                 raise Refusal(f"unknown supervisor op: {op}", code="supervisor_invalid")
             root = self._supervisor_root(request)
             supervisor = self._supervisor(root)
+            agents = supervisor.snapshots()
+            approvals = getattr(self, "_approvals", None)
             self._send(
                 {
                     "type": "result",
                     "id": request_id,
                     "ok": True,
                     "project": str(root),
-                    "agents": supervisor.snapshots(),
+                    "mode": load_workspace(root).mode,
+                    "agents": agents,
+                    "counts": {
+                        "agents": len(agents),
+                        "running": sum(
+                            1 for agent in agents if agent["state"] == "running"
+                        ),
+                    },
+                    "approvals": approvals.pending() if approvals else [],
                 }
             )
         except Refusal as exc:

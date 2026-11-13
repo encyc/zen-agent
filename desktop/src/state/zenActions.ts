@@ -106,11 +106,53 @@ export async function onZenModeLeft(get: AppGetter): Promise<void> {
   if (!stopped) useSettingsStore.getState().setWorkspaceMode('zen')
 }
 
+const WORKSPACE_MODES = new Set(['coding', 'zen', 'swarm'])
+
+/** Ask the backend for the project's mode and cache it locally. The backend
+ * is authoritative when it answers; an older child that rejects the kind
+ * leaves the local value alone. */
+export async function syncWorkspaceState(get: AppGetter): Promise<void> {
+  if (get().project === null) return
+  let frame: Record<string, unknown>
+  try {
+    frame = await get().client().send({
+      type: 'workspace',
+      op: 'get',
+      project: get().project,
+    })
+  } catch {
+    return
+  }
+  const mode = frame.type === 'result' && frame.ok ? frame.mode : null
+  if (typeof mode === 'string' && WORKSPACE_MODES.has(mode)) {
+    useSettingsStore.getState().setWorkspaceMode(mode as WorkspaceMode)
+  }
+}
+
+async function persistWorkspaceMode(
+  get: AppGetter,
+  mode: WorkspaceMode,
+): Promise<boolean> {
+  if (get().project === null) return false
+  try {
+    const frame = await get().client().send({
+      type: 'workspace',
+      op: 'set',
+      project: get().project,
+      mode,
+    })
+    return frame.type === 'result' && frame.ok === true
+  } catch {
+    return false
+  }
+}
+
 /** One place for the mode switcher: persist the mode, then run the zen-side
  * transitions (enable on enter, gated stop on leave). */
 export function switchWorkspaceMode(get: AppGetter, mode: WorkspaceMode): void {
   const prev = useSettingsStore.getState().workspaceMode
   useSettingsStore.getState().setWorkspaceMode(mode)
+  void persistWorkspaceMode(get, mode)
   if (mode === 'zen') void switchZenPresence(get, true)
   else if (prev === 'zen') void onZenModeLeft(get)
   // Entering swarm loads the active project's room (no-op in other modes).
@@ -143,6 +185,7 @@ export async function syncZenState(get: AppGetter): Promise<void> {
 /** Re-point the per-project stores after boot or a project switch: the fleet
  * roster and the swarm room both belong to the project on screen. */
 export async function syncProjectState(get: AppGetter): Promise<void> {
+  await syncWorkspaceState(get)
   await syncZenState(get)
   await syncSwarmState(get().project)
 }

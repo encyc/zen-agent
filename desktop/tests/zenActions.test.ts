@@ -5,7 +5,9 @@ import {
   applyFleetFrame,
   onZenModeLeft,
   stopFleet,
+  switchWorkspaceMode,
   switchZenPresence,
+  syncWorkspaceState,
   syncZenState,
   zenTranscript,
 } from '../src/state/zenActions.ts'
@@ -237,4 +239,36 @@ test('stopFleet marks the fleet stopped', async () => {
   const env = makeEnv(() => ({ type: 'result', ok: true, roster: [] }))
   await stopFleet(env.get)
   assert.equal(useZenStore.getState().stoppedByUser, true)
+})
+
+
+test('syncWorkspaceState adopts the backend mode', async () => {
+  resetStores()
+  const env = makeEnv(() => ({ type: 'result', ok: true, mode: 'swarm' }))
+  await syncWorkspaceState(env.get)
+  assert.equal(useSettingsStore.getState().workspaceMode, 'swarm')
+})
+
+test('syncWorkspaceState ignores an unknown or failed mode', async () => {
+  resetStores()
+  useSettingsStore.getState().setWorkspaceMode('zen')
+  const env = makeEnv(() => ({ type: 'result', ok: true, mode: 'banana' }))
+  await syncWorkspaceState(env.get)
+  assert.equal(useSettingsStore.getState().workspaceMode, 'zen')
+})
+
+test('switchWorkspaceMode writes the backend mode', async () => {
+  resetStores()
+  const env = makeEnv(() => ({ type: 'result', ok: true, mode: 'coding' }))
+  switchWorkspaceMode(env.get, 'coding')
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.ok(
+    env.sent.some(
+      (payload) =>
+        payload.type === 'workspace' &&
+        payload.op === 'set' &&
+        payload.mode === 'coding',
+    ),
+    'workspace set was sent',
+  )
 })

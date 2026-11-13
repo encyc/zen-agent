@@ -170,6 +170,7 @@ def test_usage_scans_every_project(tmp_path, monkeypatch):
 
 
 def test_role_managed_sessions_skip_the_scope_warning():
+    from zenagent.app.agent_profile import AgentProfile
     from zenagent.app.runtime import Runtime
 
     legacy = project.legacy_sessions_dir()
@@ -178,6 +179,6 @@ def test_role_managed_sessions_skip_the_scope_warning():
     path.write_text("", encoding="utf-8")
 
     runtime = Runtime()
-    runtime.project_sessions = False
+    runtime.profile = AgentProfile(project_sessions=False)
     runtime._note_session_scope(path)
     assert runtime.warnings == []

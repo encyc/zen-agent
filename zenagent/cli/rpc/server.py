@@ -14,6 +14,10 @@ from dataclasses import asdict
 from pathlib import Path
 
 from zenagent.agent import Agent
+from zenagent.app.approval_router import (
+    approval_event_for,
+    register_approval,
+)
 from zenagent.app.views import usage_total
 from zenagent.app.workspace import (
     worktree_overview,
@@ -234,27 +238,22 @@ class RpcServer(FilesOps, SessionOps, PluginsOps, ConfigOps):
             args = json.dumps(arguments, ensure_ascii=False, default=str)[:_ARGS_CHARS]
         except (TypeError, ValueError):  # pragma: no cover - defensive
             args = str(arguments)[:_ARGS_CHARS]
-        event: dict = {
-            "type": "approval_request",
-            "request_id": request_id,
-            "tool_name": tool_name,
-            "args": args,
-        }
-        if verdict is not None:
-            event["kind"] = verdict.kind
-            event["risk"] = verdict.risk
-            event["target"] = verdict.target
-            event["reason"] = verdict.reason
+        event = approval_event_for(self, request_id, tool_name, args, verdict)
         self._send({"type": "event", "event": event})
 
         future: asyncio.Future = asyncio.get_running_loop().create_future()
         self._approvals[request_id] = future
+        router = getattr(self, "approval_router", None)
+        if router is not None:
+            register_approval(router, self, request_id, future)
         try:
             return await asyncio.wait_for(future, self.approval_timeout_s)
         except TimeoutError:
             return "deny"
         finally:
             self._approvals.pop(request_id, None)
+            if router is not None:
+                router.forget(request_id)
 
     def _resolve_approval(self, request: dict) -> bool:
         request_id = request.get("request_id")
