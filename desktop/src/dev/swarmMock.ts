@@ -463,6 +463,34 @@ function transcriptRows(task: SwarmTask): (MessageView | ToolCallView)[] {
   ]
 }
 
+function postMessage(
+  rows: Room,
+  text: string,
+  refId: string | undefined,
+  images: string[],
+): SwarmTask[] {
+  const source = refId === undefined ? undefined : rows.swarmMessages.find((m) => m.id === refId)
+  const message = appendMessage(rows, {
+    author: { kind: 'user', id: 'you' },
+    text,
+    ref: source === undefined ? null : { id: source.id, author: source.author, text: source.text },
+    images,
+  })
+  const created: SwarmTask[] = []
+  for (const roleId of message.mentions) {
+    const task = addTask(rows, {
+      assignee: roleId,
+      source: message.id,
+      author: message.author,
+      chainId: `c_${rows.swarmTasks.length + 1}`,
+      depth: message.chainDepth + 1,
+    })
+    created.push(task)
+    void run(rows, task, message.chainDepth + 1)
+  }
+  return created
+}
+
 export function handleSwarm(
   state: SwarmMockState,
   payload: Record<string, unknown>,
@@ -489,27 +517,8 @@ export function handleSwarm(
   if (op === 'post') {
     const text = String(payload.text ?? '')
     const refId = typeof payload.ref === 'string' ? payload.ref : undefined
-    const source = refId === undefined ? undefined : rows.swarmMessages.find((m) => m.id === refId)
     const images = Array.isArray(payload.images) ? payload.images.map(String) : []
-    const message = appendMessage(rows, {
-      author: { kind: 'user', id: 'you' },
-      text,
-      ref: source === undefined ? null : { id: source.id, author: source.author, text: source.text },
-      images,
-    })
-    const created: SwarmTask[] = []
-    for (const roleId of message.mentions) {
-      const task = addTask(rows, {
-        assignee: roleId,
-        source: message.id,
-        author: message.author,
-        chainId: `c_${rows.swarmTasks.length + 1}`,
-        depth: message.chainDepth + 1,
-      })
-      created.push(task)
-      void run(rows, task, message.chainDepth + 1)
-    }
-    return ok({ tasks: copy(created) })
+    return ok({ tasks: copy(postMessage(rows, text, refId, images)) })
   }
 
   if (op === 'cancel') {
@@ -613,4 +622,36 @@ export function handleSwarm(
   }
 
   return { type: 'error', id: payload.id, ok: false, message: `unknown swarm op: ${op}` }
+}
+
+/** The host-level dispatch entry the swarm composer uses after the cutover. */
+export function handleSupervisor(
+  state: SwarmMockState,
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  const ok = (fields: Record<string, unknown>) => ({
+    type: 'result',
+    id: payload.id,
+    ok: true,
+    ...fields,
+  })
+  if (payload.op !== 'dispatch') {
+    return { type: 'error', id: payload.id, ok: false, code: 'supervisor_invalid', message: 'unsupported' }
+  }
+  const mode = String(payload.mode ?? 'swarm')
+  if (mode !== 'swarm') {
+    return { type: 'error', id: payload.id, ok: false, code: 'dispatch_invalid', message: mode }
+  }
+  const rows = roomFor(state, payload)
+  const role = typeof payload.role === 'string' ? payload.role : ''
+  const prompt = String(payload.prompt ?? '')
+  const text = role === '' ? prompt : `@${role} ${prompt}`
+  const refId = typeof payload.ref === 'string' ? payload.ref : undefined
+  const images = Array.isArray(payload.images) ? payload.images.map(String) : []
+  const tasks = postMessage(rows, text, refId, images)
+  return ok({
+    dispatched: true,
+    tasks: copy(tasks),
+    taskIds: tasks.map((task) => task.id),
+  })
 }

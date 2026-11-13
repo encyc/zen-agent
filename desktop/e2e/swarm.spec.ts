@@ -27,8 +27,10 @@ test('switch to swarm, delegate, and see the chain', async ({ page }) => {
   await expect(tasks.nth(1)).toHaveAttribute('data-state', 'done')
 
   const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
-  const post = calls.find((call) => call.type === 'swarm' && call.op === 'post')
-  assert.equal(post?.text, '@research 查 X')
+  const post = calls.find(
+    (call) => call.type === 'supervisor' && call.op === 'dispatch' && call.mode === 'swarm',
+  )
+  assert.equal(post?.prompt, '@research 查 X')
 })
 
 test('the room @ menu picks a role inside the shared plate', async ({ page }) => {
@@ -457,7 +459,9 @@ test('quoting a message sends its id with the post', async ({ page }) => {
 
   await expect(page.locator('[data-swarm-quote-strip]')).toHaveCount(0)
   const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
-  const post = calls.filter((call) => call.type === 'swarm' && call.op === 'post').at(-1)
+  const post = calls
+    .filter((call) => call.type === 'supervisor' && call.op === 'dispatch')
+    .at(-1)
   assert.equal(post?.ref, 'm_seed')
 })
 

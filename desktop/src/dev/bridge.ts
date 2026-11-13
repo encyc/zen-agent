@@ -6,7 +6,7 @@
 
 import { PROTOCOL_VERSION } from '../rpc/types.ts'
 import { handlePlugins, type PluginMockState } from './pluginsMock.ts'
-import { handleSwarm, type SwarmMockState } from './swarmMock.ts'
+import { handleSupervisor, handleSwarm, type SwarmMockState } from './swarmMock.ts'
 import { handleZenFleet, type ZenMockState } from './zenMock.ts'
 type Lane = 'queue' | 'steer'
 
@@ -495,6 +495,7 @@ export function installBridge(state: BridgeState) {
       }
       case 'plugins': return handlePlugins(state, payload)
       case 'swarm': return handleSwarm(state, payload)
+      case 'supervisor': return handleSupervisor(state, payload)
       case 'zen_fleet': return handleZenFleet(state, payload)
       case 'mcp': {
         const rows = () =>
