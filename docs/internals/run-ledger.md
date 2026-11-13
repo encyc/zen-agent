@@ -55,10 +55,12 @@ worker 状态的权威；账本负责把它们放到同一张时间线上。
   写终态；`max_turns` / `max_cost` / `error` / `no_stream` / `length` 记为 `failed`，
   `aborted` 记为 `aborted`，其余正常结束记为 `done`。
 
-接线点只有两处：
+接线点：
 
 - `app/bootstrap.py::prepare`：coding、REPL、TUI、RPC slot、zen worker 都走这里；
-- `app/swarm/manager.py::_build_agent`：swarm 绕过 `prepare`，单独接。
+- `app/swarm/manager.py::_build_agent`：swarm 绕过 `prepare`，单独接；
+- `app/subagent_runs.py::SubagentRunSink`：`task` 工具的每次 child dispatch 由
+  `build_task_tool(run_sink=...)` 观察，记 `kind=subagent`。
 
 ## scope
 
@@ -70,6 +72,7 @@ worker 状态的权威；账本负责把它们放到同一张时间线上。
 | zen router | `zen_router` | `router` | — |
 | zen worker | `zen_worker` | worker 标题/stem | `parentRunId` = 派工时 router 的 `current_run_id`，`label` = focus |
 | swarm | `swarm` | role id | `workItemId`、`taskId`（每轮写入） |
+| subagent | `subagent` | task name | `session` = 父 session，`parentRunId` = 派发时的父 run |
 
 `app/zen/fleet.py::_build_worker`、`app/swarm/manager.py::_build_agent`、
 `app/swarm/schedule.py::_execute` 分别填这些字段；`cli/rpc/ops_zen.py` 在 fleet
@@ -89,25 +92,38 @@ RPC（host 级，跨模式）：
 
 Python 侧可直接用 `RunLedger(path).list(...)` / `.get(...)`；`RunLedger.load()` 是完整重放。
 
-## 当前边界（Phase 1）
+## 崩溃对账
 
-- **subagent 未接入**：`task` 工具的孩子 agent 还没有 scope（`RUN_KINDS` 预留了
-  `subagent`）。Phase 2 在 `subagents_runtime.construct_child` 接。
-- **崩溃后的 running 行不会自动修正**：进程被杀时最后一条是 `running`。查询方可以用
-  `startedAt` 判断陈旧；后续 Phase 会增加 host 启动时的 `interrupted` 对账。
+`attach_run_recorder` 在挂 recorder 之前先收口崩溃残留：
+
+- `RunLedger.reconcile_session(path)`：当前 runtime 已持有该 session 的 writer lease，
+  同路径旧的 `running` 行不可能属于活进程，直接追加 `interrupted`；
+- `RunLedger.reconcile_stale(session_is_live)`：每个进程每个账本扫一次，用 lease 探针
+  判断其他 session 是否还有 writer；探针失败按“活着”处理，避免误杀；
+- 收口保留原归属字段，只追加 `status=interrupted`、`termination=interrupted`、
+  `endedAt`、`durationMs` 和 `error` 原因；
+- 无 session 的行不碰：没有 lease 就没有死亡证据。
+
+## 当前边界
+
+- **subagent 用父 session 归属**：孩子没有独立 session，账本行记录父 run 和父
+  session；父 session 恢复时由 `reconcile_session` 一并收口。
 - **swarm 的终态仍以 task 为准**：账本记的是 agent run 的终止原因；用户取消的任务在
-  `tasks.jsonl` 里是 `cancelled`，账本里可能仍是 `aborted`。
-- **没有 retention/compaction**：`runs.jsonl` 只追加；Phase 2 再按项目保留期清理。
-- **`workspaceMode` 仍在 UI**：账本记录事实，不拥有模式；模式收归后端是 Phase 4。
+  `tasks.jsonl` 里是 `cancelled`，账本里可能仍是 `aborted`。房间启动时
+  `SwarmStore.reconcile` 会把未终态 task 标 `failed`，账本再独立收口 run。
+- **没有 retention/compaction**：`runs.jsonl` 只追加。
+- **对账是 best-effort**：文件系统不支持 advisory lock 时 lease 本身已降级，探针按
+  进程内 registry 判断。
 
 ## 源码对照
 
 | 关注点 | 文件 |
 |---|---|
 | record / ledger / 重放 / 过滤 | `zenagent/app/runs.py` |
-| Runtime 接线 / scope 更新 / 成本汇总 | `zenagent/app/run_wiring.py` |
+| Runtime 接线 / scope 更新 / 成本汇总 / 崩溃对账 | `zenagent/app/run_wiring.py` |
+| writer lease / liveness 探针 | `zenagent/app/session_lease.py` |
 | coding 接线 | `zenagent/app/bootstrap.py::prepare` |
 | zen scope | `zenagent/app/zen/fleet.py::_build_worker`、`zenagent/cli/rpc/ops_zen.py` |
 | swarm scope | `zenagent/app/swarm/manager.py::_build_agent`、`zenagent/app/swarm/schedule.py::_execute` |
 | RPC | `zenagent/cli/rpc/ops_runs.py`、`zenagent/cli/rpc/host.py` |
-| 测试 | `tests/test_run_ledger.py`、`tests/test_run_scopes.py`、`tests/test_rpc_runs.py` |
+| 测试 | `tests/test_run_ledger.py`、`tests/test_subagent_runs.py`、`tests/test_run_scopes.py`、`tests/test_rpc_runs.py` |

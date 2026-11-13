@@ -121,6 +121,7 @@ Phase 3：Supervisor + AgentProfile，把 role 字段移出 `Runtime`。
 Phase 4：`workspaceMode` 收到后端，模式切换变成幂等事务。
 Phase 5：统一 zen/swarm 的 scheduler / approval / roster，RPC 收敛到 `supervisor` 请求族。
 Phase 6：`supervisor dispatch` 适配器——一个派活入口，zen/swarm 各自保留调度策略。
+Phase 7：run 账本崩溃对账 + `subagent` 记账（父 session / 父 run 归属）。
 
 目标结构：
 
