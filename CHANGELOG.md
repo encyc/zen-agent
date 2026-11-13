@@ -20,6 +20,18 @@ matches the release tag; older history is in the repository tags and commits.
   RPC across modes. The ledger is best-effort and append-only; it is the
   foundation for a backend-owned supervisor, not a replacement for the swarm
   task table.
+- **Backend workspace mode and a live-agent registry** — `AgentProfile` now
+  carries the role-side assembly policy, `Supervisor` tracks live slots, zen
+  workers and swarm run units per project, and `workspace op=get/set` persists
+  `coding|zen|swarm` under the project's state directory. Host-level
+  `supervisor op=status` returns the union of live agents, running count,
+  pending approvals and the mode; desktop boot/switch uses the backend value as
+  the source of truth.
+- **Approvals are correlated by lookup** — slot approvals and swarm approvals
+  register with a shared `ApprovalRouter` carrying `project` / `agentId` /
+  `runId` / `workItemId` / `taskId`. The host resolves `approval` and
+  `supervisor op=approve` through the registry, with the old prefix/slot path
+  retained as a compatibility fallback.
 - **A session has one writer** — `Runtime` now takes a `SessionLease` when it
   binds a session: a second live runtime in the same process is refused with
   `SessionLeaseBusy`, and an advisory lock under `~/.zenagent/locks/` covers a

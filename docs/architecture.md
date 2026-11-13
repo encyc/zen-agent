@@ -152,7 +152,7 @@ agent_end 事件
 | `zenagent/tools/` | 内置工具 | `base_tools(ask_tool)` = `read_file`/`write_file`/`edit_file`/`list_dir`/`bash`/`wait`/`ask`/`glob`/`grep`/`web_search`/`fetch`（ask 每 Runtime 一份，handler 挂在 `runtime.ask_handler`）；`Runtime` 另外注入 `todo`/`task`/`memory`/`checkpoint`/`lsp`/`github`/skills/MCP |
 | `zenagent/app/zen/` | Zen 模式（app 层聚合） | `ZenFleet`（fleet.py：异步派工/报告回注/并发上限）、roster 侧车 `.zen.json`（roster.py）、Router 工具集（tools.py，经 `_recompose` 并入）、Router/Worker 提示词（prompts.py） |
 | `zenagent/app/swarm/` | 多角色 Swarm 运行时（app 层） | `SwarmManager`（manager.py：每角色常驻 Runtime + FIFO 调度 + `asyncio.Semaphore` 并发 3）、角色清单（roles.py，`~/.zenagent/agents/<id>/manifest.json`，`${KEY}` 凭证占位）、append-only 房间/任务（room.py，`~/.zenagent/swarm/`）、@mention 三道门（router.py：链深/链费/收件箱）、`TaskRunner`（runner.py）、协议与 `swarm_post`（protocol.py）、角色文件读写（roster.py）；经 `cli/rpc/ops_swarm.py` 在 host 层全局分发 |
-| `zenagent/app/` | UI 无关的应用层 | `Runtime`、`ChatController`、`CommandRegistry`、`SessionManager`、`PermissionGate`/`PermissionBroker`、`RunStatus`、`records`、`RunLedger`/`run_wiring`（运行账本）、`SessionLease`（单 writer 租约）、`bootstrap.prepare`（四前端唯一装配序列） |
+| `zenagent/app/` | UI 无关的应用层 | `Runtime`、`ChatController`、`CommandRegistry`、`SessionManager`、`PermissionGate`/`PermissionBroker`、`RunStatus`、`records`、`RunLedger`/`run_wiring`（运行账本）、`SessionLease`（单 writer 租约）、`AgentProfile`/`Supervisor`（live-agent registry）、`WorkspaceState`（后端模式）、`ApprovalRouter`（审批关联）、`bootstrap.prepare`（四前端唯一装配序列） |
 | `zenagent/cli/` | 所有交互面 | `main`、`repl`、`rpc`、`tui`（`cli/permissions.py` 只是兼容 shim） |
 | `zenagent/mcp/` | MCP 客户端与生命周期 | `McpClient`、`StdioTransport`、`HttpTransport`、`McpManager` |
 | `zenagent/skills.py` / `templates.py` | 文件即扩展 | `discover_skills`、`build_skill_tool`、`expand` |

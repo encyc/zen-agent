@@ -124,3 +124,15 @@
 - `workspace.set` 记录期望模式，不负责启动/停止 fleet/room；启停仍由 zen/swarm 执行。
 - `supervisor.cancel` 对 live handle 的 agent 发 abort，终态由各 runner 映射。
 - `supervisor.dispatch` 未实现；这是刻意保留的模式特有调度。
+
+## 验收记录（2026-11-13 中午）
+
+- Python 全量：`2852 passed in 277.42s`。
+- Desktop：`pnpm test` 431 passed；`pnpm build` 通过。
+- `ruff check .` 全绿；`scripts/check_architecture.py` 通过。
+- 行数：`runtime.py` 1036、`manager.py` 841、`repl.py` 1027、`server.py` 708、
+  `types.ts` 735——均在 allowlist 内。
+- 提交：`dfde3fd feat(assembly): move role policy out of Runtime into AgentProfile`、
+  `ee6aa18 feat(supervisor): register live agents across slots, zen and swarm`、
+  `93559ce feat(workspace): own the mode in the backend and correlate approvals`、
+  本 docs 提交。
