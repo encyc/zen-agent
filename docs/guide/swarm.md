@@ -98,6 +98,9 @@ manifest（`root` 指向库工作区、`inheritProject: false`），复制时会
 
 - **派活**：任何一条消息（来自人或 agent）里出现 `@role`，就为该角色创建一条
   `queued` 任务，链深 = 来源消息深度 + 1。未知的 `@xxx` 原样保留为文本，不报错。
+- **文件引用**：`@"path"` 把一个工作区路径带进消息；它只作为文字上下文，不创建任务，
+  也不会被当成角色。`@` 菜单在有查询时同时搜角色与工作区文件；文件一律写成引号形式，
+  带空格的路径也自然包含在内。
 - **执行**：每个角色一次只跑一个任务，全局并发上限 3，其余排队。注入给角色的是
   发件人、task id、链深、房间协议和消息正文，作为 user 消息进入它自己的 session。
 - **回报**：run 结束时**最终文本自动作为该任务的结果发回房间**（`done` 的结构性兜底）。
@@ -133,6 +136,26 @@ manifest（`root` 指向库工作区、`inheritProject: false`），复制时会
 （每个任务的注入提示以 `[swarm]` 开头并带 task id，后端按这两个提示切片），对账补全
 中途错过的内容；房间消息流不会因为这些步骤变吵。角色会话被 `reset` 或压缩后旧任务会
 显示「执行记录不可用」——完整原文仍在该角色目录下的 session JSONL 里。
+
+## Composer 与 coding/zen 的对照
+
+房间 composer 和 coding/zen 共用同一个 `ComposerPlate`：外壳、自动增高/拖拽改高、
+Enter/⌘Enter、附件栏、菜单、审批/提问卡片和通知条都是同一套实现。差异只在房间
+特有的语义上：
+
+| 能力 | coding / zen | swarm |
+|---|---|---|
+| 发送 / 插话 / 停止 | 三态；跑着时输入非空变 steer，空输入变 stop | 发送；有运行中任务且输入为空时变 stop，Esc 同样停止全部 |
+| `@` | 文件/目录 | 角色 + 工作区文件（文件自动写成 `@"path"`） |
+| `/` | 全量命令 + skills | `/reload` `/reset` `/stop` `/help`；`/help` 打开命令表，`/reset` 先选角色 |
+| 模型 / 模式 / 思考 | 可在 composer 里切 | 由角色 manifest 决定；派工目标会显示该角色的 model · mode · thinking |
+| 上下文仪表 | 有 | 无：房间是多 session，没有单一 context |
+| 引用 / 发送预览 | 无 | 房间独有：引用消息作为下一条的上下文；预览会说明任务数、排队、图片与 vision |
+| 待发送 / todo | `PendingDock` / `TodoDock` | 任务队列 / 工单面板 |
+
+没有运行中的 turn，所以没有 steer；角色会话的模型与权限档位属于 manifest，
+composer 只展示、不覆盖。除此之外，空盘停止、`/help`、`/reset` 角色选择、目标模型
+信息和 `@` 文件引用都已经补齐。
 
 ## 结构性闸门（不依赖提示词）
 
@@ -211,3 +234,4 @@ manifest（`root` 指向库工作区、`inheritProject: false`），复制时会
 | 角色文件写回 / 删除 | `zenagent/app/swarm/roster.py` |
 | RPC 请求族 | `zenagent/cli/rpc/ops_swarm.py` |
 | 桌面房间与角色管理 | `desktop/src/ui/pages/RoomPage.tsx`、`desktop/src/ui/SwarmSidebar.tsx`、`AgentSettings.tsx` |
+| 房间 composer | `desktop/src/ui/composer/RoomComposer.tsx`、`desktop/src/state/roomCommands.ts`、`desktop/src/state/roomPreview.ts` |

@@ -3,6 +3,39 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+**The swarm composer closes the gap with coding and zen where the room can
+support it.** The plate was already shared; the remaining differences were the
+room's missing stop control, a command menu with no help or role picker, no
+model/mode visibility, and no way to put a workspace file into a task.
+
+### Added
+
+- **The empty room plate is a stop control** — while tasks are running or
+  queued, an empty composer turns the primary button into stop (and Esc does
+  the same) instead of leaving `/stop` as the only way out. The button is send
+  again as soon as there is a draft.
+- **`/help` is a real command table** — it lists the room commands with their
+  meanings and the `@` rule, instead of just reopening the slash menu.
+- **`/reset` asks which role** — a bare `/reset` opens a role picker; an
+  explicit `/reset <role>` still works, and an unknown role keeps the inline
+  error.
+- **Target model/mode/thinking are visible** — selecting `@role` shows
+  `model · mode · thinking` in the preview and in the mention menu, so a room
+  post says how the chosen role will run without overriding its manifest.
+- **`@` also finds workspace files** — with a query, the room's mention menu
+  lists matching files and directories after roles. Files are inserted as
+  `@"path"`, which the room's role parser cannot mistake for a role; a file
+  path is context for the task, not a delegation by itself.
+
+### Changed
+
+- **The room command menu and the mention menu stay one composer flow** —
+  `/reset` opens its picker from both the menu and Enter; `@` keeps roles first
+  and adds files only when the query narrows them. `/help` and `/reset` return
+  to the same quote/attachment state, and stopping never clears a draft.
+
 ## v0.13.5 — 2026-11-13
 
 **coding, zen and swarm now sit on one control plane.** They still schedule
