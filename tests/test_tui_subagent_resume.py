@@ -71,7 +71,8 @@ async def test_resumed_session_can_open_the_subagent_transcript(runtime_factory)
         [entry] = app.chat.status.subagents
         assert entry.has_transcript is True
 
-    # A fresh runtime resumes the session file; the app rebuilds from disk.
+    # A fresh runtime resumes the session file; the first one must let go.
+    await runtime.close()
     resumed = await runtime_factory(stream_fn=TaskCallingStream(), resume=session_path)
     app2 = ZenAgentApp(resumed)
     async with app2.run_test(size=(140, 40)) as pilot:
@@ -110,6 +111,7 @@ async def test_interrupted_transcript_is_still_readable(runtime_factory):
         await app.chat.wait_for_idle()
         session_path = runtime.session.path
 
+    await runtime.close()
     # Simulate a crash mid-run: the file has messages but no `end` line.
     sidecar = task_dir(session_path) / "tc_task.jsonl"
     lines = [
@@ -142,6 +144,7 @@ async def test_truncated_sidecar_is_marked_in_the_row_and_banner(runtime_factory
         await app.chat.wait_for_idle()
         session_path = runtime.session.path
 
+    await runtime.close()
     # Simulate the per-file cap: the sidecar was cut and marked, the run is ok.
     sidecar = task_dir(session_path) / "tc_task.jsonl"
     with sidecar.open("a", encoding="utf-8") as handle:

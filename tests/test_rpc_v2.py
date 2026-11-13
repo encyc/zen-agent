@@ -339,6 +339,7 @@ async def test_a_child_booted_on_a_session_serves_its_transcript_first(
     first = await runtime_factory()
     await first.session.append(UserMessage(content="earlier question", timestamp=1))
     path = first.session.path
+    await first.close()
 
     _runtime, server, writes, queue = await build(runtime_factory, resume=path)
     await run_lines(server, queue, [{"type": "transcript", "id": "t", "limit": 50}])
