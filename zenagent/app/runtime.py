@@ -22,6 +22,7 @@ from zenagent.agent.session import Session, latest_session, unique_session_path
 from zenagent.agent.subagents import SubagentLimits
 from zenagent.agent.subagents_runtime import SubagentObserver
 from zenagent.app import plugin_wiring, records
+from zenagent.app import session_lease as leases
 from zenagent.app.journal import attach_journal, journal_for, load_backup_policy
 from zenagent.app.metrics import MetricsSession
 from zenagent.app.modes import (
@@ -267,6 +268,7 @@ class Runtime:
 
     @session.setter
     def session(self, session: Session) -> None:
+        leases.bind_session_lease(self, session.path)
         self._session = session
         # A new transcript invalidates checkpoint/rewind indexes.
         self.rewind.clear()
@@ -974,6 +976,7 @@ class Runtime:
 
             await release_job_manager()
         self._drop_unused_session()
+        leases.release_session_lease(self)
 
     @property
     def unused_session(self) -> bool:
@@ -983,12 +986,8 @@ class Runtime:
     def _drop_unused_session(self) -> None:
         """Leave no file behind for a launch that produced no conversation.
 
-        Bootstrap writes the session header (plus the starting mode record)
-        eagerly, so every launch used to leave an ``(empty)`` row in the
-        listings. A file this process created and never appended a message to is
-        not a transcript: remove it rather than moving it to ``.trash`` (trashing
-        it would keep the junk, just somewhere else). A resumed session is never
-        ours to remove, even when it is empty.
+        A file this process created and never appended a message to is not a
+        transcript; a resumed session is never ours to remove.
         """
         for path in list(self._created_sessions):
             try:
@@ -1027,10 +1026,10 @@ class Runtime:
     ) -> None:
         """Abort any run, then load `path` (or a fresh session) into the agent.
 
-        ``carry_todos`` copies the current todo sidecar into the new session:
-        compaction is a continuation of the same work, so the checklist must
-        survive it (fork/new are new branches and start empty).
+        ``carry_todos`` copies the checklist: compaction continues the same
+        work, while fork/new are new branches and start empty.
         """
+        leases.ensure_session_free(self, path)
         carried: list[dict] = []
         if carry_todos:
             carried = load_todo_phases(self.session.path)
