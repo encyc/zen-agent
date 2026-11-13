@@ -84,6 +84,8 @@ class ZenFleet:
         report_limit: int = REPORT_LIMIT,
         worker_mode: str = "inherit",
         supervisor: Supervisor | None = None,
+        max_cost: float | None = None,
+        max_turns: int | None = None,
     ) -> None:
         self.chat = chat
         self.root = Path(root)
@@ -111,6 +113,10 @@ class ZenFleet:
         #: historical behaviour); a concrete mode pins the worker's broker.
         self.worker_mode = worker_mode
         self.supervisor = supervisor
+        #: ``[task]`` budgets: a worker is a spawned agent, so it takes the same
+        #: caps the task tool gives its children. None leaves the runtime default.
+        self.max_cost = max_cost
+        self.max_turns = max_turns
         self._report_buffer: list[str] = []
         self._wake_task: asyncio.Task | None = None
         self._sem = asyncio.Semaphore(self.max_concurrent)
@@ -317,7 +323,16 @@ class ZenFleet:
             label=handle.focus,
         )
         prepared = await prepare(
-            RuntimeOptions(root=self.root, resume=handle.path, mode=mode, profile=profile),
+            RuntimeOptions(
+                root=self.root,
+                resume=handle.path,
+                mode=mode,
+                profile=profile,
+                model_id=self._router_model_id(),
+                thinking=self._router_thinking(),
+                max_cost=self.max_cost,
+                max_turns=self.max_turns,
+            ),
             views=False,
         )
         router_runtime = getattr(self.chat, "runtime", None)
@@ -342,6 +357,16 @@ class ZenFleet:
                 parentRunId=getattr(router_runtime, "current_run_id", None),
             )
         return prepared
+
+    def _router_agent(self) -> Any:
+        return getattr(getattr(self.chat, "runtime", None), "agent", None)
+
+    def _router_model_id(self) -> str | None:
+        """The model the router is on right now; None keeps the config default."""
+        return getattr(getattr(self._router_agent(), "model", None), "id", None)
+
+    def _router_thinking(self) -> str | None:
+        return getattr(self._router_agent(), "thinking", None)
 
     def _last_report(self, agent: Any) -> str:
         for message in reversed(getattr(agent, "messages", [])):

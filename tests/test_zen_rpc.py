@@ -71,6 +71,8 @@ class FakeUserConfig:
     zen_max_concurrent = 3
     zen_batch_window_s = 0.5
     task_timeout_s = 0
+    task_max_cost: float | None = 2.0
+    task_max_turns = 9
     zen_report_limit = 800
     zen_worker_mode = "inherit"
 

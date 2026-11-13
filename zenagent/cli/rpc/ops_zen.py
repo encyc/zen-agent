@@ -205,6 +205,10 @@ class ZenOps:
             report_limit=config.zen_report_limit,
             worker_mode=config.zen_worker_mode,
             supervisor=supervisor,
+            # Workers are spawned agents: they take the same [task] budgets as
+            # the task tool's children.
+            max_cost=config.task_max_cost,
+            max_turns=config.task_max_turns,
         )
         runtime.zen_fleet = fleet
         set_workspace_mode(root, "zen", router_session=str(runtime.session.path))
