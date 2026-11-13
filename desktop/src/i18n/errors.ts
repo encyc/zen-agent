@@ -10,6 +10,7 @@ const CODE_KEYS: Record<string, string> = {
   'session_failed': 'rpc.error.sessionFailed',
   'session_import_missing': 'rpc.error.sessionImportMissing',
   'session_busy': 'rpc.error.sessionBusy',
+  'session_lease_busy': 'rpc.error.sessionFailed',
   'session_invalid': 'rpc.error.sessionInvalid',
   'limits_failed': 'rpc.error.limitsFailed',
   'config_failed': 'rpc.error.configFailed',
