@@ -672,3 +672,14 @@ async def test_worker_without_ask_channel_keeps_the_handler_empty(env) -> None:
     await fleet.wait_all()
     runtime = env["factory"].runtimes[str(env["paths"]["w1"])]
     assert runtime.ask_handler is None
+
+
+async def test_worker_inherits_an_explicit_thinking_off(env) -> None:
+    """`/thinking off` stores None; the worker must see "off", not "derive one"."""
+    env["chat"].runtime = SimpleNamespace(
+        agent=SimpleNamespace(model=SimpleNamespace(id="router-model"), thinking=None)
+    )
+    fleet = _fleet_with(env)
+    await fleet.dispatch(str(env["paths"]["w1"]), "a")
+    await fleet.wait_all()
+    assert env["factory"].calls[-1]["thinking"] == "off"

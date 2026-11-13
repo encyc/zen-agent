@@ -1,8 +1,8 @@
 """Wire a Runtime to the project's run ledger.
 
 The recorder is attached by :func:`~zenagent.app.bootstrap.prepare` for every
-frontend, and by the swarm manager for role runtimes (swarm deliberately builds
-its runtimes without ``prepare``). Nothing here changes agent behaviour: an
+frontend and for every orchestrator's run times. Nothing here changes agent
+behaviour: an
 ``agent_start`` opens a ledger record and an ``agent_end`` closes it, both
 best-effort.
 
@@ -187,9 +187,9 @@ def attach_swarm_run(
 ) -> RunLedger | None:
     """Wire a role runtime and stamp its first scope in one call.
 
-    Swarm builds runtimes outside ``prepare``, so it owns this attachment; the
-    helper keeps the manager's line budget flat and the scope shape in one
-    place.
+    ``prepare`` already attached the recorder (swarm builds through it like
+    every frontend); this call is idempotent and only stamps the swarm scope,
+    keeping the manager's line budget flat and the scope shape in one place.
     """
     ledger = attach_run_recorder(runtime)
     update_run_scope(

@@ -186,7 +186,7 @@ worker 与 run unit 都走 `prepare()` 装配，与 coding 同一个入口。
 
 | 维度 | Zen | Swarm | 为什么 |
 |---|---|---|---|
-| 结果回传 | 终局文本 `chat.steer` 回灌 router，批量合并 | room 消息 + `tasks.jsonl` 状态机 | router 只需要结论；房间需要过程可围观 |
+| 结果回传 | 终局文本 `chat.deliver`（无则 `steer`）回灌 router，批量合并 | room 消息 + `tasks.jsonl` 状态机 | router 只需要结论；房间需要过程可围观 |
 | 事件可见性 | 只看终局报告 | `events_tap` 实时转发每个角色事件 | 同上 |
 | 超时收尾 | abort + 把「运行超时」注入 router | `abort_outcome` + 等 idle，由 manager 记终态 | worker 的失败是给 router 的一条消息；run unit 的失败是房间的一条记录 |
 | 生命周期 | 每次 dispatch 结束即 `close()` | 空闲保留，`runtime_idle_s` 后回收 | worker 按需造；房间成员要能复用 |

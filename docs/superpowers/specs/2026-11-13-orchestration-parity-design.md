@@ -42,7 +42,7 @@ composer 走 supervisor）统一了**派活入口与登记**，没有统一**子
   `Agent` 那边就是 `None`（无上限）。
 - **3+4 是死路**：zen 把 auto 降级成 ask（怕 worker 悄悄放行写操作），但 worker 没有
   `ask_handler`，`ask` 工具直接返回错误——既不自动放行，也没人能问。swarm 相反：
-  原样用 `role.mode`，且每个 role 有 ask 通道。同一件事两套安全性。
+  原样用 `role.mode`，审批走房间的 confirm（它的 ask 是个自动驳回的桩）。同一件事两套安全性。
 - **1 是维护陷阱**：`bootstrap.py` 存在的理由就是「四个前端各抄一遍已经漂移过一次」，
   现在编排器也在各抄。
 

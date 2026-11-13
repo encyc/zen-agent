@@ -372,7 +372,12 @@ class ZenFleet:
         return getattr(getattr(self._router_agent(), "model", None), "id", None)
 
     def _router_thinking(self) -> str | None:
-        return getattr(self._router_agent(), "thinking", None)
+        agent = self._router_agent()
+        if agent is None:
+            return None
+        # "/thinking off" stores None, and RuntimeOptions reads None as "derive
+        # it from the model" — so an explicit off has to travel as "off".
+        return getattr(agent, "thinking", None) or "off"
 
     def _last_report(self, agent: Any) -> str:
         for message in reversed(getattr(agent, "messages", [])):
