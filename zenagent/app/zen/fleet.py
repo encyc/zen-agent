@@ -94,8 +94,8 @@ class ZenFleet:
         #: The owning slot's confirm callback: a worker's mutating tool calls
         #: surface as approvals in the UI, tagged with the router's frames.
         self.confirm = confirm
-        #: The router's permission mode. Workers inherit it except for zen:
-        #: the zen bypass auto-approves mutations, so workers downgrade to ask
+        #: The router's permission mode. Workers inherit it except for auto:
+        #: the auto bypass approves mutations, so workers downgrade to ask
         #: at the build boundary and their mutating tools surface as approvals.
         self.mode = mode
         self._handles: dict[str, WorkerHandle] = {}
@@ -107,7 +107,7 @@ class ZenFleet:
         self.run_timeout_s = max(0.0, float(run_timeout_s))
         #: One report is cut to this many characters before it reaches the router.
         self.report_limit = max(1, int(report_limit))
-        #: ``inherit`` keeps the router's mode but downgrades zen to ask (the
+        #: ``inherit`` keeps the router's mode but downgrades auto to ask (the
         #: historical behaviour); a concrete mode pins the worker's broker.
         self.worker_mode = worker_mode
         self.supervisor = supervisor
@@ -296,11 +296,11 @@ class ZenFleet:
                 self._notify()
 
     async def _build_worker(self, handle: WorkerHandle) -> Any:
-        # The default keeps the router's mode but never inherits the zen
-        # bypass: zen auto-approves mutations, so workers are downgraded to ask
-        # to surface approvals. ``zen`` opts into the bypass explicitly.
+        # The default keeps the router's mode but never inherits the auto
+        # bypass: auto approves mutations, so workers are downgraded to ask to
+        # surface approvals. ``auto`` opts into the bypass explicitly.
         if self.worker_mode == "inherit":
-            mode = "ask" if self.mode == "zen" else self.mode
+            mode = "ask" if self.mode == "auto" else self.mode
         else:
             mode = self.worker_mode
         path = Path(handle.path)

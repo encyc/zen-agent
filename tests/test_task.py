@@ -134,7 +134,7 @@ async def test_child_only_gets_read_only_tools_and_never_task_itself():
     assert "task" not in child_tools
 
 
-async def test_zen_child_mirrors_the_parent_but_never_the_denylist():
+async def test_auto_child_mirrors_the_parent_but_never_the_denylist():
     stream = ChildStream()
     tools = _tools() + [
         _read_tool(name)
@@ -145,7 +145,7 @@ async def test_zen_child_mirrors_the_parent_but_never_the_denylist():
         api_key="k",
         stream_fn=stream,
         base_tools=tools,
-        mode="zen",
+        mode="auto",
     )
 
     await tool.execute("t1", {"prompt": "go"})
@@ -159,7 +159,7 @@ async def test_zen_child_mirrors_the_parent_but_never_the_denylist():
 
 async def test_child_tools_follow_live_roster_and_mode_per_dispatch():
     stream = ChildStream()
-    live = {"tools": _tools(), "mode": "zen"}
+    live = {"tools": _tools(), "mode": "auto"}
     tool = build_task_tool(
         model=_model(),
         api_key="k",
@@ -173,7 +173,7 @@ async def test_child_tools_follow_live_roster_and_mode_per_dispatch():
     live["mode"] = "ask"
     await tool.execute("t2", {"prompt": "go"})
 
-    assert "write_file" in stream.tools_seen[0]  # zen: parent's writers delegate
+    assert "write_file" in stream.tools_seen[0]  # auto: parent's writers delegate
     assert "write_file" not in stream.tools_seen[1]  # ask: read-only child
     assert "bash" not in stream.tools_seen[1]
 
@@ -191,7 +191,7 @@ async def test_child_system_prompt_names_its_tools():
 
     await tool.execute("t1", {"prompt": "go"})
 
-    # Non-zen dispatch: only the read tools the child may actually use.
+    # Non-auto dispatch: only the read tools the child may actually use.
     assert "Your tools: read_file, grep." in seen[0]
     assert "{{child_tools}}" not in seen[0]
 
@@ -645,7 +645,7 @@ async def test_async_freezes_mode_and_tools_at_dispatch():
     from zenagent.agent.subagents_runtime import get_task_manager
 
     stream = SlowStream(delay=0.15)
-    live = {"tools": _tools(), "mode": "zen"}
+    live = {"tools": _tools(), "mode": "auto"}
     tool = build_task_tool(
         model=_model(),
         api_key="k",
@@ -837,7 +837,7 @@ async def test_child_tool_calls_go_through_the_parent_gate():
         api_key="k",
         stream_fn=stream,
         base_tools=_tools(),
-        mode="zen",
+        mode="auto",
         before_tool_call=gate,
     )
 

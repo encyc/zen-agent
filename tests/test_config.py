@@ -804,6 +804,13 @@ def test_zen_fleet_behaviour_defaults(tmp_path):
     assert config.zen_worker_mode == "inherit"
 
 
+def test_zen_worker_mode_accepts_the_legacy_zen_alias(tmp_path):
+    config = load_user_config(
+        write_config(tmp_path, "[zen]\nworker_mode = \"zen\"\n")
+    )
+    assert config.zen_worker_mode == "auto"
+
+
 def test_zen_worker_mode_rejects_unknown_choice(tmp_path):
     with pytest.raises(ValueError, match="zen.worker_mode"):
         load_user_config(write_config(tmp_path, "[zen]\nworker_mode = \"yolo\"\n"))

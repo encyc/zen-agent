@@ -4,13 +4,13 @@ The kernel has no permission concept on purpose (pi's philosophy): confirmation
 is the harness's job. This gate classifies tools and asks the user only for the
 classes that can change the machine.
 
-Reading tools pass straight through; write/execute tools require either zen
+Reading tools pass straight through; write/execute tools require either auto
 mode or ``--yes``, a previous "always allow" answer for that tool in this
 session, or an interactive confirmation. In a non-interactive run without
 ``--yes`` they are denied with an explanatory reason, which the model sees as
 an is_error result.
 
-``zen`` is the top rung: even the confirmable risk tiers (destructive command,
+``auto`` is the top rung: even the confirmable risk tiers (destructive command,
 protected path, outside workspace) run instead of asking. Policy — catastrophic
 commands, explicit deny patterns, plan mode — still refuses.
 """
@@ -328,13 +328,13 @@ class PermissionGate:
             return Verdict(
                 "refuse",
                 f"tool {tool_name!r} is blocked by plan mode (read-only); "
-                "switch to /mode ask or /mode zen to execute",
+                "switch to /mode ask or /mode auto to execute",
             )
         if self.read_only and not read_only:
             return Verdict("refuse", f"tool {tool_name!r} is blocked by --read-only")
-        # zen is the "never ask" rung: the three confirmable risk tiers below
+        # auto is the "never ask" rung: the three confirmable risk tiers below
         # run instead of asking. Everything above is policy and still wins.
-        confirm_risks = self.mode != "zen"
+        confirm_risks = self.mode != "auto"
         if confirm_risks and tool_name == "bash" and not self.allow_dangerous:
             # --allow-dangerous is the single escape hatch for catastrophic
             # *and* destructive shell commands; asking for it twice would be
@@ -402,7 +402,7 @@ class PermissionGate:
         if target_is_granted(tool_name, args, self._always_allowed):
             return True, ""
         if (
-            self.mode == "zen"
+            self.mode == "auto"
             or self.assume_yes
             or tool_name in self._always_allowed
         ):
@@ -576,7 +576,7 @@ class PermissionBroker:
         if verdict.kind == "refuse":
             return {"block": True, "reason": verdict.reason}
         if verdict.kind == "confirm":
-            # Only ask mode reaches here: zen already downgraded these tiers to
+            # Only ask mode reaches here: auto already downgraded these tiers to
             # allow inside assess(), and the refuse tiers returned above. Risky
             # actions still confirm; ordinary ones were already allowed.
             risk_target = verdict.target or target
@@ -599,7 +599,7 @@ class PermissionBroker:
             return None
         if matches_any(self._gate.allow, name) is not None:
             return None
-        if self._gate.mode == "zen":
+        if self._gate.mode == "auto":
             return None
         if self._confirm is None:
             return {"block": True, "reason": f"tool {name!r} requires approval"}

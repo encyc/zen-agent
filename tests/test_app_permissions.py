@@ -76,8 +76,8 @@ async def test_broker_always_remembers_the_tool_for_the_session():
     assert asked == []
 
 
-async def test_broker_zen_mode_skips_confirmation():
-    gate = PermissionGate(interactive=False, assume_yes=True, mode="zen")
+async def test_broker_auto_mode_skips_confirmation():
+    gate = PermissionGate(interactive=False, assume_yes=True, mode="auto")
     broker = PermissionBroker.wrap(gate)
     asked: list[str] = []
 
@@ -111,8 +111,8 @@ async def test_broker_plan_mode_blocks_before_asking():
 async def test_broker_exposes_mode_and_switches_it():
     broker = PermissionBroker.wrap(PermissionGate(interactive=False, mode="ask"))
     assert broker.mode == "ask"
-    broker.set_mode("zen")
-    assert broker.mode == "zen" and broker._gate.mode == "zen"
+    broker.set_mode("auto")
+    assert broker.mode == "auto" and broker._gate.mode == "auto"
 
 
 async def test_broker_plan_mode_beats_a_session_grant():
@@ -138,7 +138,7 @@ async def test_broker_deny_pattern_beats_a_session_grant():
 
 
 # ---------------------------------------------------------------------------
-# Risk-level confirmations: ask mode still asks; zen never does. Grants are
+# Risk-level confirmations: ask mode still asks; auto never does. Grants are
 # target-scoped.
 # ---------------------------------------------------------------------------
 
@@ -160,7 +160,7 @@ async def test_ask_mode_still_asks_for_outside_write(tmp_path):
     assert asked == [("write_file", "outside")]
 
 
-async def test_ordinary_write_in_zen_mode_does_not_ask(tmp_path):
+async def test_ordinary_write_in_auto_mode_does_not_ask(tmp_path):
     asked: list[str] = []
 
     async def confirm(name, arguments, verdict):
@@ -168,7 +168,7 @@ async def test_ordinary_write_in_zen_mode_does_not_ask(tmp_path):
         return "deny"
 
     gate = build_permission_gate(
-        interactive=False, mode="zen", policy=GuardPolicy(workspace=tmp_path)
+        interactive=False, mode="auto", policy=GuardPolicy(workspace=tmp_path)
     )
     broker = PermissionBroker.wrap(gate)
     broker.set_confirm(confirm)
@@ -223,7 +223,7 @@ async def test_destructive_bash_in_ask_mode_asks(tmp_path):
     assert seen == ["destructive"]
 
 
-async def test_zen_mode_runs_risk_tiers_without_asking(tmp_path):
+async def test_auto_mode_runs_risk_tiers_without_asking(tmp_path):
     asked: list[str] = []
 
     async def confirm(name, arguments, verdict):
@@ -231,7 +231,7 @@ async def test_zen_mode_runs_risk_tiers_without_asking(tmp_path):
         return "deny"
 
     gate = build_permission_gate(
-        interactive=False, mode="zen", policy=GuardPolicy(workspace=tmp_path)
+        interactive=False, mode="auto", policy=GuardPolicy(workspace=tmp_path)
     )
     broker = PermissionBroker.wrap(gate)
     broker.set_confirm(confirm)

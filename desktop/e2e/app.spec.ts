@@ -2103,14 +2103,14 @@ test('zen settings own the fleet knobs and Parameters leaves them out', async ({
   await panel.getByRole('button', { name: '修改' }).click()
   const mode = page.locator('[data-knob="zen.worker_mode"]').getByRole('combobox')
   await expect(mode).toHaveValue('inherit')
-  await mode.selectOption('zen')
+  await mode.selectOption('auto')
   await panel.getByRole('button', { name: '保存（1 项改动）' }).click()
 
   const sets = (await page.evaluate(() => window.__ZEN_E2E__.calls))
     .filter((call) => call.type === 'limits' && call.op === 'set')
     .map(({ key, value }) => ({ key, value }))
-  assert.deepEqual(sets, [{ key: 'zen.worker_mode', value: 'zen' }])
-  await expect(page.locator('[data-knob="zen.worker_mode"]')).toContainText('zen')
+  assert.deepEqual(sets, [{ key: 'zen.worker_mode', value: 'auto' }])
+  await expect(page.locator('[data-knob="zen.worker_mode"]')).toContainText('auto')
 })
 
 test('mcp settings probes a server and reports its tools', async ({ page }) => {
@@ -2671,7 +2671,7 @@ test('a fresh runtime is put back onto the last mode, model and thinking', async
   })
   await boot(page, initialState())
 
-  // The child defaults to zen mode / catalog model / high thinking; the prefs
+  // The child defaults to ask mode / catalog model / high thinking; the prefs
   // are replayed as ordinary frames, so the person never notices the restart.
   await expect
     .poll(() => page.evaluate(() => window.__ZEN_E2E__.calls.some((call) => call.type === 'mode' && call.mode === 'plan')))

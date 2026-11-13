@@ -107,14 +107,14 @@ def test_help_text_is_generated_from_the_command_table():
     text = help_text(make_registry())
     for name in table:
         assert name in text
-    assert "plan|ask|zen" in text
+    assert "plan|ask|auto" in text
 
 
 def test_mode_arguments_are_completed():
     completer = ReplCompleter(base_dir=Path("/tmp"))
-    assert complete(completer, "/mode ") == ["plan", "ask", "zen"]
+    assert complete(completer, "/mode ") == ["plan", "ask", "auto"]
     assert complete(completer, "/mode p") == ["plan"]
-    assert complete(completer, "/mode z") == ["zen"]
+    assert complete(completer, "/mode au") == ["auto"]
 
 
 def test_thinking_arguments_are_completed():
@@ -193,7 +193,7 @@ def test_builtin_commands_are_tagged_as_command():
         slash_commands=slash_commands(make_registry()), base_dir=Path("/tmp")
     )
     items = dict(complete_items(completer, "/mo"))
-    assert items["/mode"] == "command · set runtime mode: plan|ask|zen"
+    assert items["/mode"] == "command · set runtime mode: plan|ask|auto"
 
 
 def test_mid_sentence_slash_offers_only_skills():

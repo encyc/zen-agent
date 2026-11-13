@@ -185,7 +185,7 @@ def compose_system(ctx: PromptContext) -> RenderedPrompt:
                 tokens=_block_tokens(part),
             )
         )
-    if ctx.include_mode and ctx.mode in ("plan", "zen"):
+    if ctx.include_mode and ctx.mode in ("plan", "auto"):
         block_id = f"{ctx.mode}_mode"
         part = read_block(block_id, ctx.root)
         text = f"{text}\n\n{part}"

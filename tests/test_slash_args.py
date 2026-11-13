@@ -29,7 +29,7 @@ def test_theme_values_match_the_appearance_choices():
 
 def test_argument_filter_is_case_insensitive():
     assert values("/mode", "P") == ["plan"]
-    assert values("/mode", "z") == ["zen"]
+    assert values("/mode", "au") == ["auto"]
 
 
 def test_commands_without_argument_values_return_nothing():

@@ -1036,7 +1036,7 @@ async function refreshAfterSessionChange(get: () => AppState): Promise<void> {
 /** Re-apply the user's mode/model/thinking onto a freshly spawned child.
  *
  * The child comes up with `--mode ask` and catalog defaults; without this a
- * project switch silently drops the person out of zen mode and back to the
+ * project switch silently drops the person out of auto mode and back to the
  * default model, which is exactly the "everything reset" feeling a reload
  * has. Every replayed frame is a normal request: a pref the server rejects
  * (a model that was renamed, say) costs that pref, never the connection. */

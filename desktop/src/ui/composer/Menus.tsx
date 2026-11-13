@@ -243,10 +243,10 @@ export function RoleModelMenu({
   )
 }
 
-const MODES: { id: 'plan' | 'ask' | 'zen'; key: string }[] = [
+const MODES: { id: 'plan' | 'ask' | 'auto'; key: string }[] = [
   { id: 'plan', key: 'mode.plan' },
   { id: 'ask', key: 'mode.ask' },
-  { id: 'zen', key: 'mode.zen' },
+  { id: 'auto', key: 'mode.auto' },
 ]
 
 export function ModeMenu({
@@ -255,7 +255,7 @@ export function ModeMenu({
   onClose,
 }: {
   mode: string
-  onPick(mode: 'plan' | 'ask' | 'zen'): void
+  onPick(mode: 'plan' | 'ask' | 'auto'): void
   onClose(): void
 }) {
   const t = useT()

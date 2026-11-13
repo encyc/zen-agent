@@ -10,7 +10,7 @@ import type { SwarmRole } from '../../rpc/types'
 import css from './AgentSettings.module.css'
 
 export const ROLE_ID = /^[a-z0-9][a-z0-9._-]*$/
-const MODES = ['plan', 'ask', 'zen'] as const
+const MODES = ['plan', 'ask', 'auto'] as const
 
 export function roleNotice(
   reply: Record<string, unknown>,

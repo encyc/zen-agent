@@ -8,9 +8,17 @@ from __future__ import annotations
 
 import argparse
 
-from zenagent.app.modes import MODES
+from zenagent.app.modes import MODES, normalize_mode
 
 THINKING_CHOICES = ("off", "low", "medium", "high", "max")
+
+
+def _permission_mode(raw: str) -> str:
+    """argparse type: normalize the legacy ``zen`` alias before choices run."""
+    mode = normalize_mode(raw)
+    if mode is None:
+        raise argparse.ArgumentTypeError(f"unknown mode: {raw}")
+    return mode
 
 #: The flags every frontend shares; ``tests/test_cli_flags.py`` pins this
 #: list against both parsers.
@@ -51,7 +59,7 @@ def add_runtime_flags(parser: argparse.ArgumentParser) -> None:
         help="reasoning level (default: high for reasoning models, off otherwise; max when supported)",
     )
     parser.add_argument(
-        "--yes", action="store_true", help="run everything without asking (zen mode)"
+        "--yes", action="store_true", help="run everything without asking (auto mode)"
     )
     parser.add_argument(
         "--read-only",
@@ -60,10 +68,11 @@ def add_runtime_flags(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--mode",
+        type=_permission_mode,
         choices=MODES,
         default=None,
         help="runtime permission mode: plan (read-only) | ask (confirm) | "
-        "zen (fully automatic, no confirmations)",
+        "auto (fully automatic, no confirmations; legacy alias: zen)",
     )
     parser.add_argument(
         "--allow-dangerous",

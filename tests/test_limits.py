@@ -226,7 +226,7 @@ def test_writer_preserves_mode(tmp_path):
 
 def test_string_knob_only_accepts_its_choices():
     knob = KNOB_BY_KEY["zen.worker_mode"]
-    assert coerce_value(knob, "zen", Path("/tmp/config.toml")) == "zen"
+    assert coerce_value(knob, "auto", Path("/tmp/config.toml")) == "auto"
     for bad in ("nope", True, 1, None):
         with pytest.raises(ValueError, match="zen.worker_mode"):
             coerce_value(knob, bad, Path("/tmp/config.toml"))

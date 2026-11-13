@@ -69,7 +69,7 @@ async def test_get_lists_every_knob_with_defaults(runtime_factory, config_file):
     assert knobs["task.max_cost"]["nullable"] is True
     # Zen/Swarm own their own pages but share the same snapshot.
     assert knobs["zen.worker_mode"]["kind"] == "str"
-    assert knobs["zen.worker_mode"]["choices"] == ["inherit", "ask", "plan", "zen"]
+    assert knobs["zen.worker_mode"]["choices"] == ["inherit", "ask", "plan", "auto"]
     assert knobs["swarm.max_chain_depth"]["section"] == "swarm"
 
 

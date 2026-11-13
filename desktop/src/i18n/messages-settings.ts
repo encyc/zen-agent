@@ -150,7 +150,7 @@ export const settingsZh: Record<string, string> = {
   'settings.limit.zen.batch_window_s': 'worker 报告的合批窗口（秒）；0 表示每条报告立即上报。',
   'settings.limit.zen.report_limit': 'worker 报告回传主会话时保留的字符数，超出截断。',
   'settings.limit.zen.worker_mode':
-    'worker 的权限档位：inherit 跟随主会话（zen 主会话降为 ask），ask / plan / zen 为固定档位。',
+    'worker 的权限档位：inherit 跟随主会话（auto 主会话降为 ask），ask / plan / auto 为固定档位。',
   'settings.limit.swarm.max_concurrent': '一个房间里同时运行的角色任务数上限。',
   'settings.limit.swarm.max_chain_depth': '一条派单链路最多向下委派多少层。',
   'settings.limit.swarm.max_chain_cost': '一条派单链路的累计花销上限（美元），超出即中止。',
@@ -356,7 +356,7 @@ export const settingsEn: Record<string, string> = {
   'settings.limit.zen.batch_window_s': 'Batching window for worker reports, in seconds; 0 reports each one immediately.',
   'settings.limit.zen.report_limit': 'Characters kept per worker report on the way back to the main session; longer reports are truncated.',
   'settings.limit.zen.worker_mode':
-    'Worker permission mode: inherit follows the main session (zen sessions downgrade to ask); ask / plan / zen are fixed.',
+    'Worker permission mode: inherit follows the main session (auto sessions downgrade to ask); ask / plan / auto are fixed.',
   'settings.limit.swarm.max_concurrent': 'Role tasks allowed to run at once in one room.',
   'settings.limit.swarm.max_chain_depth': 'Delegation levels a single chain may descend.',
   'settings.limit.swarm.max_chain_cost': 'Cumulative spend cap for one delegation chain in USD; exceeded chains stop.',

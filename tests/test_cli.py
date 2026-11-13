@@ -747,13 +747,18 @@ def _capture_gate_for(monkeypatch, argv):
 
 
 def test_mode_flag_reaches_the_permission_gate(monkeypatch):
+    gate = _capture_gate_for(monkeypatch, ["-p", "hi", "--mode", "auto"])
+    assert gate.mode == "auto"
+
+
+def test_legacy_zen_mode_flag_still_reaches_auto(monkeypatch):
     gate = _capture_gate_for(monkeypatch, ["-p", "hi", "--mode", "zen"])
-    assert gate.mode == "zen"
+    assert gate.mode == "auto"
 
 
-def test_yes_maps_to_zen_mode(monkeypatch):
+def test_yes_maps_to_auto_mode(monkeypatch):
     gate = _capture_gate_for(monkeypatch, ["-p", "hi", "--yes"])
-    assert gate.mode == "zen"
+    assert gate.mode == "auto"
 
 
 def test_default_mode_is_ask(monkeypatch):

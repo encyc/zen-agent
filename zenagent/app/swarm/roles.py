@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from zenagent import project
-from zenagent.app.modes import DEFAULT_MODE, MODES
+from zenagent.app.modes import DEFAULT_MODE, normalize_mode
 from zenagent.mcp.config import parse_server
 from zenagent.plugins.discovery import discover_plugins
 from zenagent.plugins.state import credentials_for, is_enabled, resolve
@@ -271,9 +271,10 @@ def parse_role(
     if not isinstance(limits, dict):
         limits = {}
 
-    mode = str(raw.get("mode") or DEFAULT_MODE)
-    if mode not in MODES:
-        warnings.append(f"role {role_id}: unknown mode {mode!r}; using {DEFAULT_MODE}")
+    raw_mode = str(raw.get("mode") or DEFAULT_MODE)
+    mode = normalize_mode(raw_mode)
+    if mode is None:
+        warnings.append(f"role {role_id}: unknown mode {raw_mode!r}; using {DEFAULT_MODE}")
         mode = DEFAULT_MODE
 
     tools_raw = raw.get("tools")

@@ -46,7 +46,7 @@ export interface Usage {
   cost: number
 }
 
-export type Mode = 'plan' | 'ask' | 'zen'
+export type Mode = 'plan' | 'ask' | 'auto'
 
 // ---- server frames -------------------------------------------------------
 

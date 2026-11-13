@@ -228,7 +228,7 @@ async def test_mode_argument_hints_list_the_values(fake_runtime):
         assert (
             "plan" in hints.plain
             and "ask" in hints.plain
-            and "zen" in hints.plain
+            and "auto" in hints.plain
         )
         assert "/mode" not in hints.plain  # value hints, not command names
 
@@ -270,7 +270,7 @@ async def test_bare_mode_command_opens_the_selector(fake_runtime):
         await pilot.press("down", "enter")
         await pilot.pause()
         await pilot.pause()
-        assert app.runtime.mode == "zen"
+        assert app.runtime.mode == "auto"
 
 
 async def test_bare_thinking_command_opens_the_selector(fake_runtime):
@@ -308,7 +308,7 @@ async def test_enter_on_a_value_hint_accepts_and_submits(fake_runtime):
         await pilot.pause()
         await pilot.pause()
         assert not isinstance(app.screen, ChoicePicker), "no redundant submenu"
-        assert app.runtime.mode == "zen"
+        assert app.runtime.mode == "auto"
         assert prompt.text == ""
 
 

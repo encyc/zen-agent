@@ -180,8 +180,8 @@ def build_task_tool(
                 )
             live_thinking = "high" if live_model.reasoning else "off"
         available = _live(live_tools) if live_tools is not None else base_tools
-        zen = (_live(mode) or "") == "zen"
-        child_tools = [tool for tool in available if child_allowed(tool, zen=zen)]
+        auto = (_live(mode) or "") == "auto"
+        child_tools = [tool for tool in available if child_allowed(tool, auto=auto)]
         child_system_prompt = render(
             read_block("task_child_system"),
             {

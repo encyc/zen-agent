@@ -89,6 +89,15 @@ def _manifest(role_id: str = "research", **overrides) -> dict:
     return {"schemaVersion": 1, "id": role_id, "name": role_id.title(), **overrides}
 
 
+def test_parse_role_normalizes_the_legacy_zen_mode_to_auto(home):
+    role_dir = _write_role("research", _manifest(mode="zen"))
+    role, warnings = parse_role(role_dir)
+
+    assert role is not None
+    assert role.mode == "auto"
+    assert warnings == []
+
+
 def test_parse_role_reads_fields_and_prompt(home):
     role_dir = _write_role("research", _manifest(model="deepseek-chat"))
     role, warnings = parse_role(role_dir)

@@ -450,7 +450,7 @@ class Confirm(DialogScreen[bool]):
 
 
 class PlanReview(DialogScreen[str]):
-    """Read-only review of the last plan; approving switches to zen mode."""
+    """Read-only review of the last plan; approving switches to auto mode."""
 
     BINDINGS = [  # noqa: RUF012 - Textual class API
         ("a", "approve", "Approve"),
@@ -468,7 +468,7 @@ class PlanReview(DialogScreen[str]):
                 yield Static(Text(self.plan), classes="dialog-detail")
             with Vertical(id="dialog-choices"):
                 yield DialogChoice(
-                    _choice("a", t("tui.dialog.approve_zen")), "approve", primary=True
+                    _choice("a", t("tui.dialog.approve_auto")), "approve", primary=True
                 )
                 yield DialogChoice(_choice("k", t("tui.dialog.keep_plan")), "keep")
 

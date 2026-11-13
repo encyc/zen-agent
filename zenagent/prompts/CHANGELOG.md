@@ -4,6 +4,13 @@ Every content change bumps `PROMPT_VERSION` (`zenagent/prompts/spec.py`) and get
 one entry here: what changed, why, and the experiment/report that justified it.
 P0 extracted the v0.4.1 text verbatim — no behavior change.
 
+## 2026-11-13.1 — rename the permission mode from zen to auto
+
+- The `zen_mode` block is now `auto_mode` and its text says `AUTO MODE`; the
+  workspace mode named Zen is untouched.
+- `plan_mode` and the `task` tool description now point at `auto` instead of
+  `zen` for the no-confirmation permission mode.
+
 ## 2026-11-10.1 — remove the taiji Router prompt surface
 
 - Removed the `taiji_router` block and the five `tool.*_worker` blocks with

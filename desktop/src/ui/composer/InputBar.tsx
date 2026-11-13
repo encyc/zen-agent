@@ -47,7 +47,7 @@ export function InputBar() {
   const steer = useAppStore((state) => state.steer)
   const setMode = useAppStore((state) => state.setMode)
   const status = useStatusStore((state) => state.status)
-  const mode = status?.mode ?? 'zen'
+  const mode = status?.mode ?? 'auto'
   const model = status?.model ?? ''
   const thinking = status?.thinking ?? null
 

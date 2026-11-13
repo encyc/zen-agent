@@ -1,4 +1,4 @@
-"""plan/ask/zen runtime modes: resolution, gate behavior, prompt note."""
+"""plan/ask/auto runtime modes: resolution, gate behavior, prompt note."""
 
 import pytest
 
@@ -13,12 +13,12 @@ from zenagent.app.modes import (
 from zenagent.app.permissions import PermissionGate
 
 
-def test_modes_are_plan_ask_zen():
-    assert MODES == ("plan", "ask", "zen")
+def test_modes_are_plan_ask_auto():
+    assert MODES == ("plan", "ask", "auto")
     assert DEFAULT_MODE == "ask"
 
 
-@pytest.mark.parametrize("raw", ["plan", "PLAN", " Ask ", "zen"])
+@pytest.mark.parametrize("raw", ["plan", "PLAN", " Ask ", "auto"])
 def test_normalize_mode_accepts_case_and_space(raw):
     assert normalize_mode(raw) in MODES
 
@@ -28,12 +28,17 @@ def test_normalize_mode_rejects_unknown(raw):
     assert normalize_mode(raw) is None
 
 
+def test_legacy_zen_is_alias_for_auto():
+    assert normalize_mode("zen") == "auto"
+    assert resolve_mode(explicit="zen", assume_yes=False, read_only=False) == "auto"
+
+
 def test_explicit_mode_wins_over_flags():
-    assert resolve_mode(explicit="zen", assume_yes=False, read_only=True) == "zen"
+    assert resolve_mode(explicit="auto", assume_yes=False, read_only=True) == "auto"
 
 
-def test_yes_maps_to_zen():
-    assert resolve_mode(explicit=None, assume_yes=True) == "zen"
+def test_yes_maps_to_auto():
+    assert resolve_mode(explicit=None, assume_yes=True) == "auto"
 
 
 def test_read_only_maps_to_plan():
@@ -82,23 +87,23 @@ async def test_ask_still_denies_in_non_interactive_runs():
 
 
 # ---------------------------------------------------------------------------
-# zen: the no-confirmation rung. Risk tiers run instead of asking; policy wins.
+# auto: the no-confirmation rung. Risk tiers run instead of asking; policy wins.
 # ---------------------------------------------------------------------------
 
 
-async def test_zen_allows_write_without_yes():
-    gate = PermissionGate(mode="zen", interactive=False)
+async def test_auto_allows_write_without_yes():
+    gate = PermissionGate(mode="auto", interactive=False)
     allowed, reason = await gate.check("write_file", {"path": "x"})
     assert allowed is True and reason == ""
 
 
-async def test_zen_runs_every_risk_tier_instead_of_asking(tmp_path):
+async def test_auto_runs_every_risk_tier_instead_of_asking(tmp_path):
     from pathlib import Path
 
     from zenagent.app.safety import GuardPolicy
 
     gate = PermissionGate(
-        mode="zen", interactive=False, policy=GuardPolicy(workspace=tmp_path)
+        mode="auto", interactive=False, policy=GuardPolicy(workspace=tmp_path)
     )
     for name, args in (
         ("bash", {"command": "git reset --hard"}),  # destructive
@@ -109,22 +114,22 @@ async def test_zen_runs_every_risk_tier_instead_of_asking(tmp_path):
         assert allowed is True, (name, reason)
 
 
-async def test_zen_still_refuses_catastrophic_commands():
-    gate = PermissionGate(mode="zen", allow_dangerous=False)
+async def test_auto_still_refuses_catastrophic_commands():
+    gate = PermissionGate(mode="auto", allow_dangerous=False)
     allowed, reason = await gate.check("bash", {"command": "rm -rf /"})
     assert allowed is False and "--allow-dangerous" in reason
 
 
-async def test_deny_pattern_still_beats_zen():
-    gate = PermissionGate(mode="zen", deny=["write_file"])
+async def test_deny_pattern_still_beats_auto():
+    gate = PermissionGate(mode="auto", deny=["write_file"])
     allowed, reason = await gate.check("write_file", {"path": "x"})
     assert allowed is False and "denied by policy" in reason
 
 
 def test_set_mode_switches_gate():
     gate = PermissionGate(mode="ask", interactive=False)
-    gate.set_mode("zen")
-    assert gate.mode == "zen"
+    gate.set_mode("auto")
+    assert gate.mode == "auto"
 
 
 def test_set_mode_rejects_unknown():
@@ -138,9 +143,9 @@ def test_plan_prompt_note_is_explicit_about_read_only():
     assert "read-only" in note.lower()
 
 
-def test_zen_prompt_note_tells_the_model_to_act():
-    note = mode_prompt_note("zen")
-    assert "ZEN" in note
+def test_auto_prompt_note_tells_the_model_to_act():
+    note = mode_prompt_note("auto")
+    assert "AUTO" in note
     assert "without asking" in note
 
 
@@ -159,11 +164,11 @@ async def test_runtime_starts_in_ask_and_exposes_mode(runtime_factory):
     assert runtime.mode == "ask"
 
 
-async def test_runtime_options_can_select_zen(runtime_factory):
-    runtime = await runtime_factory(mode="zen")
-    assert runtime.mode == "zen"
-    assert runtime.gate.mode == "zen"
-    assert "ZEN MODE" in runtime.agent.system_prompt
+async def test_runtime_options_can_select_auto(runtime_factory):
+    runtime = await runtime_factory(mode="auto")
+    assert runtime.mode == "auto"
+    assert runtime.gate.mode == "auto"
+    assert "AUTO MODE" in runtime.agent.system_prompt
 
 
 async def test_runtime_set_mode_updates_gate_and_status(runtime_factory):
@@ -193,6 +198,6 @@ async def test_switching_plan_to_zen_lifts_the_plan_refusal():
     blocked, _ = await gate.check("write_file", {"path": "x"})
     assert blocked is False
 
-    gate.set_mode("zen")
+    gate.set_mode("auto")
     allowed, reason = await gate.check("write_file", {"path": "x"})
     assert allowed is True and reason == ""

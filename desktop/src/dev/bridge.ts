@@ -123,7 +123,7 @@ export function installBridge(state: BridgeState) {
   }
 
   /** The fake tracks the current session so a resume flips the list. */
-  let currentMode = state.statusMode ?? 'zen'
+  let currentMode = state.statusMode ?? 'auto'
   let currentSessionPath = state.noCurrent === true ? '' : '/sessions/a.jsonl'
   /** Resolved project root → the session its resident slot is on. A warm slot
    * ignores `resume`, exactly like `RpcHost._ensure`. */
@@ -426,7 +426,7 @@ export function installBridge(state: BridgeState) {
           ['zen', 'max_concurrent', 3, 'int', 'session', 1, 16, []],
           ['zen', 'batch_window_s', 0.5, 'float', 'session', 0, 10, []],
           ['zen', 'report_limit', 800, 'int', 'session', 200, 20000, []],
-          ['zen', 'worker_mode', 'inherit', 'str', 'session', 0, 0, ['inherit', 'ask', 'plan', 'zen']],
+          ['zen', 'worker_mode', 'inherit', 'str', 'session', 0, 0, ['inherit', 'ask', 'plan', 'auto']],
           ['swarm', 'max_concurrent', 3, 'int', 'session', 1, 16, []],
           ['swarm', 'max_chain_depth', 8, 'int', 'session', 1, 32, []],
           ['swarm', 'max_chain_cost', 5, 'float', 'session', 0.01, 1000, []],

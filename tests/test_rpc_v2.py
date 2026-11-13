@@ -623,10 +623,10 @@ def test_rpc_cli_yes_resolves_to_zen_and_builds_the_guard_policy(
     )
 
     assert code == 2
-    assert captured["options"].mode == "zen"
+    assert captured["options"].mode == "auto"
     assert captured["assume_yes"] is True
     gate = captured["gate"]
-    assert gate.mode == "zen"
+    assert gate.mode == "auto"
     policy = gate._gate.policy  # the broker wraps the real gate
     assert str(outside.resolve()) in [str(path) for path in policy.allow_outside]
     assert policy.allow_destructive is True

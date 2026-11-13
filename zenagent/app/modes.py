@@ -1,4 +1,4 @@
-"""Runtime permission modes: ``plan`` / ``ask`` / ``zen``.
+"""Runtime permission modes: ``plan`` / ``ask`` / ``auto``.
 
 The kernel has no permission concept on purpose (pi's philosophy); the mode is
 harness policy. Keeping the vocabulary in one UI-agnostic module means the CLI,
@@ -10,9 +10,13 @@ REPL and TUI all resolve and display the same three words.
   modal). Non-interactive runs deny, as before. The three confirmable risk
   tiers (destructive command, protected path, outside workspace) confirm here
   too, and catastrophic shell commands / explicit deny patterns still win.
-- ``zen``: no confirmations at all. The risk tiers run instead of asking,
+- ``auto``: no confirmations at all. The risk tiers run instead of asking,
   headless runs included. Only policy stays: catastrophic shell commands still
   refuse (``--allow-dangerous`` lifts that too) and explicit deny patterns win.
+
+``zen`` is still accepted as a legacy alias and normalizes to ``auto`` so old
+scripts, configs and role manifests keep working; the workspace mode ``zen`` is
+a separate concept and is not touched here.
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ from zenagent.prompts.registry import read_block
 
 __all__ = [
     "DEFAULT_MODE",
+    "LEGACY_MODES",
     "MODES",
     "describe_modes",
     "mode_prompt_note",
@@ -30,7 +35,11 @@ __all__ = [
 ]
 
 #: The three supported modes, in escalation order.
-MODES: tuple[str, str, str] = ("plan", "ask", "zen")
+MODES: tuple[str, str, str] = ("plan", "ask", "auto")
+
+#: Pre-rename spellings accepted at the edges (CLI, config, role manifests,
+#: old prefs) and normalized immediately. Never advertised.
+LEGACY_MODES: dict[str, str] = {"zen": "auto"}
 
 #: The default when neither a flag nor an explicit mode says otherwise.
 DEFAULT_MODE = "ask"
@@ -41,6 +50,7 @@ def normalize_mode(raw: str | None) -> str | None:
     if raw is None:
         return None
     candidate = raw.strip().lower()
+    candidate = LEGACY_MODES.get(candidate, candidate)
     return candidate if candidate in MODES else None
 
 
@@ -53,7 +63,7 @@ def resolve_mode(
     """Resolve the effective mode from the explicit flag and legacy switches.
 
     Precedence: ``--mode`` wins; then ``--read-only`` (plan) and ``--yes``
-    (zen) for backward compatibility; otherwise ``ask``.
+    (auto) for backward compatibility; otherwise ``ask``.
     """
     if explicit is not None:
         mode = normalize_mode(explicit)
@@ -63,7 +73,7 @@ def resolve_mode(
     if read_only:
         return "plan"
     if assume_yes:
-        return "zen"
+        return "auto"
     return DEFAULT_MODE
 
 
@@ -72,8 +82,8 @@ def mode_prompt_note(mode: str) -> str:
     normalized = normalize_mode(mode)
     if normalized == "plan":
         return read_block("plan_mode")
-    if normalized == "zen":
-        return read_block("zen_mode")
+    if normalized == "auto":
+        return read_block("auto_mode")
     return ""
 
 

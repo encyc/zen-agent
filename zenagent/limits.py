@@ -333,8 +333,8 @@ ZEN_KNOBS: tuple[Limit, ...] = (
         minimum=0,
         maximum=0,
         apply="session",
-        unit="inherit|ask|plan|zen",
-        choices=("inherit", "ask", "plan", "zen"),
+        unit="inherit|ask|plan|auto",
+        choices=("inherit", "ask", "plan", "auto"),
     ),
 )
 

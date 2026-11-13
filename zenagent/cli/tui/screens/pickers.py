@@ -146,7 +146,7 @@ def open_todo_editor(app: App) -> None:
 
 
 def open_plan_review(app: App) -> None:
-    """Read the last plan, then approve (→ zen) or keep planning."""
+    """Read the last plan, then approve (→ auto) or keep planning."""
     plan = app.chat.last_assistant_text()
     if not plan:
         app.notify(t("tui.app.no_plan"), timeout=3)
@@ -156,8 +156,8 @@ def open_plan_review(app: App) -> None:
         if choice != "approve":
             return
         app._mode_before_plan = None
-        app.runtime.set_mode("zen")
-        app.notify(t("tui.app.mode_set", mode="zen"))
+        app.runtime.set_mode("auto")
+        app.notify(t("tui.app.mode_set", mode="auto"))
         app._refresh_status()
 
     app.open_menu("plan-review", lambda: PlanReview(plan), reviewed)

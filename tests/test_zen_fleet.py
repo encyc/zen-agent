@@ -194,8 +194,8 @@ def _fleet_with(env: dict, **kwargs) -> ZenFleet:
     )
 
 
-async def test_worker_mode_inherit_downgrades_zen_to_ask(env) -> None:
-    fleet = _fleet_with(env, mode="zen")
+async def test_worker_mode_inherit_downgrades_auto_to_ask(env) -> None:
+    fleet = _fleet_with(env, mode="auto")
     await fleet.dispatch(str(env["paths"]["w1"]), "a")
     await fleet.wait_all()
     assert env["factory"].modes[str(env["paths"]["w1"])] == "ask"
@@ -209,10 +209,10 @@ async def test_worker_mode_inherit_keeps_other_router_modes(env) -> None:
 
 
 async def test_worker_mode_pins_the_worker_broker(env) -> None:
-    fleet = _fleet_with(env, mode="ask", worker_mode="zen")
+    fleet = _fleet_with(env, mode="ask", worker_mode="auto")
     await fleet.dispatch(str(env["paths"]["w1"]), "a")
     await fleet.wait_all()
-    assert env["factory"].modes[str(env["paths"]["w1"])] == "zen"
+    assert env["factory"].modes[str(env["paths"]["w1"])] == "auto"
 
 
 async def test_report_limit_cuts_worker_reports(env) -> None:
@@ -504,18 +504,18 @@ async def test_worker_inherits_confirm_and_mode(env) -> None:
     assert env["factory"].modes[str(env["paths"]["w2"])] == "ask"
 
 
-async def test_zen_router_workers_run_in_ask_mode(env) -> None:
-    """A zen router keeps its autonomy, but its workers downgrade to ask so
+async def test_auto_router_workers_run_in_ask_mode(env) -> None:
+    """An auto router keeps its autonomy, but its workers downgrade to ask so
     mutating tool calls surface as approvals instead of auto-approving."""
     fleet: ZenFleet = env["fleet"]
-    fleet.mode = "zen"
+    fleet.mode = "auto"
     await fleet.dispatch(str(env["paths"]["w1"]), "修复")
     await fleet.wait_all()
     assert env["factory"].modes[str(env["paths"]["w1"])] == "ask"
 
 
 async def test_plan_router_workers_inherit_plan(env) -> None:
-    """Only the zen bypass is downgraded; a plan router's workers keep plan."""
+    """Only the auto bypass is downgraded; a plan router's workers keep plan."""
     fleet: ZenFleet = env["fleet"]
     fleet.mode = "plan"
     await fleet.dispatch(str(env["paths"]["w2"]), "修复")

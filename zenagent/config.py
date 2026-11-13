@@ -109,10 +109,12 @@ DEFAULT_ZEN_BATCH_WINDOW_S = 0.5
 #: Default cap on one worker report injected into the router conversation.
 DEFAULT_ZEN_REPORT_LIMIT = 800
 #: How a worker's permission mode is chosen. ``inherit`` keeps the router's
-#: mode but downgrades zen to ask (the historical behaviour); the other values
-#: pin it, and ``zen`` means workers may mutate without approvals.
+#: mode but downgrades auto to ask (the historical behaviour); the other values
+#: pin it, and ``auto`` means workers may mutate without approvals.
 DEFAULT_ZEN_WORKER_MODE = "inherit"
-ZEN_WORKER_MODES = ("inherit", "ask", "plan", "zen")
+ZEN_WORKER_MODES = ("inherit", "ask", "plan", "auto")
+#: Pre-rename worker-mode spellings; normalized before validation.
+LEGACY_ZEN_WORKER_MODES = {"zen": "auto"}
 
 #: Keys accepted inside ``[swarm]`` (room policy, global-only).
 _SWARM_KEYS = frozenset(
@@ -402,7 +404,7 @@ class UserConfig:
     zen_batch_window_s: float = DEFAULT_ZEN_BATCH_WINDOW_S
     #: ``[zen]``: one worker report is cut to this many characters
     zen_report_limit: int = DEFAULT_ZEN_REPORT_LIMIT
-    #: ``[zen]``: worker permission mode (inherit|ask|plan|zen)
+    #: ``[zen]``: worker permission mode (inherit|ask|plan|auto)
     zen_worker_mode: str = DEFAULT_ZEN_WORKER_MODE
     #: ``[swarm]``: role runs in flight per room (global-only)
     swarm_max_concurrent: int = DEFAULT_SWARM_MAX_CONCURRENT
@@ -528,6 +530,11 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
     zen_report_limit = _positive_int(
         zen_table, "report_limit", DEFAULT_ZEN_REPORT_LIMIT, "zen", target
     )
+    raw_worker_mode = zen_table.get("worker_mode")
+    if isinstance(raw_worker_mode, str):
+        zen_table["worker_mode"] = LEGACY_ZEN_WORKER_MODES.get(
+            raw_worker_mode, raw_worker_mode
+        )
     zen_worker_mode = _choice(
         zen_table,
         "worker_mode",

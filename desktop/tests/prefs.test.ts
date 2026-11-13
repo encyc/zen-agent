@@ -36,13 +36,20 @@ test('loadPrefs returns nulls when storage is empty', () => {
 
 test('savePref writes and loadPrefs reads back', () => {
   withStorage((store) => {
-    savePref('mode', 'zen')
+    savePref('mode', 'auto')
     savePref('model', 'glm-5.3')
     savePref('thinking', 'high')
-    assert.deepEqual(loadPrefs(), { mode: 'zen', model: 'glm-5.3', thinking: 'high' })
-    assert.equal(store.get(MODE_KEY), 'zen')
+    assert.deepEqual(loadPrefs(), { mode: 'auto', model: 'glm-5.3', thinking: 'high' })
+    assert.equal(store.get(MODE_KEY), 'auto')
     assert.equal(store.get(MODEL_KEY), 'glm-5.3')
     assert.equal(store.get(THINKING_KEY), 'high')
+  })
+})
+
+test('a legacy zen mode pref loads as auto', () => {
+  withStorage((store) => {
+    store.set(MODE_KEY, 'zen')
+    assert.equal(loadPrefs().mode, 'auto')
   })
 })
 
@@ -82,7 +89,7 @@ test('spawnArgs resumes a session on the child that replaces another project', (
 
 test('replayFrames order: mode, then model, thinking last', () => {
   const frames = replayFrames(
-    { mode: 'zen', model: 'glm-5.3', thinking: 'high' },
+    { mode: 'auto', model: 'glm-5.3', thinking: 'high' },
     { mode: 'ask', model: null, thinking: 'off' },
   )
   assert.deepEqual(frames.map((frame) => frame.type), ['mode', 'model', 'command'])

@@ -502,7 +502,7 @@ async def test_destructive_bash_requires_confirmation(tmp_path):
 async def test_destructive_bash_is_quiet_for_build_dir(tmp_path):
     gate = build_permission_gate(
         interactive=False,
-        mode="zen",
+        mode="auto",
         policy=GuardPolicy(workspace=tmp_path),
     )
     assert (await gate.check("bash", {"command": "rm -rf ./build"}))[0] is True
@@ -572,7 +572,7 @@ def test_an_explicit_mode_switch_lifts_read_only():
     gate = PermissionGate(mode="plan", read_only=True)
     assert gate.read_only is True
 
-    gate.set_mode("zen")
+    gate.set_mode("auto")
 
     assert gate.read_only is False
-    assert gate.mode == "zen"
+    assert gate.mode == "auto"

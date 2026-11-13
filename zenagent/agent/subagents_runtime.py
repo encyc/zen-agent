@@ -55,10 +55,10 @@ _CHILD_TOOL_DENYLIST = frozenset({"task", "ask", "wait", "todo", "rewind"})
 _CHILD_TOOL_DENY_PREFIXES = ("memory", "checkpoint")
 
 
-def child_allowed(tool: AgentTool, *, zen: bool) -> bool:
+def child_allowed(tool: AgentTool, *, auto: bool) -> bool:
     """Whether a child may see ``tool`` under the parent's permission mode.
 
-    Zen parents delegate their full active set (minus the denylist); every
+    Auto parents delegate their full active set (minus the denylist); every
     other mode delegates read tools only. The child is not a second user: it
     never exceeds what the session it was born in allows.
     """
@@ -66,12 +66,12 @@ def child_allowed(tool: AgentTool, *, zen: bool) -> bool:
         return False
     if tool.name.startswith(_CHILD_TOOL_DENY_PREFIXES):
         return False
-    return zen or tool.approval == "read"
+    return auto or tool.approval == "read"
 
 
-def child_tool_names(base_tools: Sequence[AgentTool], *, zen: bool = False) -> set[str]:
-    """Names of the tools a child may see from ``base_tools`` under ``zen``."""
-    return {tool.name for tool in base_tools if child_allowed(tool, zen=zen)}
+def child_tool_names(base_tools: Sequence[AgentTool], *, auto: bool = False) -> set[str]:
+    """Names of the tools a child may see from ``base_tools`` under ``auto``."""
+    return {tool.name for tool in base_tools if child_allowed(tool, auto=auto)}
 
 
 def _live(value):

@@ -236,7 +236,7 @@ async def test_runtime_exposes_a_read_only_task_tool(runtime_factory):
     task = tools["task"]
     assert task.approval == "read"
     assert task.execution_mode == "sequential"
-    # Outside zen the child tool set is the parent's read tools minus the
+    # Outside auto the child tool set is the parent's read tools minus the
     # denylist; time travel and session state never reach the child.
     from zenagent.agent.subagents_runtime import child_tool_names
 
@@ -245,11 +245,11 @@ async def test_runtime_exposes_a_read_only_task_tool(runtime_factory):
     assert not child & {"task", "ask", "wait", "todo", "rewind"}
     assert "write_file" not in child and "bash" not in child
     assert "memory" not in child and "checkpoint" not in child
-    # In zen the child mirrors the parent's active set (minus the denylist).
-    zen_child = child_tool_names(list(runtime._base_tools), zen=True)
-    assert "write_file" in zen_child and "bash" in zen_child
-    assert not zen_child & {"task", "ask", "wait", "todo", "rewind"}
-    assert "memory" not in zen_child and "checkpoint" not in zen_child
+    # In auto the child mirrors the parent's active set (minus the denylist).
+    auto_child = child_tool_names(list(runtime._base_tools), auto=True)
+    assert "write_file" in auto_child and "bash" in auto_child
+    assert not auto_child & {"task", "ask", "wait", "todo", "rewind"}
+    assert "memory" not in auto_child and "checkpoint" not in auto_child
 
 
 async def test_switching_sessions_rebinds_the_task_tool(runtime_factory):
@@ -476,9 +476,9 @@ async def test_runtime_writes_tool_end_without_a_chat_controller(runtime_factory
     assert isinstance(tool_ends[0].get("duration_ms"), int)
 
 
-async def test_bootstrap_honours_read_only_even_in_zen_mode(runtime_factory):
-    """``-p --mode zen --read-only`` must still refuse writes."""
-    runtime = await runtime_factory(mode="zen", read_only=True)
+async def test_bootstrap_honours_read_only_even_in_auto_mode(runtime_factory):
+    """``-p --mode auto --read-only`` must still refuse writes."""
+    runtime = await runtime_factory(mode="auto", read_only=True)
 
     assert runtime.gate.read_only is True
     verdict = await runtime.gate.before_tool_call(
