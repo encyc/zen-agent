@@ -3,7 +3,7 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased
+## v0.13.6 — 2026-11-13
 
 **Zen workers now run on the router's model and can ask a human.** A worker used
 to fall back to the configured default model — so a router switched with `/model`
