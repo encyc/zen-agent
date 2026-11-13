@@ -6,6 +6,7 @@ import asyncio
 from dataclasses import asdict
 from pathlib import Path
 
+from zenagent.app.session_lease import SessionLeaseBusy
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
 
 
@@ -141,6 +142,16 @@ class SessionOps:
         label = op if isinstance(op, str) else ""
         try:
             result = await self._session_op(op, request)
+        except SessionLeaseBusy as exc:
+            self._send(
+                error_frame(
+                    request_id,
+                    str(exc),
+                    "session_lease_busy",
+                    {"op": label},
+                )
+            )
+            return
         except MissingSessionFile as exc:
             self._send(
                 failure_frame(

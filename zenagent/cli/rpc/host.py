@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from zenagent.app.bootstrap import prepare
+from zenagent.app.session_lease import SessionLeaseBusy
 from zenagent.cli.rpc.codec import PROTOCOL_VERSION
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
 from zenagent.cli.rpc.ops_runs import RunsOps
@@ -404,11 +405,14 @@ class RpcHost(RunsOps, SwarmOps, ZenOps):
             await self._make_room()
         key = self._free_key(base)
         options = replace(self._options, root=root, resume=resume)
-        prepared = await prepare(
-            options,
-            stream_fn=self._stream_fn,
-            assume_yes=self._assume_yes,
-        )
+        try:
+            prepared = await prepare(
+                options,
+                stream_fn=self._stream_fn,
+                assume_yes=self._assume_yes,
+            )
+        except SessionLeaseBusy as exc:
+            raise Refusal(str(exc), code="session_lease_busy") from exc
         if self._warn is not None:
             for warning in prepared.runtime.warnings:
                 self._warn(warning)
