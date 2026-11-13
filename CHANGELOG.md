@@ -20,6 +20,12 @@ matches the release tag; older history is in the repository tags and commits.
   RPC across modes. The ledger is best-effort and append-only; it is the
   foundation for a backend-owned supervisor, not a replacement for the swarm
   task table.
+- **A session has one writer** — `Runtime` now takes a `SessionLease` when it
+  binds a session: a second live runtime in the same process is refused with
+  `SessionLeaseBusy`, and an advisory lock under `~/.zenagent/locks/` covers a
+  second CLI process. `switch_session` checks before aborting the current run,
+  so a busy target leaves the session and its run untouched. Read-only
+  transcript snapshots are unaffected.
 - **Swarm idle runtimes are reclaimed** — a `(role, work item)` runtime now
   closes after `[swarm] runtime_idle_s` (default 600 s, `0` disables) once it
   has no run in flight, no queued round and no pending manifest apply. The

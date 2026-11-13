@@ -41,6 +41,26 @@ class Session:
 - 解析宽容：坏行/旧格式行记 warning 并跳过，不让整个会话打不开。
 - `messages` 属性是缓存视图，`append` 保持同步。
 
+## Session writer lease
+
+一个 session 文件同一时间只允许一个 writer Runtime。`app/session_lease.py` 分两层：
+
+- **进程内**：registry 以 resolved path 为键，owner 是 Runtime 对象；第二个 Runtime
+  在 `Runtime.session` setter 处抛 `SessionLeaseBusy`，不会先 abort 当前 run。
+- **跨进程**：`~/.zenagent/locks/<sha256(path)>.lock` 上的 advisory lock
+  （POSIX `fcntl.flock`，Windows `msvcrt.locking`）。拿不到锁同样拒绝；文件系统不支持
+  锁时降级为进程内 registry。
+
+接线点：
+
+- `Runtime.session` setter 在换文件时先 acquire 新租约、成功后才 release 旧租约；
+  同一路径重绑 no-op。
+- `switch_session` 在 abort 之前 `ensure_session_free`，目标 busy 时当前 run 不受影响。
+- `close` 末尾释放租约；只读 `Session` / transcript 快照不参与。
+
+锁文件不删除（避免 unlink 后第三方重建的竞态），只保留很小的空文件；`runtime.py`
+仍不超过 1061 行 allowlist。
+
 辅助函数：
 
 - `truncate_last_turn(messages)`：`/undo` 用，删除最后一个完整 turn（含其工具结果）。
