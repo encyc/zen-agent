@@ -21,8 +21,8 @@ from pathlib import Path
 from zenagent.agent.agent import Agent
 from zenagent.agent.session import Session
 from zenagent.app import agent_profile as agents
-from zenagent.app.plugin_wiring import start_mcp
 from zenagent.app.bootstrap import prepare
+from zenagent.app.plugin_wiring import start_mcp
 from zenagent.app.run_wiring import attach_swarm_run
 from zenagent.app.runtime import Runtime, RuntimeOptions
 from zenagent.app.swarm.approvals import APPROVAL_TIMEOUT_S, SwarmApprovals

@@ -11,8 +11,8 @@ import pytest
 from conftest import text_stream
 
 from zenagent.app.runtime import Runtime
-from zenagent.app.swarm.events_tap import subscribe_events, tap
 from zenagent.app.swarm import manager as manager_module
+from zenagent.app.swarm.events_tap import subscribe_events, tap
 from zenagent.app.swarm.manager import SwarmManager
 from zenagent.app.swarm.roles import (
     project_agents_root,
