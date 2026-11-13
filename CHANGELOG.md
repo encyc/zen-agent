@@ -30,18 +30,34 @@ model/mode visibility, and no way to put a workspace file into a task.
 - **Target model/mode/thinking are visible** — selecting `@role` shows
   `model · mode · thinking` in the preview and in the mention menu, so a room
   post says how the chosen role will run without overriding its manifest.
-- **The room composer can switch the target role's model** — with one or more
-  `@role` targets, the model chip opens the catalog and writes `model` back to
-  the targeted role manifest(s), one role at a time. Several targets are
-  updated together; "role default" clears the override. Running tasks keep the
-  model they started with; later tasks use the new one.
+- **The room composer switches the whole room's model** — the model chip is
+  enabled without an `@` mention and writes `model` back to **every role** in
+  the room, one role at a time. That includes roles reached by an agent's
+  reply (`@A` → `@B`), which previously could hit a different or unbound
+  provider. "Role default" clears the override. Running tasks keep the model
+  they started with; later tasks use the new one.
 - **`@` also finds workspace files** — with a query, the room's mention menu
   lists matching files and directories after roles. Files are inserted as
   `@"path"`, which the room's role parser cannot mistake for a role; a file
   path is context for the task, not a delegation by itself.
+- **A session belongs to one workspace mode** — project session summaries
+  carry `workspace` (`coding` / `zen`, derived from `.zen.json`), and the
+  coding sidebar lists only coding sessions; Zen's roster lists only its
+  router/workers. Sessions without the field (older files) count as coding.
+- **Zen workers get readable names and a real conversation view** — the roster
+  title is the user title, else the focus, else a one-line summary of the
+  worker's first task; clicking a worker opens its read-only transcript in the
+  center column with the same message/thinking/tool/diff renderers as coding
+  and subagents, instead of the old drawer.
+- **Configured swarm roles always render** — the sidebar is sourced from the
+  project role files, not from live runtime instances, so a room with three
+  roles shows three agents (idle) before any run starts.
 
 ### Changed
 
+- **The archived global room no longer warns on every room open** — the
+  per-project room starts silently; the old `~/.zenagent/swarm/` is still not
+  imported.
 - **The permission mode formerly called `zen` is now `auto`** — `--mode auto`,
   `/mode auto`, worker `mode = "auto"` and role manifests all use the new
   name. `--yes` maps to `auto`. The old spelling is still accepted at the

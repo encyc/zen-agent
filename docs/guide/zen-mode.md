@@ -50,15 +50,21 @@ Router 的纪律（系统提示词强制）：只做中枢，不亲自实现；�
 时则在下一步边界注入；同一时间窗内完成的多个 worker 报告会**合并成一条
 消息**，Router 一个回合统一点评），永远不要等待或轮询。
 
-## Sidebar 名册与 Worker 抽屉
+## Sidebar 名册与 Worker 会话
 
-Zen 开启时，会话区渲染当前项目的名册：
+Zen 开启时，会话区渲染当前项目的名册；名册只含项目 `.zen.json` 里登记的
+Router 与 Worker，普通 coding session 不会混进来：
 
 - **Router 行**：当前交互会话（高亮徽标）。worker 报告到达即唤醒 Router
   开新回合，无需用户介入。
 - **Worker 行**：状态点（绿=执行中/排队，红=受阻/失败，灰=空闲/待命）+
-  焦点标签 + 状态词。点击打开**只读抽屉**查看该 worker 的 transcript；
-  输入永远只在 Router 会话。
+  可读名称 + 状态词。名称优先取用户重命名，其次取焦点，最后取该 worker
+  第一条任务描述的短摘要；完整名称在悬停提示里。
+- **点击 Worker**：在**中间对话栏**打开它的只读会话视图（不是抽屉），使用与
+  coding/subagent 相同的消息、思考、工具卡和 diff 组件渲染整个 session；
+  左上角返回 Router。输入仍然只在 Router 会话。
+- **Coding 侧边栏不显示 Zen session**：项目会话列表按 `workspace` 归属过滤；
+  `.zen.json` 里的 Router/Worker 归 Zen，其余归 Coding。
 
 状态词表：`idle 空闲 · queued 排队 · working 执行中 · waiting 待命 ·
 blocked 受阻 · failed 失败`。
@@ -81,5 +87,5 @@ blocked 受阻 · failed 失败`。
   是该 worker 当时的目标。它们和 coding/swarm 的 run 落在同一份项目 `runs.jsonl`，
   可用宿主级 `runs` 查询；Zen 自己仍以名册为 worker 状态的权威。详见
   [控制面](orchestration.md)。
-- **Worker 抽屉是只读的**：打开抽屉只读 transcript，不占用会话写者；但同一个 worker
-  会话不能同时被第二个 runtime 恢复（[单写者租约](sessions.md#单写者租约)）。
+- **Worker 会话视图是只读的**：打开它只读 transcript，不占用会话写者；但同一个
+  worker 会话不能同时被第二个 runtime 恢复（[单写者租约](sessions.md#单写者租约)）。

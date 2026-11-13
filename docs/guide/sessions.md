@@ -17,6 +17,14 @@
 - 升级前的扁平 `~/.zenagent/sessions/*.jsonl` 保留为 legacy，只在 all 视图出现；`zen sessions adopt PATH` 可归入当前项目。
 - 旧文件不会被重写：压缩、`/undo`、`/fork` 都**写新文件**，保证历史可审计。
 
+## 会话归属
+
+每个项目会话在列表里带一个 `workspace` 归属：`coding` 或 `zen`（Swarm 角色的
+session 在 `swarm/agents/` 下，不进普通项目会话列表）。归属由 sessions 目录里的
+`.zen.json` 名册决定：Router 和已登记的 Worker 属于 `zen`，其余属于 `coding`；
+没有该字段的旧会话按 `coding` 处理。桌面端 coding 侧边栏只显示 `coding`，Zen
+名册只显示 `zen`，因此离开 Zen 后不会把 worker 会话混进普通会话列表。
+
 ## 单写者租约
 
 一个会话同一时间只允许一个写者。`Runtime` 绑定 session 时取得 `SessionLease`：
