@@ -3,11 +3,14 @@
 import pytest
 
 from zenagent.agent import Agent
+from zenagent.app.agent_profile import AgentProfile
 from zenagent.app.runtime import Runtime, RuntimeOptions
 
 
 def _options() -> RuntimeOptions:
-    return RuntimeOptions(mcp=False, skills=False, templates=False)
+    return RuntimeOptions(
+        profile=AgentProfile(mcp=False, skills=False, templates=False)
+    )
 
 
 async def test_bootstrap_wires_agent_and_session(runtime_factory, app_env):
@@ -340,7 +343,8 @@ async def test_runtime_auto_compact_is_configurable(runtime_factory):
 async def test_bootstrap_accepts_an_api_key_override(app_env, monkeypatch):
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     options = RuntimeOptions(
-        mcp=False, skills=False, templates=False, api_key="override-key"
+        profile=AgentProfile(mcp=False, skills=False, templates=False),
+        api_key="override-key",
     )
 
     runtime = await Runtime.bootstrap(options)
@@ -428,6 +432,7 @@ async def test_bootstrap_hands_the_permission_gate_to_the_task_tool(
     runtime_factory, app_env, monkeypatch
 ):
     """A child agent consults the same gate as its parent (no policy bypass)."""
+    from zenagent.app.agent_profile import AgentProfile
     from zenagent.app.permissions import PermissionBroker
     from zenagent.app.runtime import Runtime, RuntimeOptions
     from zenagent.app.runtime import build_task_tool as real_build_task_tool
@@ -445,7 +450,8 @@ async def test_bootstrap_hands_the_permission_gate_to_the_task_tool(
 
     broker = PermissionBroker.wrap(runtime.gate)
     brokered = await Runtime.bootstrap(
-        RuntimeOptions(mcp=False, skills=False, templates=False), gate=broker
+        RuntimeOptions(profile=AgentProfile(mcp=False, skills=False, templates=False)),
+        gate=broker,
     )
     try:
         assert captured["before_tool_call"] == broker.before_tool_call
@@ -586,7 +592,10 @@ async def test_bootstrap_rejects_a_missing_root(tmp_path):
     missing = tmp_path / "gone"
     with pytest.raises(RuntimeError, match="project root is not a directory"):
         await Runtime.bootstrap(
-            RuntimeOptions(root=missing, mcp=False, skills=False, templates=False)
+            RuntimeOptions(
+                root=missing,
+                profile=AgentProfile(mcp=False, skills=False, templates=False),
+            )
         )
 
 

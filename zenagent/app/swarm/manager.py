@@ -1,11 +1,8 @@
 """SwarmManager: one runtime per (role, work item), and the room lifecycle.
 
 A role is a *configuration*; a work item is a *job*. The run unit is the pair:
-the same agent may be working two jobs at once, each with its own runtime and
-session, which is what makes a work item a context boundary. The manager owns
-everything the runner deliberately does not: inbox sizes for the router gates,
-the approval broker in front of each runtime, the role lifecycle (update while
-running, delete, reset, reload) and the work item table.
+one agent may work two jobs, each with its own runtime and session. The manager owns what the runner deliberately does not: inbox sizes for the
+router gates, the approval broker, the role lifecycle and the work item table.
 
 Scheduling lives in :mod:`zenagent.app.swarm.schedule`, wire emission in
 :mod:`zenagent.app.swarm.frames`, instance identity in
@@ -23,6 +20,7 @@ from pathlib import Path
 
 from zenagent.agent.agent import Agent
 from zenagent.agent.session import Session
+from zenagent.app.agent_profile import AgentProfile
 from zenagent.app.permissions import build_broker_for
 from zenagent.app.plugin_wiring import start_mcp
 from zenagent.app.run_wiring import attach_swarm_run
@@ -129,9 +127,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
         #: Run units, keyed by (role, work item): one agent may work two jobs.
         self.agents: dict[AgentKey, SwarmAgent] = {}
         self.runners: dict[AgentKey, TaskRunner] = {}
-        #: Role ids come from configuration (discover_roles), never from built
-        #: instances: instances are built lazily, so deriving the roster from
-        #: them would leave the router with no roles on a fresh start.
+        #: Role ids come from configuration, never from lazily built instances.
         self.role_ids: set[str] = set()
         self._roles: dict[str, RoleManifest] = {}
         self._idle = IdleTracker(runtime_idle_s)
@@ -178,8 +174,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
         roles, warnings = discover_roles(self.root)
         self.warnings.extend(warnings)
         self._set_roles(roles)
-        # Instances are built lazily on a round's first run; role membership
-        # still comes from configuration, so @-mentions route without one.
+        # Instances are built lazily; membership still comes from configuration.
         self.router = Router(
             self.store,
             self.role_ids,
@@ -540,8 +535,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
 
     async def reload(self) -> list[str]:
         roles, warnings = discover_roles(self.root)
-        # A reload is the authoritative re-read: drop stale discovery/build
-        # warnings, keeping room-log warnings and healthy runtimes' diagnostics.
+        # Reload is authoritative: stale discovery warnings are replaced.
         self.warnings = list(self.store.warnings)
         self.warnings.extend(warnings)
         for agent in self.agents.values():
@@ -558,8 +552,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
             elif role_signature(existing) != role_signature(role):
                 notes.append(f"updated {role_id}")
                 await self._apply_role(role)
-        # Membership comes from configuration, not from what happens to be
-        # built: a role with no instance yet is still a member of the room.
+        # Membership comes from configuration, not from what happens to be built.
         self._set_roles(roles)
         return notes
 
@@ -620,6 +613,25 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
         )
         key = agent_key(role.id, work_item_id)
         broker.set_confirm(self._confirm_callback(key))
+        profile = AgentProfile(
+            id=role.id,
+            kind="swarm",
+            label=role.name,
+            tools_allow=None if role.tools is None else tuple(role.tools),
+            extra_tools=(
+                build_swarm_post_tool(
+                    lambda text, key=key: self._post_from(key, text)
+                ),
+                *self.work_tools(opened_by=role.id, opened_from=work_item_id),
+            ),
+            extra_prompt=f"{role.system_prompt}\n\n{PROTOCOL_TEXT}",
+            plugins=False,
+            skills=False,
+            templates=False,
+            mcp=False,
+            context_files=role.inherit_project,
+            project_sessions=False,
+        )
         options = RuntimeOptions(
             root=role.root,
             model_id=role.model,
@@ -627,21 +639,8 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
             mode=role.mode,
             max_turns=role.max_turns,
             max_cost=role.max_cost,
-            mcp=False,
-            skills=False,
-            templates=False,
-            plugins=False,
-            context_files=role.inherit_project,
-            tools_allow=role.tools,
-            extra_tools=[
-                build_swarm_post_tool(
-                    lambda text, key=key: self._post_from(key, text)
-                ),
-                *self.work_tools(opened_by=role.id, opened_from=work_item_id),
-            ],
-            extra_prompt=f"{role.system_prompt}\n\n{PROTOCOL_TEXT}",
+            profile=profile,
             resume=session_path,
-            project_sessions=False,
         )
         stream_fn = (
             self._stream_fn_factory(role)

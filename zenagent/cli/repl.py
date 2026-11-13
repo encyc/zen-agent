@@ -26,6 +26,7 @@ from zenagent.agent.memory_store import split_title_body
 from zenagent.agent.session import (
     sessions_dir,
 )
+from zenagent.app.agent_profile import AgentProfile
 from zenagent.app.appearance import THEME_CHOICES
 from zenagent.app.bootstrap import prepare
 from zenagent.app.modes import describe_modes
@@ -469,13 +470,12 @@ async def repl(
         model_id=model_id,
         thinking=thinking,
         resume=resume,
-        mcp=mcp,
         mcp_file=Path(mcp_file) if mcp_file else None,
         mcp_servers=mcp_servers,
-        skills=skills,
-        templates=templates,
+        profile=AgentProfile(
+            mcp=mcp, skills=skills, templates=templates, context_files=context_files
+        ),
         extension_paths=list(extension_paths or []),
-        context_files=context_files,
         read_only=read_only,
         allow_dangerous=allow_dangerous,
         allow_outside=list(allow_outside or []),

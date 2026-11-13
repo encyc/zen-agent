@@ -5,6 +5,7 @@ import json
 import pytest
 
 from zenagent import project
+from zenagent.app.agent_profile import AgentProfile
 from zenagent.app.runtime import Runtime, RuntimeOptions
 from zenagent.config import UserConfig
 
@@ -25,10 +26,9 @@ async def _bootstrap(monkeypatch, root):
     return await Runtime.bootstrap(
         RuntimeOptions(
             root=root,
-            mcp=False,
-            skills=False,
-            templates=False,
-            context_files=False,
+            profile=AgentProfile(
+                mcp=False, skills=False, templates=False, context_files=False
+            ),
         )
     )
 

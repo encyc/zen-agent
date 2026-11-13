@@ -23,6 +23,7 @@ from zenagent.agent.subagents import SubagentLimits
 from zenagent.agent.subagents_runtime import SubagentObserver
 from zenagent.app import plugin_wiring, records
 from zenagent.app import session_lease as leases
+from zenagent.app.agent_profile import AgentProfile
 from zenagent.app.journal import attach_journal, journal_for, load_backup_policy
 from zenagent.app.metrics import MetricsSession
 from zenagent.app.modes import (
@@ -116,16 +117,12 @@ class RuntimeOptions:
     model_id: str | None = None
     thinking: str | None = None
     resume: Path | str | None = None
-    mcp: bool = True
+    #: Role-side assembly: identity and capability policy. Generic run knobs
+    #: stay on this dataclass; the profile owns what used to be role flags.
+    profile: AgentProfile = field(default_factory=AgentProfile)
     mcp_file: Path | None = None
     mcp_servers: list[str] | None = None
-    skills: bool = True
-    templates: bool = True
-    #: Global plugin assembly. Role runtimes turn this off: their capabilities
-    #: come from the role manifest, not from whatever the user enabled globally.
-    plugins: bool = True
     extension_paths: list[str] = field(default_factory=list)
-    context_files: bool = True
     read_only: bool = False
     allow_dangerous: bool = False
     allow_outside: list[str] = field(default_factory=list)
@@ -145,18 +142,8 @@ class RuntimeOptions:
     auto_compact: bool = True
     #: Explicit tool list (embedding/test seam); ``None`` = compose the default.
     tools: list | None = None
-    #: Role assembly: keep only these tool names (``None`` = the default set).
-    tools_allow: list[str] | None = None
-    #: Role assembly: tools appended after the allowlist filter.
-    extra_tools: list | None = None
-    #: Role assembly: persona text appended as an extension prompt fragment.
-    extra_prompt: str | None = None
     #: Retry cadence for late MCP servers.
     mcp_retry_interval_s: float = 10.0
-    #: Whether resumed transcripts live under a project's sessions directory.
-    #: Role runtimes keep per-role sessions in the swarm state dir, which has
-    #: no project owner to compare, so the scope warning does not apply.
-    project_sessions: bool = True
 
 
 class Runtime:
@@ -171,9 +158,7 @@ class Runtime:
         #: Project identity root (nearest ``.git``): sessions, config, MCP,
         #: skills, templates, memory and the permission policy hang off it.
         self.root: Path = self.cwd
-        #: False when sessions belong to the embedder (swarm roles), so the
-        #: project-scope resume check has nothing to compare against.
-        self.project_sessions = True
+        self.profile = AgentProfile()
         #: Env var the current model needs when the app started without a key.
         self.missing_api_key: str | None = None
         self.catalog: dict[str, ProviderConfig] = {}
@@ -246,15 +231,11 @@ class Runtime:
         #: Project memory library (<root>/.zenagent/memory/); set per-recompose.
         self.memory_store: MemoryStore | None = None
         self._extension_prompt = ""
-        self._extra_prompt = ""
-        self._tools_allow: list[str] | None = None
-        self._extra_tools: list = []
         self._extension_tools: list = []
         #: Slash commands contributed by extensions (name → ExtensionCommand).
         self.extension_commands: dict = {}
         self._hook_unsubscribes: list = []
         self._options: RuntimeOptions | None = None
-        self._context_files = True
 
     @property
     def limits(self) -> Limits:
@@ -370,7 +351,7 @@ class Runtime:
         if not runtime.cwd.is_dir():
             raise RuntimeError(f"project root is not a directory: {runtime.cwd}")
         runtime.root = project.find_project_root(runtime.cwd)
-        runtime.project_sessions = options.project_sessions
+        runtime.profile = options.profile
         runtime.user_config = load_user_config(cwd=runtime.root)
         runtime.catalog = apply_user_config(
             load_catalog(), runtime.user_config, runtime.warnings
@@ -444,17 +425,17 @@ class Runtime:
         runtime._lsp_acquired = True
         acquire_clients()
         assembly = None
-        if options.tools is None and options.plugins:
+        if options.tools is None and runtime.profile.plugins:
             assembly = await plugin_wiring.start_plugins(runtime, options)
 
-        if options.skills and options.tools is None:
+        if runtime.profile.skills and options.tools is None:
             skills, warnings = discover_skills(
                 [*default_skill_roots(runtime.root), *(assembly.skill_roots if assembly else [])]
             )
             runtime.skills = _active_skills(skills)
             runtime.warnings.extend(f"skills {warning}" for warning in warnings)
 
-        if options.templates:
+        if runtime.profile.templates:
             runtime.templates, warnings = discover_templates(
                 default_template_roots(runtime.root)
             )
@@ -476,10 +457,6 @@ class Runtime:
             runtime._extension_prompt = loaded.prompt_text
 
         runtime._options = options
-        runtime._tools_allow = options.tools_allow
-        runtime._extra_tools = list(options.extra_tools or [])
-        runtime._extra_prompt = options.extra_prompt or ""
-        runtime._context_files = options.context_files
         runtime.auto_compact = options.auto_compact
         runtime._custom_tools = (
             list(options.tools) if options.tools is not None else None
@@ -636,7 +613,7 @@ class Runtime:
         ``project_sessions=False``: their transcripts live outside the project
         tree, so there is no owner to compare and no warning to raise.
         """
-        if not self.project_sessions:
+        if not self.profile.project_sessions:
             return
         owner = project.project_key_for_session(path)
         current = project.project_key(self.root)
@@ -655,7 +632,7 @@ class Runtime:
                 discover_context_files(self.cwd),
                 max_bytes=self.limits.max_context_bytes,
             )
-            if self._context_files
+            if self.profile.context_files
             else ""
         )
         memory_index = (
@@ -671,10 +648,10 @@ class Runtime:
             memory_index=memory_index,
             extension_fragments=tuple(
                 fragment
-                for fragment in (self._extension_prompt, self._extra_prompt)
+                for fragment in (self._extension_prompt, self.profile.extra_prompt)
                 if fragment
             ),
-            include_context=self._context_files,
+            include_context=self.profile.context_files,
             include_mode=False,
         )
         rendered = compose_system(context)
@@ -739,9 +716,9 @@ class Runtime:
                 build_skill_tool(self.skills, max_body_bytes=self.limits.max_body_bytes)
             )
         tools.extend(self._extension_tools)
-        if self._tools_allow is not None:
-            tools = [tool for tool in tools if tool.name in self._tools_allow]
-        tools = [*tools, *self._extra_tools]
+        if self.profile.tools_allow is not None:
+            tools = [tool for tool in tools if tool.name in self.profile.tools_allow]
+        tools = [*tools, *self.profile.extra_tools]
         self._skill_entries = format_skill_entries(
             self.skills, max_bytes=self.limits.max_index_bytes
         )
@@ -798,7 +775,7 @@ class Runtime:
     @property
     def skills_enabled(self) -> bool:
         """Whether discovery ran with skills turned on (``--no-skills`` aside)."""
-        return self._options is None or self._options.skills
+        return self.profile.skills
 
     @staticmethod
     def _signature(items: list) -> list[tuple[str, str, str, str]]:
@@ -874,7 +851,7 @@ class Runtime:
         if not self.skills_enabled:
             active["max_index_bytes"] = "--no-skills"
             active["max_body_bytes"] = "--no-skills"
-        if not self._context_files:
+        if not self.profile.context_files:
             active["max_context_bytes"] = "--no-context-files"
         if not self.auto_compact:
             active["compact_threshold"] = "--no-auto-compact"
@@ -908,10 +885,9 @@ class Runtime:
         """
         if hasattr(self, "agent") and self.agent.is_streaming:
             raise RuntimeError(t("cmdmsg.cannot_reload"))
-        options = self._options
         notes: list[str] = []
 
-        if options is None or options.skills:
+        if self.profile.skills:
             skills, warnings = discover_skills(
                 [*default_skill_roots(self.root), *self._plugin_skill_roots]
             )
@@ -922,7 +898,7 @@ class Runtime:
                 notes.append(self._change_note("skills", self.skills, skills))
             self.skills = skills
 
-        if options is None or options.templates:
+        if self.profile.templates:
             templates, warnings = discover_templates(
                 default_template_roots(self.root)
             )

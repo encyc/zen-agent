@@ -492,9 +492,9 @@ def test_rpc_flags_forward_to_runtime_options(monkeypatch, tmp_path):
     assert str(options.trace) == str(trace)
     assert str(options.metrics) == str(metrics)
     assert options.retries == 2
-    assert options.mcp is False
-    assert options.skills is False
-    assert options.templates is False
+    assert options.profile.mcp is False
+    assert options.profile.skills is False
+    assert options.profile.templates is False
     assert options.auto_compact is False
     assert [str(path) for path in options.extension_paths] == [
         str(tmp_path / "ext.py")

@@ -78,7 +78,7 @@ def assemble_plugins(
 def attach_plugins(runtime: Runtime, options: RuntimeOptions) -> PluginAssembly:
     """Bootstrap step: assemble plugins and hand the result to the runtime."""
     user_configs: dict[str, McpServerConfig] = {}
-    if options.mcp:
+    if runtime.profile.mcp:
         user_configs = load_mcp_config(options.mcp_file, cwd=runtime.root)
         if options.mcp_servers:
             user_configs = {
@@ -113,7 +113,7 @@ async def start_mcp(
 async def start_plugins(runtime: Runtime, options: RuntimeOptions) -> PluginAssembly:
     """Bootstrap step: assemble plugins and start their MCP manager."""
     assembly = attach_plugins(runtime, options)
-    if options.mcp:
+    if runtime.profile.mcp:
         runtime.mcp = await start_mcp(
             assembly.configs,
             retry_interval_s=options.mcp_retry_interval_s,
@@ -134,7 +134,7 @@ async def reconfigure(runtime: Runtime) -> list[str]:
         raise RuntimeError(t("cmdmsg.cannot_reload"))
     options = runtime._options
     user_configs: dict[str, McpServerConfig] = {}
-    if options is None or options.mcp:
+    if runtime.profile.mcp:
         user_configs = load_mcp_config(getattr(options, "mcp_file", None))
         if options is not None and options.mcp_servers:
             user_configs = {
@@ -152,7 +152,7 @@ async def reconfigure(runtime: Runtime) -> list[str]:
         *(options.extension_paths if options is not None else []),
         *assembly.extension_files,
     ]
-    if options is None or options.mcp:
+    if runtime.profile.mcp:
         retry = getattr(options, "mcp_retry_interval_s", None) or 30.0
         runtime.mcp = await start_mcp(
             assembly.configs, retry_interval_s=retry, runtime=runtime

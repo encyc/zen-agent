@@ -129,6 +129,7 @@ def test_status_mapping():
 async def test_prepare_records_a_coding_run(app_env, monkeypatch):
     from conftest import text_stream
 
+    from zenagent.app.agent_profile import AgentProfile
     from zenagent.app.bootstrap import prepare
     from zenagent.app.runtime import RuntimeOptions
     from zenagent.config import UserConfig
@@ -139,7 +140,10 @@ async def test_prepare_records_a_coding_run(app_env, monkeypatch):
         lambda *args, **kwargs: UserConfig(default_model="deepseek-flash"),
     )
     prepared = await prepare(
-        RuntimeOptions(root=app_env, mcp=False, skills=False, templates=False),
+        RuntimeOptions(
+            root=app_env,
+            profile=AgentProfile(mcp=False, skills=False, templates=False),
+        ),
         stream_fn=text_stream("ok"),
         views=False,
     )

@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from zenagent.agent.session import read_session_titles, unique_session_path
+from zenagent.app.agent_profile import AgentProfile
 from zenagent.app.bootstrap import prepare
 from zenagent.app.records import open_session
 from zenagent.app.run_wiring import update_run_scope
@@ -302,8 +303,13 @@ class ZenFleet:
             # registered worker identity and its transcript would diverge.
             with contextlib.suppress(OSError):
                 open_session(path, lazy=True, cwd=self.root).materialize()
+        profile = AgentProfile(
+            id=handle.title or Path(handle.path).stem,
+            kind="zen_worker",
+            label=handle.focus,
+        )
         prepared = await prepare(
-            RuntimeOptions(root=self.root, resume=handle.path, mode=mode),
+            RuntimeOptions(root=self.root, resume=handle.path, mode=mode, profile=profile),
             views=False,
         )
         router_runtime = getattr(self.chat, "runtime", None)

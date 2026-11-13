@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from zenagent import project
+from zenagent.app.agent_profile import AgentProfile
 from zenagent.app.bootstrap import prepare
 from zenagent.app.runtime import RuntimeOptions
 from zenagent.cli.rpc.host import RpcHost
@@ -41,10 +42,9 @@ def _repo(tmp_path: Path, name: str) -> Path:
 def _options(root: Path) -> RuntimeOptions:
     return RuntimeOptions(
         root=root,
-        mcp=False,
-        skills=False,
-        templates=False,
-        context_files=False,
+        profile=AgentProfile(
+            mcp=False, skills=False, templates=False, context_files=False
+        ),
         mode="ask",
     )
 

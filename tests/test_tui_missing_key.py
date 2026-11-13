@@ -7,11 +7,14 @@ see the setup screen.
 
 import pytest
 
+from zenagent.app.agent_profile import AgentProfile
 from zenagent.app.runtime import Runtime, RuntimeOptions
 from zenagent.cli.tui.app import ZenAgentApp
 from zenagent.cli.tui.widgets.error_banner import ErrorBanner
 
-_OPTIONS = RuntimeOptions(mcp=False, skills=False, templates=False)
+_OPTIONS = RuntimeOptions(
+    profile=AgentProfile(mcp=False, skills=False, templates=False)
+)
 
 
 class _NoKeys:

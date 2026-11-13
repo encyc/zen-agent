@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from prompt_fixtures import CONFIGS, CWD
 
+from zenagent.app.agent_profile import AgentProfile
 from zenagent.prompts import PromptContext, compose_system
 from zenagent.skills import format_skill_entries
 
@@ -72,7 +73,9 @@ def register(api):
     )
 
     runtime = await runtime_factory(
-        tools=[], extension_paths=[str(extension)], context_files=False
+        tools=[],
+        extension_paths=[str(extension)],
+        profile=AgentProfile(context_files=False),
     )
 
     prompt = runtime.agent.system_prompt

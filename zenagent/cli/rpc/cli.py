@@ -25,6 +25,7 @@ def _stdout_line(text: str) -> None:
 
 
 async def _run(args) -> int:
+    from zenagent.app.agent_profile import AgentProfile
     from zenagent.app.bootstrap import prepare
     from zenagent.app.modes import resolve_mode
     from zenagent.app.runtime import RuntimeOptions
@@ -43,13 +44,15 @@ async def _run(args) -> int:
         model_id=args.model,
         thinking=args.thinking,
         resume=args.resume,
-        mcp=not args.no_mcp,
         mcp_file=Path(args.mcp_file) if args.mcp_file else None,
         mcp_servers=args.mcp_servers,
-        skills=not args.no_skills,
-        templates=not args.no_templates,
+        profile=AgentProfile(
+            mcp=not args.no_mcp,
+            skills=not args.no_skills,
+            templates=not args.no_templates,
+            context_files=not args.no_context_files,
+        ),
         extension_paths=args.extension_paths or [],
-        context_files=not args.no_context_files,
         auto_compact=not args.no_auto_compact,
         read_only=args.read_only,
         allow_dangerous=args.allow_dangerous,

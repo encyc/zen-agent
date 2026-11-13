@@ -92,13 +92,46 @@ def isolated_git_identity(monkeypatch):
 
 @pytest.fixture
 async def runtime_factory(app_env):
-    """Build Runtime instances for tests; closes them all on teardown."""
+    """Build Runtime instances for tests; closes them all on teardown.
+
+    The legacy role kwargs (``mcp``/``skills``/``tools_allow``…) are folded
+    into an ``AgentProfile`` here, so tests exercise the same assembly seam the
+    production callers use without repeating the profile construction.
+    """
+    from dataclasses import replace
+
+    from zenagent.app.agent_profile import AgentProfile
     from zenagent.app.runtime import Runtime, RuntimeOptions
 
     created = []
+    profile_keys = {
+        "mcp",
+        "skills",
+        "templates",
+        "plugins",
+        "context_files",
+        "project_sessions",
+        "tools_allow",
+        "extra_tools",
+        "extra_prompt",
+    }
 
     async def make(*, stream_fn=None, **overrides):
-        options = RuntimeOptions(**{"mcp": False, "skills": False, "templates": False, **overrides})
+        profile = overrides.pop(
+            "profile", AgentProfile(mcp=False, skills=False, templates=False)
+        )
+        changes = {
+            key: overrides.pop(key)
+            for key in list(overrides)
+            if key in profile_keys
+        }
+        if changes.get("tools_allow") is not None:
+            changes["tools_allow"] = tuple(changes["tools_allow"])
+        if changes.get("extra_tools") is not None:
+            changes["extra_tools"] = tuple(changes["extra_tools"])
+        if changes:
+            profile = replace(profile, **changes)
+        options = RuntimeOptions(profile=profile, **overrides)
         runtime = await Runtime.bootstrap(options, stream_fn=stream_fn)
         created.append(runtime)
         return runtime

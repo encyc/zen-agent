@@ -24,6 +24,7 @@ from pathlib import Path
 
 from zenagent import __version__
 from zenagent.agent.session import list_sessions
+from zenagent.app.agent_profile import AgentProfile
 from zenagent.app.bootstrap import prepare
 from zenagent.app.compact import maybe_auto_compact
 from zenagent.app.modes import resolve_mode
@@ -176,15 +177,16 @@ async def run_headless(
         model_id=model_id,
         thinking=thinking,
         resume=resume,
-        mcp=mcp,
         mcp_file=Path(mcp_file) if mcp_file else None,
         mcp_servers=mcp_servers,
-        skills=skills,
-        # Nothing in a one-shot run expands prompt templates (they are a
-        # slash-command surface), so discovery is skipped like before.
-        templates=False,
+        profile=AgentProfile(
+            mcp=mcp,
+            skills=skills,
+            # A one-shot run never expands prompt templates.
+            templates=False,
+            context_files=context_files,
+        ),
         extension_paths=list(extension_paths or []),
-        context_files=context_files,
         read_only=read_only,
         allow_dangerous=allow_dangerous,
         allow_outside=list(allow_outside or []),
@@ -486,13 +488,15 @@ def main(argv: list[str] | None = None) -> int:
             options = RuntimeOptions(
                 model_id=args.model,
                 resume=args.resume,
-                mcp=not args.no_mcp,
                 mcp_servers=args.mcp_servers,
                 mcp_file=args.mcp_file,
-                skills=not args.no_skills,
-                templates=not args.no_templates,
+                profile=AgentProfile(
+                    mcp=not args.no_mcp,
+                    skills=not args.no_skills,
+                    templates=not args.no_templates,
+                    context_files=not args.no_context_files,
+                ),
                 extension_paths=args.extension_paths or [],
-                context_files=not args.no_context_files,
                 read_only=args.read_only,
                 allow_dangerous=args.allow_dangerous,
                 allow_outside=args.allow_outside or [],
