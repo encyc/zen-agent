@@ -34,7 +34,7 @@ Coding、Zen、Swarm 仍按各自的方式编排，但现在共用一层**项目
   `<role>@<workItem|adhoc>`。
 
 `supervisor op=status` 是跨模式的“现在有什么在跑”查询面。它返回项目模式、live agent
-快照、运行中计数和待审批列表；每个快照带 `key` / `agent` / `kind` / `label` /
+快照、运行中计数和待审批列表（跨项目，条目自带 `project`）；每个快照带 `key` / `agent` / `kind` / `label` /
 `state`（`running|idle`）/ `session` / `runId`，以及 zen/swarm 的关联字段：
 
 ```json
@@ -159,10 +159,10 @@ runtime / 进程，再恢复。这条规则也解释了为什么两个终端不�
 ```
 
 - `mode` 省略时读 `workspace.json`；`coding` 会被拒绝（单会话应该直接 prompt）。
-- Zen 的 `session` 与 `agent` 同时给出且不一致时拒绝；fleet 未启用或已关闭返回
-  `dispatch_unavailable`。
-- Swarm 的未知角色、忙 worker 等策略拒绝返回 `dispatch_rejected`；`ref` / `images`
-  原样转发，引用和附件不会因为换入口而丢失。
+- Zen 的 `session` 与 `agent` 同时给出且不一致时拒绝；没有挂载 dispatcher（fleet /
+  room 未启用或已 detach）返回 `dispatch_unavailable`。
+- 关闭中的 fleet、未知角色、忙 worker 等策略拒绝返回 `dispatch_rejected`；
+  `ref` / `images` 原样转发，引用和附件不会因为换入口而丢失。
 - **回执只确认“已交给编排器”**：不会伪造 `runId`。真正的 run 身份由 runner 在开始
   执行时写入账本，之后用 `runs` 查询。
 
