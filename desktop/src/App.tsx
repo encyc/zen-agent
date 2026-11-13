@@ -17,6 +17,7 @@ import { Sidebar } from './ui/Sidebar'
 import { ChatView } from './ui/chat/ChatView'
 import { InputBar } from './ui/composer/InputBar'
 import { RoomPage } from './ui/pages/RoomPage'
+import { WorkerConversation } from './ui/WorkerConversation'
 import { restoreChatState } from './ui/pages/navigation'
 import { isRuntimeMissing, type RuntimeProbe } from './state/startFailure.ts'
 import { shouldShowWindow } from './state/shellWindow.ts'
@@ -24,6 +25,7 @@ import { runtimeProbe } from './rpc/client.ts'
 import { ConversationTopbar } from './ui/ConversationTopbar'
 import { NoticeBanner } from './ui/NoticeBanner'
 import { useUpdateStore } from './state/updateStore'
+import { useZenStore } from './state/zenStore'
 import { SIDEBAR_DEFAULT, RIGHTBAR_DEFAULT, clampChatWidth } from './ui/columns'
 import { PanelLeftIcon, PanelRightIcon } from './ui/icons'
 import css from './App.module.css'
@@ -41,9 +43,6 @@ const RightPanel = lazy(() =>
 )
 const CommandPalette = lazy(() =>
   import('./ui/palette/CommandPalette').then((module) => ({ default: module.CommandPalette })),
-)
-const WorkerDrawer = lazy(() =>
-  import('./ui/WorkerDrawer').then((module) => ({ default: module.WorkerDrawer })),
 )
 
 function loadWidth(key: string, fallback: number): number {
@@ -75,6 +74,7 @@ export function App() {
   const fontScale = useSettingsStore((state) => state.fontScale)
   const view = useSettingsStore((state) => state.view)
   const workspaceMode = useSettingsStore((state) => state.workspaceMode)
+  const workerPath = useZenStore((state) => state.workerPath)
   const previousView = useRef(view)
   const updateChecked = useRef(false)
   // The shell opens straight into a chat: the last project, else the user's
@@ -86,6 +86,13 @@ export function App() {
   const [sidebarWidth, setSidebarWidth] = useState(() => loadWidth(SIDEBAR_KEY, SIDEBAR_DEFAULT))
   const rightbarOpen = useWorkPanelStore((state) => state.open)
   const [rightbarWidth, setRightbarWidth] = useState(() => loadWidth(RIGHTBAR_KEY, RIGHTBAR_DEFAULT))
+
+  // A worker transcript only belongs to the zen surface; leaving it (or
+  // switching to another worker) must not leave the old one armed when zen
+  // comes back.
+  useEffect(() => {
+    if (workspaceMode !== 'zen') useZenStore.getState().closeWorker()
+  }, [workspaceMode])
 
   // Theme presenter: write the snapshot to the DOM, outside React (dsh pattern).
   // The palette rides a separate attribute so both sides of every palette
@@ -264,6 +271,8 @@ export function App() {
           {collapsed && <ExpandSidebar onExpand={() => setCollapsed(false)} />}
           <RoomPage />
         </>
+      ) : workspaceMode === 'zen' && workerPath !== null ? (
+        <WorkerConversation />
       ) : (
         // coding and zen share the conversation: in zen the sidebar swaps to
         // the fleet roster, but the router session is the chat itself.
@@ -305,7 +314,6 @@ export function App() {
       )}
       </AppFrame>
       <Suspense fallback={null}>
-        <WorkerDrawer />
       <CommandPalette />
       </Suspense>
     </>

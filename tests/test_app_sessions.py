@@ -297,6 +297,21 @@ async def test_entries_all_view_labels_each_project(
     assert roots[legacy_session.name] == ""
 
 
+def test_entries_tag_zen_roster_sessions_as_zen(session_runtime):
+    from zenagent.app.zen.roster import set_focus
+
+    manager = SessionManager(session_runtime)
+    sessions_dir = manager.current().parent
+    coding = _write_session(sessions_dir, "coding.jsonl", ["coding work"])
+    worker = _write_session(sessions_dir, "zen-worker.jsonl", ["worker work"])
+    set_focus(sessions_dir, "zen-worker", "review")
+
+    by_name = {entry.path.name: entry.workspace for entry in manager.entries()}
+
+    assert by_name[coding.name] == "coding"
+    assert by_name[worker.name] == "zen"
+
+
 async def test_pinned_sessions_sort_first(session_runtime):
     runtime = session_runtime
     manager = SessionManager(runtime)

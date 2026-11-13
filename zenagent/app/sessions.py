@@ -28,6 +28,7 @@ from zenagent.agent.session import (
 from zenagent.agent.subagents import carry_task_dir, trash_task_dir
 from zenagent.app import records
 from zenagent.app.runtime import Runtime
+from zenagent.app.zen.roster import read_roster
 from zenagent.export import export_session
 from zenagent.i18n import t
 
@@ -115,6 +116,10 @@ class SessionEntry:
     project: str = ""
     project_path: str = ""
     pinned: bool = False
+    #: ``zen`` when the session stem is in the project's ``.zen.json`` roster
+    #: (router or worker); ``coding`` for ordinary project sessions. Swarm role
+    #: sessions live outside the project session directory entirely.
+    workspace: str = "coding"
 
 
 class SessionManager:
@@ -149,6 +154,7 @@ class SessionManager:
         entries: list[SessionEntry] = []
         pins_by_dir: dict[Path, set[str]] = {}
         roots_by_dir: dict[Path, str] = {}
+        zen_by_dir: dict[Path, set[str]] = {}
         for info in list_sessions(limit=100, scope=scope):
             try:
                 size = info.path.stat().st_size
@@ -160,6 +166,7 @@ class SessionManager:
                 roots_by_dir[directory] = project.project_root_for_sessions_dir(
                     directory
                 )
+                zen_by_dir[directory] = set(read_roster(directory))
             entries.append(
                 SessionEntry(
                     path=info.path,
@@ -174,6 +181,9 @@ class SessionManager:
                     project=info.project,
                     project_path=roots_by_dir[directory],
                     pinned=info.path.name in pins_by_dir[directory],
+                    workspace=(
+                        "zen" if info.path.stem in zen_by_dir[directory] else "coding"
+                    ),
                 )
             )
         # Pinned first, otherwise newest-first exactly as list_sessions returned

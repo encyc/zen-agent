@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { expect, test } from '@playwright/test'
 import { boot, initialState } from './harness'
 
-test('entering zen shows the router roster and opens a worker drawer', async ({ page }) => {
+test('entering zen shows the router roster and opens a worker conversation', async ({ page }) => {
   await boot(page, initialState())
   await page.locator('[data-workspace-mode="zen"]').click()
 
@@ -12,10 +12,15 @@ test('entering zen shows the router roster and opens a worker drawer', async ({ 
   await expect(worker).toBeVisible()
 
   await worker.click()
-  const drawer = page.locator('[data-zen-drawer-body]')
-  await expect(drawer).toBeVisible()
-  // The read-only transcript comes from zen_fleet op=transcript.
-  await expect(drawer).toContainText('worker 报告')
+  const transcript = page.locator('[data-zen-worker-transcript]')
+  await expect(transcript).toBeVisible()
+  // The read-only transcript comes from zen_fleet op=transcript and uses the
+  // same conversation rows as coding/subagents.
+  await expect(transcript).toContainText('worker 报告')
+  await expect(page.locator('[data-zen-drawer-body]')).toHaveCount(0)
+  await page.locator('[data-zen-worker-back]').click()
+  await expect(page.locator('[data-zen-worker]')).toHaveCount(0)
+  await expect(page.locator('[data-zen-roster]')).toBeVisible()
 })
 
 test('stopping the fleet shows the paused banner; resume re-enables', async ({ page }) => {

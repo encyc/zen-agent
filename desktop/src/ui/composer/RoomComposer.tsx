@@ -177,19 +177,19 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
       return role === undefined ? `@${id}` : `@${id} · ${roleMeta(role)}`
     })
     .join('  ')
-  const targetRoles = mentions
-    .map((id) => roles.find((entry) => entry.id === id))
-    .filter((role): role is SwarmRole => role !== undefined)
-  const modelValues = targetRoles.map((role) => role.model ?? null)
+  // The model chip is room-wide, not per mention: a chain delegation from one
+  // role to another must use the same provider/model the person selected, so
+  // every role manifest is updated together and no @ is needed to arm it.
+  const modelValues = roles.map((role) => role.model ?? null)
   const modelChoices = new Set(modelValues)
   const modelValue = modelChoices.size === 1 ? (modelValues[0] ?? null) : null
   const modelMixed = modelChoices.size > 1
   const modelLabel =
-    targetRoles.length === 0
-      ? t('swarm.modelPickRole')
-      : targetRoles.length === 1
-        ? (targetRoles[0].model ?? t('swarm.modelDefault'))
-        : t('swarm.modelMultiple', { n: targetRoles.length })
+    roles.length === 0
+      ? t('swarm.modelEmpty')
+      : modelMixed
+        ? t('swarm.modelMixed')
+        : (modelValue ?? t('swarm.modelDefault'))
   const liveTasks = tasks.filter(
     (task) => task.state === 'running' || task.state === 'queued',
   )
@@ -276,11 +276,11 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
 
   const changeModel = async (modelId: string | null) => {
     setModelMenuOpen(false)
-    if (modelBusy || targetRoles.length === 0) return
+    if (modelBusy || roles.length === 0) return
     setModelBusy(true)
     setCommandError(null)
     try {
-      for (const role of targetRoles) {
+      for (const role of roles) {
         const answer = await saveRole('update', role.id, { model: modelId })
         if (answer.ok !== true) {
           const message =
@@ -596,8 +596,8 @@ export function RoomComposer({ roles }: { roles: SwarmRole[] }) {
                 data-swarm-model-value={modelValue ?? ''}
                 aria-label={`${t('swarm.model')}: ${modelLabel}`}
                 aria-expanded={modelMenuOpen}
-                disabled={targetRoles.length === 0 || modelBusy}
-                title={targetRoles.length === 0 ? t('swarm.modelPickRole') : t('swarm.modelHint')}
+                disabled={roles.length === 0 || modelBusy}
+                title={roles.length === 0 ? t('swarm.modelEmpty') : t('swarm.modelHint')}
                 onClick={() => setModelMenuOpen((open) => !open)}
               >
                 <span className={css.modelName}>{modelLabel}</span>

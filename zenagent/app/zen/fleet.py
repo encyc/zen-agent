@@ -18,7 +18,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from zenagent.agent.session import read_session_titles, unique_session_path
+from zenagent.agent.session import Session, read_session_titles, unique_session_path
 from zenagent.app.agent_profile import AgentProfile, Supervisor
 from zenagent.app.bootstrap import prepare
 from zenagent.app.records import open_session
@@ -27,7 +27,7 @@ from zenagent.app.runtime import RuntimeOptions
 from zenagent.app.zen.prompts import worker_prompt
 from zenagent.app.zen.roster import read_roster
 from zenagent.app.zen.roster import set_focus as roster_set_focus
-from zenagent.types import AssistantMessage
+from zenagent.types import AssistantMessage, TextContent, UserMessage
 
 if TYPE_CHECKING:
     from zenagent.app.chat import ChatController
@@ -48,6 +48,49 @@ worker_statuses = ("idle", "queued", "working", "waiting", "blocked", "failed")
 REPORT_LIMIT = 800
 
 RosterRow = dict[str, str]
+
+def _clip(text: str, limit: int = 48) -> str:
+    """One-line display summary for a worker whose focus is not set."""
+    collapsed = " ".join(text.split()).strip(" #>*`-")
+    if collapsed == "":
+        return ""
+    return collapsed if len(collapsed) <= limit else f"{collapsed[: limit - 1].rstrip()}…"
+
+
+def _session_summary(path: Path) -> str:
+    """The first user task in a worker session, without control framing.
+
+    Workers created by ``fleet_spawn`` have no focus until the router sets
+    one; a timestamp stem is not a name a person can tell apart. The injected
+    worker prompt starts with ``[zen 派工]``, so the task line is the useful
+    part when focus is empty.
+    """
+    try:
+        messages = Session(path).load()
+    except Exception:  # noqa: BLE001 - naming must never break the roster
+        return ""
+    for message in messages:
+        if not isinstance(message, UserMessage):
+            continue
+        if isinstance(message.content, str):
+            text = message.content
+        else:
+            text = "".join(
+                getattr(block, "text", "")
+                for block in message.content
+                if isinstance(block, TextContent)
+            )
+        if text.startswith("[zen 派工]"):
+            for line in text.splitlines():
+                if line.startswith("任务："):
+                    text = line.removeprefix("任务：")
+                    break
+        summary = _clip(text)
+        if summary:
+            return summary
+    return ""
+
+
 
 
 class WorkerHandle:
@@ -134,23 +177,30 @@ class ZenFleet:
             titles = read_session_titles(self.sessions_dir)
         except OSError:
             titles = {}
+        tracked = set(entries) | {Path(self.router_path).stem}
         rows: list[RosterRow] = []
         seen: set[str] = set()
         for file in sorted(self.sessions_dir.glob("*.jsonl")):
             stem = file.stem
+            if stem not in tracked:
+                continue
             path = str(file)
             seen.add(path)
-            role = "router" if path == self.router_path else entries.get(stem).role if stem in entries else "worker"
+            role = "router" if path == self.router_path else entries.get(stem).role
             handle = self._handles.get(path)
             focus = (
                 handle.focus
                 if handle is not None and handle.focus
                 else entries.get(stem).focus if stem in entries else ""
             )
+            title = titles.get(file.name) or focus
+            if not title and role != "router":
+                title = _session_summary(file)
+            title = title or stem
             rows.append(
                 {
                     "path": path,
-                    "title": titles.get(file.name) or stem,
+                    "title": title,
                     "focus": focus,
                     "role": role,
                     "status": handle.status if handle is not None else "idle",
@@ -158,17 +208,26 @@ class ZenFleet:
                 }
             )
         for path, handle in self._handles.items():
-            if path not in seen:
-                rows.append(
-                    {
-                        "path": path,
-                        "title": handle.title or Path(path).stem,
-                        "focus": handle.focus,
-                        "role": "worker",
-                        "status": handle.status,
-                        "last_report": handle.last_report,
-                    }
-                )
+            if path in seen:
+                continue
+            file = Path(path)
+            title = (
+                titles.get(file.name)
+                or handle.focus
+                or _session_summary(file)
+                or handle.title
+                or file.stem
+            )
+            rows.append(
+                {
+                    "path": path,
+                    "title": title,
+                    "focus": handle.focus,
+                    "role": "worker",
+                    "status": handle.status,
+                    "last_report": handle.last_report,
+                }
+            )
         rows.sort(key=lambda row: (0 if row["role"] == "router" else 1, row["title"]))
         return rows
 
@@ -225,6 +284,10 @@ class ZenFleet:
             entry = read_roster(self.sessions_dir).get(stem)
             handle = WorkerHandle(str(path), stem, entry.focus if entry else "")
             self._handles[str(path)] = handle
+        # A session the router picks for work becomes a tracked worker even
+        # when it predates the roster; otherwise it would keep showing up as a
+        # coding session after the first dispatch.
+        roster_set_focus(self.sessions_dir, path.stem, handle.focus)
         handle.status = "queued" if (working >= self.max_concurrent or queued) else "working"
         handle.stopped = False
         handle.task = asyncio.create_task(self._run(handle, task))

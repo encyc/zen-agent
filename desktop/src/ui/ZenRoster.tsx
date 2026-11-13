@@ -70,9 +70,13 @@ export function ZenRoster() {
                 data-tone={zenStatusTone(worker.status)}
                 aria-hidden
               />
-              <span className={css.zenWorkerTitle}>{worker.title}</span>
-              {worker.focus !== '' && (
-                <span className={css.zenFocus}>{worker.focus}</span>
+              <span className={css.zenWorkerTitle} title={worker.title} data-worker-title>
+                {worker.title}
+              </span>
+              {worker.focus !== '' && worker.focus !== worker.title && (
+                <span className={css.zenFocus} title={worker.focus}>
+                  {worker.focus}
+                </span>
               )}
               <span className={css.zenStatus}>{t(zenStatusKey(worker.status))}</span>
             </button>

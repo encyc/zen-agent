@@ -20,11 +20,10 @@ import {
   mergeProjects,
   projectRowCount,
   sessionSections,
+  sessionsForWorkspace,
   type SidebarProjectGroup,
 } from '../state/sessionGroups'
 import { armDelete, deleteArmed } from '../state/armedDelete'
-import { useZenStore } from '../state/zenStore'
-import { ZenRoster } from './ZenRoster'
 import { useT } from '../i18n/locale'
 import type { SessionSummary } from '../rpc/types'
 import { Tooltip } from './primitives'
@@ -65,9 +64,11 @@ function readClosedSections(): string[] {
 
 export function SidebarCoding() {
   const t = useT()
-  const zenEnabled = useZenStore((state) => state.enabled)
-  const workspaceMode = useSettingsStore((state) => state.workspaceMode)
-  const sessions = useSessionStore((state) => state.sessions)
+  const allSessions = useSessionStore((state) => state.sessions)
+  const sessions = useMemo(
+    () => sessionsForWorkspace(allSessions, 'coding'),
+    [allSessions],
+  )
   const currentPath = useSessionStore((state) => state.currentPath)
   const collapsedProjects = useSessionStore((state) => state.collapsedProjects)
   const toggleProject = useSessionStore((state) => state.toggleProject)
@@ -365,17 +366,13 @@ export function SidebarCoding() {
                 spellCheck={false}
               />
             </div>
-            {zenEnabled || workspaceMode === 'zen' ? (
-              <ZenRoster />
-            ) : (
-              <div className={css.standaloneList}>
-                {standalone.length > 0 ? (
-                  standalone.map((session) => renderRow(session))
-                ) : (
-                  <div className={css.sectionEmpty}>{t('sidebar.standalone')}</div>
-                )}
-              </div>
-            )}
+            <div className={css.standaloneList}>
+              {standalone.length > 0 ? (
+                standalone.map((session) => renderRow(session))
+              ) : (
+                <div className={css.sectionEmpty}>{t('sidebar.standalone')}</div>
+              )}
+            </div>
           </>
         )}
       </section>

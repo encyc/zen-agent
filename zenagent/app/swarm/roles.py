@@ -26,13 +26,11 @@ __all__ = [
     "RoleManifest",
     "agents_root",
     "discover_roles",
-    "legacy_room_warnings",
     "parse_role",
     "project_agents_root",
     "project_state_root",
     "role_session_path",
     "sessions_dir",
-    "state_root",
     "supports_vision",
     "workspaces_root",
 ]
@@ -100,28 +98,9 @@ def workspaces_root() -> Path:
     return Path.home() / ".zenagent-workspaces"
 
 
-def state_root() -> Path:
-    """The pre-project global room; read only, kept for archive detection."""
-    return project.zenagent_home() / "swarm"
-
-
 def project_state_root(root: Path) -> Path:
     """Machine-local swarm state for one project (room logs, role sessions)."""
     return project.project_dir(root) / "swarm"
-
-
-def legacy_room_warnings(*, has_messages: bool) -> list[str]:
-    """Point a project's first look at the pre-project room kept on disk.
-
-    The old room is never imported: its tasks belong to no project, so the
-    note says where it stayed and leaves the new room empty. A project room
-    that already has traffic says nothing.
-    """
-    if has_messages or not (state_root() / "room.jsonl").is_file():
-        return []
-    return [
-        "legacy global room archived at ~/.zenagent/swarm/; new rooms are per project"
-    ]
 
 
 def role_session_path(

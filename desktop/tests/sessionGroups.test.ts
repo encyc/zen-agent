@@ -6,6 +6,7 @@ import {
   projectName,
   projectRowCount,
   sessionSections,
+  sessionsForWorkspace,
 } from '../src/state/sessionGroups.ts'
 import type { SessionSummary } from '../src/rpc/types.ts'
 
@@ -152,4 +153,21 @@ test('a registered project path wins over the session-recorded root', () => {
 test('project names come from the last path segment', () => {
   assert.equal(projectName('/Users/me/work/zen-agent/'), 'zen-agent')
   assert.equal(projectName('C:\\work\\alpha'), 'alpha')
+})
+
+
+test('sessionsForWorkspace keeps old unclassified sessions as coding', () => {
+  const sessions = [
+    make('/s/coding.jsonl', 3),
+    make('/s/zen.jsonl', 2, { workspace: 'zen' }),
+    make('/s/swarm.jsonl', 1, { workspace: 'swarm' }),
+  ]
+  assert.deepEqual(
+    sessionsForWorkspace(sessions, 'coding').map((session) => session.path),
+    ['/s/coding.jsonl'],
+  )
+  assert.deepEqual(
+    sessionsForWorkspace(sessions, 'zen').map((session) => session.path),
+    ['/s/zen.jsonl'],
+  )
 })

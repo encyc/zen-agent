@@ -445,8 +445,8 @@ export interface SessionSummary {
   model?: string
   /** Parent session stem after fork; empty when original. */
   derived_from?: string
+  workspace?: 'coding' | 'zen' | 'swarm' // absent means coding
 }
-
 export interface SessionListResult {
   type: 'result'
   id: string

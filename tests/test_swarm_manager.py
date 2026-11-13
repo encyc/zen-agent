@@ -16,7 +16,6 @@ from zenagent.app.swarm.manager import SwarmManager
 from zenagent.app.swarm.roles import (
     project_agents_root,
     project_state_root,
-    state_root,
 )
 from zenagent.app.swarm.room import RoomMessage, SwarmStore, TaskRecord
 from zenagent.events import Aborted, AgentEvent, AssistantEvent
@@ -1025,55 +1024,6 @@ def test_has_active_tracks_running_tasks():
     manager._running[("alpha", None)] = object()
 
     assert manager.has_active() is True
-
-
-async def test_empty_project_room_points_at_the_archived_global_room():
-    legacy = state_root()
-    legacy.mkdir(parents=True, exist_ok=True)
-    (legacy / "room.jsonl").write_text("", encoding="utf-8")
-
-    manager = _manager(stream_fn_factory=lambda role: text_stream("ok"))
-    await manager.start()
-    try:
-        archived = [
-            warning
-            for warning in manager.warnings
-            if warning.startswith("legacy global room archived")
-        ]
-        assert archived == [
-            "legacy global room archived at ~/.zenagent/swarm/; new rooms are per project"
-        ]
-    finally:
-        await manager.close()
-
-
-async def test_project_room_with_messages_does_not_warn_about_the_archive():
-    legacy = state_root()
-    legacy.mkdir(parents=True, exist_ok=True)
-    (legacy / "room.jsonl").write_text("", encoding="utf-8")
-    store = SwarmStore(project_state_root(_project_root()))
-    store.load()
-    store.append_message(
-        RoomMessage(
-            id="m_old",
-            ts=1,
-            author_kind="user",
-            author_id="you",
-            text="@worker hello",
-            mentions=["worker"],
-        )
-    )
-
-    manager = _manager(stream_fn_factory=lambda role: text_stream("ok"))
-    await manager.start()
-    try:
-        assert not [
-            warning
-            for warning in manager.warnings
-            if warning.startswith("legacy global room archived")
-        ]
-    finally:
-        await manager.close()
 
 
 async def test_unknown_ref_is_refused():

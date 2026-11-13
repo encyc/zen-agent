@@ -86,6 +86,15 @@ test('cancel a running task', async ({ page }) => {
   assert.equal(cancel?.taskId, 't_seed')
 })
 
+test('configured roles render even when no role runtime is live', async ({ page }) => {
+  await boot(page, initialState(swarmFixture({ swarmAgents: [] })))
+  await page.locator('[data-workspace-mode="swarm"]').click()
+
+  await expect(page.locator('[data-swarm-agent]')).toHaveCount(2)
+  await expect(page.locator('[data-swarm-agent="research"]')).toContainText('Research')
+  await expect(page.locator('[data-swarm-agent="builder"]')).toContainText('Builder')
+})
+
 test('create a role from settings', async ({ page }) => {
   await boot(page, initialState(swarmFixture()))
   await page.locator('[data-workspace-mode="swarm"]').click()
@@ -631,12 +640,10 @@ test('typing @ also offers workspace files, with a quoted path', async ({ page }
   await expect(composer).toHaveValue('@"src/room.ts" ')
 })
 
-test('the model chip writes the chosen model to the targeted role', async ({ page }) => {
+test('the room model chip applies to every role without a mention', async ({ page }) => {
   await boot(page, initialState({ ...swarmFixture(), models: roomModels }))
   await page.locator('[data-workspace-mode="swarm"]').click()
 
-  const composer = page.locator('[data-swarm-input]')
-  await composer.fill('@research ')
   const chip = page.locator('[data-swarm-model]')
   await expect(chip).toContainText('deepseek-chat')
   await chip.click()
@@ -647,30 +654,11 @@ test('the model chip writes the chosen model to the targeted role', async ({ pag
 
   await expect(chip).toContainText('deepseek-reasoner')
   const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
-  const update = calls.find(
-    (call) => call.type === 'swarm' && call.op === 'roles' && call.action === 'update',
-  )
-  assert.equal(update?.roleId, 'research')
-  assert.deepEqual((update?.manifest as Record<string, unknown>).model, 'deepseek-reasoner')
-})
-
-test('the model chip applies to every targeted role', async ({ page }) => {
-  await boot(page, initialState({ ...swarmFixture(), models: roomModels }))
-  await page.locator('[data-workspace-mode="swarm"]').click()
-
-  const composer = page.locator('[data-swarm-input]')
-  await composer.fill('@research @builder ')
-  const chip = page.locator('[data-swarm-model]')
-  await expect(chip).toContainText('2 个角色')
-  await chip.click()
-  await page.locator('[data-role-model-menu] [data-model="deepseek-reasoner"]').click()
-
-  const calls = await page.evaluate(() => window.__ZEN_E2E__.calls)
   const updates = calls.filter(
     (call) => call.type === 'swarm' && call.op === 'roles' && call.action === 'update',
   )
-  assert.deepEqual(
-    updates.map((call) => call.roleId).sort(),
-    ['builder', 'research'],
-  )
+  assert.deepEqual(updates.map((call) => call.roleId).sort(), ['builder', 'research'])
+  for (const update of updates) {
+    assert.deepEqual((update.manifest as Record<string, unknown>).model, 'deepseek-reasoner')
+  }
 })

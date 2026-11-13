@@ -72,6 +72,15 @@ export function mergeProjects(
   return merged
 }
 
+/** The sessions a workspace mode owns. Unclassified sessions (legacy or an
+ * older child) count as coding, so nothing disappears on upgrade. */
+export function sessionsForWorkspace(
+  sessions: SessionSummary[],
+  workspace: 'coding' | 'zen' | 'swarm',
+): SessionSummary[] {
+  return sessions.filter((session) => (session.workspace ?? 'coding') === workspace)
+}
+
 /** Rows visible after `pages` pages: a project opens with one page and each
  * "more" click adds exactly one page, never past the loaded sessions. */
 export function projectRowCount(total: number, pages: number): number {

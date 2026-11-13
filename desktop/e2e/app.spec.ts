@@ -975,6 +975,38 @@ test('collapsing the sidebar gives the conversation the full width', async ({ pa
   await expect.poll(async () => (await center.boundingBox())?.x ?? -1).toBe(Math.round(open.x))
 })
 
+test('the coding sidebar hides sessions owned by the zen workspace', async ({ page }) => {
+  const row = (path: string, title: string, workspace: 'coding' | 'zen', current: boolean) => ({
+    path,
+    name: title,
+    title,
+    project: 'p',
+    project_path: '/work/p',
+    messages: 1,
+    current,
+    pinned: false,
+    created_at: 1,
+    updated_at: current ? 2 : 1,
+    model: 'deepseek-flash',
+    derived_from: '',
+    workspace,
+  })
+  await boot(
+    page,
+    initialState({
+      title: 'coding chat',
+      statusSession: '/sessions/coding.jsonl',
+      sessionRows: [
+        row('/sessions/coding.jsonl', 'coding chat', 'coding', true),
+        row('/sessions/zen.jsonl', 'zen chat', 'zen', false),
+      ],
+    }),
+  )
+
+  await expect(page.locator('[data-session-path="/sessions/coding.jsonl"]')).toBeVisible()
+  await expect(page.locator('[data-session-path="/sessions/zen.jsonl"]')).toHaveCount(0)
+})
+
 test('composer menus open directly above their own trigger', async ({ page }) => {
   await boot(page, initialState())
   const mode = page.locator('[data-menu-trigger="mode"]')

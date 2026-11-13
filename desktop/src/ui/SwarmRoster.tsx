@@ -23,6 +23,10 @@ export function SwarmRoster(props: {
     () => new Map(tasks.map((task, index): [string, number] => [task.id, index + 1])),
     [tasks],
   )
+  const byId = useMemo(
+    () => new Map(agents.map((agent) => [agent.agent, agent])),
+    [agents],
+  )
   const { busy, onConfigure, onCreate, onCopy } = props
   return (
     <section className={css.block}>
@@ -57,38 +61,40 @@ export function SwarmRoster(props: {
           </button>
         </div>
       </div>
-      {agents.length === 0 ? (
+      {roles.length === 0 ? (
         <p className={css.blockEmpty}>{t('swarm.noAgents')}</p>
       ) : (
         <ul className={css.rows} data-swarm-roster>
-          {agents.map((agent) => {
-            const number = agent.task === null ? undefined : numbers.get(agent.task)
-            const role = roles.find((entry) => entry.id === agent.agent)
+          {roles.map((role) => {
+            const agent = byId.get(role.id)
+            const state = agent?.state ?? 'idle'
+            const number =
+              agent?.task === null || agent?.task === undefined
+                ? undefined
+                : numbers.get(agent.task)
             return (
               <li
-                key={agent.agent}
+                key={role.id}
                 className={css.agentRow}
-                data-swarm-agent={agent.agent}
-                data-state={agent.state}
+                data-swarm-agent={role.id}
+                data-state={state}
               >
-                <span className={css.stateDot} data-state={agent.state} aria-hidden />
+                <span className={css.stateDot} data-state={state} aria-hidden />
                 <div className={css.rowMain}>
-                  <span className={css.rowTitle}>{agent.name}</span>
+                  <span className={css.rowTitle}>{role.name}</span>
                   <span className={css.rowCaption}>
-                    {t(`swarm.agent.${agent.state}`)}
+                    {t(`swarm.agent.${state}`)}
                     {number !== undefined ? ` · #${number}` : ''}
                   </span>
                 </div>
-                {agent.pendingApply && <span className={css.badge}>{t('swarm.pendingApply')}</span>}
+                {agent?.pendingApply && <span className={css.badge}>{t('swarm.pendingApply')}</span>}
                 <div className={css.rowActions}>
                   <button
                     type="button"
                     className={css.ghost}
-                    data-swarm-configure={agent.agent}
-                    disabled={busy || role === undefined}
-                    onClick={() => {
-                      if (role !== undefined) onConfigure(role)
-                    }}
+                    data-swarm-configure={role.id}
+                    disabled={busy}
+                    onClick={() => onConfigure(role)}
                   >
                     {t('swarm.roleConfigure')}
                   </button>
@@ -96,8 +102,8 @@ export function SwarmRoster(props: {
                     type="button"
                     className={css.ghost}
                     data-swarm-reset
-                    disabled={agent.state === 'running'}
-                    onClick={() => void resetAgent(agent.agent)}
+                    disabled={busy || state === 'running'}
+                    onClick={() => void resetAgent(role.id)}
                   >
                     {t('swarm.reset')}
                   </button>

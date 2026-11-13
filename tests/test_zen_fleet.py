@@ -10,7 +10,8 @@ from types import SimpleNamespace
 import pytest
 
 from zenagent.app.zen.fleet import ZenFleet
-from zenagent.types import AssistantMessage, TextContent, Usage
+from zenagent.app.zen.roster import set_focus
+from zenagent.types import AssistantMessage, TextContent, Usage, UserMessage
 
 
 def _assistant(text: str) -> AssistantMessage:
@@ -149,6 +150,8 @@ def _worker_files(tmp_path: Path, names: list[str]) -> dict[str, Path]:
         p = sessions / f"{name}.jsonl"
         p.write_text("{}", encoding="utf-8")
         paths[name] = p
+        if name != "router":
+            set_focus(sessions, name, "")
     return paths
 
 
@@ -192,6 +195,42 @@ def _fleet_with(env: dict, **kwargs) -> ZenFleet:
         batch_window_s=0.05,
         **kwargs,
     )
+
+
+def test_roster_lists_only_zen_sessions_and_names_workers(tmp_path):
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    router = sessions / "router.jsonl"
+    worker = sessions / "worker.jsonl"
+    focused = sessions / "focused.jsonl"
+    coding = sessions / "coding.jsonl"
+    for path, text in (
+        (router, "router chat"),
+        (worker, "[zen 派工]\n焦点：\n任务：修复登录超时\n\n其余说明"),
+        (focused, "focused chat"),
+        (coding, "ordinary coding chat"),
+    ):
+        path.write_text(
+            json.dumps(UserMessage(content=text, timestamp=0).to_json()) + "\n",
+            encoding="utf-8",
+        )
+    set_focus(sessions, "worker", "")
+    set_focus(sessions, "focused", "代码审查")
+
+    fleet = ZenFleet(
+        chat=None,
+        root=tmp_path,
+        sessions_dir=sessions,
+        router_path=str(router),
+    )
+    rows = fleet.roster()
+
+    assert rows[0]["path"] == str(router)
+    by_name = {Path(row["path"]).name: row for row in rows}
+    assert set(by_name) == {"router.jsonl", "worker.jsonl", "focused.jsonl"}
+    assert by_name["worker.jsonl"]["title"] == "修复登录超时"
+    assert by_name["focused.jsonl"]["title"] == "代码审查"
+    assert "coding.jsonl" not in by_name
 
 
 async def test_worker_mode_inherit_downgrades_auto_to_ask(env) -> None:
