@@ -87,6 +87,14 @@ class RpcHost(WorkspaceOps, RunsOps, SupervisorOps, SwarmOps, ZenOps):
             self._slots[initial.key] = initial
             self._active = initial
             self._active_by_project[initial.project_key] = initial
+            self._supervisor(initial.root).register(
+                initial.key,
+                profile=AgentProfile(
+                    id=initial.key, kind="coding", label=initial.key
+                ),
+                runtime=initial.runtime,
+                session=initial.runtime.session,
+            )
 
     # -- introspection ------------------------------------------------------
 

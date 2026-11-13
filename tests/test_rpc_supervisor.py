@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from zenagent.app.agent_profile import AgentProfile
 from zenagent.app.approval_router import ApprovalEntry
 from zenagent.app.runtime import RuntimeOptions
 from zenagent.app.workspace_state import set_workspace_mode
 from zenagent.cli.rpc.host import RpcHost
+from zenagent.cli.rpc.slot import RuntimeSlot
 
 
 class _Agent:
@@ -62,6 +64,29 @@ async def test_supervisor_status_lists_registered_agents(tmp_path):
 
     await host._supervisor_op({"op": "explode", "project": str(tmp_path)}, "s2")
     assert json.loads(writes[-1])["code"] == "supervisor_invalid"
+
+
+async def test_supervisor_status_includes_the_initial_slot(tmp_path):
+    runtime = _Runtime()
+    session = _Session(tmp_path / "main.jsonl")
+    runtime.session = session
+    initial = RuntimeSlot(
+        root=tmp_path,
+        key="main",
+        server=SimpleNamespace(runtime=runtime),
+    )
+    writes: list[str] = []
+    host = RpcHost(
+        initial=initial,
+        options=RuntimeOptions(root=tmp_path),
+        read_line=lambda: None,
+        write_line=writes.append,
+    )
+
+    await host._supervisor_op({"op": "status", "project": str(tmp_path)}, "s1")
+    frame = json.loads(writes[-1])
+    assert [agent["key"] for agent in frame["agents"]] == ["main"]
+    assert frame["agents"][0]["kind"] == "coding"
 
 
 async def test_supervisor_approve_resolves_the_shared_router(tmp_path):
