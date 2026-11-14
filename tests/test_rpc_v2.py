@@ -2187,3 +2187,39 @@ def test_serialize_event_marks_a_skill_turn():
     assert message["text"] == "review"
     assert message["skill_args"] == "src/app.py"
     assert "Check the diff carefully." in message["skill_body"]
+
+
+async def test_oversized_approval_args_are_marked_truncated(runtime_factory):
+    """P2: the approver must know they are approving a tail they cannot see."""
+    from zenagent.cli.rpc.server import _ARGS_CHARS
+
+    _runtime, server, writes, _queue = await build(runtime_factory)
+
+    task = asyncio.create_task(
+        server.confirm("write_file", {"path": "x", "content": "y" * (_ARGS_CHARS + 100)})
+    )
+    while not any("approval_request" in message for message in writes):
+        await asyncio.sleep(0.01)
+    event = next(
+        json.loads(message)["event"]
+        for message in writes
+        if "approval_request" in message
+    )
+    assert event["argsTruncated"] is True
+    assert len(event["args"]) <= _ARGS_CHARS
+    server._approvals[event["request_id"]].set_result("deny")
+    assert await task == "deny"
+
+    # Normal-sized args carry no truncation marker at all.
+    writes.clear()
+    task = asyncio.create_task(server.confirm("write_file", {"path": "x"}))
+    while not any("approval_request" in message for message in writes):
+        await asyncio.sleep(0.01)
+    event = next(
+        json.loads(message)["event"]
+        for message in writes
+        if "approval_request" in message
+    )
+    assert "argsTruncated" not in event
+    server._approvals[event["request_id"]].set_result("deny")
+    assert await task == "deny"

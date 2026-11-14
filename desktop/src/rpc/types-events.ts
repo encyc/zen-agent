@@ -76,6 +76,9 @@ export interface AgentEventFrame {
   error?: string
   // approval_request / ask_request extras
   request_id?: string
+  /** True when `args` was clipped server-side (audit P2): the approver is
+   *  seeing a prefix; the broker still checks the full command. */
+  argsTruncated?: boolean
   // terminal extras
   kind?: 'confirm' | 'output' | 'exit'
   data?: string

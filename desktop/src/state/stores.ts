@@ -400,6 +400,8 @@ export interface PendingApproval {
   requestId: string
   toolName: string
   args: string
+  /** The server clipped `args`; the approver is seeing a prefix (audit P2). */
+  argsTruncated?: boolean
   risk: string | null
   target: string | null
   reason: string | null

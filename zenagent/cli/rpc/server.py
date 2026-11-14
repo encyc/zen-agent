@@ -235,10 +235,20 @@ class RpcServer(FilesOps, SessionOps, PluginsOps, ConfigOps):
         request_id = f"{prefix}a{self._approval_seq}"
         self._approval_seq += 1
         try:
-            args = json.dumps(arguments, ensure_ascii=False, default=str)[:_ARGS_CHARS]
+            full = json.dumps(arguments, ensure_ascii=False, default=str)
         except (TypeError, ValueError):  # pragma: no cover - defensive
-            args = str(arguments)[:_ARGS_CHARS]
-        event = approval_event_for(self, request_id, tool_name, args, verdict)
+            full = str(arguments)
+        args = full[:_ARGS_CHARS]
+        event = approval_event_for(
+            self,
+            request_id,
+            tool_name,
+            args,
+            verdict,
+            # The approver must know they are approving a tail they cannot
+            # see (audit P2): the broker still checks the full command.
+            args_truncated=len(full) > _ARGS_CHARS,
+        )
         self._send({"type": "event", "event": event})
 
         future: asyncio.Future = asyncio.get_running_loop().create_future()

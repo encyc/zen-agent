@@ -84,6 +84,7 @@ def approval_event(
     agent_id: str = "main",
     work_item_id: str | None = None,
     task_id: str | None = None,
+    args_truncated: bool = False,
 ) -> dict:
     """The wire event for one approval request, with run correlation on it."""
     event: dict = {
@@ -96,6 +97,8 @@ def approval_event(
         "workItemId": work_item_id,
         "taskId": task_id,
     }
+    if args_truncated:
+        event["argsTruncated"] = True
     if verdict is not None:
         event["kind"] = verdict.kind
         event["risk"] = verdict.risk
@@ -104,7 +107,9 @@ def approval_event(
     return event
 
 
-def approval_event_for(server, request_id: str, tool_name: str, args: str, verdict=None) -> dict:
+def approval_event_for(
+    server, request_id: str, tool_name: str, args: str, verdict=None, *, args_truncated: bool = False
+) -> dict:
     """Build the event from a live server/runtime (keeps server.py compact)."""
     runtime = getattr(server, "runtime", None)
     scope = getattr(runtime, "run_scope", {}) if runtime is not None else {}
@@ -117,6 +122,7 @@ def approval_event_for(server, request_id: str, tool_name: str, args: str, verdi
         agent_id=str(scope.get("agentId") or "main"),
         work_item_id=scope.get("workItemId"),
         task_id=scope.get("taskId"),
+        args_truncated=args_truncated,
     )
 
 

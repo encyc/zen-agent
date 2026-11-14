@@ -1090,6 +1090,7 @@ function handleFrame(frame: ServerFrame, handling: FrameHandling): void {
         requestId: event.request_id,
         toolName: event.tool_name ?? '?',
         args: event.args ?? '',
+        argsTruncated: event.argsTruncated ?? false,
         risk: event.risk ?? null,
         target: event.target ?? null,
         reason: event.reason ?? null,

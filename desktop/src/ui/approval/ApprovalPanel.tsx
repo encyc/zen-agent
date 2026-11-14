@@ -84,6 +84,9 @@ export function ApprovalPanel() {
             <span className={css.toolName}>{approval.toolName}</span>
             <span className={css.toolArgs}>{argsPreview}</span>
           </div>
+          {approval.argsTruncated && (
+            <div className={css.risk}>{t('approval.truncated')}</div>
+          )}
           {approval.risk !== null && approval.risk !== '' && (
             <div className={css.risk}>{approval.risk}{approval.target !== null ? ` · ${approval.target}` : ''}</div>
           )}
