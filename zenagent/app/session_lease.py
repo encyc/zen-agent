@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import errno
 import hashlib
+import logging
 import os
 import threading
 from dataclasses import dataclass
@@ -46,6 +47,9 @@ try:  # Windows
     import msvcrt
 except ImportError:  # pragma: no cover - POSIX
     msvcrt = None  # type: ignore[assignment]
+
+
+_log = logging.getLogger(__name__)
 
 
 class SessionLeaseBusy(RuntimeError):
@@ -108,18 +112,35 @@ def _lock_path(path: Path) -> Path:
     return project.zenagent_home() / "locks" / f"{digest}.lock"
 
 
+_DEGRADED_WARNED = False
+
+
+def _warn_degraded(path: Path) -> None:
+    """Say once, in logs, that cross-process locking is unavailable here."""
+    global _DEGRADED_WARNED
+    if not _DEGRADED_WARNED:
+        _DEGRADED_WARNED = True
+        _log.warning(
+            "filesystem cannot flock (%s): session one-writer and liveness "
+            "probes degrade to per-process semantics",
+            path,
+        )
+
+
 def _acquire_file_lock(path: Path) -> int | None:
     """Best-effort advisory lock; ``None`` means the FS cannot lock.
 
     A lock held by someone else always raises. A filesystem that cannot create
     the lock directory/file (read-only home, unsupported FS) degrades to the
-    in-process registry rather than making every session unopenable.
+    in-process registry rather than making every session unopenable — loudly
+    once, so the weakened guarantee is visible in logs (audit P2).
     """
     lock_path = _lock_path(path)
     try:
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
     except OSError:
+        _warn_degraded(path)
         return None
     try:
         if fcntl is not None:
@@ -137,6 +158,7 @@ def _acquire_file_lock(path: Path) -> int | None:
         if exc.errno in (errno.EACCES, errno.EAGAIN, errno.EWOULDBLOCK, errno.ENOLCK):
             raise SessionLeaseBusy() from exc
         # An unsupported filesystem should not make a session unopenable.
+        _warn_degraded(path)
         return None
     return fd
 
@@ -198,8 +220,11 @@ def session_is_live(path: Path | str) -> bool:
         lease = acquire_session(resolved, object())
     except SessionLeaseBusy:
         return True
+    # "cannot lock" is not "nobody home": reconcile must not kill a run
+    # it cannot see (audit P2).
+    degraded = lease.lock_fd is None
     release_session(lease)
-    return False
+    return degraded
 
 
 def bind_session_lease(runtime, path: Path | str) -> SessionLease:

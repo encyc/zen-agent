@@ -174,3 +174,16 @@ def test_session_is_live_tracks_the_lease(tmp_path):
     assert session_is_live(path) is True
     release_session(lease)
     assert session_is_live(path) is False
+
+
+def test_is_live_is_conservative_without_a_lock_primitive(tmp_path, monkeypatch):
+    """P2: "cannot lock" must not read as "nobody home" to the sweep.
+
+    On an FS without flock the probe used to report every live run dead, so
+    one attach sweep marked another process's running rows interrupted
+    (audit P2). Degradation now reads as live.
+    """
+    import zenagent.app.session_lease as lease_mod
+
+    monkeypatch.setattr(lease_mod, "_acquire_file_lock", lambda path: None)
+    assert lease_mod.session_is_live(tmp_path / "s.jsonl") is True
