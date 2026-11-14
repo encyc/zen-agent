@@ -42,7 +42,7 @@ def test_app_pkg_has_no_eager_reexport():
 
 def test_from_app_import_still_works():
     """The lazy re-exports keep the public surface importable."""
-    import zenagent.app as app
+    from zenagent import app
 
     for name in app.__all__:
         obj = getattr(app, name)

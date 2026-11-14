@@ -29,7 +29,23 @@ _LAZY = {
     "usage_total": "zenagent.app.views",
 }
 
-__all__ = sorted(_LAZY)
+__all__ = [
+    "ChatController",
+    "CommandRegistry",
+    "DividerView",
+    "MessageView",
+    "ModelManager",
+    "PermissionBroker",
+    "RunStatus",
+    "Runtime",
+    "RuntimeOptions",
+    "SessionManager",
+    "ToolCallView",
+    "TranscriptView",
+    "messages_to_views",
+    "usage_total",
+]
+assert set(__all__) == set(_LAZY), "the lazy map and __all__ must stay in sync"
 
 
 def __getattr__(name: str):
