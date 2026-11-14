@@ -1,12 +1,12 @@
 {
   "python": {
-    "zenagent/app/runtime.py": 1061,
+    "zenagent/app/runtime.py": 1089,
     "zenagent/app/commands.py": 866,
     "zenagent/cli/repl.py": 1027,
     "zenagent/cli/tui/screens/modals.py": 1042,
     "zenagent/cli/rpc/ops_config.py": 969,
-    "zenagent/cli/rpc/server.py": 709,
-    "zenagent/app/swarm/manager.py": 841
+    "zenagent/cli/rpc/server.py": 718,
+    "zenagent/app/swarm/manager.py": 886
   },
   "ts": {
     "desktop/src/ui/Sidebar.tsx": 854,
@@ -17,5 +17,8 @@
     "desktop/e2e/app.spec.ts": 2855,
     "desktop/src/i18n/messages.ts": 1123,
     "desktop/e2e/harness.ts": 886
-  }
+  },
+  "zenagent/app/swarm/manager.py": 886,
+  "zenagent/cli/rpc/server.py": 718,
+  "zenagent/app/runtime.py": 1089
 }
