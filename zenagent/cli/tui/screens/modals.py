@@ -12,7 +12,11 @@ from zenagent.cli.tui.screens.approvals import (
     RenamePrompt,
     ToolApproval,
 )
-from zenagent.cli.tui.screens.dialogs import DialogChoice, DialogScreen
+from zenagent.cli.tui.screens.dialogs import (
+    DialogChoice,
+    DialogScreen,
+    preview_diff,
+)
 from zenagent.cli.tui.screens.editors import (
     ChoicePicker,
     HistorySearch,
@@ -46,4 +50,5 @@ __all__ = [
     "TodoEditor",
     "ToolApproval",
     "UsageDashboard",
+    "preview_diff",
 ]
