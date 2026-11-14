@@ -3,6 +3,64 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## v0.13.7 — 2026-11-14
+
+**A full architecture audit's findings are closed, and Runtime stops being a
+god class.** The 37-finding audit (3 P0 / 10 P1 / 24 P2) ran through a
+34-task cleanup plan plus a fresh reviewer pass, then the audit's remaining
+Runtime split lines landed. The kernel's behavior contract is unchanged; what
+changed is where things live and which holes are closed.
+
+### Security
+
+- **Search tools join the credential gate.** `grep`/`glob` read their whole
+  `path` root, so a `grep` over `~/.ssh` read every key it contains — the
+  audited read-then-`fetch` exfiltration chain still ran in auto mode. Both
+  now confirm like `read_file`, in every mode.
+- **The project-MCP trust gate survives a plugin reload.** `reconfigure`
+  used to call `load_mcp_config` without the withhold step — "reload
+  plugins" in a hostile repo silently spawned the stdio command bootstrap
+  had withheld. One shared loader gates attach and reconfigure.
+
+### Reliability
+
+- **One JSONL discipline everywhere.** `agent/jsonl.py` owns fsynced appends
+  plus torn-tail repair for sessions, the run ledger, swarm rooms and work
+  items (work-items load previously destroyed the first record after a
+  crash); appends probe the last byte instead of re-reading whole files.
+- **Swarm rooms refuse a second process.** The room lock is real
+  (`SwarmLocked` → a friendly refusal), a failed start releases the flock
+  instead of deadlocking later requests, and roster/manifest writes are
+  atomic.
+- **Transcript write failures surface.** A failed session append counts,
+  warns once and notifies the UI instead of a silent stderr line.
+- **The fleet delivers its last reports.** A paused report pump re-drives
+  itself with exponential backoff (2 s…60 s) instead of stranding the final
+  worker reports forever; `close()` awaits worker tasks.
+- **Session leases degrade loudly** (and Windows lock conflicts report
+  busy instead of silently unlocking); the `app` package lazy-loads, so
+  importing it has no import-order landmines.
+
+### Structure
+
+- `Runtime` went from 879 to 514 body lines / 638 file lines: skill
+  recomposition lives in `app/skills_recompose.py`, the limits knobs in
+  `app/limits_apply.py`, the 245-line assembly in `bootstrap.assemble()`
+  (with its rollback), and the plugin lifecycle in `plugin_wiring`.
+- `repl.py` (1027 → 786), `ops_config.py` (969 → 294, split into
+  `ops_secrets`/`ops_skills`) and `modals.py` (1042 → 49, split into
+  dialogs/palette pickers/approvals/editors) all left the god-file list.
+- The approval wire event carries `argsTruncated`; desktop renders a
+  truncation marker.
+
+### Governance & tooling
+
+- `scripts/check.sh` gains a **mypy ratchet** (77 modules frozen; new
+  modules must be clean) and the LOC allowlist dropped ten entries after
+  the splits. Governance manifest v8: `gov_diff` CLEAN, `gov_health` PASS.
+- Tests are hermetic (scripted REPL runs no longer load the developer's
+  real `mcp.json`), pytest-timeout guards the gate, and CI covers 3.13.
+
 ## v0.13.6 — 2026-11-13
 
 **Zen workers now run on the router's model and can ask a human.** A worker used
