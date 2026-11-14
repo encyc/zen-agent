@@ -93,3 +93,56 @@ async def test_prepared_wiring_shares_one_chat(fake_stack):
     prepared = await bootstrap_mod.prepare(options)
     assert prepared.services.chat is prepared.chat
     assert prepared.commands.services is prepared.services
+
+
+async def test_bootstrap_failure_releases_lease_and_refs(monkeypatch, tmp_path):
+    """P1-3: a crash after the session is bound must not pin lease or refcounts.
+
+    bootstrap binds the session lease, then builds the plugin/task surface;
+    anything raising there used to leave the lease held forever, so the same
+    worker session could never be rebuilt in-process (audit P1-3).
+    """
+    import zenagent.tools.jobs as jobs_mod
+    from zenagent.app import session_lease as leases
+    from zenagent.app.agent_profile import AgentProfile
+    from zenagent.app.runtime import Runtime
+    from zenagent.config import UserConfig
+
+    root = tmp_path / "proj"
+    (root / ".git").mkdir(parents=True)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setattr(
+        "zenagent.app.runtime.load_user_config",
+        lambda *args, **kwargs: UserConfig(default_model="deepseek-flash"),
+    )
+    refs_before = jobs_mod._refs
+
+    seen: dict = {}
+    orig_open = Runtime._open_session
+
+    def spy(self, resume):
+        session = orig_open(self, resume)
+        seen["path"] = session.path
+        return session
+
+    monkeypatch.setattr(Runtime, "_open_session", spy)
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("plugin wiring exploded")
+
+    # build_task_tool is the first unconditional call after the session
+    # (and therefore the lease) is bound; extension loading is skipped when
+    # no extension files exist, so it is not a reliable injection point.
+    monkeypatch.setattr("zenagent.app.runtime.build_task_tool", boom)
+
+    with pytest.raises(RuntimeError, match="plugin wiring exploded"):
+        await Runtime.bootstrap(
+            RuntimeOptions(
+                root=root,
+                profile=AgentProfile(mcp=False, skills=False, templates=False, context_files=False),
+            )
+        )
+
+    # The lease must be back: claiming the same session path succeeds.
+    leases.acquire_session(seen["path"], owner=object())
+    assert jobs_mod._refs == refs_before
