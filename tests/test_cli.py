@@ -12,7 +12,7 @@ import time
 import pytest
 
 import zenagent.cli.main as cli_main
-from zenagent.cli.permissions import READ_ONLY_TOOLS, PermissionGate
+from zenagent.app.permissions import READ_ONLY_TOOLS, PermissionGate
 from zenagent.config import UserConfig
 from zenagent.events import AssistantEvent
 from zenagent.providers.catalog import load_catalog
