@@ -1,24 +1,28 @@
 {
   "python": {
-    "zenagent/app/runtime.py": 1089,
-    "zenagent/app/commands.py": 866,
-    "zenagent/cli/repl.py": 1027,
-    "zenagent/cli/tui/screens/modals.py": 1042,
-    "zenagent/cli/rpc/ops_config.py": 969,
-    "zenagent/cli/rpc/server.py": 721,
-    "zenagent/app/swarm/manager.py": 886
+    "zenagent/app/runtime.py": 910,
+    "zenagent/app/commands.py": 875,
+    "zenagent/app/swarm/manager.py": 896
   },
   "ts": {
-    "desktop/src/ui/Sidebar.tsx": 854,
-    "desktop/src/state/appStore.ts": 1175,
-    "desktop/src/dev/bridge.ts": 998,
-    "desktop/src/rpc/types.ts": 735,
-    "desktop/src/i18n/locale.ts": 20,
-    "desktop/e2e/app.spec.ts": 2855,
-    "desktop/src/i18n/messages.ts": 1123,
-    "desktop/e2e/harness.ts": 886
+    "desktop/src/state/appStore.ts": 1176,
+    "desktop/src/dev/bridge.ts": 954,
+    "desktop/e2e/app.spec.ts": 2750
   },
   "zenagent/app/swarm/manager.py": 886,
   "zenagent/cli/rpc/server.py": 718,
-  "zenagent/app/runtime.py": 1089
+  "zenagent/app/runtime.py": 1089,
+  "_notes": {
+    "_readme": "Entries beyond the 800-line default cap. The +10 headroom entries must be paid back by 2026-12-31 (audit §6.4 follow-up plan: runtime assembly slice, swarm manager split, commands split, desktop store/spec splits).",
+    "python": {
+      "zenagent/app/commands.py": "payback 2026-12-31",
+      "zenagent/app/runtime.py": "payback 2026-12-31 (§6.4: assembly slice)",
+      "zenagent/app/swarm/manager.py": "payback 2026-12-31 (§6.4: room/manager split)"
+    },
+    "ts": {
+      "desktop/e2e/app.spec.ts": "payback 2026-12-31 (split by flow)",
+      "desktop/src/dev/bridge.ts": "payback 2026-12-31",
+      "desktop/src/state/appStore.ts": "payback 2026-12-31 (slice stores)"
+    }
+  }
 }
