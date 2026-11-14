@@ -7,7 +7,6 @@ the torn record AND the new one (audit P1-5).
 
 import json
 import os
-from pathlib import Path
 
 import pytest
 
