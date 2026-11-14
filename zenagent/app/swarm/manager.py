@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import fcntl
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -73,7 +74,7 @@ from zenagent.app.swarm.workitems import WorkItemStore
 from zenagent.attachments import read_image_argument
 from zenagent.config import load_user_config
 from zenagent.mcp.config import parse_server
-from zenagent.project import project_key
+from zenagent.project import project_dir, project_key
 from zenagent.skills import discover_skills
 
 __all__ = ["APPROVAL_TIMEOUT_S", "SwarmAgent", "SwarmManager"]
@@ -98,6 +99,19 @@ class SwarmAgent:
 
 def _now() -> int:
     return int(time.time())
+
+
+class SwarmLocked(ValueError):
+    """Another process holds the project's swarm lock.
+
+    Subclasses ValueError so ops_swarm's existing ValueError→Refusal mapping
+    surfaces it on the wire without a special case.
+    """
+
+
+def swarm_lock_path(root: Path) -> Path:
+    """The machine-local lock file, next to runs.jsonl (audit P1-7)."""
+    return project_dir(root=root) / "swarm.lock"
 
 
 class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
@@ -141,6 +155,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
         self._role_locks: dict[str, asyncio.Lock] = {}
         self._wake = asyncio.Event()
         self._loop_task: asyncio.Task | None = None
+        self._lock_handle = None
         self._approvals: dict[str, asyncio.Future] = {}
         self._approval_seq = 0
         # Approval ids carry the project key, so a reply reaches this room.
@@ -158,9 +173,36 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
 
     # -- lifecycle ----------------------------------------------------------
 
+    def _acquire_lock(self) -> None:
+        """One writer per project, machine-wide (audit P1-7).
+
+        Taken before any load/reconcile: a refused start must not rewrite the
+        other process's live tasks. Any lock failure refuses the start —
+        a swarm room is destructive state, not a place to guess.
+        """
+        path = swarm_lock_path(self.root)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handle = path.open("w")
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            handle.close()
+            raise SwarmLocked(
+                f"swarm room is open in another process ({path})"
+            ) from exc
+        self._lock_handle = handle
+
+    def _release_lock(self) -> None:
+        if self._lock_handle is not None:
+            with contextlib.suppress(OSError):
+                fcntl.flock(self._lock_handle, fcntl.LOCK_UN)
+            self._lock_handle.close()
+            self._lock_handle = None
+
     async def start(self) -> None:
         if self._started:
             return
+        self._acquire_lock()
         self._stopping = False
         self.store.load()
         self.warnings.extend(self.store.warnings)
@@ -200,6 +242,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
             if not future.done():
                 future.set_result("deny")
 
+        self._release_lock()
         for key, run in list(self._running.items()):
             runner = self.runners.get(key)
             if runner is not None:

@@ -1269,3 +1269,30 @@ async def test_role_auto_is_downgraded_to_ask():
         await _wait_for(lambda: _states(manager)[task.id] == "done")
     finally:
         await manager.close()
+
+
+async def test_second_manager_cannot_start_while_one_holds_the_room():
+    """P1-7: one writer per project's swarm state, across processes.
+
+    Two managers each reconcile() on start; without a lock the second rewrites
+    the first's live tasks to failed. The lock is taken before any load, so a
+    refused start touches no durable state.
+    """
+    from zenagent.app.swarm.manager import SwarmLocked
+
+    first = _manager()
+    await first.start()
+    try:
+        second = _manager()
+        with pytest.raises(SwarmLocked):
+            await second.start()
+    finally:
+        await first.close()
+
+    # Released on close: a fresh manager starts cleanly.
+    third = _manager()
+    await third.start()
+    try:
+        assert third._started
+    finally:
+        await third.close()
