@@ -186,6 +186,9 @@ class RunLedger:
     def __init__(self, path: Path | str) -> None:
         self.path = Path(path)
         self.warnings: list[str] = []
+        #: Write attempts that failed (disk full, vanished directory): the
+        #: counter is how ``ops runs`` can tell a row is stuck (audit P2).
+        self.write_failures = 0
 
     # -- writes -------------------------------------------------------------
 
@@ -251,6 +254,7 @@ class RunLedger:
                 append_line(self.path, dump_line(record.to_json(), default=str))
         except OSError as exc:
             # Observability is best-effort; the run itself owns the truth.
+            self.write_failures += 1
             self.warnings.append(f"run ledger write failed: {exc}")
             _log.warning("run ledger write failed: %s", exc)
 

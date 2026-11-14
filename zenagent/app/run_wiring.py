@@ -85,6 +85,10 @@ def _reconcile(ledger: RunLedger, runtime) -> None:
             _SWEPT.add(key)
         ledger.reconcile_stale(session_is_live)
     except Exception:  # noqa: BLE001 - recovery must never block startup
+        # A failed sweep must not hold its "done" claim: the next attach
+        # retries, instead of zombie running rows living forever (audit P2).
+        with _SWEEP_LOCK:
+            _SWEPT.discard(str(ledger.path))
         _log.debug("run reconciliation failed", exc_info=True)
 
 

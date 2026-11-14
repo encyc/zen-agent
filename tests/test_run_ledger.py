@@ -245,3 +245,57 @@ def test_attach_run_recorder_reconciles_crash_debris(tmp_path, monkeypatch):
     assert rows[own.id].status == "interrupted"
     assert rows[other.id].status == "interrupted"
     assert runtime.run_ledger.path == ledger.path
+
+
+def test_sweep_failure_is_retryable(tmp_path, monkeypatch):
+    """P2: a crashed sweep must not poison _SWEPT for the process lifetime.
+
+    A long-lived host that swept once at startup never retried: crash debris
+    from a later CLI process showed zombie running rows forever (audit P2).
+    """
+    from types import SimpleNamespace
+
+    from zenagent.app import run_wiring
+    from zenagent.app.run_wiring import attach_run_recorder
+
+    monkeypatch.setattr("zenagent.project.zenagent_home", lambda: tmp_path / "home")
+    run_wiring._SWEPT.clear()
+    root = tmp_path / "project"
+    session = tmp_path / "s.jsonl"
+
+    class _Agent:
+        def __init__(self):
+            self.listeners = []
+
+        def subscribe(self, listener):
+            self.listeners.append(listener)
+
+    calls = []
+    real_stale = RunLedger.reconcile_stale
+
+    def flaky(self, probe):
+        calls.append(1)
+        if len(calls) == 1:
+            raise OSError("transient")
+        return real_stale(self, probe)
+
+    monkeypatch.setattr(RunLedger, "reconcile_stale", flaky)
+
+    first = SimpleNamespace(root=root, agent=_Agent(), session=SimpleNamespace(path=session))
+    attach_run_recorder(first)
+    second = SimpleNamespace(root=root, agent=_Agent(), session=SimpleNamespace(path=session))
+    attach_run_recorder(second)
+    assert len(calls) == 2  # the sweep ran again
+
+
+def test_append_failure_counts_and_warns(tmp_path, monkeypatch):
+    """P2: a failed ledger write must be visible, not a silent best-effort."""
+    ledger = _ledger(tmp_path)
+
+    def broken(path, line):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("zenagent.app.runs.append_line", broken)
+    ledger.start(kind="coding", session=str(tmp_path / "s.jsonl"))
+    assert ledger.write_failures == 1
+    assert any("write failed" in w for w in ledger.warnings)
