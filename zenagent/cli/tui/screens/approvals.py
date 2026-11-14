@@ -8,8 +8,14 @@ from textual.containers import Vertical, VerticalScroll
 from textual.widgets import Input, Static
 
 from zenagent.app.safety import Verdict
+from zenagent.cli.tui.screens.dialogs import (
+    DialogChoice,
+    DialogScreen,
+    _choice,
+    _clip,
+    preview_diff,
+)
 from zenagent.i18n import t
-from zenagent.cli.tui.screens.dialogs import DialogChoice, DialogScreen, preview_diff, _choice, _clip
 
 
 def _approval_body(tool_name: str, arguments: dict) -> list[tuple[str, str]]:

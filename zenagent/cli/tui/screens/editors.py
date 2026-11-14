@@ -11,9 +11,11 @@ from textual.containers import Vertical, VerticalScroll
 from textual.widgets import Input, OptionList, Static
 from textual.widgets.option_list import Option
 
+from zenagent.cli.tui.screens.dialogs import (
+    DialogScreen,
+)
 from zenagent.cli.tui.screens.palette import PaletteItem, PaletteScreen
 from zenagent.i18n import t
-from zenagent.cli.tui.screens.dialogs import DialogChoice, DialogScreen, preview_diff, _choice, _clip
 
 
 class SettingsPicker(PaletteScreen[str]):
