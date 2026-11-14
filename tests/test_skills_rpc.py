@@ -90,6 +90,10 @@ async def test_toggle_persists_and_filters_the_live_runtime(
     monkeypatch.setattr(
         "zenagent.app.runtime.default_skill_roots", lambda cwd: roots(tmp_path)
     )
+    monkeypatch.setattr(
+        "zenagent.app.skills_recompose.default_skill_roots",
+        lambda cwd: roots(tmp_path),
+    )
     runtime = await runtime_factory(skills=True)
     assert {skill.name for skill in runtime.skills} == {"deploy", "pdf"}
     writes: list[str] = []

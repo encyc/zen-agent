@@ -52,6 +52,9 @@ def skill_root(tmp_path, monkeypatch):
     root = tmp_path / "skills"
     root.mkdir()
     monkeypatch.setattr("zenagent.app.runtime.default_skill_roots", lambda cwd: [root])
+    monkeypatch.setattr(
+        "zenagent.app.skills_recompose.default_skill_roots", lambda cwd: [root]
+    )
     return root
 
 
@@ -184,6 +187,9 @@ async def test_reload_reports_an_edited_template(runtime_factory, tmp_path, monk
         "---\ndescription: review a file\n---\nold body {{args}}\n", encoding="utf-8"
     )
     monkeypatch.setattr("zenagent.app.runtime.default_template_roots", lambda cwd: [root])
+    monkeypatch.setattr(
+        "zenagent.app.skills_recompose.default_template_roots", lambda cwd: [root]
+    )
     runtime = await runtime_factory(templates=True)
 
     template.write_text(

@@ -14,7 +14,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from zenagent import project, settings
+from zenagent import project
 from zenagent.agent import Agent
 from zenagent.agent.artifacts import build_artifact_sink
 from zenagent.agent.memory_store import MemoryStore, format_memory_index
@@ -22,7 +22,7 @@ from zenagent.agent.registry import ToolRegistry
 from zenagent.agent.session import Session, latest_session, unique_session_path
 from zenagent.agent.subagents import SubagentLimits
 from zenagent.agent.subagents_runtime import SubagentObserver
-from zenagent.app import plugin_wiring, records, subagent_runs
+from zenagent.app import plugin_wiring, records, skills_recompose, subagent_runs
 from zenagent.app import session_lease as leases
 from zenagent.app.agent_profile import AgentProfile
 from zenagent.app.journal import attach_journal, journal_for, load_backup_policy
@@ -34,7 +34,7 @@ from zenagent.app.modes import (
     resolve_mode,
 )
 from zenagent.app.permissions import PermissionGate, build_permission_gate
-from zenagent.app.rewind import RewindState, build_checkpoint_tools
+from zenagent.app.rewind import RewindState
 from zenagent.app.safety import GuardPolicy
 from zenagent.app.session_meta import (
     SessionMetaRecorder,
@@ -74,10 +74,8 @@ from zenagent.providers.catalog import ProviderConfig, load_catalog
 from zenagent.providers.limits import estimate_text_tokens
 from zenagent.providers.registry import StreamFn
 from zenagent.skills import (
-    build_skill_tool,
     default_skill_roots,
     discover_skills,
-    format_skill_entries,
 )
 from zenagent.templates import (
     PromptTemplate,
@@ -86,9 +84,7 @@ from zenagent.templates import (
 )
 from zenagent.tools import base_tools
 from zenagent.tools.ask import AskHandler, build_ask_tool
-from zenagent.tools.github import build_github_tool
-from zenagent.tools.lsp import build_lsp_tool, release_clients
-from zenagent.tools.memory import build_memory_tool, build_memory_write_tool
+from zenagent.tools.lsp import release_clients
 from zenagent.tools.task import build_task_tool
 from zenagent.tools.todo import (
     TodoTool,
@@ -101,12 +97,6 @@ from zenagent.trace import TraceRecorder
 __all__ = ["Runtime", "RuntimeOptions"]
 
 SwitchHook = Callable[[Path | None], Awaitable[bool]]
-
-
-def _active_skills(skills: list) -> list:
-    """Drop skills the user switched off in settings before they reach the agent."""
-    disabled = settings.disabled_skills()
-    return [skill for skill in skills if skill.name not in disabled]
 
 
 @dataclass
@@ -449,7 +439,7 @@ class Runtime:
                 skills, warnings = discover_skills(
                     [*default_skill_roots(runtime.root), *(assembly.skill_roots if assembly else [])]
                 )
-                runtime.skills = _active_skills(skills)
+                runtime.skills = skills_recompose.active_skills(skills)
                 runtime.warnings.extend(f"skills {warning}" for warning in warnings)
 
             if runtime.profile.templates:
@@ -693,84 +683,13 @@ class Runtime:
         return await self.guard.transform(self.rewind.transform(messages))
 
     def _recompose(self) -> None:
-        """Rebuild the tool list and prompt from the current discovery results.
-
-        Skills, extension tools and MCP tools all contribute to both. The
-        desired set goes through :attr:`tool_registry`, which applies
-        ``hidden``/``default_inactive`` and any activation override, and reports
-        whether the model-visible set changed -- so a reload that finds nothing
-        new does not touch the live agent. Rebuilding from scratch (rather than
-        patching the previous list) is what keeps ``read_skill``'s roster, the
-        prompt's skill index and ``agent.tools`` from drifting apart.
-        """
-        if self._custom_tools is not None:
-            tools = [*self._custom_tools, *self._extension_tools]
-            self._skill_entries = ""
-            self._base_tools = tools
-            self._base_prompt = self._build_prompt(tools)
-            if hasattr(self, "agent"):
-                self.agent.tools = list(tools)
-                self.agent.system_prompt = self._prompt_with_mode()
-            return
-
-        tools = base_tools(
-            self.ask_tool,
-            shell_max_output_bytes=self.limits.shell_max_output_bytes,
-            cwd=self.cwd,
-        )
-        tools.extend(
-            build_checkpoint_tools(lambda: getattr(self, "agent", None), self.rewind)
-        )
-        github_tool = build_github_tool()
-        if github_tool is not None:
-            tools.append(github_tool)
-        tools.append(build_lsp_tool())
-        # Project memory: always registered; the tools operate on
-        # <root>/.zenagent/memory/ and an empty library is not an error.
-        self.memory_store = MemoryStore(self.root)
-        tools.append(build_memory_tool(self.memory_store))
-        tools.append(build_memory_write_tool(self.memory_store))
-        if self.todo_tool is not None:
-            tools.append(self.todo_tool)
-        if self.task_tool is not None:
-            tools.append(self.task_tool)
-        for provider in self.tool_providers:
-            tools.extend(provider(self))
-        if self.mcp is not None:
-            tools.extend(self.mcp.tool_defs())
-        if self.skills:
-            tools.append(
-                build_skill_tool(self.skills, max_body_bytes=self.limits.max_body_bytes)
-            )
-        tools.extend(self._extension_tools)
-        if self.profile.tools_allow is not None:
-            tools = [tool for tool in tools if tool.name in self.profile.tools_allow]
-        tools = [*tools, *self.profile.extra_tools]
-        self._skill_entries = format_skill_entries(
-            self.skills, max_bytes=self.limits.max_index_bytes
-        )
-        self.tool_registry.reconcile(tools)
-        active = self.tool_registry.active()
-        self._base_tools = list(active)
-        self._base_prompt = self._build_prompt(active)
-        if hasattr(self, "agent"):
-            self.agent.tools = list(active)
-            self.agent.system_prompt = self._prompt_with_mode()
+        skills_recompose.recompose(self)
 
     def reconcile(self) -> list[str]:
-        """Single entry point for every tool-set change, synchronously.
-
-        MCP refresh is the one async half (see :meth:`reconcile_async`); this
-        covers skills, extensions and templates, and is what ``/reload`` and
-        the discovery tests call. Kept as a thin alias so callers express intent
-        ("reconcile the tool set") rather than mechanism ("rediscover").
-        """
-        return self.rediscover()
+        return skills_recompose.reconcile(self)
 
     async def reconcile_async(self) -> list[str]:
-        """The full reload path: reconnect MCP servers, then rediscover files."""
-        await self.refresh_mcp()
-        return self.rediscover()
+        return await skills_recompose.reconcile_async(self)
 
     def _subscribe_hooks(self) -> None:
         """Attach the current extension hooks, replacing the previous generation.
@@ -804,65 +723,8 @@ class Runtime:
         """Whether discovery ran with skills turned on (``--no-skills`` aside)."""
         return self.profile.skills
 
-    @staticmethod
-    def _signature(items: list) -> list[tuple[str, str, str, str]]:
-        """What makes a discovered item "the same item": a body edit counts.
-
-        Shared by skills and templates; mtimes deliberately do not participate,
-        so a ``touch`` does not report a change.
-        """
-        return [
-            (item.name, item.description, str(item.path), item.body) for item in items
-        ]
-
-    @classmethod
-    def _change_note(cls, label: str, before: list, after: list) -> str:
-        old = {item.name: item for item in before}
-        new = {item.name: item for item in after}
-        added = sorted(set(new) - set(old))
-        removed = sorted(set(old) - set(new))
-        edited = sorted(
-            name
-            for name in set(old) & set(new)
-            if cls._signature([old[name]]) != cls._signature([new[name]])
-        )
-        note = f"{label} {len(before)} -> {len(after)}"
-        if added:
-            note += f" (+{', '.join(added)})"
-        if removed:
-            note += f" (-{', '.join(removed)})"
-        if edited:
-            note += f" (~{', '.join(edited)})"
-        return note
-
     def refresh_skills(self) -> list[str]:
-        """Rescan the skill roots and adopt the result when it changed.
-
-        Cheap and side-effect free -- a directory listing plus the ``SKILL.md``
-        reads, well under a millisecond for a normal library -- so a display
-        command may call it on every invocation. Unlike :meth:`rediscover` it
-        never runs extension code.
-
-        Returns change notes (empty when nothing changed). While a run is
-        streaming the agent is left untouched: the model has already been told
-        which skills exist, and swapping the tool under it would make
-        ``read_skill`` disagree with the prompt.
-        """
-        if not self.skills_enabled:
-            return []
-        skills, warnings = discover_skills(default_skill_roots(self.root))
-        skills = _active_skills(skills)
-        for warning in warnings:
-            self._note(f"skills {warning}")
-        if self._signature(skills) == self._signature(self.skills):
-            return []
-        note = self._change_note("skills", self.skills, skills)
-        if hasattr(self, "agent") and self.agent.is_streaming:
-            return [f"{note}; applies after this run"]
-        self.skills = skills
-        if hasattr(self, "agent"):
-            self._recompose()
-        return [note]
+        return skills_recompose.refresh_skills(self)
 
     def limit_overrides(self) -> dict[str, str]:
         """Knobs this session overrides, mapped to the switch that did it.
@@ -900,58 +762,7 @@ class Runtime:
         self._recompose()
 
     def rediscover(self) -> list[str]:
-        """Re-run every discovery step and swap the result into the live agent.
-
-        Skills and templates are file reads, but extensions are *executed*
-        again (``importlib`` + ``register(api)``), which is why this belongs on
-        an explicit ``/reload`` and never inside a display command.
-
-        Refuses while a run is streaming: tools cannot be swapped under an
-        in-flight request. Raises ``RuntimeError``; callers check
-        ``agent.is_streaming`` first to render a nicer message.
-        """
-        if hasattr(self, "agent") and self.agent.is_streaming:
-            raise RuntimeError(t("cmdmsg.cannot_reload"))
-        notes: list[str] = []
-
-        if self.profile.skills:
-            skills, warnings = discover_skills(
-                [*default_skill_roots(self.root), *self._plugin_skill_roots]
-            )
-            skills = _active_skills(skills)
-            for warning in warnings:
-                self._note(f"skills {warning}")
-            if self._signature(skills) != self._signature(self.skills):
-                notes.append(self._change_note("skills", self.skills, skills))
-            self.skills = skills
-
-        if self.profile.templates:
-            templates, warnings = discover_templates(
-                default_template_roots(self.root)
-            )
-            for warning in warnings:
-                self._note(f"templates {warning}")
-            if self._signature(templates) != self._signature(self.templates):
-                notes.append(self._change_note("templates", self.templates, templates))
-            self.templates = templates
-
-        if self.extension_files:
-            loaded = load_extensions(self.extension_files)
-            for warning in loaded.warnings:
-                self._note(f"extension {warning}")
-            self._extension_tools = list(loaded.tools)
-            self.extension_commands = dict(loaded.commands)
-            self._extension_prompt = loaded.prompt_text
-            self.hooks = loaded.hooks
-            notes.append(
-                f"{len(self._extension_tools)} extension tools "
-                f"from {len(self.extension_files)} files"
-            )
-
-        self._recompose()
-        if hasattr(self, "agent"):
-            self._subscribe_hooks()
-        return notes or ["nothing changed"]
+        return skills_recompose.rediscover(self)
 
     async def reconfigure_plugins(self) -> list[str]:
         """Re-apply plugin contributions to the live runtime."""
