@@ -374,3 +374,33 @@ async def test_images_reach_the_agent_as_content_blocks(tmp_path, runtime_factor
     assert isinstance(first, UserMessage)
     assert any(isinstance(block, ImageContent) for block in first.content)
     assert any(isinstance(block, TextContent) and "看图" in block.text for block in first.content)
+
+
+async def test_cancelled_before_start_is_not_recorded_running(tmp_path, runtime_factory):
+    """P2: the manager cancels a queued task the scheduler already picked up.
+
+    The runner used to blind-write queued→running from its stale copy,
+    silently overriding the user's cancel (audit P2). It now re-reads the
+    store first and honours a terminal state.
+    """
+    from dataclasses import replace
+
+    runtime = await runtime_factory(stream_fn=text_stream("late"))
+    store, _router, current, post, admit = _bind(tmp_path)
+    task = _task(store)
+    current["task"] = task
+
+    cancelled = replace(task, state="cancelled", reason="aborted")
+    store.append_task(cancelled)  # the manager's cancel landed in the room
+    runner = TaskRunner(
+        record_task=store.append_task,
+        agent=runtime.agent,
+        session=runtime.session,
+        role=ROLE,
+        post_message=post,
+        admit_message=admit,
+        read_task=store.tasks.get,
+    )
+    record = await runner.run(task, _message(store))
+    assert record.state == "cancelled"
+    assert store.tasks[task.id].state == "cancelled"

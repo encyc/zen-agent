@@ -726,6 +726,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
             ),
             admit_message=self._admit,
             run_timeout_s=config.task_timeout_s,
+            read_task=lambda task_id: self.store.tasks.get(task_id),
         )
         agent = SwarmAgent(
             role=role,

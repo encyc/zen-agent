@@ -18,7 +18,7 @@ from zenagent.agent.session import Session
 from zenagent.app.compact import maybe_auto_compact
 from zenagent.app.swarm.protocol import injected_prompt
 from zenagent.app.swarm.roles import RoleManifest
-from zenagent.app.swarm.room import RoomMessage, TaskRecord
+from zenagent.app.swarm.room import RoomMessage, TaskRecord, is_terminal
 from zenagent.attachments import read_image_argument
 from zenagent.types import AssistantMessage, TextContent
 
@@ -46,6 +46,7 @@ class TaskRunner:
         post_message: Callable[[str, str], RoomMessage],
         admit_message: Callable[[RoomMessage], object],
         run_timeout_s: float = 0,
+        read_task: Callable[[str], TaskRecord | None] | None = None,
     ) -> None:
         #: Records a task transition; the manager owns it so every state the
         #: room sees (queued → running → terminal) also reaches the UI as a
@@ -61,6 +62,9 @@ class TaskRunner:
         self.abort_outcome: tuple[str, str] | None = None
         #: Wall-clock budget for one run; ``0`` disables the watchdog.
         self.run_timeout_s = max(0.0, float(run_timeout_s))
+        #: The store's current row for a task id, re-read at run start so a
+        #: cancel that landed between scheduling and running wins (audit P2).
+        self.read_task: Callable[[str], TaskRecord | None] | None = read_task
 
     async def run(self, task: TaskRecord, message: RoomMessage) -> TaskRecord:
         # A cancel issued before this run started: the manager sets abort_outcome
@@ -69,6 +73,14 @@ class TaskRunner:
         # to done; clear it in finally so a later run (e.g. retry) starts clean.
         pre_cancel = self.abort_outcome
         self.abort_outcome = None
+        if self.read_task is not None:
+            current = self.read_task(task.id)
+            if current is not None and is_terminal(current.state):
+                # The manager cancelled this task after the scheduler had
+                # already picked it up (audit P2): honour the store, not the
+                # stale copy this unit was scheduled with.
+                self.post_message(f"Task {task.id} cancelled", "system")
+                return current
         running = replace(task, state="running", updated_at=int(time.time()))
         self.record_task(running)
 
