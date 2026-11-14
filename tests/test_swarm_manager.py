@@ -1239,3 +1239,33 @@ async def test_run_units_are_built_through_prepare(monkeypatch) -> None:
     assert calls, "swarm must build run units through prepare()"
     assert calls[0]["views"] is False
     assert calls[0]["allow_missing_key"] is True
+
+
+async def test_role_auto_is_downgraded_to_ask():
+    """P1-2: a role's configured ``auto`` never inherits the bypass.
+
+    Fleet parity: zen downgrades worker auto to ask so approvals surface;
+    swarm roles must follow the same rule, not ship the bypass verbatim.
+    """
+    role_dir = _write_role("writer")
+    (role_dir / "manifest.json").write_text(
+        json.dumps(
+            {"id": "writer", "name": "Writer", "tools": ["write_file"], "mode": "auto"}
+        ),
+        encoding="utf-8",
+    )
+    frames: list[dict] = []
+    manager = _manager(
+        write_frame=frames.append,
+        stream_fn_factory=lambda role: _write_then_text_stream(),
+    )
+    await manager.start()
+    try:
+        [task] = await manager.post("@writer 写个文件")
+        await _wait_for(lambda: _approval_request(frames) is not None)
+        request = _approval_request(frames)
+        assert request is not None
+        assert manager.resolve_approval(request["request_id"], "allow") is True
+        await _wait_for(lambda: _states(manager)[task.id] == "done")
+    finally:
+        await manager.close()

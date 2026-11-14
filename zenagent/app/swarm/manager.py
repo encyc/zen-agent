@@ -627,7 +627,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
             root=role.root,
             model_id=role.model,
             thinking=role.thinking,
-            mode=role.mode,
+            mode=agents.effective_worker_mode(role.mode),
             max_turns=role.max_turns,
             max_cost=role.max_cost,
             profile=profile,

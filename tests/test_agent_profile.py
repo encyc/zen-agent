@@ -82,3 +82,12 @@ async def test_supervisor_registers_snapshots_and_closes(tmp_path):
     await supervisor.close()
     assert runtime.closed is True
     assert supervisor.handles() == []
+
+
+def test_effective_worker_mode_never_inherits_auto():
+    """P1-2: the shared normalization both orchestrators must use."""
+    from zenagent.app.agent_profile import effective_worker_mode
+
+    assert effective_worker_mode("auto") == "ask"
+    assert effective_worker_mode("ask") == "ask"
+    assert effective_worker_mode("plan") == "plan"

@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from zenagent.agent.session import Session, read_session_titles, unique_session_path
-from zenagent.app.agent_profile import AgentProfile, Supervisor
+from zenagent.app.agent_profile import AgentProfile, Supervisor, effective_worker_mode
 from zenagent.app.bootstrap import prepare
 from zenagent.app.records import open_session
 from zenagent.app.run_wiring import update_run_scope
@@ -371,9 +371,10 @@ class ZenFleet:
     async def _build_worker(self, handle: WorkerHandle) -> Any:
         # The default keeps the router's mode but never inherits the auto
         # bypass: auto approves mutations, so workers are downgraded to ask to
-        # surface approvals. ``auto`` opts into the bypass explicitly.
+        # surface approvals. ``auto`` opts into the bypass explicitly. The
+        # rule lives in agent_profile so swarm run units share it.
         if self.worker_mode == "inherit":
-            mode = "ask" if self.mode == "auto" else self.mode
+            mode = effective_worker_mode(self.mode)
         else:
             mode = self.worker_mode
         path = Path(handle.path)

@@ -183,3 +183,13 @@ def register_swarm_agent(
         session=runtime.session,
         workItemId=work_item_id,
     )
+
+
+def effective_worker_mode(configured: str) -> str:
+    """The mode an orchestrator-run agent actually runs with.
+
+    Shared by zen workers and swarm run units (fleet.py / manager.py): a
+    worker may keep the parent's mode but never inherits the ``auto`` bypass —
+    auto approves mutations, and a worker's approvals must surface to a human.
+    """
+    return "ask" if configured == "auto" else configured
