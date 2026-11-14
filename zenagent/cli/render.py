@@ -8,6 +8,7 @@ line of text.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from rich.console import Group, RenderableType
@@ -16,10 +17,15 @@ from rich.panel import Panel
 from rich.text import Text
 
 from zenagent.agent.loop import ToolResultAgent
-from zenagent.agent.session import Session
+from zenagent.agent.memory_store import split_title_body
+from zenagent.agent.session import Session, sessions_dir
+from zenagent.app.modes import describe_modes
 from zenagent.app.views import usage_total
+from zenagent.cli.editor import run_editor
 from zenagent.cli.theme import DEFAULT_THEME, Theme
+from zenagent.config import config_path
 from zenagent.events import AssistantEvent
+from zenagent.i18n import t
 from zenagent.types import (
     AssistantMessage,
     TextContent,
@@ -27,6 +33,9 @@ from zenagent.types import (
     ToolCall,
     Usage,
 )
+
+#: Print callback shape shared by every CLI renderer.
+PrintFn = Callable[..., None]
 
 __all__ = [
     "AssistantLiveRenderer",
@@ -225,3 +234,196 @@ def session_header(session: Session) -> str:
     """A one-line header for the current session."""
     count = len(session.messages)
     return f"session {session.path.name} · {count} messages"
+
+
+# --- moved from repl.py (audit P2 Task 29): pure rendering shared by CLI ---
+
+def _render_sessions(services, print_fn: PrintFn, scope: str) -> None:
+    """The text form of the TUI's session picker."""
+    entries = services.sessions.entries(scope=scope)
+    if not entries:
+        print_fn(t("repl.no_sessions"))
+        if scope == "project":
+            print_fn(t("repl.sessions_hint"))
+        return
+    for position, entry in enumerate(entries, start=1):
+        mark = "*" if entry.current else " "
+        label = (
+            f"[{entry.project or t('repl.legacy_project')}] "
+            if scope == "all"
+            else ""
+        )
+        title = entry.title or t("repl.empty_title")
+        print_fn(
+            t(
+                "repl.session_row",
+                mark=mark,
+                position=position,
+                label=label,
+                title=title,
+                messages=entry.messages,
+                path=entry.path.name,
+            )
+        )
+
+
+def _render_todo(services, print_fn: PrintFn) -> None:
+    rows = [
+        f"[{task.get('status', 'pending')}] {task.get('content', '')}"
+        for phase in services.chat.todos
+        for task in (phase.get("tasks") or [])
+        if isinstance(task, dict)
+    ]
+    print_fn("\n".join(rows) if rows else t("cmdmsg.todo_empty"))
+
+
+def _render_memory_index(services, print_fn: PrintFn) -> None:
+    store = services.runtime.memory_store
+    entries = store.list_entries() if store else []
+    if not entries:
+        print_fn(t("cmdmsg.memory_empty"))
+        return
+    for entry in entries:
+        print_fn(f"{entry.id}  {entry.title}  {entry.updated}")
+
+
+def _memory_editor_flow(services, entry_id: str | None, title_prefill: str, print_fn: PrintFn) -> None:
+    store = services.runtime.memory_store
+    entry = store.read_entry(entry_id) if (store and entry_id) else None
+    if entry_id and entry is None:
+        print_fn(t("cmdmsg.memory_not_found", id=entry_id))
+        return
+    initial = f"title: {entry.title if entry else title_prefill}\n\n{entry.body if entry else ''}"
+    text = run_editor(initial)
+    if text is None:
+        print_fn(t("repl.no_editor"))
+        return
+    title, body = split_title_body(text)
+    saved = (
+        store.update_entry(entry.id, title=title, body=body, reason="ui edit")
+        if entry
+        else store.write_entry(title=title, body=body, source="ui", reason="ui edit")
+    )
+    print_fn(t("cmdmsg.memory_saved", id=saved.id, title=saved.title))
+
+
+def _render_settings(services, print_fn: PrintFn) -> None:
+    from zenagent import settings as settings_store
+
+    prefs = settings_store.describe()["prefs"]
+    print_fn(t("repl.settings_header"))
+    for key, value in (
+        (t("repl.settings.model"), services.runtime.agent.model.id),
+        (t("repl.settings.thinking"), services.runtime.agent.thinking or "off"),
+        (t("repl.settings.theme"), str(prefs.get("theme", "auto"))),
+        (t("repl.settings.language"), str(prefs.get("language", "auto"))),
+    ):
+        print_fn(t("repl.settings_row", key=key, value=value))
+    print_fn(
+        t(
+            "repl.settings_paths",
+            config=config_path(),
+            settings=settings_store.settings_path(),
+            sessions=sessions_dir(),
+        )
+    )
+
+
+def render_command_result(
+    result,
+    *,
+    name: str,
+    services,
+    print_fn: PrintFn,
+    keybindings: dict[str, str] | None,
+    set_theme,
+    set_language,
+) -> str | None:
+    """Render one ``CommandResult`` as terminal text; ``"exit"`` means stop.
+
+    The TUI turns these results into pickers and overlays. The REPL has no
+    widgets, so every screen gets a text form instead of silently doing
+    nothing: a picker prints its current value, a list prints its rows.
+    """
+    if result.quit:
+        return "exit"
+    if result.model:
+        switch = services.models.switch(result.model)
+        if switch.ok:
+            print_fn(t("repl.model_switch", model=services.models.current()))
+        else:
+            print_fn(switch.reason or t("repl.unknown_model", model=result.model))
+    if result.appearance:
+        set_theme(result.appearance)
+    if result.language:
+        set_language(result.language)
+    if result.message:
+        print_fn(result.message)
+
+    screen = result.screen
+    if screen == "model-picker":
+        print_fn(t("repl.current_model", model=services.models.current()))
+    elif screen == "mode-picker":
+        print_fn(
+            t("cmdmsg.mode_set", mode=services.runtime.mode, modes=describe_modes())
+        )
+    elif screen == "thinking-picker":
+        print_fn(
+            t("repl.thinking_info", level=services.runtime.agent.thinking or "off")
+        )
+    elif screen == "theme-picker":
+        print_fn(t("repl.theme_usage"))
+    elif screen == "language-picker":
+        print_fn(t("repl.lang_usage"))
+    elif screen == "session-picker":
+        _render_sessions(services, print_fn, "project")
+    elif screen == "session-picker-all":
+        _render_sessions(services, print_fn, "all")
+    elif screen == "hotkeys":
+        if keybindings:
+            for action, key in sorted(keybindings.items()):
+                print_fn(f"{action}: {key}")
+        else:
+            print_fn(t("repl.no_keybindings"))
+    elif screen == "todo-edit":
+        _render_todo(services, print_fn)
+    elif screen == "memory-manager":
+        _render_memory_index(services, print_fn)
+    elif screen == "memory-add":
+        _memory_editor_flow(services, None, result.target or "", print_fn)
+    elif screen == "memory-edit":
+        _memory_editor_flow(services, result.target, "", print_fn)
+    elif screen == "settings":
+        _render_settings(services, print_fn)
+    elif screen == "plan-review":
+        plan = services.chat.last_assistant_text()
+        print_fn(plan if plan else t("cmdmsg.no_plan"))
+        if plan:
+            print_fn(t("repl.plan_review_hint"))
+    return None
+
+
+def render_help(commands, template_list, print_fn: PrintFn) -> None:
+    """The REPL's ``/help``: the shared registry plus prompt templates."""
+    entries = [(f"/{command.name}", command.description) for command in commands.names()]
+    width = max(len(name) for name, _ in entries)
+    rows = [f"  {name:<{width}}  {description}" for name, description in entries]
+    print_fn(
+        t("repl.help.header")
+        + "\n"
+        + "\n".join(rows)
+        + "\n"
+        + t("repl.help.footer")
+    )
+    if template_list:
+        print_fn(t("repl.templates_header"))
+        for template in template_list:
+            print_fn(
+                t(
+                    "repl.template_row",
+                    name=template.name,
+                    description=template.description,
+                )
+            )
+
+

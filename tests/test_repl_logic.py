@@ -126,6 +126,7 @@ async def test_repl_smoke_two_turns_then_exit(isolated_sessions):
         input_fn=scripted_input("one", "two", "/exit", settle=0.02),
         print_fn=lambda *a, **k: None,
         api_key="k",
+    mcp=False,
     )
     assert code == 0
     assert len(stream.requests) == 2
@@ -144,6 +145,7 @@ async def test_repl_eof_exits_cleanly(isolated_sessions):
         input_fn=scripted_input(),
         print_fn=lambda *a, **k: None,
         api_key="k",
+    mcp=False,
     )
     assert code == 0
 
@@ -170,6 +172,7 @@ async def test_typing_while_running_steers_instead_of_stacking(isolated_sessions
         input_fn=input_fn,
         print_fn=lambda *a, **k: None,
         api_key="k",
+    mcp=False,
     )
     assert code == 0
     # Steering is delivered at the next step boundary; because the first run
@@ -187,7 +190,11 @@ async def test_typing_while_running_steers_instead_of_stacking(isolated_sessions
 
 async def test_unknown_model_returns_one():
     code = await repl(
-        "no-such-model", stream_fn=scripted_stream(), input_fn=scripted_input(), api_key="k"
+        "no-such-model",
+        stream_fn=scripted_stream(),
+        input_fn=scripted_input(),
+        api_key="k",
+        mcp=False,
     )
     assert code == 1
 
@@ -195,7 +202,7 @@ async def test_unknown_model_returns_one():
 async def test_missing_key_returns_one(monkeypatch):
     for name in ("ZAI_CODING_CN_API_KEY", "DEEPSEEK_API_KEY", "OPENCODE_API_KEY"):
         monkeypatch.delenv(name, raising=False)
-    code = await repl("glm-5.3", stream_fn=scripted_stream(), input_fn=scripted_input())
+    code = await repl("glm-5.3", stream_fn=scripted_stream(), input_fn=scripted_input(), mcp=False)
     assert code == 1
 
 
@@ -212,6 +219,7 @@ async def test_repl_prints_a_status_line_after_each_run(isolated_sessions):
         input_fn=scripted_input("hi", "/exit", settle=0.02),
         print_fn=lambda *a, **k: lines.append("".join(str(x) for x in a)),
         api_key="k",
+    mcp=False,
     )
     assert code == 0
     assert any("msgs" in line and "ctx" in line for line in lines), lines
@@ -305,6 +313,7 @@ async def test_reload_discovers_skills_added_mid_session(tmp_path, monkeypatch):
         input_fn=input_fn,
         print_fn=lambda *a, **k: lines.append("".join(str(x) for x in a)),
         api_key="k",
+    mcp=False,
     )
     assert code == 0
     joined = "\n".join(lines)
@@ -333,6 +342,7 @@ async def test_slash_theme_switches_and_reports(isolated_sessions):
         input_fn=input_fn,
         print_fn=lambda *a, **k: lines.append("".join(str(x) for x in a)),
         api_key="k",
+    mcp=False,
     )
     assert code == 0
     assert any("theme -> mono" in line for line in lines)
@@ -344,6 +354,7 @@ async def test_slash_tools_lists_the_tool_set(isolated_sessions, capsys):
         stream_fn=scripted_stream(),
         api_key="k",
         input_fn=scripted_input("/tools", "/exit"),
+    mcp=False,
     )
     assert code == 0
     out = capsys.readouterr().out
@@ -358,6 +369,7 @@ async def test_slash_retry_reruns_the_last_prompt(isolated_sessions, capsys):
         api_key="k",
         input_fn=scripted_input("hello", "/retry", "/exit", settle=0.05),
         print_fn=lambda *a, **k: None,
+    mcp=False,
     )
     assert code == 0
     assert len(stream.requests) == 2
@@ -537,6 +549,7 @@ async def test_repl_forwards_the_thinking_flag(isolated_sessions):
         print_fn=lambda *a, **k: None,
         api_key="k",
         thinking="low",
+    mcp=False,
     )
 
     assert code == 0
@@ -566,6 +579,7 @@ async def test_repl_attaches_startup_images_to_the_first_prompt(
         print_fn=lambda *a, **k: None,
         api_key="k",
         images=[image],
+    mcp=False,
     )
 
     assert code == 0
@@ -584,6 +598,7 @@ async def test_repl_rejects_startup_images_for_a_non_vision_model(isolated_sessi
         print_fn=lambda *a, **k: None,
         api_key="k",
         images=[image],
+    mcp=False,
     )
 
     assert code == 1
@@ -622,6 +637,7 @@ async def test_repl_exposes_the_tools_the_tui_has(
         input_fn=scripted_input("hi", "/exit"),
         print_fn=lambda *a, **k: None,
         api_key="k",
+    mcp=False,
     )
 
     assert code == 0
@@ -652,6 +668,7 @@ async def test_repl_resume_loads_the_runtime_session(isolated_sessions):
         input_fn=scripted_input("follow-up", "/exit"),
         print_fn=lambda *a, **k: None,
         api_key="k",
+    mcp=False,
     )
 
     assert code == 0
@@ -693,6 +710,7 @@ async def test_repl_prints_the_provider_error_after_a_failed_run(isolated_sessio
         input_fn=scripted_input("hi", "", "/exit", settle=0.2),
         print_fn=print_fn,
         api_key="k",
+    mcp=False,
     )
 
     assert code == 0
@@ -775,6 +793,7 @@ async def _drive(tmp_path, printed, reader, stream, mode="ask"):
         print_fn=print_fn,
         api_key="k",
         mode=mode,
+    mcp=False,
     )
     return code, seen_requests[0]
 

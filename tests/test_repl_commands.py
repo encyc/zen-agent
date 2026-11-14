@@ -11,7 +11,7 @@ import time
 import pytest
 
 import zenagent.agent.session as session_module
-import zenagent.cli.repl as repl_module
+import zenagent.cli.render as render_module
 from zenagent.app.commands import CommandResult, build_default_commands
 from zenagent.cli.repl import render_command_result, render_help, repl
 from zenagent.config import UserConfig
@@ -435,7 +435,7 @@ async def test_memory_manager_screen_empty_library_prints_empty_message(runtime_
 
 async def test_memory_add_screen_runs_editor_and_saves_ui_entry(runtime_factory, tmp_path, monkeypatch):
     services = await memory_services(runtime_factory, tmp_path)
-    monkeypatch.setattr(repl_module, "run_editor",
+    monkeypatch.setattr(render_module, "run_editor",
                         lambda initial: "title: 新条目\n\n正文内容")
     lines: list[str] = []
     _render(services, CommandResult(screen="memory-add", target="新条目"), lines)
@@ -446,7 +446,7 @@ async def test_memory_add_screen_runs_editor_and_saves_ui_entry(runtime_factory,
 
 async def test_memory_add_screen_without_editor_writes_nothing(runtime_factory, tmp_path, monkeypatch):
     services = await memory_services(runtime_factory, tmp_path)
-    monkeypatch.setattr(repl_module, "run_editor", lambda initial: None)
+    monkeypatch.setattr(render_module, "run_editor", lambda initial: None)
     lines: list[str] = []
     _render(services, CommandResult(screen="memory-add", target=""), lines)
     assert services.runtime.memory_store.list_entries() == []
@@ -456,7 +456,7 @@ async def test_memory_add_screen_without_editor_writes_nothing(runtime_factory, 
 async def test_memory_edit_screen_updates_existing_entry(runtime_factory, tmp_path, monkeypatch):
     services = await memory_services(runtime_factory, tmp_path)
     entry = services.runtime.memory_store.write_entry(title="旧", body="旧正文", source="agent")
-    monkeypatch.setattr(repl_module, "run_editor",
+    monkeypatch.setattr(render_module, "run_editor",
                         lambda initial: "title: 新标题\n\n新正文")
     lines: list[str] = []
     _render(services, CommandResult(screen="memory-edit", target=entry.id), lines)

@@ -63,7 +63,7 @@ def test_runtime_warns_on_a_cross_project_session(tmp_path, monkeypatch):
 
 def test_repl_sessions_all_labels_each_project():
     from zenagent.app.sessions import SessionEntry
-    from zenagent.cli.repl import _render_sessions
+    from zenagent.cli.render import _render_sessions
 
     entry = SessionEntry(
         path=Path("/tmp/s.jsonl"),

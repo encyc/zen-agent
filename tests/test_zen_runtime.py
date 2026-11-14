@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from zenagent.app.runtime import Runtime  # noqa: F401 - fixture surface contract
 from zenagent.app.zen.fleet import ZenFleet
-from zenagent.app.zen.tools import register_router_surface
 from zenagent.app.zen.prompts import ROUTER_PROMPT_NOTE
+from zenagent.app.zen.tools import register_router_surface
 from zenagent.project import project_sessions_dir
 
 
