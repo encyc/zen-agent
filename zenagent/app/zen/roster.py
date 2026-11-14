@@ -10,10 +10,11 @@ empty roster — zen mode simply has no history yet.
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+
+from zenagent.app.support import atomic_write_text
 
 __all__ = [
     "ROSTER_FILENAME",
@@ -60,9 +61,7 @@ def _read(sessions_dir: Path) -> dict:
 def _write(sessions_dir: Path, roster: dict[str, dict]) -> None:
     path = _roster_path(sessions_dir)
     payload = json.dumps(roster, ensure_ascii=False, indent=2, sort_keys=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(payload, encoding="utf-8")
-    os.replace(tmp, path)
+    atomic_write_text(path, payload)
 
 
 def _entries(sessions_dir: Path) -> dict[str, RosterEntry]:

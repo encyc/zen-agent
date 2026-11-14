@@ -66,3 +66,25 @@ async def test_workspace_rpc_get_and_set(tmp_path):
         {"op": "set", "project": str(tmp_path), "mode": "banana"}, "w3"
     )
     assert json.loads(writes[-1])["code"] == "workspace_invalid"
+
+
+def test_workspace_save_fsyncs_before_replace(tmp_path, monkeypatch):
+    """P2: workspace.json must not be renamed before its bytes hit disk."""
+    import os as os_mod
+
+    from zenagent.app.workspace_state import set_workspace_mode
+
+    root = tmp_path / "proj"
+    (root / ".git").mkdir(parents=True)
+    set_workspace_mode(root, "zen")  # seed a good file
+
+    fsyncs = []
+    real_fsync = os_mod.fsync
+
+    def counting_fsync(fd):
+        fsyncs.append(fd)
+        real_fsync(fd)
+
+    monkeypatch.setattr(os_mod, "fsync", counting_fsync)
+    set_workspace_mode(root, "swarm")
+    assert fsyncs, "save_workspace must fsync before os.replace"

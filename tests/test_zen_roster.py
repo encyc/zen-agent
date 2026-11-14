@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from zenagent.app.zen.roster import (
     RosterEntry,
     latest_router,
@@ -49,3 +51,40 @@ def test_missing_and_corrupt_files_are_empty(tmp_path: Path) -> None:
     (tmp_path / ".zen.json").write_text("{oops", encoding="utf-8")
     assert read_roster(tmp_path) == {}
     assert latest_router(tmp_path) is None
+
+
+def test_roster_write_fsyncs_and_survives_a_failed_replace(tmp_path, monkeypatch):
+    """P2: .zen.json must not vanish (rename before its bytes hit disk)."""
+    import json as json_mod
+    import os as os_mod
+
+    from zenagent.app.zen import roster as roster_mod
+
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    path = roster_mod._roster_path(sessions)
+    path.write_text(json_mod.dumps({"worker.jsonl": {"focus": "x"}}), encoding="utf-8")
+
+    fsyncs = []
+    real_fsync = os_mod.fsync
+
+    def counting_fsync(fd):
+        fsyncs.append(fd)
+        real_fsync(fd)
+
+    monkeypatch.setattr(os_mod, "fsync", counting_fsync)
+
+    # A crash between tmp-write and rename must leave the old roster intact.
+    real_replace = os_mod.replace
+    def exploding_replace(src, dst):
+        raise OSError("power cut mid-rename")
+    monkeypatch.setattr(os_mod, "replace", exploding_replace)
+    with pytest.raises(OSError):
+        roster_mod._write(sessions, {"worker.jsonl": {"focus": "y"}})
+    monkeypatch.setattr(os_mod, "replace", real_replace)
+    assert json_mod.loads(path.read_text(encoding="utf-8")) == {
+        "worker.jsonl": {"focus": "x"}
+    }
+
+    roster_mod._write(sessions, {"worker.jsonl": {"focus": "y"}})
+    assert fsyncs, "_write must fsync the temp file before renaming"

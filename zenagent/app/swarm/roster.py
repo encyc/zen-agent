@@ -15,6 +15,7 @@ import re
 import shutil
 from pathlib import Path
 
+from zenagent.app.support import atomic_write_text
 from zenagent.app.swarm.roles import (
     RoleManifest,
     agents_root,
@@ -29,8 +30,11 @@ _ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 def _read_manifest(path) -> dict:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
+    except ValueError as exc:
+        # A half-written manifest must not become an empty merge base: the
+        # merge promises that skills/plugins/MCP/inheritProject survive an
+        # edit, and merging into {} silently deletes them (audit P2).
+        raise ValueError(f"corrupt role manifest {path}: {exc}") from exc
     return raw if isinstance(raw, dict) else {}
 
 
@@ -51,11 +55,11 @@ def write_role(role_id: str, manifest: dict, *, root) -> RoleManifest:
             merged.pop(key, None)
         else:
             merged[key] = value
-    manifest_path.write_text(
-        json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8"
+    atomic_write_text(
+        manifest_path, json.dumps(merged, ensure_ascii=False, indent=2) + "\n"
     )
     if prompt is not None:
-        (role_dir / "prompt.md").write_text(str(prompt), encoding="utf-8")
+        atomic_write_text(role_dir / "prompt.md", str(prompt))
     role, warnings = parse_role(role_dir, project_root=root)
     if role is None:
         raise ValueError("; ".join(warnings) or f"invalid role {role_id}")

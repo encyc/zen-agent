@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -155,3 +157,23 @@ def cache_hit_ratio(usage: Usage, api: str) -> float | None:
     if prompt <= 0:
         return None
     return usage.cache_read / prompt
+
+
+def atomic_write_text(path: Path, text: str) -> None:
+    """Replace ``path`` with ``text`` durably: fsync the temp, then rename.
+
+    ``os.replace`` before the bytes are on disk loses the file on a power cut
+    (audit P2): the temp file is fsynced first, and a failed write leaves the
+    original untouched.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise

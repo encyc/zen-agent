@@ -14,12 +14,12 @@ records which mode the project is in so every frontend can read the same fact.
 from __future__ import annotations
 
 import json
-import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
 from zenagent import project
+from zenagent.app.support import atomic_write_text
 
 __all__ = [
     "WORKSPACE_MODES",
@@ -84,10 +84,9 @@ def save_workspace(root: Path | str, state: WorkspaceState) -> WorkspaceState:
     )
     path = workspace_path(root)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    payload = json.dumps(current.to_json(), ensure_ascii=False, indent=2)
-    tmp.write_text(payload + "\n", encoding="utf-8")
-    os.replace(tmp, path)
+    atomic_write_text(
+        path, json.dumps(current.to_json(), ensure_ascii=False, indent=2) + "\n"
+    )
     return current
 
 
