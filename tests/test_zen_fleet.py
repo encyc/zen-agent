@@ -277,8 +277,9 @@ async def test_report_limit_cuts_worker_reports(env) -> None:
 async def test_dispatch_runs_worker_and_injects_report(env) -> None:
     fleet: ZenFleet = env["fleet"]
     path = env["paths"]["w1"]
+    # P2: dispatch always reports queued; _run flips to working after the sem.
     status = await fleet.dispatch(str(path), "修复编译")
-    assert status == "working"
+    assert status == "queued"
     await fleet.wait_all()
     assert fleet.status_of(str(path)) == "waiting"
     assert "[zen:worker" in env["chat"].delivered[0], "idle router must be woken"
@@ -344,7 +345,10 @@ async def test_dispatch_busy_worker_is_refused(env) -> None:
     gate = loop.create_future()
     env["factory"].gates[env["paths"]["w1"]] = gate
     await fleet.dispatch(str(env["paths"]["w1"]), "a")
-    with pytest.raises(ValueError, match="working"):
+    for _ in range(5):
+        await asyncio.sleep(0)  # let _run take the semaphore and flip working
+    assert fleet.status_of(str(env["paths"]["w1"])) == "working"
+    with pytest.raises(ValueError, match="worker is working"):
         await fleet.dispatch(str(env["paths"]["w1"]), "b")
     gate.set_result(None)
     await fleet.wait_all()
@@ -358,7 +362,11 @@ async def test_concurrency_cap_queues(env) -> None:
     env["factory"].gates[env["paths"]["w2"]] = gates[1]
     s1 = await fleet.dispatch(str(env["paths"]["w1"]), "a")
     s2 = await fleet.dispatch(str(env["paths"]["w2"], ), "b")
-    assert (s1, s2) == ("working", "working")
+    assert (s1, s2) == ("queued", "queued")  # P2: the flip belongs to _run
+    for _ in range(10):
+        await asyncio.sleep(0)
+    assert (fleet.status_of(str(env["paths"]["w1"])),
+            fleet.status_of(str(env["paths"]["w2"]))) == ("working", "working")
     s3 = await fleet.dispatch(str(env["paths"]["w3"]), "c")
     assert s3 == "queued"
     gates[0].set_result(None)
@@ -764,3 +772,15 @@ async def test_failed_delivery_requeues_reports(env, caplog):
         await fleet.wait_all()
     assert fleet._report_buffer, "the failed batch must be re-queued"
     assert any("deliver" in record.message for record in caplog.records)
+
+
+async def test_dispatch_reports_queued_until_the_semaphore(env) -> None:
+    """P2: the status flip belongs to _run, after the semaphore — not dispatch.
+
+    Dispatch guessed from the counter at dispatch time; a slot freed by the
+    previous worker but not yet flipped by its task made the roster say
+    "working" while the run sat queued (audit P2).
+    """
+    fleet = _fleet_with(env)
+    status = await fleet.dispatch(str(env["paths"]["w1"]), "a")
+    assert status == "queued"

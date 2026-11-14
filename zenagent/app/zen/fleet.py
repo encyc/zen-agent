@@ -291,8 +291,6 @@ class ZenFleet:
             raise ValueError(f"worker is {handle.status}: {path.name}")
         if self._closing:
             raise ValueError("fleet is closing")
-        working = sum(1 for h in self._handles.values() if h.status == "working")
-        queued = handle is not None and handle.status == "queued"
         if handle is None:
             stem = path.stem
             entry = read_roster(self.sessions_dir).get(stem)
@@ -302,7 +300,10 @@ class ZenFleet:
         # when it predates the roster; otherwise it would keep showing up as a
         # coding session after the first dispatch.
         roster_set_focus(self.sessions_dir, path.stem, handle.focus)
-        handle.status = "queued" if (working >= self.max_concurrent or queued) else "working"
+        # Always queued here: the flip to "working" belongs to _run, after
+        # the semaphore — a counter-based guess goes stale across awaits
+        # (audit P2).
+        handle.status = "queued"
         handle.stopped = False
         handle.task = asyncio.create_task(self._run(handle, task))
         self._notify()
