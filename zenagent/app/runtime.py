@@ -22,7 +22,13 @@ from zenagent.agent.registry import ToolRegistry
 from zenagent.agent.session import Session, latest_session, unique_session_path
 from zenagent.agent.subagents import SubagentLimits
 from zenagent.agent.subagents_runtime import SubagentObserver
-from zenagent.app import plugin_wiring, records, skills_recompose, subagent_runs
+from zenagent.app import (
+    limits_apply,
+    plugin_wiring,
+    records,
+    skills_recompose,
+    subagent_runs,
+)
 from zenagent.app import session_lease as leases
 from zenagent.app.agent_profile import AgentProfile
 from zenagent.app.journal import attach_journal, journal_for, load_backup_policy
@@ -727,39 +733,10 @@ class Runtime:
         return skills_recompose.refresh_skills(self)
 
     def limit_overrides(self) -> dict[str, str]:
-        """Knobs this session overrides, mapped to the switch that did it.
-
-        The settings page shows effective values, so it has to know that
-        ``--max-turns 20`` (or ``--no-skills``) beats the file for this run.
-        Keys are :class:`~zenagent.limits.Limit` attrs.
-        """
-        active: dict[str, str] = {}
-        options = self._options
-        if options is not None and options.max_turns is not None:
-            active["max_turns"] = f"--max-turns {options.max_turns}"
-        if not self.skills_enabled:
-            active["max_index_bytes"] = "--no-skills"
-            active["max_body_bytes"] = "--no-skills"
-        if not self.profile.context_files:
-            active["max_context_bytes"] = "--no-context-files"
-        if not self.auto_compact:
-            active["compact_threshold"] = "--no-auto-compact"
-        return active
+        return limits_apply.overrides(self)
 
     def apply_limits(self) -> None:
-        """Push the *immediate* ``[limits]`` knobs into the live agent.
-
-        The rest (turn cap, context injection, compaction threshold, per-result
-        budget) are bound when the session starts; the settings page labels them
-        "new sessions" rather than pretending otherwise.
-        """
-        agent = getattr(self, "agent", None)
-        if agent is not None:
-            agent.loop_guard_threshold = self.limits.loop_guard_threshold
-        # ``_recompose`` (not ``rediscover``) rebuilds the tool list and prompt
-        # from the already-loaded extensions: a budget change must not re-run
-        # extension modules.
-        self._recompose()
+        return limits_apply.apply(self)
 
     def rediscover(self) -> list[str]:
         return skills_recompose.rediscover(self)
