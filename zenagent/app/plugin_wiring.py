@@ -13,7 +13,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from zenagent.i18n import t
-from zenagent.mcp.config import McpServerConfig, load_mcp_config, parse_server
+from zenagent.mcp.config import (
+    McpServerConfig,
+    load_mcp_config,
+    parse_server,
+    withhold_untrusted_project_servers,
+)
 from zenagent.mcp.manager import McpManager
 from zenagent.plugins.discovery import discover_plugins
 from zenagent.plugins.state import credentials_for, is_enabled, resolve
@@ -86,6 +91,18 @@ def attach_plugins(runtime: Runtime, options: RuntimeOptions) -> PluginAssembly:
                 for name, config in user_configs.items()
                 if name in options.mcp_servers
             }
+        # An explicit --mcp-file is the user's own deliberate choice; the
+        # project layer is a committed file anyone can have written (audit
+        # P1-1), so its stdio servers need a per-name trust.
+        if options.mcp_file is None:
+            user_configs, untrusted = withhold_untrusted_project_servers(
+                user_configs, cwd=runtime.root
+            )
+            for name in untrusted:
+                runtime._note(
+                    f"mcp: project server '{name}' is not trusted; "
+                    f"run: zen mcp trust {name}"
+                )
     assembly = assemble_plugins(user_configs=user_configs)
     runtime.plugin_statuses = assembly.statuses
     runtime._plugin_skill_roots = assembly.skill_roots

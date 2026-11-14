@@ -34,6 +34,7 @@ from zenagent.app.views import usage_total
 from zenagent.attachments import read_image_argument
 from zenagent.cli.doctor import run_doctor
 from zenagent.cli.exportcmd import run_export
+from zenagent.cli.mcpcmd import run_mcp_command
 from zenagent.cli.usagecmd import run_usage
 from zenagent.events import AgentEvent
 from zenagent.i18n import LANGUAGE_CHOICES
@@ -272,7 +273,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "command",
         nargs="?",
-        help="optional subcommand: doctor, sessions",
+        help="optional subcommand: doctor, sessions, mcp",
+    )
+    parser.add_argument(
+        "mcp_server",
+        nargs="?",
+        help="server name for: mcp trust <name>",
     )
     parser.add_argument(
         "-V",
@@ -435,6 +441,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_usage(args.since, args.json)
     if args.command == "export":
         return run_export(args.session, args.format, args.output)
+    if args.command == "mcp":
+        return run_mcp_command(args.session, args.mcp_server)
     if args.command == "doctor":
         if args.report:
             from zenagent.cli.doctor import collect_report

@@ -25,6 +25,7 @@ from pathlib import Path
 
 from zenagent import project
 from zenagent.mcp.client import HttpTransport, StdioTransport, Transport
+from zenagent.project import project_dir
 
 __all__ = [
     "McpServerConfig",
@@ -271,3 +272,67 @@ def make_transport(config: McpServerConfig) -> Transport:
 def parse_server(name: str, raw: object) -> McpServerConfig:
     """Public validator wrapper for plugin manifests."""
     return _parse_server(name, raw)
+
+
+def untrusted_project_servers(*, cwd: Path | None = None) -> list[str]:
+    """Project-layer stdio server names the user has not trusted (audit P1-1)."""
+    trusted = load_trusted(cwd=cwd)
+    return [
+        name
+        for name, config in _load_mcp_file(project.project_mcp_path(cwd)).items()
+        if config.transport_kind == "stdio" and name not in trusted
+    ]
+
+
+def withhold_untrusted_project_servers(
+    servers: dict[str, McpServerConfig], *, cwd: Path | None = None
+) -> tuple[dict[str, McpServerConfig], list[str]]:
+    """Drop untrusted project stdio servers; restore a global one they overrode.
+
+    The project layer wins the merge, so a same-named untrusted override must
+    not take the user's own global definition down with it.
+    """
+    untrusted = untrusted_project_servers(cwd=cwd)
+    if not untrusted:
+        return servers, []
+    global_only = _load_mcp_file(config_path())
+    kept = dict(servers)
+    for name in untrusted:
+        kept.pop(name, None)
+        if name in global_only:
+            kept[name] = global_only[name]
+    return kept, untrusted
+
+
+def load_trusted(*, cwd: Path | None = None, root: Path | None = None) -> set[str]:
+    """Names the user explicitly trusted for this project (empty on any doubt)."""
+    path = project_dir(cwd=cwd, root=root) / "mcp_trust.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return set()
+    except (OSError, ValueError):
+        return set()
+    trusted = data.get("trusted") if isinstance(data, dict) else None
+    if not isinstance(trusted, list):
+        return set()
+    return {str(name) for name in trusted}
+
+
+def trust_project_server(name: str, *, cwd: Path | None = None, root: Path | None = None) -> None:
+    """Record one project server as trusted — a deliberate, per-name act."""
+    trusted = load_trusted(cwd=cwd, root=root)
+    trusted.add(name)
+    path = project_dir(cwd=cwd, root=root) / "mcp_trust.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps({"trusted": sorted(trusted)}, indent=1) + "\n"
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".mcp_trust")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
