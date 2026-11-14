@@ -34,6 +34,12 @@ export function relaunchApp(): Promise<void> {
   return bridge.relaunch()
 }
 
+/** Open an http(s) URL in the system browser (audit P2: model markdown never
+ * navigates the app window). The shell command validates the scheme again. */
+export function openExternal(url: string): Promise<void> {
+  return bridge.invoke('open_external', { url })
+}
+
 /** Test seam: swap the Tauri bridge (the real one needs a webview). */
 export function _useBridge(next: Bridge): void {
   bridge = next

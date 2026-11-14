@@ -50,6 +50,7 @@ pub fn run() {
             rpc::runtime_probe,
             rpc::get_initial_state,
             rpc::relaunch_app,
+            rpc::open_external,
         ])
         .setup(|app| {
             // Warm the login-shell env cache off the main thread so the first

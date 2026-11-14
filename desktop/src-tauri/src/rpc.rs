@@ -931,3 +931,65 @@ mod shape_tests {
         assert_eq!(value.as_object().unwrap().len(), 2);
     }
 }
+
+/// Open an http(s) URL in the system browser (audit P2: model-markdown links
+/// must never navigate the app window — a hostile page could phish for keys).
+#[tauri::command]
+pub fn open_external(url: String) -> Result<(), String> {
+    if !is_openable_http_url(&url) {
+        return Err("only http(s) URLs can be opened externally".into());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg("-u")
+            .arg(&url)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("cmd")
+            .args(["/C", "start", "", &url])
+            .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        Command::new("xdg-open")
+            .arg(&url)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+}
+
+/// The scheme allowlist the shell hop relies on: http(s) only, bounded length,
+/// no control characters (a \n in a URL could splice shell arguments).
+fn is_openable_http_url(url: &str) -> bool {
+    if url.len() > 2048 {
+        return false;
+    }
+    if url.chars().any(|c| c.is_control()) {
+        return false;
+    }
+    url.starts_with("http://") || url.starts_with("https://")
+}
+
+#[cfg(test)]
+mod open_external_tests {
+    use super::is_openable_http_url;
+
+    #[test]
+    fn accepts_only_http_and_https() {
+        assert!(is_openable_http_url("https://example.com/x"));
+        assert!(is_openable_http_url("http://example.com"));
+        assert!(!is_openable_http_url("file:///etc/passwd"));
+        assert!(!is_openable_http_url("javascript:alert(1)"));
+        assert!(!is_openable_http_url("https://x\nrm -rf /"));
+        assert!(!is_openable_http_url(&"https://x".repeat(2000)));
+    }
+}

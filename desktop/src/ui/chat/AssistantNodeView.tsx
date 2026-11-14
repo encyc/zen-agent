@@ -11,6 +11,8 @@ import { ChevronRightIcon, SparkIcon } from '../icons'
 import { TextShimmer } from '../primitives'
 import { formatDuration } from '../format'
 import { useMarkdown } from './markdown'
+import { externalLinkAction } from './markdownLinks'
+import { openExternal } from '../../rpc/client'
 import { TurnActions } from './TurnActions'
 import css from './AssistantNodeView.module.css'
 
@@ -53,6 +55,20 @@ export function AssistantNodeView({
     }
     const target = event.target
     if (!(target instanceof HTMLElement)) return
+    // Model-markdown links never navigate this window: http(s) goes to the
+    // system browser, anything else is dropped (audit P2).
+    const anchor = target.closest<HTMLAnchorElement>('a[href]')
+    if (anchor !== null) {
+      const href = anchor.getAttribute('href')
+      const action = externalLinkAction(href)
+      if (action !== null) {
+        event.preventDefault()
+        if (action === 'browser' && href !== null) {
+          void openExternal(href).catch(() => {})
+        }
+        return
+      }
+    }
     const button = target.closest<HTMLElement>('[data-copy-code]')
     if (button === null) return
     const code = button.closest('.md-code-block')?.querySelector('code')
