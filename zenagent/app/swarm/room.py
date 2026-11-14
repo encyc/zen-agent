@@ -17,6 +17,8 @@ import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from zenagent.agent.jsonl import append_line, dump_line
+
 __all__ = [
     "TERMINAL",
     "RoomMessage",
@@ -286,10 +288,9 @@ class SwarmStore:
             os.fsync(handle.fileno())
 
     def _append_line(self, path: Path, payload: dict) -> None:
-        with path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
-            handle.flush()
-            os.fsync(handle.fileno())
+        # Shared durable append (agent/jsonl.py): fsync plus torn-tail repair,
+        # which is what closes work_items.jsonl's repair gap too (audit P1-5).
+        append_line(path, dump_line(payload))
 
 
 def _parse_images(raw) -> list[str]:

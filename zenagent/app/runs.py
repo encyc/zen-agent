@@ -25,6 +25,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from zenagent.agent.jsonl import append_line, dump_line
+
 __all__ = [
     "RUN_KINDS",
     "RUN_STATUSES",
@@ -243,12 +245,10 @@ class RunLedger:
         return finished
 
     def _append(self, record: RunRecord) -> None:
-        line = json.dumps(record.to_json(), ensure_ascii=False, default=str)
         try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            with _WRITE_LOCK, self.path.open("a", encoding="utf-8") as handle:
-                handle.write(line + "\n")
-                handle.flush()
+            with _WRITE_LOCK:
+                # Shared durable append: fsync + torn-tail repair (P1-5).
+                append_line(self.path, dump_line(record.to_json(), default=str))
         except OSError as exc:
             # Observability is best-effort; the run itself owns the truth.
             self.warnings.append(f"run ledger write failed: {exc}")

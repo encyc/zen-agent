@@ -28,6 +28,7 @@ from datetime import datetime
 from pathlib import Path
 
 from zenagent import __version__, project
+from zenagent.agent.jsonl import append_line, dump_line
 from zenagent.types import (
     AssistantMessage,
     Message,
@@ -432,11 +433,11 @@ class Session:
     _file_lock = threading.Lock()
 
     def _write_line(self, payload: dict) -> None:
-        with self._file_lock, self.path.open("a", encoding="utf-8") as handle:
-            # One write call per line: payload and newline land atomically,
-            # so a concurrent writer can only interleave between lines.
-            handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
-            handle.flush()
+        with self._file_lock:
+            # The shared discipline: one write call per line, fsynced, and a
+            # torn tail from a crash mid-append repaired before the next
+            # record lands (agent/jsonl.py; audit P1-5).
+            append_line(self.path, dump_line(payload))
 
     def append_meta(self, record: dict) -> None:
         """Append one side-channel record; metadata must never kill a run.
