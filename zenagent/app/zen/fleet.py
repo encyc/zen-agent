@@ -165,6 +165,10 @@ class ZenFleet:
         #: to reach a human; without it the ask tool is a dead end.
         self.ask = ask
         self._report_buffer: list[str] = []
+        #: Delivery is failing: the flush pump holds so a dead router cannot
+        #: turn re-queueing into a busy retry loop (audit P2). New reports
+        #: clear the pause.
+        self._deliver_paused = False
         self._wake_task: asyncio.Task | None = None
         self._sem = asyncio.Semaphore(self.max_concurrent)
         self._closing = False
@@ -468,6 +472,7 @@ class ZenFleet:
         if self.chat is None:
             return
         self._report_buffer.append(f"[zen:worker {handle.title}] {text}")
+        self._deliver_paused = False
         if self._wake_task is None or self._wake_task.done():
             self._wake_task = asyncio.get_running_loop().create_task(
                 self._flush_reports()
@@ -493,6 +498,8 @@ class ZenFleet:
     async def _flush_reports(self) -> None:
         """Deliver buffered reports as one merged message, in a loop so a
         report arriving mid-delivery is never delivered one-per-run."""
+        if self._deliver_paused:
+            return
         try:
             while self._report_buffer and not self._closing:
                 if self.batch_window_s:
@@ -512,7 +519,14 @@ class ZenFleet:
                 joined = "\n\n".join(batch)
                 deliver = getattr(self.chat, "deliver", None)
                 if deliver is not None:
-                    await self._safe_deliver(deliver, joined)
+                    delivered = await self._safe_deliver(deliver, joined)
+                    if not delivered:
+                        # Backpressure, not a drop: re-queue for the next
+                        # flush cycle and hold the pump so a dead router
+                        # cannot spin retries (audit P2).
+                        self._report_buffer[:0] = batch
+                        self._deliver_paused = True
+                        return
                 else:
                     # A dead router must not kill workers.
                     with contextlib.suppress(Exception):
@@ -524,15 +538,27 @@ class ZenFleet:
             if (
                 self._report_buffer
                 and not self._closing
+                and not self._deliver_paused
                 and not asyncio.current_task().cancelling()
             ):
                 self._wake_task = asyncio.get_running_loop().create_task(
                     self._flush_reports()
                 )
 
-    async def _safe_deliver(self, deliver, message: str) -> None:
-        with contextlib.suppress(Exception):
+    async def _safe_deliver(self, deliver, message: str) -> bool:
+        """Deliver worker reports; False (logged) when the router refuses.
+
+        A failure must not silently drop the batch — the caller re-queues it.
+        """
+        try:
             await deliver(message)
+            return True
+        except Exception:  # noqa: BLE001 - a dead router must not kill workers
+            _log.warning(
+                "delivering %d zen report(s) failed; re-queued",
+                message.count("\n\n") + 1,
+            )
+            return False
 
     async def stop(self, session_path: str) -> bool:
         """Abort one worker's run; True when a live run was stopped."""

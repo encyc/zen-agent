@@ -747,3 +747,20 @@ async def test_close_awaits_worker_tasks(env) -> None:
     await close_task
     assert handle.task is None or handle.task.done()
     assert fleet._wake_task is None or fleet._wake_task.done()
+
+
+async def test_failed_delivery_requeues_reports(env, caplog):
+    """P2: a failed deliver must not silently drop the worker reports."""
+    import logging
+
+    fleet = _fleet_with(env)
+
+    async def broken(text):
+        raise OSError("router gone")
+
+    env["chat"].deliver = broken
+    await fleet.dispatch(str(env["paths"]["w1"]), "a")
+    with caplog.at_level(logging.WARNING, logger="zenagent.app.zen.fleet"):
+        await fleet.wait_all()
+    assert fleet._report_buffer, "the failed batch must be re-queued"
+    assert any("deliver" in record.message for record in caplog.records)
