@@ -8,6 +8,7 @@ servers, and swaps a live manager when plugins are reconfigured.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -20,6 +21,7 @@ from zenagent.mcp.config import (
     withhold_untrusted_project_servers,
 )
 from zenagent.mcp.manager import McpManager
+from zenagent.plugins import state as plugin_state
 from zenagent.plugins.discovery import discover_plugins
 from zenagent.plugins.state import credentials_for, is_enabled, resolve
 
@@ -45,6 +47,22 @@ class PluginAssembly:
     warnings: list[str]
 
 
+def extension_drift(path: str | Path, plugin_id: str) -> bool:
+    """Whether a plugin's contributed extension no longer matches its install.
+
+    ``False`` when nothing was pinned (pre-pinning installs) or the file is
+    gone — discovery reports missing files its own way.
+    """
+    recorded = plugin_state.extension_hash(plugin_id)
+    if recorded is None:
+        return False
+    try:
+        current = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    except OSError:
+        return False
+    return current != recorded
+
+
 def assemble_plugins(
     *, user_configs: dict[str, McpServerConfig] | None = None
 ) -> PluginAssembly:
@@ -62,6 +80,11 @@ def assemble_plugins(
         resolved = resolve(manifest, credentials_for(manifest.id))
         skill_roots.extend(resolved.skill_roots)
         if resolved.extension is not None:
+            if extension_drift(resolved.extension, manifest.id):
+                warnings.append(
+                    f"{manifest.id}: extension changed since install — "
+                    "reinstall it if this was not you"
+                )
             extension_files.append(str(resolved.extension))
         if resolved.missing:
             statuses[manifest.id] = "needs_credentials"

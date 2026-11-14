@@ -59,6 +59,28 @@ def set_enabled(plugin_id: str, enabled: bool) -> None:
     settings.set_pref(PLUGIN_STATE_PREF, states)
 
 
+def extension_hash(plugin_id: str) -> str | None:
+    """The sha256 recorded at install for this plugin's contributed extension.
+
+    ``None`` for plugins installed before pinning existed — they are not
+    warned about, only *changed since install* ones are.
+    """
+    entry = _states().get(plugin_id)
+    if not isinstance(entry, dict):
+        return None
+    value = entry.get("extension_sha256")
+    return value if isinstance(value, str) and value else None
+
+
+def set_extension_hash(plugin_id: str, digest: str) -> None:
+    states = dict(_states())
+    entry = states.get(plugin_id)
+    entry = dict(entry) if isinstance(entry, dict) else {}
+    entry["extension_sha256"] = digest
+    states[plugin_id] = entry
+    settings.set_pref(PLUGIN_STATE_PREF, states)
+
+
 def credentials_for(plugin_id: str) -> dict[str, str]:
     """Stored plugin credentials only — never the environment fallback."""
     prefix = credential_name(plugin_id, "")

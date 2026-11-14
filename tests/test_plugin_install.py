@@ -186,3 +186,55 @@ def test_install_staging_is_invisible_to_discovery(tmp_path, monkeypatch):
     install_plugin(source, root=root)
     assert seen
     assert all(manifests == [] for manifests in seen)
+
+
+def test_extension_hash_recorded_and_drift_warns(tmp_path, monkeypatch):
+    """P2: plugin extension code is pinned at install; drift says so at load.
+
+    A plugin's extension file runs with full process rights (audit P2). The
+    install records its sha256; assembly warns when the file no longer
+    matches — so a silent swap is visible instead of invisible.
+    """
+    import hashlib
+
+    from zenagent.plugins import state as plugin_state
+
+    source = tmp_path / "plug"
+    source.mkdir()
+    (source / "extension.py").write_text("def register(api):\n    pass\n")
+    (source / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schemaVersion": 1,
+                "id": "pinned",
+                "name": "Pinned",
+                "version": "1.0",
+                "description": "Pins its extension",
+                "contributes": {"extension": "extension.py"},
+            }
+        )
+    )
+    monkeypatch.setenv("ZENAGENT_SETTINGS_PATH", str(tmp_path / "settings.json"))
+    install_plugin(source, root=tmp_path / "installed")
+
+    recorded = plugin_state.extension_hash("pinned")
+    assert recorded is not None
+    assert recorded == hashlib.sha256(
+        (tmp_path / "installed" / "pinned" / "extension.py").read_bytes()
+    ).hexdigest()
+
+    # Drift: the file changed after install → assembly warns.
+    (tmp_path / "installed" / "pinned" / "extension.py").write_text(
+        "def register(api):\n    evil()\n"
+    )
+    from zenagent.app import plugin_wiring
+
+    monkeypatch.setattr(
+        "zenagent.plugins.discovery.discover_plugins",
+        lambda *a, **k: [],
+    )
+    # the drift check helper under test
+    drift = plugin_wiring.extension_drift(
+        tmp_path / "installed" / "pinned" / "extension.py", "pinned"
+    )
+    assert drift is True

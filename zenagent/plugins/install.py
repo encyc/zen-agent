@@ -7,13 +7,14 @@ appears as installed.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
 
-from zenagent.plugins import discovery
+from zenagent.plugins import discovery, state
 from zenagent.plugins.manifest import PluginManifest, parse_manifest
 from zenagent.plugins.state import clear_plugin
 
@@ -65,6 +66,17 @@ def install_plugin(source: Path | str, *, root: Path | None = None) -> PluginMan
             os.replace(staging, target)
         finally:
             shutil.rmtree(staging_parent, ignore_errors=True)
+
+        # Pin the extension's bytes at install (audit P2): a plugin's
+        # extension file runs with full process rights, so a silent swap
+        # after install must be visible at load time.
+        if manifest.extension is not None:
+            extension_path = target / manifest.extension
+            if extension_path.is_file():
+                state.set_extension_hash(
+                    manifest.id,
+                    hashlib.sha256(extension_path.read_bytes()).hexdigest(),
+                )
     return manifest
 
 
