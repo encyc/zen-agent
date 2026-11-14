@@ -117,6 +117,8 @@ async def test_zen_router_scope_follows_attach_and_detach(tmp_path):
             self.root = tmp_path
             self.session = SimpleNamespace(path=tmp_path / "router.jsonl")
             self.zen_fleet = None
+            self.tool_providers: list = []
+            self.prompt_note_providers: list = []
             self.user_config = None
 
         def _recompose(self):
