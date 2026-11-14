@@ -176,9 +176,7 @@ async def assemble(
 
         runtime._lsp_acquired = True
         acquire_clients()
-        assembly = None
-        if options.tools is None and runtime.profile.plugins:
-            assembly = await plugin_wiring.start_plugins(runtime, options)
+        assembly = await plugin_wiring.boot_contributions(runtime, options)
 
         if runtime.profile.skills and options.tools is None:
             skills, warnings = discover_skills(

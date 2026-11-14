@@ -134,6 +134,20 @@ def _load_runtime_mcp(
     return configs
 
 
+async def boot_contributions(
+    runtime: Runtime, options: RuntimeOptions
+) -> PluginAssembly | None:
+    """The bootstrap seam for plugin contributions (audit finding 9).
+
+    Runs unless the caller supplied its own tool list or the profile opts
+    out; ``attach_plugins`` (inside ``start_plugins``) applies the project
+    trust gate on every load.
+    """
+    if options.tools is not None or not runtime.profile.plugins:
+        return None
+    return await start_plugins(runtime, options)
+
+
 def attach_plugins(runtime: Runtime, options: RuntimeOptions) -> PluginAssembly:
     """Bootstrap step: assemble plugins and hand the result to the runtime."""
     user_configs: dict[str, McpServerConfig] = {}

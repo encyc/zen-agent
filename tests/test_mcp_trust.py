@@ -130,3 +130,21 @@ async def test_plugin_reconfigure_keeps_the_trust_gate(
     # The reload must not silently respawn the withheld server either.
     assert runtime.mcp is None
     assert any("'evil' is not trusted" in w for w in runtime.warnings)
+
+
+async def test_boot_contributions_respects_tools_and_profile(
+    isolated, runtime_factory
+):
+    """Bootstrap's plugin start is plugin_wiring's own seam (audit finding 9)."""
+    from dataclasses import replace
+
+    from zenagent.app import plugin_wiring
+
+    runtime = await runtime_factory(mcp=True, plugins=True, root=isolated)
+    # options.tools 默认 None、plugins profile=True：返回 assembly（此处无插件 → 各容器为空）
+    assembly = await plugin_wiring.boot_contributions(runtime, runtime._options)
+    assert assembly is not None and assembly.configs == {}
+    # custom tools 时插件装配被跳过
+    options = replace(runtime._options, tools=[])
+    assert await plugin_wiring.boot_contributions(runtime, options) is None
+    await runtime.close()
