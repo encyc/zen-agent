@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-14T08:11:38+00:00",
+ "generated_at": "2026-11-14T09:43:36+00:00",
  "root": "/Users/mac/zen-agent/.worktrees/audit-cleanup",
  "files": {
   "examples.custom_tool": {
@@ -562,6 +562,7 @@
     "zenagent.app",
     "zenagent.app.Runtime",
     "zenagent.app.agent_profile",
+    "zenagent.app.bootstrap",
     "zenagent.app.chat",
     "zenagent.app.permissions",
     "zenagent.app.runtime",
@@ -576,7 +577,7 @@
     "zenagent.types"
    ],
    "fan_in": 0,
-   "fan_out": 19
+   "fan_out": 20
   },
   "tests.test_app_session_meta": {
    "path": "tests/test_app_session_meta.py",
@@ -1048,7 +1049,7 @@
   },
   "tests.test_export": {
    "path": "tests/test_export.py",
-   "loc": 158,
+   "loc": 178,
    "classes": {},
    "long_funcs": [],
    "imports": [
@@ -1291,6 +1292,19 @@
    "fan_in": 0,
    "fan_out": 3
   },
+  "tests.test_limits_apply": {
+   "path": "tests/test_limits_apply.py",
+   "loc": 36,
+   "classes": {},
+   "long_funcs": [],
+   "imports": [
+    "zenagent.app",
+    "zenagent.app.limits_apply",
+    "zenagent.app.runtime"
+   ],
+   "fan_in": 0,
+   "fan_out": 3
+  },
   "tests.test_limits_rpc": {
    "path": "tests/test_limits_rpc.py",
    "loc": 263,
@@ -1420,14 +1434,16 @@
   },
   "tests.test_mcp_trust": {
    "path": "tests/test_mcp_trust.py",
-   "loc": 110,
+   "loc": 151,
    "classes": {},
    "long_funcs": [],
    "imports": [
+    "zenagent.app",
+    "zenagent.app.plugin_wiring",
     "zenagent.mcp.config"
    ],
    "fan_in": 0,
-   "fan_out": 1
+   "fan_out": 3
   },
   "tests.test_memory_store": {
    "path": "tests/test_memory_store.py",
@@ -1523,7 +1539,7 @@
   },
   "tests.test_permissions": {
    "path": "tests/test_permissions.py",
-   "loc": 609,
+   "loc": 628,
    "classes": {},
    "long_funcs": [],
    "imports": [
@@ -2071,7 +2087,7 @@
   },
   "tests.test_rpc_contract": {
    "path": "tests/test_rpc_contract.py",
-   "loc": 319,
+   "loc": 336,
    "classes": {},
    "long_funcs": [
     {
@@ -2080,6 +2096,7 @@
     }
    ],
    "imports": [
+    "zenagent.app.approval_router",
     "zenagent.app.chat",
     "zenagent.app.commands",
     "zenagent.app.models",
@@ -2093,7 +2110,7 @@
     "zenagent.types"
    ],
    "fan_in": 0,
-   "fan_out": 11
+   "fan_out": 12
   },
   "tests.test_rpc_host": {
    "path": "tests/test_rpc_host.py",
@@ -2287,7 +2304,7 @@
   },
   "tests.test_rpc_swarm": {
    "path": "tests/test_rpc_swarm.py",
-   "loc": 684,
+   "loc": 711,
    "classes": {
     "FakeSwarm": {
      "loc": 88,
@@ -2306,15 +2323,17 @@
    ],
    "imports": [
     "zenagent.app.runtime",
+    "zenagent.app.swarm.manager",
     "zenagent.app.swarm.roles",
     "zenagent.app.swarm.room",
+    "zenagent.cli.rpc.errors",
     "zenagent.cli.rpc.host",
     "zenagent.cli.rpc.ops_swarm",
     "zenagent.events",
     "zenagent.project"
    ],
    "fan_in": 0,
-   "fan_out": 7
+   "fan_out": 9
   },
   "tests.test_rpc_v2": {
    "path": "tests/test_rpc_v2.py",
@@ -2549,16 +2568,17 @@
   },
   "tests.test_skills_recompose_layout": {
    "path": "tests/test_skills_recompose_layout.py",
-   "loc": 50,
+   "loc": 62,
    "classes": {},
    "long_funcs": [],
    "imports": [
     "zenagent.app",
+    "zenagent.app.bootstrap",
     "zenagent.app.runtime",
     "zenagent.app.skills_recompose"
    ],
    "fan_in": 0,
-   "fan_out": 3
+   "fan_out": 4
   },
   "tests.test_skills_rpc": {
    "path": "tests/test_skills_rpc.py",
@@ -2673,7 +2693,7 @@
   },
   "tests.test_swarm_manager": {
    "path": "tests/test_swarm_manager.py",
-   "loc": 1330,
+   "loc": 1361,
    "classes": {},
    "long_funcs": [
     {
@@ -3932,7 +3952,7 @@
   },
   "tests.test_zen_fleet": {
    "path": "tests/test_zen_fleet.py",
-   "loc": 787,
+   "loc": 818,
    "classes": {
     "FakeWorkerAgent": {
      "loc": 36,
@@ -4123,7 +4143,7 @@
     "zenagent.providers.registry",
     "zenagent.providers.stream_options"
    ],
-   "fan_in": 67,
+   "fan_in": 68,
    "fan_out": 3
   },
   "zenagent.__main__": {
@@ -4368,7 +4388,7 @@
     }
    ],
    "imports": [],
-   "fan_in": 50,
+   "fan_in": 51,
    "fan_out": 0
   },
   "zenagent.retry": {
@@ -4469,7 +4489,7 @@
     "zenagent.frontmatter",
     "zenagent.project"
    ],
-   "fan_in": 7,
+   "fan_in": 8,
    "fan_out": 2
   },
   "zenagent.trace": {
@@ -4489,7 +4509,7 @@
    "imports": [
     "zenagent.events"
    ],
-   "fan_in": 2,
+   "fan_in": 3,
    "fan_out": 1
   },
   "zenagent.types": {
@@ -4592,7 +4612,7 @@
     "zenagent.agent.agent",
     "zenagent.agent.loop"
    ],
-   "fan_in": 16,
+   "fan_in": 17,
    "fan_out": 2
   },
   "zenagent.agent.agent": {
@@ -4653,7 +4673,7 @@
   },
   "zenagent.agent.jsonl": {
    "path": "zenagent/agent/jsonl.py",
-   "loc": 62,
+   "loc": 87,
    "classes": {},
    "long_funcs": [],
    "imports": [],
@@ -4935,7 +4955,7 @@
    "classes": {},
    "long_funcs": [],
    "imports": [],
-   "fan_in": 32,
+   "fan_in": 35,
    "fan_out": 0
   },
   "zenagent.app.agent_profile": {
@@ -4993,7 +5013,7 @@
    },
    "long_funcs": [],
    "imports": [],
-   "fan_in": 5,
+   "fan_in": 6,
    "fan_out": 0
   },
   "zenagent.app.attachments_state": {
@@ -5014,7 +5034,7 @@
   },
   "zenagent.app.bootstrap": {
    "path": "zenagent/app/bootstrap.py",
-   "loc": 104,
+   "loc": 395,
    "classes": {
     "PreparedFrontend": {
      "loc": 13,
@@ -5023,23 +5043,54 @@
    },
    "long_funcs": [
     {
+     "name": "assemble",
+     "loc": 248
+    },
+    {
      "name": "prepare",
      "loc": 49
     }
    ],
    "imports": [
+    "zenagent",
+    "zenagent.agent",
+    "zenagent.agent.Agent",
+    "zenagent.agent.subagents",
+    "zenagent.app",
     "zenagent.app.chat",
     "zenagent.app.commands",
+    "zenagent.app.journal",
+    "zenagent.app.metrics",
     "zenagent.app.models",
+    "zenagent.app.modes",
     "zenagent.app.permissions",
+    "zenagent.app.plugin_wiring",
     "zenagent.app.run_wiring",
     "zenagent.app.runtime",
+    "zenagent.app.safety",
+    "zenagent.app.session_meta",
     "zenagent.app.sessions",
+    "zenagent.app.skills_recompose",
+    "zenagent.app.subagent_runs",
+    "zenagent.app.support",
+    "zenagent.app.views",
     "zenagent.config",
-    "zenagent.providers.registry"
+    "zenagent.extensions",
+    "zenagent.i18n",
+    "zenagent.project",
+    "zenagent.providers.catalog",
+    "zenagent.providers.registry",
+    "zenagent.skills",
+    "zenagent.templates",
+    "zenagent.tools",
+    "zenagent.tools.jobs",
+    "zenagent.tools.lsp",
+    "zenagent.tools.task",
+    "zenagent.tools.todo",
+    "zenagent.trace"
    ],
-   "fan_in": 14,
-   "fan_out": 9
+   "fan_in": 17,
+   "fan_out": 35
   },
   "zenagent.app.btw": {
    "path": "zenagent/app/btw.py",
@@ -5307,6 +5358,17 @@
    "fan_in": 4,
    "fan_out": 4
   },
+  "zenagent.app.limits_apply": {
+   "path": "zenagent/app/limits_apply.py",
+   "loc": 53,
+   "classes": {},
+   "long_funcs": [],
+   "imports": [
+    "zenagent.app.runtime"
+   ],
+   "fan_in": 2,
+   "fan_out": 1
+  },
   "zenagent.app.links": {
    "path": "zenagent/app/links.py",
    "loc": 60,
@@ -5329,7 +5391,7 @@
    "imports": [
     "zenagent.telemetry"
    ],
-   "fan_in": 2,
+   "fan_in": 3,
    "fan_out": 1
   },
   "zenagent.app.models": {
@@ -5367,7 +5429,7 @@
     "zenagent.i18n",
     "zenagent.prompts.registry"
    ],
-   "fan_in": 13,
+   "fan_in": 14,
    "fan_out": 2
   },
   "zenagent.app.pending": {
@@ -5393,7 +5455,7 @@
   },
   "zenagent.app.permissions": {
    "path": "zenagent/app/permissions.py",
-   "loc": 639,
+   "loc": 643,
    "classes": {
     "PermissionGate": {
      "loc": 216,
@@ -5425,19 +5487,14 @@
   },
   "zenagent.app.plugin_wiring": {
    "path": "zenagent/app/plugin_wiring.py",
-   "loc": 207,
+   "loc": 230,
    "classes": {
     "PluginAssembly": {
      "loc": 6,
      "methods": 0
     }
    },
-   "long_funcs": [
-    {
-     "name": "reconfigure",
-     "loc": 42
-    }
-   ],
+   "long_funcs": [],
    "imports": [
     "zenagent.app.runtime",
     "zenagent.i18n",
@@ -5447,7 +5504,7 @@
     "zenagent.plugins.discovery",
     "zenagent.plugins.state"
    ],
-   "fan_in": 5,
+   "fan_in": 7,
    "fan_out": 7
   },
   "zenagent.app.probes": {
@@ -5584,22 +5641,18 @@
   },
   "zenagent.app.runtime": {
    "path": "zenagent/app/runtime.py",
-   "loc": 901,
+   "loc": 638,
    "classes": {
     "RuntimeOptions": {
      "loc": 36,
      "methods": 0
     },
     "Runtime": {
-     "loc": 760,
+     "loc": 514,
      "methods": 33
     }
    },
    "long_funcs": [
-    {
-     "name": "bootstrap",
-     "loc": 243
-    },
     {
      "name": "__init__",
      "loc": 101
@@ -5613,27 +5666,24 @@
     "zenagent.agent.memory_store",
     "zenagent.agent.registry",
     "zenagent.agent.session",
-    "zenagent.agent.subagents",
     "zenagent.agent.subagents_runtime",
     "zenagent.app",
     "zenagent.app.agent_profile",
-    "zenagent.app.journal",
+    "zenagent.app.bootstrap",
+    "zenagent.app.limits_apply",
     "zenagent.app.metrics",
     "zenagent.app.modes",
     "zenagent.app.permissions",
     "zenagent.app.plugin_wiring",
     "zenagent.app.records",
     "zenagent.app.rewind",
-    "zenagent.app.safety",
     "zenagent.app.session_lease",
     "zenagent.app.session_meta",
     "zenagent.app.skills_recompose",
-    "zenagent.app.subagent_runs",
     "zenagent.app.support",
     "zenagent.app.views",
     "zenagent.config",
     "zenagent.context_files",
-    "zenagent.extensions",
     "zenagent.i18n",
     "zenagent.limits",
     "zenagent.mcp.manager",
@@ -5642,22 +5692,19 @@
     "zenagent.providers.catalog",
     "zenagent.providers.limits",
     "zenagent.providers.registry",
-    "zenagent.skills",
     "zenagent.templates",
-    "zenagent.tools",
     "zenagent.tools.ask",
     "zenagent.tools.jobs",
     "zenagent.tools.lsp",
-    "zenagent.tools.task",
     "zenagent.tools.todo",
     "zenagent.trace"
    ],
-   "fan_in": 43,
-   "fan_out": 44
+   "fan_in": 45,
+   "fan_out": 38
   },
   "zenagent.app.safety": {
    "path": "zenagent/app/safety.py",
-   "loc": 365,
+   "loc": 366,
    "classes": {
     "GuardPolicy": {
      "loc": 45,
@@ -5683,7 +5730,7 @@
   },
   "zenagent.app.session_lease": {
    "path": "zenagent/app/session_lease.py",
-   "loc": 293,
+   "loc": 308,
    "classes": {
     "SessionLeaseBusy": {
      "loc": 6,
@@ -5723,7 +5770,7 @@
     "zenagent.events",
     "zenagent.types"
    ],
-   "fan_in": 2,
+   "fan_in": 3,
    "fan_out": 5
   },
   "zenagent.app.sessions": {
@@ -5826,7 +5873,7 @@
   },
   "zenagent.app.skills_recompose": {
    "path": "zenagent/app/skills_recompose.py",
-   "loc": 249,
+   "loc": 251,
    "classes": {},
    "long_funcs": [
     {
@@ -5853,7 +5900,7 @@
     "zenagent.tools.lsp",
     "zenagent.tools.memory"
    ],
-   "fan_in": 2,
+   "fan_in": 3,
    "fan_out": 13
   },
   "zenagent.app.slash_args": {
@@ -5922,7 +5969,7 @@
     "zenagent.settings",
     "zenagent.types"
    ],
-   "fan_in": 15,
+   "fan_in": 16,
    "fan_out": 5
   },
   "zenagent.app.views": {
@@ -5988,7 +6035,7 @@
     "zenagent.events",
     "zenagent.types"
    ],
-   "fan_in": 36,
+   "fan_in": 37,
    "fan_out": 6
   },
   "zenagent.app.workspace": {
@@ -6112,7 +6159,7 @@
   },
   "zenagent.app.swarm.manager": {
    "path": "zenagent/app/swarm/manager.py",
-   "loc": 887,
+   "loc": 897,
    "classes": {
     "SwarmAgent": {
      "loc": 14,
@@ -6123,7 +6170,7 @@
      "methods": 0
     },
     "SwarmManager": {
-     "loc": 770,
+     "loc": 780,
      "methods": 38
     }
    },
@@ -6134,7 +6181,7 @@
     },
     {
      "name": "close",
-     "loc": 51
+     "loc": 54
     },
     {
      "name": "__init__",
@@ -6174,7 +6221,7 @@
     "zenagent.project",
     "zenagent.skills"
    ],
-   "fan_in": 8,
+   "fan_in": 9,
    "fan_out": 27
   },
   "zenagent.app.swarm.protocol": {
@@ -6226,7 +6273,7 @@
   },
   "zenagent.app.swarm.room": {
    "path": "zenagent/app/swarm/room.py",
-   "loc": 362,
+   "loc": 350,
    "classes": {
     "RoomRef": {
      "loc": 9,
@@ -6241,7 +6288,7 @@
      "methods": 0
     },
     "SwarmStore": {
-     "loc": 194,
+     "loc": 183,
      "methods": 15
     }
    },
@@ -6405,25 +6452,25 @@
   },
   "zenagent.app.zen.fleet": {
    "path": "zenagent/app/zen/fleet.py",
-   "loc": 627,
+   "loc": 667,
    "classes": {
     "WorkerHandle": {
      "loc": 13,
      "methods": 1
     },
     "ZenFleet": {
-     "loc": 516,
-     "methods": 22
+     "loc": 550,
+     "methods": 24
     }
    },
    "long_funcs": [
     {
-     "name": "_run",
-     "loc": 63
+     "name": "__init__",
+     "loc": 66
     },
     {
-     "name": "__init__",
-     "loc": 61
+     "name": "_run",
+     "loc": 63
     },
     {
      "name": "roster",
@@ -6435,7 +6482,7 @@
     },
     {
      "name": "_flush_reports",
-     "loc": 49
+     "loc": 54
     }
    ],
    "imports": [
@@ -6634,7 +6681,7 @@
   },
   "zenagent.cli.main": {
    "path": "zenagent/cli/main.py",
-   "loc": 628,
+   "loc": 630,
    "classes": {
     "_PlainOutput": {
      "loc": 45,
@@ -6652,7 +6699,7 @@
     },
     {
      "name": "build_parser",
-     "loc": 83
+     "loc": 85
     }
    ],
    "imports": [
@@ -6914,7 +6961,7 @@
     }
    ],
    "imports": [],
-   "fan_in": 14,
+   "fan_in": 15,
    "fan_out": 0
   },
   "zenagent.cli.rpc.host": {
@@ -7207,10 +7254,10 @@
   },
   "zenagent.cli.rpc.ops_swarm": {
    "path": "zenagent/cli/rpc/ops_swarm.py",
-   "loc": 349,
+   "loc": 356,
    "classes": {
     "SwarmOps": {
-     "loc": 303,
+     "loc": 309,
      "methods": 8
     }
    },
@@ -7221,6 +7268,10 @@
     },
     {
      "name": "_swarm_works",
+     "loc": 42
+    },
+    {
+     "name": "_swarm_manager",
      "loc": 42
     }
    ],
@@ -7233,10 +7284,11 @@
     "zenagent.cli.rpc.errors",
     "zenagent.config",
     "zenagent.events",
+    "zenagent.i18n",
     "zenagent.project"
    ],
    "fan_in": 2,
-   "fan_out": 9
+   "fan_out": 10
   },
   "zenagent.cli.rpc.ops_workspace": {
    "path": "zenagent/cli/rpc/ops_workspace.py",
@@ -7974,7 +8026,7 @@
   },
   "zenagent.cli.tui.screens.modals": {
    "path": "zenagent/cli/tui/screens/modals.py",
-   "loc": 50,
+   "loc": 55,
    "classes": {},
    "long_funcs": [],
    "imports": [
@@ -8595,12 +8647,12 @@
     "zenagent.i18n.en",
     "zenagent.i18n.zh"
    ],
-   "fan_in": 66,
+   "fan_in": 68,
    "fan_out": 2
   },
   "zenagent.i18n.en": {
    "path": "zenagent/i18n/en.py",
-   "loc": 602,
+   "loc": 603,
    "classes": {},
    "long_funcs": [],
    "imports": [],
@@ -8609,7 +8661,7 @@
   },
   "zenagent.i18n.zh": {
    "path": "zenagent/i18n/zh.py",
-   "loc": 601,
+   "loc": 602,
    "classes": {},
    "long_funcs": [],
    "imports": [],
@@ -8973,7 +9025,7 @@
     "zenagent.providers.compat",
     "zenagent.types"
    ],
-   "fan_in": 43,
+   "fan_in": 44,
    "fan_out": 2
   },
   "zenagent.providers.compat": {
@@ -9311,7 +9363,7 @@
    "imports": [
     "zenagent.tools.shell"
    ],
-   "fan_in": 12,
+   "fan_in": 13,
    "fan_out": 1
   },
   "zenagent.tools.lsp": {
@@ -9337,7 +9389,7 @@
     "zenagent.agent.loop",
     "zenagent.tools._result"
    ],
-   "fan_in": 4,
+   "fan_in": 5,
    "fan_out": 2
   },
   "zenagent.tools.memory": {
@@ -9495,7 +9547,7 @@
     "zenagent.prompts",
     "zenagent.types"
    ],
-   "fan_in": 11,
+   "fan_in": 12,
    "fan_out": 3
   },
   "zenagent.tools.wait": {
@@ -10601,6 +10653,13 @@
   },
   {
    "src": "tests.test_app_runtime",
+   "dst": "zenagent.app.bootstrap",
+   "calls": [
+    "build_task_tool"
+   ]
+  },
+  {
+   "src": "tests.test_app_runtime",
    "dst": "zenagent.app.chat",
    "calls": [
     "ChatController"
@@ -10618,8 +10677,7 @@
    "dst": "zenagent.app.runtime",
    "calls": [
     "Runtime.bootstrap",
-    "RuntimeOptions",
-    "build_task_tool"
+    "RuntimeOptions"
    ]
   },
   {
@@ -12090,6 +12148,24 @@
    ]
   },
   {
+   "src": "tests.test_limits_apply",
+   "dst": "zenagent.app",
+   "calls": []
+  },
+  {
+   "src": "tests.test_limits_apply",
+   "dst": "zenagent.app.limits_apply",
+   "calls": [
+    "apply",
+    "overrides"
+   ]
+  },
+  {
+   "src": "tests.test_limits_apply",
+   "dst": "zenagent.app.runtime",
+   "calls": []
+  },
+  {
    "src": "tests.test_limits_rpc",
    "dst": "zenagent.cli.rpc",
    "calls": [
@@ -12253,6 +12329,19 @@
    "dst": "zenagent.cli.rpc",
    "calls": [
     "RpcServer"
+   ]
+  },
+  {
+   "src": "tests.test_mcp_trust",
+   "dst": "zenagent.app",
+   "calls": []
+  },
+  {
+   "src": "tests.test_mcp_trust",
+   "dst": "zenagent.app.plugin_wiring",
+   "calls": [
+    "boot_contributions",
+    "reconfigure"
    ]
   },
   {
@@ -13627,6 +13716,13 @@
   },
   {
    "src": "tests.test_rpc_contract",
+   "dst": "zenagent.app.approval_router",
+   "calls": [
+    "approval_event"
+   ]
+  },
+  {
+   "src": "tests.test_rpc_contract",
    "dst": "zenagent.app.chat",
    "calls": [
     "ChatController"
@@ -13948,6 +14044,13 @@
   },
   {
    "src": "tests.test_rpc_swarm",
+   "dst": "zenagent.app.swarm.manager",
+   "calls": [
+    "swarm_lock_path"
+   ]
+  },
+  {
+   "src": "tests.test_rpc_swarm",
    "dst": "zenagent.app.swarm.roles",
    "calls": [
     "agents_root"
@@ -13959,6 +14062,11 @@
    "calls": [
     "TaskRecord"
    ]
+  },
+  {
+   "src": "tests.test_rpc_swarm",
+   "dst": "zenagent.cli.rpc.errors",
+   "calls": []
   },
   {
    "src": "tests.test_rpc_swarm",
@@ -14424,6 +14532,11 @@
   },
   {
    "src": "tests.test_skills_recompose_layout",
+   "dst": "zenagent.app.bootstrap",
+   "calls": []
+  },
+  {
+   "src": "tests.test_skills_recompose_layout",
    "dst": "zenagent.app.runtime",
    "calls": []
   },
@@ -14608,7 +14721,8 @@
    "src": "tests.test_swarm_manager",
    "dst": "zenagent.app.swarm.manager",
    "calls": [
-    "SwarmManager"
+    "SwarmManager",
+    "swarm_lock_path"
    ]
   },
   {
@@ -17399,6 +17513,28 @@
   },
   {
    "src": "zenagent.app.bootstrap",
+   "dst": "zenagent",
+   "calls": []
+  },
+  {
+   "src": "zenagent.app.bootstrap",
+   "dst": "zenagent.agent",
+   "calls": []
+  },
+  {
+   "src": "zenagent.app.bootstrap",
+   "dst": "zenagent.agent.subagents",
+   "calls": [
+    "SubagentLimits.from_user_config"
+   ]
+  },
+  {
+   "src": "zenagent.app.bootstrap",
+   "dst": "zenagent.app",
+   "calls": []
+  },
+  {
+   "src": "zenagent.app.bootstrap",
    "dst": "zenagent.app.chat",
    "calls": [
     "ChatController"
@@ -17414,6 +17550,22 @@
   },
   {
    "src": "zenagent.app.bootstrap",
+   "dst": "zenagent.app.journal",
+   "calls": [
+    "attach_journal",
+    "journal_for",
+    "load_backup_policy"
+   ]
+  },
+  {
+   "src": "zenagent.app.bootstrap",
+   "dst": "zenagent.app.metrics",
+   "calls": [
+    "MetricsSession"
+   ]
+  },
+  {
+   "src": "zenagent.app.bootstrap",
    "dst": "zenagent.app.models",
    "calls": [
     "ModelManager"
@@ -17421,9 +17573,24 @@
   },
   {
    "src": "zenagent.app.bootstrap",
+   "dst": "zenagent.app.modes",
+   "calls": [
+    "resolve_mode"
+   ]
+  },
+  {
+   "src": "zenagent.app.bootstrap",
    "dst": "zenagent.app.permissions",
    "calls": [
-    "build_broker_for"
+    "build_broker_for",
+    "build_permission_gate"
+   ]
+  },
+  {
+   "src": "zenagent.app.bootstrap",
+   "dst": "zenagent.app.plugin_wiring",
+   "calls": [
+    "boot_contributions"
    ]
   },
   {
@@ -17442,6 +17609,22 @@
   },
   {
    "src": "zenagent.app.bootstrap",
+   "dst": "zenagent.app.safety",
+   "calls": [
+    "GuardPolicy.from_config"
+   ]
+  },
+  {
+   "src": "zenagent.app.bootstrap",
+   "dst": "zenagent.app.session_meta",
+   "calls": [
+    "SessionMetaRecorder",
+    "make_retry_recorder",
+    "mode_record"
+   ]
+  },
+  {
+   "src": "zenagent.app.bootstrap",
    "dst": "zenagent.app.sessions",
    "calls": [
     "SessionManager"
@@ -17449,15 +17632,134 @@
   },
   {
    "src": "zenagent.app.bootstrap",
+   "dst": "zenagent.app.skills_recompose",
+   "calls": [
+    "active_skills"
+   ]
+  },
+  {
+   "src": "zenagent.app.bootstrap",
+   "dst": "zenagent.app.subagent_runs",
+   "calls": [
+    "SubagentRunSink"
+   ]
+  },
+  {
+   "src": "zenagent.app.bootstrap",
+   "dst": "zenagent.app.support",
+   "calls": [
+    "api_key_for",
+    "resolve_model",
+    "resolve_task_model",
+    "session_id_for"
+   ]
+  },
+  {
+   "src": "zenagent.app.bootstrap",
+   "dst": "zenagent.app.views",
+   "calls": [
+    "last_request_usage"
+   ]
+  },
+  {
+   "src": "zenagent.app.bootstrap",
    "dst": "zenagent.config",
    "calls": [
+    "ContextGuard",
+    "apply_user_config",
     "load_user_config"
+   ]
+  },
+  {
+   "src": "zenagent.app.bootstrap",
+   "dst": "zenagent.extensions",
+   "calls": [
+    "load_extensions"
+   ]
+  },
+  {
+   "src": "zenagent.app.bootstrap",
+   "dst": "zenagent.i18n",
+   "calls": [
+    "t"
+   ]
+  },
+  {
+   "src": "zenagent.app.bootstrap",
+   "dst": "zenagent.project",
+   "calls": [
+    "find_project_root"
+   ]
+  },
+  {
+   "src": "zenagent.app.bootstrap",
+   "dst": "zenagent.providers.catalog",
+   "calls": [
+    "load_catalog"
    ]
   },
   {
    "src": "zenagent.app.bootstrap",
    "dst": "zenagent.providers.registry",
    "calls": []
+  },
+  {
+   "src": "zenagent.app.bootstrap",
+   "dst": "zenagent.skills",
+   "calls": [
+    "default_skill_roots",
+    "discover_skills"
+   ]
+  },
+  {
+   "src": "zenagent.app.bootstrap",
+   "dst": "zenagent.templates",
+   "calls": [
+    "default_template_roots",
+    "discover_templates"
+   ]
+  },
+  {
+   "src": "zenagent.app.bootstrap",
+   "dst": "zenagent.tools",
+   "calls": [
+    "base_tools"
+   ]
+  },
+  {
+   "src": "zenagent.app.bootstrap",
+   "dst": "zenagent.tools.jobs",
+   "calls": [
+    "acquire_job_manager"
+   ]
+  },
+  {
+   "src": "zenagent.app.bootstrap",
+   "dst": "zenagent.tools.lsp",
+   "calls": [
+    "acquire_clients"
+   ]
+  },
+  {
+   "src": "zenagent.app.bootstrap",
+   "dst": "zenagent.tools.task",
+   "calls": [
+    "build_task_tool"
+   ]
+  },
+  {
+   "src": "zenagent.app.bootstrap",
+   "dst": "zenagent.tools.todo",
+   "calls": [
+    "build_todo_tool"
+   ]
+  },
+  {
+   "src": "zenagent.app.bootstrap",
+   "dst": "zenagent.trace",
+   "calls": [
+    "TraceRecorder"
+   ]
   },
   {
    "src": "zenagent.app.btw",
@@ -17864,6 +18166,11 @@
    ]
   },
   {
+   "src": "zenagent.app.limits_apply",
+   "dst": "zenagent.app.runtime",
+   "calls": []
+  },
+  {
    "src": "zenagent.app.metrics",
    "dst": "zenagent.telemetry",
    "calls": [
@@ -18220,13 +18527,6 @@
   },
   {
    "src": "zenagent.app.runtime",
-   "dst": "zenagent.agent.subagents",
-   "calls": [
-    "SubagentLimits.from_user_config"
-   ]
-  },
-  {
-   "src": "zenagent.app.runtime",
    "dst": "zenagent.agent.subagents_runtime",
    "calls": []
   },
@@ -18244,42 +18544,42 @@
   },
   {
    "src": "zenagent.app.runtime",
-   "dst": "zenagent.app.journal",
+   "dst": "zenagent.app.bootstrap",
    "calls": [
-    "attach_journal",
-    "journal_for",
-    "load_backup_policy"
+    "assemble"
+   ]
+  },
+  {
+   "src": "zenagent.app.runtime",
+   "dst": "zenagent.app.limits_apply",
+   "calls": [
+    "apply",
+    "overrides"
    ]
   },
   {
    "src": "zenagent.app.runtime",
    "dst": "zenagent.app.metrics",
-   "calls": [
-    "MetricsSession"
-   ]
+   "calls": []
   },
   {
    "src": "zenagent.app.runtime",
    "dst": "zenagent.app.modes",
    "calls": [
     "mode_prompt_note",
-    "normalize_mode",
-    "resolve_mode"
+    "normalize_mode"
    ]
   },
   {
    "src": "zenagent.app.runtime",
    "dst": "zenagent.app.permissions",
-   "calls": [
-    "build_permission_gate"
-   ]
+   "calls": []
   },
   {
    "src": "zenagent.app.runtime",
    "dst": "zenagent.app.plugin_wiring",
    "calls": [
-    "reconfigure",
-    "start_plugins"
+    "reconfigure"
    ]
   },
   {
@@ -18298,13 +18598,6 @@
   },
   {
    "src": "zenagent.app.runtime",
-   "dst": "zenagent.app.safety",
-   "calls": [
-    "GuardPolicy.from_config"
-   ]
-  },
-  {
-   "src": "zenagent.app.runtime",
    "dst": "zenagent.app.session_lease",
    "calls": [
     "bind_session_lease",
@@ -18317,8 +18610,6 @@
    "src": "zenagent.app.runtime",
    "dst": "zenagent.app.session_meta",
    "calls": [
-    "SessionMetaRecorder",
-    "make_retry_recorder",
     "mode_record"
    ]
   },
@@ -18326,7 +18617,6 @@
    "src": "zenagent.app.runtime",
    "dst": "zenagent.app.skills_recompose",
    "calls": [
-    "active_skills",
     "recompose",
     "reconcile",
     "reconcile_async",
@@ -18336,19 +18626,9 @@
   },
   {
    "src": "zenagent.app.runtime",
-   "dst": "zenagent.app.subagent_runs",
-   "calls": [
-    "SubagentRunSink"
-   ]
-  },
-  {
-   "src": "zenagent.app.runtime",
    "dst": "zenagent.app.support",
    "calls": [
-    "api_key_for",
-    "resolve_model",
-    "resolve_task_model",
-    "session_id_for"
+    "api_key_for"
    ]
   },
   {
@@ -18362,10 +18642,7 @@
    "src": "zenagent.app.runtime",
    "dst": "zenagent.config",
    "calls": [
-    "ContextGuard",
-    "UserConfig",
-    "apply_user_config",
-    "load_user_config"
+    "UserConfig"
    ]
   },
   {
@@ -18374,13 +18651,6 @@
    "calls": [
     "discover_context_files",
     "load_context_files"
-   ]
-  },
-  {
-   "src": "zenagent.app.runtime",
-   "dst": "zenagent.extensions",
-   "calls": [
-    "load_extensions"
    ]
   },
   {
@@ -18404,7 +18674,6 @@
    "src": "zenagent.app.runtime",
    "dst": "zenagent.project",
    "calls": [
-    "find_project_root",
     "project_key",
     "project_key_for_session",
     "write_project_meta"
@@ -18423,9 +18692,7 @@
   {
    "src": "zenagent.app.runtime",
    "dst": "zenagent.providers.catalog",
-   "calls": [
-    "load_catalog"
-   ]
+   "calls": []
   },
   {
    "src": "zenagent.app.runtime",
@@ -18441,26 +18708,8 @@
   },
   {
    "src": "zenagent.app.runtime",
-   "dst": "zenagent.skills",
-   "calls": [
-    "default_skill_roots",
-    "discover_skills"
-   ]
-  },
-  {
-   "src": "zenagent.app.runtime",
    "dst": "zenagent.templates",
-   "calls": [
-    "default_template_roots",
-    "discover_templates"
-   ]
-  },
-  {
-   "src": "zenagent.app.runtime",
-   "dst": "zenagent.tools",
-   "calls": [
-    "base_tools"
-   ]
+   "calls": []
   },
   {
    "src": "zenagent.app.runtime",
@@ -18473,7 +18722,6 @@
    "src": "zenagent.app.runtime",
    "dst": "zenagent.tools.jobs",
    "calls": [
-    "acquire_job_manager",
     "release_job_manager"
    ]
   },
@@ -18481,22 +18729,13 @@
    "src": "zenagent.app.runtime",
    "dst": "zenagent.tools.lsp",
    "calls": [
-    "acquire_clients",
     "release_clients"
-   ]
-  },
-  {
-   "src": "zenagent.app.runtime",
-   "dst": "zenagent.tools.task",
-   "calls": [
-    "build_task_tool"
    ]
   },
   {
    "src": "zenagent.app.runtime",
    "dst": "zenagent.tools.todo",
    "calls": [
-    "build_todo_tool",
     "load_todo_phases",
     "save_todo_phases"
    ]
@@ -18504,9 +18743,7 @@
   {
    "src": "zenagent.app.runtime",
    "dst": "zenagent.trace",
-   "calls": [
-    "TraceRecorder"
-   ]
+   "calls": []
   },
   {
    "src": "zenagent.app.safety",
@@ -19185,7 +19422,8 @@
    "dst": "zenagent.agent.jsonl",
    "calls": [
     "append_line",
-    "dump_line"
+    "dump_line",
+    "repair_tail"
    ]
   },
   {
@@ -20610,6 +20848,13 @@
    "src": "zenagent.cli.rpc.ops_swarm",
    "dst": "zenagent.events",
    "calls": []
+  },
+  {
+   "src": "zenagent.cli.rpc.ops_swarm",
+   "dst": "zenagent.i18n",
+   "calls": [
+    "t"
+   ]
   },
   {
    "src": "zenagent.cli.rpc.ops_swarm",
@@ -23644,14 +23889,14 @@
    "zenagent.agent.tool_exec"
   ],
   [
-   "zenagent.plugins",
-   "zenagent.plugins.install"
-  ],
-  [
    "zenagent.tools.web",
    "zenagent.tools.web.providers",
    "zenagent.tools.web.registry",
    "zenagent.tools.web.tools"
+  ],
+  [
+   "zenagent.plugins",
+   "zenagent.plugins.install"
   ],
   [
    "zenagent.tools",
@@ -23659,8 +23904,14 @@
   ],
   [
    "zenagent.app.agent_profile",
+   "zenagent.app.bootstrap",
+   "zenagent.app.chat",
+   "zenagent.app.commands",
+   "zenagent.app.limits_apply",
+   "zenagent.app.models",
    "zenagent.app.plugin_wiring",
    "zenagent.app.runtime",
+   "zenagent.app.sessions",
    "zenagent.app.skills_recompose"
   ],
   [
@@ -23706,8 +23957,8 @@
   ]
  ],
  "stats": {
-  "files": 491,
-  "edges": 2032,
+  "files": 493,
+  "edges": 2064,
   "cycles": 7,
   "errors": []
  }

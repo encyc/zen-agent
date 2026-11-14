@@ -1,6 +1,6 @@
 # zen-agent 节点册
 
-> manifest v7 单源生成，勿手改。每节 = 一个图节点。
+> manifest v8 单源生成，勿手改。每节 = 一个图节点。
 
 ## 簇：基础层（`base`）
 
@@ -247,12 +247,12 @@ TUI 专用 PyPI 版本检查（后台、静默失败）
 
 装配与防线：bootstrap.prepare（四前端唯一装配序列）、Runtime（对象槽位/工具注入）、PermissionGate/Broker 权限门、safety 风险模型、modes、error_notice 失败文案统一
 
-- 文件：`zenagent/agent/__init__.py`、`zenagent/app/__init__.py`、`zenagent/app/agent_profile.py`、`zenagent/app/approval_router.py`、`zenagent/app/bootstrap.py`、`zenagent/app/dispatch.py`、`zenagent/app/error_notice.py`、`zenagent/app/metrics.py`、`zenagent/app/models.py`、`zenagent/app/modes.py`、`zenagent/app/permissions.py`、`zenagent/app/plugin_wiring.py`、`zenagent/app/probes.py`、`zenagent/app/retry.py`、`zenagent/app/runtime.py`、`zenagent/app/safety.py`、`zenagent/app/skills_recompose.py`、`zenagent/app/support.py`、`zenagent/app/workspace.py`、`zenagent/app/workspace_state.py`
+- 文件：`zenagent/agent/__init__.py`、`zenagent/app/__init__.py`、`zenagent/app/agent_profile.py`、`zenagent/app/approval_router.py`、`zenagent/app/bootstrap.py`、`zenagent/app/dispatch.py`、`zenagent/app/error_notice.py`、`zenagent/app/limits_apply.py`、`zenagent/app/metrics.py`、`zenagent/app/models.py`、`zenagent/app/modes.py`、`zenagent/app/permissions.py`、`zenagent/app/plugin_wiring.py`、`zenagent/app/probes.py`、`zenagent/app/retry.py`、`zenagent/app/runtime.py`、`zenagent/app/safety.py`、`zenagent/app/skills_recompose.py`、`zenagent/app/support.py`、`zenagent/app/workspace.py`、`zenagent/app/workspace_state.py`
 - 关键符号：`PreparedFrontend`、`Runtime`、`RuntimeOptions`、`PermissionGate`、`PermissionBroker`
 - 出边：→ `agent.loop`（ToolRegistry）；→ `agent.rt`（Runtime 构造 Agent、挂 ask_handler/订阅者）；→ `app.chat`（AppServices、ChatController、build_default_commands、git_status）；→ `app.transcript`（RewindState、SessionManager、SessionMetaRecorder、attach_journal）；→ `config`（ContextGuard、UserConfig、apply_user_config、load_user_config）；→ `context_files`（discover_context_files、load_context_files）；→ `extensions`（load_extensions）；→ `i18n`（t、t.startswith）；→ `limits`（—）；→ `mcp`（Runtime 注入 MCP 工具）；→ `plugins`（plugin_wiring 把插件贡献翻译成 MCP 配置）；→ `project`（find_project_root、project_key、project_key_for_session、write_project_meta）；→ `prompts`（compose_system 组装 system prompt）；→ `providers`（StreamOptions、estimate_text_tokens、find_model、load_catalog）；→ `settings`（disabled_skills、get_api_key）；→ `skills`（build_skill_tool、default_skill_roots、discover_skills、format_skill_entries）；→ `telemetry`（MetricsRecorder、append_metrics）；→ `templates`（default_template_roots、discover_templates）；→ `tools`（Runtime 注入 base_tools + todo/task/memory/checkpoint/lsp/github）；→ `tools.web`（SearchRequest）；→ `trace`（TraceRecorder）；→ `types`（UserMessage）
 - 入边：`app.chat` →（ChatController 驱动 Runtime）；`app.transcript` →（—）；`cli` →（RuntimeOptions、api_key_for、describe_modes、prepare）；`cli.rpc` →（RuntimeOptions、list_directory、prepare、probe_mcp_server）；`cli.tui` →（ModelManager、tool_target）；`cli.tui.screens` →（—）；`app.swarm` →（Runtime.bootstrap、RuntimeOptions、build_broker_for、start_mcp）；`app.zen` →（bootstrap.prepare、RuntimeOptions（每 worker 装配 runtime））
 - 依赖强度：被 8 个节点 import；依赖 22 个节点
-- 🔴 健康红点：2 error / 6 warn（见 health/report.md）
+- 🔴 健康红点：1 error / 9 warn（见 health/report.md）
 
 ### `app.chat` — 会话交互
 

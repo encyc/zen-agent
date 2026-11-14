@@ -1,6 +1,6 @@
 {
   "project": "zen-agent",
-  "version": 7,
+  "version": 8,
   "updated": "2026-11-14",
   "overview": "zen-agent 是零第三方依赖（仅 httpx）的终端 AI 编码代理。四个前端（REPL / headless -p / JSONL RPC / Textual TUI）共用 app 层唯一装配序列 bootstrap.prepare；agent 内核以「事件流 + 工具永远返回结果 + 取消是协议内状态」为契约；providers 适配多家 LLM；插件（声明式连接器包，经 MCP 单向外呼）与 MCP/skills/模板/扩展/桌面 GUI(经 RPC) 都在内核之上接线不改内核。",
   "policy": {
@@ -135,6 +135,7 @@
         "zenagent/app/bootstrap.py",
         "zenagent/app/dispatch.py",
         "zenagent/app/error_notice.py",
+        "zenagent/app/limits_apply.py",
         "zenagent/app/metrics.py",
         "zenagent/app/models.py",
         "zenagent/app/modes.py",
@@ -3240,6 +3241,10 @@
     {
       "file": "tests/test_zen_tools.py",
       "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_limits_apply.py",
+      "reason": "outside src_root: tests"
     }
   ],
   "cycles_seen": [
@@ -3322,6 +3327,18 @@
       "zenagent.app.swarm.approvals",
       "zenagent.app.swarm.frames",
       "zenagent.app.swarm.manager"
+    ],
+    [
+      "zenagent.app.agent_profile",
+      "zenagent.app.bootstrap",
+      "zenagent.app.chat",
+      "zenagent.app.commands",
+      "zenagent.app.limits_apply",
+      "zenagent.app.models",
+      "zenagent.app.plugin_wiring",
+      "zenagent.app.runtime",
+      "zenagent.app.sessions",
+      "zenagent.app.skills_recompose"
     ]
   ]
 }

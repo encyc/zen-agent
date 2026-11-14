@@ -1,6 +1,6 @@
 # zen-agent 架构简报（Agent 首读）
 
-> 由 manifest.json 单源生成（`scaffold.py render`），勿手改。manifest v7 · 2026-11-14 · 42 节点 / 208 边。讨论架构：本文件 + nodes.md + deps.json 三件套为准。
+> 由 manifest.json 单源生成（`scaffold.py render`），勿手改。manifest v8 · 2026-11-14 · 42 节点 / 208 边。讨论架构：本文件 + nodes.md + deps.json 三件套为准。
 
 ## 1. 项目定位
 zen-agent 是零第三方依赖（仅 httpx）的终端 AI 编码代理。四个前端（REPL / headless -p / JSONL RPC / Textual TUI）共用 app 层唯一装配序列 bootstrap.prepare；agent 内核以「事件流 + 工具永远返回结果 + 取消是协议内状态」为契约；providers 适配多家 LLM；插件（声明式连接器包，经 MCP 单向外呼）与 MCP/skills/模板/扩展/桌面 GUI(经 RPC) 都在内核之上接线不改内核。
@@ -36,7 +36,7 @@ zen-agent 是零第三方依赖（仅 httpx）的终端 AI 编码代理。四个
 - `agent.rt` **有状态运行时** — 有状态运行时：Agent（历史/订阅者/steering/abort）、Session JSONL 持久化、子代理运行时（task 工具的背后）、memory_store/artifacts（7 文件，被 12 节点依赖）
 
 ### 簇 应用层（`app`）
-- `app.assembly` **装配与防线** — 装配与防线：bootstrap.prepare（四前端唯一装配序列）、Runtime（对象槽位/工具注入）、PermissionGate/Broker 权限门、safety 风险模型、modes、error_notice 失败文案统一（20 文件，被 8 节点依赖）
+- `app.assembly` **装配与防线** — 装配与防线：bootstrap.prepare（四前端唯一装配序列）、Runtime（对象槽位/工具注入）、PermissionGate/Broker 权限门、safety 风险模型、modes、error_notice 失败文案统一（21 文件，被 8 节点依赖）
 - `app.chat` **会话交互** — 会话交互控制：ChatController（run 生命周期/last_error）、slash 命令注册表与补全、views UI 无关视图模型、模型切换、子代理跟踪（13 文件，被 9 节点依赖）
 - `app.transcript` **会话历史与恢复** — 会话文件与历史操作：sessions/records 词汇表、session_meta 边车、journal 写快照(/restore)、compact 摘要边界、shake 卸载、rewind（13 文件，被 8 节点依赖）
 - `app.swarm` **多角色 swarm** — 常驻多角色运行时：角色是配置（人设/模型/工具/预算），运行单元是 (角色, 工单)：同名角色可并行多个工单、各自 Runtime+Session；房间 JSONL 是唯一消息源，@ 是唯一路由原语；Router 做入站闸门并在工单边界重基链，TaskRunner 约束任务边界与预算。workitems 是 append-only 工单表，workflow 负责开单/续单/请求关闭，schedule 调度每轮，instances 维护运行单元索引与空闲回收，approvals 管审批回调，events_tap 广播角色 run 事件，transcript 可从磁盘还原已归档轮次。（16 文件，被 1 节点依赖）
@@ -292,8 +292,8 @@ zen-agent 是零第三方依赖（仅 httpx）的终端 AI 编码代理。四个
 - zen 只在 app 层组合既有内核：worker runtime 经 bootstrap.prepare 装配并 resume 到项目会话，结果经 chat.steer 注入 router（结果自到、不等待）；fleet 属于单个项目 slot，不跨项目
 
 ## 5. 健康红点
-最近 gov_health（2026-11-14）：违规 131 项，新增 error 0，恶化 0，基线 131 项。
-红点节点：`(unmapped)`(9E/34W)、`cli.rpc`(5E/10W)、`tools`(0E/9W)、`app.assembly`(2E/6W)、`cli`(0E/8W)、`(cycles)`(7E/0W)、`app.chat`(2E/4W)、`app.swarm`(2E/3W)
+最近 gov_health（2026-11-14）：违规 133 项，新增 error 0，恶化 0，基线 133 项。
+红点节点：`(unmapped)`(10E/33W)、`cli.rpc`(5E/10W)、`app.assembly`(1E/9W)、`tools`(0E/9W)、`cli`(0E/8W)、`(cycles)`(7E/0W)、`app.chat`(2E/4W)、`app.swarm`(2E/3W)
 
 ## 6. 最近治理（deltas.md 最后一条）
 ## [v7] 2026-11-14 — 架构审计清理（audit-cleanup 分支，34 项计划收尾）

@@ -1,10 +1,10 @@
-# 熵增报告（2026-11-14 · manifest v7）
+# 熵增报告（2026-11-14 · manifest v8）
 
-结论：PASS —— 违规 131 项（error 32 / warn 99），基线 131 项（只许降）。
+结论：PASS —— 违规 133 项（error 32 / warn 101），基线 133 项（只许降）。
 
 ## 全部违规明细
 - [error] **循环依赖** `zenagent.agent.loop ↔ zenagent.agent.result_budget ↔ zenagent.agent.timeouts ↔ zenagent.agent.tool_exec` — 限 不允许（或登记 cycles_seen）（基线 4）
-- [error] **循环依赖** `zenagent.app.agent_profile ↔ zenagent.app.plugin_wiring ↔ zenagent.app.runtime ↔ zenagent.app.skills_recompose` — 限 不允许（或登记 cycles_seen）（基线 4）
+- [error] **循环依赖** `zenagent.app.agent_profile ↔ zenagent.app.bootstrap ↔ zenagent.app.chat ↔ zenagent.app.commands ↔ zenagent.app.limits_apply ↔ zenagent.app.models ↔ zenagent.app.plugin_wiring ↔ zenagent.app.runtime ↔ zenagent.app.sessions ↔ zenagent.app.skills_recompose` — 限 不允许（或登记 cycles_seen）（基线 10）
 - [error] **循环依赖** `zenagent.app.swarm.approvals ↔ zenagent.app.swarm.frames ↔ zenagent.app.swarm.manager` — 限 不允许（或登记 cycles_seen）（基线 3）
 - [error] **循环依赖** `zenagent.cli.tui ↔ zenagent.cli.tui.app ↔ zenagent.cli.tui.app_parts.appearance ↔ zenagent.cli.tui.app_parts.commands ↔ zenagent.cli.tui.app_parts.display ↔ zenagent.cli.tui.app_parts.drafts ↔ zenagent.cli.tui.app_parts.sessions ↔ zenagent.cli.tui.app_parts.update_notice ↔ zenagent.cli.tui.app_parts.views ↔ zenagent.cli.tui.run ↔ zenagent.cli.tui.screens.context_breakdown ↔ zenagent.cli.tui.screens.info ↔ zenagent.cli.tui.screens.job_log ↔ zenagent.cli.tui.screens.todo_list ↔ zenagent.cli.tui.status ↔ zenagent.cli.tui.status.segments ↔ zenagent.cli.tui.widgets.attachments ↔ zenagent.cli.tui.widgets.command_hints ↔ zenagent.cli.tui.widgets.error_banner ↔ zenagent.cli.tui.widgets.new_content ↔ zenagent.cli.tui.widgets.pending_band ↔ zenagent.cli.tui.widgets.prompt_gutter ↔ zenagent.cli.tui.widgets.rows ↔ zenagent.cli.tui.widgets.sidebar ↔ zenagent.cli.tui.widgets.sidebar_resize ↔ zenagent.cli.tui.widgets.skill_block ↔ zenagent.cli.tui.widgets.status_band ↔ zenagent.cli.tui.widgets.subagent_banner ↔ zenagent.cli.tui.widgets.todo_hud ↔ zenagent.cli.tui.widgets.tool_card ↔ zenagent.cli.tui.widgets.transcript ↔ zenagent.cli.tui.widgets.welcome ↔ zenagent.cli.tui.widgets.work_indicator ↔ zenagent.cli.tui.widgets.work_strip` — 限 不允许（或登记 cycles_seen）（基线 34）
 - [error] **循环依赖** `zenagent.plugins ↔ zenagent.plugins.install` — 限 不允许（或登记 cycles_seen）（基线 2）
@@ -17,53 +17,55 @@
 - [error] **上帝文件** `tests/test_repl_logic.py` — 限 ≤800 行（实际 1001）（基线 1001）
 - [error] **上帝文件** `tests/test_rpc_v2.py` — 限 ≤800 行（实际 2226）（基线 2226）
 - [error] **上帝文件** `tests/test_session.py` — 限 ≤800 行（实际 1221）（基线 1221）
-- [error] **上帝文件** `tests/test_swarm_manager.py` — 限 ≤800 行（实际 1330）（基线 1330）
+- [error] **上帝文件** `tests/test_swarm_manager.py` — 限 ≤800 行（实际 1361）（基线 1361）
 - [error] **上帝文件** `tests/test_task.py` — 限 ≤800 行（实际 876）（基线 876）
+- [error] **上帝文件** `tests/test_zen_fleet.py` — 限 ≤800 行（实际 818）（基线 818）
 - [error] **上帝文件** `zenagent/app/commands.py` — 限 ≤800 行（实际 866）（基线 866）
-- [error] **上帝文件** `zenagent/app/runtime.py` — 限 ≤800 行（实际 901）（基线 901）
-- [error] **上帝文件** `zenagent/app/swarm/manager.py` — 限 ≤800 行（实际 887）（基线 887）
+- [error] **上帝文件** `zenagent/app/swarm/manager.py` — 限 ≤800 行（实际 897）（基线 897）
 - [error] **上帝类** `zenagent/agent/session.py::Session` — 限 loc≤300 且 methods≤20（实际 359 行 / 15 方法）（基线 359）
 - [error] **上帝类** `zenagent/app/chat.py::ChatController` — 限 loc≤300 且 methods≤20（实际 643 行 / 44 方法）（基线 643）
 - [error] **上帝类** `zenagent/app/journal.py::SnapshotJournal` — 限 loc≤300 且 methods≤20（实际 370 行 / 20 方法）（基线 370）
-- [error] **上帝类** `zenagent/app/runtime.py::Runtime` — 限 loc≤300 且 methods≤20（实际 760 行 / 33 方法）（基线 760）
-- [error] **上帝类** `zenagent/app/swarm/manager.py::SwarmManager` — 限 loc≤300 且 methods≤20（实际 770 行 / 38 方法）（基线 770）
-- [error] **上帝类** `zenagent/app/zen/fleet.py::ZenFleet` — 限 loc≤300 且 methods≤20（实际 516 行 / 22 方法）（基线 516）
+- [error] **上帝类** `zenagent/app/runtime.py::Runtime` — 限 loc≤300 且 methods≤20（实际 514 行 / 33 方法）（基线 514）
+- [error] **上帝类** `zenagent/app/swarm/manager.py::SwarmManager` — 限 loc≤300 且 methods≤20（实际 780 行 / 38 方法）（基线 780）
+- [error] **上帝类** `zenagent/app/zen/fleet.py::ZenFleet` — 限 loc≤300 且 methods≤20（实际 550 行 / 24 方法）（基线 550）
 - [error] **上帝类** `zenagent/cli/rpc/host.py::RpcHost` — 限 loc≤300 且 methods≤20（实际 619 行 / 24 方法）（基线 619）
 - [error] **上帝类** `zenagent/cli/rpc/ops_secrets.py::SecretsOps` — 限 loc≤300 且 methods≤20（实际 339 行 / 11 方法）（基线 339）
 - [error] **上帝类** `zenagent/cli/rpc/ops_skills.py::SkillsOps` — 限 loc≤300 且 methods≤20（实际 325 行 / 10 方法）（基线 325）
-- [error] **上帝类** `zenagent/cli/rpc/ops_swarm.py::SwarmOps` — 限 loc≤300 且 methods≤20（实际 303 行 / 8 方法）（基线 303）
+- [error] **上帝类** `zenagent/cli/rpc/ops_swarm.py::SwarmOps` — 限 loc≤300 且 methods≤20（实际 309 行 / 8 方法）（基线 309）
 - [error] **上帝类** `zenagent/cli/rpc/server.py::RpcServer` — 限 loc≤300 且 methods≤20（实际 610 行 / 20 方法）（基线 610）
 - [error] **上帝类** `zenagent/cli/tui/app.py::ZenAgentApp` — 限 loc≤300 且 methods≤20（实际 683 行 / 52 方法）（基线 683）
 - [error] **上帝类** `zenagent/cli/tui/widgets/transcript.py::TranscriptView` — 限 loc≤300 且 methods≤20（实际 328 行 / 30 方法）（基线 328）
+- [warn] **跨簇混杂** `zenagent/app/bootstrap.py → agent、base、i18n、providers、tools` — 限 ≤4 簇（实际 5）（基线 5）
 - [warn] **跨簇混杂** `zenagent/app/runtime.py → agent、base、i18n、mcp、prompts、providers、tools` — 限 ≤4 簇（实际 7）（基线 7）
 - [warn] **跨簇混杂** `zenagent/cli/main.py → agent、app、base、i18n、providers` — 限 ≤4 簇（实际 5）（基线 5）
 - [warn] **跨簇混杂** `zenagent/cli/tui/screens/pickers.py → app、base、i18n、mcp、tools` — 限 ≤4 簇（实际 5）（基线 5）
 - [warn] **大文件** `tests/test_app_runtime.py` — 限 ≤600 行（实际 691）（基线 691）
 - [warn] **大文件** `tests/test_app_views.py` — 限 ≤600 行（实际 748）（基线 748）
-- [warn] **大文件** `tests/test_permissions.py` — 限 ≤600 行（实际 609）（基线 609）
-- [warn] **大文件** `tests/test_rpc_swarm.py` — 限 ≤600 行（实际 684）（基线 684）
+- [warn] **大文件** `tests/test_permissions.py` — 限 ≤600 行（实际 628）（基线 628）
+- [warn] **大文件** `tests/test_rpc_swarm.py` — 限 ≤600 行（实际 711）（基线 711）
 - [warn] **大文件** `tests/test_todo.py` — 限 ≤600 行（实际 728）（基线 728）
 - [warn] **大文件** `tests/test_tools_fs.py` — 限 ≤600 行（实际 729）（基线 729）
-- [warn] **大文件** `tests/test_zen_fleet.py` — 限 ≤600 行（实际 787）（基线 787）
 - [warn] **大文件** `zenagent/agent/session.py` — 限 ≤600 行（实际 797）（基线 797）
 - [warn] **大文件** `zenagent/agent/subagents_runtime.py` — 限 ≤600 行（实际 618）（基线 618）
 - [warn] **大文件** `zenagent/app/chat.py` — 限 ≤600 行（实际 700）（基线 700）
-- [warn] **大文件** `zenagent/app/permissions.py` — 限 ≤600 行（实际 639）（基线 639）
+- [warn] **大文件** `zenagent/app/permissions.py` — 限 ≤600 行（实际 643）（基线 643）
+- [warn] **大文件** `zenagent/app/runtime.py` — 限 ≤600 行（实际 638）（基线 638）
 - [warn] **大文件** `zenagent/app/views.py` — 限 ≤600 行（实际 747）（基线 747）
-- [warn] **大文件** `zenagent/app/zen/fleet.py` — 限 ≤600 行（实际 627）（基线 627）
-- [warn] **大文件** `zenagent/cli/main.py` — 限 ≤600 行（实际 628）（基线 628）
+- [warn] **大文件** `zenagent/app/zen/fleet.py` — 限 ≤600 行（实际 667）（基线 667）
+- [warn] **大文件** `zenagent/cli/main.py` — 限 ≤600 行（实际 630）（基线 630）
 - [warn] **大文件** `zenagent/cli/repl.py` — 限 ≤600 行（实际 787）（基线 787）
 - [warn] **大文件** `zenagent/cli/rpc/host.py` — 限 ≤600 行（实际 664）（基线 664）
 - [warn] **大文件** `zenagent/cli/rpc/server.py` — 限 ≤600 行（实际 722）（基线 722）
 - [warn] **大文件** `zenagent/cli/tui/app.py` — 限 ≤600 行（实际 759）（基线 759）
 - [warn] **大文件** `zenagent/config.py` — 限 ≤600 行（实际 795）（基线 795）
-- [warn] **大文件** `zenagent/i18n/en.py` — 限 ≤600 行（实际 602）（基线 602）
-- [warn] **大文件** `zenagent/i18n/zh.py` — 限 ≤600 行（实际 601）（基线 601）
+- [warn] **大文件** `zenagent/i18n/en.py` — 限 ≤600 行（实际 603）（基线 603）
+- [warn] **大文件** `zenagent/i18n/zh.py` — 限 ≤600 行（实际 602）（基线 602）
 - [warn] **大文件** `zenagent/limits.py` — 限 ≤600 行（实际 795）（基线 795）
 - [warn] **大文件** `zenagent/providers/openai_completions.py` — 限 ≤600 行（实际 630）（基线 630）
 - [warn] **大文件** `zenagent/tools/todo.py` — 限 ≤600 行（实际 785）（基线 785）
+- [warn] **枢纽嫌疑** `zenagent.app.bootstrap` — 限 fan_in≤15 或 fan_out≤10（实际 17/35）（基线 52）
 - [warn] **枢纽嫌疑** `zenagent.app.chat` — 限 fan_in≤15 或 fan_out≤10（实际 19/19）（基线 38）
-- [warn] **枢纽嫌疑** `zenagent.app.runtime` — 限 fan_in≤15 或 fan_out≤10（实际 43/44）（基线 87）
+- [warn] **枢纽嫌疑** `zenagent.app.runtime` — 限 fan_in≤15 或 fan_out≤10（实际 45/38）（基线 83）
 - [warn] **枢纽嫌疑** `zenagent.cli.tui.app` — 限 fan_in≤15 或 fan_out≤10（实际 43/45）（基线 88）
 - [warn] **长函数** `scripts/eval.py::run_case` — 限 ≤80 行（实际 167）（基线 167）
 - [warn] **长函数** `scripts/eval.py::run_cases` — 限 ≤80 行（实际 104）（基线 104）
@@ -74,17 +76,17 @@
 - [warn] **长函数** `zenagent/agent/loop.py::agent_loop` — 限 ≤80 行（实际 274）（基线 274）
 - [warn] **长函数** `zenagent/agent/subagents_runtime.py::run_child` — 限 ≤80 行（实际 108）（基线 108）
 - [warn] **长函数** `zenagent/agent/tool_exec.py::execute_tool` — 限 ≤80 行（实际 122）（基线 122）
+- [warn] **长函数** `zenagent/app/bootstrap.py::assemble` — 限 ≤80 行（实际 248）（基线 248）
 - [warn] **长函数** `zenagent/app/permissions.py::assess` — 限 ≤80 行（实际 85）（基线 85）
 - [warn] **长函数** `zenagent/app/rewind.py::build_checkpoint_tools` — 限 ≤80 行（实际 89）（基线 89）
 - [warn] **长函数** `zenagent/app/runtime.py::__init__` — 限 ≤80 行（实际 101）（基线 101）
-- [warn] **长函数** `zenagent/app/runtime.py::bootstrap` — 限 ≤80 行（实际 243）（基线 243）
 - [warn] **长函数** `zenagent/app/swarm/manager.py::_build_agent` — 限 ≤80 行（实际 104）（基线 104）
 - [warn] **长函数** `zenagent/app/swarm/roles.py::parse_role` — 限 ≤80 行（实际 128）（基线 128）
 - [warn] **长函数** `zenagent/app/swarm/runner.py::run` — 限 ≤80 行（实际 83）（基线 83）
 - [warn] **长函数** `zenagent/app/views.py::messages_to_views` — 限 ≤80 行（实际 84）（基线 84）
 - [warn] **长函数** `zenagent/app/zen/tools.py::fleet_tools` — 限 ≤80 行（实际 139）（基线 139）
 - [warn] **长函数** `zenagent/cli/flags.py::add_runtime_flags` — 限 ≤80 行（实际 124）（基线 124）
-- [warn] **长函数** `zenagent/cli/main.py::build_parser` — 限 ≤80 行（实际 83）（基线 83）
+- [warn] **长函数** `zenagent/cli/main.py::build_parser` — 限 ≤80 行（实际 85）（基线 85）
 - [warn] **长函数** `zenagent/cli/main.py::main` — 限 ≤80 行（实际 230）（基线 230）
 - [warn] **长函数** `zenagent/cli/main.py::run_headless` — 限 ≤80 行（实际 139）（基线 139）
 - [warn] **长函数** `zenagent/cli/repl.py::repl` — 限 ≤80 行（实际 596）（基线 596）

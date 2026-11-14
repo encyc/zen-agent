@@ -1,6 +1,5 @@
 {
   "python": {
-    "zenagent/app/runtime.py": 910,
     "zenagent/app/commands.py": 875,
     "zenagent/app/swarm/manager.py": 896
   },
@@ -16,7 +15,6 @@
     "_readme": "Entries beyond the 800-line default cap. The +10 headroom entries must be paid back by 2026-12-31 (audit §6.4 follow-up plan: runtime assembly slice, swarm manager split, commands split, desktop store/spec splits).",
     "python": {
       "zenagent/app/commands.py": "payback 2026-12-31",
-      "zenagent/app/runtime.py": "payback 2026-12-31 (§6.4: assembly slice)",
       "zenagent/app/swarm/manager.py": "payback 2026-12-31 (§6.4: room/manager split)"
     },
     "ts": {

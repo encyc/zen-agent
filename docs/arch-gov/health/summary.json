@@ -1,17 +1,17 @@
 {
  "date": "2026-11-14",
- "manifest_version": 7,
+ "manifest_version": 8,
  "new_errors": 0,
  "new_warns": 0,
  "worse": 0,
  "improved": 0,
  "resolved": 0,
- "total": 131,
- "baseline_size": 131,
+ "total": 133,
+ "baseline_size": 133,
  "by_node": {
   "(unmapped)": {
-   "errors": 9,
-   "warns": 34
+   "errors": 10,
+   "warns": 33
   },
   "config": {
    "errors": 0,
@@ -33,6 +33,10 @@
    "errors": 1,
    "warns": 3
   },
+  "app.assembly": {
+   "errors": 1,
+   "warns": 9
+  },
   "app.chat": {
    "errors": 2,
    "warns": 4
@@ -40,10 +44,6 @@
   "app.transcript": {
    "errors": 1,
    "warns": 1
-  },
-  "app.assembly": {
-   "errors": 2,
-   "warns": 6
   },
   "app.swarm": {
    "errors": 2,

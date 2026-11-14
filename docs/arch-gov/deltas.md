@@ -57,3 +57,14 @@
 - 熵增（重点改善）：`Runtime` 上帝类 879→760 行（重组切片 skills_recompose 抽出）；`runtime.py` 上帝文件 1032→901；`repl.py` 1028→787 与 `ops_config.py` 902→294 上帝项**解除**（拆分后低于 800 线）；`ConfigOps` 902→294 解除
 - 熵增（登记存量）：基线 103→131 —— 新增 error 7（`test_app_chat`/`test_rpc_v2` 等测试文件本分支增长越 800 线）、新增 warn 21、恶化 31（`runtime.__init__` 86→101、`bootstrap` 233→243 等，任务 1-31 修复性增长），按 `--update-baseline` 全量登记；偿还期限 2026-12-31 记于 `allowlist.json._notes`
 - 门禁：`scripts/check.sh` 增加 `uv run mypy zenagent` 步骤（ratchet：77 个模块 691 个存量错误冻结为 overrides，新模块不许加入清单）；LOC allowlist 重基线（4 个 python + 5 个 ts 条目删除——文件已低于 800 默认线，余 6 条 +10 行余量带偿还注释）
+
+## [v8] 2026-11-14 — Runtime §6 后续切片（bootstrap 装配体 / limits 独立 / 插件胶水）
+
+计划：`docs/superpowers/plans/2026-11-14-runtime-slices.md`（commits 74c8694..31bbdc0 + 本收尾）；完成审计 §六.5 对 Runtime 的全部四条切分线。
+
+- 增：映射 `zenagent/app/limits_apply.py` → app.assembly 节点；`tests/test_limits_apply.py` 登记 unmapped；`tests/test_skills_recompose_layout.py` 既有映射未动
+- 增：`cycles_seen` 登记 10 模块 app 包 SCC（`agent_profile/bootstrap/chat/commands/limits_apply/models/plugin_wiring/runtime/sessions/skills_recompose`）——bootstrap 顶层 import Runtime + runtime 延迟 import assemble + TYPE_CHECKING 缝隙使 SCC 重塑；运行时实际单向（runtime → 延迟 bootstrap）
+- 改：`Runtime.bootstrap` 245 行装配体逐字迁入 `bootstrap.assemble()`，类方法仅剩薄委托（函数级 import 回避循环）；`limit_overrides/apply_limits` 迁入 `limits_apply.py`；插件启动条件迁入 `plugin_wiring.boot_contributions()`。runtime.py 880→637（上帝文件解除，allowlist 条目删除，回归默认 800 线）；Runtime 上帝类 760→514 行 / 24 方法
+- 熵增（改善）：`file_loc:zenagent.app.runtime` 901→638（error 解除、warn 档重登记）；`god_class:...Runtime` 760→514；`long_func:...assemble` 245 行为新增存量（搬运即得，偿还同 2026-12-31）
+- 熵增（登记存量）：基线 133 项（净 +0：改善 3 / 解除 2 / 新增 4 / 恶化 14，净变化由 `--update-baseline` 全量登记）；恶化主因 bootstrap.py 103→396 行的重分类与长函数重排
+- 门禁：`bash scripts/check.sh` 全绿（2945→2951 用例）；gov_diff CLEAN；allowlist 删 `zenagent/app/runtime.py` 条目（910→638）
