@@ -59,7 +59,7 @@
 | 运行模式（plan/ask/auto） | `zenagent/app/modes.py` |
 | 写入前快照与 `/restore` | `zenagent/app/journal.py`、`zenagent/app/restore.py` |
 | 流式渲染、状态行、diff | `zenagent/cli/render.py` |
-| 权限门 | `zenagent/app/permissions.py`（`PermissionGate`/`PermissionBroker`/`build_broker_for`；`cli/permissions.py` 只是兼容 shim） |
+| 权限门 | `zenagent/app/permissions.py`（`PermissionGate`/`PermissionBroker`/`build_broker_for`） |
 | 上下文压缩 | `zenagent/app/compact.py`（+ `zenagent/config.py::ContextGuard`） |
 | 自动补全 | `zenagent/cli/completion.py` |
 | `doctor` | `zenagent/cli/doctor.py` |

@@ -155,3 +155,23 @@ def test_cli_rejects_a_missing_session(capsys):
 
     assert cli_main.main(["export", "/nope/session.jsonl"]) == 1
     assert "no such session" in capsys.readouterr().err
+
+
+def test_mcp_trust_leaves_export_positionals_alone(capsys, monkeypatch):
+    """The mcp positional must not steal export's path (argparse fills
+    optional positionals in definition order) — and ``mcp trust <name>``
+    must reach the command with action and name in the right slots."""
+    import zenagent.cli.main as cli_main
+
+    seen = {}
+
+    def fake_run(action, name):
+        seen["action"], seen["name"] = action, name
+        return 0
+
+    monkeypatch.setattr(cli_main, "run_mcp_command", fake_run)
+    assert cli_main.main(["mcp", "trust", "some-server"]) == 0
+    assert seen == {"action": "trust", "name": "some-server"}
+
+    assert cli_main.main(["export", "/nope/session.jsonl"]) == 1
+    assert "no such session" in capsys.readouterr().err

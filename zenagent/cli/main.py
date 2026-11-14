@@ -276,11 +276,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="optional subcommand: doctor, sessions, mcp",
     )
     parser.add_argument(
-        "mcp_server",
-        nargs="?",
-        help="server name for: mcp trust <name>",
-    )
-    parser.add_argument(
         "-V",
         "--version",
         action="version",
@@ -289,6 +284,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("-p", "--prompt", help="run one prompt headlessly and exit")
     parser.add_argument("session", nargs="?", help="session path for: export")
+    # After "session": argparse fills optional positionals in definition
+    # order, so export's path must not be stealable by the mcp slot.
+    parser.add_argument(
+        "mcp_server",
+        nargs="?",
+        help="server name for: mcp trust <name>",
+    )
     parser.add_argument(
         "--format", choices=("md", "html"), default="md", help="export format (default md)"
     )

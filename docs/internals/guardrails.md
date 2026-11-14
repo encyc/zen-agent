@@ -16,7 +16,7 @@
 为什么这么窄：内核零依赖；工具自己会防御内部；过严的 schema 会把模型卡在「格式不对」的循环里。
 校验失败 → `is_error=True` 的常规工具结果，模型下一轮能自己修。
 
-## 2. 权限门（`cli/permissions.py`）
+## 2. 权限门（`app/permissions.py`）
 
 ```python
 allowed, reason = await gate.check(tool_name, args)
