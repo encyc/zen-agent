@@ -597,6 +597,25 @@ async def test_read_project_file_still_free():
     assert allowed is True
 
 
+async def test_grep_and_glob_over_protected_paths_require_approval_too():
+    """The search tools read their whole ``path`` root — a grep over ~/.ssh
+    reads every credential in it, so they sit behind the same gate as
+    read_file (review finding: the exfil chain stayed open without this)."""
+    gate = PermissionGate(interactive=False, mode="auto")
+    for tool in ("grep", "glob"):
+        allowed, reason = await gate.check(
+            tool, {"path": "~/.zenagent/settings.json"}
+        )
+        assert allowed is False, tool
+        assert "protected" in reason, tool
+
+
+async def test_grep_in_the_workspace_stays_free():
+    gate = PermissionGate(interactive=False, mode="auto")
+    allowed, _ = await gate.check("grep", {"pattern": "x", "path": "."})
+    assert allowed is True
+
+
 async def test_fetch_requires_approval():
     """P0-1: fetch can exfiltrate anything that was read; it must not be free."""
     from zenagent.tools.web.tools import FETCH

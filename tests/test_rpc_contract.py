@@ -316,3 +316,20 @@ async def test_every_swarm_frame_names_the_project_of_its_room(tmp_path, monkeyp
         ]
     finally:
         await host.close()
+
+
+def test_approval_event_truncation_flag_matches_the_ts_contract():
+    """``argsTruncated`` is optional on the wire but the names must agree:
+    the desktop interface (types-events.ts) reads argsTruncated; a rename on
+    the Python side would leave the marker dead with its local fixture green
+    (final-review finding)."""
+    from zenagent.app.approval_router import approval_event
+
+    plain = approval_event("r1", "bash", "git status")
+    assert "argsTruncated" not in plain
+
+    flagged = approval_event("r2", "bash", "x" * 200, args_truncated=True)
+    assert flagged["argsTruncated"] is True
+    # The desktop contract's field name, pinned here as a string literal so a
+    # Python-side rename fails this test instead of the GUI silently.
+    assert "argsTruncated" in flagged

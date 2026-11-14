@@ -459,6 +459,7 @@ CATALOG: dict[str, str] = {
     "notice.error.outage": "模型服务暂时不可用：稍后重新发送即可。",
     "notice.error.provider": "模型服务返回错误：请查看详情；若反复出现，欢迎附会话日志提 issue。",
     "notice.error.bug": "zenagent 运行出错（疑似 bug）：请附会话日志到 GitHub 提 issue；会话进度已保存，可重新发送继续。",
+    "swarm.locked": "该项目的 swarm 房间已在另一个 zenagent 进程中打开；请先在那边关闭。",
     "notice.auto_compaction_failed": "自动压缩失败：{error}",
     "notice.pending_dropped": "已丢弃 {n} 条待发消息（会话已切换）",
     "perm.risk_outside": "⚠ 项目外路径：{target}",

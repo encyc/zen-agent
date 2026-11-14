@@ -103,29 +103,42 @@ def assemble_plugins(
     return PluginAssembly(merged, skill_roots, extension_files, statuses, warnings)
 
 
+def _load_runtime_mcp(
+    runtime: Runtime, options: RuntimeOptions | None
+) -> dict[str, McpServerConfig]:
+    """The session's user-layer MCP configs, behind the project trust gate.
+
+    Shared by attach and reconfigure. An explicit ``--mcp-file`` is the
+    user's own deliberate choice; the project layer is a committed file
+    anyone can have written (audit P1-1), so its stdio servers need a
+    per-name trust — on EVERY load: a plugin reload must not silently
+    respawn the servers bootstrap withheld.
+    """
+    mcp_file = getattr(options, "mcp_file", None)
+    configs = load_mcp_config(mcp_file, cwd=runtime.root)
+    if options is not None and options.mcp_servers:
+        configs = {
+            name: config
+            for name, config in configs.items()
+            if name in options.mcp_servers
+        }
+    if mcp_file is None:
+        configs, untrusted = withhold_untrusted_project_servers(
+            configs, cwd=runtime.root
+        )
+        for name in untrusted:
+            runtime._note(
+                f"mcp: project server '{name}' is not trusted; "
+                f"run: zen mcp trust {name}"
+            )
+    return configs
+
+
 def attach_plugins(runtime: Runtime, options: RuntimeOptions) -> PluginAssembly:
     """Bootstrap step: assemble plugins and hand the result to the runtime."""
     user_configs: dict[str, McpServerConfig] = {}
     if runtime.profile.mcp:
-        user_configs = load_mcp_config(options.mcp_file, cwd=runtime.root)
-        if options.mcp_servers:
-            user_configs = {
-                name: config
-                for name, config in user_configs.items()
-                if name in options.mcp_servers
-            }
-        # An explicit --mcp-file is the user's own deliberate choice; the
-        # project layer is a committed file anyone can have written (audit
-        # P1-1), so its stdio servers need a per-name trust.
-        if options.mcp_file is None:
-            user_configs, untrusted = withhold_untrusted_project_servers(
-                user_configs, cwd=runtime.root
-            )
-            for name in untrusted:
-                runtime._note(
-                    f"mcp: project server '{name}' is not trusted; "
-                    f"run: zen mcp trust {name}"
-                )
+        user_configs = _load_runtime_mcp(runtime, options)
     assembly = assemble_plugins(user_configs=user_configs)
     runtime.plugin_statuses = assembly.statuses
     runtime._plugin_skill_roots = assembly.skill_roots
@@ -175,13 +188,9 @@ async def reconfigure(runtime: Runtime) -> list[str]:
     options = runtime._options
     user_configs: dict[str, McpServerConfig] = {}
     if runtime.profile.mcp:
-        user_configs = load_mcp_config(getattr(options, "mcp_file", None))
-        if options is not None and options.mcp_servers:
-            user_configs = {
-                name: config
-                for name, config in user_configs.items()
-                if name in options.mcp_servers
-            }
+        # Same trust gate as bootstrap: a reload must not respawn the
+        # untrusted project servers that were withheld at start.
+        user_configs = _load_runtime_mcp(runtime, options)
     assembly = assemble_plugins(user_configs=user_configs)
     old, runtime.mcp = runtime.mcp, None
     runtime.plugin_statuses = assembly.statuses

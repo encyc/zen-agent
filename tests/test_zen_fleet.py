@@ -774,6 +774,37 @@ async def test_failed_delivery_requeues_reports(env, caplog):
     assert any("deliver" in record.message for record in caplog.records)
 
 
+async def test_paused_pump_retries_on_backoff_and_recovers(env):
+    """A stranded pause must not orphan the final reports (review finding).
+
+    deliver fails while the LAST worker reports, then recovers: with no new
+    report arriving, only the backoff re-pump can unstick the queue."""
+    fleet = _fleet_with(env)
+    fleet._repump_base_s = 0.01
+    fleet.batch_window_s = 0
+
+    calls = {"n": 0}
+
+    async def flaky(text):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise OSError("router gone")
+        env["chat"].delivered.append(text)
+
+    env["chat"].deliver = flaky
+    await fleet.dispatch(str(env["paths"]["w1"]), "a")
+    await fleet.wait_all()
+    assert fleet._deliver_paused, "the failure must pause the pump"
+    assert fleet._report_buffer, "the failed batch must be re-queued"
+
+    # No new reports arrive; the backoff re-pump alone must deliver them.
+    await asyncio.sleep(0.2)
+    assert not fleet._deliver_paused
+    assert env["chat"].delivered and "[zen:worker" in env["chat"].delivered[0]
+    assert fleet._report_buffer == []
+    assert fleet._repump_failures == 0, "success resets the backoff"
+
+
 async def test_dispatch_reports_queued_until_the_semaphore(env) -> None:
     """P2: the status flip belongs to _run, after the semaphore — not dispatch.
 

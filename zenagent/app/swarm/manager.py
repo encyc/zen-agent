@@ -203,32 +203,42 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
         if self._started:
             return
         self._acquire_lock()
-        self._stopping = False
-        self.store.load()
-        self.warnings.extend(self.store.warnings)
-        reconcile_message = self.store.reconcile()
-        if reconcile_message:
-            for message in reconcile_message:
-                self._emit_message(message)
+        try:
+            self._stopping = False
+            self.store.load()
+            self.warnings.extend(self.store.warnings)
+            reconcile_message = self.store.reconcile()
+            if reconcile_message:
+                for message in reconcile_message:
+                    self._emit_message(message)
 
-        self.work_items.load()
-        self.warnings.extend(self.work_items.warnings)
-        roles, warnings = discover_roles(self.root)
-        self.warnings.extend(warnings)
-        self._set_roles(roles)
-        # Instances are built lazily; membership still comes from configuration.
-        self.router = Router(
-            self.store,
-            self.role_ids,
-            work_items=self.work_items,
-            max_chain_depth=self._max_chain_depth,
-            max_chain_cost=self._max_chain_cost,
-        )
-        self._started = True
-        self._loop_task = asyncio.create_task(self._schedule())
+            self.work_items.load()
+            self.warnings.extend(self.work_items.warnings)
+            roles, warnings = discover_roles(self.root)
+            self.warnings.extend(warnings)
+            self._set_roles(roles)
+            # Instances are built lazily; membership still comes from configuration.
+            self.router = Router(
+                self.store,
+                self.role_ids,
+                work_items=self.work_items,
+                max_chain_depth=self._max_chain_depth,
+                max_chain_cost=self._max_chain_cost,
+            )
+            self._started = True
+            self._loop_task = asyncio.create_task(self._schedule())
+        except BaseException:
+            # A failed start must not leave the flock held: the manager stays
+            # cached in the host, so every later request would re-flock a
+            # second fd and conflict with OUR OWN held lock forever.
+            self._release_lock()
+            raise
 
     async def close(self) -> None:
         if not self._started and not self.agents and self._loop_task is None:
+            # Even a never-started manager may hold the flock (start() failed
+            # after _acquire_lock); release it instead of leaking it.
+            self._release_lock()
             return
         self._stopping = True
         self._wake.set()

@@ -9,7 +9,6 @@ the room.
 from __future__ import annotations
 
 import json
-import os
 import re
 import secrets
 import threading
@@ -17,7 +16,7 @@ import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from zenagent.agent.jsonl import append_line, dump_line
+from zenagent.agent.jsonl import append_line, dump_line, repair_tail
 
 __all__ = [
     "TERMINAL",
@@ -269,23 +268,12 @@ class SwarmStore:
                 self.warnings.append(f"{path.name}: skipped record: {exc}")
 
     def _repair_tail(self, path: Path) -> None:
-        # A crash mid-append can leave a partial last line. Drop everything
-        # after the final newline so the next append starts on a clean boundary
-        # instead of concatenating onto the torn record.
+        # Shared durable discipline (agent/jsonl.py); an OSError here is a
+        # warning, not a crash — the room keeps loading what it could read.
         try:
-            data = path.read_bytes()
-        except FileNotFoundError:
-            return
+            repair_tail(path)
         except OSError as exc:
             self.warnings.append(f"{path.name}: {exc}")
-            return
-        if not data or data.endswith(b"\n"):
-            return
-        cut = data.rfind(b"\n") + 1
-        with path.open("r+b") as handle:
-            handle.truncate(cut)
-            handle.flush()
-            os.fsync(handle.fileno())
 
     def _append_line(self, path: Path, payload: dict) -> None:
         # Shared durable append (agent/jsonl.py): fsync plus torn-tail repair,

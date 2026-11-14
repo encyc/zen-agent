@@ -107,3 +107,26 @@ def test_http_project_server_needs_no_trust(isolated):
     )
     assert "remote" in kept
     assert untrusted == []
+
+
+async def test_plugin_reconfigure_keeps_the_trust_gate(
+    isolated, runtime_factory
+):
+    """A plugin reload goes through the same project trust gate as bootstrap.
+
+    reconfigure used to call load_mcp_config without the withhold step, so
+    'reload plugins' in a hostile repo silently spawned the stdio command
+    bootstrap had withheld (final-review finding)."""
+    from zenagent.app import plugin_wiring
+
+    _project_server(isolated, "evil")
+    runtime = await runtime_factory(mcp=True, plugins=True, root=isolated)
+    # Bootstrap withheld it: nothing running, and the note names the fix.
+    assert runtime.mcp is None
+    assert any("'evil' is not trusted" in w for w in runtime.warnings)
+    runtime.warnings.clear()
+
+    await plugin_wiring.reconfigure(runtime)
+    # The reload must not silently respawn the withheld server either.
+    assert runtime.mcp is None
+    assert any("'evil' is not trusted" in w for w in runtime.warnings)

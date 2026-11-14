@@ -77,7 +77,9 @@ _PATH_WRITE_TOOLS = frozenset({"write_file", "edit_file"})
 
 #: Read tools whose ``path`` argument is checked against credential locations:
 #: anything read can be fetched out, so credential reads confirm in every mode.
-_PATH_READ_TOOLS = frozenset({"read_file", "list_dir"})
+#: glob/grep read too (their ``path`` is the search root) — a grep over
+#: ~/.ssh reads every credential in it just like read_file would.
+_PATH_READ_TOOLS = frozenset({"read_file", "list_dir", "glob", "grep"})
 
 #: How a non-interactive run can explicitly resolve each confirm-level risk.
 _RISK_HINTS = {
@@ -102,7 +104,9 @@ def matches_any(patterns: list[str], name: str) -> str | None:
 
 
 #: Tools whose approval is scoped to a concrete filesystem path.
-_PATH_TARGET_TOOLS = frozenset({"read_file", "write_file", "edit_file", "list_dir"})
+_PATH_TARGET_TOOLS = frozenset(
+    {"read_file", "write_file", "edit_file", "list_dir", "glob", "grep"}
+)
 
 
 def tool_target(tool_name: str, args: dict) -> str | None:

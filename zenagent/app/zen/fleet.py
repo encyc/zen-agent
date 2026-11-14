@@ -32,6 +32,12 @@ from zenagent.types import AssistantMessage, TextContent, UserMessage
 if TYPE_CHECKING:
     from zenagent.app.chat import ChatController
 
+#: Delay before the first re-attempt of a failed report delivery; doubles
+#: per consecutive failure up to the cap. A pause without a retry would
+#: strand the last worker reports forever.
+_REPUMP_BASE_S = 2.0
+_REPUMP_MAX_S = 60.0
+
 __all__ = ["REPORT_LIMIT", "RosterRow", "WorkerHandle", "ZenFleet", "worker_statuses"]
 
 _log = logging.getLogger(__name__)
@@ -167,9 +173,14 @@ class ZenFleet:
         self._report_buffer: list[str] = []
         #: Delivery is failing: the flush pump holds so a dead router cannot
         #: turn re-queueing into a busy retry loop (audit P2). New reports
-        #: clear the pause.
+        #: clear the pause, and a delayed re-pump (below) retries with
+        #: backoff — a plain pause would strand the final reports forever
+        #: when the router died after the last worker finished.
         self._deliver_paused = False
         self._wake_task: asyncio.Task | None = None
+        self._repump_failures = 0
+        self._repump_handle: asyncio.TimerHandle | None = None
+        self._repump_base_s = _REPUMP_BASE_S
         self._sem = asyncio.Semaphore(self.max_concurrent)
         self._closing = False
 
@@ -521,12 +532,17 @@ class ZenFleet:
                 deliver = getattr(self.chat, "deliver", None)
                 if deliver is not None:
                     delivered = await self._safe_deliver(deliver, joined)
+                    if delivered:
+                        self._repump_failures = 0
                     if not delivered:
                         # Backpressure, not a drop: re-queue for the next
                         # flush cycle and hold the pump so a dead router
-                        # cannot spin retries (audit P2).
+                        # cannot spin retries (audit P2) — but schedule a
+                        # backoff re-pump so the batch is not stranded when
+                        # no further report ever arrives.
                         self._report_buffer[:0] = batch
                         self._deliver_paused = True
+                        self._schedule_repump()
                         return
                 else:
                     # A dead router must not kill workers.
@@ -545,6 +561,27 @@ class ZenFleet:
                 self._wake_task = asyncio.get_running_loop().create_task(
                     self._flush_reports()
                 )
+
+    def _schedule_repump(self) -> None:
+        """Retry the paused pump after an exponential backoff (capped)."""
+        self._repump_failures += 1
+        delay = min(
+            self._repump_base_s * 2 ** (self._repump_failures - 1), _REPUMP_MAX_S
+        )
+        if self._repump_handle is not None:
+            self._repump_handle.cancel()
+        self._repump_handle = asyncio.get_running_loop().call_later(
+            delay, self._repump
+        )
+
+    def _repump(self) -> None:
+        if self._closing or not self._deliver_paused:
+            return
+        self._deliver_paused = False
+        if self._report_buffer and (self._wake_task is None or self._wake_task.done()):
+            self._wake_task = asyncio.get_running_loop().create_task(
+                self._flush_reports()
+            )
 
     async def _safe_deliver(self, deliver, message: str) -> bool:
         """Deliver worker reports; False (logged) when the router refuses.
@@ -600,6 +637,9 @@ class ZenFleet:
     async def close(self) -> None:
         """Abort every live worker; the fleet is done for this slot."""
         self._closing = True
+        if self._repump_handle is not None:
+            self._repump_handle.cancel()
+            self._repump_handle = None
         for handle in self._handles.values():
             if handle.agent is not None:
                 # Teardown must not raise.

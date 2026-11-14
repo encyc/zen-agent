@@ -1327,3 +1327,34 @@ async def test_close_isolates_a_failing_runtime():
         assert manager.agents == {}
     finally:
         await manager.close()
+
+
+async def test_a_failed_start_releases_the_flock(tmp_path):
+    """start() failing after _acquire_lock must not leave the lock held.
+
+    The manager stays cached in the host, so a leaked flock would make every
+    later request conflict with our OWN held lock forever (final-review
+    finding)."""
+    import fcntl
+
+    from zenagent.app.swarm.manager import SwarmManager, swarm_lock_path
+
+    manager = SwarmManager(root=tmp_path, write_frame=lambda payload: None)
+    lock_path = swarm_lock_path(tmp_path)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def broken_load():
+        raise OSError("unreadable tasks.jsonl")
+
+    manager.store.load = broken_load
+    with pytest.raises(OSError):
+        await manager.start()
+    assert manager._lock_handle is None, "the flock must be released on failure"
+
+    # And the path is lockable again by anyone else.
+    probe = lock_path.open("w")
+    try:
+        fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    finally:
+        fcntl.flock(probe, fcntl.LOCK_UN)
+        probe.close()

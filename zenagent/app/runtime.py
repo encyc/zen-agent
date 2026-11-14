@@ -807,6 +807,9 @@ class Runtime:
             await release_job_manager()
         self._drop_unused_session()
         leases.release_session_lease(self)
+        # A mid-switch close (abort during session switch) may have left the
+        # stashed pre-switch lease held; discard the pair symmetrically.
+        leases.discard_switch_lease(self)
 
     @property
     def unused_session(self) -> bool:

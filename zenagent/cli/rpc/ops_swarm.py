@@ -14,13 +14,14 @@ from collections import OrderedDict
 from pathlib import Path
 
 from zenagent.app.dispatch import SwarmDispatcher
-from zenagent.app.swarm.manager import SwarmManager
+from zenagent.app.swarm.manager import SwarmLocked, SwarmManager
 from zenagent.app.swarm.roles import discover_roles
 from zenagent.app.swarm.roster import copy_role, role_view
 from zenagent.cli.rpc.codec import serialize_event
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
 from zenagent.config import load_user_config
 from zenagent.events import AgentEvent
+from zenagent.i18n import t
 from zenagent.project import find_project_root, project_key
 
 #: Server-side diagnostics; raw exception detail never crosses the wire.
@@ -218,7 +219,13 @@ class SwarmOps:
         else:
             self._swarm.move_to_end(key)
         if not manager.started:
-            await manager.start()
+            try:
+                await manager.start()
+            except SwarmLocked as exc:
+                # The manager instance stays cached; the next request retries
+                # once the other process lets go (finding: generic ValueError
+                # text pointed at "another process" without saying whose).
+                raise Refusal(t("swarm.locked"), code="swarm_locked") from exc
         if hasattr(self, "_supervisor"):
             self._supervisor(root).attach_dispatcher(SwarmDispatcher(manager))
         await self._evict_idle_rooms(keep=key)

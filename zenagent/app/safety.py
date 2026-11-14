@@ -39,6 +39,7 @@ __all__ = [
     "PathScope",
     "RiskKind",
     "Verdict",
+    "classify_read_path",
     "classify_write_path",
     "default_allow_outside",
     "destructive_command_reason",

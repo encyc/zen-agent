@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import fcntl
 import json
 import re
 from pathlib import Path
+
+import pytest
 
 from zenagent.app.runtime import RuntimeOptions
 from zenagent.app.swarm.roles import agents_root
@@ -681,3 +684,27 @@ async def test_supervisor_dispatch_rejects_an_unknown_swarm_role(tmp_path):
     )
 
     assert writes[-1]["code"] == "dispatch_rejected"
+
+
+async def test_a_lock_held_elsewhere_refuses_with_the_friendly_message(tmp_path):
+    """SwarmLocked surfaces as a swarm_locked refusal, not a generic error.
+
+    flock on a second fd in the SAME process conflicts like a second process
+    would — the lock is per open file description, not per process."""
+
+    from zenagent.app.swarm.manager import swarm_lock_path
+    from zenagent.cli.rpc.errors import Refusal
+
+    host, _writes = _host(tmp_path)
+    lock_path = swarm_lock_path(tmp_path)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    holder = lock_path.open("w")
+    try:
+        fcntl.flock(holder, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with pytest.raises(Refusal) as excinfo:
+            await host._swarm_manager(tmp_path)
+        assert excinfo.value.code == "swarm_locked"
+        assert "another zenagent process" in str(excinfo.value)
+    finally:
+        fcntl.flock(holder, fcntl.LOCK_UN)
+        holder.close()

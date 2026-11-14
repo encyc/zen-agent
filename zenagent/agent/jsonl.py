@@ -32,8 +32,13 @@ def repair_tail(path: Path) -> None:
 
     Complete files, empty files and absent files are left untouched. The
     truncation is fsynced so a crash right after it cannot resurrect the tail.
+    The file size is re-verified under the write handle: if another writer
+    appended between our read and the cut, their line may end in the range we
+    were about to destroy — leaving the file alone beats deleting their data
+    (a still-torn tail is repaired on the next append).
     """
     try:
+        size = path.stat().st_size
         data = path.read_bytes()
     except FileNotFoundError:
         return
@@ -41,9 +46,28 @@ def repair_tail(path: Path) -> None:
         return
     cut = data.rfind(b"\n") + 1
     with path.open("r+b") as handle:
+        if handle.seek(0, os.SEEK_END) != size:
+            return
         handle.truncate(cut)
         handle.flush()
         os.fsync(handle.fileno())
+
+
+def _ends_torn(path: Path) -> bool:
+    """True when the file exists and its last byte is not a newline.
+
+    One seek+read instead of a full-file read: ``append_line`` runs on every
+    message write, and transcripts reach tens of megabytes.
+    """
+    try:
+        with path.open("rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                return False
+            handle.seek(-1, os.SEEK_END)
+            return handle.read(1) != b"\n"
+    except FileNotFoundError:
+        return False
 
 
 def append_line(path: Path, line: str) -> None:
@@ -54,7 +78,8 @@ def append_line(path: Path, line: str) -> None:
     failed write is fatal or best-effort (they own that policy).
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    repair_tail(path)
+    if _ends_torn(path):
+        repair_tail(path)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(line if line.endswith("\n") else line + "\n")
         handle.flush()

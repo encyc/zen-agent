@@ -163,7 +163,9 @@ def refresh_skills(runtime: Runtime) -> list[str]:
     """
     if not runtime.skills_enabled:
         return []
-    skills, warnings = discover_skills(default_skill_roots(runtime.root))
+    skills, warnings = discover_skills(
+        [*default_skill_roots(runtime.root), *runtime._plugin_skill_roots]
+    )
     skills = active_skills(skills)
     for warning in warnings:
         runtime._note(f"skills {warning}")

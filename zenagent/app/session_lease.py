@@ -18,6 +18,18 @@ participate: only a Runtime claims a lease.
 from __future__ import annotations
 
 import errno
+
+#: errno values that mean "the region is held by someone else". EDEADLOCK is
+#: the POSIX alias and only exists on some platforms; getattr keeps the tuple
+#: portable.
+_LOCK_BUSY_ERRNOS = (
+    errno.EACCES,
+    errno.EAGAIN,
+    errno.EWOULDBLOCK,
+    errno.ENOLCK,
+    errno.EDEADLK,
+    getattr(errno, "EDEADLOCK", errno.EDEADLK),
+)
 import hashlib
 import logging
 import os
@@ -155,7 +167,10 @@ def _acquire_file_lock(path: Path) -> int | None:
             return None
     except OSError as exc:
         os.close(fd)
-        if exc.errno in (errno.EACCES, errno.EAGAIN, errno.EWOULDBLOCK, errno.ENOLCK):
+        # msvcrt.locking reports a held region as EDEADLK ("resource deadlock
+        # avoided"), not EACCES — without it two runtimes would both degrade
+        # to unlocked instead of one refusing with SessionLeaseBusy.
+        if exc.errno in _LOCK_BUSY_ERRNOS:
             raise SessionLeaseBusy() from exc
         # An unsupported filesystem should not make a session unopenable.
         _warn_degraded(path)
