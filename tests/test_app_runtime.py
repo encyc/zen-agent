@@ -631,3 +631,60 @@ async def test_session_persist_failure_surfaces_as_a_notice(runtime_factory, mon
     assert runtime.persist_failures >= 1
     assert len(notices) == runtime.persist_failures
     assert "disk full" in notices[-1]
+
+
+async def test_switch_refuses_before_aborting_current_run(runtime_factory, tmp_path):
+    """P2: the lease check must be a hold, not a peek, and precede the abort.
+
+    ensure_session_free peeked the in-process registry; a foreign PROCESS's
+    flock was invisible until the setter's bind — after this run had already
+    been aborted (audit P2). The preflight now takes the lease, and a busy
+    target fails while the run is alive.
+    """
+    import asyncio
+    import json as json_mod
+    import subprocess
+    import sys
+
+    from zenagent.app import session_lease as lease_mod
+    from zenagent.types import TextContent, UserMessage
+
+    runtime = await runtime_factory(stream_fn=_echo_stream())
+    other = tmp_path / "other.jsonl"
+    other.write_text(
+        json_mod.dumps(
+            UserMessage(content=[TextContent(text="x")], timestamp=0).to_json()
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    def _hold_lock():
+        proc = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import fcntl,sys,time; f=open(sys.argv[1],'w'); "
+                    "fcntl.flock(f, fcntl.LOCK_EX); print('ok', flush=True); "
+                    "time.sleep(30)"
+                ),
+                str(lease_mod._lock_path(other)),
+            ],
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+        return proc, proc.stdout.readline().strip()
+
+    proc, held = await asyncio.to_thread(_hold_lock)
+    try:
+        assert held == "ok"  # the foreign lock is held
+
+        aborts = []
+        runtime.agent.abort = lambda: aborts.append(1)
+
+        with pytest.raises(lease_mod.SessionLeaseBusy):
+            await runtime.switch_session(other)
+        assert aborts == []  # the current run was never touched
+    finally:
+        proc.kill()

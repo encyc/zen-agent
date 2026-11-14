@@ -1048,10 +1048,20 @@ class Runtime:
         ``carry_todos`` copies the checklist: compaction continues the same
         work, while fork/new are new branches and start empty.
         """
-        leases.ensure_session_free(self, path)
+        # Hold, don't peek: a busy target must be refused while this run is
+        # still alive (audit P2). The stash is adopted by the session setter.
+        leases.preflight_switch_lease(self, path)
         carried: list[dict] = []
         if carry_todos:
             carried = load_todo_phases(self.session.path)
+        try:
+            await self._switch_into(path, carry_todos, carried)
+        finally:
+            leases.discard_switch_lease(self)
+
+    async def _switch_into(
+        self, path: Path | None, carry_todos: bool, carried: list[dict]
+    ) -> None:
         if self.before_switch is not None and not await self.before_switch(path):
             return
         self.agent.abort()

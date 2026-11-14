@@ -227,6 +227,36 @@ def session_is_live(path: Path | str) -> bool:
     return degraded
 
 
+def preflight_switch_lease(runtime, path: Path | str | None) -> None:
+    """Take the target's lease NOW; the session setter adopts it.
+
+    ``ensure_session_free`` only peeked the registry: a foreign process's
+    flock was invisible until the setter's bind — after the current run had
+    already been aborted (audit P2). Taking the lease here closes that window.
+    """
+    if path is None:
+        return
+    resolved = _resolved(path)
+    current = getattr(runtime, "_session_lease", None)
+    if current is not None and current.path == resolved:
+        return
+    stashed = getattr(runtime, "_switch_lease", None)
+    if stashed is not None:
+        if stashed.path == resolved:
+            return
+        release_session(stashed)
+        runtime._switch_lease = None
+    runtime._switch_lease = acquire_session(resolved, runtime)
+
+
+def discard_switch_lease(runtime) -> None:
+    """Release an unadopted preflight lease (switch refused or failed)."""
+    stashed = getattr(runtime, "_switch_lease", None)
+    if stashed is not None:
+        runtime._switch_lease = None
+        release_session(stashed)
+
+
 def bind_session_lease(runtime, path: Path | str) -> SessionLease:
     """Acquire the new session before releasing the old one.
 
@@ -238,6 +268,15 @@ def bind_session_lease(runtime, path: Path | str) -> SessionLease:
     current = getattr(runtime, "_session_lease", None)
     if current is not None and current.path == resolved:
         return current
+    stashed = getattr(runtime, "_switch_lease", None)
+    if stashed is not None and stashed.path == resolved:
+        # switch_session preflighted this lease before aborting the run;
+        # adopt it instead of re-acquiring (audit P2).
+        runtime._switch_lease = None
+        if current is not None:
+            release_session(current)
+        runtime._session_lease = stashed
+        return stashed
     lease = acquire_session(resolved, runtime)
     if current is not None:
         release_session(current)
