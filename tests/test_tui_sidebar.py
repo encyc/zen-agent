@@ -335,7 +335,6 @@ async def test_work_strip_is_hidden_without_background_work(fake_runtime):
 
 
 async def test_work_timer_only_runs_while_something_is_live(fake_runtime, monkeypatch):
-    import asyncio
 
     jobs: list = []
 
@@ -356,14 +355,16 @@ async def test_work_timer_only_runs_while_something_is_live(fake_runtime, monkey
         assert app._work_timer is not None
 
         jobs.clear()
-        await asyncio.sleep(1.15)  # let the 1s timer poll the manager
+        # P2: fire the poll tick directly — a wall-clock wait made this test
+        # flaky under CI load (audit P2 / Task 25).
+        app._on_change()
+        await pilot.pause()
 
         assert app._work_timer is None
         assert app.query_one(WorkStrip).display is False
 
 
 async def test_work_timer_refresh_updates_the_sidebar_rows(fake_runtime, monkeypatch):
-    import asyncio
 
     job = _running_job()
 
@@ -384,7 +385,9 @@ async def test_work_timer_refresh_updates_the_sidebar_rows(fake_runtime, monkeyp
 
         job.status = "ok"
         job.duration_ms = 250
-        await asyncio.sleep(1.15)
+        # P2: fire the poll tick directly instead of sleeping past the timer.
+        app._on_change()
+        await pilot.pause()
 
         assert any("✓ bg_1" in row for row in rows(app, "Jobs"))
 
