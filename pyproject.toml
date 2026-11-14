@@ -54,11 +54,14 @@ module-name = "zenagent"
 dev = [
     "pytest>=9.2.0",
     "pytest-asyncio>=1.4.1",
+    "pytest-timeout>=2.3.1",
     "ruff>=0.17.3",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# A hung gate future used to burn the CI job's whole window (audit P2).
+timeout = 120
 asyncio_default_fixture_loop_scope = "function"
 # A test that calls an async helper without awaiting it still "passes"; the
 # coroutine is only finalized later and pytest reports it as unraisable. Make
