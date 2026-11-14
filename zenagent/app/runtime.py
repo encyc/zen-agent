@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -59,6 +60,8 @@ from zenagent.context_files import (
 )
 from zenagent.extensions import load_extensions
 from zenagent.i18n import t
+
+_log = logging.getLogger(__name__)
 from zenagent.limits import Limits
 from zenagent.mcp.manager import McpManager
 from zenagent.prompts import (
@@ -220,6 +223,11 @@ class Runtime:
         #: Extra system-prompt notes sourced the same way (e.g. the zen router
         #: note); each returns the note text or None when inactive.
         self.prompt_note_providers: list[Callable[[], str | None]] = []
+        #: Transcript write failures (audit P1-8): the in-memory transcript and
+        #: the JSONL must not diverge silently. Listeners (chat) surface it.
+        self.persist_failures = 0
+        self.last_persist_error: str = ""
+        self.error_notice_listeners: list[Callable[[str], None]] = []
         #: Checkpoint/rewind markers (context projection; transcript stays intact).
         self.rewind = RewindState()
         #: Extra workspace roots tracked by /add-dir (display only for now).
@@ -549,7 +557,10 @@ class Runtime:
                     return
                 if event.new_messages:
                     for message in event.new_messages:
-                        await runtime.session.append(message)
+                        try:
+                            await runtime.session.append(message)
+                        except OSError as exc:
+                            runtime.note_persist_failure(exc)
                 if runtime._metrics is not None:
                     await asyncio.to_thread(runtime._metrics.flush, runtime.agent)
 
@@ -947,6 +958,22 @@ class Runtime:
         return await plugin_wiring.reconfigure(self)
 
     # -- lifecycle ----------------------------------------------------------
+
+    def note_persist_failure(self, exc: OSError) -> None:
+        """A transcript write failed: count it and surface it (audit P1-8).
+
+        Best-effort logging hides this exact failure class — the run "succeeds"
+        while the transcript silently loses the turn. The notice goes to every
+        listener (chat wires ``set_last_error``) instead of stderr.
+        """
+        self.persist_failures += 1
+        self.last_persist_error = t(
+            "runtime.persist_failed", error=str(exc)
+        )
+        _log.warning("session persist failed: %s", exc)
+        for listener in self.error_notice_listeners:
+            with contextlib.suppress(Exception):
+                listener(self.last_persist_error)
 
     async def close(self) -> None:
         if self.tracer is not None:

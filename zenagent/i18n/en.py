@@ -469,6 +469,9 @@ CATALOG: dict[str, str] = {
     "runtime.missing_key": "missing API key for {model} (set {env})",
     "runtime.no_resume": "no session to resume ({resume})",
     "runtime.hook_failed": "extension hook failed: {error}",
+    "runtime.persist_failed": (
+        "session write failed ({error}); this turn may not survive a restart"
+    ),
     "mode.unknown": "unknown mode: {mode} (choose plan|ask|auto)",
     "session.legacy_file": "not a legacy session file: {source}",
     "session.legacy_dir": "not a legacy session file: {source} (expected under {dir})",

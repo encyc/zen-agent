@@ -605,3 +605,29 @@ async def test_status_reports_the_runtime_cwd(runtime_factory, tmp_path):
     runtime = await runtime_factory(root=tmp_path)
 
     assert ChatController(runtime).status.cwd == str(tmp_path.resolve())
+
+
+async def test_session_persist_failure_surfaces_as_a_notice(runtime_factory, monkeypatch):
+    """P1-8: a failed transcript write must not vanish into stderr.
+
+    The in-memory transcript and the JSONL diverged silently before: the run
+    "succeeded", the ledger said done, and resume lost the turn. The failure
+    now lands on the notice channel the chat listens to.
+    """
+    runtime = await runtime_factory(stream_fn=_echo_stream())
+
+    notices: list[str] = []
+    runtime.error_notice_listeners.append(notices.append)
+
+    async def broken_append(message):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(runtime.session, "append", broken_append)
+
+    await runtime.agent.prompt("hi")
+
+    # agent_end carries every new message of the turn; each write attempt
+    # that fails must surface exactly one notice.
+    assert runtime.persist_failures >= 1
+    assert len(notices) == runtime.persist_failures
+    assert "disk full" in notices[-1]

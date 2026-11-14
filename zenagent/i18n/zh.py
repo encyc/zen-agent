@@ -468,6 +468,9 @@ CATALOG: dict[str, str] = {
     "runtime.missing_key": "模型 {model} 缺少 API key（设置 {env}）",
     "runtime.no_resume": "没有可恢复的会话（{resume}）",
     "runtime.hook_failed": "扩展 hook 失败：{error}",
+    "runtime.persist_failed": (
+        "会话写盘失败（{error}）；本轮对话可能无法在重启后保留"
+    ),
     "mode.unknown": "未知模式：{mode}（可选 plan|ask|auto）",
     "session.legacy_file": "不是旧版会话文件：{source}",
     "session.legacy_dir": "不是旧版会话文件：{source}（应位于 {dir}）",
