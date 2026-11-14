@@ -320,3 +320,23 @@ async def test_restore_survives_a_new_session_file(tmp_path):
     report = rewritten.restore(runs[0].run)
     assert report.restored == [str(path)]
     assert path.read_text() == "old"
+
+
+def test_blob_and_manifest_writes_fsync(tmp_path, monkeypatch):
+    """P2: a rename before its bytes hit disk loses the file on power cut."""
+    import os as os_mod
+
+    journal = SnapshotJournal(tmp_path / "backups", BackupPolicy())
+    fsyncs = []
+    real_fsync = os_mod.fsync
+
+    def counting_fsync(fd):
+        fsyncs.append(fd)
+        real_fsync(fd)
+
+    monkeypatch.setattr(os_mod, "fsync", counting_fsync)
+
+    journal._write_blob("a" * 64, b"payload")
+    journal._rewrite_manifest([{"id": 1}])
+    assert fsyncs, "blob and manifest writes must fsync before os.replace"
+    assert len(fsyncs) >= 2

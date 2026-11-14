@@ -193,6 +193,8 @@ class SnapshotJournal:
         try:
             with os.fdopen(descriptor, "wb") as handle:
                 handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
             _chmod(Path(temp_name), _FILE_MODE)
             os.replace(temp_name, target)
         except BaseException:
@@ -250,6 +252,8 @@ class SnapshotJournal:
             with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
                 for entry in entries:
                     handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                handle.flush()
+                os.fsync(handle.fileno())
             _chmod(Path(temp_name), _FILE_MODE)
             os.replace(temp_name, self.manifest_path)
         except BaseException:
