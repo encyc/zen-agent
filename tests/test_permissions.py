@@ -210,11 +210,12 @@ async def test_every_builtin_tool_declares_an_approval_tier():
     assert tiers["grep"] == "read"
     assert tiers["read_skill" if "read_skill" in tiers else "web_search"] == "read"
     assert tiers["web_search"] == "read"
-    assert tiers["fetch"] == "read"
+    # P0-1: fetch is the exfiltration channel, so it declares "ask" (2026-11-14 audit).
+    assert tiers["fetch"] == "ask"
     assert tiers["write_file"] == "write"
     assert tiers["edit_file"] == "write"
     assert tiers["bash"] == "exec"
-    assert set(tiers.values()) <= {"read", "write", "exec"}
+    assert set(tiers.values()) <= {"read", "ask", "write", "exec"}
 
 
 async def test_plan_mode_gates_real_builtin_tools_by_their_declaration():
@@ -576,3 +577,29 @@ def test_an_explicit_mode_switch_lifts_read_only():
 
     assert gate.read_only is False
     assert gate.mode == "auto"
+
+
+async def test_read_protected_dir_requires_approval_even_in_auto():
+    """P0-1: credential reads must surface an approval even in auto mode."""
+    gate = PermissionGate(interactive=False, mode="auto")
+    allowed, reason = await gate.check("read_file", {"path": "~/.zenagent/settings.json"})
+    assert allowed is False
+    assert "protected" in reason
+
+
+async def test_read_project_file_still_free():
+    """Ordinary project reads stay approval-free."""
+    gate = PermissionGate(interactive=False, mode="auto")
+    allowed, _ = await gate.check("read_file", {"path": "README.md"})
+    assert allowed is True
+
+
+async def test_fetch_requires_approval():
+    """P0-1: fetch can exfiltrate anything that was read; it must not be free."""
+    from zenagent.tools.web.tools import FETCH
+
+    gate = PermissionGate(interactive=False)
+    # The tool object rides along, as the loop passes it (tool_exec.py).
+    allowed, reason = await gate.check("fetch", {"url": "https://example.com"}, FETCH)
+    assert allowed is False
+    assert reason

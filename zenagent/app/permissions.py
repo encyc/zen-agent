@@ -27,6 +27,7 @@ from zenagent.app.modes import DEFAULT_MODE, normalize_mode
 from zenagent.app.safety import (
     GuardPolicy,
     Verdict,
+    classify_read_path,
     classify_write_path,
     default_allow_outside,
     destructive_command_reason,
@@ -73,6 +74,10 @@ _MAX_ARGS_PREVIEW = 120
 
 #: Tools whose path becomes the risk target (and the session grant key).
 _PATH_WRITE_TOOLS = frozenset({"write_file", "edit_file"})
+
+#: Read tools whose ``path`` argument is checked against credential locations:
+#: anything read can be fetched out, so credential reads confirm in every mode.
+_PATH_READ_TOOLS = frozenset({"read_file", "list_dir"})
 
 #: How a non-interactive run can explicitly resolve each confirm-level risk.
 _RISK_HINTS = {
@@ -369,6 +374,23 @@ class PermissionGate:
                         f"{resolved} is outside the workspace "
                         f"{self.policy.workspace}",
                         risk="outside",
+                        target=tool_target(tool_name, args),
+                    )
+        if tool_name in _PATH_READ_TOOLS:
+            raw = args.get("path")
+            if isinstance(raw, str) and raw:
+                try:
+                    scope, resolved = classify_read_path(raw, self.policy)
+                except (OSError, RuntimeError) as exc:
+                    return Verdict("refuse", f"cannot resolve {raw!r}: {exc}")
+                # Not gated by confirm_risks: even auto mode surfaces a
+                # credential read, because the read itself is silent and
+                # whatever it yields can be fetched out.
+                if scope == "protected":
+                    return Verdict(
+                        "confirm",
+                        f"{resolved} is a protected credential path",
+                        risk="protected",
                         target=tool_target(tool_name, args),
                     )
         return Verdict("allow", "")

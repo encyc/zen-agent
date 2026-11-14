@@ -264,6 +264,27 @@ def classify_write_path(raw: str | Path, policy: GuardPolicy) -> tuple[PathScope
     return "outside", target
 
 
+def classify_read_path(raw: str | Path, policy: GuardPolicy) -> tuple[PathScope, Path]:
+    """Classify a read target as ``inside``/``outside``/``protected``.
+
+    Reads are free everywhere except the machine's credential locations: the
+    one read scope that gates is ``protected`` (an agent task never needs
+    ``~/.zenagent`` or ``~/.ssh`` content, and anything read can be fetched
+    out). Resolution matches writes: ``~`` expanded, symlinks followed, so a
+    link into a credential directory is judged by where it lands.
+    """
+    target = _resolved(raw)
+    if _is_protected(target):
+        return "protected", target
+    allowed = (
+        _resolved(policy.workspace),
+        *(_resolved(path) for path in policy.allow_outside),
+    )
+    if _is_under(target, allowed):
+        return "inside", target
+    return "outside", target
+
+
 def _rm_is_recursive(flags: Iterable[str]) -> bool:
     """Whether an ``rm`` flag set asks for a recursive delete."""
     for flag in flags:

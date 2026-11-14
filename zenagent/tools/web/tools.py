@@ -218,5 +218,7 @@ FETCH = AgentTool(
         "required": ["url"],
     },
     execute=_fetch,
-    approval="read",
+    # Not "read": fetch is the one exfiltration channel — anything any tool
+    # read can leave in a URL — so it goes through the approval gate.
+    approval="ask",
 )
