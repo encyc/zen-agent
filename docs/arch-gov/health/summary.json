@@ -1,23 +1,27 @@
 {
- "date": "2026-11-11",
- "manifest_version": 4,
+ "date": "2026-11-14",
+ "manifest_version": 7,
  "new_errors": 0,
  "new_warns": 0,
  "worse": 0,
  "improved": 0,
  "resolved": 0,
- "total": 113,
- "baseline_size": 113,
+ "total": 131,
+ "baseline_size": 131,
  "by_node": {
   "(unmapped)": {
-   "errors": 7,
-   "warns": 29
+   "errors": 9,
+   "warns": 34
   },
   "config": {
    "errors": 0,
    "warns": 2
   },
   "limits": {
+   "errors": 0,
+   "warns": 1
+  },
+  "retry": {
    "errors": 0,
    "warns": 1
   },
@@ -31,7 +35,7 @@
   },
   "app.chat": {
    "errors": 2,
-   "warns": 5
+   "warns": 4
   },
   "app.transcript": {
    "errors": 1,
@@ -39,19 +43,23 @@
   },
   "app.assembly": {
    "errors": 2,
-   "warns": 5
+   "warns": 6
   },
   "app.swarm": {
-   "errors": 1,
+   "errors": 2,
    "warns": 3
   },
-  "cli": {
+  "app.zen": {
    "errors": 1,
-   "warns": 7
+   "warns": 2
+  },
+  "cli": {
+   "errors": 0,
+   "warns": 8
   },
   "cli.rpc": {
    "errors": 5,
-   "warns": 6
+   "warns": 10
   },
   "cli.tui": {
    "errors": 1,
@@ -62,11 +70,15 @@
    "warns": 1
   },
   "cli.tui.screens": {
-   "errors": 1,
+   "errors": 0,
    "warns": 1
   },
   "cli.tui.widgets": {
    "errors": 1,
+   "warns": 2
+  },
+  "i18n": {
+   "errors": 0,
    "warns": 2
   },
   "providers": {
@@ -78,7 +90,7 @@
    "warns": 9
   },
   "(cycles)": {
-   "errors": 6,
+   "errors": 7,
    "warns": 0
   }
  }

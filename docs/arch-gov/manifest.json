@@ -1,3062 +1,3327 @@
 {
- "project": "zen-agent",
- "version": 6,
- "updated": "2026-11-11",
- "overview": "zen-agent 是零第三方依赖（仅 httpx）的终端 AI 编码代理。四个前端（REPL / headless -p / JSONL RPC / Textual TUI）共用 app 层唯一装配序列 bootstrap.prepare；agent 内核以「事件流 + 工具永远返回结果 + 取消是协议内状态」为契约；providers 适配多家 LLM；插件（声明式连接器包，经 MCP 单向外呼）与 MCP/skills/模板/扩展/桌面 GUI(经 RPC) 都在内核之上接线不改内核。",
- "policy": {
-  "file_loc_warn": 600,
-  "file_loc_max": 800,
-  "class_loc_max": 300,
-  "class_methods_max": 20,
-  "func_loc_max": 80,
-  "hub_fan_in": 15,
-  "hub_fan_out": 10,
-  "cross_cluster_max": 4,
-  "exempt": {
-   "hub": [],
-   "orphan": [
-    "zenagent/app/swarm/__init__.py"
-   ],
-   "file_loc": []
-  }
- },
- "clusters": [
-  {
-   "id": "base",
-   "title": "基础层",
-   "desc": ""
-  },
-  {
-   "id": "agent",
-   "title": "运行时内核",
-   "desc": ""
-  },
-  {
-   "id": "app",
-   "title": "应用层",
-   "desc": ""
-  },
-  {
-   "id": "cli",
-   "title": "交互层",
-   "desc": ""
-  },
-  {
-   "id": "i18n",
-   "title": "界面语言",
-   "desc": ""
-  },
-  {
-   "id": "mcp",
-   "title": "MCP 客户端",
-   "desc": ""
-  },
-  {
-   "id": "prompts",
-   "title": "提示词",
-   "desc": ""
-  },
-  {
-   "id": "providers",
-   "title": "协议层",
-   "desc": ""
-  },
-  {
-   "id": "tools",
-   "title": "能力层",
-   "desc": ""
-  }
- ],
- "nodes": [
-  {
-   "id": "agent.loop",
-   "title": "无状态执行内核",
-   "cluster": "agent",
-   "files": [
-    "zenagent/agent/loop.py",
-    "zenagent/agent/tool_exec.py",
-    "zenagent/agent/result_budget.py",
-    "zenagent/agent/timeouts.py",
-    "zenagent/agent/guard.py",
-    "zenagent/agent/validate.py",
-    "zenagent/agent/protocol.py",
-    "zenagent/agent/registry.py"
-   ],
-   "resp": "无状态执行器：agent_loop 组装请求、流式调 provider、终止判定；tool_exec 工具调度（权限门→校验→并行/串行）与结果回写；result_budget/timeouts/guard 循环护栏。已知常量回指环在本节点内部（cycles_seen）",
-   "symbols": [
-    "AgentConfig",
-    "AgentState",
-    "ToolOutcome",
-    "AgentTool",
-    "ToolResultAgent"
-   ]
-  },
-  {
-   "id": "agent.rt",
-   "title": "有状态运行时",
-   "cluster": "agent",
-   "files": [
-    "zenagent/agent/agent.py",
-    "zenagent/agent/session.py",
-    "zenagent/agent/subagents.py",
-    "zenagent/agent/subagents_runtime.py",
-    "zenagent/agent/memory_store.py",
-    "zenagent/agent/artifacts.py"
-   ],
-   "resp": "有状态运行时：Agent（历史/订阅者/steering/abort）、Session JSONL 持久化、子代理运行时（task 工具的背后）、memory_store/artifacts",
-   "symbols": [
-    "Agent",
-    "_Run",
-    "Session",
-    "SessionInfo",
-    "SubagentStore"
-   ]
-  },
-  {
-   "id": "app.assembly",
-   "title": "装配与防线",
-   "cluster": "app",
-   "files": [
-    "zenagent/app/bootstrap.py",
-    "zenagent/app/runtime.py",
-    "zenagent/app/permissions.py",
-    "zenagent/app/safety.py",
-    "zenagent/app/modes.py",
-    "zenagent/app/support.py",
-    "zenagent/app/metrics.py",
-    "zenagent/app/probes.py",
-    "zenagent/app/workspace.py",
-    "zenagent/app/error_notice.py",
-    "zenagent/app/plugin_wiring.py",
-    "zenagent/app/retry.py",
-    "zenagent/app/models.py",
-    "zenagent/app/__init__.py",
-    "zenagent/agent/__init__.py"
-   ],
-   "resp": "装配与防线：bootstrap.prepare（四前端唯一装配序列）、Runtime（对象槽位/工具注入）、PermissionGate/Broker 权限门、safety 风险模型、modes、error_notice 失败文案统一",
-   "symbols": [
-    "PreparedFrontend",
-    "Runtime",
-    "RuntimeOptions",
-    "PermissionGate",
-    "PermissionBroker"
-   ]
-  },
-  {
-   "id": "app.chat",
-   "title": "会话交互",
-   "cluster": "app",
-   "files": [
-    "zenagent/app/chat.py",
-    "zenagent/app/commands.py",
-    "zenagent/app/views.py",
-    "zenagent/app/skill_commands.py",
-    "zenagent/app/slash_args.py",
-    "zenagent/app/pending.py",
-    "zenagent/app/btw.py",
-    "zenagent/app/links.py",
-    "zenagent/app/clipboard.py",
-    "zenagent/app/git.py",
-    "zenagent/app/appearance.py",
-    "zenagent/app/attachments_state.py",
-    "zenagent/app/subagent_tracker.py"
-   ],
-   "resp": "会话交互控制：ChatController（run 生命周期/last_error）、slash 命令注册表与补全、views UI 无关视图模型、模型切换、子代理跟踪",
-   "symbols": [
-    "ChatController",
-    "CommandRegistry",
-    "CommandResult",
-    "AppServices",
-    "Command"
-   ]
-  },
-  {
-   "id": "app.transcript",
-   "title": "会话历史与恢复",
-   "cluster": "app",
-   "files": [
-    "zenagent/app/sessions.py",
-    "zenagent/app/records.py",
-    "zenagent/app/session_meta.py",
-    "zenagent/app/journal.py",
-    "zenagent/app/compact.py",
-    "zenagent/app/shake.py",
-    "zenagent/app/rewind.py",
-    "zenagent/app/restore.py",
-    "zenagent/app/context.py"
-   ],
-   "resp": "会话文件与历史操作：sessions/records 词汇表、session_meta 边车、journal 写快照(/restore)、compact 摘要边界、shake 卸载、rewind",
-   "symbols": [
-    "SessionManager",
-    "SessionEntry",
-    "SessionMetaRecorder",
-    "SnapshotJournal",
-    "RunInfo"
-   ]
-  },
-  {
-   "id": "app.swarm",
-   "title": "多角色 swarm",
-   "cluster": "app",
-   "files": [
-    "zenagent/app/swarm/__init__.py",
-    "zenagent/app/swarm/approvals.py",
-    "zenagent/app/swarm/events_tap.py",
-    "zenagent/app/swarm/frames.py",
-    "zenagent/app/swarm/instances.py",
-    "zenagent/app/swarm/manager.py",
-    "zenagent/app/swarm/protocol.py",
-    "zenagent/app/swarm/roles.py",
-    "zenagent/app/swarm/room.py",
-    "zenagent/app/swarm/roster.py",
-    "zenagent/app/swarm/router.py",
-    "zenagent/app/swarm/runner.py",
-    "zenagent/app/swarm/schedule.py",
-    "zenagent/app/swarm/transcript.py",
-    "zenagent/app/swarm/workflow.py",
-    "zenagent/app/swarm/workitems.py"
-   ],
-   "resp": "常驻多角色运行时：角色是配置（人设/模型/工具/预算），运行单元是 (角色, 工单)：同名角色可并行多个工单、各自 Runtime+Session；房间 JSONL 是唯一消息源，@ 是唯一路由原语；Router 做入站闸门并在工单边界重基链，TaskRunner 约束任务边界与预算。workitems 是 append-only 工单表，workflow 负责开单/续单/请求关闭，schedule 调度每轮，instances 维护运行单元索引与空闲回收，approvals 管审批回调，events_tap 广播角色 run 事件，transcript 可从磁盘还原已归档轮次。",
-   "symbols": [
-    "RoleManifest",
-    "SwarmStore",
-    "Router",
-    "TaskRunner",
-    "SwarmManager",
-    "WorkItem",
-    "WorkItemStore"
-   ]
-  },
-  {
-   "id": "app.zen",
-   "title": "zen 路由与舰队",
-   "cluster": "app",
-   "files": [
-    "zenagent/app/zen/__init__.py",
-    "zenagent/app/zen/fleet.py",
-    "zenagent/app/zen/identity.py",
-    "zenagent/app/zen/prompts.py",
-    "zenagent/app/zen/roster.py",
-    "zenagent/app/zen/tools.py"
-   ],
-   "resp": "zen 模式：一个 router 会话 + 该项目其余会话作为 worker，fleet 属于单个项目 slot。ZenFleet 经 bootstrap.prepare 为每个 worker 装配完整 runtime 并 resume 到其会话，跑任务提示后经 chat.steer 把最终文本注入 router 对话（结果自到、不等待）；信号量限并发，超额排队。roster 边车记录角色/焦点，prompts 组装 worker 提示，tools 提供 zen 派发工具。",
-   "symbols": [
-    "ZenFleet",
-    "WorkerHandle",
-    "RosterRow",
-    "worker_statuses",
-    "read_roster"
-   ]
-  },
-  {
-   "id": "__main__",
-   "title": "__main__.py",
-   "cluster": "base",
-   "files": [
-    "zenagent/__main__.py"
-   ],
-   "resp": "python -m zenagent 入口，转发 cli.main",
-   "symbols": []
-  },
-  {
-   "id": "attachments",
-   "title": "attachments.py",
-   "cluster": "base",
-   "files": [
-    "zenagent/attachments.py"
-   ],
-   "resp": "图片附件读取：magic bytes 定 MIME、本地校验后构造 ImageContent",
-   "symbols": []
-  },
-  {
-   "id": "config",
-   "title": "config.py",
-   "cluster": "base",
-   "files": [
-    "zenagent/config.py"
-   ],
-   "resp": "config.toml 读写与默认配置（~/.zenagent/config.toml）",
-   "symbols": [
-    "UserConfig",
-    "ContextGuard"
-   ]
-  },
-  {
-   "id": "context_files",
-   "title": "context_files.py",
-   "cluster": "base",
-   "files": [
-    "zenagent/context_files.py"
-   ],
-   "resp": "AGENTS.md 等项目指令文件发现，注入 system prompt（--no-context-files 可关）",
-   "symbols": []
-  },
-  {
-   "id": "crash",
-   "title": "crash.py",
-   "cluster": "base",
-   "files": [
-    "zenagent/crash.py"
-   ],
-   "resp": "崩溃日志钩子：未捕获异常落盘",
-   "symbols": []
-  },
-  {
-   "id": "evals_runner",
-   "title": "evals_runner.py",
-   "cluster": "base",
-   "files": [
-    "zenagent/evals_runner.py"
-   ],
-   "resp": "行为评测纯函数部分（报告读写/基线对比）；runner 在 scripts/eval.py",
-   "symbols": []
-  },
-  {
-   "id": "events",
-   "title": "events.py",
-   "cluster": "base",
-   "files": [
-    "zenagent/events.py"
-   ],
-   "resp": "两层事件体系 + AbortToken/Aborted：取消是协议内正常状态",
-   "symbols": [
-    "AgentEvent",
-    "AssistantEvent",
-    "AbortToken",
-    "Aborted"
-   ]
-  },
-  {
-   "id": "export",
-   "title": "export.py",
-   "cluster": "base",
-   "files": [
-    "zenagent/export.py"
-   ],
-   "resp": "会话导出",
-   "symbols": []
-  },
-  {
-   "id": "extensions",
-   "title": "extensions.py",
-   "cluster": "base",
-   "files": [
-    "zenagent/extensions.py"
-   ],
-   "resp": "Python 扩展加载与 ExtensionAPI",
-   "symbols": [
-    "ExtensionAPI",
-    "LoadedExtensions",
-    "ExtensionCommand"
-   ]
-  },
-  {
-   "id": "frontmatter",
-   "title": "frontmatter.py",
-   "cluster": "base",
-   "files": [
-    "zenagent/frontmatter.py"
-   ],
-   "resp": "极简 frontmatter 解析（skills/模板共用，免 YAML 依赖）",
-   "symbols": []
-  },
-  {
-   "id": "http_client",
-   "title": "http_client.py",
-   "cluster": "base",
-   "files": [
-    "zenagent/http_client.py"
-   ],
-   "resp": "进程级共享 httpx.AsyncClient 构造（抗敌意 shell 环境）",
-   "symbols": []
-  },
-  {
-   "id": "limits",
-   "title": "limits.py",
-   "cluster": "base",
-   "files": [
-    "zenagent/limits.py"
-   ],
-   "resp": "[limits]/[task] 预算唯一注册表与外科手术式写盘（write_managed 唯一写路径）",
-   "symbols": [
-    "Limit",
-    "Limits",
-    "LimitsWriteError"
-   ]
-  },
-  {
-   "id": "plugins",
-   "title": "plugins",
-   "cluster": "base",
-   "files": [
-    "zenagent/plugins/__init__.py",
-    "zenagent/plugins/manifest.py",
-    "zenagent/plugins/state.py",
-    "zenagent/plugins/discovery.py",
-    "zenagent/plugins/install.py",
-    "zenagent/plugins/catalog.py"
-   ],
-   "resp": "声明式能力包：manifest 校验、发现、安装/卸载、启停与凭据、贡献解析",
-   "symbols": [
-    "PluginManifest",
-    "ResolvedContributions"
-   ]
-  },
-  {
-   "id": "project",
-   "title": "project.py",
-   "cluster": "base",
-   "files": [
-    "zenagent/project.py"
-   ],
-   "resp": "项目身份与目录布局：<root>/.zenagent/ 随仓库 vs ~/.zenagent/projects/ 本机状态",
-   "symbols": [
-    "ProjectRelocation",
-    "ProjectMeta"
-   ]
-  },
-  {
-   "id": "retry",
-   "title": "retry.py",
-   "cluster": "base",
-   "files": [
-    "zenagent/retry.py"
-   ],
-   "resp": "通用重试 helper（与 providers/message 级重试无关）",
-   "symbols": []
-  },
-  {
-   "id": "settings",
-   "title": "settings.py",
-   "cluster": "base",
-   "files": [
-    "zenagent/settings.py"
-   ],
-   "resp": "settings.json(0600)：API keys 与 UI 偏好，优先级高于环境变量",
-   "symbols": [
-    "SettingsStore"
-   ]
-  },
-  {
-   "id": "skills",
-   "title": "skills.py",
-   "cluster": "base",
-   "files": [
-    "zenagent/skills.py"
-   ],
-   "resp": "文件即扩展：SKILL.md 发现 + skill 工具构造",
-   "symbols": [
-    "Skill"
-   ]
-  },
-  {
-   "id": "telemetry",
-   "title": "telemetry.py",
-   "cluster": "base",
-   "files": [
-    "zenagent/telemetry.py"
-   ],
-   "resp": "",
-   "symbols": [
-    "MetricsRecorder",
-    "RunMetrics"
-   ]
-  },
-  {
-   "id": "templates",
-   "title": "templates.py",
-   "cluster": "base",
-   "files": [
-    "zenagent/templates.py"
-   ],
-   "resp": "prompt 模板展开（expand）",
-   "symbols": [
-    "PromptTemplate"
-   ]
-  },
-  {
-   "id": "trace",
-   "title": "trace.py",
-   "cluster": "base",
-   "files": [
-    "zenagent/trace.py"
-   ],
-   "resp": "append-only JSONL 执行 trace：工具/参数/结果/耗时",
-   "symbols": [
-    "TraceRecorder",
-    "TraceRecord"
-   ]
-  },
-  {
-   "id": "types",
-   "title": "types.py",
-   "cluster": "base",
-   "files": [
-    "zenagent/types.py"
-   ],
-   "resp": "全部数据类型：消息/内容块/用量/成本（全图 fan-in 最高）",
-   "symbols": [
-    "AssistantMessage",
-    "Cost",
-    "ToolCall",
-    "Usage",
-    "UserMessage"
-   ]
-  },
-  {
-   "id": "update_check",
-   "title": "update_check.py",
-   "cluster": "base",
-   "files": [
-    "zenagent/update_check.py"
-   ],
-   "resp": "TUI 专用 PyPI 版本检查（后台、静默失败）",
-   "symbols": []
-  },
-  {
-   "id": "usage",
-   "title": "usage.py",
-   "cluster": "base",
-   "files": [
-    "zenagent/usage.py"
-   ],
-   "resp": "用量聚合 collect_usage（四前端唯一一份）",
-   "symbols": [
-    "UsageReport",
-    "ModelUsage"
-   ]
-  },
-  {
-   "id": "cli",
-   "title": "cli",
-   "cluster": "cli",
-   "files": [
-    "zenagent/cli/__init__.py",
-    "zenagent/cli/completion.py",
-    "zenagent/cli/doctor.py",
-    "zenagent/cli/editor.py",
-    "zenagent/cli/exportcmd.py",
-    "zenagent/cli/flags.py",
-    "zenagent/cli/keybindings.py",
-    "zenagent/cli/main.py",
-    "zenagent/cli/permissions.py",
-    "zenagent/cli/prompts_cmd.py",
-    "zenagent/cli/render.py",
-    "zenagent/cli/repl.py",
-    "zenagent/cli/sessionscmd.py",
-    "zenagent/cli/theme.py",
-    "zenagent/cli/usagecmd.py"
-   ],
-   "resp": "交互层入口：main 参数分发、repl、render/doctor/export/usage/theme/keybindings",
-   "symbols": [
-    "ReplCompleter",
-    "Check",
-    "_PlainOutput",
-    "AssistantLiveRenderer",
-    "LiveUpdate"
-   ]
-  },
-  {
-   "id": "cli.rpc",
-   "title": "rpc",
-   "cluster": "cli",
-   "files": [
-    "zenagent/cli/rpc/__init__.py",
-    "zenagent/cli/rpc/cli.py",
-    "zenagent/cli/rpc/codec.py",
-    "zenagent/cli/rpc/errors.py",
-    "zenagent/cli/rpc/ops_config.py",
-    "zenagent/cli/rpc/ops_files.py",
-    "zenagent/cli/rpc/ops_plugins.py",
-    "zenagent/cli/rpc/ops_session.py",
-    "zenagent/cli/rpc/server.py",
-    "zenagent/cli/rpc/host.py",
-    "zenagent/cli/rpc/ops_swarm.py",
-    "zenagent/cli/rpc/ops_zen.py",
-    "zenagent/cli/rpc/slot.py",
-    "zenagent/cli/rpc/terminal.py"
-   ],
-   "resp": "JSONL RPC 服务器与 ops 分派（hello 协议握手、[limits] 契约、项目 slot；swarm 角色与房间分派；zen 舰队启停与 roster）",
-   "symbols": [
-    "ConfigOps",
-    "FilesOps",
-    "SessionOps",
-    "RpcServer"
-   ]
-  },
-  {
-   "id": "cli.tui",
-   "title": "tui",
-   "cluster": "cli",
-   "files": [
-    "zenagent/cli/tui/__init__.py",
-    "zenagent/cli/tui/app.py",
-    "zenagent/cli/tui/app_theme.py",
-    "zenagent/cli/tui/history.py",
-    "zenagent/cli/tui/labels.py",
-    "zenagent/cli/tui/palette.py",
-    "zenagent/cli/tui/run.py",
-    "zenagent/cli/tui/status/__init__.py",
-    "zenagent/cli/tui/status/presets.py",
-    "zenagent/cli/tui/status/segments.py",
-    "zenagent/cli/tui/textutil.py"
-   ],
-   "resp": "Textual TUI 应用壳与 run",
-   "symbols": [
-    "ZenAgentApp",
-    "PromptHistory",
-    "_LiveMap",
-    "Preset",
-    "SegmentContext"
-   ]
-  },
-  {
-   "id": "cli.tui.app_parts",
-   "title": "app_parts",
-   "cluster": "cli",
-   "files": [
-    "zenagent/cli/tui/app_parts/__init__.py",
-    "zenagent/cli/tui/app_parts/appearance.py",
-    "zenagent/cli/tui/app_parts/commands.py",
-    "zenagent/cli/tui/app_parts/display.py",
-    "zenagent/cli/tui/app_parts/drafts.py",
-    "zenagent/cli/tui/app_parts/hints.py",
-    "zenagent/cli/tui/app_parts/models.py",
-    "zenagent/cli/tui/app_parts/queue.py",
-    "zenagent/cli/tui/app_parts/sessions.py",
-    "zenagent/cli/tui/app_parts/update_notice.py",
-    "zenagent/cli/tui/app_parts/views.py"
-   ],
-   "resp": "TUI 主应用组成部件（display/commands/sessions/views…）",
-   "symbols": [
-    "AppearanceMixin",
-    "CommandsMixin",
-    "DisplayMixin",
-    "DraftsMixin",
-    "HintsMixin"
-   ]
-  },
-  {
-   "id": "cli.tui.screens",
-   "title": "screens",
-   "cluster": "cli",
-   "files": [
-    "zenagent/cli/tui/screens/appearance.py",
-    "zenagent/cli/tui/screens/context_breakdown.py",
-    "zenagent/cli/tui/screens/info.py",
-    "zenagent/cli/tui/screens/job_log.py",
-    "zenagent/cli/tui/screens/memory_manager.py",
-    "zenagent/cli/tui/screens/modals.py",
-    "zenagent/cli/tui/screens/palette.py",
-    "zenagent/cli/tui/screens/pickers.py",
-    "zenagent/cli/tui/screens/providers.py",
-    "zenagent/cli/tui/screens/secrets.py",
-    "zenagent/cli/tui/screens/todo_list.py"
-   ],
-   "resp": "TUI 全屏界面（info/todo/job_log/modals/pickers…）",
-   "symbols": [
-    "ContextBreakdownScreen",
-    "JobLogScreen",
-    "MemoryManager",
-    "MemoryEditor",
-    "AskQuestion"
-   ]
-  },
-  {
-   "id": "cli.tui.widgets",
-   "title": "widgets",
-   "cluster": "cli",
-   "files": [
-    "zenagent/cli/tui/widgets/attachments.py",
-    "zenagent/cli/tui/widgets/command_hints.py",
-    "zenagent/cli/tui/widgets/error_banner.py",
-    "zenagent/cli/tui/widgets/markdown_stream.py",
-    "zenagent/cli/tui/widgets/new_content.py",
-    "zenagent/cli/tui/widgets/pending_band.py",
-    "zenagent/cli/tui/widgets/prompt_gutter.py",
-    "zenagent/cli/tui/widgets/prompt_input.py",
-    "zenagent/cli/tui/widgets/rows.py",
-    "zenagent/cli/tui/widgets/sidebar.py",
-    "zenagent/cli/tui/widgets/sidebar_resize.py",
-    "zenagent/cli/tui/widgets/skill_block.py",
-    "zenagent/cli/tui/widgets/status_band.py",
-    "zenagent/cli/tui/widgets/subagent_banner.py",
-    "zenagent/cli/tui/widgets/todo_hud.py",
-    "zenagent/cli/tui/widgets/tool_card.py",
-    "zenagent/cli/tui/widgets/transcript.py",
-    "zenagent/cli/tui/widgets/welcome.py",
-    "zenagent/cli/tui/widgets/work_indicator.py",
-    "zenagent/cli/tui/widgets/work_strip.py"
-   ],
-   "resp": "TUI 组件库（transcript/sidebar/tool_card…20 文件，同质 UI 部件故不拆）",
-   "symbols": [
-    "AttachmentChips",
-    "Chip",
-    "CommandHints",
-    "ErrorBanner",
-    "StreamingMarkdown"
-   ]
-  },
-  {
-   "id": "i18n",
-   "title": "i18n",
-   "cluster": "i18n",
-   "files": [
-    "zenagent/i18n/__init__.py",
-    "zenagent/i18n/en.py",
-    "zenagent/i18n/zh.py"
-   ],
-   "resp": "stdlib-only i18n：扁平 dict 目录、英文目录为准、缺失回退可见",
-   "symbols": []
-  },
-  {
-   "id": "mcp",
-   "title": "mcp",
-   "cluster": "mcp",
-   "files": [
-    "zenagent/mcp/__init__.py",
-    "zenagent/mcp/client.py",
-    "zenagent/mcp/config.py",
-    "zenagent/mcp/redact.py",
-    "zenagent/mcp/manager.py"
-   ],
-   "resp": "MCP 客户端与生命周期：Stdio/Http transport、McpManager；工具包装成 AgentTool 注入",
-   "symbols": [
-    "StdioTransport",
-    "HttpTransport",
-    "McpClient",
-    "McpTool",
-    "McpTransportError"
-   ]
-  },
-  {
-   "id": "prompts",
-   "title": "prompts",
-   "cluster": "prompts",
-   "files": [
-    "zenagent/prompts/__init__.py",
-    "zenagent/prompts/registry.py",
-    "zenagent/prompts/render.py",
-    "zenagent/prompts/spec.py"
-   ],
-   "resp": "prompt 子系统：blocks/*.md 块文件 + compose_system 唯一组装契约 + catalog",
-   "symbols": [
-    "PromptContext",
-    "RenderedBlock",
-    "RenderedPrompt",
-    "PromptRenderError",
-    "BlockSpec"
-   ]
-  },
-  {
-   "id": "providers",
-   "title": "providers",
-   "cluster": "providers",
-   "files": [
-    "zenagent/providers/__init__.py",
-    "zenagent/providers/anthropic_messages.py",
-    "zenagent/providers/catalog.py",
-    "zenagent/providers/compat.py",
-    "zenagent/providers/google_generative_ai.py",
-    "zenagent/providers/history.py",
-    "zenagent/providers/limits.py",
-    "zenagent/providers/openai_completions.py",
-    "zenagent/providers/openai_responses.py",
-    "zenagent/providers/registry.py",
-    "zenagent/providers/stream_options.py",
-    "zenagent/providers/transport.py"
-   ],
-   "resp": "协议层：StreamFn 契约、safe_stream（永不抛）、4 家适配器、transport（共享连接池/取消）+ message 级 retry、catalog/compat",
-   "symbols": [
-    "_Block",
-    "Model",
-    "ProviderConfig",
-    "CompatFlags",
-    "_ToolBlock"
-   ]
-  },
-  {
-   "id": "tools",
-   "title": "tools",
-   "cluster": "tools",
-   "files": [
-    "zenagent/tools/__init__.py",
-    "zenagent/tools/_result.py",
-    "zenagent/tools/ask.py",
-    "zenagent/tools/bash.py",
-    "zenagent/tools/fs.py",
-    "zenagent/tools/github.py",
-    "zenagent/tools/jobs.py",
-    "zenagent/tools/lsp.py",
-    "zenagent/tools/memory.py",
-    "zenagent/tools/read_state.py",
-    "zenagent/tools/search.py",
-    "zenagent/tools/shell.py",
-    "zenagent/tools/task.py",
-    "zenagent/tools/todo.py",
-    "zenagent/tools/wait.py"
-   ],
-   "resp": "内置工具面：read/write/edit/list_dir/bash/wait/ask/glob/grep + todo/task/memory/checkpoint/lsp/github",
-   "symbols": [
-    "JobManager",
-    "Job",
-    "UnknownJobError",
-    "JobStartError",
-    "LspClient"
-   ]
-  },
-  {
-   "id": "tools.web",
-   "title": "web",
-   "cluster": "tools",
-   "files": [
-    "zenagent/tools/web/__init__.py",
-    "zenagent/tools/web/net.py",
-    "zenagent/tools/web/providers.py",
-    "zenagent/tools/web/query.py",
-    "zenagent/tools/web/registry.py",
-    "zenagent/tools/web/tools.py",
-    "zenagent/tools/web/types.py"
-   ],
-   "resp": "网络工具：web_search 多供应商链 + fetch",
-   "symbols": [
-    "StructuredQuery",
-    "QuerySyntax",
-    "Term",
-    "SearchChain",
-    "ChainResult"
-   ]
-  }
- ],
- "edges": [
-  {
-   "from": "__main__",
-   "to": "cli",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "agent.loop",
-   "to": "events",
-   "desc": "AgentEvent",
-   "kind": "import"
-  },
-  {
-   "from": "agent.loop",
-   "to": "providers",
-   "desc": "stream_with_retry → safe_stream → adapter.stream → transport",
-   "kind": "import"
-  },
-  {
-   "from": "agent.loop",
-   "to": "retry",
-   "desc": "stream_with_retry",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "agent.loop",
-   "to": "types",
-   "desc": "SystemMessage、TextContent、ToolDef、ToolResultMessage",
-   "kind": "import"
-  },
-  {
-   "from": "agent.rt",
-   "to": "agent.loop",
-   "desc": "Agent.prompt → _drive → agent_loop（每 run 一个 task）",
-   "kind": "import"
-  },
-  {
-   "from": "agent.rt",
-   "to": "config",
-   "desc": "ContextGuard",
-   "kind": "import"
-  },
-  {
-   "from": "agent.rt",
-   "to": "events",
-   "desc": "AbortToken",
-   "kind": "import"
-  },
-  {
-   "from": "agent.rt",
-   "to": "project",
-   "desc": "all_session_dirs、legacy_sessions_dir、project_key_for_session、project_sessions_dir",
-   "kind": "import"
-  },
-  {
-   "from": "agent.rt",
-   "to": "providers",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "agent.rt",
-   "to": "types",
-   "desc": "TextContent、UserMessage、message_from_json",
-   "kind": "import"
-  },
-  {
-   "from": "app.assembly",
-   "to": "agent.loop",
-   "desc": "ToolRegistry",
-   "kind": "import"
-  },
-  {
-   "from": "app.assembly",
-   "to": "agent.rt",
-   "desc": "Runtime 构造 Agent、挂 ask_handler/订阅者",
-   "kind": "import"
-  },
-  {
-   "from": "app.assembly",
-   "to": "app.chat",
-   "desc": "AppServices、ChatController、build_default_commands、git_status",
-   "kind": "import"
-  },
-  {
-   "from": "app.assembly",
-   "to": "app.transcript",
-   "desc": "RewindState、SessionManager、SessionMetaRecorder、attach_journal",
-   "kind": "import"
-  },
-  {
-   "from": "app.assembly",
-   "to": "config",
-   "desc": "ContextGuard、UserConfig、apply_user_config、load_user_config",
-   "kind": "import"
-  },
-  {
-   "from": "app.assembly",
-   "to": "context_files",
-   "desc": "discover_context_files、load_context_files",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "app.assembly",
-   "to": "extensions",
-   "desc": "load_extensions",
-   "kind": "import"
-  },
-  {
-   "from": "app.assembly",
-   "to": "i18n",
-   "desc": "t、t.startswith",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "app.assembly",
-   "to": "limits",
-   "desc": "",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "app.assembly",
-   "to": "mcp",
-   "desc": "Runtime 注入 MCP 工具",
-   "kind": "import"
-  },
-  {
-   "from": "app.assembly",
-   "to": "plugins",
-   "desc": "plugin_wiring 把插件贡献翻译成 MCP 配置",
-   "kind": "import"
-  },
-  {
-   "from": "app.assembly",
-   "to": "project",
-   "desc": "find_project_root、project_key、project_key_for_session、write_project_meta",
-   "kind": "import"
-  },
-  {
-   "from": "app.assembly",
-   "to": "prompts",
-   "desc": "compose_system 组装 system prompt",
-   "kind": "import"
-  },
-  {
-   "from": "app.assembly",
-   "to": "providers",
-   "desc": "StreamOptions、estimate_text_tokens、find_model、load_catalog",
-   "kind": "import"
-  },
-  {
-   "from": "app.assembly",
-   "to": "settings",
-   "desc": "disabled_skills、get_api_key",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "app.assembly",
-   "to": "skills",
-   "desc": "build_skill_tool、default_skill_roots、discover_skills、format_skill_entries",
-   "kind": "import"
-  },
-  {
-   "from": "app.assembly",
-   "to": "telemetry",
-   "desc": "MetricsRecorder、append_metrics",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "app.assembly",
-   "to": "templates",
-   "desc": "default_template_roots、discover_templates",
-   "kind": "import"
-  },
-  {
-   "from": "app.assembly",
-   "to": "tools",
-   "desc": "Runtime 注入 base_tools + todo/task/memory/checkpoint/lsp/github",
-   "kind": "import"
-  },
-  {
-   "from": "app.assembly",
-   "to": "tools.web",
-   "desc": "SearchRequest",
-   "kind": "import"
-  },
-  {
-   "from": "app.assembly",
-   "to": "trace",
-   "desc": "TraceRecorder",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "app.assembly",
-   "to": "types",
-   "desc": "UserMessage",
-   "kind": "import"
-  },
-  {
-   "from": "app.chat",
-   "to": "agent.loop",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "app.chat",
-   "to": "agent.rt",
-   "desc": "Session、SubagentStore、carry_task_dir、get_task_manager",
-   "kind": "import"
-  },
-  {
-   "from": "app.chat",
-   "to": "app.assembly",
-   "desc": "ChatController 驱动 Runtime",
-   "kind": "import"
-  },
-  {
-   "from": "app.chat",
-   "to": "app.transcript",
-   "desc": "build_context_report、compact、is_compaction、is_tool_end",
-   "kind": "import"
-  },
-  {
-   "from": "app.chat",
-   "to": "attachments",
-   "desc": "read_image_argument",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "app.chat",
-   "to": "events",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "app.chat",
-   "to": "frontmatter",
-   "desc": "parse_frontmatter",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "app.chat",
-   "to": "i18n",
-   "desc": "t",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "app.chat",
-   "to": "providers",
-   "desc": "StreamOptions、safe_stream、stream_fn_for",
-   "kind": "import"
-  },
-  {
-   "from": "app.chat",
-   "to": "skills",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "app.chat",
-   "to": "tools",
-   "desc": "coerce_todo_phases、get_job_manager、load_todo_phases",
-   "kind": "import"
-  },
-  {
-   "from": "app.chat",
-   "to": "tools.web",
-   "desc": "default_provider、format_results、run_search",
-   "kind": "import"
-  },
-  {
-   "from": "app.chat",
-   "to": "types",
-   "desc": "Cost、SystemMessage、Usage、UserMessage",
-   "kind": "import"
-  },
-  {
-   "from": "app.transcript",
-   "to": "agent.loop",
-   "desc": "AgentTool、ToolResultAgent",
-   "kind": "import"
-  },
-  {
-   "from": "app.transcript",
-   "to": "agent.rt",
-   "desc": "Session、carry_task_dir、get_task_manager、list_sessions",
-   "kind": "import"
-  },
-  {
-   "from": "app.transcript",
-   "to": "app.assembly",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "app.transcript",
-   "to": "events",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "app.transcript",
-   "to": "export",
-   "desc": "export_session",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "app.transcript",
-   "to": "i18n",
-   "desc": "t",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "app.transcript",
-   "to": "project",
-   "desc": "legacy_sessions_dir、project_backups_dir、project_root_for_sessions_dir、project_sessions_dir",
-   "kind": "import"
-  },
-  {
-   "from": "app.transcript",
-   "to": "prompts",
-   "desc": "compact_result、compose_compact",
-   "kind": "import"
-  },
-  {
-   "from": "app.transcript",
-   "to": "providers",
-   "desc": "StreamOptions、estimate_prompt_tokens、estimate_tool_tokens、safe_stream",
-   "kind": "import"
-  },
-  {
-   "from": "app.transcript",
-   "to": "types",
-   "desc": "SystemMessage、TextContent、UserMessage",
-   "kind": "import"
-  },
-  {
-   "from": "attachments",
-   "to": "types",
-   "desc": "ImageContent",
-   "kind": "import"
-  },
-  {
-   "from": "cli",
-   "to": "agent.loop",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "cli",
-   "to": "agent.rt",
-   "desc": "latest_session、list_sessions、sessions_dir、split_title_body",
-   "kind": "import"
-  },
-  {
-   "from": "cli",
-   "to": "app.assembly",
-   "desc": "RuntimeOptions、api_key_for、describe_modes、prepare",
-   "kind": "import"
-  },
-  {
-   "from": "cli",
-   "to": "app.chat",
-   "desc": "TranscriptBuilder、argument_values、build_skill_submission、resolve_theme",
-   "kind": "import"
-  },
-  {
-   "from": "cli",
-   "to": "app.transcript",
-   "desc": "adopt_legacy_session、maybe_auto_compact",
-   "kind": "import"
-  },
-  {
-   "from": "cli",
-   "to": "attachments",
-   "desc": "read_image_argument",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli",
-   "to": "cli.rpc",
-   "desc": "main",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli",
-   "to": "cli.tui",
-   "desc": "run_tui_session",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli",
-   "to": "config",
-   "desc": "UserConfig、apply_user_config、config_path、load_user_config",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli",
-   "to": "crash",
-   "desc": "install_excepthook",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli",
-   "to": "events",
-   "desc": "",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli",
-   "to": "export",
-   "desc": "export_session",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli",
-   "to": "i18n",
-   "desc": "resolve_language、set_locale、t",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli",
-   "to": "limits",
-   "desc": "describe",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli",
-   "to": "project",
-   "desc": "legacy_sessions_dir、project_config_path",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli",
-   "to": "prompts",
-   "desc": "PromptContext、compose_system、read_block",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli",
-   "to": "providers",
-   "desc": "load_catalog",
-   "kind": "import"
-  },
-  {
-   "from": "cli",
-   "to": "settings",
-   "desc": "describe、get_api_key、get_pref、set_pref",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli",
-   "to": "templates",
-   "desc": "expand",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli",
-   "to": "tools",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "cli",
-   "to": "types",
-   "desc": "",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli",
-   "to": "usage",
-   "desc": "collect_usage、render_report、session_paths",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.rpc",
-   "to": "agent.rt",
-   "desc": "MemoryStore",
-   "kind": "import"
-  },
-  {
-   "from": "cli.rpc",
-   "to": "app.assembly",
-   "desc": "RuntimeOptions、list_directory、prepare、probe_mcp_server",
-   "kind": "import"
-  },
-  {
-   "from": "cli.rpc",
-   "to": "app.chat",
-   "desc": "build_skill_submission、parse_skill_display、usage_total",
-   "kind": "import"
-  },
-  {
-   "from": "cli.rpc",
-   "to": "app.transcript",
-   "desc": "is_compaction",
-   "kind": "import"
-  },
-  {
-   "from": "cli.rpc",
-   "to": "attachments",
-   "desc": "read_image_argument",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.rpc",
-   "to": "cli",
-   "desc": "add_runtime_flags",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.rpc",
-   "to": "config",
-   "desc": "config_path、load_user_config",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.rpc",
-   "to": "events",
-   "desc": "",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.rpc",
-   "to": "i18n",
-   "desc": "set_locale",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.rpc",
-   "to": "limits",
-   "desc": "KNOB_BY_KEY.get、coerce_value、read_managed、write_managed",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.rpc",
-   "to": "mcp",
-   "desc": "load_mcp_layers、remove_mcp_server、save_mcp_server",
-   "kind": "import"
-  },
-  {
-   "from": "cli.rpc",
-   "to": "plugins",
-   "desc": "ops_plugins：内置目录、发现、安装/卸载、启停与凭据",
-   "kind": "import"
-  },
-  {
-   "from": "cli.rpc",
-   "to": "project",
-   "desc": "find_project_root、project_config_path、project_dir、project_key",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.rpc",
-   "to": "settings",
-   "desc": "describe、disabled_skills、get_api_key、set_api_key",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.rpc",
-   "to": "skills",
-   "desc": "default_skill_roots、discover_skills",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.rpc",
-   "to": "tools.web",
-   "desc": "KEY_ENVS.items、KEY_ENVS.values、LABELS.get",
-   "kind": "import"
-  },
-  {
-   "from": "cli.rpc",
-   "to": "types",
-   "desc": "",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.tui",
-   "to": "app.assembly",
-   "desc": "ModelManager、tool_target",
-   "kind": "import"
-  },
-  {
-   "from": "cli.tui",
-   "to": "app.chat",
-   "desc": "AppServices、ChatController、build_default_commands、resolve_theme",
-   "kind": "import"
-  },
-  {
-   "from": "cli.tui",
-   "to": "app.transcript",
-   "desc": "SessionManager",
-   "kind": "import"
-  },
-  {
-   "from": "cli.tui",
-   "to": "cli.tui.app_parts",
-   "desc": "",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.tui",
-   "to": "cli.tui.screens",
-   "desc": "AskQuestion、Confirm、RenamePrompt、ToolApproval",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.tui",
-   "to": "cli.tui.widgets",
-   "desc": "AttachmentChips、CommandHints、ErrorBanner、NewContentBar",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.tui",
-   "to": "i18n",
-   "desc": "resolve_language、set_locale、t、tn",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.tui",
-   "to": "settings",
-   "desc": "get_pref",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.tui.app_parts",
-   "to": "agent.rt",
-   "desc": "session_title",
-   "kind": "import"
-  },
-  {
-   "from": "cli.tui.app_parts",
-   "to": "app.chat",
-   "desc": "AppServices、build_default_commands、build_skill_submission、read_clipboard_text",
-   "kind": "import"
-  },
-  {
-   "from": "cli.tui.app_parts",
-   "to": "attachments",
-   "desc": "read_image_argument",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.tui.app_parts",
-   "to": "cli",
-   "desc": "argument_matches、command_matches、hint_context、skill_matches",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.tui.app_parts",
-   "to": "cli.tui",
-   "desc": "bind、theme_name",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.tui.app_parts",
-   "to": "cli.tui.screens",
-   "desc": "HistorySearch、JobLogScreen、SecretInput",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.tui.app_parts",
-   "to": "cli.tui.widgets",
-   "desc": "",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.tui.app_parts",
-   "to": "i18n",
-   "desc": "resolve_language、set_locale、t",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.tui.app_parts",
-   "to": "project",
-   "desc": "find_project_root、project_key、project_key_for_session",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.tui.app_parts",
-   "to": "settings",
-   "desc": "get_api_key、set_api_key、set_pref",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.tui.app_parts",
-   "to": "templates",
-   "desc": "expand",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.tui.app_parts",
-   "to": "tools.web",
-   "desc": "LABELS.get",
-   "kind": "import"
-  },
-  {
-   "from": "cli.tui.app_parts",
-   "to": "update_check",
-   "desc": "format_notice、installed_version、is_disabled、mark_notified",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.tui.screens",
-   "to": "agent.rt",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "cli.tui.screens",
-   "to": "app.assembly",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "cli.tui.screens",
-   "to": "app.chat",
-   "desc": "argument_values",
-   "kind": "import"
-  },
-  {
-   "from": "cli.tui.screens",
-   "to": "app.transcript",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "cli.tui.screens",
-   "to": "cli.tui",
-   "desc": "STATE_COLORS.get、clip_cells、context_label、pad_cells",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.tui.screens",
-   "to": "cli.tui.widgets",
-   "desc": "APP_CHORDS.items",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.tui.screens",
-   "to": "i18n",
-   "desc": "t",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.tui.screens",
-   "to": "mcp",
-   "desc": "save_server",
-   "kind": "import"
-  },
-  {
-   "from": "cli.tui.screens",
-   "to": "settings",
-   "desc": "describe、set_pref",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.tui.screens",
-   "to": "tools",
-   "desc": "save_todo_phases、unified_diff",
-   "kind": "import"
-  },
-  {
-   "from": "cli.tui.screens",
-   "to": "tools.web",
-   "desc": "LABELS.get、available_providers、default_provider",
-   "kind": "import"
-  },
-  {
-   "from": "cli.tui.screens",
-   "to": "usage",
-   "desc": "collect_usage、render_report、session_paths",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.tui.widgets",
-   "to": "app.chat",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "cli.tui.widgets",
-   "to": "cli.tui",
-   "desc": "CONTEXT_COLORS.get、SECTION_ACCENTS.get、STATE_COLORS.get、clip_cells",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.tui.widgets",
-   "to": "i18n",
-   "desc": "t、tn",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.tui.widgets",
-   "to": "tools",
-   "desc": "summarize_todo",
-   "kind": "import"
-  },
-  {
-   "from": "cli.tui.widgets",
-   "to": "types",
-   "desc": "",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "config",
-   "to": "limits",
-   "desc": "parse_limits",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "config",
-   "to": "project",
-   "desc": "project_config_path",
-   "kind": "import"
-  },
-  {
-   "from": "config",
-   "to": "providers",
-   "desc": "ProviderConfig、model_from_mapping",
-   "kind": "import"
-  },
-  {
-   "from": "config",
-   "to": "types",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "context_files",
-   "to": "prompts",
-   "desc": "read_block、render",
-   "kind": "import"
-  },
-  {
-   "from": "events",
-   "to": "types",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "export",
-   "to": "agent.rt",
-   "desc": "Session",
-   "kind": "import"
-  },
-  {
-   "from": "export",
-   "to": "types",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "extensions",
-   "to": "agent.loop",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "mcp",
-   "to": "agent.loop",
-   "desc": "AgentTool、ToolResultAgent",
-   "kind": "import"
-  },
-  {
-   "from": "mcp",
-   "to": "http_client",
-   "desc": "async_client",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "mcp",
-   "to": "project",
-   "desc": "project_mcp_path",
-   "kind": "import"
-  },
-  {
-   "from": "mcp",
-   "to": "types",
-   "desc": "ImageContent、TextContent",
-   "kind": "import"
-  },
-  {
-   "from": "plugins",
-   "to": "settings",
-   "desc": "state 读写 settings.api_keys 中的 plugin:<id>:<key>",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "prompts",
-   "to": "providers",
-   "desc": "estimate_text_tokens",
-   "kind": "import"
-  },
-  {
-   "from": "providers",
-   "to": "events",
-   "desc": "Aborted、AssistantEvent",
-   "kind": "import"
-  },
-  {
-   "from": "providers",
-   "to": "http_client",
-   "desc": "async_client",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "providers",
-   "to": "types",
-   "desc": "AssistantMessage、Cost、TextContent、ThinkingContent",
-   "kind": "import"
-  },
-  {
-   "from": "retry",
-   "to": "events",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "retry",
-   "to": "providers",
-   "desc": "safe_stream",
-   "kind": "import"
-  },
-  {
-   "from": "retry",
-   "to": "types",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "skills",
-   "to": "agent.loop",
-   "desc": "AgentTool、ToolResultAgent",
-   "kind": "import"
-  },
-  {
-   "from": "skills",
-   "to": "frontmatter",
-   "desc": "parse_frontmatter",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "skills",
-   "to": "project",
-   "desc": "find_project_root",
-   "kind": "import"
-  },
-  {
-   "from": "skills",
-   "to": "prompts",
-   "desc": "read_block、render、tool_description",
-   "kind": "import"
-  },
-  {
-   "from": "skills",
-   "to": "types",
-   "desc": "TextContent",
-   "kind": "import"
-  },
-  {
-   "from": "telemetry",
-   "to": "events",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "telemetry",
-   "to": "types",
-   "desc": "Usage",
-   "kind": "import"
-  },
-  {
-   "from": "templates",
-   "to": "frontmatter",
-   "desc": "parse_frontmatter",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "templates",
-   "to": "project",
-   "desc": "find_project_root",
-   "kind": "import"
-  },
-  {
-   "from": "tools",
-   "to": "agent.loop",
-   "desc": "AgentTool、ToolResultAgent",
-   "kind": "import"
-  },
-  {
-   "from": "tools",
-   "to": "agent.rt",
-   "desc": "task 工具背后 = subagents_runtime",
-   "kind": "import"
-  },
-  {
-   "from": "tools",
-   "to": "config",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "tools",
-   "to": "events",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "tools",
-   "to": "prompts",
-   "desc": "read_block、render、tool_description",
-   "kind": "import"
-  },
-  {
-   "from": "tools",
-   "to": "providers",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "tools",
-   "to": "tools.web",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "tools",
-   "to": "types",
-   "desc": "TextContent",
-   "kind": "import"
-  },
-  {
-   "from": "tools.web",
-   "to": "agent.loop",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "tools.web",
-   "to": "http_client",
-   "desc": "async_client",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "tools.web",
-   "to": "prompts",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "tools.web",
-   "to": "settings",
-   "desc": "get_api_key、get_pref",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "tools.web",
-   "to": "tools",
-   "desc": "text_result",
-   "kind": "import"
-  },
-  {
-   "from": "trace",
-   "to": "events",
-   "desc": "",
-   "kind": "import"
-  },
-  {
-   "from": "update_check",
-   "to": "http_client",
-   "desc": "async_client",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "usage",
-   "to": "agent.rt",
-   "desc": "all_session_dirs、sessions_dir",
-   "kind": "import"
-  },
-  {
-   "from": "usage",
-   "to": "types",
-   "desc": "message_from_json",
-   "kind": "import"
-  },
-  {
-   "from": "app.swarm",
-   "to": "agent.loop",
-   "desc": "AgentTool、ToolResultAgent",
-   "kind": "import"
-  },
-  {
-   "from": "app.swarm",
-   "to": "agent.rt",
-   "desc": "Agent、Session（每角色独立运行时）",
-   "kind": "import"
-  },
-  {
-   "from": "app.swarm",
-   "to": "app.assembly",
-   "desc": "Runtime.bootstrap、RuntimeOptions、build_broker_for、start_mcp",
-   "kind": "import"
-  },
-  {
-   "from": "app.swarm",
-   "to": "app.transcript",
-   "desc": "maybe_auto_compact",
-   "kind": "import"
-  },
-  {
-   "from": "app.swarm",
-   "to": "config",
-   "desc": "load_user_config",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "app.swarm",
-   "to": "mcp",
-   "desc": "parse_server（角色 MCP 声明）",
-   "kind": "import"
-  },
-  {
-   "from": "app.swarm",
-   "to": "plugins",
-   "desc": "credentials_for、discover_plugins、is_enabled、resolve",
-   "kind": "import"
-  },
-  {
-   "from": "app.swarm",
-   "to": "project",
-   "desc": "zenagent_home（工作区围栏）",
-   "kind": "import"
-  },
-  {
-   "from": "app.swarm",
-   "to": "settings",
-   "desc": "get_api_key",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "app.swarm",
-   "to": "skills",
-   "desc": "discover_skills（角色技能根）",
-   "kind": "import"
-  },
-  {
-   "from": "app.swarm",
-   "to": "types",
-   "desc": "TextContent",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "cli.rpc",
-   "to": "app.swarm",
-   "desc": "SwarmManager、SwarmOps 分派",
-   "kind": "import"
-  },
-  {
-   "from": "app.zen",
-   "to": "agent.loop",
-   "desc": "AgentTool、ToolResultAgent（zen 派发工具）",
-   "kind": "import"
-  },
-  {
-   "from": "app.zen",
-   "to": "agent.rt",
-   "desc": "read_session_titles、unique_session_path（worker 会话）",
-   "kind": "import"
-  },
-  {
-   "from": "app.zen",
-   "to": "app.assembly",
-   "desc": "bootstrap.prepare、RuntimeOptions（每 worker 装配 runtime）",
-   "kind": "import"
-  },
-  {
-   "from": "app.zen",
-   "to": "app.transcript",
-   "desc": "open_session（resume worker 会话）",
-   "kind": "import"
-  },
-  {
-   "from": "app.zen",
-   "to": "app.chat",
-   "desc": "ChatController（chat.steer 注入 router，TYPE_CHECKING）",
-   "kind": "import",
-   "hidden": true
-  },
-  {
-   "from": "app.zen",
-   "to": "tools",
-   "desc": "text_result（zen 工具结果）",
-   "kind": "import"
-  },
-  {
-   "from": "cli.rpc",
-   "to": "app.zen",
-   "desc": "ZenFleet、latest_router、set_role（zen 启停与 roster）",
-   "kind": "import"
-  }
- ],
- "invariants": [
-  "六层依赖只向下：cli → app → tools → agent → providers → types/events；tests/test_layering.py 钉住；app/ 不 import cli 与 argparse/textual/rich/prompt_toolkit",
-  "StreamFn 永不抛异常：一切失败翻译成 terminal error 事件（safe_stream）",
-  "工具永远返回结果：失败 = is_error 结果回喂模型，loop 内没有包裹工具执行的 try/except",
-  "取消是协议内正常状态：Aborted(Exception) 而非 asyncio.CancelledError，AbortToken 贯穿 transport",
-  "bootstrap.prepare 是四个前端唯一装配序列；broker 与 runtime 读同一 RuntimeOptions（参数化测试钉死）",
-  "已知常量回指环 loop↔tool_exec↔result_budget↔timeouts 在 agent.loop 节点内部，cycles_seen 登记",
-  "插件只做单向外呼：zen → 插件 MCP 进程 → 外部应用；plugins/ 不 import mcp/app/cli/agent/tools/providers（tests/test_plugin_layering.py 钉住），只有 app/plugin_wiring.py 把插件贡献翻译成 MCP 配置",
-  "swarm 只在 app 层组合既有内核：角色 runtime 经 Runtime.bootstrap 装配，插件仍单向外呼，密码只存 ~/.zenagent/settings.json（manifest 只放 ${KEY} 占位）",
-  "zen 只在 app 层组合既有内核：worker runtime 经 bootstrap.prepare 装配并 resume 到项目会话，结果经 chat.steer 注入 router（结果自到、不等待）；fleet 属于单个项目 slot，不跨项目"
- ],
- "unmapped": [
-  {
-   "file": "tests/test_mcp_redact.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_plugin_catalog.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_plugin_install.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_plugin_layering.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_plugin_manifest.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_plugin_runtime.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_plugin_state.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_plugin_wiring.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_rpc_plugins.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "zenagent/__init__.py",
-   "reason": "package 门面 __init__"
-  },
-  {
-   "file": "examples/custom_tool.py",
-   "reason": "outside src_root: examples"
-  },
-  {
-   "file": "examples/embed.py",
-   "reason": "outside src_root: examples"
-  },
-  {
-   "file": "examples/headless.py",
-   "reason": "outside src_root: examples"
-  },
-  {
-   "file": "examples/mcp.py",
-   "reason": "outside src_root: examples"
-  },
-  {
-   "file": "examples/rpc_client.py",
-   "reason": "outside src_root: examples"
-  },
-  {
-   "file": "scripts/build-sidecar.py",
-   "reason": "outside src_root: scripts"
-  },
-  {
-   "file": "scripts/capture_sse.py",
-   "reason": "outside src_root: scripts"
-  },
-  {
-   "file": "scripts/check_architecture.py",
-   "reason": "outside src_root: scripts"
-  },
-  {
-   "file": "scripts/eval.py",
-   "reason": "outside src_root: scripts"
-  },
-  {
-   "file": "scripts/import_graph.py",
-   "reason": "outside src_root: scripts"
-  },
-  {
-   "file": "scripts/prompt_goldens.py",
-   "reason": "outside src_root: scripts"
-  },
-  {
-   "file": "scripts/sync-desktop-version.py",
-   "reason": "outside src_root: scripts"
-  },
-  {
-   "file": "scripts/zen_sidecar_entry.py",
-   "reason": "outside src_root: scripts"
-  },
-  {
-   "file": "tests/conftest.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/prompt_fixtures.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_agent_class.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_anthropic.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_app_chat.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_app_chat_attachments.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_app_commands.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_app_context.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_app_discovery.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_app_git.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_app_links.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_app_models.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_app_pending.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_app_permissions.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_app_records.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_app_runtime.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_app_session_meta.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_app_sessions.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_app_support.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_app_undo_retry.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_app_views.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_appearance.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_architecture_gate.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_artifacts.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_ask.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_bootstrap.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_catalog.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_catalog_pi_ai.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_cli.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_cli_flags.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_cli_prompts.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_compact.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_completion.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_config.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_context_files.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_crash.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_crash_wiring.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_docs_commands.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_docs_paths.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_doctor.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_error_notice.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_evals_runner.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_events.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_examples.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_export.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_extensions.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_git_identity.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_google.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_headless_parity.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_history_replay.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_i18n.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_i18n_app.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_i18n_tui.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_images.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_jobs.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_journal.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_layering.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_limits.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_limits_rpc.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_loop.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_mcp_client.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_mcp_manager.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_mcp_rpc.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_memory_store.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_modes.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_openai_request.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_openai_responses.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_openai_stream.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_permissions.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_probes.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_project.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_project_rpc.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_project_scoping.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_prompt_goldens_capture.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_prompts_budget.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_prompts_compact.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_prompts_compose.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_prompts_frontends.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_prompts_golden.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_prompts_registry.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_prompts_render.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_prompts_sources.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_prompts_tools.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_provider_limits.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_readme.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_registry.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_render.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_repl_commands.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_repl_logic.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_repl_streaming.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_restore.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_result_budget.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_retry.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_rewind.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_rpc.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_rpc_contract.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_rpc_v2.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_runtime_memory.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_safety.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_secrets_rpc.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_session.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_settings.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_sidecar_build.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_skill_commands.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_skills.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_skills_rpc.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_slash_args.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_smoke.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_streaming_behavior.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_subagent_tracker.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_subagents_runtime.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_subagents_store.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_task.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_telemetry.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_templates.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_theme.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_timeouts.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_todo.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tool_registry.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tools_bash.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tools_fs.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tools_github.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tools_lsp.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tools_memory.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tools_result.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tools_search.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tools_wait.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tools_web.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tools_web_query.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_trace.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_transport.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_app_theme.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_approval.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_ask.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_attachments.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_chat.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_command_guard.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_compact.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_context.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_controls.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_error_banner.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_history.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_job_log.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_layout.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_links.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_markdown_stream.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_memory.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_missing_key.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_mouse.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_palette.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_pending_band.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_pickers.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_polish.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_rows.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_screen_registry.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_selection.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_sessions.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_sidebar.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_sidebar_resize.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_skeleton.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_skill_invocation.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_status_band.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_subagent_resume.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_subagent_view.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_theme_css.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_thinking_status.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_todo.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_tool_card.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_tool_card_families.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_update.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tui_usability.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_types.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_update_check.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_updater_fragment.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_usage.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_validate.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_workspace.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/fixtures/fake_lsp_server.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/fixtures/mcp_crash_once_server.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/fixtures/mcp_echo_server.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/fixtures/mcp_flaky_server.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "scripts/demo_age.py",
-   "reason": "outside src_root: scripts"
-  },
-  {
-   "file": "tests/test_project_scoped_runtime.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_rpc_host.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_rpc_host_e2e.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_rpc_slot.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_rpc_swarm.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_runtime_role_assembly.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_swarm_manager.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_swarm_roles.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_swarm_room.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_swarm_router.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_swarm_runner.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_terminal.py",
-   "reason": "outside src_root: tests"
-  },
-  {
-   "file": "tests/test_tools_scoped.py",
-   "reason": "outside src_root: tests"
-  }
- ],
- "cycles_seen": [
-  [
-   "zenagent.agent.loop",
-   "zenagent.agent.result_budget",
-   "zenagent.agent.timeouts",
-   "zenagent.agent.tool_exec"
+  "project": "zen-agent",
+  "version": 7,
+  "updated": "2026-11-14",
+  "overview": "zen-agent 是零第三方依赖（仅 httpx）的终端 AI 编码代理。四个前端（REPL / headless -p / JSONL RPC / Textual TUI）共用 app 层唯一装配序列 bootstrap.prepare；agent 内核以「事件流 + 工具永远返回结果 + 取消是协议内状态」为契约；providers 适配多家 LLM；插件（声明式连接器包，经 MCP 单向外呼）与 MCP/skills/模板/扩展/桌面 GUI(经 RPC) 都在内核之上接线不改内核。",
+  "policy": {
+    "file_loc_warn": 600,
+    "file_loc_max": 800,
+    "class_loc_max": 300,
+    "class_methods_max": 20,
+    "func_loc_max": 80,
+    "hub_fan_in": 15,
+    "hub_fan_out": 10,
+    "cross_cluster_max": 4,
+    "exempt": {
+      "hub": [
+        "zenagent",
+        "zenagent.agent.loop",
+        "zenagent.app.views",
+        "zenagent.config",
+        "zenagent.events",
+        "zenagent.i18n",
+        "zenagent.project",
+        "zenagent.providers.catalog",
+        "zenagent.types"
+      ],
+      "orphan": [
+        "zenagent/app/swarm/__init__.py"
+      ],
+      "file_loc": []
+    }
+  },
+  "clusters": [
+    {
+      "id": "base",
+      "title": "基础层",
+      "desc": ""
+    },
+    {
+      "id": "agent",
+      "title": "运行时内核",
+      "desc": ""
+    },
+    {
+      "id": "app",
+      "title": "应用层",
+      "desc": ""
+    },
+    {
+      "id": "cli",
+      "title": "交互层",
+      "desc": ""
+    },
+    {
+      "id": "i18n",
+      "title": "界面语言",
+      "desc": ""
+    },
+    {
+      "id": "mcp",
+      "title": "MCP 客户端",
+      "desc": ""
+    },
+    {
+      "id": "prompts",
+      "title": "提示词",
+      "desc": ""
+    },
+    {
+      "id": "providers",
+      "title": "协议层",
+      "desc": ""
+    },
+    {
+      "id": "tools",
+      "title": "能力层",
+      "desc": ""
+    }
   ],
-  [
-   "zenagent.tools.web",
-   "zenagent.tools.web.providers",
-   "zenagent.tools.web.registry",
-   "zenagent.tools.web.tools"
+  "nodes": [
+    {
+      "id": "agent.loop",
+      "title": "无状态执行内核",
+      "cluster": "agent",
+      "files": [
+        "zenagent/agent/loop.py",
+        "zenagent/agent/tool_exec.py",
+        "zenagent/agent/result_budget.py",
+        "zenagent/agent/timeouts.py",
+        "zenagent/agent/guard.py",
+        "zenagent/agent/validate.py",
+        "zenagent/agent/protocol.py",
+        "zenagent/agent/registry.py"
+      ],
+      "resp": "无状态执行器：agent_loop 组装请求、流式调 provider、终止判定；tool_exec 工具调度（权限门→校验→并行/串行）与结果回写；result_budget/timeouts/guard 循环护栏。已知常量回指环在本节点内部（cycles_seen）",
+      "symbols": [
+        "AgentConfig",
+        "AgentState",
+        "ToolOutcome",
+        "AgentTool",
+        "ToolResultAgent"
+      ]
+    },
+    {
+      "id": "agent.rt",
+      "title": "有状态运行时",
+      "cluster": "agent",
+      "files": [
+        "zenagent/agent/agent.py",
+        "zenagent/agent/artifacts.py",
+        "zenagent/agent/jsonl.py",
+        "zenagent/agent/memory_store.py",
+        "zenagent/agent/session.py",
+        "zenagent/agent/subagents.py",
+        "zenagent/agent/subagents_runtime.py"
+      ],
+      "resp": "有状态运行时：Agent（历史/订阅者/steering/abort）、Session JSONL 持久化、子代理运行时（task 工具的背后）、memory_store/artifacts",
+      "symbols": [
+        "Agent",
+        "_Run",
+        "Session",
+        "SessionInfo",
+        "SubagentStore"
+      ]
+    },
+    {
+      "id": "app.assembly",
+      "title": "装配与防线",
+      "cluster": "app",
+      "files": [
+        "zenagent/agent/__init__.py",
+        "zenagent/app/__init__.py",
+        "zenagent/app/agent_profile.py",
+        "zenagent/app/approval_router.py",
+        "zenagent/app/bootstrap.py",
+        "zenagent/app/dispatch.py",
+        "zenagent/app/error_notice.py",
+        "zenagent/app/metrics.py",
+        "zenagent/app/models.py",
+        "zenagent/app/modes.py",
+        "zenagent/app/permissions.py",
+        "zenagent/app/plugin_wiring.py",
+        "zenagent/app/probes.py",
+        "zenagent/app/retry.py",
+        "zenagent/app/runtime.py",
+        "zenagent/app/safety.py",
+        "zenagent/app/skills_recompose.py",
+        "zenagent/app/support.py",
+        "zenagent/app/workspace.py",
+        "zenagent/app/workspace_state.py"
+      ],
+      "resp": "装配与防线：bootstrap.prepare（四前端唯一装配序列）、Runtime（对象槽位/工具注入）、PermissionGate/Broker 权限门、safety 风险模型、modes、error_notice 失败文案统一",
+      "symbols": [
+        "PreparedFrontend",
+        "Runtime",
+        "RuntimeOptions",
+        "PermissionGate",
+        "PermissionBroker"
+      ]
+    },
+    {
+      "id": "app.chat",
+      "title": "会话交互",
+      "cluster": "app",
+      "files": [
+        "zenagent/app/chat.py",
+        "zenagent/app/commands.py",
+        "zenagent/app/views.py",
+        "zenagent/app/skill_commands.py",
+        "zenagent/app/slash_args.py",
+        "zenagent/app/pending.py",
+        "zenagent/app/btw.py",
+        "zenagent/app/links.py",
+        "zenagent/app/clipboard.py",
+        "zenagent/app/git.py",
+        "zenagent/app/appearance.py",
+        "zenagent/app/attachments_state.py",
+        "zenagent/app/subagent_tracker.py"
+      ],
+      "resp": "会话交互控制：ChatController（run 生命周期/last_error）、slash 命令注册表与补全、views UI 无关视图模型、模型切换、子代理跟踪",
+      "symbols": [
+        "ChatController",
+        "CommandRegistry",
+        "CommandResult",
+        "AppServices",
+        "Command"
+      ]
+    },
+    {
+      "id": "app.transcript",
+      "title": "会话历史与恢复",
+      "cluster": "app",
+      "files": [
+        "zenagent/app/compact.py",
+        "zenagent/app/context.py",
+        "zenagent/app/journal.py",
+        "zenagent/app/records.py",
+        "zenagent/app/restore.py",
+        "zenagent/app/rewind.py",
+        "zenagent/app/run_wiring.py",
+        "zenagent/app/runs.py",
+        "zenagent/app/session_lease.py",
+        "zenagent/app/session_meta.py",
+        "zenagent/app/sessions.py",
+        "zenagent/app/shake.py",
+        "zenagent/app/subagent_runs.py"
+      ],
+      "resp": "会话文件与历史操作：sessions/records 词汇表、session_meta 边车、journal 写快照(/restore)、compact 摘要边界、shake 卸载、rewind",
+      "symbols": [
+        "SessionManager",
+        "SessionEntry",
+        "SessionMetaRecorder",
+        "SnapshotJournal",
+        "RunInfo"
+      ]
+    },
+    {
+      "id": "app.swarm",
+      "title": "多角色 swarm",
+      "cluster": "app",
+      "files": [
+        "zenagent/app/swarm/__init__.py",
+        "zenagent/app/swarm/approvals.py",
+        "zenagent/app/swarm/events_tap.py",
+        "zenagent/app/swarm/frames.py",
+        "zenagent/app/swarm/instances.py",
+        "zenagent/app/swarm/manager.py",
+        "zenagent/app/swarm/protocol.py",
+        "zenagent/app/swarm/roles.py",
+        "zenagent/app/swarm/room.py",
+        "zenagent/app/swarm/roster.py",
+        "zenagent/app/swarm/router.py",
+        "zenagent/app/swarm/runner.py",
+        "zenagent/app/swarm/schedule.py",
+        "zenagent/app/swarm/transcript.py",
+        "zenagent/app/swarm/workflow.py",
+        "zenagent/app/swarm/workitems.py"
+      ],
+      "resp": "常驻多角色运行时：角色是配置（人设/模型/工具/预算），运行单元是 (角色, 工单)：同名角色可并行多个工单、各自 Runtime+Session；房间 JSONL 是唯一消息源，@ 是唯一路由原语；Router 做入站闸门并在工单边界重基链，TaskRunner 约束任务边界与预算。workitems 是 append-only 工单表，workflow 负责开单/续单/请求关闭，schedule 调度每轮，instances 维护运行单元索引与空闲回收，approvals 管审批回调，events_tap 广播角色 run 事件，transcript 可从磁盘还原已归档轮次。",
+      "symbols": [
+        "RoleManifest",
+        "SwarmStore",
+        "Router",
+        "TaskRunner",
+        "SwarmManager",
+        "WorkItem",
+        "WorkItemStore"
+      ]
+    },
+    {
+      "id": "app.zen",
+      "title": "zen 路由与舰队",
+      "cluster": "app",
+      "files": [
+        "zenagent/app/zen/__init__.py",
+        "zenagent/app/zen/fleet.py",
+        "zenagent/app/zen/identity.py",
+        "zenagent/app/zen/prompts.py",
+        "zenagent/app/zen/roster.py",
+        "zenagent/app/zen/tools.py"
+      ],
+      "resp": "zen 模式：一个 router 会话 + 该项目其余会话作为 worker，fleet 属于单个项目 slot。ZenFleet 经 bootstrap.prepare 为每个 worker 装配完整 runtime 并 resume 到其会话，跑任务提示后经 chat.steer 把最终文本注入 router 对话（结果自到、不等待）；信号量限并发，超额排队。roster 边车记录角色/焦点，prompts 组装 worker 提示，tools 提供 zen 派发工具。",
+      "symbols": [
+        "ZenFleet",
+        "WorkerHandle",
+        "RosterRow",
+        "worker_statuses",
+        "read_roster"
+      ]
+    },
+    {
+      "id": "__main__",
+      "title": "__main__.py",
+      "cluster": "base",
+      "files": [
+        "zenagent/__main__.py"
+      ],
+      "resp": "python -m zenagent 入口，转发 cli.main",
+      "symbols": []
+    },
+    {
+      "id": "attachments",
+      "title": "attachments.py",
+      "cluster": "base",
+      "files": [
+        "zenagent/attachments.py"
+      ],
+      "resp": "图片附件读取：magic bytes 定 MIME、本地校验后构造 ImageContent",
+      "symbols": []
+    },
+    {
+      "id": "config",
+      "title": "config.py",
+      "cluster": "base",
+      "files": [
+        "zenagent/config.py"
+      ],
+      "resp": "config.toml 读写与默认配置（~/.zenagent/config.toml）",
+      "symbols": [
+        "UserConfig",
+        "ContextGuard"
+      ]
+    },
+    {
+      "id": "context_files",
+      "title": "context_files.py",
+      "cluster": "base",
+      "files": [
+        "zenagent/context_files.py"
+      ],
+      "resp": "AGENTS.md 等项目指令文件发现，注入 system prompt（--no-context-files 可关）",
+      "symbols": []
+    },
+    {
+      "id": "crash",
+      "title": "crash.py",
+      "cluster": "base",
+      "files": [
+        "zenagent/crash.py"
+      ],
+      "resp": "崩溃日志钩子：未捕获异常落盘",
+      "symbols": []
+    },
+    {
+      "id": "evals_runner",
+      "title": "evals_runner.py",
+      "cluster": "base",
+      "files": [
+        "zenagent/evals_runner.py"
+      ],
+      "resp": "行为评测纯函数部分（报告读写/基线对比）；runner 在 scripts/eval.py",
+      "symbols": []
+    },
+    {
+      "id": "events",
+      "title": "events.py",
+      "cluster": "base",
+      "files": [
+        "zenagent/events.py"
+      ],
+      "resp": "两层事件体系 + AbortToken/Aborted：取消是协议内正常状态",
+      "symbols": [
+        "AgentEvent",
+        "AssistantEvent",
+        "AbortToken",
+        "Aborted"
+      ]
+    },
+    {
+      "id": "export",
+      "title": "export.py",
+      "cluster": "base",
+      "files": [
+        "zenagent/export.py"
+      ],
+      "resp": "会话导出",
+      "symbols": []
+    },
+    {
+      "id": "extensions",
+      "title": "extensions.py",
+      "cluster": "base",
+      "files": [
+        "zenagent/extensions.py"
+      ],
+      "resp": "Python 扩展加载与 ExtensionAPI",
+      "symbols": [
+        "ExtensionAPI",
+        "LoadedExtensions",
+        "ExtensionCommand"
+      ]
+    },
+    {
+      "id": "frontmatter",
+      "title": "frontmatter.py",
+      "cluster": "base",
+      "files": [
+        "zenagent/frontmatter.py"
+      ],
+      "resp": "极简 frontmatter 解析（skills/模板共用，免 YAML 依赖）",
+      "symbols": []
+    },
+    {
+      "id": "http_client",
+      "title": "http_client.py",
+      "cluster": "base",
+      "files": [
+        "zenagent/http_client.py"
+      ],
+      "resp": "进程级共享 httpx.AsyncClient 构造（抗敌意 shell 环境）",
+      "symbols": []
+    },
+    {
+      "id": "limits",
+      "title": "limits.py",
+      "cluster": "base",
+      "files": [
+        "zenagent/limits.py"
+      ],
+      "resp": "[limits]/[task] 预算唯一注册表与外科手术式写盘（write_managed 唯一写路径）",
+      "symbols": [
+        "Limit",
+        "Limits",
+        "LimitsWriteError"
+      ]
+    },
+    {
+      "id": "plugins",
+      "title": "plugins",
+      "cluster": "base",
+      "files": [
+        "zenagent/plugins/__init__.py",
+        "zenagent/plugins/manifest.py",
+        "zenagent/plugins/state.py",
+        "zenagent/plugins/discovery.py",
+        "zenagent/plugins/install.py",
+        "zenagent/plugins/catalog.py"
+      ],
+      "resp": "声明式能力包：manifest 校验、发现、安装/卸载、启停与凭据、贡献解析",
+      "symbols": [
+        "PluginManifest",
+        "ResolvedContributions"
+      ]
+    },
+    {
+      "id": "project",
+      "title": "project.py",
+      "cluster": "base",
+      "files": [
+        "zenagent/project.py"
+      ],
+      "resp": "项目身份与目录布局：<root>/.zenagent/ 随仓库 vs ~/.zenagent/projects/ 本机状态",
+      "symbols": [
+        "ProjectRelocation",
+        "ProjectMeta"
+      ]
+    },
+    {
+      "id": "retry",
+      "title": "retry.py",
+      "cluster": "base",
+      "files": [
+        "zenagent/retry.py"
+      ],
+      "resp": "通用重试 helper（与 providers/message 级重试无关）",
+      "symbols": []
+    },
+    {
+      "id": "settings",
+      "title": "settings.py",
+      "cluster": "base",
+      "files": [
+        "zenagent/settings.py"
+      ],
+      "resp": "settings.json(0600)：API keys 与 UI 偏好，优先级高于环境变量",
+      "symbols": [
+        "SettingsStore"
+      ]
+    },
+    {
+      "id": "skills",
+      "title": "skills.py",
+      "cluster": "base",
+      "files": [
+        "zenagent/skills.py"
+      ],
+      "resp": "文件即扩展：SKILL.md 发现 + skill 工具构造",
+      "symbols": [
+        "Skill"
+      ]
+    },
+    {
+      "id": "telemetry",
+      "title": "telemetry.py",
+      "cluster": "base",
+      "files": [
+        "zenagent/telemetry.py"
+      ],
+      "resp": "",
+      "symbols": [
+        "MetricsRecorder",
+        "RunMetrics"
+      ]
+    },
+    {
+      "id": "templates",
+      "title": "templates.py",
+      "cluster": "base",
+      "files": [
+        "zenagent/templates.py"
+      ],
+      "resp": "prompt 模板展开（expand）",
+      "symbols": [
+        "PromptTemplate"
+      ]
+    },
+    {
+      "id": "trace",
+      "title": "trace.py",
+      "cluster": "base",
+      "files": [
+        "zenagent/trace.py"
+      ],
+      "resp": "append-only JSONL 执行 trace：工具/参数/结果/耗时",
+      "symbols": [
+        "TraceRecorder",
+        "TraceRecord"
+      ]
+    },
+    {
+      "id": "types",
+      "title": "types.py",
+      "cluster": "base",
+      "files": [
+        "zenagent/types.py"
+      ],
+      "resp": "全部数据类型：消息/内容块/用量/成本（全图 fan-in 最高）",
+      "symbols": [
+        "AssistantMessage",
+        "Cost",
+        "ToolCall",
+        "Usage",
+        "UserMessage"
+      ]
+    },
+    {
+      "id": "update_check",
+      "title": "update_check.py",
+      "cluster": "base",
+      "files": [
+        "zenagent/update_check.py"
+      ],
+      "resp": "TUI 专用 PyPI 版本检查（后台、静默失败）",
+      "symbols": []
+    },
+    {
+      "id": "usage",
+      "title": "usage.py",
+      "cluster": "base",
+      "files": [
+        "zenagent/usage.py"
+      ],
+      "resp": "用量聚合 collect_usage（四前端唯一一份）",
+      "symbols": [
+        "UsageReport",
+        "ModelUsage"
+      ]
+    },
+    {
+      "id": "cli",
+      "title": "cli",
+      "cluster": "cli",
+      "files": [
+        "zenagent/cli/__init__.py",
+        "zenagent/cli/completion.py",
+        "zenagent/cli/doctor.py",
+        "zenagent/cli/editor.py",
+        "zenagent/cli/exportcmd.py",
+        "zenagent/cli/flags.py",
+        "zenagent/cli/interaction.py",
+        "zenagent/cli/keybindings.py",
+        "zenagent/cli/main.py",
+        "zenagent/cli/mcpcmd.py",
+        "zenagent/cli/prompts_cmd.py",
+        "zenagent/cli/render.py",
+        "zenagent/cli/repl.py",
+        "zenagent/cli/sessionscmd.py",
+        "zenagent/cli/theme.py",
+        "zenagent/cli/usagecmd.py"
+      ],
+      "resp": "交互层入口：main 参数分发、repl、render/doctor/export/usage/theme/keybindings",
+      "symbols": [
+        "ReplCompleter",
+        "Check",
+        "_PlainOutput",
+        "AssistantLiveRenderer",
+        "LiveUpdate"
+      ]
+    },
+    {
+      "id": "cli.rpc",
+      "title": "rpc",
+      "cluster": "cli",
+      "files": [
+        "zenagent/cli/rpc/__init__.py",
+        "zenagent/cli/rpc/cli.py",
+        "zenagent/cli/rpc/codec.py",
+        "zenagent/cli/rpc/errors.py",
+        "zenagent/cli/rpc/host.py",
+        "zenagent/cli/rpc/ops_config.py",
+        "zenagent/cli/rpc/ops_files.py",
+        "zenagent/cli/rpc/ops_plugins.py",
+        "zenagent/cli/rpc/ops_runs.py",
+        "zenagent/cli/rpc/ops_secrets.py",
+        "zenagent/cli/rpc/ops_session.py",
+        "zenagent/cli/rpc/ops_skills.py",
+        "zenagent/cli/rpc/ops_supervisor.py",
+        "zenagent/cli/rpc/ops_swarm.py",
+        "zenagent/cli/rpc/ops_workspace.py",
+        "zenagent/cli/rpc/ops_zen.py",
+        "zenagent/cli/rpc/server.py",
+        "zenagent/cli/rpc/slot.py",
+        "zenagent/cli/rpc/terminal.py"
+      ],
+      "resp": "JSONL RPC 服务器与 ops 分派（hello 协议握手、[limits] 契约、项目 slot；swarm 角色与房间分派；zen 舰队启停与 roster）",
+      "symbols": [
+        "ConfigOps",
+        "FilesOps",
+        "SessionOps",
+        "RpcServer"
+      ]
+    },
+    {
+      "id": "cli.tui",
+      "title": "tui",
+      "cluster": "cli",
+      "files": [
+        "zenagent/cli/tui/__init__.py",
+        "zenagent/cli/tui/app.py",
+        "zenagent/cli/tui/app_theme.py",
+        "zenagent/cli/tui/history.py",
+        "zenagent/cli/tui/labels.py",
+        "zenagent/cli/tui/palette.py",
+        "zenagent/cli/tui/run.py",
+        "zenagent/cli/tui/status/__init__.py",
+        "zenagent/cli/tui/status/presets.py",
+        "zenagent/cli/tui/status/segments.py",
+        "zenagent/cli/tui/textutil.py"
+      ],
+      "resp": "Textual TUI 应用壳与 run",
+      "symbols": [
+        "ZenAgentApp",
+        "PromptHistory",
+        "_LiveMap",
+        "Preset",
+        "SegmentContext"
+      ]
+    },
+    {
+      "id": "cli.tui.app_parts",
+      "title": "app_parts",
+      "cluster": "cli",
+      "files": [
+        "zenagent/cli/tui/app_parts/__init__.py",
+        "zenagent/cli/tui/app_parts/appearance.py",
+        "zenagent/cli/tui/app_parts/commands.py",
+        "zenagent/cli/tui/app_parts/display.py",
+        "zenagent/cli/tui/app_parts/drafts.py",
+        "zenagent/cli/tui/app_parts/hints.py",
+        "zenagent/cli/tui/app_parts/models.py",
+        "zenagent/cli/tui/app_parts/queue.py",
+        "zenagent/cli/tui/app_parts/sessions.py",
+        "zenagent/cli/tui/app_parts/update_notice.py",
+        "zenagent/cli/tui/app_parts/views.py"
+      ],
+      "resp": "TUI 主应用组成部件（display/commands/sessions/views…）",
+      "symbols": [
+        "AppearanceMixin",
+        "CommandsMixin",
+        "DisplayMixin",
+        "DraftsMixin",
+        "HintsMixin"
+      ]
+    },
+    {
+      "id": "cli.tui.screens",
+      "title": "screens",
+      "cluster": "cli",
+      "files": [
+        "zenagent/cli/tui/screens/appearance.py",
+        "zenagent/cli/tui/screens/approvals.py",
+        "zenagent/cli/tui/screens/context_breakdown.py",
+        "zenagent/cli/tui/screens/dialogs.py",
+        "zenagent/cli/tui/screens/editors.py",
+        "zenagent/cli/tui/screens/info.py",
+        "zenagent/cli/tui/screens/job_log.py",
+        "zenagent/cli/tui/screens/memory_manager.py",
+        "zenagent/cli/tui/screens/modals.py",
+        "zenagent/cli/tui/screens/palette.py",
+        "zenagent/cli/tui/screens/palette_pickers.py",
+        "zenagent/cli/tui/screens/pickers.py",
+        "zenagent/cli/tui/screens/providers.py",
+        "zenagent/cli/tui/screens/secrets.py",
+        "zenagent/cli/tui/screens/todo_list.py"
+      ],
+      "resp": "TUI 全屏界面（info/todo/job_log/modals/pickers…）",
+      "symbols": [
+        "ContextBreakdownScreen",
+        "JobLogScreen",
+        "MemoryManager",
+        "MemoryEditor",
+        "AskQuestion"
+      ]
+    },
+    {
+      "id": "cli.tui.widgets",
+      "title": "widgets",
+      "cluster": "cli",
+      "files": [
+        "zenagent/cli/tui/widgets/attachments.py",
+        "zenagent/cli/tui/widgets/command_hints.py",
+        "zenagent/cli/tui/widgets/error_banner.py",
+        "zenagent/cli/tui/widgets/markdown_stream.py",
+        "zenagent/cli/tui/widgets/new_content.py",
+        "zenagent/cli/tui/widgets/pending_band.py",
+        "zenagent/cli/tui/widgets/prompt_gutter.py",
+        "zenagent/cli/tui/widgets/prompt_input.py",
+        "zenagent/cli/tui/widgets/rows.py",
+        "zenagent/cli/tui/widgets/sidebar.py",
+        "zenagent/cli/tui/widgets/sidebar_resize.py",
+        "zenagent/cli/tui/widgets/skill_block.py",
+        "zenagent/cli/tui/widgets/status_band.py",
+        "zenagent/cli/tui/widgets/subagent_banner.py",
+        "zenagent/cli/tui/widgets/todo_hud.py",
+        "zenagent/cli/tui/widgets/tool_card.py",
+        "zenagent/cli/tui/widgets/transcript.py",
+        "zenagent/cli/tui/widgets/welcome.py",
+        "zenagent/cli/tui/widgets/work_indicator.py",
+        "zenagent/cli/tui/widgets/work_strip.py"
+      ],
+      "resp": "TUI 组件库（transcript/sidebar/tool_card…20 文件，同质 UI 部件故不拆）",
+      "symbols": [
+        "AttachmentChips",
+        "Chip",
+        "CommandHints",
+        "ErrorBanner",
+        "StreamingMarkdown"
+      ]
+    },
+    {
+      "id": "i18n",
+      "title": "i18n",
+      "cluster": "i18n",
+      "files": [
+        "zenagent/i18n/__init__.py",
+        "zenagent/i18n/en.py",
+        "zenagent/i18n/zh.py"
+      ],
+      "resp": "stdlib-only i18n：扁平 dict 目录、英文目录为准、缺失回退可见",
+      "symbols": []
+    },
+    {
+      "id": "mcp",
+      "title": "mcp",
+      "cluster": "mcp",
+      "files": [
+        "zenagent/mcp/__init__.py",
+        "zenagent/mcp/client.py",
+        "zenagent/mcp/config.py",
+        "zenagent/mcp/redact.py",
+        "zenagent/mcp/manager.py"
+      ],
+      "resp": "MCP 客户端与生命周期：Stdio/Http transport、McpManager；工具包装成 AgentTool 注入",
+      "symbols": [
+        "StdioTransport",
+        "HttpTransport",
+        "McpClient",
+        "McpTool",
+        "McpTransportError"
+      ]
+    },
+    {
+      "id": "prompts",
+      "title": "prompts",
+      "cluster": "prompts",
+      "files": [
+        "zenagent/prompts/__init__.py",
+        "zenagent/prompts/registry.py",
+        "zenagent/prompts/render.py",
+        "zenagent/prompts/spec.py"
+      ],
+      "resp": "prompt 子系统：blocks/*.md 块文件 + compose_system 唯一组装契约 + catalog",
+      "symbols": [
+        "PromptContext",
+        "RenderedBlock",
+        "RenderedPrompt",
+        "PromptRenderError",
+        "BlockSpec"
+      ]
+    },
+    {
+      "id": "providers",
+      "title": "providers",
+      "cluster": "providers",
+      "files": [
+        "zenagent/providers/__init__.py",
+        "zenagent/providers/anthropic_messages.py",
+        "zenagent/providers/catalog.py",
+        "zenagent/providers/compat.py",
+        "zenagent/providers/google_generative_ai.py",
+        "zenagent/providers/history.py",
+        "zenagent/providers/limits.py",
+        "zenagent/providers/openai_completions.py",
+        "zenagent/providers/openai_responses.py",
+        "zenagent/providers/registry.py",
+        "zenagent/providers/stream_options.py",
+        "zenagent/providers/transport.py"
+      ],
+      "resp": "协议层：StreamFn 契约、safe_stream（永不抛）、4 家适配器、transport（共享连接池/取消）+ message 级 retry、catalog/compat",
+      "symbols": [
+        "_Block",
+        "Model",
+        "ProviderConfig",
+        "CompatFlags",
+        "_ToolBlock"
+      ]
+    },
+    {
+      "id": "tools",
+      "title": "tools",
+      "cluster": "tools",
+      "files": [
+        "zenagent/tools/__init__.py",
+        "zenagent/tools/_result.py",
+        "zenagent/tools/ask.py",
+        "zenagent/tools/bash.py",
+        "zenagent/tools/fs.py",
+        "zenagent/tools/github.py",
+        "zenagent/tools/jobs.py",
+        "zenagent/tools/lsp.py",
+        "zenagent/tools/memory.py",
+        "zenagent/tools/read_state.py",
+        "zenagent/tools/search.py",
+        "zenagent/tools/shell.py",
+        "zenagent/tools/task.py",
+        "zenagent/tools/todo.py",
+        "zenagent/tools/wait.py"
+      ],
+      "resp": "内置工具面：read/write/edit/list_dir/bash/wait/ask/glob/grep + todo/task/memory/checkpoint/lsp/github",
+      "symbols": [
+        "JobManager",
+        "Job",
+        "UnknownJobError",
+        "JobStartError",
+        "LspClient"
+      ]
+    },
+    {
+      "id": "tools.web",
+      "title": "web",
+      "cluster": "tools",
+      "files": [
+        "zenagent/tools/web/__init__.py",
+        "zenagent/tools/web/net.py",
+        "zenagent/tools/web/providers.py",
+        "zenagent/tools/web/query.py",
+        "zenagent/tools/web/registry.py",
+        "zenagent/tools/web/tools.py",
+        "zenagent/tools/web/types.py"
+      ],
+      "resp": "网络工具：web_search 多供应商链 + fetch",
+      "symbols": [
+        "StructuredQuery",
+        "QuerySyntax",
+        "Term",
+        "SearchChain",
+        "ChainResult"
+      ]
+    }
   ],
-  [
-   "zenagent.tools",
-   "zenagent.tools.fs"
+  "edges": [
+    {
+      "from": "__main__",
+      "to": "cli",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "agent.loop",
+      "to": "events",
+      "desc": "AgentEvent",
+      "kind": "import"
+    },
+    {
+      "from": "agent.loop",
+      "to": "providers",
+      "desc": "stream_with_retry → safe_stream → adapter.stream → transport",
+      "kind": "import"
+    },
+    {
+      "from": "agent.loop",
+      "to": "retry",
+      "desc": "stream_with_retry",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "agent.loop",
+      "to": "types",
+      "desc": "SystemMessage、TextContent、ToolDef、ToolResultMessage",
+      "kind": "import"
+    },
+    {
+      "from": "agent.rt",
+      "to": "agent.loop",
+      "desc": "Agent.prompt → _drive → agent_loop（每 run 一个 task）",
+      "kind": "import"
+    },
+    {
+      "from": "agent.rt",
+      "to": "config",
+      "desc": "ContextGuard",
+      "kind": "import"
+    },
+    {
+      "from": "agent.rt",
+      "to": "events",
+      "desc": "AbortToken",
+      "kind": "import"
+    },
+    {
+      "from": "agent.rt",
+      "to": "project",
+      "desc": "all_session_dirs、legacy_sessions_dir、project_key_for_session、project_sessions_dir",
+      "kind": "import"
+    },
+    {
+      "from": "agent.rt",
+      "to": "providers",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "agent.rt",
+      "to": "types",
+      "desc": "TextContent、UserMessage、message_from_json",
+      "kind": "import"
+    },
+    {
+      "from": "app.assembly",
+      "to": "agent.loop",
+      "desc": "ToolRegistry",
+      "kind": "import"
+    },
+    {
+      "from": "app.assembly",
+      "to": "agent.rt",
+      "desc": "Runtime 构造 Agent、挂 ask_handler/订阅者",
+      "kind": "import"
+    },
+    {
+      "from": "app.assembly",
+      "to": "app.chat",
+      "desc": "AppServices、ChatController、build_default_commands、git_status",
+      "kind": "import"
+    },
+    {
+      "from": "app.assembly",
+      "to": "app.transcript",
+      "desc": "RewindState、SessionManager、SessionMetaRecorder、attach_journal",
+      "kind": "import"
+    },
+    {
+      "from": "app.assembly",
+      "to": "config",
+      "desc": "ContextGuard、UserConfig、apply_user_config、load_user_config",
+      "kind": "import"
+    },
+    {
+      "from": "app.assembly",
+      "to": "context_files",
+      "desc": "discover_context_files、load_context_files",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "app.assembly",
+      "to": "extensions",
+      "desc": "load_extensions",
+      "kind": "import"
+    },
+    {
+      "from": "app.assembly",
+      "to": "i18n",
+      "desc": "t、t.startswith",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "app.assembly",
+      "to": "limits",
+      "desc": "",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "app.assembly",
+      "to": "mcp",
+      "desc": "Runtime 注入 MCP 工具",
+      "kind": "import"
+    },
+    {
+      "from": "app.assembly",
+      "to": "plugins",
+      "desc": "plugin_wiring 把插件贡献翻译成 MCP 配置",
+      "kind": "import"
+    },
+    {
+      "from": "app.assembly",
+      "to": "project",
+      "desc": "find_project_root、project_key、project_key_for_session、write_project_meta",
+      "kind": "import"
+    },
+    {
+      "from": "app.assembly",
+      "to": "prompts",
+      "desc": "compose_system 组装 system prompt",
+      "kind": "import"
+    },
+    {
+      "from": "app.assembly",
+      "to": "providers",
+      "desc": "StreamOptions、estimate_text_tokens、find_model、load_catalog",
+      "kind": "import"
+    },
+    {
+      "from": "app.assembly",
+      "to": "settings",
+      "desc": "disabled_skills、get_api_key",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "app.assembly",
+      "to": "skills",
+      "desc": "build_skill_tool、default_skill_roots、discover_skills、format_skill_entries",
+      "kind": "import"
+    },
+    {
+      "from": "app.assembly",
+      "to": "telemetry",
+      "desc": "MetricsRecorder、append_metrics",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "app.assembly",
+      "to": "templates",
+      "desc": "default_template_roots、discover_templates",
+      "kind": "import"
+    },
+    {
+      "from": "app.assembly",
+      "to": "tools",
+      "desc": "Runtime 注入 base_tools + todo/task/memory/checkpoint/lsp/github",
+      "kind": "import"
+    },
+    {
+      "from": "app.assembly",
+      "to": "tools.web",
+      "desc": "SearchRequest",
+      "kind": "import"
+    },
+    {
+      "from": "app.assembly",
+      "to": "trace",
+      "desc": "TraceRecorder",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "app.assembly",
+      "to": "types",
+      "desc": "UserMessage",
+      "kind": "import"
+    },
+    {
+      "from": "app.chat",
+      "to": "agent.loop",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "app.chat",
+      "to": "agent.rt",
+      "desc": "Session、SubagentStore、carry_task_dir、get_task_manager",
+      "kind": "import"
+    },
+    {
+      "from": "app.chat",
+      "to": "app.assembly",
+      "desc": "ChatController 驱动 Runtime",
+      "kind": "import"
+    },
+    {
+      "from": "app.chat",
+      "to": "app.transcript",
+      "desc": "build_context_report、compact、is_compaction、is_tool_end",
+      "kind": "import"
+    },
+    {
+      "from": "app.chat",
+      "to": "attachments",
+      "desc": "read_image_argument",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "app.chat",
+      "to": "events",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "app.chat",
+      "to": "frontmatter",
+      "desc": "parse_frontmatter",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "app.chat",
+      "to": "i18n",
+      "desc": "t",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "app.chat",
+      "to": "providers",
+      "desc": "StreamOptions、safe_stream、stream_fn_for",
+      "kind": "import"
+    },
+    {
+      "from": "app.chat",
+      "to": "skills",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "app.chat",
+      "to": "tools",
+      "desc": "coerce_todo_phases、get_job_manager、load_todo_phases",
+      "kind": "import"
+    },
+    {
+      "from": "app.chat",
+      "to": "tools.web",
+      "desc": "default_provider、format_results、run_search",
+      "kind": "import"
+    },
+    {
+      "from": "app.chat",
+      "to": "types",
+      "desc": "Cost、SystemMessage、Usage、UserMessage",
+      "kind": "import"
+    },
+    {
+      "from": "app.transcript",
+      "to": "agent.loop",
+      "desc": "AgentTool、ToolResultAgent",
+      "kind": "import"
+    },
+    {
+      "from": "app.transcript",
+      "to": "agent.rt",
+      "desc": "Session、carry_task_dir、get_task_manager、list_sessions",
+      "kind": "import"
+    },
+    {
+      "from": "app.transcript",
+      "to": "app.assembly",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "app.transcript",
+      "to": "events",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "app.transcript",
+      "to": "export",
+      "desc": "export_session",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "app.transcript",
+      "to": "i18n",
+      "desc": "t",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "app.transcript",
+      "to": "project",
+      "desc": "legacy_sessions_dir、project_backups_dir、project_root_for_sessions_dir、project_sessions_dir",
+      "kind": "import"
+    },
+    {
+      "from": "app.transcript",
+      "to": "prompts",
+      "desc": "compact_result、compose_compact",
+      "kind": "import"
+    },
+    {
+      "from": "app.transcript",
+      "to": "providers",
+      "desc": "StreamOptions、estimate_prompt_tokens、estimate_tool_tokens、safe_stream",
+      "kind": "import"
+    },
+    {
+      "from": "app.transcript",
+      "to": "types",
+      "desc": "SystemMessage、TextContent、UserMessage",
+      "kind": "import"
+    },
+    {
+      "from": "attachments",
+      "to": "types",
+      "desc": "ImageContent",
+      "kind": "import"
+    },
+    {
+      "from": "cli",
+      "to": "agent.loop",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "cli",
+      "to": "agent.rt",
+      "desc": "latest_session、list_sessions、sessions_dir、split_title_body",
+      "kind": "import"
+    },
+    {
+      "from": "cli",
+      "to": "app.assembly",
+      "desc": "RuntimeOptions、api_key_for、describe_modes、prepare",
+      "kind": "import"
+    },
+    {
+      "from": "cli",
+      "to": "app.chat",
+      "desc": "TranscriptBuilder、argument_values、build_skill_submission、resolve_theme",
+      "kind": "import"
+    },
+    {
+      "from": "cli",
+      "to": "app.transcript",
+      "desc": "adopt_legacy_session、maybe_auto_compact",
+      "kind": "import"
+    },
+    {
+      "from": "cli",
+      "to": "attachments",
+      "desc": "read_image_argument",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli",
+      "to": "cli.rpc",
+      "desc": "main",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli",
+      "to": "cli.tui",
+      "desc": "run_tui_session",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli",
+      "to": "config",
+      "desc": "UserConfig、apply_user_config、config_path、load_user_config",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli",
+      "to": "crash",
+      "desc": "install_excepthook",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli",
+      "to": "events",
+      "desc": "",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli",
+      "to": "export",
+      "desc": "export_session",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli",
+      "to": "i18n",
+      "desc": "resolve_language、set_locale、t",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli",
+      "to": "limits",
+      "desc": "describe",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli",
+      "to": "project",
+      "desc": "legacy_sessions_dir、project_config_path",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli",
+      "to": "prompts",
+      "desc": "PromptContext、compose_system、read_block",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli",
+      "to": "providers",
+      "desc": "load_catalog",
+      "kind": "import"
+    },
+    {
+      "from": "cli",
+      "to": "settings",
+      "desc": "describe、get_api_key、get_pref、set_pref",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli",
+      "to": "templates",
+      "desc": "expand",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli",
+      "to": "tools",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "cli",
+      "to": "types",
+      "desc": "",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli",
+      "to": "usage",
+      "desc": "collect_usage、render_report、session_paths",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.rpc",
+      "to": "agent.rt",
+      "desc": "MemoryStore",
+      "kind": "import"
+    },
+    {
+      "from": "cli.rpc",
+      "to": "app.assembly",
+      "desc": "RuntimeOptions、list_directory、prepare、probe_mcp_server",
+      "kind": "import"
+    },
+    {
+      "from": "cli.rpc",
+      "to": "app.chat",
+      "desc": "build_skill_submission、parse_skill_display、usage_total",
+      "kind": "import"
+    },
+    {
+      "from": "cli.rpc",
+      "to": "app.transcript",
+      "desc": "is_compaction",
+      "kind": "import"
+    },
+    {
+      "from": "cli.rpc",
+      "to": "attachments",
+      "desc": "read_image_argument",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.rpc",
+      "to": "cli",
+      "desc": "add_runtime_flags",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.rpc",
+      "to": "config",
+      "desc": "config_path、load_user_config",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.rpc",
+      "to": "events",
+      "desc": "",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.rpc",
+      "to": "i18n",
+      "desc": "set_locale",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.rpc",
+      "to": "limits",
+      "desc": "KNOB_BY_KEY.get、coerce_value、read_managed、write_managed",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.rpc",
+      "to": "mcp",
+      "desc": "load_mcp_layers、remove_mcp_server、save_mcp_server",
+      "kind": "import"
+    },
+    {
+      "from": "cli.rpc",
+      "to": "plugins",
+      "desc": "ops_plugins：内置目录、发现、安装/卸载、启停与凭据",
+      "kind": "import"
+    },
+    {
+      "from": "cli.rpc",
+      "to": "project",
+      "desc": "find_project_root、project_config_path、project_dir、project_key",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.rpc",
+      "to": "settings",
+      "desc": "describe、disabled_skills、get_api_key、set_api_key",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.rpc",
+      "to": "skills",
+      "desc": "default_skill_roots、discover_skills",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.rpc",
+      "to": "tools.web",
+      "desc": "KEY_ENVS.items、KEY_ENVS.values、LABELS.get",
+      "kind": "import"
+    },
+    {
+      "from": "cli.rpc",
+      "to": "types",
+      "desc": "",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.tui",
+      "to": "app.assembly",
+      "desc": "ModelManager、tool_target",
+      "kind": "import"
+    },
+    {
+      "from": "cli.tui",
+      "to": "app.chat",
+      "desc": "AppServices、ChatController、build_default_commands、resolve_theme",
+      "kind": "import"
+    },
+    {
+      "from": "cli.tui",
+      "to": "app.transcript",
+      "desc": "SessionManager",
+      "kind": "import"
+    },
+    {
+      "from": "cli.tui",
+      "to": "cli.tui.app_parts",
+      "desc": "",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.tui",
+      "to": "cli.tui.screens",
+      "desc": "AskQuestion、Confirm、RenamePrompt、ToolApproval",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.tui",
+      "to": "cli.tui.widgets",
+      "desc": "AttachmentChips、CommandHints、ErrorBanner、NewContentBar",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.tui",
+      "to": "i18n",
+      "desc": "resolve_language、set_locale、t、tn",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.tui",
+      "to": "settings",
+      "desc": "get_pref",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.tui.app_parts",
+      "to": "agent.rt",
+      "desc": "session_title",
+      "kind": "import"
+    },
+    {
+      "from": "cli.tui.app_parts",
+      "to": "app.chat",
+      "desc": "AppServices、build_default_commands、build_skill_submission、read_clipboard_text",
+      "kind": "import"
+    },
+    {
+      "from": "cli.tui.app_parts",
+      "to": "attachments",
+      "desc": "read_image_argument",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.tui.app_parts",
+      "to": "cli",
+      "desc": "argument_matches、command_matches、hint_context、skill_matches",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.tui.app_parts",
+      "to": "cli.tui",
+      "desc": "bind、theme_name",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.tui.app_parts",
+      "to": "cli.tui.screens",
+      "desc": "HistorySearch、JobLogScreen、SecretInput",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.tui.app_parts",
+      "to": "cli.tui.widgets",
+      "desc": "",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.tui.app_parts",
+      "to": "i18n",
+      "desc": "resolve_language、set_locale、t",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.tui.app_parts",
+      "to": "project",
+      "desc": "find_project_root、project_key、project_key_for_session",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.tui.app_parts",
+      "to": "settings",
+      "desc": "get_api_key、set_api_key、set_pref",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.tui.app_parts",
+      "to": "templates",
+      "desc": "expand",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.tui.app_parts",
+      "to": "tools.web",
+      "desc": "LABELS.get",
+      "kind": "import"
+    },
+    {
+      "from": "cli.tui.app_parts",
+      "to": "update_check",
+      "desc": "format_notice、installed_version、is_disabled、mark_notified",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.tui.screens",
+      "to": "agent.rt",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "cli.tui.screens",
+      "to": "app.assembly",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "cli.tui.screens",
+      "to": "app.chat",
+      "desc": "argument_values",
+      "kind": "import"
+    },
+    {
+      "from": "cli.tui.screens",
+      "to": "app.transcript",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "cli.tui.screens",
+      "to": "cli.tui",
+      "desc": "STATE_COLORS.get、clip_cells、context_label、pad_cells",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.tui.screens",
+      "to": "cli.tui.widgets",
+      "desc": "APP_CHORDS.items",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.tui.screens",
+      "to": "i18n",
+      "desc": "t",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.tui.screens",
+      "to": "mcp",
+      "desc": "save_server",
+      "kind": "import"
+    },
+    {
+      "from": "cli.tui.screens",
+      "to": "settings",
+      "desc": "describe、set_pref",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.tui.screens",
+      "to": "tools",
+      "desc": "save_todo_phases、unified_diff",
+      "kind": "import"
+    },
+    {
+      "from": "cli.tui.screens",
+      "to": "tools.web",
+      "desc": "LABELS.get、available_providers、default_provider",
+      "kind": "import"
+    },
+    {
+      "from": "cli.tui.screens",
+      "to": "usage",
+      "desc": "collect_usage、render_report、session_paths",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.tui.widgets",
+      "to": "app.chat",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "cli.tui.widgets",
+      "to": "cli.tui",
+      "desc": "CONTEXT_COLORS.get、SECTION_ACCENTS.get、STATE_COLORS.get、clip_cells",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.tui.widgets",
+      "to": "i18n",
+      "desc": "t、tn",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.tui.widgets",
+      "to": "tools",
+      "desc": "summarize_todo",
+      "kind": "import"
+    },
+    {
+      "from": "cli.tui.widgets",
+      "to": "types",
+      "desc": "",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "config",
+      "to": "limits",
+      "desc": "parse_limits",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "config",
+      "to": "project",
+      "desc": "project_config_path",
+      "kind": "import"
+    },
+    {
+      "from": "config",
+      "to": "providers",
+      "desc": "ProviderConfig、model_from_mapping",
+      "kind": "import"
+    },
+    {
+      "from": "config",
+      "to": "types",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "context_files",
+      "to": "prompts",
+      "desc": "read_block、render",
+      "kind": "import"
+    },
+    {
+      "from": "events",
+      "to": "types",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "export",
+      "to": "agent.rt",
+      "desc": "Session",
+      "kind": "import"
+    },
+    {
+      "from": "export",
+      "to": "types",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "extensions",
+      "to": "agent.loop",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "mcp",
+      "to": "agent.loop",
+      "desc": "AgentTool、ToolResultAgent",
+      "kind": "import"
+    },
+    {
+      "from": "mcp",
+      "to": "http_client",
+      "desc": "async_client",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "mcp",
+      "to": "project",
+      "desc": "project_mcp_path",
+      "kind": "import"
+    },
+    {
+      "from": "mcp",
+      "to": "types",
+      "desc": "ImageContent、TextContent",
+      "kind": "import"
+    },
+    {
+      "from": "plugins",
+      "to": "settings",
+      "desc": "state 读写 settings.api_keys 中的 plugin:<id>:<key>",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "prompts",
+      "to": "providers",
+      "desc": "estimate_text_tokens",
+      "kind": "import"
+    },
+    {
+      "from": "providers",
+      "to": "events",
+      "desc": "Aborted、AssistantEvent",
+      "kind": "import"
+    },
+    {
+      "from": "providers",
+      "to": "http_client",
+      "desc": "async_client",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "providers",
+      "to": "types",
+      "desc": "AssistantMessage、Cost、TextContent、ThinkingContent",
+      "kind": "import"
+    },
+    {
+      "from": "retry",
+      "to": "events",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "retry",
+      "to": "providers",
+      "desc": "safe_stream",
+      "kind": "import"
+    },
+    {
+      "from": "retry",
+      "to": "types",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "skills",
+      "to": "agent.loop",
+      "desc": "AgentTool、ToolResultAgent",
+      "kind": "import"
+    },
+    {
+      "from": "skills",
+      "to": "frontmatter",
+      "desc": "parse_frontmatter",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "skills",
+      "to": "project",
+      "desc": "find_project_root",
+      "kind": "import"
+    },
+    {
+      "from": "skills",
+      "to": "prompts",
+      "desc": "read_block、render、tool_description",
+      "kind": "import"
+    },
+    {
+      "from": "skills",
+      "to": "types",
+      "desc": "TextContent",
+      "kind": "import"
+    },
+    {
+      "from": "telemetry",
+      "to": "events",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "telemetry",
+      "to": "types",
+      "desc": "Usage",
+      "kind": "import"
+    },
+    {
+      "from": "templates",
+      "to": "frontmatter",
+      "desc": "parse_frontmatter",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "templates",
+      "to": "project",
+      "desc": "find_project_root",
+      "kind": "import"
+    },
+    {
+      "from": "tools",
+      "to": "agent.loop",
+      "desc": "AgentTool、ToolResultAgent",
+      "kind": "import"
+    },
+    {
+      "from": "tools",
+      "to": "agent.rt",
+      "desc": "task 工具背后 = subagents_runtime",
+      "kind": "import"
+    },
+    {
+      "from": "tools",
+      "to": "config",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "tools",
+      "to": "events",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "tools",
+      "to": "prompts",
+      "desc": "read_block、render、tool_description",
+      "kind": "import"
+    },
+    {
+      "from": "tools",
+      "to": "providers",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "tools",
+      "to": "tools.web",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "tools",
+      "to": "types",
+      "desc": "TextContent",
+      "kind": "import"
+    },
+    {
+      "from": "tools.web",
+      "to": "agent.loop",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "tools.web",
+      "to": "http_client",
+      "desc": "async_client",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "tools.web",
+      "to": "prompts",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "tools.web",
+      "to": "settings",
+      "desc": "get_api_key、get_pref",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "tools.web",
+      "to": "tools",
+      "desc": "text_result",
+      "kind": "import"
+    },
+    {
+      "from": "trace",
+      "to": "events",
+      "desc": "",
+      "kind": "import"
+    },
+    {
+      "from": "update_check",
+      "to": "http_client",
+      "desc": "async_client",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "usage",
+      "to": "agent.rt",
+      "desc": "all_session_dirs、sessions_dir",
+      "kind": "import"
+    },
+    {
+      "from": "usage",
+      "to": "types",
+      "desc": "message_from_json",
+      "kind": "import"
+    },
+    {
+      "from": "app.swarm",
+      "to": "agent.loop",
+      "desc": "AgentTool、ToolResultAgent",
+      "kind": "import"
+    },
+    {
+      "from": "app.swarm",
+      "to": "agent.rt",
+      "desc": "Agent、Session（每角色独立运行时）",
+      "kind": "import"
+    },
+    {
+      "from": "app.swarm",
+      "to": "app.assembly",
+      "desc": "Runtime.bootstrap、RuntimeOptions、build_broker_for、start_mcp",
+      "kind": "import"
+    },
+    {
+      "from": "app.swarm",
+      "to": "app.transcript",
+      "desc": "maybe_auto_compact",
+      "kind": "import"
+    },
+    {
+      "from": "app.swarm",
+      "to": "config",
+      "desc": "load_user_config",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "app.swarm",
+      "to": "mcp",
+      "desc": "parse_server（角色 MCP 声明）",
+      "kind": "import"
+    },
+    {
+      "from": "app.swarm",
+      "to": "plugins",
+      "desc": "credentials_for、discover_plugins、is_enabled、resolve",
+      "kind": "import"
+    },
+    {
+      "from": "app.swarm",
+      "to": "project",
+      "desc": "zenagent_home（工作区围栏）",
+      "kind": "import"
+    },
+    {
+      "from": "app.swarm",
+      "to": "settings",
+      "desc": "get_api_key",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "app.swarm",
+      "to": "skills",
+      "desc": "discover_skills（角色技能根）",
+      "kind": "import"
+    },
+    {
+      "from": "app.swarm",
+      "to": "types",
+      "desc": "TextContent",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "cli.rpc",
+      "to": "app.swarm",
+      "desc": "SwarmManager、SwarmOps 分派",
+      "kind": "import"
+    },
+    {
+      "from": "app.zen",
+      "to": "agent.loop",
+      "desc": "AgentTool、ToolResultAgent（zen 派发工具）",
+      "kind": "import"
+    },
+    {
+      "from": "app.zen",
+      "to": "agent.rt",
+      "desc": "read_session_titles、unique_session_path（worker 会话）",
+      "kind": "import"
+    },
+    {
+      "from": "app.zen",
+      "to": "app.assembly",
+      "desc": "bootstrap.prepare、RuntimeOptions（每 worker 装配 runtime）",
+      "kind": "import"
+    },
+    {
+      "from": "app.zen",
+      "to": "app.transcript",
+      "desc": "open_session（resume worker 会话）",
+      "kind": "import"
+    },
+    {
+      "from": "app.zen",
+      "to": "app.chat",
+      "desc": "ChatController（chat.steer 注入 router，TYPE_CHECKING）",
+      "kind": "import",
+      "hidden": true
+    },
+    {
+      "from": "app.zen",
+      "to": "tools",
+      "desc": "text_result（zen 工具结果）",
+      "kind": "import"
+    },
+    {
+      "from": "cli.rpc",
+      "to": "app.zen",
+      "desc": "ZenFleet、latest_router、set_role（zen 启停与 roster）",
+      "kind": "import"
+    },
+    {
+      "from": "agent.rt",
+      "to": "i18n",
+      "desc": "会话/运行时用户文案经 t()",
+      "kind": "import"
+    },
+    {
+      "from": "app.swarm",
+      "to": "app.chat",
+      "desc": "worker 报告回注 router 对话（messages_to_views）",
+      "kind": "import"
+    },
+    {
+      "from": "app.swarm",
+      "to": "attachments",
+      "desc": "worker 转发用户图片附件（read_image_argument）",
+      "kind": "import"
+    },
+    {
+      "from": "app.swarm",
+      "to": "events",
+      "desc": "AgentEvent 类型与角色事件订阅",
+      "kind": "import"
+    },
+    {
+      "from": "app.swarm",
+      "to": "providers",
+      "desc": "角色模型/密钥目录（load_catalog）",
+      "kind": "import"
+    },
+    {
+      "from": "app.transcript",
+      "to": "app.zen",
+      "desc": "worker 转录页读取花名册（read_roster）",
+      "kind": "import"
+    },
+    {
+      "from": "app.zen",
+      "to": "types",
+      "desc": "wire 协议类型",
+      "kind": "import"
+    },
+    {
+      "from": "cli",
+      "to": "mcp",
+      "desc": "mcpcmd 的 trust/list 子命令（untrusted_project_servers）",
+      "kind": "import"
+    }
   ],
-  [
-   "zenagent.app",
-   "zenagent.app.chat",
-   "zenagent.app.commands",
-   "zenagent.app.compact",
-   "zenagent.app.models",
-   "zenagent.app.plugin_wiring",
-   "zenagent.app.retry",
-   "zenagent.app.runtime",
-   "zenagent.app.session_meta",
-   "zenagent.app.sessions",
-   "zenagent.app.shake"
+  "invariants": [
+    "六层依赖只向下：cli → app → tools → agent → providers → types/events；tests/test_layering.py 钉住；app/ 不 import cli 与 argparse/textual/rich/prompt_toolkit",
+    "StreamFn 永不抛异常：一切失败翻译成 terminal error 事件（safe_stream）",
+    "工具永远返回结果：失败 = is_error 结果回喂模型，loop 内没有包裹工具执行的 try/except",
+    "取消是协议内正常状态：Aborted(Exception) 而非 asyncio.CancelledError，AbortToken 贯穿 transport",
+    "bootstrap.prepare 是四个前端唯一装配序列；broker 与 runtime 读同一 RuntimeOptions（参数化测试钉死）",
+    "已知常量回指环 loop↔tool_exec↔result_budget↔timeouts 在 agent.loop 节点内部，cycles_seen 登记",
+    "插件只做单向外呼：zen → 插件 MCP 进程 → 外部应用；plugins/ 不 import mcp/app/cli/agent/tools/providers（tests/test_plugin_layering.py 钉住），只有 app/plugin_wiring.py 把插件贡献翻译成 MCP 配置",
+    "swarm 只在 app 层组合既有内核：角色 runtime 经 Runtime.bootstrap 装配，插件仍单向外呼，密码只存 ~/.zenagent/settings.json（manifest 只放 ${KEY} 占位）",
+    "zen 只在 app 层组合既有内核：worker runtime 经 bootstrap.prepare 装配并 resume 到项目会话，结果经 chat.steer 注入 router（结果自到、不等待）；fleet 属于单个项目 slot，不跨项目"
   ],
-  [
-   "zenagent.cli.tui",
-   "zenagent.cli.tui.app",
-   "zenagent.cli.tui.app_parts.appearance",
-   "zenagent.cli.tui.app_parts.commands",
-   "zenagent.cli.tui.app_parts.display",
-   "zenagent.cli.tui.app_parts.drafts",
-   "zenagent.cli.tui.app_parts.sessions",
-   "zenagent.cli.tui.app_parts.update_notice",
-   "zenagent.cli.tui.app_parts.views",
-   "zenagent.cli.tui.run",
-   "zenagent.cli.tui.screens.context_breakdown",
-   "zenagent.cli.tui.screens.info",
-   "zenagent.cli.tui.screens.job_log",
-   "zenagent.cli.tui.screens.todo_list",
-   "zenagent.cli.tui.status",
-   "zenagent.cli.tui.status.segments",
-   "zenagent.cli.tui.widgets.attachments",
-   "zenagent.cli.tui.widgets.command_hints",
-   "zenagent.cli.tui.widgets.error_banner",
-   "zenagent.cli.tui.widgets.new_content",
-   "zenagent.cli.tui.widgets.pending_band",
-   "zenagent.cli.tui.widgets.prompt_gutter",
-   "zenagent.cli.tui.widgets.rows",
-   "zenagent.cli.tui.widgets.sidebar",
-   "zenagent.cli.tui.widgets.sidebar_resize",
-   "zenagent.cli.tui.widgets.skill_block",
-   "zenagent.cli.tui.widgets.status_band",
-   "zenagent.cli.tui.widgets.subagent_banner",
-   "zenagent.cli.tui.widgets.todo_hud",
-   "zenagent.cli.tui.widgets.tool_card",
-   "zenagent.cli.tui.widgets.transcript",
-   "zenagent.cli.tui.widgets.welcome",
-   "zenagent.cli.tui.widgets.work_indicator",
-   "zenagent.cli.tui.widgets.work_strip"
+  "unmapped": [
+    {
+      "file": "tests/test_mcp_redact.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_plugin_catalog.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_plugin_install.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_plugin_layering.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_plugin_manifest.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_plugin_runtime.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_plugin_state.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_plugin_wiring.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_rpc_plugins.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "zenagent/__init__.py",
+      "reason": "package 门面 __init__"
+    },
+    {
+      "file": "examples/custom_tool.py",
+      "reason": "outside src_root: examples"
+    },
+    {
+      "file": "examples/embed.py",
+      "reason": "outside src_root: examples"
+    },
+    {
+      "file": "examples/headless.py",
+      "reason": "outside src_root: examples"
+    },
+    {
+      "file": "examples/mcp.py",
+      "reason": "outside src_root: examples"
+    },
+    {
+      "file": "examples/rpc_client.py",
+      "reason": "outside src_root: examples"
+    },
+    {
+      "file": "scripts/build-sidecar.py",
+      "reason": "outside src_root: scripts"
+    },
+    {
+      "file": "scripts/capture_sse.py",
+      "reason": "outside src_root: scripts"
+    },
+    {
+      "file": "scripts/check_architecture.py",
+      "reason": "outside src_root: scripts"
+    },
+    {
+      "file": "scripts/eval.py",
+      "reason": "outside src_root: scripts"
+    },
+    {
+      "file": "scripts/import_graph.py",
+      "reason": "outside src_root: scripts"
+    },
+    {
+      "file": "scripts/prompt_goldens.py",
+      "reason": "outside src_root: scripts"
+    },
+    {
+      "file": "scripts/sync-desktop-version.py",
+      "reason": "outside src_root: scripts"
+    },
+    {
+      "file": "scripts/zen_sidecar_entry.py",
+      "reason": "outside src_root: scripts"
+    },
+    {
+      "file": "tests/conftest.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/prompt_fixtures.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_agent_class.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_anthropic.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_app_chat.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_app_chat_attachments.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_app_commands.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_app_context.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_app_discovery.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_app_git.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_app_links.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_app_models.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_app_pending.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_app_permissions.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_app_records.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_app_runtime.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_app_session_meta.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_app_sessions.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_app_support.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_app_undo_retry.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_app_views.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_appearance.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_architecture_gate.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_artifacts.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_ask.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_bootstrap.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_catalog.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_catalog_pi_ai.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_cli.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_cli_flags.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_cli_prompts.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_compact.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_completion.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_config.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_context_files.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_crash.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_crash_wiring.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_docs_commands.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_docs_paths.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_doctor.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_error_notice.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_evals_runner.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_events.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_examples.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_export.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_extensions.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_git_identity.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_google.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_headless_parity.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_history_replay.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_i18n.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_i18n_app.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_i18n_tui.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_images.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_jobs.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_journal.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_layering.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_limits.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_limits_rpc.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_loop.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_mcp_client.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_mcp_manager.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_mcp_rpc.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_memory_store.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_modes.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_openai_request.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_openai_responses.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_openai_stream.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_permissions.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_probes.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_project.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_project_rpc.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_project_scoping.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_prompt_goldens_capture.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_prompts_budget.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_prompts_compact.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_prompts_compose.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_prompts_frontends.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_prompts_golden.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_prompts_registry.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_prompts_render.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_prompts_sources.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_prompts_tools.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_provider_limits.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_readme.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_registry.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_render.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_repl_commands.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_repl_logic.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_repl_streaming.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_restore.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_result_budget.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_retry.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_rewind.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_rpc.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_rpc_contract.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_rpc_v2.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_runtime_memory.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_safety.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_secrets_rpc.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_session.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_settings.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_sidecar_build.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_skill_commands.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_skills.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_skills_rpc.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_slash_args.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_smoke.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_streaming_behavior.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_subagent_tracker.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_subagents_runtime.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_subagents_store.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_task.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_telemetry.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_templates.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_theme.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_timeouts.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_todo.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tool_registry.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tools_bash.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tools_fs.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tools_github.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tools_lsp.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tools_memory.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tools_result.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tools_search.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tools_wait.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tools_web.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tools_web_query.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_trace.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_transport.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_app_theme.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_approval.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_ask.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_attachments.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_chat.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_command_guard.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_compact.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_context.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_controls.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_error_banner.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_history.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_job_log.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_layout.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_links.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_markdown_stream.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_memory.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_missing_key.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_mouse.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_palette.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_pending_band.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_pickers.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_polish.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_rows.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_screen_registry.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_selection.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_sessions.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_sidebar.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_sidebar_resize.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_skeleton.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_skill_invocation.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_status_band.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_subagent_resume.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_subagent_view.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_theme_css.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_thinking_status.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_todo.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_tool_card.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_tool_card_families.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_update.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tui_usability.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_types.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_update_check.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_updater_fragment.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_usage.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_validate.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_workspace.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/fixtures/fake_lsp_server.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/fixtures/mcp_crash_once_server.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/fixtures/mcp_echo_server.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/fixtures/mcp_flaky_server.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "scripts/demo_age.py",
+      "reason": "outside src_root: scripts"
+    },
+    {
+      "file": "tests/test_project_scoped_runtime.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_rpc_host.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_rpc_host_e2e.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_rpc_slot.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_rpc_swarm.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_runtime_role_assembly.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_swarm_manager.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_swarm_roles.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_swarm_room.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_swarm_router.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_swarm_runner.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_terminal.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_tools_scoped.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/golden/prompts/compact.json",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/golden/prompts/context.base.txt",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/golden/prompts/context.txt",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/golden/prompts/default-11.base.txt",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/golden/prompts/default-11.txt",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/golden/prompts/eval-11.base.txt",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/golden/prompts/eval-11.txt",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/golden/prompts/extension.base.txt",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/golden/prompts/extension.txt",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/golden/prompts/headless-14.base.txt",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/golden/prompts/headless-14.txt",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/golden/prompts/plan.base.txt",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/golden/prompts/plan.txt",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/golden/prompts/rpc-13.base.txt",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/golden/prompts/rpc-13.txt",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/golden/prompts/skills.base.txt",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/golden/prompts/skills.txt",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/golden/prompts/tools.json",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/golden/prompts/tui-14.base.txt",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/golden/prompts/tui-14.txt",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_agent_profile.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_approval_router.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_dispatch.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_jsonl.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_mcp_trust.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_rpc_ops_layout.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_rpc_runs.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_rpc_supervisor.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_run_ledger.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_run_scopes.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_session_lease.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_skills_recompose_layout.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_subagent_runs.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_swarm_protocol.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_swarm_reclaim.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_swarm_roster.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_swarm_transcript.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_swarm_workitems.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_workspace_state.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_zen_fleet.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_zen_roster.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_zen_rpc.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_zen_runtime.py",
+      "reason": "outside src_root: tests"
+    },
+    {
+      "file": "tests/test_zen_tools.py",
+      "reason": "outside src_root: tests"
+    }
   ],
-  [
-   "zenagent.plugins",
-   "zenagent.plugins.install"
+  "cycles_seen": [
+    [
+      "zenagent.agent.loop",
+      "zenagent.agent.result_budget",
+      "zenagent.agent.timeouts",
+      "zenagent.agent.tool_exec"
+    ],
+    [
+      "zenagent.tools.web",
+      "zenagent.tools.web.providers",
+      "zenagent.tools.web.registry",
+      "zenagent.tools.web.tools"
+    ],
+    [
+      "zenagent.tools",
+      "zenagent.tools.fs"
+    ],
+    [
+      "zenagent.app",
+      "zenagent.app.chat",
+      "zenagent.app.commands",
+      "zenagent.app.compact",
+      "zenagent.app.models",
+      "zenagent.app.plugin_wiring",
+      "zenagent.app.retry",
+      "zenagent.app.runtime",
+      "zenagent.app.session_meta",
+      "zenagent.app.sessions",
+      "zenagent.app.shake"
+    ],
+    [
+      "zenagent.cli.tui",
+      "zenagent.cli.tui.app",
+      "zenagent.cli.tui.app_parts.appearance",
+      "zenagent.cli.tui.app_parts.commands",
+      "zenagent.cli.tui.app_parts.display",
+      "zenagent.cli.tui.app_parts.drafts",
+      "zenagent.cli.tui.app_parts.sessions",
+      "zenagent.cli.tui.app_parts.update_notice",
+      "zenagent.cli.tui.app_parts.views",
+      "zenagent.cli.tui.run",
+      "zenagent.cli.tui.screens.context_breakdown",
+      "zenagent.cli.tui.screens.info",
+      "zenagent.cli.tui.screens.job_log",
+      "zenagent.cli.tui.screens.todo_list",
+      "zenagent.cli.tui.status",
+      "zenagent.cli.tui.status.segments",
+      "zenagent.cli.tui.widgets.attachments",
+      "zenagent.cli.tui.widgets.command_hints",
+      "zenagent.cli.tui.widgets.error_banner",
+      "zenagent.cli.tui.widgets.new_content",
+      "zenagent.cli.tui.widgets.pending_band",
+      "zenagent.cli.tui.widgets.prompt_gutter",
+      "zenagent.cli.tui.widgets.rows",
+      "zenagent.cli.tui.widgets.sidebar",
+      "zenagent.cli.tui.widgets.sidebar_resize",
+      "zenagent.cli.tui.widgets.skill_block",
+      "zenagent.cli.tui.widgets.status_band",
+      "zenagent.cli.tui.widgets.subagent_banner",
+      "zenagent.cli.tui.widgets.todo_hud",
+      "zenagent.cli.tui.widgets.tool_card",
+      "zenagent.cli.tui.widgets.transcript",
+      "zenagent.cli.tui.widgets.welcome",
+      "zenagent.cli.tui.widgets.work_indicator",
+      "zenagent.cli.tui.widgets.work_strip"
+    ],
+    [
+      "zenagent.plugins",
+      "zenagent.plugins.install"
+    ],
+    [
+      "zenagent.app.agent_profile",
+      "zenagent.app.plugin_wiring",
+      "zenagent.app.runtime",
+      "zenagent.app.skills_recompose"
+    ],
+    [
+      "zenagent.app.swarm.approvals",
+      "zenagent.app.swarm.frames",
+      "zenagent.app.swarm.manager"
+    ]
   ]
- ]
 }

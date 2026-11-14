@@ -1,6 +1,6 @@
 # zen-agent 架构简报（Agent 首读）
 
-> 由 manifest.json 单源生成（`scaffold.py render`），勿手改。manifest v4 · 2026-11-11 · 41 节点 / 193 边。讨论架构：本文件 + nodes.md + deps.json 三件套为准。
+> 由 manifest.json 单源生成（`scaffold.py render`），勿手改。manifest v7 · 2026-11-14 · 42 节点 / 208 边。讨论架构：本文件 + nodes.md + deps.json 三件套为准。
 
 ## 1. 项目定位
 zen-agent 是零第三方依赖（仅 httpx）的终端 AI 编码代理。四个前端（REPL / headless -p / JSONL RPC / Textual TUI）共用 app 层唯一装配序列 bootstrap.prepare；agent 内核以「事件流 + 工具永远返回结果 + 取消是协议内状态」为契约；providers 适配多家 LLM；插件（声明式连接器包，经 MCP 单向外呼）与 MCP/skills/模板/扩展/桌面 GUI(经 RPC) 都在内核之上接线不改内核。
@@ -8,12 +8,12 @@ zen-agent 是零第三方依赖（仅 httpx）的终端 AI 编码代理。四个
 ## 2. 结构总览
 ### 簇 基础层（`base`）
 - `__main__` **__main__.py** — python -m zenagent 入口，转发 cli.main（1 文件，被 0 节点依赖）
-- `attachments` **attachments.py** — 图片附件读取：magic bytes 定 MIME、本地校验后构造 ImageContent（1 文件，被 4 节点依赖）
+- `attachments` **attachments.py** — 图片附件读取：magic bytes 定 MIME、本地校验后构造 ImageContent（1 文件，被 5 节点依赖）
 - `config` **config.py** — config.toml 读写与默认配置（~/.zenagent/config.toml）（1 文件，被 6 节点依赖）
 - `context_files` **context_files.py** — AGENTS.md 等项目指令文件发现，注入 system prompt（--no-context-files 可关）（1 文件，被 1 节点依赖）
 - `crash` **crash.py** — 崩溃日志钩子：未捕获异常落盘（1 文件，被 1 节点依赖）
 - `evals_runner` **evals_runner.py** — 行为评测纯函数部分（报告读写/基线对比）；runner 在 scripts/eval.py（1 文件，被 0 节点依赖）
-- `events` **events.py** — 两层事件体系 + AbortToken/Aborted：取消是协议内正常状态（1 文件，被 11 节点依赖）
+- `events` **events.py** — 两层事件体系 + AbortToken/Aborted：取消是协议内正常状态（1 文件，被 12 节点依赖）
 - `export` **export.py** — 会话导出（1 文件，被 2 节点依赖）
 - `extensions` **extensions.py** — Python 扩展加载与 ExtensionAPI（1 文件，被 1 节点依赖）
 - `frontmatter` **frontmatter.py** — 极简 frontmatter 解析（skills/模板共用，免 YAML 依赖）（1 文件，被 3 节点依赖）
@@ -27,45 +27,46 @@ zen-agent 是零第三方依赖（仅 httpx）的终端 AI 编码代理。四个
 - `telemetry` **telemetry.py** — （职责待 enrich）（1 文件，被 1 节点依赖）
 - `templates` **templates.py** — prompt 模板展开（expand）（1 文件，被 3 节点依赖）
 - `trace` **trace.py** — append-only JSONL 执行 trace：工具/参数/结果/耗时（1 文件，被 1 节点依赖）
-- `types` **types.py** — 全部数据类型：消息/内容块/用量/成本（全图 fan-in 最高）（1 文件，被 20 节点依赖）
+- `types` **types.py** — 全部数据类型：消息/内容块/用量/成本（全图 fan-in 最高）（1 文件，被 21 节点依赖）
 - `update_check` **update_check.py** — TUI 专用 PyPI 版本检查（后台、静默失败）（1 文件，被 1 节点依赖）
 - `usage` **usage.py** — 用量聚合 collect_usage（四前端唯一一份）（1 文件，被 2 节点依赖）
 
 ### 簇 运行时内核（`agent`）
-- `agent.loop` **无状态执行内核** — 无状态执行器：agent_loop 组装请求、流式调 provider、终止判定；tool_exec 工具调度（权限门→校验→并行/串行）与结果回写；result_budget/timeouts/guard 循环护栏。已知常量回指环在本节点内部（cycles_seen）（8 文件，被 11 节点依赖）
-- `agent.rt` **有状态运行时** — 有状态运行时：Agent（历史/订阅者/steering/abort）、Session JSONL 持久化、子代理运行时（task 工具的背后）、memory_store/artifacts（6 文件，被 11 节点依赖）
+- `agent.loop` **无状态执行内核** — 无状态执行器：agent_loop 组装请求、流式调 provider、终止判定；tool_exec 工具调度（权限门→校验→并行/串行）与结果回写；result_budget/timeouts/guard 循环护栏。已知常量回指环在本节点内部（cycles_seen）（8 文件，被 12 节点依赖）
+- `agent.rt` **有状态运行时** — 有状态运行时：Agent（历史/订阅者/steering/abort）、Session JSONL 持久化、子代理运行时（task 工具的背后）、memory_store/artifacts（7 文件，被 12 节点依赖）
 
 ### 簇 应用层（`app`）
-- `app.assembly` **装配与防线** — 装配与防线：bootstrap.prepare（四前端唯一装配序列）、Runtime（对象槽位/工具注入）、PermissionGate/Broker 权限门、safety 风险模型、modes、error_notice 失败文案统一（15 文件，被 7 节点依赖）
-- `app.chat` **会话交互** — 会话交互控制：ChatController（run 生命周期/last_error）、slash 命令注册表与补全、views UI 无关视图模型、模型切换、子代理跟踪（13 文件，被 7 节点依赖）
-- `app.transcript` **会话历史与恢复** — 会话文件与历史操作：sessions/records 词汇表、session_meta 边车、journal 写快照(/restore)、compact 摘要边界、shake 卸载、rewind（9 文件，被 7 节点依赖）
-- `app.swarm` **多角色 swarm** — 常驻多角色运行时：角色清单（人设/模型/工具/预算）→ 每角色独立 Runtime+Session；房间 JSONL 是唯一消息源，@ 是唯一路由原语；Router 做入站闸门，TaskRunner 以协议块约束任务边界与预算，SwarmManager 持有调度与审批。（8 文件，被 1 节点依赖）
+- `app.assembly` **装配与防线** — 装配与防线：bootstrap.prepare（四前端唯一装配序列）、Runtime（对象槽位/工具注入）、PermissionGate/Broker 权限门、safety 风险模型、modes、error_notice 失败文案统一（20 文件，被 8 节点依赖）
+- `app.chat` **会话交互** — 会话交互控制：ChatController（run 生命周期/last_error）、slash 命令注册表与补全、views UI 无关视图模型、模型切换、子代理跟踪（13 文件，被 9 节点依赖）
+- `app.transcript` **会话历史与恢复** — 会话文件与历史操作：sessions/records 词汇表、session_meta 边车、journal 写快照(/restore)、compact 摘要边界、shake 卸载、rewind（13 文件，被 8 节点依赖）
+- `app.swarm` **多角色 swarm** — 常驻多角色运行时：角色是配置（人设/模型/工具/预算），运行单元是 (角色, 工单)：同名角色可并行多个工单、各自 Runtime+Session；房间 JSONL 是唯一消息源，@ 是唯一路由原语；Router 做入站闸门并在工单边界重基链，TaskRunner 约束任务边界与预算。workitems 是 append-only 工单表，workflow 负责开单/续单/请求关闭，schedule 调度每轮，instances 维护运行单元索引与空闲回收，approvals 管审批回调，events_tap 广播角色 run 事件，transcript 可从磁盘还原已归档轮次。（16 文件，被 1 节点依赖）
+- `app.zen` **zen 路由与舰队** — zen 模式：一个 router 会话 + 该项目其余会话作为 worker，fleet 属于单个项目 slot。ZenFleet 经 bootstrap.prepare 为每个 worker 装配完整 runtime 并 resume 到其会话，跑任务提示后经 chat.steer 把最终文本注入 router 对话（结果自到、不等待）；信号量限并发，超额排队。roster 边车记录角色/焦点，prompts 组装 worker 提示，tools 提供 zen 派发工具。（6 文件，被 2 节点依赖）
 
 ### 簇 交互层（`cli`）
-- `cli` **cli** — 交互层入口：main 参数分发、repl、render/doctor/export/usage/theme/keybindings（15 文件，被 3 节点依赖）
-- `cli.rpc` **rpc** — JSONL RPC 服务器与 ops 分派（hello 协议握手、[limits] 契约、项目 slot；swarm 角色与房间分派）（13 文件，被 1 节点依赖）
+- `cli` **cli** — 交互层入口：main 参数分发、repl、render/doctor/export/usage/theme/keybindings（16 文件，被 3 节点依赖）
+- `cli.rpc` **rpc** — JSONL RPC 服务器与 ops 分派（hello 协议握手、[limits] 契约、项目 slot；swarm 角色与房间分派；zen 舰队启停与 roster）（19 文件，被 1 节点依赖）
 - `cli.tui` **tui** — Textual TUI 应用壳与 run（11 文件，被 4 节点依赖）
 - `cli.tui.app_parts` **app_parts** — TUI 主应用组成部件（display/commands/sessions/views…）（11 文件，被 1 节点依赖）
-- `cli.tui.screens` **screens** — TUI 全屏界面（info/todo/job_log/modals/pickers…）（11 文件，被 2 节点依赖）
+- `cli.tui.screens` **screens** — TUI 全屏界面（info/todo/job_log/modals/pickers…）（15 文件，被 2 节点依赖）
 - `cli.tui.widgets` **widgets** — TUI 组件库（transcript/sidebar/tool_card…20 文件，同质 UI 部件故不拆）（20 文件，被 3 节点依赖）
 
 ### 簇 界面语言（`i18n`）
-- `i18n` **i18n** — stdlib-only i18n：扁平 dict 目录、英文目录为准、缺失回退可见（3 文件，被 9 节点依赖）
+- `i18n` **i18n** — stdlib-only i18n：扁平 dict 目录、英文目录为准、缺失回退可见（3 文件，被 10 节点依赖）
 
 ### 簇 MCP 客户端（`mcp`）
-- `mcp` **mcp** — MCP 客户端与生命周期：Stdio/Http transport、McpManager；工具包装成 AgentTool 注入（5 文件，被 4 节点依赖）
+- `mcp` **mcp** — MCP 客户端与生命周期：Stdio/Http transport、McpManager；工具包装成 AgentTool 注入（5 文件，被 5 节点依赖）
 
 ### 簇 提示词（`prompts`）
 - `prompts` **prompts** — prompt 子系统：blocks/*.md 块文件 + compose_system 唯一组装契约 + catalog（4 文件，被 7 节点依赖）
 
 ### 簇 协议层（`providers`）
-- `providers` **providers** — 协议层：StreamFn 契约、safe_stream（永不抛）、4 家适配器、transport（共享连接池/取消）+ message 级 retry、catalog/compat（12 文件，被 10 节点依赖）
+- `providers` **providers** — 协议层：StreamFn 契约、safe_stream（永不抛）、4 家适配器、transport（共享连接池/取消）+ message 级 retry、catalog/compat（12 文件，被 11 节点依赖）
 
 ### 簇 能力层（`tools`）
-- `tools` **tools** — 内置工具面：read/write/edit/list_dir/bash/wait/ask/glob/grep + todo/task/memory/checkpoint/lsp/github（15 文件，被 6 节点依赖）
+- `tools` **tools** — 内置工具面：read/write/edit/list_dir/bash/wait/ask/glob/grep + todo/task/memory/checkpoint/lsp/github（15 文件，被 7 节点依赖）
 - `tools.web` **web** — 网络工具：web_search 多供应商链 + fetch（7 文件，被 6 节点依赖）
 
-**簇间依赖**：`agent` → `base`（7 条边）；`agent` → `providers`（2 条边）；`app` → `agent`（8 条边）；`app` → `base`（27 条边）；`app` → `i18n`（3 条边）；`app` → `mcp`（2 条边）；`app` → `prompts`（2 条边）；`app` → `providers`（3 条边）；`app` → `tools`（4 条边）；`base` → `agent`（4 条边）；`base` → `cli`（1 条边）；`base` → `prompts`（2 条边）；`base` → `providers`（2 条边）；`cli` → `agent`（5 条边）；`cli` → `app`（15 条边）；`cli` → `base`（29 条边）；`cli` → `i18n`（6 条边）；`cli` → `mcp`（2 条边）；`cli` → `prompts`（1 条边）；`cli` → `providers`（1 条边）；`cli` → `tools`（6 条边）；`mcp` → `agent`（1 条边）；`mcp` → `base`（3 条边）；`prompts` → `providers`（1 条边）；`providers` → `base`（3 条边）；`tools` → `agent`（3 条边）；`tools` → `base`（5 条边）；`tools` → `prompts`（2 条边）；`tools` → `providers`（1 条边）
+**簇间依赖**：`agent` → `base`（7 条边）；`agent` → `i18n`（1 条边）；`agent` → `providers`（2 条边）；`app` → `agent`（10 条边）；`app` → `base`（30 条边）；`app` → `i18n`（3 条边）；`app` → `mcp`（2 条边）；`app` → `prompts`（2 条边）；`app` → `providers`（4 条边）；`app` → `tools`（5 条边）；`base` → `agent`（4 条边）；`base` → `cli`（1 条边）；`base` → `prompts`（2 条边）；`base` → `providers`（2 条边）；`cli` → `agent`（5 条边）；`cli` → `app`（16 条边）；`cli` → `base`（29 条边）；`cli` → `i18n`（6 条边）；`cli` → `mcp`（3 条边）；`cli` → `prompts`（1 条边）；`cli` → `providers`（1 条边）；`cli` → `tools`（6 条边）；`mcp` → `agent`（1 条边）；`mcp` → `base`（3 条边）；`prompts` → `providers`（1 条边）；`providers` → `base`（3 条边）；`tools` → `agent`（3 条边）；`tools` → `base`（5 条边）；`tools` → `prompts`（2 条边）；`tools` → `providers`（1 条边）
 
 ## 3. 边表
 | from | to | 语义 |
@@ -263,6 +264,21 @@ zen-agent 是零第三方依赖（仅 httpx）的终端 AI 编码代理。四个
 | `app.swarm` | `skills` | discover_skills（角色技能根） |
 | `app.swarm` | `types` | TextContent |
 | `cli.rpc` | `app.swarm` | SwarmManager、SwarmOps 分派 |
+| `app.zen` | `agent.loop` | AgentTool、ToolResultAgent（zen 派发工具） |
+| `app.zen` | `agent.rt` | read_session_titles、unique_session_path（worker 会话） |
+| `app.zen` | `app.assembly` | bootstrap.prepare、RuntimeOptions（每 worker 装配 runtime） |
+| `app.zen` | `app.transcript` | open_session（resume worker 会话） |
+| `app.zen` | `app.chat` | ChatController（chat.steer 注入 router，TYPE_CHECKING） |
+| `app.zen` | `tools` | text_result（zen 工具结果） |
+| `cli.rpc` | `app.zen` | ZenFleet、latest_router、set_role（zen 启停与 roster） |
+| `agent.rt` | `i18n` | 会话/运行时用户文案经 t() |
+| `app.swarm` | `app.chat` | worker 报告回注 router 对话（messages_to_views） |
+| `app.swarm` | `attachments` | worker 转发用户图片附件（read_image_argument） |
+| `app.swarm` | `events` | AgentEvent 类型与角色事件订阅 |
+| `app.swarm` | `providers` | 角色模型/密钥目录（load_catalog） |
+| `app.transcript` | `app.zen` | worker 转录页读取花名册（read_roster） |
+| `app.zen` | `types` | wire 协议类型 |
+| `cli` | `mcp` | mcpcmd 的 trust/list 子命令（untrusted_project_servers） |
 
 ## 4. 不变量
 - 六层依赖只向下：cli → app → tools → agent → providers → types/events；tests/test_layering.py 钉住；app/ 不 import cli 与 argparse/textual/rich/prompt_toolkit
@@ -273,14 +289,20 @@ zen-agent 是零第三方依赖（仅 httpx）的终端 AI 编码代理。四个
 - 已知常量回指环 loop↔tool_exec↔result_budget↔timeouts 在 agent.loop 节点内部，cycles_seen 登记
 - 插件只做单向外呼：zen → 插件 MCP 进程 → 外部应用；plugins/ 不 import mcp/app/cli/agent/tools/providers（tests/test_plugin_layering.py 钉住），只有 app/plugin_wiring.py 把插件贡献翻译成 MCP 配置
 - swarm 只在 app 层组合既有内核：角色 runtime 经 Runtime.bootstrap 装配，插件仍单向外呼，密码只存 ~/.zenagent/settings.json（manifest 只放 ${KEY} 占位）
+- zen 只在 app 层组合既有内核：worker runtime 经 bootstrap.prepare 装配并 resume 到项目会话，结果经 chat.steer 注入 router（结果自到、不等待）；fleet 属于单个项目 slot，不跨项目
 
 ## 5. 健康红点
-最近 gov_health（2026-11-11）：违规 113 项，新增 error 2，恶化 6，基线 113 项。
-红点节点：`(unmapped)`(7E/29W)、`cli.rpc`(5E/6W)、`tools`(0E/9W)、`cli`(1E/7W)、`app.chat`(2E/5W)、`app.assembly`(2E/5W)、`(cycles)`(6E/0W)、`providers`(0E/5W)
+最近 gov_health（2026-11-14）：违规 131 项，新增 error 0，恶化 0，基线 131 项。
+红点节点：`(unmapped)`(9E/34W)、`cli.rpc`(5E/10W)、`tools`(0E/9W)、`app.assembly`(2E/6W)、`cli`(0E/8W)、`(cycles)`(7E/0W)、`app.chat`(2E/4W)、`app.swarm`(2E/3W)
 
 ## 6. 最近治理（deltas.md 最后一条）
-## [v4] 2026-11-10 — 移除 taiji
-  - 删：节点 `app.taiji`（11 文件）与 `cli.rpc` 中的 `ops_taiji.py` / `TaijiOps`
-  - 删：9 条边（`app.assembly → app.taiji`、`app.taiji →` agent.loop/agent.rt/app.assembly/app.chat/project/prompts/types、`cli.rpc → app.taiji`）
-  - 删：`cycles_seen` 中的 `app.taiji ↔ app.taiji.supervisor`；基线中 7 条 taiji 违规随节点消失而解除
-  - 熵增：refresh deps 暴露 v0.12.1 合并后的存量漂移（`runtime.py`、`server.py`、`test_session.py` 等行数增长，非本次删除引入），按当前值 `--update-baseline` 重登记；基线 112→109（taiji 解除 7 项，漂移新增/恶化按现值登记）
+## [v7] 2026-11-14 — 架构审计清理（audit-cleanup 分支，34 项计划收尾）
+计划：`docs/superpowers/plans/2026-11-14-architecture-audit-cleanup.md`；审计：`docs/reviews/2026-11-14-architecture-audit.md`（P0×3 / P1×10 / P2×24 全部处置，commits 346a771..4e3a57b）。
+  - 增：映射 21 个新文件入节点 —— `agent.jsonl`→agent.rt；`app/agent_profile` / `approval_router` / `dispatch` / `skills_recompose` / `workspace_state`→app.assembly；`app/run_wiring` / `runs` / `session_lease` / `subagent_runs`→app.transcript；`cli/interaction` / `mcpcmd`→cli；rpc 的 `ops_runs` / `ops_secrets` / `ops_skills` / `ops_supervisor` / `ops_workspace`→cli.rpc；tui screens 的 `approvals` / `dialogs` / `editors` / `palette_pickers`→cli.tui.screens
+  - 删：`cli/permissions.py`（兼容 shim 摘除，import 方并入 app.permissions）；24 个新增 tests 登记 `unmapped`（outside src_root）
+  - 增：8 条边（`agent.rt→i18n`、`app.swarm→app.chat/attachments/events/providers`、`app.transcript→app.zen`、`app.zen→types`、`cli→mcp`）——ops 拆分后 `cli.rpc→mcp/settings/skills/tools.web` 等边由 ops_secrets/ops_skills 重新支撑，未删除
+  - 增：`cycles_seen` 两条（附理由）：`app.agent_profile ↔ plugin_wiring ↔ runtime ↔ skills_recompose`（skills_recompose 仅 TYPE_CHECKING 引 runtime 做注解，运行时单向）；`app.swarm.approvals ↔ frames ↔ manager`（frames 回引 manager 取房间态，任务 11-17 迁移产物，后续 plan 拆）
+  - 增：`policy.exempt.hub` 登记 9 个契约枢纽（`zenagent` 包根、`agent.loop`、`app.views`、`config`、`events`、`i18n`、`project`、`providers.catalog`、`types`）——宽扇入扇出是设计意图；`app.runtime` / `app.chat` / `cli.tui.app` 三个意外枢纽**不豁免**，留在基线里盯着
+  - 熵增（重点改善）：`Runtime` 上帝类 879→760 行（重组切片 skills_recompose 抽出）；`runtime.py` 上帝文件 1032→901；`repl.py` 1028→787 与 `ops_config.py` 902→294 上帝项**解除**（拆分后低于 800 线）；`ConfigOps` 902→294 解除
+  - 熵增（登记存量）：基线 103→131 —— 新增 error 7（`test_app_chat`/`test_rpc_v2` 等测试文件本分支增长越 800 线）、新增 warn 21、恶化 31（`runtime.__init__` 86→101、`bootstrap` 233→243 等，任务 1-31 修复性增长），按 `--update-baseline` 全量登记；偿还期限 2026-12-31 记于 `allowlist.json._notes`
+  - 门禁：`scripts/check.sh` 增加 `uv run mypy zenagent` 步骤（ratchet：77 个模块 691 个存量错误冻结为 overrides，新模块不许加入清单）；LOC allowlist 重基线（4 个 python + 5 个 ts 条目删除——文件已低于 800 默认线，余 6 条 +10 行余量带偿还注释）

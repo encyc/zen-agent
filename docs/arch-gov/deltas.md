@@ -44,3 +44,16 @@
 - 改：不变量 +1（zen 只在 app 层组合既有内核：worker 经 `bootstrap.prepare` 装配并 resume 到项目会话，结果经 `chat.steer` 注入 router、不等待；fleet 属于单个项目 slot）
 - 评审修复（fix/zen-swarm-review 分支）：`swarm_notice` 补 `swarm:true` 并钉住服务端帧契约（union + 每帧 flag + handler 覆盖）；角色 prompt/skills 路径围栏（`_within`）；房间 append `fsync` + load 修复未终止尾行；桌面 worker drawer 失败文案/稳定 key + `zenBackgroundRun` 布尔白名单
 - 熵增：`scripts/check_architecture.py` 仅校验 LOC 预算（对 `docs/architecture/allowlist.json`），本次无文件越限，门禁绿；manifest 为治理文档，不参与 LOC 门禁
+
+## [v7] 2026-11-14 — 架构审计清理（audit-cleanup 分支，34 项计划收尾）
+
+计划：`docs/superpowers/plans/2026-11-14-architecture-audit-cleanup.md`；审计：`docs/reviews/2026-11-14-architecture-audit.md`（P0×3 / P1×10 / P2×24 全部处置，commits 346a771..4e3a57b）。
+
+- 增：映射 21 个新文件入节点 —— `agent.jsonl`→agent.rt；`app/agent_profile` / `approval_router` / `dispatch` / `skills_recompose` / `workspace_state`→app.assembly；`app/run_wiring` / `runs` / `session_lease` / `subagent_runs`→app.transcript；`cli/interaction` / `mcpcmd`→cli；rpc 的 `ops_runs` / `ops_secrets` / `ops_skills` / `ops_supervisor` / `ops_workspace`→cli.rpc；tui screens 的 `approvals` / `dialogs` / `editors` / `palette_pickers`→cli.tui.screens
+- 删：`cli/permissions.py`（兼容 shim 摘除，import 方并入 app.permissions）；24 个新增 tests 登记 `unmapped`（outside src_root）
+- 增：8 条边（`agent.rt→i18n`、`app.swarm→app.chat/attachments/events/providers`、`app.transcript→app.zen`、`app.zen→types`、`cli→mcp`）——ops 拆分后 `cli.rpc→mcp/settings/skills/tools.web` 等边由 ops_secrets/ops_skills 重新支撑，未删除
+- 增：`cycles_seen` 两条（附理由）：`app.agent_profile ↔ plugin_wiring ↔ runtime ↔ skills_recompose`（skills_recompose 仅 TYPE_CHECKING 引 runtime 做注解，运行时单向）；`app.swarm.approvals ↔ frames ↔ manager`（frames 回引 manager 取房间态，任务 11-17 迁移产物，后续 plan 拆）
+- 增：`policy.exempt.hub` 登记 9 个契约枢纽（`zenagent` 包根、`agent.loop`、`app.views`、`config`、`events`、`i18n`、`project`、`providers.catalog`、`types`）——宽扇入扇出是设计意图；`app.runtime` / `app.chat` / `cli.tui.app` 三个意外枢纽**不豁免**，留在基线里盯着
+- 熵增（重点改善）：`Runtime` 上帝类 879→760 行（重组切片 skills_recompose 抽出）；`runtime.py` 上帝文件 1032→901；`repl.py` 1028→787 与 `ops_config.py` 902→294 上帝项**解除**（拆分后低于 800 线）；`ConfigOps` 902→294 解除
+- 熵增（登记存量）：基线 103→131 —— 新增 error 7（`test_app_chat`/`test_rpc_v2` 等测试文件本分支增长越 800 线）、新增 warn 21、恶化 31（`runtime.__init__` 86→101、`bootstrap` 233→243 等，任务 1-31 修复性增长），按 `--update-baseline` 全量登记；偿还期限 2026-12-31 记于 `allowlist.json._notes`
+- 门禁：`scripts/check.sh` 增加 `uv run mypy zenagent` 步骤（ratchet：77 个模块 691 个存量错误冻结为 overrides，新模块不许加入清单）；LOC allowlist 重基线（4 个 python + 5 个 ts 条目删除——文件已低于 800 默认线，余 6 条 +10 行余量带偿还注释）
