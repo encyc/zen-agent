@@ -471,6 +471,7 @@ CATALOG: dict[str, str] = {
     "runtime.persist_failed": (
         "会话写盘失败（{error}）；本轮对话可能无法在重启后保留"
     ),
+    "session.newer_version": "会话文件 {path} 由更新版本写入（记录版本 {version}）；部分能力可能缺失，重写操作（undo/retry）可能丢弃未知记录",
     "mode.unknown": "未知模式：{mode}（可选 plan|ask|auto）",
     "session.legacy_file": "不是旧版会话文件：{source}",
     "session.legacy_dir": "不是旧版会话文件：{source}（应位于 {dir}）",

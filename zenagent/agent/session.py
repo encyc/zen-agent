@@ -29,6 +29,7 @@ from pathlib import Path
 
 from zenagent import __version__, project
 from zenagent.agent.jsonl import append_line, dump_line
+from zenagent.i18n import t
 from zenagent.types import (
     AssistantMessage,
     Message,
@@ -543,6 +544,15 @@ class Session:
                 # warning. ``role`` always wins if a line carries both.
                 self.records.append(record)
                 if record["type"] == "session" and self.header is None:
+                    written = record.get("version")
+                    if isinstance(written, int) and written > RECORD_VERSION:
+                        self.warnings.append(
+                            t(
+                                "session.newer_version",
+                                path=self.path.name,
+                                version=written,
+                            )
+                        )
                     self.header = record
                 if self.boundary is not None and self.boundary(record):
                     segments.append([])

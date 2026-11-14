@@ -60,6 +60,10 @@ RETRY = "retry"
 #: The permission mode the session switched to.
 MODE = "mode"
 
+#: Record kinds this version defines. Anything else is carried verbatim by a
+#: transcript rewrite (see ``keep_for_rewrite``).
+KNOWN_KINDS = frozenset({TOOL_END, COMPACTION, RUN_START, RUN_END, RETRY, MODE})
+
 #: Every kind this build writes. Unknown kinds are read back untouched but are
 #: never carried into a rewritten transcript.
 KINDS = (TOOL_END, COMPACTION, RUN_START, RUN_END, RETRY, MODE)
@@ -221,6 +225,11 @@ def keep_for_rewrite(*, keep_tool_end: bool = True) -> Callable[[dict], bool]:
         kind = record_type(record)
         if kind == COMPACTION:
             return True
-        return keep_tool_end and kind == TOOL_END
+        if keep_tool_end and kind == TOOL_END:
+            return True
+        # An unknown kind (a newer file, or a plugin's side-channel) is inert
+        # on replay, so carry it verbatim instead of silently deleting another
+        # version's data (audit P2).
+        return kind not in KNOWN_KINDS
 
     return keep

@@ -1094,7 +1094,12 @@ async def test_side_channel_records_round_trip(isolated_sessions):
     )]]
 
     carried = reloaded.carry_records(messages, keep=records.keep_for_rewrite())
-    assert [record["type"] for record in carried] == ["tool_end", "compaction"]
+    # P2: unknown kinds are carried verbatim now (see test_app_records).
+    assert [record["type"] for record in carried] == [
+        "tool_end",
+        "compaction",
+        "future-kind",
+    ]
 
 
 def test_rewrite_and_fork_at_require_the_keep_predicate():
@@ -1183,3 +1188,33 @@ def test_a_new_session_header_records_the_explicit_root(tmp_path):
 
     header = json.loads(session.path.read_text(encoding="utf-8").splitlines()[0])
     assert header["cwd"] == str(root)
+
+
+def test_newer_session_file_warns_on_load(tmp_path):
+    """P2: RECORD_VERSION was written but never read; a newer file must say so."""
+    import json as json_mod
+
+    from zenagent.agent.session import Session
+
+    path = tmp_path / "future.jsonl"
+    header = {
+        "type": "session",
+        "version": 999,
+        "id": "future",
+        "createdAt": 0,
+        "cwd": "/x",
+        "app": "zenagent",
+        "appVersion": "0",
+    }
+    message = {
+        "role": "user",
+        "content": [{"type": "text", "text": "hi"}],
+        "timestamp": 0,
+    }
+    path.write_text(
+        json_mod.dumps(header) + "\n" + json_mod.dumps(message) + "\n",
+        encoding="utf-8",
+    )
+    session = Session(path)
+    session.load()
+    assert any("999" in warning for warning in session.warnings)

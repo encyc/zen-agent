@@ -472,6 +472,7 @@ CATALOG: dict[str, str] = {
     "runtime.persist_failed": (
         "session write failed ({error}); this turn may not survive a restart"
     ),
+    "session.newer_version": "session file {path} was written by a newer version (record version {version}); some features may be missing and a rewrite (undo/retry) may drop unknown records",
     "mode.unknown": "unknown mode: {mode} (choose plan|ask|auto)",
     "session.legacy_file": "not a legacy session file: {source}",
     "session.legacy_dir": "not a legacy session file: {source} (expected under {dir})",
