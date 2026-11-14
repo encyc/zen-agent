@@ -1,6 +1,7 @@
 """The RpcServer core: child state, dispatch, and the chat/run wire handlers.
 
-Composed from the domain mixins: FilesOps, SessionOps, ConfigOps.
+Composed from the domain mixins: FilesOps, SessionOps, PluginsOps,
+ConfigOps, SecretsOps, SkillsOps.
 Pure relocation from the pre-split ``cli/rpc.py`` — zero behavior change.
 """
 
@@ -27,7 +28,9 @@ from zenagent.cli.rpc.errors import failure_frame
 from zenagent.cli.rpc.ops_config import ConfigOps
 from zenagent.cli.rpc.ops_files import FilesOps
 from zenagent.cli.rpc.ops_plugins import PluginsOps
+from zenagent.cli.rpc.ops_secrets import SecretsOps
 from zenagent.cli.rpc.ops_session import SessionOps
+from zenagent.cli.rpc.ops_skills import SkillsOps
 from zenagent.events import AgentEvent
 from zenagent.limits import LimitsWriteError
 from zenagent.project import project_key
@@ -106,7 +109,7 @@ def _usage(agent: Agent) -> dict:
     }
 
 
-class RpcServer(FilesOps, SessionOps, PluginsOps, ConfigOps):
+class RpcServer(FilesOps, SessionOps, PluginsOps, ConfigOps, SecretsOps, SkillsOps):
     """Reads requests, streams agent events, writes one result per request."""
 
     def __init__(

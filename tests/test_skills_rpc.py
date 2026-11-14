@@ -39,7 +39,7 @@ async def test_list_reports_project_and_global_skills_with_enabled_state(
     project_root, global_root = roots(tmp_path)
     write_skill(project_root, "deploy", "Ship the app")
     write_skill(global_root, "pdf", "Build a PDF")
-    monkeypatch.setattr("zenagent.cli.rpc.ops_config.default_skill_roots", lambda cwd: roots(tmp_path))
+    monkeypatch.setattr("zenagent.cli.rpc.ops_skills.default_skill_roots", lambda cwd: roots(tmp_path))
     runtime = await runtime_factory()
     writes: list[str] = []
     server = build_server(runtime, writes)
@@ -65,7 +65,7 @@ async def test_read_returns_the_body_and_rejects_unknown_skills(
     runtime_factory, monkeypatch, tmp_path
 ):
     write_skill(roots(tmp_path)[0], "deploy", "Ship the app", "Run `make ship`.\n")
-    monkeypatch.setattr("zenagent.cli.rpc.ops_config.default_skill_roots", lambda cwd: roots(tmp_path))
+    monkeypatch.setattr("zenagent.cli.rpc.ops_skills.default_skill_roots", lambda cwd: roots(tmp_path))
     runtime = await runtime_factory()
     writes: list[str] = []
     server = build_server(runtime, writes)
@@ -86,7 +86,7 @@ async def test_toggle_persists_and_filters_the_live_runtime(
     project_root, global_root = roots(tmp_path)
     write_skill(project_root, "deploy", "Ship the app")
     write_skill(global_root, "pdf", "Build a PDF")
-    monkeypatch.setattr("zenagent.cli.rpc.ops_config.default_skill_roots", lambda cwd: roots(tmp_path))
+    monkeypatch.setattr("zenagent.cli.rpc.ops_skills.default_skill_roots", lambda cwd: roots(tmp_path))
     monkeypatch.setattr(
         "zenagent.app.runtime.default_skill_roots", lambda cwd: roots(tmp_path)
     )
@@ -113,7 +113,7 @@ async def test_toggle_persists_and_filters_the_live_runtime(
 
 async def test_toggle_rejects_unknown_skills(runtime_factory, monkeypatch, tmp_path):
     write_skill(roots(tmp_path)[0], "deploy", "Ship the app")
-    monkeypatch.setattr("zenagent.cli.rpc.ops_config.default_skill_roots", lambda cwd: roots(tmp_path))
+    monkeypatch.setattr("zenagent.cli.rpc.ops_skills.default_skill_roots", lambda cwd: roots(tmp_path))
     runtime = await runtime_factory()
     writes: list[str] = []
     server = build_server(runtime, writes)
@@ -131,7 +131,7 @@ async def test_rescan_picks_up_a_skill_added_on_disk(
 ):
     project_root, _ = roots(tmp_path)
     write_skill(project_root, "deploy", "Ship the app")
-    monkeypatch.setattr("zenagent.cli.rpc.ops_config.default_skill_roots", lambda cwd: roots(tmp_path))
+    monkeypatch.setattr("zenagent.cli.rpc.ops_skills.default_skill_roots", lambda cwd: roots(tmp_path))
     runtime = await runtime_factory()
     writes: list[str] = []
     server = build_server(runtime, writes)

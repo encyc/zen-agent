@@ -36,7 +36,7 @@ def config_file(tmp_path, monkeypatch):
         '# hand-written\n\ndefault_model = "deepseek-flash"\n\n[tools]\nallow = ["read_*"]\n',
         encoding="utf-8",
     )
-    monkeypatch.setattr("zenagent.cli.rpc.ops_config.global_config_path", lambda: path)
+    monkeypatch.setattr("zenagent.cli.rpc.ops_secrets.global_config_path", lambda: path)
     monkeypatch.setattr("zenagent.config.config_path", lambda: path)
     return path
 

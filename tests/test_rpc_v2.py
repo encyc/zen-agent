@@ -1479,7 +1479,7 @@ async def test_a_refused_limit_value_crosses_as_a_code(
 
     config = tmp_path / "config.toml"
     config.write_text("", encoding="utf-8")
-    monkeypatch.setattr("zenagent.cli.rpc.ops_config.global_config_path", lambda: config)
+    monkeypatch.setattr("zenagent.cli.rpc.ops_secrets.global_config_path", lambda: config)
     monkeypatch.setattr("zenagent.config.config_path", lambda: config)
     _runtime, server, writes, queue = await build(runtime_factory)
 
@@ -1514,14 +1514,14 @@ async def test_a_limit_write_whose_config_no_longer_parses_is_config_failed(
     configuration code, not the parser's absolute path."""
     config = tmp_path / "config.toml"
     config.write_text("", encoding="utf-8")
-    monkeypatch.setattr("zenagent.cli.rpc.ops_config.global_config_path", lambda: config)
+    monkeypatch.setattr("zenagent.cli.rpc.ops_secrets.global_config_path", lambda: config)
     monkeypatch.setattr("zenagent.config.config_path", lambda: config)
     _runtime, server, writes, queue = await build(runtime_factory)
 
     def explode(path):
         raise ValueError(f"cannot parse {config}")
 
-    monkeypatch.setattr("zenagent.cli.rpc.ops_config.load_user_config", explode)
+    monkeypatch.setattr("zenagent.cli.rpc.ops_secrets.load_user_config", explode)
 
     await run_lines(
         server,
@@ -1556,7 +1556,7 @@ async def test_a_failed_mcp_save_crosses_as_a_code(
     def explode(*args, **kwargs):
         raise OSError(errno.EACCES, "Permission denied", str(secret))
 
-    monkeypatch.setattr("zenagent.cli.rpc.ops_config.save_mcp_server", explode)
+    monkeypatch.setattr("zenagent.cli.rpc.ops_skills.save_mcp_server", explode)
 
     await run_lines(
         server,
@@ -1724,7 +1724,7 @@ async def test_a_failure_scenario_never_leaks_the_tmp_path(
     bad_image = tmp_path / "notes.txt"
     bad_image.write_text("not an image", encoding="utf-8")
     monkeypatch.setattr(
-        "zenagent.cli.rpc.ops_config.global_config_path",
+        "zenagent.cli.rpc.ops_secrets.global_config_path",
         lambda: tmp_path / "config.toml",
     )
     monkeypatch.setattr("zenagent.config.config_path", lambda: tmp_path / "config.toml")
