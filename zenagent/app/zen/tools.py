@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 from zenagent.agent.protocol import AgentTool, ToolResultAgent
 from zenagent.app.zen.fleet import worker_statuses
+from zenagent.app.zen.identity import router_fleet
 from zenagent.tools._result import text_result
 
 if TYPE_CHECKING:
@@ -237,3 +238,31 @@ def fleet_tools(
             execute=lambda call_id, args, abort, on_update: _spawn(args),
         ),
     ]
+
+
+def _router_tool_provider(rt) -> list:
+    """The fleet tools while ``rt``'s session is the fleet's router session."""
+    if router_fleet(rt.zen_fleet, rt.session.path) is None:
+        return []
+    return fleet_tools(lambda: router_fleet(rt.zen_fleet, rt.session.path))
+
+
+def register_router_surface(runtime) -> None:
+    """Attach zen's router surface (tools + prompt note) to a runtime.
+
+    The kernel no longer names the zen package (audit P0-3): the wiring that
+    attaches a fleet registers these providers once; they read the live
+    ``runtime.zen_fleet`` on every recompose, so detach and re-attach need no
+    bookkeeping here. Idempotent.
+    """
+    def _note():
+        from zenagent.app.zen.prompts import ROUTER_PROMPT_NOTE
+
+        if router_fleet(runtime.zen_fleet, runtime.session.path) is None:
+            return None
+        return ROUTER_PROMPT_NOTE
+
+    if _router_tool_provider not in runtime.tool_providers:
+        runtime.tool_providers.append(_router_tool_provider)
+    if _note not in runtime.prompt_note_providers:
+        runtime.prompt_note_providers.append(_note)

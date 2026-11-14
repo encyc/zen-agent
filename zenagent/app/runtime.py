@@ -47,7 +47,6 @@ from zenagent.app.support import (
     session_id_for,
 )
 from zenagent.app.views import last_request_usage
-from zenagent.app.zen.identity import router_fleet
 from zenagent.config import (
     ContextGuard,
     UserConfig,
@@ -208,10 +207,19 @@ class Runtime:
         self._base_tools: list = []
         #: Desired set + activation policy for the model-visible tool list.
         self.tool_registry = ToolRegistry()
-        #: Zen mode fleet (zenagent.app.zen.fleet.ZenFleet) when enabled;
-        #: None in coding mode. Importing zen.fleet here would cycle through
-        #: bootstrap, so the type lives only in the ops layer and comments.
+        #: Zen mode fleet when enabled; None in coding mode. The kernel never
+        #: names the zen package (that cycle ran through bootstrap, audit P0-3):
+        #: the orchestrator registers its surface via the two provider slots
+        #: below when it attaches, and unregisters nothing (providers read the
+        #: live attribute and go inert when it clears).
         self.zen_fleet = None
+        #: Orchestrator tool sources: Callable[[Runtime], list[AgentTool]],
+        #: consulted on every recompose. Registered by zen wiring; empty in
+        #: coding mode.
+        self.tool_providers: list[Callable[[Runtime], list]] = []
+        #: Extra system-prompt notes sourced the same way (e.g. the zen router
+        #: note); each returns the note text or None when inactive.
+        self.prompt_note_providers: list[Callable[[], str | None]] = []
         #: Checkpoint/rewind markers (context projection; transcript stays intact).
         self.rewind = RewindState()
         #: Extra workspace roots tracked by /add-dir (display only for now).
@@ -288,10 +296,10 @@ class Runtime:
 
     def _prompt_with_mode(self) -> str:
         note = mode_prompt_note(self._mode)
-        if router_fleet(self.zen_fleet, self.session.path) is not None:
-            from zenagent.app.zen.prompts import ROUTER_PROMPT_NOTE
-
-            note = f"{note}\n\n{ROUTER_PROMPT_NOTE}" if note else ROUTER_PROMPT_NOTE
+        for provider in self.prompt_note_providers:
+            extra = provider()
+            if extra:
+                note = f"{note}\n\n{extra}" if note else extra
         report = self._base_prompt_report
         if report is not None:
             blocks = report.blocks
@@ -706,10 +714,8 @@ class Runtime:
             tools.append(self.todo_tool)
         if self.task_tool is not None:
             tools.append(self.task_tool)
-        if router_fleet(self.zen_fleet, self.session.path) is not None:
-            from zenagent.app.zen.tools import fleet_tools
-
-            tools.extend(fleet_tools(lambda: router_fleet(self.zen_fleet, self.session.path)))
+        for provider in self.tool_providers:
+            tools.extend(provider(self))
         if self.mcp is not None:
             tools.extend(self.mcp.tool_defs())
         if self.skills:

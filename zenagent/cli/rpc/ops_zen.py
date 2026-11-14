@@ -27,6 +27,7 @@ from zenagent.app.views import TranscriptBuilder
 from zenagent.app.workspace_state import load_workspace, set_workspace_mode
 from zenagent.app.zen.fleet import ZenFleet
 from zenagent.app.zen.roster import latest_router, set_role
+from zenagent.app.zen.tools import register_router_surface
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
 from zenagent.cli.rpc.ops_session import _optional_count, _page_views
 from zenagent.config import load_user_config
@@ -212,6 +213,7 @@ class ZenOps:
             max_turns=config.task_max_turns,
         )
         runtime.zen_fleet = fleet
+        register_router_surface(runtime)
         set_workspace_mode(root, "zen", router_session=str(runtime.session.path))
         if supervisor is not None:
             supervisor.register(

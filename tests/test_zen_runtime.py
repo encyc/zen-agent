@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from zenagent.app.runtime import Runtime  # noqa: F401 - fixture surface contract
 from zenagent.app.zen.fleet import ZenFleet
+from zenagent.app.zen.tools import register_router_surface
 from zenagent.app.zen.prompts import ROUTER_PROMPT_NOTE
 from zenagent.project import project_sessions_dir
 
@@ -26,6 +27,7 @@ async def test_fleet_tools_and_router_note_join_when_fleet_is_set(runtime_factor
         router_path=str(runtime.session.path),
     )
     runtime.zen_fleet = fleet
+    register_router_surface(runtime)
     runtime._recompose()
     try:
         names = {tool.name for tool in runtime.agent.tools}
@@ -55,6 +57,7 @@ async def test_router_note_mentions_async_result_delivery(runtime_factory):
         router_path=str(runtime.session.path),
     )
     runtime.zen_fleet = fleet
+    register_router_surface(runtime)
     runtime._recompose()
     try:
         assert "禁止" in runtime.agent.system_prompt
@@ -74,6 +77,7 @@ async def test_fleet_tools_follow_the_router_session_not_the_slot(runtime_factor
         router_path=str(runtime.session.path),
     )
     runtime.zen_fleet = fleet
+    register_router_surface(runtime)
     runtime._recompose()
     try:
         names = {tool.name for tool in runtime.agent.tools}

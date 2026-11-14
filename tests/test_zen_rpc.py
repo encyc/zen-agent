@@ -91,6 +91,8 @@ class FakeRuntime:
         self.mode = "ask"
         self.user_config = FakeUserConfig()
         self.zen_fleet = None
+        self.tool_providers: list = []
+        self.prompt_note_providers: list = []
         self.warnings: list[str] = []
         self.closed = False
         self.recomposed = 0
