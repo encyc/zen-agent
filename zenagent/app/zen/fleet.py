@@ -581,3 +581,19 @@ class ZenFleet:
             if handle.status in ("working", "queued"):
                 handle.status = "blocked"
         self._notify()
+        # Teardown must actually finish: worker tasks run runtime.close
+        # (MCP children, job process groups) in their finally, so returning
+        # before they settle leaks them (audit P1-4).
+        tasks = [
+            h.task
+            for h in self._handles.values()
+            if h.task is not None and not h.task.done()
+        ]
+        if self._wake_task is not None and not self._wake_task.done():
+            tasks.append(self._wake_task)
+        if tasks:
+            _, pending = await asyncio.wait(tasks, timeout=10)
+            if pending:
+                _log.warning(
+                    "zen fleet close: %d task(s) did not settle", len(pending)
+                )

@@ -722,3 +722,28 @@ async def test_worker_inherits_an_explicit_thinking_off(env) -> None:
     await fleet.dispatch(str(env["paths"]["w1"]), "a")
     await fleet.wait_all()
     assert env["factory"].calls[-1]["thinking"] == "off"
+
+
+async def test_close_awaits_worker_tasks(env) -> None:
+    """P1-4: close() must not return while worker tasks are still settling.
+
+    A worker stuck in prepare (a pending build gate) used to survive close():
+    its runtime.close — MCP children, job process groups — never ran, because
+    nothing awaited the task (audit P1-4).
+    """
+    fleet = _fleet_with(env)
+    gate = asyncio.get_running_loop().create_future()
+    env["factory"].build_gates[Path(str(env["paths"]["w1"]))] = gate
+    await fleet.dispatch(str(env["paths"]["w1"]), "a")
+    handle = next(iter(fleet._handles.values()))
+
+    close_task = asyncio.create_task(fleet.close())
+    await asyncio.sleep(0)  # let close() run to its first await (or completion)
+    # The worker task is still stuck in prepare: close() must be waiting on it.
+    assert not close_task.done(), (
+        "close() returned while a worker task was still pending"
+    )
+    gate.set_result(None)
+    await close_task
+    assert handle.task is None or handle.task.done()
+    assert fleet._wake_task is None or fleet._wake_task.done()
