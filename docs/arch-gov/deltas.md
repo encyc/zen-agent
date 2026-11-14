@@ -68,3 +68,4 @@
 - 熵增（改善）：`file_loc:zenagent.app.runtime` 901→638（error 解除、warn 档重登记）；`god_class:...Runtime` 760→514；`long_func:...assemble` 245 行为新增存量（搬运即得，偿还同 2026-12-31）
 - 熵增（登记存量）：基线 133 项（净 +0：改善 3 / 解除 2 / 新增 4 / 恶化 14，净变化由 `--update-baseline` 全量登记）；恶化主因 bootstrap.py 103→396 行的重分类与长函数重排
 - 门禁：`bash scripts/check.sh` 全绿（2945→2951 用例）；gov_diff CLEAN；allowlist 删 `zenagent/app/runtime.py` 条目（910→638）
+- 历史注记：main 检出曾有一份未提交的「v7（orchestration-parity 合并后的运行基建面登记，全面架构审计会话产物）」——节点 app.runs/app.supervisor 划分、11-11 基线后的存量漂移重登记、`gov_health.py` 解除项 KeyError 工具修复。该登记随 audit-cleanup 的 v7/v8 从当前树重新推导而取代；其 deltas 条目从未提交，此处记其存在。
