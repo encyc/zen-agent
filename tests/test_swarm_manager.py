@@ -1296,3 +1296,34 @@ async def test_second_manager_cannot_start_while_one_holds_the_room():
         assert third._started
     finally:
         await third.close()
+
+
+async def test_close_isolates_a_failing_runtime():
+    """P2: one runtime.close blowing up must not leak the remaining runtimes.
+
+    The close loop used to be a bare await: a failure skipped the unregister
+    and the close of every runtime after it (audit P2).
+    """
+    role_dir = _write_role("writer")
+    (role_dir / "manifest.json").write_text(
+        json.dumps({"id": "writer", "name": "Writer", "tools": ["write_file"]}),
+        encoding="utf-8",
+    )
+    manager = _manager(stream_fn_factory=lambda role: _write_then_text_stream())
+    await manager.start()
+    try:
+        await manager.post("@writer 写个文件")
+        await _wait_for(lambda: bool(manager.agents))
+
+        key = next(iter(manager.agents))
+        victim = manager.agents[key].runtime
+
+        async def broken():
+            raise OSError("close blew up")
+
+        victim.close = broken  # instance attr shadows the bound method
+
+        await manager.close()  # must not raise
+        assert manager.agents == {}
+    finally:
+        await manager.close()

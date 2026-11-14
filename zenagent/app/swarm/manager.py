@@ -267,7 +267,10 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
         self._pending.clear()
 
         for key, agent in list(self.agents.items()):
-            await agent.runtime.close()
+            # Teardown must not raise: a failing runtime.close must not skip
+            # the unregister and the close of the runtimes after it (audit P2).
+            with contextlib.suppress(Exception):
+                await agent.runtime.close()
             self.supervisor.unregister(agents.swarm_handle_key(*key))
         self.agents.clear()
         self.runners.clear()
@@ -563,7 +566,8 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
                     self.runners.pop(key, None)
                     self.supervisor.unregister(agents.swarm_handle_key(*key))
                     self._idle.forget(key)
-                    await agent.runtime.close()
+                    with contextlib.suppress(Exception):
+                        await agent.runtime.close()
         finally:
             self._deleting.discard(role_id)
             self._wake.set()
