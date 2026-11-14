@@ -61,7 +61,7 @@ async def host(monkeypatch, tmp_path):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
     for target in (
         "zenagent.app.bootstrap.load_user_config",
-        "zenagent.app.runtime.load_user_config",
+        "zenagent.app.bootstrap.load_user_config",
     ):
         monkeypatch.setattr(
             target,
@@ -187,7 +187,7 @@ async def test_zen_gives_the_router_its_own_slot(monkeypatch, tmp_path):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
     for target in (
         "zenagent.app.bootstrap.load_user_config",
-        "zenagent.app.runtime.load_user_config",
+        "zenagent.app.bootstrap.load_user_config",
     ):
         monkeypatch.setattr(
             target,
@@ -260,7 +260,7 @@ async def test_enabling_zen_does_not_abort_a_running_turn(monkeypatch, tmp_path)
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
     for target in (
         "zenagent.app.bootstrap.load_user_config",
-        "zenagent.app.runtime.load_user_config",
+        "zenagent.app.bootstrap.load_user_config",
     ):
         monkeypatch.setattr(
             target,

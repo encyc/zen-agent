@@ -47,3 +47,15 @@ def test_signature_and_change_note_helpers_left_runtime():
     # templates); no copy stays behind on the class.
     assert not hasattr(runtime_module.Runtime, "_signature")
     assert not hasattr(runtime_module.Runtime, "_change_note")
+
+
+def test_bootstrap_assembly_lives_in_the_bootstrap_module():
+    import inspect
+
+    from zenagent.app import bootstrap
+
+    assert callable(bootstrap.assemble)
+    source = inspect.getsource(runtime_module.Runtime.bootstrap)
+    assert "zenagent.app.bootstrap" in source and "assemble" in source
+    # 回滚留在 assemble 里，委托不得吞掉失败语义
+    assert "except BaseException" not in source

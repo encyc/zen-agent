@@ -96,7 +96,7 @@ async def test_extension_command_runs_via_repl(tmp_path, monkeypatch):
         "zenagent.app.bootstrap.load_user_config", lambda *a, **k: UserConfig()
     )
     monkeypatch.setattr(
-        "zenagent.app.runtime.load_user_config",
+        "zenagent.app.bootstrap.load_user_config",
         lambda *args, **kwargs: UserConfig(),
     )
     monkeypatch.setattr(
@@ -163,7 +163,7 @@ def register(api):
     )
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
     monkeypatch.setattr(
-        "zenagent.app.runtime.load_user_config", lambda *a, **k: UserConfig()
+        "zenagent.app.bootstrap.load_user_config", lambda *a, **k: UserConfig()
     )
 
     captured: dict = {}

@@ -276,7 +276,7 @@ async def test_bootstrap_respects_disabled_backups(monkeypatch, app_env):
     from zenagent.config import UserConfig
 
     monkeypatch.setattr(
-        "zenagent.app.runtime.load_user_config",
+        "zenagent.app.bootstrap.load_user_config",
         lambda *args, **kwargs: UserConfig(default_model="deepseek-flash", backup_enabled=False),
     )
     runtime = await Runtime.bootstrap(_options(), stream_fn=None)
@@ -394,7 +394,7 @@ async def test_bootstrap_wires_the_task_budget_from_config(
 ):
     """Runtime-based frontends (TUI, REPL, RPC) all get ``[task]`` for free."""
     from zenagent.agent.subagents import SubagentLimits
-    from zenagent.app.runtime import build_task_tool as real_build_task_tool
+    from zenagent.app.bootstrap import build_task_tool as real_build_task_tool
     from zenagent.config import UserConfig
 
     captured: dict = {}
@@ -404,7 +404,7 @@ async def test_bootstrap_wires_the_task_budget_from_config(
         return real_build_task_tool(**kwargs)
 
     monkeypatch.setattr(
-        "zenagent.app.runtime.load_user_config",
+        "zenagent.app.bootstrap.load_user_config",
         lambda *args, **kwargs: UserConfig(
             default_model="deepseek-flash",
             task_max_turns=5,
@@ -414,7 +414,7 @@ async def test_bootstrap_wires_the_task_budget_from_config(
             task_max_transcript_file_bytes=2048,
         ),
     )
-    monkeypatch.setattr("zenagent.app.runtime.build_task_tool", capture)
+    monkeypatch.setattr("zenagent.app.bootstrap.build_task_tool", capture)
 
     await runtime_factory()
 
@@ -433,9 +433,9 @@ async def test_bootstrap_hands_the_permission_gate_to_the_task_tool(
 ):
     """A child agent consults the same gate as its parent (no policy bypass)."""
     from zenagent.app.agent_profile import AgentProfile
+    from zenagent.app.bootstrap import build_task_tool as real_build_task_tool
     from zenagent.app.permissions import PermissionBroker
     from zenagent.app.runtime import Runtime, RuntimeOptions
-    from zenagent.app.runtime import build_task_tool as real_build_task_tool
 
     captured: dict = {}
 
@@ -443,7 +443,7 @@ async def test_bootstrap_hands_the_permission_gate_to_the_task_tool(
         captured.update(kwargs)
         return real_build_task_tool(**kwargs)
 
-    monkeypatch.setattr("zenagent.app.runtime.build_task_tool", capture)
+    monkeypatch.setattr("zenagent.app.bootstrap.build_task_tool", capture)
 
     runtime = await runtime_factory()
     assert captured["before_tool_call"] == runtime.gate.before_tool_call

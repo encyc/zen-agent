@@ -38,7 +38,7 @@ ROSTER_PLACEHOLDER = "Available tools: <roster>"
 def isolate_user_config(monkeypatch):
     """Tests must not read the developer's real ~/.zenagent/config.toml."""
     monkeypatch.setattr(
-        "zenagent.app.runtime.load_user_config", lambda *a, **k: UserConfig()
+        "zenagent.app.bootstrap.load_user_config", lambda *a, **k: UserConfig()
     )
 
 

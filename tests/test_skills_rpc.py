@@ -88,7 +88,7 @@ async def test_toggle_persists_and_filters_the_live_runtime(
     write_skill(global_root, "pdf", "Build a PDF")
     monkeypatch.setattr("zenagent.cli.rpc.ops_skills.default_skill_roots", lambda cwd: roots(tmp_path))
     monkeypatch.setattr(
-        "zenagent.app.runtime.default_skill_roots", lambda cwd: roots(tmp_path)
+        "zenagent.app.bootstrap.default_skill_roots", lambda cwd: roots(tmp_path)
     )
     monkeypatch.setattr(
         "zenagent.app.skills_recompose.default_skill_roots",

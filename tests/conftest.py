@@ -14,7 +14,7 @@ def app_env(tmp_path, monkeypatch):
     monkeypatch.delenv("ZAI_CODING_CN_API_KEY", raising=False)
     monkeypatch.delenv("OPENCODE_API_KEY", raising=False)
     monkeypatch.setattr(
-        "zenagent.app.runtime.load_user_config", lambda *args, **kwargs: UserConfig(default_model="deepseek-flash")
+        "zenagent.app.bootstrap.load_user_config", lambda *args, **kwargs: UserConfig(default_model="deepseek-flash")
     )
     monkeypatch.setattr(
         "zenagent.agent.session.sessions_dir",

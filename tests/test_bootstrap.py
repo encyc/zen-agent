@@ -112,7 +112,7 @@ async def test_bootstrap_failure_releases_lease_and_refs(monkeypatch, tmp_path):
     (root / ".git").mkdir(parents=True)
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
     monkeypatch.setattr(
-        "zenagent.app.runtime.load_user_config",
+        "zenagent.app.bootstrap.load_user_config",
         lambda *args, **kwargs: UserConfig(default_model="deepseek-flash"),
     )
     refs_before = jobs_mod._refs
@@ -133,7 +133,7 @@ async def test_bootstrap_failure_releases_lease_and_refs(monkeypatch, tmp_path):
     # build_task_tool is the first unconditional call after the session
     # (and therefore the lease) is bound; extension loading is skipped when
     # no extension files exist, so it is not a reliable injection point.
-    monkeypatch.setattr("zenagent.app.runtime.build_task_tool", boom)
+    monkeypatch.setattr("zenagent.app.bootstrap.build_task_tool", boom)
 
     with pytest.raises(RuntimeError, match="plugin wiring exploded"):
         await Runtime.bootstrap(

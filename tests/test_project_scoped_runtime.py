@@ -20,7 +20,7 @@ def _repo(tmp_path, name, note):
 async def _bootstrap(monkeypatch, root):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
     monkeypatch.setattr(
-        "zenagent.app.runtime.load_user_config",
+        "zenagent.app.bootstrap.load_user_config",
         lambda *args, **kwargs: UserConfig(default_model="deepseek-flash"),
     )
     return await Runtime.bootstrap(

@@ -27,7 +27,7 @@ def isolate_user_config(monkeypatch):
     )
     # Assembly moved into the Runtime, so that is where the config is read.
     monkeypatch.setattr(
-        "zenagent.app.runtime.load_user_config", lambda *a, **k: UserConfig()
+        "zenagent.app.bootstrap.load_user_config", lambda *a, **k: UserConfig()
     )
 
 
@@ -286,7 +286,7 @@ def test_config_default_model_is_used(monkeypatch):
     from zenagent.config import UserConfig
 
     monkeypatch.setattr(
-        "zenagent.app.runtime.load_user_config",
+        "zenagent.app.bootstrap.load_user_config",
         lambda *a, **k: UserConfig(default_model="deepseek-flash"),
     )
     captured: dict = {}
@@ -671,7 +671,7 @@ def test_custom_provider_from_config_is_used(monkeypatch, tmp_path):
     )
     monkeypatch.setenv("LOCAL_API_KEY", "test-key")
     monkeypatch.setattr(
-        "zenagent.app.runtime.load_user_config",
+        "zenagent.app.bootstrap.load_user_config",
         lambda *a, **k: UserConfig(default_model="my-model", custom_providers={"local": provider}),
     )
     captured: dict = {}
@@ -687,7 +687,7 @@ def test_policy_flags_reach_the_permission_gate(monkeypatch):
 
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
     monkeypatch.setattr(
-        "zenagent.app.runtime.load_user_config",
+        "zenagent.app.bootstrap.load_user_config",
         lambda *a, **k: UserConfig(tool_allow=["read_*"], tool_deny=["bash"]),
     )
     # prepare() reads the user config for the broker before bootstrap runs.
@@ -738,7 +738,7 @@ def _capture_gate_for(monkeypatch, argv):
 
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
     monkeypatch.setattr(
-        "zenagent.app.runtime.load_user_config", lambda *a, **k: UserConfig()
+        "zenagent.app.bootstrap.load_user_config", lambda *a, **k: UserConfig()
     )
     captured: dict = {}
     _patch_bootstrap(monkeypatch, fake_stream(), captured)

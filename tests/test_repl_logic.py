@@ -32,7 +32,7 @@ def isolate_user_config(monkeypatch):
         "zenagent.app.bootstrap.load_user_config", lambda *a, **k: UserConfig()
     )
     monkeypatch.setattr(
-        "zenagent.app.runtime.load_user_config",
+        "zenagent.app.bootstrap.load_user_config",
         lambda *args, **kwargs: UserConfig(),
     )
 
@@ -281,7 +281,7 @@ async def test_reload_discovers_skills_added_mid_session(tmp_path, monkeypatch):
         "zenagent.app.bootstrap.load_user_config", lambda *a, **k: UserConfig()
     )
     monkeypatch.setattr(
-        "zenagent.app.runtime.load_user_config",
+        "zenagent.app.bootstrap.load_user_config",
         lambda *args, **kwargs: UserConfig(),
     )
     monkeypatch.setenv("HOME", str(tmp_path))  # don't discover the developer's global skills
