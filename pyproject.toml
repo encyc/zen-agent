@@ -46,12 +46,18 @@ Changelog = "https://github.com/encyc/zen-agent/blob/main/CHANGELOG.md"
 requires = ["uv_build>=0.11.24,<0.12.0"]
 build-backend = "uv_build"
 
+[tool.uv]
+# The mypyc wheel segfaults on this repo's 3.15 interpreter (even `mypy
+# --version`); build the pure-Python fallback instead.
+no-binary-package = ["mypy"]
+
 [tool.uv.build-backend]
 module-root = ""
 module-name = "zenagent"
 
 [dependency-groups]
 dev = [
+    "mypy>=1.11",
     "pytest>=9.2.0",
     "pytest-asyncio>=1.4.1",
     "pytest-timeout>=2.3.1",
@@ -73,3 +79,97 @@ filterwarnings = [
 
 [tool.ruff]
 target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+# Ratchet (audit P1-10): every module below is grandfathered with
+# `ignore_errors` — the existing error debt stays frozen and CI fails only on
+# NEW type errors in NON-overridden modules. Do not add modules to this list;
+# fix the module and delete its override instead.
+
+[[tool.mypy.overrides]]
+# Ratchet baseline (audit P1-10): these 77 modules carry 691 existing
+# type errors, frozen here so the gate fails only on NEW errors in modules
+# NOT listed below. Do NOT add modules to this list — fix the module and
+# delete its entry instead.
+module = [
+    "zenagent.agent.subagents",
+    "zenagent.app.agent_profile",
+    "zenagent.app.bootstrap",
+    "zenagent.app.btw",
+    "zenagent.app.chat",
+    "zenagent.app.commands",
+    "zenagent.app.compact",
+    "zenagent.app.journal",
+    "zenagent.app.probes",
+    "zenagent.app.retry",
+    "zenagent.app.runtime",
+    "zenagent.app.skills_recompose",
+    "zenagent.app.subagent_tracker",
+    "zenagent.app.swarm.events_tap",
+    "zenagent.app.swarm.manager",
+    "zenagent.app.swarm.schedule",
+    "zenagent.app.swarm.workflow",
+    "zenagent.app.views",
+    "zenagent.app.zen.fleet",
+    "zenagent.app.zen.tools",
+    "zenagent.cli.completion",
+    "zenagent.cli.interaction",
+    "zenagent.cli.main",
+    "zenagent.cli.repl",
+    "zenagent.cli.rpc.host",
+    "zenagent.cli.rpc.ops_config",
+    "zenagent.cli.rpc.ops_files",
+    "zenagent.cli.rpc.ops_plugins",
+    "zenagent.cli.rpc.ops_runs",
+    "zenagent.cli.rpc.ops_secrets",
+    "zenagent.cli.rpc.ops_session",
+    "zenagent.cli.rpc.ops_skills",
+    "zenagent.cli.rpc.ops_supervisor",
+    "zenagent.cli.rpc.ops_swarm",
+    "zenagent.cli.rpc.ops_workspace",
+    "zenagent.cli.rpc.ops_zen",
+    "zenagent.cli.rpc.server",
+    "zenagent.cli.tui.app",
+    "zenagent.cli.tui.app_parts.appearance",
+    "zenagent.cli.tui.app_parts.commands",
+    "zenagent.cli.tui.app_parts.display",
+    "zenagent.cli.tui.app_parts.drafts",
+    "zenagent.cli.tui.app_parts.hints",
+    "zenagent.cli.tui.app_parts.models",
+    "zenagent.cli.tui.app_parts.queue",
+    "zenagent.cli.tui.app_parts.sessions",
+    "zenagent.cli.tui.app_parts.update_notice",
+    "zenagent.cli.tui.app_parts.views",
+    "zenagent.cli.tui.screens.appearance",
+    "zenagent.cli.tui.screens.approvals",
+    "zenagent.cli.tui.screens.memory_manager",
+    "zenagent.cli.tui.screens.palette",
+    "zenagent.cli.tui.screens.pickers",
+    "zenagent.cli.tui.screens.providers",
+    "zenagent.cli.tui.widgets.attachments",
+    "zenagent.cli.tui.widgets.error_banner",
+    "zenagent.cli.tui.widgets.new_content",
+    "zenagent.cli.tui.widgets.rows",
+    "zenagent.cli.tui.widgets.sidebar",
+    "zenagent.cli.tui.widgets.sidebar_resize",
+    "zenagent.cli.tui.widgets.skill_block",
+    "zenagent.cli.tui.widgets.work_indicator",
+    "zenagent.config",
+    "zenagent.limits",
+    "zenagent.providers.anthropic_messages",
+    "zenagent.providers.google_generative_ai",
+    "zenagent.providers.openai_completions",
+    "zenagent.providers.openai_responses",
+    "zenagent.retry",
+    "zenagent.tools.bash",
+    "zenagent.tools.fs",
+    "zenagent.tools.jobs",
+    "zenagent.tools.lsp",
+    "zenagent.tools.memory",
+    "zenagent.tools.todo",
+    "zenagent.tools.web.registry",
+    "zenagent.types",
+]
+ignore_errors = true

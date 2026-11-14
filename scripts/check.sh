@@ -23,6 +23,9 @@ uv sync --extra cli --dev
 echo "==> lint"
 uv run ruff check .
 
+echo "==> types (mypy ratchet: listed modules frozen, new modules must be clean)"
+uv run mypy zenagent
+
 echo "==> architecture budget"
 python3 scripts/check_architecture.py
 
