@@ -446,7 +446,35 @@ class Runtime:
 
     async def _transform_context(self, messages: list) -> list:
         """Per-request context projection: an armed rewind, then overflow pruning."""
-        return await self.guard.transform(self.rewind.transform(messages))
+        projected = self.rewind.transform(messages)
+        await self._persist_rewind_branch(messages)
+        return await self.guard.transform(projected)
+
+    async def _persist_rewind_branch(self, messages: list) -> None:
+        """Persist an armed rewind once, so resume replays the rewound view.
+
+        The branch record cuts the replay at the checkpoint and skips the
+        abandoned span; the report message lands right after it, making the
+        replayed view equal the in-memory projection. Only the first applied
+        request after ``arm`` writes; ``append_meta`` swallows write failures,
+        so a full disk never breaks the request.
+        """
+        state = self.rewind
+        if not state.armed or state.recorded:
+            return
+        if state.checkpoint_index is None or state.rewind_index is None:
+            return
+        skip = state.rewind_index - state.checkpoint_index
+        if skip < 1 or state.checkpoint_index > len(messages):
+            return  # the indices moved underneath: transform() will clear them
+        session = getattr(self, "_session", None)
+        if session is None:
+            return
+        state.recorded = True
+        session.append_meta(
+            records.branch(state.checkpoint_index, skip, goal=state.goal)
+        )
+        await session.append(state.report_message())
 
     def _recompose(self) -> None:
         skills_recompose.recompose(self)

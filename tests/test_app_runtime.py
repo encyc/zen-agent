@@ -688,3 +688,33 @@ async def test_switch_refuses_before_aborting_current_run(runtime_factory, tmp_p
         assert aborts == []  # the current run was never touched
     finally:
         proc.kill()
+
+
+async def test_armed_rewind_persists_a_branch_the_resume_replays(runtime_factory):
+    """A durable rewind: the projection and the resumed view never drift."""
+    from zenagent.app import records
+    from zenagent.types import UserMessage
+
+    runtime = await runtime_factory()
+    messages = [
+        UserMessage(content=text, timestamp=1) for text in ("a", "b", "c", "d")
+    ]
+    for message in messages:
+        await runtime.session.append(message)
+    runtime.agent.replace_messages(messages)
+
+    runtime.rewind.checkpoint(2, "goal")
+    assert runtime.rewind.arm(4, "learnings", "c1") is None
+
+    projected = await runtime._transform_context(messages)
+    expected = ["a", "b", "[rewind] goal: goal\n\nlearnings"]
+    assert [m.content for m in projected] == expected
+
+    # the replayed view equals the in-memory projection
+    resumed = records.open_session(runtime.session.path).load()
+    assert [m.content for m in resumed] == expected
+
+    # the rewind is persisted once: a second request appends nothing
+    await runtime._transform_context(messages)
+    again = records.open_session(runtime.session.path).load()
+    assert [m.content for m in again] == expected

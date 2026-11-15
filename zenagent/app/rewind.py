@@ -43,6 +43,9 @@ class RewindState:
     rewind_index: int | None = None
     rewind_call_id: str = ""
     armed: bool = False
+    #: Set once the armed rewind has been persisted to the session file as a
+    #: branch record + report message, so resume replays the rewound view.
+    recorded: bool = False
 
     # -- markers ------------------------------------------------------------
 
@@ -53,6 +56,7 @@ class RewindState:
         self.rewind_index = None
         self.rewind_call_id = ""
         self.armed = False
+        self.recorded = False
 
     def arm(self, index: int, report: str, call_id: str) -> str | None:
         """Arm the projection; returns an error message when there is nothing to rewind."""
@@ -73,8 +77,19 @@ class RewindState:
         self.rewind_index = None
         self.rewind_call_id = ""
         self.armed = False
+        self.recorded = False
 
     # -- projection ---------------------------------------------------------
+
+    def report_message(self) -> UserMessage:
+        """The report as the user message both the projection and the
+        persisted branch use — the two views must never drift."""
+        content = (
+            f"[rewind] goal: {self.goal}\n\n{self.report}"
+            if self.goal
+            else f"[rewind]\n\n{self.report}"
+        )
+        return UserMessage(content=content, timestamp=int(time.time()))
 
     def transform(self, messages: list) -> list:
         """Apply the armed rewind to one request; identity when not armed."""
@@ -91,14 +106,7 @@ class RewindState:
             self.clear()
             return messages
         head = list(messages[: self.checkpoint_index])
-        report = UserMessage(
-            content=(
-                f"[rewind] goal: {self.goal}\n\n{self.report}"
-                if self.goal
-                else f"[rewind]\n\n{self.report}"
-            ),
-            timestamp=int(time.time()),
-        )
+        report = self.report_message()
         tail = [
             message
             for message in messages[self.rewind_index :]

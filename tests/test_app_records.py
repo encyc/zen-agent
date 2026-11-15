@@ -125,3 +125,76 @@ def test_rewrite_keeps_unknown_record_kinds():
         records.keep_for_rewrite(keep_tool_end=False)({"type": records.TOOL_END})
         is False
     )
+
+
+# -- branch records: durable rewind (pi learnings ①) -------------------------
+
+
+def test_branch_shape():
+    assert records.branch(3, 2, goal="找根因") == {
+        "type": "branch",
+        "cut": 3,
+        "skip": 2,
+        "goal": "找根因",
+    }
+
+
+def test_branch_shape_omits_empty_goal():
+    assert records.branch(1, 2) == {"type": "branch", "cut": 1, "skip": 2}
+
+
+def test_branch_window_projects_and_validates():
+    messages = ["m0", "m1", "m2", "m3", "m4"]
+    assert records.branch_window(
+        {"type": "branch", "cut": 1, "skip": 2}, messages
+    ) == ["m0", "m3", "m4"]
+    assert records.branch_window({"type": "branch", "cut": 0, "skip": 5}, messages) == []
+    # out-of-range, no-op, wrong-kind and malformed records never project
+    assert records.branch_window({"type": "branch", "cut": 6, "skip": 1}, messages) is None
+    assert records.branch_window({"type": "branch", "cut": 1, "skip": 0}, messages) is None
+    assert records.branch_window({"type": "compaction", "cut": 1, "skip": 1}, messages) is None
+    assert records.branch_window({"type": "branch", "cut": "x", "skip": 1}, messages) is None
+
+
+def test_branch_records_do_not_survive_a_rewrite():
+    # branch records point at positions: a rewritten transcript invalidates them
+    keep = records.keep_for_rewrite()
+    assert not keep({"type": "branch", "cut": 1, "skip": 1})
+
+
+def test_branch_window_rescopes_session_replay(tmp_path):
+    from zenagent.agent.session import Session
+    from zenagent.types import UserMessage
+
+    def user(text: str) -> UserMessage:
+        return UserMessage(content=text, timestamp=0)
+
+    path = tmp_path / "s.jsonl"
+    session = Session(path, window=records.branch_window)
+    for text in ("a", "b", "c"):
+        session._append_sync(user(text))
+    session.append_meta(records.branch(1, 2, goal="explore"))
+    session._append_sync(user("report"))
+
+    loaded = Session(path, window=records.branch_window).load()
+    assert [m.content for m in loaded] == ["a", "report"]
+    # the abandoned branch stays in the file for the audit trail
+    assert [m.content for m in Session(path).load()] == ["a", "b", "c", "report"]
+
+
+def test_open_session_replays_the_branch_window(tmp_path):
+    from zenagent.agent.session import Session
+    from zenagent.types import UserMessage
+
+    def user(text: str) -> UserMessage:
+        return UserMessage(content=text, timestamp=0)
+
+    path = tmp_path / "s.jsonl"
+    session = Session(path)
+    for text in ("a", "b", "c"):
+        session._append_sync(user(text))
+    session.append_meta(records.branch(1, 2))
+    session._append_sync(user("report"))
+
+    loaded = records.open_session(path).load()
+    assert [m.content for m in loaded] == ["a", "report"]

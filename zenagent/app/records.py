@@ -25,6 +25,7 @@ from pathlib import Path
 from zenagent.agent.session import Session
 
 __all__ = [
+    "BRANCH",
     "COMPACTION",
     "KINDS",
     "MODE",
@@ -34,7 +35,10 @@ __all__ = [
     "TOOL_DETAILS_LIMIT",
     "TOOL_DIFF_MAX_LINES",
     "TOOL_END",
+    "branch",
+    "branch_window",
     "compaction",
+    "is_branch",
     "is_compaction",
     "is_tool_end",
     "keep_for_rewrite",
@@ -59,14 +63,16 @@ RUN_END = "run_end"
 RETRY = "retry"
 #: The permission mode the session switched to.
 MODE = "mode"
+#: A durable rewind branch: the live replay rescope and how much was abandoned.
+BRANCH = "branch"
 
 #: Record kinds this version defines. Anything else is carried verbatim by a
 #: transcript rewrite (see ``keep_for_rewrite``).
-KNOWN_KINDS = frozenset({TOOL_END, COMPACTION, RUN_START, RUN_END, RETRY, MODE})
+KNOWN_KINDS = frozenset({TOOL_END, COMPACTION, RUN_START, RUN_END, RETRY, MODE, BRANCH})
 
 #: Every kind this build writes. Unknown kinds are read back untouched but are
 #: never carried into a rewritten transcript.
-KINDS = (TOOL_END, COMPACTION, RUN_START, RUN_END, RETRY, MODE)
+KINDS = (TOOL_END, COMPACTION, RUN_START, RUN_END, RETRY, MODE, BRANCH)
 
 #: Serialized cap for one ``tool_end`` record's ``details`` (UI-only payload).
 TOOL_DETAILS_LIMIT = 16_384
@@ -87,6 +93,38 @@ def is_tool_end(record: dict) -> bool:
 
 def is_compaction(record: dict) -> bool:
     return record_type(record) == COMPACTION
+
+
+def branch(cut: int, skip: int, *, goal: str = "") -> dict:
+    """One ``branch`` record: the live replay keeps ``messages[:cut]`` plus
+    everything appended after this record; ``skip`` messages were abandoned
+    and stay in the file as the audit trail."""
+    record: dict = {"type": BRANCH, "cut": int(cut), "skip": int(skip)}
+    if goal:
+        record["goal"] = goal
+    return record
+
+
+def is_branch(record: dict) -> bool:
+    return record_type(record) == BRANCH
+
+
+def branch_window(record: dict, messages: list) -> list | None:
+    """The structural selector behind ``Session(window=...)`` for branches.
+
+    Returns the projected replay — head before the cut, abandoned span
+    dropped — or ``None`` when the record is not a branch or its positions
+    no longer fit (a torn or corrupt record must never lose the transcript).
+    """
+    if record_type(record) != BRANCH:
+        return None
+    cut = record.get("cut")
+    skip = record.get("skip")
+    if not isinstance(cut, int) or not isinstance(skip, int):
+        return None
+    if cut < 0 or skip < 1 or cut + skip > len(messages):
+        return None
+    return [*messages[:cut], *messages[cut + skip :]]
 
 
 def _json_size(value: object) -> int:
@@ -171,12 +209,16 @@ def open_session(
     retry seed the Agent from the compacted segment only — while listings,
     titles and export keep the whole file (bare ``Session``). The display reads
     the full view and positions the divider from ``Session.segment_start``.
+    Branch records rescope the replay the same way: a durable rewind's
+    abandoned span stays in the file but out of the live context.
 
     ``lazy`` is for sessions the runtime itself just created: their header and
     starting records stay in memory until the first message (see
     :meth:`Session.materialize`), so an idle launch writes no transcript.
     """
-    return Session(path, boundary=is_compaction, lazy=lazy, cwd=cwd)
+    return Session(
+        path, boundary=is_compaction, window=branch_window, lazy=lazy, cwd=cwd
+    )
 
 
 def run_start() -> dict:

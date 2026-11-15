@@ -122,3 +122,32 @@ async def test_session_change_clears_rewind(runtime_factory):
     runtime.session = runtime.session
     assert runtime.rewind.armed is False
     assert runtime.rewind.checkpoint_index is None
+
+
+def test_report_message_matches_the_projection():
+    state = RewindState()
+    state.checkpoint(2, "goal text")
+    state.arm(4, "learnings", "c1")
+
+    message = state.report_message()
+    projected = state.transform(
+        [user("a"), user("b"), user("c"), user("d")]
+    )
+
+    assert message.content == "[rewind] goal: goal text\n\nlearnings"
+    assert projected[2].content == message.content
+
+
+def test_recorded_flag_resets_on_checkpoint_and_clear():
+    state = RewindState()
+    state.checkpoint(2, "g")
+    state.arm(4, "r", "c1")
+    state.recorded = True
+
+    state.checkpoint(1, "g2")
+    assert state.recorded is False
+
+    state.arm(3, "r2", "c2")
+    state.recorded = True
+    state.clear()
+    assert state.recorded is False
