@@ -471,15 +471,23 @@ class Runtime:
         if session is None:
             return
         state.recorded = True
-        session.append_meta(
-            records.branch(
-                state.checkpoint_index,
-                skip,
-                call=state.rewind_call_id,
-                goal=state.goal,
+        try:
+            session.append_meta(
+                records.branch(
+                    state.checkpoint_index,
+                    skip,
+                    call=state.rewind_call_id,
+                    goal=state.goal,
+                )
             )
-        )
-        await session.append(state.report_message())
+            await session.append(state.report_message())
+        except OSError as exc:
+            # The report append is loud by nature, but a failing disk must
+            # not kill the request — the persist subscriber's discipline.
+            # Persistence is attempted once: the in-memory projection keeps
+            # working, and no duplicate branch record is ever written.
+            self.note_persist_failure(exc)
+            return
         # Align the live transcript with the durable replay in this suspended
         # moment (the loop awaits transform_context). From here on one
         # coordinate space serves both, so a second rewind composes in the

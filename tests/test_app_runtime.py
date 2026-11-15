@@ -718,3 +718,42 @@ async def test_armed_rewind_persists_a_branch_the_resume_replays(runtime_factory
     await runtime._transform_context(messages)
     again = records.open_session(runtime.session.path).load()
     assert [m.content for m in again] == expected
+
+
+async def test_rewind_persist_failure_never_breaks_the_request(runtime_factory):
+    """A failing disk must not kill the run (the persist-subscriber discipline)."""
+    from zenagent.app import records
+    from zenagent.types import UserMessage
+
+    runtime = await runtime_factory()
+    messages = [
+        UserMessage(content=text, timestamp=1) for text in ("a", "b", "c", "d")
+    ]
+    for message in messages:
+        await runtime.session.append(message)
+    runtime.agent.replace_messages(messages)
+
+    async def failing_append(message):
+        raise OSError("disk full")
+
+    runtime.rewind.checkpoint(2, "goal")
+    assert runtime.rewind.arm(4, "learnings", "c1") is None
+
+    original_append = runtime.session.append
+    runtime.session.append = failing_append  # type: ignore[method-assign]
+    try:
+        projected = await runtime._transform_context(messages)
+    finally:
+        runtime.session.append = original_append  # type: ignore[method-assign]
+
+    # the request still gets the in-memory projection
+    assert [m.content for m in projected][-1].startswith("[rewind]")
+    # the record landed (append_meta swallows its own failures); the report
+    # write failed, so the replay degrades to the head — valid, no orphans
+    replay = records.open_session(runtime.session.path).load()
+    assert [m.content for m in replay] == ["a", "b"]
+
+    # persistence is attempted once: a second request writes no duplicate
+    await runtime._transform_context(messages)
+    again = records.open_session(runtime.session.path).load()
+    assert [m.content for m in again] == ["a", "b"]
