@@ -29,8 +29,8 @@ def test_compaction_shape():
         "type": "compaction",
         "tokensBefore": 1200,
         "reason": "auto",
+        "kept": 0,
     }
-
 
 def test_run_boundary_shapes():
     assert records.run_start() == {"type": "run_start"}

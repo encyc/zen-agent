@@ -145,12 +145,17 @@ def tool_end(
     return record
 
 
-def compaction(tokens_before: int, reason: str) -> dict:
-    """One ``compaction`` record: the replay boundary and its divider."""
+def compaction(tokens_before: int, reason: str, *, kept: int = 0) -> dict:
+    """One ``compaction`` record: the replay boundary and its divider.
+
+    ``kept`` counts the recent-tail messages that stayed in context after the
+    cut (0 = the pre-tail full-summarize behavior).
+    """
     return {
         "type": COMPACTION,
         "tokensBefore": int(tokens_before),
         "reason": reason,
+        "kept": int(kept),
     }
 
 

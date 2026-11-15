@@ -73,9 +73,9 @@ async def test_auto_compaction_keeps_the_history_and_marks_the_cut(
         await pilot.pause()
 
         # The rebuilt view keeps the full history as scrollback: the first
-        # turn's bubble survives, one divider marks the cut, and the summary
-        # follows it as a user block.
-        assert len(app.query(Markdown)) == 1
+        # turn's bubble survives, one divider marks the cut, the summary
+        # follows it as a user block, and the kept tail renders after it.
+        assert len(app.query(Markdown)) == 2
         assert any("此前会话摘要" in block.plain for block in app.query(UserBlock))
         assert list(app.query(DividerRow))
 
@@ -89,4 +89,4 @@ async def test_auto_compaction_keeps_the_history_and_marks_the_cut(
 
         assert any(block.plain == "second" for block in app.query(UserBlock))
         # Both turns' bubbles render: the history was never dropped.
-        assert len(app.query(Markdown)) == 2
+        assert len(app.query(Markdown)) == 3

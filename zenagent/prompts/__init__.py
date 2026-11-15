@@ -218,10 +218,27 @@ def tool_description(name: str, *, root: Path | None = None, **values: str) -> s
     return render(read_block(f"tool.{name}", root), values)
 
 
-def compose_compact(transcript: str, *, root: Path | None = None) -> tuple[str, str]:
-    """Render the compaction request as ``(system, user)``."""
+def compose_compact(
+    transcript: str,
+    *,
+    previous_summary: str | None = None,
+    root: Path | None = None,
+) -> tuple[str, str]:
+    """Render the compaction request as ``(system, user)``.
+
+    With ``previous_summary``, the user prompt asks the model to merge the
+    new transcript into that summary (``compact.update``) instead of
+    summarizing from scratch (``compact.summary``) — a re-compaction updates
+    the existing summary rather than rebuilding it.
+    """
     system = read_block("compact.system", root)
-    user = render(read_block("compact.summary", root), {"transcript": transcript})
+    if previous_summary is not None:
+        user = render(
+            read_block("compact.update", root),
+            {"previous_summary": previous_summary, "transcript": transcript},
+        )
+    else:
+        user = render(read_block("compact.summary", root), {"transcript": transcript})
     return system, user
 
 

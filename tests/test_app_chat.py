@@ -226,13 +226,15 @@ async def test_compact_now_stays_in_the_same_session(runtime_factory, capsys):
 
     assert message and "compacted" in message
     assert runtime.session.path == old_path, "compaction keeps the session identity"
-    assert len(runtime.agent.messages) == 1  # only the summary UserMessage
-    # Replay returns the summary segment; the file keeps the full history.
+    assert len(runtime.agent.messages) == 2  # summary UserMessage + kept tail
+    # Replay returns the summary segment plus the kept tail; the file keeps
+    # the full history.
     cut = records.open_session(old_path)
     assert cut.load() == runtime.agent.messages
-    # The transcript keeps the pre-compaction rows with one divider mid-stream.
+    # The transcript keeps the pre-compaction rows with one divider mid-stream,
+    # then the summary and the kept tail.
     kinds = [view.kind for view in chat.transcript]
-    assert kinds == ["user", "assistant", "divider", "user"]
+    assert kinds == ["user", "assistant", "divider", "user", "assistant"]
     assert chat.take_notices() == [], "the divider is a transcript view now"
     assert capsys.readouterr().out == "", "the TUI controller must never print"
 
@@ -1000,7 +1002,9 @@ async def test_compact_now_sources_the_divider_and_persists_tokens(runtime_facto
     assert notice
     assert chat.notices_snapshot == [], "the divider is a transcript view now"
     kinds = [view.kind for view in chat.transcript]
-    assert kinds == ["divider", "user"], "divider leads the compacted segment"
+    assert kinds == ["divider", "user", "assistant"], (
+        "divider leads the compacted segment; the kept tail follows"
+    )
     session = Session(runtime.session.path)
     session.load()
     record = next(item for item in session.records if item["type"] == "compaction")

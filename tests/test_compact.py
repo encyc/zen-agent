@@ -10,11 +10,19 @@ import zenagent.agent.session as session_module
 from zenagent.agent import Agent
 from zenagent.agent.session import Session, session_title
 from zenagent.app import records
-from zenagent.app.compact import compact
+from zenagent.app.compact import _choose_cut, compact
 from zenagent.events import AssistantEvent
 from zenagent.providers.catalog import Model
 from zenagent.providers.compat import CompatFlags
-from zenagent.types import AssistantMessage, Cost, TextContent, Usage, UserMessage
+from zenagent.types import (
+    AssistantMessage,
+    Cost,
+    TextContent,
+    ToolCall,
+    ToolResultMessage,
+    Usage,
+    UserMessage,
+)
 
 
 def model() -> Model:
@@ -100,21 +108,24 @@ def isolated_sessions(tmp_path, monkeypatch):
 async def test_compact_appends_the_summary_to_the_same_session(isolated_sessions):
     agent = agent_with_history(summary_stream("目标：改文件；决定：已改；未竟：无"))
     session = live_session(agent, isolated_sessions)
+    original = agent_with_history(summary_stream()).messages
 
     path = await compact(agent, session)
 
     assert path == session.path, "compaction keeps the session identity"
-    assert len(agent.messages) == 1
-    only = agent.messages[0]
-    assert isinstance(only, UserMessage)
-    assert only.content.startswith("# 此前会话摘要")
-    assert "改文件" in only.content
-    # Boundary-aware replay returns just the summary segment...
+    # the summary leads the live view; the recent tail stays in context
+    assert len(agent.messages) == 2
+    summary = agent.messages[0]
+    assert isinstance(summary, UserMessage)
+    assert summary.content.startswith("# 此前会话摘要")
+    assert "改文件" in summary.content
+    assert agent.messages[1:] == original[1:]
+    # Boundary-aware replay returns summary + tail...
     cut = records.open_session(path)
-    assert cut.load() == [only]
-    assert cut.segment_start == 2
+    assert cut.load() == agent.messages
+    assert cut.segment_start == len(original)
     # ...while the file keeps the full history as the audit trail.
-    assert Session(path).load() == agent_with_history(summary_stream()).messages + [only]
+    assert Session(path).load() == original + agent.messages
     assert not list(isolated_sessions.glob("*-compact.jsonl"))
 
 
@@ -225,7 +236,7 @@ async def test_maybe_auto_compact_triggers_above_the_threshold(isolated_sessions
     path = await maybe_auto_compact(agent, session, print_fn=lambda *_: None)
 
     assert path == session.path
-    assert len(agent.messages) == 1
+    assert len(agent.messages) == 2
     assert agent.messages[0].content.startswith("# 此前会话摘要")
     assert records.open_session(path).load() == agent.messages
 
@@ -277,11 +288,15 @@ async def test_compact_appends_the_boundary_record_before_the_summary(
     path = await compact(agent, session, reason="manual", tokens_before=1234)
 
     lines = [json.loads(line) for line in path.read_text().splitlines()]
-    assert lines[-2]["type"] == "compaction"
-    assert lines[-2]["tokensBefore"] == 1234
-    assert lines[-2]["reason"] == "manual"
-    assert "derivedFrom" not in lines[-2]
-    assert lines[-1]["role"] == "user"
+    kinds = [line.get("type") or line.get("role") for line in lines]
+    # record → summary → tail: the boundary always lands right before the
+    # summary, and the kept tail follows it
+    record_index = kinds.index("compaction")
+    assert lines[record_index]["tokensBefore"] == 1234
+    assert lines[record_index]["reason"] == "manual"
+    assert "derivedFrom" not in lines[record_index]
+    assert kinds[record_index + 1] == "user"
+    assert "compaction" not in kinds[record_index + 1 :]
 
 
 async def test_compact_defaults_tokens_before_to_the_last_usage(isolated_sessions):
@@ -300,3 +315,144 @@ async def test_compact_defaults_tokens_before_to_the_last_usage(isolated_session
     )
     assert record["tokensBefore"] == 1000
     assert record["reason"] == "manual"
+
+
+# -- cut-point discipline and summary merge (pi learnings ③) -----------------
+
+
+class recording_stream:
+    """Summary stream that records each summarizer request."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.requests: list[list] = []
+
+    async def __call__(self, model_, messages, tools, options):
+        self.requests.append(list(messages))
+        partial = AssistantMessage(
+            content=[TextContent(text=self.text)],
+            provider="test",
+            model="m",
+            usage=Usage(),
+            stop_reason="stop",
+            timestamp=int(time.time()),
+        )
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+
+def _assistant(text: str, timestamp: int, *, call: ToolCall | None = None) -> AssistantMessage:
+    content: list = [TextContent(text=text)]
+    if call is not None:
+        content.append(call)
+    return AssistantMessage(
+        content=content,
+        provider="test",
+        model="m",
+        usage=Usage(),
+        stop_reason="stop",
+        timestamp=timestamp,
+    )
+
+
+def test_choose_cut_honors_the_budget_from_the_end():
+    messages = [
+        UserMessage(content="x" * 2000, timestamp=1),
+        UserMessage(content="y" * 2000, timestamp=2),
+        UserMessage(content="z" * 2000, timestamp=3),
+    ]
+    # each message is ~500 estimated tokens: 150 fits one, 600 fits two
+    assert _choose_cut(messages, keep_tokens=600) == 2
+    # a budget nothing fits leaves no tail (the pre-tail behavior)
+    assert _choose_cut(messages, keep_tokens=100) == 3
+    # a huge budget still keeps a non-empty head to summarize
+    assert _choose_cut(messages, keep_tokens=10**9) == 1
+
+
+def test_choose_cut_never_orphans_tool_result():
+    messages = [
+        UserMessage(content="early", timestamp=1),
+        _assistant("y" * 2000, 2, call=ToolCall(id="c1", name="bash", arguments={})),
+        ToolResultMessage(
+            tool_call_id="c1",
+            tool_name="bash",
+            content=[TextContent(text="out")],
+            is_error=False,
+            timestamp=3,
+        ),
+    ]
+
+    cut = _choose_cut(messages, keep_tokens=150)
+
+    tail = messages[cut:]
+    call_ids = {
+        block.id
+        for message in tail
+        if isinstance(message, AssistantMessage)
+        for block in message.content
+        if isinstance(block, ToolCall)
+    }
+    assert all(
+        not isinstance(message, ToolResultMessage) or message.tool_call_id in call_ids
+        for message in tail
+    )
+    # the whole round was pulled into the tail even though the assistant
+    # message alone blew the budget
+    assert cut == 1
+
+
+async def test_compact_keeps_a_recent_tail(isolated_sessions):
+    messages = [
+        UserMessage(content="x" * 2000, timestamp=1),
+        _assistant("y" * 2000, 2),
+        UserMessage(content="u2", timestamp=3),
+        _assistant("a2", 4),
+    ]
+    agent = Agent(model(), "system", api_key="k", stream_fn=summary_stream("S"))
+    agent.replace_messages(messages)
+    session = live_session(agent, isolated_sessions)
+
+    await compact(agent, session, keep_recent_tokens=150)
+
+    assert agent.messages == [agent.messages[0], messages[2], messages[3]]
+    assert agent.messages[0].content.startswith("# 此前会话摘要")
+    replay = records.open_session(session.path)
+    assert replay.load() == agent.messages
+    kept = next(
+        record
+        for record in replay.records
+        if records.record_type(record) == records.COMPACTION
+    )["kept"]
+    assert kept == 2
+
+
+async def test_compact_full_summarize_when_nothing_fits(isolated_sessions):
+    agent = agent_with_history(summary_stream("S"))
+    session = live_session(agent, isolated_sessions)
+    original = agent_with_history(summary_stream()).messages
+
+    await compact(agent, session, keep_recent_tokens=0)
+
+    # keep budget zero: no tail, the live view is just the summary
+    assert agent.messages == [agent.messages[0]]
+    assert records.open_session(session.path).load() == [agent.messages[0]]
+    assert Session(session.path).load() == original + agent.messages
+
+
+async def test_compact_merges_into_the_previous_summary(isolated_sessions):
+    agent = agent_with_history(summary_stream("第一份摘要内容"))
+    session = live_session(agent, isolated_sessions)
+    await compact(agent, session)
+
+    stream = recording_stream("合并后的摘要")
+    agent.stream_fn = stream
+    await compact(agent, session)
+
+    assert len(stream.requests) == 1
+    prompt = stream.requests[0][-1].content
+    assert "已有摘要" in prompt
+    assert "第一份摘要内容" in prompt
+    assert "改好了" in prompt
+    assert "请把下面这段编码会话压缩" not in prompt
+    merged = agent.messages[0]
+    assert merged.content.startswith("# 此前会话摘要")
+    assert "合并后的摘要" in merged.content
