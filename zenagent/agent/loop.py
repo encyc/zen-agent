@@ -93,6 +93,10 @@ class AgentConfig:
       patch individual fields.
     * ``get_steering_messages()`` — async; consulted after each tool round.
       Non-empty results are appended to the state as new context.
+    * ``get_followup_messages()`` — async; consulted only when the run would
+      otherwise stop (a plain end of turn). Non-empty results are appended as
+      new context and the loop keeps going; abort/error/cost/terminate stops
+      never drain it.
     * ``transform_context(request_messages)`` — async; rewrites the full
       request list (system message first) for the LLM call only; the state is
       never touched.
@@ -107,6 +111,7 @@ class AgentConfig:
     before_tool_call: Callable | None = None
     after_tool_call: Callable | None = None
     get_steering_messages: Callable[[], Awaitable[list[Message]]] | None = None
+    get_followup_messages: Callable[[], Awaitable[list[Message]]] | None = None
     transform_context: Callable[[list[Message]], Awaitable[list[Message]]] | None = None
     stream_fn: StreamFn | None = None  # None -> stream_fn_for(model)
     #: Hard cap on provider requests in one run (None -> module default).
@@ -349,7 +354,22 @@ async def agent_loop(
                         batch_task.cancel()
                         await asyncio.gather(batch_task, return_exceptions=True)
             else:
-                break  # plain end of turn (or a tool_use turn with nothing actionable)
+                # Plain end of turn: the run would stop here. A queued
+                # follow-up keeps it alive as a normal user turn — abort,
+                # error, cost and terminate stops never reach this drain.
+                followups = (
+                    list(await config.get_followup_messages())
+                    if config.get_followup_messages is not None
+                    else []
+                )
+                if not followups:
+                    break
+                for message in followups:
+                    state.messages.append(message)
+                    new_messages.append(message)
+                    yield AgentEvent(type="message_start", message=message)
+                    yield AgentEvent(type="message_end", message=message)
+                continue  # another round with the follow-up in context
 
             # Append and announce in assistant source order, not completion
             # order — the transcript must read as a coherent round.
