@@ -187,6 +187,21 @@ async def test_a_lazy_session_loads_empty_without_materializing(tmp_path):
     assert path.is_file()
 
 
+async def test_materialize_gives_a_lazy_session_its_file_without_a_message(tmp_path):
+    # Explicit naming/pinning makes an empty conversation real (pi learnings ⑦):
+    # the file appears, but playback still never writes a message line.
+    path = tmp_path / "lazy.jsonl"
+    session = Session(path, lazy=True)
+    session.append_meta({"type": "mode", "mode": "ask"})
+
+    session.materialize()
+
+    assert path.is_file()
+    lines = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert [line.get("type") for line in lines] == ["session", "mode"]
+    assert all("role" not in line for line in lines)
+
+
 def test_listing_hides_header_only_sessions(isolated_sessions):
     isolated_sessions.mkdir(parents=True)
     _write_session(isolated_sessions, "real.jsonl", ["chat"], mtime=2)
