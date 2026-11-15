@@ -232,6 +232,16 @@ class Agent:
             raise RuntimeError("cannot replace messages while a run is active")
         self._state.messages = list(messages)
 
+    def project_transcript(self, view: list[Message]) -> None:
+        """Swap the transcript in place for ``view`` (no run-state check).
+
+        The runtime uses this to align the live view with a persisted rewind
+        branch. Safe in the moments when the loop is suspended — it awaits
+        ``transform_context`` — because the loop reads ``state.messages``
+        fresh each iteration and later appends land on the swapped list.
+        """
+        self._state.messages[:] = view
+
     def reset(self) -> None:
         """Clear the transcript and pending queued input (config is kept)."""
         if self._run is not None:

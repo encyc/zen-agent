@@ -95,6 +95,11 @@ def _choose_cut(
         cut -= 1
     while cut > floor and _orphans_tool_result(messages[cut:]):
         cut -= 1
+    if _orphans_tool_result(messages[cut:]):
+        # The floor blocks walking back further: shrink the tail instead —
+        # a tail holding an orphaned result would poison the next request.
+        while cut < len(messages) and _orphans_tool_result(messages[cut:]):
+            cut += 1
     return cut
 
 

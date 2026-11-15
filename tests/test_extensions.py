@@ -206,9 +206,10 @@ def test_named_sections_replace_in_place(tmp_path):
     loaded = load_extensions([write(tmp_path, "sections.py", source)])
 
     assert loaded.sections == {"style": "v2", "other": "other"}
-    assert "v2" in loaded.prompt_text and "v1" not in loaded.prompt_text
-    # insertion order is stable: "style" keeps the position it registered first
-    assert loaded.prompt_text.index("v2") < loaded.prompt_text.index("other")
+    # sections render through their own channel: the joined prompt text must
+    # not carry them, or the assembled system prompt would say everything twice
+    assert "v2" not in loaded.prompt_text and "v1" not in loaded.prompt_text
+    assert "other" not in loaded.prompt_text
 
 
 def test_cross_file_section_conflict_keeps_the_first_with_warning(tmp_path):

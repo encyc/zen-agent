@@ -106,7 +106,6 @@ class RewindState:
             self.clear()
             return messages
         head = list(messages[: self.checkpoint_index])
-        report = self.report_message()
         tail = [
             message
             for message in messages[self.rewind_index :]
@@ -115,7 +114,10 @@ class RewindState:
                 and message.tool_call_id == self.rewind_call_id
             )
         ]
-        return [*head, report, *tail]
+        # The report lands at the END of the projection — the same position
+        # the durable branch record gives it in the append-only file, so the
+        # in-memory view and the replayed view never drift apart.
+        return [*head, *tail, self.report_message()]
 
 
 def build_checkpoint_tools(agent_getter, state: RewindState) -> list[AgentTool]:

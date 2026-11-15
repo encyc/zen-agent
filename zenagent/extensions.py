@@ -99,10 +99,12 @@ class LoadedExtensions:
 
     @property
     def prompt_text(self) -> str:
-        parts = [*self.prompt_fragments, *self.sections.values()]
-        if not parts:
+        """The anonymous prompt fragments joined. Named sections render
+        through their own channel (:attr:`sections`) and must never be
+        joined in here too, or the assembled prompt says everything twice."""
+        if not self.prompt_fragments:
             return ""
-        return "\n\n".join(parts)
+        return "\n\n".join(self.prompt_fragments)
 
     def __bool__(self) -> bool:
         return bool(

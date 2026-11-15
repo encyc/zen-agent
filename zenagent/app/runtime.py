@@ -472,9 +472,20 @@ class Runtime:
             return
         state.recorded = True
         session.append_meta(
-            records.branch(state.checkpoint_index, skip, goal=state.goal)
+            records.branch(
+                state.checkpoint_index,
+                skip,
+                call=state.rewind_call_id,
+                goal=state.goal,
+            )
         )
         await session.append(state.report_message())
+        # Align the live transcript with the durable replay in this suspended
+        # moment (the loop awaits transform_context). From here on one
+        # coordinate space serves both, so a second rewind composes in the
+        # space the replay actually uses instead of the abandoned-span space.
+        self.agent.project_transcript(state.transform(list(self.agent.messages)))
+        state.clear()
 
     def _recompose(self) -> None:
         skills_recompose.recompose(self)

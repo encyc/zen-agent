@@ -205,6 +205,8 @@ async def assemble(
             runtime.extension_commands = dict(loaded.commands)
             runtime.hooks = loaded.hooks
             runtime._extension_prompt = loaded.prompt_text
+            # sections render through their own provenance channel; they must
+            # never be joined into _extension_prompt as well
             runtime._extension_sections = tuple(loaded.sections.items())
 
         runtime._options = options

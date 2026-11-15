@@ -306,6 +306,25 @@ async def test_follow_up_drained_before_a_max_turns_stop():
     )
 
 
+async def test_follow_up_not_consumed_when_run_is_aborted():
+    async def abortable(model, messages, tools, options):
+        snap = partial()
+        yield AssistantEvent(type="start", partial=snap)
+        while not options.abort.aborted:
+            await asyncio.sleep(0.001)
+        raise Aborted("cancelled by user")
+
+    agent = make_agent(abortable)
+    agent.follow_up("queued")
+    run = asyncio.create_task(agent.prompt("work"))
+    await asyncio.sleep(0.02)
+    agent.abort()
+    await run
+
+    assert agent.termination == "aborted"
+    assert agent.pending_follow_up == 1
+
+
 def test_reset_clears_follow_up():
     agent = make_agent(scripted([("text", "x"), end()]))
     agent.follow_up("pending")

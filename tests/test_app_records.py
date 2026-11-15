@@ -131,16 +131,63 @@ def test_rewrite_keeps_unknown_record_kinds():
 
 
 def test_branch_shape():
-    assert records.branch(3, 2, goal="找根因") == {
+    assert records.branch(3, 2, call="rw1", goal="找根因") == {
         "type": "branch",
         "cut": 3,
         "skip": 2,
+        "call": "rw1",
         "goal": "找根因",
     }
 
 
-def test_branch_shape_omits_empty_goal():
+def test_branch_shape_omits_empty_goal_and_call():
     assert records.branch(1, 2) == {"type": "branch", "cut": 1, "skip": 2}
+
+
+def test_branch_window_drops_the_rewind_tool_result():
+    # the rewind tool's own result lands at the cut edge in the file; the
+    # projection must drop it exactly like the in-memory transform does,
+    # or the resumed view feeds the provider an orphaned tool result
+    from zenagent.types import TextContent, ToolResultMessage
+
+    result = ToolResultMessage(
+        tool_call_id="rw1",
+        tool_name="rewind",
+        content=[TextContent(text="rewind armed")],
+        is_error=False,
+        timestamp=0,
+    )
+    messages = ["a", "b", "c", result, "e"]
+
+    projected = records.branch_window(
+        {"type": "branch", "cut": 1, "skip": 2, "call": "rw1"}, messages
+    )
+
+    assert projected == ["a", "e"]
+
+
+def test_two_branch_records_compose_in_replay_order(tmp_path):
+    from zenagent.agent.session import Session
+    from zenagent.types import UserMessage
+
+    def user(text: str) -> UserMessage:
+        return UserMessage(content=text, timestamp=0)
+
+    path = tmp_path / "s.jsonl"
+    session = Session(path, window=records.branch_window)
+    for text in ("a", "b", "c", "d"):
+        session._append_sync(user(text))
+    # rewind 1: checkpoint 2, exploration [c, d] abandoned, report follows
+    session.append_meta(records.branch(2, 2))
+    session._append_sync(user("report1"))
+    # the conversation continues after the materialized view
+    session._append_sync(user("e"))
+    # rewind 2: same coordinates as the materialized live view
+    session.append_meta(records.branch(2, 2))
+    session._append_sync(user("report2"))
+
+    loaded = Session(path, window=records.branch_window).load()
+    assert [m.content for m in loaded] == ["a", "b", "report2"]
 
 
 def test_branch_window_projects_and_validates():

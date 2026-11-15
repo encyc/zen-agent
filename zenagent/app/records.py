@@ -95,11 +95,15 @@ def is_compaction(record: dict) -> bool:
     return record_type(record) == COMPACTION
 
 
-def branch(cut: int, skip: int, *, goal: str = "") -> dict:
+def branch(cut: int, skip: int, *, call: str = "", goal: str = "") -> dict:
     """One ``branch`` record: the live replay keeps ``messages[:cut]`` plus
     everything appended after this record; ``skip`` messages were abandoned
-    and stay in the file as the audit trail."""
+    and stay in the file as the audit trail. ``call`` names the rewind tool
+    call whose own result must leave the projection with the abandoned span
+    (in-memory and replayed views must never drift)."""
     record: dict = {"type": BRANCH, "cut": int(cut), "skip": int(skip)}
+    if call:
+        record["call"] = call
     if goal:
         record["goal"] = goal
     return record
@@ -113,8 +117,9 @@ def branch_window(record: dict, messages: list) -> list | None:
     """The structural selector behind ``Session(window=...)`` for branches.
 
     Returns the projected replay — head before the cut, abandoned span
-    dropped — or ``None`` when the record is not a branch or its positions
-    no longer fit (a torn or corrupt record must never lose the transcript).
+    dropped, the rewind tool's own result filtered out — or ``None`` when the
+    record is not a branch or its positions no longer fit (a torn or corrupt
+    record must never lose the transcript).
     """
     if record_type(record) != BRANCH:
         return None
@@ -124,7 +129,15 @@ def branch_window(record: dict, messages: list) -> list | None:
         return None
     if cut < 0 or skip < 1 or cut + skip > len(messages):
         return None
-    return [*messages[:cut], *messages[cut + skip :]]
+    projected = [*messages[:cut], *messages[cut + skip :]]
+    call = record.get("call")
+    if isinstance(call, str) and call:
+        projected = [
+            message
+            for message in projected
+            if getattr(message, "tool_call_id", None) != call
+        ]
+    return projected
 
 
 def _json_size(value: object) -> int:

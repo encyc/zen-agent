@@ -48,8 +48,10 @@ def test_rewind_projects_head_report_and_tail():
     texts = [getattr(message, "content", "") for message in projected]
     assert texts[0] == "system"
     assert texts[1] == "task"
-    assert "bug is in parser.py" in texts[2] and "find the bug" in texts[2]
-    assert texts[-1] == "next question"
+    # the report lands at the END of the projection — the same position the
+    # durable branch record gives it in the append-only file
+    assert texts[2] == "next question"
+    assert "bug is in parser.py" in texts[-1] and "find the bug" in texts[-1]
     assert "read a" not in texts and "read b" not in texts
     assert tool_result("c2") not in projected
 

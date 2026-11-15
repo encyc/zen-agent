@@ -400,6 +400,39 @@ def test_choose_cut_never_orphans_tool_result():
     assert cut == 1
 
 
+def test_choose_cut_never_orphans_even_at_the_floor():
+    # previous-summary mode (floor=2): the budget stops the cut right after
+    # the summary, which would orphan the tool result in the tail — the cut
+    # gives up the tail rather than poison the next request
+    messages = [
+        UserMessage(content="# 此前会话摘要\nold", timestamp=1),
+        _assistant("y" * 2000, 2, call=ToolCall(id="c1", name="bash", arguments={})),
+        ToolResultMessage(
+            tool_call_id="c1",
+            tool_name="bash",
+            content=[TextContent(text="out")],
+            is_error=False,
+            timestamp=3,
+        ),
+    ]
+
+    cut = _choose_cut(messages, keep_tokens=150, floor=2)
+
+    tail = messages[cut:]
+    call_ids = {
+        block.id
+        for message in tail
+        if isinstance(message, AssistantMessage)
+        for block in message.content
+        if isinstance(block, ToolCall)
+    }
+    assert all(
+        not isinstance(message, ToolResultMessage) or message.tool_call_id in call_ids
+        for message in tail
+    )
+    assert cut == 3  # no tail: the pre-tail full-summarize behavior
+
+
 async def test_compact_keeps_a_recent_tail(isolated_sessions):
     messages = [
         UserMessage(content="x" * 2000, timestamp=1),
