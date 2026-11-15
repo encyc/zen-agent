@@ -75,6 +75,10 @@ class PromptContext:
     skill_entries: str = ""
     memory_index: str = ""
     extension_fragments: Sequence[str] = ()
+    #: Named extension sections rendered after the anonymous fragments, one
+    #: provenance block each — a change to one section leaves every other
+    #: block's bytes (and the prompt prefix) untouched.
+    extension_sections: Sequence[tuple[str, str]] = ()
     include_context: bool = True
     include_skills: bool = True
     include_memory: bool = True
@@ -185,6 +189,18 @@ def compose_system(ctx: PromptContext) -> RenderedPrompt:
                 tokens=_block_tokens(part),
             )
         )
+    if ctx.include_extensions:
+        for name, section_text in ctx.extension_sections:
+            text = f"{text}\n\n{section_text}"
+            blocks.append(
+                RenderedBlock(
+                    id=f"extension.{name}",
+                    chars=len(section_text),
+                    cache_class="session",
+                    version=PROMPT_VERSION,
+                    tokens=_block_tokens(section_text),
+                )
+            )
     if ctx.include_mode and ctx.mode in ("plan", "auto"):
         block_id = f"{ctx.mode}_mode"
         part = read_block(block_id, ctx.root)

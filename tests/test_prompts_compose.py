@@ -106,3 +106,43 @@ def test_memory_index_comes_after_skills() -> None:
     )
     ids = [block.id for block in rendered.blocks]
     assert ids.index("skills") < ids.index("memory_index")
+
+
+def test_extension_sections_render_one_block_each() -> None:
+    rendered = compose_system(
+        PromptContext(
+            cwd=CWD,
+            tool_names=(),
+            extension_fragments=("LEGACY FRAGMENT",),
+            extension_sections=(("style", "STYLE SECTION"), ("extra", "EXTRA SECTION")),
+            include_mode=False,
+        )
+    )
+
+    ids = [block.id for block in rendered.blocks]
+    assert ids.count("extension.style") == 1
+    assert ids.count("extension.extra") == 1
+    assert "LEGACY FRAGMENT" in rendered.text
+    assert "STYLE SECTION" in rendered.text and "EXTRA SECTION" in rendered.text
+    # fragments land before the named sections; sections keep insertion order
+    assert rendered.text.index("LEGACY FRAGMENT") < rendered.text.index(
+        "STYLE SECTION"
+    )
+    assert rendered.text.index("STYLE SECTION") < rendered.text.index("EXTRA SECTION")
+
+
+def test_extension_sections_absent_leaves_extension_block_untouched() -> None:
+    without = compose_system(
+        PromptContext(cwd=CWD, tool_names=(), include_mode=False)
+    )
+    with_only_fragments = compose_system(
+        PromptContext(
+            cwd=CWD,
+            tool_names=(),
+            extension_fragments=("LEGACY FRAGMENT",),
+            include_mode=False,
+        )
+    )
+    assert "LEGACY FRAGMENT" not in without.text
+    assert not [b for b in without.blocks if b.id.startswith("extension.")]
+    assert [b.id for b in with_only_fragments.blocks].count("extensions") == 1

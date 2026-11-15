@@ -191,3 +191,33 @@ def register(api):
     assert "ext_tool" in captured["tools"]
     assert "FROM EXTENSION" in captured["prompt"]
     assert sentinel.exists()
+
+
+# -- named prompt sections (pi learnings ⑤) ---------------------------------
+
+
+def test_named_sections_replace_in_place(tmp_path):
+    source = (
+        "def register(api):\n"
+        "    api.add_system_prompt('v1', section='style')\n"
+        "    api.add_system_prompt('v2', section='style')\n"
+        "    api.add_system_prompt('other', section='other')\n"
+    )
+    loaded = load_extensions([write(tmp_path, "sections.py", source)])
+
+    assert loaded.sections == {"style": "v2", "other": "other"}
+    assert "v2" in loaded.prompt_text and "v1" not in loaded.prompt_text
+    # insertion order is stable: "style" keeps the position it registered first
+    assert loaded.prompt_text.index("v2") < loaded.prompt_text.index("other")
+
+
+def test_cross_file_section_conflict_keeps_the_first_with_warning(tmp_path):
+    first = "def register(api):\n    api.add_system_prompt('one', section='style')\n"
+    second = "def register(api):\n    api.add_system_prompt('two', section='style')\n"
+
+    loaded = load_extensions(
+        [write(tmp_path, "a.py", first), write(tmp_path, "b.py", second)]
+    )
+
+    assert loaded.sections == {"style": "one"}
+    assert loaded.warnings and "style" in loaded.warnings[0]

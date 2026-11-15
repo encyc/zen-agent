@@ -220,6 +220,8 @@ class Runtime:
         #: Project memory library (<root>/.zenagent/memory/); set per-recompose.
         self.memory_store: MemoryStore | None = None
         self._extension_prompt = ""
+        #: Named extension prompt sections, set alongside ``_extension_prompt``.
+        self._extension_sections: tuple[tuple[str, str], ...] = ()
         self._extension_tools: list = []
         #: Slash commands contributed by extensions (name → ExtensionCommand).
         self.extension_commands: dict = {}
@@ -433,6 +435,7 @@ class Runtime:
                 for fragment in (self._extension_prompt, self.profile.extra_prompt)
                 if fragment
             ),
+            extension_sections=self._extension_sections,
             include_context=self.profile.context_files,
             include_mode=False,
         )

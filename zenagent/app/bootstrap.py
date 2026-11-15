@@ -205,6 +205,7 @@ async def assemble(
             runtime.extension_commands = dict(loaded.commands)
             runtime.hooks = loaded.hooks
             runtime._extension_prompt = loaded.prompt_text
+            runtime._extension_sections = tuple(loaded.sections.items())
 
         runtime._options = options
         runtime.auto_compact = options.auto_compact
