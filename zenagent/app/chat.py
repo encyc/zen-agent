@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -19,6 +20,7 @@ from zenagent.app.compact import (
 from zenagent.app.context import build_context_report
 from zenagent.app.error_notice import bug_notice, run_error_notice
 from zenagent.app.git import git_status
+from zenagent.app.goal import GoalTurnContext, goal_tokens, render_goal_prompt
 from zenagent.app.pending import PendingQueue
 from zenagent.app.retry import prepare_retry
 from zenagent.app.runtime import Runtime
@@ -44,7 +46,7 @@ from zenagent.events import AgentEvent
 from zenagent.i18n import t
 from zenagent.tools.jobs import get_job_manager
 from zenagent.tools.todo import coerce_todo_phases, load_todo_phases
-from zenagent.types import ImageContent
+from zenagent.types import ImageContent, Usage
 
 __all__ = ["ChatController"]
 
@@ -93,6 +95,16 @@ class ChatController:
         #: HUD. Seeded from the current session's sidecar so resume/start shows
         #: the list before the first tool call of the restored transcript.
         self._todos: list[dict] = load_todo_phases(self._session_path())
+        #: Goal loop bookkeeping. ``_goal_turn`` marks the run that just
+        #: finished; ``_turn_tool_calls`` feeds the no-progress detector.
+        self._goal_turn = False
+        self._turn_tool_calls = 0
+        self._goal_checking = False
+        self._frontend_ready = False
+        self._goal_usage_at_start = Usage()
+        self._goal_subagent_tokens_at_start = 0
+        self._goal_started_at: float | None = None
+        self._goal_watchdog: asyncio.Task | None = None
         runtime.agent.subscribe(self._on_event)
 
     # -- snapshots ----------------------------------------------------------
@@ -147,6 +159,8 @@ class ChatController:
         )
         subagents = self._subagent_views()
         git = git_status(self.runtime.cwd)
+        goal_ctl = getattr(self.runtime, "goal", None)
+        goal_view = goal_ctl.snapshot() if goal_ctl is not None else None
         return RunStatus(
             model_id=agent.model.id,
             thinking=agent.thinking,
@@ -189,6 +203,7 @@ class ChatController:
                 context_used,
                 agent.model.context_window,
             ),
+            goal=goal_view,
         )
 
     # -- work-in-progress snapshots -----------------------------------------
@@ -261,6 +276,56 @@ class ChatController:
         # gap would otherwise see "idle" and start a second run on the agent.
         self._running = True
         self._task = asyncio.create_task(self._run(text, pending))
+
+    # -- goal loop -----------------------------------------------------------
+
+    def start_goal(
+        self,
+        objective: str,
+        *,
+        check: str | None = None,
+        max_turns: int | None = None,
+    ) -> str:
+        """Set a goal and start its first turn (or defer while busy)."""
+
+        goal = getattr(self.runtime, "goal", None)
+        if goal is None:
+            raise RuntimeError("goal controller is not wired")
+        state = goal.set(objective, check=check, max_turns=max_turns)
+        if self.busy:
+            self._notify()
+            return t("cmdmsg.goal_start_deferred")
+        self._running = True
+        self._task = asyncio.create_task(
+            self._run(render_goal_prompt(state), goal=True)
+        )
+        self._notify()
+        return t("cmdmsg.goal_started")
+
+    def maybe_continue_goal(self) -> None:
+        """Start a goal turn when the controller is idle and the goal is active."""
+
+        goal = getattr(self.runtime, "goal", None)
+        if goal is None or self.busy or self._goal_checking:
+            return
+        if self._pending_queue.items:
+            return
+        state = goal.state
+        if state is None or state.status != "active":
+            return
+        self._running = True
+        self._task = asyncio.create_task(
+            self._run(render_goal_prompt(state), goal=True)
+        )
+        self._notify()
+
+    def on_frontend_ready(self) -> None:
+        """Resume an active goal once, after the first frontend paint."""
+
+        if self._frontend_ready:
+            return
+        self._frontend_ready = True
+        self.maybe_continue_goal()
 
     @property
     def attachments(self) -> list[ImageContent]:
@@ -651,10 +716,24 @@ class ChatController:
     # -- run loop -----------------------------------------------------------
 
     async def _run(
-        self, text: str | None, images: list[ImageContent] | None = None
+        self,
+        text: str | None,
+        images: list[ImageContent] | None = None,
+        *,
+        goal: bool = False,
     ) -> None:
         self._running = True
         self._last_error = ""
+        self._goal_turn = goal
+        self._turn_tool_calls = 0
+        self._goal_usage_at_start = usage_total(self.runtime.agent.messages)
+        self._goal_subagent_tokens_at_start = self._subagents.tokens
+        self._goal_started_at = time.monotonic()
+        goal_ctl = getattr(self.runtime, "goal", None)
+        if goal_ctl is not None:
+            goal_ctl.note_turn_start(auto=goal)
+        if goal_ctl is not None and goal_ctl.state is not None:
+            self._goal_watchdog = asyncio.create_task(self._goal_watch())
         self._notify()
         started = time.monotonic()
         before_output = usage_total(self.runtime.agent.messages).output
@@ -667,6 +746,10 @@ class ChatController:
                     # Nothing to continue: keep the steering text visible
                     # instead of raising out of the task.
                     self._demote_steering()
+            elif goal:
+                await self.runtime.agent.prompt(
+                    text, images=images or None, goal=True
+                )
             else:
                 await self.runtime.agent.prompt(text, images=images or None)
         except Exception as exc:  # noqa: BLE001 - surfacing ANY escaped bug is the contract
@@ -679,6 +762,11 @@ class ChatController:
             failure = bug_notice(repr(exc))
         finally:
             termination = "error" if failure else self.runtime.agent.termination
+            if self._goal_watchdog is not None:
+                self._goal_watchdog.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self._goal_watchdog
+                self._goal_watchdog = None
             # Aborts and provider errors skip message_end; do not leave a row
             # ticking after the run is over.
             self._builder.finalize()
@@ -709,20 +797,94 @@ class ChatController:
             # turns go first: compress only between bursts (Review Focus #1).
             if termination != "aborted" and not self._pending_queue.items:
                 await self._maybe_auto_compact()
-            self._running = False
-            self._task = None
-            self._notify()
-            if continuation:
-                self._task = asyncio.create_task(self._run(None))
-            elif termination == "stop":
-                # Only a normal finish auto-drains the queue. An error/cap
-                # ending leaves the pending rows visible and the banner up;
-                # the user decides when to run again (Review Focus #4).
-                item = self._pending_queue.take_next_queue_item()
-                if item is not None:
+            goal_started = False
+            if (
+                not continuation
+                and not self._pending_queue.items
+                and goal_ctl is not None
+                and goal_ctl.state is not None
+                and goal_ctl.state.status == "active"
+            ):
+                ctx = GoalTurnContext(
+                    messages=list(self.runtime.agent.messages),
+                    auto=self._goal_turn,
+                    tool_calls=self._turn_tool_calls,
+                    termination=termination,
+                    tokens_delta=self._goal_tokens_delta(),
+                    subagent_tokens_delta=self._goal_subagent_tokens_delta(),
+                    elapsed_s=(
+                        time.monotonic() - self._goal_started_at
+                        if self._goal_started_at is not None
+                        else 0.0
+                    ),
+                    user_queued=False,
+                )
+                self._goal_checking = True
+                self._notify()
+                try:
+                    decision = await goal_ctl.after_turn(ctx)
+                except Exception as exc:  # noqa: BLE001 - never kill the session
+                    self._last_error = bug_notice(repr(exc))
+                    decision = None
+                finally:
+                    self._goal_checking = False
+                if (
+                    decision is not None
+                    and decision.action == "continue"
+                    and decision.prompt
+                ):
+                    self._running = False
+                    self._task = None
+                    self._notify()
                     self._task = asyncio.create_task(
-                        self._run(item.message.text, item.images)
+                        self._run(decision.prompt, goal=True)
                     )
+                    goal_started = True
+            if not goal_started:
+                self._running = False
+                self._task = None
+                self._notify()
+                if continuation:
+                    self._task = asyncio.create_task(self._run(None))
+                elif termination == "stop":
+                    # Only a normal finish auto-drains the queue. An error/cap
+                    # ending leaves the pending rows visible and the banner up;
+                    # the user decides when to run again (Review Focus #4).
+                    item = self._pending_queue.take_next_queue_item()
+                    if item is not None:
+                        self._task = asyncio.create_task(
+                            self._run(item.message.text, item.images)
+                        )
+
+    async def _goal_watch(self) -> None:
+        """Check the hard token/wall budget while a goal run is in flight."""
+
+        try:
+            while True:
+                await asyncio.sleep(5)
+                self._check_goal_budget()
+        except asyncio.CancelledError:
+            return
+
+    def _goal_tokens_delta(self) -> int:
+        api = self.runtime.agent.model.api
+        current = usage_total(self.runtime.agent.messages)
+        return max(0, goal_tokens(current, api) - goal_tokens(self._goal_usage_at_start, api))
+
+    def _goal_subagent_tokens_delta(self) -> int:
+        return max(0, self._subagents.tokens - self._goal_subagent_tokens_at_start)
+
+    def _check_goal_budget(self) -> None:
+        goal_ctl = getattr(self.runtime, "goal", None)
+        if goal_ctl is None or self._goal_started_at is None:
+            return
+        if goal_ctl.state is None or goal_ctl.state.status != "active":
+            return
+        tokens = self._goal_tokens_delta() + self._goal_subagent_tokens_delta()
+        elapsed = time.monotonic() - self._goal_started_at
+        if goal_ctl.budget_exceeded(tokens_delta=tokens, elapsed_s=elapsed):
+            goal_ctl.note_budget_abort()
+            self.runtime.agent.abort()
 
     def _demote_steering(self) -> None:
         """Turn undelivered steering into visible queue entries (nothing lost)."""
@@ -761,6 +923,10 @@ class ChatController:
     # -- event → view models ------------------------------------------------
 
     def _on_event(self, event: AgentEvent) -> None:
+        if event.type == "tool_execution_end":
+            self._turn_tool_calls += 1
+        elif event.type == "message_end":
+            self._check_goal_budget()
         changed = self._builder.apply(event)
         if (
             event.type in ("tool_execution_start", "tool_execution_end")

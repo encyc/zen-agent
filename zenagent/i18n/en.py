@@ -368,6 +368,8 @@ CATALOG: dict[str, str] = {
     "cmdmsg.pinned": "pinned {name}",
     "cmdmsg.unpinned": "unpinned {name}",
     "cmdmsg.cleared": "cleared the conversation",
+    "cmdmsg.goal_started": "goal started",
+    "cmdmsg.goal_start_deferred": "goal set; will start when the current turn finishes",
     "cmdmsg.compaction_failed": "compaction failed: {error}",
     "cmdmsg.nothing_to_compact": "nothing to compact",
     "cmdmsg.image_usage": "usage: /image <path>",

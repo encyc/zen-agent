@@ -367,6 +367,8 @@ CATALOG: dict[str, str] = {
     "cmdmsg.pinned": "已置顶 {name}",
     "cmdmsg.unpinned": "已取消置顶 {name}",
     "cmdmsg.cleared": "已清空对话",
+    "cmdmsg.goal_started": "目标已启动",
+    "cmdmsg.goal_start_deferred": "目标已设置；当前回合结束后开始",
     "cmdmsg.compaction_failed": "压缩失败：{error}",
     "cmdmsg.nothing_to_compact": "没有可压缩的内容",
     "cmdmsg.image_usage": "用法：/image <path>",
