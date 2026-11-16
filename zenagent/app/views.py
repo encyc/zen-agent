@@ -27,6 +27,7 @@ from zenagent.types import (
 )
 
 __all__ = [
+    "GoalView",
     "JobLogView",
     "JobStatusView",
     "JobView",
@@ -148,6 +149,24 @@ TranscriptView = MessageView | ToolCallView | DividerView
 
 
 @dataclass
+class GoalView:
+    """Read-only goal snapshot for status bars, sidebars and RPC clients."""
+
+    objective: str
+    status: str
+    check: str | None
+    turns_used: int
+    max_turns: int
+    tokens_used: int
+    max_tokens: int
+    wall_seconds: float
+    max_wall_seconds: int
+    last_verdict: str | None
+    last_reason: str
+    updated_at: int
+
+
+@dataclass
 class RunStatus:
     """Snapshot the status bar renders."""
 
@@ -208,6 +227,8 @@ class RunStatus:
     active_subagent: str | None = None
     #: Context-window composition (measured total, estimated slices).
     context: ContextReport | None = None
+    #: Session goal snapshot; None when the session has no goal.
+    goal: GoalView | None = None
 
     def to_wire(self) -> dict:
         """The whole snapshot as JSON-ready data.

@@ -10,9 +10,13 @@ from __future__ import annotations
 
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING, Literal, cast
 
+from zenagent.agent.session import Session
+from zenagent.app import records
+from zenagent.app.views import GoalView
 from zenagent.types import Usage
 
 if TYPE_CHECKING:
@@ -22,6 +26,7 @@ __all__ = [
     "GOAL_STATUSES",
     "GoalAction",
     "GoalArgs",
+    "GoalController",
     "GoalLimits",
     "GoalState",
     "GoalStatus",
@@ -166,6 +171,142 @@ class GoalState:
             created_at=_as_float(data.get("created_at"), 0.0),
             updated_at=_as_float(data.get("updated_at"), 0.0),
         )
+
+
+class GoalController:
+    """Owns one session's goal state, persistence and lifecycle.
+
+    The controller is deliberately UI-agnostic: it never imports Chat, Runtime
+    or a frontend. ``ChatController`` asks it what to do next; ``Runtime`` binds
+    it to the session in context.
+    """
+
+    def __init__(
+        self,
+        *,
+        limits: GoalLimits | None = None,
+        verifier: object | None = None,
+        check_verifier: object | None = None,
+        now: Callable[[], float] = time.time,
+    ) -> None:
+        self._limits = limits or GoalLimits()
+        self._verifier = verifier
+        self._check_verifier = check_verifier
+        self._now = now
+        self._state: GoalState | None = None
+        self._session: Session | None = None
+
+    @property
+    def state(self) -> GoalState | None:
+        return self._state
+
+    def configure(
+        self,
+        *,
+        limits: GoalLimits,
+        verifier: object | None,
+        check_verifier: object | None = None,
+    ) -> None:
+        """Update defaults for future goals; the current goal keeps its budget."""
+
+        self._limits = limits
+        self._verifier = verifier
+        self._check_verifier = check_verifier
+
+    def bind_session(self, session: Session | None) -> None:
+        """Load the last goal record from ``session`` (or clear when ``None``)."""
+
+        self._session = session
+        if session is None:
+            self._state = None
+            return
+        session.ensure_loaded()
+        state: GoalState | None = None
+        for record in session.records:
+            if not records.is_goal(record):
+                continue
+            payload = record.get("goal")
+            if payload is None:
+                state = None
+                continue
+            if not isinstance(payload, dict):
+                continue
+            try:
+                state = GoalState.from_dict(payload)
+            except ValueError:
+                continue
+        self._state = state
+
+    def set(
+        self,
+        objective: str,
+        *,
+        check: str | None = None,
+        max_turns: int | None = None,
+    ) -> GoalState:
+        state = GoalState.new(
+            objective,
+            check=check,
+            limits=self._limits,
+            max_turns=max_turns,
+        )
+        stamp = self._now()
+        state.created_at = stamp
+        state.updated_at = stamp
+        self._state = state
+        self._persist()
+        return state
+
+    def pause(self) -> GoalState | None:
+        state = self._state
+        if state is None or state.status != "active":
+            return None
+        state.status = "paused"
+        state.updated_at = self._now()
+        self._persist()
+        return state
+
+    def resume(self) -> GoalState | None:
+        state = self._state
+        if state is None or state.status not in ("paused", "blocked"):
+            return None
+        state.status = "active"
+        state.no_progress_turns = 0
+        state.verifier_failures = 0
+        state.check_failures = 0
+        state.last_check_key = ""
+        state.updated_at = self._now()
+        self._persist()
+        return state
+
+    def clear(self) -> None:
+        self._state = None
+        self._persist()
+
+    def snapshot(self) -> GoalView | None:
+        state = self._state
+        if state is None:
+            return None
+        return GoalView(
+            objective=state.objective,
+            status=state.status,
+            check=state.check,
+            turns_used=state.turns_used,
+            max_turns=state.max_turns,
+            tokens_used=state.tokens_used,
+            max_tokens=state.max_tokens,
+            wall_seconds=state.wall_seconds_used,
+            max_wall_seconds=state.max_wall_seconds,
+            last_verdict=state.last_verdict,
+            last_reason=state.last_reason,
+            updated_at=int(state.updated_at),
+        )
+
+    def _persist(self) -> None:
+        if self._session is None:
+            return
+        payload = self._state.to_dict() if self._state is not None else None
+        self._session.append_meta(records.goal(payload))
 
 
 def parse_goal_args(argument: str) -> GoalArgs:
