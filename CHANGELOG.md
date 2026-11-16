@@ -3,6 +3,86 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## v0.13.8 — 2026-11-16
+
+**Five pi learnings landed, and the review pass made each hold end to end.**
+A rewind now survives a restart, compaction keeps a recent tail without
+orphaning a tool result, the model can be extended at its stop instead of
+starting a new run, extensions contribute named prompt sections, and an idle
+launch writes no transcript. Reviewing that work found the durable branch
+record was writing positions the file had not received yet; fixing it
+re-shaped the persistence seam and the pending lanes.
+
+### Added
+
+- **A rewind survives the process.** The session kernel gains a structural
+  `window` selector (a record + the replay so far → a projected buffer) and the
+  app owns the `branch` vocabulary: the record skips the abandoned span, the
+  report follows it, and the span stays in the file as the audit trail. Corrupt
+  or out-of-range records are ignored rather than losing the transcript.
+- **The follow-up channel is consumed by both frontends.** `Agent.follow_up()`
+  queues text the loop injects only when the run would otherwise stop (abort,
+  error, cost and `max_turns` stops leave it alone). The TUI's `ctrl+q` now
+  extends the running turn instead of parking the next run; the desktop sends
+  the new `follow_up` frame on `Ctrl/Cmd+Enter` or the labelled 接续 button, and
+  both surfaces report `status.continuing`.
+- **Named extension prompt sections.** `add_system_prompt(text, section=...)`
+  renders one provenance block per section (`extension.<name>`, `cache_class
+  session`), re-registering a section replaces it in place, and a second file
+  claiming the name keeps the first with a warning.
+- **Pending lanes render row by row.** Every queued or steering message is its
+  own row with its own actions (升为插话 / 立即插话 / 取回); the group keeps a
+  header and 清空全部. The continuation dock gains its own cancel.
+- **立即插话 (send now).** `session op=interrupt_pending` aborts the live turn
+  and sends that row as the next ordinary user turn. The abort is idempotent
+  and preemptive — one abort per live turn, never per message — and steering
+  that had not reached the model is demoted to the strict-FIFO queue lane.
+- **Re-compaction merges instead of rebuilding.** `compose_compact(
+  previous_summary=...)` renders the new `compact.update` block when the
+  transcript already leads with a summary.
+
+### Reliability
+
+- **The durable rewind actually addressed the file.** The persist subscriber
+  writes a run's messages at `agent_end`, so a branch written mid-run pointed
+  past the end of the file and its range check discarded it. The controller now
+  tracks the run's messages and flushes them before the record; resume then
+  equals the live view and the report keeps its place.
+- **Rewind projects in transcript space.** `transform_context` receives
+  `[system, *messages]` while rewind positions come from the transcript; the
+  prefix is stripped for the projection and restored afterwards (the off-by-one
+  that shifted every boundary is gone). The checkpoint round's tool results
+  stay in the kept head, one report object serves the request and the file, and
+  a single orphan rule serves both the branch window and the rewind.
+- **A manual `/compact` shrinks the conversation.** It keeps a quarter of the
+  transcript (still capped at pi's 20k) instead of keeping any conversation
+  under 20k verbatim and summarizing one message; auto-compaction is unchanged.
+- **A takeover burst cannot lose its abort.** `submit` marks the controller
+  busy before scheduling, takeovers serialize, and a takeover yields once so
+  the next abort has a live run to cancel — without it the second interrupt was
+  a silent no-op and the texts ran in FIFO order.
+- **A failing disk never kills a rewind request** (the persist subscriber's
+  discipline); persistence is attempted once.
+
+### Fixed
+
+- `status` carries `continuing` as a flat key (the desktop reads flat keys, so
+  the dock could never appear), `session op=dequeue` accepts `pending_id` for
+  one named row in either lane, and taking a steering row back also drops its
+  queued text from the agent.
+- The 0.13.7 release prep left `zenagent/__init__.py` at 0.13.6 while
+  `pyproject.toml` said 0.13.7 (which `scripts/release-check.sh` rejects);
+  both are now 0.13.8.
+
+### Governance & tooling
+
+- The desktop dev bridge mirrors the new frames, a Playwright spec (six
+  scenarios) pins the follow-up / take-back / send-now controls, and the LOC
+  allowlist registers `session.py`, `appStore.ts` and `bridge.ts` with payback
+  notes.
+- The plan for this work records the persistence-timing correction that the
+  first implementation missed.
+
 ## v0.13.7 — 2026-11-14
 
 **A full architecture audit's findings are closed, and Runtime stops being a
