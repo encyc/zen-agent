@@ -28,6 +28,7 @@ from zenagent.types import AssistantMessage, Message, ToolCall, ToolResultMessag
 __all__ = [
     "BRANCH",
     "COMPACTION",
+    "GOAL",
     "KINDS",
     "MODE",
     "RETRY",
@@ -40,8 +41,10 @@ __all__ = [
     "branch_window",
     "compaction",
     "drop_orphan_tool_results",
+    "goal",
     "is_branch",
     "is_compaction",
+    "is_goal",
     "is_tool_end",
     "keep_for_rewrite",
     "mode",
@@ -57,6 +60,8 @@ __all__ = [
 TOOL_END = "tool_end"
 #: A context compaction: how many tokens it replaced and where it came from.
 COMPACTION = "compaction"
+#: One full goal snapshot; the last one in the file wins.
+GOAL = "goal"
 #: A run began (the boundary the transcript itself cannot express).
 RUN_START = "run_start"
 #: A run ended: termination reason, turns, wall clock and the last error.
@@ -70,11 +75,13 @@ BRANCH = "branch"
 
 #: Record kinds this version defines. Anything else is carried verbatim by a
 #: transcript rewrite (see ``keep_for_rewrite``).
-KNOWN_KINDS = frozenset({TOOL_END, COMPACTION, RUN_START, RUN_END, RETRY, MODE, BRANCH})
+KNOWN_KINDS = frozenset(
+    {TOOL_END, COMPACTION, GOAL, RUN_START, RUN_END, RETRY, MODE, BRANCH}
+)
 
 #: Every kind this build writes. Unknown kinds are read back untouched but are
 #: never carried into a rewritten transcript.
-KINDS = (TOOL_END, COMPACTION, RUN_START, RUN_END, RETRY, MODE, BRANCH)
+KINDS = (TOOL_END, COMPACTION, GOAL, RUN_START, RUN_END, RETRY, MODE, BRANCH)
 
 #: Serialized cap for one ``tool_end`` record's ``details`` (UI-only payload).
 TOOL_DETAILS_LIMIT = 16_384
@@ -95,6 +102,10 @@ def is_tool_end(record: dict) -> bool:
 
 def is_compaction(record: dict) -> bool:
     return record_type(record) == COMPACTION
+
+
+def is_goal(record: dict) -> bool:
+    return record_type(record) == GOAL
 
 
 def branch(cut: int, skip: int, *, call: str = "", goal: str = "") -> dict:
@@ -216,6 +227,11 @@ def tool_end(
     return record
 
 
+def goal(state: dict | None) -> dict:
+    """One complete goal snapshot; ``None`` clears the session's goal."""
+    return {"type": GOAL, "goal": state}
+
+
 def compaction(tokens_before: int, reason: str, *, kept: int = 0) -> dict:
     """One ``compaction`` record: the replay boundary and its divider.
 
@@ -291,20 +307,26 @@ def mode(value: str) -> dict:
     return {"type": MODE, "mode": value}
 
 
-def keep_for_rewrite(*, keep_tool_end: bool = True) -> Callable[[dict], bool]:
+def keep_for_rewrite(
+    *, keep_tool_end: bool = True, keep_goal: bool = True
+) -> Callable[[dict], bool]:
     """Predicate for :meth:`Session.carry_records` after a transcript rewrite.
 
     ``compaction`` records always travel (the divider still happened);
-    ``tool_end`` records travel so cards keep their durations and diffs, unless
-    the caller is about to drop the tool calls themselves. Run boundaries,
-    retries, mode switches and unknown kinds are dropped: a truncated file must
-    not claim events whose messages are gone.
+    ``goal`` records travel with undo/retry/compact, but a fork can drop them
+    so a new branch does not inherit an active loop; ``tool_end`` records travel
+    so cards keep their durations and diffs, unless the caller is about to drop
+    the tool calls themselves. Run boundaries, retries, mode switches and
+    unknown kinds are dropped: a truncated file must not claim events whose
+    messages are gone.
     """
 
     def keep(record: dict) -> bool:
         kind = record_type(record)
         if kind == COMPACTION:
             return True
+        if kind == GOAL:
+            return keep_goal
         if keep_tool_end and kind == TOOL_END:
             return True
         # An unknown kind (a newer file, or a plugin's side-channel) is inert
