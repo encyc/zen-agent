@@ -3,6 +3,24 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## v0.13.9 — 2026-11-16
+
+**The Windows desktop build no longer dies on import.** 0.13.8's swarm room
+lock imported `fcntl` unconditionally, so the frozen Windows sidecar crashed
+with `ModuleNotFoundError: No module named 'fcntl'` before its bootstrap. The
+desktop release failed on both Windows legs (macOS and Linux built fine), and
+`zen rpc` on a Windows source install hit the same import.
+
+### Fixed
+
+- **The room's one-writer lock is platform-neutral.** `room_file_lock` keeps
+  `flock` on POSIX and uses a one-byte `msvcrt` lock on Windows; a platform
+  with neither primitive still refuses the room (`SwarmLocked`) instead of
+  running it unlocked. A subprocess test hides `fcntl` and imports the whole
+  `zen rpc` chain, so the Windows-startup regression cannot return silently.
+- 0.13.8's release prep is otherwise unchanged: the same pi learnings, the
+  same durable rewind / compaction / follow-up work.
+
 ## v0.13.8 — 2026-11-16
 
 **Five pi learnings landed, and the review pass made each hold end to end.**
