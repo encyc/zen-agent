@@ -610,6 +610,7 @@ class RpcServer(FilesOps, SessionOps, PluginsOps, ConfigOps, SecretsOps, SkillsO
             payload["active_subagent"] = status.active_subagent
             payload["subagent_cost"] = status.subagent_cost
             payload["subagent_tokens"] = status.subagent_tokens
+            payload["goal"] = asdict(status.goal) if status.goal else None
             # The complete snapshot (every RunStatus field, nested dataclasses
             # included) so a client never has to guess which keys were
             # remembered. The flat keys above stay for older clients.

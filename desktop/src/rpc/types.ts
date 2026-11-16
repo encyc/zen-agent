@@ -190,6 +190,21 @@ export interface ContextReport {
   free_tokens: number
 }
 
+export interface GoalView {
+  objective: string
+  status: string
+  check: string | null
+  turns_used: number
+  max_turns: number
+  tokens_used: number
+  max_tokens: number
+  wall_seconds: number
+  max_wall_seconds: number
+  last_verdict: string | null
+  last_reason: string
+  updated_at: number
+}
+
 export interface StatusResult {
   type: 'result'
   id: string
@@ -222,6 +237,7 @@ export interface StatusResult {
   active_subagent?: string | null
   subagent_cost?: number
   subagent_tokens?: number
+  goal?: GoalView | null
 }
 
 // ---- models / commands catalogs ------------------------------------------

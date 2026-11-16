@@ -11,12 +11,14 @@ from zenagent.agent.session import session_title
 from zenagent.app import clipboard
 from zenagent.app.appearance import THEME_CHOICES
 from zenagent.app.chat import ChatController
+from zenagent.app.goal import parse_goal_args
 from zenagent.app.links import extract_links, parse_index
 from zenagent.app.models import ModelManager
 from zenagent.app.modes import describe_modes
 from zenagent.app.restore import run_restore_command
 from zenagent.app.runtime import Runtime
 from zenagent.app.sessions import SessionManager
+from zenagent.app.views import GoalView
 from zenagent.i18n import LANGUAGE_CHOICES, t
 
 __all__ = [
@@ -526,6 +528,57 @@ async def _restore(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(message=message)
 
 
+@_command("goal")
+async def _goal(services: AppServices, argument: str) -> CommandResult:
+    """Set, inspect or control the session goal."""
+    try:
+        args = parse_goal_args(argument)
+    except ValueError as exc:
+        return CommandResult(message=t("cmdmsg.goal_usage", error=exc))
+
+    controller = services.runtime.goal
+    if args.action == "status":
+        return CommandResult(message=_goal_status(controller.snapshot()))
+    if args.action == "pause":
+        state = controller.pause()
+        if state is None:
+            return CommandResult(message=t("cmdmsg.goal_no_active"))
+        return CommandResult(message=t("cmdmsg.goal_paused"))
+    if args.action == "resume":
+        state = controller.resume()
+        if state is None:
+            return CommandResult(message=t("cmdmsg.goal_no_resume"))
+        services.chat.maybe_continue_goal()
+        return CommandResult(message=t("cmdmsg.goal_resumed"))
+    if args.action == "clear":
+        controller.clear()
+        return CommandResult(message=t("cmdmsg.goal_cleared"))
+    assert args.objective is not None
+    return CommandResult(
+        message=services.chat.start_goal(
+            args.objective, check=args.check, max_turns=args.max_turns
+        )
+    )
+
+
+def _goal_status(view: GoalView | None) -> str:
+    if view is None:
+        return t("cmdmsg.goal_none")
+    return t(
+        "cmdmsg.goal_status",
+        objective=view.objective,
+        status=view.status,
+        check=view.check or "-",
+        turns=view.turns_used,
+        max_turns=view.max_turns,
+        tokens=view.tokens_used,
+        max_tokens=view.max_tokens,
+        wall=int(view.wall_seconds),
+        max_wall=view.max_wall_seconds,
+        last=f"{view.last_verdict or 'none'} — {view.last_reason or 'no verdict yet'}",
+    )
+
+
 @_command("todo")
 async def _todo(services: AppServices, argument: str) -> CommandResult:
     """Open the editable todo list (the model shares the same sidecar)."""
@@ -841,6 +894,7 @@ def build_default_commands(services: AppServices) -> CommandRegistry:
         _settings,
         _plan_review,
         _todo,
+        _goal,
         _memory,
         _undo,
         _restore,
