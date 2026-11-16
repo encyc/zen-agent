@@ -362,7 +362,7 @@ def sequenced_stream(texts: list[str]):
     return stream
 
 
-def settled(lines: list[str], *, model: str = "glm-5.3") -> bool:
+def settled(lines: list[str]) -> bool:
     """True once the classic REPL printed its status line, i.e. no run is live.
 
     The REPL keeps reading while a run streams, so a scripted reader that types
@@ -371,7 +371,7 @@ def settled(lines: list[str], *, model: str = "glm-5.3") -> bool:
     the REPL's documented no-op (it ``continue``s): the loop then reaps, and
     this predicate says when the run really settled, so no command is lost.
     """
-    return any(line.startswith(f"{model} · ") for line in lines)
+    return any("msgs" in line and "ctx" in line for line in lines)
 
 
 @pytest.fixture(autouse=True)

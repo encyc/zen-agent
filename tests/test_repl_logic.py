@@ -214,13 +214,28 @@ async def test_missing_key_returns_one(monkeypatch):
 
 async def test_repl_prints_a_status_line_after_each_run(isolated_sessions):
     lines: list[str] = []
+    sent: list[str] = []
+    deadline = time.monotonic() + 10.0
+
+    async def input_fn() -> str:
+        if not sent:
+            sent.append("hi")
+            return "hi"
+        # /exit aborts the run it lands on, and a slow runner can still be
+        # persisting the first one -- wait for its status line instead.
+        if not settled(lines):
+            assert time.monotonic() < deadline, f"run never settled: {lines!r}"
+            await asyncio.sleep(0.01)
+            return ""
+        return "/exit"
+
     code = await repl(
         "glm-5.3",
         stream_fn=scripted_stream(0.0, "hello"),
-        input_fn=scripted_input("hi", "/exit", settle=0.02),
+        input_fn=input_fn,
         print_fn=lambda *a, **k: lines.append("".join(str(x) for x in a)),
         api_key="k",
-    mcp=False,
+        mcp=False,
     )
     assert code == 0
     assert any("msgs" in line and "ctx" in line for line in lines), lines
@@ -288,21 +303,19 @@ async def test_reload_discovers_skills_added_mid_session(tmp_path, monkeypatch):
 
     lines: list[str] = []
     sent: list[str] = []
-    blanks = 0
+    deadline = time.monotonic() + 10.0
 
     async def input_fn() -> str:
-        nonlocal blanks
-        await asyncio.sleep(0.02)
         if not sent:
             sent.append("hi")
             return "hi"
         if "reload" not in sent:
-            # /reload refuses mid-run: a blank line is the REPL's no-op, which
-            # reaps the run -- so the command lands only once it really settled.
+            # /reload refuses mid-run and this line is read while the turn is
+            # still streaming. A blank line is the REPL's no-op: the loop reaps,
+            # and the status line proves the run finished.
             if not settled(lines):
-                blanks += 1
-                assert blanks < 5000, "the first run never settled"
-                await asyncio.sleep(0)  # let the run task make progress
+                assert time.monotonic() < deadline, f"run never settled: {lines!r}"
+                await asyncio.sleep(0.01)
                 return ""
             skill_dir = tmp_path / ".zenagent" / "skills" / "late"
             skill_dir.mkdir(parents=True)
