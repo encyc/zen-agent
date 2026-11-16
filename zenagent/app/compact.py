@@ -36,6 +36,7 @@ __all__ = [
     "AUTO_COMPACT_THRESHOLD",
     "KEEP_RECENT_TOKENS",
     "compact",
+    "manual_keep_recent",
     "maybe_auto_compact",
     "should_auto_compact",
 ]
@@ -101,6 +102,19 @@ def _choose_cut(
         while cut < len(messages) and _orphans_tool_result(messages[cut:]):
             cut += 1
     return cut
+
+
+def manual_keep_recent(messages: list[Message]) -> int:
+    """Keep budget for an explicit ``/compact``: a quarter of the transcript.
+
+    ``KEEP_RECENT_TOKENS`` is tuned for automatic compaction, which only fires
+    near the context limit. Applying that budget to a manual compaction would
+    keep the whole conversation verbatim and summarize almost nothing, so the
+    manual path scales the tail down with the transcript — still leaving recent
+    context unsummarized, but always freeing most of it.
+    """
+    total = sum(_message_tokens(message) for message in messages)
+    return min(KEEP_RECENT_TOKENS, total // 4)
 
 
 def _previous_summary(messages: list[Message]) -> str | None:

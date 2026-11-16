@@ -226,15 +226,14 @@ async def test_compact_now_stays_in_the_same_session(runtime_factory, capsys):
 
     assert message and "compacted" in message
     assert runtime.session.path == old_path, "compaction keeps the session identity"
-    assert len(runtime.agent.messages) == 2  # summary UserMessage + kept tail
-    # Replay returns the summary segment plus the kept tail; the file keeps
-    # the full history.
+    assert len(runtime.agent.messages) == 1  # the summary replaces the pair
+    # Replay returns the summary segment; the file keeps the full history.
     cut = records.open_session(old_path)
     assert cut.load() == runtime.agent.messages
     # The transcript keeps the pre-compaction rows with one divider mid-stream,
-    # then the summary and the kept tail.
+    # then the summary.
     kinds = [view.kind for view in chat.transcript]
-    assert kinds == ["user", "assistant", "divider", "user", "assistant"]
+    assert kinds == ["user", "assistant", "divider", "user"]
     assert chat.take_notices() == [], "the divider is a transcript view now"
     assert capsys.readouterr().out == "", "the TUI controller must never print"
 
@@ -1002,14 +1001,38 @@ async def test_compact_now_sources_the_divider_and_persists_tokens(runtime_facto
     assert notice
     assert chat.notices_snapshot == [], "the divider is a transcript view now"
     kinds = [view.kind for view in chat.transcript]
-    assert kinds == ["divider", "user", "assistant"], (
-        "divider leads the compacted segment; the kept tail follows"
+    assert kinds == ["divider", "user"], (
+        "divider leads the compacted segment; nothing recent outlived the budget"
     )
     session = Session(runtime.session.path)
     session.load()
     record = next(item for item in session.records if item["type"] == "compaction")
     assert record["reason"] == "manual"
     assert record["tokensBefore"] == 500
+
+
+async def test_manual_compact_keeps_a_recent_tail_and_still_shrinks(runtime_factory):
+    """The manual budget is a quarter of the transcript, not the 20k auto cap."""
+    from conftest import text_stream
+
+    from zenagent.app import records
+
+    runtime = await runtime_factory(stream_fn=text_stream("summary"))
+    original = [
+        UserMessage(content="please review this turn " * 80, timestamp=index)
+        for index in range(12)
+    ]
+    for message in original:
+        await runtime.session.append(message)
+    runtime.agent.replace_messages(list(original))
+    chat = ChatController(runtime)
+
+    notice = await chat.compact_now()
+
+    assert notice
+    live = runtime.agent.messages
+    assert 1 < len(live) < len(original), "a summary plus a smaller recent tail"
+    assert records.open_session(runtime.session.path).load() == live
 
 
 async def test_retry_hydrates_surviving_cards_from_records(runtime_factory):

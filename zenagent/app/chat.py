@@ -10,7 +10,12 @@ from pathlib import Path
 from zenagent.agent.session import Session
 from zenagent.agent.subagents import carry_task_dir
 from zenagent.app.attachments_state import Attachments
-from zenagent.app.compact import compact, should_auto_compact
+from zenagent.app.compact import (
+    KEEP_RECENT_TOKENS,
+    compact,
+    manual_keep_recent,
+    should_auto_compact,
+)
 from zenagent.app.context import build_context_report
 from zenagent.app.error_notice import bug_notice, run_error_notice
 from zenagent.app.git import git_status
@@ -443,6 +448,14 @@ class ChatController:
             self.runtime.session,
             reason="auto" if force else "manual",
             tokens_before=before,
+            # The automatic path keeps the budget pi tuned (20k of recent
+            # context near the limit); an explicit /compact must actually
+            # shrink a normal-sized conversation instead of keeping it whole.
+            keep_recent_tokens=(
+                KEEP_RECENT_TOKENS
+                if force
+                else manual_keep_recent(self.runtime.agent.messages)
+            ),
         )
         # The summary replaced the sized transcript; reseed the guard so the
         # auto-compaction check cannot fire again before a real request lands.

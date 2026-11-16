@@ -10,7 +10,13 @@ import zenagent.agent.session as session_module
 from zenagent.agent import Agent
 from zenagent.agent.session import Session, session_title
 from zenagent.app import records
-from zenagent.app.compact import _choose_cut, compact
+from zenagent.app.compact import (
+    KEEP_RECENT_TOKENS,
+    _choose_cut,
+    _message_tokens,
+    compact,
+    manual_keep_recent,
+)
 from zenagent.events import AssistantEvent
 from zenagent.providers.catalog import Model
 from zenagent.providers.compat import CompatFlags
@@ -489,3 +495,14 @@ async def test_compact_merges_into_the_previous_summary(isolated_sessions):
     merged = agent.messages[0]
     assert merged.content.startswith("# 此前会话摘要")
     assert "合并后的摘要" in merged.content
+
+
+def test_manual_keep_recent_scales_and_is_capped():
+    mid = [UserMessage(content="y" * 2000, timestamp=index) for index in range(10)]
+    budget = manual_keep_recent(mid)
+    total = sum(_message_tokens(message) for message in mid)
+    assert budget == total // 4, "a normal transcript keeps a quarter verbatim"
+    assert 0 < budget < total
+
+    huge = [UserMessage(content="z" * 8000, timestamp=index) for index in range(60)]
+    assert manual_keep_recent(huge) == KEEP_RECENT_TOKENS, "the auto cap still applies"
