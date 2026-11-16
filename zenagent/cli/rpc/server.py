@@ -538,6 +538,9 @@ class RpcServer(FilesOps, SessionOps, PluginsOps, ConfigOps, SecretsOps, SkillsO
         if kind == "skills":
             await self._skills(request, request_id)
             return True
+        if kind in ("prefs", "set_pref"):
+            self._prefs(request, request_id)
+            return True
         if kind == "limits":
             # A refused write (bad value, hand-mangled file) is a normal,
             # reportable outcome — the server must survive it and so must the

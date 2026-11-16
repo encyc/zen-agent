@@ -187,6 +187,8 @@ export const settingsZh: Record<string, string> = {
   'settings.chatInput': '输入与链接',
   'settings.enterToSend': '回车发送',
   'settings.enterToSendHint': '关闭后按 ⌘/Ctrl+Enter 发送。',
+  'settings.goalPauseOnLeave': '离开会话时暂停目标',
+  'settings.goalPauseOnLeaveHint': '关闭时切回目标会话会继续推进；打开后需手动 /goal resume。',
   'settings.fontScale': '字体大小',
   'settings.fontScaleHint': '选择字号，窗口缩放保持不变。',
   'settings.fontSizeSmall': '小',
@@ -394,6 +396,9 @@ export const settingsEn: Record<string, string> = {
   'settings.chatInput': 'Input & links',
   'settings.enterToSend': 'Enter to send',
   'settings.enterToSendHint': 'Off: press ⌘/Ctrl+Enter to send.',
+  'settings.goalPauseOnLeave': 'Pause goal when leaving a session',
+  'settings.goalPauseOnLeaveHint':
+    'Off: switching back resumes the goal. On: switching back needs /goal resume.',
   'settings.fontScale': 'Font size',
   'settings.fontScaleHint': 'Pick a size. Window zoom is unchanged.',
   'settings.fontSizeSmall': 'Small',

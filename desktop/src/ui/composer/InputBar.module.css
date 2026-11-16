@@ -1,6 +1,10 @@
 /* Mode-specific composer controls. The plate itself (capsule, draft surface,
  * menu, control row, attachments) lives in ComposerPlate.module.css. */
 
+.goalDock {
+  margin-bottom: 6px;
+}
+
 .modes {
   display: flex;
   align-items: center;

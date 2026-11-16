@@ -1,0 +1,55 @@
+.panel {
+  margin-top: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--ds-hairline);
+  border-radius: 10px;
+  background: var(--ds-surface-2);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.close,
+.action {
+  border: 1px solid var(--ds-hairline);
+  border-radius: 8px;
+  background: var(--ds-surface-1);
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+}
+
+.close {
+  padding: 2px 8px;
+}
+
+.objective {
+  margin: 0 0 6px;
+  color: var(--dsw-alias-label-primary);
+  word-break: break-word;
+}
+
+.meta {
+  margin: 2px 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.action {
+  padding: 4px 10px;
+}
+
+.action:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
