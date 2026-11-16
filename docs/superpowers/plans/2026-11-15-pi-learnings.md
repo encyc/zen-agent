@@ -45,7 +45,7 @@
 - Produces: `AgentConfig.get_followup_messages: Callable[[], Awaitable[list[Message]]] | None = None`；`Agent.follow_up(text: str) -> None`；`Agent.pending_follow_up: int`；`Agent.take_follow_up() -> list[str]`。
 - 语义：只在 plain end-of-turn（loop.py `else: break`，约 :352）poll；aborted/error/max_turns/max_cost/tool_terminate/no_stream 不 poll。drain 全部并聚合成一条 `UserMessage`（无 `steering=True` 标记），与 steering 的聚合方式一致。
 
-- [ ] **Step 1: 写失败测试**（`tests/test_agent_class.py` 追加）
+- [x] **Step 1: 写失败测试**（`tests/test_agent_class.py` 追加）
 
 ```python
 async def test_follow_up_continues_run_at_plain_stop(fake_model_stream, ...):
@@ -55,10 +55,10 @@ async def test_follow_up_not_consumed_on_abort(...):
 async def test_reset_clears_follow_up(...):
 ```
 
-- [ ] **Step 2: 跑测试确认失败**：`uv run pytest tests/test_agent_class.py -q -k follow_up` → FAIL（AttributeError: follow_up）
-- [ ] **Step 3: 实现**：AgentConfig 加字段（默认 None）；loop 在 `else: break` 前插 poll 块；Agent 加队列三件套 + `_config()` 接线 + `reset()` 清空。
-- [ ] **Step 4: 跑测试确认通过**（同 Step 2 命令）
-- [ ] **Step 5: Commit** `feat(agent): follow-up queue keeps a run alive at plain stop (pi learnings ④)`
+- [x] **Step 2: 跑测试确认失败**：`uv run pytest tests/test_agent_class.py -q -k follow_up` → FAIL（AttributeError: follow_up）
+- [x] **Step 3: 实现**：AgentConfig 加字段（默认 None）；loop 在 `else: break` 前插 poll 块；Agent 加队列三件套 + `_config()` 接线 + `reset()` 清空。
+- [x] **Step 4: 跑测试确认通过**（同 Step 2 命令）
+- [x] **Step 5: Commit** `feat(agent): follow-up queue keeps a run alive at plain stop (pi learnings ④)`
 
 ### Task 2: 空会话不落盘——验证与补钉（pi ⑦）
 
@@ -67,9 +67,9 @@ async def test_reset_clears_follow_up(...):
 
 **Interfaces:** 只读验证 + 缺口补钉。现状：`Session.lazy`（session.py:385）+ `materialize()`（:470）+ `list_sessions` 跳 header-only（:756-763）已实现 pi 行为。
 
-- [ ] **Step 1:** `rg -n "lazy|materialize" tests/ | head -20` 清点既有覆盖
-- [ ] **Step 2:** 若缺以下任一断言则补测：①从不发消息的 lazy 会话 `path.exists() is False`；②`materialize()` 后文件存在且只有 header；③首条消息 append 后 header + meta 记录按原顺序落盘；④`list_sessions` 不含空文件但含被 pin 的空文件。
-- [ ] **Step 3: Commit** `test(session): pin lazy-session no-file-on-idle behavior (pi learnings ⑦)`
+- [x] **Step 1:** `rg -n "lazy|materialize" tests/ | head -20` 清点既有覆盖
+- [x] **Step 2:** 若缺以下任一断言则补测：①从不发消息的 lazy 会话 `path.exists() is False`；②`materialize()` 后文件存在且只有 header；③首条消息 append 后 header + meta 记录按原顺序落盘；④`list_sessions` 不含空文件但含被 pin 的空文件。
+- [x] **Step 3: Commit** `test(session): pin lazy-session no-file-on-idle behavior (pi learnings ⑦)`
 
 ### Task 3: extension 命名 section + 字节稳定性（pi ⑤）
 
@@ -84,7 +84,7 @@ async def test_reset_clears_follow_up(...):
 - Produces: `ExtensionAPI.add_system_prompt(text: str, *, section: str | None = None) -> None`；`LoadedExtensions.sections: dict[str, str]`（插入序，同 key 替换保位）；`LoadedExtensions.prompt_text`（fragments 在前、sections 按插入序在后，`"\n\n"` join）；`PromptContext.extension_sections: Sequence[tuple[str, str]] = ()`；compose_system 对每节发一个 `RenderedBlock(id=f"extension.{name}", cache_class="session")`。
 - 语义：`section=None` 走旧 fragments 路径（零回归）；跨文件同名 section 报 warning 并保留第一个（与 commands 一致）；同一文件内重复注册为替换。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 def test_add_system_prompt_section_replaces_in_place():
@@ -93,10 +93,10 @@ def test_compose_system_renders_one_block_per_section():
 def test_unchanged_inputs_render_byte_identical():
 ```
 
-- [ ] **Step 2: 跑测试确认失败**：`uv run pytest tests/test_extensions.py -q` → FAIL
-- [ ] **Step 3: 实现**（按 Interfaces 签名；compose_system 中 sections 渲染排在 fragments block 之后、mode block 之前）
-- [ ] **Step 4: 跑测试通过 + prompt parity/golden 测试不回归**：`uv run pytest tests/ -q -k "prompt or golden"`
-- [ ] **Step 5: Commit** `feat(extensions): named prompt sections with stable ordering (pi learnings ⑤)`
+- [x] **Step 2: 跑测试确认失败**：`uv run pytest tests/test_extensions.py -q` → FAIL
+- [x] **Step 3: 实现**（按 Interfaces 签名；compose_system 中 sections 渲染排在 fragments block 之后、mode block 之前）
+- [x] **Step 4: 跑测试通过 + prompt parity/golden 测试不回归**：`uv run pytest tests/ -q -k "prompt or golden"`
+- [x] **Step 5: Commit** `feat(extensions): named prompt sections with stable ordering (pi learnings ⑤)`
 
 ### Task 4: compaction 切点纪律 + 多级摘要合并（pi ③）
 
@@ -113,7 +113,7 @@ def test_unchanged_inputs_render_byte_identical():
 - 落盘顺序：compaction record（含 kept）→ summary 消息 → tail 消息逐条 `session.append`；`agent.replace_messages([summary, *tail])`。replay（boundary 后）= summary + tail。
 - 多级合并：live 视图首条消息是 `compact_result(...)` 产物时，改用 `compose_compact(transcript_of_rest, previous_summary=旧摘要)` 的 update 模板，摘要调用 usage 不变。
 
-- [ ] **Step 1: 写失败测试**（`tests/test_compact.py` 追加）
+- [x] **Step 1: 写失败测试**（`tests/test_compact.py` 追加）
 
 ```python
 def test_choose_cut_never_orphans_tool_result():
@@ -122,10 +122,10 @@ async def test_compact_full_when_budget_huge(...):       # cut==0 旧行为
 async def test_compact_updates_previous_summary(...):    # 第二次 compact 走 update 模板
 ```
 
-- [ ] **Step 2: 跑测试确认失败**：`uv run pytest tests/test_compact.py -q` → FAIL
-- [ ] **Step 3: 实现**（_choose_cut 纯函数先行；compose_compact 加参；compact 主体改三段式落盘）
-- [ ] **Step 4: 跑测试通过 + 既有 compact 测试全绿**：`uv run pytest tests/test_compact.py tests/ -q -k compact`
-- [ ] **Step 5: Commit** `feat(compact): keep-recent tail with safe cut points and summary merge (pi learnings ③)`
+- [x] **Step 2: 跑测试确认失败**：`uv run pytest tests/test_compact.py -q` → FAIL
+- [x] **Step 3: 实现**（_choose_cut 纯函数先行；compose_compact 加参；compact 主体改三段式落盘）
+- [x] **Step 4: 跑测试通过 + 既有 compact 测试全绿**：`uv run pytest tests/test_compact.py tests/ -q -k compact`
+- [x] **Step 5: Commit** `feat(compact): keep-recent tail with safe cut points and summary merge (pi learnings ③)`
 
 ### Task 5: session 分支持久化——rewind 落盘可回（pi ①）
 
@@ -143,7 +143,7 @@ async def test_compact_updates_previous_summary(...):    # 第二次 compact 走
 - Runtime 写盘点：在 `_transform_context` 内、`rewind.transform` 判定 armed 之后写盘一次；写盘失败（OSError）由 `append_meta` 吞掉，不影响本次请求。
 - 交互矩阵：branch 之后又 compaction → replay 取最后 boundary 段（branch 只影响其所在段）；compaction 之后 rewind → window 作用于当前段缓冲。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 def test_branch_window_projection_and_validation():
@@ -153,16 +153,16 @@ def test_branch_records_dropped_on_rewrite():            # keep_for_rewrite
 async def test_rewind_projection_matches_resume_view(...):  # Review Focus #1
 ```
 
-- [ ] **Step 2: 跑测试确认失败**：`uv run pytest tests/test_app_records.py -q -k branch` → FAIL
-- [ ] **Step 3: 实现**（顺序：records builder/window → session.window → rewind.report_message/recorded → runtime 写盘 → open_session 接线）
-- [ ] **Step 4: 跑测试通过 + rewind/records/session 相关全绿**：`uv run pytest tests/ -q -k "rewind or records or session"`
-- [ ] **Step 5: Commit** `feat(session): durable rewind branches via window records (pi learnings ①)`
+- [x] **Step 2: 跑测试确认失败**：`uv run pytest tests/test_app_records.py -q -k branch` → FAIL
+- [x] **Step 3: 实现**（顺序：records builder/window → session.window → rewind.report_message/recorded → runtime 写盘 → open_session 接线）
+- [x] **Step 4: 跑测试通过 + rewind/records/session 相关全绿**：`uv run pytest tests/ -q -k "rewind or records or session"`
+- [x] **Step 5: Commit** `feat(session): durable rewind branches via window records (pi learnings ①)`
 
 ### Task 6: 全门禁收尾
 
-- [ ] **Step 1:** `bash scripts/check.sh`（ruff + mypy + architecture budget + pytest 全量）
-- [ ] **Step 2:** 若架构预算报新文件/新行数问题，按其输出修正或登记
-- [ ] **Step 3:** `git log --oneline main..` 核对 6 个 commit；报告留档
+- [x] **Step 1:** `bash scripts/check.sh`（ruff + mypy + architecture budget + pytest 全量）
+- [x] **Step 2:** 若架构预算报新文件/新行数问题，按其输出修正或登记
+- [x] **Step 3:** `git log --oneline main..` 核对 6 个 commit；报告留档
 
 ## Self-Review
 
@@ -170,3 +170,71 @@ async def test_rewind_projection_matches_resume_view(...):  # Review Focus #1
 - 类型一致：`branch_window`/`window` 签名、`extension_sections` 元组形状、`compose_compact` 新参均已锁定。
 - Review Focus 五条各有钉测（Task 5/4/1/2/全任务）。
 - 比例：无算法正文，只有签名 + 断言 + 命令。
+
+---
+
+## 复核后的修正（2026-11-16）
+
+上述计划执行完后做了端到端复核，五条里有三条需要修正；计划里的假设（尤其
+Task 5 的落盘时序）有一处是错的，记录在此以免下次再踩。
+
+### Task 5：branch record 的坐标空间
+
+原计划假设「写 record 时文件已经包含本次 run 的消息」。**不成立**：persist
+订阅器在 `agent_end` 才写本次 run 的 message（`bootstrap.py` 的 `persist`），
+而 rewind 发生在 run 中途。于是 `cut/skip` 指向的缓冲文件里还不存在，
+`branch_window` 的越界校验会把 record 静默丢弃——resume 既不裁剪、report 还
+落在 run 消息之前；同时 live 投影会丢掉 checkpoint 的工具结果，留下无结果的
+tool_call。
+
+修正（见 `_persist_rewind_branch` / `RewindState.head_end`）：
+
+1. **先 flush 再写 record**：run 的 message 由 `message_end` 订阅器跟踪
+   （`Runtime._record_unpersisted`），rewind 落盘前把它们写进文件，`agent_end`
+   只写剩下的部分——顺序与 `new_messages` 解耦，record 的位置才成立。
+2. **投影在 transcript 空间做**：`transform_context` 收到的是
+   `[system, *state.messages]`，rewind 下标是 transcript 下标；投影前剥掉
+   system 前缀，算完再装回去（否则每个边界都偏移一条）。
+3. **head 吃掉 checkpoint 那一轮的工具结果**：`head_end()` 越过尾随的
+   `ToolResultMessage`，head 不会以没有结果的 tool call 结尾；rewind 下标仍是
+   硬上限。
+4. **一个 report 对象**：`transform(report=...)` 让请求投影和落盘共用同一个
+   `UserMessage`，不再各造一份内容相同、时间戳可能不同的消息。
+5. **通用孤儿规则**：`records.drop_orphan_tool_results` 同时用于
+   `branch_window` 与 rewind 投影，盖住「rewind 与兄弟工具同批调用」的情况。
+
+`tests/test_app_runtime.py` 现在有一条走真实 loop + 真实 persist 订阅器的端到端
+测试（checkpoint → rewind → 文本），断言 `open_session().load()` 与
+`agent.messages` 逐条相等且没有任何不成对的 tool call/result。
+
+### Task 4：手动 /compact 的预算
+
+`KEEP_RECENT_TOKENS = 20_000` 是给自动压缩（接近上下文上限才触发）调的；
+手动 `/compact` 套同一个预算时，20k 以内的会话会被整段保留，只总结第一条
+消息——等于没压。现在 `ChatController.compact_now(force=False)` 使用
+`manual_keep_recent()`（会话的四分之一，仍以 20k 封顶），自动路径保持 20k。
+
+### Task 1：follow-up 要有消费方
+
+内核队列原本没有任何调用方。现在三通道语义固定下来：
+
+| 通道 | 触发 | 语义 |
+| --- | --- | --- |
+| `queue` | 运行中 Enter | 排到下一次 run |
+| `steer` | `ctrl+s` / GUI Enter | 当前工具轮之后插话 |
+| `follow_up` | TUI `ctrl+q` / GUI `Ctrl+Enter` | 当前 run 该停时继续，作为普通 user 回合 |
+
+`ChatController.follow_up()` 是两端共用的入口（空闲时退化为下一次 run 的
+queue）；状态栏与 GUI dock 都显示接续条数（`RunStatus.continuing`）。GUI 走
+`follow_up` 帧，桌面侧 `Cmd/Ctrl+Enter` 发送。
+
+### Review Focus 复核
+
+1. rewind 投影 == resume 视图：**已由真实 loop 的端到端测试钉住**（原先的单测
+   把同一个 list 同时当 agent.messages 和请求，绕开了生产形状，因此是恒真的）。
+2. compaction 不孤立 toolResult：成立，`_choose_cut` 的回退与缩尾都有钉测。
+3. followUp 不在异常终止点生效：成立；补记一个已知语义——followUp 在 plain
+   stop 被消费后若紧接着撞上 `max_turns`，文本会进入 transcript 但得不到回复
+   （`test_follow_up_drained_before_a_max_turns_stop` 钉住了它）。
+5. 旧文件零回归：门禁全绿；`compaction` record 新增的 `kept` 字段对旧读取方是
+   附加信息。

@@ -79,11 +79,11 @@ notes say "no update signature" must be downloaded manually.
 | keyed node stores + selector subscriptions | zustand chat store mirroring `TranscriptBuilder` |
 | `body[data-ds-dark-theme]` tokens | same attribute + same token names in `tokens.css` |
 | ApprovalPanel composer takeover | same pattern, decision = `allow`/`always`/`deny` |
-| Composer input machine (steer/queue) | Enter steers while running, Esc interrupts |
+| Composer input machine (steer/follow-up/queue) | Enter steers while running, Ctrl/Cmd+Enter continues the same turn, Esc interrupts |
 
 ## RPC surface used
 
-Requests: `prompt`, `cancel`, `steer`, `status`, `transcript`, `models`,
+Requests: `prompt`, `cancel`, `steer`, `follow_up`, `status`, `transcript`, `models`,
 `commands`, `model`, `mode`, `approval`, `session` (op: `list`/`new`/`fork`/
 `resume`/`delete`/`compact`/`undo`), `command` (48 built-ins), `shutdown`.
 

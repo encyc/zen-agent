@@ -1,28 +1,28 @@
 {
- "python": {
-  "zenagent/app/commands.py": 875,
-  "zenagent/app/swarm/manager.py": 896,
-  "zenagent/agent/session.py": 807
- },
- "ts": {
-  "desktop/src/state/appStore.ts": 1176,
-  "desktop/src/dev/bridge.ts": 954,
-  "desktop/e2e/app.spec.ts": 2750
- },
- "zenagent/app/swarm/manager.py": 886,
- "zenagent/cli/rpc/server.py": 718,
- "zenagent/app/runtime.py": 1089,
- "_notes": {
-  "_readme": "Entries beyond the 800-line default cap. The +10 headroom entries must be paid back by 2026-12-31 (audit §6.4 follow-up plan: runtime assembly slice, swarm manager split, commands split, desktop store/spec splits).",
   "python": {
-   "zenagent/app/commands.py": "payback 2026-12-31",
-   "zenagent/app/swarm/manager.py": "payback 2026-12-31 (§6.4: room/manager split)",
-   "zenagent/agent/session.py": "payback 2026-12-31 (title/pin sidecar split)"
+    "zenagent/app/commands.py": 875,
+    "zenagent/app/swarm/manager.py": 896,
+    "zenagent/agent/session.py": 807
   },
   "ts": {
-   "desktop/e2e/app.spec.ts": "payback 2026-12-31 (split by flow)",
-   "desktop/src/dev/bridge.ts": "payback 2026-12-31",
-   "desktop/src/state/appStore.ts": "payback 2026-12-31 (slice stores)"
+    "desktop/src/state/appStore.ts": 1180,
+    "desktop/src/dev/bridge.ts": 954,
+    "desktop/e2e/app.spec.ts": 2750
+  },
+  "zenagent/app/swarm/manager.py": 886,
+  "zenagent/cli/rpc/server.py": 718,
+  "zenagent/app/runtime.py": 1089,
+  "_notes": {
+    "_readme": "Entries beyond the 800-line default cap. The +10 headroom entries must be paid back by 2026-12-31 (audit §6.4 follow-up plan: runtime assembly slice, swarm manager split, commands split, desktop store/spec splits).",
+    "python": {
+      "zenagent/app/commands.py": "payback 2026-12-31",
+      "zenagent/app/swarm/manager.py": "payback 2026-12-31 (§6.4: room/manager split)",
+      "zenagent/agent/session.py": "payback 2026-12-31 (title/pin sidecar split)"
+    },
+    "ts": {
+      "desktop/e2e/app.spec.ts": "payback 2026-12-31 (split by flow)",
+      "desktop/src/dev/bridge.ts": "payback 2026-12-31",
+      "desktop/src/state/appStore.ts": "payback 2026-12-31 (slice stores; +4 for the follow-up lane)"
+    }
   }
- }
 }

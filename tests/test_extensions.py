@@ -222,3 +222,23 @@ def test_cross_file_section_conflict_keeps_the_first_with_warning(tmp_path):
 
     assert loaded.sections == {"style": "one"}
     assert loaded.warnings and "style" in loaded.warnings[0]
+
+
+async def test_named_section_reaches_the_assembled_prompt(tmp_path, runtime_factory):
+    """bootstrap -> Runtime._extension_sections -> compose_system, end to end."""
+    extension = write(
+        tmp_path,
+        "section.py",
+        "def register(api):\n"
+        "    api.add_system_prompt('LEGACY FRAGMENT')\n"
+        "    api.add_system_prompt('SECTION BODY', section='style')\n",
+    )
+
+    runtime = await runtime_factory(extension_paths=[str(extension)])
+
+    prompt = runtime.agent.system_prompt
+    assert "LEGACY FRAGMENT" in prompt
+    assert prompt.count("SECTION BODY") == 1, "one block, never joined twice"
+    block_ids = [block.id for block in runtime.prompt_report.blocks]
+    assert "extensions" in block_ids
+    assert "extension.style" in block_ids

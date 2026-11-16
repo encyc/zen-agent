@@ -32,6 +32,7 @@ def test_compaction_shape():
         "kept": 0,
     }
 
+
 def test_run_boundary_shapes():
     assert records.run_start() == {"type": "run_start"}
     assert records.run_end(termination="stop", turns=2) == {
