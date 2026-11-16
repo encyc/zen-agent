@@ -59,16 +59,30 @@ class QueueActionsMixin:
         prompt.focus()
 
     def action_follow_up(self) -> None:
-        """ctrl+q: queue while running, otherwise submit normally."""
+        """ctrl+q: extend the running turn, otherwise submit normally.
+
+        The three lanes have three intents: Enter while running parks the text
+        for the *next* run, ctrl+s steers (interrupts after the tool round),
+        and ctrl+q rides the kernel follow-up channel — the run keeps going
+        with this text as its next user turn. Images cannot ride that channel,
+        so an attachment falls back to the queue lane.
+        """
         prompt = self.query_one(PromptInput)
         text = prompt.text.strip()
         if not text:
             return
         prompt.clear()
-        if self.chat.status.running:
-            self.chat.queue_follow_up(text)
-        else:
+        if not self.chat.status.running:
             self.run_worker(self.chat.submit(text))
+            return
+        if self.chat.attachments:
+            self.chat.queue_follow_up(text)
+            return
+        self.chat.follow_up(text)
+        if self.chat.status.continuing:
+            # The controller falls back to the queue lane when no run is
+            # streaming (compaction); the pending band already shows that one.
+            self.notify(t("tui.queue.continuing"), timeout=2)
 
     def _promote_pending(self, pending_id: int) -> None:
         """Click / Ctrl+S on a queued message: move it to the steering lane."""

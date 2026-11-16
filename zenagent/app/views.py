@@ -166,6 +166,10 @@ class RunStatus:
     context_window: int = 0
     follow_ups: int = 0
     steering: int = 0
+    #: Follow-ups the kernel will inject when the running turn stops — they
+    #: extend the same run instead of starting a new one (``follow_ups`` is the
+    #: next-run queue, ``steering`` interrupts after the tool round).
+    continuing: int = 0
     #: Wall-clock time of the most recent turn and the output tokens it produced;
     #: both 0 before the first finished turn (the segments hide themselves).
     turn_ms: int = 0

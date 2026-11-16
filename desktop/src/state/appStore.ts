@@ -131,6 +131,8 @@ interface AppState {
   loadOlderTranscript(): Promise<boolean>
   submit(): Promise<void>
   steer(text: string): Promise<void>
+  /** Extend the running turn: the kernel answers this when it would stop. */
+  followUp(text: string): Promise<void>
   cancel(): Promise<void>
   approve(requestId: string, decision: 'allow' | 'always' | 'deny'): Promise<void>
   resolveAsk(requestId: string, answers: (string[] | null)[]): Promise<void>
@@ -704,6 +706,18 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch {
       // transport-level failure: the exit listener already flagged it
     }
+  },
+
+  async followUp(text) {
+    const trimmed = text.trim()
+    if (!trimmed) return
+    useComposerStore.getState().setDraft('')
+    try {
+      await get().client().send({ type: 'follow_up', text: trimmed })
+    } catch {
+      // ignore
+    }
+    void get().refreshStatus()
   },
 
   async steer(text) {

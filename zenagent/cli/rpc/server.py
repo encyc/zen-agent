@@ -446,6 +446,8 @@ class RpcServer(FilesOps, SessionOps, PluginsOps, ConfigOps, SecretsOps, SkillsO
             return False
         if kind == "steer":
             return self._steer(request, request_id)
+        if kind == "follow_up":
+            return self._follow_up(request, request_id)
         if kind == "tools":
             self._send(
                 {
@@ -608,6 +610,21 @@ class RpcServer(FilesOps, SessionOps, PluginsOps, ConfigOps, SecretsOps, SkillsO
             # remembered. The flat keys above stay for older clients.
             payload["status"] = status.to_wire()
         return payload
+
+    def _follow_up(self, request: dict, request_id) -> bool:
+        """Queue text that extends the live run when it would otherwise stop."""
+        text = request.get("text")
+        if not isinstance(text, str) or not text.strip():
+            self._send(
+                {"type": "error", "id": request_id, "message": "follow_up needs text"}
+            )
+            return True
+        if self.chat is not None:
+            self.chat.follow_up(text)
+        else:
+            self.agent.follow_up(text)
+        self._send({"type": "result", "id": request_id, "ok": True})
+        return True
 
     def _steer(self, request: dict, request_id) -> bool:
         text = request.get("text")

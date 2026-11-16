@@ -161,6 +161,7 @@ class ChatController:
             context_window=agent.model.context_window,
             follow_ups=self._pending_queue.count("queue"),
             steering=agent.pending_steering,
+            continuing=agent.pending_follow_up,
             pending=self._pending_queue.items,
             session_name=Path(self.runtime.session.path).stem,
             cwd=str(self.runtime.cwd),
@@ -282,14 +283,39 @@ class ChatController:
         self._pending_queue.queue(text, blocks)
         self._notify()
 
+    def follow_up(self, text: str) -> bool:
+        """Queue text that extends the live run when it would otherwise stop.
+
+        Three lanes, three intents: :meth:`queue_follow_up` saves the message
+        for the *next* run, :meth:`steer` interrupts the current one after its
+        tool round, and a follow-up rides the kernel channel — the run keeps
+        going with the text as a normal user turn. Text-only: attachments need
+        the queue lane.
+        """
+        cleaned = text.strip()
+        if not cleaned:
+            return False
+        if not self.runtime.agent.is_streaming:
+            # Nothing to extend: park it for the next run rather than leave it
+            # on the agent until some later turn happens to stop.
+            self.queue_follow_up(cleaned)
+            return True
+        self.runtime.agent.follow_up(cleaned)
+        self._notify()
+        return True
+
     def clear_pending(self) -> int:
-        """Drop every pending message (both lanes); returns how many went."""
+        """Drop every pending message (queue, steering and follow-ups).
+
+        Undelivered steering and follow-ups also live on the agent; reclaim
+        them too, or they would be injected into the next request after the
+        user cleared.
+        """
         cleared = self._pending_queue.clear()
+        cleared += len(self.runtime.agent.take_steering())
+        cleared += len(self.runtime.agent.take_follow_up())
         if not cleared:
             return 0
-        # Undelivered steering also lives on the agent; reclaim it or it would
-        # be injected into the next run's first request after the user cleared.
-        self.runtime.agent.take_steering()
         self._notify()
         return cleared
 

@@ -82,6 +82,7 @@ export const REQUEST_KINDS = [
   'cancel',
   'command',
   'commands',
+  'follow_up',
   'fs_index',
   'fs_list',
   'fs_read',
@@ -204,6 +205,8 @@ export interface StatusResult {
   busy?: boolean
   follow_ups?: number
   steering?: number
+  /** Follow-ups the kernel will inject when the running turn stops. */
+  continuing?: number
   cost?: number
   thinking?: string | null
   context_used?: number | null

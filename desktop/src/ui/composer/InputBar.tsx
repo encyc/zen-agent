@@ -18,7 +18,7 @@ import { ApprovalPanel } from '../approval/ApprovalPanel'
 import { AskCard } from '../ask/AskCard'
 import { pickImagePaths } from './pickImages'
 import { useImageDrop } from './useImageDrop'
-import { TodoDock, PendingDock, ContextMeter } from './Docks'
+import { TodoDock, PendingDock, ContinuingDock, ContextMeter } from './Docks'
 import { ModelMenu, ModeMenu } from './Menus'
 import {
   ComposerAttachments,
@@ -45,6 +45,7 @@ export function InputBar() {
   const submit = useAppStore((state) => state.submit)
   const cancel = useAppStore((state) => state.cancel)
   const steer = useAppStore((state) => state.steer)
+  const followUp = useAppStore((state) => state.followUp)
   const setMode = useAppStore((state) => state.setMode)
   const status = useStatusStore((state) => state.status)
   const mode = status?.mode ?? 'auto'
@@ -152,6 +153,16 @@ export function InputBar() {
     requestAnimationFrame(() => textRef.current?.focus())
   }
 
+  // While a turn runs, ⌘/Ctrl+Enter extends it instead of steering it: the
+  // agent answers the text when it would otherwise stop (same run, no notice).
+  const doFollowUp = () => {
+    setMenu({ kind: null })
+    const text = draft.trim()
+    if (text === '') return
+    void followUp(text)
+    requestAnimationFrame(() => textRef.current?.focus())
+  }
+
   const acceptMention = (index: number) => {
     const row = mentionRows[index]
     if (row === undefined || mention === null) return
@@ -204,6 +215,11 @@ export function InputBar() {
         return
       }
     }
+    if (busy && event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault()
+      doFollowUp()
+      return
+    }
     if (isSubmitKey(event, enterToSend)) {
       event.preventDefault()
       doSubmit()
@@ -249,6 +265,7 @@ export function InputBar() {
       {approvalCount > 0 && <ApprovalPanel />}
       {askCount > 0 && <AskCard />}
       <PendingDock />
+      <ContinuingDock />
       <TodoDock />
       <ComposerPlate
         value={draft}

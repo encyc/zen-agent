@@ -120,7 +120,7 @@ async def test_escape_keeps_the_draft_and_ctrl_c_clears_it(fake_runtime):
         assert app.is_running, "ctrl+c is not exit"
 
 
-async def test_ctrl_q_queues_while_running(gated_app):
+async def test_ctrl_q_queues_a_follow_up_while_running(gated_app):
     app, gate = gated_app
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
@@ -132,7 +132,9 @@ async def test_ctrl_q_queues_while_running(gated_app):
             await pilot.press(char)
         await pilot.press("ctrl+q")
         await pilot.pause()
-        assert app.chat.status.follow_ups == 1
+        # ctrl+q rides the kernel follow-up lane, not the next-run queue
+        assert app.chat.status.continuing == 1
+        assert app.chat.status.follow_ups == 0
         assert prompt.text == ""
 
         gate.set()

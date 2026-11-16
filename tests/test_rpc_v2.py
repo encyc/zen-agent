@@ -2223,3 +2223,24 @@ async def test_oversized_approval_args_are_marked_truncated(runtime_factory):
     assert "argsTruncated" not in event
     server._approvals[event["request_id"]].set_result("deny")
     assert await task == "deny"
+
+
+async def test_follow_up_while_idle_parks_for_the_next_run(runtime_factory):
+    _runtime, server, writes, queue = await build(runtime_factory)
+    await run_lines(
+        server,
+        queue,
+        [
+            {"type": "follow_up", "id": "f1", "text": "then check the tests"},
+            {"type": "status", "id": "f2"},
+        ],
+    )
+    messages = decode(writes)
+    assert messages[0]["ok"] is True
+    assert messages[1]["follow_ups"] == 1
+
+
+async def test_follow_up_needs_text(runtime_factory):
+    _runtime, server, writes, queue = await build(runtime_factory)
+    await run_lines(server, queue, [{"type": "follow_up", "id": "f1", "text": "  "}])
+    assert decode(writes)[0]["type"] == "error"

@@ -179,6 +179,25 @@ export function PendingDock() {
   )
 }
 
+/** Kernel follow-ups: the running turn answers them when it would stop.
+ * They are not pending rows — the agent drains them mid-run and the message
+ * lands in the transcript when delivered — so the dock only reports the count. */
+export function ContinuingDock() {
+  const t = useT()
+  const continuing = useStatusStore((state) => state.status?.continuing ?? 0)
+  if (continuing <= 0) return null
+  return (
+    <div className={css.pendingDock} data-continuing-dock>
+      <div className={css.pendingGroup} data-lane="continue">
+        <span className={css.pendingLabel}>
+          {t('composer.continuing')} · {continuing}
+        </span>
+        <span className={css.pendingText}>{t('composer.continuingHint')}</span>
+      </div>
+    </div>
+  )
+}
+
 function PendingGroup({
   lane,
   label,
