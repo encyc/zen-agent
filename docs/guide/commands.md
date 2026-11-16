@@ -95,9 +95,17 @@ agent 正在跑的时候，输入框里的内容**不是**新的一轮：它作�
 并发跑两个 run。Ctrl+C 才是协作式中止。若一轮因为 `max_turns`/`max_cost` 结束，没送达的插话降级为下一条
 排队输入，不自动重试。
 
+斜杠命令是个例外，但它们**分两类**：改写转录、会话文件或工具集的命令（`/compact`、`/reload`、`/retry`、
+`/undo`、`/clear`、`/export`、`/fork`、`/restore`、`/new`、`/fresh`、`/handoff`、`/import`、
+`/model`、`/plan-review`）在执行中被输入时，REPL 会**等这一轮结束再执行**，不会当场拒绝
+（"cannot reload while the agent is working" / "nothing to compact"）而把你输入的那行丢掉。其余命令
+（`/help`、`/mode`、`/theme`、`/quit` ……）仍然立即生效。清单见
+`zenagent/app/command_policy.py::DEFERRED_COMMANDS`。
+
 ## 源码对照
 
 - 注册与派发：`zenagent/app/commands.py::CommandRegistry`、`Command`、`_command`、`dispatch`
+- 执行中延后执行的命令清单：`zenagent/app/command_policy.py::DEFERRED_COMMANDS`
 - 链接抽取（`/urls`、`/copy <n>`、`/open <n>`）：`zenagent/app/links.py::extract_links`、`parse_index`
 - 命令文案（中英）：`zenagent/i18n/{en,zh}.py` 的 `cmd.<name>.description`
 - 前端渲染差异：`zenagent/cli/repl.py`（文本）与 `zenagent/cli/tui/app.py`（选择器/浮层）

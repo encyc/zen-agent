@@ -9,7 +9,6 @@ import asyncio
 import time
 
 import pytest
-from conftest import settled
 
 import zenagent.agent.session as session_module
 import zenagent.cli.render as render_module
@@ -287,35 +286,11 @@ async def test_repl_compact_continues_in_the_same_session(isolated_sessions):
     from zenagent.app import records
 
     lines: list[str] = []
-    sent: list[str] = []
-    deadline = time.monotonic() + 10.0
-
-    async def input_fn() -> str:
-        if not sent:
-            sent.append("hi")
-            return "hi"
-        if "compact" not in sent:
-            # /compact refuses mid-run and this line is read while the turn is
-            # still streaming. A blank line is the REPL's no-op: the loop reaps,
-            # and the status line proves the run -- including its disk write --
-            # finished. Sleep in real time: a bare yield burns the budget while
-            # the run waits on I/O.
-            if not settled(lines):
-                assert time.monotonic() < deadline, f"run never settled: {lines!r}"
-                await asyncio.sleep(0.01)
-                return ""
-            sent.append("compact")
-            return "/compact"
-        if "next" not in sent:
-            sent.append("next")
-            return "next"
-        return "/exit"
-
     code = await repl(
         "glm-5.3",
         stream_fn=scripted_stream("first", "summary", "after"),
         api_key="k",
-        input_fn=input_fn,
+        input_fn=scripted_input("hi", "/compact", "next", "/exit"),
         print_fn=lines.append,
         mcp=False,
     )

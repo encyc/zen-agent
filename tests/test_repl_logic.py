@@ -302,27 +302,19 @@ async def test_reload_discovers_skills_added_mid_session(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
     lines: list[str] = []
-    sent: list[str] = []
-    deadline = time.monotonic() + 10.0
+    calls = {"n": 0}
 
     async def input_fn() -> str:
-        if not sent:
-            sent.append("hi")
+        await asyncio.sleep(0.02)
+        calls["n"] += 1
+        if calls["n"] == 1:
             return "hi"
-        if "reload" not in sent:
-            # /reload refuses mid-run and this line is read while the turn is
-            # still streaming. A blank line is the REPL's no-op: the loop reaps,
-            # and the status line proves the run finished.
-            if not settled(lines):
-                assert time.monotonic() < deadline, f"run never settled: {lines!r}"
-                await asyncio.sleep(0.01)
-                return ""
+        if calls["n"] == 2:
             skill_dir = tmp_path / ".zenagent" / "skills" / "late"
             skill_dir.mkdir(parents=True)
             (skill_dir / "SKILL.md").write_text(
                 "---\nname: late\ndescription: added mid-session\n---\nbody\n"
             )
-            sent.append("reload")
             return "/reload"
         return "/exit"
 
@@ -338,6 +330,22 @@ async def test_reload_discovers_skills_added_mid_session(tmp_path, monkeypatch):
     joined = "\n".join(lines)
     assert "reloaded:" in joined
     assert "1 skills" in joined
+
+
+async def test_a_command_typed_mid_run_acts_on_the_finished_turn(isolated_sessions):
+    """/compact typed while the model streams waits, then compacts for real."""
+    lines: list[str] = []
+    code = await repl(
+        "glm-5.3",
+        stream_fn=scripted_stream(0.4, "slow answer", "summary of it"),
+        input_fn=scripted_input("hello", "/compact", "/exit", settle=0.02),
+        print_fn=lambda *a, **k: lines.append("".join(str(x) for x in a)),
+        api_key="k",
+        mcp=False,
+    )
+    assert code == 0
+    # Refusing mid-run would have said "nothing to compact" and dropped it.
+    assert any("compacted" in line for line in lines), lines
 
 
 # ---------------------------------------------------------------------------
