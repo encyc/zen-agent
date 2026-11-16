@@ -2244,3 +2244,22 @@ async def test_follow_up_needs_text(runtime_factory):
     _runtime, server, writes, queue = await build(runtime_factory)
     await run_lines(server, queue, [{"type": "follow_up", "id": "f1", "text": "  "}])
     assert decode(writes)[0]["type"] == "error"
+
+
+async def test_status_surfaces_the_continuation_count(runtime_factory, monkeypatch):
+    """`continuing` is a flat status key: the desktop dock reads it there."""
+    from dataclasses import replace
+
+    _runtime, server, writes, queue = await build(runtime_factory)
+    base = server.chat.status
+    monkeypatch.setattr(
+        type(server.chat),
+        "status",
+        property(lambda _self: replace(base, continuing=2)),
+    )
+
+    await run_lines(server, queue, [{"type": "status", "id": "s1"}])
+
+    payload = decode(writes)[0]
+    assert payload["continuing"] == 2
+    assert payload["status"]["continuing"] == 2

@@ -587,6 +587,9 @@ class RpcServer(FilesOps, SessionOps, PluginsOps, ConfigOps, SecretsOps, SkillsO
             payload["busy"] = self.chat.busy
             payload["follow_ups"] = status.follow_ups
             payload["steering"] = status.steering
+            # Kernel follow-ups (the same run continues at its stop); the
+            # desktop dock reads this flat key, not the nested snapshot.
+            payload["continuing"] = status.continuing
             payload["cost"] = status.cost
             # The reducer the TUI renders: context composition, thinking,
             # todos, live jobs/subagents and the pending lanes. A client that
