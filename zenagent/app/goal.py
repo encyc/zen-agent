@@ -11,9 +11,12 @@ from __future__ import annotations
 import time
 import uuid
 from dataclasses import asdict, dataclass
-from typing import Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 from zenagent.types import Usage
+
+if TYPE_CHECKING:
+    from zenagent.limits import Limits
 
 __all__ = [
     "GOAL_STATUSES",
@@ -53,6 +56,16 @@ class GoalLimits:
     max_wall_seconds: int = 14_400
     check_timeout_s: int = 300
     verifier_max_tokens: int = 512
+
+    @classmethod
+    def from_limits(cls, limits: Limits) -> GoalLimits:
+        return cls(
+            max_turns=limits.goal_max_turns,
+            max_tokens=limits.goal_max_tokens,
+            max_wall_seconds=limits.goal_max_wall_minutes * 60,
+            check_timeout_s=limits.goal_check_timeout_s,
+            verifier_max_tokens=limits.goal_verifier_max_tokens,
+        )
 
 
 @dataclass

@@ -205,6 +205,66 @@ LIMITS: tuple[Limit, ...] = (
         apply="immediate",
         unit="bytes of bash output",
     ),
+    Limit(
+        table="limits.goal",
+        name="max_turns",
+        section="goal",
+        attr="goal_max_turns",
+        default=40,
+        kind="int",
+        minimum=1,
+        maximum=10000,
+        apply="session",
+        unit="turns per goal",
+    ),
+    Limit(
+        table="limits.goal",
+        name="max_wall_minutes",
+        section="goal",
+        attr="goal_max_wall_minutes",
+        default=240,
+        kind="int",
+        minimum=1,
+        maximum=10080,
+        apply="session",
+        unit="minutes of active goal work",
+    ),
+    Limit(
+        table="limits.goal",
+        name="max_tokens",
+        section="goal",
+        attr="goal_max_tokens",
+        default=2_000_000,
+        kind="int",
+        minimum=1000,
+        maximum=100000000,
+        apply="session",
+        unit="provider tokens per goal",
+    ),
+    Limit(
+        table="limits.goal",
+        name="check_timeout_s",
+        section="goal",
+        attr="goal_check_timeout_s",
+        default=300,
+        kind="int",
+        minimum=10,
+        maximum=3600,
+        apply="session",
+        unit="seconds per check command",
+    ),
+    Limit(
+        table="limits.goal",
+        name="verifier_max_tokens",
+        section="goal",
+        attr="goal_verifier_max_tokens",
+        default=512,
+        kind="int",
+        minimum=128,
+        maximum=4096,
+        apply="session",
+        unit="tokens per model verification",
+    ),
 )
 
 #: The ``[task]`` registry: subagent budgets that already shipped as config.
@@ -403,13 +463,21 @@ MANAGED_TABLES: tuple[str, ...] = (
     "limits.context",
     "limits.agent",
     "limits.tools",
+    "limits.goal",
     "task",
     "zen",
     "swarm",
 )
 
 #: Presentation order of the groups, shared by the page and the docs.
-GROUP_ORDER: tuple[str, ...] = ("skills", "context", "agent", "subagents", "tools")
+GROUP_ORDER: tuple[str, ...] = (
+    "skills",
+    "context",
+    "agent",
+    "subagents",
+    "tools",
+    "goal",
+)
 
 
 @dataclass(frozen=True)
@@ -429,6 +497,11 @@ class Limits:
     loop_guard_threshold: int = 5
     max_result_bytes: int = 40000
     shell_max_output_bytes: int = 30000
+    goal_max_turns: int = 40
+    goal_max_wall_minutes: int = 240
+    goal_max_tokens: int = 2_000_000
+    goal_check_timeout_s: int = 300
+    goal_verifier_max_tokens: int = 512
     explicit: frozenset[str] = frozenset()
 
     def value(self, attr: str) -> int | float:

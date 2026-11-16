@@ -54,9 +54,16 @@ async def test_get_lists_every_knob_with_defaults(runtime_factory, config_file):
 
     assert result["ok"] is True
     assert result["path"] == str(config_file)
-    assert result["groups"] == ["skills", "context", "agent", "subagents", "tools"]
+    assert result["groups"] == [
+        "skills",
+        "context",
+        "agent",
+        "subagents",
+        "tools",
+        "goal",
+    ]
     knobs = knobs_by_key(result)
-    assert len(knobs) == 22
+    assert len(knobs) == 27
     index = knobs["limits.skills.max_index_bytes"]
     assert index["value"] == 12288
     assert index["default"] == 12288
