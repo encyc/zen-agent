@@ -3,6 +3,33 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## v0.13.10 — 2026-11-16
+
+**The Windows desktop build compiles again, and CI now proves it.** 0.13.9 fixed
+the sidecar freeze, so both Windows legs got as far as the Rust build — and hit
+a second, older break: `open_external` (2026-11-14) called
+`Command::creation_flags` without importing Windows' `CommandExt`, and nothing
+in the pipeline compiled a `#[cfg(windows)]` block. The desktop release was the
+only Windows compiler, hours away from a developer's edit.
+
+### Fixed
+
+- **`open_external` imports `std::os::windows::process::CommandExt`.** Windows
+  bundles build again; macOS/Linux paths are untouched.
+- **A `desktop-rust-windows` CI job (windows-latest) compiles the crate** with
+  `cargo check --tests`, so platform-gated Rust cannot rot unseen between
+  releases. Cross-checking from macOS is not an option — `ring`'s C needs the
+  Windows SDK headers.
+- **`tests/test_platform_imports.py` fails on a module-level import of a
+  POSIX-only stdlib module** (`fcntl`, `termios`, `pwd`, `msvcrt`-only peers).
+  That is exactly the 0.13.8 sidecar crash; the guard reproduces it on the
+  pre-fix tree, so the next one fails locally instead of in a frozen build.
+- **Two REPL tests no longer race the end of a run.** `/compact` and `/reload`
+  refuse mid-run by design, and both tests typed them before the turn settled —
+  the failure mode `ci` hit on `main` (ubuntu/py3.14 and macos/py3.13). They now
+  hand the REPL a no-op line until the run's status line proves it is idle, and
+  the compact test stops reading the developer's MCP configuration (`mcp=False`).
+
 ## v0.13.9 — 2026-11-16
 
 **The Windows desktop build no longer dies on import.** 0.13.8's swarm room
