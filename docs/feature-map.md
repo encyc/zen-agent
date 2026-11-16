@@ -70,6 +70,7 @@
 | 待发区与插话：输入框上方排队/插话 band、点击/Ctrl+S 升格、滞留插话续跑、跨会话丢弃 | `app/{views,chat}.py`、`cli/tui/widgets/pending_band.py`、`cli/tui/app.py`、`agent/agent.py` | `test_app_pending.py`、`test_tui_pending_band.py`、`test_tui_controls.py` | [TUI](guide/tui.md) |
 | 模型/会话选择器、命令面板 | `screens/modals.py` | `test_tui_pickers.py` | 同上 |
 | 工作面板侧栏（Todo/Subagent/Jobs）+ 后台活提示条 | `widgets/{sidebar,work_strip}.py`、`app.py` | `test_tui_sidebar.py`、`test_tui_layout.py` | [TUI](guide/tui.md) |
+| 目标（goal）：`/goal`、自动续跑、check/model verifier、预算/阻塞、GoalHud/侧栏 | `app/{goal,goal_verifier,chat}.py`、`cli/tui/widgets/goal_hud.py` | `test_goal*.py`、`test_tui_goal.py` | [命令](guide/commands.md) · [TUI](guide/tui.md) |
 | todo 只读浮层（HUD/侧栏点击、命令面板入口） | `screens/todo_list.py`、`widgets/todo_hud.py` | `test_tui_todo.py` | 同上 |
 | 工作面板打磨：拖拽调宽、ctx 组成（条+浮层）、job 日志浮层、todo 全量内联、语义色板 | `widgets/{sidebar,sidebar_resize}.py`、`screens/{context_breakdown,job_log,todo_list}.py`、`palette.py`、`app/context.py` | `test_tui_{sidebar_resize,context,job_log,palette}.py`、`test_app_context.py` | [TUI](guide/tui.md) |
 | 外观与主题：dark/light/auto、统一色彩 token、TUI 双 Textual 主题 + REPL 派生、即时切换 | `app/appearance.py`、`cli/tui/app_theme.py`、`cli/tui/{palette.py,theme.tcss}`、`cli/theme.py` | `test_appearance.py`、`test_tui_{app_theme,theme_css,palette}.py`、`test_theme.py` | [TUI](guide/tui.md) |
@@ -93,7 +94,7 @@
 | 主题 / 键位 | `cli/theme.py`、`cli/keybindings.py` | `test_theme.py` | — |
 | 会话链接（`/urls`、`/copy <n>`、`/open <n>`） | `app/links.py`、`app/commands.py` | `test_app_links.py`、`test_app_commands.py`、`test_tui_links.py` | — |
 
-REPL/TUI 共用同一份命令表（`app/commands.py`，48 条），REPL 额外支持 legacy 主题名：
+REPL/TUI 共用同一份命令表（`app/commands.py`，49 条），REPL 额外支持 legacy 主题名：
 `/help /exit /quit /clear /model /thinking /mode /session /sessions /rename /fork /import /undo /restore /retry /tools /compact /image /images /skills /mcp /reload /theme /lang /hotkeys /pin /new /settings /search /doctor /jobs /copy /urls /open /btw /shake /handoff /add-dir /remove-dir /dirs /fresh /trace /export /usage /context /plan-review /todo /memory`。
 
 REPL 的 screen 类命令（picker/浮层）由 `render_command_result` 渲染成文本，不再静默无输出。
@@ -121,7 +122,7 @@ RPC 在前三者之上再共享 `ChatController`。
 | steering / 排队 | ✅ 双 lane | ✅ 插话 | ❌ | ✅ `steer` |
 | 异步子代理（`task` + `async` / `wait`） | ✅ 工具 + 侧栏实时状态 | ✅ 工具（文本） | ✅ 工具（无 UI） | ✅ 工具（事件 `details`） |
 | 用量 / context / trace / metrics | ✅ 面板 + flag | ✅ 文本 + flag | ✅ `--json` / flag | ✅ `usage` / flag |
-| 斜杠命令 | ✅ 48 | ✅ 48（文本降级） | ❌ | ✅ 48 内置（`command` 请求） |
+| 斜杠命令 | ✅ 49 | ✅ 49（文本降级） | ❌ | ✅ 49 内置（`command` 请求） |
 
 RPC 的事件与状态数据最全：`event` 带 `message`/`new_messages`/工具 `details`/assistant `error`，
 `status` 直接携带 TUI 同源 reducer 的 thinking、context 占用、todos、pending、jobs、subagents

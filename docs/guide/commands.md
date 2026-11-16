@@ -1,6 +1,6 @@
 # 斜杠命令
 
-TUI 与 REPL **共用同一个** `CommandRegistry`（`zenagent/app/commands.py`，48 条内置命令）：
+TUI 与 REPL **共用同一个** `CommandRegistry`（`zenagent/app/commands.py`，49 条内置命令）：
 `/help` 列出全部命令，裸命令（如 `/model`）在 TUI 打开选择器、在 REPL 打印文本。
 不认识的 `/xxx` 会得到**未知命令**提示（REPL 打印 `未知命令：/xxx（试 /help）`，TUI 在转录区
 给一条 notice），**不会**被当作普通提问发给模型；如果名字匹配 prompt 模板
@@ -83,11 +83,27 @@ TUI 与 REPL **共用同一个** `CommandRegistry`（`zenagent/app/commands.py`�
 | `/context` | 上下文窗口占用情况 |
 | `/todo` | 查看 todo 列表：TUI 打开可编辑浮层（与模型 `todo` 工具共用 `<session>.todo.json`），REPL 打印只读文本 |
 | `/memory` | 查看与编辑项目记忆库（TUI 面板 / REPL 文本） |
+| `/goal` | 设置/查看/控制会话目标：`/goal <objective>`、`/goal --check "<cmd>" --budget N <objective>`、`/goal pause|resume|clear` |
 | `/jobs` | 列出后台作业，或 `/jobs kill <id>` 终止一个 |
 | `/hotkeys` | 显示当前键位 |
 | `/trace` | 显示 trace 文件路径（启动时带 `--trace` 才有） |
 | `/search` | 联网搜索，或打开搜索设置 |
 | `/restore` | 恢复上一次 agent 运行改动的文件（`/restore list` 列历史运行） |
+
+### 目标（goal）
+
+`/goal <objective>` 设置一个**会话级**目标并立即开始第一轮；目标在每轮正常结束后由独立检查
+判定，未完成且未超预算就自动续跑。
+
+- `/goal --check "<command>" <objective>`：用用户提供的确定性命令判定完成（退出码 0 = 达成）；
+  命令由 controller 执行，模型不能改，也不会写进续跑 prompt。
+- `/goal --budget N <objective>`：把本目标的轮次上限设为 N；token（默认 2M）和 wall-clock
+  （默认 4h）来自 `[limits.goal]`，到顶会硬中断当前 run，不再开新轮。
+- `/goal` 查看目标、预算和最近一次判定；`/goal pause` 只停止后续续跑，不中断当前轮；
+  `/goal resume` 恢复 paused/blocked；`/goal clear` 清除。
+- 应用退出即暂停，重开恢复 active 目标；带 `check` 的目标在重启/导入后恢复为 paused，
+  需要 `/goal resume` 确认后才会执行命令。设置里的「离开会话时暂停目标」决定切换 session
+  时是保持 active 还是置 paused。
 
 ## 执行中插话（steering）
 
