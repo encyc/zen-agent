@@ -29,6 +29,7 @@ export interface MemoryEntryMock {
 
 export interface BridgeState extends PluginMockState, SwarmMockState, ZenMockState {
   running: boolean
+  continuing?: number
   pending: PendingItemMock[]
   calls: Record<string, unknown>[]
   starts: { cwd?: string | null; pid?: number; args?: string[] }[]
@@ -239,6 +240,7 @@ export function installBridge(state: BridgeState) {
           session: state.statusSession,
           thinking: state.thinking ?? 'high',
           pending: state.pending,
+          continuing: state.continuing ?? 0,
           subagents: state.subagents ?? [],
           todos: state.todos ?? [],
           context_used: 32000,
@@ -256,6 +258,10 @@ export function installBridge(state: BridgeState) {
             free_tokens: 96000,
           },
         }
+      case 'follow_up':
+        // `rpc_send` already records the request; only track the count here.
+        state.continuing = (state.continuing ?? 0) + 1
+        return { type: 'result', id: payload.id, ok: true }
       case 'transcript': {
         const root = typeof payload.project === 'string' ? payload.project : ''
         if (state.hangTranscriptFrom !== undefined && root === state.hangTranscriptFrom) {
@@ -648,10 +654,14 @@ export function installBridge(state: BridgeState) {
           }
           case 'dequeue': {
             let index = -1
-            for (let position = state.pending.length - 1; position >= 0; position -= 1) {
-              if (state.pending[position].lane === 'queue') {
-                index = position
-                break
+            if (typeof payload.pending_id === 'number') {
+              index = state.pending.findIndex((item) => item.id === payload.pending_id)
+            } else {
+              for (let position = state.pending.length - 1; position >= 0; position -= 1) {
+                if (state.pending[position].lane === 'queue') {
+                  index = position
+                  break
+                }
               }
             }
             const taken = index >= 0 ? state.pending.splice(index, 1)[0] : undefined
@@ -663,6 +673,13 @@ export function installBridge(state: BridgeState) {
               text: taken?.text ?? null,
             }
           }
+          case 'interrupt_pending': {
+            state.pending = state.pending.filter((item) => item.id !== payload.pending_id)
+            return { type: 'result', id: payload.id, ok: true, sent: true }
+          }
+          case 'clear_continuations':
+            state.continuing = 0
+            return { type: 'result', id: payload.id, ok: true }
           case 'clear_pending': {
             const cleared = state.pending.length
             state.pending = []

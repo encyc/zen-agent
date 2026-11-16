@@ -76,10 +76,23 @@ from zenagent.tools.todo import (
     save_todo_phases,
 )
 from zenagent.trace import TraceRecorder
+from zenagent.types import SystemMessage
 
 __all__ = ["Runtime", "RuntimeOptions"]
 
 SwitchHook = Callable[[Path | None], Awaitable[bool]]
+
+
+def _split_system(messages: list) -> tuple[SystemMessage | None, list]:
+    """Split the loop's request into its system prefix and the transcript.
+
+    ``transform_context`` receives ``[system, *state.messages]``; rewind
+    positions are recorded against ``state.messages``, so the projection must
+    run on the transcript half or every index drifts by one.
+    """
+    if messages and isinstance(messages[0], SystemMessage):
+        return messages[0], list(messages[1:])
+    return None, list(messages)
 
 
 @dataclass
@@ -220,6 +233,10 @@ class Runtime:
         #: Project memory library (<root>/.zenagent/memory/); set per-recompose.
         self.memory_store: MemoryStore | None = None
         self._extension_prompt = ""
+        #: Messages emitted this run but not yet written to the session file.
+        self._unpersisted_messages: list = []
+        #: Named extension prompt sections, set alongside ``_extension_prompt``.
+        self._extension_sections: tuple[tuple[str, str], ...] = ()
         self._extension_tools: list = []
         #: Slash commands contributed by extensions (name → ExtensionCommand).
         self.extension_commands: dict = {}
@@ -433,6 +450,7 @@ class Runtime:
                 for fragment in (self._extension_prompt, self.profile.extra_prompt)
                 if fragment
             ),
+            extension_sections=self._extension_sections,
             include_context=self.profile.context_files,
             include_mode=False,
         )
@@ -442,8 +460,106 @@ class Runtime:
         return rendered.text
 
     async def _transform_context(self, messages: list) -> list:
-        """Per-request context projection: an armed rewind, then overflow pruning."""
-        return await self.guard.transform(self.rewind.transform(messages))
+        """Per-request context projection: an armed rewind, then overflow pruning.
+
+        The loop hands the request with the system prompt first; rewind
+        positions are transcript positions, so the projection is computed
+        without that prefix and the prefix is restored afterwards.
+        """
+        system, transcript = _split_system(messages)
+        report = (
+            self.rewind.report_message()
+            if self.rewind.armed and not self.rewind.recorded
+            else None
+        )
+        projected = self.rewind.transform(transcript, report=report)
+        await self._persist_rewind_branch(report)
+        rebuilt = [system, *projected] if system is not None else list(projected)
+        return await self.guard.transform(rebuilt)
+
+    async def _persist_rewind_branch(self, report) -> None:
+        """Persist an armed rewind once, so resume replays the rewound view.
+
+        Order is the contract: the run's messages flushed so far land first
+        (the branch positions must address the file, not a buffer the file has
+        not received yet), then the record that skips the abandoned span, then
+        the report. The live transcript is swapped for the same projection, so
+        one coordinate space serves the loop, the file and a later resume.
+        """
+        state = self.rewind
+        if not state.armed or state.recorded or report is None:
+            return
+        if state.checkpoint_index is None or state.rewind_index is None:
+            return
+        messages = list(self.agent.messages)
+        if state.checkpoint_index > len(messages) or state.rewind_index > len(messages):
+            return  # the indices moved underneath: transform() cleared them
+        cut = state.head_end(messages)
+        if cut is None:
+            return
+        skip = state.rewind_index - cut
+        live_view = state.transform(messages, report=report)
+        if not state.armed:  # transform gave up on stale positions
+            return
+        session = self.session
+        if not await self._flush_unpersisted(session):
+            return
+        state.recorded = True
+        if skip >= 1:
+            # append_meta swallows its own failures: best-effort by contract.
+            session.append_meta(
+                records.branch(
+                    cut,
+                    skip,
+                    call=state.rewind_call_id,
+                    goal=state.goal,
+                )
+            )
+        try:
+            await session.append(report)
+        except OSError as exc:
+            # The report append is loud by nature, but a failing disk must
+            # not kill the request — the persist subscriber's discipline.
+            # Persistence is attempted once: the in-memory projection keeps
+            # working, and no duplicate branch record is ever written.
+            self.note_persist_failure(exc)
+            return
+        # Align the live transcript with the durable replay in this suspended
+        # moment (the loop awaits transform_context). From here on one
+        # coordinate space serves both, so a second rewind composes in the
+        # space the replay actually uses instead of the abandoned-span space.
+        self.agent.project_transcript(live_view)
+        state.clear()
+
+    async def _flush_unpersisted(self, session: Session) -> bool:
+        """Write the run's messages the session file has not taken yet.
+
+        The transcript is persisted at ``agent_end``; a rewind writes a record
+        whose positions must match the file *now*. Flushing first makes the
+        two coordinate spaces one. A failed write is surfaced and its
+        remainder handed back to ``agent_end`` — the branch record is then
+        skipped, so the file stays a valid prefix of the live transcript.
+        """
+        pending = self._unpersisted_messages
+        self._unpersisted_messages = []
+        for index, message in enumerate(pending):
+            try:
+                await session.append(message)
+            except OSError as exc:
+                self.note_persist_failure(exc)
+                self._unpersisted_messages = pending[index:]
+                return False
+        return True
+
+    def _record_unpersisted(self, event) -> None:
+        """Track the messages this run still owes the session file.
+
+        ``agent_end`` writes what is left; a rewind flush writes it earlier so
+        its branch record can address the file. ``new_messages`` alone cannot
+        serve both (it keeps messages the rewind has since projected away).
+        """
+        if event.type == "message_end" and event.message is not None:
+            self._unpersisted_messages.append(event.message)
 
     def _recompose(self) -> None:
         skills_recompose.recompose(self)

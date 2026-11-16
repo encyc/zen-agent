@@ -41,7 +41,7 @@ async def test_alt_up_puts_the_last_queued_message_back_in_the_prompt(gated_app)
 
         prompt = app.query_one(PromptInput)
         prompt.insert("queued text")
-        await pilot.press("ctrl+q")
+        await pilot.press("enter")  # Enter while running parks the next run
         await pilot.pause()
         assert app.chat.status.follow_ups == 1
 
@@ -541,3 +541,30 @@ async def test_todo_editor_writes_the_session_sidecar(picker_app):
         for phase in app.chat.todos
         for task in (phase.get("tasks") or [])
     )
+
+
+async def test_ctrl_q_extends_the_running_turn_instead_of_queueing(gated_app):
+    """ctrl+q rides the kernel follow-up channel; Enter parks the next run."""
+    app, gate = gated_app
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await app.chat.submit("hi")
+        await pilot.pause()
+        assert app.chat.status.running is True
+
+        prompt = app.query_one(PromptInput)
+        prompt.insert("and then the tests")
+        await pilot.press("ctrl+q")
+        await pilot.pause()
+
+        assert app.runtime.agent.pending_follow_up == 1
+        assert app.chat.status.continuing == 1
+        assert app.chat.status.follow_ups == 0, "the next-run queue is a different lane"
+        assert "1 continuing" in app.query_one(StatusBand).plain
+
+        gate.set()
+        await app.chat.wait_for_idle()
+        await pilot.pause()
+        texts = [str(getattr(m, "content", "")) for m in app.runtime.agent.messages]
+        assert "and then the tests" in texts
+        assert app.chat.status.continuing == 0

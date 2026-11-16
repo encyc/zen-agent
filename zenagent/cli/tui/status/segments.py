@@ -174,6 +174,8 @@ def _render_queued(ctx: SegmentContext) -> Text | None:
         parts.append(tn("tui.status.queued", status.follow_ups))
     if status.steering:
         parts.append(tn("tui.status.steering", status.steering))
+    if status.continuing:
+        parts.append(tn("tui.status.continuing", status.continuing))
     if not parts:
         return None
     return Text(" · ".join(parts), style=palette.ACCENT if status.running else palette.MUTED)

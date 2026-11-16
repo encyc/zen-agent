@@ -221,6 +221,9 @@ def rediscover(runtime: Runtime) -> list[str]:
         runtime._extension_tools = list(loaded.tools)
         runtime.extension_commands = dict(loaded.commands)
         runtime._extension_prompt = loaded.prompt_text
+        # sections render through their own provenance channel; they must
+        # never be joined into _extension_prompt as well
+        runtime._extension_sections = tuple(loaded.sections.items())
         runtime.hooks = loaded.hooks
         notes.append(
             f"{len(runtime._extension_tools)} extension tools "

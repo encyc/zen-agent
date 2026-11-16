@@ -29,3 +29,12 @@ def test_compact_module_has_no_literal_prompts() -> None:
     assert "请把下面这段编码会话压缩" not in source
     assert "You compress coding-session transcripts" not in source
     assert "# 此前会话摘要" not in source
+
+
+def test_compose_compact_update_mode_merges_the_previous_summary() -> None:
+    _system, user = compose_compact("新记录", previous_summary="旧摘要")
+    assert "旧摘要" in user and "新记录" in user
+    assert "请把下面这段编码会话压缩" not in user
+    # the fresh-summary path is untouched (the golden pins it byte for byte)
+    _, fresh = compose_compact("T")
+    assert "旧摘要" not in fresh

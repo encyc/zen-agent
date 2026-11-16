@@ -4,11 +4,7 @@
 import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { useAppStore } from '../../state/appStore'
-import {
-  canDequeuePending,
-  canPromotePending,
-  queuedNewestFirst,
-} from '../../state/pending'
+import { canPromotePending, queuedNewestFirst } from '../../state/pending'
 import { useSettingsStore, useStatusStore } from '../../state/stores'
 import type { PendingMessage } from '../../rpc/types'
 import { useT } from '../../i18n/locale'
@@ -146,11 +142,11 @@ export function PendingDock() {
   const running = useStatusStore((state) => state.status?.running ?? false)
   const promotePending = useAppStore((state) => state.promotePending)
   const dequeuePending = useAppStore((state) => state.dequeuePending)
+  const interruptPending = useAppStore((state) => state.interruptPending)
   const clearPending = useAppStore((state) => state.clearPending)
   if (pending.length === 0) return null
   const queued = queuedNewestFirst(pending)
   const steering = pending.filter((item) => item.lane === 'steer')
-  const headlineQueued = queued[0]
   return (
     <div className={css.pendingDock}>
       {steering.length > 0 && (
@@ -159,6 +155,13 @@ export function PendingDock() {
           label={t('composer.steering')}
           items={steering}
           onClear={() => void clearPending()}
+          rowActions={(item) => [
+            {
+              label: t('queue.interrupt'),
+              onPress: () => void interruptPending(item.id),
+            },
+            { label: t('queue.dequeue'), onPress: () => void dequeuePending(item.id) },
+          ]}
         />
       )}
       {queued.length > 0 && (
@@ -166,54 +169,115 @@ export function PendingDock() {
           lane="queue"
           label={t('composer.queue')}
           items={queued}
-          onPromote={
-            headlineQueued !== undefined && canPromotePending(headlineQueued, running)
-              ? () => void promotePending(headlineQueued.id)
-              : undefined
-          }
-          onDequeue={canDequeuePending(pending) ? () => void dequeuePending() : undefined}
           onClear={() => void clearPending()}
+          rowActions={(item) => [
+            ...(canPromotePending(item, running)
+              ? [
+                  {
+                    label: t('queue.promote'),
+                    onPress: () => void promotePending(item.id),
+                  },
+                ]
+              : []),
+            {
+              label: t('queue.interrupt'),
+              onPress: () => void interruptPending(item.id),
+            },
+            ...(item.images === 0
+              ? [
+                  {
+                    label: t('queue.dequeue'),
+                    onPress: () => void dequeuePending(item.id),
+                  },
+                ]
+              : []),
+          ]}
         />
       )}
     </div>
   )
 }
 
+interface PendingRowAction {
+  label: string
+  onPress(): void
+}
+
+/** One lane rendered row by row: every message keeps its own actions, so a
+ * specific entry can be sent now or taken back without touching its siblings. */
 function PendingGroup({
   lane,
   label,
   items,
-  onPromote,
-  onDequeue,
   onClear,
+  rowActions,
 }: {
   lane: string
   label: string
   items: PendingMessage[]
-  onPromote?: () => void
-  onDequeue?: () => void
-  onClear?: () => void
+  onClear: () => void
+  rowActions(item: PendingMessage): PendingRowAction[]
 }) {
   const t = useT()
   return (
     <div className={css.pendingGroup} data-lane={lane}>
-      <span className={css.pendingLabel}>{label} · {items.length}</span>
-      <span className={css.pendingText}>{items[0]?.text ?? ''}</span>
-      {onPromote !== undefined && (
-        <button type="button" className={css.pendingAction} onClick={onPromote}>
-          {t('queue.promote')}
-        </button>
-      )}
-      {onDequeue !== undefined && (
-        <button type="button" className={css.pendingAction} onClick={onDequeue}>
-          {t('queue.dequeue')}
-        </button>
-      )}
-      {onClear !== undefined && (
+      <div className={css.pendingHead}>
+        <span className={css.pendingLabel}>
+          {label} · {items.length}
+        </span>
         <button type="button" className={css.pendingAction} onClick={onClear}>
           {t('queue.clear')}
         </button>
-      )}
+      </div>
+      <ul className={css.pendingList}>
+        {items.map((item, index) => (
+          <li key={item.id} className={css.pendingRow}>
+            <span className={css.pendingIndex}>{index + 1}.</span>
+            <span className={css.pendingText} title={item.text}>
+              {item.text}
+            </span>
+            <span className={css.pendingRowActions}>
+              {rowActions(item).map((action) => (
+                <button
+                  key={action.label}
+                  type="button"
+                  className={css.pendingAction}
+                  onClick={action.onPress}
+                >
+                  {action.label}
+                </button>
+              ))}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/** Kernel follow-ups: the running turn answers them when it would stop.
+ * They are not pending rows — the agent drains them mid-run and the message
+ * lands in the transcript when delivered — so the dock only reports the count. */
+export function ContinuingDock() {
+  const t = useT()
+  const continuing = useStatusStore((state) => state.status?.continuing ?? 0)
+  const clearContinuations = useAppStore((state) => state.clearContinuations)
+  if (continuing <= 0) return null
+  return (
+    <div className={css.pendingDock} data-continuing-dock>
+      <div className={css.pendingGroup} data-lane="continue">
+        <span className={css.pendingLabel}>
+          {t('composer.continuing')} · {continuing}
+        </span>
+        <span className={css.pendingText}>{t('composer.continuingHint')}</span>
+        <button
+          type="button"
+          className={css.pendingAction}
+          onClick={() => void clearContinuations()}
+        >
+          {t('queue.clear')}
+        </button>
+      </div>
     </div>
   )
 }

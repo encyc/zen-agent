@@ -374,6 +374,12 @@ class Session:
     boundary: Callable[[dict], bool] | None = field(
         default=None, repr=False, compare=False
     )
+    #: Optional structural replay selector (record + buffer → projected
+    #: buffer), app-injected; the kernel never knows record kinds. ``None``
+    #: leaves the buffer untouched.
+    window: Callable[[dict, list[Message]], list[Message] | None] | None = field(
+        default=None, repr=False, compare=False
+    )
     #: Side-channel records from the last :meth:`load` (header first).
     records: list[dict] = field(default_factory=list, repr=False, compare=False)
     #: The ``session`` header record from the last :meth:`load`, if any.
@@ -556,6 +562,11 @@ class Session:
                     self.header = record
                 if self.boundary is not None and self.boundary(record):
                     segments.append([])
+                if self.window is not None:
+                    # A record may rescope the replay; None leaves it alone.
+                    projected = self.window(record, segments[-1])
+                    if projected is not None:
+                        segments[-1] = projected
                 continue
             try:
                 segments[-1].append(message_from_json(record))

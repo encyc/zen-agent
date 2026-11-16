@@ -27,6 +27,8 @@ CATALOG: dict[str, str] = {
     "tui.status.queued.other": "{n} queued",
     "tui.status.steering.one": "{n} steering",
     "tui.status.steering.other": "{n} steering",
+    "tui.status.continuing.one": "{n} continuing",
+    "tui.status.continuing.other": "{n} continuing",
     # TUI: pending band (above the composer)
     "tui.queue.title.queued": "Queued",
     "tui.queue.title.steer": "Steering",
@@ -36,6 +38,7 @@ CATALOG: dict[str, str] = {
     "tui.queue.promoted": "Now steering; delivered at the next step",
     "tui.queue.blocked_images": "A queued message with images can't steer; it is sent after this run",
     "tui.queue.cleared": "Pending messages cleared",
+    "tui.queue.continuing": "Queued to continue when this turn stops",
     # TUI: welcome / work chrome
     "tui.welcome.subtitle": "v{version} · python agent loop",
     "tui.welcome.hints": "/ commands  ·  ctrl+b info  ·  ctrl+d quit",

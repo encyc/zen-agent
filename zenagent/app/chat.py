@@ -10,7 +10,12 @@ from pathlib import Path
 from zenagent.agent.session import Session
 from zenagent.agent.subagents import carry_task_dir
 from zenagent.app.attachments_state import Attachments
-from zenagent.app.compact import compact, should_auto_compact
+from zenagent.app.compact import (
+    KEEP_RECENT_TOKENS,
+    compact,
+    manual_keep_recent,
+    should_auto_compact,
+)
 from zenagent.app.context import build_context_report
 from zenagent.app.error_notice import bug_notice, run_error_notice
 from zenagent.app.git import git_status
@@ -68,6 +73,9 @@ class ChatController:
         self._pending_queue = PendingQueue()
         self._task: asyncio.Task | None = None
         self._running = False
+        #: Serializes interrupt takeovers: abort → wait → submit must not
+        #: interleave with another takeover, or two runs would start at once.
+        self._interrupt_lock = asyncio.Lock()
         #: True while an automatic compaction runs: the controller stays busy
         #: so a submit queues instead of racing the summarizer (C2).
         self._compacting = False
@@ -156,6 +164,7 @@ class ChatController:
             context_window=agent.model.context_window,
             follow_ups=self._pending_queue.count("queue"),
             steering=agent.pending_steering,
+            continuing=agent.pending_follow_up,
             pending=self._pending_queue.items,
             session_name=Path(self.runtime.session.path).stem,
             cwd=str(self.runtime.cwd),
@@ -248,6 +257,9 @@ class ChatController:
         if self._running or self._compacting:
             self.queue_follow_up(text, pending)
             return
+        # Mark busy before the task is scheduled: a takeover arriving in the
+        # gap would otherwise see "idle" and start a second run on the agent.
+        self._running = True
         self._task = asyncio.create_task(self._run(text, pending))
 
     @property
@@ -277,14 +289,46 @@ class ChatController:
         self._pending_queue.queue(text, blocks)
         self._notify()
 
+    def follow_up(self, text: str) -> bool:
+        """Queue text that extends the live run when it would otherwise stop.
+
+        Three lanes, three intents: :meth:`queue_follow_up` saves the message
+        for the *next* run, :meth:`steer` interrupts the current one after its
+        tool round, and a follow-up rides the kernel channel — the run keeps
+        going with the text as a normal user turn. Text-only: attachments need
+        the queue lane.
+        """
+        cleaned = text.strip()
+        if not cleaned:
+            return False
+        if not self.runtime.agent.is_streaming:
+            # Nothing to extend: park it for the next run rather than leave it
+            # on the agent until some later turn happens to stop.
+            self.queue_follow_up(cleaned)
+            return True
+        self.runtime.agent.follow_up(cleaned)
+        self._notify()
+        return True
+
+    def clear_continuations(self) -> int:
+        """Drop the queued continuations without touching the pending lanes."""
+        cleared = len(self.runtime.agent.take_follow_up())
+        if cleared:
+            self._notify()
+        return cleared
+
     def clear_pending(self) -> int:
-        """Drop every pending message (both lanes); returns how many went."""
+        """Drop every pending message (queue, steering and follow-ups).
+
+        Undelivered steering and follow-ups also live on the agent; reclaim
+        them too, or they would be injected into the next request after the
+        user cleared.
+        """
         cleared = self._pending_queue.clear()
+        cleared += len(self.runtime.agent.take_steering())
+        cleared += len(self.runtime.agent.take_follow_up())
         if not cleared:
             return 0
-        # Undelivered steering also lives on the agent; reclaim it or it would
-        # be injected into the next run's first request after the user cleared.
-        self.runtime.agent.take_steering()
         self._notify()
         return cleared
 
@@ -306,6 +350,23 @@ class ChatController:
     def clear_follow_ups(self) -> None:
         """Backwards-compatible alias for :meth:`clear_pending`."""
         self.clear_pending()
+
+    def dequeue_pending(self, pending_id: int) -> str | None:
+        """Take one pending row back into the composer, from either lane.
+
+        A steering row also lives on the agent: dropping the visible row
+        without dropping the queued text would deliver it anyway.
+        """
+        ordinal = self._pending_queue.steer_ordinal(pending_id)
+        taken = self._pending_queue.take(pending_id)
+        if taken is None:
+            return None
+        if ordinal is not None:
+            self.runtime.agent.drop_steering(ordinal)
+        if taken.images:
+            self._attachments.prepend(taken.images)  # back into the composer
+        self._notify()
+        return taken.message.text
 
     def dequeue_follow_up(self) -> str | None:
         """Take the most recently queued follow-up back out of the queue.
@@ -381,6 +442,36 @@ class ChatController:
         self._notify()
         return "ok"
 
+    async def interrupt_with(self, text: str) -> None:
+        """Send ``text`` now: abort the live turn, then start a fresh run.
+
+        Steering waits for the next tool round (or the turn's end); this is
+        the "send it now" lane the docks offer next to 取回. The interrupted
+        turn keeps its transcript; the text becomes an ordinary user turn.
+        """
+        cleaned = text.strip()
+        if not cleaned:
+            return
+        async with self._interrupt_lock:
+            if not (self._running or self._compacting):
+                await self.submit(cleaned)
+                return
+            self.abort()
+            await self.wait_for_idle()
+            await self.submit(cleaned)
+            # Give the scheduled run one step to bind: Agent.abort() is a no-op
+            # while no run exists, so a takeover landing in this gap would
+            # silently lose its cancellation and the texts would run in FIFO.
+            await asyncio.sleep(0)
+
+    async def interrupt_pending(self, pending_id: int) -> bool:
+        """Deliver one pending row immediately; ``False`` when it is gone."""
+        taken = self.dequeue_pending(pending_id)
+        if taken is None:
+            return False
+        await self.interrupt_with(taken)
+        return True
+
     def abort(self) -> None:
         self.runtime.agent.abort()
         self._notify()
@@ -443,6 +534,14 @@ class ChatController:
             self.runtime.session,
             reason="auto" if force else "manual",
             tokens_before=before,
+            # The automatic path keeps the budget pi tuned (20k of recent
+            # context near the limit); an explicit /compact must actually
+            # shrink a normal-sized conversation instead of keeping it whole.
+            keep_recent_tokens=(
+                KEEP_RECENT_TOKENS
+                if force
+                else manual_keep_recent(self.runtime.agent.messages)
+            ),
         )
         # The summary replaced the sized transcript; reseed the guard so the
         # auto-compaction check cannot fire again before a real request lands.

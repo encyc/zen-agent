@@ -254,6 +254,85 @@ async def test_steer_is_injected_after_the_tool_round():
 
 
 # ---------------------------------------------------------------------------
+# Follow-up: queued input that only fires when the run would otherwise stop
+# ---------------------------------------------------------------------------
+
+
+async def test_follow_up_continues_the_run_at_plain_stop():
+    stream = scripted([("text", "first"), end()], [("text", "second"), end()])
+    agent = make_agent(stream)
+    agent.follow_up("and then the second thing")
+    await agent.prompt("go")
+
+    # the first plain stop did not end the run: the follow-up was injected
+    # as a real user turn and the loop asked for one more response
+    assert len(stream.requests) == 2
+    injected = stream.requests[1][-1]
+    assert isinstance(injected, UserMessage)
+    assert injected.content == "and then the second thing"
+    assert not injected.steering  # a follow-up is a plain user turn
+    assert agent.termination == "stop"
+    assert agent.pending_follow_up == 0
+    assert any(
+        isinstance(message, UserMessage)
+        and message.content == "and then the second thing"
+        for message in agent.messages
+    )
+
+
+async def test_follow_up_not_consumed_when_run_ends_in_error():
+    stream = scripted([("text", "boom"), end("error")])
+    agent = make_agent(stream)
+    agent.follow_up("queued")
+    await agent.prompt("go")
+
+    assert agent.termination == "error"
+    assert agent.pending_follow_up == 1
+
+
+async def test_follow_up_drained_before_a_max_turns_stop():
+    # A follow-up drained at the plain stop behaves like post-round steering:
+    # it enters the transcript, and the guard applies on the next iteration.
+    stream = scripted([("text", "one"), end()])
+    agent = make_agent(stream, max_turns=1)
+    agent.follow_up("queued")
+    await agent.prompt("go")
+
+    assert agent.termination == "max_turns"
+    assert agent.pending_follow_up == 0
+    assert any(
+        isinstance(message, UserMessage) and message.content == "queued"
+        for message in agent.messages
+    )
+
+
+async def test_follow_up_not_consumed_when_run_is_aborted():
+    async def abortable(model, messages, tools, options):
+        snap = partial()
+        yield AssistantEvent(type="start", partial=snap)
+        while not options.abort.aborted:
+            await asyncio.sleep(0.001)
+        raise Aborted("cancelled by user")
+
+    agent = make_agent(abortable)
+    agent.follow_up("queued")
+    run = asyncio.create_task(agent.prompt("work"))
+    await asyncio.sleep(0.02)
+    agent.abort()
+    await run
+
+    assert agent.termination == "aborted"
+    assert agent.pending_follow_up == 1
+
+
+def test_reset_clears_follow_up():
+    agent = make_agent(scripted([("text", "x"), end()]))
+    agent.follow_up("pending")
+    agent.reset()
+    assert agent.pending_follow_up == 0
+
+
+# ---------------------------------------------------------------------------
 # Abort, reset, replace_messages, continue
 # ---------------------------------------------------------------------------
 

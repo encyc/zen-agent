@@ -26,6 +26,8 @@ CATALOG: dict[str, str] = {
     "tui.status.queued.other": "排队 {n}",
     "tui.status.steering.one": "插话 {n}",
     "tui.status.steering.other": "插话 {n}",
+    "tui.status.continuing.one": "接续 {n}",
+    "tui.status.continuing.other": "接续 {n}",
     # TUI：输入框上方的待发区
     "tui.queue.title.queued": "排队",
     "tui.queue.title.steer": "插话",
@@ -35,6 +37,7 @@ CATALOG: dict[str, str] = {
     "tui.queue.promoted": "已转为插话，下一步立即送达",
     "tui.queue.blocked_images": "带图片的排队消息不能插话，本轮结束后发送",
     "tui.queue.cleared": "已清空待发消息",
+    "tui.queue.continuing": "已排入接续：本回合停下后继续",
     # TUI：欢迎 / 工作条
     "tui.welcome.subtitle": "v{version} · Python agent 循环",
     "tui.welcome.hints": "/ 命令  ·  ctrl+b 面板  ·  ctrl+d 退出",

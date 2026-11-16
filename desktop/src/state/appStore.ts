@@ -131,6 +131,8 @@ interface AppState {
   loadOlderTranscript(): Promise<boolean>
   submit(): Promise<void>
   steer(text: string): Promise<void>
+  /** Extend the running turn: the kernel answers this when it would stop. */
+  followUp(text: string): Promise<void>
   cancel(): Promise<void>
   approve(requestId: string, decision: 'allow' | 'always' | 'deny'): Promise<void>
   resolveAsk(requestId: string, answers: (string[] | null)[]): Promise<void>
@@ -148,8 +150,10 @@ interface AppState {
   importSession(path: string): Promise<boolean>
   exportSession(format: ExportFormat): Promise<string | null>
   promotePending(id: number): Promise<void>
-  dequeuePending(): Promise<void>
+  dequeuePending(pendingId?: number): Promise<void>
+  interruptPending(pendingId: number): Promise<void>
   clearPending(): Promise<void>
+  clearContinuations(): Promise<void>
   clearTodos(): Promise<void>
   compactNow(): Promise<void>
   undoLast(): Promise<void>
@@ -706,6 +710,18 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  async followUp(text) {
+    const trimmed = text.trim()
+    if (!trimmed) return
+    useComposerStore.getState().setDraft('')
+    try {
+      await get().client().send({ type: 'follow_up', text: trimmed })
+    } catch {
+      // ignore
+    }
+    void get().refreshStatus()
+  },
+
   async steer(text) {
     const trimmed = text.trim()
     if (!trimmed) return
@@ -912,37 +928,45 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   async promotePending(id) {
+    await statusOp(get, { type: 'session', op: 'promote', pending_id: id })
+  },
+
+  async dequeuePending(pendingId?: number) {
     await runSessionOp(
       get,
-      { type: 'session', op: 'promote', pending_id: id },
-      () => get().refreshStatus(),
+      {
+        type: 'session',
+        op: 'dequeue',
+        ...(pendingId === undefined ? {} : { pending_id: pendingId }),
+      },
+      (frame) => {
+        if (frame.dequeued === true && typeof frame.text === 'string') {
+          const composer = useComposerStore.getState()
+          composer.setDraft(nextDraft(composer.draft, frame.text))
+        }
+        return get().refreshStatus()
+      },
     )
   },
 
-  async dequeuePending() {
-    let frame: Record<string, unknown>
-    try {
-      frame = await get().client().send({ type: 'session', op: 'dequeue' })
-    } catch (error) {
-      showActionError(error)
-      return
-    }
-    if (showFrameError(frame)) return
-    if (frame.dequeued === true && typeof frame.text === 'string') {
-      const composer = useComposerStore.getState()
-      composer.setDraft(nextDraft(composer.draft, frame.text))
-    }
-    await get().refreshStatus()
+  async interruptPending(pendingId: number) {
+    await statusOp(get, {
+      type: 'session',
+      op: 'interrupt_pending',
+      pending_id: pendingId,
+    })
+  },
+
+  async clearContinuations() {
+    await statusOp(get, { type: 'session', op: 'clear_continuations' })
   },
 
   async clearPending() {
-    await runSessionOp(get, { type: 'session', op: 'clear_pending' }, () =>
-      get().refreshStatus(),
-    )
+    await statusOp(get, { type: 'session', op: 'clear_pending' })
   },
 
   async clearTodos() {
-    await runSessionOp(get, { type: 'session', op: 'clear_todos' }, () => get().refreshStatus())
+    await statusOp(get, { type: 'session', op: 'clear_todos' })
   },
 
   async compactNow() {
@@ -977,10 +1001,15 @@ registerSwarmSender({
   send: (request) => useAppStore.getState().client().send(request),
 })
 
+/** Run a session op whose only follow-up is a status refresh. */
+function statusOp(get: () => AppState, payload: Record<string, unknown>) {
+  return runSessionOp(get, payload, () => get().refreshStatus())
+}
+
 async function runSessionOp(
   get: () => AppState,
   payload: Record<string, unknown>,
-  after: () => Promise<void> | void,
+  after: (frame: Record<string, unknown>) => Promise<void> | void,
 ): Promise<void> {
   let frame: Record<string, unknown>
   try {
@@ -990,7 +1019,7 @@ async function runSessionOp(
     return
   }
   if (showFrameError(frame)) return
-  await after()
+  await after(frame)
 }
 
 async function runSessionCommand(

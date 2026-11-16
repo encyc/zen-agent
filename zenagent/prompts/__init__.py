@@ -75,6 +75,10 @@ class PromptContext:
     skill_entries: str = ""
     memory_index: str = ""
     extension_fragments: Sequence[str] = ()
+    #: Named extension sections rendered after the anonymous fragments, one
+    #: provenance block each — a change to one section leaves every other
+    #: block's bytes (and the prompt prefix) untouched.
+    extension_sections: Sequence[tuple[str, str]] = ()
     include_context: bool = True
     include_skills: bool = True
     include_memory: bool = True
@@ -185,6 +189,18 @@ def compose_system(ctx: PromptContext) -> RenderedPrompt:
                 tokens=_block_tokens(part),
             )
         )
+    if ctx.include_extensions:
+        for name, section_text in ctx.extension_sections:
+            text = f"{text}\n\n{section_text}"
+            blocks.append(
+                RenderedBlock(
+                    id=f"extension.{name}",
+                    chars=len(section_text),
+                    cache_class="session",
+                    version=PROMPT_VERSION,
+                    tokens=_block_tokens(section_text),
+                )
+            )
     if ctx.include_mode and ctx.mode in ("plan", "auto"):
         block_id = f"{ctx.mode}_mode"
         part = read_block(block_id, ctx.root)
@@ -202,10 +218,27 @@ def tool_description(name: str, *, root: Path | None = None, **values: str) -> s
     return render(read_block(f"tool.{name}", root), values)
 
 
-def compose_compact(transcript: str, *, root: Path | None = None) -> tuple[str, str]:
-    """Render the compaction request as ``(system, user)``."""
+def compose_compact(
+    transcript: str,
+    *,
+    previous_summary: str | None = None,
+    root: Path | None = None,
+) -> tuple[str, str]:
+    """Render the compaction request as ``(system, user)``.
+
+    With ``previous_summary``, the user prompt asks the model to merge the
+    new transcript into that summary (``compact.update``) instead of
+    summarizing from scratch (``compact.summary``) — a re-compaction updates
+    the existing summary rather than rebuilding it.
+    """
     system = read_block("compact.system", root)
-    user = render(read_block("compact.summary", root), {"transcript": transcript})
+    if previous_summary is not None:
+        user = render(
+            read_block("compact.update", root),
+            {"previous_summary": previous_summary, "transcript": transcript},
+        )
+    else:
+        user = render(read_block("compact.summary", root), {"transcript": transcript})
     return system, user
 
 

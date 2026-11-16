@@ -52,6 +52,9 @@ class ExtensionAPI:
         self.tools: list[AgentTool] = []
         self.commands: dict[str, ExtensionCommand] = {}
         self.prompt_fragments: list[str] = []
+        #: Named prompt sections: re-registering a section replaces its text
+        #: in place, so a reloaded extension updates instead of duplicating.
+        self.sections: dict[str, str] = {}
         self.hooks: dict[str, list[Callable]] = {}
 
     def register_tool(self, tool: AgentTool) -> None:
@@ -60,9 +63,21 @@ class ExtensionAPI:
     def register_command(self, name: str, description: str, handler: Callable) -> None:
         self.commands[name] = ExtensionCommand(name=name, description=description, handler=handler)
 
-    def add_system_prompt(self, text: str) -> None:
-        if text.strip():
-            self.prompt_fragments.append(text.strip())
+    def add_system_prompt(self, text: str, *, section: str | None = None) -> None:
+        """Contribute system prompt text.
+
+        Without ``section`` the text joins the anonymous fragments (legacy
+        behavior). With ``section``, the text replaces that named section in
+        place — same section, same slot — keeping the assembled prompt stable
+        for everything registered before it.
+        """
+        cleaned = text.strip()
+        if not cleaned:
+            return
+        if section is None:
+            self.prompt_fragments.append(cleaned)
+        else:
+            self.sections[section] = cleaned
 
     def on(self, event_type: str, callback: Callable[[Any], None]) -> None:
         self.hooks.setdefault(event_type, []).append(callback)
@@ -75,17 +90,26 @@ class LoadedExtensions:
     tools: list[AgentTool] = field(default_factory=list)
     commands: dict[str, ExtensionCommand] = field(default_factory=dict)
     prompt_fragments: list[str] = field(default_factory=list)
+    #: Named sections in first-registration order; a later file claiming an
+    #: existing section keeps the first registration (with a warning), so the
+    #: assembled prompt never reorders across reloads.
+    sections: dict[str, str] = field(default_factory=dict)
     hooks: dict[str, list[Callable]] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
 
     @property
     def prompt_text(self) -> str:
+        """The anonymous prompt fragments joined. Named sections render
+        through their own channel (:attr:`sections`) and must never be
+        joined in here too, or the assembled prompt says everything twice."""
         if not self.prompt_fragments:
             return ""
         return "\n\n".join(self.prompt_fragments)
 
     def __bool__(self) -> bool:
-        return bool(self.tools or self.commands or self.prompt_fragments or self.hooks)
+        return bool(
+            self.tools or self.commands or self.prompt_fragments or self.sections or self.hooks
+        )
 
 
 def load_extensions(paths: list[str | Path]) -> LoadedExtensions:
@@ -125,6 +149,13 @@ def load_extensions(paths: list[str | Path]) -> LoadedExtensions:
                 continue
             loaded.commands[name] = command
         loaded.prompt_fragments.extend(api.prompt_fragments)
+        for section, text in api.sections.items():
+            if section in loaded.sections:
+                loaded.warnings.append(
+                    f"{path}: section {section!r} already registered (keeping the first)"
+                )
+                continue
+            loaded.sections[section] = text
         for event_type, callbacks in api.hooks.items():
             loaded.hooks.setdefault(event_type, []).extend(callbacks)
     return loaded

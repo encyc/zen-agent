@@ -23,8 +23,10 @@ from collections.abc import Callable
 from pathlib import Path
 
 from zenagent.agent.session import Session
+from zenagent.types import AssistantMessage, Message, ToolCall, ToolResultMessage
 
 __all__ = [
+    "BRANCH",
     "COMPACTION",
     "KINDS",
     "MODE",
@@ -34,7 +36,11 @@ __all__ = [
     "TOOL_DETAILS_LIMIT",
     "TOOL_DIFF_MAX_LINES",
     "TOOL_END",
+    "branch",
+    "branch_window",
     "compaction",
+    "drop_orphan_tool_results",
+    "is_branch",
     "is_compaction",
     "is_tool_end",
     "keep_for_rewrite",
@@ -59,14 +65,16 @@ RUN_END = "run_end"
 RETRY = "retry"
 #: The permission mode the session switched to.
 MODE = "mode"
+#: A durable rewind branch: the live replay rescope and how much was abandoned.
+BRANCH = "branch"
 
 #: Record kinds this version defines. Anything else is carried verbatim by a
 #: transcript rewrite (see ``keep_for_rewrite``).
-KNOWN_KINDS = frozenset({TOOL_END, COMPACTION, RUN_START, RUN_END, RETRY, MODE})
+KNOWN_KINDS = frozenset({TOOL_END, COMPACTION, RUN_START, RUN_END, RETRY, MODE, BRANCH})
 
 #: Every kind this build writes. Unknown kinds are read back untouched but are
 #: never carried into a rewritten transcript.
-KINDS = (TOOL_END, COMPACTION, RUN_START, RUN_END, RETRY, MODE)
+KINDS = (TOOL_END, COMPACTION, RUN_START, RUN_END, RETRY, MODE, BRANCH)
 
 #: Serialized cap for one ``tool_end`` record's ``details`` (UI-only payload).
 TOOL_DETAILS_LIMIT = 16_384
@@ -87,6 +95,69 @@ def is_tool_end(record: dict) -> bool:
 
 def is_compaction(record: dict) -> bool:
     return record_type(record) == COMPACTION
+
+
+def branch(cut: int, skip: int, *, call: str = "", goal: str = "") -> dict:
+    """One ``branch`` record: the live replay keeps ``messages[:cut]`` plus
+    everything appended after this record; ``skip`` messages were abandoned
+    and stay in the file as the audit trail. ``call`` names the rewind tool
+    call whose own result must leave the projection with the abandoned span
+    (in-memory and replayed views must never drift)."""
+    record: dict = {"type": BRANCH, "cut": int(cut), "skip": int(skip)}
+    if call:
+        record["call"] = call
+    if goal:
+        record["goal"] = goal
+    return record
+
+
+def is_branch(record: dict) -> bool:
+    return record_type(record) == BRANCH
+
+
+def drop_orphan_tool_results(messages: list[Message]) -> list[Message]:
+    """Drop tool results whose tool call is no longer in ``messages``.
+
+    A replay projection (branch window, rewind) can cut a tool call out of the
+    transcript while its result survives — a provider rejects a result whose
+    call is missing, so every projection applies this same rule and the live
+    and replayed views stay equal.
+    """
+    call_ids = {
+        block.id
+        for message in messages
+        if isinstance(message, AssistantMessage)
+        for block in message.content
+        if isinstance(block, ToolCall)
+    }
+    kept = [
+        message
+        for message in messages
+        if not (
+            isinstance(message, ToolResultMessage)
+            and message.tool_call_id not in call_ids
+        )
+    ]
+    return kept if len(kept) != len(messages) else messages
+
+
+def branch_window(record: dict, messages: list) -> list | None:
+    """The structural selector behind ``Session(window=...)`` for branches.
+
+    Returns the projected replay — head before the cut, abandoned span
+    dropped, orphaned tool results removed — or ``None`` when the record is
+    not a branch or its positions no longer fit (a torn or corrupt record must
+    never lose the transcript).
+    """
+    if record_type(record) != BRANCH:
+        return None
+    cut = record.get("cut")
+    skip = record.get("skip")
+    if not isinstance(cut, int) or not isinstance(skip, int):
+        return None
+    if cut < 0 or skip < 1 or cut + skip > len(messages):
+        return None
+    return drop_orphan_tool_results([*messages[:cut], *messages[cut + skip :]])
 
 
 def _json_size(value: object) -> int:
@@ -145,12 +216,17 @@ def tool_end(
     return record
 
 
-def compaction(tokens_before: int, reason: str) -> dict:
-    """One ``compaction`` record: the replay boundary and its divider."""
+def compaction(tokens_before: int, reason: str, *, kept: int = 0) -> dict:
+    """One ``compaction`` record: the replay boundary and its divider.
+
+    ``kept`` counts the recent-tail messages that stayed in context after the
+    cut (0 = the pre-tail full-summarize behavior).
+    """
     return {
         "type": COMPACTION,
         "tokensBefore": int(tokens_before),
         "reason": reason,
+        "kept": int(kept),
     }
 
 
@@ -166,12 +242,16 @@ def open_session(
     retry seed the Agent from the compacted segment only — while listings,
     titles and export keep the whole file (bare ``Session``). The display reads
     the full view and positions the divider from ``Session.segment_start``.
+    Branch records rescope the replay the same way: a durable rewind's
+    abandoned span stays in the file but out of the live context.
 
     ``lazy`` is for sessions the runtime itself just created: their header and
     starting records stay in memory until the first message (see
     :meth:`Session.materialize`), so an idle launch writes no transcript.
     """
-    return Session(path, boundary=is_compaction, lazy=lazy, cwd=cwd)
+    return Session(
+        path, boundary=is_compaction, window=branch_window, lazy=lazy, cwd=cwd
+    )
 
 
 def run_start() -> dict:

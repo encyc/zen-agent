@@ -187,6 +187,21 @@ async def test_a_lazy_session_loads_empty_without_materializing(tmp_path):
     assert path.is_file()
 
 
+async def test_materialize_gives_a_lazy_session_its_file_without_a_message(tmp_path):
+    # Explicit naming/pinning makes an empty conversation real (pi learnings ⑦):
+    # the file appears, but playback still never writes a message line.
+    path = tmp_path / "lazy.jsonl"
+    session = Session(path, lazy=True)
+    session.append_meta({"type": "mode", "mode": "ask"})
+
+    session.materialize()
+
+    assert path.is_file()
+    lines = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert [line.get("type") for line in lines] == ["session", "mode"]
+    assert all("role" not in line for line in lines)
+
+
 def test_listing_hides_header_only_sessions(isolated_sessions):
     isolated_sessions.mkdir(parents=True)
     _write_session(isolated_sessions, "real.jsonl", ["chat"], mtime=2)
@@ -1218,3 +1233,34 @@ def test_newer_session_file_warns_on_load(tmp_path):
     session = Session(path)
     session.load()
     assert any("999" in warning for warning in session.warnings)
+
+
+def test_window_selector_rescopes_the_replay(tmp_path):
+    """A window record may project the current replay buffer (pi learnings ①).
+
+    The kernel never learns what a branch is: it hands the record and the
+    messages read so far to the selector and adopts the returned projection;
+    later messages append to it. An out-of-range result is ignored — a torn
+    or corrupt record must never lose the transcript.
+    """
+    path = tmp_path / "s.jsonl"
+
+    def window(record, messages):
+        if record.get("type") == "branch":
+            cut, skip = record["cut"], record["skip"]
+            if 0 <= cut and skip >= 1 and cut + skip <= len(messages):
+                return messages[:cut] + messages[cut + skip :]
+        return None
+
+    session = Session(path, window=window)
+    for text in ("a", "b", "c"):
+        session._append_sync(UserMessage(content=text, timestamp=1))
+    session.append_meta({"type": "branch", "cut": 1, "skip": 2})
+    session._append_sync(UserMessage(content="after", timestamp=2))
+
+    loaded = Session(path, window=window).load()
+    assert [m.content for m in loaded] == ["a", "after"]
+
+    # an out-of-range record is ignored: the earlier rescope still holds
+    session.append_meta({"type": "branch", "cut": 99, "skip": 1})
+    assert [m.content for m in Session(path, window=window).load()] == ["a", "after"]

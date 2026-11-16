@@ -11,6 +11,9 @@ on top of its ``agentLoop()`` function:
 * owns the transcript (``messages``) and the run configuration;
 * ``subscribe`` for ``AgentEvent`` consumers, delivered serially;
 * ``steer`` queues user input that the loop drains after a tool round;
+* ``follow_up`` queues input that the loop drains only when the run would
+  otherwise stop (a plain end of turn) — steering interrupts, follow-up
+  extends;
 * ``abort`` cancels the current run cooperatively (the run still ends with an
   ``aborted`` terminal state, never by raising);
 * ``wait_for_idle`` resolves once the run finished *and* its ``agent_end``
@@ -120,6 +123,7 @@ class Agent:
         self._state = AgentState(messages=list(messages or []))
         self._listeners: list[AgentListener] = []
         self._steering: list[str] = []
+        self._follow_up: list[str] = []
         self._run: _Run | None = None
         self._error_message: str | None = None
 
@@ -175,6 +179,38 @@ class Agent:
         self._steering = []
         return texts
 
+    @property
+    def pending_follow_up(self) -> int:
+        """Follow-up messages queued but not yet consumed by the loop."""
+        return len(self._follow_up)
+
+    def follow_up(self, text: str) -> None:
+        """Queue input to be injected when the run would otherwise stop.
+
+        Unlike :meth:`steer` (which interrupts after the current tool round),
+        a follow-up never interrupts: it only extends a run that reached a
+        plain end of turn. Error, abort, cost and terminate stops leave the
+        queue untouched for the next run.
+        """
+        self._follow_up.append(text)
+
+    def drop_steering(self, index: int) -> bool:
+        """Remove one queued steering entry by its delivery position.
+
+        The controller keeps a visible row per steering message; taking that
+        row back must take the queued text with it or the model still sees it.
+        """
+        if 0 <= index < len(self._steering):
+            del self._steering[index]
+            return True
+        return False
+
+    def take_follow_up(self) -> list[str]:
+        """Remove and return queued follow-up input (abort / clear cleanup)."""
+        texts = self._follow_up
+        self._follow_up = []
+        return texts
+
     # -- control ------------------------------------------------------------
 
     def abort(self) -> None:
@@ -207,12 +243,23 @@ class Agent:
             raise RuntimeError("cannot replace messages while a run is active")
         self._state.messages = list(messages)
 
+    def project_transcript(self, view: list[Message]) -> None:
+        """Swap the transcript in place for ``view`` (no run-state check).
+
+        The runtime uses this to align the live view with a persisted rewind
+        branch. Safe in the moments when the loop is suspended — it awaits
+        ``transform_context`` — because the loop reads ``state.messages``
+        fresh each iteration and later appends land on the swapped list.
+        """
+        self._state.messages[:] = view
+
     def reset(self) -> None:
-        """Clear the transcript and pending steering input (config is kept)."""
+        """Clear the transcript and pending queued input (config is kept)."""
         if self._run is not None:
             raise RuntimeError("cannot reset while a run is active")
         self._state.messages = []
         self._steering.clear()
+        self._follow_up.clear()
         self._error_message = None
 
     # -- internals ----------------------------------------------------------
@@ -228,6 +275,7 @@ class Agent:
             before_tool_call=self.before_tool_call,
             after_tool_call=self.after_tool_call,
             get_steering_messages=self._drain_steering,
+            get_followup_messages=self._drain_follow_up,
             transform_context=self.transform_context,
             stream_fn=self.stream_fn,
             max_turns=self.max_turns,
@@ -250,6 +298,19 @@ class Agent:
                 content="\n".join(lines),
                 timestamp=int(time.time()),
                 steering=True,
+            )
+        ]
+
+    async def _drain_follow_up(self) -> list[Message]:
+        """Aggregate queued follow-up lines into one plain user message."""
+        if not self._follow_up:
+            return []
+        lines = self._follow_up
+        self._follow_up = []
+        return [
+            UserMessage(
+                content="\n".join(lines),
+                timestamp=int(time.time()),
             )
         ]
 

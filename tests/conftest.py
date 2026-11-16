@@ -198,6 +198,54 @@ async def fake_runtime(runtime_factory):
     return await runtime_factory(stream_fn=text_stream())
 
 
+def scripted_stream(*turns):
+    """A StreamFn replaying one explicit script per request.
+
+    Each turn is a sequence of ``("tool", (id, name, arguments))``,
+    ``("text", text)`` and ``("end", reason)`` steps. ``requests`` keeps the
+    messages every call received, so a test can assert what the model saw —
+    including the system prefix the loop adds.
+    """
+    from zenagent.events import AssistantEvent
+    from zenagent.types import AssistantMessage, TextContent, ToolCall, Usage
+
+    class Stream:
+        def __init__(self) -> None:
+            self.turns = [list(turn) for turn in turns]
+            self.requests: list[list] = []
+
+        async def __call__(self, model, messages, tools, options):
+            assert self.turns, "unexpected extra stream call"
+            self.requests.append(list(messages))
+            partial = AssistantMessage(
+                content=[], provider="p", model="m", usage=Usage(),
+                stop_reason="pending", timestamp=0,
+            )
+            yield AssistantEvent(type="start", partial=partial)
+            for kind, payload in self.turns.pop(0):
+                if kind == "text":
+                    partial.content.append(TextContent(text=payload))
+                    yield AssistantEvent(
+                        type="text_delta", partial=partial,
+                        content_index=0, delta=payload,
+                    )
+                elif kind == "tool":
+                    call_id, name, arguments = payload
+                    call = ToolCall(id=call_id, name=name, arguments=arguments)
+                    partial.content.append(call)
+                    yield AssistantEvent(
+                        type="toolcall_end", partial=partial,
+                        content_index=0, tool_call=call,
+                    )
+                elif kind == "end":
+                    partial.stop_reason = payload
+                    yield AssistantEvent(
+                        type="done", partial=partial, reason=payload
+                    )
+
+    return Stream()
+
+
 def tool_then_text_stream():
     """First turn asks for read_file, second answers — exercises tool cards."""
     from zenagent.events import AssistantEvent

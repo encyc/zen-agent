@@ -1708,17 +1708,26 @@ test('a queued message can be promoted to steering', async ({ page }) => {
   ).toBeVisible()
 })
 
-test('dequeue takes back the newest queued text the dock headlines', async ({ page }) => {
+test('every queued row takes itself back', async ({ page }) => {
   await boot(page, initialState())
   await setPending(page, [
     { id: 8, lane: 'queue', text: '第一条', images: 0, created_at: 2 },
     { id: 9, lane: 'queue', text: '取回我', images: 0, created_at: 3 },
   ])
-  await expect(page.getByText('取回我')).toBeVisible({ timeout: 10_000 })
-  await expect(page.getByText('第一条')).toBeHidden()
-  await page.getByRole('button', { name: '取回' }).click()
+  const queue = page.locator('[data-lane="queue"]')
+  await expect(queue).toContainText('取回我', { timeout: 10_000 })
+  // row-by-row: both rows are listed, each owning its actions
+  await expect(queue).toContainText('第一条')
+
+  await queue
+    .getByRole('listitem')
+    .filter({ hasText: '取回我' })
+    .getByRole('button', { name: '取回' })
+    .click()
+
   await expect(page.locator('textarea')).toHaveValue('取回我')
-  await expect(page.getByText('第一条')).toBeVisible()
+  await expect(queue).not.toContainText('取回我')
+  await expect(queue).toContainText('第一条')
 })
 
 test('clearing drops the pending dock', async ({ page }) => {

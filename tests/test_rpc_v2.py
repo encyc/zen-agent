@@ -2223,3 +2223,97 @@ async def test_oversized_approval_args_are_marked_truncated(runtime_factory):
     assert "argsTruncated" not in event
     server._approvals[event["request_id"]].set_result("deny")
     assert await task == "deny"
+
+
+async def test_follow_up_while_idle_parks_for_the_next_run(runtime_factory):
+    _runtime, server, writes, queue = await build(runtime_factory)
+    await run_lines(
+        server,
+        queue,
+        [
+            {"type": "follow_up", "id": "f1", "text": "then check the tests"},
+            {"type": "status", "id": "f2"},
+        ],
+    )
+    messages = decode(writes)
+    assert messages[0]["ok"] is True
+    assert messages[1]["follow_ups"] == 1
+
+
+async def test_follow_up_needs_text(runtime_factory):
+    _runtime, server, writes, queue = await build(runtime_factory)
+    await run_lines(server, queue, [{"type": "follow_up", "id": "f1", "text": "  "}])
+    assert decode(writes)[0]["type"] == "error"
+
+
+async def test_status_surfaces_the_continuation_count(runtime_factory, monkeypatch):
+    """`continuing` is a flat status key: the desktop dock reads it there."""
+    from dataclasses import replace
+
+    _runtime, server, writes, queue = await build(runtime_factory)
+    base = server.chat.status
+    monkeypatch.setattr(
+        type(server.chat),
+        "status",
+        property(lambda _self: replace(base, continuing=2)),
+    )
+
+    await run_lines(server, queue, [{"type": "status", "id": "s1"}])
+
+    payload = decode(writes)[0]
+    assert payload["continuing"] == 2
+    assert payload["status"]["continuing"] == 2
+
+
+async def test_session_dequeue_takes_a_named_row(runtime_factory):
+    """The wire form addresses one row; omitting the id keeps the old newest-queue
+    behavior. The steering lane's agent-side drop is covered at the controller."""
+    _runtime, server, writes, queue = await build(runtime_factory)
+    server.chat.queue_follow_up("next")
+    server.chat.queue_follow_up("later")
+    oldest = server.chat.status.pending[0]
+
+    await run_lines(
+        server,
+        queue,
+        [
+            {"type": "session", "id": "d1", "op": "dequeue", "pending_id": oldest.id},
+            {"type": "session", "id": "d2", "op": "clear_continuations"},
+        ],
+    )
+
+    messages = decode(writes)
+    dequeued = next(m for m in messages if m.get("id") == "d1")
+    assert dequeued["dequeued"] is True
+    assert dequeued["text"] == "next", "the named row, not the newest"
+    cleared = next(m for m in messages if m.get("id") == "d2")
+    assert cleared["cleared"] == 0
+    assert [item.text for item in server.chat.status.pending] == ["later"]
+
+
+async def test_session_interrupt_pending_sends_the_row_now(runtime_factory):
+    _runtime, server, writes, queue = await build(runtime_factory)
+    server.chat.queue_follow_up("go now")
+    row = server.chat.status.pending[0]
+
+    await run_lines(
+        server,
+        queue,
+        [
+            {
+                "type": "session",
+                "id": "i1",
+                "op": "interrupt_pending",
+                "pending_id": row.id,
+            }
+        ],
+    )
+    await server.chat.wait_for_idle()
+
+    assert decode(writes)[0]["sent"] is True
+    texts = [
+        str(getattr(message, "content", ""))
+        for message in server.chat.runtime.agent.messages
+    ]
+    assert "go now" in texts
+    assert server.chat.status.pending == []

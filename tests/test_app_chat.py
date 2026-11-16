@@ -226,11 +226,12 @@ async def test_compact_now_stays_in_the_same_session(runtime_factory, capsys):
 
     assert message and "compacted" in message
     assert runtime.session.path == old_path, "compaction keeps the session identity"
-    assert len(runtime.agent.messages) == 1  # only the summary UserMessage
+    assert len(runtime.agent.messages) == 1  # the summary replaces the pair
     # Replay returns the summary segment; the file keeps the full history.
     cut = records.open_session(old_path)
     assert cut.load() == runtime.agent.messages
-    # The transcript keeps the pre-compaction rows with one divider mid-stream.
+    # The transcript keeps the pre-compaction rows with one divider mid-stream,
+    # then the summary.
     kinds = [view.kind for view in chat.transcript]
     assert kinds == ["user", "assistant", "divider", "user"]
     assert chat.take_notices() == [], "the divider is a transcript view now"
@@ -1000,12 +1001,38 @@ async def test_compact_now_sources_the_divider_and_persists_tokens(runtime_facto
     assert notice
     assert chat.notices_snapshot == [], "the divider is a transcript view now"
     kinds = [view.kind for view in chat.transcript]
-    assert kinds == ["divider", "user"], "divider leads the compacted segment"
+    assert kinds == ["divider", "user"], (
+        "divider leads the compacted segment; nothing recent outlived the budget"
+    )
     session = Session(runtime.session.path)
     session.load()
     record = next(item for item in session.records if item["type"] == "compaction")
     assert record["reason"] == "manual"
     assert record["tokensBefore"] == 500
+
+
+async def test_manual_compact_keeps_a_recent_tail_and_still_shrinks(runtime_factory):
+    """The manual budget is a quarter of the transcript, not the 20k auto cap."""
+    from conftest import text_stream
+
+    from zenagent.app import records
+
+    runtime = await runtime_factory(stream_fn=text_stream("summary"))
+    original = [
+        UserMessage(content="please review this turn " * 80, timestamp=index)
+        for index in range(12)
+    ]
+    for message in original:
+        await runtime.session.append(message)
+    runtime.agent.replace_messages(list(original))
+    chat = ChatController(runtime)
+
+    notice = await chat.compact_now()
+
+    assert notice
+    live = runtime.agent.messages
+    assert 1 < len(live) < len(original), "a summary plus a smaller recent tail"
+    assert records.open_session(runtime.session.path).load() == live
 
 
 async def test_retry_hydrates_surviving_cards_from_records(runtime_factory):
@@ -1233,3 +1260,57 @@ async def test_deliver_steers_into_a_streaming_turn(runtime_factory):
     await task
 
 
+
+
+# -- kernel follow-up lane (ctrl+q / the wire ``follow_up`` frame) -----------
+
+
+async def test_follow_up_extends_the_running_turn(runtime_factory):
+    gate = asyncio.Event()
+    runtime = await runtime_factory(stream_fn=gated_stream(gate))
+    chat = ChatController(runtime)
+    task = asyncio.create_task(chat.submit("first"))
+    await asyncio.sleep(0.05)
+
+    assert chat.follow_up("  then run the tests  ") is True
+    assert runtime.agent.pending_follow_up == 1
+    assert chat.status.continuing == 1
+    assert chat.status.follow_ups == 0, "the next-run queue is a different lane"
+
+    gate.set()
+    await task
+    await chat.wait_for_idle()
+    texts = [str(getattr(m, "content", "")) for m in runtime.agent.messages]
+    assert "then run the tests" in texts, "the run continued with the follow-up"
+    assert chat.status.continuing == 0
+
+
+async def test_follow_up_while_idle_parks_for_the_next_run(runtime_factory):
+    from conftest import text_stream
+
+    runtime = await runtime_factory(stream_fn=text_stream())
+    chat = ChatController(runtime)
+
+    assert chat.follow_up("later") is True
+    assert runtime.agent.pending_follow_up == 0, "nothing live to extend"
+    assert chat.status.follow_ups == 1
+
+
+async def test_clear_pending_drops_undelivered_follow_ups(runtime_factory):
+    gate = asyncio.Event()
+    runtime = await runtime_factory(stream_fn=gated_stream(gate))
+    chat = ChatController(runtime)
+    task = asyncio.create_task(chat.submit("first"))
+    await asyncio.sleep(0.05)
+
+    chat.follow_up("extend")
+    chat.queue_follow_up("next")
+    assert chat.clear_pending() == 2
+    assert runtime.agent.pending_follow_up == 0
+    assert chat.status.follow_ups == 0
+
+    gate.set()
+    await task
+    await chat.wait_for_idle()
+    texts = [str(getattr(m, "content", "")) for m in runtime.agent.messages]
+    assert "extend" not in texts and "next" not in texts
