@@ -295,10 +295,9 @@
 
 .pendingGroup {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 36px;
-  padding: 7px 8px 7px 12px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 8px 6px 12px;
   border: 1px solid var(--ds-hairline);
   border-radius: var(--ds-radius-card);
   background: var(--ds-surface-1);
@@ -312,6 +311,45 @@
   box-shadow:
     var(--ds-shadow-soft),
     inset 2px 0 0 0 var(--dsw-alias-state-business-primary);
+}
+
+.pendingHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 24px;
+}
+
+.pendingList {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pendingRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 24px;
+}
+
+.pendingIndex {
+  flex: none;
+  min-width: 14px;
+  font-size: var(--ds-font-11);
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-quaternary);
+}
+
+.pendingRowActions {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
 }
 
 .pendingLabel {

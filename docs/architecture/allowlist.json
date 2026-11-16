@@ -5,8 +5,8 @@
     "zenagent/agent/session.py": 807
   },
   "ts": {
-    "desktop/src/state/appStore.ts": 1189,
-    "desktop/src/dev/bridge.ts": 957,
+    "desktop/src/state/appStore.ts": 1195,
+    "desktop/src/dev/bridge.ts": 961,
     "desktop/e2e/app.spec.ts": 2750
   },
   "zenagent/app/swarm/manager.py": 886,
@@ -21,8 +21,8 @@
     },
     "ts": {
       "desktop/e2e/app.spec.ts": "payback 2026-12-31 (split by flow)",
-      "desktop/src/dev/bridge.ts": "payback 2026-12-31 (+3 clear_continuations for the follow-up lane)",
-      "desktop/src/state/appStore.ts": "payback 2026-12-31 (slice stores; +13 for the follow-up/continuation lanes)"
+      "desktop/src/dev/bridge.ts": "payback 2026-12-31 (mirrors follow-up/continuation/interrupt frames)",
+      "desktop/src/state/appStore.ts": "payback 2026-12-31 (slice stores; follow-up + interrupt lane actions)"
     }
   }
 }

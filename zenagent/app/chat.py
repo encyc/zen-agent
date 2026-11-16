@@ -436,6 +436,31 @@ class ChatController:
         self._notify()
         return "ok"
 
+    async def interrupt_with(self, text: str) -> None:
+        """Send ``text`` now: abort the live turn, then start a fresh run.
+
+        Steering waits for the next tool round (or the turn's end); this is
+        the "send it now" lane the docks offer next to 取回. The interrupted
+        turn keeps its transcript; the text becomes an ordinary user turn.
+        """
+        cleaned = text.strip()
+        if not cleaned:
+            return
+        if not (self._running or self._compacting):
+            await self.submit(cleaned)
+            return
+        self.abort()
+        await self.wait_for_idle()
+        await self.submit(cleaned)
+
+    async def interrupt_pending(self, pending_id: int) -> bool:
+        """Deliver one pending row immediately; ``False`` when it is gone."""
+        taken = self.dequeue_pending(pending_id)
+        if taken is None:
+            return False
+        await self.interrupt_with(taken)
+        return True
+
     def abort(self) -> None:
         self.runtime.agent.abort()
         self._notify()

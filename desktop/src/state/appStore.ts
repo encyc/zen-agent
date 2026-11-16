@@ -151,6 +151,7 @@ interface AppState {
   exportSession(format: ExportFormat): Promise<string | null>
   promotePending(id: number): Promise<void>
   dequeuePending(pendingId?: number): Promise<void>
+  interruptPending(pendingId: number): Promise<void>
   clearPending(): Promise<void>
   clearContinuations(): Promise<void>
   clearTodos(): Promise<void>
@@ -927,11 +928,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   async promotePending(id) {
-    await runSessionOp(
-      get,
-      { type: 'session', op: 'promote', pending_id: id },
-      () => get().refreshStatus(),
-    )
+    await statusOp(get, { type: 'session', op: 'promote', pending_id: id })
   },
 
   async dequeuePending(pendingId?: number) {
@@ -952,20 +949,24 @@ export const useAppStore = create<AppState>((set, get) => ({
     )
   },
 
+  async interruptPending(pendingId: number) {
+    await statusOp(get, {
+      type: 'session',
+      op: 'interrupt_pending',
+      pending_id: pendingId,
+    })
+  },
+
   async clearContinuations() {
-    await runSessionOp(get, { type: 'session', op: 'clear_continuations' }, () =>
-      get().refreshStatus(),
-    )
+    await statusOp(get, { type: 'session', op: 'clear_continuations' })
   },
 
   async clearPending() {
-    await runSessionOp(get, { type: 'session', op: 'clear_pending' }, () =>
-      get().refreshStatus(),
-    )
+    await statusOp(get, { type: 'session', op: 'clear_pending' })
   },
 
   async clearTodos() {
-    await runSessionOp(get, { type: 'session', op: 'clear_todos' }, () => get().refreshStatus())
+    await statusOp(get, { type: 'session', op: 'clear_todos' })
   },
 
   async compactNow() {
@@ -999,6 +1000,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 registerSwarmSender({
   send: (request) => useAppStore.getState().client().send(request),
 })
+
+/** Run a session op whose only follow-up is a status refresh. */
+function statusOp(get: () => AppState, payload: Record<string, unknown>) {
+  return runSessionOp(get, payload, () => get().refreshStatus())
+}
 
 async function runSessionOp(
   get: () => AppState,

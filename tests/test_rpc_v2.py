@@ -2289,3 +2289,31 @@ async def test_session_dequeue_takes_a_named_row(runtime_factory):
     cleared = next(m for m in messages if m.get("id") == "d2")
     assert cleared["cleared"] == 0
     assert [item.text for item in server.chat.status.pending] == ["later"]
+
+
+async def test_session_interrupt_pending_sends_the_row_now(runtime_factory):
+    _runtime, server, writes, queue = await build(runtime_factory)
+    server.chat.queue_follow_up("go now")
+    row = server.chat.status.pending[0]
+
+    await run_lines(
+        server,
+        queue,
+        [
+            {
+                "type": "session",
+                "id": "i1",
+                "op": "interrupt_pending",
+                "pending_id": row.id,
+            }
+        ],
+    )
+    await server.chat.wait_for_idle()
+
+    assert decode(writes)[0]["sent"] is True
+    texts = [
+        str(getattr(message, "content", ""))
+        for message in server.chat.runtime.agent.messages
+    ]
+    assert "go now" in texts
+    assert server.chat.status.pending == []

@@ -608,3 +608,43 @@ async def test_clear_continuations_leaves_the_pending_lanes_alone(runtime_factor
 
     gate.set()
     await task
+
+
+async def test_interrupt_pending_aborts_and_sends_the_text_now(runtime_factory):
+    """立即插话: the live turn is cancelled and the text becomes the next turn."""
+    first = {"armed": True}
+
+    async def stream(model, messages, tools, options):
+        partial = AssistantMessage(
+            content=[TextContent(text="")],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="pending",
+            timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        if first["armed"]:
+            first["armed"] = False
+            while not options.abort.aborted:
+                await asyncio.sleep(0.001)
+            raise Aborted("interrupted by the user")
+        partial.content[0].text = "done"
+        partial.stop_reason = "stop"
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    runtime = await runtime_factory(stream_fn=stream)
+    chat = ChatController(runtime)
+    task = asyncio.create_task(chat.submit("first"))
+    await asyncio.sleep(0.05)
+    chat.steer("now, not later")
+    row = next(item for item in chat.status.pending if item.lane == "steer")
+
+    assert await chat.interrupt_pending(row.id) is True
+    await task
+    await chat.wait_for_idle()
+
+    texts = [str(getattr(message, "content", "")) for message in runtime.agent.messages]
+    assert "now, not later" in texts, "the row was sent as its own turn"
+    assert chat.status.pending == []
+    assert await chat.interrupt_pending(row.id) is False, "the row is already gone"

@@ -673,6 +673,10 @@ export function installBridge(state: BridgeState) {
               text: taken?.text ?? null,
             }
           }
+          case 'interrupt_pending': {
+            state.pending = state.pending.filter((item) => item.id !== payload.pending_id)
+            return { type: 'result', id: payload.id, ok: true, sent: true }
+          }
           case 'clear_continuations':
             state.continuing = 0
             return { type: 'result', id: payload.id, ok: true }

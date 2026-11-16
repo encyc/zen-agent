@@ -4,11 +4,7 @@
 import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { useAppStore } from '../../state/appStore'
-import {
-  canDequeuePending,
-  canPromotePending,
-  queuedNewestFirst,
-} from '../../state/pending'
+import { canPromotePending, queuedNewestFirst } from '../../state/pending'
 import { useSettingsStore, useStatusStore } from '../../state/stores'
 import type { PendingMessage } from '../../rpc/types'
 import { useT } from '../../i18n/locale'
@@ -146,13 +142,11 @@ export function PendingDock() {
   const running = useStatusStore((state) => state.status?.running ?? false)
   const promotePending = useAppStore((state) => state.promotePending)
   const dequeuePending = useAppStore((state) => state.dequeuePending)
+  const interruptPending = useAppStore((state) => state.interruptPending)
   const clearPending = useAppStore((state) => state.clearPending)
   if (pending.length === 0) return null
   const queued = queuedNewestFirst(pending)
   const steering = pending.filter((item) => item.lane === 'steer')
-  const headlineQueued = queued[0]
-  // the newest steering row is the one a group-level 取回 takes back
-  const newestSteer = steering[steering.length - 1]
   return (
     <div className={css.pendingDock}>
       {steering.length > 0 && (
@@ -160,12 +154,14 @@ export function PendingDock() {
           lane="steer"
           label={t('composer.steering')}
           items={steering}
-          onDequeue={
-            newestSteer !== undefined
-              ? () => void dequeuePending(newestSteer.id)
-              : undefined
-          }
           onClear={() => void clearPending()}
+          rowActions={(item) => [
+            {
+              label: t('queue.interrupt'),
+              onPress: () => void interruptPending(item.id),
+            },
+            { label: t('queue.dequeue'), onPress: () => void dequeuePending(item.id) },
+          ]}
         />
       )}
       {queued.length > 0 && (
@@ -173,15 +169,88 @@ export function PendingDock() {
           lane="queue"
           label={t('composer.queue')}
           items={queued}
-          onPromote={
-            headlineQueued !== undefined && canPromotePending(headlineQueued, running)
-              ? () => void promotePending(headlineQueued.id)
-              : undefined
-          }
-          onDequeue={canDequeuePending(pending) ? () => void dequeuePending() : undefined}
           onClear={() => void clearPending()}
+          rowActions={(item) => [
+            ...(canPromotePending(item, running)
+              ? [
+                  {
+                    label: t('queue.promote'),
+                    onPress: () => void promotePending(item.id),
+                  },
+                ]
+              : []),
+            {
+              label: t('queue.interrupt'),
+              onPress: () => void interruptPending(item.id),
+            },
+            ...(item.images === 0
+              ? [
+                  {
+                    label: t('queue.dequeue'),
+                    onPress: () => void dequeuePending(item.id),
+                  },
+                ]
+              : []),
+          ]}
         />
       )}
+    </div>
+  )
+}
+
+interface PendingRowAction {
+  label: string
+  onPress(): void
+}
+
+/** One lane rendered row by row: every message keeps its own actions, so a
+ * specific entry can be sent now or taken back without touching its siblings. */
+function PendingGroup({
+  lane,
+  label,
+  items,
+  onClear,
+  rowActions,
+}: {
+  lane: string
+  label: string
+  items: PendingMessage[]
+  onClear: () => void
+  rowActions(item: PendingMessage): PendingRowAction[]
+}) {
+  const t = useT()
+  return (
+    <div className={css.pendingGroup} data-lane={lane}>
+      <div className={css.pendingHead}>
+        <span className={css.pendingLabel}>
+          {label} · {items.length}
+        </span>
+        <button type="button" className={css.pendingAction} onClick={onClear}>
+          {t('queue.clear')}
+        </button>
+      </div>
+      <ul className={css.pendingList}>
+        {items.map((item, index) => (
+          <li key={item.id} className={css.pendingRow}>
+            <span className={css.pendingIndex}>{index + 1}.</span>
+            <span className={css.pendingText} title={item.text}>
+              {item.text}
+            </span>
+            <span className={css.pendingRowActions}>
+              {rowActions(item).map((action) => (
+                <button
+                  key={action.label}
+                  type="button"
+                  className={css.pendingAction}
+                  onClick={action.onPress}
+                >
+                  {action.label}
+                </button>
+              ))}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
@@ -209,45 +278,6 @@ export function ContinuingDock() {
           {t('queue.clear')}
         </button>
       </div>
-    </div>
-  )
-}
-
-function PendingGroup({
-  lane,
-  label,
-  items,
-  onPromote,
-  onDequeue,
-  onClear,
-}: {
-  lane: string
-  label: string
-  items: PendingMessage[]
-  onPromote?: () => void
-  onDequeue?: () => void
-  onClear?: () => void
-}) {
-  const t = useT()
-  return (
-    <div className={css.pendingGroup} data-lane={lane}>
-      <span className={css.pendingLabel}>{label} · {items.length}</span>
-      <span className={css.pendingText}>{items[0]?.text ?? ''}</span>
-      {onPromote !== undefined && (
-        <button type="button" className={css.pendingAction} onClick={onPromote}>
-          {t('queue.promote')}
-        </button>
-      )}
-      {onDequeue !== undefined && (
-        <button type="button" className={css.pendingAction} onClick={onDequeue}>
-          {t('queue.dequeue')}
-        </button>
-      )}
-      {onClear !== undefined && (
-        <button type="button" className={css.pendingAction} onClick={onClear}>
-          {t('queue.clear')}
-        </button>
-      )}
     </div>
   )
 }

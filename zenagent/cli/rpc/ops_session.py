@@ -313,6 +313,14 @@ class SessionOps:
             else:
                 text = self.chat.dequeue_follow_up()
             return {"dequeued": text is not None, "text": text}
+        if op == "interrupt_pending":
+            if self.chat is None:
+                raise Refusal("interrupt_pending needs a runtime")
+            pending_id = request.get("pending_id")
+            if not isinstance(pending_id, int):
+                raise Refusal("interrupt_pending needs pending_id")
+            sent = await self.chat.interrupt_pending(pending_id)
+            return {"sent": sent}
         if op == "clear_continuations":
             if self.chat is None:
                 raise Refusal("clear_continuations needs a runtime")

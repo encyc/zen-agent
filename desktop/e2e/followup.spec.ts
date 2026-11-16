@@ -95,3 +95,35 @@ test('the continuation row can be cancelled on its own', async ({ page }) => {
   await dock.getByRole('button', { name: '清空全部' }).click()
   await expect(dock).toHaveCount(0)
 })
+
+test('a steering row can be sent now instead of waiting', async ({ page }) => {
+  await boot(page, initialState({ running: true }))
+  await setPending(page, [
+    { id: 31, lane: 'steer', text: '先停下看日志', images: 0, created_at: 6 },
+    { id: 32, lane: 'steer', text: '另一个想法', images: 0, created_at: 7 },
+  ])
+  const group = page.locator('[data-lane="steer"]')
+  await expect(group).toContainText('先停下看日志', { timeout: 10_000 })
+
+  // the row's own button, not the group's: the sibling row survives
+  await group
+    .getByRole('listitem')
+    .filter({ hasText: '先停下看日志' })
+    .getByRole('button', { name: '立即插话' })
+    .click()
+
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__ZEN_E2E__.calls.some(
+          (call) =>
+            call.type === 'session' &&
+            call.op === 'interrupt_pending' &&
+            call.pending_id === 31,
+        ),
+      ),
+    )
+    .toBe(true)
+  await expect(group).not.toContainText('先停下看日志')
+  await expect(group).toContainText('另一个想法')
+})
