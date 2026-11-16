@@ -8,6 +8,7 @@ import asyncio
 import time
 
 import pytest
+from conftest import settled
 
 import zenagent.agent.session as session_module
 import zenagent.cli.repl as repl_module
@@ -280,48 +281,50 @@ async def test_reload_discovers_skills_added_mid_session(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "zenagent.app.bootstrap.load_user_config", lambda *a, **k: UserConfig()
     )
-    monkeypatch.setattr(
-        "zenagent.app.bootstrap.load_user_config",
-        lambda *args, **kwargs: UserConfig(),
-    )
-    monkeypatch.setenv("HOME", str(tmp_path))  # don't discover the developer's global skills
-    monkeypatch.chdir(tmp_path)
     # Discovery also reads ~/.zenagent/skills: point HOME at the tmpdir so the
     # developer's own skill library cannot leak into the count below.
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
 
-    calls = {"n": 0}
+    lines: list[str] = []
+    sent: list[str] = []
+    blanks = 0
 
     async def input_fn() -> str:
+        nonlocal blanks
         await asyncio.sleep(0.02)
-        calls["n"] += 1
-        if calls["n"] == 1:
+        if not sent:
+            sent.append("hi")
             return "hi"
-        if calls["n"] == 2:
+        if "reload" not in sent:
+            # /reload refuses mid-run: a blank line is the REPL's no-op, which
+            # reaps the run -- so the command lands only once it really settled.
+            if not settled(lines):
+                blanks += 1
+                assert blanks < 5000, "the first run never settled"
+                await asyncio.sleep(0)  # let the run task make progress
+                return ""
             skill_dir = tmp_path / ".zenagent" / "skills" / "late"
             skill_dir.mkdir(parents=True)
             (skill_dir / "SKILL.md").write_text(
                 "---\nname: late\ndescription: added mid-session\n---\nbody\n"
             )
+            sent.append("reload")
             return "/reload"
         return "/exit"
 
-    lines: list[str] = []
     code = await repl(
         "glm-5.3",
         stream_fn=scripted_stream(0.0, "hello"),
         input_fn=input_fn,
         print_fn=lambda *a, **k: lines.append("".join(str(x) for x in a)),
         api_key="k",
-    mcp=False,
+        mcp=False,
     )
     assert code == 0
     joined = "\n".join(lines)
     assert "reloaded:" in joined
     assert "1 skills" in joined
-    # the newly discovered skill also shows up in /skills
-    lines.clear()
-    calls["n"] = 0
 
 
 # ---------------------------------------------------------------------------
