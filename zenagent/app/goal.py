@@ -12,12 +12,12 @@ import time
 import uuid
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Literal, Protocol, cast
 
 from zenagent.agent.session import Session
 from zenagent.app import records
 from zenagent.app.views import GoalView
-from zenagent.types import Usage
+from zenagent.types import Message, Usage
 
 if TYPE_CHECKING:
     from zenagent.limits import Limits
@@ -30,6 +30,10 @@ __all__ = [
     "GoalLimits",
     "GoalState",
     "GoalStatus",
+    "GoalTurnContext",
+    "GoalVerdict",
+    "GoalVerdictKind",
+    "GoalVerifier",
     "goal_tokens",
     "parse_goal_args",
 ]
@@ -173,6 +177,40 @@ class GoalState:
         )
 
 
+GoalVerdictKind = Literal["met", "not_met", "impossible"]
+
+
+@dataclass(frozen=True)
+class GoalVerdict:
+    """One verification result."""
+
+    verdict: GoalVerdictKind
+    reason: str
+    evidence: str = ""
+    tokens: int = 0
+
+
+@dataclass
+class GoalTurnContext:
+    """What one finished turn contributes to the goal decision."""
+
+    messages: list[Message]
+    auto: bool
+    tool_calls: int
+    termination: str | None
+    tokens_delta: int
+    subagent_tokens_delta: int
+    elapsed_s: float
+    user_queued: bool
+
+
+class GoalVerifier(Protocol):
+    """Completion verifier: check command or an independent model call."""
+
+    async def verify(self, goal: GoalState, ctx: GoalTurnContext) -> GoalVerdict:
+        ...
+
+
 class GoalController:
     """Owns one session's goal state, persistence and lifecycle.
 
@@ -185,8 +223,8 @@ class GoalController:
         self,
         *,
         limits: GoalLimits | None = None,
-        verifier: object | None = None,
-        check_verifier: object | None = None,
+        verifier: GoalVerifier | None = None,
+        check_verifier: GoalVerifier | None = None,
         now: Callable[[], float] = time.time,
     ) -> None:
         self._limits = limits or GoalLimits()
@@ -204,8 +242,8 @@ class GoalController:
         self,
         *,
         limits: GoalLimits,
-        verifier: object | None,
-        check_verifier: object | None = None,
+        verifier: GoalVerifier | None,
+        check_verifier: GoalVerifier | None = None,
     ) -> None:
         """Update defaults for future goals; the current goal keeps its budget."""
 
