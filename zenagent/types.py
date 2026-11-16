@@ -142,6 +142,8 @@ class UserMessage:
     #: True when the loop delivered this through the steering channel
     #: (provenance for the file and the UI; adapters never read it).
     steering: bool = False
+    #: True when the controller started this turn to continue a goal.
+    goal: bool = False
 
     def to_json(self) -> dict:
         if isinstance(self.content, str):
@@ -151,6 +153,8 @@ class UserMessage:
         payload = {"role": "user", "content": content, "timestamp": self.timestamp}
         if self.steering:
             payload["steering"] = True
+        if self.goal:
+            payload["goal"] = True
         return payload
 
 
@@ -324,6 +328,7 @@ def message_from_json(d: dict) -> Message:
             content=content,
             timestamp=_require(d, "timestamp", "user message"),
             steering=d.get("steering") is True,
+            goal=d.get("goal") is True,
         )
     if role == "assistant":
         return AssistantMessage(

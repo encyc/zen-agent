@@ -173,6 +173,8 @@ async def agent_loop(
     state: AgentState,
     config: AgentConfig,
     abort: AbortToken | None = None,
+    *,
+    user_goal: bool = False,
 ) -> AsyncIterator[AgentEvent]:
     """Run the agent loop, yielding ``AgentEvent`` until the run ends.
 
@@ -185,7 +187,9 @@ async def agent_loop(
     yield AgentEvent(type="agent_start")
 
     if prompt is not None:
-        user = UserMessage(content=prompt, timestamp=int(time.time()))
+        user = UserMessage(
+            content=prompt, timestamp=int(time.time()), goal=user_goal
+        )
         state.messages.append(user)
         new_messages.append(user)
         yield AgentEvent(type="message_start", message=user)

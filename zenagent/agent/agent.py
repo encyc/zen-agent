@@ -224,12 +224,18 @@ class Agent:
         if run is not None:
             await run.done.wait()
 
-    async def prompt(self, text: str, images: list[ImageContent] | None = None) -> None:
+    async def prompt(
+        self,
+        text: str,
+        images: list[ImageContent] | None = None,
+        *,
+        goal: bool = False,
+    ) -> None:
         """Start a run with a new user message and return when it settles."""
         if images:
-            await self._drive([*images, TextContent(text=text)])
+            await self._drive([*images, TextContent(text=text)], goal=goal)
         else:
-            await self._drive(text)
+            await self._drive(text, goal=goal)
 
     async def continue_(self) -> None:
         """Start a run without adding a message (retry/replay), e.g. after a resume."""
@@ -329,7 +335,10 @@ class Agent:
                 )
 
     async def _drive(
-        self, prompt: str | list[TextContent | ImageContent] | None
+        self,
+        prompt: str | list[TextContent | ImageContent] | None,
+        *,
+        goal: bool = False,
     ) -> None:
         if self._run is not None:
             raise RuntimeError("Agent is already running; await wait_for_idle() first")
@@ -338,7 +347,7 @@ class Agent:
         self._error_message = None
         try:
             async for event in agent_loop(
-                prompt, self._state, self._config(), run.abort
+                prompt, self._state, self._config(), run.abort, user_goal=goal
             ):
                 await self._dispatch(event)
                 if event.type == "agent_end":
