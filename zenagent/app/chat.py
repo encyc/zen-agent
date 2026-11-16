@@ -73,6 +73,9 @@ class ChatController:
         self._pending_queue = PendingQueue()
         self._task: asyncio.Task | None = None
         self._running = False
+        #: Serializes interrupt takeovers: abort → wait → submit must not
+        #: interleave with another takeover, or two runs would start at once.
+        self._interrupt_lock = asyncio.Lock()
         #: True while an automatic compaction runs: the controller stays busy
         #: so a submit queues instead of racing the summarizer (C2).
         self._compacting = False
@@ -254,6 +257,9 @@ class ChatController:
         if self._running or self._compacting:
             self.queue_follow_up(text, pending)
             return
+        # Mark busy before the task is scheduled: a takeover arriving in the
+        # gap would otherwise see "idle" and start a second run on the agent.
+        self._running = True
         self._task = asyncio.create_task(self._run(text, pending))
 
     @property
@@ -446,12 +452,17 @@ class ChatController:
         cleaned = text.strip()
         if not cleaned:
             return
-        if not (self._running or self._compacting):
+        async with self._interrupt_lock:
+            if not (self._running or self._compacting):
+                await self.submit(cleaned)
+                return
+            self.abort()
+            await self.wait_for_idle()
             await self.submit(cleaned)
-            return
-        self.abort()
-        await self.wait_for_idle()
-        await self.submit(cleaned)
+            # Give the scheduled run one step to bind: Agent.abort() is a no-op
+            # while no run exists, so a takeover landing in this gap would
+            # silently lose its cancellation and the texts would run in FIFO.
+            await asyncio.sleep(0)
 
     async def interrupt_pending(self, pending_id: int) -> bool:
         """Deliver one pending row immediately; ``False`` when it is gone."""

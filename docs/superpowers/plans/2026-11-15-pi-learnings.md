@@ -228,6 +228,12 @@ tool_call。
 queue）；状态栏与 GUI dock 都显示接续条数（`RunStatus.continuing`）。GUI 走
 `follow_up` 帧，桌面侧 `Cmd/Ctrl+Enter` 发送。
 
+第四种交付是**抢占式立即插话**（GUI 行内「立即插话」，`session op=interrupt_pending`）：
+abort 当前回合后把该文本作为新回合发出。中断幂等——同一时刻只 abort 一次，不为每条消息
+各中断一次；abort 落下时未送达的插话降级回排队 lane，所以既不丢消息也不会并发两个回合。
+严格 FIFO 由排队 lane 负责（一轮一条），长任务用 `bash` 的 `async: true` 后台任务，
+abort 不会杀掉它。
+
 ### Review Focus 复核
 
 1. rewind 投影 == resume 视图：**已由真实 loop 的端到端测试钉住**（原先的单测

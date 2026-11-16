@@ -32,8 +32,9 @@ TUI/REPL 是同一套实现（headless `-p` 例外，它自己装配 Agent，见
 | `cancel` | — | abort 当前 run |
 | `status` | — | running / busy / messages / model / session / mode / tools / usage / termination / follow_ups / steering / continuing / cost，以及 TUI reducer 字段：thinking / context_used / context_window / cache_hit_ratio / turn_ms / todos / last_error / pending / jobs / subagents / active_subagent / subagent_cost / subagent_tokens |
 | `shutdown` | — | 等运行中的 run abort 后退出 |
-| `steer` | `text` | 插话；空闲时进入 follow-up 排队 |
+| `steer` | `text` | 插话（下一个工具轮边界注入）；空闲时进入 follow-up 排队 |
 | `follow_up` | `text` | 接续：让运行中的本轮在该停时继续（同一 run 的普通 user 回合）；空闲时进入下一次 run 的排队 |
+| `session op=interrupt_pending` | `pending_id` | 立即插话：占用地中断当前回合并把它作为新回合发送；未送达的插话降级到排队 lane，中断幂等 |
 | `tools` | — | 模型可见工具 `[{name, description, approval}]` |
 | `model` | `model_id` | 切模型（key / thinking / session id / 窗口一起更新） |
 | `mode` | `mode` | `plan` / `ask` / `auto`（旧客户端可继续发 `zen`，服务端归一为 `auto`） |

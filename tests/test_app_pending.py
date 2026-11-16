@@ -648,3 +648,100 @@ async def test_interrupt_pending_aborts_and_sends_the_text_now(runtime_factory):
     assert "now, not later" in texts, "the row was sent as its own turn"
     assert chat.status.pending == []
     assert await chat.interrupt_pending(row.id) is False, "the row is already gone"
+
+
+async def test_a_takeover_burst_aborts_once_and_demotes_the_rest(runtime_factory):
+    """立即插话 is preemptive, not per-message: the live turn is aborted once.
+
+    Steering that had not reached the model when the abort lands is demoted to
+    the queue lane (its own FIFO), so a burst cannot lose text and cannot run
+    two agent turns at once — the second click simply finds its row demoted.
+    """
+    calls = {"n": 0}
+
+    async def stream(model, messages, tools, options):
+        calls["n"] += 1
+        partial = AssistantMessage(
+            content=[TextContent(text="")],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="pending",
+            timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        if calls["n"] == 1:
+            while not options.abort.aborted:
+                await asyncio.sleep(0.001)
+            raise Aborted("taken over")
+        partial.content[0].text = "done"
+        partial.stop_reason = "stop"
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    runtime = await runtime_factory(stream_fn=stream)
+    chat = ChatController(runtime)
+    task = asyncio.create_task(chat.submit("first"))
+    await asyncio.sleep(0.05)
+    chat.steer("A")
+    chat.steer("B")
+    rows = [item for item in chat.status.pending if item.lane == "steer"]
+
+    assert await chat.interrupt_pending(rows[0].id) is True
+    # A aborted the live turn once; B never got its own abort — it was demoted
+    # to the queue before a second takeover could target it.
+    assert await chat.interrupt_pending(rows[1].id) is False
+    await task
+    await chat.wait_for_idle()
+
+    assert calls["n"] == 3, "original + the takeover turn + the demoted queue turn"
+    texts = [str(getattr(message, "content", "")) for message in runtime.agent.messages]
+    assert "A" in texts and "B" in texts, "nothing was lost in the takeover"
+    assert texts.index("A") < texts.index("B"), "the takeover ran first, the rest FIFO"
+    assert chat.status.last_error == "", "no concurrent-run crash"
+    assert chat.status.running is False
+    assert chat.status.pending == []
+
+
+async def test_a_second_takeover_aborts_the_first_takeover_turn(runtime_factory):
+    """Serial takeovers: each aborts the live turn; no run ever overlaps."""
+    calls = {"n": 0}
+
+    async def stream(model, messages, tools, options):
+        calls["n"] += 1
+        partial = AssistantMessage(
+            content=[TextContent(text="")],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="pending",
+            timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        if calls["n"] <= 2:
+            while not options.abort.aborted:
+                await asyncio.sleep(0.001)
+            raise Aborted("taken over")
+        partial.content[0].text = "done"
+        partial.stop_reason = "stop"
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    runtime = await runtime_factory(stream_fn=stream)
+    chat = ChatController(runtime)
+    task = asyncio.create_task(chat.submit("first"))
+    await asyncio.sleep(0.05)
+    chat.steer("A")
+    chat.queue_follow_up("B")
+    steer_row = next(item for item in chat.status.pending if item.lane == "steer")
+    queue_row = next(item for item in chat.status.pending if item.lane == "queue")
+
+    assert await chat.interrupt_pending(steer_row.id) is True
+    # the second takeover targets the turn the first one just started
+    assert await chat.interrupt_pending(queue_row.id) is True
+    await task
+    await chat.wait_for_idle()
+
+    assert calls["n"] == 3, "original + two takeover turns"
+    texts = [str(getattr(message, "content", "")) for message in runtime.agent.messages]
+    assert "A" in texts and "B" in texts
+    assert texts.index("A") < texts.index("B")
+    assert chat.status.last_error == "", "the abort landed instead of a lost interrupt"
