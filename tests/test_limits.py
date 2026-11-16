@@ -46,6 +46,7 @@ def test_knobs_are_grouped_by_the_sections_the_pages_show():
         "agent",
         "subagents",
         "tools",
+        "goal",
         "zen",
         "swarm",
     }

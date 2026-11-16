@@ -61,6 +61,7 @@ def _section_accents() -> dict[str, str]:
         "session": _active["sec-session"],
         "model": _active["sec-model"],
         "runtime": _active["sec-runtime"],
+        "goal": _active["sec-context"],
         "context": _active["sec-context"],
         "todo": _active["accent"],
         "subagent": _active["sec-subagent"],

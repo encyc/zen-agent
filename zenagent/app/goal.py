@@ -255,6 +255,9 @@ class GoalController:
         self._budget_abort = False
         self._turn_auto = True
         self._turn_started_at = 0.0
+        #: Check goals created/resumed in this process are trusted; a goal
+        #: loaded from disk by a fresh controller needs /goal resume first.
+        self._trusted_checks: set[str] = set()
 
     @property
     def state(self) -> GoalState | None:
@@ -296,7 +299,12 @@ class GoalController:
             except ValueError:
                 continue
         self._state = state
-        if state is not None and state.status == "active" and state.check:
+        if (
+            state is not None
+            and state.status == "active"
+            and state.check
+            and state.goal_id not in self._trusted_checks
+        ):
             state.status = "paused"
             state.last_reason = "check needs confirmation; run /goal resume"
             state.updated_at = self._now()
@@ -334,6 +342,8 @@ class GoalController:
         state.created_at = stamp
         state.updated_at = stamp
         self._state = state
+        if state.check:
+            self._trusted_checks.add(state.goal_id)
         self._persist()
         return state
 
@@ -355,11 +365,15 @@ class GoalController:
         state.verifier_failures = 0
         state.check_failures = 0
         state.last_check_key = ""
+        if state.check:
+            self._trusted_checks.add(state.goal_id)
         state.updated_at = self._now()
         self._persist()
         return state
 
     def clear(self) -> None:
+        if self._state is not None:
+            self._trusted_checks.discard(self._state.goal_id)
         self._state = None
         self._persist()
 

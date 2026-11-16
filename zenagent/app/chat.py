@@ -10,6 +10,7 @@ from pathlib import Path
 
 from zenagent.agent.session import Session
 from zenagent.agent.subagents import carry_task_dir
+from zenagent.app import goal_chat
 from zenagent.app.attachments_state import Attachments
 from zenagent.app.compact import (
     KEEP_RECENT_TOKENS,
@@ -20,7 +21,6 @@ from zenagent.app.compact import (
 from zenagent.app.context import build_context_report
 from zenagent.app.error_notice import bug_notice, run_error_notice
 from zenagent.app.git import git_status
-from zenagent.app.goal import GoalTurnContext, goal_tokens, render_goal_prompt
 from zenagent.app.pending import PendingQueue
 from zenagent.app.retry import prepare_retry
 from zenagent.app.runtime import Runtime
@@ -289,44 +289,19 @@ class ChatController:
     ) -> str:
         """Set a goal and start its first turn (or defer while busy)."""
 
-        goal = getattr(self.runtime, "goal", None)
-        if goal is None:
-            raise RuntimeError("goal controller is not wired")
-        state = goal.set(objective, check=check, max_turns=max_turns)
-        if self.busy:
-            self._notify()
-            return t("cmdmsg.goal_start_deferred")
-        self._running = True
-        self._task = asyncio.create_task(
-            self._run(render_goal_prompt(state), goal=True)
+        return goal_chat.start_goal(
+            self, objective, check=check, max_turns=max_turns
         )
-        self._notify()
-        return t("cmdmsg.goal_started")
 
     def maybe_continue_goal(self) -> None:
         """Start a goal turn when the controller is idle and the goal is active."""
 
-        goal = getattr(self.runtime, "goal", None)
-        if goal is None or self.busy or self._goal_checking:
-            return
-        if self._pending_queue.items:
-            return
-        state = goal.state
-        if state is None or state.status != "active":
-            return
-        self._running = True
-        self._task = asyncio.create_task(
-            self._run(render_goal_prompt(state), goal=True)
-        )
-        self._notify()
+        goal_chat.maybe_continue_goal(self)
 
     def on_frontend_ready(self) -> None:
         """Resume an active goal once, after the first frontend paint."""
 
-        if self._frontend_ready:
-            return
-        self._frontend_ready = True
-        self.maybe_continue_goal()
+        goal_chat.on_frontend_ready(self)
 
     @property
     def attachments(self) -> list[ImageContent]:
@@ -725,16 +700,7 @@ class ChatController:
     ) -> None:
         self._running = True
         self._last_error = ""
-        self._goal_turn = goal
-        self._turn_tool_calls = 0
-        self._goal_usage_at_start = usage_total(self.runtime.agent.messages)
-        self._goal_subagent_tokens_at_start = self._subagents.tokens
-        self._goal_started_at = time.monotonic()
-        goal_ctl = getattr(self.runtime, "goal", None)
-        if goal_ctl is not None:
-            goal_ctl.note_turn_start(auto=goal)
-        if goal_ctl is not None and goal_ctl.state is not None:
-            self._goal_watchdog = asyncio.create_task(self._goal_watch())
+        goal_chat.begin_goal_turn(self, goal)
         self._notify()
         started = time.monotonic()
         before_output = usage_total(self.runtime.agent.messages).output
@@ -799,48 +765,10 @@ class ChatController:
             if termination != "aborted" and not self._pending_queue.items:
                 await self._maybe_auto_compact()
             goal_started = False
-            if (
-                not continuation
-                and not self._pending_queue.items
-                and goal_ctl is not None
-                and goal_ctl.state is not None
-                and goal_ctl.state.status == "active"
-            ):
-                ctx = GoalTurnContext(
-                    messages=list(self.runtime.agent.messages),
-                    auto=self._goal_turn,
-                    tool_calls=self._turn_tool_calls,
-                    termination=termination,
-                    tokens_delta=self._goal_tokens_delta(),
-                    subagent_tokens_delta=self._goal_subagent_tokens_delta(),
-                    elapsed_s=(
-                        time.monotonic() - self._goal_started_at
-                        if self._goal_started_at is not None
-                        else 0.0
-                    ),
-                    user_queued=False,
+            if not continuation and not self._pending_queue.items:
+                goal_started = await goal_chat.end_goal_turn(
+                    self, termination=termination
                 )
-                self._goal_checking = True
-                self._notify()
-                try:
-                    decision = await goal_ctl.after_turn(ctx)
-                except Exception as exc:  # noqa: BLE001 - never kill the session
-                    self._last_error = bug_notice(repr(exc))
-                    decision = None
-                finally:
-                    self._goal_checking = False
-                if (
-                    decision is not None
-                    and decision.action == "continue"
-                    and decision.prompt
-                ):
-                    self._running = False
-                    self._task = None
-                    self._notify()
-                    self._task = asyncio.create_task(
-                        self._run(decision.prompt, goal=True)
-                    )
-                    goal_started = True
             if not goal_started:
                 self._running = False
                 self._task = None
@@ -856,36 +784,6 @@ class ChatController:
                         self._task = asyncio.create_task(
                             self._run(item.message.text, item.images)
                         )
-
-    async def _goal_watch(self) -> None:
-        """Check the hard token/wall budget while a goal run is in flight."""
-
-        try:
-            while True:
-                await asyncio.sleep(5)
-                self._check_goal_budget()
-        except asyncio.CancelledError:
-            return
-
-    def _goal_tokens_delta(self) -> int:
-        api = self.runtime.agent.model.api
-        current = usage_total(self.runtime.agent.messages)
-        return max(0, goal_tokens(current, api) - goal_tokens(self._goal_usage_at_start, api))
-
-    def _goal_subagent_tokens_delta(self) -> int:
-        return max(0, self._subagents.tokens - self._goal_subagent_tokens_at_start)
-
-    def _check_goal_budget(self) -> None:
-        goal_ctl = getattr(self.runtime, "goal", None)
-        if goal_ctl is None or self._goal_started_at is None:
-            return
-        if goal_ctl.state is None or goal_ctl.state.status != "active":
-            return
-        tokens = self._goal_tokens_delta() + self._goal_subagent_tokens_delta()
-        elapsed = time.monotonic() - self._goal_started_at
-        if goal_ctl.budget_exceeded(tokens_delta=tokens, elapsed_s=elapsed):
-            goal_ctl.note_budget_abort()
-            self.runtime.agent.abort()
 
     def _demote_steering(self) -> None:
         """Turn undelivered steering into visible queue entries (nothing lost)."""
@@ -927,7 +825,7 @@ class ChatController:
         if event.type == "tool_execution_end":
             self._turn_tool_calls += 1
         elif event.type == "message_end":
-            self._check_goal_budget()
+            goal_chat.check_goal_budget(self)
         changed = self._builder.apply(event)
         if (
             event.type in ("tool_execution_start", "tool_execution_end")
