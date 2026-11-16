@@ -306,8 +306,17 @@ class SessionOps:
         if op == "dequeue":
             if self.chat is None:
                 raise Refusal("dequeue needs a runtime")
-            text = self.chat.dequeue_follow_up()
+            pending_id = request.get("pending_id")
+            if isinstance(pending_id, int):
+                # One named row, either lane (the dock's per-row 取回).
+                text = self.chat.dequeue_pending(pending_id)
+            else:
+                text = self.chat.dequeue_follow_up()
             return {"dequeued": text is not None, "text": text}
+        if op == "clear_continuations":
+            if self.chat is None:
+                raise Refusal("clear_continuations needs a runtime")
+            return {"cleared": self.chat.clear_continuations()}
         if op == "clear_pending":
             if self.chat is None:
                 raise Refusal("clear_pending needs a runtime")

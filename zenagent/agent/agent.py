@@ -194,6 +194,17 @@ class Agent:
         """
         self._follow_up.append(text)
 
+    def drop_steering(self, index: int) -> bool:
+        """Remove one queued steering entry by its delivery position.
+
+        The controller keeps a visible row per steering message; taking that
+        row back must take the queued text with it or the model still sees it.
+        """
+        if 0 <= index < len(self._steering):
+            del self._steering[index]
+            return True
+        return False
+
     def take_follow_up(self) -> list[str]:
         """Remove and return queued follow-up input (abort / clear cleanup)."""
         texts = self._follow_up

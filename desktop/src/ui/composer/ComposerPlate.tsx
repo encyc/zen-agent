@@ -21,6 +21,15 @@ export interface ComposerPrimary {
   onPress(): void
 }
 
+/** A labelled action beside the round primary button (e.g. "continue this
+ * turn" while a run is streaming — a visible alternative to the shortcut). */
+export interface ComposerSecondary {
+  label: string
+  hint?: string
+  disabled?: boolean
+  onPress(): void
+}
+
 export interface ComposerOption {
   key: string
   name: ReactNode
@@ -38,6 +47,7 @@ export interface ComposerPlateProps {
   onCaret(position: number): void
   onKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>): void
   primary: ComposerPrimary
+  secondary?: ComposerSecondary
   menu?: ReactNode
   attachments?: ReactNode
   leading?: ReactNode
@@ -95,6 +105,7 @@ export function ComposerPlate({
   onCaret,
   onKeyDown,
   primary,
+  secondary,
   menu,
   attachments,
   leading,
@@ -259,6 +270,18 @@ export function ComposerPlate({
         <div className={css.tools}>{leading}</div>
         <div className={css.trailing}>
           {trailing}
+          {secondary !== undefined && (
+            <Tooltip label={secondary.hint ?? secondary.label}>
+              <button
+                type="button"
+                className={css.secondary}
+                disabled={secondary.disabled ?? false}
+                onClick={secondary.onPress}
+              >
+                {secondary.label}
+              </button>
+            </Tooltip>
+          )}
           <Tooltip label={primaryLabel}>
             <button
               type="button"

@@ -245,6 +245,35 @@ html[data-composer-resizing] * {
   cursor: default;
 }
 
+.secondary {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--ds-hairline);
+  border-radius: 999px;
+  background: var(--ds-surface-1);
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--ds-font-12);
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color 100ms ease,
+    border-color 100ms ease,
+    opacity 100ms ease;
+}
+
+.secondary:hover:not(:disabled) {
+  background: var(--ds-surface-2);
+  border-color: var(--ds-hairline-strong);
+}
+
+.secondary:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 /* ---- attachments ---------------------------------------------------------------- */
 
 .attachRail {

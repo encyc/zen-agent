@@ -151,6 +151,8 @@ export function PendingDock() {
   const queued = queuedNewestFirst(pending)
   const steering = pending.filter((item) => item.lane === 'steer')
   const headlineQueued = queued[0]
+  // the newest steering row is the one a group-level 取回 takes back
+  const newestSteer = steering[steering.length - 1]
   return (
     <div className={css.pendingDock}>
       {steering.length > 0 && (
@@ -158,6 +160,11 @@ export function PendingDock() {
           lane="steer"
           label={t('composer.steering')}
           items={steering}
+          onDequeue={
+            newestSteer !== undefined
+              ? () => void dequeuePending(newestSteer.id)
+              : undefined
+          }
           onClear={() => void clearPending()}
         />
       )}
@@ -185,6 +192,7 @@ export function PendingDock() {
 export function ContinuingDock() {
   const t = useT()
   const continuing = useStatusStore((state) => state.status?.continuing ?? 0)
+  const clearContinuations = useAppStore((state) => state.clearContinuations)
   if (continuing <= 0) return null
   return (
     <div className={css.pendingDock} data-continuing-dock>
@@ -193,6 +201,13 @@ export function ContinuingDock() {
           {t('composer.continuing')} · {continuing}
         </span>
         <span className={css.pendingText}>{t('composer.continuingHint')}</span>
+        <button
+          type="button"
+          className={css.pendingAction}
+          onClick={() => void clearContinuations()}
+        >
+          {t('queue.clear')}
+        </button>
       </div>
     </div>
   )

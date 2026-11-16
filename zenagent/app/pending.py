@@ -70,6 +70,24 @@ class PendingQueue:
                 return self._items.pop(index)
         return None
 
+    def take(self, pending_id: int) -> PendingItem | None:
+        """Pop one entry by id, whichever lane it sits in."""
+        for index, item in enumerate(self._items):
+            if item.message.id == pending_id:
+                return self._items.pop(index)
+        return None
+
+    def steer_ordinal(self, pending_id: int) -> int | None:
+        """Position among steering entries (the agent's delivery order)."""
+        ordinal = 0
+        for item in self._items:
+            if item.message.lane != "steer":
+                continue
+            if item.message.id == pending_id:
+                return ordinal
+            ordinal += 1
+        return None
+
     def dequeue_latest(self) -> tuple[str, list[ImageContent]] | None:
         """Pop the most recently queued follow-up: ``(text, images)``, or None.
 

@@ -281,6 +281,15 @@ export function InputBar() {
         onCaret={setCursor}
         onKeyDown={onKeyDown}
         primary={primary}
+        secondary={
+          busy && draft.trim() !== ''
+            ? {
+                label: t('composer.continue'),
+                hint: t('composer.continueHint'),
+                onPress: doFollowUp,
+              }
+            : undefined
+        }
         plateData={{ 'data-composer-plate': '' }}
         menu={
           menuOpen ? (

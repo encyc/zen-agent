@@ -304,6 +304,13 @@ class ChatController:
         self._notify()
         return True
 
+    def clear_continuations(self) -> int:
+        """Drop the queued continuations without touching the pending lanes."""
+        cleared = len(self.runtime.agent.take_follow_up())
+        if cleared:
+            self._notify()
+        return cleared
+
     def clear_pending(self) -> int:
         """Drop every pending message (queue, steering and follow-ups).
 
@@ -337,6 +344,23 @@ class ChatController:
     def clear_follow_ups(self) -> None:
         """Backwards-compatible alias for :meth:`clear_pending`."""
         self.clear_pending()
+
+    def dequeue_pending(self, pending_id: int) -> str | None:
+        """Take one pending row back into the composer, from either lane.
+
+        A steering row also lives on the agent: dropping the visible row
+        without dropping the queued text would deliver it anyway.
+        """
+        ordinal = self._pending_queue.steer_ordinal(pending_id)
+        taken = self._pending_queue.take(pending_id)
+        if taken is None:
+            return None
+        if ordinal is not None:
+            self.runtime.agent.drop_steering(ordinal)
+        if taken.images:
+            self._attachments.prepend(taken.images)  # back into the composer
+        self._notify()
+        return taken.message.text
 
     def dequeue_follow_up(self) -> str | None:
         """Take the most recently queued follow-up back out of the queue.

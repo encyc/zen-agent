@@ -561,3 +561,50 @@ def test_find_and_remove_by_id():
     queue.remove(found)
     assert queue.items == []
     assert queue.find(message.id) is None
+
+
+# -- per-row dequeue and the continuation lane -------------------------------
+
+
+async def test_dequeue_pending_takes_one_steering_row_back(runtime_factory):
+    """A steering row must leave the agent queue too, or it is delivered anyway."""
+    gate = asyncio.Event()
+    runtime = await runtime_factory(stream_fn=gated_stream(gate))
+    chat = ChatController(runtime)
+    task = asyncio.create_task(chat.submit("first"))
+    await asyncio.sleep(0.05)
+
+    chat.steer("one")
+    chat.steer("two")
+    assert runtime.agent.pending_steering == 2
+    newest = [item for item in chat.status.pending if item.lane == "steer"][-1]
+
+    assert chat.dequeue_pending(newest.id) == "two"
+    assert runtime.agent.pending_steering == 1
+    assert [item.text for item in chat.status.pending] == ["one"]
+
+    gate.set()
+    await task
+    await chat.wait_for_idle()
+    texts = [str(getattr(message, "content", "")) for message in runtime.agent.messages]
+    assert "one" in texts, "the row that stayed visible still reaches the model"
+    assert "two" not in texts, "the taken-back text must not be delivered"
+
+
+async def test_clear_continuations_leaves_the_pending_lanes_alone(runtime_factory):
+    gate = asyncio.Event()
+    runtime = await runtime_factory(stream_fn=gated_stream(gate))
+    chat = ChatController(runtime)
+    task = asyncio.create_task(chat.submit("first"))
+    await asyncio.sleep(0.05)
+
+    chat.follow_up("continue")
+    chat.queue_follow_up("next")
+    assert runtime.agent.pending_follow_up == 1
+
+    assert chat.clear_continuations() == 1
+    assert runtime.agent.pending_follow_up == 0
+    assert chat.status.follow_ups == 1, "the next-run queue is a different lane"
+
+    gate.set()
+    await task

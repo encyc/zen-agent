@@ -2263,3 +2263,29 @@ async def test_status_surfaces_the_continuation_count(runtime_factory, monkeypat
     payload = decode(writes)[0]
     assert payload["continuing"] == 2
     assert payload["status"]["continuing"] == 2
+
+
+async def test_session_dequeue_takes_a_named_row(runtime_factory):
+    """The wire form addresses one row; omitting the id keeps the old newest-queue
+    behavior. The steering lane's agent-side drop is covered at the controller."""
+    _runtime, server, writes, queue = await build(runtime_factory)
+    server.chat.queue_follow_up("next")
+    server.chat.queue_follow_up("later")
+    oldest = server.chat.status.pending[0]
+
+    await run_lines(
+        server,
+        queue,
+        [
+            {"type": "session", "id": "d1", "op": "dequeue", "pending_id": oldest.id},
+            {"type": "session", "id": "d2", "op": "clear_continuations"},
+        ],
+    )
+
+    messages = decode(writes)
+    dequeued = next(m for m in messages if m.get("id") == "d1")
+    assert dequeued["dequeued"] is True
+    assert dequeued["text"] == "next", "the named row, not the newest"
+    cleared = next(m for m in messages if m.get("id") == "d2")
+    assert cleared["cleared"] == 0
+    assert [item.text for item in server.chat.status.pending] == ["later"]
