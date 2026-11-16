@@ -20,6 +20,7 @@ from zenagent.app.goal import (
     GoalTurnContext,
     GoalVerdict,
     GoalVerdictKind,
+    GoalVerifierError,
     goal_tokens,
 )
 from zenagent.providers.catalog import Model
@@ -49,10 +50,6 @@ _SYSTEM_PROMPT = (
     'keys: {"verdict":"met|not_met|impossible","reason":"one short sentence"}.'
     " Use impossible only when the goal cannot be satisfied."
 )
-
-
-class GoalVerifierError(RuntimeError):
-    """The verifier could not produce a verdict (provider or parse failure)."""
 
 
 class CheckVerifier:

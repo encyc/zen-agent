@@ -27,6 +27,7 @@ __all__ = [
     "GoalAction",
     "GoalArgs",
     "GoalController",
+    "GoalDecision",
     "GoalLimits",
     "GoalState",
     "GoalStatus",
@@ -34,8 +35,10 @@ __all__ = [
     "GoalVerdict",
     "GoalVerdictKind",
     "GoalVerifier",
+    "GoalVerifierError",
     "goal_tokens",
     "parse_goal_args",
+    "render_goal_prompt",
 ]
 
 GoalStatus = Literal["active", "paused", "blocked", "budget_limited", "complete"]
@@ -204,6 +207,21 @@ class GoalTurnContext:
     user_queued: bool
 
 
+class GoalVerifierError(RuntimeError):
+    """The verifier could not produce a verdict (provider or parse failure)."""
+
+
+@dataclass(frozen=True)
+class GoalDecision:
+    """What ChatController should do after one turn."""
+
+    action: Literal["continue", "stop"]
+    status: GoalStatus
+    prompt: str | None = None
+    reason: str = ""
+    wrap_up: bool = False
+
+
 class GoalVerifier(Protocol):
     """Completion verifier: check command or an independent model call."""
 
@@ -233,6 +251,9 @@ class GoalController:
         self._now = now
         self._state: GoalState | None = None
         self._session: Session | None = None
+        self._budget_abort = False
+        self._turn_auto = True
+        self._turn_started_at = 0.0
 
     @property
     def state(self) -> GoalState | None:
@@ -340,6 +361,146 @@ class GoalController:
             updated_at=int(state.updated_at),
         )
 
+    def note_turn_start(self, *, auto: bool) -> None:
+        self._turn_auto = auto
+        self._turn_started_at = self._now()
+        self._budget_abort = False
+
+    def note_budget_abort(self) -> None:
+        self._budget_abort = True
+
+    def budget_exceeded(
+        self, *, tokens_delta: int = 0, elapsed_s: float = 0.0
+    ) -> bool:
+        state = self._state
+        if state is None or state.status != "active":
+            return False
+        return (
+            state.tokens_used + max(tokens_delta, 0) >= state.max_tokens
+            or state.wall_seconds_used + max(elapsed_s, 0.0)
+            >= state.max_wall_seconds
+        )
+
+    async def after_turn(self, ctx: GoalTurnContext) -> GoalDecision:
+        state = self._state
+        if state is None or state.status != "active":
+            return GoalDecision(
+                "stop", state.status if state is not None else "complete"
+            )
+
+        state.tokens_used += max(ctx.tokens_delta, 0) + max(
+            ctx.subagent_tokens_delta, 0
+        )
+        state.wall_seconds_used += max(ctx.elapsed_s, 0.0)
+
+        if ctx.termination != "stop":
+            if ctx.termination == "aborted":
+                if self._budget_abort:
+                    self._budget_abort = False
+                    return self._finish(
+                        "budget_limited", "goal budget reached while running"
+                    )
+                return self._finish("paused", "run aborted")
+            return self._finish("blocked", f"run ended: {ctx.termination}")
+
+        state.turns_used += 1
+        state.updated_at = self._now()
+
+        if state.tokens_used >= state.max_tokens:
+            return self._finish(
+                "budget_limited",
+                f"token budget reached ({state.tokens_used}/{state.max_tokens})",
+            )
+        if state.wall_seconds_used >= state.max_wall_seconds:
+            return self._finish(
+                "budget_limited",
+                "wall-clock budget reached "
+                f"({state.wall_seconds_used:.0f}/{state.max_wall_seconds}s)",
+            )
+        if state.turns_used > state.max_turns:
+            return self._finish(
+                "budget_limited",
+                f"turn budget reached ({state.turns_used}/{state.max_turns})",
+            )
+        if state.turns_used >= state.max_turns:
+            self._persist()
+            return GoalDecision(
+                "continue",
+                "active",
+                prompt=render_goal_prompt(state, wrap_up=True),
+                reason="turn budget reached; wrapping up",
+                wrap_up=True,
+            )
+
+        if ctx.auto and ctx.tool_calls == 0:
+            state.no_progress_turns += 1
+        else:
+            state.no_progress_turns = 0
+        if state.no_progress_turns >= 3:
+            return self._finish("blocked", "no progress for 3 goal turns")
+
+        verifier = self._check_verifier if state.check else self._verifier
+        if verifier is None:
+            return self._finish("blocked", "no verifier available")
+
+        try:
+            verdict = await verifier.verify(state, ctx)
+        except GoalVerifierError as exc:
+            state.verifier_failures += 1
+            state.last_reason = str(exc)
+            state.updated_at = self._now()
+            if state.verifier_failures >= 3:
+                return self._finish(
+                    "blocked", f"verifier failed 3 times: {exc}"
+                )
+            self._persist()
+            return GoalDecision(
+                "continue",
+                "active",
+                prompt=render_goal_prompt(state),
+                reason=str(exc),
+            )
+
+        state.verifier_failures = 0
+        state.last_verdict = verdict.verdict
+        state.last_reason = verdict.reason
+        state.updated_at = self._now()
+
+        if verdict.verdict == "met":
+            return self._finish("complete", verdict.reason)
+        if verdict.verdict == "impossible":
+            return self._finish("blocked", verdict.reason)
+
+        if state.check:
+            key = _check_key(verdict)
+            if key == state.last_check_key:
+                state.check_failures += 1
+            else:
+                state.check_failures = 1
+            state.last_check_key = key
+            if state.check_failures >= 3:
+                return self._finish(
+                    "blocked",
+                    f"check keeps failing identically: {verdict.reason}",
+                )
+
+        self._persist()
+        return GoalDecision(
+            "continue",
+            "active",
+            prompt=render_goal_prompt(state),
+            reason=verdict.reason,
+        )
+
+    def _finish(self, status: GoalStatus, reason: str) -> GoalDecision:
+        state = self._state
+        if state is not None:
+            state.status = status
+            state.last_reason = reason
+            state.updated_at = self._now()
+            self._persist()
+        return GoalDecision("stop", status, reason=reason)
+
     def _persist(self) -> None:
         if self._session is None:
             return
@@ -404,6 +565,43 @@ def goal_tokens(usage: Usage, api: str) -> int:
     if api == "anthropic-messages":
         prompt += usage.cache_read + usage.cache_write
     return prompt + usage.output
+
+
+def render_goal_prompt(state: GoalState, *, wrap_up: bool = False) -> str:
+    """The user-visible continuation directive; objective is untrusted data."""
+
+    if wrap_up:
+        instruction = (
+            "The turn budget is reached. Do not start new work. Summarize useful "
+            "progress, remaining work, blockers and the next step."
+        )
+    else:
+        instruction = (
+            "Take the next concrete step. Do not restate the plan. Do not ask the "
+            "user a question unless the goal is blocked. The controller runs the "
+            "configured check; use the last verification reason below to decide "
+            "the next step. Do not start work outside the objective."
+        )
+    return (
+        "[goal] Continue working toward the objective below.\n\n"
+        f"<objective>\n{_escape(state.objective)}\n</objective>\n\n"
+        f"Budget: turn {state.turns_used}/{state.max_turns}, "
+        f"tokens {state.tokens_used}/{state.max_tokens}, "
+        f"elapsed {state.wall_seconds_used:.0f}/{state.max_wall_seconds}s.\n"
+        f"Last verification: {state.last_verdict or 'none'} — "
+        f"{state.last_reason or 'no verdict yet'}\n\n"
+        f"{instruction}"
+    )
+
+
+def _check_key(verdict: GoalVerdict) -> str:
+    evidence = verdict.evidence.strip()
+    tail = evidence.splitlines()[-1] if evidence else ""
+    return f"{verdict.reason}|{tail}"
+
+
+def _escape(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _take_flag_value(text: str) -> tuple[str, str]:
