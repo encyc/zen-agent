@@ -14,6 +14,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING, Literal, Protocol, cast
 
+from zenagent import settings
 from zenagent.agent.session import Session
 from zenagent.app import records
 from zenagent.app.views import GoalView
@@ -295,6 +296,26 @@ class GoalController:
             except ValueError:
                 continue
         self._state = state
+        if state is not None and state.status == "active" and state.check:
+            state.status = "paused"
+            state.last_reason = "check needs confirmation; run /goal resume"
+            state.updated_at = self._now()
+            self._persist()
+
+    def on_session_leave(self, session: Session | None) -> None:
+        """Pause the old session's goal when the user asked to leave-pause."""
+
+        if session is None or session is not self._session:
+            return
+        if not settings.get_pref("goal_pause_on_session_switch", False):
+            return
+        state = self._state
+        if state is None or state.status != "active":
+            return
+        state.status = "paused"
+        state.last_reason = "session switched"
+        state.updated_at = self._now()
+        self._persist()
 
     def set(
         self,
@@ -505,6 +526,10 @@ class GoalController:
         if self._session is None:
             return
         payload = self._state.to_dict() if self._state is not None else None
+        if payload is not None:
+            # A goal is a real session fact even before the first message:
+            # materialize the lazy file so a switch cannot lose the objective.
+            self._session.materialize()
         self._session.append_meta(records.goal(payload))
 
 

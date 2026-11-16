@@ -381,6 +381,7 @@ class ZenAgentApp(
         for block in self._initial_images:
             self.chat.attach_image(block)
         self._refresh_status()
+        self.chat.on_frontend_ready()
         self.query_one(PromptInput).focus()
         self._start_update_check()
         # This mounted app is the interactive surface that answers ask calls.

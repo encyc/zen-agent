@@ -66,6 +66,7 @@ class ChatController:
     ) -> None:
         self.runtime = runtime
         runtime.error_notice_listeners.append(self.set_last_error)
+        runtime.goal_resume = self.maybe_continue_goal
         self._on_change = on_change
         self._builder = TranscriptBuilder()
         #: Subagent transcripts, sidebar rows and spend (see SubagentTracker).

@@ -407,6 +407,7 @@ async def repl(
     commands = prepared.commands
     for block in initial_images:
         chat.attach_image(block)
+    chat.on_frontend_ready()
 
     def print_help() -> None:
         render_help(commands, template_list, print_fn)

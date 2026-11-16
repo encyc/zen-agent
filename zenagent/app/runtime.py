@@ -7,6 +7,7 @@ Nothing in this module imports a UI library or the CLI package.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 from collections.abc import Awaitable, Callable
@@ -28,6 +29,7 @@ from zenagent.app import (
 )
 from zenagent.app import session_lease as leases
 from zenagent.app.agent_profile import AgentProfile
+from zenagent.app.goal import GoalController
 from zenagent.app.metrics import MetricsSession
 from zenagent.app.modes import (
     DEFAULT_MODE,
@@ -216,6 +218,10 @@ class Runtime:
         self.error_notice_listeners: list[Callable[[str], None]] = []
         #: Checkpoint/rewind markers (context projection; transcript stays intact).
         self.rewind = RewindState()
+        #: Session goal state; bound to the session by the setter below.
+        self.goal = GoalController()
+        #: ChatController installs this to resume an active goal after a switch.
+        self.goal_resume: Callable[[], None] | None = None
         #: Extra workspace roots tracked by /add-dir (display only for now).
         self.extra_dirs: list[Path] = []
         #: JSONL trace path when the frontend started with --trace.
@@ -256,7 +262,16 @@ class Runtime:
     @session.setter
     def session(self, session: Session) -> None:
         leases.bind_session_lease(self, session.path)
+        old = getattr(self, "_session", None)
+        if old is not None:
+            self.goal.on_session_leave(old)
         self._session = session
+        self.goal.bind_session(session)
+        if self.goal_resume is not None:
+            try:
+                asyncio.get_running_loop().call_soon(self.goal_resume)
+            except RuntimeError:
+                pass
         # A new transcript invalidates checkpoint/rewind indexes.
         self.rewind.clear()
         # Artifacts belong to the session in context. Hooking the assignment

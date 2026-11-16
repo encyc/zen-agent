@@ -405,6 +405,8 @@ class RpcServer(FilesOps, SessionOps, PluginsOps, ConfigOps, SecretsOps, SkillsO
                     "protocol_version": PROTOCOL_VERSION,
                 }
             )
+            if self.chat is not None:
+                self.chat.on_frontend_ready()
             return True
         if kind == "prompt":
             text = request.get("text")
