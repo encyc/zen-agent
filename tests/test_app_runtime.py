@@ -757,3 +757,120 @@ async def test_rewind_persist_failure_never_breaks_the_request(runtime_factory):
     await runtime._transform_context(messages)
     again = records.open_session(runtime.session.path).load()
     assert [m.content for m in again] == ["a", "b"]
+
+
+# -- durable rewind under the real loop --------------------------------------
+#
+# The review-focus invariant is "the resumed view equals the live view". The
+# tests below exercise the shapes production actually uses: a request carries a
+# SystemMessage the transcript does not have, and the run's messages reach the
+# file only when it ends — so the branch record must still address the file.
+
+def _unpaired(messages):
+    """Tool calls without a result, and results without a call."""
+    from zenagent.types import AssistantMessage, ToolCall, ToolResultMessage
+
+    calls = {
+        block.id
+        for message in messages
+        if isinstance(message, AssistantMessage)
+        for block in message.content
+        if isinstance(block, ToolCall)
+    }
+    results = {
+        message.tool_call_id
+        for message in messages
+        if isinstance(message, ToolResultMessage)
+    }
+    return calls - results, results - calls
+
+
+async def test_transform_context_projects_in_transcript_space(runtime_factory):
+    from zenagent.types import SystemMessage, UserMessage
+
+    runtime = await runtime_factory()
+    transcript = [UserMessage(content=text, timestamp=1) for text in ("a", "b", "c", "d")]
+    for message in transcript:
+        await runtime.session.append(message)
+    runtime.agent.replace_messages(list(transcript))
+    runtime.rewind.checkpoint(2, "goal")  # keep a, b
+    assert runtime.rewind.arm(4, "learnings", "c1") is None
+
+    # the loop always prepends the system prompt to the request
+    request = [SystemMessage(content="sys", timestamp=0), *runtime.agent.messages]
+    projected = await runtime._transform_context(request)
+
+    assert projected[0].content == "sys"
+    assert [m.content for m in projected[1:]] == [
+        "a",
+        "b",
+        "[rewind] goal: goal\n\nlearnings",
+    ]
+    from zenagent.app import records
+
+    resumed = records.open_session(runtime.session.path).load()
+    assert [m.content for m in resumed] == ["a", "b", "[rewind] goal: goal\n\nlearnings"]
+    assert [m.content for m in runtime.agent.messages] == [
+        m.content for m in resumed
+    ]
+
+
+async def test_durable_rewind_matches_the_live_transcript(runtime_factory):
+    """Checkpoint and rewind inside one run, persisted through the real loop."""
+    from conftest import scripted_stream
+
+    from zenagent.app import records
+
+    stream = scripted_stream(
+        [("tool", ("k1", "checkpoint", {"goal": "find the bug"})), ("end", "tool_use")],
+        [("tool", ("k2", "rewind", {"report": "bug is in parser.py"})), ("end", "tool_use")],
+        [("text", "fixed it"), ("end", "stop")],
+    )
+    runtime = await runtime_factory(stream_fn=stream)
+    await runtime.agent.prompt("investigate the crash")
+
+    live = [str(getattr(m, "content", "")) for m in runtime.agent.messages]
+    resumed = [
+        str(getattr(m, "content", ""))
+        for m in records.open_session(runtime.session.path).load()
+    ]
+    assert resumed == live
+    assert any("[rewind]" in text for text in live), "the report survives"
+    assert not any("rewind armed" in text for text in live), (
+        "the abandoned round is gone from the live view"
+    )
+    # neither the transcript nor the request that followed the rewind may carry
+    # a tool call without its result (the provider rejects it)
+    assert _unpaired(runtime.agent.messages) == (set(), set())
+    assert _unpaired(stream.requests[2]) == (set(), set())
+
+
+async def test_durable_rewind_writes_the_record_after_the_run_messages(runtime_factory):
+    """File order: run messages, branch record, report, then what follows."""
+    import json
+    import pathlib
+
+    from conftest import scripted_stream
+
+    stream = scripted_stream(
+        [("tool", ("k1", "checkpoint", {"goal": "g"})), ("end", "tool_use")],
+        [("tool", ("k2", "rewind", {"report": "r"})), ("end", "tool_use")],
+        [("text", "after"), ("end", "stop")],
+    )
+    runtime = await runtime_factory(stream_fn=stream)
+    await runtime.agent.prompt("go")
+
+    lines = [
+        json.loads(line)
+        for line in pathlib.Path(runtime.session.path).read_text().splitlines()
+    ]
+    kinds = [line.get("type") or line.get("role") for line in lines]
+    branch_at = kinds.index("branch")
+    record = lines[branch_at]
+    # head = prompt + the checkpoint round (call and result); the rewind call
+    # is the abandoned span, and its result is dropped as an orphan
+    assert record["cut"] == 3 and record["skip"] == 1
+    # the record addresses the file: the run's messages were flushed first
+    assert kinds.index("toolResult") < branch_at
+    assert kinds[branch_at + 1] == "user", "the report follows its record"
+    assert kinds[-1] == "run_end", "the run boundary still closes the file"

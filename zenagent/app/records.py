@@ -23,6 +23,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from zenagent.agent.session import Session
+from zenagent.types import AssistantMessage, Message, ToolCall, ToolResultMessage
 
 __all__ = [
     "BRANCH",
@@ -38,6 +39,7 @@ __all__ = [
     "branch",
     "branch_window",
     "compaction",
+    "drop_orphan_tool_results",
     "is_branch",
     "is_compaction",
     "is_tool_end",
@@ -113,13 +115,39 @@ def is_branch(record: dict) -> bool:
     return record_type(record) == BRANCH
 
 
+def drop_orphan_tool_results(messages: list[Message]) -> list[Message]:
+    """Drop tool results whose tool call is no longer in ``messages``.
+
+    A replay projection (branch window, rewind) can cut a tool call out of the
+    transcript while its result survives — a provider rejects a result whose
+    call is missing, so every projection applies this same rule and the live
+    and replayed views stay equal.
+    """
+    call_ids = {
+        block.id
+        for message in messages
+        if isinstance(message, AssistantMessage)
+        for block in message.content
+        if isinstance(block, ToolCall)
+    }
+    kept = [
+        message
+        for message in messages
+        if not (
+            isinstance(message, ToolResultMessage)
+            and message.tool_call_id not in call_ids
+        )
+    ]
+    return kept if len(kept) != len(messages) else messages
+
+
 def branch_window(record: dict, messages: list) -> list | None:
     """The structural selector behind ``Session(window=...)`` for branches.
 
     Returns the projected replay — head before the cut, abandoned span
-    dropped, the rewind tool's own result filtered out — or ``None`` when the
-    record is not a branch or its positions no longer fit (a torn or corrupt
-    record must never lose the transcript).
+    dropped, orphaned tool results removed — or ``None`` when the record is
+    not a branch or its positions no longer fit (a torn or corrupt record must
+    never lose the transcript).
     """
     if record_type(record) != BRANCH:
         return None
@@ -129,15 +157,7 @@ def branch_window(record: dict, messages: list) -> list | None:
         return None
     if cut < 0 or skip < 1 or cut + skip > len(messages):
         return None
-    projected = [*messages[:cut], *messages[cut + skip :]]
-    call = record.get("call")
-    if isinstance(call, str) and call:
-        projected = [
-            message
-            for message in projected
-            if getattr(message, "tool_call_id", None) != call
-        ]
-    return projected
+    return drop_orphan_tool_results([*messages[:cut], *messages[cut + skip :]])
 
 
 def _json_size(value: object) -> int:

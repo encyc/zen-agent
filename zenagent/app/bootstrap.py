@@ -288,15 +288,24 @@ async def assemble(
             runtime._metrics = MetricsSession(runtime.metrics_path)
             runtime._metrics.start(agent)
 
+        # The run's messages are tracked as they are announced: a rewind
+        # flushes them mid-run (its branch record must address the file), so
+        # ``agent_end`` cannot rely on ``new_messages`` alone — that list still
+        # holds the span the rewind has projected away.
+        agent.subscribe(runtime._record_unpersisted)
+
         async def persist(event) -> None:
             if event.type != "agent_end":
                 return
-            if event.new_messages:
-                for message in event.new_messages:
-                    try:
-                        await runtime.session.append(message)
-                    except OSError as exc:
-                        runtime.note_persist_failure(exc)
+            pending, runtime._unpersisted_messages = (
+                runtime._unpersisted_messages,
+                [],
+            )
+            for message in pending:
+                try:
+                    await runtime.session.append(message)
+                except OSError as exc:
+                    runtime.note_persist_failure(exc)
             if runtime._metrics is not None:
                 await asyncio.to_thread(runtime._metrics.flush, runtime.agent)
 

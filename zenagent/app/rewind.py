@@ -16,7 +16,8 @@ import time
 from dataclasses import dataclass
 
 from zenagent.agent.loop import AgentTool, ToolResultAgent
-from zenagent.types import TextContent, ToolResultMessage, UserMessage
+from zenagent.app.records import drop_orphan_tool_results
+from zenagent.types import Message, TextContent, ToolResultMessage, UserMessage
 
 __all__ = ["RewindState", "build_checkpoint_tools"]
 
@@ -91,8 +92,33 @@ class RewindState:
         )
         return UserMessage(content=content, timestamp=int(time.time()))
 
-    def transform(self, messages: list) -> list:
-        """Apply the armed rewind to one request; identity when not armed."""
+    def head_end(self, messages: list[Message]) -> int | None:
+        """Where the kept head ends: the checkpoint plus that round's results.
+
+        ``checkpoint()`` records its index before its own tool result lands, so
+        the assistant call sits inside the head. Walking over the trailing tool
+        results keeps the head from ending on an unanswered tool call. The
+        rewind index is a hard ceiling: a pair may move into the tail together,
+        but a result is never cut away from its call.
+        """
+        if self.checkpoint_index is None:
+            return None
+        cut = min(self.checkpoint_index, len(messages))
+        while cut < len(messages) and isinstance(messages[cut], ToolResultMessage):
+            cut += 1
+        if self.rewind_index is not None:
+            cut = min(cut, self.rewind_index)
+        return cut
+
+    def transform(
+        self, messages: list[Message], *, report: UserMessage | None = None
+    ) -> list[Message]:
+        """Apply the armed rewind to one request; identity when not armed.
+
+        ``report`` lets one caller hand the same message object to the
+        projection and to the session file, so the two views share identity
+        instead of rebuilding equal-looking text.
+        """
         if not self.armed:
             return messages
         if (
@@ -105,19 +131,23 @@ class RewindState:
             # without the clear): drop the projection rather than corrupt a turn.
             self.clear()
             return messages
-        head = list(messages[: self.checkpoint_index])
-        tail = [
-            message
-            for message in messages[self.rewind_index :]
-            if not (
-                isinstance(message, ToolResultMessage)
-                and message.tool_call_id == self.rewind_call_id
-            )
-        ]
+        cut = self.head_end(messages)
+        if cut is None:  # armed without a checkpoint index (defensive)
+            self.clear()
+            return messages
+        head = list(messages[:cut])
+        tail = list(messages[self.rewind_index :])
         # The report lands at the END of the projection — the same position
         # the durable branch record gives it in the append-only file, so the
         # in-memory view and the replayed view never drift apart.
-        return [*head, *tail, self.report_message()]
+        rebuilt = [
+            *head,
+            *tail,
+            report if report is not None else self.report_message(),
+        ]
+        # Cutting the abandoned span can orphan a tool result (the rewind
+        # call's own result, or a sibling call's in a multi-tool turn).
+        return drop_orphan_tool_results(rebuilt)
 
 
 def build_checkpoint_tools(agent_getter, state: RewindState) -> list[AgentTool]:
