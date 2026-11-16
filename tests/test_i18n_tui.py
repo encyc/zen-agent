@@ -119,7 +119,7 @@ async def test_sidebar_and_welcome_speak_chinese(fake_runtime, monkeypatch):
     async with app.run_test(size=(140, 40)) as pilot:
         await pilot.pause()
         titles = [section.title for section in app.query(SidebarSection)]
-        assert titles == ["会话", "模型", "运行时", "上下文", "待办", "子代理", "后台任务"]
+        assert titles == ["会话", "模型", "运行时", "目标", "上下文", "待办", "子代理", "后台任务"]
         await pilot.press("ctrl+b")
         await pilot.pause()
         assert app.query_one(Sidebar)._section("session").title == "会话"

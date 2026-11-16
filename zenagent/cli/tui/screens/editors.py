@@ -39,6 +39,9 @@ class SettingsPicker(PaletteScreen[str]):
         )
         if described["problem"]:
             status = t("tui.settings.file_problem", problem=described["problem"])
+        pause_on_leave = bool(
+            settings_module.get_pref("goal_pause_on_session_switch", False)
+        )
         items = [
             PaletteItem(
                 label=t("tui.settings.switch_model"), value="model", note=model
@@ -74,6 +77,15 @@ class SettingsPicker(PaletteScreen[str]):
                 label=t("tui.settings.thinking"),
                 value="thinking",
                 note=thinking or t("tui.settings.off"),
+            ),
+            PaletteItem(
+                label=t("tui.settings.goal_pause"),
+                value="goal-pause",
+                note=t(
+                    "tui.settings.goal_pause_on"
+                    if pause_on_leave
+                    else "tui.settings.goal_pause_off"
+                ),
             ),
             PaletteItem(
                 label=t("tui.settings.sidebar"), value="sidebar", note="ctrl+b"
