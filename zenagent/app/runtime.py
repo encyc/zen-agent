@@ -752,6 +752,9 @@ class Runtime:
             self._touch_project()
             session = self.use_new_session()
         messages = session.load()
+        # A crash mid tool-run leaves the tail's calls unanswered; give the
+        # file, the display and the model their unknown-outcome results.
+        messages = await records.repair_interrupted_run(session, messages)
         self.agent.replace_messages(messages)
         self.session = session
         if self.todo_tool is not None:
