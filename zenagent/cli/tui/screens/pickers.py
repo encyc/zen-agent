@@ -291,3 +291,13 @@ def open_plugins_manager(app: App) -> None:
         lambda: PluginsManager(app.runtime),
         lambda _result: None,
     )
+
+
+def open_limits_manager(app: App) -> None:
+    from zenagent.cli.tui.screens.limits import LimitsManager
+
+    app.open_menu(
+        "limits-manager",
+        lambda: LimitsManager(app.runtime),
+        lambda _result: None,
+    )

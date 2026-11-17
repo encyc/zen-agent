@@ -12,6 +12,7 @@ from __future__ import annotations
 import contextlib
 
 from zenagent import settings
+from zenagent.app import limits_apply
 from zenagent.cli.rpc.errors import failure_frame
 from zenagent.config import config_path as global_config_path
 from zenagent.config import load_user_config
@@ -24,7 +25,6 @@ from zenagent.limits import (
     read_managed,
     write_managed,
 )
-from zenagent.swarm_settings import SWARM_FIELDS
 
 __all__ = ["SecretsOps"]
 
@@ -267,22 +267,7 @@ class SecretsOps:
         if runtime is None:
             await self._drop_idle_swarm_rooms()
             return
-        fresh = load_user_config(global_config_path())
-        runtime.user_config.limits = fresh.limits
-        runtime.user_config.task_max_turns = fresh.task_max_turns
-        runtime.user_config.task_timeout_s = fresh.task_timeout_s
-        runtime.user_config.task_max_cost = fresh.task_max_cost
-        runtime.user_config.task_keep_transcripts = fresh.task_keep_transcripts
-        runtime.user_config.task_max_transcript_bytes = fresh.task_max_transcript_bytes
-        runtime.user_config.task_max_transcript_file_bytes = (
-            fresh.task_max_transcript_file_bytes
-        )
-        runtime.user_config.zen_max_concurrent = fresh.zen_max_concurrent
-        runtime.user_config.zen_batch_window_s = fresh.zen_batch_window_s
-        runtime.user_config.zen_report_limit = fresh.zen_report_limit
-        runtime.user_config.zen_worker_mode = fresh.zen_worker_mode
-        for name in SWARM_FIELDS:
-            setattr(runtime.user_config, name, getattr(fresh, name))
+        limits_apply.copy_onto(runtime, load_user_config(global_config_path()))
         runtime.apply_limits()
         await self._drop_idle_swarm_rooms()
 

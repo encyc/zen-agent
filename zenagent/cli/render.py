@@ -372,6 +372,39 @@ def _render_plugins(services, print_fn: PrintFn) -> None:
     print_fn(t("repl.plugins_footer"))
 
 
+def _render_limits(services, print_fn: PrintFn) -> None:
+    """The budget knobs with their effective values, grouped by table."""
+    from zenagent.app.limits_apply import overrides
+    from zenagent.config import config_path, load_user_config
+    from zenagent.limits import ALL_KNOBS, read_managed
+
+    explicit = {
+        f"{table}.{name}"
+        for table, rows in read_managed(config_path()).items()
+        for name in rows
+    }
+    knob_overrides = overrides(services.runtime) if services.runtime else {}
+    last_table = ""
+    for knob in ALL_KNOBS:
+        if knob.table != last_table:
+            last_table = knob.table
+            print_fn(t("repl.limits_group", table=knob.table))
+        config = getattr(services.runtime, "user_config", None)
+        if knob.table.startswith("limits"):
+            source = config if config is not None else load_user_config(config_path())
+            value = source.limits.value(knob.attr)
+        else:
+            value = getattr(load_user_config(config_path()), knob.attr)
+        if knob.attr in knob_overrides:
+            note = t("tui.limits.overridden", switch=knob_overrides[knob.attr])
+        elif knob.key in explicit:
+            note = ""
+        else:
+            note = t("repl.limits_default_note")
+        print_fn(f"  {knob.key} = {value}  {note}".rstrip())
+    print_fn(t("repl.limits_footer", path=config_path()))
+
+
 def _memory_editor_flow(services, entry_id: str | None, title_prefill: str, print_fn: PrintFn) -> None:
     store = services.runtime.memory_store
     entry = store.read_entry(entry_id) if (store and entry_id) else None
@@ -478,6 +511,8 @@ def render_command_result(
         _render_secrets(services, print_fn)
     elif screen == "plugins-manager":
         _render_plugins(services, print_fn)
+    elif screen == "limits-manager":
+        _render_limits(services, print_fn)
     elif screen == "memory-add":
         _memory_editor_flow(services, None, result.target or "", print_fn)
     elif screen == "memory-edit":

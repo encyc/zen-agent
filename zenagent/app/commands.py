@@ -590,6 +590,12 @@ async def _plugins(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(screen="plugins-manager")
 
 
+@_command("limits")
+async def _limits(services: AppServices, argument: str) -> CommandResult:
+    """Edit the budget knobs (turns, context, cost — the [limits] registry)."""
+    return CommandResult(screen="limits-manager")
+
+
 @_command("plan-review")
 async def _plan_review(services: AppServices, argument: str) -> CommandResult:
     """Review the plan the model produced in plan mode (approve → auto)."""
@@ -862,6 +868,7 @@ def build_default_commands(services: AppServices) -> CommandRegistry:
         _settings,
         _secrets,
         _plugins,
+        _limits,
         _plan_review,
         _todo,
         _goal,

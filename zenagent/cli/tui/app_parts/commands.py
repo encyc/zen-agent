@@ -41,6 +41,7 @@ class CommandsMixin:
         "memory-edit": "open_memory_edit",
         "secrets-manager": "open_secrets_manager",
         "plugins-manager": "open_plugins_manager",
+        "limits-manager": "open_limits_manager",
     }
 
     #: Screens whose opener consumes ``result.target`` (the entry id to edit,

@@ -735,6 +735,14 @@ class ZenAgentApp(
 
         _open_plugins_manager(self)
 
+    def open_limits_manager(self) -> None:
+        """``/limits``: the budget knobs, editing the managed config tables."""
+        from zenagent.cli.tui.screens.pickers import (
+            open_limits_manager as _open_limits_manager,
+        )
+
+        _open_limits_manager(self)
+
     def open_mode_picker(self) -> None:
         from zenagent.cli.tui.screens.pickers import (
             open_mode_picker as _open_mode_picker,

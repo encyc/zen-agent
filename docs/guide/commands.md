@@ -85,6 +85,7 @@ TUI 与 REPL **共用同一个** `CommandRegistry`（`zenagent/app/commands.py`�
 | `/memory` | 查看与编辑项目记忆库（TUI 面板 / REPL 文本） |
 | `/secrets` | 管理 provider API key（设置/清除/连通测试；`/secrets <ENV>` 直达该行。TUI 面板 / REPL 文本列表） |
 | `/plugins` | 浏览已装插件与内置目录：enter 开关、i 安装、x 卸载（TUI 面板 / REPL 文本列表） |
+| `/limits` | 编辑预算旋钮（[limits] 等表：回合数、上下文、花费；enter 改值、r 重置。TUI 面板 / REPL 文本列表） |
 | `/goal` | 设置/查看/控制会话目标：`/goal <objective>`、`/goal --check "<cmd>" --budget N <objective>`、`/goal pause|resume|clear` |
 | `/jobs` | 列出后台作业，或 `/jobs kill <id>` 终止一个 |
 | `/hotkeys` | 显示当前键位 |
