@@ -84,6 +84,12 @@ CATALOG: dict[str, str] = {
     "tui.goal.panel_check": "验收：{check}",
     "tui.goal.panel_budget": "预算：{turns} 回合 · {tokens} tok · {wall}",
     "tui.goal.clear_confirm": "清除本会话的目标？",
+    # TUI：设置分栏面板（rail + items）
+    "tui.settings.section_appearance": "外观",
+    "tui.settings.section_model": "模型",
+    "tui.settings.section_search": "搜索",
+    "tui.settings.section_session": "会话",
+    "tui.settings.panel_hint": "enter 选择 · 左右切换栏 · esc 关闭",
     "tui.sidebar.model": "模型",
     "tui.sidebar.runtime": "运行时",
     "tui.sidebar.context": "上下文",

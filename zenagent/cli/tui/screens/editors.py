@@ -6,8 +6,10 @@ import copy
 from typing import ClassVar
 
 from rich.text import Text
+from textual import on
 from textual.app import ComposeResult
-from textual.containers import Vertical, VerticalScroll
+from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.screen import ModalScreen
 from textual.widgets import Input, OptionList, Static
 from textual.widgets.option_list import Option
 
@@ -17,88 +19,271 @@ from zenagent.cli.tui.screens.dialogs import (
 from zenagent.cli.tui.screens.palette import PaletteItem, PaletteScreen
 from zenagent.i18n import t
 
+__all__ = ["HotkeysSheet", "SettingsPanel"]
 
-class SettingsPicker(PaletteScreen[str]):
-    """A small settings surface: only the knobs this build can actually change."""
 
-    def __init__(
-        self,
-        thinking: str | None,
-        model: str,
-        theme: str = "auto",
-        language: str = "auto",
-    ) -> None:
+class SettingsPanel(ModalScreen[None]):
+    """The settings dialog: a section rail on the left, the knobs on the right.
+
+    The desktop's settings page is a searchable rail plus one decision tile;
+    this is its terminal shape. Values are read live on every render, so a
+    flipped toggle or a sub-picker's result shows up without reopening.
+    Activation goes through the one ``on_action`` handler the app supplies —
+    the same mapping the old flat picker and the REPL text form use.
+    """
+
+    BINDINGS = [  # noqa: RUF012 - Textual class API
+        ("escape", "close", "Close"),
+        ("right", "cycle_section", "Into items"),
+        ("left", "back_to_rail", "To rail"),
+    ]
+
+    DEFAULT_CSS = """
+    SettingsPanel {
+        align: center middle;
+        background: $ink 65%;
+    }
+
+    SettingsPanel #settings-panel {
+        width: 96;
+        max-width: 95%;
+        height: auto;
+        max-height: 26;
+        padding: 1 2;
+        background: $surface;
+        border: round $line;
+    }
+
+    SettingsPanel #settings-title {
+        height: 1;
+        color: $accent;
+        text-style: bold;
+    }
+
+    SettingsPanel #settings-body {
+        height: auto;
+        max-height: 18;
+    }
+
+    SettingsPanel #settings-rail {
+        width: 26;
+        height: auto;
+        max-height: 16;
+        padding: 0 1 0 0;
+        scrollbar-size-vertical: 0;
+    }
+
+    SettingsPanel #settings-items {
+        width: 1fr;
+        height: auto;
+        max-height: 16;
+        padding: 0 0 0 1;
+        border-left: solid $line;
+        scrollbar-size-vertical: 1;
+    }
+
+    SettingsPanel OptionList > .option-list--option-highlighted {
+        background: $line;
+        color: $foreground;
+    }
+
+    SettingsPanel #settings-footer {
+        height: 1;
+        margin: 1 0 0 0;
+        color: $dim;
+    }
+    """
+
+    #: Sections in display order; each entry is (value, label-i18n-key).
+    #: The item values are the dispatch vocabulary every frontend shares.
+    SECTIONS: ClassVar[list[tuple[str, str, tuple[tuple[str, str], ...]]]] = [
+        (
+            "appearance",
+            "tui.settings.section_appearance",
+            (("theme", "tui.settings.theme"), ("language", "tui.settings.language")),
+        ),
+        (
+            "model",
+            "tui.settings.section_model",
+            (
+                ("model", "tui.settings.switch_model"),
+                ("thinking", "tui.settings.thinking"),
+                ("model-keys", "tui.settings.model_keys"),
+            ),
+        ),
+        (
+            "search",
+            "tui.settings.section_search",
+            (
+                ("search-provider", "tui.settings.search_provider"),
+                ("search-keys", "tui.settings.search_keys"),
+            ),
+        ),
+        (
+            "session",
+            "tui.settings.section_session",
+            (
+                ("goal-pause", "tui.settings.goal_pause"),
+                ("sidebar", "tui.settings.sidebar"),
+                ("clear", "tui.settings.clear"),
+                ("export", "tui.settings.export"),
+            ),
+        ),
+    ]
+
+    def __init__(self, app, on_action) -> None:
+        super().__init__()
+        self._app = app
+        self._on_action = on_action
+        self._section_index = 0
+
+    # -- data ---------------------------------------------------------------
+
+    def _live_note(self, value: str) -> str:
+        """The current value a row shows; read on every render."""
         from zenagent import settings as settings_module
-        from zenagent.cli.tui.screens.palette import PaletteItem
+
+        if value == "model":
+            return self._app.models.current()
+        if value == "thinking":
+            return (
+                getattr(self._app.runtime.agent, "thinking", None)
+                or t("tui.settings.off")
+            )
+        if value == "theme":
+            return self._app._theme_spec
+        if value == "language":
+            return self._app._language_spec
+        if value == "goal-pause":
+            return t(
+                "tui.settings.goal_pause_on"
+                if settings_module.get_pref("goal_pause_on_session_switch", False)
+                else "tui.settings.goal_pause_off"
+            )
+        if value == "sidebar":
+            return "ctrl+b"
+        if value == "search-provider":
+            return t("tui.settings.default_engine")
+        if value == "search-keys":
+            return t("tui.settings.search_keys_note")
+        if value == "model-keys":
+            return t("tui.settings.paste_key")
+        return ""
+
+    def items_for(self, section_value: str) -> list[PaletteItem]:
+        """The rows of one section, with live notes."""
+        section = next(s for s in self.SECTIONS if s[0] == section_value)
+        return [
+            PaletteItem(
+                label=t(label_key),
+                value=value,
+                note=self._live_note(value),
+                enabled=True,
+            )
+            for value, label_key in section[2]
+        ]
+
+    @property
+    def items(self) -> list[PaletteItem]:
+        """Every row across sections, in display order (tests, hints)."""
+        rows: list[PaletteItem] = []
+        for section_value, _, _ in self.SECTIONS:
+            rows.extend(self.items_for(section_value))
+        return rows
+
+    # -- layout -------------------------------------------------------------
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="settings-panel"):
+            yield Static(t("tui.picker.settings"), id="settings-title")
+            with Horizontal(id="settings-body"):
+                yield OptionList(id="settings-rail")
+                yield OptionList(id="settings-items")
+            yield Static(self._footer_text(), id="settings-footer")
+
+    def on_mount(self) -> None:
+        self._fill_rail()
+        self._show_section(0)
+        rail = self.query_one("#settings-rail", OptionList)
+        rail.focus()
+
+    def _fill_rail(self) -> None:
+        rail = self.query_one("#settings-rail", OptionList)
+        rail.clear_options()
+        for index, (_, title_key, _) in enumerate(self.SECTIONS):
+            mark = "▸" if index == self._section_index else " "
+            rail.add_option(Option(f"{mark} {t(title_key)}"))
+
+    def _footer_text(self) -> str:
+        from zenagent import settings as settings_module
 
         described = settings_module.describe()
-        status = t(
-            "tui.settings.file_status",
-            n=len(described["keys"]),
-            path=described["path"],
-        )
         if described["problem"]:
             status = t("tui.settings.file_problem", problem=described["problem"])
-        pause_on_leave = bool(
-            settings_module.get_pref("goal_pause_on_session_switch", False)
-        )
-        items = [
-            PaletteItem(
-                label=t("tui.settings.switch_model"), value="model", note=model
-            ),
-            PaletteItem(
-                label=t("tui.settings.theme"), value="theme", note=theme
-            ),
-            PaletteItem(
-                label=t("tui.settings.language"), value="language", note=language
-            ),
-            PaletteItem(
-                label=t("tui.settings.file"),
-                value="noop",
-                note=status,
-                enabled=False,
-            ),
-            PaletteItem(
-                label=t("tui.settings.model_keys"),
-                value="model-keys",
-                note=t("tui.settings.paste_key"),
-            ),
-            PaletteItem(
-                label=t("tui.settings.search_provider"),
-                value="search-provider",
-                note=t("tui.settings.default_engine"),
-            ),
-            PaletteItem(
-                label=t("tui.settings.search_keys"),
-                value="search-keys",
-                note=t("tui.settings.search_keys_note"),
-            ),
-            PaletteItem(
-                label=t("tui.settings.thinking"),
-                value="thinking",
-                note=thinking or t("tui.settings.off"),
-            ),
-            PaletteItem(
-                label=t("tui.settings.goal_pause"),
-                value="goal-pause",
-                note=t(
-                    "tui.settings.goal_pause_on"
-                    if pause_on_leave
-                    else "tui.settings.goal_pause_off"
-                ),
-            ),
-            PaletteItem(
-                label=t("tui.settings.sidebar"), value="sidebar", note="ctrl+b"
-            ),
-            PaletteItem(label=t("tui.settings.clear"), value="clear"),
-            PaletteItem(label=t("tui.settings.export"), value="export"),
-        ]
-        super().__init__(
-            title=t("tui.picker.settings"),
-            items=items,
-            placeholder=t("tui.picker.settings_search"),
-        )
+        else:
+            status = t(
+                "tui.settings.file_status",
+                n=len(described["keys"]),
+                path=described["path"],
+            )
+        return f"{status} · {t('tui.settings.panel_hint')}"
 
+    def _show_section(self, index: int) -> None:
+        self._section_index = index
+        self._fill_rail()
+        items = self.query_one("#settings-items", OptionList)
+        items.clear_options()
+        section_value = self.SECTIONS[index][0]
+        for item in self.items_for(section_value):
+            note = f"  {item.note}" if item.note else ""
+            items.add_option(Option(f"{item.label}{note}"))
+        if items.option_count:
+            items.highlighted = 0
+
+    # -- navigation ---------------------------------------------------------
+
+    def _rail_index(self) -> int:
+        rail = self.query_one("#settings-rail", OptionList)
+        return rail.highlighted if rail.highlighted is not None else 0
+
+    @on(OptionList.OptionSelected, "#settings-rail")
+    def _rail_selected(self, _event: OptionList.OptionSelected) -> None:
+        self._show_section(self._rail_index())
+        self.query_one("#settings-items", OptionList).focus()
+
+    @on(OptionList.OptionSelected, "#settings-items")
+    def _item_selected(self, _event: OptionList.OptionSelected) -> None:
+        self._activate_highlighted()
+
+    def _activate_highlighted(self) -> None:
+        section_value = self.SECTIONS[self._section_index][0]
+        rows = self.items_for(section_value)
+        items = self.query_one("#settings-items", OptionList)
+        index = items.highlighted
+        if index is None or not 0 <= index < len(rows):
+            return
+        self.run_worker(self._activate(rows[index].value))
+
+    async def _activate(self, value: str) -> None:
+        handler = self._on_action
+        if handler is None:
+            return
+        outcome = handler(value)
+        if hasattr(outcome, "__await__"):
+            await outcome
+        # The action may have flipped a pref or opened a sub-picker over us;
+        # repaint the live values underneath either way.
+        self._show_section(self._section_index)
+
+    def action_cycle_section(self) -> None:
+        """Right on the rail: into the items pane."""
+        self.query_one("#settings-items", OptionList).focus()
+
+    def action_back_to_rail(self) -> None:
+        self.query_one("#settings-rail", OptionList).focus()
+
+    def action_close(self) -> None:
+        self.dismiss(None)
 
 
 class HotkeysSheet(DialogScreen[None]):

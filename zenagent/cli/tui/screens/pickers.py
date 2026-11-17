@@ -18,7 +18,7 @@ from zenagent.cli.tui.screens.modals import (
     McpAdd,
     PlanReview,
     SessionPicker,
-    SettingsPicker,
+    SettingsPanel,
     TodoEditor,
     UsageDashboard,
 )
@@ -59,16 +59,10 @@ def open_settings(app: App) -> None:
         else:
             await app._dispatch_command(choice, "")
 
-    status = app.chat.status
     app.open_menu(
         "settings",
-        lambda: SettingsPicker(
-            status.thinking,
-            status.model_id,
-            app._theme_spec,
-            app._language_spec,
-        ),
-        selected,
+        lambda: SettingsPanel(app, selected),
+        lambda _result: None,
     )
 
 

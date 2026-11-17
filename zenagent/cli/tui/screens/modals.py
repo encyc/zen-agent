@@ -22,7 +22,7 @@ from zenagent.cli.tui.screens.editors import (
     HistorySearch,
     HotkeysSheet,
     McpAdd,
-    SettingsPicker,
+    SettingsPanel,
     TodoEditor,
     UsageDashboard,
 )
@@ -46,7 +46,7 @@ __all__ = [
     "RenamePrompt",
     "SessionAction",
     "SessionPicker",
-    "SettingsPicker",
+    "SettingsPanel",
     "TodoEditor",
     "ToolApproval",
     "UsageDashboard",

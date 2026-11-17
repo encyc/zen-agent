@@ -85,6 +85,12 @@ CATALOG: dict[str, str] = {
     "tui.goal.panel_check": "check: {check}",
     "tui.goal.panel_budget": "budget: {turns} turns · {tokens} tok · {wall}",
     "tui.goal.clear_confirm": "Clear this session's goal?",
+    # TUI: settings panel (rail + items)
+    "tui.settings.section_appearance": "Appearance",
+    "tui.settings.section_model": "Model",
+    "tui.settings.section_search": "Search",
+    "tui.settings.section_session": "Session",
+    "tui.settings.panel_hint": "enter select · left/right panes · esc close",
     "tui.sidebar.model": "Model",
     "tui.sidebar.runtime": "Runtime",
     "tui.sidebar.context": "Context",
