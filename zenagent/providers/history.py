@@ -57,6 +57,43 @@ __all__ = [
 #: finished block, and their tool calls were never executed.
 _FAILED_STOP_REASONS = frozenset({"pending", "error", "aborted"})
 
+#: Stands in for an image block whose bytes are gone: a blob-backed image the
+#: store could not hydrate (its file was deleted) degrades to ``data: ""`` on
+#: load, and an empty base64 payload is rejected by every provider (400).
+MISSING_IMAGE = "(image omitted: the stored image file is missing)"
+
+
+def _without_empty_images(message: Message) -> Message:
+    """Replace empty-data image blocks with text, copying only when needed.
+
+    An image whose blob could not be hydrated arrives with ``data == ""``;
+    sending that to a provider is a hard 400, so the wire view turns it into
+    an explicit omission note instead (the transcript keeps the ref).
+    """
+    if isinstance(message, UserMessage):
+        content = message.content
+        if not isinstance(content, list):
+            return message
+        if not any(
+            isinstance(block, ImageContent) and not block.data for block in content
+        ):
+            return message
+        return replace(
+            message,
+            content=_replace_images_with_placeholder(content, MISSING_IMAGE),
+        )
+    if isinstance(message, ToolResultMessage):
+        content = message.content
+        if not any(
+            isinstance(block, ImageContent) and not block.data for block in content
+        ):
+            return message
+        return replace(
+            message,
+            content=_replace_images_with_placeholder(content, MISSING_IMAGE),
+        )
+    return message
+
 
 def _replay_content(
     message: AssistantMessage,
@@ -99,6 +136,7 @@ def replayable(messages: list[Message]) -> list[Message]:
     kept: list[Message] = []
     kept_call_ids: set[str] = set()
     for index, message in enumerate(messages):
+        message = _without_empty_images(message)
         if isinstance(message, ToolResultMessage):
             if message.tool_call_id in kept_call_ids:
                 kept.append(message)
