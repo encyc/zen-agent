@@ -3,7 +3,15 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased
+## v0.13.12 — 2026-11-17
+
+**A screenshot now reaches the model that asked for it.** Tool results from MCP
+servers and other tools carry images, but the OpenAI and Google adapters dropped
+them — the model got a file name and no pixels — and an oversized result could
+kill the MCP read loop outright. Every connected wire format now carries tool
+images, a text-only model is told that an image was dropped, and the stdio
+transport reads large results. A config typo also names the field and the way
+out.
 
 ### Fixed
 
