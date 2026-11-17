@@ -69,11 +69,37 @@ export function initialState(): Promise<InitialState> {
 
 type EventHandler = (frame: ServerFrame) => void
 
+/** Kinds whose request must stay session-free: host-level ops that route by
+ * other fields, and `terminal`, whose `session` is a shell token — tagging it
+ * would break every terminal op. Caller-set `session` fields always win. */
+const SESSION_TAG_EXEMPT = new Set([
+  'hello',
+  'project',
+  'terminal',
+  'runs',
+  'supervisor',
+  'swarm',
+  'zen_fleet',
+  'workspace',
+  'shutdown',
+])
+
+/** Per-process salt + shared counter: two windows share one sidecar pending
+ * map, and both used to mint `r1, r2, …` — a collision handed one window's
+ * answer to the other. The salt never contains `:` (the host reads an id
+ * prefix as a slot key). */
+const ID_SALT = Math.random().toString(36).slice(2, 6)
+let nextRequestId = 0
+const nextId = () => `r${ID_SALT}${(nextRequestId += 1)}`
+
 export class RpcClient {
-  private nextId = 0
   /** The project every routed request belongs to; null until the host names
    * its active slot (a v2 server leaves requests untagged). */
   private project: string | null = null
+  /** The on-screen session, provided by the shell: session-scoped requests
+   * name it so the host serves this session even when another slot is active
+   * (a detached session window, a background sibling). */
+  private sessionProvider: () => string | null = () => null
   private handlers = new Set<EventHandler>()
   private stderrHandlers = new Set<(line: string) => void>()
   private exitHandlers = new Set<(code: number | null, pid?: number) => void>()
@@ -87,6 +113,10 @@ export class RpcClient {
 
   activeProject(): string | null {
     return this.project
+  }
+
+  setSessionProvider(get: () => string | null): void {
+    this.sessionProvider = get
   }
 
   async start(options: StartOptions = {}): Promise<number> {
@@ -188,13 +218,28 @@ export class RpcClient {
    * callers still gate on `ok` (and `type`) before reading `T`'s fields, and a
    * transport failure still rejects. */
   send<T = Record<string, unknown>>(payload: Record<string, unknown>, timeoutMs?: number): Promise<T> {
-    const id = `r${(this.nextId += 1)}`
+    const id = nextId()
     // `hello` and `project` are host-level ops; everything else is served by
     // a slot and must name it.
     const routed =
       payload.type !== 'hello' && payload.type !== 'project' && this.project !== null
+    // Session-scoped requests name the on-screen session so the host serves
+    // this session's slot even when another one is active. A caller that
+    // already set `session` (a pane, a specific transcript) wins; kinds whose
+    // `session` field means something else stay untouched.
+    const session = this.sessionProvider()
+    const tagSession =
+      !SESSION_TAG_EXEMPT.has(String(payload.type)) &&
+      !('session' in payload) &&
+      typeof session === 'string' &&
+      session !== ''
     return bridge.invoke<T>('rpc_send', {
-      payload: { ...payload, ...(routed ? { project: this.project } : {}), id },
+      payload: {
+        ...payload,
+        ...(routed ? { project: this.project } : {}),
+        ...(tagSession ? { session } : {}),
+        id,
+      },
       timeoutMs: timeoutMs ?? null,
     })
   }
