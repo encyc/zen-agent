@@ -20,7 +20,7 @@
    - [护栏与校验](internals/guardrails.md) → [持久化/重试/崩溃](internals/persistence.md) → [Run 账本](internals/run-ledger.md) → [Supervisor](internals/supervisor.md)
    - [MCP 内核](internals/mcp-internals.md) · [扩展内核](internals/extensions-internals.md)
 4. 速查：[核心契约](reference/contracts.md) · [事件全表](reference/events.md) · [文件地图](reference/file-map.md)
-5. [功能地图](feature-map.md)（功能 → 源码 → 测试）· [测试策略](testing.md) · [开发与发版](development.md)
+5. [功能地图](feature-map.md)（功能 → 源码 → 测试）· [四端能力矩阵](frontend-matrix.md)（tui / gui / repl / headless 各有什么）· [测试策略](testing.md) · [开发与发版](development.md)
 
 ## 文档是怎么组织的
 
@@ -28,6 +28,7 @@
 - **internals/**：面向学习，解释「为什么这么写 + 不变量 + 失败模式」，直接引用源码符号。
 - **reference/**：表格化速查，不做解释。
 - **feature-map.md**：任何功能都能从这里跳到实现和测试。
+- **frontend-matrix.md**：四端（tui/gui/repl/headless）能力对照矩阵，新增功能时同步维护。
 
 ## 一句话记住这套设计
 
