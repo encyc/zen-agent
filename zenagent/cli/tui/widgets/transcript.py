@@ -239,7 +239,7 @@ class TranscriptView(VerticalScroll):
     def _append_message(self, view: MessageView) -> None:
         self._open_read_group = None
         if view.kind == "user":
-            self.mount(UserBlock(view.text))
+            self.mount(UserBlock(view.text, goal=view.goal))
             return
         if view.kind == "skill":
             self.mount(SkillBlock(view))

@@ -30,16 +30,36 @@ __all__ = [
 
 
 
+def _goal_objective(text: str) -> str:
+    start = text.find("<objective>")
+    if start < 0:
+        return text.splitlines()[0] if text else ""
+    start += len("<objective>")
+    end = text.find("</objective>", start)
+    return text[start:end].strip() if end >= 0 else text[start:].strip()
+
+
 class UserBlock(Static):
     """The user's turn as a filled, full-width bar -- no prefix, no quoting.
 
-    Image attachments inside the message render as their own dim line
-    (``[image image/png]``) instead of blending into the prose, which is what
-    makes a vision turn visually distinct without adding a second widget.
+    Goal continuation messages are rendered as a compact ``◎ goal · <objective>``
+    row instead of the full controller template, so they do not read as user
+    input and do not become the session title.
     """
 
-    def __init__(self, text: str) -> None:
+    def __init__(self, text: str, *, goal: bool = False) -> None:
         self._text = text
+        if goal:
+            objective = _goal_objective(text)
+            self._text = f"◎ goal · {objective}" if objective else "◎ goal"
+            renderable = Text()
+            renderable.append("◎ ", style=palette.ACCENT)
+            renderable.append("goal", style=palette.ACCENT)
+            if objective:
+                renderable.append(" · ", style=palette.DIM)
+                renderable.append(objective, style=palette.MUTED)
+            super().__init__(renderable, classes="goal-message")
+            return
         renderable = Text()
         for index, line in enumerate(text.splitlines() or [""]):
             if index:

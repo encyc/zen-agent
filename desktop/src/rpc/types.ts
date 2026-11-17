@@ -501,6 +501,8 @@ export interface MessageView {
   timestamp?: number
   /** Delivered through the steering channel (user rows only). */
   steering?: boolean
+  /** True when this user row starts a goal continuation turn. */
+  goal?: boolean
   skill_args?: string | null
   skill_body?: string | null
   thinking?: string | null

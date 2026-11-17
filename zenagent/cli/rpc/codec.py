@@ -79,6 +79,8 @@ def _message_projection(message) -> dict:
         payload["is_error"] = is_error
     if getattr(message, "steering", False):
         payload["steering"] = True
+    if getattr(message, "goal", False):
+        payload["goal"] = True
     return payload
 
 

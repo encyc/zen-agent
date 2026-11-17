@@ -33,6 +33,8 @@ export interface MessageProjection {
   tool_name?: string
   is_error?: boolean
   steering?: boolean
+  /** True when the user turn starts a goal continuation. */
+  goal?: boolean
   /** Set when the user turn is an injected `/skill:<name>` invocation. */
   skill?: boolean
   skill_args?: string

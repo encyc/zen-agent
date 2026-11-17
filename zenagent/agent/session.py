@@ -308,11 +308,29 @@ def set_session_pin(session_file: Path, pinned: bool) -> bool:
     return pinned
 
 
+def _goal_objective(text: str) -> str:
+    start = text.find("<objective>")
+    if start < 0:
+        return ""
+    start += len("<objective>")
+    end = text.find("</objective>", start)
+    return text[start:end].strip() if end >= 0 else text[start:].strip()
+
+
 def _title_from_messages(messages: list[Message]) -> str:
-    """Brief of the first text user message; ``"(empty)"`` when there is none."""
+    """Brief of the first text user message; a goal turn uses its objective."""
+    first_goal = ""
     for message in messages:
         if isinstance(message, UserMessage) and isinstance(message.content, str):
+            if message.goal:
+                if not first_goal:
+                    first_goal = message.content
+                continue
             return brief(message.content)
+    if first_goal:
+        objective = _goal_objective(first_goal)
+        if objective:
+            return brief(objective)
     return "(empty)"
 
 

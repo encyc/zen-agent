@@ -44,6 +44,17 @@ def test_goal_hud_shows_status_and_budget():
     assert "fix tests" in hud.render_text()
 
 
+def test_goal_message_renders_compactly():
+    from zenagent.cli.tui.widgets.rows import UserBlock
+
+    block = UserBlock(
+        "[goal] Continue...\n\n<objective>\nfix tests\n</objective>\n",
+        goal=True,
+    )
+    assert "fix tests" in block.plain
+    assert "Continue" not in block.plain
+
+
 def test_settings_has_goal_pause_row():
     from zenagent.cli.tui.screens.editors import SettingsPicker
 

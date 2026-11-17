@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { goalSummary } from '../src/ui/chat/goalView.ts'
+import { goalObjective, goalSummary } from '../src/ui/chat/goalView.ts'
 
 test('goalSummary renders status and budget', () => {
   const text = goalSummary({
@@ -20,4 +20,9 @@ test('goalSummary renders status and budget', () => {
   })
   assert.match(text, /3\/40/)
   assert.match(text, /fix tests/)
+})
+
+test('goalObjective extracts the objective from a continuation prompt', () => {
+  const text = '[goal] Continue...\n\n<objective>\nfix tests\n</objective>\n'
+  assert.equal(goalObjective(text), 'fix tests')
 })

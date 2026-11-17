@@ -22,3 +22,12 @@ export function goalStatusIcon(status: string): string {
 export function goalSummary(view: GoalView): string {
   return `${view.objective} · ${view.turns_used}/${view.max_turns}`
 }
+
+/** The objective inside a controller continuation prompt, for compact rows. */
+export function goalObjective(text: string): string {
+  const start = text.indexOf('<objective>')
+  if (start < 0) return text.split('\n')[0] ?? ''
+  const from = start + '<objective>'.length
+  const end = text.indexOf('</objective>', from)
+  return (end >= 0 ? text.slice(from, end) : text.slice(from)).trim()
+}

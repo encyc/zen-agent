@@ -45,6 +45,18 @@ def test_state_roundtrip_and_defaults():
     assert GoalState.from_dict(state.to_dict()) == state
 
 
+def test_goal_message_title_uses_objective():
+    from zenagent.agent.session import _title_from_messages
+    from zenagent.types import UserMessage
+
+    text = "[goal] Continue...\n\n<objective>\nfix flaky tests\n</objective>\n"
+    title = _title_from_messages(
+        [UserMessage(content=text, timestamp=1, goal=True)]
+    )
+    assert "fix flaky tests" in title
+    assert "Continue" not in title
+
+
 def test_goal_tokens_is_provider_aware():
     usage = Usage(input=100, output=20, cache_read=60, cache_write=10)
     assert goal_tokens(usage, "openai-completions") == 120
