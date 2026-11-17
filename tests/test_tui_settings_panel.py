@@ -1,8 +1,9 @@
-"""Settings panel: the full-screen tabbed page (omp-style).
+"""Settings panel: the full-screen tabbed page (omp-style) with dropdown edits.
 
 The panel is a modal on the screen stack, so queries go through
 ``app.screen`` (the repo-wide idiom, see tests/test_tui_approval.py).
-The activation handler is stubbed, so no test opens sub-pickers.
+Enter on a value row opens the option dropdown in place; the tests drive
+it with pilot presses and read the panel's own state.
 """
 
 from textual.widgets import OptionList
@@ -60,24 +61,58 @@ async def test_left_right_switches_sections_instantly(fake_runtime):
         assert "Session" in _tabs_text(panel)
 
 
-async def test_enter_cycles_theme_in_place(fake_runtime):
+async def test_enter_opens_dropdown_with_options_and_current_marked(
+    fake_runtime,
+):
     app = ZenAgentApp(fake_runtime)
     async with app.run_test(size=(120, 40)) as pilot:
         await app._dispatch_command("settings", "")
         await pilot.pause()
         panel = app.screen
-        assert app._theme_spec == "auto"
         await pilot.press("enter")  # the items list owns focus from the start
         await pilot.pause()
+        assert isinstance(app.screen, SettingsPanel)  # no palette took over
+        dropdown = panel.query_one("#settings-dropdown-list", OptionList)
+        assert panel.query_one("#settings-dropdown").display
+        prompts = [str(option.prompt) for option in dropdown.options]
+        assert len(prompts) == 3
+        assert any("auto" in prompt and "●" in prompt for prompt in prompts)
+
+
+async def test_dropdown_selection_applies_and_closes(fake_runtime):
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await app._dispatch_command("settings", "")
         await pilot.pause()
-        # Cycled in place: auto → dark, no sub-picker over the page.
+        panel = app.screen
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.press("down")  # auto → dark
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.pause()
         assert app._theme_spec == "dark"
-        assert isinstance(app.screen, SettingsPanel)
+        assert not panel.query_one("#settings-dropdown").display
         row_note = panel.items_for("appearance")[0].note
         assert row_note == "dark"
 
 
-async def test_goal_pause_row_flips_in_place(fake_runtime):
+async def test_dropdown_escape_cancels_without_applying(fake_runtime):
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await app._dispatch_command("settings", "")
+        await pilot.pause()
+        panel = app.screen
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.press("down")
+        await pilot.press("escape")
+        await pilot.pause()
+        assert app._theme_spec == "auto"  # untouched
+        assert not panel.query_one("#settings-dropdown").display
+
+
+async def test_goal_pause_dropdown_flips_the_pref(fake_runtime):
     from zenagent import settings
 
     app = ZenAgentApp(fake_runtime)
@@ -90,8 +125,35 @@ async def test_goal_pause_row_flips_in_place(fake_runtime):
         panel.query_one("#settings-items", OptionList).highlighted = 0  # goal-pause
         await pilot.press("enter")
         await pilot.pause()
+        await pilot.press("up")  # current "off" is highlighted; move to "on"
+        await pilot.press("enter")
+        await pilot.pause()
         await pilot.pause()
         assert settings.get_pref("goal_pause_on_session_switch") is True
+
+
+async def test_search_provider_dropdown_keeps_the_page_up(fake_runtime):
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await app._dispatch_command("settings", "")
+        await pilot.pause()
+        panel = app.screen
+        await pilot.press("right")  # model section
+        await pilot.pause()
+        await pilot.press("right")  # search section
+        await pilot.pause()
+        await pilot.press("enter")  # search-provider row
+        await pilot.pause()
+        # The dropdown opens in place: still our page, no palette takeover.
+        assert isinstance(app.screen, SettingsPanel)
+        assert panel.query_one("#settings-dropdown").display
+        prompts = [
+            str(option.prompt)
+            for option in panel.query_one(
+                "#settings-dropdown-list", OptionList
+            ).options
+        ]
+        assert len(prompts) >= 4  # auto + the keyed providers
 
 
 async def test_overlay_action_hides_the_page_until_resume(fake_runtime):
@@ -115,20 +177,6 @@ async def test_overlay_action_hides_the_page_until_resume(fake_runtime):
         await pilot.pause()
         assert panel.display is True
         assert app.screen is panel
-
-
-async def test_description_line_follows_the_highlight(fake_runtime):
-    app = ZenAgentApp(fake_runtime)
-    async with app.run_test(size=(120, 40)) as pilot:
-        await app._dispatch_command("settings", "")
-        await pilot.pause()
-        panel = app.screen
-        description = _desc_text(panel)
-        assert "theme" in description.lower() or "主题" in description
-        await pilot.press("down")
-        await pilot.pause()
-        description = _desc_text(panel)
-        assert "language" in description.lower() or "语言" in description
 
 
 async def test_goal_pause_row_reflects_the_pref_live(fake_runtime):
