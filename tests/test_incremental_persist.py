@@ -73,3 +73,43 @@ async def test_a_failed_flush_lands_on_the_next_run(runtime_factory, monkeypatch
     assert runtime.session.messages[4].content == "and again", (
         "the deferred tail must land before the new run's messages"
     )
+
+
+async def test_a_failed_flush_never_pollutes_the_next_session(
+    runtime_factory, monkeypatch
+):
+    """The deferred tail belongs to the session it came from.
+
+    A switch must land it in the old file (best effort) — a tail written
+    after the switch would append session A's messages into session B's
+    file, and a later repair could synthesize a duplicate tool result.
+    """
+    from zenagent.agent.session import Session, unique_session_path
+
+    runtime = await runtime_factory(stream_fn=tool_then_text_stream())
+    path_a = runtime.session.path
+    make_flaky_append(monkeypatch)
+
+    await runtime.agent.prompt("read the readme")
+
+    runtime.session.ensure_loaded()
+    assert [type(m) for m in runtime.session.messages] == [UserMessage], (
+        "the tail is still deferred at switch time"
+    )
+
+    monkeypatch.undo()
+    await runtime.switch_session(unique_session_path(root=runtime.root))
+    path_b = runtime.session.path
+    await runtime.agent.prompt("in session B")
+
+    b_messages = Session(path_b).load()
+    assert all(m.content != "read the readme" for m in b_messages), (
+        "session A's tail must never land in session B's file"
+    )
+    a_messages = Session(path_a).load()
+    assert [type(m) for m in a_messages] == [
+        UserMessage,
+        AssistantMessage,
+        ToolResultMessage,
+        AssistantMessage,
+    ], "the switch landed the deferred tail in its own session's file"

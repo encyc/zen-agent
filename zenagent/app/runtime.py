@@ -749,6 +749,14 @@ class Runtime:
     ) -> None:
         if self.before_switch is not None and not await self.before_switch(path):
             return
+        if self._unpersisted_messages:
+            # The tail belongs to the session it came from: land it there
+            # before the switch — a deferred tail written after the switch
+            # would append the old session's messages into the new file, and
+            # a later repair could synthesize a duplicate tool result. What
+            # still fails stays dropped, like the inline handler always did.
+            await self._flush_unpersisted(self.session)
+            self._unpersisted_messages = []
         self.agent.abort()
         await self.agent.wait_for_idle()
         if path is not None:
