@@ -155,8 +155,33 @@
 .composer {
   flex: none;
   display: flex;
+  align-items: flex-end;
+  gap: 6px;
   padding: 6px 8px 8px;
   border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.sendButton {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--ds-radius-12);
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+}
+
+.sendButton:hover {
+  background: var(--dsw-alias-state-business-primary);
+  color: var(--dsw-alias-label-primary-foreground);
+}
+
+.sendButton:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .composerInput {

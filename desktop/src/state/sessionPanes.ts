@@ -160,6 +160,9 @@ export const usePanesStore = create<PanesState>((set, get) => {
         return
       }
       const current = useSessionStore.getState().currentPath
+      // The session on screen is already a full-width conversation; "open in
+      // split" is only meaningful for a *second* session.
+      if (get().panes.length === 0 && path === current) return
       // The strip always shows the session on screen next to the new pane:
       // seed it from the primary store (its pane, its busy state, the draft
       // the dock is about to stop carrying) so nothing repaints blank.
@@ -196,8 +199,26 @@ export const usePanesStore = create<PanesState>((set, get) => {
     },
 
     close(path) {
-      set((state) => ({ panes: state.panes.filter((pane) => pane.path !== path) }))
-      if (get().panes.length === 0) stopPoll()
+      const remaining = get().panes.filter((pane) => pane.path !== path)
+      // The strip renders at two or more panes; whatever this close leaves
+      // below that must hand its content back to the primary store, or the
+      // invisible pane would keep swallowing the conversation's live frames
+      // while the shell paints a stale transcript.
+      if (remaining.length <= 1) {
+        const last = remaining[0]
+        if (last !== undefined) {
+          const primary = useChatStore.getState()
+          if (useSessionStore.getState().currentPath !== last.path) {
+            useSessionStore.getState().setCurrent(last.path)
+          }
+          primary.restorePane(last.chat.getState().pane())
+          void useAppStore.getState().refreshTranscript()
+        }
+        set({ panes: [] })
+        stopPoll()
+        return
+      }
+      set({ panes: remaining })
     },
 
     async focus(path) {

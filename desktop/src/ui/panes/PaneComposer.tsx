@@ -1,11 +1,14 @@
 /** The slim per-pane composer: prompt or slash command into this pane's
- * session, Enter sends (the shared enterToSend preference), Esc stops the
- * run. Images, mentions and the model picker stay on the docked composer —
- * closing the split brings it back for the focused session. */
+ * session, with the dock's keyboard contract (Enter submits when the setting
+ * allows it, ⌘/Ctrl+Enter always does), a visible send button, and Esc to
+ * stop the pane's run. Images, mentions and the model picker stay on the
+ * docked composer — closing the split brings it back for the focused session. */
 
 import { useSettingsStore } from '../../state/stores'
 import { usePanesStore, type SessionPane } from '../../state/sessionPanes'
+import { isSubmitKey } from '../composer/ComposerPlate'
 import { useT } from '../../i18n/locale'
+import { SendArrowUpIcon, StopIcon } from '../icons'
 import css from './panes.module.css'
 
 export function PaneComposer({ pane }: { pane: SessionPane }) {
@@ -18,10 +21,10 @@ export function PaneComposer({ pane }: { pane: SessionPane }) {
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Escape') {
       event.stopPropagation()
-      cancel(pane.path)
+      if (pane.busy) cancel(pane.path)
       return
     }
-    if (event.key !== 'Enter' || event.shiftKey || !enterToSend) return
+    if (!isSubmitKey(event, enterToSend)) return
     event.preventDefault()
     void submit(pane.path)
   }
@@ -39,6 +42,27 @@ export function PaneComposer({ pane }: { pane: SessionPane }) {
         onChange={(event) => setDraft(pane.path, event.target.value)}
         onKeyDown={onKeyDown}
       />
+      <button
+        type="button"
+        className={css.sendButton}
+        data-pane-send
+        aria-label={t('panes.composerPlaceholder')}
+        disabled={pane.draft.trim() === ''}
+        onClick={() => void submit(pane.path)}
+      >
+        <SendArrowUpIcon size={14} />
+      </button>
+      {pane.busy && (
+        <button
+          type="button"
+          className={css.action}
+          data-pane-stop
+          aria-label={t('panes.stop')}
+          onClick={() => cancel(pane.path)}
+        >
+          <StopIcon size={12} />
+        </button>
+      )}
     </div>
   )
 }

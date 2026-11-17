@@ -96,18 +96,25 @@ function takeUsageDelta(session: string | null, total: Usage): Usage {
   return delta
 }
 
-let frameWired = false
+/** The client the frame handlers are attached to: connect() may run again
+ * after an exit (same client, same wiring — re-registering would duplicate
+ * every node in the chat), while a fresh client (a new window, tests) wires
+ * from scratch. */
+let wiredClient: RpcClient | null = null
 
-/** Register the frame stream once per process: connect() may run again after
- * an exit, and stacked handlers would duplicate every node in the chat. Also
- * names the client's session provider, so every session-scoped request
- * carries the on-screen session and the host routes it to the right slot. */
+/** Register the frame stream for this client and name its session provider,
+ * so every session-scoped request carries the on-screen session and the host
+ * routes it to the right slot. */
 export function ensureFrameWiring(rpc: RpcClient, handling: FrameHandling): void {
-  if (!frameWired) {
-    frameWired = true
-    rpc.setSessionProvider(() => useSessionStore.getState().currentPath)
-    rpc.onFrame((frame: ServerFrame) => handleFrame(frame, handling))
-  }
+  if (wiredClient === rpc) return
+  wiredClient = rpc
+  rpc.setSessionProvider(() => useSessionStore.getState().currentPath)
+  // Attach the bridge listeners even when nothing will call `start` (the
+  // adopt path): broadcast frames reach the handlers only through them.
+  void rpc.ensureListening().catch(() => {
+    // A bridge without the event system (node tests) simply has no stream.
+  })
+  rpc.onFrame((frame: ServerFrame) => handleFrame(frame, handling))
 }
 
 /** A server refusal goes through the code→dictionary mapper (`message` stays

@@ -236,6 +236,12 @@ async function bootChild(
   void syncProjectState(get)
 }
 
+/** Test seam: drop the client singleton so a new bridge (and fresh wiring)
+ * is picked up by the next `client()` call. */
+export function _resetClientForTests(): void {
+  client = null
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   connection: 'idle',
   project: null,
@@ -684,7 +690,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     const payload: Record<string, unknown> = { type: 'prompt', text }
     if (images.length > 0) payload.images = images.map((image) => image.path)
     try {
-      const frame = await get().client().send(payload)
+      let frame = await get().client().send(payload)
+      // The on-screen session's slot can be gone (LRU eviction, another
+      // window's resume reloading this project's idle slot): the host refuses
+      // with session_invalid instead of answering for the wrong session.
+      // Resuming re-opens the slot, then the prompt goes through — no dead
+      // end, no wrong conversation.
+      if (frame.type === 'error' && frame.code === 'session_invalid') {
+        await get().resumeSession(useSessionStore.getState().currentPath ?? '')
+        frame = await get().client().send(payload)
+      }
       // The person may have switched sessions while this turn ran: its result
       // (and usage row) belongs to the session it was sent to, not the pane
       // that is on screen now.

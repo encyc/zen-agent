@@ -8,7 +8,7 @@ import { test } from 'node:test'
 import { _useBridge, type Bridge } from '../src/rpc/client.ts'
 import { parseBootOverride } from '../src/state/bootMode.ts'
 import { bootSessionWindow } from '../src/state/sessionBoot.ts'
-import { useAppStore } from '../src/state/appStore.ts'
+import { useAppStore, _resetClientForTests } from '../src/state/appStore.ts'
 import { useChatStore } from '../src/state/chatStore.ts'
 import { useSessionStore } from '../src/state/stores.ts'
 
@@ -19,10 +19,12 @@ interface Scripted {
   bridge: Bridge
   requests: Record<string, unknown>[]
   started: { value: boolean }
+  listens: string[]
 }
 
 function scripted(options: { alive?: boolean } = {}): Scripted {
   const requests: Record<string, unknown>[] = []
+  const listens: string[] = []
   const started = { value: false }
   const bridge: Bridge = {
     async invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
@@ -76,15 +78,17 @@ function scripted(options: { alive?: boolean } = {}): Scripted {
       }
       return ok() as T
     },
-    async listen<T>(): Promise<() => void> {
+    async listen<T>(event: string): Promise<() => void> {
+      listens.push(event)
       return () => {}
     },
     async relaunch(): Promise<void> {},
   }
-  return { bridge, requests, started }
+  return { bridge, requests, started, listens }
 }
 
 function reset(): void {
+  _resetClientForTests()
   useAppStore.setState({
     connection: 'idle',
     project: null,
@@ -139,6 +143,21 @@ test('a dead runtime falls back to rpc_start, then pins the session', async () =
   assert.equal(fake.started.value, true)
   assert.equal(useAppStore.getState().pid, 7)
   assert.equal(useSessionStore.getState().currentPath, SESSION)
+})
+
+test('the adopt path attaches the frame stream (a deaf detached window would freeze)', async () => {
+  const fake = scripted({ alive: true })
+  _useBridge(fake.bridge)
+  reset()
+
+  await bootSessionWindow({ kind: 'session', session: SESSION, project: PROJECT })
+
+  // The bridge listeners are what deliver rpc:frame/stderr/exit; the adopt
+  // path never calls rpc_start, so they must be attached by the boot itself.
+  assert.deepEqual(
+    [...fake.listens].sort(),
+    ['rpc:exit', 'rpc:frame', 'rpc:stderr'],
+  )
 })
 
 test('when the slot holds another session, an explicit resume follows the open', async () => {

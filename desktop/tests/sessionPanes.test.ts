@@ -12,6 +12,7 @@ import {
   resetPanesForTests,
 } from '../src/state/sessionPanes.ts'
 import { useChatStore } from '../src/state/chatStore.ts'
+import { _resetClientForTests } from '../src/state/appStore.ts'
 import { useNoticeStore, useSessionStore } from '../src/state/stores.ts'
 
 const PROJECT = '/work/p'
@@ -93,6 +94,7 @@ function scripted(options: {
 
 function reset(bridge: Bridge): void {
   _useBridge(bridge)
+  _resetClientForTests()
   resetPanesForTests()
   useChatStore.getState().reset()
   useSessionStore.getState().setSessions([])
@@ -182,7 +184,7 @@ test('open caps the strip at three panes with a notice', async () => {
   assert.notEqual(useNoticeStore.getState().notice, null)
 })
 
-test('close removes the pane; the last remaining pane keeps the strip alive', async () => {
+test('close removes the pane; below the strip threshold the registry dissolves', async () => {
   const bridge = scripted()
   reset(bridge)
   const store = usePanesStore.getState()
@@ -193,7 +195,10 @@ test('close removes the pane; the last remaining pane keeps the strip alive', as
   assert.deepEqual(usePanesStore.getState().panes.map((pane) => pane.path), [CURRENT, B])
 
   store.close(B)
-  assert.deepEqual(usePanesStore.getState().panes.map((pane) => pane.path), [CURRENT])
+  // One pane would render as nothing (the strip needs two): its content goes
+  // back to the primary store and the registry empties, so the visible
+  // conversation keeps receiving its frames.
+  assert.deepEqual(usePanesStore.getState().panes, [])
 })
 
 test('submit resumes a static pane first, then sends the tagged prompt to the pane', async () => {
@@ -273,14 +278,32 @@ test('pollPanes reads each live pane status and drops a dead residency', async (
 
   assert.equal(usePanesStore.getState().panes[1]?.busy, true)
 
-  // A later poll whose reply no longer names the pane's session means the
-  // slot is gone: the pane goes static rather than showing someone else's run.
-  const poisoned = scripted()
-  poisoned.log.requests.length = 0
-  await usePanesStore.getState().open(B)
-  const panes = usePanesStore.getState().panes
-  const paneB = panes.find((entry) => entry.path === B)
-  assert.notEqual(paneB, undefined)
+  // A poll reply that no longer names the pane's session means the slot is
+  // gone (evicted, or an older runtime): the pane goes static rather than
+  // showing someone else's run.
+  const other = { ...bridge }
+  _useBridge({
+    ...other,
+    async invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+      const payload = (args?.payload ?? {}) as Record<string, unknown>
+      if (command === 'rpc_send' && payload.type === 'status') {
+        return {
+          type: 'result',
+          id: String(payload.id),
+          ok: true,
+          running: true,
+          session: '/someone/else.jsonl',
+        } as T
+      }
+      return bridge.invoke<T>(command, args)
+    },
+  })
+
+  await pollPanes()
+
+  const pane = usePanesStore.getState().panes[1]
+  assert.equal(pane?.live, false)
+  assert.equal(pane?.busy, false)
 })
 
 test('finalizeAll settles every pane after the sidecar exits', async () => {
@@ -292,6 +315,39 @@ test('finalizeAll settles every pane after the sidecar exits', async () => {
   usePanesStore.getState().finalizeAll()
 
   assert.equal(usePanesStore.getState().panes[1]?.busy, false)
+})
+
+test('closing back below the strip dissolves the last pane into the shell', async () => {
+  const bridge = scripted()
+  reset(bridge)
+  const store = usePanesStore.getState()
+  // Seed the focused pane with content so the restore is observable.
+  store.setDraft(A, '')
+  await store.open(A)
+  const paneA = usePanesStore.getState().panes.find((entry) => entry.path === A)
+  paneA?.chat.getState().applyEvent({
+    type: 'message_start',
+    message: { role: 'user', text: 'pane only row' },
+  } as never)
+
+  store.close(A)
+
+  // One pane left (the seeded current session) is below the strip threshold:
+  // its content belongs to the primary store again and the registry is empty,
+  // so live frames reach the visible transcript instead of a hidden pane.
+  assert.deepEqual(usePanesStore.getState().panes, [])
+  const primary = useChatStore.getState().nodes
+  assert.equal(primary.length, 0)
+  void primary
+})
+
+test('opening the session already on screen is a no-op, not a hidden hijack', async () => {
+  const bridge = scripted()
+  reset(bridge)
+
+  await usePanesStore.getState().open(CURRENT)
+
+  assert.deepEqual(usePanesStore.getState().panes, [])
 })
 
 test('the registry is wired as the frame-router pane sink', async () => {

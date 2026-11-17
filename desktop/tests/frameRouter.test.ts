@@ -193,6 +193,7 @@ test('ensureFrameWiring registers the frame handler once and names the session p
   reset()
   useSessionStore.getState().setCurrent(OTHER_SESSION)
   const wired: ((frame: unknown) => void)[] = []
+  const listening: number[] = []
   let provider: (() => string | null) | null = null
   const fakeClient = {
     onFrame(handler: (frame: never) => void) {
@@ -200,6 +201,10 @@ test('ensureFrameWiring registers the frame handler once and names the session p
       return () => {
         wired.length = 0
       }
+    },
+    ensureListening() {
+      listening.push(1)
+      return Promise.resolve()
     },
     setSessionProvider(get: () => string | null) {
       provider = get
@@ -210,5 +215,8 @@ test('ensureFrameWiring registers the frame handler once and names the session p
   ensureFrameWiring(fakeClient, handling())
 
   assert.equal(wired.length, 1)
+  // The bridge listeners must attach even on a client that never starts a
+  // runtime (the adopt path) — broadcast frames depend on them.
+  assert.equal(listening.length, 1)
   assert.equal(provider?.(), OTHER_SESSION)
 })

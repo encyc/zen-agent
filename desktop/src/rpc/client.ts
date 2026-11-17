@@ -148,6 +148,21 @@ export class RpcClient {
     }
   }
 
+  /** Attach the three stream listeners without spawning anything: a window
+   * that *adopts* a running sidecar (a detached session window) never calls
+   * `start`, so without this its `rpc:frame` handler would never fire and the
+   * transcript would freeze at the boot snapshot. Idempotent with `start` —
+   * whichever runs first wins, the other joins the same registration. */
+  async ensureListening(): Promise<void> {
+    if (this.wiring === null) {
+      this.wiring = this.listenAll().catch((error: unknown) => {
+        this.wiring = null
+        throw error
+      })
+    }
+    await this.wiring
+  }
+
   /** Register the three stream listeners once; the promise is what makes a
    * concurrent `start()` join the same registration.
    *

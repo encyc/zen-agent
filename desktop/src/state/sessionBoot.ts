@@ -15,6 +15,7 @@
  * boot after the person already answered some), and never seeds panes. */
 
 import { useAppStore } from './appStore.ts'
+import type { RpcClient } from '../rpc/client.ts'
 import { useChatStore } from './chatStore.ts'
 import { ensureFrameWiring, getPaneSink, type FrameHandling } from './frameRouter.ts'
 import { restorePrefs } from './prefsReplay.ts'
@@ -23,7 +24,7 @@ import type { BootOverride } from './bootMode.ts'
 
 const POLL_MS = 2000
 let pollTimer: ReturnType<typeof setInterval> | null = null
-let wired = false
+let wiredClient: RpcClient | null = null
 
 function handling(): FrameHandling {
   return {
@@ -34,8 +35,8 @@ function handling(): FrameHandling {
 
 export async function bootSessionWindow(override: BootOverride): Promise<void> {
   const rpc = useAppStore.getState().client()
-  if (!wired) {
-    wired = true
+  if (wiredClient !== rpc) {
+    wiredClient = rpc
     ensureFrameWiring(rpc, handling())
     // Per-window connection lifecycle: the exit clears this window's poll,
     // settles the transcript and flips to the exit screen. The pid guard
