@@ -79,17 +79,19 @@ test('localizeError alone still falls back to the raw message', () => {
 })
 
 test('the action-error entry renders through the mapper', () => {
-  assert.match(read('state/appStore.ts'), /frameErrorNotice/)
+  // The shared refusal helper lives in the frame router (moved out of
+  // appStore); its error branch must keep going through the mapper.
+  assert.match(read('state/frameRouter.ts'), /frameErrorNotice/)
 })
 
 test('a failed prompt and a failed file read reach the localized notice', () => {
   // A prompt error frame used to be dropped wholesale (`if (type === 'error')
   // return`), so `prompt_failed` never rendered.
-  const appStore = read('state/appStore.ts')
-  const handleResult = appStore.match(
-    /function handleResultFrame\([\s\S]*?\n\}/,
+  const router = read('state/frameRouter.ts')
+  const handleResult = router.match(
+    /export function handleResultFrame\([\s\S]*?\n\}/,
   )?.[0]
-  assert.ok(handleResult, 'appStore lost handleResultFrame')
+  assert.ok(handleResult, 'frameRouter lost handleResultFrame')
   assert.doesNotMatch(handleResult, /frame\.type === 'error'\) return/)
   assert.match(handleResult, /showFrameError\(frame\)/)
 
