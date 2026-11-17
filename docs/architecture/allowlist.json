@@ -1,10 +1,11 @@
 {
   "python": {
-    "zenagent/app/commands.py": 885,
+    "zenagent/app/commands.py": 920,
     "zenagent/app/chat.py": 881,
     "zenagent/app/swarm/manager.py": 911,
     "zenagent/agent/session.py": 886,
-    "zenagent/limits.py": 963
+    "zenagent/limits.py": 963,
+    "zenagent/cli/tui/app.py": 822
   },
   "ts": {
     "desktop/src/state/appStore.ts": 1195,
@@ -14,11 +15,12 @@
   "_notes": {
     "_readme": "Entries beyond the 800-line default cap, each recorded at real size +10. Catalog files (message dictionaries) are measured in entries against an 800-entry cap instead, so they no longer appear here — see scripts/check_architecture.py. The entries below must be paid back by 2026-12-31 (audit §6.4 follow-up plan: runtime assembly slice, swarm manager split, commands split, desktop store/spec splits).",
     "python": {
-      "zenagent/app/commands.py": "payback 2026-12-31",
+      "zenagent/app/commands.py": "payback 2026-12-31 (TUI panel/command surface; split job subcommands next)",
       "zenagent/app/chat.py": "payback 2026-12-31 (goal hooks; split job/subagent views next)",
       "zenagent/app/swarm/manager.py": "payback 2026-12-31 (§6.4: room/manager split)",
       "zenagent/agent/session.py": "payback 2026-12-31 (title/pin sidecar split; session-activity rule keeps a live listing)",
-      "zenagent/limits.py": "payback 2026-12-31 (goal knob registry split; config field refusals)"
+      "zenagent/limits.py": "payback 2026-12-31 (goal knob registry split; config field refusals)",
+      "zenagent/cli/tui/app.py": "payback 2026-12-31 (surface launchers; split pickers/panels next)"
     },
     "ts": {
       "desktop/e2e/app.spec.ts": "payback 2026-12-31 (split by flow)",
