@@ -91,7 +91,7 @@
 
 .itemPath {
   overflow: hidden;
-  font-size: var(--ds-font-10-5);
+  font-size: var(--ds-font-11);
   color: var(--dsw-alias-label-caption);
   text-overflow: ellipsis;
   white-space: nowrap;

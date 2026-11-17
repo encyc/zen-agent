@@ -7,7 +7,7 @@
 
 .meta {
   padding: 0 2px;
-  font-size: var(--ds-font-10-5);
+  font-size: var(--ds-font-11);
   line-height: 15px;
   font-variant-numeric: tabular-nums;
   color: var(--dsw-alias-label-caption);
@@ -96,7 +96,7 @@
   border-radius: 0 10px 10px 0;
   background: var(--ds-surface-1);
   color: var(--dsw-alias-label-tertiary);
-  font-size: var(--ds-font-12-5);
+  font-size: var(--ds-font-13);
   line-height: 20px;
   white-space: pre-wrap;
   word-break: break-word;
@@ -197,20 +197,22 @@
   background: color-mix(in srgb, var(--dsw-alias-label-primary) 3%, transparent);
 }
 
+/* The head strip is tinted, so the caption floor does not hold here: on a 3%
+   wash the caption lands at 4.43:1. The language tag takes the tertiary tier,
+   which clears the floor on the strip as well as on the canvas. */
 .markdown :global(.md-code-lang) {
-  font-size: var(--ds-font-10-5);
+  font-size: var(--ds-font-11);
   line-height: 15px;
   letter-spacing: 0.02em;
-  color: var(--dsw-alias-label-caption);
+  color: var(--dsw-alias-label-tertiary);
 }
-
 .markdown :global(.md-code-copy) {
   padding: 2px 6px;
   border: none;
   border-radius: var(--dsw-radius-xs);
   background: none;
   color: var(--dsw-alias-label-tertiary);
-  font-size: var(--ds-font-10-5);
+  font-size: var(--ds-font-11);
   line-height: 15px;
   cursor: pointer;
   opacity: 0;

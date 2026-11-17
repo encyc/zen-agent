@@ -423,7 +423,7 @@ html[data-platform='darwin'] .brand {
 
 .sessionPending {
   flex: none;
-  font-size: var(--ds-font-10-5);
+  font-size: var(--ds-font-11);
   line-height: 14px;
   padding: 0 6px;
   border-radius: var(--ds-radius-full);
@@ -567,7 +567,7 @@ html[data-platform='darwin'] .brand {
 
 .version {
   color: var(--dsw-alias-label-tertiary);
-  font-size: var(--ds-font-10-5);
+  font-size: var(--ds-font-11);
   font-variant-numeric: tabular-nums;
 }
 
@@ -657,7 +657,7 @@ html[data-platform='darwin'] .brand {
   padding: 5px 8px;
   border: 1px solid var(--ds-hairline);
   border-radius: var(--ds-radius-control);
-  font-size: 11px;
+  font-size: var(--ds-font-11);
   color: var(--dsw-alias-label-secondary);
   background: var(--ds-surface-1);
 }
@@ -667,7 +667,7 @@ html[data-platform='darwin'] .brand {
   border: none;
   border-radius: 6px;
   padding: 2px 8px;
-  font-size: 11px;
+  font-size: var(--ds-font-11);
   background: transparent;
   color: var(--dsw-alias-brand-text);
   cursor: pointer;
@@ -679,14 +679,14 @@ html[data-platform='darwin'] .brand {
 }
 
 .zenRouterBadge {
-  font-size: 10px;
+  font-size: var(--ds-font-11);
   font-weight: 600;
   color: var(--dsw-alias-brand-text);
   text-transform: uppercase;
 }
 
 .zenWorkersLabel {
-  font-size: 11px;
+  font-size: var(--ds-font-11);
   color: var(--dsw-alias-label-tertiary);
   padding: 2px 8px 0;
 }
@@ -742,7 +742,7 @@ html[data-platform='darwin'] .brand {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: var(--ds-font-11);
   color: var(--dsw-alias-label-tertiary);
   min-width: 0;
 }
@@ -750,6 +750,6 @@ html[data-platform='darwin'] .brand {
 .zenStatus {
   margin-left: auto;
   flex: none;
-  font-size: 11px;
+  font-size: var(--ds-font-11);
   color: var(--dsw-alias-label-tertiary);
 }

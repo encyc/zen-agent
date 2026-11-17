@@ -8,19 +8,17 @@
      Components keep using --dsw-*; this block is the single tuning point. */
   --ds-font-scale: 1;
   --ds-font-family-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  --ds-font-10: calc(10px * var(--ds-font-scale));
-  --ds-font-10-5: calc(10.5px * var(--ds-font-scale));
+  /* The type ladder is deliberately short: six steps, all whole pixels, each
+     one a role rather than a size — 11 micro label, 12 metadata, 13 UI chrome,
+     14 body, 16 section title, 28 page title. Half-pixel rungs (10.5/11.5/
+     12.5/13.5) used to sit between these; they rounded nothing and made CJK
+     glyphs render muddy at the low end, so their usages were retargeted to the
+     nearest whole step. Add a rung only when a new role needs it. */
   --ds-font-11: calc(11px * var(--ds-font-scale));
-  --ds-font-11-5: calc(11.5px * var(--ds-font-scale));
   --ds-font-12: calc(12px * var(--ds-font-scale));
-  --ds-font-12-5: calc(12.5px * var(--ds-font-scale));
   --ds-font-13: calc(13px * var(--ds-font-scale));
-  --ds-font-13-5: calc(13.5px * var(--ds-font-scale));
   --ds-font-14: calc(14px * var(--ds-font-scale));
-  --ds-font-15: calc(15px * var(--ds-font-scale));
   --ds-font-16: calc(16px * var(--ds-font-scale));
-  --ds-font-18: calc(18px * var(--ds-font-scale));
-  --ds-font-20: calc(20px * var(--ds-font-scale));
   --ds-font-28: calc(28px * var(--ds-font-scale));
   --ds-radius-4: 4px;
   --ds-radius-6: 6px;
@@ -131,6 +129,10 @@ body {
   --dsw-static-neutral-bluish-500: rgb(151, 157, 166);
   --dsw-static-neutral-bluish-50: rgb(249, 250, 251);
   --dsw-static-neutral-bluish-600: rgb(129, 133, 140);
+  /* Zen-side extension (not from the dsh port): the light label ladder runs on
+     white, where 600 is only 3.7:1. This rung sits at 4.6:1 — the AA floor —
+     so the quietest label tier can stay quiet without failing contrast. */
+  --dsw-static-neutral-bluish-650: rgb(113, 117, 124);
   --dsw-static-neutral-bluish-60: rgb(245, 246, 247);
   --dsw-static-neutral-bluish-700: rgb(97, 102, 107);
   --dsw-static-neutral-bluish-750: rgb(67, 69, 74);
@@ -184,15 +186,19 @@ body {
   --dsw-alias-interactive-bg-hover-danger: rgba(236, 19, 19, 0.05);
   --dsw-alias-interactive-bg-hover-solid: var(--dsw-static-neutral-bluish-75);
   --dsw-alias-interactive-bg-hover: rgba(38, 49, 72, 0.06);
-  --dsw-alias-label-caption: var(--dsw-static-neutral-bluish-400);
+  /* Light label ladder (measured on the white canvas, AA needs 4.5:1):
+     primary 18.9 · secondary 9.6 · tertiary 5.8 · caption 4.6.
+     The ported values stopped at 3.7 (tertiary) and 2.1 (caption), which is
+     unreadable for 11px CJK metadata; the tiers now each clear the floor. */
+  --dsw-alias-label-caption: var(--dsw-static-neutral-bluish-650);
   --dsw-alias-label-deep-diving: color-mix(in srgb, var(--dsw-static-deepseek-500) 70%, var(--dsw-static-blue-950));
   --dsw-alias-label-deep-diving-shimmer: color-mix(in srgb, var(--dsw-static-deepseek-500) 30%, var(--dsw-static-blue-950));
   --dsw-alias-label-dimmed: var(--dsw-static-neutral-bluish-200);
   --dsw-alias-label-primary: var(--dsw-static-neutral-bluish-1000);
   --dsw-alias-label-primary-foreground: var(--dsw-static-neutral-bluish-00);
-  --dsw-alias-label-secondary: var(--dsw-static-neutral-bluish-700);
+  --dsw-alias-label-secondary: var(--dsw-static-neutral-bluish-750);
   --dsw-alias-label-shimmer: color-mix(in srgb, var(--dsw-static-neutral-1000) 30%, transparent);
-  --dsw-alias-label-tertiary: var(--dsw-static-neutral-bluish-600);
+  --dsw-alias-label-tertiary: var(--dsw-static-neutral-bluish-700);
   --dsw-alias-menu-icon: var(--dsw-static-neutral-bluish-800);
   --dsw-alias-link: var(--dsw-static-deepseek-500);
   --dsw-alias-markdown-citation: var(--dsw-static-neutral-bluish-100);

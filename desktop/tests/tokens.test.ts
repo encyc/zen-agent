@@ -10,9 +10,12 @@ test('the parity layer carries the pi font stack, ramp, radii and the 760px band
     /--ds-font-family-sans:\s*-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;/,
   )
   assert.match(css, /--ds-font-scale:\s*1;/)
-  for (const size of ['10-5', '11', '11-5', '12', '12-5', '13', '13-5', '14', '15', '16', '18', '20', '28']) {
+  // Whole-pixel rungs only: the half-pixel steps (10.5/11.5/12.5/13.5) rendered
+  // CJK chrome muddy and rounded to nothing, so their usages were retargeted.
+  for (const size of ['11', '12', '13', '14', '16', '28']) {
     assert.match(css, new RegExp(`--ds-font-${size}:\\s*calc\\(`))
   }
+  assert.doesNotMatch(css, /--ds-font-\d+-\d+:/)
   for (const radius of ['4', '6', '8', '10', '12', '14', '16', '18', '20', '24']) {
     assert.match(css, new RegExp(`--ds-radius-${radius}:\\s*${radius}px;`))
   }

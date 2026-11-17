@@ -1,6 +1,10 @@
+/* The rail rides beside the reading column instead of the column's own left
+   edge: at a 1165px center the reading text starts 200px in, so a fixed 8px
+   offset parked the dashes in empty gutter and read as a stray mark. `max`
+   keeps them off the frame edge once the window is too narrow to clear it. */
 .rail {
   position: absolute;
-  left: 8px;
+  left: max(8px, calc((100% - var(--ds-chat-content-width)) / 2 - 26px));
   top: 0;
   bottom: calc(var(--composer-dock-height, 168px) + 16px);
   z-index: 6;
@@ -17,7 +21,7 @@
   align-items: center;
   flex: 0 1 auto;
   width: 100%;
-  height: 8px;
+  height: 14px;
   min-height: 0;
   padding: 0;
   border: none;
@@ -43,6 +47,6 @@
   background: var(--dsw-alias-label-primary);
 }
 
-.marker:focus-visible {
-  outline: none;
-}
+/* The dash is the target, so it gets a hit box taller than the 2px it paints.
+   Keyboard focus falls through to the global ring: the old rule cancelled it
+   with `outline: none` and left nothing behind. */

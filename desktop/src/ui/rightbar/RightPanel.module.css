@@ -79,7 +79,7 @@ html[data-work-panel-resizing] * {
   border-radius: 9px;
   background: transparent;
   color: var(--dsw-alias-label-secondary);
-  font-size: var(--ds-font-12-5);
+  font-size: var(--ds-font-13);
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;

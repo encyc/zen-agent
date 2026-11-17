@@ -171,7 +171,7 @@ html[data-composer-resizing] * {
 .menuName {
   flex: none;
   font-family: var(--ds-font-family-code);
-  font-size: var(--ds-font-12-5);
+  font-size: var(--ds-font-13);
   font-weight: 600;
   color: var(--dsw-alias-label-primary);
 }

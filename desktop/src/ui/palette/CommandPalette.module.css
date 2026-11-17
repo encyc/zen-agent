@@ -113,7 +113,7 @@
 }
 
 .optionHint {
-  font-size: var(--ds-font-10-5);
+  font-size: var(--ds-font-11);
   line-height: 14px;
   color: var(--dsw-alias-label-caption);
 }
@@ -129,6 +129,6 @@
   flex: none;
   padding: 8px 14px;
   border-top: 1px solid var(--dsw-alias-border-l1);
-  font-size: var(--ds-font-10-5);
+  font-size: var(--ds-font-11);
   color: var(--dsw-alias-label-caption);
 }

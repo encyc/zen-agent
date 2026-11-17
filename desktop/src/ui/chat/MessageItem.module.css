@@ -54,7 +54,7 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 12%, transparent);
   color: var(--dsw-alias-state-business-primary);
-  font-size: var(--ds-font-10-5);
+  font-size: var(--ds-font-11);
   line-height: 15px;
   font-weight: 500;
   letter-spacing: 0.02em;

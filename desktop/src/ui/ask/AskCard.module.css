@@ -95,7 +95,7 @@
 /* The agent's context tag sits above the question as a quiet line — sentence
  * case, no tracking, so the question keeps the loudest voice. */
 .questionHeader {
-  font-size: var(--ds-font-11-5);
+  font-size: var(--ds-font-12);
   line-height: 16px;
   color: var(--dsw-alias-label-tertiary);
 }
@@ -103,7 +103,7 @@
 .question {
   display: block;
   margin: 0;
-  font-size: var(--ds-font-15);
+  font-size: var(--ds-font-16);
   font-weight: 550;
   line-height: 22px;
   color: var(--dsw-alias-label-primary);
@@ -230,7 +230,7 @@
   box-shadow: inset 0 0 0 1.5px var(--ds-hairline-strong);
   background: transparent;
   color: var(--dsw-alias-label-primary-foreground);
-  font-size: 10px;
+  font-size: var(--ds-font-11);
   font-weight: 700;
   line-height: 1;
   transition:

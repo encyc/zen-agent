@@ -84,6 +84,8 @@
   width: 16px;
   height: 14px;
   border-radius: 3px;
+  /* One glyph in a 16×14 box: this is pictogram geometry, not text, so it stays
+     a literal instead of riding the type ladder (--ds-font-11 would overflow). */
   font-family: var(--ds-font-family-code);
   font-size: 8px;
   font-weight: 600;
@@ -191,7 +193,7 @@
   overflow: hidden;
   white-space: nowrap;
   font-family: var(--ds-font-family-code);
-  font-size: var(--ds-font-11-5);
+  font-size: var(--ds-font-12);
 }
 
 .crumb {

@@ -110,7 +110,7 @@
 .navGroupLabel {
   padding: 0 10px 6px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: var(--ds-font-11-5);
+  font-size: var(--ds-font-12);
   font-weight: var(--font-weight-600, 600);
   letter-spacing: 0.04em;
   line-height: 1.25;
@@ -120,7 +120,7 @@
 .navEmpty {
   padding: 12px 10px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: var(--ds-font-12-5);
+  font-size: var(--ds-font-13);
 }
 
 .navItem {
@@ -280,7 +280,7 @@
 .pageSubtitle {
   margin: 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: var(--ds-font-13-5);
+  font-size: var(--ds-font-14);
   line-height: 1.45;
 }
 
@@ -319,14 +319,14 @@
 .cardHeading {
   margin: 0;
   color: var(--dsw-alias-label-primary);
-  font-size: var(--ds-font-13-5);
+  font-size: var(--ds-font-14);
   font-weight: 600;
 }
 
 .cardCaption {
   margin: 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: var(--ds-font-12-5);
+  font-size: var(--ds-font-13);
   line-height: 1.45;
 }
 
@@ -360,7 +360,7 @@
 
 .rowTitle {
   color: var(--dsw-alias-label-primary);
-  font-size: var(--ds-font-13-5);
+  font-size: var(--ds-font-14);
   font-weight: 500;
   line-height: 1.3;
 }
@@ -463,7 +463,7 @@
   background: transparent;
   color: var(--dsw-alias-label-primary);
   font-family: inherit;
-  font-size: var(--ds-font-12-5);
+  font-size: var(--ds-font-13);
   text-align: left;
   cursor: pointer;
 }
@@ -494,7 +494,7 @@
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   font-family: inherit;
-  font-size: var(--ds-font-12-5);
+  font-size: var(--ds-font-13);
   line-height: 1.2;
   cursor: pointer;
   white-space: nowrap;
@@ -662,7 +662,7 @@
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   font-family: inherit;
-  font-size: var(--ds-font-11-5);
+  font-size: var(--ds-font-12);
   cursor: pointer;
 }
 

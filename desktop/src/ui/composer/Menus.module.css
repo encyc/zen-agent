@@ -87,7 +87,7 @@
 .itemSub {
   flex: 1;
   min-width: 0;
-  font-size: var(--ds-font-11-5);
+  font-size: var(--ds-font-12);
   color: var(--dsw-alias-label-tertiary);
   white-space: nowrap;
   overflow: hidden;

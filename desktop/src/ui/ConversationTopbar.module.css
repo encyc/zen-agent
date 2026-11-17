@@ -78,7 +78,7 @@ html[data-platform='darwin'] .root {
   background: var(--ds-surface-1);
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--ds-font-11);
-  line-height: var(--ds-font-11-5);
+  line-height: var(--ds-font-12);
   white-space: nowrap;
 }
 
@@ -96,7 +96,7 @@ html[data-platform='darwin'] .root {
   flex: 0 0 auto;
   color: var(--dsw-alias-border-l3);
   font-size: var(--ds-font-11);
-  line-height: var(--ds-font-11-5);
+  line-height: var(--ds-font-12);
 }
 
 .titleHeading {
@@ -107,7 +107,7 @@ html[data-platform='darwin'] .root {
   margin: 0;
   font-size: var(--ds-font-13);
   font-weight: 500;
-  line-height: var(--ds-font-13-5);
+  line-height: var(--ds-font-14);
 }
 
 /* Click-to-edit: paints and measures exactly like the plain title so the
@@ -153,7 +153,7 @@ html[data-platform='darwin'] .root {
   font-family: inherit;
   font-size: var(--ds-font-13);
   font-weight: 500;
-  line-height: var(--ds-font-13-5);
+  line-height: var(--ds-font-14);
 }
 
 .right {

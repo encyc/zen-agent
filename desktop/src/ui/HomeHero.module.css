@@ -101,14 +101,14 @@
   padding: 6px 10px;
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--ds-font-11);
-  line-height: var(--ds-font-11-5);
+  line-height: var(--ds-font-12);
 }
 
 .menuLabel {
   padding: 6px 10px 2px;
   color: var(--dsw-alias-label-caption);
   font-size: var(--ds-font-11);
-  line-height: var(--ds-font-11-5);
+  line-height: var(--ds-font-12);
 }
 
 .menuItem {
@@ -124,7 +124,7 @@
   background: transparent;
   color: var(--dsw-alias-label-primary);
   font-family: inherit;
-  font-size: var(--ds-font-12-5);
+  font-size: var(--ds-font-13);
   text-align: left;
   white-space: nowrap;
   cursor: pointer;
@@ -159,7 +159,7 @@
   align-items: center;
   justify-content: space-between;
   color: var(--dsw-alias-label-secondary);
-  font-size: var(--ds-font-12-5);
+  font-size: var(--ds-font-13);
   font-weight: 600;
   letter-spacing: 0.01em;
 }
@@ -189,7 +189,7 @@
   align-items: center;
   gap: 10px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: var(--ds-font-12-5);
+  font-size: var(--ds-font-13);
   line-height: 18px;
 }
 

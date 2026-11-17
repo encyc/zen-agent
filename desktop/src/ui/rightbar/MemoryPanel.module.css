@@ -201,7 +201,7 @@
 .snippet {
   overflow: hidden;
   color: var(--dsw-alias-label-secondary);
-  font-size: var(--ds-font-11-5);
+  font-size: var(--ds-font-12);
   line-height: 17px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -228,7 +228,7 @@
 
 .emptyHint {
   color: var(--dsw-alias-label-tertiary);
-  font-size: var(--ds-font-11-5);
+  font-size: var(--ds-font-12);
   line-height: 17px;
 }
 
@@ -335,7 +335,7 @@
   margin: 0;
   padding: 0 11px 6px;
   color: var(--dsw-alias-state-error-primary);
-  font-size: var(--ds-font-11-5);
+  font-size: var(--ds-font-12);
 }
 
 .footer {

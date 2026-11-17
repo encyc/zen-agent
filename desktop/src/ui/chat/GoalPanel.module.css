@@ -36,7 +36,7 @@
 .meta {
   margin: 2px 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  font-size: var(--ds-font-12);
 }
 
 .actions {

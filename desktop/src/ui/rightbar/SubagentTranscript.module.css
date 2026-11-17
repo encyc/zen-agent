@@ -34,7 +34,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--dsw-alias-label-primary);
-  font-size: var(--ds-font-12-5);
+  font-size: var(--ds-font-13);
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;

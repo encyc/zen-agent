@@ -24,7 +24,7 @@
 
 .summary {
   color: var(--dsw-alias-label-tertiary);
-  font-size: var(--ds-font-11-5);
+  font-size: var(--ds-font-12);
   font-variant-numeric: tabular-nums;
 }
 
@@ -36,7 +36,7 @@
   border-radius: var(--dsw-radius-sm);
   background: transparent;
   color: var(--dsw-alias-label-secondary);
-  font-size: var(--ds-font-11-5);
+  font-size: var(--ds-font-12);
   cursor: pointer;
 }
 

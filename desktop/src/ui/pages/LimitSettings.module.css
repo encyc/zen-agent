@@ -37,14 +37,14 @@
 .cardHeading {
   margin: 0;
   color: var(--dsw-alias-label-primary);
-  font-size: var(--ds-font-13-5);
+  font-size: var(--ds-font-14);
   font-weight: 600;
 }
 
 .cardCaption {
   margin: 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: var(--ds-font-12-5);
+  font-size: var(--ds-font-13);
   line-height: 1.45;
 }
 
@@ -64,7 +64,7 @@
 
 .filePath {
   font-family: var(--ds-font-mono, ui-monospace, monospace);
-  font-size: var(--ds-font-11-5);
+  font-size: var(--ds-font-12);
   color: var(--dsw-alias-label-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -82,7 +82,7 @@
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   font-family: inherit;
-  font-size: var(--ds-font-11-5);
+  font-size: var(--ds-font-12);
   cursor: pointer;
   flex: none;
 }
@@ -95,7 +95,7 @@
 .fileNote {
   margin-top: 6px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: var(--ds-font-11-5);
+  font-size: var(--ds-font-12);
   line-height: 1.45;
 }
 
@@ -152,7 +152,7 @@
   padding: 1px 7px;
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-secondary);
-  font-size: 10px;
+  font-size: var(--ds-font-11);
   white-space: nowrap;
 }
 
@@ -160,7 +160,7 @@
   border-radius: 999px;
   padding: 1px 7px;
   background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 18%, transparent);
-  font-size: 10px;
+  font-size: var(--ds-font-11);
   white-space: nowrap;
   max-width: 220px;
   overflow: hidden;
@@ -170,7 +170,7 @@
 .detail {
   margin-top: 2px;
   color: var(--dsw-alias-label-secondary);
-  font-size: var(--ds-font-11-5);
+  font-size: var(--ds-font-12);
   line-height: 1.45;
 }
 
@@ -246,7 +246,7 @@
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   font-family: inherit;
-  font-size: var(--ds-font-11-5);
+  font-size: var(--ds-font-12);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -269,7 +269,7 @@
   background: var(--dsw-alias-label-primary);
   color: var(--dsw-alias-bg-base);
   font-family: inherit;
-  font-size: var(--ds-font-12-5);
+  font-size: var(--ds-font-13);
   font-weight: 500;
   cursor: pointer;
 }
@@ -291,7 +291,7 @@
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   font-family: inherit;
-  font-size: var(--ds-font-12-5);
+  font-size: var(--ds-font-13);
   cursor: pointer;
 }
 
@@ -302,7 +302,7 @@
 
 .blockedNote {
   color: var(--dsw-alias-state-error-primary);
-  font-size: var(--ds-font-11-5);
+  font-size: var(--ds-font-12);
 }
 
 .hint {

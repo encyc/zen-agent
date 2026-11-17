@@ -166,7 +166,7 @@
   padding: 0 6px;
   border-radius: var(--ds-radius-4);
   background: var(--dsw-alias-bg-layer-3);
-  font-size: var(--ds-font-10-5);
+  font-size: var(--ds-font-11);
   color: var(--dsw-alias-state-warn-label);
 }
 
