@@ -3,7 +3,8 @@
 > **维护型文档**：回答「哪个前端有哪些能力」。与 [feature-map.md](feature-map.md) 互补——那篇回答
 > 「功能在哪实现、怎么测」，本篇回答「tui / gui / repl / headless 各自有什么」。
 >
-> - 最近盘点：2026-11-17（GUI v0.13.11，协议 v3）
+> - 最近盘点：2026-11-17（GUI v0.13.11，协议 v3；同日 TUI 对齐 Phase A–E 合入：
+>   `/secrets` `/plugins` `/limits` `/runs` `/worktrees` 与 goal 详情面板）
 > - 图例：`●` 完整 · `◐` 部分（文本降级 / 仅启动期 / 子集）· `—` 无
 > - 维护规则见文末。
 
@@ -50,17 +51,17 @@ GUI(Tauri) ── zen rpc sidecar(JSONL) ──► RpcHost(多项目) ──► 
 | **swarm（房间/roster/works/roles）** | **—** | ● | **—** | — | GUI 独有 |
 | **swarm gate/storm/budget 可视** | **—** | ◐ | — | — | 旋钮经 limits 可改；实时 gate 状态四端皆无结构化面 |
 | **zen fleet** | **—** | ● | **—** | — | GUI 独有 |
-| goal | ● | ● | ● | — | GUI 另有 limits 页预算旋钮 |
+| goal | ● | ● | ● | — | TUI 另有 GoalHud 点击的详情面板 |
 | todo | ● | ● | ◐ | — | REPL 只读列表 |
 | memory 管理 | ● | ● | ● | ◐ | headless 只读入上下文 |
-| skills / plugins / secrets 管理面 | ◐ | ● | ◐ | ◐ | TUI 只有 API key 录入 + `/skills`；plugins 无 UI |
+| skills / plugins / secrets 管理面 | ● | ● | ◐ | ◐ | TUI 有 `/secrets` `/plugins`（+`/skills`）；REPL 文本列表 |
 | mcp 管理 | ● | ● | ◐ | ◐ | REPL 无 add 向导渲染 |
-| limits 编辑 | — | ● | — | ◐ | headless 仅启动 flag；TUI 无面板 |
+| limits 编辑 | ● | ● | ◐ | ◐ | `/limits` 面板/文本列表；headless 仅启动 flag |
 | fs 文件浏览 | — | ● | — | — | |
-| git worktree 总览 | ◐ | ● | — | — | TUI 仅状态带分支段 |
+| git worktree 总览 | ● | ● | ◐ | — | TUI `/worktrees` 只读屏 + REPL 文本 |
 | 内置 terminal | — | ● | — | — | TUI/REPL 本身就是终端，by design 不做 |
 | subagent 查看 | ● | ● | ◐ | — | REPL 仅 `/jobs` 列表 |
-| runs 历史账本 | — | **—** | — | — | `runs` op 已就绪，**四端皆空** |
+| runs 历史账本 | ● | **—** | ◐ | — | TUI `/runs`（四端第一个视图）；GUI 待接同一 op |
 | 多项目驻留 | — | ● | — | — | TUI/REPL 单进程单 cwd |
 
 ## RPC op 骨架（GUI 能力的来源）
@@ -107,11 +108,10 @@ slot 级 kind（`RpcServer`）：`hello` `prompt` `cancel` `status` `shutdown` `
 
 1. **裁决排除（2026-11-17）**：swarm/zen 不进 TUI/REPL（暂缓非永久，见
    [TUI 对齐计划](superpowers/specs/2026-11-17-tui-gui-parity-design.md) 的范围裁决）。
-2. runs 视图四端皆空（op 就绪，TUI 对齐计划先做，验证信息架构后 GUI 接同一 op）。
+2. runs 视图：TUI 已做（`/runs`，四端第一个）；GUI 待接同一 `runs` op。
 3. GUI 未接的现成 op：`session.retry`、`usage`、`tools`、`swarm.works` 的 detail/merge/rename。
-4. REPL：follow_up、队列管理、session picker 只列不切、todo 只读、mcp 向导无渲染、settings 只读。
-5. TUI：secrets/plugins/limits 管理面、worktree 总览、runs、goal 详情面板
-   （对齐计划 Phase A–E）。
+4. REPL：follow_up、队列管理、session picker 只列不切、todo 只读、mcp 向导无渲染、settings 只读
+   （`/secrets` `/plugins` `/limits` `/runs` `/worktrees` 已有文本形式）。
 
 ### P2 · by design 不补
 

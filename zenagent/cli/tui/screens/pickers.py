@@ -321,3 +321,13 @@ def open_worktrees_screen(app: App) -> None:
         lambda: WorktreesScreen(app.runtime),
         lambda _result: None,
     )
+
+
+def open_goal_panel(app: App) -> None:
+    from zenagent.cli.tui.screens.goal import GoalPanel
+
+    app.open_menu(
+        "goal-panel",
+        lambda: GoalPanel(app),
+        lambda _result: None,
+    )

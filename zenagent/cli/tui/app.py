@@ -366,6 +366,7 @@ class ZenAgentApp(
         self.command_hints = self.query_one(CommandHints)
         self.query_one(WorkStrip).set_handler(self._open_sidebar_from_strip)
         self.query_one(TodoHud).set_handler(self.action_show_todo_list)
+        self.query_one(GoalHud).set_handler(self.open_goal_panel)
         self.query_one(PendingBand).set_handler(self._promote_pending)
         self.query_one(Sidebar).set_handlers(
             on_todo=self.action_show_todo_list,
@@ -758,6 +759,14 @@ class ZenAgentApp(
         )
 
         _open_worktrees_screen(self)
+
+    def open_goal_panel(self) -> None:
+        """GoalHud click: the session goal's full fields and actions."""
+        from zenagent.cli.tui.screens.pickers import (
+            open_goal_panel as _open_goal_panel,
+        )
+
+        _open_goal_panel(self)
 
     def open_mode_picker(self) -> None:
         from zenagent.cli.tui.screens.pickers import (

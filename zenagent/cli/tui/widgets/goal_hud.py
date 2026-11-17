@@ -43,6 +43,7 @@ class GoalHud(Static):
     def __init__(self) -> None:
         super().__init__("", id="goal-hud")
         self._plain = ""
+        self._on_click_handler = None
         self.display = False
 
     @property
@@ -51,6 +52,14 @@ class GoalHud(Static):
 
     def render_text(self) -> str:
         return self._plain
+
+    def set_handler(self, handler) -> None:
+        """Install the click handler (None clears it), like the todo HUD."""
+        self._on_click_handler = handler
+
+    def on_click(self) -> None:
+        if self._on_click_handler is not None:
+            self._on_click_handler()
 
     def set_goal(self, view: GoalView | None) -> None:
         """Render one goal snapshot; ``None`` hides the row."""
