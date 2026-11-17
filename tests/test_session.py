@@ -207,18 +207,65 @@ def test_listing_hides_header_only_sessions(isolated_sessions):
     _write_session(isolated_sessions, "real.jsonl", ["chat"], mtime=2)
     junk = isolated_sessions / "junk.jsonl"
     junk.write_text(
+        json.dumps({"type": "session", "version": 1, "createdAt": 1}) + "\n",
+        encoding="utf-8",
+    )
+
+    assert [info.path.name for info in list_sessions()] == ["real.jsonl"]
+
+
+def test_listing_keeps_a_session_whose_run_is_still_in_progress(isolated_sessions):
+    # Messages are written at ``agent_end``; a session mid-turn only has
+    # activity records, and the sidebar must still show the conversation.
+    isolated_sessions.mkdir(parents=True)
+    running = isolated_sessions / "running.jsonl"
+    running.write_text(
         "\n".join(
             json.dumps(record)
             for record in (
                 {"type": "session", "version": 1, "createdAt": 1},
-                {"type": "mode", "mode": "ask", "timestamp": 1},
+                {"type": "mode", "mode": "auto", "timestamp": 1},
+                {"type": "run_start", "timestamp": 2},
+                {"type": "tool_end", "tool_name": "bash", "timestamp": 3},
             )
         )
         + "\n",
         encoding="utf-8",
     )
 
-    assert [info.path.name for info in list_sessions()] == ["real.jsonl"]
+    infos = list_sessions()
+
+    assert [info.path.name for info in infos] == ["running.jsonl"]
+    assert infos[0].messages == 0
+    assert infos[0].started is True
+
+
+def test_listing_titles_a_running_goal_from_its_record(isolated_sessions):
+    # A goal is set before the turn that carries it writes any message, so
+    # the record itself names the session in the meantime.
+    isolated_sessions.mkdir(parents=True)
+    goal = isolated_sessions / "goal.jsonl"
+    goal.write_text(
+        "\n".join(
+            json.dumps(record)
+            for record in (
+                {"type": "session", "version": 1, "createdAt": 1},
+                {"type": "mode", "mode": "auto", "timestamp": 1},
+                {
+                    "type": "goal",
+                    "timestamp": 2,
+                    "goal": {"goal_id": "g1", "objective": "ship the goal loop"},
+                },
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    info = list_sessions()[0]
+
+    assert info.path.name == "goal.jsonl"
+    assert info.title == "ship the goal loop"
 
 
 def test_listing_keeps_intentional_empty_sessions(isolated_sessions):

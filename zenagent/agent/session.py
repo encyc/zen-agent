@@ -317,6 +317,43 @@ def _goal_objective(text: str) -> str:
     return text[start:end].strip() if end >= 0 else text[start:].strip()
 
 
+#: Side-channel records a lazy session writes before it has a conversation.
+#: The kernel only knows its own envelope (the header); every other kind is
+#: vocabulary it deliberately does not name.
+_ENVELOPE_RECORD_TYPES = frozenset({HEADER_TYPE})
+
+
+def _goal_record_objective(records: list[dict]) -> str:
+    """The newest goal record's objective; empty when the file has no goal.
+
+    The message that starts a goal turn is only written at ``agent_end``, so a
+    session whose goal is already running has no message to derive a title
+    from. The goal record itself carries the objective the person typed.
+    """
+    for record in reversed(records):
+        if record.get("type") != "goal":
+            continue
+        goal = record.get("goal")
+        if isinstance(goal, dict):
+            objective = goal.get("objective")
+            if isinstance(objective, str) and objective.strip():
+                return objective.strip()
+    return ""
+
+
+def _session_started(records: list[dict]) -> bool:
+    """True once the file records more than its envelope (the header).
+
+    New sessions are lazy and the transcript is written at ``agent_end``, so a
+    session with a run in progress -- or a goal already set -- has no message
+    lines yet. Those are live conversations, not header-only leftovers, and
+    the listing must keep them.
+    """
+    return any(
+        record.get("type") not in _ENVELOPE_RECORD_TYPES for record in records
+    )
+
+
 def _title_from_messages(messages: list[Message]) -> str:
     """Brief of the first text user message; a goal turn uses its objective."""
     first_goal = ""
@@ -367,6 +404,9 @@ class SessionInfo:
     model: str = ""
     #: Header ``derivedFrom``; empty for an original session.
     derived_from: str = ""
+    #: True when the file holds more than its envelope (the header): a run
+    #: in progress, a goal, or a stored conversation.
+    started: bool = False
 
 
 @dataclass
@@ -638,14 +678,22 @@ class Session:
             raw = self.header.get("derivedFrom")
             if isinstance(raw, str):
                 derived_from = raw
+        title = overrides.get(self.path.name) or _title_from_messages(messages)
+        if title == "(empty)":
+            # A goal that is already running names the session before its
+            # first turn has written a message line.
+            objective = _goal_record_objective(self.records)
+            if objective:
+                title = brief(objective)
         return SessionInfo(
             path=self.path,
             mtime=mtime,
             messages=len(messages),
-            title=overrides.get(self.path.name) or _title_from_messages(messages),
+            title=title,
             created_at=created_at,
             model=model,
             derived_from=derived_from,
+            started=_session_started(self.records),
         )
 
     def fork_at(
@@ -781,12 +829,15 @@ def list_sessions(limit: int = 20, *, scope: str = "project") -> list[SessionInf
                 info = Session(path).read_info(titles=titles)
             except (ValueError, OSError):
                 continue
-            # Header-only leftovers from older builds are not conversations.
-            # A pinned file and an explicitly named one are deliberate and
-            # stay visible.
+            # Envelope-only leftovers from older builds are not conversations.
+            # A file with activity (a run in progress, a goal already set) is
+            # a live session whose message lines only land at ``agent_end``:
+            # keep it, or the sidebar loses the conversation being had. A
+            # pinned file and an explicitly named one are deliberate too.
             if (
                 info.messages == 0
                 and info.title == "(empty)"
+                and not info.started
                 and path.name not in pins
             ):
                 continue
