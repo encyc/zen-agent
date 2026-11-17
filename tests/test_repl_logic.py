@@ -290,6 +290,77 @@ async def test_repl_reconnects_a_late_mcp_server(tmp_path, isolated_sessions):
     assert "flaky: connected" in joined
 
 
+async def test_mcp_retry_typed_mid_run_waits_for_the_turn(tmp_path, isolated_sessions):
+    """A live turn must not make /mcp retry hit the streaming guard.
+
+    The REPL keeps reading while the model streams; /mcp retry rewrites the
+    toolset, so it belongs with the deferred commands. This is the macOS CI
+    flake: "cannot refresh tools while the agent is working".
+    """
+    import json
+    import sys
+    from pathlib import Path
+
+    sentinel = tmp_path / "ready"
+    flaky = Path(__file__).resolve().parent / "fixtures" / "mcp_flaky_server.py"
+    mcp_file = tmp_path / "mcp.json"
+    mcp_file.write_text(
+        json.dumps(
+            {
+                "servers": {
+                    "flaky": {
+                        "command": [sys.executable, str(flaky)],
+                        "env": {"MCP_READY_FILE": str(sentinel)},
+                    }
+                }
+            }
+        )
+    )
+
+    calls = {"n": 0}
+
+    async def input_fn() -> str:
+        await asyncio.sleep(0.02)
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return "hi"
+        if calls["n"] == 2:
+            sentinel.write_text("ready")  # the server comes up mid-run
+            return "/mcp retry"
+        return "/exit"
+
+    lines: list[str] = []
+    code = await repl(
+        "glm-5.3",
+        # Slow enough that /mcp retry is read while the turn is still live.
+        stream_fn=scripted_stream(0.3, "slow hello"),
+        input_fn=input_fn,
+        print_fn=lambda *a, **k: lines.append("".join(str(x) for x in a)),
+        api_key="k",
+        mcp_file=str(mcp_file),
+        mcp_retry_interval_s=0,
+    )
+    assert code == 0
+    joined = "\n".join(lines)
+    assert "mcp: tools updated" in joined
+    assert "flaky: connected" in joined
+
+
+async def test_shake_typed_mid_run_waits_for_the_turn(isolated_sessions):
+    """/shake rewrites the transcript; mid-run it must queue, not raise."""
+    lines: list[str] = []
+    code = await repl(
+        "glm-5.3",
+        stream_fn=scripted_stream(0.3, "slow hello"),
+        input_fn=scripted_input("hi", "/shake images", "/exit", settle=0.02),
+        print_fn=lambda *a, **k: lines.append("".join(str(x) for x in a)),
+        api_key="k",
+        mcp=False,
+    )
+    assert code == 0
+    assert any("removed" in line for line in lines), lines
+
+
 async def test_reload_discovers_skills_added_mid_session(tmp_path, monkeypatch):
     from zenagent.config import UserConfig
 

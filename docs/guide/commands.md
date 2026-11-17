@@ -114,7 +114,7 @@ agent 正在跑的时候，输入框里的内容**不是**新的一轮：它作�
 
 斜杠命令是个例外，但它们**分两类**：改写转录、会话文件或工具集的命令（`/compact`、`/reload`、`/retry`、
 `/undo`、`/clear`、`/export`、`/fork`、`/restore`、`/new`、`/fresh`、`/handoff`、`/import`、
-`/model`、`/plan-review`）在执行中被输入时，REPL 会**等这一轮结束再执行**，不会当场拒绝
+`/mcp`、`/shake`、`/model`、`/plan-review`）在执行中被输入时，REPL 会**等这一轮结束再执行**，不会当场拒绝
 （"cannot reload while the agent is working" / "nothing to compact"）而把你输入的那行丢掉。其余命令
 （`/help`、`/mode`、`/theme`、`/quit` ……）仍然立即生效。清单见
 `zenagent/app/command_policy.py::DEFERRED_COMMANDS`。

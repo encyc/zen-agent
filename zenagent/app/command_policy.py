@@ -22,12 +22,14 @@ DEFERRED_COMMANDS = frozenset(
         "fresh",
         "handoff",
         "import",
+        "mcp",
         "model",
         "new",
         "plan-review",
         "reload",
         "restore",
         "retry",
+        "shake",
         "undo",
     }
 )
