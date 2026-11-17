@@ -34,14 +34,30 @@ cd /Users/mac/zen-agent/.worktrees/multi-session-panes/desktop && pnpm tauri dev
 
 | 门 | 结果 |
 |---|---|
-| Python 全量 pytest | 3187 passed（含新增 5 个会话路由测试） |
-| 桌面单测 node --test | 478 passed（新增 panes/frameRouter/detach/sessionBoot/clientTag/chatStoreFactory） |
+| Python 全量 pytest | 3187 passed（含新增 5 个会话路由测试）；审查后回归 23 passed |
+| 桌面单测 node --test | 481 passed（新增 panes/frameRouter/detach/sessionBoot/clientTag/chatStoreFactory） |
 | Playwright e2e | 143 passed（新增 panes.spec.ts 4 条） |
 | tsc + vite build | ✓ |
 | style tokens lint | ✓ |
 | 架构预算门（800 行/文件） | ✓（appStore 反而缩小：1195 → 1046 行） |
 | cargo check | ✓ |
 | 原生打包 | ✓ ZenAgent.app + dmg（PyInstaller 冒烟通过） |
+
+## 独立审查与修复
+
+全分支由独立审查代理复核（设计文档 Amendments、5 条 Review Focus、跨窗口风险、
+测试诚实度）。审出 2 个 Critical、3 个 Important，均已修复并回归：
+
+- 独立窗口"领养"已运行后端时不再失聪（帧监听在领养路径也挂载）——修复前拖出的
+  窗口会停在快照。
+- 关闭面板回到单栏时，面板内容交还给主视图、注册表清空——修复前会话帧会被
+  隐形面板吞掉、界面像卡死。
+- 关闭"Enter 发送"设置后，面板也有 ⌘/Ctrl+Enter 与发送按钮。
+- 会话被淘汰后的提示词自动恢复重试，不再报错卡死。
+- 两处测试诚实度补齐（状态轮询降级、领养路径监听）。
+
+遗留小项（Minor，未修，详见 ledger）：session_invalid 文案、静态面板上的
+/retry 恢复、同毫秒拖出窗口标签碰撞、rpc_start 竞态守卫、轮询未错峰等。
 
 ## 关键设计（为什么这样建）
 
