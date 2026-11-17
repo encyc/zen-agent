@@ -105,12 +105,13 @@ slot 级 kind（`RpcServer`）：`hello` `prompt` `cancel` `status` `shutdown` `
 
 ### P1 · 端级缺口（app 层/RPC 已就绪，端没接）
 
-1. swarm + zen 在 TUI/REPL 缺席（TUI 进程内直连，不需等 RPC；详见
-   [TUI 对齐计划](superpowers/specs/2026-11-17-tui-gui-parity-design.md)）。
-2. runs 视图四端皆空（op 就绪，GUI 先接最便宜）。
+1. **裁决排除（2026-11-17）**：swarm/zen 不进 TUI/REPL（暂缓非永久，见
+   [TUI 对齐计划](superpowers/specs/2026-11-17-tui-gui-parity-design.md) 的范围裁决）。
+2. runs 视图四端皆空（op 就绪，TUI 对齐计划先做，验证信息架构后 GUI 接同一 op）。
 3. GUI 未接的现成 op：`session.retry`、`usage`、`tools`、`swarm.works` 的 detail/merge/rename。
 4. REPL：follow_up、队列管理、session picker 只列不切、todo 只读、mcp 向导无渲染、settings 只读。
-5. TUI：secrets/plugins/limits 管理面、swarm/zen/gate、worktree 总览、runs、多项目。
+5. TUI：secrets/plugins/limits 管理面、worktree 总览、runs、goal 详情面板
+   （对齐计划 Phase A–E）。
 
 ### P2 · by design 不补
 
