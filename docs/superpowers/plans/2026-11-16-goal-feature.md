@@ -10,6 +10,14 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-16-goal-feature-design.md`
 
+**Status (2026-11-17):** landed on `feat/goal-feature` across tasks 1–13. The
+implementation ran task-by-task without ticking the per-step checkboxes below,
+so the commit history — not the boxes — is the record: each task is one or more
+commits, followed by a hardening pass for the verifier's races (`never apply a
+verdict from a replaced, paused or switched goal`), verifier input/output
+bounds, and the goal-row rendering in both frontends. Gate on the merged tree:
+`bash scripts/check.sh` and `cd desktop && npm test && npm run build`.
+
 ## Global Constraints
 
 - No new runtime dependencies; standard library + existing `httpx` only.
@@ -30,8 +38,8 @@ These are the failure modes no single task's happy-path test covers; each has a 
 1. **A user message arrives while the goal verifier/check is running.** The user turn must run first; goal continuation must never start two agent runs or overtake the queue. Test: `test_user_message_wins_over_goal_continuation` (Task 8).
 2. **App restart or `/import` with a persisted `check`.** A session file can contain arbitrary shell; it must restore `paused` and require `/goal resume`, never auto-execute. Test: `test_persisted_check_restores_paused` (Task 9).
 3. **Session switch preference.** Default keeps the goal active and resumes on return; `goal_pause_on_session_switch=true` pauses on leave. No background session may start a goal run. Test: `test_switch_keeps_goal_active_by_default` / `test_switch_pause_pref_pauses` (Task 9).
-4. **Provider usage normalization and subagent spend.** `Usage.input` means different things on OpenAI vs Anthropic; budget must not undercount. Test: `test_budget_counts_provider_tokens_and_subagents` (Task 6).
-5. **Goal survives undo/retry/compact but not fork.** Test: `test_goal_survives_rewrite_and_drops_on_fork` (Task 2).
+4. **Provider usage normalization and subagent spend.** `Usage.input` means different things on OpenAI vs Anthropic; budget must not undercount. Test: `test_verifier_tokens_count_against_budget` + `test_budget_counts_subagents` (Task 6).
+5. **Goal survives undo/retry/compact but not fork.** Test: `test_fork_drops_goal_but_rewrite_keeps_it` (Task 2).
 
 ---
 
