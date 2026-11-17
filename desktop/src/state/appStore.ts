@@ -39,8 +39,9 @@ import { stopFleet, switchWorkspaceMode, syncProjectState, zenTranscript } from 
 import { registerSwarmSender } from './swarmWiring.ts'
 import { nextDraft } from './pending.ts'
 import { latestSessionForProject } from './latestSession.ts'
-import { loadPrefs, replayFrames, savePref, spawnArgs } from './prefs.ts'
+import { savePref, spawnArgs } from './prefs.ts'
 import { PaneCache } from './projectPanes.ts'
+import { restorePrefs } from './prefsReplay.ts'
 import {
   ensureFrameWiring,
   getPaneSink,
@@ -1043,30 +1044,3 @@ async function refreshAfterSessionChange(get: () => AppState): Promise<void> {
   void get().refreshSessions()
 }
 
-/** Re-apply the user's mode/model/thinking onto a freshly spawned child.
- *
- * The child comes up with `--mode ask` and catalog defaults; without this a
- * project switch silently drops the person out of auto mode and back to the
- * default model, which is exactly the "everything reset" feeling a reload
- * has. Every replayed frame is a normal request: a pref the server rejects
- * (a model that was renamed, say) costs that pref, never the connection. */
-async function restorePrefs(get: () => AppState): Promise<void> {
-  await get().refreshStatus()
-  const prefs = loadPrefs()
-  const live = useStatusStore.getState().status
-  const frames = replayFrames(prefs, {
-    mode: live?.mode ?? null,
-    model: live?.model ?? null,
-    thinking: live?.thinking ?? null,
-  })
-  if (frames.length === 0) return
-  for (const payload of frames) {
-    try {
-      await get().client().send(payload)
-    } catch {
-      // A dead child ends here; the caller's own error path reports it.
-      return
-    }
-  }
-  await get().refreshStatus()
-}

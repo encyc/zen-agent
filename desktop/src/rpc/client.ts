@@ -189,6 +189,17 @@ export class RpcClient {
     await bridge.invoke('rpc_stop').catch(() => {})
   }
 
+  /** Whether the shell already runs a sidecar: a detached session window
+   * adopts it instead of spawning a second runtime. A bridge without the
+   * command (the scripted dev bridge) answers "not running". */
+  async alive(): Promise<boolean> {
+    try {
+      return (await bridge.invoke<boolean>('rpc_alive')) === true
+    } catch {
+      return false
+    }
+  }
+
   /** Verify the wire contract before any domain request.
    *
    * Rejects with a structured failure (the same shape `rpc_start` rejects
