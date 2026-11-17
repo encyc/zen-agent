@@ -19,6 +19,10 @@ dist/
 
 docs/za/
 
+# architecture explorer (standalone vite app) and its built single-file output
+docs/explorer/
+docs/internals/zen.html
+
 # agent worktrees
 .worktrees/
 
