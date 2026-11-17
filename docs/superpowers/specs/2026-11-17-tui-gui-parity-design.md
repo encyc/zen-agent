@@ -1,6 +1,12 @@
 # TUI × GUI 功能对齐计划
 
-日期：2026-11-17 · 状态：待实施 · 基线：[四端能力矩阵](../../frontend-matrix.md)
+日期：2026-11-17 · 状态：Phase A–E 已实施 · 基线：[四端能力矩阵](../../frontend-matrix.md)
+
+> **实施记录（2026-11-17）**：A `/secrets`（af36397）· B `/plugins`（e28ec1b）·
+> C `/limits`（390ab18，adopt 契约提取为 `limits_apply.copy_onto/reload_into`）·
+> D `/runs` + `/worktrees`（8ab8543，runs 行助手下沉 `app/runs.py`）·
+> E goal 面板（83409ac，GoalHud 点击进入）。矩阵已按维护规则同步。
+> 未排期：F（REPL follow_up/队列管理）、观察项（TUI 文件浏览）。
 
 ## 范围裁决（2026-11-17）
 
@@ -111,7 +117,7 @@ GUI 专属现状，矩阵中相应格标注 TUI「裁决排除」。
 
 **测试**：`tests/test_tui_goal_panel.py`。
 
-## Phase F · 顺手项（不阻塞）
+## Phase F · 顺手项（未排期）
 
 - **REPL follow_up + 队列管理**：`ChatController.follow_up` 已有，只差命令/键位入口；
   steer 已有。
