@@ -9,9 +9,17 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from 'react'
-import { retryableNodeId, useChatStore, type ChatNode, type ToolNode, type UserNode } from '../../state/chatStore'
+import {
+  retryableNodeId,
+  useChatStore,
+  type ChatNode,
+  type ChatStoreApi,
+  type ToolNode,
+  type UserNode,
+} from '../../state/chatStore'
 import { groupTurns, type ChatTurn } from '../../state/turns'
 import {
   TRANSCRIPT_WINDOW_MIN,
@@ -50,11 +58,26 @@ function sameUserRows(rows: UserNode[], nodes: ChatNode[]): boolean {
   return index === rows.length
 }
 
-export function ChatView() {
-  const nodes = useChatStore((state) => state.nodes)
-  const revision = useChatStore((state) => state.revision)
-  const hasMoreBefore = useChatStore((state) => state.hasMoreBefore)
-  const busy = useAppStore((state) => state.busy)
+/** One conversation transcript. Without props this is the shell's focused
+ * session exactly as before; a session pane passes its own chat store, its
+ * own busy flag and its own older-page/retry routes, so the same scrolling,
+ * windowing and node rendering serve both surfaces. */
+export interface ChatViewProps {
+  chat?: ChatStoreApi
+  busy?: boolean
+  onLoadOlder?: () => Promise<boolean>
+  onRetry?: () => void
+  /** Replaces the HomeHero empty state (panes never offer project picking). */
+  emptyState?: ReactNode
+}
+
+export function ChatView(props: ChatViewProps) {
+  const chat = props.chat ?? useChatStore
+  const nodes = useSyncExternalStore(chat.subscribe, () => chat.getState().nodes)
+  const revision = useSyncExternalStore(chat.subscribe, () => chat.getState().revision)
+  const hasMoreBefore = useSyncExternalStore(chat.subscribe, () => chat.getState().hasMoreBefore)
+  const appBusy = useAppStore((state) => state.busy)
+  const busy = props.busy ?? appBusy
   const project = useSessionStore(
     (state) => state.sessions.find((session) => session.path === state.currentPath)?.project ?? null,
   )
@@ -138,17 +161,18 @@ export function ChatView() {
   // The loaded rows are all mounted and the session has more history on the
   // server: fetch the next older page and mount it in one commit, anchored
   // like a window growth so the reader's place does not jump.
+  const fetchOlder = props.onLoadOlder ?? (() => useAppStore.getState().loadOlderTranscript())
   const loadOlder = useCallback(async () => {
     const scroller = scrollerRef.current
-    const before = useChatStore.getState().nodes.length
-    if (!(await useAppStore.getState().loadOlderTranscript())) return
-    const added = useChatStore.getState().nodes.length - before
+    const before = chat.getState().nodes.length
+    if (!(await fetchOlder())) return
+    const added = chat.getState().nodes.length - before
     if (added <= 0) return
     if (scroller !== null) {
       anchorRef.current = scroller.scrollHeight - scroller.scrollTop
     }
     setWindowSize((size) => size + added)
-  }, [])
+  }, [chat, fetchOlder])
 
   const revealTop = useCallback(() => {
     if (transcriptWindow.bounded) {
@@ -251,7 +275,7 @@ export function ChatView() {
   // reset and session refresh, so the action reuses that command.
   const retryId = retryableNodeId(visible)
   const canRetry = !busy && retryId !== null
-  const onRetry = () => void useAppStore.getState().runCommand('retry', '')
+  const onRetry = props.onRetry ?? (() => void useAppStore.getState().runCommand('retry', ''))
   const turns = groupTurns(visible, busy)
   const liveTurn = turns[turns.length - 1]
   const showRunningRow = busy && (liveTurn === undefined || liveTurn.tools.length === 0)
@@ -275,12 +299,14 @@ export function ChatView() {
       <div className={css.scroll} ref={scrollerRef} data-chat-scroll>
         {isEmpty ? (
           <div className={css.emptyHost}>
-            <HomeHero
-              projectName={project}
-              recents={recents}
-              onPickFolder={() => void pickAndSwitchProject()}
-              onOpenRecent={(path) => void switchProject(path)}
-            />
+            {props.emptyState ?? (
+              <HomeHero
+                projectName={project}
+                recents={recents}
+                onPickFolder={() => void pickAndSwitchProject()}
+                onOpenRecent={(path) => void switchProject(path)}
+              />
+            )}
           </div>
         ) : (
           <div className={css.flow} data-chat-flow>
@@ -313,7 +339,9 @@ export function ChatView() {
       {!isEmpty && (
         <ConversationMinimap users={userRows} activeId={activeId} onJump={jumpTo} />
       )}
-      <ChatWidthHandles width={clampChatWidth(chatWidth)} onChange={setChatWidth} />
+      {props.chat === undefined && (
+        <ChatWidthHandles width={clampChatWidth(chatWidth)} onChange={setChatWidth} />
+      )}
       {showJump && (
         <button
           type="button"

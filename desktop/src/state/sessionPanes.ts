@@ -47,6 +47,9 @@ interface PanesState {
    * click does today) and a static pane upgrades to live. */
   focus(path: string): Promise<void>
   submit(path: string): Promise<void>
+  /** One slash command addressed to this pane's session (also the retry
+   * route: runCommand(path, 'retry', '')). */
+  runCommand(path: string, name: string, argument: string): Promise<void>
   cancel(path: string): Promise<void>
   loadOlder(path: string): Promise<boolean>
   setDraft(path: string, text: string): void
@@ -213,7 +216,10 @@ export const usePanesStore = create<PanesState>((set, get) => {
       if (text === '') return
       patchPane(path, { draft: '' })
       if (text.startsWith('/')) {
-        await submitCommand(path, text)
+        const space = text.indexOf(' ')
+        const name = space < 0 ? text.slice(1) : text.slice(1, space)
+        const argument = space < 0 ? '' : text.slice(space + 1).trim()
+        await get().runCommand(path, name, argument)
         return
       }
       // A static pane's slot is gone: resume makes it resident (and current —
@@ -226,10 +232,17 @@ export const usePanesStore = create<PanesState>((set, get) => {
           .client()
           .send({ type: 'prompt', text, session: path })
         routeReply(frame, appHandling())
+        // An untagged refusal (an older runtime, the scripted host) shows the
+        // banner; the pane still releases its optimistic busy flag.
+        if (frame.type === 'error') setBusy(path, false)
       } catch {
         // transport-level failure: the exit listener already flagged it
         setBusy(path, false)
       }
+    },
+
+    async runCommand(path, name, argument) {
+      await submitCommand(path, name, argument)
     },
 
     async cancel(path) {
@@ -299,10 +312,7 @@ export const usePanesStore = create<PanesState>((set, get) => {
     },
   }
 
-  async function submitCommand(path: string, text: string): Promise<void> {
-    const space = text.indexOf(' ')
-    const name = space < 0 ? text.slice(1) : text.slice(1, space)
-    const argument = space < 0 ? '' : text.slice(space + 1).trim()
+  async function submitCommand(path: string, name: string, argument: string): Promise<void> {
     let frame: Record<string, unknown>
     try {
       frame = await useAppStore

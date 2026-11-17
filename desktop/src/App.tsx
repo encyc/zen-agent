@@ -26,6 +26,8 @@ import { ConversationTopbar } from './ui/ConversationTopbar'
 import { NoticeBanner } from './ui/NoticeBanner'
 import { useUpdateStore } from './state/updateStore'
 import { useZenStore } from './state/zenStore'
+import { usePanesStore } from './state/sessionPanes'
+import { SessionPanes } from './ui/panes/SessionPanes'
 import { SIDEBAR_DEFAULT, RIGHTBAR_DEFAULT, clampChatWidth } from './ui/columns'
 import { PanelLeftIcon, PanelRightIcon } from './ui/icons'
 import css from './App.module.css'
@@ -75,6 +77,7 @@ export function App() {
   const view = useSettingsStore((state) => state.view)
   const workspaceMode = useSettingsStore((state) => state.workspaceMode)
   const workerPath = useZenStore((state) => state.workerPath)
+  const openPanes = usePanesStore((state) => state.panes)
   const previousView = useRef(view)
   const updateChecked = useRef(false)
   // The shell opens straight into a chat: the last project, else the user's
@@ -275,11 +278,19 @@ export function App() {
         <WorkerConversation />
       ) : (
         // coding and zen share the conversation: in zen the sidebar swaps to
-        // the fleet roster, but the router session is the chat itself.
+        // the fleet roster, but the router session is the chat itself. With
+        // two or more panes open the strip replaces the single conversation;
+        // the docked composer returns with it.
         <>
           <ConversationTopbar collapsed={collapsed} onExpandSidebar={() => setCollapsed(false)} />
-          <ChatView />
-          <ComposerDock />
+          {openPanes.length >= 2 ? (
+            <SessionPanes />
+          ) : (
+            <>
+              <ChatView />
+              <ComposerDock />
+            </>
+          )}
           <button
             type="button"
             className={css.workPanelToggle}
