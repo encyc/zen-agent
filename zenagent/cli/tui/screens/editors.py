@@ -8,11 +8,12 @@ from typing import ClassVar
 from rich.text import Text
 from textual import on
 from textual.app import ComposeResult
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Input, OptionList, Static
 from textual.widgets.option_list import Option
 
+from zenagent.cli.tui import palette
 from zenagent.cli.tui.screens.dialogs import (
     DialogScreen,
 )
@@ -34,24 +35,19 @@ class SettingsPanel(ModalScreen[None]):
 
     BINDINGS = [  # noqa: RUF012 - Textual class API
         ("escape", "close", "Close"),
-        ("right", "cycle_section", "Into items"),
-        ("left", "back_to_rail", "To rail"),
+        ("right", "next_section", "Next section"),
+        ("left", "previous_section", "Previous section"),
     ]
+
+    #: The label column's width; values start aligned after it.
+    _LABEL_WIDTH: ClassVar[int] = 28
 
     DEFAULT_CSS = """
     SettingsPanel {
-        align: center middle;
-        background: $ink 65%;
-    }
-
-    SettingsPanel #settings-panel {
-        width: 96;
-        max-width: 95%;
-        height: auto;
-        max-height: 26;
+        width: 100%;
+        height: 100%;
         padding: 1 2;
         background: $surface;
-        border: round $line;
     }
 
     SettingsPanel #settings-title {
@@ -60,25 +56,16 @@ class SettingsPanel(ModalScreen[None]):
         text-style: bold;
     }
 
-    SettingsPanel #settings-body {
-        height: auto;
-        max-height: 18;
-    }
-
-    SettingsPanel #settings-rail {
-        width: 26;
-        height: auto;
-        max-height: 16;
-        padding: 0 1 0 0;
-        scrollbar-size-vertical: 0;
+    SettingsPanel #settings-tabs {
+        height: 1;
+        margin: 0 0 1 0;
     }
 
     SettingsPanel #settings-items {
-        width: 1fr;
-        height: auto;
-        max-height: 16;
-        padding: 0 0 0 1;
-        border-left: solid $line;
+        height: 1fr;
+        background: $surface;
+        border: none;
+        padding: 0;
         scrollbar-size-vertical: 1;
     }
 
@@ -87,9 +74,14 @@ class SettingsPanel(ModalScreen[None]):
         color: $foreground;
     }
 
-    SettingsPanel #settings-footer {
+    SettingsPanel #settings-desc {
         height: 1;
         margin: 1 0 0 0;
+        color: $dim;
+    }
+
+    SettingsPanel #settings-footer {
+        height: 1;
         color: $dim;
     }
     """
@@ -136,6 +128,10 @@ class SettingsPanel(ModalScreen[None]):
         self._app = app
         self._on_action = on_action
         self._section_index = 0
+        #: The composed tab line / description; tests read these instead of
+        #: Static internals (Textual 8 exposes no renderable accessor).
+        self._tabs_line: Text = Text()
+        self._description: str = ""
 
     # -- data ---------------------------------------------------------------
 
@@ -194,25 +190,27 @@ class SettingsPanel(ModalScreen[None]):
     # -- layout -------------------------------------------------------------
 
     def compose(self) -> ComposeResult:
-        with Vertical(id="settings-panel"):
-            yield Static(t("tui.picker.settings"), id="settings-title")
-            with Horizontal(id="settings-body"):
-                yield OptionList(id="settings-rail")
-                yield OptionList(id="settings-items")
-            yield Static(self._footer_text(), id="settings-footer")
+        yield Static(t("tui.picker.settings"), id="settings-title")
+        yield Static(id="settings-tabs")
+        yield OptionList(id="settings-items")
+        yield Static("", id="settings-desc")
+        yield Static(self._footer_text(), id="settings-footer")
 
     def on_mount(self) -> None:
-        self._fill_rail()
         self._show_section(0)
-        rail = self.query_one("#settings-rail", OptionList)
-        rail.focus()
+        self.query_one("#settings-items", OptionList).focus()
 
-    def _fill_rail(self) -> None:
-        rail = self.query_one("#settings-rail", OptionList)
-        rail.clear_options()
+    def _tabs_text(self) -> Text:
+        """One rich line of tabs; the selected one is inverted like omp's."""
+        line = Text()
         for index, (_, title_key, _) in enumerate(self.SECTIONS):
-            mark = "▸" if index == self._section_index else " "
-            rail.add_option(Option(f"{mark} {t(title_key)}"))
+            title = t(title_key)
+            if index == self._section_index:
+                line.append(f" {title} ", style=palette.ACCENT + " bold")
+            else:
+                line.append(f" {title} ", style=palette.DIM)
+            line.append("  ", style=palette.DIM)
+        return line
 
     def _footer_text(self) -> str:
         from zenagent import settings as settings_module
@@ -228,32 +226,61 @@ class SettingsPanel(ModalScreen[None]):
             )
         return f"{status} · {t('tui.settings.panel_hint')}"
 
+    def _row_text(self, item: PaletteItem) -> Text:
+        """Label and value as two aligned columns, like the desktop page."""
+        from zenagent.cli.tui.textutil import clip_cells
+
+        line = Text()
+        line.append(f"{clip_cells(item.label, self._LABEL_WIDTH):<{self._LABEL_WIDTH}}")
+        line.append(item.note or "", style=palette.TEXT)
+        return line
+
     def _show_section(self, index: int) -> None:
         self._section_index = index
-        self._fill_rail()
+        self._tabs_line = self._tabs_text()
+        self.query_one("#settings-tabs", Static).update(self._tabs_line)
         items = self.query_one("#settings-items", OptionList)
         items.clear_options()
         section_value = self.SECTIONS[index][0]
         for item in self.items_for(section_value):
-            note = f"  {item.note}" if item.note else ""
-            items.add_option(Option(f"{item.label}{note}"))
+            items.add_option(Option(self._row_text(item)))
         if items.option_count:
             items.highlighted = 0
+        self._update_description()
+
+    def _update_description(self) -> None:
+        """The highlighted row's description, the line above the footer."""
+        section_value = self.SECTIONS[self._section_index][0]
+        rows = self.items_for(section_value)
+        items = self.query_one("#settings-items", OptionList)
+        index = items.highlighted
+        description = ""
+        if index is not None and 0 <= index < len(rows):
+            description = t(f"tui.settings.desc.{rows[index].value}")
+            if description.startswith("tui.settings.desc."):
+                description = ""  # no description key for this row
+        self._description = description
+        self.query_one("#settings-desc", Static).update(description)
 
     # -- navigation ---------------------------------------------------------
 
-    def _rail_index(self) -> int:
-        rail = self.query_one("#settings-rail", OptionList)
-        return rail.highlighted if rail.highlighted is not None else 0
-
-    @on(OptionList.OptionSelected, "#settings-rail")
-    def _rail_selected(self, _event: OptionList.OptionSelected) -> None:
-        self._show_section(self._rail_index())
-        self.query_one("#settings-items", OptionList).focus()
+    @on(OptionList.OptionHighlighted, "#settings-items")
+    def _highlight_changed(self, _event) -> None:
+        self._update_description()
 
     @on(OptionList.OptionSelected, "#settings-items")
     def _item_selected(self, _event: OptionList.OptionSelected) -> None:
         self._activate_highlighted()
+
+    def action_next_section(self) -> None:
+        """Right/`l`: the next tab, wrapping; the list follows instantly."""
+        self._show_section((self._section_index + 1) % len(self.SECTIONS))
+
+    def action_previous_section(self) -> None:
+        """Left/`h`: the previous tab, wrapping; the list follows instantly."""
+        self._show_section(
+            (self._section_index - 1) % len(self.SECTIONS)
+        )
 
     def _activate_highlighted(self) -> None:
         section_value = self.SECTIONS[self._section_index][0]
@@ -274,13 +301,6 @@ class SettingsPanel(ModalScreen[None]):
         # The action may have flipped a pref or opened a sub-picker over us;
         # repaint the live values underneath either way.
         self._show_section(self._section_index)
-
-    def action_cycle_section(self) -> None:
-        """Right on the rail: into the items pane."""
-        self.query_one("#settings-items", OptionList).focus()
-
-    def action_back_to_rail(self) -> None:
-        self.query_one("#settings-rail", OptionList).focus()
 
     def action_close(self) -> None:
         self.dismiss(None)

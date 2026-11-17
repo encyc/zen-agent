@@ -1,4 +1,4 @@
-"""Settings panel: the rail + items dialog.
+"""Settings panel: the full-screen tabbed page (omp-style).
 
 The panel is a modal on the screen stack, so queries go through
 ``app.screen`` (the repo-wide idiom, see tests/test_tui_approval.py).
@@ -11,33 +11,56 @@ from zenagent.cli.tui.app import ZenAgentApp
 from zenagent.cli.tui.screens.editors import SettingsPanel
 
 
-async def test_panel_shows_rail_and_first_section(fake_runtime):
+def _tabs_text(panel: SettingsPanel) -> str:
+    return str(panel._tabs_line)
+
+
+def _desc_text(panel: SettingsPanel) -> str:
+    return panel._description
+
+
+def _item_prompts(panel: SettingsPanel) -> list[str]:
+    options = panel.query_one("#settings-items", OptionList).options
+    return [str(option.prompt) for option in options]
+
+
+async def test_panel_opens_full_screen_with_four_sections(fake_runtime):
     app = ZenAgentApp(fake_runtime)
     async with app.run_test(size=(120, 40)) as pilot:
         await app._dispatch_command("settings", "")
         await pilot.pause()
         panel = app.screen
-        rail = list(panel.query_one("#settings-rail", OptionList).options)
-        assert len(rail) == 4
-        items = panel.items_for("appearance")
-        assert [item.value for item in items] == ["theme", "language"]
+        assert isinstance(panel, SettingsPanel)
+        # Full screen: the panel covers the whole terminal, not a fixed box.
+        assert panel.outer_size.width == 120 and panel.outer_size.height == 40
+        tabs = _tabs_text(panel)
+        for title in ("Appearance", "Model", "Search", "Session"):
+            assert title in tabs
+        # First section's rows, label and value as two columns.
+        rows = _item_prompts(panel)
+        assert len(rows) == 2
+        assert "Theme" in rows[0]
 
 
-async def test_rail_selection_switches_the_items_pane(fake_runtime):
+async def test_left_right_switches_sections_instantly(fake_runtime):
     app = ZenAgentApp(fake_runtime)
     async with app.run_test(size=(120, 40)) as pilot:
         await app._dispatch_command("settings", "")
         await pilot.pause()
         panel = app.screen
-        panel.query_one("#settings-rail", OptionList).highlighted = 2  # search
-        await pilot.press("enter")
+        await pilot.press("right")
         await pilot.pause()
-        rows = list(panel.query_one("#settings-items", OptionList).options)
-        text = " ".join(str(option.prompt) for option in rows)
-        assert "search" in text.lower() or "搜索" in text
+        assert "Model" in _tabs_text(panel)
+        rows = _item_prompts(panel)
+        assert any("thinking" in row.lower() or "推理" in row for row in rows)
+        await pilot.press("left")
+        await pilot.press("left")
+        await pilot.pause()
+        # Wraps to the last section.
+        assert "Session" in _tabs_text(panel)
 
 
-async def test_item_activation_calls_the_action_handler(fake_runtime):
+async def test_enter_activates_and_repaints_live_values(fake_runtime):
     app = ZenAgentApp(fake_runtime)
     activated: list[str] = []
 
@@ -47,16 +70,25 @@ async def test_item_activation_calls_the_action_handler(fake_runtime):
     async with app.run_test(size=(120, 40)) as pilot:
         app.open_menu("settings", lambda: SettingsPanel(app, on_action), lambda _r: None)
         await pilot.pause()
-        panel = app.screen
-        await pilot.press("right")  # rail → items pane
-        await pilot.pause()
-        panel.query_one("#settings-items", OptionList).highlighted = 0  # theme
-        await pilot.press("enter")
+        await pilot.press("enter")  # the items list owns focus from the start
         await pilot.pause()
         await pilot.pause()
         assert activated == ["theme"]
-        # The panel stays open (a sub-picker lands on top of it in real use).
         assert isinstance(app.screen, SettingsPanel)
+
+
+async def test_description_line_follows_the_highlight(fake_runtime):
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await app._dispatch_command("settings", "")
+        await pilot.pause()
+        panel = app.screen
+        description = _desc_text(panel)
+        assert "theme" in description.lower() or "主题" in description
+        await pilot.press("down")
+        await pilot.pause()
+        description = _desc_text(panel)
+        assert "language" in description.lower() or "语言" in description
 
 
 async def test_goal_pause_row_reflects_the_pref_live(fake_runtime):
