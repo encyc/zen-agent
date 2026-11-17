@@ -31,17 +31,38 @@ class ModelsMixin:
             rows.append((LABELS.get(name, name), env_name, configured))
         return rows
 
-    def _prompt_secret(self, env_name: str, scope: str) -> None:
+    def _apply_secret(self, env_name: str, value: str) -> bool:
+        """Persist one key and adopt it in the live session.
+
+        Only a key that drives the current model reloads the runtime — the wire
+        path (``ops_secrets._reload_key``) has the same guard, so both entry
+        points (the model picker flow and ``/secrets``) behave identically.
+        Returns whether the live session is now authenticated.
+        """
         from zenagent import settings
+
+        settings.set_api_key(env_name, value)
+        provider_id = getattr(getattr(self.runtime, "model", None), "provider", None)
+        provider = self.runtime.catalog.get(provider_id) if provider_id else None
+        recovered = False
+        if provider is not None and provider.api_key_env == env_name:
+            recovered = self.runtime.reload_api_key()
+            if recovered:
+                self.runtime.missing_api_key = None
+                self.chat.clear_last_error()
+            else:
+                self.runtime.agent.api_key = ""
+                self.runtime.missing_api_key = env_name
+        self._refresh_status()
+        return recovered
+
+    def _prompt_secret(self, env_name: str, scope: str) -> None:
         from zenagent.cli.tui.screens.secrets import SecretInput
 
         async def entered(value: str | None) -> None:
             if not value:
                 return
-            settings.set_api_key(env_name, value)
-            recovered = self.runtime.reload_api_key()
-            if recovered:
-                self.chat.clear_last_error()
+            recovered = self._apply_secret(env_name, value)
             self.notify(
                 t(
                     "tui.app.saved_key_ready" if recovered else "tui.app.saved_key",
@@ -49,7 +70,6 @@ class ModelsMixin:
                 ),
                 timeout=3,
             )
-            self._refresh_status()
 
         scope_key = (
             "tui.secrets.scope_model" if scope == "model" else "tui.secrets.scope_search"

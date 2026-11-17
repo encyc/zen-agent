@@ -83,6 +83,7 @@ TUI 与 REPL **共用同一个** `CommandRegistry`（`zenagent/app/commands.py`�
 | `/context` | 上下文窗口占用情况 |
 | `/todo` | 查看 todo 列表：TUI 打开可编辑浮层（与模型 `todo` 工具共用 `<session>.todo.json`），REPL 打印只读文本 |
 | `/memory` | 查看与编辑项目记忆库（TUI 面板 / REPL 文本） |
+| `/secrets` | 管理 provider API key（设置/清除/连通测试；`/secrets <ENV>` 直达该行。TUI 面板 / REPL 文本列表） |
 | `/goal` | 设置/查看/控制会话目标：`/goal <objective>`、`/goal --check "<cmd>" --budget N <objective>`、`/goal pause|resume|clear` |
 | `/jobs` | 列出后台作业，或 `/jobs kill <id>` 终止一个 |
 | `/hotkeys` | 显示当前键位 |

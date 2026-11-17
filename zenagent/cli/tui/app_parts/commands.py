@@ -39,12 +39,13 @@ class CommandsMixin:
         "memory-manager": "open_memory_manager",
         "memory-add": "open_memory_add",
         "memory-edit": "open_memory_edit",
+        "secrets-manager": "open_secrets_manager",
     }
 
     #: Screens whose opener consumes ``result.target`` (the entry id to edit,
-    #: or the title prefill for a new one).
+    #: the title prefill for a new one, or the env name to preselect).
     SCREEN_ARG_KEYS: ClassVar[frozenset[str]] = frozenset(
-        {"memory-add", "memory-edit"}
+        {"memory-add", "memory-edit", "secrets-manager"}
     )
 
     def get_system_commands(self, screen):

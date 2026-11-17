@@ -719,6 +719,14 @@ class ZenAgentApp(
         """``/memory edit <id>``: the target is the entry id."""
         self.open_memory_editor(target)
 
+    def open_secrets_manager(self, target: str | None = None) -> None:
+        """``/secrets [env]``: the target preselects that provider's row."""
+        from zenagent.cli.tui.screens.pickers import (
+            open_secrets_manager as _open_secrets_manager,
+        )
+
+        _open_secrets_manager(self, target)
+
     def open_mode_picker(self) -> None:
         from zenagent.cli.tui.screens.pickers import (
             open_mode_picker as _open_mode_picker,

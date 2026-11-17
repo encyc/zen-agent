@@ -287,6 +287,53 @@ def _render_memory_index(services, print_fn: PrintFn) -> None:
         print_fn(f"{entry.id}  {entry.title}  {entry.updated}")
 
 
+def _render_secrets(services, print_fn: PrintFn) -> None:
+    """Provider key listing: configured/missing per row, values never shown."""
+    from zenagent import settings
+    from zenagent.tools.web.providers import KEY_ENVS, LABELS
+
+    catalog = getattr(services.runtime, "catalog", None) or {}
+    current = getattr(getattr(services.runtime, "model", None), "provider", None)
+    rows: list[str] = []
+    for provider in sorted(catalog.values(), key=lambda item: item.name.lower()):
+        configured = settings.get_api_key(provider.api_key_env) is not None
+        marker = "●" if configured else " "
+        note = t("tui.secrets.current") if provider.id == current else ""
+        rows.append(
+            t(
+                "tui.secrets.row_model",
+                marker=marker,
+                name=provider.name,
+                env=provider.api_key_env,
+                status=(
+                    t("tui.secrets.key_set")
+                    if configured
+                    else t("tui.secrets.needs", env=provider.api_key_env)
+                ),
+                count=len(provider.models),
+                note=note,
+            )
+        )
+    for provider_id, env in KEY_ENVS.items():
+        configured = settings.get_api_key(env) is not None
+        rows.append(
+            t(
+                "tui.secrets.row_search",
+                marker="●" if configured else " ",
+                name=LABELS.get(provider_id, provider_id),
+                env=env,
+                status=(
+                    t("tui.secrets.key_set") if configured else t("tui.secrets.needs", env=env)
+                ),
+            )
+        )
+    if not rows:
+        print_fn(t("tui.secrets.empty"))
+        return
+    print_fn("\n".join(rows))
+    print_fn(t("repl.secrets_footer"))
+
+
 def _memory_editor_flow(services, entry_id: str | None, title_prefill: str, print_fn: PrintFn) -> None:
     store = services.runtime.memory_store
     entry = store.read_entry(entry_id) if (store and entry_id) else None
@@ -389,6 +436,8 @@ def render_command_result(
         _render_todo(services, print_fn)
     elif screen == "memory-manager":
         _render_memory_index(services, print_fn)
+    elif screen == "secrets-manager":
+        _render_secrets(services, print_fn)
     elif screen == "memory-add":
         _memory_editor_flow(services, None, result.target or "", print_fn)
     elif screen == "memory-edit":

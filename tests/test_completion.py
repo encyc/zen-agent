@@ -53,6 +53,7 @@ def test_slash_prefix_completes_commands():
     assert set(complete(completer, "/se")) == {
         "/session",
         "/sessions",
+        "/secrets",
         "/search",
         "/settings",
     }

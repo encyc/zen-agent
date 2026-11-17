@@ -578,6 +578,12 @@ async def _settings(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(screen="settings")
 
 
+@_command("secrets")
+async def _secrets(services: AppServices, argument: str) -> CommandResult:
+    """Manage provider API keys: set, clear, test (an env name preselects a row)."""
+    return CommandResult(screen="secrets-manager", target=argument.strip() or None)
+
+
 @_command("plan-review")
 async def _plan_review(services: AppServices, argument: str) -> CommandResult:
     """Review the plan the model produced in plan mode (approve → auto)."""
@@ -848,6 +854,7 @@ def build_default_commands(services: AppServices) -> CommandRegistry:
         _fork,
         _import,
         _settings,
+        _secrets,
         _plan_review,
         _todo,
         _goal,

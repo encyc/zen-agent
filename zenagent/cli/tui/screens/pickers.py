@@ -271,3 +271,13 @@ def open_memory_editor(
         lambda: MemoryEditor(store, entry, title_prefill=title_prefill),
         saved,
     )
+
+
+def open_secrets_manager(app: App, preselect: str | None = None) -> None:
+    from zenagent.cli.tui.screens.secrets_manager import SecretsManager
+
+    app.open_menu(
+        "secrets-manager",
+        lambda: SecretsManager(app.runtime, preselect=preselect or ""),
+        lambda _result: None,
+    )
