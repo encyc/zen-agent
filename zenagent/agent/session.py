@@ -832,6 +832,9 @@ def list_sessions(limit: int = 20, *, scope: str = "project") -> list[SessionInf
     if scope not in _SCOPES:
         raise ValueError(f"unknown session scope: {scope!r} (choose project|all)")
     directories = [sessions_dir()] if scope == "project" else all_session_dirs()
+    # Function-level import: session_index derives from this module's types.
+    from zenagent.agent.session_index import SessionIndex
+
     infos: list[SessionInfo] = []
     for directory in directories:
         if not directory.is_dir():
@@ -839,9 +842,10 @@ def list_sessions(limit: int = 20, *, scope: str = "project") -> list[SessionInf
         titles = read_session_titles(directory)
         pins = read_session_pins(directory)
         label = _project_label(directory)
+        index = SessionIndex(directory)
         for path in directory.glob("*.jsonl"):
             try:
-                info = Session(path).read_info(titles=titles)
+                info = index.read(path, titles)
             except (ValueError, OSError):
                 continue
             # Envelope-only leftovers from older builds are not conversations.
@@ -858,6 +862,7 @@ def list_sessions(limit: int = 20, *, scope: str = "project") -> list[SessionInf
                 continue
             info.project = label
             infos.append(info)
+        index.flush()
     infos.sort(key=lambda info: info.mtime, reverse=True)
     return infos[:limit]
 
