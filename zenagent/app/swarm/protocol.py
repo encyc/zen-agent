@@ -8,6 +8,7 @@ from pathlib import Path
 from zenagent.agent.protocol import AgentTool, ToolResultAgent
 from zenagent.app.swarm.room import RoomMessage, TaskRecord
 from zenagent.app.swarm.workitems import WorkItem
+from zenagent.prompts.registry import read_block
 from zenagent.types import TextContent
 
 __all__ = [
@@ -17,18 +18,11 @@ __all__ = [
     "injected_prompt",
 ]
 
-PROTOCOL_TEXT = """\
-Team room protocol:
-- Your final message is posted to the room as this task's result. Write it for whoever needs it.
-- Mention @role in the final message to hand work to that role; every known @role creates a queued task. Mention the role who delegated to you when they asked for the result back.
-- Use the swarm_post tool to post an update while the run continues; it accepts the same @role mentions.
-- Mention @you to notify the person watching the room; it creates no task.
-- Never mention a role you do not need: every mention is a task and spends budget.
-- A plain @role stays in the current work item. Use work_open only when the request is a
-  distinct job that deserves its own context; the room gets a card and the item can be
-  merged back if you split it wrongly.
-- Use work_request_close when the job is ready for acceptance. A human still scores and
-  closes it; this only moves it to review."""
+#: The room's conventions live as a prompt block (``prompts/blocks/``), like
+#: every other fixed prose: one source, one character budget, one place to
+#: review a wording change. ``rstrip`` keeps the injected prompt byte-identical
+#: to the inline string it replaced (the file ends with a newline).
+PROTOCOL_TEXT = read_block("swarm_protocol").rstrip()
 
 
 def injected_prompt(message: RoomMessage, task: TaskRecord) -> str:

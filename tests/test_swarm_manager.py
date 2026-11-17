@@ -23,6 +23,7 @@ from zenagent.app.swarm.roles import (
 from zenagent.app.swarm.room import RoomMessage, SwarmStore, TaskRecord
 from zenagent.events import Aborted, AgentEvent, AssistantEvent
 from zenagent.project import project_key
+from zenagent.swarm_settings import SwarmLimits
 from zenagent.types import (
     AssistantMessage,
     TextContent,
@@ -136,12 +137,19 @@ async def test_close_fails_pending_approvals():
 
 
 async def test_configured_policy_reaches_the_router():
-    manager = _manager(max_concurrent=5, max_chain_depth=2, max_chain_cost=1.25)
+    limits = SwarmLimits(max_reply_fanout=3, max_chain_tasks=40)
+    manager = _manager(
+        max_concurrent=5,
+        max_chain_depth=2,
+        max_chain_cost=1.25,
+        swarm_limits=limits,
+    )
     await manager.start()
     try:
         assert manager.router is not None
         assert manager.router.max_chain_depth == 2
         assert manager.router.max_chain_cost == 1.25
+        assert manager.router.gate.limits == limits
         assert manager._sem._value == 5
     finally:
         await manager.close()
@@ -524,7 +532,10 @@ async def test_unknown_mention_lands_in_the_room_without_a_task():
         await manager.close()
 
 
-async def test_mutual_mentions_stop_at_the_depth_cap():
+async def test_mutual_mentions_stop_at_the_edge_cap():
+    """Two rounds between the same pair is an ask plus a receipt; the third is
+    a ping-pong and is refused. The chain therefore ends well short of the old
+    depth-8 cap — the depth gate is the backstop, not the stopper."""
     _write_role("ping")
     _write_role("pong")
     manager = _manager(
@@ -536,25 +547,19 @@ async def test_mutual_mentions_stop_at_the_depth_cap():
     try:
         await manager.post("@ping go")
         await _wait_for(
-            lambda: any(
-                "chain_depth" in message["text"]
-                for message in manager.messages()
-                if message["author"]["kind"] == "system"
-            )
-        )
-        await _wait_for(
             lambda: not any(
                 task["state"] in ("queued", "running") for task in manager.tasks()
             )
         )
         tasks = manager.tasks()
-        assert max(task["chainDepth"] for task in tasks) == 8
+        assert len(tasks) == 5
+        assert max(task["chainDepth"] for task in tasks) < 8
         notes = [
             message["text"]
             for message in manager.messages()
             if message["author"]["kind"] == "system"
         ]
-        assert any("chain_depth" in text for text in notes)
+        assert any("edge_repeat" in text for text in notes)
     finally:
         await manager.close()
 

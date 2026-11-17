@@ -4,6 +4,17 @@ Every content change bumps `PROMPT_VERSION` (`zenagent/prompts/spec.py`) and get
 one entry here: what changed, why, and the experiment/report that justified it.
 P0 extracted the v0.4.1 text verbatim — no behavior change.
 
+## 2026-11-17.1 — the swarm room protocol becomes a block
+
+- New `swarm_protocol` block. It was inline in `zenagent/app/swarm/protocol.py`,
+  which the source gate exists to prevent: fixed prompt prose outside
+  `prompts/blocks/` has no character budget and no single place to review a
+  wording change. `test_prompts_sources.py` now marks it.
+- Content change at the same time: the room hands out work as a *reply*
+  (at most one role) or a *request* (`swarm_post`, up to four). This matches the
+  new message budget (`docs/superpowers/specs/2026-11-17-swarm-message-budget-design.md`),
+  which bounds a chain at one role per result, two rounds per pair and 24 tasks.
+
 ## 2026-11-13.1 — rename the permission mode from zen to auto
 
 - The `zen_mode` block is now `auto_mode` and its text says `AUTO MODE`; the

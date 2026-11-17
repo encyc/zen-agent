@@ -24,7 +24,7 @@ __all__ = [
 
 #: Bumped whenever block content changes; recorded in eval reports and the
 #: prompt CHANGELOG.
-PROMPT_VERSION = "2026-11-13.1"
+PROMPT_VERSION = "2026-11-17.1"
 
 CacheClass = Literal["stable", "session", "volatile"]
 
@@ -154,6 +154,17 @@ BLOCKS: dict[str, BlockSpec] = {
         cache_class="stable",
         budget_chars=1100,
         required_vars=("max_turns", "child_tools"),
+    ),
+    #: The swarm room's conventions. Not part of ``compose_system``: the swarm
+    #: manager appends it per role and the runner injects it per round, so it
+    #: lives here for the same reason every other fixed prose does — one source,
+    #: one budget, one place to review a wording change.
+    "swarm_protocol": BlockSpec(
+        id="swarm_protocol",
+        path="swarm_protocol.md",
+        version=PROMPT_VERSION,
+        cache_class="stable",
+        budget_chars=1000,
     ),
     "compact.result": BlockSpec(
         id="compact.result",

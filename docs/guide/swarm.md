@@ -112,8 +112,8 @@ live runtime，它也会以 `空闲` 状态出现（配置了三个角色就显�
   发件人、task id、链深、房间协议和消息正文，作为 user 消息进入它自己的 session。
 - **回报**：run 结束时**最终文本自动作为该任务的结果发回房间**（`done` 的结构性兜底）。
   中途可用 `swarm_post` 工具发言或派活。
-- **没有自动回执**：结果对谁有价值，就在最终文本里 `@` 谁；派活时写"完成后 @我"
-  就能拿到回报。每个 `@` 都是一条新任务并消耗预算，不要随手多 @。
+- **结果是回复，不是广播**：最终文本里 `@` 最多只有一个角色会真正派活；要同时交给多个角色，
+  先调 `swarm_post`（按请求处理，最多 4 个角色）。派活时写"完成后 @我"就能拿到回报。
 - **@you**：留在房间历史里，并作为桌面通知提醒你；它不创建任务。
 - **入口**：桌面 composer 走宿主级 `supervisor op=dispatch`（`mode=swarm`），旧的
   `swarm op=post` 请求族仍然保留；两个入口在同一个 `SwarmManager.post` 上汇合，
@@ -172,12 +172,40 @@ Enter/⌘Enter、附件栏、菜单、审批/提问卡片和通知条都是同�
 
 | 闸门 | 默认 | 行为 |
 |---|---|---|
+| 消息类型 | request / reply / note | 结果消息按 reply：最多派给 1 个角色；用户发帖与 `swarm_post` 按 request：最多 4 个；其余拒（`reply_cap` / `fanout_cap`） |
+| 同边重复 | 2 / 链 | 同一（发起者，目标）在一个链里第 3 次派活被拒（`edge_repeat`），掐断互相回执的 ping-pong |
+| 链任务数 | 24 / 链 | 精确计数，超出即拒（`chain_tasks`）；与模型写什么无关 |
+| 风暴熔断 | 60 秒 12 条 | 一个链在窗口内已建 12 条即拒（`chain_burst`） |
 | 链深 | 8 | 超限的派活拒投，房间系统消息说明，任务不创建 |
 | 每 run 预算 | 角色 `limits` | 超限以 `max_cost` / `max_turns` 结束 → failed |
 | 链级预算 | $5 / 链 | 累计超限后拒绝新派活，防链式烧钱 |
 | 每角色 inbox | 16 | 满则拒绝新派活并提醒，不静默堆积 |
 | 全局并发 | 3 | 超出排队 |
 | `@` 范围 | 已配置角色 | 只能派给存在的角色；`@you` 只触发桌面通知 |
+
+前四行是消息预算层：[2026-11-17-swarm-message-budget-design](../superpowers/specs/2026-11-17-swarm-message-budget-design.md)。
+它把"一条链最多产生多少任务"变成与模型行为无关的不变量——模型可以无限 `@`，被拒的是房间。
+
+这十项全部在 `~/.zenagent/config.toml` 的 `[swarm]` 里（全局生效，项目文件不能放宽），
+也可以直接在设置页改：
+
+```toml
+[swarm]
+max_concurrent = 3
+max_chain_depth = 8
+max_chain_cost = 5.0
+runtime_idle_s = 600
+max_request_fanout = 4
+max_reply_fanout = 1
+max_edge_repeats = 2
+max_chain_tasks = 24
+storm_window_s = 60
+storm_burst = 12
+```
+
+改动在下一个房间重建时生效：有任务在飞的房间保留旧策略（信号量和路由不能中途改大小）。
+**任务数当预扣、美元当兜底**：任务在 admit 时同步落盘，计数精确；`chainCost` 要等 run 结束才累加，
+并行分支会读到同一份陈旧值而一起越过阈值。
 
 工具审批复用既有审批通道，帧上带 `agent` 与 `task` 标记；超时 120 秒后按角色
 `mode` 处理（`ask` 拒绝并失败任务，`auto` 自动通过）。`swarm_post` 是只读工具，

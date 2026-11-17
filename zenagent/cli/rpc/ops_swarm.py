@@ -23,6 +23,7 @@ from zenagent.config import load_user_config
 from zenagent.events import AgentEvent
 from zenagent.i18n import t
 from zenagent.project import find_project_root, project_key
+from zenagent.swarm_settings import SwarmLimits
 
 #: Server-side diagnostics; raw exception detail never crosses the wire.
 logger = logging.getLogger(__name__)
@@ -214,6 +215,7 @@ class SwarmOps:
                 max_chain_depth=config.swarm_max_chain_depth,
                 max_chain_cost=config.swarm_max_chain_cost,
                 runtime_idle_s=config.swarm_runtime_idle_s,
+                swarm_limits=SwarmLimits.from_policy(config),
             )
             self._swarm[key] = manager
         else:

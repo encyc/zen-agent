@@ -63,7 +63,10 @@ async def test_get_lists_every_knob_with_defaults(runtime_factory, config_file):
         "goal",
     ]
     knobs = knobs_by_key(result)
-    assert len(knobs) == 27
+    # 21 budget/task/zen knobs + the ten [swarm] room-policy knobs.
+    assert len(knobs) == 33
+    assert knobs["swarm.max_chain_tasks"]["value"] == 24
+    assert knobs["swarm.max_chain_tasks"]["section"] == "swarm"
     index = knobs["limits.skills.max_index_bytes"]
     assert index["value"] == 12288
     assert index["default"] == 12288

@@ -31,8 +31,18 @@ from pathlib import Path
 
 from zenagent import project
 from zenagent.config_errors import UnknownConfigField
+from zenagent.config_fields import (
+    non_negative_float as _non_negative_float,
+)
+from zenagent.config_fields import (
+    positive_int as _positive_int,
+)
+from zenagent.config_fields import (
+    unknown_section_keys as _unknown_section_keys,
+)
 from zenagent.limits import Limits, parse_limits
 from zenagent.providers.catalog import ProviderConfig, model_from_mapping
+from zenagent.swarm_settings import SWARM_FIELDS, SwarmPolicy, parse_swarm_table
 from zenagent.types import AssistantMessage, Message, Usage
 
 __all__ = [
@@ -117,36 +127,12 @@ ZEN_WORKER_MODES = ("inherit", "ask", "plan", "auto")
 #: Pre-rename worker-mode spellings; normalized before validation.
 LEGACY_ZEN_WORKER_MODES = {"zen": "auto"}
 
-#: Keys accepted inside ``[swarm]`` (room policy, global-only).
-_SWARM_KEYS = frozenset(
-    {"max_concurrent", "max_chain_depth", "max_chain_cost", "runtime_idle_s"}
-)
-#: Default number of swarm role runs in flight per room.
-DEFAULT_SWARM_MAX_CONCURRENT = 3
-#: Default cap on how deep a delegation chain may grow.
-DEFAULT_SWARM_MAX_CHAIN_DEPTH = 8
-#: Default spend cap for one delegation chain, in USD.
-DEFAULT_SWARM_MAX_CHAIN_COST = 5.0
-#: Default idle time before a (role, work item) runtime is closed; 0 disables.
-DEFAULT_SWARM_RUNTIME_IDLE_S = 600.0
-
-
 def _absolute_path(raw: str, target: Path) -> str:
     """Normalize one config path: ``~`` expands, relatives resolve next to the file."""
     candidate = Path(raw).expanduser()
     if not candidate.is_absolute():
         candidate = (target.parent / candidate).resolve()
     return str(candidate)
-
-
-def _unknown_section_keys(
-    table: dict, allowed: frozenset[str], section: str, target: Path
-) -> None:
-    unknown = set(table) - allowed
-    if unknown:
-        raise UnknownConfigField.keys(
-            target=target, prefix=f"[{section}]", unknown=unknown, allowed=allowed
-        )
 
 
 def _bool_value(
@@ -157,15 +143,6 @@ def _bool_value(
         raise ValueError(  # noqa: TRY004 - config errors are ValueError by contract
             f"config {target}: {section}.{key} must be a boolean"
         )
-    return value
-
-
-def _positive_int(
-    table: dict, key: str, default: int, section: str, target: Path
-) -> int:
-    value = table.get(key, default)
-    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-        raise ValueError(f"config {target}: {section}.{key} must be a positive integer")
     return value
 
 
@@ -226,26 +203,6 @@ def _positive_float_or_none(
         return None
     if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
         raise ValueError(f"config {target}: {section}.{key} must be a positive number")
-    return float(value)
-
-
-def _positive_float(
-    table: dict, key: str, default: float, section: str, target: Path
-) -> float:
-    value = table.get(key, default)
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
-        raise ValueError(f"config {target}: {section}.{key} must be a positive number")
-    return float(value)
-
-
-def _non_negative_float(
-    table: dict, key: str, default: float, section: str, target: Path
-) -> float:
-    value = table.get(key, default)
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
-        raise ValueError(
-            f"config {target}: {section}.{key} must be a non-negative number"
-        )
     return float(value)
 
 
@@ -359,8 +316,12 @@ def _parse_custom_providers(raw: object, target: Path) -> dict[str, ProviderConf
 
 
 @dataclass
-class UserConfig:
-    """Parsed user configuration."""
+class UserConfig(SwarmPolicy):
+    """Parsed user configuration.
+
+    Inherits the ten ``[swarm]`` fields from :class:`SwarmPolicy` so the room
+    policy's defaults, parser and registry stay in one module.
+    """
 
     default_model: str | None = None
     #: provider id -> {"base_url": ..., "api_key_env": ...}
@@ -407,14 +368,6 @@ class UserConfig:
     zen_report_limit: int = DEFAULT_ZEN_REPORT_LIMIT
     #: ``[zen]``: worker permission mode (inherit|ask|plan|auto)
     zen_worker_mode: str = DEFAULT_ZEN_WORKER_MODE
-    #: ``[swarm]``: role runs in flight per room (global-only)
-    swarm_max_concurrent: int = DEFAULT_SWARM_MAX_CONCURRENT
-    #: ``[swarm]``: delegation chain depth cap
-    swarm_max_chain_depth: int = DEFAULT_SWARM_MAX_CHAIN_DEPTH
-    #: ``[swarm]``: delegation chain spend cap in USD
-    swarm_max_chain_cost: float = DEFAULT_SWARM_MAX_CHAIN_COST
-    #: ``[swarm]``: idle seconds before a run unit's runtime is reclaimed
-    swarm_runtime_idle_s: float = DEFAULT_SWARM_RUNTIME_IDLE_S
 
 
 def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfig:
@@ -545,36 +498,7 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
         "zen",
         target,
     )
-    swarm_table = _section_table(data, "swarm", target)
-    _unknown_section_keys(swarm_table, _SWARM_KEYS, "swarm", target)
-    swarm_max_concurrent = _positive_int(
-        swarm_table,
-        "max_concurrent",
-        DEFAULT_SWARM_MAX_CONCURRENT,
-        "swarm",
-        target,
-    )
-    swarm_max_chain_depth = _positive_int(
-        swarm_table,
-        "max_chain_depth",
-        DEFAULT_SWARM_MAX_CHAIN_DEPTH,
-        "swarm",
-        target,
-    )
-    swarm_max_chain_cost = _positive_float(
-        swarm_table,
-        "max_chain_cost",
-        DEFAULT_SWARM_MAX_CHAIN_COST,
-        "swarm",
-        target,
-    )
-    swarm_runtime_idle_s = _non_negative_float(
-        swarm_table,
-        "runtime_idle_s",
-        DEFAULT_SWARM_RUNTIME_IDLE_S,
-        "swarm",
-        target,
-    )
+    swarm_values = parse_swarm_table(_section_table(data, "swarm", target), target)
     return UserConfig(
         default_model=default_model,
         provider_overrides=overrides,
@@ -599,10 +523,7 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
         zen_batch_window_s=zen_batch_window_s,
         zen_report_limit=zen_report_limit,
         zen_worker_mode=zen_worker_mode,
-        swarm_max_concurrent=swarm_max_concurrent,
-        swarm_max_chain_depth=swarm_max_chain_depth,
-        swarm_max_chain_cost=swarm_max_chain_cost,
-        swarm_runtime_idle_s=swarm_runtime_idle_s,
+        **swarm_values,
     )
 
 
@@ -652,10 +573,9 @@ def _merge_user_configs(base: UserConfig, override: UserConfig) -> UserConfig:
         zen_batch_window_s=base.zen_batch_window_s,
         zen_report_limit=base.zen_report_limit,
         zen_worker_mode=base.zen_worker_mode,
-        swarm_max_concurrent=base.swarm_max_concurrent,
-        swarm_max_chain_depth=base.swarm_max_chain_depth,
-        swarm_max_chain_cost=base.swarm_max_chain_cost,
-        swarm_runtime_idle_s=base.swarm_runtime_idle_s,
+        # The room policy is global-only, so the project layer never widens it:
+        # the global file's values win even when a project file is present.
+        **{name: getattr(base, name) for name in SWARM_FIELDS},
     )
 
 

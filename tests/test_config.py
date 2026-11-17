@@ -847,13 +847,29 @@ def test_swarm_policy_parsed(tmp_path):
     config = load_user_config(
         write_config(
             tmp_path,
-            "[swarm]\nmax_concurrent = 6\nmax_chain_depth = 12\nmax_chain_cost = 2.5\nruntime_idle_s = 30\n",
+            "[swarm]\n"
+            "max_concurrent = 6\n"
+            "max_chain_depth = 12\n"
+            "max_chain_cost = 2.5\n"
+            "runtime_idle_s = 30\n"
+            "max_request_fanout = 3\n"
+            "max_reply_fanout = 2\n"
+            "max_edge_repeats = 4\n"
+            "max_chain_tasks = 40\n"
+            "storm_window_s = 15\n"
+            "storm_burst = 6\n",
         )
     )
     assert config.swarm_max_concurrent == 6
     assert config.swarm_max_chain_depth == 12
     assert config.swarm_max_chain_cost == 2.5
     assert config.swarm_runtime_idle_s == 30.0
+    assert config.swarm_max_request_fanout == 3
+    assert config.swarm_max_reply_fanout == 2
+    assert config.swarm_max_edge_repeats == 4
+    assert config.swarm_max_chain_tasks == 40
+    assert config.swarm_storm_window_s == 15.0
+    assert config.swarm_storm_burst == 6
 
 
 def test_swarm_policy_defaults(tmp_path):
@@ -862,6 +878,12 @@ def test_swarm_policy_defaults(tmp_path):
     assert config.swarm_max_chain_depth == 8
     assert config.swarm_max_chain_cost == 5.0
     assert config.swarm_runtime_idle_s == 600.0
+    assert config.swarm_max_request_fanout == 4
+    assert config.swarm_max_reply_fanout == 1
+    assert config.swarm_max_edge_repeats == 2
+    assert config.swarm_max_chain_tasks == 24
+    assert config.swarm_storm_window_s == 60.0
+    assert config.swarm_storm_burst == 12
 
 
 def test_swarm_policy_must_be_positive(tmp_path):
@@ -871,6 +893,10 @@ def test_swarm_policy_must_be_positive(tmp_path):
         load_user_config(write_config(tmp_path, "[swarm]\nmax_chain_cost = 0\n"))
     with pytest.raises(ValueError, match="swarm.runtime_idle_s"):
         load_user_config(write_config(tmp_path, "[swarm]\nruntime_idle_s = -1\n"))
+    with pytest.raises(ValueError, match="swarm.max_reply_fanout"):
+        load_user_config(write_config(tmp_path, "[swarm]\nmax_reply_fanout = 0\n"))
+    with pytest.raises(ValueError, match="swarm.storm_window_s"):
+        load_user_config(write_config(tmp_path, "[swarm]\nstorm_window_s = -5\n"))
 
 
 def test_project_layer_may_not_set_swarm(tmp_path, monkeypatch):

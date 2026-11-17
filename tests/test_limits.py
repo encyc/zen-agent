@@ -13,6 +13,7 @@ from zenagent import __version__
 from zenagent.config import UserConfig, load_user_config
 from zenagent.limits import (
     ALL_KNOBS,
+    KNOB_BY_ATTR,
     KNOB_BY_KEY,
     KNOBS_BY_TABLE,
     Limits,
@@ -278,23 +279,18 @@ def test_zen_and_swarm_tables_round_trip_through_the_writer(tmp_path):
 
 def test_registry_defaults_match_the_config_defaults():
     from zenagent import config as user_config
+    from zenagent.swarm_settings import SWARM_FIELDS, SwarmPolicy
 
     assert KNOB_BY_KEY["zen.max_concurrent"].default == user_config.DEFAULT_ZEN_MAX_CONCURRENT
     assert KNOB_BY_KEY["zen.batch_window_s"].default == user_config.DEFAULT_ZEN_BATCH_WINDOW_S
     assert KNOB_BY_KEY["zen.report_limit"].default == user_config.DEFAULT_ZEN_REPORT_LIMIT
     assert KNOB_BY_KEY["zen.worker_mode"].default == user_config.DEFAULT_ZEN_WORKER_MODE
-    assert (
-        KNOB_BY_KEY["swarm.max_concurrent"].default
-        == user_config.DEFAULT_SWARM_MAX_CONCURRENT
-    )
-    assert (
-        KNOB_BY_KEY["swarm.max_chain_depth"].default
-        == user_config.DEFAULT_SWARM_MAX_CHAIN_DEPTH
-    )
-    assert (
-        KNOB_BY_KEY["swarm.max_chain_cost"].default
-        == user_config.DEFAULT_SWARM_MAX_CHAIN_COST
-    )
+    # Every [swarm] knob's registry default is the dataclass default, so the
+    # settings page, the parser and the gate cannot drift apart.
+    policy = SwarmPolicy()
+    for name in SWARM_FIELDS:
+        assert KNOB_BY_ATTR[name].default == getattr(policy, name), name
+    assert len([knob for knob in ALL_KNOBS if knob.table == "swarm"]) == len(SWARM_FIELDS)
 
 
 def test_user_config_defaults_do_not_share_the_limits_object():

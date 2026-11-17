@@ -28,6 +28,7 @@ from zenagent.app.runtime import Runtime, RuntimeOptions
 from zenagent.app.swarm.approvals import APPROVAL_TIMEOUT_S, SwarmApprovals
 from zenagent.app.swarm.events_tap import EventSink, subscribe_events
 from zenagent.app.swarm.frames import SwarmFrames
+from zenagent.app.swarm.gate import MessageGate
 from zenagent.app.swarm.instances import AgentKey, IdleTracker, agent_key
 from zenagent.app.swarm.protocol import (
     PROTOCOL_TEXT,
@@ -76,6 +77,7 @@ from zenagent.config import load_user_config
 from zenagent.mcp.config import parse_server
 from zenagent.project import project_dir, project_key
 from zenagent.skills import discover_skills
+from zenagent.swarm_settings import SwarmLimits
 
 __all__ = ["APPROVAL_TIMEOUT_S", "SwarmAgent", "SwarmManager"]
 
@@ -125,6 +127,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
         max_concurrent: int = 3,
         max_chain_depth: int = DEFAULT_MAX_CHAIN_DEPTH,
         max_chain_cost: float = DEFAULT_MAX_CHAIN_COST,
+        swarm_limits: SwarmLimits | None = None,
         runtime_idle_s: float = 600.0,
         supervisor: agents.Supervisor | None = None,
         approval_router=None,
@@ -136,6 +139,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
         self._sem = asyncio.Semaphore(max_concurrent)
         self._max_chain_depth = max_chain_depth
         self._max_chain_cost = max_chain_cost
+        self._swarm_limits = swarm_limits
         self.store = SwarmStore(project_state_root(self.root))
         self.work_items = WorkItemStore(self.store)
         self.router: Router | None = None
@@ -224,6 +228,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
                 work_items=self.work_items,
                 max_chain_depth=self._max_chain_depth,
                 max_chain_cost=self._max_chain_cost,
+                gate=MessageGate(self._swarm_limits),
             )
             self._started = True
             self._loop_task = asyncio.create_task(self._schedule())

@@ -238,6 +238,10 @@ Room（@coder）──router──▶ task#13（depth+1）──▶ coder.inbox 
 | 全局并发 run | 3 | 超出排队 |
 | @ 范围 | 已配置角色 | 只能派给存在的角色；@user 触发桌面通知 |
 
+> 0.13.x 增补：上表只有深度与花费，广度不受约束（3 个角色 × 深度 8 即 O(k^8)）。现由
+> [消息预算层](2026-11-17-swarm-message-budget-design.md)补上三条硬闸门：结果消息按
+> `reply` 只能派给 1 个角色、同一对角色在一链内最多 2 次、一条链最多 24 条任务。
+
 **审批**：run 内工具审批以 `agent + task` 标记的 approval 帧送 GUI，复用既有 approval 通道；
 超时按角色 `mode` 处理（ask：拒绝并失败任务；zen：自动通过）。
 **@user**：作为提醒送达桌面通知（复用 Notifications 机制），并留在房间历史里。

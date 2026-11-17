@@ -28,6 +28,7 @@ MARKERS = (
     "- ... more skills omitted",
     "You are zenagent, a coding agent. Be concise.",
     "You are a read-only research subagent",
+    "Team room protocol:",
 )
 
 #: (relative file, marker) pairs that are allowed outside the block files.

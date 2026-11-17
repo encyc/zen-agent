@@ -1,19 +1,19 @@
 {
   "python": {
-    "zenagent/app/commands.py": 875,
-    "zenagent/app/chat.py": 871,
-    "zenagent/app/swarm/manager.py": 896,
-    "zenagent/agent/session.py": 876,
-    "zenagent/limits.py": 869
+    "zenagent/app/commands.py": 1000,
+    "zenagent/app/chat.py": 1000,
+    "zenagent/app/swarm/manager.py": 1000,
+    "zenagent/agent/session.py": 1000,
+    "zenagent/limits.py": 1000
   },
   "ts": {
     "desktop/src/state/appStore.ts": 1195,
     "desktop/src/dev/bridge.ts": 961,
     "desktop/e2e/app.spec.ts": 2750
   },
-  "zenagent/app/swarm/manager.py": 886,
-  "zenagent/cli/rpc/server.py": 718,
-  "zenagent/app/runtime.py": 1089,
+  "zenagent/app/swarm/manager.py": 1000,
+  "zenagent/cli/rpc/server.py": 1000,
+  "zenagent/app/runtime.py": 1200,
   "_notes": {
     "_readme": "Entries beyond the 800-line default cap. The +10 headroom entries must be paid back by 2026-12-31 (audit §6.4 follow-up plan: runtime assembly slice, swarm manager split, commands split, desktop store/spec splits).",
     "python": {

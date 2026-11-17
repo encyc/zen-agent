@@ -1,9 +1,10 @@
 """Mention routing and the structural gates that bound autonomous chains.
 
 The router is pure data plus store appends: it turns ``@role`` mentions into
-queued tasks and refuses admissions that would exceed chain depth, chain cost
-or an agent's inbox. Rejections are returned, never posted — the manager owns
-room notices.
+queued tasks and refuses admissions that would exceed the message budget
+(:mod:`zenagent.app.swarm.gate`: intent and fan-out), chain depth, chain cost or
+an agent's inbox. Rejections are returned, never posted — the manager owns room
+notices.
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 
+from zenagent.app.swarm.gate import MessageGate
 from zenagent.app.swarm.room import RoomMessage, SwarmStore, TaskRecord
 from zenagent.app.swarm.workitems import WorkItemStore
 
@@ -37,9 +39,13 @@ class Router:
         max_chain_depth: int = DEFAULT_MAX_CHAIN_DEPTH,
         max_chain_cost: float = DEFAULT_MAX_CHAIN_COST,
         inbox_cap: int = DEFAULT_INBOX_CAP,
+        gate: MessageGate | None = None,
     ) -> None:
         self.store = store
         self.role_ids = set(role_ids)
+        #: Intent, fan-out and the chain budget. Constructor-level policy, the
+        #: same way ``inbox_cap`` is: not a ``[swarm]`` knob.
+        self.gate = gate or MessageGate()
         #: Optional: chain rebasing needs to know which work item a round
         #: belongs to, but a router with no work items (older callers, tests)
         #: keeps the single-chain behaviour.
@@ -76,8 +82,18 @@ class Router:
         chain_depth = 1 if crosses else message.chain_depth + 1
         now = int(time.time())
 
-        for role_id in dict.fromkeys(message.mentions):
-            if role_id not in self.role_ids:
+        # Intent, breadth and the chain budget are decided before any task is
+        # created: a result answers (one role), a request may fan out, and a
+        # spent chain admits nothing more. Every refusal stays a room notice.
+        decision = self.gate.select(
+            message, self.store, chain_id, role_ids=self.role_ids, now=now
+        )
+        admission.rejected.extend(decision.rejected)
+
+        for role_id in decision.accepted:
+            edge = (message.author_id, role_id)
+            if decision.facts.edges.get(edge, 0) >= self.gate.limits.max_edge_repeats:
+                admission.rejected.append((role_id, "edge_repeat"))
                 continue
             if chain_depth > self.max_chain_depth:
                 admission.rejected.append((role_id, "chain_depth"))

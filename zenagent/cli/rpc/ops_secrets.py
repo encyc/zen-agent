@@ -24,6 +24,7 @@ from zenagent.limits import (
     read_managed,
     write_managed,
 )
+from zenagent.swarm_settings import SWARM_FIELDS
 
 __all__ = ["SecretsOps"]
 
@@ -280,10 +281,8 @@ class SecretsOps:
         runtime.user_config.zen_batch_window_s = fresh.zen_batch_window_s
         runtime.user_config.zen_report_limit = fresh.zen_report_limit
         runtime.user_config.zen_worker_mode = fresh.zen_worker_mode
-        runtime.user_config.swarm_max_concurrent = fresh.swarm_max_concurrent
-        runtime.user_config.swarm_max_chain_depth = fresh.swarm_max_chain_depth
-        runtime.user_config.swarm_max_chain_cost = fresh.swarm_max_chain_cost
-        runtime.user_config.swarm_runtime_idle_s = fresh.swarm_runtime_idle_s
+        for name in SWARM_FIELDS:
+            setattr(runtime.user_config, name, getattr(fresh, name))
         runtime.apply_limits()
         await self._drop_idle_swarm_rooms()
 
