@@ -281,3 +281,13 @@ def open_secrets_manager(app: App, preselect: str | None = None) -> None:
         lambda: SecretsManager(app.runtime, preselect=preselect or ""),
         lambda _result: None,
     )
+
+
+def open_plugins_manager(app: App) -> None:
+    from zenagent.cli.tui.screens.plugins import PluginsManager
+
+    app.open_menu(
+        "plugins-manager",
+        lambda: PluginsManager(app.runtime),
+        lambda _result: None,
+    )

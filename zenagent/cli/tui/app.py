@@ -727,6 +727,14 @@ class ZenAgentApp(
 
         _open_secrets_manager(self, target)
 
+    def open_plugins_manager(self) -> None:
+        """``/plugins``: installed plugins and the builtin catalog."""
+        from zenagent.cli.tui.screens.pickers import (
+            open_plugins_manager as _open_plugins_manager,
+        )
+
+        _open_plugins_manager(self)
+
     def open_mode_picker(self) -> None:
         from zenagent.cli.tui.screens.pickers import (
             open_mode_picker as _open_mode_picker,

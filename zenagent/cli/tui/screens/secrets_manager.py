@@ -51,8 +51,9 @@ class SecretsManager(DialogScreen[None]):
         super().__init__()
         self.runtime = runtime
         self.preselect = preselect
-        #: Rows behind the option lines; the highlight index maps into this.
+        #: Rows behind the option lines; ``_row_at`` maps option → row.
         self._rows: list[SecretRow] = []
+        self._row_at: list[int | None] = []
 
     # -- data ---------------------------------------------------------------
 
@@ -103,16 +104,20 @@ class SecretsManager(DialogScreen[None]):
 
     def _refresh(self) -> None:
         option_list = self.query_one("#secrets-list", OptionList)
-        highlighted = option_list.highlighted
+        previous = self._selected_row_index(option_list)
         option_list.clear_options()
         self._rows = self._collect()
+        #: Option index → row index; None for the section headers.
+        self._row_at.clear()
         if not self._rows:
+            self._row_at.append(None)
             option_list.add_option(Option(t("tui.secrets.empty"), disabled=True))
             return
         scope = ""
         for index, row in enumerate(self._rows):
             if row.scope != scope:
                 scope = row.scope
+                self._row_at.append(None)
                 option_list.add_option(
                     Option(
                         t(
@@ -148,8 +153,9 @@ class SecretsManager(DialogScreen[None]):
                     env=row.env,
                     status=status,
                 )
+            self._row_at.append(index)
             option_list.add_option(Option(text))
-        self._restore_highlight(option_list, highlighted)
+        self._restore_highlight(option_list, previous)
         self.query_one("#dialog-title", Static).update(
             t(
                 "tui.secrets.manager_count",
@@ -158,25 +164,52 @@ class SecretsManager(DialogScreen[None]):
             )
         )
 
-    def _restore_highlight(self, option_list: OptionList, previous) -> None:
+    def _selected_row_index(self, option_list: OptionList) -> int | None:
+        """The row behind the highlighted option (headers map to None)."""
+        index = option_list.highlighted
+        if index is None or not 0 <= index < len(self._row_at):
+            return None
+        return self._row_at[index]
+
+    def _option_for_row(self, row_index: int) -> int | None:
+        """The option index a row index lives at (headers shift the list)."""
+        seen = -1
+        for option_index, row_index_at in enumerate(self._row_at):
+            if row_index_at is None:
+                continue
+            seen += 1
+            if seen == row_index:
+                return option_index
+        return None
+
+    def _restore_highlight(self, option_list: OptionList, previous: int | None) -> None:
         """Keep the selection stable across refreshes; honour a preselect once."""
+        target: int | None = None
         if self.preselect:
             for index, row in enumerate(self._rows):
                 if row.env == self.preselect or row.id == self.preselect:
-                    option_list.highlighted = index
+                    target = index
                     self.preselect = ""
-                    return
-        if previous is not None and 0 <= previous < len(self._rows):
+                    break
+        if target is None and previous is not None:
+            target = previous
+        if target is not None:
+            option = self._option_for_row(target)
+            if option is not None:
+                option_list.highlighted = option
+                return
+        if option_list.highlighted is None:
+            option_list.highlighted = self._option_for_row(0)
             option_list.highlighted = previous
         elif option_list.highlighted is None:
             option_list.highlighted = 0
 
     def _selected(self) -> SecretRow | None:
         option_list = self.query_one("#secrets-list", OptionList)
-        index = option_list.highlighted
-        if index is None or index < 0 or index >= len(self._rows):
+        row_index = self._selected_row_index(option_list)
+        if row_index is None:
             return None
-        return self._rows[index]
+        return self._rows[row_index]
 
     # -- actions ------------------------------------------------------------
 

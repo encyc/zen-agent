@@ -47,9 +47,10 @@ async def test_set_key_via_secret_input_writes_store(
         await app._dispatch_command("secrets", "")
         await pilot.pause()
         manager = app.screen
-        manager.query_one("#secrets-list", OptionList).highlighted = len(
-            manager._collect()
-        ) - 2  # a KEY_ENVS row (deepseek/tavily/brave order → tavily)
+        rows = manager._collect()
+        manager.query_one("#secrets-list", OptionList).highlighted = (
+            manager._option_for_row(len(rows) - 2)
+        )  # a KEY_ENVS row (deepseek/tavily/brave order → tavily)
         row = manager._selected()
         assert row is not None and row.env == "TAVILY_API_KEY"
         await pilot.press("s")
@@ -80,9 +81,10 @@ async def test_clear_requires_confirm_and_empties_key(
         await app._dispatch_command("secrets", "")
         await pilot.pause()
         manager = app.screen
-        manager.query_one("#secrets-list", OptionList).highlighted = len(
-            manager._collect()
-        ) - 1  # the last KEY_ENVS row (brave)
+        rows = manager._collect()
+        manager.query_one("#secrets-list", OptionList).highlighted = (
+            manager._option_for_row(len(rows) - 1)
+        )  # the last KEY_ENVS row (brave)
         await pilot.press("x")
         await pilot.pause()
         await pilot.press("y")  # Confirm
@@ -130,6 +132,7 @@ async def test_test_action_runs_the_right_probe(
         await pilot.pause()
         manager = app.screen
         assert manager.preselect == ""  # consumed on first refresh
+        assert manager._selected().id == "deepseek"  # the row the preselect named
         await pilot.press("t")
         await pilot.pause()
         await pilot.pause()

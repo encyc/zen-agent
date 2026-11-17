@@ -584,6 +584,12 @@ async def _secrets(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(screen="secrets-manager", target=argument.strip() or None)
 
 
+@_command("plugins")
+async def _plugins(services: AppServices, argument: str) -> CommandResult:
+    """Browse installed plugins and the builtin catalog (install, toggle)."""
+    return CommandResult(screen="plugins-manager")
+
+
 @_command("plan-review")
 async def _plan_review(services: AppServices, argument: str) -> CommandResult:
     """Review the plan the model produced in plan mode (approve → auto)."""
@@ -855,6 +861,7 @@ def build_default_commands(services: AppServices) -> CommandRegistry:
         _import,
         _settings,
         _secrets,
+        _plugins,
         _plan_review,
         _todo,
         _goal,

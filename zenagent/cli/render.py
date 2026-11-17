@@ -334,6 +334,44 @@ def _render_secrets(services, print_fn: PrintFn) -> None:
     print_fn(t("repl.secrets_footer"))
 
 
+def _render_plugins(services, print_fn: PrintFn) -> None:
+    """Installed plugins with enable state, then the builtin catalog."""
+    from zenagent.plugins.catalog import builtin_catalog
+    from zenagent.plugins.discovery import discover_plugins
+    from zenagent.plugins.state import credentials_for, is_enabled
+
+    manifests, warnings = discover_plugins()
+    if warnings:
+        for warning in warnings:
+            print_fn(t("tui.plugins.warning", warning=warning))
+    if not manifests:
+        print_fn(t("repl.plugins_none"))
+    else:
+        for manifest in manifests:
+            enabled = is_enabled(manifest.id)
+            credentials = credentials_for(manifest.id)
+            missing = sum(
+                1 for spec in manifest.credentials if not credentials.get(spec.key)
+            )
+            marker = "●" if enabled else "○"
+            print_fn(
+                t(
+                    "repl.plugins_row",
+                    marker=marker,
+                    name=f"{manifest.name} v{manifest.version}",
+                    id=manifest.id,
+                )
+            )
+            if missing:
+                print_fn(t("tui.plugins.creds_missing", count=missing))
+    print_fn(t("repl.plugins_catalog_header"))
+    installed = {manifest.id for manifest in manifests}
+    for entry in builtin_catalog():
+        mark = t("tui.plugins.status_installed") if entry.id in installed else ""
+        print_fn(f"  {entry.name} — {entry.description} {mark}".rstrip())
+    print_fn(t("repl.plugins_footer"))
+
+
 def _memory_editor_flow(services, entry_id: str | None, title_prefill: str, print_fn: PrintFn) -> None:
     store = services.runtime.memory_store
     entry = store.read_entry(entry_id) if (store and entry_id) else None
@@ -438,6 +476,8 @@ def render_command_result(
         _render_memory_index(services, print_fn)
     elif screen == "secrets-manager":
         _render_secrets(services, print_fn)
+    elif screen == "plugins-manager":
+        _render_plugins(services, print_fn)
     elif screen == "memory-add":
         _memory_editor_flow(services, None, result.target or "", print_fn)
     elif screen == "memory-edit":
