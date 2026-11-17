@@ -284,8 +284,8 @@ async def assemble(
             limits=GoalLimits.from_limits(runtime.limits),
             verifier=ModelVerifier(
                 stream_fn=agent.stream_fn,
-                model=agent.model,
-                api_key=agent.api_key,
+                model=lambda: runtime.agent.model,
+                api_key=lambda: runtime.agent.api_key,
                 max_tokens=runtime.limits.goal_verifier_max_tokens,
             ),
             check_verifier=CheckVerifier(

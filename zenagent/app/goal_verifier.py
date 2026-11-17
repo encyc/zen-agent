@@ -12,6 +12,8 @@ import asyncio
 import json
 import os
 import signal
+import tempfile
+from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
@@ -64,35 +66,42 @@ class CheckVerifier:
         if not command:
             return GoalVerdict("not_met", "no check command")
         try:
-            if os.name != "nt":
-                process = await asyncio.create_subprocess_shell(
-                    command,
-                    cwd=str(self._cwd),
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.STDOUT,
-                    start_new_session=True,
-                )
-            else:
-                process = await asyncio.create_subprocess_shell(
-                    command,
-                    cwd=str(self._cwd),
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.STDOUT,
-                )
+            with tempfile.TemporaryFile() as output:
+                if os.name != "nt":
+                    process = await asyncio.create_subprocess_shell(
+                        command,
+                        cwd=str(self._cwd),
+                        stdout=output,
+                        stderr=asyncio.subprocess.STDOUT,
+                        start_new_session=True,
+                    )
+                else:
+                    process = await asyncio.create_subprocess_shell(
+                        command,
+                        cwd=str(self._cwd),
+                        stdout=output,
+                        stderr=asyncio.subprocess.STDOUT,
+                    )
+                try:
+                    await asyncio.wait_for(
+                        process.wait(), timeout=self._timeout_s
+                    )
+                except TimeoutError:
+                    await _kill(process)
+                    return GoalVerdict(
+                        "not_met",
+                        f"check timed out after {self._timeout_s:g}s",
+                    )
+                except asyncio.CancelledError:
+                    await _kill(process)
+                    raise
+                output.seek(0, os.SEEK_END)
+                size = output.tell()
+                output.seek(max(0, size - 8192))
+                decoded = output.read().decode("utf-8", "replace")
         except OSError as exc:
             return GoalVerdict("not_met", f"check failed to start: {exc}")
-        try:
-            stdout, _ = await asyncio.wait_for(
-                process.communicate(), timeout=self._timeout_s
-            )
-        except TimeoutError:
-            await _kill(process)
-            return GoalVerdict(
-                "not_met",
-                f"check timed out after {self._timeout_s:g}s",
-            )
-        output = (stdout or b"").decode("utf-8", "replace")
-        evidence = output[-_OUTPUT_TAIL:]
+        evidence = decoded[-_OUTPUT_TAIL:]
         if process.returncode == 0:
             return GoalVerdict("met", "check passed", evidence=evidence)
         reason = f"check exited {process.returncode}"
@@ -111,8 +120,8 @@ class ModelVerifier:
         self,
         *,
         stream_fn: StreamFn,
-        model: Model,
-        api_key: str,
+        model: Model | Callable[[], Model],
+        api_key: str | Callable[[], str],
         max_tokens: int,
     ) -> None:
         self._stream_fn = stream_fn
@@ -121,19 +130,27 @@ class ModelVerifier:
         self._max_tokens = max_tokens
 
     async def verify(self, goal: GoalState, ctx: GoalTurnContext) -> GoalVerdict:
+        model = self._model() if not isinstance(self._model, Model) else self._model
+        api_key = (
+            self._api_key()
+            if not isinstance(self._api_key, str)
+            else self._api_key
+        )
         messages: list[Message] = [
             SystemMessage(content=_SYSTEM_PROMPT, timestamp=0),
             UserMessage(content=_user_prompt(goal, ctx), timestamp=0),
         ]
         options = StreamOptions(
-            api_key=self._api_key,
+            api_key=api_key,
             thinking="off",
             max_tokens=self._max_tokens,
         )
         tokens = 0
         last_error = "model verifier returned no verdict"
         for _attempt in range(2):
-            text, tokens_used = await self._complete(messages, options)
+            text, tokens_used = await self._complete(
+                model, messages, options
+            )
             tokens += tokens_used
             parsed = _parse_verdict(text)
             if parsed is not None:
@@ -143,11 +160,14 @@ class ModelVerifier:
         raise GoalVerifierError(last_error)
 
     async def _complete(
-        self, messages: list[Message], options: StreamOptions
+        self,
+        model: Model,
+        messages: list[Message],
+        options: StreamOptions,
     ) -> tuple[str, int]:
         last: AssistantMessage | None = None
         async for event in safe_stream(
-            self._stream_fn, self._model, messages, [], options
+            self._stream_fn, model, messages, [], options
         ):
             last = event.partial
             if event.type == "error":
@@ -162,7 +182,7 @@ class ModelVerifier:
             for block in last.content
             if isinstance(block, TextContent)
         )
-        return text, goal_tokens(last.usage, self._model.api)
+        return text, goal_tokens(last.usage, model.api)
 
 
 async def _kill(process: asyncio.subprocess.Process) -> None:
