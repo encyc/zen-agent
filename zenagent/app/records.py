@@ -23,6 +23,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from zenagent.agent.blob_store import BlobStore, blob_root_for
 from zenagent.agent.session import Session
 from zenagent.types import (
     AssistantMessage,
@@ -275,7 +276,12 @@ def open_session(
     :meth:`Session.materialize`), so an idle launch writes no transcript.
     """
     return Session(
-        path, boundary=is_compaction, window=branch_window, lazy=lazy, cwd=cwd
+        path,
+        boundary=is_compaction,
+        window=branch_window,
+        lazy=lazy,
+        cwd=cwd,
+        blob_store=BlobStore(blob_root_for(path)),
     )
 
 

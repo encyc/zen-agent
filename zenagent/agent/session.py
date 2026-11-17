@@ -28,6 +28,7 @@ from datetime import datetime
 from pathlib import Path
 
 from zenagent import __version__, project
+from zenagent.agent.blob_store import BlobStore, blob_root_for
 from zenagent.agent.jsonl import append_line, dump_line
 from zenagent.i18n import t
 from zenagent.types import (
@@ -449,6 +450,10 @@ class Session:
     #: records in memory until the first message, so an idle launch (or a
     #: project switch that never chats) leaves no ``(empty)`` row on disk.
     lazy: bool = field(default=False, repr=False, compare=False)
+    #: Content-addressed spill for large image payloads; ``None`` keeps every
+    #: image inline. :meth:`load` hydrates blob refs regardless of injection,
+    #: so bare readers stay lossless.
+    blob_store: BlobStore | None = field(default=None, repr=False, compare=False)
     _header_ensured: bool = field(default=False, repr=False, compare=False)
     _messages: list[Message] | None = field(default=None, repr=False, compare=False)
     _pending_records: list[dict] = field(default_factory=list, repr=False, compare=False)
@@ -554,7 +559,12 @@ class Session:
         # A lazy session held its header/mode records back; the first message
         # is what turns them into a transcript, in their original order.
         self._flush_pending()
-        self._write_line(message.to_json())
+        payload = message.to_json()
+        if self.blob_store is not None:
+            # Large image payloads leave the line for _blobs/; failure keeps
+            # them inline (best effort, never breaks the run).
+            self.blob_store.offload(payload)
+        self._write_line(payload)
         if self._messages is not None:
             self._messages.append(message)
 
@@ -588,6 +598,9 @@ class Session:
         if not self.path.is_file():
             self._messages = segments[0]
             return segments[0]
+        # Hydration is unconditional: a bare Session (export, listing, TUI
+        # display) must see the same messages a store-injected one does.
+        blob_store = self.blob_store or BlobStore(blob_root_for(self.path))
         text = self.path.read_text(encoding="utf-8")
         for lineno, raw in enumerate(text.splitlines(), start=1):
             line = raw.strip()
@@ -626,6 +639,8 @@ class Session:
                     if projected is not None:
                         segments[-1] = projected
                 continue
+            for ref in blob_store.hydrate(record):
+                self.warnings.append(f"{self.path.name}: missing image blob {ref}")
             try:
                 segments[-1].append(message_from_json(record))
             except (ValueError, TypeError) as exc:
