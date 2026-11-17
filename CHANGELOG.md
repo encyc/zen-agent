@@ -25,6 +25,11 @@ matches the release tag; older history is in the repository tags and commits.
   one says `(see attached image)`), so strict endpoints no longer receive an
   empty tool message.
 
+- **An MCP server's large tool result no longer kills its read loop.** The stdio
+  transport used asyncio's 64 KiB line limit, which a normal screenshot's base64
+  payload exceeds; the reader died and every in-flight call waited out its
+  timeout. The limit now covers image-bearing results (32 MiB).
+
 ## v0.13.11 — 2026-11-17
 
 **A session can now work toward a goal on its own.** `/goal` sets a verifiable

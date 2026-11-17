@@ -35,7 +35,7 @@ async def test_stdio_handshake_and_tool_listing():
         assert client.protocol_version == "2024-11-05"
         tools = await client.list_tools()
         names = [tool.name for tool in tools]
-        assert names == ["echo", "fail", "sleep", "crash"]
+        assert names == ["echo", "fail", "sleep", "crash", "huge"]
         echo = tools[0]
         assert echo.description == "Echo the given text"
         assert echo.input_schema["required"] == ["text"]
@@ -64,6 +64,23 @@ async def test_unknown_method_surfaces_a_rpc_error():
     try:
         with pytest.raises(McpError, match="-32601"):
             await client.transport.request("does/not/exist", {}, 5)
+    finally:
+        await client.close()
+
+
+async def test_stdio_reads_a_line_far_above_the_asyncio_default_limit():
+    """A screenshot's base64 JSON line is megabytes, not 64 KiB.
+
+    The asyncio StreamReader default would raise inside the read loop at 64 KiB,
+    killing it silently so the call times out; the transport has to size the
+    limit for real MCP payloads.
+    """
+    client = McpClient("echo", stdio_transport())
+    await client.start()
+    try:
+        result = await client.call_tool("huge", {}, timeout_s=5)
+        assert result.is_error is False
+        assert result.content == [{"type": "text", "text": "x" * 200_000}]
     finally:
         await client.close()
 

@@ -2,7 +2,7 @@
 """Minimal stdio MCP server used by the client tests.
 
 Speaks newline-delimited JSON-RPC 2.0 and implements just enough:
-initialize, tools/list, tools/call (echo / fail / sleep / crash).
+initialize, tools/list, tools/call (echo / fail / sleep / crash / huge).
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ TOOLS = [
     {"name": "fail", "description": "Always fails", "inputSchema": {"type": "object"}},
     {"name": "sleep", "description": "Sleep, then answer", "inputSchema": {"type": "object"}},
     {"name": "crash", "description": "Exit the server", "inputSchema": {"type": "object"}},
+    {"name": "huge", "description": "One huge result line", "inputSchema": {"type": "object"}},
 ]
 
 
@@ -85,6 +86,14 @@ def main() -> None:
             elif name == "sleep":
                 time.sleep(5)
                 result(request_id, {"content": [{"type": "text", "text": "awake"}]})
+            elif name == "huge":
+                result(
+                    request_id,
+                    {
+                        "content": [{"type": "text", "text": "x" * 200_000}],
+                        "isError": False,
+                    },
+                )
             elif name == "crash":
                 sys.exit(3)
             else:

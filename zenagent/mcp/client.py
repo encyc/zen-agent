@@ -44,6 +44,13 @@ DEFAULT_PROTOCOL_VERSION = "2024-11-05"
 #: Lines of server stderr kept for error messages.
 _MAX_STDERR_LINES = 20
 
+#: Bytes allowed in one newline-delimited JSON-RPC line from a server. The
+#: asyncio default is 64 KiB, which a tool result carrying a base64 image (a
+#: normal screenshot is megabytes) blows past: ``readline`` raises and the read
+#: loop dies, leaving every in-flight call to time out. Sized for image-bearing
+#: results, not as a guarantee against a hostile server.
+_MAX_LINE_BYTES = 32 * 1024 * 1024
+
 
 class McpError(Exception):
     """A JSON-RPC error, a broken transport, or a protocol violation."""
@@ -160,6 +167,7 @@ class StdioTransport:
             stderr=asyncio.subprocess.PIPE,
             env=environment,
             cwd=self.cwd,
+            limit=_MAX_LINE_BYTES,
         )
         self._reader = asyncio.create_task(self._read_loop())
         self._stderr_task = asyncio.create_task(self._drain_stderr())
