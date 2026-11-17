@@ -1,8 +1,42 @@
 """Rich chat rendering: assistant markdown and collapsible tool cards."""
 
+from zenagent.app.views import MessageView, RunStatus, ToolCallView
 from zenagent.cli.tui.app import ZenAgentApp
 from zenagent.cli.tui.widgets.tool_card import ToolCard
 from zenagent.cli.tui.widgets.transcript import TranscriptView
+
+
+async def test_a_replaced_placeholder_still_mounts_its_card(chat_app_with_one_tool):
+    """A same-index replacement (placeholder → tool call) must re-render.
+
+    A repaint can land while the streamed placeholder still exists (any await
+    between the builder's two notifies); the append-only diff already counted
+    that slot as a message, and without the rebuild the card never mounts.
+    """
+    app = chat_app_with_one_tool
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        transcript = app.query_one("#transcript", TranscriptView)
+        status = RunStatus(model_id="m", thinking=None, running=False)
+
+        transcript.sync(
+            [
+                MessageView(kind="user", text="go"),
+                MessageView(kind="assistant", text=""),
+            ],
+            status,
+        )
+        assert not list(app.query(ToolCard)), "the placeholder is not a card"
+
+        transcript.sync(
+            [
+                MessageView(kind="user", text="go"),
+                ToolCallView(call_id="c1", name="read_file", args_preview="{}"),
+                MessageView(kind="assistant", text="done"),
+            ],
+            status,
+        )
+        assert list(app.query(ToolCard)), "the replaced slot must mount its card"
 
 
 async def test_streamed_answer_and_tool_card_render(chat_app_with_one_tool):
