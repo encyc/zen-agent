@@ -1,9 +1,9 @@
 {
   "python": {
     "zenagent/app/commands.py": 875,
-    "zenagent/app/chat.py": 870,
+    "zenagent/app/chat.py": 871,
     "zenagent/app/swarm/manager.py": 896,
-    "zenagent/agent/session.py": 807,
+    "zenagent/agent/session.py": 825,
     "zenagent/limits.py": 867
   },
   "ts": {

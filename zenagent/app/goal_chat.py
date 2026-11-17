@@ -77,20 +77,82 @@ def begin_goal_turn(chat: ChatController, goal: bool) -> None:
     chat._goal_subagent_tokens_at_start = chat._subagents.tokens
     chat._goal_started_at = time.monotonic()
     controller = _goal_controller(chat)
-    if controller is None:
+    state = controller.state if controller is not None else None
+    chat._goal_run_id = (
+        state.goal_id
+        if state is not None and state.status == "active"
+        else None
+    )
+    if controller is None or state is None:
         return
     controller.note_turn_start(auto=goal)
-    if controller.state is not None:
+    if goal:
         chat._goal_watchdog = asyncio.create_task(_watch(chat))
 
 
-async def end_goal_turn(chat: ChatController, *, termination: str | None) -> bool:
-    """Evaluate after a turn; True when a goal continuation was started."""
+def settle_goal_turn(
+    chat: ChatController, termination: str | None
+) -> GoalTurnContext | None:
+    """Charge the finished turn once, even when a user message will run next."""
 
     goal = _goal_controller(chat)
     if goal is None or goal.state is None or goal.state.status != "active":
+        return None
+    if chat._goal_run_id is None or goal.state.goal_id != chat._goal_run_id:
+        return None
+    ctx = _context(chat, termination)
+    goal.settle_turn(ctx)
+    return ctx
+
+
+async def end_goal_turn(
+    chat: ChatController, *, ctx: GoalTurnContext | None
+) -> bool:
+    """Evaluate after a turn; True when a goal continuation was started.
+
+    ``ctx`` comes from :func:`settle_goal_turn` so the turn is never charged
+    twice. A user message that arrived while the verifier was running takes
+    priority: the parent run drains it and the goal is evaluated after that
+    user turn instead.
+    """
+
+    if ctx is None:
         return False
-    ctx = GoalTurnContext(
+    goal = _goal_controller(chat)
+    if goal is None or goal.state is None or goal.state.status != "active":
+        return False
+    if chat._goal_run_id is None or goal.state.goal_id != chat._goal_run_id:
+        return False
+    if chat._pending_queue.items:
+        return False
+    chat._goal_checking = True
+    chat._notify()
+    try:
+        decision = await goal.after_turn(ctx, account=False)
+    except Exception as exc:  # noqa: BLE001 - never kill the session
+        chat._last_error = bug_notice(repr(exc))
+        decision = None
+    finally:
+        chat._goal_checking = False
+    if (
+        decision is not None
+        and decision.action == "continue"
+        and decision.prompt
+    ):
+        if chat._pending_queue.items:
+            return False
+        chat._running = False
+        chat._task = None
+        chat._notify()
+        chat._task = asyncio.create_task(
+            chat._run(decision.prompt, goal=True)
+        )
+        return True
+    return False
+
+
+def _context(chat: ChatController, termination: str | None) -> GoalTurnContext:
+    return GoalTurnContext(
         messages=list(chat.runtime.agent.messages),
         auto=chat._goal_turn,
         tool_calls=chat._turn_tool_calls,
@@ -104,31 +166,11 @@ async def end_goal_turn(chat: ChatController, *, termination: str | None) -> boo
         ),
         user_queued=False,
     )
-    chat._goal_checking = True
-    chat._notify()
-    try:
-        decision = await goal.after_turn(ctx)
-    except Exception as exc:  # noqa: BLE001 - never kill the session
-        chat._last_error = bug_notice(repr(exc))
-        decision = None
-    finally:
-        chat._goal_checking = False
-    if (
-        decision is not None
-        and decision.action == "continue"
-        and decision.prompt
-    ):
-        chat._running = False
-        chat._task = None
-        chat._notify()
-        chat._task = asyncio.create_task(
-            chat._run(decision.prompt, goal=True)
-        )
-        return True
-    return False
 
 
 def check_goal_budget(chat: ChatController) -> None:
+    if not chat._goal_turn:
+        return
     goal = _goal_controller(chat)
     if goal is None or chat._goal_started_at is None:
         return

@@ -110,6 +110,15 @@ async def test_three_identical_check_failures_block(tmp_path):
     assert decision.status == "blocked"
 
 
+async def test_verifier_tokens_count_against_budget(tmp_path):
+    ctl = _ctl(
+        tmp_path,
+        FakeVerifier(GoalVerdict("not_met", "nope", tokens=7)),
+    )
+    await ctl.after_turn(_ctx(tokens_delta=1))
+    assert ctl.state.tokens_used == 8
+
+
 async def test_budget_counts_subagents(tmp_path):
     ctl = _ctl(
         tmp_path,

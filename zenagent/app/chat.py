@@ -99,6 +99,7 @@ class ChatController:
         #: Goal loop bookkeeping. ``_goal_turn`` marks the run that just
         #: finished; ``_turn_tool_calls`` feeds the no-progress detector.
         self._goal_turn = False
+        self._goal_run_id: str | None = None
         self._turn_tool_calls = 0
         self._goal_checking = False
         self._frontend_ready = False
@@ -764,11 +765,10 @@ class ChatController:
             # turns go first: compress only between bursts (Review Focus #1).
             if termination != "aborted" and not self._pending_queue.items:
                 await self._maybe_auto_compact()
+            goal_ctx = goal_chat.settle_goal_turn(self, termination)
             goal_started = False
             if not continuation and not self._pending_queue.items:
-                goal_started = await goal_chat.end_goal_turn(
-                    self, termination=termination
-                )
+                goal_started = await goal_chat.end_goal_turn(self, ctx=goal_ctx)
             if not goal_started:
                 self._running = False
                 self._task = None
@@ -784,6 +784,14 @@ class ChatController:
                         self._task = asyncio.create_task(
                             self._run(item.message.text, item.images)
                         )
+            if (
+                not continuation
+                and not goal_started
+                and not self._pending_queue.items
+            ):
+                # A goal set while the previous run was busy starts here; the
+                # goal loop never owns the controller while a user task is set.
+                goal_chat.maybe_continue_goal(self)
 
     def _demote_steering(self) -> None:
         """Turn undelivered steering into visible queue entries (nothing lost)."""

@@ -16,6 +16,18 @@ class FakeVerifier:
         )
 
 
+class GatedVerifier:
+    def __init__(self, verdict=None):
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+        self.verdict = verdict or GoalVerdict("not_met", "more")
+
+    async def verify(self, goal, ctx):
+        self.started.set()
+        await self.release.wait()
+        return self.verdict
+
+
 def _bind_goal(runtime, verifier, **limits):
     runtime.goal = GoalController(limits=GoalLimits(**limits), verifier=verifier)
     runtime.goal.bind_session(runtime.session)
@@ -118,6 +130,105 @@ async def test_budget_watchdog_aborts(runtime_factory):
     await chat.wait_for_idle()
 
     assert runtime.goal.snapshot().status == "budget_limited"
+
+
+async def test_user_message_during_verification_wins(runtime_factory):
+    calls = []
+
+    async def stream(model, messages, tools, options):
+        from zenagent.events import AssistantEvent
+        from zenagent.types import AssistantMessage, TextContent, Usage
+
+        calls.append(messages[-1].content)
+        partial = AssistantMessage(
+            content=[TextContent(text="working")],
+            provider="p", model="m", usage=Usage(),
+            stop_reason="stop", timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    runtime = await runtime_factory(stream_fn=stream)
+    verifier = GatedVerifier()
+    _bind_goal(runtime, verifier, max_turns=4)
+    chat = ChatController(runtime)
+    chat.start_goal("fix tests")
+    await verifier.started.wait()
+
+    await chat.submit("user during verify")
+    verifier.release.set()
+    await chat.wait_for_idle()
+
+    assert "user during verify" in calls[1]
+    assert "fix tests" in calls[2]
+
+
+async def test_pause_during_verification_stops_continuation(runtime_factory):
+    calls = []
+
+    async def stream(model, messages, tools, options):
+        from zenagent.events import AssistantEvent
+        from zenagent.types import AssistantMessage, TextContent, Usage
+
+        calls.append(messages[-1].content)
+        partial = AssistantMessage(
+            content=[TextContent(text="working")],
+            provider="p", model="m", usage=Usage(),
+            stop_reason="stop", timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    runtime = await runtime_factory(stream_fn=stream)
+    verifier = GatedVerifier()
+    _bind_goal(runtime, verifier, max_turns=4)
+    chat = ChatController(runtime)
+    chat.start_goal("fix tests")
+    await verifier.started.wait()
+
+    runtime.goal.pause()
+    verifier.release.set()
+    await chat.wait_for_idle()
+
+    assert runtime.goal.snapshot().status == "paused"
+    assert len(calls) == 1
+
+
+async def test_session_switch_during_verification_keeps_new_session_clean(
+    runtime_factory, tmp_path
+):
+    calls = []
+
+    async def stream(model, messages, tools, options):
+        from zenagent.events import AssistantEvent
+        from zenagent.types import AssistantMessage, TextContent, Usage
+
+        calls.append(messages[-1].content)
+        partial = AssistantMessage(
+            content=[TextContent(text="working")],
+            provider="p", model="m", usage=Usage(),
+            stop_reason="stop", timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    runtime = await runtime_factory(stream_fn=stream)
+    verifier = GatedVerifier()
+    _bind_goal(runtime, verifier, max_turns=4)
+    chat = ChatController(runtime)
+    chat.start_goal("fix tests")
+    await verifier.started.wait()
+
+    other = tmp_path / "other.jsonl"
+    other.write_text("", encoding="utf-8")
+    await runtime.switch_session(other)
+    verifier.release.set()
+    await chat.wait_for_idle()
+
+    assert runtime.session.path == other
+    assert not any(
+        getattr(message, "goal", False) for message in runtime.agent.messages
+    )
 
 
 async def test_start_goal_while_busy_defers(runtime_factory):

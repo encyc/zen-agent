@@ -8,6 +8,7 @@ the session binding.
 
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
 from collections.abc import Callable
@@ -258,6 +259,10 @@ class GoalController:
         #: Check goals created/resumed in this process are trusted; a goal
         #: loaded from disk by a fresh controller needs /goal resume first.
         self._trusted_checks: set[str] = set()
+        #: Bumped by every lifecycle change; a verifier result from an older
+        #: generation is discarded instead of being applied to the new goal.
+        self._generation = 0
+        self._verify_task: asyncio.Task[GoalVerdict] | None = None
 
     @property
     def state(self) -> GoalState | None:
@@ -276,9 +281,29 @@ class GoalController:
         self._verifier = verifier
         self._check_verifier = check_verifier
 
+    def _invalidate(self) -> None:
+        self._generation += 1
+        task = self._verify_task
+        if task is not None and not task.done():
+            task.cancel()
+
+    def _still_current(
+        self,
+        generation: int,
+        state: GoalState,
+        session: Session | None,
+    ) -> bool:
+        return (
+            self._generation == generation
+            and self._state is state
+            and self._session is session
+            and state.status == "active"
+        )
+
     def bind_session(self, session: Session | None) -> None:
         """Load the last goal record from ``session`` (or clear when ``None``)."""
 
+        self._invalidate()
         self._session = session
         if session is None:
             self._state = None
@@ -332,6 +357,7 @@ class GoalController:
         check: str | None = None,
         max_turns: int | None = None,
     ) -> GoalState:
+        self._invalidate()
         state = GoalState.new(
             objective,
             check=check,
@@ -351,6 +377,7 @@ class GoalController:
         state = self._state
         if state is None or state.status != "active":
             return None
+        self._invalidate()
         state.status = "paused"
         state.updated_at = self._now()
         self._persist()
@@ -360,6 +387,7 @@ class GoalController:
         state = self._state
         if state is None or state.status not in ("paused", "blocked"):
             return None
+        self._invalidate()
         state.status = "active"
         state.no_progress_turns = 0
         state.verifier_failures = 0
@@ -372,6 +400,7 @@ class GoalController:
         return state
 
     def clear(self) -> None:
+        self._invalidate()
         if self._state is not None:
             self._trusted_checks.discard(self._state.goal_id)
         self._state = None
@@ -416,17 +445,34 @@ class GoalController:
             >= state.max_wall_seconds
         )
 
-    async def after_turn(self, ctx: GoalTurnContext) -> GoalDecision:
+    def settle_turn(self, ctx: GoalTurnContext) -> bool:
+        """Charge one finished turn to the goal budget, even if it will stop."""
+
+        state = self._state
+        if state is None or state.status != "active":
+            return False
+        state.tokens_used += max(ctx.tokens_delta, 0) + max(
+            ctx.subagent_tokens_delta, 0
+        )
+        state.wall_seconds_used += max(ctx.elapsed_s, 0.0)
+        if ctx.termination == "stop":
+            state.turns_used += 1
+        state.updated_at = self._now()
+        self._persist()
+        return True
+
+    async def after_turn(
+        self, ctx: GoalTurnContext, *, account: bool = True
+    ) -> GoalDecision:
         state = self._state
         if state is None or state.status != "active":
             return GoalDecision(
                 "stop", state.status if state is not None else "complete"
             )
-
-        state.tokens_used += max(ctx.tokens_delta, 0) + max(
-            ctx.subagent_tokens_delta, 0
-        )
-        state.wall_seconds_used += max(ctx.elapsed_s, 0.0)
+        generation = self._generation
+        session = self._session
+        if account:
+            self.settle_turn(ctx)
 
         if ctx.termination != "stop":
             if ctx.termination == "aborted":
@@ -437,9 +483,6 @@ class GoalController:
                     )
                 return self._finish("paused", "run aborted")
             return self._finish("blocked", f"run ended: {ctx.termination}")
-
-        state.turns_used += 1
-        state.updated_at = self._now()
 
         if state.tokens_used >= state.max_tokens:
             return self._finish(
@@ -478,11 +521,29 @@ class GoalController:
         if verifier is None:
             return self._finish("blocked", "no verifier available")
 
+        verify_started = self._now()
+        task = asyncio.create_task(verifier.verify(state, ctx))
+        self._verify_task = task
         try:
-            verdict = await verifier.verify(state, ctx)
+            verdict = await task
+        except asyncio.CancelledError:
+            return GoalDecision(
+                "stop",
+                self._state.status if self._state is not None else "paused",
+                reason="verification cancelled",
+            )
         except GoalVerifierError as exc:
+            if not self._still_current(generation, state, session):
+                return GoalDecision(
+                    "stop",
+                    self._state.status
+                    if self._state is not None
+                    else "complete",
+                    reason="goal changed during verification",
+                )
             state.verifier_failures += 1
             state.last_reason = str(exc)
+            state.wall_seconds_used += max(0.0, self._now() - verify_started)
             state.updated_at = self._now()
             if state.verifier_failures >= 3:
                 return self._finish(
@@ -494,6 +555,30 @@ class GoalController:
                 "active",
                 prompt=render_goal_prompt(state),
                 reason=str(exc),
+            )
+        finally:
+            self._verify_task = None
+
+        if not self._still_current(generation, state, session):
+            return GoalDecision(
+                "stop",
+                self._state.status if self._state is not None else "complete",
+                reason="goal changed during verification",
+            )
+
+        state.wall_seconds_used += max(0.0, self._now() - verify_started)
+        state.tokens_used += max(0, verdict.tokens)
+        state.updated_at = self._now()
+        if state.tokens_used >= state.max_tokens:
+            return self._finish(
+                "budget_limited",
+                f"token budget reached ({state.tokens_used}/{state.max_tokens})",
+            )
+        if state.wall_seconds_used >= state.max_wall_seconds:
+            return self._finish(
+                "budget_limited",
+                "wall-clock budget reached "
+                f"({state.wall_seconds_used:.0f}/{state.max_wall_seconds}s)",
             )
 
         state.verifier_failures = 0
