@@ -35,15 +35,25 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-__all__ = ["LOOP_GUARD_PREFIX", "is_loop_guard_message"]
+__all__ = [
+    "LOOP_GUARD_PREFIX",
+    "STALL_GUARD_PREFIX",
+    "is_loop_guard_message",
+    "is_stall_guard_message",
+]
 
 from zenagent.agent.guard import (
     LOOP_GUARD_PREFIX,
     LOOP_GUARD_TEXT,
     LOOP_GUARD_THRESHOLD,
+    STALL_GUARD_BATCHES,
+    STALL_GUARD_PREFIX,
+    STALL_GUARD_TEXT,
+    EvidenceLedger,
     calls_signature,
     is_loop_guard_message,
     is_poll_call,
+    is_stall_guard_message,
 )
 from zenagent.agent.protocol import AgentTool, ToolContext, ToolResultAgent
 from zenagent.agent.result_budget import MAX_RESULT_BYTES
@@ -67,6 +77,7 @@ from zenagent.types import (
 
 __all__ = [
     "LOOP_GUARD_PREFIX",
+    "STALL_GUARD_PREFIX",
     "AgentConfig",
     "AgentState",
     "AgentTool",
@@ -74,6 +85,7 @@ __all__ = [
     "ToolResultAgent",
     "agent_loop",
     "is_loop_guard_message",
+    "is_stall_guard_message",
 ]
 
 
@@ -119,6 +131,9 @@ class AgentConfig:
     #: Identical tool-call streak before the loop guard intervenes
     #: (``[limits.agent].loop_guard_threshold``).
     loop_guard_threshold: int = LOOP_GUARD_THRESHOLD
+    #: Consecutive rounds of already-seen evidence before the stall guard
+    #: intervenes (see :class:`zenagent.agent.guard.EvidenceLedger`).
+    stall_guard_batches: int = STALL_GUARD_BATCHES
     #: Per-result byte budget before head+tail truncation
     #: (``[limits.agent].max_result_bytes``).
     max_result_bytes: int = MAX_RESULT_BYTES
@@ -201,6 +216,9 @@ async def agent_loop(
     last_signature: tuple | None = None
     repeat_streak = 0
     guard_injected = False
+    evidence = EvidenceLedger()
+    stall_streak = 0
+    stall_injected = False
     tool_stats: dict[str, dict] = {}
     try:
         # Input typed while the previous run was finishing is still queued: pick
@@ -440,18 +458,55 @@ async def agent_loop(
                 # persisted, rendered as a user turn, or counted by fork/retry.
                 state.messages.append(notice)
 
+            # Evidence stall guard: comparing *what was read* rather than the
+            # exact call catches the model that re-asks the same question with
+            # new flags. A poll or an edit never counts; only a run of rounds
+            # whose every read is already covered does.
+            # A call that failed taught the model nothing; only results that
+            # actually came back count as evidence (a policy denial may be
+            # retried legitimately once the user approves).
+            answered = {
+                outcome.call.id
+                for outcome in outcomes
+                if not outcome.result.is_error
+            }
+            stalled, repeated = evidence.observe(
+                [call for call in calls if call.id in answered]
+            )
+            stall_streak = stall_streak + 1 if stalled else 0
+            if stall_streak >= config.stall_guard_batches and not stall_injected:
+                stall_injected = True
+                sample = ", ".join(repeated[:2])[:120]
+                state.messages.append(
+                    UserMessage(
+                        content=STALL_GUARD_TEXT.format(n=stall_streak, sample=sample),
+                        timestamp=int(time.time()),
+                    )
+                )
+
             if config.get_steering_messages is not None:
-                for message in await config.get_steering_messages():
+                steered = await config.get_steering_messages()
+                if steered:
+                    # A fresh instruction may legitimately ask for the same
+                    # bytes the run already read.
+                    evidence = EvidenceLedger()
+                    stall_streak = 0
+                    stall_injected = False
+                for message in steered:
                     state.messages.append(message)
                     new_messages.append(message)
                     yield AgentEvent(type="message_start", message=message)
                     yield AgentEvent(type="message_end", message=message)
             # else / loop continues: another round with the tool results in context
     finally:
-        # The corrective exists only for the turns after it fired: drop it from
-        # the durable transcript so resume/retry/fork never see synthetic text.
+        # The correctives exist only for the turns after they fired: drop them
+        # from the durable transcript so resume/retry/fork never see synthetic
+        # text.
         state.messages[:] = [
-            message for message in state.messages if not is_loop_guard_message(message)
+            message
+            for message in state.messages
+            if not is_loop_guard_message(message)
+            and not is_stall_guard_message(message)
         ]
         state.termination = termination
         yield AgentEvent(

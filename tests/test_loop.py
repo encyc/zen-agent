@@ -1318,6 +1318,94 @@ async def test_poll_like_commands_are_exempt_from_the_loop_guard():
     )
 
 
+async def test_repeated_reads_get_one_stall_corrective_notice():
+    """Re-asking for the same page is not progress; the loop says so once."""
+
+    async def page(name, args, abort, on_update=None):
+        return ToolResultAgent(content=[TextContent(text="page")])
+
+    call = call_tool(
+        "t1", "read_file", {"path": "a.py", "offset": 0, "limit": 100}
+    )
+    script = [[call, finish("tool_use")] for _ in range(3)]
+    script.append([say("done"), finish("stop")])
+    stream = ScriptedStream(script)
+    state = AgentState()
+    events = await run(
+        "go", state, make_config(stream, tools=[make_tool("read_file", page)])
+    )
+
+    # The corrective reached the model...
+    last_request = stream.calls[-1]["messages"]
+    assert any(
+        "evidence-loop guard" in str(getattr(message, "content", ""))
+        for message in last_request
+    )
+    # ...but not the UI/persistence/durable transcript.
+    end = next(event for event in events if event.type == "agent_end")
+    assert not any(
+        "evidence-loop guard" in str(getattr(message, "content", ""))
+        for message in end.new_messages
+    )
+    assert not any(
+        "evidence-loop guard" in str(getattr(message, "content", ""))
+        for message in state.messages
+    )
+
+
+async def test_reading_the_next_page_is_not_a_stall():
+    """Paging forward is exactly the long investigation the guard must keep."""
+
+    async def page(name, args, abort, on_update=None):
+        return ToolResultAgent(content=[TextContent(text="page")])
+
+    script = [
+        [
+            call_tool(
+                "t1", "read_file", {"path": "a.py", "offset": offset, "limit": 100}
+            ),
+            finish("tool_use"),
+        ]
+        for offset in (0, 100, 200)
+    ]
+    script.append([say("done"), finish("stop")])
+    stream = ScriptedStream(script)
+    state = AgentState()
+    await run(
+        "go", state, make_config(stream, tools=[make_tool("read_file", page)])
+    )
+
+    assert not any(
+        "evidence-loop guard" in str(getattr(message, "content", ""))
+        for call in stream.calls
+        for message in call["messages"]
+    )
+
+
+async def test_failed_reads_do_not_count_as_evidence():
+    """A denied or failing read taught the model nothing; retrying it is not a stall."""
+
+    async def denied(name, args, abort, on_update=None):
+        return ToolResultAgent(content=[TextContent(text="denied")], is_error=True)
+
+    call = call_tool(
+        "t1", "read_file", {"path": "a.py", "offset": 0, "limit": 100}
+    )
+    script = [[call, finish("tool_use")] for _ in range(3)]
+    script.append([say("done"), finish("stop")])
+    stream = ScriptedStream(script)
+    state = AgentState()
+    await run(
+        "go", state, make_config(stream, tools=[make_tool("read_file", denied)])
+    )
+
+    assert not any(
+        "evidence-loop guard" in str(getattr(message, "content", ""))
+        for call in stream.calls
+        for message in call["messages"]
+    )
+
+
 async def test_agent_end_carries_per_tool_stats():
     async def ok(name, args, abort, on_update=None):
         return ToolResultAgent(content=[TextContent(text="ok")])

@@ -8,7 +8,7 @@ from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from typing import Literal
 
-from zenagent.agent.loop import LOOP_GUARD_PREFIX
+from zenagent.agent.loop import LOOP_GUARD_PREFIX, STALL_GUARD_PREFIX
 from zenagent.app.context import ContextReport
 from zenagent.app.records import is_compaction, is_tool_end
 from zenagent.app.skill_commands import parse_skill_display
@@ -425,7 +425,7 @@ def messages_to_views(
                 if isinstance(message.content, str)
                 else _text_of(message.content)
             )
-            if text.startswith(LOOP_GUARD_PREFIX):
+            if text.startswith((LOOP_GUARD_PREFIX, STALL_GUARD_PREFIX)):
                 continue  # synthetic model-only corrective, not a user turn
             views.append(
                 user_view(
