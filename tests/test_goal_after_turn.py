@@ -53,6 +53,27 @@ async def test_met_completes(tmp_path):
     assert decision.status == "complete"
 
 
+async def test_unlimited_budgets_never_stop_the_goal(tmp_path):
+    # 0 turns the ceiling off: only a verdict, a blocker or the user stops it.
+    ctl = _ctl(
+        tmp_path,
+        FakeVerifier(GoalVerdict("not_met", "still failing")),
+        max_turns=0,
+        max_tokens=0,
+        max_wall_seconds=0,
+    )
+    decision = await ctl.after_turn(
+        _ctx(tokens_delta=10**9, elapsed_s=10**9)
+    )
+
+    assert decision.action == "continue"
+    assert decision.wrap_up is False
+    assert ctl.state is not None and ctl.state.status == "active"
+    assert (
+        ctl.budget_exceeded(tokens_delta=10**9, elapsed_s=10**9) is False
+    )
+
+
 async def test_not_met_continues_with_budget_and_reason(tmp_path):
     ctl = _ctl(tmp_path, FakeVerifier(GoalVerdict("not_met", "3 tests failed")))
     decision = await ctl.after_turn(_ctx())

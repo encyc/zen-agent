@@ -40,6 +40,7 @@ __all__ = [
     "TranscriptBuilder",
     "TranscriptNotice",
     "args_preview",
+    "goal_limit_text",
     "job_views",
     "last_request_usage",
     "messages_to_views",
@@ -171,6 +172,12 @@ class GoalView:
     last_verdict: str | None
     last_reason: str
     updated_at: int
+
+
+def goal_limit_text(value: int) -> str:
+    """A goal ceiling for display; zero means the ceiling is off."""
+
+    return "∞" if value <= 0 else str(value)
 
 
 @dataclass

@@ -44,6 +44,14 @@ def test_goal_hud_shows_status_and_budget():
     assert "fix tests" in hud.render_text()
 
 
+def test_goal_hud_shows_unlimited_budget():
+    from dataclasses import replace
+
+    hud = GoalHud()
+    hud.set_goal(replace(_view(), max_turns=0, max_tokens=0))
+    assert "∞" in hud.render_text()
+
+
 def test_goal_message_renders_compactly():
     from zenagent.cli.tui.widgets.rows import UserBlock
 

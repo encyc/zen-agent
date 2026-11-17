@@ -97,8 +97,9 @@ TUI 与 REPL **共用同一个** `CommandRegistry`（`zenagent/app/commands.py`�
 
 - `/goal --check "<command>" <objective>`：用用户提供的确定性命令判定完成（退出码 0 = 达成）；
   命令由 controller 执行，模型不能改，也不会写进续跑 prompt。
-- `/goal --budget N <objective>`：把本目标的轮次上限设为 N；token（默认 2M）和 wall-clock
-  （默认 4h）来自 `[limits.goal]`，到顶会硬中断当前 run，不再开新轮。
+- `/goal --budget N <objective>`：把本目标的轮次上限设为 N（`0` = 不设上限）；token（默认 2M）
+  和 wall-clock（默认 4h）来自 `[limits.goal]`（桌面 Settings → 参数与预算，或手改
+  `~/.zenagent/config.toml`；同样可以设成 `0` = 不限），到顶会硬中断当前 run，不再开新轮。
 - `/goal` 查看目标、预算和最近一次判定；`/goal pause` 只停止后续续跑，不中断当前轮；
   `/goal resume` 恢复 paused/blocked；`/goal clear` 清除。
 - 应用退出即暂停，重开恢复 active 目标；带 `check` 的目标在重启/导入后恢复为 paused，

@@ -1,6 +1,12 @@
 import pytest
 
-from zenagent.app.goal import GoalLimits, GoalState, goal_tokens, parse_goal_args
+from zenagent.app.goal import (
+    GoalLimits,
+    GoalState,
+    goal_tokens,
+    parse_goal_args,
+    render_goal_prompt,
+)
 from zenagent.types import Usage
 
 
@@ -31,11 +37,24 @@ def test_flags_after_objective_are_literal():
 
 
 @pytest.mark.parametrize(
-    "raw", ["--budget 0 fix", "--budget x fix", "--check", "--check '' fix"]
+    "raw", ["--budget -1 fix", "--budget x fix", "--check", "--check '' fix"]
 )
 def test_parse_rejects_bad_input(raw):
     with pytest.raises(ValueError):
         parse_goal_args(raw)
+
+
+def test_budget_zero_means_no_ceiling():
+    args = parse_goal_args("--budget 0 fix tests")
+    assert args.max_turns == 0
+
+    state = GoalState.new(
+        "fix tests",
+        max_turns=0,
+        limits=GoalLimits(max_tokens=0, max_wall_seconds=0),
+    )
+    assert state.max_turns == 0
+    assert "unlimited" in render_goal_prompt(state)
 
 
 def test_state_roundtrip_and_defaults():

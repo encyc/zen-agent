@@ -61,9 +61,17 @@ _LIFECYCLE: dict[str, GoalAction] = {
 }
 
 
+#: A zero ceiling means "no limit" on every budget knob.
+_NO_LIMIT = 0
+
+
 @dataclass(frozen=True)
 class GoalLimits:
-    """Defaults applied when a new goal is created."""
+    """Defaults applied when a new goal is created.
+
+    Each budget may be zero, which turns that ceiling off for the goal: the
+    controller then only stops on a verdict, a blocker or the user.
+    """
 
     max_turns: int = 40
     max_tokens: int = 2_000_000
@@ -100,6 +108,7 @@ class GoalState:
     objective: str
     status: GoalStatus
     check: str | None
+    #: Ceilings captured when the goal was created; 0 means "no ceiling".
     max_turns: int
     max_tokens: int
     max_wall_seconds: int
@@ -133,8 +142,8 @@ class GoalState:
             check = check.strip()
             if not check:
                 raise ValueError("goal check is empty")
-        if max_turns is not None and max_turns <= 0:
-            raise ValueError("goal max_turns must be positive")
+        if max_turns is not None and max_turns < 0:
+            raise ValueError("goal max_turns must be zero or positive")
         limits = limits or GoalLimits()
         now = time.time()
         return cls(
@@ -439,11 +448,16 @@ class GoalController:
         state = self._state
         if state is None or state.status != "active":
             return False
-        return (
-            state.tokens_used + max(tokens_delta, 0) >= state.max_tokens
-            or state.wall_seconds_used + max(elapsed_s, 0.0)
+        tokens_hit = (
+            state.max_tokens > _NO_LIMIT
+            and state.tokens_used + max(tokens_delta, 0) >= state.max_tokens
+        )
+        wall_hit = (
+            state.max_wall_seconds > _NO_LIMIT
+            and state.wall_seconds_used + max(elapsed_s, 0.0)
             >= state.max_wall_seconds
         )
+        return tokens_hit or wall_hit
 
     def settle_turn(self, ctx: GoalTurnContext) -> bool:
         """Charge one finished turn to the goal budget, even if it will stop."""
@@ -484,23 +498,26 @@ class GoalController:
                 return self._finish("paused", "run aborted")
             return self._finish("blocked", f"run ended: {ctx.termination}")
 
-        if state.tokens_used >= state.max_tokens:
+        if state.max_tokens > _NO_LIMIT and state.tokens_used >= state.max_tokens:
             return self._finish(
                 "budget_limited",
                 f"token budget reached ({state.tokens_used}/{state.max_tokens})",
             )
-        if state.wall_seconds_used >= state.max_wall_seconds:
+        if (
+            state.max_wall_seconds > _NO_LIMIT
+            and state.wall_seconds_used >= state.max_wall_seconds
+        ):
             return self._finish(
                 "budget_limited",
                 "wall-clock budget reached "
                 f"({state.wall_seconds_used:.0f}/{state.max_wall_seconds}s)",
             )
-        if state.turns_used > state.max_turns:
+        if state.max_turns > _NO_LIMIT and state.turns_used > state.max_turns:
             return self._finish(
                 "budget_limited",
                 f"turn budget reached ({state.turns_used}/{state.max_turns})",
             )
-        if state.turns_used >= state.max_turns:
+        if state.max_turns > _NO_LIMIT and state.turns_used >= state.max_turns:
             self._persist()
             return GoalDecision(
                 "continue",
@@ -569,12 +586,15 @@ class GoalController:
         state.wall_seconds_used += max(0.0, self._now() - verify_started)
         state.tokens_used += max(0, verdict.tokens)
         state.updated_at = self._now()
-        if state.tokens_used >= state.max_tokens:
+        if state.max_tokens > _NO_LIMIT and state.tokens_used >= state.max_tokens:
             return self._finish(
                 "budget_limited",
                 f"token budget reached ({state.tokens_used}/{state.max_tokens})",
             )
-        if state.wall_seconds_used >= state.max_wall_seconds:
+        if (
+            state.max_wall_seconds > _NO_LIMIT
+            and state.wall_seconds_used >= state.max_wall_seconds
+        ):
             return self._finish(
                 "budget_limited",
                 "wall-clock budget reached "
@@ -637,7 +657,7 @@ def parse_goal_args(argument: str) -> GoalArgs:
 
     Flags are only recognized before the objective, so an objective may contain
     ``--check`` literally. ``--check`` accepts a quoted value; ``--budget`` is a
-    positive turn count.
+    turn count, and 0 turns the turn ceiling off.
     """
 
     rest = argument.strip()
@@ -660,9 +680,13 @@ def parse_goal_args(argument: str) -> GoalArgs:
             try:
                 parsed = int(value)
             except ValueError as exc:
-                raise ValueError("--budget needs a positive integer") from exc
-            if parsed <= 0:
-                raise ValueError("--budget needs a positive integer")
+                raise ValueError(
+                    "--budget needs zero or a positive integer (0 = no limit)"
+                ) from exc
+            if parsed < 0:
+                raise ValueError(
+                    "--budget needs zero or a positive integer (0 = no limit)"
+                )
             max_turns = parsed
             continue
         break
@@ -709,9 +733,10 @@ def render_goal_prompt(state: GoalState, *, wrap_up: bool = False) -> str:
     return (
         "[goal] Continue working toward the objective below.\n\n"
         f"<objective>\n{_escape(state.objective)}\n</objective>\n\n"
-        f"Budget: turn {state.turns_used}/{state.max_turns}, "
-        f"tokens {state.tokens_used}/{state.max_tokens}, "
-        f"elapsed {state.wall_seconds_used:.0f}/{state.max_wall_seconds}s.\n"
+        f"Budget: turn {state.turns_used}/{_budget_text(state.max_turns)}, "
+        f"tokens {state.tokens_used}/{_budget_text(state.max_tokens)}, "
+        f"elapsed {state.wall_seconds_used:.0f}/"
+        f"{_budget_text(state.max_wall_seconds)}s.\n"
         f"Last verification: {state.last_verdict or 'none'} — "
         f"{state.last_reason or 'no verdict yet'}\n\n"
         f"{instruction}"
@@ -726,6 +751,11 @@ def _check_key(verdict: GoalVerdict) -> str:
 
 def _escape(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _budget_text(value: int) -> str:
+    """A ceiling as the continuation prompt names it; zero means it is off."""
+    return "unlimited" if value <= _NO_LIMIT else str(value)
 
 
 def _take_flag_value(text: str) -> tuple[str, str]:

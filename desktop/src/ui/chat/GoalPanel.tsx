@@ -4,6 +4,7 @@
 import { useAppStore } from '../../state/appStore'
 import { useT } from '../../i18n/locale'
 import type { GoalView } from '../../rpc/types'
+import { goalLimit } from './goalView'
 import css from './GoalPanel.module.css'
 
 export function GoalPanel(props: { view: GoalView; onClose(): void }) {
@@ -31,9 +32,9 @@ export function GoalPanel(props: { view: GoalView; onClose(): void }) {
       <p className={css.meta}>
         {t('goal.panel.budget', {
           turns: props.view.turns_used,
-          maxTurns: props.view.max_turns,
+          maxTurns: goalLimit(props.view.max_turns),
           tokens: props.view.tokens_used,
-          maxTokens: props.view.max_tokens,
+          maxTokens: goalLimit(props.view.max_tokens),
         })}
       </p>
       <p className={css.meta}>

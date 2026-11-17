@@ -16,6 +16,7 @@ from rich.text import Text
 from textual.containers import Vertical, VerticalScroll
 from textual.widgets import Static
 
+from zenagent.app.views import goal_limit_text
 from zenagent.cli.tui import palette
 from zenagent.cli.tui.textutil import clip_cells
 from zenagent.i18n import t, tn
@@ -351,9 +352,9 @@ class Sidebar(VerticalScroll):
                             t(
                                 "tui.goal.budget",
                                 turns=goal.turns_used,
-                                max_turns=goal.max_turns,
+                                max_turns=goal_limit_text(goal.max_turns),
                                 tokens=goal.tokens_used,
-                                max_tokens=goal.max_tokens,
+                                max_tokens=goal_limit_text(goal.max_tokens),
                             )
                         ),
                         style=palette.MUTED,

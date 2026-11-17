@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { goalObjective, goalSummary } from '../src/ui/chat/goalView.ts'
+import { goalLimit, goalObjective, goalSummary } from '../src/ui/chat/goalView.ts'
 
 test('goalSummary renders status and budget', () => {
   const text = goalSummary({
@@ -25,4 +25,9 @@ test('goalSummary renders status and budget', () => {
 test('goalObjective extracts the objective from a continuation prompt', () => {
   const text = '[goal] Continue...\n\n<objective>\nfix tests\n</objective>\n'
   assert.equal(goalObjective(text), 'fix tests')
+})
+
+test('goalLimit marks a zero ceiling as unlimited', () => {
+  assert.equal(goalLimit(0), '∞')
+  assert.equal(goalLimit(40), '40')
 })

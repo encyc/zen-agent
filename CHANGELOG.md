@@ -18,6 +18,10 @@ matches the release tag; older history is in the repository tags and commits.
   token budgets; token/wall overruns abort the live run, the turn limit gets one
   wrap-up turn. No-progress, repeated identical check failures and repeated
   verifier errors become `blocked`; the goal record survives resume/compaction.
+- **Budgets can be switched off.** `[limits.goal]` `max_turns`, `max_wall_minutes` and
+  `max_tokens` accept `0` = no ceiling (Settings → 参数与预算 writes the same file),
+  and `/goal --budget 0` drops the turn cap. The check timeout and verifier output
+  stay bounded on purpose: they guard a subprocess and one model call.
 - **TUI and desktop surfaces.** A goal HUD/sidebar section in the TUI and a goal
   chip/panel above the desktop composer show status, budget and last verdict.
   Settings can pause the goal when leaving a session; the default keeps it active
