@@ -76,6 +76,9 @@
   每次流式请求不再重建 TLS 会话；`fs` 大文件读取移出事件循环。
 - `scripts/check_architecture.py` + `docs/architecture/allowlist.json`：源文件 800 行上限，
   存量大文件登记基线**只许降**；挂在 CI 的 `check.sh` 与 `release-check.sh` 里。
+  文案目录（`i18n/{en,zh}.py`、`desktop/src/i18n/messages*.ts`）按**条目数**计量（上限同为 800），
+  不按行数——它们的行数只反映语言份数，不反映耦合；条目占比跌破 85% 即退回行数口径，
+  防止把逻辑塞进字典绕过上限。口径说明见 `docs/guide/i18n.md`。
   `crash.py` 的崩溃日志钩子在 CLI 启动接线（此前是死代码）。
 
 ## 一次请求的完整数据流

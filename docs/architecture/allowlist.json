@@ -1,21 +1,18 @@
 {
   "python": {
-    "zenagent/app/commands.py": 1000,
-    "zenagent/app/chat.py": 1000,
-    "zenagent/app/swarm/manager.py": 1000,
-    "zenagent/agent/session.py": 1000,
-    "zenagent/limits.py": 1000
+    "zenagent/app/commands.py": 885,
+    "zenagent/app/chat.py": 881,
+    "zenagent/app/swarm/manager.py": 911,
+    "zenagent/agent/session.py": 886,
+    "zenagent/limits.py": 963
   },
   "ts": {
     "desktop/src/state/appStore.ts": 1195,
     "desktop/src/dev/bridge.ts": 961,
     "desktop/e2e/app.spec.ts": 2750
   },
-  "zenagent/app/swarm/manager.py": 1000,
-  "zenagent/cli/rpc/server.py": 1000,
-  "zenagent/app/runtime.py": 1200,
   "_notes": {
-    "_readme": "Entries beyond the 800-line default cap. The +10 headroom entries must be paid back by 2026-12-31 (audit §6.4 follow-up plan: runtime assembly slice, swarm manager split, commands split, desktop store/spec splits).",
+    "_readme": "Entries beyond the 800-line default cap, each recorded at real size +10. Catalog files (message dictionaries) are measured in entries against an 800-entry cap instead, so they no longer appear here — see scripts/check_architecture.py. The entries below must be paid back by 2026-12-31 (audit §6.4 follow-up plan: runtime assembly slice, swarm manager split, commands split, desktop store/spec splits).",
     "python": {
       "zenagent/app/commands.py": "payback 2026-12-31",
       "zenagent/app/chat.py": "payback 2026-12-31 (goal hooks; split job/subagent views next)",

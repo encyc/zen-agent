@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { zh, en } from '../src/i18n/messages.ts'
+import { zh, en, translate } from '../src/i18n/messages.ts'
 import { localizeError } from '../src/i18n/errors.ts'
 
 test('the two dictionaries carry the same key set', () => {
@@ -10,6 +10,30 @@ test('the two dictionaries carry the same key set', () => {
 test('no dictionary value is empty', () => {
   for (const [key, value] of Object.entries(zh)) assert.ok(String(value).length > 0, `zh ${key}`)
   for (const [key, value] of Object.entries(en)) assert.ok(String(value).length > 0, `en ${key}`)
+})
+
+/** Placeholder names in a template, sorted — `{name}` → 'name'. */
+function fields(text: string): string {
+  return [...String(text).matchAll(/\{(\w+)\}/g)].map((m) => m[1]!).sort().join(',')
+}
+
+test('both locales carry the same placeholders for every key', () => {
+  // Parity of keys is not parity of templates: translate() leaves an unknown
+  // `{name}` on screen verbatim, so a zh string that renames a placeholder
+  // ships a literal brace to a user. The TUI catalog is pinned the same way
+  // (tests/test_i18n.py).
+  const mismatched = Object.keys(en).filter((key) => fields(en[key]!) !== fields(zh[key]!))
+  assert.deepEqual(
+    mismatched,
+    [],
+    mismatched.map((k) => `${k}: en={${fields(en[k]!)}} zh={${fields(zh[k]!)}}`).join('\n'),
+  )
+})
+
+test('translate interpolates and leaves an unknown placeholder visible', () => {
+  assert.equal(translate('zh', 'sidebar.projectGroup', { name: 'p' }), '项目 p')
+  // An unknown name must not silently blank the label — the brace is the signal.
+  assert.equal(translate('en', 'sidebar.projectGroup', {}), 'Project {name}')
 })
 
 test('localizeError prefers the code and interpolates params', () => {
