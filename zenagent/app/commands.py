@@ -11,6 +11,7 @@ from zenagent.agent.session import session_title
 from zenagent.app import clipboard
 from zenagent.app.appearance import THEME_CHOICES
 from zenagent.app.chat import ChatController
+from zenagent.app.goal_commands import run_goal_command
 from zenagent.app.links import extract_links, parse_index
 from zenagent.app.models import ModelManager
 from zenagent.app.modes import describe_modes
@@ -526,6 +527,14 @@ async def _restore(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(message=message)
 
 
+@_command("goal")
+async def _goal(services: AppServices, argument: str) -> CommandResult:
+    return CommandResult(message=run_goal_command(
+        argument, services.runtime.goal,
+        start_goal=services.chat.start_goal,
+        resume_goal=services.chat.maybe_continue_goal))
+
+
 @_command("todo")
 async def _todo(services: AppServices, argument: str) -> CommandResult:
     """Open the editable todo list (the model shares the same sidecar)."""
@@ -841,6 +850,7 @@ def build_default_commands(services: AppServices) -> CommandRegistry:
         _settings,
         _plan_review,
         _todo,
+        _goal,
         _memory,
         _undo,
         _restore,

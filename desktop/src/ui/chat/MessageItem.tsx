@@ -2,18 +2,36 @@
 
 import { useT } from '../../i18n/locale'
 import { TurnActions } from './TurnActions'
+import { goalObjective } from './goalView'
 import css from './MessageItem.module.css'
 
 export function UserMessage({
   text,
   steering = false,
+  goal = false,
   anchor,
 }: {
   text: string
   steering?: boolean
+  goal?: boolean
   anchor?: string
 }) {
   const t = useT()
+  if (goal) {
+    return (
+      <div
+        className={css.userRow}
+        data-turn-row
+        data-minimap-id={anchor}
+        data-minimap-kind="user"
+      >
+        <div className={css.goalRow} data-selectable>
+          <span className={css.goalChip}>◎ {t('goal.chip.label')}</span>
+          <span className={css.goalText}>{goalObjective(text)}</span>
+        </div>
+      </div>
+    )
+  }
   return (
     <div
       className={css.userRow}

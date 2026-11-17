@@ -221,6 +221,7 @@ class Sidebar(VerticalScroll):
         yield SidebarSection("session")
         yield SidebarSection("model")
         yield SidebarSection("runtime")
+        yield SidebarSection("goal")
         yield SidebarSection("context", on_row_click=lambda _key: self._context_clicked())
         yield SidebarSection("todo", on_row_click=lambda _key: self._todo_clicked())
         yield SidebarSection("subagent", on_row_click=self._subagent_clicked)
@@ -329,6 +330,51 @@ class Sidebar(VerticalScroll):
                 ("models", Text(tn("tui.sidebar.models", len(models.entries())), style=palette.MUTED)),
             ]
         )
+
+        goal = status.goal
+        if goal is None:
+            self._section("goal").set_rows([])
+        else:
+            goal_rows: list[tuple[str, Text | str]] = [
+                ("objective", Text(fit(goal.objective), style=palette.TEXT)),
+                (
+                    "status",
+                    Text(
+                        fit(t(f"tui.goal.status.{goal.status}")),
+                        style=palette.MUTED,
+                    ),
+                ),
+                (
+                    "budget",
+                    Text(
+                        fit(
+                            t(
+                                "tui.goal.budget",
+                                turns=goal.turns_used,
+                                max_turns=goal.max_turns,
+                                tokens=goal.tokens_used,
+                                max_tokens=goal.max_tokens,
+                            )
+                        ),
+                        style=palette.MUTED,
+                    ),
+                ),
+                (
+                    "last",
+                    Text(
+                        fit(
+                            f"{goal.last_verdict or '-'}: "
+                            f"{goal.last_reason or '-'}"
+                        ),
+                        style=palette.MUTED,
+                    ),
+                ),
+            ]
+            if goal.check:
+                goal_rows.insert(
+                    2, ("check", Text(fit(goal.check), style=palette.MUTED))
+                )
+            self._section("goal").set_rows(goal_rows)
 
         report = status.context
         if report is not None and report.slices:

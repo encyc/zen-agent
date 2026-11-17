@@ -3,6 +3,27 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+### Goal loop
+
+- **`/goal` keeps one session working toward a verifiable objective.** After each
+  clean turn an independent verifier decides whether the goal is met; if not and
+  the budget allows, the next turn starts automatically. `/goal pause`, `/goal
+  resume` and `/goal clear` control the lifecycle.
+- **Two verification paths.** A user-supplied `--check "<command>"` is the
+  authoritative check (exit 0 = met, bounded output, hard timeout); goals without
+  a check use an independent one-shot model verifier over a bounded transcript.
+- **Hard budgets and named stops.** `[limits.goal]` sets turn, wall-clock and
+  token budgets; token/wall overruns abort the live run, the turn limit gets one
+  wrap-up turn. No-progress, repeated identical check failures and repeated
+  verifier errors become `blocked`; the goal record survives resume/compaction.
+- **TUI and desktop surfaces.** A goal HUD/sidebar section in the TUI and a goal
+  chip/panel above the desktop composer show status, budget and last verdict.
+  Settings can pause the goal when leaving a session; the default keeps it active
+  so switching back resumes. Persisted `--check` goals restore paused after a
+  restart/import until `/goal resume` confirms the command.
+
 ## v0.13.10 — 2026-11-16
 
 **The Windows desktop build compiles again, and CI now proves it.** 0.13.9 fixed

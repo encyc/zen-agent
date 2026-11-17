@@ -31,6 +31,19 @@ def open_settings(app: App) -> None:
             return
         if choice == "sidebar":
             app.action_toggle_sidebar()
+        elif choice == "goal-pause":
+            from zenagent import settings
+
+            value = not bool(
+                settings.get_pref("goal_pause_on_session_switch", False)
+            )
+            settings.set_pref("goal_pause_on_session_switch", value)
+            state = t(
+                "tui.settings.goal_pause_on"
+                if value
+                else "tui.settings.goal_pause_off"
+            )
+            app.notify(t("tui.settings.goal_pause_set", state=state), timeout=3)
         elif choice == "thinking":
             app.action_cycle_thinking()
         elif choice == "theme":

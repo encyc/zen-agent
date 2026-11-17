@@ -165,6 +165,34 @@ class ConfigOps:
             }
         )
 
+    def _prefs(self, request: dict, request_id) -> None:
+        """Read or update the small allowlist of runtime preferences."""
+        from zenagent import settings
+
+        allowed = ("goal_pause_on_session_switch",)
+        if request.get("type") == "set_pref":
+            name = request.get("name")
+            if name not in allowed:
+                self._send(
+                    {
+                        "type": "error",
+                        "id": request_id,
+                        "message": f"unknown pref: {name}",
+                    }
+                )
+                return
+            settings.set_pref(str(name), bool(request.get("value")))
+        self._send(
+            {
+                "type": "result",
+                "id": request_id,
+                "ok": True,
+                "prefs": {
+                    name: bool(settings.get_pref(name, False)) for name in allowed
+                },
+            }
+        )
+
     # -- sessions and commands ---------------------------------------------
 
     async def _command(self, request: dict, request_id) -> bool:

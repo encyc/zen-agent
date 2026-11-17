@@ -29,6 +29,8 @@ from zenagent.agent.subagents import SubagentLimits
 from zenagent.app import plugin_wiring, skills_recompose, subagent_runs
 from zenagent.app.chat import ChatController
 from zenagent.app.commands import AppServices, CommandRegistry, build_default_commands
+from zenagent.app.goal import GoalLimits
+from zenagent.app.goal_verifier import CheckVerifier, ModelVerifier
 from zenagent.app.journal import attach_journal, journal_for, load_backup_policy
 from zenagent.app.metrics import MetricsSession
 from zenagent.app.models import ModelManager
@@ -278,6 +280,18 @@ async def assemble(
         )
         agent.subscribe(runtime.guard.on_event)
         runtime.agent = agent
+        runtime.goal.configure(
+            limits=GoalLimits.from_limits(runtime.limits),
+            verifier=ModelVerifier(
+                stream_fn=agent.stream_fn,
+                model=lambda: runtime.agent.model,
+                api_key=lambda: runtime.agent.api_key,
+                max_tokens=runtime.limits.goal_verifier_max_tokens,
+            ),
+            check_verifier=CheckVerifier(
+                runtime.limits.goal_check_timeout_s, cwd=runtime.cwd
+            ),
+        )
         runtime._subscribe_hooks()
         if options.trace:
             runtime.trace_path = str(options.trace)

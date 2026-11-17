@@ -8,7 +8,16 @@ must be read at render time, never snapshotted at import.
 from zenagent.app.appearance import APPEARANCES
 from zenagent.cli.tui import palette
 
-SECTIONS = ["session", "model", "runtime", "context", "todo", "subagent", "jobs"]
+SECTIONS = [
+    "session",
+    "model",
+    "runtime",
+    "goal",
+    "context",
+    "todo",
+    "subagent",
+    "jobs",
+]
 
 
 def test_bind_switches_palette_tokens():

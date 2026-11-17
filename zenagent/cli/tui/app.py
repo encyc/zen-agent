@@ -42,6 +42,7 @@ from zenagent.cli.tui.history import PromptHistory
 from zenagent.cli.tui.widgets.attachments import AttachmentChips
 from zenagent.cli.tui.widgets.command_hints import CommandHints
 from zenagent.cli.tui.widgets.error_banner import ErrorBanner
+from zenagent.cli.tui.widgets.goal_hud import GoalHud
 from zenagent.cli.tui.widgets.new_content import NewContentBar
 from zenagent.cli.tui.widgets.pending_band import PendingBand
 from zenagent.cli.tui.widgets.prompt_gutter import PromptGutter
@@ -350,6 +351,7 @@ class ZenAgentApp(
                     yield CommandHints()
                     yield AttachmentChips()
                     yield TodoHud()
+                    yield GoalHud()
                     yield WorkStrip()
                     yield StatusBand()
                     yield PendingBand()
@@ -381,6 +383,7 @@ class ZenAgentApp(
         for block in self._initial_images:
             self.chat.attach_image(block)
         self._refresh_status()
+        self.chat.on_frontend_ready()
         self.query_one(PromptInput).focus()
         self._start_update_check()
         # This mounted app is the interactive surface that answers ask calls.
@@ -416,6 +419,8 @@ class ZenAgentApp(
         # the row hides itself while the session has no list.
         for hud in self.query(TodoHud):
             hud.set_todos(status.todos)
+        for goal_hud in self.query(GoalHud):
+            goal_hud.set_goal(status.goal)
         parent = self.query_one("#transcript", TranscriptView)
         parent.sync(self.chat.transcript, status)
         if self._viewing is not None:

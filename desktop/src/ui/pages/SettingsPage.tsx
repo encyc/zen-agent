@@ -396,6 +396,36 @@ export function SettingsPage() {
 
   const [tab, setTab] = useState<Tab>('appearance')
   const [query, setQuery] = useState('')
+  const [goalPauseOnLeave, setGoalPauseOnLeave] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    void useAppStore
+      .getState()
+      .client()
+      .send({ type: 'prefs' })
+      .then((frame) => {
+        if (cancelled) return
+        const prefs = (frame as { prefs?: Record<string, unknown> }).prefs
+        setGoalPauseOnLeave(Boolean(prefs?.goal_pause_on_session_switch))
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  function changeGoalPause(value: boolean) {
+    setGoalPauseOnLeave(value)
+    void useAppStore
+      .getState()
+      .client()
+      .send({
+        type: 'set_pref',
+        name: 'goal_pause_on_session_switch',
+        value,
+      })
+  }
   // The palette previews follow the resolved side, so track the system half
   // of 'auto' here too.
   const [systemDark, setSystemDark] = useState(
@@ -710,6 +740,16 @@ export function SettingsPage() {
                     checked={enterToSend}
                     label={t('settings.enterToSend')}
                     onChange={setEnterToSend}
+                  />
+                </Row>
+                <Row
+                  title={t('settings.goalPauseOnLeave')}
+                  detail={t('settings.goalPauseOnLeaveHint')}
+                >
+                  <Switch
+                    checked={goalPauseOnLeave}
+                    label={t('settings.goalPauseOnLeave')}
+                    onChange={changeGoalPause}
                   />
                 </Row>
               </Card>

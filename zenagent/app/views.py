@@ -27,6 +27,7 @@ from zenagent.types import (
 )
 
 __all__ = [
+    "GoalView",
     "JobLogView",
     "JobStatusView",
     "JobView",
@@ -71,6 +72,8 @@ class MessageView:
     timestamp: int = 0
     #: True when the user message arrived through the steering channel.
     steering: bool = False
+    #: True when the message starts a goal continuation turn.
+    goal: bool = False
     #: Stable row identity inside one append-only session (``v{n}``); a
     #: rewrite/fork/compact starts a new id space.
     id: str = ""
@@ -81,7 +84,9 @@ class MessageView:
     duration_ms: int | None = None
 
 
-def user_view(text: str, *, timestamp: int = 0, steering: bool = False) -> MessageView:
+def user_view(
+    text: str, *, timestamp: int = 0, steering: bool = False, goal: bool = False
+) -> MessageView:
     """A user turn, or the compact view of an injected ``/skill:`` message."""
     display = parse_skill_display(text)
     if display is not None:
@@ -92,8 +97,11 @@ def user_view(text: str, *, timestamp: int = 0, steering: bool = False) -> Messa
             skill_body=display.body,
             timestamp=timestamp,
             steering=steering,
+            goal=goal,
         )
-    return MessageView(kind="user", text=text, timestamp=timestamp, steering=steering)
+    return MessageView(
+        kind="user", text=text, timestamp=timestamp, steering=steering, goal=goal
+    )
 
 
 @dataclass
@@ -145,6 +153,24 @@ class DividerView:
 
 #: One rendered transcript row: a message turn, a tool card or the divider.
 TranscriptView = MessageView | ToolCallView | DividerView
+
+
+@dataclass
+class GoalView:
+    """Read-only goal snapshot for status bars, sidebars and RPC clients."""
+
+    objective: str
+    status: str
+    check: str | None
+    turns_used: int
+    max_turns: int
+    tokens_used: int
+    max_tokens: int
+    wall_seconds: float
+    max_wall_seconds: int
+    last_verdict: str | None
+    last_reason: str
+    updated_at: int
 
 
 @dataclass
@@ -208,6 +234,8 @@ class RunStatus:
     active_subagent: str | None = None
     #: Context-window composition (measured total, estimated slices).
     context: ContextReport | None = None
+    #: Session goal snapshot; None when the session has no goal.
+    goal: GoalView | None = None
 
     def to_wire(self) -> dict:
         """The whole snapshot as JSON-ready data.
@@ -393,7 +421,12 @@ def messages_to_views(
             if text.startswith(LOOP_GUARD_PREFIX):
                 continue  # synthetic model-only corrective, not a user turn
             views.append(
-                user_view(text, timestamp=message.timestamp, steering=message.steering)
+                user_view(
+                    text,
+                    timestamp=message.timestamp,
+                    steering=message.steering,
+                    goal=message.goal,
+                )
             )
         elif isinstance(message, AssistantMessage):
             text = _text_of(message.content)
@@ -626,6 +659,7 @@ class TranscriptBuilder:
                     _user_text(message),
                     timestamp=message.timestamp,
                     steering=message.steering,
+                    goal=message.goal,
                 )
             )
         elif isinstance(message, AssistantMessage):

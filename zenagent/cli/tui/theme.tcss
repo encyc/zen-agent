@@ -114,6 +114,14 @@ Screen {
     width: 100%;
 }
 
+.goal-message {
+    background: $surface;
+    color: $muted;
+    padding: 0 1;
+    margin: 1 0 0 0;
+    width: 100%;
+}
+
 .assistant-message {
     margin: 0 0 1 0;
 }

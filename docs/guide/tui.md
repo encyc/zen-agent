@@ -5,9 +5,10 @@
 
 ## 布局
 
-单列结构，抄自 omp 的主屏：**转录区在上，底部一条 dock（todo HUD + 状态带 + 输入行）**。
+单列结构，抄自 omp 的主屏：**转录区在上，底部一条 dock（todo HUD + goal HUD + 状态带 + 输入行）**。
 dock 里 `TodoHud` 只有存在 todo 时显示一行（当前 phase / 当前任务 / closed/total），
-数据来自 `ChatController.todos`（启动时从 `<session>.todo.json` 恢复）。
+数据来自 `ChatController.todos`（启动时从 `<session>.todo.json` 恢复）；`GoalHud` 只有存在
+目标时显示一行（状态 / objective / 轮次 / token / 最近判定），数据来自 `RunStatus.goal`。
 没有底部状态栏，状态信息就是输入框上方那条填色带；屏幕最后一行就是输入行。
 
 ```
@@ -48,9 +49,12 @@ dock 里 `TodoHud` 只有存在 todo 时显示一行（当前 phase / 当前任�
 ## 工作面板（侧栏与浮层）
 
 `ctrl+b` 打开的信息侧栏是 TUI 独有的“正在发生什么”面板：`session` / `model` / `runtime` /
-`context` / `todo` / `subagent` / `jobs` 七段，行内容每秒从同一份 `RunStatus` 快照原地刷新。
+`goal` / `context` / `todo` / `subagent` / `jobs` 八段，行内容每秒从同一份 `RunStatus` 快照原地刷新。
 侧栏关着而后台还有活时，dock 会出现一条可点击的 `◐ N 个后台任务 · ctrl+b` 提示条。
 
+- **goal**：objective、状态、检查命令、轮次/token 预算和最近判定；有目标时才出现。
+  续跑由 `ChatController` 驱动，TUI 只读同一份 `RunStatus.goal`；`/goal pause|resume|clear`
+  控制生命周期。设置里的「Goal: pause when leaving session」决定切换 session 时是否暂停。
 - **todo**：侧栏只显示摘要，点击打开**只读**清单（命令面板里也有入口）；
   可编辑版本是 `/todo` 打开的浮层（见「浮层」一节）。
 - **subagent**：列出运行中/已完成的子代理；点击一行把主区域换成该子代理的**只读转录**，

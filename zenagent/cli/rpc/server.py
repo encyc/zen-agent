@@ -405,6 +405,8 @@ class RpcServer(FilesOps, SessionOps, PluginsOps, ConfigOps, SecretsOps, SkillsO
                     "protocol_version": PROTOCOL_VERSION,
                 }
             )
+            if self.chat is not None:
+                self.chat.on_frontend_ready()
             return True
         if kind == "prompt":
             text = request.get("text")
@@ -536,6 +538,9 @@ class RpcServer(FilesOps, SessionOps, PluginsOps, ConfigOps, SecretsOps, SkillsO
         if kind == "skills":
             await self._skills(request, request_id)
             return True
+        if kind in ("prefs", "set_pref"):
+            self._prefs(request, request_id)
+            return True
         if kind == "limits":
             # A refused write (bad value, hand-mangled file) is a normal,
             # reportable outcome — the server must survive it and so must the
@@ -608,6 +613,7 @@ class RpcServer(FilesOps, SessionOps, PluginsOps, ConfigOps, SecretsOps, SkillsO
             payload["active_subagent"] = status.active_subagent
             payload["subagent_cost"] = status.subagent_cost
             payload["subagent_tokens"] = status.subagent_tokens
+            payload["goal"] = asdict(status.goal) if status.goal else None
             # The complete snapshot (every RunStatus field, nested dataclasses
             # included) so a client never has to guess which keys were
             # remembered. The flat keys above stay for older clients.

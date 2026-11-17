@@ -1,0 +1,37 @@
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--ds-hairline);
+  border-radius: 10px;
+  background: var(--ds-surface-2);
+  color: var(--dsw-alias-label-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.chip:hover {
+  background: var(--ds-surface-3);
+  border-color: var(--ds-hairline-strong);
+}
+
+.icon {
+  flex: none;
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.label {
+  flex: none;
+  font-weight: 600;
+}
+
+.objective {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

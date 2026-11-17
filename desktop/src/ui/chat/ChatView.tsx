@@ -362,6 +362,7 @@ function TurnSeat({
         key={turn.user.id}
         text={turn.user.text}
         steering={turn.user.steering}
+        goal={turn.user.goal}
         anchor={turn.user.id}
       />,
     )

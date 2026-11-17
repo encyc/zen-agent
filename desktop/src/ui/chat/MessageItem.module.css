@@ -26,6 +26,29 @@
   border: 1px dashed var(--dsw-alias-state-business-primary);
 }
 
+.goalRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 2px 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsh-content-font-size, 14px);
+}
+
+.goalChip {
+  flex: none;
+  color: var(--dsw-alias-state-business-primary);
+  font-weight: 600;
+}
+
+.goalText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .steerChip {
   padding: 0 7px;
   border-radius: 999px;

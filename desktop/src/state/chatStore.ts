@@ -21,6 +21,8 @@ export interface UserNode {
   text: string
   /** Delivered through the steering channel. */
   steering: boolean
+  /** True when this row starts a goal continuation turn. */
+  goal?: boolean
   timestamp: number
 }
 
@@ -266,6 +268,7 @@ function viewToNode(
       id: view.id || nid(),
       text: view.text,
       steering: view.steering === true,
+      goal: view.goal === true,
       timestamp: view.timestamp ?? 0,
     }
   }
@@ -413,6 +416,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               id: nid(),
               text: event.message?.text ?? '',
               steering: event.message?.steering === true,
+              goal: event.message?.goal === true,
               timestamp: 0,
             })
           }

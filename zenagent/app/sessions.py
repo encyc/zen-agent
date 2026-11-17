@@ -246,7 +246,7 @@ class SessionManager:
         for message in messages:
             target._append_sync(message)
         for record in source_session.carry_records(
-            messages, keep=records.keep_for_rewrite()
+            messages, keep=records.keep_for_rewrite(keep_goal=False)
         ):
             target.append_meta(record)
         # Historical subagent transcripts follow the history they describe.

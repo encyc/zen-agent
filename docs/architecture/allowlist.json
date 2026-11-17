@@ -1,8 +1,10 @@
 {
   "python": {
     "zenagent/app/commands.py": 875,
+    "zenagent/app/chat.py": 871,
     "zenagent/app/swarm/manager.py": 896,
-    "zenagent/agent/session.py": 807
+    "zenagent/agent/session.py": 825,
+    "zenagent/limits.py": 867
   },
   "ts": {
     "desktop/src/state/appStore.ts": 1195,
@@ -16,8 +18,10 @@
     "_readme": "Entries beyond the 800-line default cap. The +10 headroom entries must be paid back by 2026-12-31 (audit §6.4 follow-up plan: runtime assembly slice, swarm manager split, commands split, desktop store/spec splits).",
     "python": {
       "zenagent/app/commands.py": "payback 2026-12-31",
+      "zenagent/app/chat.py": "payback 2026-12-31 (goal hooks; split job/subagent views next)",
       "zenagent/app/swarm/manager.py": "payback 2026-12-31 (§6.4: room/manager split)",
-      "zenagent/agent/session.py": "payback 2026-12-31 (title/pin sidecar split)"
+      "zenagent/agent/session.py": "payback 2026-12-31 (title/pin sidecar split)",
+      "zenagent/limits.py": "payback 2026-12-31 (goal knob registry split)"
     },
     "ts": {
       "desktop/e2e/app.spec.ts": "payback 2026-12-31 (split by flow)",

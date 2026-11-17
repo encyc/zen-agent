@@ -16,6 +16,8 @@ import type { FsIndexResult } from '../../rpc/types'
 import { useT } from '../../i18n/locale'
 import { ApprovalPanel } from '../approval/ApprovalPanel'
 import { AskCard } from '../ask/AskCard'
+import { GoalChip } from '../chat/GoalChip'
+import { GoalPanel } from '../chat/GoalPanel'
 import { pickImagePaths } from './pickImages'
 import { useImageDrop } from './useImageDrop'
 import { TodoDock, PendingDock, ContinuingDock, ContextMeter } from './Docks'
@@ -51,6 +53,7 @@ export function InputBar() {
   const mode = status?.mode ?? 'auto'
   const model = status?.model ?? ''
   const thinking = status?.thinking ?? null
+  const goal = status?.goal ?? null
 
   const draft = useComposerStore((state) => state.draft)
   const setDraft = useComposerStore((state) => state.setDraft)
@@ -65,6 +68,7 @@ export function InputBar() {
   const askCount = useAskStore((state) => state.queue.length)
 
   const [menu, setMenu] = useState<MenuState>({ kind: null })
+  const [goalOpen, setGoalOpen] = useState(false)
   const [slashIndex, setSlashIndex] = useState(0)
   const [cursor, setCursor] = useState(0)
   const [files, setFiles] = useState<IndexedPath[] | null>(null)
@@ -267,6 +271,14 @@ export function InputBar() {
       <PendingDock />
       <ContinuingDock />
       <TodoDock />
+      {goal !== null && (
+        <div className={css.goalDock}>
+          <GoalChip view={goal} onOpen={() => setGoalOpen((open) => !open)} />
+          {goalOpen && (
+            <GoalPanel view={goal} onClose={() => setGoalOpen(false)} />
+          )}
+        </div>
+      )}
       <ComposerPlate
         value={draft}
         boxes={boxes}
