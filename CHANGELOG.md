@@ -3,9 +3,48 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased
+## v0.13.13 — 2026-11-17
 
-### Added
+**The terminal catches up to the desktop.** `/settings` becomes the desktop page
+in the terminal — a full-screen tab strip, two aligned columns, and a dropdown
+on Enter instead of a silent cycle — and five inspector surfaces move behind the
+same command line: `/secrets`, `/plugins`, `/limits`, `/runs` and `/worktrees`,
+plus the goal panel behind the HUD. Alongside them a run now notices when it
+keeps re-reading evidence it already has, and the architecture gate stops
+charging message catalogs as if they were code.
+
+### TUI
+
+- **`/settings` is the desktop page, not a flat list.** A full-screen tab strip
+  (left/right switches instantly, no confirm step), two aligned columns of label
+  and live value, and the highlighted row's description above the footer. Values
+  are re-read on every render, so a toggle or a sub-picker's result shows
+  without reopening; a settings action changes in place.
+- **Enter on a value row opens a dropdown.** Every option is visible, the
+  current one dot-marked and pre-highlighted; up/down moves, Enter applies and
+  repaints the row, Escape cancels untouched. Theme, language, thinking, model,
+  search provider and goal pause all use it — the search provider used to be a
+  bottom palette that clobbered the page. Key-entry rows keep their pickers
+  (the page hides, then resumes); the sidebar stays a toggle.
+- **`/secrets` sets, clears and probes provider keys.** One row per provider
+  (model catalog and search chain), `s`/`x`/`t` for set, clear and test; probes
+  run in-process. The REPL gets the same command as a text listing.
+- **`/plugins` toggles and installs.** Installed plugins toggle with Enter, the
+  builtin catalog installs, uninstall goes through Confirm; every write
+  re-applies the live runtime and defers while a turn streams.
+- **`/limits` edits every budget knob.** The desktop page's rows with their
+  effective value, CLI-override markers, edit (empty = off) and per-knob reset;
+  the adopt contract is shared with the wire so the two cannot drift.
+- **`/runs` and `/worktrees` are the first run-ledger views in any frontend.**
+  `/runs` lists the project ledger newest-first with status marks, a
+  duration/cost column and a field-by-field detail dialog; `/worktrees` is
+  read-only and says plainly that switching means restarting with `--cwd`.
+- **The goal HUD opens the goal panel.** Objective, status, check, all three
+  budgets with what they spent, and the last verdict with its reason;
+  pause/resume/clear dispatch the existing `/goal` command, so the panel adds no
+  second mutation path.
+
+### Agent loop
 
 - **A run now notices when it keeps re-reading evidence it already has.** The
   tool-loop guard only catches byte-identical calls, so a model that re-asked
@@ -19,6 +58,51 @@ matches the release tag; older history is in the repository tags and commits.
   or denied call is not recorded, a write/edit clears that file's coverage, and
   `HEAD` or a branch is never treated as immutable. The note is model-facing
   only: never persisted, never rendered as a user turn.
+
+### Governance & tooling
+
+- **The line-count gate no longer charges message dictionaries as if they were
+  code.** The 800-line cap exists to stop god classes, but it was counting
+  `'key': 'value',` rows as if they carried coupling. `desktop/src/i18n/messages.ts`
+  reached 1123 lines and the allowlist was raised five times to keep it (one
+  commit called it a "pure data cap exception"; the gate has no such exception,
+  it was an allowlist entry, and the allowlist only shrinks). The same trap was
+  waiting for `zenagent/i18n/en.py`, which grows ~2.7 lines a day. A file that is
+  at least 85% `key: value` lines is now measured in **entries** against
+  `CATALOG_CAP = 800`; six files qualify, while the eight real god classes
+  (`limits.py` 953, `appStore.ts` 1195, `app.spec.ts` 2749 …) are still counted
+  in lines.
+- **The 85% ratio is the structural guard, not a floor picked by feel.** Above
+  it, a catalog's code lines stay under 18% of its length, so moving logic into
+  the dictionary drops the file out of catalog territory, back under the line
+  cap, and fails. Pinned by `test_logic_in_a_catalog_does_not_escape_the_line_cap`.
+- **Two debts in the allowlist ledger paid.** Three real paths had drifted to
+  the allowlist's top level, where the gate never read them — a cap nobody
+  enforces reads like a cap that is holding, so stray top-level keys are now a
+  violation rather than a shrug. And `67635a0` had raised all five python entries
+  to `1000` (real: 875–953) while adding an unrelated swarm gate, so the notes'
+  promised "+10 headroom" was really +47 to +129; re-baselined to real+10.
+- **The desktop catalog is pinned on placeholders, not just keys.**
+  `translate()` leaves an unknown `{name}` on screen verbatim, so a Chinese
+  string that renames a placeholder ships a literal brace to a user. The TUI
+  catalog has been checked for this since `d287087`; the desktop one was not.
+  All 749 keys currently agree, so this is a ratchet, not a repair.
+- **Two entries re-baselined for the TUI work.** `commands.py` grew to 910 with
+  the panel commands and is recorded at 920; `cli/tui/app.py` reached 812 with
+  the new surface launchers and joins the ledger at 822. Both are on the same
+  2026-12-31 payback plan.
+- `i18n/en.py` now has 213 keys of room instead of a projected deadline, and
+  `docs/guide/i18n.md` records why the two catalogs are shaped differently —
+  TUI one file per locale (the gettext `.po` shape), desktop one file per feature
+  surface (the Rails/i18next shape) — and why re-splitting the desktop one by
+  language would cost a dimension without saving a line.
+
+### Fixed
+
+- **A REPL command typed mid-stream no longer ends the session.** `/mcp` retry
+  and `/shake` rewrite state that refuses mid-run and were not in the deferred
+  set, so typing one during a live turn raised out of the REPL and ended the
+  session. Both now wait for the turn to settle like `/compact` and `/reload`.
 
 ## v0.13.12 — 2026-11-17
 
