@@ -189,12 +189,27 @@ export function handleFrame(frame: ServerFrame, handling: FrameHandling): void {
   // them as chat.
   if (applySwarmFrame(frame, handling.get().project)) return
   if (applyFleetFrame(frame)) return
+  routeReply(frame as Record<string, unknown>, handling)
+}
+
+/** Where one direct reply (a `send` answer, not a broadcast frame) lands:
+ * an open pane's store, the on-screen transcript, or — when the reply is for
+ * a session the person has already left — just the refreshes. The same rules
+ * the broadcast path applies. */
+export function routeReply(frame: Record<string, unknown>, handling: FrameHandling): void {
+  const tagged = frame as { session?: unknown }
+  const session =
+    typeof tagged.session === 'string' && tagged.session !== '' ? tagged.session : null
   if (sink !== null && sink.hasPane(session)) {
-    handlePaneFrame(frame, session)
+    handlePaneFrame(frame as ServerFrame, session)
     return
   }
-  if (!frameSessionBelongsTo(frame, useSessionStore.getState().currentPath)) return
-  handleResultFrame(frame as Record<string, unknown>, handling)
+  if (!frameSessionBelongsTo(frame, useSessionStore.getState().currentPath)) {
+    void handling.get().refreshStatus()
+    void handling.get().refreshSessions()
+    return
+  }
+  handleResultFrame(frame, handling)
 }
 
 /** Result and error frames addressed to an open pane: usage rows settle into

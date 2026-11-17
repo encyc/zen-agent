@@ -6,8 +6,8 @@
 import { startFailureOf, type StartFailure } from './startFailure.ts'
 import { create } from 'zustand'
 import { homeDir } from '@tauri-apps/api/path'
-import { TRANSCRIPT_PAGE_SIZE, olderPageCursor } from './transcriptWindow'
-import { RpcClient } from '../rpc/client'
+import { TRANSCRIPT_PAGE_SIZE, olderPageCursor } from './transcriptWindow.ts'
+import { RpcClient } from '../rpc/client.ts'
 import type {
   CompactionRecord,
   ErrorFrame,
@@ -17,7 +17,7 @@ import type {
   SecretProviderRow,
   SkillRow,
   StatusResult,
-} from '../rpc/types'
+} from '../rpc/types.ts'
 import {
   useApprovalStore,
   useAskStore,
@@ -33,14 +33,14 @@ import {
   useStatusStore,
   useWorkPanelStore,
   type WorkspaceMode,
-} from './stores'
-import { useChatStore } from './chatStore'
-import { stopFleet, switchWorkspaceMode, syncProjectState, zenTranscript } from './zenActions'
-import { registerSwarmSender } from './swarmWiring'
-import { nextDraft } from './pending'
-import { latestSessionForProject } from './latestSession'
-import { loadPrefs, replayFrames, savePref, spawnArgs } from './prefs'
-import { PaneCache } from './projectPanes'
+} from './stores.ts'
+import { useChatStore } from './chatStore.ts'
+import { stopFleet, switchWorkspaceMode, syncProjectState, zenTranscript } from './zenActions.ts'
+import { registerSwarmSender } from './swarmWiring.ts'
+import { nextDraft } from './pending.ts'
+import { latestSessionForProject } from './latestSession.ts'
+import { loadPrefs, replayFrames, savePref, spawnArgs } from './prefs.ts'
+import { PaneCache } from './projectPanes.ts'
 import {
   ensureFrameWiring,
   getPaneSink,
@@ -49,8 +49,8 @@ import {
   showFrameError,
   type FrameHandling,
 } from './frameRouter.ts'
-import { frameBelongsTo, frameSessionBelongsTo } from '../rpc/frames'
-import { reportRefreshFailure } from './refresh'
+import { frameBelongsTo, frameSessionBelongsTo } from '../rpc/frames.ts'
+import { reportRefreshFailure } from './refresh.ts'
 import { applyStatus } from './statusSnapshot.ts'
 
 export type ConnectionState = 'idle' | 'starting' | 'ready' | 'exited'
