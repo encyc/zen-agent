@@ -8,6 +8,7 @@ import asyncio
 import time
 
 import pytest
+from conftest import settled
 
 import zenagent.agent.session as session_module
 import zenagent.cli.repl as repl_module
@@ -213,13 +214,28 @@ async def test_missing_key_returns_one(monkeypatch):
 
 async def test_repl_prints_a_status_line_after_each_run(isolated_sessions):
     lines: list[str] = []
+    sent: list[str] = []
+    deadline = time.monotonic() + 10.0
+
+    async def input_fn() -> str:
+        if not sent:
+            sent.append("hi")
+            return "hi"
+        # /exit aborts the run it lands on, and a slow runner can still be
+        # persisting the first one -- wait for its status line instead.
+        if not settled(lines):
+            assert time.monotonic() < deadline, f"run never settled: {lines!r}"
+            await asyncio.sleep(0.01)
+            return ""
+        return "/exit"
+
     code = await repl(
         "glm-5.3",
         stream_fn=scripted_stream(0.0, "hello"),
-        input_fn=scripted_input("hi", "/exit", settle=0.02),
+        input_fn=input_fn,
         print_fn=lambda *a, **k: lines.append("".join(str(x) for x in a)),
         api_key="k",
-    mcp=False,
+        mcp=False,
     )
     assert code == 0
     assert any("msgs" in line and "ctx" in line for line in lines), lines
@@ -280,16 +296,12 @@ async def test_reload_discovers_skills_added_mid_session(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "zenagent.app.bootstrap.load_user_config", lambda *a, **k: UserConfig()
     )
-    monkeypatch.setattr(
-        "zenagent.app.bootstrap.load_user_config",
-        lambda *args, **kwargs: UserConfig(),
-    )
-    monkeypatch.setenv("HOME", str(tmp_path))  # don't discover the developer's global skills
-    monkeypatch.chdir(tmp_path)
     # Discovery also reads ~/.zenagent/skills: point HOME at the tmpdir so the
     # developer's own skill library cannot leak into the count below.
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
 
+    lines: list[str] = []
     calls = {"n": 0}
 
     async def input_fn() -> str:
@@ -306,22 +318,34 @@ async def test_reload_discovers_skills_added_mid_session(tmp_path, monkeypatch):
             return "/reload"
         return "/exit"
 
-    lines: list[str] = []
     code = await repl(
         "glm-5.3",
         stream_fn=scripted_stream(0.0, "hello"),
         input_fn=input_fn,
         print_fn=lambda *a, **k: lines.append("".join(str(x) for x in a)),
         api_key="k",
-    mcp=False,
+        mcp=False,
     )
     assert code == 0
     joined = "\n".join(lines)
     assert "reloaded:" in joined
     assert "1 skills" in joined
-    # the newly discovered skill also shows up in /skills
-    lines.clear()
-    calls["n"] = 0
+
+
+async def test_a_command_typed_mid_run_acts_on_the_finished_turn(isolated_sessions):
+    """/compact typed while the model streams waits, then compacts for real."""
+    lines: list[str] = []
+    code = await repl(
+        "glm-5.3",
+        stream_fn=scripted_stream(0.4, "slow answer", "summary of it"),
+        input_fn=scripted_input("hello", "/compact", "/exit", settle=0.02),
+        print_fn=lambda *a, **k: lines.append("".join(str(x) for x in a)),
+        api_key="k",
+        mcp=False,
+    )
+    assert code == 0
+    # Refusing mid-run would have said "nothing to compact" and dropped it.
+    assert any("compacted" in line for line in lines), lines
 
 
 # ---------------------------------------------------------------------------

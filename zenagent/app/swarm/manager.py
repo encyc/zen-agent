@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import fcntl
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -51,6 +50,7 @@ from zenagent.app.swarm.room import (
     _task_record,
     is_terminal,
     parse_mentions,
+    room_file_lock,
 )
 from zenagent.app.swarm.roster import (
     remove_role_dir,
@@ -184,7 +184,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
         path.parent.mkdir(parents=True, exist_ok=True)
         handle = path.open("w")
         try:
-            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            room_file_lock(handle.fileno())
         except OSError as exc:
             handle.close()
             raise SwarmLocked(
@@ -195,7 +195,7 @@ class SwarmManager(SwarmFrames, SwarmSchedule, SwarmApprovals, SwarmWorkflow):
     def _release_lock(self) -> None:
         if self._lock_handle is not None:
             with contextlib.suppress(OSError):
-                fcntl.flock(self._lock_handle, fcntl.LOCK_UN)
+                room_file_lock(self._lock_handle.fileno(), unlock=True)
             self._lock_handle.close()
             self._lock_handle = None
 

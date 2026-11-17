@@ -292,6 +292,7 @@ async def test_repl_compact_continues_in_the_same_session(isolated_sessions):
         api_key="k",
         input_fn=scripted_input("hi", "/compact", "next", "/exit"),
         print_fn=lines.append,
+        mcp=False,
     )
     assert code == 0
     files = list(isolated_sessions.glob("*.jsonl"))

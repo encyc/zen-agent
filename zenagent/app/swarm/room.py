@@ -9,6 +9,7 @@ the room.
 from __future__ import annotations
 
 import json
+import os
 import re
 import secrets
 import threading
@@ -18,6 +19,16 @@ from pathlib import Path
 
 from zenagent.agent.jsonl import append_line, dump_line, repair_tail
 
+try:  # POSIX
+    import fcntl
+except ImportError:  # pragma: no cover - Windows
+    fcntl = None  # type: ignore[assignment]
+
+try:  # Windows
+    import msvcrt
+except ImportError:  # pragma: no cover - POSIX
+    msvcrt = None  # type: ignore[assignment]
+
 __all__ = [
     "TERMINAL",
     "RoomMessage",
@@ -26,6 +37,7 @@ __all__ = [
     "TaskRecord",
     "is_terminal",
     "parse_mentions",
+    "room_file_lock",
 ]
 
 RECORD_VERSION = 1
@@ -36,6 +48,31 @@ TRANSITIONS = {
     "running": {"done", "failed", "cancelled"},
 }
 MENTION_RE = re.compile(r"(?<![\w@])@([a-z0-9][a-z0-9._-]*)")
+
+
+def room_file_lock(fd: int, *, unlock: bool = False) -> None:
+    """Take (or release) the room's one-writer lock on an open file.
+
+    ``flock`` on POSIX. Windows has no ``fcntl`` — the frozen sidecar imports
+    this module on startup — so it locks one byte through ``msvcrt`` instead,
+    the way :mod:`zenagent.app.session_lease` does. A raised ``OSError`` means
+    the lock is held; a platform with neither primitive refuses the room
+    rather than running it unlocked.
+    """
+    if fcntl is not None:
+        fcntl.flock(fd, fcntl.LOCK_UN if unlock else fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return
+    if msvcrt is not None:  # pragma: no cover - Windows
+        os.lseek(fd, 0, os.SEEK_SET)
+        if unlock:
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+            return
+        if os.fstat(fd).st_size == 0:
+            os.write(fd, b"\0")  # msvcrt locks a byte range, not a handle
+            os.lseek(fd, 0, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        return
+    raise OSError("no file-lock primitive on this platform")
 
 
 @dataclass

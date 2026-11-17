@@ -24,6 +24,7 @@ from rich.console import Console
 from zenagent.app.agent_profile import AgentProfile
 from zenagent.app.appearance import THEME_CHOICES
 from zenagent.app.bootstrap import prepare
+from zenagent.app.command_policy import DEFERRED_COMMANDS
 from zenagent.app.modes import describe_modes
 from zenagent.app.permissions import (
     render_approval_prompt,
@@ -760,6 +761,10 @@ async def repl(
                     prompt_text = skill_prompt
                     command = ""
             if command:
+                if chat.busy and command in DEFERRED_COMMANDS:
+                    # Typed while the model was streaming: run it against the
+                    # finished turn instead of refusing mid-run and losing it.
+                    await chat.wait_for_idle()
                 if await dispatch_slash(command, argument) == "exit":
                     chat.abort()
                     await chat.wait_for_idle()

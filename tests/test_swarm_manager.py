@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -1358,3 +1360,42 @@ async def test_a_failed_start_releases_the_flock(tmp_path):
     finally:
         fcntl.flock(probe, fcntl.LOCK_UN)
         probe.close()
+
+
+def test_import_chain_survives_a_missing_fcntl():
+    """Windows has no fcntl; the frozen sidecar imports this chain at startup.
+
+    The Windows desktop build died on an unguarded ``import fcntl`` inside the
+    swarm manager before its bootstrap ran, so the whole ``zen rpc`` import
+    chain must stay loadable without the POSIX module.
+    """
+    root = Path(__file__).resolve().parents[1]
+    code = (
+        "import sys\n"
+        "sys.modules['fcntl'] = None\n"
+        "import zenagent.app.swarm.room as room\n"
+        "assert room.fcntl is None\n"
+        "import zenagent.cli.rpc.host\n"
+        "print('ok')\n"
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", code],
+        check=False,
+        cwd=root,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip().endswith("ok")
+
+
+async def test_no_lock_primitive_refuses_the_room(tmp_path, monkeypatch):
+    """Neither flock nor msvcrt: refuse the room instead of running unlocked."""
+    from zenagent.app.swarm import room as room_module
+
+    monkeypatch.setattr(room_module, "fcntl", None)
+    monkeypatch.setattr(room_module, "msvcrt", None)
+    manager = SwarmManager(root=tmp_path, write_frame=lambda payload: None)
+
+    with pytest.raises(manager_module.SwarmLocked):
+        await manager.start()

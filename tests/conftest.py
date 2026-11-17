@@ -361,6 +361,19 @@ def sequenced_stream(texts: list[str]):
 
     return stream
 
+
+def settled(lines: list[str]) -> bool:
+    """True once the classic REPL printed its status line, i.e. no run is live.
+
+    The REPL keeps reading while a run streams, so a scripted reader that types
+    a slash command right after a prompt races the end of the turn -- and
+    ``/compact`` and ``/reload`` refuse mid-run by design. Returning ``""`` is
+    the REPL's documented no-op (it ``continue``s): the loop then reaps, and
+    this predicate says when the run really settled, so no command is lost.
+    """
+    return any("msgs" in line and "ctx" in line for line in lines)
+
+
 @pytest.fixture(autouse=True)
 def _reset_i18n_locale():
     """Keep the global locale deterministic across tests."""
