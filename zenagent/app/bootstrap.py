@@ -309,18 +309,17 @@ async def assemble(
         agent.subscribe(runtime._record_unpersisted)
 
         async def persist(event) -> None:
-            if event.type != "agent_end":
+            # Durable before side effects, the two dsh checkpoints: each
+            # message flushes at its own ``message_end`` — the assistant turn
+            # lands before its tool bodies run, a tool result before the next
+            # model request, the user turn before the first request.
+            # ``agent_end`` stays as the backstop: aborts and provider errors
+            # skip ``message_end``, and a failed mid-run flush keeps its tail
+            # pending (``_flush_unpersisted`` restores it) for this retry.
+            if event.type not in ("message_end", "agent_end"):
                 return
-            pending, runtime._unpersisted_messages = (
-                runtime._unpersisted_messages,
-                [],
-            )
-            for message in pending:
-                try:
-                    await runtime.session.append(message)
-                except OSError as exc:
-                    runtime.note_persist_failure(exc)
-            if runtime._metrics is not None:
+            await runtime._flush_unpersisted(runtime.session)
+            if event.type == "agent_end" and runtime._metrics is not None:
                 await asyncio.to_thread(runtime._metrics.flush, runtime.agent)
 
         agent.subscribe(persist)
