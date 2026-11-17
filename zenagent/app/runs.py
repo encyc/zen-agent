@@ -32,10 +32,10 @@ __all__ = [
     "RUN_STATUSES",
     "RunLedger",
     "RunRecord",
-    "duration_text",
     "clock_text",
-    "status_marks",
+    "duration_text",
     "status_for_termination",
+    "status_marks",
 ]
 
 _log = logging.getLogger(__name__)

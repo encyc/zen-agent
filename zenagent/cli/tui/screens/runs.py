@@ -18,7 +18,7 @@ from zenagent.app.runs import RunRecord, clock_text, duration_text, status_marks
 from zenagent.cli.tui.screens.dialogs import DialogScreen
 from zenagent.i18n import t
 
-__all__ = ["RunsScreen", "RunDetail"]
+__all__ = ["RunDetail", "RunsScreen"]
 
 
 class RunsScreen(DialogScreen[None]):
