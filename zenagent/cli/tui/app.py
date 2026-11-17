@@ -743,6 +743,22 @@ class ZenAgentApp(
 
         _open_limits_manager(self)
 
+    def open_runs_screen(self) -> None:
+        """``/runs``: the project's run ledger, read-only."""
+        from zenagent.cli.tui.screens.pickers import (
+            open_runs_screen as _open_runs_screen,
+        )
+
+        _open_runs_screen(self)
+
+    def open_worktrees_screen(self) -> None:
+        """``/worktrees``: the repository's worktree overview, read-only."""
+        from zenagent.cli.tui.screens.pickers import (
+            open_worktrees_screen as _open_worktrees_screen,
+        )
+
+        _open_worktrees_screen(self)
+
     def open_mode_picker(self) -> None:
         from zenagent.cli.tui.screens.pickers import (
             open_mode_picker as _open_mode_picker,

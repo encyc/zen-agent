@@ -42,6 +42,8 @@ class CommandsMixin:
         "secrets-manager": "open_secrets_manager",
         "plugins-manager": "open_plugins_manager",
         "limits-manager": "open_limits_manager",
+        "runs-screen": "open_runs_screen",
+        "worktrees-screen": "open_worktrees_screen",
     }
 
     #: Screens whose opener consumes ``result.target`` (the entry id to edit,

@@ -301,3 +301,23 @@ def open_limits_manager(app: App) -> None:
         lambda: LimitsManager(app.runtime),
         lambda _result: None,
     )
+
+
+def open_runs_screen(app: App) -> None:
+    from zenagent.cli.tui.screens.runs import RunsScreen
+
+    app.open_menu(
+        "runs-screen",
+        lambda: RunsScreen(app.runtime),
+        lambda _result: None,
+    )
+
+
+def open_worktrees_screen(app: App) -> None:
+    from zenagent.cli.tui.screens.worktrees import WorktreesScreen
+
+    app.open_menu(
+        "worktrees-screen",
+        lambda: WorktreesScreen(app.runtime),
+        lambda _result: None,
+    )

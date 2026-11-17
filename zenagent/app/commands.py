@@ -596,6 +596,18 @@ async def _limits(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(screen="limits-manager")
 
 
+@_command("runs")
+async def _runs(services: AppServices, argument: str) -> CommandResult:
+    """Show the project's run ledger (one record per agent run)."""
+    return CommandResult(screen="runs-screen")
+
+
+@_command("worktrees")
+async def _worktrees(services: AppServices, argument: str) -> CommandResult:
+    """Show the repository's git worktrees (switching needs a restart)."""
+    return CommandResult(screen="worktrees-screen")
+
+
 @_command("plan-review")
 async def _plan_review(services: AppServices, argument: str) -> CommandResult:
     """Review the plan the model produced in plan mode (approve → auto)."""
@@ -869,6 +881,8 @@ def build_default_commands(services: AppServices) -> CommandRegistry:
         _secrets,
         _plugins,
         _limits,
+        _runs,
+        _worktrees,
         _plan_review,
         _todo,
         _goal,

@@ -405,6 +405,68 @@ def _render_limits(services, print_fn: PrintFn) -> None:
     print_fn(t("repl.limits_footer", path=config_path()))
 
 
+def _render_runs(services, print_fn: PrintFn) -> None:
+    """The run ledger, newest first; the same rows the TUI panel shows."""
+    ledger = getattr(services.runtime, "run_ledger", None)
+    if ledger is None:
+        print_fn(t("tui.runs.empty"))
+        return
+    records = ledger.list(limit=100)
+    if not records:
+        print_fn(t("tui.runs.empty"))
+        return
+    from zenagent.app.runs import clock_text, duration_text, status_marks
+
+    for record in records:
+        print_fn(
+            t(
+                "tui.runs.row",
+                mark=status_marks.get(record.status, "?"),
+                clock=clock_text(record.started_at),
+                kind=record.kind,
+                label=record.label or record.agent_id or record.id,
+                status=record.status,
+                duration=duration_text(record.duration_ms),
+                cost=record.cost,
+            )
+        )
+    for warning in ledger.warnings:
+        print_fn(t("tui.runs.warning", warning=warning))
+
+
+def _render_worktrees(services, print_fn: PrintFn) -> None:
+    """The worktree overview; switching is a restart, so the text says so."""
+    from zenagent.app.workspace import worktree_overview
+
+    overview = worktree_overview(services.runtime.root)
+    if not overview["is_repo"]:
+        print_fn(t("tui.worktrees.not_repo", root=overview["root"]))
+        return
+    print_fn(
+        t(
+            "tui.worktrees.head",
+            branch=overview["branch"] or "—",
+            main=overview["main"],
+        )
+    )
+    for entry in overview["worktrees"]:
+        mark = "▸" if entry["current"] else " "
+        branch = entry["branch"] or (
+            f"({t('tui.worktrees.detached')} {entry['head'][:7]})"
+        )
+        note = " ·bare" if entry["bare"] else ""
+        print_fn(
+            t(
+                "tui.worktrees.row",
+                mark=mark,
+                branch=branch,
+                path=entry["path"],
+                note=note,
+            )
+        )
+    print_fn(t("tui.worktrees.switch_note"))
+
+
 def _memory_editor_flow(services, entry_id: str | None, title_prefill: str, print_fn: PrintFn) -> None:
     store = services.runtime.memory_store
     entry = store.read_entry(entry_id) if (store and entry_id) else None
@@ -513,6 +575,10 @@ def render_command_result(
         _render_plugins(services, print_fn)
     elif screen == "limits-manager":
         _render_limits(services, print_fn)
+    elif screen == "runs-screen":
+        _render_runs(services, print_fn)
+    elif screen == "worktrees-screen":
+        _render_worktrees(services, print_fn)
     elif screen == "memory-add":
         _memory_editor_flow(services, None, result.target or "", print_fn)
     elif screen == "memory-edit":

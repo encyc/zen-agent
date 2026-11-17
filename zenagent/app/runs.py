@@ -32,6 +32,9 @@ __all__ = [
     "RUN_STATUSES",
     "RunLedger",
     "RunRecord",
+    "duration_text",
+    "clock_text",
+    "status_marks",
     "status_for_termination",
 ]
 
@@ -43,6 +46,32 @@ RUN_KINDS = ("coding", "zen_router", "zen_worker", "swarm", "subagent")
 #: Terminal and in-flight states. ``aborted`` is a cooperative stop; a layer
 #: that knows the user cancelled (swarm) may record ``cancelled`` instead.
 RUN_STATUSES = ("running", "done", "failed", "aborted", "cancelled", "interrupted")
+
+#: One glyph per status, for every frontend that lists runs (TUI/REPL now,
+#: the desktop when it adopts the same rows). Presentation, not state.
+status_marks = {
+    "running": "●",
+    "done": "✓",
+    "failed": "✗",
+    "aborted": "−",
+    "cancelled": "−",
+    "interrupted": "−",
+}
+
+
+def clock_text(stamp: int | None) -> str:
+    """A short local timestamp for a ledger row."""
+    return time.strftime("%m-%d %H:%M", time.localtime(stamp)) if stamp else "—"
+
+
+def duration_text(ms: int | None) -> str:
+    """A compact duration for a ledger row."""
+    if ms is None:
+        return "—"
+    seconds = ms / 1000
+    if seconds >= 60:
+        return f"{seconds / 60:.1f}m"
+    return f"{seconds:.1f}s"
 
 #: Terminations the kernel treats as a normal finish.
 _DONE_TERMINATIONS = frozenset({"stop", "tool_terminate"})
