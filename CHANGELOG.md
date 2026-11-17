@@ -3,7 +3,14 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased
+## v0.13.11 — 2026-11-17
+
+**A session can now work toward a goal on its own.** `/goal` sets a verifiable
+objective; an independent check decides when it is met, and the next turn starts
+by itself until the goal completes, blocks, or hits a budget that can be
+switched off entirely with `0`. Two session-list fixes landed alongside it: the
+conversation being written stays visible in the sidebar, and a brand-new one is
+listed while it is still materializing.
 
 ### Goal loop
 
@@ -27,6 +34,20 @@ matches the release tag; older history is in the repository tags and commits.
   Settings can pause the goal when leaving a session; the default keeps it active
   so switching back resumes. Persisted `--check` goals restore paused after a
   restart/import until `/goal resume` confirms the command.
+
+### Fixed
+
+- **A session in the middle of a turn stays in the session list.** The transcript
+  is written at `agent_end`, so a live session had no message lines yet and the
+  listing hid it as a header-only leftover — the sidebar lost the conversation
+  for the whole turn, which a goal turn can stretch to minutes. A file that
+  recorded activity is now kept, and a running goal session takes its title from
+  the goal's objective until the first turn names it.
+- **A new conversation is listed before its first message.** The current session,
+  still lazy on disk, gets a placeholder row ("New session") so it can be found
+  and re-selected; the row is replaced when the real transcript lands.
+- **The Limits page explains the goal knobs.** The five `[limits.goal]` rows and
+  their group had no copy in either locale, so the page rendered raw i18n keys.
 
 ## v0.13.10 — 2026-11-16
 
