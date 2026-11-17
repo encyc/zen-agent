@@ -32,6 +32,28 @@ Five input classes the spec implies but individual tasks may not exercise — ea
 
 ---
 
+## Amendment (post-execution): Task 5 checkpoint redesigned
+
+The per-message `message_end` flush was **reverted during execution**: driving
+the flush inside the agent's event subscriber deadlocked the takeover/abort
+path (the pump blocked on a completed `to_thread` future under this 3.15b3
+runtime; A/B-proven 3x/3x by reverting only the subscriber). Commit
+`7d601d1`'s title ("persist each message at message_end") therefore does NOT
+describe shipped behavior. What shipped instead (`eb07d6b`):
+
+- `agent_end` flushes through `runtime._flush_unpersisted`, which restores a
+  failed drain's tail instead of dropping it (the old inline handler lost it).
+- A deferred tail lands at the next `agent_end` (order preserved) or at
+  `close()`.
+- `_switch_into` lands the tail in its own session's file before switching and
+  drops whatever still failed — never carries pending across a session.
+
+The dsh-style durable-before-side-effects checkpoint (assistant turn durable
+before tool bodies run) needs a loop-level pre-side-effect hook and stays a
+documented future design. Mid-run crash durability is unchanged from main.
+
+---
+
 ### Task 1: Semantic crash repair on resume
 
 **Files:**
