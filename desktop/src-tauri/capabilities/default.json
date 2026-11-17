@@ -1,12 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capability for the main window",
-  "windows": ["main"],
+  "description": "Default capability for the main shell and detached session windows",
+  "windows": ["main", "session-*"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
     "core:window:allow-show",
+    "core:webview:allow-create-webview-window",
     "dialog:allow-open",
     "updater:allow-check",
     "updater:allow-download-and-install"

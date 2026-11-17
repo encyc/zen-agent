@@ -89,6 +89,23 @@ export function windowBounds(): { x: number; y: number; width: number; height: n
   }
 }
 
+/** Other windows hear a detach and drop their matching pane (the main shell;
+ * detached windows hear it too and simply have no such pane). A missing
+ * event system (node tests, a bare browser) is a no-op unsubscribe. */
+export async function listenSessionDetached(
+  handler: (session: string) => void,
+): Promise<() => void> {
+  try {
+    const { listen } = await import('@tauri-apps/api/event')
+    const unlisten = await listen<{ session: string }>('zen:session-detached', (event) => {
+      handler(event.payload.session)
+    })
+    return unlisten
+  } catch {
+    return () => {}
+  }
+}
+
 export function detachedWindowUrl(session: string, project: string | null): string {
   const params = new URLSearchParams({ boot: 'session', session })
   if (project !== null && project !== '') params.set('project', project)

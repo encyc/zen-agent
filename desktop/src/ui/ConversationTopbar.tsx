@@ -13,6 +13,9 @@ import css from './ConversationTopbar.module.css'
 
 interface ConversationTopbarProps {
   collapsed: boolean
+  /** A detached session window has no sidebar: the expand seat would point
+   * at nothing, so it stays hidden. */
+  detached?: boolean
   onExpandSidebar(): void
 }
 
@@ -63,16 +66,18 @@ export function ConversationTopbar(props: ConversationTopbarProps) {
       <div className={css.left} data-tauri-drag-region>
         {/* Out of flow: the expanded sidebar paints its own collapse control,
             so this seat only appears while the sidebar is collapsed. */}
-        <div className={css.lead} aria-hidden={!props.collapsed}>
-          <button
-            type="button"
-            className={css.button}
-            onClick={props.onExpandSidebar}
-            aria-label={t('topbar.expandSidebar')}
-            tabIndex={props.collapsed ? undefined : -1}
-          >
-            <PanelLeftIcon size={15} />
-          </button>
+        <div className={css.lead} aria-hidden={!props.collapsed || props.detached}>
+          {!props.detached && (
+            <button
+              type="button"
+              className={css.button}
+              onClick={props.onExpandSidebar}
+              aria-label={t('topbar.expandSidebar')}
+              tabIndex={props.collapsed ? undefined : -1}
+            >
+              <PanelLeftIcon size={15} />
+            </button>
+          )}
         </div>
         <div className={css.titleWrap} data-tauri-drag-region>
           {current?.project ? (
