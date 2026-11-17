@@ -251,13 +251,22 @@ class SecretsManager(DialogScreen[None]):
         if not row.configured:
             self.notify(t("tui.secrets.not_set", env=row.env), timeout=3)
             return
+
+        def cleared(ok: bool | None) -> None:
+            if ok:
+                self._save(row, "")
+
         self.app.push_screen(
-            Confirm(t("tui.secrets.clear_confirm", env=row.env)),
-            lambda ok: ok and self._save(row, ""),
+            Confirm(t("tui.secrets.clear_confirm", env=row.env)), cleared
         )
 
     def _save(self, row: SecretRow, value: str) -> None:
-        recovered = self.app._apply_secret(row.env, value)
+        from typing import cast
+
+        from zenagent.cli.tui.app_parts.models import ModelsMixin
+
+        app = cast("ModelsMixin", self.app)
+        recovered = app._apply_secret(row.env, value)
         if value:
             self.notify(
                 t(

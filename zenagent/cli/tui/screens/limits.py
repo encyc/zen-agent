@@ -265,9 +265,13 @@ class LimitsManager(DialogScreen[None]):
         from zenagent.limits import KNOB_BY_KEY
 
         knob = KNOB_BY_KEY[row.key]
+
+        def reset(ok: bool | None) -> None:
+            if ok:
+                self._write(knob, None, reset=True)
+
         self.app.push_screen(
-            Confirm(t("tui.limits.reset_confirm", key=row.key)),
-            lambda ok: ok and self._write(knob, None, reset=True),
+            Confirm(t("tui.limits.reset_confirm", key=row.key)), reset
         )
 
     def _write(self, knob, value, *, reset: bool = False) -> None:

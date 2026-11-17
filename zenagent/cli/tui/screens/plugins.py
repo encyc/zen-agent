@@ -54,7 +54,7 @@ class PluginsManager(DialogScreen[None]):
     """Installed plugins + builtin catalog; enter toggles, i installs."""
 
     BINDINGS = [  # noqa: RUF012 - Textual class API
-        ("enter", "toggle", "Toggle"),
+        ("enter", "toggle_row", "Toggle"),
         ("i", "install", "Install"),
         ("x", "uninstall", "Uninstall"),
         ("escape", "close", "Close"),
@@ -222,9 +222,9 @@ class PluginsManager(DialogScreen[None]):
 
     @on(OptionList.OptionSelected)
     def _open_selected(self, _event: OptionList.OptionSelected) -> None:
-        self.action_toggle()
+        self.action_toggle_row()
 
-    def action_toggle(self) -> None:
+    def action_toggle_row(self) -> None:
         row = self._selected()
         if row is None or row.section != "installed":
             return
@@ -239,7 +239,7 @@ class PluginsManager(DialogScreen[None]):
         if row.enabled:
             self.notify(t("tui.plugins.already_installed", name=row.label), timeout=3)
             return
-        from zenagent.plugins.install import install_builtin
+        from zenagent.plugins.catalog import install_builtin
 
         self._write(
             row,
@@ -253,14 +253,17 @@ class PluginsManager(DialogScreen[None]):
             return
         from zenagent.plugins.install import uninstall_plugin
 
+        def uninstalled(ok: bool | None) -> None:
+            if ok:
+                self._write(
+                    row,
+                    lambda: uninstall_plugin(row.id),
+                    note=t("tui.plugins.uninstalled", name=row.label),
+                )
+
         self.app.push_screen(
             Confirm(t("tui.plugins.uninstall_confirm", name=row.label)),
-            lambda ok: ok
-            and self._write(
-                row,
-                lambda: uninstall_plugin(row.id),
-                note=t("tui.plugins.uninstalled", name=row.label),
-            ),
+            uninstalled,
         )
 
     def _write(self, row: PluginRow, mutate, note: str | None = None) -> None:

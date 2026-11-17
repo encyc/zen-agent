@@ -32,7 +32,7 @@ class GoalPanel(DialogScreen[None]):
     """Read the snapshot, act through the ``/goal`` command path."""
 
     BINDINGS = [  # noqa: RUF012 - Textual class API
-        ("p", "toggle", "Pause/Resume"),
+        ("p", "toggle_goal", "Pause/Resume"),
         ("c", "clear", "Clear"),
         ("escape", "close", "Close"),
     ]
@@ -88,7 +88,7 @@ class GoalPanel(DialogScreen[None]):
 
     # -- actions ------------------------------------------------------------
 
-    def action_toggle(self) -> None:
+    def action_toggle_goal(self) -> None:
         view = self._view()
         if view is None:
             return
@@ -100,10 +100,11 @@ class GoalPanel(DialogScreen[None]):
             return
         from zenagent.cli.tui.screens.modals import Confirm
 
-        self.app.push_screen(
-            Confirm(t("tui.goal.clear_confirm")),
-            lambda ok: ok and self._dispatch("clear"),
-        )
+        def clear(ok: bool | None) -> None:
+            if ok:
+                self._dispatch("clear")
+
+        self.app.push_screen(Confirm(t("tui.goal.clear_confirm")), clear)
 
     def _dispatch(self, argument: str) -> None:
         self.run_worker(self._run(argument))
