@@ -3,6 +3,23 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+### Added
+
+- **A run now notices when it keeps re-reading evidence it already has.** The
+  tool-loop guard only catches byte-identical calls, so a model that re-asked
+  the same question with different flags — the same page through `sed`, the
+  same grep, the same URL — could spend a dozen rounds without returning a byte
+  the run did not already have, and a checkpoint/rewind re-read paths its own
+  report had already summarized. Each run now keeps a coverage ledger of the
+  file ranges, search queries and URLs its successful reads returned; two
+  consecutive rounds whose every read is already covered inject one advisory
+  note naming the repeats. Polls, tests and edits request no evidence, a failed
+  or denied call is not recorded, a write/edit clears that file's coverage, and
+  `HEAD` or a branch is never treated as immutable. The note is model-facing
+  only: never persisted, never rendered as a user turn.
+
 ## v0.13.12 — 2026-11-17
 
 **A screenshot now reaches the model that asked for it.** Tool results from MCP
