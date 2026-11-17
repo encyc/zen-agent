@@ -287,6 +287,186 @@ def _render_memory_index(services, print_fn: PrintFn) -> None:
         print_fn(f"{entry.id}  {entry.title}  {entry.updated}")
 
 
+def _render_secrets(services, print_fn: PrintFn) -> None:
+    """Provider key listing: configured/missing per row, values never shown."""
+    from zenagent import settings
+    from zenagent.tools.web.providers import KEY_ENVS, LABELS
+
+    catalog = getattr(services.runtime, "catalog", None) or {}
+    current = getattr(getattr(services.runtime, "model", None), "provider", None)
+    rows: list[str] = []
+    for provider in sorted(catalog.values(), key=lambda item: item.name.lower()):
+        configured = settings.get_api_key(provider.api_key_env) is not None
+        marker = "●" if configured else " "
+        note = t("tui.secrets.current") if provider.id == current else ""
+        rows.append(
+            t(
+                "tui.secrets.row_model",
+                marker=marker,
+                name=provider.name,
+                env=provider.api_key_env,
+                status=(
+                    t("tui.secrets.key_set")
+                    if configured
+                    else t("tui.secrets.needs", env=provider.api_key_env)
+                ),
+                count=len(provider.models),
+                note=note,
+            )
+        )
+    for provider_id, env in KEY_ENVS.items():
+        configured = settings.get_api_key(env) is not None
+        rows.append(
+            t(
+                "tui.secrets.row_search",
+                marker="●" if configured else " ",
+                name=LABELS.get(provider_id, provider_id),
+                env=env,
+                status=(
+                    t("tui.secrets.key_set") if configured else t("tui.secrets.needs", env=env)
+                ),
+            )
+        )
+    if not rows:
+        print_fn(t("tui.secrets.empty"))
+        return
+    print_fn("\n".join(rows))
+    print_fn(t("repl.secrets_footer"))
+
+
+def _render_plugins(services, print_fn: PrintFn) -> None:
+    """Installed plugins with enable state, then the builtin catalog."""
+    from zenagent.plugins.catalog import builtin_catalog
+    from zenagent.plugins.discovery import discover_plugins
+    from zenagent.plugins.state import credentials_for, is_enabled
+
+    manifests, warnings = discover_plugins()
+    if warnings:
+        for warning in warnings:
+            print_fn(t("tui.plugins.warning", warning=warning))
+    if not manifests:
+        print_fn(t("repl.plugins_none"))
+    else:
+        for manifest in manifests:
+            enabled = is_enabled(manifest.id)
+            credentials = credentials_for(manifest.id)
+            missing = sum(
+                1 for spec in manifest.credentials if not credentials.get(spec.key)
+            )
+            marker = "●" if enabled else "○"
+            print_fn(
+                t(
+                    "repl.plugins_row",
+                    marker=marker,
+                    name=f"{manifest.name} v{manifest.version}",
+                    id=manifest.id,
+                )
+            )
+            if missing:
+                print_fn(t("tui.plugins.creds_missing", count=missing))
+    print_fn(t("repl.plugins_catalog_header"))
+    installed = {manifest.id for manifest in manifests}
+    for entry in builtin_catalog():
+        mark = t("tui.plugins.status_installed") if entry.id in installed else ""
+        print_fn(f"  {entry.name} — {entry.description} {mark}".rstrip())
+    print_fn(t("repl.plugins_footer"))
+
+
+def _render_limits(services, print_fn: PrintFn) -> None:
+    """The budget knobs with their effective values, grouped by table."""
+    from zenagent.app.limits_apply import overrides
+    from zenagent.config import config_path, load_user_config
+    from zenagent.limits import ALL_KNOBS, read_managed
+
+    explicit = {
+        f"{table}.{name}"
+        for table, rows in read_managed(config_path()).items()
+        for name in rows
+    }
+    knob_overrides = overrides(services.runtime) if services.runtime else {}
+    last_table = ""
+    for knob in ALL_KNOBS:
+        if knob.table != last_table:
+            last_table = knob.table
+            print_fn(t("repl.limits_group", table=knob.table))
+        config = getattr(services.runtime, "user_config", None)
+        if knob.table.startswith("limits"):
+            source = config if config is not None else load_user_config(config_path())
+            value = source.limits.value(knob.attr)
+        else:
+            value = getattr(load_user_config(config_path()), knob.attr)
+        if knob.attr in knob_overrides:
+            note = t("tui.limits.overridden", switch=knob_overrides[knob.attr])
+        elif knob.key in explicit:
+            note = ""
+        else:
+            note = t("repl.limits_default_note")
+        print_fn(f"  {knob.key} = {value}  {note}".rstrip())
+    print_fn(t("repl.limits_footer", path=config_path()))
+
+
+def _render_runs(services, print_fn: PrintFn) -> None:
+    """The run ledger, newest first; the same rows the TUI panel shows."""
+    ledger = getattr(services.runtime, "run_ledger", None)
+    if ledger is None:
+        print_fn(t("tui.runs.empty"))
+        return
+    records = ledger.list(limit=100)
+    if not records:
+        print_fn(t("tui.runs.empty"))
+        return
+    from zenagent.app.runs import clock_text, duration_text, status_marks
+
+    for record in records:
+        print_fn(
+            t(
+                "tui.runs.row",
+                mark=status_marks.get(record.status, "?"),
+                clock=clock_text(record.started_at),
+                kind=record.kind,
+                label=record.label or record.agent_id or record.id,
+                status=record.status,
+                duration=duration_text(record.duration_ms),
+                cost=record.cost,
+            )
+        )
+    for warning in ledger.warnings:
+        print_fn(t("tui.runs.warning", warning=warning))
+
+
+def _render_worktrees(services, print_fn: PrintFn) -> None:
+    """The worktree overview; switching is a restart, so the text says so."""
+    from zenagent.app.workspace import worktree_overview
+
+    overview = worktree_overview(services.runtime.root)
+    if not overview["is_repo"]:
+        print_fn(t("tui.worktrees.not_repo", root=overview["root"]))
+        return
+    print_fn(
+        t(
+            "tui.worktrees.head",
+            branch=overview["branch"] or "—",
+            main=overview["main"],
+        )
+    )
+    for entry in overview["worktrees"]:
+        mark = "▸" if entry["current"] else " "
+        branch = entry["branch"] or (
+            f"({t('tui.worktrees.detached')} {entry['head'][:7]})"
+        )
+        note = " ·bare" if entry["bare"] else ""
+        print_fn(
+            t(
+                "tui.worktrees.row",
+                mark=mark,
+                branch=branch,
+                path=entry["path"],
+                note=note,
+            )
+        )
+    print_fn(t("tui.worktrees.switch_note"))
+
+
 def _memory_editor_flow(services, entry_id: str | None, title_prefill: str, print_fn: PrintFn) -> None:
     store = services.runtime.memory_store
     entry = store.read_entry(entry_id) if (store and entry_id) else None
@@ -389,6 +569,16 @@ def render_command_result(
         _render_todo(services, print_fn)
     elif screen == "memory-manager":
         _render_memory_index(services, print_fn)
+    elif screen == "secrets-manager":
+        _render_secrets(services, print_fn)
+    elif screen == "plugins-manager":
+        _render_plugins(services, print_fn)
+    elif screen == "limits-manager":
+        _render_limits(services, print_fn)
+    elif screen == "runs-screen":
+        _render_runs(services, print_fn)
+    elif screen == "worktrees-screen":
+        _render_worktrees(services, print_fn)
     elif screen == "memory-add":
         _memory_editor_flow(services, None, result.target or "", print_fn)
     elif screen == "memory-edit":

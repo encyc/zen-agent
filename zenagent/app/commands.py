@@ -578,6 +578,36 @@ async def _settings(services: AppServices, argument: str) -> CommandResult:
     return CommandResult(screen="settings")
 
 
+@_command("secrets")
+async def _secrets(services: AppServices, argument: str) -> CommandResult:
+    """Manage provider API keys: set, clear, test (an env name preselects a row)."""
+    return CommandResult(screen="secrets-manager", target=argument.strip() or None)
+
+
+@_command("plugins")
+async def _plugins(services: AppServices, argument: str) -> CommandResult:
+    """Browse installed plugins and the builtin catalog (install, toggle)."""
+    return CommandResult(screen="plugins-manager")
+
+
+@_command("limits")
+async def _limits(services: AppServices, argument: str) -> CommandResult:
+    """Edit the budget knobs (turns, context, cost — the [limits] registry)."""
+    return CommandResult(screen="limits-manager")
+
+
+@_command("runs")
+async def _runs(services: AppServices, argument: str) -> CommandResult:
+    """Show the project's run ledger (one record per agent run)."""
+    return CommandResult(screen="runs-screen")
+
+
+@_command("worktrees")
+async def _worktrees(services: AppServices, argument: str) -> CommandResult:
+    """Show the repository's git worktrees (switching needs a restart)."""
+    return CommandResult(screen="worktrees-screen")
+
+
 @_command("plan-review")
 async def _plan_review(services: AppServices, argument: str) -> CommandResult:
     """Review the plan the model produced in plan mode (approve → auto)."""
@@ -848,6 +878,11 @@ def build_default_commands(services: AppServices) -> CommandRegistry:
         _fork,
         _import,
         _settings,
+        _secrets,
+        _plugins,
+        _limits,
+        _runs,
+        _worktrees,
         _plan_review,
         _todo,
         _goal,

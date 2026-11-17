@@ -366,6 +366,7 @@ class ZenAgentApp(
         self.command_hints = self.query_one(CommandHints)
         self.query_one(WorkStrip).set_handler(self._open_sidebar_from_strip)
         self.query_one(TodoHud).set_handler(self.action_show_todo_list)
+        self.query_one(GoalHud).set_handler(self.open_goal_panel)
         self.query_one(PendingBand).set_handler(self._promote_pending)
         self.query_one(Sidebar).set_handlers(
             on_todo=self.action_show_todo_list,
@@ -718,6 +719,54 @@ class ZenAgentApp(
     def open_memory_edit(self, target: str | None) -> None:
         """``/memory edit <id>``: the target is the entry id."""
         self.open_memory_editor(target)
+
+    def open_secrets_manager(self, target: str | None = None) -> None:
+        """``/secrets [env]``: the target preselects that provider's row."""
+        from zenagent.cli.tui.screens.pickers import (
+            open_secrets_manager as _open_secrets_manager,
+        )
+
+        _open_secrets_manager(self, target)
+
+    def open_plugins_manager(self) -> None:
+        """``/plugins``: installed plugins and the builtin catalog."""
+        from zenagent.cli.tui.screens.pickers import (
+            open_plugins_manager as _open_plugins_manager,
+        )
+
+        _open_plugins_manager(self)
+
+    def open_limits_manager(self) -> None:
+        """``/limits``: the budget knobs, editing the managed config tables."""
+        from zenagent.cli.tui.screens.pickers import (
+            open_limits_manager as _open_limits_manager,
+        )
+
+        _open_limits_manager(self)
+
+    def open_runs_screen(self) -> None:
+        """``/runs``: the project's run ledger, read-only."""
+        from zenagent.cli.tui.screens.pickers import (
+            open_runs_screen as _open_runs_screen,
+        )
+
+        _open_runs_screen(self)
+
+    def open_worktrees_screen(self) -> None:
+        """``/worktrees``: the repository's worktree overview, read-only."""
+        from zenagent.cli.tui.screens.pickers import (
+            open_worktrees_screen as _open_worktrees_screen,
+        )
+
+        _open_worktrees_screen(self)
+
+    def open_goal_panel(self) -> None:
+        """GoalHud click: the session goal's full fields and actions."""
+        from zenagent.cli.tui.screens.pickers import (
+            open_goal_panel as _open_goal_panel,
+        )
+
+        _open_goal_panel(self)
 
     def open_mode_picker(self) -> None:
         from zenagent.cli.tui.screens.pickers import (

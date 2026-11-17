@@ -6,99 +6,511 @@ import copy
 from typing import ClassVar
 
 from rich.text import Text
+from textual import on
 from textual.app import ComposeResult
 from textual.containers import Vertical, VerticalScroll
+from textual.screen import ModalScreen
 from textual.widgets import Input, OptionList, Static
 from textual.widgets.option_list import Option
 
+from zenagent.cli.tui import palette
 from zenagent.cli.tui.screens.dialogs import (
     DialogScreen,
 )
 from zenagent.cli.tui.screens.palette import PaletteItem, PaletteScreen
 from zenagent.i18n import t
 
+__all__ = ["HotkeysSheet", "SettingsPanel"]
 
-class SettingsPicker(PaletteScreen[str]):
-    """A small settings surface: only the knobs this build can actually change."""
 
-    def __init__(
-        self,
-        thinking: str | None,
-        model: str,
-        theme: str = "auto",
-        language: str = "auto",
-    ) -> None:
+class SettingsPanel(ModalScreen[None]):
+    """The settings dialog: a section rail on the left, the knobs on the right.
+
+    The desktop's settings page is a searchable rail plus one decision tile;
+    this is its terminal shape. Values are read live on every render, so a
+    flipped toggle or a sub-picker's result shows up without reopening.
+    Activation is the panel's own: simple values cycle in place, key rows
+    open their pickers (hiding this page until they close).
+    """
+
+    BINDINGS = [  # noqa: RUF012 - Textual class API
+        ("escape", "close", "Close"),
+        ("right", "next_section", "Next section"),
+        ("left", "previous_section", "Previous section"),
+    ]
+
+    #: The label column's width; values start aligned after it.
+    _LABEL_WIDTH: ClassVar[int] = 28
+
+    DEFAULT_CSS = """
+    SettingsPanel {
+        width: 100%;
+        height: 100%;
+        padding: 1 2;
+        background: $surface;
+    }
+
+    SettingsPanel #settings-title {
+        height: 1;
+        color: $accent;
+        text-style: bold;
+    }
+
+    SettingsPanel #settings-tabs {
+        height: 1;
+        margin: 0 0 1 0;
+    }
+
+    SettingsPanel #settings-items {
+        height: 1fr;
+        background: $surface;
+        border: none;
+        padding: 0;
+        scrollbar-size-vertical: 1;
+    }
+
+    SettingsPanel OptionList > .option-list--option-highlighted {
+        background: $line;
+        color: $foreground;
+    }
+
+    SettingsPanel #settings-desc {
+        height: 1;
+        margin: 1 0 0 0;
+        color: $dim;
+    }
+
+    SettingsPanel #settings-footer {
+        height: 1;
+        color: $dim;
+    }
+
+    SettingsPanel #settings-dropdown {
+        position: absolute;
+        display: none;
+        width: 60;
+        max-width: 90%;
+        height: auto;
+        max-height: 14;
+        padding: 0 1;
+        background: $surface;
+        border: round $line;
+    }
+
+    SettingsPanel #settings-dropdown-list {
+        height: auto;
+        max-height: 12;
+        background: $surface;
+        border: none;
+        padding: 0;
+        scrollbar-size-vertical: 1;
+    }
+
+    SettingsPanel #settings-dropdown-list > .option-list--option-highlighted {
+        background: $line;
+        color: $foreground;
+    }
+    """
+
+    #: Sections in display order; each entry is (value, label-i18n-key).
+    #: The item values are the dispatch vocabulary every frontend shares.
+    SECTIONS: ClassVar[list[tuple[str, str, tuple[tuple[str, str], ...]]]] = [
+        (
+            "appearance",
+            "tui.settings.section_appearance",
+            (("theme", "tui.settings.theme"), ("language", "tui.settings.language")),
+        ),
+        (
+            "model",
+            "tui.settings.section_model",
+            (
+                ("model", "tui.settings.switch_model"),
+                ("thinking", "tui.settings.thinking"),
+                ("model-keys", "tui.settings.model_keys"),
+            ),
+        ),
+        (
+            "search",
+            "tui.settings.section_search",
+            (
+                ("search-provider", "tui.settings.search_provider"),
+                ("search-keys", "tui.settings.search_keys"),
+            ),
+        ),
+        (
+            "session",
+            "tui.settings.section_session",
+            (
+                ("goal-pause", "tui.settings.goal_pause"),
+                ("sidebar", "tui.settings.sidebar"),
+                ("clear", "tui.settings.clear"),
+                ("export", "tui.settings.export"),
+            ),
+        ),
+    ]
+
+    def __init__(self, app) -> None:
+        super().__init__()
+        self._app = app
+        self._section_index = 0
+        #: The row currently edited through the dropdown, if any.
+        self._dropdown_row: str | None = None
+        #: The composed tab line / description; tests read these instead of
+        #: Static internals (Textual 8 exposes no renderable accessor).
+        self._tabs_line: Text = Text()
+        self._description: str = ""
+
+    # -- data ---------------------------------------------------------------
+
+    def _live_note(self, value: str) -> str:
+        """The current value a row shows; read on every render."""
         from zenagent import settings as settings_module
-        from zenagent.cli.tui.screens.palette import PaletteItem
+
+        if value == "model":
+            return self._app.models.current()
+        if value == "thinking":
+            return (
+                getattr(self._app.runtime.agent, "thinking", None)
+                or t("tui.settings.off")
+            )
+        if value == "theme":
+            return self._app._theme_spec
+        if value == "language":
+            return self._app._language_spec
+        if value == "goal-pause":
+            return t(
+                "tui.settings.goal_pause_on"
+                if settings_module.get_pref("goal_pause_on_session_switch", False)
+                else "tui.settings.goal_pause_off"
+            )
+        if value == "sidebar":
+            return "ctrl+b"
+        if value == "search-provider":
+            return t("tui.settings.default_engine")
+        if value == "search-keys":
+            return t("tui.settings.search_keys_note")
+        if value == "model-keys":
+            return t("tui.settings.paste_key")
+        return ""
+
+    def items_for(self, section_value: str) -> list[PaletteItem]:
+        """The rows of one section, with live notes."""
+        section = next(s for s in self.SECTIONS if s[0] == section_value)
+        return [
+            PaletteItem(
+                label=t(label_key),
+                value=value,
+                note=self._live_note(value),
+                enabled=True,
+            )
+            for value, label_key in section[2]
+        ]
+
+    @property
+    def items(self) -> list[PaletteItem]:
+        """Every row across sections, in display order (tests, hints)."""
+        rows: list[PaletteItem] = []
+        for section_value, _, _ in self.SECTIONS:
+            rows.extend(self.items_for(section_value))
+        return rows
+
+    # -- layout -------------------------------------------------------------
+
+    def compose(self) -> ComposeResult:
+        yield Static(t("tui.picker.settings"), id="settings-title")
+        yield Static(id="settings-tabs")
+        yield OptionList(id="settings-items")
+        yield Static("", id="settings-desc")
+        yield Static(self._footer_text(), id="settings-footer")
+        with Vertical(id="settings-dropdown"):
+            yield OptionList(id="settings-dropdown-list")
+
+    def on_mount(self) -> None:
+        self._show_section(0)
+        self.query_one("#settings-items", OptionList).focus()
+
+    def _tabs_text(self) -> Text:
+        """One rich line of tabs; the selected one is inverted like omp's."""
+        line = Text()
+        for index, (_, title_key, _) in enumerate(self.SECTIONS):
+            title = t(title_key)
+            if index == self._section_index:
+                line.append(f" {title} ", style=palette.ACCENT + " bold")
+            else:
+                line.append(f" {title} ", style=palette.DIM)
+            line.append("  ", style=palette.DIM)
+        return line
+
+    def _footer_text(self) -> str:
+        from zenagent import settings as settings_module
 
         described = settings_module.describe()
-        status = t(
-            "tui.settings.file_status",
-            n=len(described["keys"]),
-            path=described["path"],
-        )
         if described["problem"]:
             status = t("tui.settings.file_problem", problem=described["problem"])
-        pause_on_leave = bool(
-            settings_module.get_pref("goal_pause_on_session_switch", False)
-        )
-        items = [
-            PaletteItem(
-                label=t("tui.settings.switch_model"), value="model", note=model
-            ),
-            PaletteItem(
-                label=t("tui.settings.theme"), value="theme", note=theme
-            ),
-            PaletteItem(
-                label=t("tui.settings.language"), value="language", note=language
-            ),
-            PaletteItem(
-                label=t("tui.settings.file"),
-                value="noop",
-                note=status,
-                enabled=False,
-            ),
-            PaletteItem(
-                label=t("tui.settings.model_keys"),
-                value="model-keys",
-                note=t("tui.settings.paste_key"),
-            ),
-            PaletteItem(
-                label=t("tui.settings.search_provider"),
-                value="search-provider",
-                note=t("tui.settings.default_engine"),
-            ),
-            PaletteItem(
-                label=t("tui.settings.search_keys"),
-                value="search-keys",
-                note=t("tui.settings.search_keys_note"),
-            ),
-            PaletteItem(
-                label=t("tui.settings.thinking"),
-                value="thinking",
-                note=thinking or t("tui.settings.off"),
-            ),
-            PaletteItem(
-                label=t("tui.settings.goal_pause"),
-                value="goal-pause",
-                note=t(
-                    "tui.settings.goal_pause_on"
-                    if pause_on_leave
-                    else "tui.settings.goal_pause_off"
-                ),
-            ),
-            PaletteItem(
-                label=t("tui.settings.sidebar"), value="sidebar", note="ctrl+b"
-            ),
-            PaletteItem(label=t("tui.settings.clear"), value="clear"),
-            PaletteItem(label=t("tui.settings.export"), value="export"),
-        ]
-        super().__init__(
-            title=t("tui.picker.settings"),
-            items=items,
-            placeholder=t("tui.picker.settings_search"),
+        else:
+            status = t(
+                "tui.settings.file_status",
+                n=len(described["keys"]),
+                path=described["path"],
+            )
+        return f"{status} · {t('tui.settings.panel_hint')}"
+
+    def _row_text(self, item: PaletteItem) -> Text:
+        """Label and value as two aligned columns, like the desktop page."""
+        from zenagent.cli.tui.textutil import clip_cells
+
+        line = Text()
+        line.append(f"{clip_cells(item.label, self._LABEL_WIDTH):<{self._LABEL_WIDTH}}")
+        line.append(item.note or "", style=palette.TEXT)
+        return line
+
+    def _show_section(self, index: int) -> None:
+        self._section_index = index
+        self._tabs_line = self._tabs_text()
+        self.query_one("#settings-tabs", Static).update(self._tabs_line)
+        items = self.query_one("#settings-items", OptionList)
+        items.clear_options()
+        section_value = self.SECTIONS[index][0]
+        for item in self.items_for(section_value):
+            items.add_option(Option(self._row_text(item)))
+        if items.option_count:
+            items.highlighted = 0
+        self._update_description()
+
+    def _update_description(self) -> None:
+        """The highlighted row's description, the line above the footer."""
+        section_value = self.SECTIONS[self._section_index][0]
+        rows = self.items_for(section_value)
+        items = self.query_one("#settings-items", OptionList)
+        index = items.highlighted
+        description = ""
+        if index is not None and 0 <= index < len(rows):
+            description = t(f"tui.settings.desc.{rows[index].value}")
+            if description.startswith("tui.settings.desc."):
+                description = ""  # no description key for this row
+        self._description = description
+        self.query_one("#settings-desc", Static).update(description)
+
+    # -- navigation ---------------------------------------------------------
+
+    @on(OptionList.OptionHighlighted, "#settings-items")
+    def _highlight_changed(self, _event) -> None:
+        self._update_description()
+
+    @on(OptionList.OptionSelected, "#settings-items")
+    def _item_selected(self, _event: OptionList.OptionSelected) -> None:
+        self._activate_highlighted()
+
+    def action_next_section(self) -> None:
+        """Right/`l`: the next tab, wrapping; the list follows instantly."""
+        self._show_section((self._section_index + 1) % len(self.SECTIONS))
+
+    def action_previous_section(self) -> None:
+        """Left/`h`: the previous tab, wrapping; the list follows instantly."""
+        self._show_section(
+            (self._section_index - 1) % len(self.SECTIONS)
         )
 
+    def _activate_highlighted(self) -> None:
+        section_value = self.SECTIONS[self._section_index][0]
+        rows = self.items_for(section_value)
+        items = self.query_one("#settings-items", OptionList)
+        index = items.highlighted
+        if index is None or not 0 <= index < len(rows):
+            return
+        self.run_worker(self._activate(rows[index].value))
+
+    #: Rows that edit through the dropdown; ``Enter`` shows every option with
+    #: the current one marked, ↑/↓ moves, ``Enter`` applies, ``Esc`` cancels.
+    _CHOICE_ROWS: ClassVar[frozenset[str]] = frozenset(
+        {"theme", "language", "thinking", "model", "search-provider", "goal-pause"}
+    )
+
+    #: Rows whose editor is a bottom-anchored palette. The page hides while
+    #: one is up: a bottom palette over an opaque full-screen page reads as a
+    #: broken blank screen otherwise. ``on_screen_resume`` restores the page.
+    _OVERLAY_ACTIONS: ClassVar[frozenset[str]] = frozenset(
+        {"model-keys", "search-keys"}
+    )
+
+    def _current_value(self, row_value: str) -> object:
+        from zenagent import settings as settings_module
+
+        if row_value == "theme":
+            return self._app._theme_spec
+        if row_value == "language":
+            return self._app._language_spec
+        if row_value == "thinking":
+            return (
+                getattr(self._app.runtime.agent, "thinking", None) or "off"
+            )
+        if row_value == "model":
+            return self._app.models.current()
+        if row_value == "search-provider":
+            return settings_module.get_pref("search_provider", None) or "auto"
+        if row_value == "goal-pause":
+            return (
+                "on"
+                if settings_module.get_pref("goal_pause_on_session_switch", False)
+                else "off"
+            )
+        return None
+
+    def _options_for(self, row_value: str) -> list[tuple[str, str, object]]:
+        """ ``(label, note, token)`` rows for the dropdown."""
+        from zenagent.tools.web.providers import PROVIDERS, available_providers
+
+        if row_value == "theme":
+            return [(c, "", c) for c in ("auto", "dark", "light")]
+        if row_value == "language":
+            return [(c, "", c) for c in ("auto", "en", "zh")]
+        if row_value == "thinking":
+            from zenagent.app.commands import THINKING_LEVELS
+
+            return [(c, "", c) for c in THINKING_LEVELS]
+        if row_value == "model":
+            return [
+                (entry.id, entry.reason or "", entry.id)
+                for entry in self._app.models.entries()
+                if entry.available
+            ]
+        if row_value == "search-provider":
+            availability = {name: (ok, reason) for name, ok, reason in available_providers()}
+            rows: list[tuple[str, str, object]] = [
+                ("auto", t("tui.secrets.chain_note"), "auto")
+            ]
+            for name in PROVIDERS:
+                ok, reason = availability.get(name, (True, ""))
+                rows.append((name, "" if ok else reason, name))
+            return rows
+        if row_value == "goal-pause":
+            return [
+                (t("tui.settings.goal_pause_on"), "", "on"),
+                (t("tui.settings.goal_pause_off"), "", "off"),
+            ]
+        return []
+
+    async def _apply_choice(self, row_value: str, token: object) -> None:
+        """Write one chosen value through the same setter the commands use."""
+        from zenagent import settings as settings_module
+
+        app = self._app
+        if row_value == "theme":
+            applied = app.set_appearance(str(token))
+            app.notify(t("tui.app.theme_set", value=applied), timeout=3)
+        elif row_value == "language":
+            applied = app.set_language(str(token))
+            app.notify(t("tui.app.language_set", value=applied), timeout=3)
+        elif row_value == "thinking":
+            app.runtime.agent.thinking = None if token == "off" else str(token)
+            app.notify(t("cmdmsg.thinking_set", level=str(token)), timeout=3)
+        elif row_value == "model":
+            app._apply_model(str(token))
+        elif row_value == "search-provider":
+            settings_module.set_pref(
+                "search_provider", None if token == "auto" else str(token)
+            )
+            app.notify(
+                t("tui.app.search_provider_set", name=str(token)), timeout=3
+            )
+            app._refresh_status()
+        elif row_value == "goal-pause":
+            on = token == "on"
+            settings_module.set_pref("goal_pause_on_session_switch", on)
+            state = t(
+                "tui.settings.goal_pause_on" if on else "tui.settings.goal_pause_off"
+            )
+            app.notify(t("tui.settings.goal_pause_set", state=state), timeout=3)
+
+    # -- dropdown -----------------------------------------------------------
+
+    def _open_dropdown(self, row_value: str) -> None:
+        rows = self._options_for(row_value)
+        if not rows:
+            return
+        current = self._current_value(row_value)
+        dropdown = self.query_one("#settings-dropdown", Vertical)
+        dropdown_list = self.query_one("#settings-dropdown-list", OptionList)
+        dropdown_list.clear_options()
+        current_index = 0
+        for index, (label, note, token) in enumerate(rows):
+            mark = "●" if token == current else " "
+            line = Text()
+            line.append(f"{mark} ", style=palette.DIM)
+            line.append(label, style=palette.TEXT)
+            if note:
+                line.append(f"  {note}", style=palette.DIM)
+            dropdown_list.add_option(Option(line))
+            if token == current:
+                current_index = index
+        # Anchor under the edited row, clamped so the list never runs off
+        # the bottom of the page.
+        items = self.query_one("#settings-items", OptionList)
+        row = items.highlighted or 0
+        y = 5 + row + 1
+        max_y = max(4, self.size.height - len(rows) - 5)
+        dropdown.styles.offset = (0, min(y, max_y))
+        dropdown_list.highlighted = current_index
+        dropdown.display = True
+        dropdown_list.focus()
+
+    def _close_dropdown(self, *, repaint: bool = True) -> None:
+        self._dropdown_row = None
+        self.query_one("#settings-dropdown", Vertical).display = False
+        self.query_one("#settings-items", OptionList).focus()
+        if repaint:
+            self._show_section(self._section_index)
+
+    @on(OptionList.OptionSelected, "#settings-dropdown-list")
+    def _dropdown_selected(self, event: OptionList.OptionSelected) -> None:
+        row_value = self._dropdown_row
+        index = event.option_index
+        if row_value is None or index is None:
+            return
+        rows = self._options_for(row_value)
+        if not 0 <= index < len(rows):
+            return
+        self._close_dropdown(repaint=False)
+        self.run_worker(self._apply_choice(row_value, rows[index][2]))
+        self._show_section(self._section_index)
+
+    def _cancel_dropdown(self) -> None:
+        self._close_dropdown(repaint=False)
+
+    # -- activation ---------------------------------------------------------
+
+    async def _activate(self, value: str) -> None:
+        app = self._app
+        if value in self._OVERLAY_ACTIONS:
+            self.display = False
+            if value == "model-keys":
+                app.open_model_keys()
+            else:
+                app.open_search_keys()
+            return
+        if value in self._CHOICE_ROWS:
+            self._dropdown_row = value
+            self._open_dropdown(value)
+            return
+        if value == "sidebar":
+            app.action_toggle_sidebar()
+        elif value in ("clear", "export"):
+            await app._dispatch_command(value, "")
+        self._show_section(self._section_index)
+
+    def on_screen_resume(self, event) -> None:
+        """A sub-picker closed above us: show the page again, values fresh."""
+        if not self.display:
+            self.display = True
+            self._show_section(self._section_index)
+
+    def action_close(self) -> None:
+        if self._dropdown_row is not None and self.query_one(
+            "#settings-dropdown", Vertical
+        ).display:
+            self._cancel_dropdown()
+            return
+        self.dismiss(None)
 
 
 class HotkeysSheet(DialogScreen[None]):

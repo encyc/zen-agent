@@ -63,19 +63,25 @@ def test_goal_message_renders_compactly():
     assert "Continue" not in block.plain
 
 
-def test_settings_has_goal_pause_row():
-    from zenagent.cli.tui.screens.editors import SettingsPicker
+async def test_settings_has_goal_pause_row(fake_runtime):
+    from zenagent.cli.tui.app import ZenAgentApp
+    from zenagent.cli.tui.screens.editors import SettingsPanel
 
     settings.set_pref("goal_pause_on_session_switch", True)
-    picker = SettingsPicker("off", "m", "auto", "auto")
-    row = next(item for item in picker.items if item.value == "goal-pause")
-    assert row.note == t("tui.settings.goal_pause_on")
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)):
+        panel = SettingsPanel(app)
+        row = next(item for item in panel.items if item.value == "goal-pause")
+        assert row.note == t("tui.settings.goal_pause_on")
 
 
-def test_settings_goal_pause_row_reads_off():
-    from zenagent.cli.tui.screens.editors import SettingsPicker
+async def test_settings_goal_pause_row_reads_off(fake_runtime):
+    from zenagent.cli.tui.app import ZenAgentApp
+    from zenagent.cli.tui.screens.editors import SettingsPanel
 
     settings.set_pref("goal_pause_on_session_switch", False)
-    picker = SettingsPicker("off", "m", "auto", "auto")
-    row = next(item for item in picker.items if item.value == "goal-pause")
-    assert row.note == t("tui.settings.goal_pause_off")
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)):
+        panel = SettingsPanel(app)
+        row = next(item for item in panel.items if item.value == "goal-pause")
+        assert row.note == t("tui.settings.goal_pause_off")

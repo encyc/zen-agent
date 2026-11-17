@@ -127,14 +127,14 @@ async def test_every_registered_command_is_reachable_from_the_hint_list(fake_run
 
 
 async def test_settings_palette_opens(fake_runtime):
-    from zenagent.cli.tui.screens.modals import SettingsPicker
+    from zenagent.cli.tui.screens.modals import SettingsPanel
 
     app = ZenAgentApp(fake_runtime)
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         await app._dispatch_command("settings", "")
         await pilot.pause()
-        assert isinstance(app.screen, SettingsPicker)
+        assert isinstance(app.screen, SettingsPanel)
 
 
 async def test_ctrl_t_expands_and_collapses_thinking(runtime_factory):

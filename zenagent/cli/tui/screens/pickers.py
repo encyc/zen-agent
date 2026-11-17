@@ -18,7 +18,7 @@ from zenagent.cli.tui.screens.modals import (
     McpAdd,
     PlanReview,
     SessionPicker,
-    SettingsPicker,
+    SettingsPanel,
     TodoEditor,
     UsageDashboard,
 )
@@ -26,49 +26,11 @@ from zenagent.i18n import t
 
 
 def open_settings(app: App) -> None:
-    async def selected(choice: str | None) -> None:
-        if not choice:
-            return
-        if choice == "sidebar":
-            app.action_toggle_sidebar()
-        elif choice == "goal-pause":
-            from zenagent import settings
-
-            value = not bool(
-                settings.get_pref("goal_pause_on_session_switch", False)
-            )
-            settings.set_pref("goal_pause_on_session_switch", value)
-            state = t(
-                "tui.settings.goal_pause_on"
-                if value
-                else "tui.settings.goal_pause_off"
-            )
-            app.notify(t("tui.settings.goal_pause_set", state=state), timeout=3)
-        elif choice == "thinking":
-            app.action_cycle_thinking()
-        elif choice == "theme":
-            app.open_theme_picker()
-        elif choice == "language":
-            app.open_language_picker()
-        elif choice == "model-keys":
-            app.open_model_keys()
-        elif choice == "search-keys":
-            app.open_search_keys()
-        elif choice == "search-provider":
-            app.open_search_provider()
-        else:
-            await app._dispatch_command(choice, "")
-
-    status = app.chat.status
+    """The full-screen settings page; actions live on the panel itself."""
     app.open_menu(
         "settings",
-        lambda: SettingsPicker(
-            status.thinking,
-            status.model_id,
-            app._theme_spec,
-            app._language_spec,
-        ),
-        selected,
+        lambda: SettingsPanel(app),
+        lambda _result: None,
     )
 
 
@@ -270,4 +232,64 @@ def open_memory_editor(
         "memory-editor",
         lambda: MemoryEditor(store, entry, title_prefill=title_prefill),
         saved,
+    )
+
+
+def open_secrets_manager(app: App, preselect: str | None = None) -> None:
+    from zenagent.cli.tui.screens.secrets_manager import SecretsManager
+
+    app.open_menu(
+        "secrets-manager",
+        lambda: SecretsManager(app.runtime, preselect=preselect or ""),
+        lambda _result: None,
+    )
+
+
+def open_plugins_manager(app: App) -> None:
+    from zenagent.cli.tui.screens.plugins import PluginsManager
+
+    app.open_menu(
+        "plugins-manager",
+        lambda: PluginsManager(app.runtime),
+        lambda _result: None,
+    )
+
+
+def open_limits_manager(app: App) -> None:
+    from zenagent.cli.tui.screens.limits import LimitsManager
+
+    app.open_menu(
+        "limits-manager",
+        lambda: LimitsManager(app.runtime),
+        lambda _result: None,
+    )
+
+
+def open_runs_screen(app: App) -> None:
+    from zenagent.cli.tui.screens.runs import RunsScreen
+
+    app.open_menu(
+        "runs-screen",
+        lambda: RunsScreen(app.runtime),
+        lambda _result: None,
+    )
+
+
+def open_worktrees_screen(app: App) -> None:
+    from zenagent.cli.tui.screens.worktrees import WorktreesScreen
+
+    app.open_menu(
+        "worktrees-screen",
+        lambda: WorktreesScreen(app.runtime),
+        lambda _result: None,
+    )
+
+
+def open_goal_panel(app: App) -> None:
+    from zenagent.cli.tui.screens.goal import GoalPanel
+
+    app.open_menu(
+        "goal-panel",
+        lambda: GoalPanel(app),
+        lambda _result: None,
     )
