@@ -27,9 +27,12 @@ from zenagent.providers.transport import iter_sse_data
 from zenagent.types import (
     AssistantMessage,
     Cost,
+    ImageContent,
     SystemMessage,
     TextContent,
     ThinkingContent,
+    ToolCall,
+    ToolResultMessage,
     Usage,
     UserMessage,
 )
@@ -497,6 +500,93 @@ async def test_stream_drops_turns_no_provider_accepts(monkeypatch):
         {"role": "user", "content": "first"},
         {"role": "user", "content": "second"},
         {"role": "user", "content": "third"},
+    ]
+
+
+async def test_stream_moves_tool_result_images_for_a_vision_model(monkeypatch):
+    """``stream`` must pass the model's vision flag into the wire projection.
+
+    ``role: "tool"`` carries a string only, so a screenshot from an MCP tool
+    would otherwise vanish between the adapter and the model.
+    """
+    fixture = (FIXTURES / "zai-glm-5.3-text+thinking.txt").read_text(encoding="utf-8")
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["json"] = json.loads(request.content)
+        return httpx.Response(200, content=fixture.encode())
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    monkeypatch.setattr(oc, "get_shared_async_client", lambda: client)
+
+    model = Model(
+        id="deepseek-flash",
+        provider="deepseek",
+        api="openai-completions",
+        base_url="https://api.deepseek.test/v1",
+        context_window=1_000_000,
+        max_tokens=100,
+        reasoning=True,
+        cost=Cost(),
+        compat=CompatFlags(thinking_format="deepseek"),
+        supports_vision=True,
+    )
+    messages = [
+        UserMessage(content="what does the page look like?", timestamp=1),
+        AssistantMessage(
+            content=[ToolCall(id="call_1", name="screenshot", arguments={})],
+            provider="deepseek",
+            model="deepseek-flash",
+            usage=Usage(),
+            stop_reason="tool_use",
+            timestamp=2,
+        ),
+        ToolResultMessage(
+            tool_call_id="call_1",
+            tool_name="screenshot",
+            content=[
+                TextContent(text="viewport 160x120"),
+                ImageContent(data="aGVsbG8=", mime_type="image/png"),
+            ],
+            is_error=False,
+            timestamp=3,
+        ),
+    ]
+    events = [
+        event
+        async for event in stream(
+            model, messages, [], StreamOptions(api_key="sk-test")
+        )
+    ]
+
+    assert events[-1].type == "done"
+    assert captured["json"]["messages"] == [
+        {"role": "user", "content": "what does the page look like?"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "screenshot", "arguments": "{}"},
+                }
+            ],
+        },
+        {"role": "tool", "tool_call_id": "call_1", "content": "viewport 160x120"},
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Image returned by tool screenshot (call call_1):",
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "data:image/png;base64,aGVsbG8="},
+                },
+            ],
+        },
     ]
 
 

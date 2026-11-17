@@ -100,7 +100,7 @@ def test_system_and_string_user_map_verbatim():
         SystemMessage(content="You are a coding agent.", timestamp=1),
         UserMessage(content="hello", timestamp=2),
     ]
-    assert to_request_messages(messages, ZAI) == [
+    assert to_request_messages(messages, ZAI, supports_vision=False) == [
         {"role": "system", "content": "You are a coding agent."},
         {"role": "user", "content": "hello"},
     ]
@@ -114,7 +114,7 @@ def test_user_blocks_map_to_openai_content_parts():
         ],
         timestamp=1,
     )
-    assert to_request_messages([message], ZAI) == [
+    assert to_request_messages([message], ZAI, supports_vision=True) == [
         {
             "role": "user",
             "content": [
@@ -122,6 +122,28 @@ def test_user_blocks_map_to_openai_content_parts():
                 {
                     "type": "image_url",
                     "image_url": {"url": "data:image/png;base64,aGVsbG8="},
+                },
+            ],
+        }
+    ]
+
+
+def test_user_images_become_a_placeholder_without_vision():
+    message = UserMessage(
+        content=[
+            TextContent(text="what is in this?"),
+            ImageContent(data="aGVsbG8=", mime_type="image/png"),
+        ],
+        timestamp=1,
+    )
+    assert to_request_messages([message], ZAI, supports_vision=False) == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "what is in this?"},
+                {
+                    "type": "text",
+                    "text": "(image omitted: model does not support images)",
                 },
             ],
         }
@@ -137,7 +159,7 @@ def test_assistant_multi_block_joins_text_and_builds_tool_calls():
             ToolCall(id="call_1", name="get_weather", arguments={"city": "SF"}),
         ]
     )
-    assert to_request_messages([message], ZAI) == [
+    assert to_request_messages([message], ZAI, supports_vision=False) == [
         {
             "role": "assistant",
             "content": "Let me check.\nOne moment.",
@@ -162,23 +184,23 @@ def test_assistant_reasoning_content_backfilled_only_for_deepseek():
             ToolCall(id="call_1", name="get_weather", arguments={"city": "SF"}),
         ]
     )
-    deepseek = to_request_messages([message], DEEPSEEK)[0]
+    deepseek = to_request_messages([message], DEEPSEEK, supports_vision=False)[0]
     assert deepseek["reasoning_content"] == "the user asked about SF"
-    zai = to_request_messages([message], ZAI)[0]
+    zai = to_request_messages([message], ZAI, supports_vision=False)[0]
     assert "reasoning_content" not in zai
 
 
 def test_assistant_text_only_has_no_tool_calls_or_reasoning_content():
     message = _assistant([TextContent(text="done")])
     for compat in (ZAI, DEEPSEEK):
-        assert to_request_messages([message], compat) == [
+        assert to_request_messages([message], compat, supports_vision=False) == [
             {"role": "assistant", "content": "done"}
         ]
 
 
 def test_assistant_tool_call_only_content_is_none():
     message = _assistant([ToolCall(id="call_1", name="get_weather", arguments={})])
-    request = to_request_messages([message], DEEPSEEK)[0]
+    request = to_request_messages([message], DEEPSEEK, supports_vision=False)[0]
     assert request["content"] is None
     assert request["tool_calls"][0]["function"]["arguments"] == "{}"
 
@@ -186,7 +208,7 @@ def test_assistant_tool_call_only_content_is_none():
 def test_assistant_thinking_only_sends_empty_content_not_null():
     """DeepSeek rejects ``content: null`` without tool_calls (400)."""
     message = _assistant([ThinkingContent(thinking="pondering")])
-    request = to_request_messages([message], DEEPSEEK)[0]
+    request = to_request_messages([message], DEEPSEEK, supports_vision=False)[0]
     assert request == {
         "role": "assistant",
         "content": "",
@@ -195,7 +217,7 @@ def test_assistant_thinking_only_sends_empty_content_not_null():
 
 
 def test_assistant_without_blocks_sends_empty_content_not_null():
-    request = to_request_messages([_assistant([])], ZAI)[0]
+    request = to_request_messages([_assistant([])], ZAI, supports_vision=False)[0]
     assert request == {"role": "assistant", "content": ""}
 
 
@@ -210,11 +232,32 @@ def test_tool_call_with_arguments_error_serializes_empty_json():
             )
         ]
     )
-    request = to_request_messages([message], ZAI)[0]
+    request = to_request_messages([message], ZAI, supports_vision=False)[0]
     assert request["tool_calls"][0]["function"]["arguments"] == "{}"
 
 
-def test_tool_result_maps_to_tool_role_with_joined_text():
+def test_tool_result_text_only_maps_to_tool_role():
+    message = ToolResultMessage(
+        tool_call_id="call_1",
+        tool_name="get_weather",
+        content=[
+            TextContent(text="72F and sunny"),
+            TextContent(text="wind 5mph"),
+        ],
+        is_error=False,
+        timestamp=1,
+    )
+    assert to_request_messages([message], ZAI, supports_vision=False) == [
+        {
+            "role": "tool",
+            "tool_call_id": "call_1",
+            "content": "72F and sunny\nwind 5mph",
+        }
+    ]
+
+
+def test_tool_result_images_become_a_placeholder_without_vision():
+    """A text-only model is told the image exists instead of silently losing it."""
     message = ToolResultMessage(
         tool_call_id="call_1",
         tool_name="get_weather",
@@ -226,13 +269,151 @@ def test_tool_result_maps_to_tool_role_with_joined_text():
         is_error=False,
         timestamp=1,
     )
-    assert to_request_messages([message], ZAI) == [
+    assert to_request_messages([message], ZAI, supports_vision=False) == [
         {
             "role": "tool",
             "tool_call_id": "call_1",
-            "content": "72F and sunny\nwind 5mph",
+            "content": (
+                "72F and sunny\n"
+                "(tool image omitted: model does not support images)\n"
+                "wind 5mph"
+            ),
         }
     ]
+
+
+def test_tool_result_image_rides_in_a_user_turn_for_vision_models():
+    """OpenAI tool messages are text-only, so the image follows as a user turn."""
+    message = ToolResultMessage(
+        tool_call_id="call_1",
+        tool_name="get_weather",
+        content=[
+            TextContent(text="72F and sunny"),
+            ImageContent(data="aGVsbG8=", mime_type="image/png"),
+        ],
+        is_error=False,
+        timestamp=1,
+    )
+    assert to_request_messages([message], DEEPSEEK, supports_vision=True) == [
+        {
+            "role": "tool",
+            "tool_call_id": "call_1",
+            "content": "72F and sunny",
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Image returned by tool get_weather (call call_1):",
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "data:image/png;base64,aGVsbG8="},
+                },
+            ],
+        },
+    ]
+
+
+def test_image_only_tool_result_says_the_image_is_attached():
+    message = ToolResultMessage(
+        tool_call_id="call_1",
+        tool_name="screenshot",
+        content=[ImageContent(data="aGVsbG8=", mime_type="image/png")],
+        is_error=False,
+        timestamp=1,
+    )
+    assert to_request_messages([message], DEEPSEEK, supports_vision=True) == [
+        {"role": "tool", "tool_call_id": "call_1", "content": "(see attached image)"},
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Image returned by tool screenshot (call call_1):",
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "data:image/png;base64,aGVsbG8="},
+                },
+            ],
+        },
+    ]
+
+
+def test_parallel_tool_result_images_share_one_following_user_turn():
+    """A user turn between two tool messages would break the tool-call batch."""
+    results = [
+        ToolResultMessage(
+            tool_call_id="call_1",
+            tool_name="screenshot",
+            content=[ImageContent(data="aW1nMQ==", mime_type="image/png")],
+            is_error=False,
+            timestamp=2,
+        ),
+        ToolResultMessage(
+            tool_call_id="call_2",
+            tool_name="read_page",
+            content=[TextContent(text="all clear")],
+            is_error=False,
+            timestamp=3,
+        ),
+        ToolResultMessage(
+            tool_call_id="call_3",
+            tool_name="crop",
+            content=[
+                ImageContent(data="aW1nMg==", mime_type="image/jpeg"),
+                ImageContent(data="aW1nMw==", mime_type="image/jpeg"),
+            ],
+            is_error=False,
+            timestamp=4,
+        ),
+    ]
+    assert to_request_messages(results, DEEPSEEK, supports_vision=True) == [
+        {"role": "tool", "tool_call_id": "call_1", "content": "(see attached image)"},
+        {"role": "tool", "tool_call_id": "call_2", "content": "all clear"},
+        {"role": "tool", "tool_call_id": "call_3", "content": "(see attached image)"},
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Image returned by tool screenshot (call call_1):",
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "data:image/png;base64,aW1nMQ=="},
+                },
+                {
+                    "type": "text",
+                    "text": "2 images returned by tool crop (call call_3):",
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "data:image/jpeg;base64,aW1nMg=="},
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "data:image/jpeg;base64,aW1nMw=="},
+                },
+            ],
+        },
+    ]
+
+
+def test_empty_and_whitespace_tool_output_gets_a_placeholder():
+    for text in ("", "\r\n", " \n\t"):
+        message = ToolResultMessage(
+            tool_call_id="call_1",
+            tool_name="bash",
+            content=[TextContent(text=text)],
+            is_error=False,
+            timestamp=1,
+        )
+        assert to_request_messages([message], ZAI, supports_vision=False) == [
+            {"role": "tool", "tool_call_id": "call_1", "content": "(no tool output)"}
+        ]
 
 
 # ---------------------------------------------------------------- build_params

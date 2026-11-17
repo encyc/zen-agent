@@ -8,6 +8,7 @@ Request side: ``contents`` with user/model roles, ``systemInstruction`` and
 from __future__ import annotations
 
 import json
+import re
 import time
 from collections.abc import AsyncIterator
 
@@ -15,7 +16,11 @@ import httpx
 
 from zenagent.events import AbortToken, AssistantEvent
 from zenagent.providers.catalog import Model
-from zenagent.providers.history import replayable
+from zenagent.providers.history import (
+    downgrade_unsupported_images,
+    replayable,
+    tool_image_caption,
+)
 from zenagent.providers.limits import fit_stream_options
 from zenagent.providers.stream_options import StreamOptions
 from zenagent.providers.transport import (
@@ -41,6 +46,11 @@ __all__ = ["build_request", "stream", "to_contents"]
 _STOP_REASONS = {"STOP": "stop", "MAX_TOKENS": "length", "SAFETY": "stop", "OTHER": "stop"}
 
 
+def _image_part(block: ImageContent) -> dict:
+    """One Gemini inline image part."""
+    return {"inlineData": {"mimeType": block.mime_type, "data": block.data}}
+
+
 def _user_parts(content) -> list[dict]:
     if isinstance(content, str):
         return [{"text": content}]
@@ -49,14 +59,40 @@ def _user_parts(content) -> list[dict]:
         if isinstance(block, TextContent):
             parts.append({"text": block.text})
         elif isinstance(block, ImageContent):
-            parts.append(
-                {"inlineData": {"mimeType": block.mime_type, "data": block.data}}
-            )
+            parts.append(_image_part(block))
     return parts
 
 
-def to_contents(messages: list[Message]) -> tuple[str, list[dict]]:
-    """Split the transcript into a system instruction and ``contents`` turns."""
+_GEMINI_VERSION = re.compile(r"^gemini(?:-live)?-(\d+)")
+
+
+def _supports_multimodal_function_response(model_id: str) -> bool:
+    """Whether images may be nested inside ``functionResponse.parts``.
+
+    Gemini 3+ accepts multimodal function responses; Gemini 2.x and older need
+    the image in a separate user turn. Mirrors pi-ai's rule, including its
+    default for ids that do not name a Gemini version.
+    """
+    match = _GEMINI_VERSION.match(model_id.lower())
+    if match is None:
+        return True
+    return int(match.group(1)) >= 3
+
+
+def to_contents(messages: list[Message], model: Model) -> tuple[str, list[dict]]:
+    """Split the transcript into a system instruction and ``contents`` turns.
+
+    A tool result becomes a ``functionResponse`` (``output`` for success,
+    ``error`` for a failed call). A vision model's images ride inside
+    ``functionResponse.parts`` on Gemini 3+, and in a separate user turn on
+    older models, which reject the multimodal form. An empty result names the
+    attached image or sends an empty string, never a whitespace-only payload
+    some endpoints reject.
+    """
+    messages = downgrade_unsupported_images(
+        messages, supports_vision=model.supports_vision
+    )
+    multimodal = _supports_multimodal_function_response(model.id)
     system_parts: list[str] = []
     contents: list[dict] = []
 
@@ -67,6 +103,19 @@ def to_contents(messages: list[Message]) -> tuple[str, list[dict]]:
             contents[-1]["parts"].extend(parts)
         else:
             contents.append({"role": role, "parts": parts})
+
+    def append_function_response(part: dict) -> None:
+        # Cloud Code Assist wants all function responses of a turn in one
+        # user content; only merge into a user turn that is one.
+        last = contents[-1] if contents else None
+        if (
+            last is not None
+            and last["role"] == "user"
+            and any("functionResponse" in item for item in last["parts"])
+        ):
+            last["parts"].append(part)
+        else:
+            contents.append({"role": "user", "parts": [part]})
 
     for message in messages:
         if isinstance(message, SystemMessage):
@@ -93,17 +142,37 @@ def to_contents(messages: list[Message]) -> tuple[str, list[dict]]:
             text = "\n".join(
                 b.text for b in message.content if isinstance(b, TextContent)
             )
-            push(
-                "user",
-                [
-                    {
-                        "functionResponse": {
-                            "name": message.tool_name,
-                            "response": {"content": text, "isError": message.is_error},
-                        }
-                    }
-                ],
+            images = [b for b in message.content if isinstance(b, ImageContent)]
+            response_value = (
+                text if text.strip() else ("(see attached image)" if images else "")
             )
+            function_response: dict = {
+                "name": message.tool_name,
+                "response": {
+                    "error" if message.is_error else "output": response_value
+                },
+            }
+            if images and multimodal:
+                function_response["parts"] = [
+                    _image_part(block) for block in images
+                ]
+            append_function_response({"functionResponse": function_response})
+            if images and not multimodal:
+                contents.append(
+                    {
+                        "role": "user",
+                        "parts": [
+                            {
+                                "text": tool_image_caption(
+                                    message.tool_name,
+                                    message.tool_call_id,
+                                    len(images),
+                                )
+                            },
+                            *(_image_part(block) for block in images),
+                        ],
+                    }
+                )
     return "\n\n".join(part for part in system_parts if part), contents
 
 
@@ -111,7 +180,7 @@ def build_request(
     model: Model, messages: list[Message], tools: list[ToolDef], options: StreamOptions
 ) -> tuple[str, dict, dict]:
     options = fit_stream_options(model, messages, options, tools)
-    system, contents = to_contents(messages)
+    system, contents = to_contents(messages, model)
     body: dict = {"contents": contents}
     if system:
         body["systemInstruction"] = {"parts": [{"text": system}]}

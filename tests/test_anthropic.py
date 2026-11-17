@@ -76,7 +76,8 @@ def test_system_prompt_is_lifted_out_of_the_turns():
             SystemMessage(content="be brief", timestamp=1),
             SystemMessage(content="and honest", timestamp=2),
             UserMessage(content="hi", timestamp=3),
-        ]
+        ],
+        supports_vision=True,
     )
     assert system == "be brief\n\nand honest"
     assert turns == [{"role": "user", "content": [{"type": "text", "text": "hi"}]}]
@@ -100,7 +101,8 @@ def test_consecutive_user_and_tool_result_turns_are_merged():
         content=[TextContent(text="wrong tool")], is_error=True, timestamp=3,
     )
     system, turns = to_anthropic_messages(
-        [UserMessage(content="weather?", timestamp=0), assistant, tool_a, tool_b]
+        [UserMessage(content="weather?", timestamp=0), assistant, tool_a, tool_b],
+        supports_vision=True,
     )
     assert system == ""
     assert [turn["role"] for turn in turns] == ["user", "assistant", "user"]
@@ -126,7 +128,7 @@ def test_thinking_blocks_round_trip_with_signature():
         stop_reason="stop",
         timestamp=1,
     )
-    _, turns = to_anthropic_messages([assistant])
+    _, turns = to_anthropic_messages([assistant], supports_vision=True)
     blocks = turns[0]["content"]
     assert blocks[0] == {"type": "thinking", "thinking": "because", "signature": "sig"}
     assert blocks[1] == {"type": "text", "text": "answer"}
@@ -141,16 +143,99 @@ def test_redacted_thinking_round_trips_as_redacted_block():
         stop_reason="stop",
         timestamp=1,
     )
-    _, turns = to_anthropic_messages([assistant])
+    _, turns = to_anthropic_messages([assistant], supports_vision=True)
     assert turns[0]["content"][0] == {"type": "redacted_thinking", "data": "opaque"}
 
 
 def test_image_content_maps_to_base64_source():
     _, turns = to_anthropic_messages(
-        [UserMessage(content=[ImageContent(data="AAA", mime_type="image/png")], timestamp=1)]
+        [UserMessage(content=[ImageContent(data="AAA", mime_type="image/png")], timestamp=1)],
+        supports_vision=True,
     )
-    source = turns[0]["content"][0]["source"]
+    assert turns[0]["content"][0] == {"type": "text", "text": "(see attached image)"}
+    source = turns[0]["content"][1]["source"]
     assert source == {"type": "base64", "media_type": "image/png", "data": "AAA"}
+
+
+def _image(call_id: str, *, is_error: bool = False, text: str = "viewport") -> ToolResultMessage:
+    return ToolResultMessage(
+        tool_call_id=call_id,
+        tool_name="shot",
+        content=[TextContent(text=text), ImageContent(data="AAA", mime_type="image/png")],
+        is_error=is_error,
+        timestamp=2,
+    )
+
+
+def _call(call_id: str) -> AssistantMessage:
+    return AssistantMessage(
+        content=[ToolCall(id=call_id, name="shot", arguments={})],
+        provider="p",
+        model="m",
+        usage=Usage(),
+        stop_reason="tool_use",
+        timestamp=1,
+    )
+
+
+def test_tool_result_image_stays_inside_the_tool_result_block():
+    _, turns = to_anthropic_messages(
+        [_call("t1"), _image("t1")], supports_vision=True
+    )
+    content = turns[1]["content"][0]["content"]
+    assert content[0] == {"type": "text", "text": "viewport"}
+    assert content[1] == {
+        "type": "image",
+        "source": {"type": "base64", "media_type": "image/png", "data": "AAA"},
+    }
+
+
+def test_error_tool_result_images_move_after_all_tool_results():
+    """Anthropic rejects error tool results with non-text content."""
+    normal = ToolResultMessage(
+        tool_call_id="t1",
+        tool_name="shot",
+        content=[TextContent(text="sunny")],
+        is_error=False,
+        timestamp=2,
+    )
+    _, turns = to_anthropic_messages(
+        [_call("t1"), _call("t2"), normal, _image("t2", is_error=True)],
+        supports_vision=True,
+    )
+
+    assert [turn["role"] for turn in turns] == ["assistant", "user"]
+    blocks = turns[1]["content"]
+    assert [block["type"] for block in blocks] == [
+        "tool_result",
+        "tool_result",
+        "text",
+        "image",
+    ]
+    assert blocks[1]["content"] == [
+        {"type": "text", "text": "viewport"},
+        {"type": "text", "text": "(image attached after the tool results)"},
+    ]
+    assert blocks[2]["text"] == "Images from the error result of tool call t2 (shot):"
+    assert blocks[3]["source"]["data"] == "AAA"
+
+
+def test_images_become_placeholders_without_vision():
+    user = UserMessage(
+        content=[TextContent(text="look"), ImageContent(data="AAA", mime_type="image/png")],
+        timestamp=0,
+    )
+    _, turns = to_anthropic_messages(
+        [user, _call("t1"), _image("t1")], supports_vision=False
+    )
+    assert turns[0]["content"] == [
+        {"type": "text", "text": "look"},
+        {"type": "text", "text": "(image omitted: model does not support images)"},
+    ]
+    assert turns[2]["content"][0]["content"] == [
+        {"type": "text", "text": "viewport"},
+        {"type": "text", "text": "(tool image omitted: model does not support images)"},
+    ]
 
 
 def test_request_body_has_required_anthropic_fields():

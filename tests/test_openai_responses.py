@@ -11,6 +11,7 @@ from zenagent.providers.transport import iter_sse_data
 from zenagent.types import (
     AssistantMessage,
     Cost,
+    ImageContent,
     SystemMessage,
     TextContent,
     ToolCall,
@@ -29,11 +30,12 @@ WEATHER = ToolDef(
 )
 
 
-def model() -> Model:
+def model(*, supports_vision: bool = False) -> Model:
     return Model(
         id="gpt-test", provider="openai", api="openai-responses",
         base_url="https://api.test/v1", context_window=1000, max_tokens=100,
         reasoning=True, cost=Cost(), compat=CompatFlags(),
+        supports_vision=supports_vision,
     )
 
 
@@ -110,3 +112,108 @@ async def test_incomplete_event_with_calls_reports_length():
     assert events[-1].reason == "length"
     assert final.stop_reason == "length"
     assert isinstance(final.content[0], ToolCall)
+
+
+def _image_messages() -> list:
+    return [
+        AssistantMessage(
+            content=[ToolCall(id="c1", name="screenshot", arguments={})],
+            provider="p", model="m", usage=Usage(), stop_reason="tool_use", timestamp=3,
+        ),
+        ToolResultMessage(
+            tool_call_id="c1",
+            tool_name="screenshot",
+            content=[
+                TextContent(text="viewport"),
+                ImageContent(data="aGVsbG8=", mime_type="image/png"),
+            ],
+            is_error=False,
+            timestamp=4,
+        ),
+    ]
+
+
+def test_tool_result_images_ride_inside_function_call_output_for_vision_models():
+    """Responses carries tool images natively: no synthetic user turn needed."""
+    _, _, body = resp.build_params(
+        model(supports_vision=True), _image_messages(), [], StreamOptions(api_key="k")
+    )
+    assert body["input"] == [
+        {"type": "function_call", "call_id": "c1", "name": "screenshot", "arguments": "{}"},
+        {
+            "type": "function_call_output",
+            "call_id": "c1",
+            "output": [
+                {"type": "input_text", "text": "viewport"},
+                {
+                    "type": "input_image",
+                    "detail": "auto",
+                    "image_url": "data:image/png;base64,aGVsbG8=",
+                },
+            ],
+        },
+    ]
+
+
+def test_image_only_tool_result_has_no_empty_text_part():
+    messages = [
+        AssistantMessage(
+            content=[ToolCall(id="c1", name="screenshot", arguments={})],
+            provider="p", model="m", usage=Usage(), stop_reason="tool_use", timestamp=3,
+        ),
+        ToolResultMessage(
+            tool_call_id="c1",
+            tool_name="screenshot",
+            content=[ImageContent(data="aGVsbG8=", mime_type="image/png")],
+            is_error=False,
+            timestamp=4,
+        ),
+    ]
+    _, _, body = resp.build_params(
+        model(supports_vision=True), messages, [], StreamOptions(api_key="k")
+    )
+    output = body["input"][1]["output"]
+    assert output == [
+        {
+            "type": "input_image",
+            "detail": "auto",
+            "image_url": "data:image/png;base64,aGVsbG8=",
+        }
+    ]
+
+
+def test_tool_result_images_become_a_placeholder_without_vision():
+    _, _, body = resp.build_params(
+        model(), _image_messages(), [], StreamOptions(api_key="k")
+    )
+    assert body["input"] == [
+        {"type": "function_call", "call_id": "c1", "name": "screenshot", "arguments": "{}"},
+        {
+            "type": "function_call_output",
+            "call_id": "c1",
+            "output": (
+                "viewport\n(tool image omitted: model does not support images)"
+            ),
+        },
+    ]
+
+
+def test_empty_and_whitespace_tool_output_gets_a_placeholder():
+    for text in ("", "\r\n", " \n\t"):
+        messages = [
+            AssistantMessage(
+                content=[ToolCall(id="c1", name="bash", arguments={})],
+                provider="p", model="m", usage=Usage(), stop_reason="tool_use", timestamp=3,
+            ),
+            ToolResultMessage(
+                tool_call_id="c1",
+                tool_name="bash",
+                content=[TextContent(text=text)],
+                is_error=False,
+                timestamp=4,
+            ),
+        ]
+        _, _, body = resp.build_params(
+            model(), messages, [], StreamOptions(api_key="k")
+        )
+        assert body["input"][1]["output"] == "(no tool output)"

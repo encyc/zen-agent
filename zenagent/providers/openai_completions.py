@@ -31,7 +31,13 @@ import httpx
 from zenagent.events import AbortToken, AssistantEvent
 from zenagent.providers.catalog import Model
 from zenagent.providers.compat import CompatFlags, normalize_thinking
-from zenagent.providers.history import replayable
+from zenagent.providers.history import (
+    EMPTY_TOOL_OUTPUT,
+    IMAGE_ONLY_TOOL_OUTPUT,
+    downgrade_unsupported_images,
+    replayable,
+    tool_image_caption,
+)
 from zenagent.providers.limits import fit_stream_options
 from zenagent.providers.stream_options import StreamOptions
 from zenagent.providers.transport import (
@@ -42,6 +48,7 @@ from zenagent.providers.transport import (
 )
 from zenagent.types import (
     AssistantMessage,
+    ImageContent,
     Message,
     StopReason,
     SystemMessage,
@@ -49,6 +56,7 @@ from zenagent.types import (
     ThinkingContent,
     ToolCall,
     ToolDef,
+    ToolResultMessage,
     Usage,
     UserMessage,
 )
@@ -61,6 +69,14 @@ __all__ = ["StreamOptions", "build_params", "stream", "to_request_messages"]
 # ---------------------------------------------------------------------------
 
 
+def _image_part(block: ImageContent) -> dict:
+    """One OpenAI multimodal image part (a data URL)."""
+    return {
+        "type": "image_url",
+        "image_url": {"url": f"data:{block.mime_type};base64,{block.data}"},
+    }
+
+
 def _user_content(content: str | list) -> str | list[dict]:
     """User content: plain string, or OpenAI multimodal content parts."""
     if isinstance(content, str):
@@ -70,12 +86,7 @@ def _user_content(content: str | list) -> str | list[dict]:
         if isinstance(block, TextContent):
             parts.append({"type": "text", "text": block.text})
         else:
-            parts.append(
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:{block.mime_type};base64,{block.data}"},
-                }
-            )
+            parts.append(_image_part(block))
     return parts
 
 
@@ -124,15 +135,41 @@ def _assistant_request_message(message: AssistantMessage, compat: CompatFlags) -
     return request
 
 
-def to_request_messages(messages: list[Message], compat: CompatFlags) -> list[dict]:
+def to_request_messages(
+    messages: list[Message],
+    compat: CompatFlags,
+    *,
+    supports_vision: bool,
+) -> list[dict]:
     """Map unified messages onto OpenAI chat-completions message JSON.
 
     Timestamps and bookkeeping fields (provider, usage, is_error, …) are
     dropped: the wire format carries only what the API needs. Tools do
     not appear here — they ride in the request params via ``build_params``.
+
+    A ``tool`` message carries string content only. A vision model therefore
+    receives a tool's images in one user turn right after the run of tool
+    results (the caption names the tool and call); the tool message itself
+    says ``(see attached image)`` when it has no text. A text-only model gets
+    placeholders instead of images, and an entirely empty result says
+    ``(no tool output)`` — some endpoints reject empty tool content.
     """
+    messages = downgrade_unsupported_images(
+        messages, supports_vision=supports_vision
+    )
     request: list[dict] = []
+    # Image parts collected from the current run of tool results; flushed
+    # as one user turn once the run ends.
+    image_parts: list[dict] = []
+
+    def flush_images() -> None:
+        if image_parts:
+            request.append({"role": "user", "content": list(image_parts)})
+            image_parts.clear()
+
     for message in messages:
+        if not isinstance(message, ToolResultMessage):
+            flush_images()
         if isinstance(message, SystemMessage):
             request.append({"role": "system", "content": message.content})
         elif isinstance(message, UserMessage):
@@ -143,9 +180,31 @@ def to_request_messages(messages: list[Message], compat: CompatFlags) -> list[di
             text = "\n".join(
                 b.text for b in message.content if isinstance(b, TextContent)
             )
+            images = [b for b in message.content if isinstance(b, ImageContent)]
+            if text.strip():
+                content = text
+            elif images:
+                content = IMAGE_ONLY_TOOL_OUTPUT
+            else:
+                content = EMPTY_TOOL_OUTPUT
             request.append(
-                {"role": "tool", "tool_call_id": message.tool_call_id, "content": text}
+                {
+                    "role": "tool",
+                    "tool_call_id": message.tool_call_id,
+                    "content": content,
+                }
             )
+            if images:
+                image_parts.append(
+                    {
+                        "type": "text",
+                        "text": tool_image_caption(
+                            message.tool_name, message.tool_call_id, len(images)
+                        ),
+                    }
+                )
+                image_parts.extend(_image_part(block) for block in images)
+    flush_images()
     return request
 
 
@@ -600,12 +659,15 @@ async def stream(
 
     The transcript is projected through ``replayable`` first: failed/aborted
     turns and dangling tool calls that the UI keeps for the user must never
-    reach a provider.
+    reach a provider. Images a tool returned follow the tool messages as one
+    user turn for a vision model, and become placeholders otherwise.
     """
     messages = replayable(messages)
     options = fit_stream_options(model, messages, options, tools)
     params = build_params(model, tools, options, model.compat)
-    params["messages"] = to_request_messages(messages, model.compat)
+    params["messages"] = to_request_messages(
+        messages, model.compat, supports_vision=model.supports_vision
+    )
 
     headers = {
         "Authorization": f"Bearer {options.api_key}",

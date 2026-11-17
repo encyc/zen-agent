@@ -27,7 +27,12 @@ import httpx
 from zenagent.events import AbortToken, AssistantEvent
 from zenagent.providers.catalog import Model
 from zenagent.providers.compat import normalize_thinking
-from zenagent.providers.history import replayable
+from zenagent.providers.history import (
+    IMAGE_ONLY_TOOL_OUTPUT,
+    downgrade_unsupported_images,
+    replayable,
+    split_error_tool_result_images,
+)
 from zenagent.providers.limits import fit_stream_options
 from zenagent.providers.stream_options import StreamOptions
 from zenagent.providers.transport import (
@@ -104,17 +109,36 @@ def _user_blocks(content) -> list[dict]:
         if isinstance(block, TextContent):
             blocks.append({"type": "text", "text": block.text})
         elif isinstance(block, ImageContent):
-            blocks.append(
-                {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": block.mime_type,
-                        "data": block.data,
-                    },
-                }
-            )
+            blocks.append(_image_block(block))
+    return _with_image_placeholder(blocks, content)
+
+
+def _with_image_placeholder(
+    blocks: list[dict], content: list[TextContent | ImageContent]
+) -> list[dict]:
+    """Give an image-only message a text block, as pi-ai does.
+
+    Anthropic accepts image blocks, but a message with only images has no
+    text for the model to anchor on; a short placeholder keeps the shape
+    consistent with the other adapters.
+    """
+    has_text = any(isinstance(block, TextContent) for block in content)
+    has_image = any(isinstance(block, ImageContent) for block in content)
+    if has_image and not has_text:
+        return [{"type": "text", "text": IMAGE_ONLY_TOOL_OUTPUT}, *blocks]
     return blocks
+
+
+def _image_block(block: ImageContent) -> dict:
+    """One Messages-API base64 image block."""
+    return {
+        "type": "image",
+        "source": {
+            "type": "base64",
+            "media_type": block.mime_type,
+            "data": block.data,
+        },
+    }
 
 
 def _assistant_blocks(message: AssistantMessage) -> list[dict]:
@@ -143,22 +167,18 @@ def _assistant_blocks(message: AssistantMessage) -> list[dict]:
     return blocks
 
 
-def _tool_result_blocks(message: ToolResultMessage) -> list[dict]:
+def _tool_result_blocks(
+    message: ToolResultMessage,
+    content_override: list[TextContent | ImageContent] | None = None,
+) -> list[dict]:
+    source = message.content if content_override is None else content_override
     content: list[dict] = []
-    for block in message.content:
+    for block in source:
         if isinstance(block, TextContent):
             content.append({"type": "text", "text": block.text})
         elif isinstance(block, ImageContent):
-            content.append(
-                {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": block.mime_type,
-                        "data": block.data,
-                    },
-                }
-            )
+            content.append(_image_block(block))
+    content = _with_image_placeholder(content, source)
     entry: dict = {
         "type": "tool_result",
         "tool_use_id": message.tool_call_id,
@@ -169,14 +189,25 @@ def _tool_result_blocks(message: ToolResultMessage) -> list[dict]:
     return [entry]
 
 
-def to_anthropic_messages(messages: list[Message]) -> tuple[str, list[dict]]:
+def to_anthropic_messages(
+    messages: list[Message], *, supports_vision: bool
+) -> tuple[str, list[dict]]:
     """Split the transcript into a system prompt and Messages-API turns.
 
     Consecutive same-role turns are merged into one message: the Messages API
     requires alternating roles, and several tool results in a row are normal.
+
+    Images a tool returned ride inside a successful ``tool_result``. An error
+    result may not carry them here, so its images are collected and appended
+    after the whole run of tool results (still inside the same user turn),
+    where the model can see them.
     """
+    messages = downgrade_unsupported_images(
+        messages, supports_vision=supports_vision
+    )
     system_parts: list[str] = []
     turns: list[dict] = []
+    error_images: list[dict] = []
 
     def push(role: str, blocks: list[dict]) -> None:
         if not blocks:
@@ -186,7 +217,14 @@ def to_anthropic_messages(messages: list[Message]) -> tuple[str, list[dict]]:
         else:
             turns.append({"role": role, "content": blocks})
 
+    def flush_error_images() -> None:
+        if error_images:
+            push("user", list(error_images))
+            error_images.clear()
+
     for message in messages:
+        if not isinstance(message, ToolResultMessage):
+            flush_error_images()
         if isinstance(message, SystemMessage):
             system_parts.append(message.content)
         elif isinstance(message, UserMessage):
@@ -194,7 +232,17 @@ def to_anthropic_messages(messages: list[Message]) -> tuple[str, list[dict]]:
         elif isinstance(message, AssistantMessage):
             push("assistant", _assistant_blocks(message))
         elif isinstance(message, ToolResultMessage):
-            push("user", _tool_result_blocks(message))
+            split = split_error_tool_result_images(message)
+            push(
+                "user",
+                _tool_result_blocks(
+                    message, split.content if split is not None else None
+                ),
+            )
+            if split is not None:
+                error_images.append({"type": "text", "text": split.caption})
+                error_images.extend(_image_block(block) for block in split.images)
+    flush_error_images()
     return "\n\n".join(part for part in system_parts if part), turns
 
 
@@ -206,7 +254,9 @@ def build_request(
 ) -> tuple[str, dict, dict]:
     """Return ``(url, headers, body)`` for one streaming Messages request."""
     options = fit_stream_options(model, messages, options, tools)
-    system, turns = to_anthropic_messages(messages)
+    system, turns = to_anthropic_messages(
+        messages, supports_vision=model.supports_vision
+    )
     max_tokens = options.max_tokens or model.max_tokens
     level = normalize_thinking(options.thinking)
 

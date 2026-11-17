@@ -15,7 +15,11 @@ import httpx
 
 from zenagent.events import AbortToken, AssistantEvent
 from zenagent.providers.catalog import Model
-from zenagent.providers.history import replayable
+from zenagent.providers.history import (
+    EMPTY_TOOL_OUTPUT,
+    downgrade_unsupported_images,
+    replayable,
+)
 from zenagent.providers.limits import fit_stream_options
 from zenagent.providers.stream_options import StreamOptions
 from zenagent.providers.transport import (
@@ -59,8 +63,19 @@ def _user_parts(content) -> list[dict]:
     return parts
 
 
-def to_responses_input(messages: list[Message]) -> tuple[str, list[dict]]:
-    """Split the transcript into ``instructions`` plus Responses input items."""
+def to_responses_input(
+    messages: list[Message], *, supports_vision: bool
+) -> tuple[str, list[dict]]:
+    """Split the transcript into ``instructions`` plus Responses input items.
+
+    A ``function_call_output`` whose output is an array of input content can
+    carry images natively, so a vision model's tool images stay attached to
+    the call (no synthetic user turn). A text-only model gets the image
+    replaced by a placeholder, and an empty result says ``(no tool output)``.
+    """
+    messages = downgrade_unsupported_images(
+        messages, supports_vision=supports_vision
+    )
     instructions: list[str] = []
     items: list[dict] = []
     for message in messages:
@@ -93,8 +108,30 @@ def to_responses_input(messages: list[Message]) -> tuple[str, list[dict]]:
             text = "\n".join(
                 b.text for b in message.content if isinstance(b, TextContent)
             )
+            images = [b for b in message.content if isinstance(b, ImageContent)]
+            output: str | list[dict]
+            if images:
+                output = []
+                if text.strip():
+                    output.append({"type": "input_text", "text": text})
+                output.extend(
+                    {
+                        "type": "input_image",
+                        "detail": "auto",
+                        "image_url": (
+                            f"data:{block.mime_type};base64,{block.data}"
+                        ),
+                    }
+                    for block in images
+                )
+            else:
+                output = text if text.strip() else EMPTY_TOOL_OUTPUT
             items.append(
-                {"type": "function_call_output", "call_id": message.tool_call_id, "output": text}
+                {
+                    "type": "function_call_output",
+                    "call_id": message.tool_call_id,
+                    "output": output,
+                }
             )
     return "\n\n".join(part for part in instructions if part), items
 
@@ -105,7 +142,9 @@ def build_params(
     # Responses rejects prompt + max_output_tokens over the window just like the
     # chat-completions family; fit the cap before serializing (see limits.py).
     options = fit_stream_options(model, messages, options, tools)
-    instructions, items = to_responses_input(messages)
+    instructions, items = to_responses_input(
+        messages, supports_vision=model.supports_vision
+    )
     body: dict = {
         "model": model.id,
         "input": items,

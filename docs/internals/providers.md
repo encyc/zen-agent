@@ -75,6 +75,29 @@ Chat Completions 系 request 里 `prompt + max_tokens` 超过上下文窗口会�
 避免长 prompt 在第一轮就失败。`prompt_est` 包含消息 + **工具 schema**（11 个内置 + todo/task/ask/wait + MCP 工具
 可以是数千 token）；图片按固定 1024 token 估算而不是 base64 字符数。
 
+## 图片：tool result 里的图怎么到达模型
+
+`supports_vision` 是唯一开关（`catalog.yaml` 的模型条目）。请求映射前统一过
+`providers/history.py` 的两个投影：
+
+- `downgrade_unsupported_images`：非 vision 模型把 user / tool result 里的图换成
+  `(image omitted: model does not support images)` / `(tool image omitted: …)`
+  文本占位（连续图只留一条），不再静默丢弃——空的 tool 消息会被部分网关 400；
+- `split_error_tool_result_images`：Anthropic 的 error `tool_result` 不能带图，
+  图会挪到本轮所有 tool result 之后。
+
+四族方言的落点不同：
+
+| adapter | vision 模型的 tool 图 | 说明 |
+|---|---|---|
+| `openai-completions` | 本轮 tool 结果之后追加一条 user 消息集中放图 | `tool` role 只能放字符串；无文本时 tool 消息写 `(see attached image)` |
+| `openai-responses` | 直接放进 `function_call_output.output` 的 `input_image` 数组 | 原生多模态，不另造 user 消息 |
+| `anthropic-messages` | 成功结果直接放 `tool_result.content`；失败结果拆到本轮末尾 | 官方拒绝 error `tool_result` 带图 |
+| `google-generative-ai` | Gemini 3+ 嵌套进 `functionResponse.parts`；Gemini 2.x 及更早单独一条 user turn | 版本按模型 id 的 major 判断（与 pi-ai 同规则） |
+
+tool 结果文本为空或只有空白时写 `(no tool output)`（Google 的 response 写 `""`），
+只有图时写 `(see attached image)`，避免空 content 被拒。
+
 ## 传输层（`providers/transport.py`）
 
 - `post_stream()`：发请求，按状态码重试（429/5xx），等待带 abort；`Retry-After` 尊重。

@@ -8,9 +8,14 @@ be set``), partial thinking from a turn that never finished, and tool calls
 whose results are missing.
 """
 
-from zenagent.providers.history import replayable
+from zenagent.providers.history import (
+    downgrade_unsupported_images,
+    replayable,
+    split_error_tool_result_images,
+)
 from zenagent.types import (
     AssistantMessage,
+    ImageContent,
     SystemMessage,
     TextContent,
     ThinkingContent,
@@ -141,3 +146,95 @@ def test_result_before_its_call_does_not_count_as_answered():
     """Corrupt ordering must not resurrect a dangling call."""
     messages = [_result("c1"), _assistant([_call("c1")], stop_reason="tool_use")]
     assert replayable(messages) == []
+
+
+# ---------------------------------------------------------------------------
+# Images: unsupported-model downgrade and Anthropic error-result split
+# ---------------------------------------------------------------------------
+
+
+def _image(data: str = "aW1n") -> ImageContent:
+    return ImageContent(data=data, mime_type="image/png")
+
+
+def _image_result(call_id: str, name: str, image: str, *, text: str = "") -> ToolResultMessage:
+    content = [TextContent(text=text)] if text else []
+    content.append(ImageContent(data=image, mime_type="image/png"))
+    return ToolResultMessage(
+        tool_call_id=call_id,
+        tool_name=name,
+        content=content,
+        is_error=False,
+        timestamp=2,
+    )
+
+
+def test_downgrade_leaves_a_vision_transcript_untouched():
+    messages = [_user("look"), _image_result("c1", "shot", "aW1n")]
+    assert downgrade_unsupported_images(messages, supports_vision=True) is messages
+
+
+def test_downgrade_replaces_images_with_explicit_placeholders():
+    first, second, third = _image("aW1nMQ=="), _image("aW1nMg=="), _image("aW1nMw==")
+    user = UserMessage(
+        content=[TextContent(text="look"), first, second, TextContent(text="now")],
+        timestamp=1,
+    )
+    result = ToolResultMessage(
+        tool_call_id="c1",
+        tool_name="shot",
+        content=[third, TextContent(text="done")],
+        is_error=False,
+        timestamp=2,
+    )
+
+    downgraded = downgrade_unsupported_images(
+        [user, result], supports_vision=False
+    )
+
+    assert downgraded[0].content == [
+        TextContent(text="look"),
+        TextContent(text="(image omitted: model does not support images)"),
+        TextContent(text="now"),
+    ]
+    assert downgraded[1].content == [
+        TextContent(text="(tool image omitted: model does not support images)"),
+        TextContent(text="done"),
+    ]
+    # The stored transcript keeps its images.
+    assert user.content[1] is first and result.content[0] is third
+
+
+def test_downgrade_keeps_image_free_messages_verbatim():
+    messages = [_user("hi"), _assistant([TextContent(text="done")])]
+    downgraded = downgrade_unsupported_images(messages, supports_vision=False)
+    assert downgraded == messages
+    assert all(copy is message for copy, message in zip(downgraded, messages))
+
+
+def test_error_tool_result_images_move_after_the_result():
+    image = _image()
+    message = ToolResultMessage(
+        tool_call_id="c1",
+        tool_name="shot",
+        content=[TextContent(text="failed"), image, TextContent(text="tail")],
+        is_error=True,
+        timestamp=2,
+    )
+
+    split = split_error_tool_result_images(message)
+
+    assert split is not None
+    assert split.content == [
+        TextContent(text="failed"),
+        TextContent(text="(image attached after the tool results)"),
+        TextContent(text="tail"),
+    ]
+    assert split.caption == "Images from the error result of tool call c1 (shot):"
+    assert split.images == [image]
+    assert message.content[1] is image
+
+
+def test_only_error_results_with_images_are_split():
+    assert split_error_tool_result_images(_result("c1")) is None
+    assert split_error_tool_result_images(_image_result("c2", "shot", "aW1n")) is None

@@ -13,6 +13,17 @@ matches the release tag; older history is in the repository tags and commits.
   the exact field, the running zen version and the two ways out — upgrade zen, or
   remove the field — so a user can fix it without reading the source, or quote
   the message in a usable issue.
+- **Tool images now reach every vision model.** Each adapter carries a tool
+  result's images its own way: OpenAI chat-completions follows the tool messages
+  with one user turn, Responses puts them in `function_call_output`, Gemini 3+
+  nests them in `functionResponse.parts` (older Gemini gets a separate user
+  turn), and Anthropic keeps successful results inline while moving an error
+  result's images after the tool results.
+- **A text-only model is told when an image was dropped.** Images in user or
+  tool messages become explicit placeholders instead of disappearing, and an
+  empty or whitespace-only tool result says `(no tool output)` (an image-only
+  one says `(see attached image)`), so strict endpoints no longer receive an
+  empty tool message.
 
 ## v0.13.11 — 2026-11-17
 
