@@ -506,6 +506,7 @@ CATALOG: dict[str, str] = {
     "session.legacy_dir": "not a legacy session file: {source} (expected under {dir})",
     "session.already_current": "session already belongs to the current project: {source}",
     "session.not_found": "session not found: {target}",
+    "session.untitled": "New session",
     "skill.unknown": "unknown skill: {name} (available: {available})",
     # REPL: command table
     "cmd.repl.help": "show this help",

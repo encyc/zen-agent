@@ -229,6 +229,25 @@ async def test_a_new_session_has_no_file_until_the_first_message(session_runtime
     assert path.is_file()
 
 
+async def test_entries_show_the_unsaved_current_session(session_runtime):
+    # A new conversation has no file yet, but it is the one on screen: the
+    # list must let a frontend show (and re-select) it.
+    manager = SessionManager(session_runtime)
+    current = await manager.new()
+
+    entries = manager.entries()
+
+    assert [entry.path for entry in entries] == [current]
+    assert entries[0].current is True
+    assert entries[0].messages == 0
+    assert entries[0].title  # localized placeholder, never blank
+
+    await session_runtime.agent.prompt("hello")
+
+    listed = [entry for entry in manager.entries() if entry.path == current]
+    assert len(listed) == 1  # the real row replaces the placeholder
+
+
 async def test_renaming_an_unsaved_session_materializes_it(session_runtime):
     manager = SessionManager(session_runtime)
     path = manager.current()

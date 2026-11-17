@@ -189,7 +189,45 @@ class SessionManager:
         # Pinned first, otherwise newest-first exactly as list_sessions returned
         # (sorted() is stable, so no time order is lost inside each group).
         entries.sort(key=lambda entry: not entry.pinned)
+        if not any(entry.current for entry in entries):
+            entries.insert(self._unsaved_position(entries), self._unsaved_entry())
         return entries
+
+    @staticmethod
+    def _unsaved_position(entries: list[SessionEntry]) -> int:
+        """Index just after the pinned block, where a new conversation belongs."""
+        for position, entry in enumerate(entries):
+            if not entry.pinned:
+                return position
+        return len(entries)
+
+    def _unsaved_entry(self) -> SessionEntry:
+        """A row for the lazy current session, which has no file yet.
+
+        A new conversation only materializes on its first message, but the
+        person is already talking in it: without this row the session they are
+        looking at cannot be found or re-selected in a session list. Nothing
+        is written to disk -- this row lives for the duration of the list call.
+        """
+        path = self.current()
+        directory = path.parent
+        root = project.project_root_for_sessions_dir(directory)
+        meta = project.load_project_meta(root=root) if root else None
+        now = time.time()
+        return SessionEntry(
+            path=path,
+            updated_at=now,
+            messages=0,
+            size=0,
+            created_at=now,
+            title=read_session_titles(directory).get(path.name)
+            or t("session.untitled"),
+            project=meta.name if meta is not None else "",
+            project_path=root,
+            pinned=False,
+            current=True,
+            workspace=("zen" if path.stem in read_roster(directory) else "coding"),
+        )
 
     def set_pin(self, path: Path, pinned: bool) -> bool:
         """Pin/unpin one saved session; ``ValueError`` for a non-session path."""

@@ -505,6 +505,7 @@ CATALOG: dict[str, str] = {
     "session.legacy_dir": "不是旧版会话文件：{source}（应位于 {dir}）",
     "session.already_current": "会话已属于当前项目：{source}",
     "session.not_found": "找不到会话：{target}",
+    "session.untitled": "新会话",
     "skill.unknown": "未知 skill：{name}（可用：{available}）",
     # REPL：命令表
     "cmd.repl.help": "显示本帮助",
