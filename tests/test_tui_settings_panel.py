@@ -60,21 +60,61 @@ async def test_left_right_switches_sections_instantly(fake_runtime):
         assert "Session" in _tabs_text(panel)
 
 
-async def test_enter_activates_and_repaints_live_values(fake_runtime):
+async def test_enter_cycles_theme_in_place(fake_runtime):
     app = ZenAgentApp(fake_runtime)
-    activated: list[str] = []
-
-    async def on_action(value: str) -> None:
-        activated.append(value)
-
     async with app.run_test(size=(120, 40)) as pilot:
-        app.open_menu("settings", lambda: SettingsPanel(app, on_action), lambda _r: None)
+        await app._dispatch_command("settings", "")
         await pilot.pause()
+        panel = app.screen
+        assert app._theme_spec == "auto"
         await pilot.press("enter")  # the items list owns focus from the start
         await pilot.pause()
         await pilot.pause()
-        assert activated == ["theme"]
+        # Cycled in place: auto → dark, no sub-picker over the page.
+        assert app._theme_spec == "dark"
         assert isinstance(app.screen, SettingsPanel)
+        row_note = panel.items_for("appearance")[0].note
+        assert row_note == "dark"
+
+
+async def test_goal_pause_row_flips_in_place(fake_runtime):
+    from zenagent import settings
+
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await app._dispatch_command("settings", "")
+        await pilot.pause()
+        panel = app.screen
+        panel._show_section(3)  # session
+        await pilot.pause()
+        panel.query_one("#settings-items", OptionList).highlighted = 0  # goal-pause
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.pause()
+        assert settings.get_pref("goal_pause_on_session_switch") is True
+
+
+async def test_overlay_action_hides_the_page_until_resume(fake_runtime):
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await app._dispatch_command("settings", "")
+        await pilot.pause()
+        panel = app.screen
+        await pilot.press("right")  # model section
+        await pilot.pause()
+        panel.query_one("#settings-items", OptionList).highlighted = 2  # model-keys
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.pause()
+        # The page hid itself while the key picker is up...
+        assert panel.display is False
+        assert app.screen is not panel
+        # ...and comes back when the picker closes.
+        await pilot.press("escape")
+        await pilot.pause()
+        await pilot.pause()
+        assert panel.display is True
+        assert app.screen is panel
 
 
 async def test_description_line_follows_the_highlight(fake_runtime):

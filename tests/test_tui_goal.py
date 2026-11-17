@@ -70,7 +70,7 @@ async def test_settings_has_goal_pause_row(fake_runtime):
     settings.set_pref("goal_pause_on_session_switch", True)
     app = ZenAgentApp(fake_runtime)
     async with app.run_test(size=(120, 40)):
-        panel = SettingsPanel(app, None)
+        panel = SettingsPanel(app)
         row = next(item for item in panel.items if item.value == "goal-pause")
         assert row.note == t("tui.settings.goal_pause_on")
 
@@ -82,6 +82,6 @@ async def test_settings_goal_pause_row_reads_off(fake_runtime):
     settings.set_pref("goal_pause_on_session_switch", False)
     app = ZenAgentApp(fake_runtime)
     async with app.run_test(size=(120, 40)):
-        panel = SettingsPanel(app, None)
+        panel = SettingsPanel(app)
         row = next(item for item in panel.items if item.value == "goal-pause")
         assert row.note == t("tui.settings.goal_pause_off")

@@ -29,8 +29,8 @@ class SettingsPanel(ModalScreen[None]):
     The desktop's settings page is a searchable rail plus one decision tile;
     this is its terminal shape. Values are read live on every render, so a
     flipped toggle or a sub-picker's result shows up without reopening.
-    Activation goes through the one ``on_action`` handler the app supplies —
-    the same mapping the old flat picker and the REPL text form use.
+    Activation is the panel's own: simple values cycle in place, key rows
+    open their pickers (hiding this page until they close).
     """
 
     BINDINGS = [  # noqa: RUF012 - Textual class API
@@ -123,10 +123,9 @@ class SettingsPanel(ModalScreen[None]):
         ),
     ]
 
-    def __init__(self, app, on_action) -> None:
+    def __init__(self, app) -> None:
         super().__init__()
         self._app = app
-        self._on_action = on_action
         self._section_index = 0
         #: The composed tab line / description; tests read these instead of
         #: Static internals (Textual 8 exposes no renderable accessor).
@@ -291,16 +290,73 @@ class SettingsPanel(ModalScreen[None]):
             return
         self.run_worker(self._activate(rows[index].value))
 
+    #: Cycles for the rows that change in place; ``Enter`` steps to the next
+    #: value and the row repaints — no sub-picker, the page stays put.
+    _THEME_CYCLE: ClassVar[tuple[str, ...]] = ("auto", "dark", "light")
+    _LANG_CYCLE: ClassVar[tuple[str, ...]] = ("auto", "en", "zh")
+
+    #: Rows whose editor is a bottom-anchored palette. The page hides while
+    #: one is up: a bottom palette over an opaque full-screen page reads as a
+    #: broken blank screen otherwise. ``on_screen_resume`` restores the page.
+    _OVERLAY_ACTIONS: ClassVar[frozenset[str]] = frozenset(
+        {"model-keys", "search-keys", "search-provider"}
+    )
+
+    @staticmethod
+    def _next_in_cycle(cycle: tuple[str, ...], current: str) -> str:
+        if current in cycle:
+            return cycle[(cycle.index(current) + 1) % len(cycle)]
+        return cycle[0]
+
     async def _activate(self, value: str) -> None:
-        handler = self._on_action
-        if handler is None:
+        app = self._app
+        if value in self._OVERLAY_ACTIONS:
+            self.display = False
+            if value == "model-keys":
+                app.open_model_keys()
+            elif value == "search-keys":
+                app.open_search_keys()
+            else:
+                app.open_search_provider()
             return
-        outcome = handler(value)
-        if hasattr(outcome, "__await__"):
-            await outcome
-        # The action may have flipped a pref or opened a sub-picker over us;
-        # repaint the live values underneath either way.
+        from zenagent import settings as settings_module
+
+        if value == "theme":
+            applied = app.set_appearance(
+                self._next_in_cycle(self._THEME_CYCLE, app._theme_spec)
+            )
+            app.notify(t("tui.app.theme_set", value=applied), timeout=3)
+        elif value == "language":
+            applied = app.set_language(
+                self._next_in_cycle(self._LANG_CYCLE, app._language_spec)
+            )
+            app.notify(t("tui.app.language_set", value=applied), timeout=3)
+        elif value == "thinking":
+            app.action_cycle_thinking()
+        elif value == "model":
+            app._cycle_model(1)
+        elif value == "goal-pause":
+            on = not bool(
+                settings_module.get_pref("goal_pause_on_session_switch", False)
+            )
+            settings_module.set_pref("goal_pause_on_session_switch", on)
+            state = t(
+                "tui.settings.goal_pause_on" if on else "tui.settings.goal_pause_off"
+            )
+            app.notify(t("tui.settings.goal_pause_set", state=state), timeout=3)
+        elif value == "sidebar":
+            app.action_toggle_sidebar()
+        elif value in ("clear", "export"):
+            await app._dispatch_command(value, "")
+        # The action may have changed a value or the whole appearance; repaint
+        # the live rows either way.
         self._show_section(self._section_index)
+
+    def on_screen_resume(self, event) -> None:
+        """A sub-picker closed above us: show the page again, values fresh."""
+        if not self.display:
+            self.display = True
+            self._show_section(self._section_index)
 
     def action_close(self) -> None:
         self.dismiss(None)
