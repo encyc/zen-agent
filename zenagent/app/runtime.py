@@ -670,6 +670,12 @@ class Runtime:
             from zenagent.tools.jobs import release_job_manager
 
             await release_job_manager()
+        # A failed agent_end flush deferred its tail here; shutdown is the
+        # last chance to land it (best effort: a still-full disk must not
+        # make close fail).
+        if self._unpersisted_messages:
+            with contextlib.suppress(OSError):
+                await self._flush_unpersisted(self.session)
         self._drop_unused_session()
         leases.release_session_lease(self)
         # A mid-switch close (abort during session switch) may have left the

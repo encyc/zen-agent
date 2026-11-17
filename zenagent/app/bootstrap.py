@@ -309,17 +309,18 @@ async def assemble(
         agent.subscribe(runtime._record_unpersisted)
 
         async def persist(event) -> None:
-            # Durable before side effects, the two dsh checkpoints: each
-            # message flushes at its own ``message_end`` — the assistant turn
-            # lands before its tool bodies run, a tool result before the next
-            # model request, the user turn before the first request.
-            # ``agent_end`` stays as the backstop: aborts and provider errors
-            # skip ``message_end``, and a failed mid-run flush keeps its tail
-            # pending (``_flush_unpersisted`` restores it) for this retry.
-            if event.type not in ("message_end", "agent_end"):
+            # agent_end is the flush point (as before), but through
+            # ``_flush_unpersisted``: a write that fails mid-drain keeps its
+            # tail pending (restored) instead of dropping the messages the
+            # old inline handler lost. The dsh-style per-message checkpoint
+            # (assistant durable before its tool bodies run) needs a
+            # loop-level pre-side-effect hook — flushing inside this
+            # subscriber deadlocks the takeover/abort path, so it stays a
+            # documented future design.
+            if event.type != "agent_end":
                 return
             await runtime._flush_unpersisted(runtime.session)
-            if event.type == "agent_end" and runtime._metrics is not None:
+            if runtime._metrics is not None:
                 await asyncio.to_thread(runtime._metrics.flush, runtime.agent)
 
         agent.subscribe(persist)
