@@ -73,7 +73,8 @@ class SessionIndex:
         returned info only.
         """
         stat = path.stat()  # OSError propagates: a vanished file is a miss
-        entry = self._load().get(path.name)
+        entries = self._load()
+        entry = entries.get(path.name)
         if (
             entry is not None
             and entry.get("size") == stat.st_size
@@ -91,7 +92,7 @@ class SessionIndex:
             )
         else:
             info = Session(path).read_info(titles={})
-            self._entries[path.name] = {
+            entries[path.name] = {
                 "size": stat.st_size,
                 "mtime_ns": stat.st_mtime_ns,
                 "messages": info.messages,

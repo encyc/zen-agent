@@ -8,7 +8,6 @@ warning when a blob file is missing.
 """
 
 import json
-from pathlib import Path
 
 from zenagent.agent.blob_store import (
     BLOB_MIN_CHARS,
@@ -17,7 +16,7 @@ from zenagent.agent.blob_store import (
 )
 from zenagent.agent.session import Session
 from zenagent.app import records
-from zenagent.types import ImageContent, UserMessage, message_from_json
+from zenagent.types import ImageContent, UserMessage
 
 
 def big_image(mime: str = "image/png") -> ImageContent:

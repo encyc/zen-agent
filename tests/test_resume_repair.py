@@ -10,8 +10,6 @@ instead of the calls being silently dropped by ``replayable``.
 
 from pathlib import Path
 
-import pytest
-
 import zenagent.agent.session as session_module
 from zenagent.agent.session import Session
 from zenagent.app import records
