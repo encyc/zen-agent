@@ -3,6 +3,17 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+### Fixed
+
+- **A config field this build does not know now says so.** An unknown table or key
+  under `[limits]`, `[task]`, `[zen]`, `[swarm]`, `[tools]` or the provider
+  tables is still refused (a typo must fail loudly), but the message now names
+  the exact field, the running zen version and the two ways out — upgrade zen, or
+  remove the field — so a user can fix it without reading the source, or quote
+  the message in a usable issue.
+
 ## v0.13.11 — 2026-11-17
 
 **A session can now work toward a goal on its own.** `/goal` sets a verifiable

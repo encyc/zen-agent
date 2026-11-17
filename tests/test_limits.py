@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from zenagent import __version__
 from zenagent.config import UserConfig, load_user_config
 from zenagent.limits import (
     ALL_KNOBS,
@@ -125,6 +126,23 @@ def test_nullable_knob_accepts_none():
     knob = KNOB_BY_KEY["task.max_cost"]
     assert coerce_value(knob, None, Path("/tmp/config.toml")) is None
     assert coerce_value(knob, 2.5, Path("/tmp/config.toml")) == 2.5
+
+
+def test_parse_limits_unknown_field_error_is_actionable(tmp_path):
+    target = tmp_path / "config.toml"
+    with pytest.raises(ValueError) as excinfo:
+        parse_limits({"bogus": {"max_turns": 1}}, target)
+    message = str(excinfo.value)
+    assert "[limits] has unknown tables" in message
+    assert "[limits.bogus]" in message
+    assert str(target) in message
+    assert __version__ in message
+    assert "upgrade zen" in message
+    assert "file an issue" in message
+
+    with pytest.raises(ValueError) as excinfo:
+        parse_limits({"goal": {"future_knob": 1}}, target)
+    assert "[limits.goal].future_knob" in str(excinfo.value)
 
 
 def test_parse_limits_rejects_unknown_section_and_key(tmp_path):

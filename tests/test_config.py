@@ -4,6 +4,7 @@ import time
 
 import pytest
 
+from zenagent import __version__
 from zenagent.config import (
     ContextGuard,
     UserConfig,
@@ -72,6 +73,20 @@ def test_unknown_provider_key_is_rejected(tmp_path):
     path = write_config(tmp_path, '[providers.deepseek]\nmodel = "x"\n')
     with pytest.raises(ValueError, match="unknown keys"):
         load_user_config(path)
+
+
+def test_unknown_key_error_names_field_version_and_way_out(tmp_path):
+    # A config written by a newer zen must produce a message the user can act
+    # on (and quote in an issue), not just a parser complaint.
+    path = write_config(tmp_path, "[zen]\nfuture_knob = 1\n")
+    with pytest.raises(ValueError) as excinfo:
+        load_user_config(path)
+    message = str(excinfo.value)
+    assert "[zen].future_knob" in message
+    assert str(path) in message
+    assert __version__ in message
+    assert "upgrade zen" in message
+    assert "file an issue" in message
 
 
 def test_broken_toml_raises_a_clear_error(tmp_path):

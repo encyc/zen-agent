@@ -44,6 +44,8 @@ from dataclasses import dataclass, fields, replace
 from pathlib import Path
 from typing import Literal
 
+from zenagent.config_errors import UnknownConfigField
+
 __all__ = [
     "ALL_KNOBS",
     "GROUP_ORDER",
@@ -564,9 +566,9 @@ def parse_limits(raw: object, target: Path) -> Limits:
     sections = {knob.section for knob in LIMITS}
     unknown_sections = set(raw) - sections
     if unknown_sections:
-        raise ValueError(
-            f"config {target}: [limits] has unknown tables "
-            f"{sorted(unknown_sections)} (allowed: {sorted(sections)})"
+        raise UnknownConfigField.tables(
+            target=target, section="limits",
+            unknown=unknown_sections, allowed=sections,
         )
     values: dict[str, int | float] = {}
     explicit: set[str] = set()
@@ -581,9 +583,9 @@ def parse_limits(raw: object, target: Path) -> Limits:
         known = {knob.name for knob in LIMITS if knob.section == section}
         unknown = set(table) - known
         if unknown:
-            raise ValueError(
-                f"config {target}: [limits.{section}] has unknown keys "
-                f"{sorted(unknown)} (allowed: {sorted(known)})"
+            raise UnknownConfigField.keys(
+                target=target, prefix=f"[limits.{section}]",
+                unknown=unknown, allowed=known,
             )
         for knob in LIMITS:
             if knob.section != section or knob.name not in table:

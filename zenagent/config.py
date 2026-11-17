@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from zenagent import project
+from zenagent.config_errors import UnknownConfigField
 from zenagent.limits import Limits, parse_limits
 from zenagent.providers.catalog import ProviderConfig, model_from_mapping
 from zenagent.types import AssistantMessage, Message, Usage
@@ -143,8 +144,8 @@ def _unknown_section_keys(
 ) -> None:
     unknown = set(table) - allowed
     if unknown:
-        raise ValueError(
-            f"config {target}: [{section}] has unknown keys {sorted(unknown)}"
+        raise UnknownConfigField.keys(
+            target=target, prefix=f"[{section}]", unknown=unknown, allowed=allowed
         )
 
 
@@ -319,9 +320,9 @@ def _parse_custom_providers(raw: object, target: Path) -> dict[str, ProviderConf
             )
         unknown = set(table) - _CUSTOM_PROVIDER_KEYS
         if unknown:
-            raise ValueError(
-                f"config {target}: providers.custom.{provider_id} has unknown keys "
-                f"{sorted(unknown)} (allowed: {sorted(_CUSTOM_PROVIDER_KEYS)})"
+            raise UnknownConfigField.keys(
+                target=target, prefix=f"providers.custom.{provider_id}",
+                unknown=unknown, allowed=_CUSTOM_PROVIDER_KEYS,
             )
         base_url = table.get("base_url")
         api_key_env = table.get("api_key_env")
@@ -469,8 +470,9 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
         )
     unknown_tool_keys = set(tools_table) - {"allow", "deny"}
     if unknown_tool_keys:
-        raise ValueError(
-            f"config {target}: [tools] has unknown keys {sorted(unknown_tool_keys)}"
+        raise UnknownConfigField.keys(
+            target=target, prefix="[tools]", unknown=unknown_tool_keys,
+            allowed=("allow", "deny"),
         )
     tool_allow: list[str] = []
     tool_deny: list[str] = []
@@ -496,9 +498,9 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
         allowed = {"base_url", "api_key_env"}
         unknown = set(values) - allowed
         if unknown:
-            raise ValueError(
-                f"config {target}: providers.{provider_id} has unknown keys "
-                f"{sorted(unknown)} (allowed: {sorted(allowed)})"
+            raise UnknownConfigField.keys(
+                target=target, prefix=f"providers.{provider_id}",
+                unknown=unknown, allowed=allowed,
             )
         overrides[provider_id] = {
             key: str(value) for key, value in values.items() if value is not None
