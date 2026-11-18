@@ -624,6 +624,16 @@ export const useAppStore = create<AppState>((set, get) => ({
         limit: TRANSCRIPT_PAGE_SIZE,
       })
       if (frame.type !== 'result' || !frame.ok) return false
+      // The request is tagged with the on-screen session; a reply naming a
+      // different one (a tag that raced a switch, an older runtime) answers
+      // for the wrong conversation and must not paint.
+      const replySession = typeof frame.session === 'string' ? frame.session : null
+      if (
+        replySession !== null &&
+        replySession !== useSessionStore.getState().currentPath
+      ) {
+        return false
+      }
       const transcript = (frame.transcript ?? []) as never
       const notices = (frame.notices ?? []) as never
       const compactions = (frame.compactions ?? []) as CompactionRecord[]
@@ -656,6 +666,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         before,
       })
       if (frame.type !== 'result' || !frame.ok) return false
+      const olderSession = typeof frame.session === 'string' ? frame.session : null
+      if (
+        olderSession !== null &&
+        olderSession !== useSessionStore.getState().currentPath
+      ) {
+        return false
+      }
       useChatStore.getState().prependOlder({
         type: 'result',
         id: '',
@@ -852,11 +869,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   async newSession() {
-    await runSessionOp(get, { type: 'session', op: 'new' }, () => refreshAfterSessionChange(get))
+    await runSessionOp(get, { type: 'session', op: 'new' }, async (frame) => {
+      adoptSessionPath(frame)
+      await refreshAfterSessionChange(get)
+    })
   },
 
   async forkSession() {
-    await runSessionOp(get, { type: 'session', op: 'fork' }, () => refreshAfterSessionChange(get))
+    await runSessionOp(get, { type: 'session', op: 'fork' }, async (frame) => {
+      adoptSessionPath(frame)
+      await refreshAfterSessionChange(get)
+    })
   },
 
   async openSession(path) {
@@ -913,6 +936,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       return false
     }
     if (showFrameError(frame)) return false
+    adoptSessionPath(frame)
     await refreshAfterSessionChange(get)
     return true
   },
@@ -1051,11 +1075,19 @@ function showActionError(value: unknown): void {
   })
 }
 
+/** A session op's reply names the session its slot holds now (`new`, `fork`,
+ * `import`); pinning it before the refreshes keeps every tagged request —
+ * and the transcript it paints — on the session the switch produced. */
+function adoptSessionPath(frame: Record<string, unknown>): void {
+  const path = typeof frame.path === 'string' && frame.path !== '' ? frame.path : null
+  if (path !== null) useSessionStore.getState().setCurrent(path)
+}
+
 async function refreshAfterSessionChange(get: () => AppState): Promise<void> {
-  // The transcript and status are id-correlated on the wire; the global
-  // session list only feeds the sidebar, so it must not add a serial round
-  // trip to every switch.
+  // The session list names the slot's now-current session; it lands first so
+  // the transcript/status refreshes (session-tagged by the client) address
+  // the session the switch produced, not the one it left behind.
+  await get().refreshSessions()
   await Promise.all([get().refreshTranscript(), get().refreshStatus()])
-  void get().refreshSessions()
 }
 
