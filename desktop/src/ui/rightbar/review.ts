@@ -50,6 +50,10 @@ export function parseDiffHunks(diff: string): ReviewHunk[] {
       continue
     }
     if (hunks.length === 0 && (raw.startsWith('---') || raw.startsWith('+++'))) continue
+    // Before the first hunk, git's own preamble (`diff --git`, `index`,
+    // `new/deleted file mode`, …) is not diff body; only loose +/-/context
+    // lines and the no-newline marker are.
+    if (hunks.length === 0 && !/^[ +\\-]/.test(raw)) continue
     if (raw.startsWith('\\')) {
       current?.lines.push({ kind: 'meta', text: raw, oldNo: null, newNo: null })
       used += 1

@@ -1,0 +1,12 @@
+.guides {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 16px;
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--ds-hairline-strong) 0 1px,
+    transparent 1px 12px
+  );
+  pointer-events: none;
+}

@@ -1,0 +1,567 @@
+.root {
+  display: flex;
+  /* The work panel body is a plain (non-flex) box; height:100% is what
+   * constrains this panel so the side column scrolls instead of stretching. */
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.root[data-wide] {
+  flex-direction: row;
+}
+
+.note {
+  margin: 4px 2px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--ds-font-12);
+  line-height: 18px;
+}
+
+/* The banner that says the Changes list belongs to another worktree. */
+/* The Changes/commit toolbar: section label, counts, diff totals and the
+   tree/list control. One 30px rhythm across the rail. */
+.toolbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--ds-hairline);
+}
+
+.side > .toolbar {
+  margin-top: 8px;
+}
+
+.toolbarLabel {
+  flex: none;
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.toolbarCount {
+  flex: none;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  text-align: center;
+}
+
+.toolbarStat {
+  display: inline-flex;
+  flex: none;
+  gap: 5px;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.toolbarSpacer {
+  flex: 1;
+}
+
+/* Read-only preview of another worktree: a left rule, not a floating card. */
+.scopeBar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 8px 0;
+  padding: 4px 4px 4px 8px;
+  border: 1px solid color-mix(in oklab, var(--dsw-static-blue-500) 20%, transparent);
+  border-left: 2px solid var(--dsw-static-blue-500);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--dsw-static-blue-500) 6%, transparent);
+}
+
+.scopeText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--ds-font-11);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scopeBack {
+  flex: none;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid color-mix(in oklab, var(--dsw-static-blue-500) 24%, transparent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-static-blue-500);
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    color var(--ds-motion-fast) var(--ds-ease-out);
+}
+
+.scopeBack:hover {
+  background: color-mix(in oklab, var(--dsw-static-blue-500) 12%, transparent);
+  color: var(--dsw-static-blue-600);
+}
+
+.side {
+  display: flex;
+  flex: none;
+  width: 300px;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--dsw-alias-border-l1);
+  padding-bottom: 16px;
+}
+
+.root:not([data-wide]) .side {
+  width: auto;
+  flex: 1;
+  min-height: 0;
+  border-right: none;
+}
+
+.group {
+  margin-top: 10px;
+}
+
+.groupHeader {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px 0 6px;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    color var(--ds-motion-fast) var(--ds-ease-out);
+}
+
+.groupHeader:hover {
+  background: var(--ds-surface-hover);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.groupHeader:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--dsw-static-blue-500) 50%, transparent);
+  outline-offset: -2px;
+}
+
+.groupDot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--dsw-alias-label-tertiary);
+}
+
+.groupDot[data-state='staged'] {
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.groupDot[data-state='unstaged'] {
+  background: var(--dsw-alias-state-warn-primary);
+}
+
+.groupDot[data-state='untracked'] {
+  background: var(--dsw-static-neutral-bluish-400);
+}
+
+.groupLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.groupCount {
+  flex: none;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  text-align: center;
+}
+
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  height: 25px;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: var(--ds-font-12);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    box-shadow var(--ds-motion-fast) var(--ds-ease-out);
+}
+
+.row:hover {
+  background: var(--ds-surface-hover);
+}
+
+.row[data-selected] {
+  background: color-mix(in oklab, var(--dsw-static-blue-500) 8%, transparent);
+  box-shadow: inset 2px 0 0 var(--dsw-static-blue-500);
+}
+
+.row:focus-visible,
+.commitFileHeader:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--dsw-static-blue-500) 50%, transparent);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
+.chevronSpacer {
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+
+.typeSlot {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.rowPath {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: baseline;
+  overflow: hidden;
+  white-space: nowrap;
+  font-family: var(--ds-font-family-code);
+  font-size: var(--ds-font-11);
+}
+
+.pathDir {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  text-overflow: ellipsis;
+}
+
+.pathBase {
+  flex: none;
+  color: var(--dsw-alias-label-primary);
+}
+
+.pathName {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  text-overflow: ellipsis;
+}
+
+.row[data-state='untracked'] .pathBase {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.sessionDot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.counts {
+  display: inline-flex;
+  flex: none;
+  min-width: 48px;
+  justify-content: flex-end;
+  gap: 5px;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.added {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.removed {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.moreRow {
+  margin: 6px 10px 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--ds-font-11);
+}
+
+.detailCol {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.detail {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.iconButton {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    color var(--ds-motion-fast) var(--ds-ease-out);
+}
+
+.iconButton:hover {
+  background: var(--ds-surface-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.iconButton:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--dsw-static-blue-500) 50%, transparent);
+  outline-offset: -2px;
+}
+
+.detailHeader {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--ds-hairline);
+}
+
+.scopeChip {
+  flex: none;
+  max-width: 30%;
+  overflow: hidden;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--dsw-static-blue-500) 12%, transparent);
+  color: var(--dsw-static-blue-500);
+  font-family: var(--ds-font-family-code);
+  font-size: 10px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detailName {
+  flex: none;
+  max-width: 42%;
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-size: var(--ds-font-12);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detailPath {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: var(--ds-font-11);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.openInFiles {
+  flex: none;
+  height: 22px;
+  margin-left: auto;
+  padding: 0 8px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 10px;
+  cursor: pointer;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    color var(--ds-motion-fast) var(--ds-ease-out);
+}
+
+.openInFiles:hover {
+  background: var(--ds-surface-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.detailBody {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 10px 20px;
+}
+
+/* The wide pane with nothing selected: one quiet anchor instead of a bare
+   sentence in the corner. */
+.empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.emptyIcon {
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  margin-bottom: 2px;
+  border-radius: 12px;
+  background: var(--ds-surface-1);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.emptyTitle {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--ds-font-12);
+  font-weight: 600;
+}
+
+.emptyHint {
+  max-width: 240px;
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--ds-font-11);
+  line-height: 1.6;
+}
+
+.footnote {
+  margin: 6px 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--ds-font-11);
+}
+
+.foldAll {
+  flex: none;
+  height: 20px;
+  margin-left: 4px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--ds-font-11);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.foldAll:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+/* A changed file is a flat row (VSCode's list), not a card; only the diff
+   that opens under it carries the bordered code-block surface. */
+.commitFile {
+  margin-bottom: 1px;
+}
+
+.commitFileHeader {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  height: 28px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--ds-motion-fast) var(--ds-ease-out);
+}
+
+.commitFileHeader:hover {
+  background: var(--ds-surface-hover);
+}
+
+.commitFileHeader[data-open] {
+  background: var(--ds-surface-hover);
+}
+
+.commitFileHeader .rowPath {
+  flex: 1;
+}
+
+.commitFileBody {
+  padding: 4px 0 8px 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row,
+  .groupHeader,
+  .commitFileHeader,
+  .scopeBack,
+  .openInFiles,
+  .iconButton {
+    transition: none;
+  }
+}

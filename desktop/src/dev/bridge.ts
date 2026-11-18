@@ -84,6 +84,16 @@ export interface BridgeState extends PluginMockState, SwarmMockState, ZenMockSta
   fsFiles?: Record<string, Record<string, unknown>>
   memory?: MemoryEntryMock[]
   worktrees?: Record<string, unknown>
+  /** Replaces the whole `git_changes` payload; a three-group default stands in. */
+  gitChanges?: Record<string, unknown>
+  /** Per-worktree `git_changes` overrides, keyed by the requested path. */
+  gitChangesByWorktree?: Record<string, Record<string, unknown>>
+  /** Replaces the single `git_diff` payload served for any path. */
+  gitDiff?: Record<string, unknown>
+  /** Replaces the `git_log` commits (a three-commit default with one merge). */
+  gitLog?: Record<string, unknown>[]
+  /** Replaces the `git_show` payload served for any commit. */
+  gitShow?: Record<string, unknown>
   statusSession?: string
   /** The runtime mode the fake status answers with (default zen). */
   statusMode?: string
@@ -762,6 +772,69 @@ export function installBridge(state: BridgeState) {
           message: `unknown memory op: ${String(payload.op)}`,
         }
       }
+      case 'git_changes':
+        return {
+          type: 'result',
+          id: payload.id,
+          ok: true,
+          changes:
+            (typeof payload.worktree === 'string'
+              ? state.gitChangesByWorktree?.[payload.worktree]
+              : undefined) ??
+            state.gitChanges ??
+            ({
+              is_repo: true,
+              branch: 'main',
+              files: [
+                { path: 'zenagent/app/git.py', state: 'staged', plus: 2, minus: 0 },
+                { path: 'desktop/src/ui/rightbar/ReviewPanel.tsx', state: 'unstaged', plus: 4, minus: 1 },
+                { path: 'desktop/src/ui/rightbar/gitReview.ts', state: 'untracked', plus: null, minus: null },
+              ],
+              untracked_more: 0,
+            } as Record<string, unknown>),
+        }
+      case 'git_diff':
+        return {
+          type: 'result',
+          id: payload.id,
+          ok: true,
+          diff:
+            state.gitDiff ??
+            ({
+              text: '@@ -1,2 +1,3 @@\n context\n-old line\n+new line\n+added\n',
+              binary: false,
+              truncated: false,
+              missing: false,
+            } as Record<string, unknown>),
+        }
+      case 'git_log':
+        return {
+          type: 'result',
+          id: payload.id,
+          ok: true,
+          log: {
+            commits: state.gitLog ?? [
+              { hash: 'ccccccc4', short: 'ccccccc', parents: ['bbbbbbb3', 'aaaaaaa2'], subject: 'merge feature', author: 'Justin', timestamp: 1763200000, refs: ['main'] },
+              { hash: 'bbbbbbb3', short: 'bbbbbbb', parents: ['aaaaaaa2'], subject: 'side work', author: 'Justin', timestamp: 1763100000, refs: [] },
+              { hash: 'aaaaaaa2', short: 'aaaaaaa', parents: [], subject: 'initial', author: 'Justin', timestamp: 1763000000, refs: [] },
+            ],
+          },
+        }
+      case 'git_show':
+        return {
+          type: 'result',
+          id: payload.id,
+          ok: true,
+          show:
+            state.gitShow ?? {
+              found: true,
+              short: 'ccccccc',
+              subject: 'merge feature',
+              files: [
+                { path: 'src/changed.ts', additions: 2, removals: 1, diff: '@@ -1,2 +1,3 @@\n keep\n-old\n+new\n+added\n' },
+              ],
+            },
+        }
       case 'git_worktrees':
         return {
           type: 'result',
@@ -778,6 +851,7 @@ export function installBridge(state: BridgeState) {
                 path: '/work/p',
                 head: 'abc12345',
                 branch: 'main',
+                timestamp: 1763200000,
                 bare: false,
                 detached: false,
                 current: true,

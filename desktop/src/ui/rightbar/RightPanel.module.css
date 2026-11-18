@@ -60,6 +60,13 @@ html[data-work-panel-resizing] * {
   border-bottom: 1px solid var(--ds-hairline);
 }
 
+/* True fullscreen has no sidebar — and the sidebar header is what seats the
+ * macOS traffic lights. The rail's tab strip takes that job over, so it must
+ * reserve the same 78px corner or the tabs sit under the lights. */
+html[data-platform='darwin'] .root[data-fullscreen] .header {
+  padding-left: 78px;
+}
+
 .tabs {
   display: flex;
   flex: 1;
@@ -249,13 +256,14 @@ html[data-work-panel-resizing] * {
   background: var(--dsw-alias-state-business-primary);
 }
 
-.reviewWrap {
-  height: 100%;
-  min-height: 0;
-}
 
 /* Hidden-but-mounted terminal: display:none keeps the PTY and scrollback. */
 .terminalPane {
   height: 100%;
   min-height: 0;
+}
+
+/* Fullscreen: the rail fills the frame; there is no dock edge to drag. */
+.root[data-fullscreen] .resize {
+  display: none;
 }

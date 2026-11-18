@@ -86,6 +86,10 @@ export const REQUEST_KINDS = [
   'fs_index',
   'fs_list',
   'fs_read',
+  'git_changes',
+  'git_diff',
+  'git_log',
+  'git_show',
   'git_worktrees',
   'hello',
   'limits',
@@ -686,6 +690,9 @@ export interface WorktreeEntry {
   path: string
   head: string
   branch: string
+  /** The branch tip's commit time (unix seconds); 0 when unknown/unborn.
+   * The panel sorts worktrees newest-first on this. */
+  timestamp: number
   bare: boolean
   detached: boolean
   current: boolean
@@ -706,6 +713,87 @@ export interface GitWorktreesResult {
   id: string
   ok: true
   worktree: WorktreeOverview
+}
+
+// ---- git review panel --------------------------------------------------------
+
+/** One file of the changes list; counts are null for untracked (numstat
+ * has nothing to say about them). */
+export interface GitFileChange {
+  path: string
+  state: 'staged' | 'unstaged' | 'untracked'
+  plus: number | null
+  minus: number | null
+}
+
+export interface GitChangesPayload {
+  is_repo: boolean
+  branch: string
+  files: GitFileChange[]
+  untracked_more: number
+}
+
+export interface GitChangesResult {
+  type: 'result'
+  id: string
+  ok: true
+  changes: GitChangesPayload
+}
+
+/** One file's unified diff: synthetic all-additions for untracked paths,
+ * `missing` for a clean file, `binary`/`truncated` flags otherwise. */
+export interface GitDiffPayload {
+  text: string
+  binary: boolean
+  truncated: boolean
+  missing: boolean
+}
+
+export interface GitDiffResult {
+  type: 'result'
+  id: string
+  ok: true
+  diff: GitDiffPayload
+}
+
+/** One commit of the graph page: full hashes and parents (lane layout needs
+ * them), plus the display fields. */
+export interface GitCommit {
+  hash: string
+  short: string
+  parents: string[]
+  subject: string
+  author: string
+  timestamp: number
+  refs: string[]
+}
+
+export interface GitLogResult {
+  type: 'result'
+  id: string
+  ok: true
+  log: { commits: GitCommit[] }
+}
+
+export interface GitShowFile {
+  path: string
+  additions: number
+  removals: number
+  diff: string
+}
+
+export interface GitShowPayload {
+  found: boolean
+  short: string
+  subject: string
+  files: GitShowFile[]
+}
+
+export interface GitShowResult {
+  type: 'result'
+  id: string
+  ok: true
+  show: GitShowPayload
 }
 
 // ---- ask -------------------------------------------------------------------

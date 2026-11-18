@@ -85,6 +85,26 @@ test('review parses unified hunks and tracks both line numbers', () => {
   )
 })
 
+test('review skips git meta lines before the first hunk', () => {
+  const hunks = parseDiffHunks(
+    [
+      'diff --git a/src/a.ts b/src/a.ts',
+      'deleted file mode 100644',
+      'index 587be6b..0000000',
+      '--- a/src/a.ts',
+      '+++ /dev/null',
+      '@@ -1 +0,0 @@',
+      '-a',
+    ].join('\n'),
+  )
+  assert.equal(hunks.length, 1)
+  assert.equal(hunks[0].header, '@@ -1 +0,0 @@')
+  assert.deepEqual(
+    hunks[0].lines.map((line) => [line.kind, line.text]),
+    [['del', 'a']],
+  )
+})
+
 test('review splits multiple hunks and keeps a hunkless diff readable', () => {
   const hunks = parseDiffHunks(
     ['@@ -1 +1 @@', '-a', '+b', '@@ -9,2 +9,2 @@', '-c', '+d'].join('\n'),

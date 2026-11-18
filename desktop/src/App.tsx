@@ -94,6 +94,7 @@ export function App() {
 
   const [sidebarWidth, setSidebarWidth] = useState(() => loadWidth(SIDEBAR_KEY, SIDEBAR_DEFAULT))
   const rightbarOpen = useWorkPanelStore((state) => state.open)
+  const rightbarFullscreen = useWorkPanelStore((state) => state.open && state.fullscreen)
   const [rightbarWidth, setRightbarWidth] = useState(() => loadWidth(RIGHTBAR_KEY, RIGHTBAR_DEFAULT))
 
   // A worker transcript only belongs to the zen surface; leaving it (or
@@ -236,6 +237,12 @@ export function App() {
       if (event.key === 'Escape' && useAppStore.getState().busy) {
         if (useApprovalStore.getState().queue.length > 0) return
         void useAppStore.getState().cancel()
+        return
+      }
+      // Idle Escape leaves the work panel's fullscreen; a run keeps its
+      // cancel binding above — fullscreen never steals it.
+      if (event.key === 'Escape' && useWorkPanelStore.getState().fullscreen) {
+        useWorkPanelStore.getState().toggleFullscreen()
       }
     }
     document.addEventListener('keydown', onKeyDown)
@@ -282,6 +289,7 @@ export function App() {
       onSidebarToggle={() => setCollapsed(true)}
       rightbarOpen={rightbarOpen}
       rightbarWidth={rightbarWidth}
+      fullscreen={rightbarFullscreen}
       sidebar={bootOverride === null ? <Sidebar onCollapse={() => setCollapsed(true)} /> : null}
       rightbar={
         <Suspense fallback={null}>

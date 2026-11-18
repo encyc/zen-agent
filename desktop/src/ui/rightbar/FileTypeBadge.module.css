@@ -1,0 +1,37 @@
+/* A file-type badge: a static tone, so a type keeps its colour in both modes. */
+.badge {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 14px;
+  border-radius: 3px;
+  /* One glyph in a 16×14 box: this is pictogram geometry, not text, so it stays
+     a literal instead of riding the type ladder (--ds-font-11 would overflow). */
+  font-family: var(--ds-font-family-code);
+  font-size: 8px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--badge-tone);
+  background: color-mix(in oklab, var(--badge-tone) 14%, transparent);
+}
+
+.badge[data-tone='blue'] {
+  --badge-tone: var(--dsw-static-blue-500);
+}
+
+.badge[data-tone='amber'] {
+  --badge-tone: var(--dsw-static-amber-500);
+}
+
+.badge[data-tone='green'] {
+  --badge-tone: var(--dsw-static-green-500);
+}
+
+.badge[data-tone='red'] {
+  --badge-tone: var(--dsw-static-red-500);
+}
+
+.badge[data-tone='neutral'] {
+  --badge-tone: var(--dsw-alias-label-tertiary);
+}

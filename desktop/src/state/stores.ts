@@ -206,9 +206,8 @@ export const usePaletteStore = create<PaletteState>((set) => ({
 // ---- work panel -------------------------------------------------------------
 
 export type WorkPanelTabKind =
-  | 'review'
+  | 'git'
   | 'files'
-  | 'worktree'
   | 'memory'
   | 'terminal'
   | 'subagent'
@@ -232,19 +231,21 @@ export interface FileOpenRequest {
   nonce: number
 }
 
-const REVIEW_TAB: WorkPanelTab = { id: 'review', kind: 'review' }
+const GIT_TAB: WorkPanelTab = { id: 'git', kind: 'git' }
 const FILES_TAB: WorkPanelTab = { id: 'files', kind: 'files' }
 
 let fileRequestSeq = 0
 
 interface WorkPanelState {
   open: boolean
+  fullscreen: boolean
   tabs: WorkPanelTab[]
   activeId: string
   fileRequest: FileOpenRequest | null
   openPanel(): void
   closePanel(): void
-  showTab(kind: 'review' | 'files' | 'worktree' | 'memory' | 'terminal'): void
+  toggleFullscreen(): void
+  showTab(kind: 'git' | 'files' | 'memory' | 'terminal'): void
   openFile(path: string): void
   consumeFileRequest(): void
   activate(id: string): void
@@ -258,7 +259,8 @@ function withTab(tabs: WorkPanelTab[], tab: WorkPanelTab): WorkPanelTab[] {
 
 export const useWorkPanelStore = create<WorkPanelState>((set) => ({
   open: false,
-  tabs: [REVIEW_TAB, FILES_TAB],
+  fullscreen: false,
+  tabs: [GIT_TAB, FILES_TAB],
   activeId: FILES_TAB.id,
   fileRequest: null,
   // Every fresh open lands on files: the rail is a browsing surface first, so
@@ -269,7 +271,10 @@ export const useWorkPanelStore = create<WorkPanelState>((set) => ({
       tabs: withTab(state.tabs, FILES_TAB),
       activeId: FILES_TAB.id,
     })),
-  closePanel: () => set({ open: false }),
+  // Session-scoped flag (never persisted): closing the panel also leaves
+  // fullscreen so the next open starts as a normal docked rail.
+  closePanel: () => set({ open: false, fullscreen: false }),
+  toggleFullscreen: () => set((state) => ({ fullscreen: !state.fullscreen })),
   showTab: (kind) =>
     set((state) => ({
       open: true,

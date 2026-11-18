@@ -1,0 +1,83 @@
+.diff {
+  margin: 2px 0 6px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-markdown-code-block);
+  overflow: hidden;
+  font: var(--dsw-font-markdown-code-block-small);
+}
+
+.hunk + .hunk {
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.hunkHeader {
+  padding: 3px 10px;
+  background: var(--dsw-alias-markdown-code-block-banner);
+  color: var(--dsw-alias-label-tertiary);
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.line {
+  display: flex;
+  min-width: max-content;
+  line-height: 17px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.line:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.line[data-kind='add'] {
+  background: color-mix(in oklab, var(--dsw-alias-state-success-primary) 12%, transparent);
+}
+
+.line[data-kind='del'] {
+  background: color-mix(in oklab, var(--dsw-alias-state-error-primary) 12%, transparent);
+}
+
+.line[data-kind='meta'] {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.gutter {
+  flex: none;
+  width: 34px;
+  padding-right: 6px;
+  color: var(--dsw-alias-label-tertiary);
+  text-align: right;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.marker {
+  flex: none;
+  width: 14px;
+  text-align: center;
+  user-select: none;
+}
+
+.code {
+  padding-right: 10px;
+  white-space: pre;
+}
+
+[data-wrap] .line {
+  min-width: 0;
+}
+
+[data-wrap] .code {
+  flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.truncated {
+  padding: 4px 10px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--ds-font-11);
+}

@@ -32,6 +32,14 @@ function base24(size: number | undefined, className: string | undefined, style: 
   }
 }
 
+export function ExpandIcon(props: IconProps) {
+  return (
+    <svg {...base(props.size, props.className, props.style)}>
+      <path d="M3 6V3h3M10 3h3v3M13 10v3h-3M6 13H3v-3" />
+    </svg>
+  )
+}
+
 export function PlusIcon(props: IconProps) {
   return (
     <svg {...base(props.size, props.className, props.style)}>
@@ -197,6 +205,15 @@ export function BranchIcon(props: IconProps) {
   )
 }
 
+export function CommitIcon(props: IconProps) {
+  return (
+    <svg {...base(props.size, props.className, props.style)}>
+      <circle cx="8" cy="8" r="2.6" />
+      <path d="M2 8h3.4M10.6 8H14" />
+    </svg>
+  )
+}
+
 export function WarningIcon(props: IconProps) {
   return (
     <svg {...base(props.size, props.className, props.style)}>
@@ -245,6 +262,25 @@ export function TerminalIcon(props: IconProps) {
     <svg {...base(props.size, props.className, props.style)}>
       <rect x="2" y="2.5" width="12" height="11" rx="2" />
       <path d="m4.5 6 2 2-2 2M8 10.5h3.5" />
+    </svg>
+  )
+}
+
+export function ListIcon(props: IconProps) {
+  return (
+    <svg {...base(props.size, props.className, props.style)}>
+      <path d="M6 4h8M6 8h8M6 12h8" />
+      <circle cx="3" cy="4" r="0.9" fill="currentColor" stroke="none" />
+      <circle cx="3" cy="8" r="0.9" fill="currentColor" stroke="none" />
+      <circle cx="3" cy="12" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}
+
+export function TreeIcon(props: IconProps) {
+  return (
+    <svg {...base(props.size, props.className, props.style)}>
+      <path d="M3 3v9a1 1 0 0 0 1 1h3M3 6h4M3 10h4M10 3h3M10 8h3M10 13h3" />
     </svg>
   )
 }

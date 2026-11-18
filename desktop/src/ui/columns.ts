@@ -49,3 +49,11 @@ export function computeColumns(
       : Math.min(available, clampWidth(rightbar, RIGHTBAR_MIN, viewport * RIGHTBAR_MAX_RATIO))
   return { sidebar: s, center: Math.max(0, viewport - s - r), rightbar: r }
 }
+
+/** The work panel's fullscreen solve: the rail owns the whole viewport. The
+ * sidebar is dropped too — fullscreen is a review surface, and switching
+ * sessions there would need the layout it just gave away; Escape restores the
+ * previous three-column frame. A layout branch, not an overlay. */
+export function computeFullscreenColumns(viewport: number): Columns {
+  return { sidebar: 0, center: 0, rightbar: Math.max(0, viewport) }
+}

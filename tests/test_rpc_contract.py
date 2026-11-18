@@ -333,3 +333,213 @@ def test_approval_event_truncation_flag_matches_the_ts_contract():
     # The desktop contract's field name, pinned here as a string literal so a
     # Python-side rename fails this test instead of the GUI silently.
     assert "argsTruncated" in flagged
+
+
+# -- git review ops ------------------------------------------------------------
+
+
+async def _git_rpc_pair(runtime_factory, **runtime_kwargs):
+    """A minimal RpcServer over a scripted runtime; returns (server, writes)."""
+    from zenagent.app.chat import ChatController
+    from zenagent.app.commands import AppServices, build_default_commands
+    from zenagent.app.models import ModelManager
+    from zenagent.app.sessions import SessionManager
+    from zenagent.cli.rpc import RpcServer
+
+    runtime = await runtime_factory(stream_fn=_ok_stream(), **runtime_kwargs)
+    chat = ChatController(runtime)
+    services = AppServices(
+        runtime=runtime,
+        chat=chat,
+        models=ModelManager(runtime),
+        sessions=SessionManager(runtime),
+    )
+    writes: list[str] = []
+
+    async def read_line() -> str | None:
+        await asyncio.sleep(0)
+        return None
+
+    server = RpcServer(
+        runtime=runtime,
+        read_line=read_line,
+        write_line=writes.append,
+        chat=chat,
+        models=services.models,
+        sessions=services.sessions,
+        commands=build_default_commands(services),
+    )
+    return server, writes
+
+
+async def test_git_changes_roundtrip(runtime_factory, tmp_path):
+    from test_git_review import _git, make_repo, write
+
+    repo = make_repo(tmp_path)
+    write(repo / "b.txt", "x\n")
+    _git(repo, "add", "b.txt")
+    _git(repo, "commit", "-m", "base")
+    write(repo / "b.txt", "x\ny\n")
+
+    server, writes = await _git_rpc_pair(runtime_factory, root=repo)
+    assert await server._handle_line('{"type":"git_changes","id":"g1"}')
+    frame = json.loads(writes[-1])
+    assert frame["type"] == "result" and frame["ok"] is True
+    assert frame["changes"]["is_repo"] is True
+    assert frame["changes"]["files"] == [
+        {"path": "b.txt", "state": "unstaged", "plus": 1, "minus": 0}
+    ]
+
+
+async def test_git_diff_roundtrip(runtime_factory, tmp_path):
+    from test_git_review import _git, make_repo, write
+
+    repo = make_repo(tmp_path)
+    write(repo / "b.txt", "x\n")
+    _git(repo, "add", "b.txt")
+    _git(repo, "commit", "-m", "base")
+    write(repo / "new.txt", "a\n")
+
+    server, writes = await _git_rpc_pair(runtime_factory, root=repo)
+    assert await server._handle_line(
+        '{"type":"git_diff","id":"g2","path":"new.txt","staged":false}'
+    )
+    frame = json.loads(writes[-1])
+    assert frame["type"] == "result" and frame["ok"] is True
+    assert "@@ -0,0 +1,1 @@" in frame["diff"]["text"]
+    assert frame["diff"]["missing"] is False
+
+
+async def test_git_diff_bad_path_is_a_plain_error(runtime_factory, tmp_path):
+    server, writes = await _git_rpc_pair(runtime_factory, root=tmp_path)
+    assert await server._handle_line(
+        '{"type":"git_diff","id":"g3","path":123,"staged":false}'
+    )
+    frame = json.loads(writes[-1])
+    assert frame["type"] == "error" and frame["id"] == "g3"
+    assert "path" in frame["message"]
+
+
+
+async def test_git_changes_previews_a_linked_worktree(runtime_factory, tmp_path):
+    from test_git_review import _git, make_repo, write
+
+    repo = make_repo(tmp_path)
+    write(repo / "base.txt", "base\n")
+    _git(repo, "add", "base.txt")
+    _git(repo, "commit", "-m", "base")
+    linked = tmp_path / "linked"
+    _git(repo, "worktree", "add", "-q", "-b", "feature", str(linked))
+    write(linked / "feature.txt", "new\n")
+
+    server, writes = await _git_rpc_pair(runtime_factory, root=repo)
+    request = json.dumps(
+        {"type": "git_changes", "id": "g7", "worktree": str(linked)}
+    )
+    assert await server._handle_line(request)
+    frame = json.loads(writes[-1])
+    assert frame["type"] == "result" and frame["ok"] is True
+    assert frame["changes"]["branch"] == "feature"
+    assert [(f["path"], f["state"]) for f in frame["changes"]["files"]] == [
+        ("feature.txt", "untracked")
+    ]
+
+
+async def test_git_diff_previews_a_linked_worktree(runtime_factory, tmp_path):
+    from test_git_review import _git, make_repo, write
+
+    repo = make_repo(tmp_path)
+    write(repo / "base.txt", "base\n")
+    _git(repo, "add", "base.txt")
+    _git(repo, "commit", "-m", "base")
+    linked = tmp_path / "linked"
+    _git(repo, "worktree", "add", "-q", "-b", "feature", str(linked))
+    write(linked / "feature.txt", "new\n")
+
+    server, writes = await _git_rpc_pair(runtime_factory, root=repo)
+    request = json.dumps(
+        {
+            "type": "git_diff",
+            "id": "g8",
+            "path": "feature.txt",
+            "staged": False,
+            "worktree": str(linked),
+        }
+    )
+    assert await server._handle_line(request)
+    frame = json.loads(writes[-1])
+    assert frame["type"] == "result" and frame["ok"] is True
+    assert "@@ -0,0 +1,1 @@" in frame["diff"]["text"]
+
+
+async def test_git_changes_rejects_a_foreign_worktree(runtime_factory, tmp_path):
+    from test_git_review import make_repo
+
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+
+    server, writes = await _git_rpc_pair(runtime_factory, root=repo)
+    request = json.dumps(
+        {"type": "git_changes", "id": "g9", "worktree": str(outside)}
+    )
+    assert await server._handle_line(request)
+    frame = json.loads(writes[-1])
+    assert frame["type"] == "error" and frame["id"] == "g9"
+    assert "worktree" in frame["message"]
+
+
+async def test_git_ops_run_off_loop(runtime_factory, tmp_path, monkeypatch):
+    """Refresh polls fire while a run is streaming; a synchronous shell-out
+    would stall the loop — dispatch must go through ``asyncio.to_thread``."""
+    import threading
+
+    from zenagent.app import git_review
+
+    seen: dict[str, threading.Thread] = {}
+
+    def fake_changes(cwd):
+        seen["thread"] = threading.current_thread()
+        return {"is_repo": False, "branch": "", "files": [], "untracked_more": 0}
+
+    monkeypatch.setattr(git_review, "changes", fake_changes)
+    server, writes = await _git_rpc_pair(runtime_factory, root=tmp_path)
+    assert await server._handle_line('{"type":"git_changes","id":"g4"}')
+    assert json.loads(writes[-1])["ok"] is True
+    assert "thread" in seen, "dispatch never reached git_review.changes"
+    assert seen["thread"] is not threading.current_thread()
+
+
+async def test_git_log_roundtrip(runtime_factory, tmp_path):
+    from test_git_review import _history_repo
+
+    repo = _history_repo(tmp_path)
+    server, writes = await _git_rpc_pair(runtime_factory, root=repo)
+    assert await server._handle_line('{"type":"git_log","id":"g5","limit":2,"skip":0}')
+    frame = json.loads(writes[-1])
+    assert frame["type"] == "result" and frame["ok"] is True
+    commits = frame["log"]["commits"]
+    assert [c["subject"] for c in commits] == ["merge side", "c2"]
+    assert len(commits[0]["parents"]) == 2
+
+
+async def test_git_show_roundtrip(runtime_factory, tmp_path):
+    from test_git_review import _history_repo
+
+    repo = _history_repo(tmp_path)
+    server, writes = await _git_rpc_pair(runtime_factory, root=repo)
+    assert await server._handle_line('{"type":"git_show","id":"g6","commit":"HEAD"}')
+    frame = json.loads(writes[-1])
+    assert frame["type"] == "result" and frame["ok"] is True
+    assert frame["show"]["subject"] == "merge side"
+    assert [f["path"] for f in frame["show"]["files"]] == ["b.txt"]
+
+
+async def test_git_show_bad_commit_is_a_plain_error(runtime_factory, tmp_path):
+    server, writes = await _git_rpc_pair(runtime_factory, root=tmp_path)
+    assert await server._handle_line(
+        '{"type":"git_show","id":"g7","commit":"not-a-hash"}'
+    )
+    frame = json.loads(writes[-1])
+    assert frame["type"] == "error" and frame["id"] == "g7"
+    assert "commit" in frame["message"]

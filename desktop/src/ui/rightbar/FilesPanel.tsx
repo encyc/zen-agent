@@ -12,7 +12,7 @@ import chatCss from '../chat/AssistantNodeView.module.css'
 import type { FsListResult, FsReadResult, WorkspaceEntry, WorkspaceFile } from '../../rpc/types'
 import { frameErrorNotice, type ReplyLike } from '../../rpc/frames'
 import { toWorkspacePath } from './workspacePath'
-import { fileBadge } from './fileBadge'
+import { FileTypeBadge } from './FileTypeBadge.tsx'
 import {
   ensureLang,
   highlightLines,
@@ -25,7 +25,6 @@ import {
   ArrowLeftIcon,
   ChevronDownIcon,
   ChevronRightIcon,
-  FileIcon,
   FolderIcon,
 } from '../icons'
 import css from './FilesPanel.module.css'
@@ -49,19 +48,6 @@ function formatSize(size: number): string {
   if (size < 1024) return `${size} B`
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
   return `${(size / (1024 * 1024)).toFixed(1)} MB`
-}
-
-/** A type badge slot: the short label for a known extension, the generic file
- * glyph otherwise. Both live in a fixed-width slot so file and folder names
- * align at every depth. */
-function FileTypeBadge({ path }: { path: string }) {
-  const badge = fileBadge(path)
-  if (badge === null) return <FileIcon size={14} />
-  return (
-    <span className={css.badge} data-tone={badge.tone} aria-hidden>
-      {badge.label}
-    </span>
-  )
 }
 
 export function FilesPanel() {
