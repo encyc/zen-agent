@@ -15,6 +15,7 @@ export const panesZh: Record<string, string> = {
   'panes.composerPlaceholder': '发消息到这个会话…',
   'panes.detachFailed': '独立窗口只能在桌面应用中打开。',
   'panes.split': '分屏',
+  'panes.currentOnScreen': '当前会话已在主视图；选择其他会话即可并排查看。',
 }
 
 export const panesEn: Record<string, string> = {
@@ -30,4 +31,5 @@ export const panesEn: Record<string, string> = {
   'panes.composerPlaceholder': 'Message this session…',
   'panes.detachFailed': 'Detached windows only work in the desktop app.',
   'panes.split': 'Split',
+  'panes.currentOnScreen': 'This session is already on screen; pick another one to view it side by side.',
 }

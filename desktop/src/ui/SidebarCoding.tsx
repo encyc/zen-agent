@@ -507,8 +507,11 @@ export function SidebarCoding() {
               </>
             )}
             {/* Open beside the conversation: same project only (frames are
-                project-filtered on the wire), while the strip has room. */}
-            {menuSession.project_path !== undefined &&
+                project-filtered on the wire), while the strip has room — and
+                never for the session already on screen, whose dead click
+                would read as "the button is broken". */}
+            {menuSession.path !== currentPath &&
+              menuSession.project_path !== undefined &&
               menuSession.project_path !== '' &&
               menuSession.project_path === (current?.project_path ?? null) &&
               !usePanesStore.getState().panes.some((pane) => pane.path === menuSession.path) &&

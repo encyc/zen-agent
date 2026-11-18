@@ -161,8 +161,12 @@ export const usePanesStore = create<PanesState>((set, get) => {
       }
       const current = useSessionStore.getState().currentPath
       // The session on screen is already a full-width conversation; "open in
-      // split" is only meaningful for a *second* session.
-      if (get().panes.length === 0 && path === current) return
+      // split" is only meaningful for a *second* session. The sidebar hides
+      // the item for it — this notice only covers a stale menu race.
+      if (get().panes.length === 0 && path === current) {
+        notice('panes.currentOnScreen')
+        return
+      }
       // The strip always shows the session on screen next to the new pane:
       // seed it from the primary store (its pane, its busy state, the draft
       // the dock is about to stop carrying) so nothing repaints blank.

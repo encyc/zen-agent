@@ -341,13 +341,15 @@ test('closing back below the strip dissolves the last pane into the shell', asyn
   void primary
 })
 
-test('opening the session already on screen is a no-op, not a hidden hijack', async () => {
+test('opening the session already on screen hints instead of staying silent', async () => {
   const bridge = scripted()
   reset(bridge)
+  useNoticeStore.getState().dismiss()
 
   await usePanesStore.getState().open(CURRENT)
 
   assert.deepEqual(usePanesStore.getState().panes, [])
+  assert.notEqual(useNoticeStore.getState().notice, null)
 })
 
 test('the registry is wired as the frame-router pane sink', async () => {
