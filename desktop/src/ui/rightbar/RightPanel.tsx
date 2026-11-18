@@ -23,6 +23,7 @@ import {
 import {
   BotIcon,
   BranchIcon,
+  ExpandIcon,
   FileIcon,
   FolderIcon,
   PlusIcon,
@@ -87,6 +88,8 @@ export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
   const status = useStatusStore((state) => state.status)
   const tabs = useWorkPanelStore((state) => state.tabs)
   const activeId = useWorkPanelStore((state) => state.activeId)
+  const fullscreen = useWorkPanelStore((state) => state.fullscreen)
+  const toggleFullscreen = useWorkPanelStore((state) => state.toggleFullscreen)
   const showTab = useWorkPanelStore((state) => state.showTab)
   const activate = useWorkPanelStore((state) => state.activate)
   const closeTab = useWorkPanelStore((state) => state.closeTab)
@@ -164,8 +167,16 @@ export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
     onWidth(clampPanel(next))
   }
 
+  // In fullscreen the rail spans the frame; panels deciding wide/narrow off
+  // `width` should see the live span, not the last dragged dock width.
+  const effectiveWidth = fullscreen ? Math.max(RIGHTBAR_MIN, window.innerWidth - 260) : width
+
   return (
-    <div className={css.root} data-work-panel data-tab={activeTab?.kind ?? 'review'}>
+    <div
+      className={css.root}
+      data-work-panel
+      data-fullscreen={fullscreen || undefined}
+      data-tab={activeTab?.kind ?? 'review'}>
       <div
         className={css.resize}
         role="separator"
@@ -237,6 +248,16 @@ export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
           <button
             type="button"
             className={css.iconButton}
+            aria-label={fullscreen ? t('panel.fullscreenExit') : t('panel.fullscreen')}
+            title={fullscreen ? t('panel.fullscreenExit') : t('panel.fullscreen')}
+            aria-pressed={fullscreen || undefined}
+            onClick={toggleFullscreen}
+          >
+            <ExpandIcon size={14} />
+          </button>
+          <button
+            type="button"
+            className={css.iconButton}
             aria-label={t('panel.launcher')}
             title={t('panel.launcher')}
             aria-expanded={launcher}
@@ -295,7 +316,7 @@ export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
           ) : activeTab.kind === 'files' ? (
             <FilesPanel />
           ) : activeTab.kind === 'git' ? (
-            <GitPanel width={width} />
+            <GitPanel width={effectiveWidth} />
           ) : activeTab.kind === 'worktree' ? (
             <WorktreePanel />
           ) : (

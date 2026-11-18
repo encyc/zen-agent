@@ -49,3 +49,11 @@ export function computeColumns(
       : Math.min(available, clampWidth(rightbar, RIGHTBAR_MIN, viewport * RIGHTBAR_MAX_RATIO))
   return { sidebar: s, center: Math.max(0, viewport - s - r), rightbar: r }
 }
+
+/** The work panel's fullscreen solve: the sidebar keeps its column (session
+ * navigation stays reachable), the center drops its track entirely and the
+ * rail fills the rest — a layout branch, not an overlay. */
+export function computeFullscreenColumns(viewport: number, sidebar: number): Columns {
+  const s = sidebar === 0 ? 0 : clampWidth(sidebar, SIDEBAR_MIN, sidebarMax(viewport))
+  return { sidebar: s, center: 0, rightbar: Math.max(0, viewport - s) }
+}

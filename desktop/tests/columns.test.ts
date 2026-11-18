@@ -12,6 +12,7 @@ import {
   SIDEBAR_MIN,
   clampChatWidth,
   computeColumns,
+  computeFullscreenColumns,
   sidebarMax,
 } from '../src/ui/columns.ts'
 
@@ -57,4 +58,14 @@ test('the conversation band clamps to the pi 560–900 range', () => {
   assert.equal(clampChatWidth(500), 560)
   assert.equal(clampChatWidth(760), 760)
   assert.equal(clampChatWidth(1200), 900)
+})
+
+test('fullscreen gives the rail everything but the sidebar', () => {
+  const cols = computeFullscreenColumns(1440, 275)
+  assert.deepEqual(cols, { sidebar: 275, center: 0, rightbar: 1165 })
+  // Small viewport: the sidebar stays inside its own 240–280 cap, and the
+  // rail takes whatever remains.
+  const small = computeFullscreenColumns(600, 275)
+  assert.equal(small.sidebar, 275)
+  assert.equal(small.rightbar, 325)
 })

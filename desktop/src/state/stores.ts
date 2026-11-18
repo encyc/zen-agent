@@ -240,11 +240,13 @@ let fileRequestSeq = 0
 
 interface WorkPanelState {
   open: boolean
+  fullscreen: boolean
   tabs: WorkPanelTab[]
   activeId: string
   fileRequest: FileOpenRequest | null
   openPanel(): void
   closePanel(): void
+  toggleFullscreen(): void
   showTab(kind: 'review' | 'files' | 'git' | 'worktree' | 'memory' | 'terminal'): void
   openFile(path: string): void
   consumeFileRequest(): void
@@ -259,6 +261,7 @@ function withTab(tabs: WorkPanelTab[], tab: WorkPanelTab): WorkPanelTab[] {
 
 export const useWorkPanelStore = create<WorkPanelState>((set) => ({
   open: false,
+  fullscreen: false,
   tabs: [REVIEW_TAB, FILES_TAB],
   activeId: FILES_TAB.id,
   fileRequest: null,
@@ -270,7 +273,10 @@ export const useWorkPanelStore = create<WorkPanelState>((set) => ({
       tabs: withTab(state.tabs, FILES_TAB),
       activeId: FILES_TAB.id,
     })),
-  closePanel: () => set({ open: false }),
+  // Session-scoped flag (never persisted): closing the panel also leaves
+  // fullscreen so the next open starts as a normal docked rail.
+  closePanel: () => set({ open: false, fullscreen: false }),
+  toggleFullscreen: () => set((state) => ({ fullscreen: !state.fullscreen })),
   showTab: (kind) =>
     set((state) => ({
       open: true,

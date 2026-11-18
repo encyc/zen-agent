@@ -9,6 +9,7 @@ import {
   SIDEBAR_DEFAULT,
   SIDEBAR_MIN,
   computeColumns,
+  computeFullscreenColumns,
   sidebarMax,
 } from './columns'
 import css from './AppFrame.module.css'
@@ -20,6 +21,9 @@ interface AppFrameProps {
   onSidebarToggle(): void
   rightbarOpen: boolean
   rightbarWidth: number
+  /** The work panel's fullscreen: the center column is not rendered at all
+   * (chat, room pages and composer) and the rail fills the rest. */
+  fullscreen?: boolean
   sidebar: ReactNode
   rightbar: ReactNode
   children: ReactNode
@@ -44,7 +48,10 @@ export function AppFrame(props: AppFrameProps) {
   const sidebarCollapsed = props.sidebarOpen === false
   const sidebarPreference = sidebarCollapsed ? 0 : props.sidebarWidth || SIDEBAR_DEFAULT
   const rightbarPreference = props.rightbarOpen ? props.rightbarWidth || 380 : 0
-  const cols = computeColumns(viewport, sidebarPreference, rightbarPreference)
+  const fullscreen = props.fullscreen === true
+  const cols = fullscreen
+    ? computeFullscreenColumns(viewport, sidebarPreference)
+    : computeColumns(viewport, sidebarPreference, rightbarPreference)
 
   // Drag handles: pointer capture + rAF throttled deltas, frozen base.
   const [dragging, setDragging] = useState(false)
@@ -84,18 +91,25 @@ export function AppFrame(props: AppFrameProps) {
       ref={frameRef}
       className={css.frame}
       style={{
-        gridTemplateColumns: `${cols.sidebar}px minmax(${cols.rightbar === 0 ? 0 : CENTER_MIN}px, 1fr) minmax(0px, ${
-          cols.rightbar === 0 ? 0 : cols.rightbar
-        }px)`,
+        gridTemplateColumns: fullscreen
+          ? `${cols.sidebar}px minmax(0px, 1fr)`
+          : `${cols.sidebar}px minmax(${cols.rightbar === 0 ? 0 : CENTER_MIN}px, 1fr) minmax(0px, ${
+              cols.rightbar === 0 ? 0 : cols.rightbar
+            }px)`,
       }}
       data-sidebar-collapsed={sidebarCollapsed || undefined}
+      data-fullscreen={fullscreen || undefined}
       data-dragging={dragging || undefined}
     >
       <div className={css.sidebarCol}>{props.sidebar}</div>
-      <div className={css.centerCol} data-shell-center>
-        {props.children}
-      </div>
-      {cols.rightbar > 0 && <div className={css.rightbarCol}>{props.rightbar}</div>}
+      {!fullscreen && (
+        <div className={css.centerCol} data-shell-center>
+          {props.children}
+        </div>
+      )}
+      {(fullscreen || cols.rightbar > 0) && (
+        <div className={css.rightbarCol}>{props.rightbar}</div>
+      )}
       {!sidebarCollapsed && (
         <div
           className={css.handle}

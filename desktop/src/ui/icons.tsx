@@ -32,6 +32,14 @@ function base24(size: number | undefined, className: string | undefined, style: 
   }
 }
 
+export function ExpandIcon(props: IconProps) {
+  return (
+    <svg {...base(props.size, props.className, props.style)}>
+      <path d="M3 6V3h3M10 3h3v3M13 10v3h-3M6 13H3v-3" />
+    </svg>
+  )
+}
+
 export function PlusIcon(props: IconProps) {
   return (
     <svg {...base(props.size, props.className, props.style)}>
