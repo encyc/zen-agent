@@ -753,6 +753,46 @@ export interface GitDiffResult {
   diff: GitDiffPayload
 }
 
+/** One commit of the graph page: full hashes and parents (lane layout needs
+ * them), plus the display fields. */
+export interface GitCommit {
+  hash: string
+  short: string
+  parents: string[]
+  subject: string
+  author: string
+  timestamp: number
+  refs: string[]
+}
+
+export interface GitLogResult {
+  type: 'result'
+  id: string
+  ok: true
+  log: { commits: GitCommit[] }
+}
+
+export interface GitShowFile {
+  path: string
+  additions: number
+  removals: number
+  diff: string
+}
+
+export interface GitShowPayload {
+  found: boolean
+  short: string
+  subject: string
+  files: GitShowFile[]
+}
+
+export interface GitShowResult {
+  type: 'result'
+  id: string
+  ok: true
+  show: GitShowPayload
+}
+
 // ---- ask -------------------------------------------------------------------
 
 export interface AskOption {
