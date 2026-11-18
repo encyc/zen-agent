@@ -208,6 +208,7 @@ export const usePaletteStore = create<PaletteState>((set) => ({
 export type WorkPanelTabKind =
   | 'review'
   | 'files'
+  | 'git'
   | 'worktree'
   | 'memory'
   | 'terminal'
@@ -244,7 +245,7 @@ interface WorkPanelState {
   fileRequest: FileOpenRequest | null
   openPanel(): void
   closePanel(): void
-  showTab(kind: 'review' | 'files' | 'worktree' | 'memory' | 'terminal'): void
+  showTab(kind: 'review' | 'files' | 'git' | 'worktree' | 'memory' | 'terminal'): void
   openFile(path: string): void
   consumeFileRequest(): void
   activate(id: string): void

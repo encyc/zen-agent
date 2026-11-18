@@ -52,6 +52,9 @@ const WorktreePanel = lazy(() =>
 const TerminalPanel = lazy(() =>
   import('./TerminalPanel').then((module) => ({ default: module.TerminalPanel })),
 )
+const GitPanel = lazy(() =>
+  import('./GitPanel').then((module) => ({ default: module.GitPanel })),
+)
 
 export interface RightPanelProps {
   width: number
@@ -69,6 +72,7 @@ interface DragState {
 const TOOL_TABS = [
   { kind: 'review', label: 'panel.review', Icon: FileIcon },
   { kind: 'files', label: 'panel.files', Icon: FolderIcon },
+  { kind: 'git', label: 'panel.git', Icon: BranchIcon },
   { kind: 'worktree', label: 'panel.worktree', Icon: BranchIcon },
   { kind: 'memory', label: 'panel.memory', Icon: SparkIcon },
   { kind: 'terminal', label: 'panel.terminal', Icon: TerminalIcon },
@@ -290,6 +294,8 @@ export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
             <MemoryPanel />
           ) : activeTab.kind === 'files' ? (
             <FilesPanel />
+          ) : activeTab.kind === 'git' ? (
+            <GitPanel width={width} />
           ) : activeTab.kind === 'worktree' ? (
             <WorktreePanel />
           ) : (

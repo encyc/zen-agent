@@ -5,10 +5,9 @@ import { useMemo, useState } from 'react'
 import { useChatStore } from '../../state/chatStore'
 import { useT } from '../../i18n/locale'
 import { ChevronDownIcon, ChevronRightIcon } from '../icons'
-import { collectFileChanges, fileBasename, parseDiffHunks } from './review'
+import { collectFileChanges, fileBasename } from './review'
+import { DiffBlock } from './DiffBlock'
 import css from './ReviewPanel.module.css'
-
-const MAX_RENDERED_LINES = 1200
 
 export function ReviewPanel() {
   const t = useT()
@@ -40,7 +39,7 @@ export function ReviewPanel() {
           {t('panel.reviewWrap')}
         </button>
       </div>
-      <div className={css.scroll} data-wrap={wrap || undefined}>
+      <div className={css.scroll}>
         {changes.map((change) => {
           const open = !closed.has(change.path)
           return (
@@ -70,43 +69,12 @@ export function ReviewPanel() {
                 </span>
               </button>
               {open && change.diffs.map((diff, index) => (
-                <DiffBlock key={index} diff={diff} />
+                <DiffBlock key={index} diff={diff} wrap={wrap} />
               ))}
             </section>
           )
         })}
       </div>
-    </div>
-  )
-}
-
-function DiffBlock({ diff }: { diff: string }) {
-  const t = useT()
-  const hunks = useMemo(() => parseDiffHunks(diff), [diff])
-  const truncated = diff.split('\n').length > MAX_RENDERED_LINES
-
-  if (hunks.length === 0) {
-    return <pre className={css.diff}>{diff}</pre>
-  }
-
-  return (
-    <div className={css.diff}>
-      {hunks.map((hunk, hunkIndex) => (
-        <div key={hunkIndex} className={css.hunk}>
-          {hunk.header !== '' && <div className={css.hunkHeader}>{hunk.header}</div>}
-          {hunk.lines.map((line, lineIndex) => (
-            <div key={lineIndex} className={css.line} data-kind={line.kind}>
-              <span className={css.gutter}>{line.oldNo ?? ''}</span>
-              <span className={css.gutter}>{line.newNo ?? ''}</span>
-              <span className={css.marker}>
-                {line.kind === 'add' ? '+' : line.kind === 'del' ? '−' : ''}
-              </span>
-              <span className={css.code}>{line.text === '' ? ' ' : line.text}</span>
-            </div>
-          ))}
-        </div>
-      ))}
-      {truncated && <div className={css.truncated}>{t('panel.reviewTruncated')}</div>}
     </div>
   )
 }
