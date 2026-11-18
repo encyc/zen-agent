@@ -3,7 +3,7 @@
     "zenagent/app/commands.py": 920,
     "zenagent/app/chat.py": 881,
     "zenagent/app/swarm/manager.py": 911,
-    "zenagent/agent/session.py": 886,
+    "zenagent/agent/session.py": 896,
     "zenagent/limits.py": 963,
     "zenagent/cli/tui/app.py": 822
   },
@@ -18,7 +18,7 @@
       "zenagent/app/commands.py": "payback 2026-12-31 (TUI panel/command surface; split job subcommands next)",
       "zenagent/app/chat.py": "payback 2026-12-31 (goal hooks; split job/subagent views next)",
       "zenagent/app/swarm/manager.py": "payback 2026-12-31 (§6.4: room/manager split)",
-      "zenagent/agent/session.py": "payback 2026-12-31 (title/pin sidecar split; session-activity rule keeps a live listing)",
+      "zenagent/agent/session.py": "payback 2026-12-31 (title/pin sidecar split; session-activity rule keeps a live listing; +10 from session-hardening merge)",
       "zenagent/limits.py": "payback 2026-12-31 (goal knob registry split; config field refusals)",
       "zenagent/cli/tui/app.py": "payback 2026-12-31 (surface launchers; split pickers/panels next)"
     },
