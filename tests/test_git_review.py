@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from zenagent.app import git_review
-from zenagent.app.git_review import changes, diff
+from zenagent.app.git_review import changes, diff, log
 
 GIT = shutil.which("git")
 
@@ -183,3 +183,49 @@ def test_diff_clean_file_is_missing(tmp_path):
     result = diff(repo, "b.txt")
     assert result["missing"] is True
     assert result["text"] == ""
+
+
+def _history_repo(tmp_path: Path) -> Path:
+    """main: c1 → c2 → merge of side (c1 → s1); refs on main."""
+    repo = make_repo(tmp_path)
+    write(repo / "a.txt", "1\n")
+    _git(repo, "add", "a.txt")
+    _git(repo, "commit", "-m", "c1")
+    _git(repo, "checkout", "-b", "side")
+    write(repo / "b.txt", "side\n")
+    _git(repo, "add", "b.txt")
+    _git(repo, "commit", "-m", "s1")
+    _git(repo, "checkout", "main")
+    write(repo / "a.txt", "1\n2\n")
+    _git(repo, "add", "a.txt")
+    _git(repo, "commit", "-m", "c2")
+    _git(repo, "merge", "--no-ff", "side", "-m", "merge side")
+    return repo
+
+
+def test_log_parents_and_refs(tmp_path):
+    result = log(_history_repo(tmp_path))
+    commits = result["commits"]
+    assert len(commits) == 4
+    merge = commits[0]
+    assert merge["subject"] == "merge side"
+    assert len(merge["parents"]) == 2
+    assert all(len(parent) == 40 for parent in merge["parents"])
+    assert merge["short"] == merge["hash"][:7]
+    # Author comes from the environment (GIT_AUTHOR_NAME may override the
+    # local config); pin non-emptiness, not the name.
+    assert merge["author"] != ""
+    assert merge["timestamp"] > 0
+    # HEAD decorates as `HEAD -> main`; the arrow prefix is stripped.
+    assert merge["refs"] == ["main"]
+    # Log walks every ancestor: merge, c2, the merged s1, then c1.
+    assert [c["subject"] for c in commits] == ["merge side", "c2", "s1", "c1"]
+    assert commits[1]["parents"] == [commits[3]["hash"]]
+
+
+def test_log_pagination(tmp_path):
+    repo = _history_repo(tmp_path)
+    page1 = log(repo, limit=2, skip=0)["commits"]
+    page2 = log(repo, limit=2, skip=2)["commits"]
+    assert [c["subject"] for c in page1] == ["merge side", "c2"]
+    assert [c["subject"] for c in page2] == ["s1", "c1"]

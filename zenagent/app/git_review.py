@@ -13,7 +13,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-__all__ = ["UNTRACKED_LIMIT", "DIFF_LINE_LIMIT", "changes", "diff"]
+__all__ = ["UNTRACKED_LIMIT", "DIFF_LINE_LIMIT", "changes", "diff", "log"]
 
 #: Hard cap on every git child; a huge repo must not stall a panel refresh.
 _TIMEOUT_S = 5.0
@@ -193,3 +193,41 @@ def diff(cwd: Path | str, path: str, *, staged: bool = False) -> dict:
         return {"text": "", "binary": True, "truncated": False, "missing": False}
     text, truncated = _truncate(text)
     return {"text": text, "binary": False, "truncated": truncated, "missing": False}
+
+
+def log(cwd: Path | str, *, limit: int = 100, skip: int = 0) -> dict:
+    """The commit DAG page the graph renders: full hashes and parents (lane
+    layout needs them), plus subject/author/date and `%D` ref decorations with
+    the ``HEAD ->`` arrow stripped."""
+    root = Path(cwd).expanduser().resolve()
+    completed = _run_git(
+        root,
+        "log",
+        f"--skip={max(0, skip)}",
+        f"-n{max(1, limit)}",
+        "--pretty=format:%H%x1f%h%x1f%P%x1f%s%x1f%an%x1f%at%x1f%D%x1e",
+    )
+    if completed is None or completed.returncode != 0:
+        return {"commits": []}
+    commits = []
+    for record in completed.stdout.split("\x1e"):
+        fields = [field.strip() for field in record.split("\x1f")]
+        if len(fields) < 6 or fields[0] == "":
+            continue
+        refs = [
+            ref.strip().removeprefix("HEAD -> ")
+            for ref in fields[6].split(", ")
+            if ref.strip() and ref.strip() != "HEAD"
+        ]
+        commits.append(
+            {
+                "hash": fields[0],
+                "short": fields[1],
+                "parents": fields[2].split() if fields[2] else [],
+                "subject": fields[3],
+                "author": fields[4],
+                "timestamp": int(fields[5]) if fields[5].isdigit() else 0,
+                "refs": refs,
+            }
+        )
+    return {"commits": commits}
