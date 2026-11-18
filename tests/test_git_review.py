@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from zenagent.app import git_review
-from zenagent.app.git_review import changes, diff, log
+from zenagent.app.git_review import changes, diff, log, show
 
 GIT = shutil.which("git")
 
@@ -229,3 +229,59 @@ def test_log_pagination(tmp_path):
     page2 = log(repo, limit=2, skip=2)["commits"]
     assert [c["subject"] for c in page1] == ["merge side", "c2"]
     assert [c["subject"] for c in page2] == ["s1", "c1"]
+
+
+def test_show_files_and_counts(tmp_path):
+    repo = _history_repo(tmp_path)
+    merge = log(repo)["commits"][0]
+    result = show(repo, merge["short"])
+    assert result["found"] is True
+    assert result["short"] == merge["short"]
+    assert result["subject"] == "merge side"
+    paths = {entry["path"] for entry in result["files"]}
+    assert paths == {"b.txt"}
+    entry = result["files"][0]
+    assert entry["additions"] == 1
+    assert entry["removals"] == 0
+    assert "@@ " in entry["diff"] and "+side" in entry["diff"]
+
+
+def test_show_merge_empty(tmp_path):
+    # A genuinely empty merge: side carries its own commit and `-s ours`
+    # records the merge while taking none of it. (--no-ff of a branch with
+    # nothing new is a no-op in git and creates no merge commit at all.)
+    repo = make_repo(tmp_path)
+    write(repo / "a.txt", "1\n")
+    _git(repo, "add", "a.txt")
+    _git(repo, "commit", "-m", "c1")
+    _git(repo, "checkout", "-b", "side")
+    write(repo / "b.txt", "side\n")
+    _git(repo, "add", "b.txt")
+    _git(repo, "commit", "-m", "s1")
+    _git(repo, "checkout", "main")
+    _git(repo, "merge", "-s", "ours", "side", "-m", "empty merge")
+    result = show(repo, "HEAD")
+    assert result["found"] is True
+    assert result["subject"] == "empty merge"
+    assert result["files"] == []
+
+
+def test_show_bad_commit(tmp_path):
+    repo = _history_repo(tmp_path)
+    result = show(repo, "deadbeef")
+    assert result["found"] is False
+    assert result["files"] == []
+
+
+def test_show_root_commit_has_files(tmp_path):
+    """A root commit has no %P; the empty trailing field must read as "no
+    parents", not "not found" (found while wiring the graph)."""
+    repo = make_repo(tmp_path)
+    write(repo / "first.txt", "hello\n")
+    _git(repo, "add", "first.txt")
+    _git(repo, "commit", "-m", "root")
+    result = show(repo, "HEAD")
+    assert result["found"] is True
+    assert result["subject"] == "root"
+    assert [f["path"] for f in result["files"]] == ["first.txt"]
+    assert result["files"][0]["additions"] == 1

@@ -231,3 +231,59 @@ def log(cwd: Path | str, *, limit: int = 100, skip: int = 0) -> dict:
             }
         )
     return {"commits": commits}
+
+
+def show(cwd: Path | str, commit: str) -> dict:
+    """One commit's diff against its first parent (the root commit against
+    the empty tree): metadata from a `show -s`, per-file unified bodies from
+    an explicit two-endpoint diff, counts derived from the body itself. A
+    text-empty merge stays ``found`` with no files."""
+    missing = {"found": False, "short": "", "subject": "", "files": []}
+    root = Path(cwd).expanduser().resolve()
+    meta = _run_git(root, "show", "-s", "--format=%H%x1f%h%x1f%s%x1f%P", commit)
+    if meta is None or meta.returncode != 0:
+        return missing
+    fields = meta.stdout.rstrip("\n").split("\x1f")
+    if len(fields) < 3 or fields[0] == "":
+        return missing
+    # A root commit has no parents, so the trailing %P is empty and git may
+    # leave no separator at all: a short split means "no parents", not "not
+    # found".
+    short, subject = fields[1], fields[2]
+    parents = fields[3].split() if len(fields) > 3 else []
+    if parents:
+        body = _run_git(root, "diff", "--no-renames", "-p", parents[0], commit)
+    else:
+        body = _run_git(root, "diff-tree", "--root", "--no-renames", "-p", "-r", commit)
+
+    files: list[dict] = []
+    if body is not None and body.returncode == 0 and body.stdout != "":
+        chunks: list[str] = []
+        for line in body.stdout.split("\n"):
+            if line.startswith("diff --git "):
+                chunks.append(line)
+            elif chunks:
+                chunks[-1] += "\n" + line
+        for chunk in chunks:
+            lines = chunk.split("\n")[1:]
+            additions = sum(1 for l in lines if l.startswith("+") and not l.startswith("+++"))
+            removals = sum(1 for l in lines if l.startswith("-") and not l.startswith("---"))
+            text, _ = _truncate(chunk)
+            files.append(
+                {
+                    "path": _path_of_show_chunk(chunk),
+                    "additions": additions,
+                    "removals": removals,
+                    "diff": text,
+                }
+            )
+    return {"found": True, "short": short, "subject": subject, "files": files}
+
+
+def _path_of_show_chunk(chunk: str) -> str:
+    """`diff --git a/x b/x` → `x`."""
+    first = chunk.split("\n", 1)[0]
+    parts = first.split(" b/", 1)
+    if len(parts) == 2 and parts[1] != "":
+        return parts[1].strip('"')
+    return first
