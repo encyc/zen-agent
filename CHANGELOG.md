@@ -3,9 +3,55 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased
+## v0.13.14 — 2026-11-18
 
-**Session hardening** — four dsh-inspired ideas adopted without giving up the
+**The desktop holds more than one conversation at a time.** Up to three sessions
+run side by side in split panes — each with its own live transcript and
+composer — and any of them pops out into an independent window that shares the
+same runtime kernel. Getting there meant requests learned to say which session
+they belong to: the RPC host now routes by transcript path, so opening a
+session while another is mid-run spawns a sibling slot instead of erroring.
+The same release carries a durability pass over the session files themselves.
+
+### Desktop
+
+- **Open sessions side by side.** "Open in split" puts a session into a pane
+  strip under the topbar, up to three at once; the on-screen session hides its
+  own menu entry and says so with a notice instead of silently doing nothing.
+  Every pane streams its own transcript, usage and status against the live
+  kernel, with a session-tagged poll that marks a pane dead the moment its
+  session stops being resident.
+- **Each pane talks on its own.** Unfocused panes carry a slim composer with a
+  send button and Esc-to-cancel; the focused pane carries the full dock —
+  notice banner and approval panel included — so approval cards always belong
+  to the session that asked for them. Panes reserve no phantom dock height:
+  no blank band above the bottom edge, focused or not.
+- **Pop a session out to its own window.** The pane header's pop-out button
+  detaches the session into a Tauri window that boots straight into it, adopts
+  the running RPC host and keeps streaming. Detached windows close for real —
+  close-to-hide stays scoped to the main window — and a pane dropped at home
+  reflects the detach immediately.
+- **Closing dissolves cleanly.** Closing a pane returns its registries to the
+  primary view and refreshes the transcript; ending a session anywhere tears
+  its pane down everywhere. A submit that lands on an evicted session resumes
+  it once and retries instead of dead-ending.
+
+### Kernel & RPC
+
+- **Session-tagged routing.** Every session-addressed request carries the
+  transcript path it means, and the host serves it from the resident slot
+  holding that path — or refuses with `session_invalid` rather than silently
+  landing on whatever session happens to be active. Frontend ids are
+  per-process salted so two windows sharing one kernel can never collide.
+- **A busy holder spawns a sibling.** Starting a new or imported session while
+  another is mid-run used to bounce off the kernel's lease refusal; the host
+  now spawns a sibling runtime slot and activates it, so the running turn keeps
+  streaming untouched. An idle tagged new-session still switches in place, and
+  untagged forks keep the kernel's own refusal.
+
+### Session hardening
+
+Four dsh-inspired ideas adopted without giving up the
 plain-JSONL transcript: a crash mid tool-run now synthesizes "outcome unknown"
 results for the calls it stranded (resume tells the model what happened instead
 of silently dropping the calls); large image payloads spill to a
