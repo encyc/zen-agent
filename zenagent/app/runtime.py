@@ -670,6 +670,12 @@ class Runtime:
             from zenagent.tools.jobs import release_job_manager
 
             await release_job_manager()
+        # A failed agent_end flush deferred its tail here; shutdown is the
+        # last chance to land it (best effort: a still-full disk must not
+        # make close fail).
+        if self._unpersisted_messages:
+            with contextlib.suppress(OSError):
+                await self._flush_unpersisted(self.session)
         self._drop_unused_session()
         leases.release_session_lease(self)
         # A mid-switch close (abort during session switch) may have left the
@@ -743,6 +749,14 @@ class Runtime:
     ) -> None:
         if self.before_switch is not None and not await self.before_switch(path):
             return
+        if self._unpersisted_messages:
+            # The tail belongs to the session it came from: land it there
+            # before the switch — a deferred tail written after the switch
+            # would append the old session's messages into the new file, and
+            # a later repair could synthesize a duplicate tool result. What
+            # still fails stays dropped, like the inline handler always did.
+            await self._flush_unpersisted(self.session)
+            self._unpersisted_messages = []
         self.agent.abort()
         await self.agent.wait_for_idle()
         if path is not None:
@@ -752,6 +766,9 @@ class Runtime:
             self._touch_project()
             session = self.use_new_session()
         messages = session.load()
+        # A crash mid tool-run leaves the tail's calls unanswered; give the
+        # file, the display and the model their unknown-outcome results.
+        messages = await records.repair_interrupted_run(session, messages)
         self.agent.replace_messages(messages)
         self.session = session
         if self.todo_tool is not None:

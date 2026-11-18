@@ -3,6 +3,21 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+**Session hardening** — four dsh-inspired ideas adopted without giving up the
+plain-JSONL transcript: a crash mid tool-run now synthesizes "outcome unknown"
+results for the calls it stranded (resume tells the model what happened instead
+of silently dropping the calls); large image payloads spill to a
+content-addressed `_blobs/` store beside the session file (the line keeps a
+SHA-256 ref, loading hydrates it back, missing files degrade to a warning);
+task transcripts stamp their delegation depth so a resumed child never resets
+to top-level; session listings read a `_index.json` cache validated by size and
+mtime instead of parsing every transcript. A failed transcript write no longer
+drops messages — the tail is deferred and lands at the next run's end or at
+close. And a latent TUI bug is fixed: a tool card whose placeholder was
+repainted mid-stream now mounts instead of vanishing from the transcript.
+
 ## v0.13.13 — 2026-11-17
 
 **The terminal catches up to the desktop.** `/settings` becomes the desktop page

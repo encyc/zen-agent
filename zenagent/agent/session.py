@@ -28,6 +28,7 @@ from datetime import datetime
 from pathlib import Path
 
 from zenagent import __version__, project
+from zenagent.agent.blob_store import BlobStore, blob_root_for
 from zenagent.agent.jsonl import append_line, dump_line
 from zenagent.i18n import t
 from zenagent.types import (
@@ -449,6 +450,10 @@ class Session:
     #: records in memory until the first message, so an idle launch (or a
     #: project switch that never chats) leaves no ``(empty)`` row on disk.
     lazy: bool = field(default=False, repr=False, compare=False)
+    #: Content-addressed spill for large image payloads; ``None`` keeps every
+    #: image inline. :meth:`load` hydrates blob refs regardless of injection,
+    #: so bare readers stay lossless.
+    blob_store: BlobStore | None = field(default=None, repr=False, compare=False)
     _header_ensured: bool = field(default=False, repr=False, compare=False)
     _messages: list[Message] | None = field(default=None, repr=False, compare=False)
     _pending_records: list[dict] = field(default_factory=list, repr=False, compare=False)
@@ -554,7 +559,12 @@ class Session:
         # A lazy session held its header/mode records back; the first message
         # is what turns them into a transcript, in their original order.
         self._flush_pending()
-        self._write_line(message.to_json())
+        payload = message.to_json()
+        if self.blob_store is not None:
+            # Large image payloads leave the line for _blobs/; failure keeps
+            # them inline (best effort, never breaks the run).
+            self.blob_store.offload(payload)
+        self._write_line(payload)
         if self._messages is not None:
             self._messages.append(message)
 
@@ -588,6 +598,9 @@ class Session:
         if not self.path.is_file():
             self._messages = segments[0]
             return segments[0]
+        # Hydration is unconditional: a bare Session (export, listing, TUI
+        # display) must see the same messages a store-injected one does.
+        blob_store = self.blob_store or BlobStore(blob_root_for(self.path))
         text = self.path.read_text(encoding="utf-8")
         for lineno, raw in enumerate(text.splitlines(), start=1):
             line = raw.strip()
@@ -626,6 +639,8 @@ class Session:
                     if projected is not None:
                         segments[-1] = projected
                 continue
+            for ref in blob_store.hydrate(record):
+                self.warnings.append(f"{self.path.name}: missing image blob {ref}")
             try:
                 segments[-1].append(message_from_json(record))
             except (ValueError, TypeError) as exc:
@@ -817,6 +832,9 @@ def list_sessions(limit: int = 20, *, scope: str = "project") -> list[SessionInf
     if scope not in _SCOPES:
         raise ValueError(f"unknown session scope: {scope!r} (choose project|all)")
     directories = [sessions_dir()] if scope == "project" else all_session_dirs()
+    # Function-level import: session_index derives from this module's types.
+    from zenagent.agent.session_index import SessionIndex
+
     infos: list[SessionInfo] = []
     for directory in directories:
         if not directory.is_dir():
@@ -824,9 +842,10 @@ def list_sessions(limit: int = 20, *, scope: str = "project") -> list[SessionInf
         titles = read_session_titles(directory)
         pins = read_session_pins(directory)
         label = _project_label(directory)
+        index = SessionIndex(directory)
         for path in directory.glob("*.jsonl"):
             try:
-                info = Session(path).read_info(titles=titles)
+                info = index.read(path, titles)
             except (ValueError, OSError):
                 continue
             # Envelope-only leftovers from older builds are not conversations.
@@ -843,6 +862,7 @@ def list_sessions(limit: int = 20, *, scope: str = "project") -> list[SessionInf
                 continue
             info.project = label
             infos.append(info)
+        index.flush()
     infos.sort(key=lambda info: info.mtime, reverse=True)
     return infos[:limit]
 

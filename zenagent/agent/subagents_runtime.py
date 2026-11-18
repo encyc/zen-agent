@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import contextvars
 import time
 from collections import deque
 from collections.abc import Callable, Sequence
@@ -52,6 +53,16 @@ __all__ = [
 #: state the child must not write behind the parent's back), ``checkpoint``/
 #: ``rewind`` (time travel over the parent's transcript is the parent's call).
 _CHILD_TOOL_DENYLIST = frozenset({"task", "ask", "wait", "todo", "rewind"})
+
+#: Nesting depth of the currently dispatching child (main = 0). run_child
+#: increments it for the transcript header and scopes the value to the
+#: child's body with a token reset, so siblings and concurrent dispatches
+#: cannot inherit it. ``task`` is denied to children today, so default-build
+#: spawns are always depth 1; the variable keeps any other spawn path
+#: (plugins, fleet) compounding correctly instead of flattening.
+_delegation_depth: contextvars.ContextVar[int] = contextvars.ContextVar(
+    "delegation_depth", default=0
+)
 _CHILD_TOOL_DENY_PREFIXES = ("memory", "checkpoint")
 
 
@@ -406,7 +417,18 @@ class _TaskRecorder:
     #: Minimum seconds between two progress lines pushed to the tool card.
     PROGRESS_INTERVAL = 0.1
 
-    def __init__(self, *, store, call_id, name, model, messages, on_update, get_observer):
+    def __init__(
+        self,
+        *,
+        store,
+        call_id,
+        name,
+        model,
+        messages,
+        on_update,
+        get_observer,
+        delegation_depth: int = 0,
+    ):
         self._store = store
         self._call_id = call_id
         self._name = name
@@ -414,11 +436,17 @@ class _TaskRecorder:
         self._messages = messages
         self._on_update = on_update
         self._get_observer = get_observer
+        self._delegation_depth = delegation_depth
         self._turn = 0
         self._last_progress = 0.0
 
     def start(self) -> None:
-        self._store.begin(self._call_id, self._name, self._model)
+        self._store.begin(
+            self._call_id,
+            self._name,
+            self._model,
+            delegation_depth=self._delegation_depth,
+        )
         _emit(
             self._get_observer,
             self._call_id,
@@ -508,6 +536,11 @@ async def run_child(
 
         timeout_task = asyncio.create_task(watch_timeout())
 
+    # This spawn's depth: one below whoever dispatched it, stamped into the
+    # transcript header (a runtime-only depth would reset a resumed child to
+    # top-level). The value scopes to the child's body via a token reset, so
+    # it never leaks to sibling dispatches in the same context.
+    depth = _delegation_depth.get() + 1
     recorder = _TaskRecorder(
         store=store,
         call_id=call_id,
@@ -516,16 +549,19 @@ async def run_child(
         messages=lambda: child.messages,
         on_update=on_update,
         get_observer=get_observer or (lambda: None),
+        delegation_depth=depth,
     )
     recorder.start()
     child.subscribe(recorder.on_event)
 
+    depth_token = _delegation_depth.set(depth)
     failure = ""
     try:
         await child.prompt(prompt_body)
     except Exception as exc:  # noqa: BLE001 - a child crash must not kill the parent
         failure = f"{type(exc).__name__}: {exc}"
     finally:
+        _delegation_depth.reset(depth_token)
         if timeout_task is not None:
             timeout_task.cancel()
             with contextlib.suppress(asyncio.CancelledError, Exception):

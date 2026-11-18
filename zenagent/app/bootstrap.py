@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING
 from zenagent import project
 from zenagent.agent import Agent
 from zenagent.agent.subagents import SubagentLimits
-from zenagent.app import plugin_wiring, skills_recompose, subagent_runs
+from zenagent.app import plugin_wiring, records, skills_recompose, subagent_runs
 from zenagent.app.chat import ChatController
 from zenagent.app.commands import AppServices, CommandRegistry, build_default_commands
 from zenagent.app.goal import GoalLimits
@@ -309,17 +309,17 @@ async def assemble(
         agent.subscribe(runtime._record_unpersisted)
 
         async def persist(event) -> None:
+            # agent_end is the flush point (as before), but through
+            # ``_flush_unpersisted``: a write that fails mid-drain keeps its
+            # tail pending (restored) instead of dropping the messages the
+            # old inline handler lost. The dsh-style per-message checkpoint
+            # (assistant durable before its tool bodies run) needs a
+            # loop-level pre-side-effect hook — flushing inside this
+            # subscriber deadlocks the takeover/abort path, so it stays a
+            # documented future design.
             if event.type != "agent_end":
                 return
-            pending, runtime._unpersisted_messages = (
-                runtime._unpersisted_messages,
-                [],
-            )
-            for message in pending:
-                try:
-                    await runtime.session.append(message)
-                except OSError as exc:
-                    runtime.note_persist_failure(exc)
+            await runtime._flush_unpersisted(runtime.session)
             if runtime._metrics is not None:
                 await asyncio.to_thread(runtime._metrics.flush, runtime.agent)
 
@@ -334,7 +334,13 @@ async def assemble(
         if runtime.journal is not None:
             attach_journal(agent, runtime.journal)
         if runtime.session.messages:
-            agent.replace_messages(runtime.session.messages)
+            # A crash mid tool-run leaves the tail's calls unanswered; repair
+            # appends their unknown-outcome results before the agent sees them.
+            agent.replace_messages(
+                await records.repair_interrupted_run(
+                    runtime.session, runtime.session.messages
+                )
+            )
             # The resumed transcript sizes the next prompt; without this the
             # guard only knows estimates until the first new request lands.
             runtime.guard.last_usage = last_request_usage(runtime.session.messages)

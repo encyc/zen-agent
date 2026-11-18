@@ -249,7 +249,10 @@ def _block_from_json(d: Any) -> ContentBlock:
         )
     if block_type == "image":
         return ImageContent(
-            data=_require(d, "data", "image block"),
+            # An image spilled to the blob store travels as a ``blob`` ref;
+            # when its file is gone the data degrades to empty rather than
+            # losing the whole line.
+            data=d.get("data") or "",
             mime_type=_require(d, "mime_type", "image block"),
         )
     if block_type == "toolCall":

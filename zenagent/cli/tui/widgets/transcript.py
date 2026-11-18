@@ -188,6 +188,13 @@ class TranscriptView(VerticalScroll):
             # The controller transcript shrank (session switch): append-only
             # diffing cannot remove stale widgets, so rebuild.
             self.reset()
+        if self._has_unmounted_tool(views):
+            # The builder replaces a streamed assistant placeholder in place
+            # with its tool-call view. If a repaint ran while the placeholder
+            # still existed (an await landed between the two notifies), the
+            # slot was already counted as a message this append-only diff
+            # can never re-examine — rebuild from zero so the card mounts.
+            self.reset()
         grew = len(views) > self._count
         for index in range(self._count, len(views)):
             view = views[index]
@@ -235,6 +242,15 @@ class TranscriptView(VerticalScroll):
         self._sync_thinking(slot, view)
 
     # -- appends ------------------------------------------------------------
+
+    def _has_unmounted_tool(self, views: list) -> bool:
+        """A tool view below the counted frontier whose card never mounted."""
+        return any(
+            isinstance(view, ToolCallView)
+            and view.call_id not in self._cards_by_id
+            and index < self._count
+            for index, view in enumerate(views)
+        )
 
     def _append_message(self, view: MessageView) -> None:
         self._open_read_group = None

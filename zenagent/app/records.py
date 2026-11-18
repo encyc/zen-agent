@@ -19,11 +19,19 @@ swallows ``OSError``, so observability can never abort a run.
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Callable
 from pathlib import Path
 
+from zenagent.agent.blob_store import BlobStore, blob_root_for
 from zenagent.agent.session import Session
-from zenagent.types import AssistantMessage, Message, ToolCall, ToolResultMessage
+from zenagent.types import (
+    AssistantMessage,
+    Message,
+    TextContent,
+    ToolCall,
+    ToolResultMessage,
+)
 
 __all__ = [
     "BRANCH",
@@ -34,6 +42,7 @@ __all__ = [
     "RETRY",
     "RUN_END",
     "RUN_START",
+    "SYNTHESIZED_RESULT_TEXT",
     "TOOL_DETAILS_LIMIT",
     "TOOL_DIFF_MAX_LINES",
     "TOOL_END",
@@ -50,6 +59,7 @@ __all__ = [
     "mode",
     "open_session",
     "record_type",
+    "repair_interrupted_run",
     "retry",
     "run_end",
     "run_start",
@@ -266,7 +276,12 @@ def open_session(
     :meth:`Session.materialize`), so an idle launch writes no transcript.
     """
     return Session(
-        path, boundary=is_compaction, window=branch_window, lazy=lazy, cwd=cwd
+        path,
+        boundary=is_compaction,
+        window=branch_window,
+        lazy=lazy,
+        cwd=cwd,
+        blob_store=BlobStore(blob_root_for(path)),
     )
 
 
@@ -335,3 +350,71 @@ def keep_for_rewrite(
         return kind not in KNOWN_KINDS
 
     return keep
+
+
+#: Model-facing text of a synthesized result for a call the last assistant
+#: turn issued but no result ever answered (an interrupted run).
+SYNTHESIZED_RESULT_TEXT = (
+    "This tool call never completed: the session was interrupted before its "
+    "result was recorded. Its outcome is unknown — inspect the current state "
+    "before re-issuing the call."
+)
+
+
+async def repair_interrupted_run(
+    session: Session, messages: list[Message]
+) -> list[Message]:
+    """Synthesize unknown-outcome results for dangling tool calls on resume.
+
+    A crash between the assistant's ``message_end`` and its tool results (a
+    torn tail, a kill mid tool-run) leaves the transcript's last assistant
+    turn holding calls that nothing answers. ``replayable`` would drop them
+    from the next request silently; this appends one error result per
+    unanswered call instead, so the file, the display and the model all learn
+    the outcome is unknown. Only the *last* assistant turn is scanned: the
+    append-only flow answers earlier turns before the next one starts, and a
+    torn tail can only cut the end.
+
+    Calls of failed/aborted turns keep their ``replayable`` treatment — the
+    synthesized results only ever inform the model about healthy ``tool_use``
+    turns cut by a crash. No-op (nothing written) when there is no file, no
+    assistant message, no calls, or every call is answered.
+    """
+    if not messages or not session.path.is_file():
+        return messages
+    last_at = next(
+        (
+            index
+            for index in range(len(messages) - 1, -1, -1)
+            if isinstance(messages[index], AssistantMessage)
+        ),
+        None,
+    )
+    if last_at is None:
+        return messages
+    answered = {
+        message.tool_call_id
+        for message in messages[last_at + 1 :]
+        if isinstance(message, ToolResultMessage)
+    }
+    dangling = [
+        block
+        for block in messages[last_at].content
+        if isinstance(block, ToolCall)
+        and not (block.id == "" and block.name == "")
+        and block.id not in answered
+    ]
+    if not dangling:
+        return messages
+    now = int(time.time())
+    for call in dangling:  # source order: the transcript must read coherently
+        result = ToolResultMessage(
+            tool_call_id=call.id,
+            tool_name=call.name,
+            content=[TextContent(text=SYNTHESIZED_RESULT_TEXT)],
+            is_error=True,
+            timestamp=now,
+        )
+        await session.append(result)
+        messages.append(result)
+    return messages

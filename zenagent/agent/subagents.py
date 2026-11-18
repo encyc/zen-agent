@@ -160,6 +160,10 @@ class SubagentMeta:
     cost: float = 0.0
     tokens: int = 0
     truncated: bool = False
+    #: Nesting level of the spawn: main = 0 (implicit), its tasks = 1, a
+    #: task's own tasks = 2… Persisted so a resumed child never resets to
+    #: top-level (a runtime-only depth would).
+    delegation_depth: int = 0
 
 
 class SubagentStore:
@@ -193,8 +197,14 @@ class SubagentStore:
 
     # -- writing ------------------------------------------------------------
 
-    def begin(self, call_id: str, name: str, model: str) -> None:
-        """Start a transcript: write the header line (or keep it in memory)."""
+    def begin(
+        self, call_id: str, name: str, model: str, *, delegation_depth: int = 0
+    ) -> None:
+        """Start a transcript: write the header line (or keep it in memory).
+
+        ``delegation_depth`` (main = 0) is stamped only when positive: a
+        top-level task's header stays byte-identical to the legacy format.
+        """
         started_at = time.time()
         if self._directory is None:
             self._memory[call_id] = {
@@ -213,20 +223,17 @@ class SubagentStore:
             _chmod(self._directory, 0o700)
             path.write_text("", encoding="utf-8")
             _chmod(path, 0o600)
+            meta = {
+                "type": "meta",
+                "call_id": call_id,
+                "name": name,
+                "model": model,
+                "started_at": started_at,
+            }
+            if delegation_depth > 0:
+                meta["delegationDepth"] = delegation_depth
             with path.open("a", encoding="utf-8") as handle:
-                handle.write(
-                    json.dumps(
-                        {
-                            "type": "meta",
-                            "call_id": call_id,
-                            "name": name,
-                            "model": model,
-                            "started_at": started_at,
-                        },
-                        ensure_ascii=False,
-                    )
-                    + "\n"
-                )
+                handle.write(json.dumps(meta, ensure_ascii=False) + "\n")
             self._written[call_id] = 0
             self._prune()
         except OSError:
@@ -430,6 +437,7 @@ def _read_meta(path: Path) -> SubagentMeta | None:
         cost=float(end.get("cost") or 0.0) if end else 0.0,
         tokens=int(end.get("tokens") or 0) if end else 0,
         truncated=truncated,
+        delegation_depth=int(meta.get("delegationDepth") or 0),
     )
 
 

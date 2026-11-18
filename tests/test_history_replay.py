@@ -238,3 +238,56 @@ def test_error_tool_result_images_move_after_the_result():
 def test_only_error_results_with_images_are_split():
     assert split_error_tool_result_images(_result("c1")) is None
     assert split_error_tool_result_images(_image_result("c2", "shot", "aW1n")) is None
+
+
+def test_empty_image_data_becomes_a_placeholder():
+    """A hydrated image whose blob file was gone arrives with empty data; the
+    wire view must replace it with text — an empty base64 payload is a 400."""
+    empty_image = ImageContent(data="", mime_type="image/png")
+    messages = [
+        _user("look"),
+        _assistant([ToolCall(id="c1", name="shot", arguments={})], stop_reason="tool_use"),
+        ToolResultMessage(
+            tool_call_id="c1",
+            tool_name="shot",
+            content=[TextContent(text="shot:"), empty_image],
+            is_error=False,
+            timestamp=3,
+        ),
+        _assistant([TextContent(text="ok")]),
+    ]
+
+    replayed = replayable(messages)
+
+    result = replayed[2]
+    assert all(not isinstance(block, ImageContent) for block in result.content)
+    assert any(
+        "(image omitted" in block.text
+        for block in result.content
+        if isinstance(block, TextContent)
+    )
+
+
+def test_empty_image_in_a_user_turn_becomes_a_placeholder():
+    empty_image = ImageContent(data="", mime_type="image/png")
+    messages = [
+        UserMessage(content=[TextContent(text="see:"), empty_image], timestamp=1),
+    ]
+
+    replayed = replayable(messages)
+
+    content = replayed[0].content
+    assert all(not isinstance(block, ImageContent) for block in content)
+    assert any("(image omitted" in b.text for b in content if isinstance(b, TextContent))
+
+
+def test_real_images_pass_through_unchanged():
+    image = ImageContent(data="aW1n", mime_type="image/png")
+    messages = [
+        UserMessage(content=[image], timestamp=1),
+        _assistant([TextContent(text="ok")]),
+    ]
+
+    replayed = replayable(messages)
+
+    assert replayed[0].content[0] is image
