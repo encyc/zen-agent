@@ -3,6 +3,61 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## v0.14.0 — 2026-11-18
+
+**The desktop learns to review.** Review and Worktree are now one Git tab: a
+collapsible branch/worktree list, grouped changes with tree and list views, a
+lane-drawn commit graph, and per-file / per-commit diffs. A worktree row previews
+that checkout read-only — no runtime restart — and the whole rail survives true
+fullscreen. The release also carries the Review Rail visual pass and a
+transcript-window fix.
+
+### Desktop
+
+- **One Git tab.** The old Review and Worktree surfaces merged into a single
+  tab: branches/worktrees above, the working tree's staged, unstaged and
+  untracked groups below, then the commit graph. Each section collapses, the
+  worktree list is height-capped and sorted newest tip first, and the graph
+  page prefetches while scrolling.
+- **Preview a worktree without leaving.** Clicking a branch row scopes the
+  changes and diff panes to that checkout, read-only; a banner names the preview
+  and returns to the current worktree. The old "open/switch" button and its
+  runtime-restart path are gone.
+- **Tree or list, per surface.** Changes, the commit's file list, and the graph
+  each remember their own mode. Trees show folders with recursive counts and
+  indentation rails; the same folder path folds independently under staged,
+  unstaged and untracked. The commit detail opens its first file and folds the
+  rest one at a time.
+- **A commit graph that reads like an editor's.** Lane-only SVG rows use
+  adaptive lane widths, smooth merge/convergence bends, branch/tag pills (the
+  checked-out branch filled), and all local refs — an unmerged local branch is
+  visible without fetching. List mode drops the lanes for a scannable history.
+- **Fullscreen is the review surface.** The rail spans the window and hides the
+  app sidebar; on macOS the header reserves the traffic-light corner. Escape
+  exits when idle, and still cancels a running turn first.
+- **Review Rail visual pass.** Section rhythm, status dots, shared file-type
+  badges, dimmed path prefixes, aligned change counts, `aria-current` rows,
+  focus rings and reduced-motion fallbacks. The visual spec and screenshots live
+  in `docs/superpowers/specs/2026-11-18-git-review-panel-ui-design.md`.
+
+### Kernel & RPC
+
+- **Git reads off the event loop.** `git_changes`, `git_diff`, `git_log` and
+  `git_show` run through the worker thread, so a large diff or history page no
+  longer stalls streaming.
+- **Worktree-scoped reads.** `git_changes` and `git_diff` accept an optional
+  worktree path validated against `git worktree list`; stale or foreign paths
+  are refused instead of reading outside the project.
+- **History includes every local ref.** `git_log` walks `--branches --tags
+  HEAD`, so an unmerged local branch and its tip badge appear in the graph.
+
+### Fixes
+
+- **"Show earlier" mounts one page, not two.** A scroll-into-view and a click
+  could both grow the transcript window before React committed; a short cooldown
+  keeps one gesture to one growth, and duplicate older-page fetches are
+  single-flighted.
+
 ## v0.13.14 — 2026-11-18
 
 **The desktop holds more than one conversation at a time.** Up to three sessions
