@@ -8,12 +8,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAppStore } from '../../state/appStore.ts'
 import { useChatStore } from '../../state/chatStore.ts'
 import { useGitStore } from '../../state/gitStore.ts'
+import type { GitShowPayload } from '../../rpc/types.ts'
 import { useStatusStore, useWorkPanelStore } from '../../state/stores.ts'
 import { useT } from '../../i18n/locale.ts'
 import type { GitFileChange, GitWorktreesResult, WorktreeOverview } from '../../rpc/types.ts'
 import { frameError } from '../../rpc/frames.ts'
 import { ArrowLeftIcon, BranchIcon, CheckIcon, FileIcon, RefreshIcon } from '../icons'
 import { groupChanges, isSessionFile, sessionPaths } from './gitChanges.ts'
+import { GitGraphSection } from './GitGraphSection.tsx'
 import { fileBasename } from './review.ts'
 import { DiffBlock } from './DiffBlock'
 import css from './GitPanel.module.css'
@@ -35,7 +37,12 @@ export function GitPanel({ width }: { width: number }) {
   const selected = useGitStore((state) => state.selected)
   const openFile = useGitStore((state) => state.openFile)
   const loadChanges = useGitStore((state) => state.loadChanges)
+  const loadLog = useGitStore((state) => state.loadLog)
+  const loadMoreLog = useGitStore((state) => state.loadMoreLog)
+  const hasMoreLog = useGitStore((state) => state.hasMoreLog)
+  const graph = useGitStore((state) => state.log)
   const diffFor = useGitStore((state) => state.diffFor)
+  const showFor = useGitStore((state) => state.showFor)
   const nodes = useChatStore((state) => state.nodes)
   const project = useAppStore((state) => state.project)
   const running = useStatusStore((state) => state.status?.running === true)
@@ -45,7 +52,16 @@ export function GitPanel({ width }: { width: number }) {
 
   useEffect(() => {
     void loadChanges()
-  }, [loadChanges])
+    void loadLog()
+  }, [loadChanges, loadLog])
+
+  // The left column is the scroll container; its bottom edge asks for the
+  // next graph page.
+  const onSideScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    const el = event.currentTarget
+    if (!hasMoreLog || el.scrollTop + el.clientHeight < el.scrollHeight - 24) return
+    void loadMoreLog()
+  }
 
   // The branch section keeps WorktreePanel's fetch: worktrees + switch, with
   // the same guard that a switch restarts the runtime and must not race a run.
@@ -81,10 +97,13 @@ export function GitPanel({ width }: { width: number }) {
     }
   }
 
-  const diffKey = selected !== null ? `${selected.path}:${selected.staged ? 's' : 'w'}` : ''
-  const diff = selected !== null ? diffFor(diffKey) : null
+  const fileSel = selected?.kind === 'file' ? selected : null
+  const shown: GitShowPayload | null =
+    selected?.kind === 'commit' ? showFor(selected.hash) : null
+  const diffKey = fileSel !== null ? `${fileSel.path}:${fileSel.staged ? 's' : 'w'}` : ''
+  const diff = fileSel !== null ? diffFor(diffKey) : null
   const entry =
-    selected !== null ? changes?.files.find((file) => file.path === selected.path) ?? null : null
+    fileSel !== null ? changes?.files.find((file) => file.path === fileSel.path) ?? null : null
 
   if (changes !== null && !changes.is_repo) {
     return <p className={css.note}>{t('panel.git.empty')}</p>
@@ -94,7 +113,7 @@ export function GitPanel({ width }: { width: number }) {
   }
 
   const list = (
-    <div className={css.side} data-embed="" data-selectable="">
+    <div className={css.side} data-embed="" data-selectable="" onScroll={onSideScroll}>
       <div className={css.branchBar}>
         <BranchIcon size={13} />
         <span className={css.branch}>{overview?.branch || changes?.branch || '—'}</span>
@@ -151,7 +170,7 @@ export function GitPanel({ width }: { width: number }) {
               <FileRow
                 key={`${file.state}:${file.path}`}
                 file={file}
-                selected={selected?.path === file.path && selected.staged === (file.state === 'staged')}
+                selected={fileSel?.path === file.path && fileSel.staged === (file.state === 'staged')}
                 session={isSessionFile(file.path, session)}
                 onOpen={() => void openFile(file.path, file.state === 'staged')}
               />
@@ -165,26 +184,68 @@ export function GitPanel({ width }: { width: number }) {
       {changes !== null && changes.files.length === 0 && (
         <p className={css.note}>{t('panel.git.clean')}</p>
       )}
+      {graph !== null && graph.length > 0 && <GitGraphSection commits={graph} />}
+      {graph !== null && !hasMoreLog && <p className={css.moreRow}>{t('panel.git.graphEnd')}</p>}
     </div>
   )
 
-  const detail = selected !== null && (
+  const back = (
+    <button
+      type="button"
+      className={css.iconButton}
+      aria-label={t('panel.git.back')}
+      title={t('panel.git.back')}
+      onClick={() => useGitStore.setState({ selected: null })}
+    >
+      <ArrowLeftIcon size={14} />
+    </button>
+  )
+
+  const commitDetail = selected?.kind === 'commit' && (
     <div className={css.detail} data-embed="" data-selectable="">
       <div className={css.detailHeader}>
-        {narrow && (
-          <button
-            type="button"
-            className={css.iconButton}
-            aria-label={t('panel.git.back')}
-            title={t('panel.git.back')}
-            onClick={() => useGitStore.setState({ selected: null })}
-          >
-            <ArrowLeftIcon size={14} />
-          </button>
+        {narrow && back}
+        <BranchIcon size={13} />
+        <span className={css.detailName}>{shown?.subject ?? t('panel.git.loading')}</span>
+        <span className={css.detailPath}>{selected.hash.slice(0, 8)}</span>
+        {shown != null && (
+          <span className={css.counts}>
+            {t('panel.git.commitFiles', { count: shown.files.length })}
+          </span>
         )}
+      </div>
+      <div className={css.detailBody}>
+        {shown === null ? (
+          <p className={css.note}>{t('panel.git.loading')}</p>
+        ) : !shown.found ? (
+          <p className={css.note}>{t('panel.git.missing')}</p>
+        ) : shown.files.length === 0 ? (
+          <p className={css.note}>{t('panel.git.emptyCommit')}</p>
+        ) : (
+          shown.files.map((file) => (
+            <section key={file.path} className={css.commitFile}>
+              <div className={css.commitFileHeader}>
+                <span className={css.rowPath}>{file.path}</span>
+                <span className={css.counts}>
+                  <span className={css.added}>+{file.additions}</span>{' '}
+                  <span className={css.removed}>−{file.removals}</span>
+                </span>
+              </div>
+              <DiffBlock diff={file.diff} />
+            </section>
+          ))
+        )}
+      </div>
+    </div>
+  )
+
+  const fileDetail = fileSel !== null && (
+    <div className={css.detail} data-embed="" data-selectable="">
+      <div className={css.detailHeader}>
+        {narrow && back}
         <FileIcon size={13} />
-        <span className={css.detailName}>{fileBasename(selected.path)}</span>
-        <span className={css.detailPath}>{selected.path}</span>
+        <span className={css.detailName}>{fileBasename(fileSel.path)}</span>
+        <span className={css.detailPath}>{fileSel.path}</span>
         {entry != null && entry.plus != null && (
           <span className={css.counts}>
             <span className={css.added}>+{entry.plus}</span>{' '}
@@ -194,7 +255,7 @@ export function GitPanel({ width }: { width: number }) {
         <button
           type="button"
           className={css.openInFiles}
-          onClick={() => useWorkPanelStore.getState().openFile(selected.path)}
+          onClick={() => useWorkPanelStore.getState().openFile(fileSel.path)}
         >
           {t('panel.git.openInFiles')}
         </button>
@@ -219,6 +280,8 @@ export function GitPanel({ width }: { width: number }) {
       </div>
     </div>
   )
+
+  const detail = commitDetail ?? fileDetail
 
   if (narrow) {
     return <div className={css.root}>{selected !== null ? detail : list}</div>

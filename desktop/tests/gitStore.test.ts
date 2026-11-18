@@ -121,3 +121,75 @@ test('growth while the panel is closed does not refresh', async () => {
     mock.timers.reset()
   }
 })
+
+// ---- graph: log paging and keyed refresh -------------------------------------
+
+const logPage1: Record<string, unknown> = {
+  type: 'result', id: '', ok: true,
+  log: {
+    commits: [
+      { hash: 'c', short: 'c123456', parents: ['b'], subject: 'third', author: 'a', timestamp: 3, refs: ['main'] },
+      { hash: 'b', short: 'b123456', parents: ['a'], subject: 'second', author: 'a', timestamp: 2, refs: [] },
+    ],
+  },
+}
+const logPage2: Record<string, unknown> = {
+  type: 'result', id: '', ok: true,
+  log: {
+    commits: [
+      { hash: 'a', short: 'a123456', parents: [], subject: 'first', author: 'a', timestamp: 1, refs: [] },
+    ],
+  },
+}
+const logHead: Record<string, unknown> = {
+  type: 'result', id: '', ok: true,
+  log: {
+    commits: [
+      { hash: 'd', short: 'd123456', parents: ['c'], subject: 'new head', author: 'a', timestamp: 4, refs: ['main'] },
+      { hash: 'c', short: 'c123456', parents: ['b'], subject: 'third', author: 'a', timestamp: 3, refs: [] },
+      { hash: 'b', short: 'b123456', parents: ['a'], subject: 'second', author: 'a', timestamp: 2, refs: [] },
+    ],
+  },
+}
+
+test('loadLog pages and loadMoreLog appends until a short page', async () => {
+  const calls = stubClient({ git_log: logPage1 })
+  await useGitStore.getState().loadLog()
+  assert.equal(useGitStore.getState().log?.length, 2)
+  assert.equal(useGitStore.getState().hasMoreLog, true)
+
+  stubClient({ git_log: logPage2 })
+  await useGitStore.getState().loadMoreLog()
+  assert.deepEqual(useGitStore.getState().log?.map((c) => c.hash), ['c', 'b', 'a'])
+  // A page shorter than the limit ends the history.
+  assert.equal(useGitStore.getState().hasMoreLog, false)
+  assert.ok(calls.every((kind) => kind === 'git_log'))
+})
+
+test('a log refresh prepends new commits and keeps the loaded tail', async () => {
+  stubClient({ git_log: logPage1 })
+  await useGitStore.getState().loadLog()
+  stubClient({ git_log: logPage2 })
+  await useGitStore.getState().loadMoreLog()
+
+  stubClient({ git_log: logHead })
+  await useGitStore.getState().loadLog()
+  assert.deepEqual(useGitStore.getState().log?.map((c) => c.hash), ['d', 'c', 'b', 'a'])
+})
+
+test('openCommit caches the show payload by hash', async () => {
+  const calls = stubClient({
+    git_log: logPage1,
+    git_show: {
+      type: 'result', id: '', ok: true,
+      show: { found: true, short: 'c123456', subject: 'third', files: [] },
+    },
+  })
+  await useGitStore.getState().loadLog()
+  await useGitStore.getState().openCommit('c')
+  await useGitStore.getState().openCommit('c')
+  assert.equal(calls.filter((kind) => kind === 'git_show').length, 1)
+  const selected = useGitStore.getState().selected
+  assert.deepEqual(selected, { kind: 'commit', hash: 'c' })
+  assert.equal(useGitStore.getState().showFor('c')?.subject, 'third')
+})

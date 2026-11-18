@@ -88,6 +88,10 @@ export interface BridgeState extends PluginMockState, SwarmMockState, ZenMockSta
   gitChanges?: Record<string, unknown>
   /** Replaces the single `git_diff` payload served for any path. */
   gitDiff?: Record<string, unknown>
+  /** Replaces the `git_log` commits (a three-commit default with one merge). */
+  gitLog?: Record<string, unknown>[]
+  /** Replaces the `git_show` payload served for any commit. */
+  gitShow?: Record<string, unknown>
   statusSession?: string
   /** The runtime mode the fake status answers with (default zen). */
   statusMode?: string
@@ -797,6 +801,34 @@ export function installBridge(state: BridgeState) {
               truncated: false,
               missing: false,
             } as Record<string, unknown>),
+        }
+      case 'git_log':
+        return {
+          type: 'result',
+          id: payload.id,
+          ok: true,
+          log: {
+            commits: state.gitLog ?? [
+              { hash: 'ccccccc4', short: 'ccccccc', parents: ['bbbbbbb3', 'aaaaaaa2'], subject: 'merge feature', author: 'Justin', timestamp: 1763200000, refs: ['main'] },
+              { hash: 'bbbbbbb3', short: 'bbbbbbb', parents: ['aaaaaaa2'], subject: 'side work', author: 'Justin', timestamp: 1763100000, refs: [] },
+              { hash: 'aaaaaaa2', short: 'aaaaaaa', parents: [], subject: 'initial', author: 'Justin', timestamp: 1763000000, refs: [] },
+            ],
+          },
+        }
+      case 'git_show':
+        return {
+          type: 'result',
+          id: payload.id,
+          ok: true,
+          show:
+            state.gitShow ?? {
+              found: true,
+              short: 'ccccccc',
+              subject: 'merge feature',
+              files: [
+                { path: 'src/changed.ts', additions: 2, removals: 1, diff: '@@ -1,2 +1,3 @@\n keep\n-old\n+new\n+added\n' },
+              ],
+            },
         }
       case 'git_worktrees':
         return {

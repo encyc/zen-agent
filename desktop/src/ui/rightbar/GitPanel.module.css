@@ -303,3 +303,14 @@
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--ds-font-11);
 }
+
+.commitFile {
+  margin-bottom: 10px;
+}
+
+.commitFileHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+}

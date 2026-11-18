@@ -12,10 +12,12 @@ import { create } from 'zustand'
 import { useAppStore } from './appStore.ts'
 import { useChatStore } from './chatStore.ts'
 import { useWorkPanelStore } from './stores.ts'
-import type { GitChangesPayload, GitChangesResult, GitDiffPayload, GitDiffResult } from '../rpc/types.ts'
+import type { GitChangesPayload, GitChangesResult, GitCommit, GitDiffPayload, GitDiffResult, GitLogResult, GitShowPayload, GitShowResult } from '../rpc/types.ts'
+import { mergeCommits } from '../ui/rightbar/lanes.ts'
 
 const REQUEST_TIMEOUT_MS = 8000
 const REFRESH_DEBOUNCE_MS = 500
+const LOG_PAGE_SIZE = 100
 
 export interface GitSelection {
   kind: 'file'
@@ -23,23 +25,43 @@ export interface GitSelection {
   staged: boolean
 }
 
+export interface GitCommitSelection {
+  kind: 'commit'
+  hash: string
+}
+
 interface GitState {
   changes: GitChangesPayload | null
-  selected: GitSelection | null
+  selected: GitSelection | GitCommitSelection | null
   failed: boolean
+  /** The graph page: accumulated commits (paged appends, keyed refreshes). */
+  log: GitCommit[] | null
+  hasMoreLog: boolean
   loadChanges(): Promise<void>
+  loadLog(): Promise<void>
+  loadMoreLog(): Promise<void>
   openFile(path: string, staged: boolean): Promise<void>
+  openCommit(hash: string): Promise<void>
   diffFor(key: string): GitDiffPayload | null
+  showFor(hash: string): GitShowPayload | null
   clear(): void
 }
 
 /** Keyed `path:('s'|'w')` — staged and unstaged views of one path differ. */
 const diffCache = new Map<string, GitDiffPayload>()
 
+/** Commit shows, keyed by the hash the graph asked for. */
+const showCache = new Map<string, GitShowPayload>()
+
+/** Where the next graph page starts: the accumulated length. */
+let logSkip = 0
+
 export const useGitStore = create<GitState>((set, get) => ({
   changes: null,
   selected: null,
   failed: false,
+  log: null,
+  hasMoreLog: true,
 
   loadChanges: async () => {
     try {
@@ -53,6 +75,72 @@ export const useGitStore = create<GitState>((set, get) => ({
       set({ failed: true })
     }
   },
+
+  loadLog: async () => {
+    try {
+      const result = await useAppStore
+        .getState()
+        .client()
+        .send<GitLogResult>({ type: 'git_log', limit: LOG_PAGE_SIZE, skip: 0 }, REQUEST_TIMEOUT_MS)
+      if (result.ok !== true) throw new Error('git_log failed')
+      logSkip = result.log.commits.length
+      set((state) => ({
+        // A keyed merge: new commits go in front, an already-loaded tail
+        // (paged before the refresh) keeps its order.
+        log: state.log === null ? result.log.commits : mergeCommits(state.log, result.log.commits),
+        hasMoreLog: true,
+        failed: false,
+      }))
+    } catch {
+      set({ failed: true })
+    }
+  },
+
+  loadMoreLog: async () => {
+    const { log, hasMoreLog } = get()
+    if (log === null || !hasMoreLog) return
+    try {
+      const result = await useAppStore
+        .getState()
+        .client()
+        .send<GitLogResult>(
+          { type: 'git_log', limit: LOG_PAGE_SIZE, skip: logSkip },
+          REQUEST_TIMEOUT_MS,
+        )
+      if (result.ok !== true) throw new Error('git_log failed')
+      const known = new Set(log.map((commit) => commit.hash))
+      const fresh = result.log.commits.filter((commit) => !known.has(commit.hash))
+      logSkip += result.log.commits.length
+      set({
+        log: [...log, ...fresh],
+        // A short page (or an empty one) ends the history.
+        hasMoreLog: result.log.commits.length >= LOG_PAGE_SIZE,
+      })
+    } catch {
+      set({ failed: true })
+    }
+  },
+
+  openCommit: async (hash) => {
+    set({ selected: { kind: 'commit', hash } })
+    if (showCache.has(hash)) return
+    try {
+      const result = await useAppStore
+        .getState()
+        .client()
+        .send<GitShowResult>({ type: 'git_show', commit: hash }, REQUEST_TIMEOUT_MS)
+      if (result.ok !== true) throw new Error('git_show failed')
+      showCache.set(hash, result.show)
+      const current = get().selected
+      if (current?.kind === 'commit' && current.hash === hash) {
+        set({ selected: { kind: 'commit', hash } })
+      }
+    } catch {
+      // Uncached: the detail view keeps its loading affordance.
+    }
+  },
+
+  showFor: (hash) => showCache.get(hash) ?? null,
 
   openFile: async (path, staged) => {
     const selection: GitSelection = { kind: 'file', path, staged }
@@ -76,7 +164,9 @@ export const useGitStore = create<GitState>((set, get) => ({
 
   clear: () => {
     diffCache.clear()
-    set({ changes: null, selected: null, failed: false })
+    showCache.clear()
+    logSkip = 0
+    set({ changes: null, selected: null, failed: false, log: null, hasMoreLog: true })
   },
 }))
 
@@ -90,6 +180,8 @@ useChatStore.subscribe((state, prev) => {
   if (refreshTimer !== null) clearTimeout(refreshTimer)
   refreshTimer = setTimeout(() => {
     refreshTimer = null
-    void useGitStore.getState().loadChanges()
+    const git = useGitStore.getState()
+    void git.loadChanges()
+    if (git.log !== null) void git.loadLog()
   }, REFRESH_DEBOUNCE_MS)
 })
