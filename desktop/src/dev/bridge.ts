@@ -84,6 +84,10 @@ export interface BridgeState extends PluginMockState, SwarmMockState, ZenMockSta
   fsFiles?: Record<string, Record<string, unknown>>
   memory?: MemoryEntryMock[]
   worktrees?: Record<string, unknown>
+  /** Replaces the whole `git_changes` payload; a three-group default stands in. */
+  gitChanges?: Record<string, unknown>
+  /** Replaces the single `git_diff` payload served for any path. */
+  gitDiff?: Record<string, unknown>
   statusSession?: string
   /** The runtime mode the fake status answers with (default zen). */
   statusMode?: string
@@ -762,6 +766,38 @@ export function installBridge(state: BridgeState) {
           message: `unknown memory op: ${String(payload.op)}`,
         }
       }
+      case 'git_changes':
+        return {
+          type: 'result',
+          id: payload.id,
+          ok: true,
+          changes:
+            state.gitChanges ??
+            ({
+              is_repo: true,
+              branch: 'main',
+              files: [
+                { path: 'zenagent/app/git.py', state: 'staged', plus: 2, minus: 0 },
+                { path: 'desktop/src/ui/rightbar/ReviewPanel.tsx', state: 'unstaged', plus: 4, minus: 1 },
+                { path: 'desktop/src/ui/rightbar/gitReview.ts', state: 'untracked', plus: null, minus: null },
+              ],
+              untracked_more: 0,
+            } as Record<string, unknown>),
+        }
+      case 'git_diff':
+        return {
+          type: 'result',
+          id: payload.id,
+          ok: true,
+          diff:
+            state.gitDiff ??
+            ({
+              text: '@@ -1,2 +1,3 @@\n context\n-old line\n+new line\n+added\n',
+              binary: false,
+              truncated: false,
+              missing: false,
+            } as Record<string, unknown>),
+        }
       case 'git_worktrees':
         return {
           type: 'result',

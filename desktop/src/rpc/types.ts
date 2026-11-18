@@ -710,6 +710,47 @@ export interface GitWorktreesResult {
   worktree: WorktreeOverview
 }
 
+// ---- git review panel --------------------------------------------------------
+
+/** One file of the changes list; counts are null for untracked (numstat
+ * has nothing to say about them). */
+export interface GitFileChange {
+  path: string
+  state: 'staged' | 'unstaged' | 'untracked'
+  plus: number | null
+  minus: number | null
+}
+
+export interface GitChangesPayload {
+  is_repo: boolean
+  branch: string
+  files: GitFileChange[]
+  untracked_more: number
+}
+
+export interface GitChangesResult {
+  type: 'result'
+  id: string
+  ok: true
+  changes: GitChangesPayload
+}
+
+/** One file's unified diff: synthetic all-additions for untracked paths,
+ * `missing` for a clean file, `binary`/`truncated` flags otherwise. */
+export interface GitDiffPayload {
+  text: string
+  binary: boolean
+  truncated: boolean
+  missing: boolean
+}
+
+export interface GitDiffResult {
+  type: 'result'
+  id: string
+  ok: true
+  diff: GitDiffPayload
+}
+
 // ---- ask -------------------------------------------------------------------
 
 export interface AskOption {
