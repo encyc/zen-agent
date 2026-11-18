@@ -2753,3 +2753,107 @@ test('a fresh runtime is put back onto the last mode, model and thinking', async
   // A model switch may reset the thinking level, so thinking lands last.
   assert.deepEqual(order.slice(0, 3), ['mode', 'model', 'thinking'])
 })
+
+test('the git panel groups changes and serves untracked and staged diffs', async ({ page }) => {
+  await boot(
+    page,
+    initialState({
+      running: false,
+      gitChanges: {
+        is_repo: true,
+        branch: 'main',
+        files: [
+          { path: 'src/staged.ts', state: 'staged', plus: 3, minus: 1 },
+          { path: 'src/dirty.ts', state: 'unstaged', plus: 1, minus: 0 },
+          { path: 'src/new.ts', state: 'untracked', plus: null, minus: null },
+        ],
+        untracked_more: 2,
+      },
+      gitDiff: {
+        text: '@@ -0,0 +1,2 @@\n+fresh\n+lines\n',
+        binary: false,
+        truncated: false,
+        missing: false,
+      },
+    }),
+  )
+  await page.getByRole('button', { name: '打开工作面板' }).click()
+  const panel = page.locator('[data-work-panel]')
+  await page.getByRole('button', { name: '打开工作面板标签' }).click()
+  await panel.getByRole('menuitem', { name: 'Git' }).click()
+  await expect(panel.getByText('已暂存', { exact: true })).toBeVisible()
+  await expect(panel.getByText('更改', { exact: true })).toBeVisible()
+  await expect(panel.getByText('未跟踪', { exact: true })).toBeVisible()
+  await expect(panel.getByText('还有 2 个未跟踪文件未列出')).toBeVisible()
+
+  // The untracked row opens the all-additions diff (narrow rail: list→detail).
+  await panel.getByRole('button', { name: /src\/new\.ts/ }).click()
+  await expect(panel).toContainText('@@ -0,0 +1,2 @@')
+  await expect(panel.locator('[data-kind="add"]').first()).toContainText('fresh')
+  await page.getByRole('button', { name: '返回变更列表' }).click()
+
+  // The staged row asks the backend for the --cached variant.
+  await panel.getByRole('button', { name: /src\/staged\.ts/ }).click()
+  await expect(panel).toContainText('@@ -0,0 +1,2 @@')
+  const stagedAsk = await page.evaluate(
+    () =>
+      (window as unknown as { __ZEN_E2E__: { calls: { type: string; path?: string; staged?: boolean }[] } })
+        .__ZEN_E2E__.calls.find((call) => call.type === 'git_diff' && call.path === 'src/staged.ts'),
+  )
+  assert.equal(stagedAsk?.staged, true)
+})
+
+test('binary files show a placeholder instead of diff bytes', async ({ page }) => {
+  await boot(
+    page,
+    initialState({
+      running: false,
+      gitDiff: { text: '', binary: true, truncated: false, missing: false },
+    }),
+  )
+  await page.getByRole('button', { name: '打开工作面板' }).click()
+  const panel = page.locator('[data-work-panel]')
+  await page.getByRole('button', { name: '打开工作面板标签' }).click()
+  await panel.getByRole('menuitem', { name: 'Git' }).click()
+  await panel.getByRole('button', { name: /git\.py/ }).click()
+  await expect(panel.getByText('二进制文件，无法显示文本差异')).toBeVisible()
+})
+
+test('fullscreen expands the rail and idle escape restores the layout', async ({ page }) => {
+  await boot(page, initialState({ running: false }))
+  await page.getByRole('button', { name: '打开工作面板' }).click()
+  const panel = page.locator('[data-work-panel]')
+  await page.getByRole('button', { name: '打开工作面板标签' }).click()
+  await panel.getByRole('menuitem', { name: 'Git' }).click()
+  await expect(page.locator('[data-shell-center]')).toBeVisible()
+
+  await panel.getByRole('button', { name: '全屏' }).click()
+  await expect(page.locator('[data-shell-center]')).toHaveCount(0)
+  // Wide span: list and detail live side by side, so there is no back button.
+  await panel.getByRole('button', { name: /git\.py/ }).click()
+  await expect(panel).toContainText('@@ -1,2 +1,3 @@')
+  await expect(panel.getByRole('button', { name: '返回变更列表' })).toHaveCount(0)
+
+  await page.keyboard.press('Escape')
+  await expect(page.locator('[data-shell-center]')).toBeVisible()
+})
+
+test('a busy run keeps the cancel binding over fullscreen escape', async ({ page }) => {
+  await boot(page, initialState({ running: true }))
+  await page.getByRole('button', { name: '打开工作面板' }).click()
+  const panel = page.locator('[data-work-panel]')
+  await page.getByRole('button', { name: '打开工作面板标签' }).click()
+  await panel.getByRole('menuitem', { name: 'Git' }).click()
+  await panel.getByRole('button', { name: '全屏' }).click()
+  await expect(page.locator('[data-shell-center]')).toHaveCount(0)
+
+  await page.keyboard.press('Escape')
+  const cancelCount = await page.evaluate(
+    () =>
+      (window as unknown as { __ZEN_E2E__: { calls: { type: string }[] } }).__ZEN_E2E__.calls
+        .filter((call) => call.type === 'cancel').length,
+  )
+  assert.equal(cancelCount, 1)
+  // The cancel took the Escape; fullscreen survives.
+  await expect(page.locator('[data-shell-center]')).toHaveCount(0)
+})
