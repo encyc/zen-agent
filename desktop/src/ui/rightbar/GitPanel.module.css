@@ -1,6 +1,8 @@
 .root {
   display: flex;
-  flex: 1;
+  /* The work panel body is a plain (non-flex) box; height:100% is what
+   * constrains this panel so the side column scrolls instead of stretching. */
+  height: 100%;
   min-height: 0;
   flex-direction: column;
 }
@@ -16,10 +18,94 @@
   line-height: 18px;
 }
 
+/* The banner that says the Changes list belongs to another worktree. */
+/* The Changes/commit view toolbar: a label, an optional count and the
+   tree/list + fold-all controls on the right. */
+.toolbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+.side > .toolbar {
+  margin-top: 6px;
+}
+
+.toolbarLabel {
+  flex: none;
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--ds-font-11);
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.toolbarCount {
+  flex: none;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  text-align: center;
+}
+
+.toolbarSpacer {
+  flex: 1;
+}
+
+.scopeBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 8px 0;
+  padding: 3px 4px 3px 8px;
+  border: 1px solid color-mix(in oklab, var(--dsw-static-blue-500) 25%, transparent);
+  border-radius: 7px;
+  background: color-mix(in oklab, var(--dsw-static-blue-500) 7%, transparent);
+}
+
+.scopeText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--ds-font-11);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scopeBack {
+  flex: none;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid color-mix(in oklab, var(--dsw-static-blue-500) 28%, transparent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-static-blue-500);
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.scopeBack:hover {
+  background: color-mix(in oklab, var(--dsw-static-blue-500) 12%, transparent);
+}
+
 .side {
   display: flex;
   flex: none;
-  width: 260px;
+  width: 300px;
   flex-direction: column;
   min-height: 0;
   overflow-y: auto;
@@ -29,113 +115,9 @@
 
 .root:not([data-wide]) .side {
   width: auto;
+  flex: 1;
+  min-height: 0;
   border-right: none;
-}
-
-.branchBar {
-  display: flex;
-  flex: none;
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 8px;
-  background: var(--dsw-alias-bg-canvas);
-  border-bottom: 1px solid var(--dsw-alias-border-l1);
-  color: var(--dsw-alias-label-primary);
-}
-
-.branch {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 500;
-  font-size: var(--ds-font-12);
-}
-
-.iconButton {
-  display: inline-grid;
-  place-items: center;
-  flex: none;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: none;
-  border-radius: var(--dsw-radius-sm);
-  background: transparent;
-  color: var(--dsw-alias-label-tertiary);
-  cursor: pointer;
-}
-
-.iconButton:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
-}
-
-.worktrees {
-  margin: 0;
-  padding: 4px 8px 0;
-  list-style: none;
-  border-bottom: 1px solid var(--dsw-alias-border-l1);
-}
-
-.worktree {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 24px;
-  font-size: var(--ds-font-12);
-}
-
-.worktreeBranch {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--dsw-alias-label-secondary);
-  font-family: var(--ds-font-family-code);
-  font-size: var(--ds-font-11);
-}
-
-.worktree[data-current] .worktreeBranch {
-  color: var(--dsw-alias-label-primary);
-  font-weight: 500;
-}
-
-.current {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  flex: none;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: var(--ds-font-11);
-}
-
-.switch {
-  flex: none;
-  height: 20px;
-  padding: 0 8px;
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: var(--dsw-radius-sm);
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  font-size: var(--ds-font-11);
-  cursor: pointer;
-}
-
-.switch:hover:not(:disabled) {
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
-}
-
-.switch:disabled {
-  opacity: 0.5;
-  cursor: default;
 }
 
 .group {
@@ -144,14 +126,36 @@
 
 .groupHeader {
   display: flex;
+  width: 100%;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   height: 22px;
-  padding: 0 10px;
+  padding: 0 10px 0 6px;
+  border: none;
+  background: transparent;
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--ds-font-11);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  text-align: left;
+  cursor: pointer;
+}
+
+.groupHeader:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.groupHeader:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--dsw-static-blue-500) 50%, transparent);
+  outline-offset: -2px;
+}
+
+.groupLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .groupCount {
@@ -251,6 +255,21 @@
   border-bottom: 1px solid var(--dsw-alias-border-l1);
 }
 
+.scopeChip {
+  flex: none;
+  max-width: 30%;
+  overflow: hidden;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--dsw-static-blue-500) 12%, transparent);
+  color: var(--dsw-static-blue-500);
+  font-family: var(--ds-font-family-code);
+  font-size: 10px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .detailName {
   flex: none;
   max-width: 40%;
@@ -304,13 +323,54 @@
   font-size: var(--ds-font-11);
 }
 
+.foldAll {
+  flex: none;
+  height: 20px;
+  margin-left: 4px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--ds-font-11);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.foldAll:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+/* A changed file is a flat row (VSCode's list), not a card; only the diff
+   that opens under it carries the bordered code-block surface. */
 .commitFile {
-  margin-bottom: 10px;
+  margin-bottom: 1px;
 }
 
 .commitFileHeader {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 22px;
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.commitFileHeader:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.commitFileHeader .rowPath {
+  flex: 1;
+}
+
+.commitFileBody {
+  padding: 2px 0 6px 8px;
 }

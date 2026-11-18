@@ -13,7 +13,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-__all__ = ["UNTRACKED_LIMIT", "DIFF_LINE_LIMIT", "changes", "diff", "log"]
+__all__ = ["DIFF_LINE_LIMIT", "UNTRACKED_LIMIT", "changes", "diff", "log"]
 
 #: Hard cap on every git child; a huge repo must not stall a panel refresh.
 _TIMEOUT_S = 5.0
@@ -198,14 +198,23 @@ def diff(cwd: Path | str, path: str, *, staged: bool = False) -> dict:
 def log(cwd: Path | str, *, limit: int = 100, skip: int = 0) -> dict:
     """The commit DAG page the graph renders: full hashes and parents (lane
     layout needs them), plus subject/author/date and `%D` ref decorations with
-    the ``HEAD ->`` arrow stripped."""
+    the ``HEAD ->`` arrow stripped.
+
+    The walk covers every local branch and tag (plus a detached HEAD), not
+    just the checked-out branch: an unmerged feature branch must be visible in
+    the graph without opening its worktree. Remote refs stay out — the panel
+    never fetches, so they would only show what was last seen at fetch time.
+    """
     root = Path(cwd).expanduser().resolve()
     completed = _run_git(
         root,
         "log",
         f"--skip={max(0, skip)}",
         f"-n{max(1, limit)}",
+        "--branches",
+        "--tags",
         "--pretty=format:%H%x1f%h%x1f%P%x1f%s%x1f%an%x1f%at%x1f%D%x1e",
+        "HEAD",
     )
     if completed is None or completed.returncode != 0:
         return {"commits": []}

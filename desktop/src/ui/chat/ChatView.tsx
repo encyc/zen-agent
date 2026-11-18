@@ -46,6 +46,9 @@ import { ArrowDownIcon } from '../icons'
 import { RunningMark } from '../RunningMark'
 import css from './ChatView.module.css'
 
+/** One window-growth step per gesture; see `growWindow`. */
+const GROWTH_COOLDOWN_MS = 500
+
 /** The rail only cares about user rows; a stream of assistant deltas rebuilds
  * `nodes` without touching them, so compare identity instead of rebuilding. */
 function sameUserRows(rows: UserNode[], nodes: ChatNode[]): boolean {
@@ -147,11 +150,19 @@ export function ChatView(props: ChatViewProps) {
     })
   }
 
+  // One step per window budget. Scrolling the earlier row into view fires the
+  // scroll-at-top handler, then the click fires it again (a smooth scroll can
+  // also land after the commit). A short cooldown keeps one gesture to one
+  // growth; otherwise the long-transcript e2e saw 140 rows where 100 were
+  // promised.
+  const growthAt = useRef(0)
   const growWindow = useCallback(() => {
     const scroller = scrollerRef.current
     if (scroller === null) return
     const grown = growTranscriptWindow(windowSize, nodes.length)
     if (grown === windowSize) return
+    if (Date.now() - growthAt.current < GROWTH_COOLDOWN_MS) return
+    growthAt.current = Date.now()
     // Mounting rows above the viewport moves everything the reader is looking
     // at; hold the distance from the bottom so the content stays put.
     anchorRef.current = scroller.scrollHeight - scroller.scrollTop
@@ -162,16 +173,25 @@ export function ChatView(props: ChatViewProps) {
   // server: fetch the next older page and mount it in one commit, anchored
   // like a window growth so the reader's place does not jump.
   const fetchOlder = props.onLoadOlder ?? (() => useAppStore.getState().loadOlderTranscript())
+  // The top handler and the earlier-row click can both ask for a page before
+  // the first request resolves; one page per cursor, not two.
+  const loadingOlder = useRef(false)
   const loadOlder = useCallback(async () => {
-    const scroller = scrollerRef.current
-    const before = chat.getState().nodes.length
-    if (!(await fetchOlder())) return
-    const added = chat.getState().nodes.length - before
-    if (added <= 0) return
-    if (scroller !== null) {
-      anchorRef.current = scroller.scrollHeight - scroller.scrollTop
+    if (loadingOlder.current) return
+    loadingOlder.current = true
+    try {
+      const scroller = scrollerRef.current
+      const before = chat.getState().nodes.length
+      if (!(await fetchOlder())) return
+      const added = chat.getState().nodes.length - before
+      if (added <= 0) return
+      if (scroller !== null) {
+        anchorRef.current = scroller.scrollHeight - scroller.scrollTop
+      }
+      setWindowSize((size) => size + added)
+    } finally {
+      loadingOlder.current = false
     }
-    setWindowSize((size) => size + added)
   }, [chat, fetchOlder])
 
   const revealTop = useCallback(() => {

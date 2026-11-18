@@ -187,6 +187,12 @@ def test_worktree_overview_lists_the_main_and_linked_tree(tmp_path: Path) -> Non
     assert overview["main"] == str(repo.resolve())
     assert [item["branch"] for item in overview["worktrees"]] == ["main", "feature"]
     assert [item["current"] for item in overview["worktrees"]] == [True, False]
+    # The panel sorts newest-first; both branches sit on the same tip, so both
+    # carry that commit's timestamp, never the "unknown" zero.
+    assert [item["timestamp"] for item in overview["worktrees"]] == [
+        overview["worktrees"][0]["timestamp"],
+    ] * 2
+    assert overview["worktrees"][0]["timestamp"] > 0
     assert overview["status"]["branch"] == "main"
     assert overview["status"]["dirty"] == 0
 

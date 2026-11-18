@@ -61,11 +61,9 @@ test('the conversation band clamps to the pi 560–900 range', () => {
 })
 
 test('fullscreen gives the rail everything but the sidebar', () => {
-  const cols = computeFullscreenColumns(1440, 275)
-  assert.deepEqual(cols, { sidebar: 275, center: 0, rightbar: 1165 })
-  // Small viewport: the sidebar stays inside its own 240–280 cap, and the
-  // rail takes whatever remains.
-  const small = computeFullscreenColumns(600, 275)
-  assert.equal(small.sidebar, 275)
-  assert.equal(small.rightbar, 325)
+  const cols = computeFullscreenColumns(1440)
+  assert.deepEqual(cols, { sidebar: 0, center: 0, rightbar: 1440 })
+  // Small viewport: the rail still owns everything; no sidebar reserve.
+  const small = computeFullscreenColumns(600)
+  assert.deepEqual(small, { sidebar: 0, center: 0, rightbar: 600 })
 })

@@ -4,6 +4,7 @@ These tests drive real temporary repositories through the same shell-out
 surface the RPC server uses (Task 3 wires `changes`/`diff` onto it).
 """
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -19,10 +20,28 @@ if GIT is None:
     pytest.skip("git binary not available", allow_module_level=True)
 
 
-def _git(cwd: Path, *args: str) -> None:
+def _git(cwd: Path, *args: str, env: dict[str, str] | None = None) -> None:
     assert GIT is not None
     subprocess.run(
-        [GIT, *args], cwd=str(cwd), check=True, capture_output=True, text=True
+        [GIT, *args],
+        cwd=str(cwd),
+        check=True,
+        capture_output=True,
+        text=True,
+        env={**os.environ, **env} if env else None,
+    )
+
+
+def _commit(cwd: Path, message: str, when: int) -> None:
+    """A commit with a fixed author/committer time: log order must not depend
+    on how many commits happen to land in the same wall-clock second."""
+    stamp = f"@{when} +0000"
+    _git(
+        cwd,
+        "commit",
+        "-m",
+        message,
+        env={"GIT_AUTHOR_DATE": stamp, "GIT_COMMITTER_DATE": stamp},
     )
 
 
@@ -186,20 +205,33 @@ def test_diff_clean_file_is_missing(tmp_path):
 
 
 def _history_repo(tmp_path: Path) -> Path:
-    """main: c1 → c2 → merge of side (c1 → s1); refs on main."""
+    """main: c1 → c2 → merge of side (c1 → s1); refs on main.
+
+    Commit times are pinned and increasing, so `git log --branches` has one
+    deterministic date order regardless of how fast the fixture runs.
+    """
     repo = make_repo(tmp_path)
     write(repo / "a.txt", "1\n")
     _git(repo, "add", "a.txt")
-    _git(repo, "commit", "-m", "c1")
+    _commit(repo, "c1", 1_763_000_000)
     _git(repo, "checkout", "-b", "side")
     write(repo / "b.txt", "side\n")
     _git(repo, "add", "b.txt")
-    _git(repo, "commit", "-m", "s1")
+    _commit(repo, "s1", 1_763_000_060)
     _git(repo, "checkout", "main")
     write(repo / "a.txt", "1\n2\n")
     _git(repo, "add", "a.txt")
-    _git(repo, "commit", "-m", "c2")
-    _git(repo, "merge", "--no-ff", "side", "-m", "merge side")
+    _commit(repo, "c2", 1_763_000_120)
+    merge_stamp = "1763000180 +0000"
+    _git(
+        repo,
+        "merge",
+        "--no-ff",
+        "side",
+        "-m",
+        "merge side",
+        env={"GIT_AUTHOR_DATE": merge_stamp, "GIT_COMMITTER_DATE": merge_stamp},
+    )
     return repo
 
 
@@ -218,9 +250,27 @@ def test_log_parents_and_refs(tmp_path):
     assert merge["timestamp"] > 0
     # HEAD decorates as `HEAD -> main`; the arrow prefix is stripped.
     assert merge["refs"] == ["main"]
-    # Log walks every ancestor: merge, c2, the merged s1, then c1.
+    # Pinned commit times make the date order deterministic: merge, c2, s1, c1.
     assert [c["subject"] for c in commits] == ["merge side", "c2", "s1", "c1"]
     assert commits[1]["parents"] == [commits[3]["hash"]]
+
+
+
+def test_log_walks_unmerged_local_branches(tmp_path):
+    repo = _history_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "unmerged")
+    write(repo / "feature.txt", "feature\n")
+    _git(repo, "add", "feature.txt")
+    _commit(repo, "unmerged work", 1_763_000_240)
+    _git(repo, "checkout", "-q", "main")
+
+    result = log(repo)
+    subjects = [commit["subject"] for commit in result["commits"]]
+    # `git log HEAD` alone would hide this tip; the graph walks all local refs.
+    assert "unmerged work" in subjects
+    assert "unmerged" in result["commits"][subjects.index("unmerged work")]["refs"]
+    # The merged history is still there.
+    assert "merge side" in subjects
 
 
 def test_log_pagination(tmp_path):

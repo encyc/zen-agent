@@ -24,6 +24,7 @@ from zenagent.app.approval_router import (
 from zenagent.app.views import usage_total
 from zenagent.app.workspace import (
     worktree_overview,
+    worktree_paths,
 )
 from zenagent.cli.rpc.codec import serialize_event
 from zenagent.cli.rpc.errors import failure_frame
@@ -31,6 +32,22 @@ from zenagent.cli.rpc.errors import failure_frame
 #: What `git_show` accepts: a hex object name or a symbolic ref the
 #: graph can produce (`HEAD`). Anything else is the caller's mistake.
 _GIT_COMMIT_RE = re.compile(r"^(?:[0-9a-fA-F]{4,40}|HEAD)$")
+
+
+def _git_scope(cwd: Path, requested: object) -> Path | None:
+    """Resolve the review scope: the project root by default, or one of its
+    known worktrees for a read-only preview. A forged/unknown path is refused
+    — the panel may only read a worktree git itself listed, never an arbitrary
+    directory the caller names."""
+    if requested is None:
+        return cwd
+    if not isinstance(requested, str) or requested == "":
+        return None
+    try:
+        root = Path(requested).expanduser().resolve()
+    except (OSError, RuntimeError):
+        return None
+    return root if root in worktree_paths(cwd) else None
 from zenagent.cli.rpc.ops_config import ConfigOps
 from zenagent.cli.rpc.ops_files import FilesOps
 from zenagent.cli.rpc.ops_plugins import PluginsOps
@@ -540,10 +557,21 @@ class RpcServer(FilesOps, SessionOps, PluginsOps, ConfigOps, SecretsOps, SkillsO
             return True
         if kind == "git_changes":
             # The panel polls this while a run streams; the shell-out must
-            # leave the event loop free (see test_git_ops_run_off_loop).
+            # leave the event loop free (see test_git_ops_run_off_loop). The
+            # optional worktree is a read-only preview of a linked checkout.
+            scope = _git_scope(self.cwd, request.get("worktree"))
+            if scope is None:
+                self._send(
+                    {
+                        "type": "error",
+                        "id": request_id,
+                        "message": "git_changes needs a known worktree",
+                    }
+                )
+                return True
             try:
-                result = await asyncio.to_thread(git_review.changes, self.cwd)
-            except Exception as exc:
+                result = await asyncio.to_thread(git_review.changes, scope)
+            except Exception as exc:  # noqa: BLE001 - the frame is the failure surface
                 self._send(
                     failure_frame(
                         request_id,
@@ -571,7 +599,7 @@ class RpcServer(FilesOps, SessionOps, PluginsOps, ConfigOps, SecretsOps, SkillsO
                 result = await asyncio.to_thread(
                     git_review.log, self.cwd, limit=limit, skip=skip
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - the frame is the failure surface
                 self._send(
                     failure_frame(
                         request_id,
@@ -599,7 +627,7 @@ class RpcServer(FilesOps, SessionOps, PluginsOps, ConfigOps, SecretsOps, SkillsO
                 return True
             try:
                 result = await asyncio.to_thread(git_review.show, self.cwd, commit)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - the frame is the failure surface
                 self._send(
                     failure_frame(
                         request_id,
@@ -626,11 +654,21 @@ class RpcServer(FilesOps, SessionOps, PluginsOps, ConfigOps, SecretsOps, SkillsO
                 )
                 return True
             staged = request.get("staged") is True
+            scope = _git_scope(self.cwd, request.get("worktree"))
+            if scope is None:
+                self._send(
+                    {
+                        "type": "error",
+                        "id": request_id,
+                        "message": "git_diff needs a known worktree",
+                    }
+                )
+                return True
             try:
                 result = await asyncio.to_thread(
-                    git_review.diff, self.cwd, path, staged=staged
+                    git_review.diff, scope, path, staged=staged
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - the frame is the failure surface
                 self._send(
                     failure_frame(
                         request_id,

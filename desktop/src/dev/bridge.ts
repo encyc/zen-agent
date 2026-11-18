@@ -86,6 +86,8 @@ export interface BridgeState extends PluginMockState, SwarmMockState, ZenMockSta
   worktrees?: Record<string, unknown>
   /** Replaces the whole `git_changes` payload; a three-group default stands in. */
   gitChanges?: Record<string, unknown>
+  /** Per-worktree `git_changes` overrides, keyed by the requested path. */
+  gitChangesByWorktree?: Record<string, Record<string, unknown>>
   /** Replaces the single `git_diff` payload served for any path. */
   gitDiff?: Record<string, unknown>
   /** Replaces the `git_log` commits (a three-commit default with one merge). */
@@ -776,6 +778,9 @@ export function installBridge(state: BridgeState) {
           id: payload.id,
           ok: true,
           changes:
+            (typeof payload.worktree === 'string'
+              ? state.gitChangesByWorktree?.[payload.worktree]
+              : undefined) ??
             state.gitChanges ??
             ({
               is_repo: true,
@@ -846,6 +851,7 @@ export function installBridge(state: BridgeState) {
                 path: '/work/p',
                 head: 'abc12345',
                 branch: 'main',
+                timestamp: 1763200000,
                 bare: false,
                 detached: false,
                 current: true,

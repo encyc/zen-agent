@@ -690,6 +690,9 @@ export interface WorktreeEntry {
   path: string
   head: string
   branch: string
+  /** The branch tip's commit time (unix seconds); 0 when unknown/unborn.
+   * The panel sorts worktrees newest-first on this. */
+  timestamp: number
   bare: boolean
   detached: boolean
   current: boolean

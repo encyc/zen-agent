@@ -50,10 +50,10 @@ export function computeColumns(
   return { sidebar: s, center: Math.max(0, viewport - s - r), rightbar: r }
 }
 
-/** The work panel's fullscreen solve: the sidebar keeps its column (session
- * navigation stays reachable), the center drops its track entirely and the
- * rail fills the rest — a layout branch, not an overlay. */
-export function computeFullscreenColumns(viewport: number, sidebar: number): Columns {
-  const s = sidebar === 0 ? 0 : clampWidth(sidebar, SIDEBAR_MIN, sidebarMax(viewport))
-  return { sidebar: s, center: 0, rightbar: Math.max(0, viewport - s) }
+/** The work panel's fullscreen solve: the rail owns the whole viewport. The
+ * sidebar is dropped too — fullscreen is a review surface, and switching
+ * sessions there would need the layout it just gave away; Escape restores the
+ * previous three-column frame. A layout branch, not an overlay. */
+export function computeFullscreenColumns(viewport: number): Columns {
+  return { sidebar: 0, center: 0, rightbar: Math.max(0, viewport) }
 }

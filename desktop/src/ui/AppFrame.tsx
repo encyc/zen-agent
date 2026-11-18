@@ -50,7 +50,7 @@ export function AppFrame(props: AppFrameProps) {
   const rightbarPreference = props.rightbarOpen ? props.rightbarWidth || 380 : 0
   const fullscreen = props.fullscreen === true
   const cols = fullscreen
-    ? computeFullscreenColumns(viewport, sidebarPreference)
+    ? computeFullscreenColumns(viewport)
     : computeColumns(viewport, sidebarPreference, rightbarPreference)
 
   // Drag handles: pointer capture + rAF throttled deltas, frozen base.
@@ -92,7 +92,7 @@ export function AppFrame(props: AppFrameProps) {
       className={css.frame}
       style={{
         gridTemplateColumns: fullscreen
-          ? `${cols.sidebar}px minmax(0px, 1fr)`
+          ? 'minmax(0px, 1fr)'
           : `${cols.sidebar}px minmax(${cols.rightbar === 0 ? 0 : CENTER_MIN}px, 1fr) minmax(0px, ${
               cols.rightbar === 0 ? 0 : cols.rightbar
             }px)`,
@@ -101,7 +101,11 @@ export function AppFrame(props: AppFrameProps) {
       data-fullscreen={fullscreen || undefined}
       data-dragging={dragging || undefined}
     >
-      <div className={css.sidebarCol}>{props.sidebar}</div>
+      {!fullscreen && (
+        <div className={css.sidebarCol}>
+          {props.sidebar}
+        </div>
+      )}
       {!fullscreen && (
         <div className={css.centerCol} data-shell-center>
           {props.children}
@@ -110,7 +114,7 @@ export function AppFrame(props: AppFrameProps) {
       {(fullscreen || cols.rightbar > 0) && (
         <div className={css.rightbarCol}>{props.rightbar}</div>
       )}
-      {!sidebarCollapsed && (
+      {!fullscreen && !sidebarCollapsed && (
         <div
           className={css.handle}
           data-side="sidebar"

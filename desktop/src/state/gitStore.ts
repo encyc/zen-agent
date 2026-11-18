@@ -30,13 +30,27 @@ export interface GitCommitSelection {
   hash: string
 }
 
+/** A read-only preview of another linked worktree. `null` means the project
+ * root the runtime is serving: the normal review surface. */
+export interface GitScope {
+  path: string
+  branch: string
+}
+
+/** One diff cache key: the same path means different content per worktree. */
+export function diffKey(scope: GitScope | null, path: string, staged: boolean): string {
+  return `${scope?.path ?? ''}:${path}:${staged ? 's' : 'w'}`
+}
+
 interface GitState {
   changes: GitChangesPayload | null
   selected: GitSelection | GitCommitSelection | null
+  scope: GitScope | null
   failed: boolean
   /** The graph page: accumulated commits (paged appends, keyed refreshes). */
   log: GitCommit[] | null
   hasMoreLog: boolean
+  setScope(scope: GitScope | null): void
   loadChanges(): Promise<void>
   loadLog(): Promise<void>
   loadMoreLog(): Promise<void>
@@ -47,7 +61,8 @@ interface GitState {
   clear(): void
 }
 
-/** Keyed `path:('s'|'w')` — staged and unstaged views of one path differ. */
+/** Keyed by scope + `path:('s'|'w')` — staged/unstaged views differ, and so
+ * does the same path in two worktrees. */
 const diffCache = new Map<string, GitDiffPayload>()
 
 /** Commit shows, keyed by the hash the graph asked for. */
@@ -56,19 +71,36 @@ const showCache = new Map<string, GitShowPayload>()
 /** Where the next graph page starts: the accumulated length. */
 let logSkip = 0
 
+/** One tail page at a time: the scroll handler and the sentinel both fire at
+ * the bottom, and two concurrent pages would advance `logSkip` twice (the
+ * reader silently loses a page). */
+let loadingMore = false
+
 export const useGitStore = create<GitState>((set, get) => ({
   changes: null,
   selected: null,
+  scope: null,
   failed: false,
   log: null,
   hasMoreLog: true,
 
+  setScope: (scope) => {
+    set({ scope, selected: null })
+    // The scoped working tree's list is a different question; reload it now
+    // rather than letting a stale list sit under the preview banner.
+    void get().loadChanges()
+  },
+
   loadChanges: async () => {
+    const scope = get().scope
     try {
       const result = await useAppStore
         .getState()
         .client()
-        .send<GitChangesResult>({ type: 'git_changes' }, REQUEST_TIMEOUT_MS)
+        .send<GitChangesResult>(
+          { type: 'git_changes', ...(scope ? { worktree: scope.path } : {}) },
+          REQUEST_TIMEOUT_MS,
+        )
       if (result.ok !== true) throw new Error('git_changes failed')
       set({ changes: result.changes, failed: false })
     } catch {
@@ -97,17 +129,23 @@ export const useGitStore = create<GitState>((set, get) => ({
   },
 
   loadMoreLog: async () => {
+    if (loadingMore) return
     const { log, hasMoreLog } = get()
     if (log === null || !hasMoreLog) return
+    loadingMore = true
+    const skip = logSkip
     try {
       const result = await useAppStore
         .getState()
         .client()
         .send<GitLogResult>(
-          { type: 'git_log', limit: LOG_PAGE_SIZE, skip: logSkip },
+          { type: 'git_log', limit: LOG_PAGE_SIZE, skip },
           REQUEST_TIMEOUT_MS,
         )
       if (result.ok !== true) throw new Error('git_log failed')
+      // A refresh that re-keyed the head while this page was in flight moved
+      // the cursor; its merge wins and this stale page is dropped.
+      if (logSkip !== skip) return
       const known = new Set(log.map((commit) => commit.hash))
       const fresh = result.log.commits.filter((commit) => !known.has(commit.hash))
       logSkip += result.log.commits.length
@@ -118,6 +156,8 @@ export const useGitStore = create<GitState>((set, get) => ({
       })
     } catch {
       set({ failed: true })
+    } finally {
+      loadingMore = false
     }
   },
 
@@ -145,13 +185,17 @@ export const useGitStore = create<GitState>((set, get) => ({
   openFile: async (path, staged) => {
     const selection: GitSelection = { kind: 'file', path, staged }
     set({ selected: selection })
-    const key = `${path}:${staged ? 's' : 'w'}`
+    const scope = get().scope
+    const key = diffKey(scope, path, staged)
     if (diffCache.has(key)) return
     try {
       const result = await useAppStore
         .getState()
         .client()
-        .send<GitDiffResult>({ type: 'git_diff', path, staged }, REQUEST_TIMEOUT_MS)
+        .send<GitDiffResult>(
+          { type: 'git_diff', path, staged, ...(scope ? { worktree: scope.path } : {}) },
+          REQUEST_TIMEOUT_MS,
+        )
       if (result.ok !== true) throw new Error('git_diff failed')
       diffCache.set(key, result.diff)
       if (get().selected === selection) set({ selected: { ...selection } })
@@ -166,7 +210,14 @@ export const useGitStore = create<GitState>((set, get) => ({
     diffCache.clear()
     showCache.clear()
     logSkip = 0
-    set({ changes: null, selected: null, failed: false, log: null, hasMoreLog: true })
+    set({
+      changes: null,
+      selected: null,
+      scope: null,
+      failed: false,
+      log: null,
+      hasMoreLog: true,
+    })
   },
 }))
 

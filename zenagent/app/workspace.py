@@ -23,6 +23,7 @@ __all__ = [
     "read_file",
     "workspace_files",
     "worktree_overview",
+    "worktree_paths",
 ]
 
 #: One directory listing never returns more than this many entries.
@@ -281,6 +282,28 @@ def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess[str] | None:
         return None
 
 
+def _head_times(cwd: Path, heads: list[str]) -> dict[str, int]:
+    """Committer time per head hash, resolved in one git call.
+
+    The branch list wants newest-first ordering; a worktree carries no
+    creation time of its own, so the branch tip's commit time is the ordering
+    key (a branch cut from HEAD today is a fresh tip). Unknown or unborn
+    heads simply have no entry, and the panel falls back to zero.
+    """
+    unique = sorted({head for head in heads if head and head.strip("0") != ""})
+    if not unique:
+        return {}
+    completed = _git(cwd, "log", "--no-walk", "--format=%H%x1f%ct", *unique)
+    if completed is None or completed.returncode != 0:
+        return {}
+    times: dict[str, int] = {}
+    for line in completed.stdout.splitlines():
+        head, _, stamp = line.partition("\x1f")
+        if head and stamp.isdigit():
+            times[head] = int(stamp)
+    return times
+
+
 def _parse_worktrees(text: str) -> list[dict]:
     """Parse ``git worktree list --porcelain`` into plain records."""
     records: list[dict] = []
@@ -302,6 +325,23 @@ def _parse_worktrees(text: str) -> list[dict]:
     if current:
         records.append(current)
     return records
+
+
+def worktree_paths(cwd: Path | str) -> list[Path]:
+    """Every worktree root git lists for the repository, resolved.
+
+    A cheap read for scope validation: unlike :func:`worktree_overview` it
+    skips status counts and head timestamps, so a per-file diff request pays
+    one ``git worktree list`` rather than the panel's full overview.
+    """
+    root = Path(cwd).expanduser().resolve()
+    completed = _git(root, "worktree", "list", "--porcelain")
+    if completed is None or completed.returncode != 0:
+        return []
+    return [
+        Path(record["path"]).expanduser().resolve()
+        for record in _parse_worktrees(completed.stdout)
+    ]
 
 
 def _status_payload(status: GitStatus | None) -> dict | None:
@@ -340,6 +380,7 @@ def worktree_overview(cwd: Path | str) -> dict:
     if not records:
         return empty
 
+    times = _head_times(root, [record["head"] for record in records])
     worktrees = []
     current_index = -1
     for index, record in enumerate(records):
@@ -352,6 +393,7 @@ def worktree_overview(cwd: Path | str) -> dict:
                 "path": str(path),
                 "head": record["head"],
                 "branch": record["branch"],
+                "timestamp": times.get(record["head"], 0),
                 "bare": record.get("bare", False),
                 "detached": record.get("detached", False),
                 "current": is_current,

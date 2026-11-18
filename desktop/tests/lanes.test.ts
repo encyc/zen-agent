@@ -23,6 +23,9 @@ test('a linear history keeps one lane', () => {
   const rows = assignLanes([commit('c', ['b']), commit('b', ['a']), commit('a', [])])
   assert.deepEqual(rows.map((row) => row.lane), [0, 0, 0])
   assert.deepEqual(rows[0].parents, [{ hash: 'b', lane: 0 }])
+  // The dot's own lane is the arrival/continuation, never a pass-through.
+  assert.deepEqual(rows[1].incoming, [0])
+  assert.deepEqual(rows[1].through, [])
 })
 
 test('a side branch takes its own lane and merges back', () => {
@@ -43,6 +46,14 @@ test('a side branch takes its own lane and merges back', () => {
   assert.equal(rows[2].lane, 0) // b
   // Both converge on a, which keeps the earliest expected lane.
   assert.equal(rows[3].lane, 0)
+  // Row s: lane 0 is not this commit's lane but stays live below, so it is a
+  // straight through-line. Row b: the side-branch lane (1) still awaits a.
+  assert.deepEqual(rows[1].through, [0])
+  assert.deepEqual(rows[2].through, [1])
+  // Row a: lane 1 was also waiting for a, so it bends into the dot instead of
+  // dangling past the last row.
+  assert.deepEqual(rows[3].converge, [1])
+  assert.deepEqual(rows[3].through, [])
 })
 
 test('a merge whose second parent is not loaded yet still places the edge', () => {

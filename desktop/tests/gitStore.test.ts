@@ -3,7 +3,7 @@
 
 import { beforeEach, mock, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { useGitStore } from '../src/state/gitStore.ts'
+import { diffKey, useGitStore } from '../src/state/gitStore.ts'
 import { useAppStore } from '../src/state/appStore.ts'
 import { useChatStore } from '../src/state/chatStore.ts'
 import { useWorkPanelStore } from '../src/state/stores.ts'
@@ -67,8 +67,8 @@ test('openFile caches the diff by path and stage key', async () => {
 
   const selected = useGitStore.getState().selected
   assert.deepEqual(selected, { kind: 'file', path: 'a.txt', staged: false })
-  assert.deepEqual(useGitStore.getState().diffFor('a.txt:w'), diffFrame.diff)
-  assert.equal(useGitStore.getState().diffFor('a.txt:s'), null)
+  assert.deepEqual(useGitStore.getState().diffFor(diffKey(null, 'a.txt', false)), diffFrame.diff)
+  assert.equal(useGitStore.getState().diffFor(diffKey(null, 'a.txt', true)), null)
 })
 
 test('a failed refresh keeps the previous payload and flags failure', async () => {
@@ -122,6 +122,52 @@ test('growth while the panel is closed does not refresh', async () => {
   }
 })
 
+
+test('setScope previews another worktree and keys its diff separately', async () => {
+  const calls: { type: string; worktree?: string; path?: string; staged?: boolean }[] = []
+  const client = {
+    async send(payload: { type: string; worktree?: string; path?: string; staged?: boolean }) {
+      calls.push(payload)
+      if (payload.type === 'git_changes') {
+        return {
+          ...changesFrame,
+          changes: { ...changesFrame.changes, branch: 'feature' },
+        }
+      }
+      return payload.worktree
+        ? { ...diffFrame, diff: { ...diffFrame.diff, text: 'scoped' } }
+        : diffFrame
+    },
+  }
+  useAppStore.setState({ client: () => client as unknown as RpcClient })
+
+  await useGitStore.getState().openFile('a.txt', false)
+  const beforeScope = calls.length
+  useGitStore.getState().setScope({ path: '/work/p-feature', branch: 'feature' })
+  await new Promise((resolve) => setTimeout(resolve, 0))
+
+  const scoped = { path: '/work/p-feature', branch: 'feature' }
+  const scopedCalls = calls.slice(beforeScope)
+  assert.equal(useGitStore.getState().scope?.branch, 'feature')
+  assert.equal(useGitStore.getState().selected, null)
+  assert.deepEqual(
+    scopedCalls.filter((call) => call.type === 'git_changes').map((call) => call.worktree),
+    ['/work/p-feature'],
+  )
+
+  await useGitStore.getState().openFile('a.txt', false)
+  assert.deepEqual(
+    calls
+      .slice(beforeScope)
+      .filter((call) => call.type === 'git_diff')
+      .map((call) => call.worktree),
+    ['/work/p-feature'],
+  )
+  // The same path in two worktrees must not share a cache entry.
+  assert.equal(useGitStore.getState().diffFor(diffKey(scoped, 'a.txt', false))?.text, 'scoped')
+  assert.equal(useGitStore.getState().diffFor(diffKey(null, 'a.txt', false))?.text, diffFrame.diff.text)
+})
+
 // ---- graph: log paging and keyed refresh -------------------------------------
 
 const logPage1: Record<string, unknown> = {
@@ -164,6 +210,34 @@ test('loadLog pages and loadMoreLog appends until a short page', async () => {
   // A page shorter than the limit ends the history.
   assert.equal(useGitStore.getState().hasMoreLog, false)
   assert.ok(calls.every((kind) => kind === 'git_log'))
+})
+
+
+test('concurrent tail loads fetch a single page', async () => {
+  let release: (value: unknown) => void = () => {}
+  const skipped: number[] = []
+  const client = {
+    async send(payload: { type: string; skip?: number }) {
+      skipped.push(Number(payload.skip ?? 0))
+      if (payload.skip === 2) {
+        return new Promise((resolve) => {
+          release = resolve
+        })
+      }
+      return logPage1
+    },
+  }
+  useAppStore.setState({ client: () => client as unknown as RpcClient })
+  await useGitStore.getState().loadLog()
+
+  const first = useGitStore.getState().loadMoreLog()
+  const second = useGitStore.getState().loadMoreLog()
+  release(logPage2)
+  await Promise.all([first, second])
+
+  // The second call is suppressed; the cursor moved exactly once.
+  assert.deepEqual(skipped, [0, 2])
+  assert.deepEqual(useGitStore.getState().log?.map((commit) => commit.hash), ['c', 'b', 'a'])
 })
 
 test('a log refresh prepends new commits and keeps the loaded tail', async () => {

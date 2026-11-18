@@ -257,6 +257,25 @@ export function TerminalIcon(props: IconProps) {
   )
 }
 
+export function ListIcon(props: IconProps) {
+  return (
+    <svg {...base(props.size, props.className, props.style)}>
+      <path d="M6 4h8M6 8h8M6 12h8" />
+      <circle cx="3" cy="4" r="0.9" fill="currentColor" stroke="none" />
+      <circle cx="3" cy="8" r="0.9" fill="currentColor" stroke="none" />
+      <circle cx="3" cy="12" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}
+
+export function TreeIcon(props: IconProps) {
+  return (
+    <svg {...base(props.size, props.className, props.style)}>
+      <path d="M3 3v9a1 1 0 0 0 1 1h3M3 6h4M3 10h4M10 3h3M10 8h3M10 13h3" />
+    </svg>
+  )
+}
+
 export function ListTodoIcon(props: IconProps) {
   return (
     <svg {...base(props.size, props.className, props.style)}>

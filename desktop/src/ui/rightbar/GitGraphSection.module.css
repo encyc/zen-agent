@@ -1,32 +1,81 @@
+/* Commit graph: VSCode-flavoured lane columns, compact two-line rows. */
+
 .root {
-  margin-top: 8px;
+  margin-top: 10px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  padding-top: 2px;
 }
 
 .header {
   display: flex;
   align-items: center;
-  height: 22px;
-  padding: 0 10px;
+  gap: 4px;
+  height: 26px;
+  padding: 0 6px 0 4px;
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--ds-font-11);
-  text-transform: uppercase;
   letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.toggle {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.toggle:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.toggle:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--dsw-static-blue-500) 50%, transparent);
+  outline-offset: -2px;
+}
+
+.headerSpacer {
+  flex: 1;
+}
+
+.headerCount {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  text-align: center;
 }
 
 .list {
   margin: 0;
-  padding: 0;
+  padding: 0 4px;
   list-style: none;
 }
 
 .row {
+  position: relative;
   display: flex;
-  align-items: center;
-  gap: 2px;
   width: 100%;
-  padding: 0 8px 0 4px;
+  min-height: 34px;
+  padding: 3px 8px 3px 0;
   border: none;
-  border-radius: var(--dsw-radius-sm);
+  border-radius: 6px;
   background: transparent;
   text-align: left;
   cursor: pointer;
@@ -36,67 +85,131 @@
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
+/* List view drops the lane column: the text starts at the row edge. */
+.rowList {
+  padding-left: 8px;
+}
+
 .row[data-selected] {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: color-mix(in oklab, var(--dsw-static-blue-500) 10%, transparent);
+  box-shadow: inset 2px 0 0 var(--dsw-static-blue-500);
 }
 
 .graph {
   flex: none;
+  align-self: stretch;
 }
 
-.laneLine {
-  stroke: var(--dsw-alias-label-tertiary);
-  stroke-width: 1;
+.lane {
+  stroke: var(--dsw-static-neutral-bluish-400);
+  stroke-width: 2;
+  stroke-linecap: round;
+  shape-rendering: geometricPrecision;
 }
 
-.laneLine[data-color='0'] { stroke: var(--dsw-alias-state-success-primary); }
-.laneLine[data-color='1'] { stroke: var(--dsw-alias-state-info-primary); }
-.laneLine[data-color='2'] { stroke: var(--dsw-alias-state-warning-primary); }
-.laneLine[data-color='3'] { stroke: var(--dsw-alias-state-error-primary); }
-.laneLine[data-color='4'] { stroke: var(--dsw-alias-label-secondary); }
+.lane[data-color='0'] { stroke: var(--dsw-static-blue-500); }
+.lane[data-color='1'] { stroke: var(--dsw-static-green-500); }
+.lane[data-color='2'] { stroke: var(--dsw-static-amber-500); }
+.lane[data-color='3'] { stroke: var(--dsw-static-red-500); }
+.lane[data-color='4'] { stroke: var(--dsw-static-deepseek-500); }
+.lane[data-color='5'] { stroke: var(--dsw-static-neutral-bluish-400); }
+
+.dotHalo {
+  fill: var(--ds-surface-sidebar);
+}
 
 .dot {
-  fill: var(--dsw-alias-label-primary);
+  fill: var(--dsw-static-neutral-bluish-400);
 }
 
-.dot[data-color='0'] { fill: var(--dsw-alias-state-success-primary); }
-.dot[data-color='1'] { fill: var(--dsw-alias-state-info-primary); }
-.dot[data-color='2'] { fill: var(--dsw-alias-state-warning-primary); }
-.dot[data-color='3'] { fill: var(--dsw-alias-state-error-primary); }
-.dot[data-color='4'] { fill: var(--dsw-alias-label-secondary); }
+.dot[data-color='0'] { fill: var(--dsw-static-blue-500); }
+.dot[data-color='1'] { fill: var(--dsw-static-green-500); }
+.dot[data-color='2'] { fill: var(--dsw-static-amber-500); }
+.dot[data-color='3'] { fill: var(--dsw-static-red-500); }
+.dot[data-color='4'] { fill: var(--dsw-static-deepseek-500); }
+.dot[data-color='5'] { fill: var(--dsw-static-neutral-bluish-400); }
 
 .text {
   display: flex;
   flex: 1;
   min-width: 0;
   flex-direction: column;
+  justify-content: center;
   gap: 1px;
-  padding-left: 4px;
+  padding-left: 3px;
 }
 
-.subject {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--dsw-alias-label-primary);
-  font-size: var(--ds-font-12);
+.topLine {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
 }
 
 .ref {
   display: inline-block;
-  margin-right: 4px;
+  flex: none;
+  max-width: 44%;
+  height: 16px;
   padding: 0 5px;
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: var(--dsw-radius-sm);
+  overflow: hidden;
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--dsw-static-blue-500) 12%, transparent);
+  color: var(--dsw-static-blue-500);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ref[data-kind='tag'] {
+  background: color-mix(in oklab, var(--dsw-alias-label-secondary) 10%, transparent);
   color: var(--dsw-alias-label-secondary);
-  font-size: var(--ds-font-11);
+}
+
+.ref[data-current] {
+  background: var(--dsw-static-blue-600);
+  color: var(--dsw-alias-label-primary-foreground);
+}
+
+.subject {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-size: var(--ds-font-12);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .meta {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--ds-font-11);
+  line-height: 14px;
+}
+
+.hash {
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code);
+  font-size: 10px;
+}
+
+.author {
+  flex: 0 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--dsw-alias-label-tertiary);
-  font-family: var(--ds-font-family-code);
-  font-size: var(--ds-font-11);
+}
+
+.age {
+  flex: none;
+  margin-left: auto;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }

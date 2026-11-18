@@ -160,7 +160,7 @@ export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
 
   // In fullscreen the rail spans the frame; panels deciding wide/narrow off
   // `width` should see the live span, not the last dragged dock width.
-  const effectiveWidth = fullscreen ? Math.max(RIGHTBAR_MIN, window.innerWidth - 260) : width
+  const effectiveWidth = fullscreen ? window.innerWidth : width
 
   return (
     <div
@@ -192,7 +192,7 @@ export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
         onDoubleClick={() => onWidth(RIGHTBAR_DEFAULT)}
         onKeyDown={keyDown}
       />
-      <div className={css.header}>
+      <div className={css.header} data-work-panel-header>
         <div className={css.tabs} role="tablist">
           {tabs.map((tab) => {
             const Icon = iconFor(tab.kind)
