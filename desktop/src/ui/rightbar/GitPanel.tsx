@@ -15,15 +15,17 @@ import { useWorkPanelStore } from '../../state/stores.ts'
 import { useT } from '../../i18n/locale.ts'
 import {
   ArrowLeftIcon,
-  BranchIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  CommitIcon,
   FileIcon,
   ListIcon,
   TreeIcon,
 } from '../icons'
 import { groupChanges, isSessionFile, sessionPaths } from './gitChanges.ts'
 import { FileTreeList } from './FileTreeList.tsx'
+import { FileTypeBadge } from './FileTypeBadge.tsx'
+import { IndentGuides } from './IndentGuides.tsx'
 import { GitBranchSection } from './GitBranchSection.tsx'
 import { GitGraphSection } from './GitGraphSection.tsx'
 import { fileBasename } from './review.ts'
@@ -74,6 +76,15 @@ export function GitPanel({ width }: { width: number }) {
 
   const grouped = useMemo(() => groupChanges(changes?.files ?? []), [changes])
   const session = useMemo(() => sessionPaths(nodes, project), [nodes, project])
+  const totals = useMemo(() => {
+    let plus = 0
+    let minus = 0
+    for (const file of changes?.files ?? []) {
+      if (file.plus != null) plus += file.plus
+      if (file.minus != null) minus += file.minus
+    }
+    return { plus, minus }
+  }, [changes])
 
   useEffect(() => {
     void loadChanges()
@@ -216,6 +227,12 @@ export function GitPanel({ width }: { width: number }) {
         <div className={css.toolbar} data-git-changes-toolbar="">
           <span className={css.toolbarLabel}>{t('panel.git.workingTree')}</span>
           <span className={css.toolbarCount}>{changes.files.length}</span>
+          {(totals.plus > 0 || totals.minus > 0) && (
+            <span className={css.toolbarStat} aria-hidden="true">
+              <span className={css.added}>+{totals.plus}</span>
+              <span className={css.removed}>−{totals.minus}</span>
+            </span>
+          )}
           <span className={css.toolbarSpacer} />
           <ViewToggle<ChangesView>
             label={t('panel.git.viewMode')}
@@ -254,6 +271,7 @@ export function GitPanel({ width }: { width: number }) {
               }
             >
               {folded ? <ChevronRightIcon size={12} /> : <ChevronDownIcon size={12} />}
+              <span className={css.groupDot} data-state={state} aria-hidden="true" />
               <span className={css.groupLabel}>{t(label)}</span>
               <span className={css.groupCount}>{files.length}</span>
             </button>
@@ -338,7 +356,7 @@ export function GitPanel({ width }: { width: number }) {
       <div className={css.detail} data-embed="" data-selectable="">
         <div className={css.detailHeader}>
           {narrow && back}
-          <BranchIcon size={13} />
+          <CommitIcon size={13} />
           <span className={css.detailName}>{shown?.subject ?? t('panel.git.loading')}</span>
           <span className={css.detailPath}>{selected.hash.slice(0, 8)}</span>
         </div>
@@ -418,7 +436,9 @@ export function GitPanel({ width }: { width: number }) {
       <div className={css.detail} data-embed="" data-selectable="">
         <div className={css.detailHeader}>
           {narrow && back}
-          <FileIcon size={13} />
+          <span className={css.typeSlot}>
+            <FileTypeBadge path={fileSel.path} size={12} />
+          </span>
           <span className={css.detailName}>{fileBasename(fileSel.path)}</span>
           <span className={css.detailPath}>{fileSel.path}</span>
           {entry != null && entry.plus != null && (
@@ -467,7 +487,17 @@ export function GitPanel({ width }: { width: number }) {
   return (
     <div className={css.root} data-wide="">
       {list}
-      <div className={css.detailCol}>{detail ?? <p className={css.note}>{t('panel.git.pick')}</p>}</div>
+      <div className={css.detailCol}>
+        {detail ?? (
+          <div className={css.empty} data-git-empty="">
+            <span className={css.emptyIcon}>
+              <FileIcon size={20} />
+            </span>
+            <p className={css.emptyTitle}>{t('panel.git.pick')}</p>
+            <p className={css.emptyHint}>{t('panel.git.pickHint')}</p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -495,18 +525,21 @@ function FileRow({
       data-state={file.state}
       data-selected={selected || undefined}
       aria-label={file.path}
+      aria-current={selected ? 'true' : undefined}
       title={file.path}
-      style={{ paddingLeft: 18 + indent * 12 }}
+      style={{ paddingLeft: 8 + indent * 12 }}
       onClick={onOpen}
     >
-      <span className={css.rowPath}>{label ?? file.path}</span>
-      {session && <span className={css.badge}>·</span>}
-      {file.plus != null && (
-        <span className={css.counts}>
-          <span className={css.added}>+{file.plus}</span>{' '}
-          <span className={css.removed}>−{file.minus}</span>
-        </span>
-      )}
+      <IndentGuides depth={indent} />
+      <span className={css.chevronSpacer} aria-hidden="true" />
+      <span className={css.typeSlot}>
+        <FileTypeBadge path={file.path} size={12} />
+      </span>
+      <span className={css.rowPath}>
+        {label !== undefined ? <span className={css.pathName}>{label}</span> : <PathLabel path={file.path} />}
+      </span>
+      {session && <span className={css.sessionDot} aria-hidden="true" />}
+      <Counts plus={file.plus} minus={file.minus} />
     </button>
   )
 }
@@ -536,13 +569,15 @@ function CommitFile({
         style={{ paddingLeft: 8 + indent * 12 }}
         onClick={onToggle}
       >
+        <IndentGuides depth={indent} />
         {open ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
-        <FileIcon size={12} />
-        <span className={css.rowPath}>{label ?? file.path}</span>
-        <span className={css.counts}>
-          <span className={css.added}>+{file.additions}</span>{' '}
-          <span className={css.removed}>−{file.removals}</span>
+        <span className={css.typeSlot}>
+          <FileTypeBadge path={file.path} size={12} />
         </span>
+        <span className={css.rowPath}>
+          {label !== undefined ? <span className={css.pathName}>{label}</span> : <PathLabel path={file.path} />}
+        </span>
+        <Counts plus={file.additions} minus={file.removals} />
       </button>
       {open && (
         <div className={css.commitFileBody}>
@@ -550,6 +585,29 @@ function CommitFile({
         </div>
       )}
     </section>
+  )
+}
+
+/** List mode keeps the full path but dims its directory prefix, so the
+ * basename carries the scan weight. Tree mode passes a basename as `label`. */
+function PathLabel({ path }: { path: string }) {
+  const slash = path.lastIndexOf('/')
+  if (slash <= 0) return <>{path}</>
+  return (
+    <>
+      <span className={css.pathDir}>{path.slice(0, slash + 1)}</span>
+      <span className={css.pathBase}>{path.slice(slash + 1)}</span>
+    </>
+  )
+}
+
+function Counts({ plus, minus }: { plus: number | null; minus: number | null }) {
+  if (plus == null || minus == null) return null
+  return (
+    <span className={css.counts} aria-hidden="true">
+      <span className={css.added}>+{plus}</span>
+      <span className={css.removed}>−{minus}</span>
+    </span>
   )
 }
 

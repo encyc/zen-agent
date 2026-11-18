@@ -1,15 +1,16 @@
-/* Branch section: one collapsible, height-capped worktree list. */
+/* Branch section: one collapsible, height-capped worktree list. The header
+   names the section and keeps the current branch visible when collapsed. */
 
 .root {
   flex: none;
-  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  border-bottom: 1px solid var(--ds-hairline);
 }
 
 .header {
   display: flex;
   align-items: center;
   gap: 2px;
-  height: 30px;
+  height: 32px;
   padding: 0 6px 0 4px;
   background: var(--ds-surface-sidebar);
 }
@@ -20,28 +21,46 @@
   min-width: 0;
   align-items: center;
   gap: 5px;
-  height: 24px;
+  height: 26px;
   padding: 0 4px;
   border: none;
   border-radius: 6px;
   background: transparent;
   color: var(--dsw-alias-label-tertiary);
-  cursor: pointer;
   text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    color var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .toggle:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--ds-surface-hover);
   color: var(--dsw-alias-label-primary);
 }
 
+.toggle:focus-visible,
+.iconButton:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--dsw-static-blue-500) 50%, transparent);
+  outline-offset: -2px;
+}
+
+.sectionTitle {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .branch {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
-  color: var(--dsw-alias-label-primary);
-  font-size: var(--ds-font-12);
-  font-weight: 500;
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code);
+  font-size: var(--ds-font-11);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -64,23 +83,26 @@
   display: inline-grid;
   flex: none;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: none;
   border-radius: 6px;
   background: transparent;
   color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    color var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .iconButton:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--ds-surface-hover);
   color: var(--dsw-alias-label-primary);
 }
 
 .body {
-  padding-bottom: 4px;
+  padding-bottom: 6px;
 }
 
 .list {
@@ -96,22 +118,25 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 24px;
+  height: 26px;
   padding: 0 4px;
   border-radius: 6px;
+  transition: background-color var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .row:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--ds-surface-hover);
 }
 
+/* Only the worktree being previewed gets the blue rule; the current row is
+   marked by its check so "here" and "looking elsewhere" stay distinct. */
 .row[data-scoped] {
-  background: color-mix(in oklab, var(--dsw-static-blue-500) 9%, transparent);
+  background: color-mix(in oklab, var(--dsw-static-blue-500) 8%, transparent);
   box-shadow: inset 2px 0 0 var(--dsw-static-blue-500);
 }
 
 .row[data-scoped]:hover {
-  background: color-mix(in oklab, var(--dsw-static-blue-500) 13%, transparent);
+  background: color-mix(in oklab, var(--dsw-static-blue-500) 12%, transparent);
 }
 
 .pick {
@@ -120,7 +145,7 @@
   min-width: 0;
   align-items: center;
   gap: 6px;
-  height: 24px;
+  height: 26px;
   padding: 0;
   border: none;
   background: transparent;
@@ -148,7 +173,7 @@
 
 .row[data-current] .name {
   color: var(--dsw-alias-label-primary);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .age {
@@ -169,8 +194,16 @@
 }
 
 .note {
-  margin: 2px 10px 4px;
+  margin: 2px 10px 6px;
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--ds-font-11);
   line-height: 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row,
+  .toggle,
+  .iconButton {
+    transition: none;
+  }
 }

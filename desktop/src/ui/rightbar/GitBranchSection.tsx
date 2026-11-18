@@ -101,7 +101,10 @@ export function GitBranchSection({
         >
           {collapsed ? <ChevronRightIcon size={12} /> : <ChevronDownIcon size={12} />}
           <BranchIcon size={12} />
-          <span className={css.branch}>{currentBranch}</span>
+          <span className={css.sectionTitle}>{t('panel.git.branches')}</span>
+          <span className={css.branch} title={currentBranch}>
+            {currentBranch}
+          </span>
           {worktrees.length > 0 && <span className={css.count}>{worktrees.length}</span>}
         </button>
         <button
@@ -129,7 +132,7 @@ export function GitBranchSection({
                     key={worktree.path}
                     className={css.row}
                     data-current={worktree.current || undefined}
-                    data-scoped={active || undefined}
+                    data-scoped={scoped || undefined}
                     data-worktree={worktree.branch || worktree.head}
                     title={worktree.path}
                   >

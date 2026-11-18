@@ -2944,15 +2944,15 @@ test('the branch list is newest-first, collapsible and height-capped', async ({ 
   assert.ok(heights.client <= 170, `client height ${heights.client}`)
   assert.ok(heights.scroll > heights.client, 'the list should scroll, not grow')
 
-  const toggle = panel.getByRole('button', { name: '折叠工作树列表' })
+  const toggle = panel.getByRole('button', { name: '折叠分支列表' })
   await expect(toggle).toHaveAttribute('aria-expanded', 'true')
   await toggle.click()
   await expect(panel.locator('[data-worktrees]')).toHaveCount(0)
-  await expect(panel.getByRole('button', { name: '展开工作树列表' })).toHaveAttribute(
+  await expect(panel.getByRole('button', { name: '展开分支列表' })).toHaveAttribute(
     'aria-expanded',
     'false',
   )
-  await panel.getByRole('button', { name: '展开工作树列表' }).click()
+  await panel.getByRole('button', { name: '展开分支列表' }).click()
   await expect(list).toBeVisible()
 })
 

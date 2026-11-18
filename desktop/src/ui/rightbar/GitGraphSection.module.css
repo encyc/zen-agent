@@ -1,8 +1,8 @@
 /* Commit graph: VSCode-flavoured lane columns, compact two-line rows. */
 
 .root {
-  margin-top: 10px;
-  border-top: 1px solid var(--dsw-alias-border-l1);
+  margin-top: 12px;
+  border-top: 1px solid var(--ds-hairline);
   padding-top: 2px;
 }
 
@@ -10,11 +10,12 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  height: 26px;
-  padding: 0 6px 0 4px;
+  height: 30px;
+  padding: 0 8px 0 4px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: var(--ds-font-11);
-  letter-spacing: 0.04em;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
@@ -23,7 +24,7 @@
   min-width: 0;
   align-items: center;
   gap: 5px;
-  height: 22px;
+  height: 24px;
   padding: 0 4px;
   border: none;
   border-radius: 6px;
@@ -33,10 +34,13 @@
   letter-spacing: inherit;
   text-transform: inherit;
   cursor: pointer;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    color var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .toggle:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--ds-surface-hover);
   color: var(--dsw-alias-label-primary);
 }
 
@@ -64,7 +68,7 @@
 
 .list {
   margin: 0;
-  padding: 0 4px;
+  padding: 0 6px;
   list-style: none;
 }
 
@@ -72,17 +76,25 @@
   position: relative;
   display: flex;
   width: 100%;
-  min-height: 34px;
-  padding: 3px 8px 3px 0;
+  min-height: 36px;
+  padding: 4px 8px 4px 0;
   border: none;
   border-radius: 6px;
   background: transparent;
   text-align: left;
   cursor: pointer;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-out),
+    box-shadow var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .row:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--ds-surface-hover);
+}
+
+.row:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--dsw-static-blue-500) 50%, transparent);
+  outline-offset: -2px;
 }
 
 /* List view drops the lane column: the text starts at the row edge. */
@@ -91,7 +103,7 @@
 }
 
 .row[data-selected] {
-  background: color-mix(in oklab, var(--dsw-static-blue-500) 10%, transparent);
+  background: color-mix(in oklab, var(--dsw-static-blue-500) 8%, transparent);
   box-shadow: inset 2px 0 0 var(--dsw-static-blue-500);
 }
 
@@ -212,4 +224,11 @@
   margin-left: auto;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row,
+  .toggle {
+    transition: none;
+  }
 }

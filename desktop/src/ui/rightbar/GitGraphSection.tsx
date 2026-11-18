@@ -240,6 +240,7 @@ export function GitGraphSection({ commits, branch }: { commits: GitCommit[]; bra
                 className={view === 'list' ? `${css.row} ${css.rowList}` : css.row}
                 data-selected={isSelected || undefined}
                 data-commit={commit.short}
+                aria-current={isSelected ? 'true' : undefined}
                 title={`${commit.subject}\n${commit.author} · ${formatAge(commit.timestamp, locale)}`}
                 onClick={() => void openCommit(commit.hash)}
               >

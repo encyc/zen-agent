@@ -4,6 +4,7 @@
 
 import { useMemo, type ReactNode } from 'react'
 import { ChevronDownIcon, ChevronRightIcon, FolderIcon } from '../icons'
+import { IndentGuides } from './IndentGuides.tsx'
 import { buildFileTree, flattenTree } from './fileTree.ts'
 import css from './FileTreeList.module.css'
 
@@ -35,12 +36,13 @@ export function FileTreeList<T extends { path: string }>({
             title={node.path}
             onClick={() => onToggleDir(node.path)}
           >
+            <IndentGuides depth={depth} />
             {collapsed.has(node.path) ? (
               <ChevronRightIcon size={12} />
             ) : (
               <ChevronDownIcon size={12} />
             )}
-            <FolderIcon size={12} />
+            <FolderIcon size={14} />
             <span className={css.name}>{node.name}</span>
             <span className={css.count}>{node.files}</span>
           </button>

@@ -229,3 +229,8 @@ lane 的 through/converge 与并发翻页进入 node --test。
 
 验收补充（第三轮）：Changes 的 tree/list、两个同名目录独立折叠、分组/Graph 折叠、
 提交详情的 tree/list 与 macOS 全屏内边距均进入 e2e。
+
+### UI 设计
+
+第三轮之后的视觉规范（Review Rail：层级、状态色、行高、空状态、动效与可访问性）见
+[Git Review Rail — UI 设计](./2026-11-18-git-review-panel-ui-design.md)。

@@ -205,6 +205,15 @@ export function BranchIcon(props: IconProps) {
   )
 }
 
+export function CommitIcon(props: IconProps) {
+  return (
+    <svg {...base(props.size, props.className, props.style)}>
+      <circle cx="8" cy="8" r="2.6" />
+      <path d="M2 8h3.4M10.6 8H14" />
+    </svg>
+  )
+}
+
 export function WarningIcon(props: IconProps) {
   return (
     <svg {...base(props.size, props.className, props.style)}>
