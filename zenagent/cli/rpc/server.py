@@ -15,6 +15,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from zenagent.agent import Agent
+from zenagent.app import git_review
 from zenagent.app.approval_router import (
     approval_event_for,
     register_approval,
@@ -531,6 +532,57 @@ class RpcServer(FilesOps, SessionOps, PluginsOps, ConfigOps, SecretsOps, SkillsO
                     "worktree": worktree_overview(self.cwd),
                 }
             )
+            return True
+        if kind == "git_changes":
+            # The panel polls this while a run streams; the shell-out must
+            # leave the event loop free (see test_git_ops_run_off_loop).
+            try:
+                result = await asyncio.to_thread(git_review.changes, self.cwd)
+            except Exception as exc:
+                self._send(
+                    failure_frame(
+                        request_id,
+                        code="git_failed",
+                        message="git op failed",
+                        exc=exc,
+                        op=kind,
+                    )
+                )
+            else:
+                self._send(
+                    {"type": "result", "id": request_id, "ok": True, "changes": result}
+                )
+            return True
+        if kind == "git_diff":
+            path = request.get("path")
+            if not isinstance(path, str) or not path:
+                self._send(
+                    {
+                        "type": "error",
+                        "id": request_id,
+                        "message": "git_diff needs a path",
+                    }
+                )
+                return True
+            staged = request.get("staged") is True
+            try:
+                result = await asyncio.to_thread(
+                    git_review.diff, self.cwd, path, staged=staged
+                )
+            except Exception as exc:
+                self._send(
+                    failure_frame(
+                        request_id,
+                        code="git_failed",
+                        message="git op failed",
+                        exc=exc,
+                        op=kind,
+                    )
+                )
+            else:
+                self._send(
+                    {"type": "result", "id": request_id, "ok": True, "diff": result}
+                )
             return True
         if kind == "secrets":
             await self._secrets(request, request_id)
