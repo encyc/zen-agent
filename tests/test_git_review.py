@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from zenagent.app import git_review
-from zenagent.app.git_review import changes
+from zenagent.app.git_review import changes, diff
 
 GIT = shutil.which("git")
 
@@ -104,3 +104,82 @@ def test_changes_not_a_repo(tmp_path):
         "files": [],
         "untracked_more": 0,
     }
+
+
+def _base_repo(tmp_path: Path) -> Path:
+    """One committed b.txt ("x\n") as the diff fixture's HEAD."""
+    repo = make_repo(tmp_path)
+    write(repo / "b.txt", "x\n")
+    _git(repo, "add", "b.txt")
+    _git(repo, "commit", "-m", "base")
+    return repo
+
+
+def _body_lines(text: str) -> list[str]:
+    """Diff body lines: everything after the first hunk header, minus the
+    +++/--- file headers (git's `diff --git`/`index` preamble is not body)."""
+    body: list[str] = []
+    in_hunk = False
+    for line in text.splitlines():
+        if line.startswith("@@"):
+            in_hunk = True
+            continue
+        if not in_hunk or not line or line.startswith(("+++", "---")):
+            continue
+        body.append(line)
+    return body
+
+
+def test_diff_staged_and_unstaged(tmp_path):
+    repo = _base_repo(tmp_path)
+    # b.txt: staged to v2 ("x\ny\n"), then edited again to v3 in the worktree.
+    write(repo / "b.txt", "x\ny\n")
+    _git(repo, "add", "b.txt")
+    write(repo / "b.txt", "x\ny\nz\n")
+
+    staged = diff(repo, "b.txt", staged=True)
+    assert "@@" in staged["text"]
+    assert staged["binary"] is False and staged["truncated"] is False and staged["missing"] is False
+    assert "+y" in staged["text"] and "+z" not in staged["text"]
+
+    unstaged = diff(repo, "b.txt")
+    assert "+y" in unstaged["text"] and "+z" in unstaged["text"]
+
+
+def test_diff_untracked_all_additions(tmp_path):
+    repo = _base_repo(tmp_path)
+    write(repo / "new.txt", "a\nb\n")
+    result = diff(repo, "new.txt")
+    assert result["missing"] is False
+    assert "@@ -0,0 +1,2 @@" in result["text"]
+    assert _body_lines(result["text"]) == ["+a", "+b"]
+
+
+def test_diff_binary(tmp_path):
+    repo = _base_repo(tmp_path)
+    (repo / "blob.bin").write_bytes(b"\x00\x01\x02icon")
+    assert diff(repo, "blob.bin")["binary"] is True
+
+
+def test_diff_truncated(tmp_path):
+    repo = _base_repo(tmp_path)
+    write(repo / "big.txt", "".join(f"l{i}\n" for i in range(3000)))
+    result = diff(repo, "big.txt")
+    assert result["truncated"] is True
+    assert len(result["text"].splitlines()) <= 2000
+
+
+def test_diff_deleted_file(tmp_path):
+    repo = _base_repo(tmp_path)
+    (repo / "b.txt").unlink()
+    result = diff(repo, "b.txt")
+    assert result["missing"] is False
+    body = _body_lines(result["text"])
+    assert body and all(line.startswith("-") for line in body)
+
+
+def test_diff_clean_file_is_missing(tmp_path):
+    repo = _base_repo(tmp_path)
+    result = diff(repo, "b.txt")
+    assert result["missing"] is True
+    assert result["text"] == ""

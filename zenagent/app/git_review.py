@@ -13,13 +13,20 @@ import shutil
 import subprocess
 from pathlib import Path
 
-__all__ = ["UNTRACKED_LIMIT", "changes"]
+__all__ = ["UNTRACKED_LIMIT", "DIFF_LINE_LIMIT", "changes", "diff"]
 
 #: Hard cap on every git child; a huge repo must not stall a panel refresh.
 _TIMEOUT_S = 5.0
 
 #: Untracked files listed before the panel folds the rest into a count.
 UNTRACKED_LIMIT = 200
+
+#: Total diff lines served for one file; beyond this the payload is cut and
+#: flagged, and the panel links to the Files viewer for the rest.
+DIFF_LINE_LIMIT = 2000
+
+#: Bytes sniffed for a NUL when deciding an untracked file is binary.
+_BINARY_SNIFF_BYTES = 8192
 
 
 def _run_git(cwd: Path, *args: str) -> subprocess.CompletedProcess[str] | None:
@@ -122,3 +129,67 @@ def changes(cwd: Path | str) -> dict:
         "files": files,
         "untracked_more": untracked_more,
     }
+
+
+def _tracked(cwd: Path, path: str) -> bool:
+    completed = _run_git(cwd, "ls-files", "--", path)
+    return (
+        completed is not None
+        and completed.returncode == 0
+        and completed.stdout.strip() != ""
+    )
+
+
+def _truncate(text: str) -> tuple[str, bool]:
+    lines = text.split("\n")
+    if len(lines) <= DIFF_LINE_LIMIT:
+        return text, False
+    return "\n".join(lines[:DIFF_LINE_LIMIT]), True
+
+
+def _all_additions(target: Path, path: str) -> dict:
+    """A synthetic whole-file-is-new diff for an untracked path."""
+    try:
+        raw = target.read_bytes()
+    except OSError:
+        return {"text": "", "binary": False, "truncated": False, "missing": True}
+    if b"\0" in raw[:_BINARY_SNIFF_BYTES]:
+        return {"text": "", "binary": True, "truncated": False, "missing": False}
+    lines = raw.decode("utf-8", errors="replace").split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
+    if not lines:
+        return {"text": "", "binary": False, "truncated": False, "missing": False}
+    body = lines[: DIFF_LINE_LIMIT - 3]
+    truncated = len(lines) > DIFF_LINE_LIMIT - 3
+    text = (
+        f"--- /dev/null\n+++ {path}\n@@ -0,0 +1,{len(body)} @@\n"
+        + "\n".join("+" + line for line in body)
+        + "\n"
+    )
+    return {"text": text, "binary": False, "truncated": truncated, "missing": False}
+
+
+def diff(cwd: Path | str, path: str, *, staged: bool = False) -> dict:
+    """One file's unified diff: ``{"text", "binary", "truncated", "missing"}``.
+
+    ``staged`` diffs the index (``--cached``); a tracked path diffs the work
+    tree against HEAD; an untracked path gets a synthetic all-additions diff.
+    A clean (or vanished) path is ``missing`` with empty text.
+    """
+    root = Path(cwd).expanduser().resolve()
+    if staged:
+        completed = _run_git(root, "diff", "--cached", "--no-renames", "--", path)
+        text = completed.stdout if completed is not None and completed.returncode == 0 else ""
+    elif _tracked(root, path):
+        completed = _run_git(root, "diff", "HEAD", "--no-renames", "--", path)
+        text = completed.stdout if completed is not None and completed.returncode == 0 else ""
+    else:
+        return _all_additions(root / path, path)
+
+    if text == "":
+        return {"text": "", "binary": False, "truncated": False, "missing": True}
+    if "Binary files " in text and " differ" in text:
+        return {"text": "", "binary": True, "truncated": False, "missing": False}
+    text, truncated = _truncate(text)
+    return {"text": text, "binary": False, "truncated": truncated, "missing": False}
