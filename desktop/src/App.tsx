@@ -1,7 +1,7 @@
 /** App shell: theme presenter, connection gate (welcome → boot → frame →
  * exit banner). Keyboard: Cmd/Ctrl+B toggles the sidebar, like dsh. */
 
-import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { showShellWindow } from './state/windowShow.ts'
 import { defaultProjectCwd, lastProjectCwd, useAppStore } from './state/appStore'
 import {
@@ -26,6 +26,11 @@ import { ConversationTopbar } from './ui/ConversationTopbar'
 import { NoticeBanner } from './ui/NoticeBanner'
 import { useUpdateStore } from './state/updateStore'
 import { useZenStore } from './state/zenStore'
+import { usePanesStore } from './state/sessionPanes'
+import { bootSessionWindow } from './state/sessionBoot'
+import { listenSessionDetached } from './state/detachWindow'
+import { parseBootOverride } from './state/bootMode'
+import { SessionPanes } from './ui/panes/SessionPanes'
 import { SIDEBAR_DEFAULT, RIGHTBAR_DEFAULT, clampChatWidth } from './ui/columns'
 import { PanelLeftIcon, PanelRightIcon } from './ui/icons'
 import css from './App.module.css'
@@ -75,6 +80,7 @@ export function App() {
   const view = useSettingsStore((state) => state.view)
   const workspaceMode = useSettingsStore((state) => state.workspaceMode)
   const workerPath = useZenStore((state) => state.workerPath)
+  const openPanes = usePanesStore((state) => state.panes)
   const previousView = useRef(view)
   const updateChecked = useRef(false)
   // The shell opens straight into a chat: the last project, else the user's
@@ -82,6 +88,9 @@ export function App() {
   const [lastCwd] = useState(lastProjectCwd)
   const autoConnected = useRef(false)
   const windowShown = useRef(false)
+  // A detached session window (`session-*`) boots one pinned session off the
+  // shared runtime instead of connecting a project slot.
+  const bootOverride = useMemo(() => parseBootOverride(window.location.search), [])
 
   const [sidebarWidth, setSidebarWidth] = useState(() => loadWidth(SIDEBAR_KEY, SIDEBAR_DEFAULT))
   const rightbarOpen = useWorkPanelStore((state) => state.open)
@@ -143,11 +152,32 @@ export function App() {
   useEffect(() => {
     if (connection !== 'idle' || autoConnected.current) return
     autoConnected.current = true
+    if (bootOverride !== null) {
+      void bootSessionWindow(bootOverride)
+      return
+    }
     void (async () => {
       const cwd = lastCwd !== '' ? lastCwd : await defaultProjectCwd()
       await connect(undefined, cwd)
     })()
-  }, [connection, lastCwd, connect])
+  }, [connection, lastCwd, connect, bootOverride])
+
+  // The main shell drops a pane when another window takes the session over;
+  // detached windows hear it too and have no such pane (a no-op close).
+  useEffect(() => {
+    let disposed = false
+    let unlisten: (() => void) | null = null
+    void listenSessionDetached((session) => {
+      if (!disposed) usePanesStore.getState().close(session)
+    }).then((un) => {
+      if (disposed) un()
+      else unlisten = un
+    })
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  }, [])
 
   // One update check per launch, five seconds after the shell is usable: the
   // cached answer shows immediately, the network answer arrives later.
@@ -243,7 +273,7 @@ export function App() {
   return (
     <>
       <AppFrame
-      sidebarOpen={!collapsed}
+      sidebarOpen={bootOverride !== null ? false : !collapsed}
       sidebarWidth={sidebarWidth}
       onSidebarWidth={(width) => {
         setSidebarWidth(width)
@@ -252,7 +282,7 @@ export function App() {
       onSidebarToggle={() => setCollapsed(true)}
       rightbarOpen={rightbarOpen}
       rightbarWidth={rightbarWidth}
-      sidebar={<Sidebar onCollapse={() => setCollapsed(true)} />}
+      sidebar={bootOverride === null ? <Sidebar onCollapse={() => setCollapsed(true)} /> : null}
       rightbar={
         <Suspense fallback={null}>
           <RightPanel
@@ -275,11 +305,23 @@ export function App() {
         <WorkerConversation />
       ) : (
         // coding and zen share the conversation: in zen the sidebar swaps to
-        // the fleet roster, but the router session is the chat itself.
+        // the fleet roster, but the router session is the chat itself. With
+        // two or more panes open the strip replaces the single conversation;
+        // the docked composer returns with it.
         <>
-          <ConversationTopbar collapsed={collapsed} onExpandSidebar={() => setCollapsed(false)} />
-          <ChatView />
-          <ComposerDock />
+          <ConversationTopbar
+            collapsed={collapsed}
+            detached={bootOverride !== null}
+            onExpandSidebar={() => setCollapsed(false)}
+          />
+          {openPanes.length >= 2 ? (
+            <SessionPanes />
+          ) : (
+            <>
+              <ChatView />
+              <ComposerDock />
+            </>
+          )}
           <button
             type="button"
             className={css.workPanelToggle}

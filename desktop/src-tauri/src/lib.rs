@@ -33,20 +33,25 @@ pub fn run() {
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(rpc::RpcState::default())
-        // Closing the window goes to the background: the zen runtime (and any
-        // background task it is running) stays alive, and the tray (or the
-        // macOS dock) brings the window back. Quitting is the tray menu's
-        // job — that is the only path that ends the runtime.
+        // Closing the main window goes to the background: the zen runtime (and
+        // any background task it is running) stays alive, and the tray (or the
+        // macOS dock) brings the window back. Quitting is the tray menu's job —
+        // that is the only path that ends the runtime. A detached session
+        // window (`session-*`) closes normally: the session keeps running in
+        // the resident slot either way.
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
+                if window.label() == "main" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
             rpc::rpc_start,
             rpc::rpc_send,
             rpc::rpc_stop,
+            rpc::rpc_alive,
             rpc::runtime_probe,
             rpc::get_initial_state,
             rpc::relaunch_app,

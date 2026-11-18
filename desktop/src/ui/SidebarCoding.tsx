@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useAppStore } from '../state/appStore'
+import { PANE_CAP, usePanesStore } from '../state/sessionPanes'
 import { canForkSession, isBlockedSession } from '../state/sessionSelectors'
 import {
   currentPending,
@@ -505,6 +506,29 @@ export function SidebarCoding() {
                 )}
               </>
             )}
+            {/* Open beside the conversation: same project only (frames are
+                project-filtered on the wire), while the strip has room — and
+                never for the session already on screen, whose dead click
+                would read as "the button is broken". */}
+            {menuSession.path !== currentPath &&
+              menuSession.project_path !== undefined &&
+              menuSession.project_path !== '' &&
+              menuSession.project_path === (current?.project_path ?? null) &&
+              !usePanesStore.getState().panes.some((pane) => pane.path === menuSession.path) &&
+              usePanesStore.getState().panes.length < PANE_CAP && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={css.menuItem}
+                  data-open-split
+                  onClick={() => {
+                    setMenu(null)
+                    void usePanesStore.getState().open(menuSession.path)
+                  }}
+                >
+                  {t('panes.openInSplit')}
+                </button>
+              )}
             <button
               type="button"
               role="menuitem"

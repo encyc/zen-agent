@@ -1,0 +1,224 @@
+/* The pane strip: N equal columns inside the center shell column. Paints
+   with the shared tokens only (the style-token guard owns this rule). */
+
+.strip {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 1px;
+  background: var(--dsw-alias-border-l1);
+}
+
+.pane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--ds-surface-raised);
+  border-inline-end: 1px solid var(--dsw-alias-border-l1);
+}
+
+.pane:last-child {
+  border-inline-end: none;
+}
+
+.pane[data-pane-active] {
+  box-shadow: inset 0 2px 0 0 var(--dsw-alias-state-business-primary);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px 6px 10px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  cursor: grab;
+  user-select: none;
+}
+
+.header:active {
+  cursor: grabbing;
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: start;
+  border: none;
+  background: transparent;
+  padding: 2px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+}
+
+.pane[data-pane-active] .title {
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.running {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: var(--ds-radius-full);
+  background: var(--dsw-alias-state-business-primary);
+  animation: panePulse 1.6s ease-in-out infinite;
+}
+
+@keyframes panePulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.staticBadge {
+  flex: none;
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: var(--ds-radius-12);
+  color: var(--dsw-alias-label-tertiary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.action {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: var(--ds-radius-12);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.action:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* The floating-dock contract (reserved band + fade, see ChatView) does
+     not apply here: a pane's composer sits in flow below the scroller, so
+     no dock height is ever reserved and nothing fades into a blank strip. */
+  --composer-dock-height: 0px;
+}
+
+.body [data-chat-scroll] {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.body [data-chat-flow] {
+  padding-bottom: 16px;
+}
+
+.paneDock {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 10px 10px;
+}
+
+.empty {
+  padding: 24px 16px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.notResident {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-layer-2);
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.loadButton {
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--ds-radius-12);
+  background: transparent;
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+}
+
+.loadButton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.composer {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 6px 8px 8px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.sendButton {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--ds-radius-12);
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+}
+
+.sendButton:hover {
+  background: var(--dsw-alias-state-business-primary);
+  color: var(--dsw-alias-label-primary-foreground);
+}
+
+.sendButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.composerInput {
+  flex: 1;
+  resize: none;
+  border: none;
+  outline: none;
+  background: var(--dsw-alias-bg-layer-2);
+  border-radius: var(--dsw-radius-sm);
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-primary);
+  max-height: 96px;
+}
+
+.composerInput::placeholder {
+  color: var(--dsw-alias-label-tertiary);
+}

@@ -2,6 +2,7 @@
  * node --test loads this file directly to pin zh/en parity. */
 import { pluginsEn, pluginsZh } from './messages-plugins.ts'
 import { settingsEn, settingsZh } from './messages-settings.ts'
+import { panesEn, panesZh } from './messages-panes.ts'
 import { swarmEn, swarmZh } from './messages-swarm.ts'
 
 type Dict = Record<string, string>
@@ -9,6 +10,7 @@ type Dict = Record<string, string>
 export type Locale = 'zh' | 'en'
 
 export const zh: Dict = {
+  ...panesZh,
   ...settingsZh,
   ...pluginsZh,
   ...swarmZh,
@@ -371,6 +373,7 @@ export const zh: Dict = {
 }
 
 export const en: Dict = {
+  ...panesEn,
   ...settingsEn,
   ...pluginsEn,
   ...swarmEn,

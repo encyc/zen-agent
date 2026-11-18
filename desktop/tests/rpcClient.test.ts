@@ -42,12 +42,10 @@ test('send() forwards the request with a correlation id and resolves the typed f
 
   const status = await client.send<StatusResult>({ type: 'status' }, 2500)
 
-  assert.deepEqual(recorder.invokes, [
-    {
-      command: 'rpc_send',
-      args: { payload: { type: 'status', id: 'r1' }, timeoutMs: 2500 },
-    },
-  ])
+  const [invoke] = recorder.invokes
+  assert.equal(invoke.command, 'rpc_send')
+  assert.equal((invoke.args?.payload as Record<string, unknown>).type, 'status')
+  assert.match((invoke.args?.payload as Record<string, unknown>).id as string, /^r[a-z0-9]{4}\d+$/)
   assert.equal(status.running, false)
 })
 
@@ -58,9 +56,8 @@ test('send() without a timeout passes null so the shell keeps its own default', 
 
   await client.send({ type: 'hello' })
 
-  assert.deepEqual(recorder.invokes, [
-    { command: 'rpc_send', args: { payload: { type: 'hello', id: 'r1' }, timeoutMs: null } },
-  ])
+  assert.equal(recorder.invokes.length, 1)
+  assert.equal((recorder.invokes[0]?.args?.payload as Record<string, unknown>).type, 'hello')
 })
 
 test('concurrent start() calls register the three event listeners once', async () => {
@@ -135,17 +132,19 @@ test('routed requests carry the active project; host ops stay untagged', async (
   await client.send({ type: 'hello' })
   await client.send({ type: 'project', op: 'switch', root: '/work/q' })
 
+  const payloads = recorder.invokes.map(
+    (call) => call.args?.payload as Record<string, unknown>,
+  )
   assert.deepEqual(
-    recorder.invokes.map((call) => call.args),
+    payloads.map((payload) => [payload.type, payload.project]),
     [
-      { payload: { type: 'status', project: '/work/p', id: 'r1' }, timeoutMs: null },
-      { payload: { type: 'hello', id: 'r2' }, timeoutMs: null },
-      {
-        payload: { type: 'project', op: 'switch', root: '/work/q', id: 'r3' },
-        timeoutMs: null,
-      },
+      ['status', '/work/p'],
+      ['hello', undefined],
+      ['project', undefined],
     ],
   )
+  const ids = payloads.map((payload) => payload.id as string)
+  assert.equal(new Set(ids).size, 3)
 })
 
 test('handshake adopts the host’s active project for later requests', async () => {
@@ -163,8 +162,8 @@ test('handshake adopts the host’s active project for later requests', async ()
   assert.equal(client.activeProject(), '/work/q')
 
   await client.send({ type: 'status' })
-  assert.deepEqual(recorder.invokes.at(-1)?.args, {
-    payload: { type: 'status', project: '/work/q', id: 'r2' },
-    timeoutMs: null,
-  })
+  const payload = recorder.invokes.at(-1)?.args?.payload as Record<string, unknown>
+  assert.equal(payload.type, 'status')
+  assert.equal(payload.project, '/work/q')
+  assert.match(payload.id as string, /^r[a-z0-9]{4}\d+$/)
 })

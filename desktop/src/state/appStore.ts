@@ -6,8 +6,8 @@
 import { startFailureOf, type StartFailure } from './startFailure.ts'
 import { create } from 'zustand'
 import { homeDir } from '@tauri-apps/api/path'
-import { TRANSCRIPT_PAGE_SIZE, olderPageCursor } from './transcriptWindow'
-import { RpcClient } from '../rpc/client'
+import { TRANSCRIPT_PAGE_SIZE, olderPageCursor } from './transcriptWindow.ts'
+import { RpcClient } from '../rpc/client.ts'
 import type {
   CompactionRecord,
   ErrorFrame,
@@ -15,11 +15,9 @@ import type {
   McpServerRow,
   Mode,
   SecretProviderRow,
-  ServerFrame,
   SkillRow,
   StatusResult,
-  Usage,
-} from '../rpc/types'
+} from '../rpc/types.ts'
 import {
   useApprovalStore,
   useAskStore,
@@ -35,21 +33,25 @@ import {
   useStatusStore,
   useWorkPanelStore,
   type WorkspaceMode,
-} from './stores'
-import { useChatStore } from './chatStore'
-import { applyFleetFrame, stopFleet, switchWorkspaceMode, syncProjectState, zenTranscript } from './zenActions'
-import { applySwarmFrame, registerSwarmSender } from './swarmWiring'
-import { nextDraft } from './pending'
-import { latestSessionForProject } from './latestSession'
-import { loadPrefs, replayFrames, savePref, spawnArgs } from './prefs'
-import { PaneCache } from './projectPanes'
+} from './stores.ts'
+import { useChatStore } from './chatStore.ts'
+import { stopFleet, switchWorkspaceMode, syncProjectState, zenTranscript } from './zenActions.ts'
+import { registerSwarmSender } from './swarmWiring.ts'
+import { nextDraft } from './pending.ts'
+import { latestSessionForProject } from './latestSession.ts'
+import { savePref, spawnArgs } from './prefs.ts'
+import { PaneCache } from './projectPanes.ts'
+import { restorePrefs } from './prefsReplay.ts'
 import {
-  frameBelongsTo,
-  frameErrorNotice,
-  frameSessionBelongsTo,
-  type ReplyLike,
-} from '../rpc/frames'
-import { reportRefreshFailure } from './refresh'
+  ensureFrameWiring,
+  getPaneSink,
+  handleResultFrame,
+  recordUsageBaseline,
+  showFrameError,
+  type FrameHandling,
+} from './frameRouter.ts'
+import { frameBelongsTo, frameSessionBelongsTo } from '../rpc/frames.ts'
+import { reportRefreshFailure } from './refresh.ts'
 import { applyStatus } from './statusSnapshot.ts'
 
 export type ConnectionState = 'idle' | 'starting' | 'ready' | 'exited'
@@ -171,18 +173,9 @@ let olderInFlight = false
 /** Frame listeners register once per process: connect() may run again after
  * an exit, and stacked handlers would duplicate every node in the chat. */
 let wired = false
-/** Last seen cumulative usage per session, for computing a turn's delta row.
- * Sessions of one project run in parallel, so one global baseline would read
- * the other session's totals. */
-const usageBaselines = new Map<string, Usage>()
 /** Transcript panes kept across project switches (pi-desktop's retained
  * panes; three covers the usual back-and-forth). */
 const paneCache = new PaneCache()
-
-interface FrameHandling {
-  set: (partial: Partial<Pick<AppState, 'busy'>>) => void
-  get: () => AppState
-}
 
 interface BootOptions {
   bin?: string
@@ -243,6 +236,12 @@ async function bootChild(
   void syncProjectState(get)
 }
 
+/** Test seam: drop the client singleton so a new bridge (and fresh wiring)
+ * is picked up by the next `client()` call. */
+export function _resetClientForTests(): void {
+  client = null
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   connection: 'idle',
   project: null,
@@ -272,9 +271,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     useApprovalStore.getState().clear()
     useAskStore.getState().clear()
 
+    ensureFrameWiring(rpc, { set, get } as FrameHandling)
     if (!wired) {
       wired = true
-      rpc.onFrame((frame: ServerFrame) => handleFrame(frame, { set, get }))
       rpc.onStderr((line) => {
         set((state) => ({ stderrTail: [...state.stderrTail.slice(-49), line] }))
       })
@@ -288,6 +287,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           pollTimer = null
         }
         useChatStore.getState().finalize()
+        getPaneSink()?.sessionEnded()
         set({ connection: 'exited', exitCode: code, busy: false, switching: null })
       })
     }
@@ -333,9 +333,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           // A stale answer from before a session switch must not land.
           if (!applyStatus(status)) return
           set({ busy: Boolean(status.running) })
-          if (status.usage !== undefined) {
-            usageBaselines.set(status.session ?? '', status.usage)
-          }
+          recordUsageBaseline(status.session ?? '', status.usage)
         }
       })
       .catch((error) => reportRefreshFailure('status', error))
@@ -626,6 +624,16 @@ export const useAppStore = create<AppState>((set, get) => ({
         limit: TRANSCRIPT_PAGE_SIZE,
       })
       if (frame.type !== 'result' || !frame.ok) return false
+      // The request is tagged with the on-screen session; a reply naming a
+      // different one (a tag that raced a switch, an older runtime) answers
+      // for the wrong conversation and must not paint.
+      const replySession = typeof frame.session === 'string' ? frame.session : null
+      if (
+        replySession !== null &&
+        replySession !== useSessionStore.getState().currentPath
+      ) {
+        return false
+      }
       const transcript = (frame.transcript ?? []) as never
       const notices = (frame.notices ?? []) as never
       const compactions = (frame.compactions ?? []) as CompactionRecord[]
@@ -658,6 +666,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         before,
       })
       if (frame.type !== 'result' || !frame.ok) return false
+      const olderSession = typeof frame.session === 'string' ? frame.session : null
+      if (
+        olderSession !== null &&
+        olderSession !== useSessionStore.getState().currentPath
+      ) {
+        return false
+      }
       useChatStore.getState().prependOlder({
         type: 'result',
         id: '',
@@ -692,7 +707,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     const payload: Record<string, unknown> = { type: 'prompt', text }
     if (images.length > 0) payload.images = images.map((image) => image.path)
     try {
-      const frame = await get().client().send(payload)
+      let frame = await get().client().send(payload)
+      // The on-screen session's slot can be gone (LRU eviction, another
+      // window's resume reloading this project's idle slot): the host refuses
+      // with session_invalid instead of answering for the wrong session.
+      // Resuming re-opens the slot, then the prompt goes through — no dead
+      // end, no wrong conversation.
+      if (frame.type === 'error' && frame.code === 'session_invalid') {
+        await get().resumeSession(useSessionStore.getState().currentPath ?? '')
+        frame = await get().client().send(payload)
+      }
       // The person may have switched sessions while this turn ran: its result
       // (and usage row) belongs to the session it was sent to, not the pane
       // that is on screen now.
@@ -845,11 +869,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   async newSession() {
-    await runSessionOp(get, { type: 'session', op: 'new' }, () => refreshAfterSessionChange(get))
+    await runSessionOp(get, { type: 'session', op: 'new' }, async (frame) => {
+      adoptSessionPath(frame)
+      await refreshAfterSessionChange(get)
+    })
   },
 
   async forkSession() {
-    await runSessionOp(get, { type: 'session', op: 'fork' }, () => refreshAfterSessionChange(get))
+    await runSessionOp(get, { type: 'session', op: 'fork' }, async (frame) => {
+      adoptSessionPath(frame)
+      await refreshAfterSessionChange(get)
+    })
   },
 
   async openSession(path) {
@@ -906,6 +936,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       return false
     }
     if (showFrameError(frame)) return false
+    adoptSessionPath(frame)
     await refreshAfterSessionChange(get)
     return true
   },
@@ -1044,152 +1075,19 @@ function showActionError(value: unknown): void {
   })
 }
 
-/** A server refusal goes through the code→dictionary mapper (`message` stays
- * the fallback for codes this build does not know); returns false when the
- * frame is not a refusal. */
-function showFrameError(frame: ReplyLike): boolean {
-  const text = frameErrorNotice(frame, useSettingsStore.getState().locale)
-  if (text === null) return false
-  useNoticeStore.getState().show({ kind: 'error', text })
-  return true
+/** A session op's reply names the session its slot holds now (`new`, `fork`,
+ * `import`); pinning it before the refreshes keeps every tagged request —
+ * and the transcript it paints — on the session the switch produced. */
+function adoptSessionPath(frame: Record<string, unknown>): void {
+  const path = typeof frame.path === 'string' && frame.path !== '' ? frame.path : null
+  if (path !== null) useSessionStore.getState().setCurrent(path)
 }
 
 async function refreshAfterSessionChange(get: () => AppState): Promise<void> {
-  // The transcript and status are id-correlated on the wire; the global
-  // session list only feeds the sidebar, so it must not add a serial round
-  // trip to every switch.
+  // The session list names the slot's now-current session; it lands first so
+  // the transcript/status refreshes (session-tagged by the client) address
+  // the session the switch produced, not the one it left behind.
+  await get().refreshSessions()
   await Promise.all([get().refreshTranscript(), get().refreshStatus()])
-  void get().refreshSessions()
 }
 
-/** Re-apply the user's mode/model/thinking onto a freshly spawned child.
- *
- * The child comes up with `--mode ask` and catalog defaults; without this a
- * project switch silently drops the person out of auto mode and back to the
- * default model, which is exactly the "everything reset" feeling a reload
- * has. Every replayed frame is a normal request: a pref the server rejects
- * (a model that was renamed, say) costs that pref, never the connection. */
-async function restorePrefs(get: () => AppState): Promise<void> {
-  await get().refreshStatus()
-  const prefs = loadPrefs()
-  const live = useStatusStore.getState().status
-  const frames = replayFrames(prefs, {
-    mode: live?.mode ?? null,
-    model: live?.model ?? null,
-    thinking: live?.thinking ?? null,
-  })
-  if (frames.length === 0) return
-  for (const payload of frames) {
-    try {
-      await get().client().send(payload)
-    } catch {
-      // A dead child ends here; the caller's own error path reports it.
-      return
-    }
-  }
-  await get().refreshStatus()
-}
-
-function handleFrame(frame: ServerFrame, handling: FrameHandling): void {
-  const tagged = frame as { project?: unknown; session?: unknown }
-  const project =
-    typeof tagged.project === 'string' && tagged.project !== '' ? tagged.project : null
-  const session =
-    typeof tagged.session === 'string' && tagged.session !== '' ? tagged.session : null
-  if (frame.type === 'event') {
-    const event = frame.event
-    // Prompts are answered by prefix-routed ids; a background slot's question
-    // must stay in the queue even while another project or session is on
-    // screen.
-    if (event.type === 'ask_request' && event.request_id) {
-      useAskStore.getState().push({
-        requestId: event.request_id,
-        questions: event.questions ?? [],
-        project,
-        session,
-      })
-      return
-    }
-    if (event.type === 'ask_cancel' && event.request_id) {
-      useAskStore.getState().pop(event.request_id)
-      return
-    }
-    if (event.type === 'approval_request' && event.request_id) {
-      useApprovalStore.getState().push({
-        requestId: event.request_id,
-        toolName: event.tool_name ?? '?',
-        args: event.args ?? '',
-        argsTruncated: event.argsTruncated ?? false,
-        risk: event.risk ?? null,
-        target: event.target ?? null,
-        reason: event.reason ?? null,
-        project,
-        session,
-      })
-      return
-    }
-    // Chat events from a background slot or session belong to its own pane,
-    // which is refreshed from its snapshot when the person switches back.
-    if (!frameBelongsTo(frame, handling.get().project)) return
-    if (!frameSessionBelongsTo(frame, useSessionStore.getState().currentPath)) {
-      // A background session still changes the sidebar (titles, activity).
-      if (event.type === 'agent_end' || event.type === 'turn_end') {
-        void handling.get().refreshSessions()
-      }
-      return
-    }
-    useChatStore.getState().applyEvent(event)
-    if (event.type === 'agent_end' || event.type === 'turn_end') {
-      void handling.get().refreshStatus()
-    }
-    return
-  }
-  if (!frameBelongsTo(frame, handling.get().project)) return
-  // Swarm rooms are per project: only the active project's room frames and
-  // @you notices may reach the screen.
-  if (applySwarmFrame(frame, handling.get().project)) return
-  if (applyFleetFrame(frame)) return
-  if (!frameSessionBelongsTo(frame, useSessionStore.getState().currentPath)) return
-  handleResultFrame(frame as Record<string, unknown>, handling)
-}
-
-function handleResultFrame(frame: Record<string, unknown>, handling: FrameHandling): void {
-  // A prompt failure crosses as an error frame with a code; the banner
-  // localizes it instead of dropping it (the raw detail stays in the log).
-  if (frame.type === 'error') {
-    showFrameError(frame)
-    void handling.get().refreshStatus()
-    return
-  }
-  if (frame.type !== 'result' || !frame.ok) {
-    void handling.get().refreshStatus()
-    return
-  }
-  // A prompt result closes a turn: land its usage row (the delta since the
-  // previous snapshot — the wire usage is session-cumulative) and refresh.
-  if ('termination' in frame && 'usage' in frame) {
-    const total = frame.usage as Usage
-    const key = typeof frame.session === 'string' ? frame.session : ''
-    const previous = usageBaselines.get(key)
-    const delta = previous === undefined
-      ? total
-      : {
-          input: Math.max(0, total.input - previous.input),
-          output: Math.max(0, total.output - previous.output),
-          cache_read: Math.max(0, total.cache_read - previous.cache_read),
-          cache_write: Math.max(0, total.cache_write - previous.cache_write),
-          cost: Math.max(0, total.cost - previous.cost),
-        }
-    usageBaselines.set(key, total)
-    useChatStore.getState().pushUsage(
-      delta,
-      null,
-      (frame.termination as string | null) ?? null,
-    )
-    useChatStore.getState().finalize()
-    void handling.get().refreshStatus()
-    void handling.get().refreshSessions()
-    return
-  }
-  void handling.get().refreshStatus()
-}

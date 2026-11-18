@@ -41,6 +41,15 @@ if TYPE_CHECKING:
 #: Idle projects beyond this are evicted LRU (audit: cap, never unbounded).
 MAX_RESIDENT_SLOTS = 4
 
+#: Kinds whose ``session`` tag *addresses* one live session. A tag naming no
+#: resident slot is refused for these — serving the active session instead
+#: would answer the wrong conversation. Other kinds (project-level ops) fall
+#: through to the project/active rules as before.
+SESSION_ADDRESSED_KINDS = frozenset(
+    {"prompt", "steer", "follow_up", "cancel", "command",
+     "transcript", "status", "usage", "model", "mode"}
+)
+
 
 class RpcHost(WorkspaceOps, RunsOps, SupervisorOps, SwarmOps, ZenOps):
     """Reads requests, routes them to a project slot, and owns slot lifetime."""
@@ -194,6 +203,18 @@ class RpcHost(WorkspaceOps, RunsOps, SupervisorOps, SwarmOps, ZenOps):
             self._resolve_swarm_prompt(request, kind)
             return True
 
+        if self._session_unserved(request, kind):
+            self._send(
+                error_frame(
+                    request_id,
+                    "no resident slot for session",
+                    "session_invalid",
+                )
+            )
+            return True
+        if kind == "session" and request.get("op") in ("new", "fork", "import"):
+            await self._session_switch(request, request_id)
+            return True
         slot = self._slot_for(request, prefer_id=kind in ("approval", "ask"))
         if slot is None:
             self._send(
@@ -298,6 +319,14 @@ class RpcHost(WorkspaceOps, RunsOps, SupervisorOps, SwarmOps, ZenOps):
         id_key = self._id_key(request)
         if prefer_id and id_key is not None:
             return self._slots.get(id_key)
+        session_tag = request.get("session")
+        if isinstance(session_tag, str) and session_tag.strip():
+            holder = self._session_holder(
+                session_tag.strip(), self._project_tag(request)
+            )
+            if holder is not None:
+                self._slots.move_to_end(holder.key)
+                return holder
         project = request.get("project")
         if isinstance(project, str) and project.strip():
             key = project_key(find_project_root(project))
@@ -311,6 +340,46 @@ class RpcHost(WorkspaceOps, RunsOps, SupervisorOps, SwarmOps, ZenOps):
             if slot is not None:
                 return slot
         return self._active
+
+    @staticmethod
+    def _project_tag(request: dict) -> str | None:
+        """The request's project root, when it names one."""
+        project = request.get("project")
+        if isinstance(project, str) and project.strip():
+            return project.strip()
+        return None
+
+    def _session_unserved(self, request: dict, kind: object) -> bool:
+        """True when a session-addressed kind names a session nobody holds.
+
+        Approval/ask keep their id-prefix escape: the request id names one slot
+        even when the tag is stale, so the id path decides instead of this.
+        """
+        if kind not in SESSION_ADDRESSED_KINDS:
+            return False
+        session_tag = request.get("session")
+        if not isinstance(session_tag, str) or not session_tag.strip():
+            return False
+        if kind in ("approval", "ask") and self._id_key(request) is not None:
+            return False
+        return (
+            self._session_holder(session_tag.strip(), self._project_tag(request))
+            is None
+        )
+
+    def _session_holder(self, session: str, project: str | None) -> RuntimeSlot | None:
+        """The resident slot holding ``session`` (project-matched when tagged)."""
+        try:
+            target = str(Path(session).expanduser().resolve())
+            required = project_key(find_project_root(project)) if project else None
+        except Exception:  # noqa: BLE001 - a bad path/tag is simply unroutable
+            return None
+        for slot in self._slots.values():
+            if required is not None and slot.project_key != required:
+                continue
+            if self._session_path(slot) == target:
+                return slot
+        return None
 
     @staticmethod
     def _id_key(request: dict) -> str | None:
@@ -436,6 +505,64 @@ class RpcHost(WorkspaceOps, RunsOps, SupervisorOps, SwarmOps, ZenOps):
             )
             return
         await slot.server._handle_line(json.dumps(request))
+
+    async def _session_switch(self, request: dict, request_id) -> None:
+        """Session-switching ops never abort a running conversation.
+
+        A session-tagged request (v3 GUI) whose holder is busy gets a sibling
+        slot instead of the kernel's ``session_lease_busy`` refusal: ``new``
+        opens a fresh session in the sibling, ``import`` loads the file there
+        (``resume=<file>`` would fight the busy holder's lease, so the
+        sibling starts fresh). The sibling is activated, so ``session list``
+        reports it current and the GUI follows while the busy run keeps
+        running. ``fork`` and every untagged request keep the old path
+        verbatim — forwarded, refused by the kernel when busy — so v2
+        clients and the TUI see no behavior change.
+        """
+        slot = self._slot_for(request)
+        session_tag = request.get("session")
+        tagged = isinstance(session_tag, str) and session_tag.strip() != ""
+        op = request.get("op")
+        if slot is None:
+            self._send(error_frame(request_id, "no project: open one first", "no_project"))
+            return
+        if not tagged or not slot.busy or op == "fork":
+            await slot.server._handle_line(json.dumps(request))
+            return
+        try:
+            root = Path(slot.runtime.root).resolve()
+            sibling = await self._spawn(root, resume=None, base=slot.project_key)
+            self._activate(sibling)
+            if op == "new":
+                self._send(
+                    {
+                        "type": "result",
+                        "id": request_id,
+                        "ok": True,
+                        "path": self._session_path(sibling),
+                    }
+                )
+                return
+            await sibling.server._handle_line(json.dumps(request))
+        except Refusal as exc:
+            self._send(
+                error_frame(
+                    request_id,
+                    str(exc),
+                    exc.code or "session_invalid",
+                    {"op": str(op)},
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 - a bad switch is a result
+            self._send(
+                failure_frame(
+                    request_id,
+                    code="session_failed",
+                    message="session failed",
+                    exc=exc,
+                    op=str(op),
+                )
+            )
 
     async def _spawn(self, root: Path, *, resume, base: str) -> RuntimeSlot:
         """Prepare and register one runtime slot for ``root``."""

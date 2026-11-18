@@ -314,7 +314,13 @@ function buildNodes(
     .filter((node): node is ChatNode => node !== null)
 }
 
-export const useChatStore = create<ChatState>((set, get) => ({
+export type ChatStoreApi = ReturnType<typeof createChatStore>
+
+/** One chat transcript. The session pane registry gives every open session
+ * its own instance; `useChatStore` stays the focused session's store. The
+ * node-id sequence is module-level, so ids stay unique across instances. */
+export function createChatStore() {
+  return create<ChatState>((set, get) => ({
   nodes: [],
   cards: {},
   currentAssistantId: null,
@@ -715,4 +721,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       revision: get().revision + 1,
     })
   },
-}))
+  }))
+}
+
+export const useChatStore = createChatStore()

@@ -590,6 +590,18 @@ pub async fn rpc_stop(state: State<'_, RpcState>) -> Result<(), String> {
     .map_err(|error| format!("rpc_stop join failed: {error}"))
 }
 
+/// Whether a sidecar is already running, for any window that boots: a
+/// detached session window adopts the running process instead of spawning a
+/// second runtime (which would fork session state). Read-only and cheap.
+#[tauri::command]
+pub fn rpc_alive(state: State<'_, RpcState>) -> bool {
+    let slot = state.proc.lock().unwrap();
+    match slot.as_ref() {
+        Some(proc) => proc.alive.load(Ordering::SeqCst),
+        None => false,
+    }
+}
+
 /// Can this install replace itself? The Tauri updater only handles AppImages
 /// on Linux: a .deb comes from a package manager, so the UI links there instead
 /// of offering a restart that can only fail.
