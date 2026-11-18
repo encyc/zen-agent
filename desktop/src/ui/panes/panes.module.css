@@ -115,11 +115,19 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  /* Panes reserve dock space only when a dock actually lives here: the
-     focused pane's dock overrides this with its measured height, so the
-     unfocused panes stop showing a blank block where the full composer
-     would be. */
+  /* The floating-dock contract (reserved band + fade, see ChatView) does
+     not apply here: a pane's composer sits in flow below the scroller, so
+     no dock height is ever reserved and nothing fades into a blank strip. */
   --composer-dock-height: 0px;
+}
+
+.body [data-chat-scroll] {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.body [data-chat-flow] {
+  padding-bottom: 16px;
 }
 
 .paneDock {

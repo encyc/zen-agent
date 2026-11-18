@@ -4,7 +4,7 @@
  * the resume the sidebar click does — so the topbar, sidebar and status poll
  * follow the pane the person is reading. */
 
-import { useLayoutEffect, useRef, useState, type DragEvent, type RefObject } from 'react'
+import { useState, type DragEvent } from 'react'
 import { useAppStore } from '../../state/appStore'
 import { usePanesStore, type SessionPane } from '../../state/sessionPanes'
 import { detachSession, outsideDrop, windowBounds } from '../../state/detachWindow'
@@ -24,7 +24,6 @@ export function PaneView({ pane }: { pane: SessionPane }) {
   const locale = useSettingsStore((state) => state.locale)
   const [dragging, setDragging] = useState(false)
   const panes = usePanesStore.getState()
-  const bodyRef = useRef<HTMLDivElement | null>(null)
 
   const focus = () => {
     void usePanesStore.getState().focus(pane.path)
@@ -144,7 +143,7 @@ export function PaneView({ pane }: { pane: SessionPane }) {
           </button>
         </Tooltip>
       </header>
-      <div className={css.body} ref={bodyRef}>
+      <div className={css.body}>
         <ChatView
           chat={pane.chat}
           busy={pane.busy}
@@ -162,10 +161,9 @@ export function PaneView({ pane }: { pane: SessionPane }) {
         )}
         {isCurrent ? (
           // The focused pane gets the real composer — approval/ask cards,
-          // images, mentions, model picker — with its measured height feeding
-          // this pane's transcript reserve. Unfocused panes keep the slim
-          // per-session composer and reserve nothing.
-          <PaneDock bodyRef={bodyRef} />
+          // images, mentions, model picker — in flow at the pane's bottom.
+          // Unfocused panes keep the slim per-session composer.
+          <PaneDock />
         ) : (
           <PaneComposer pane={pane} />
         )}
@@ -175,34 +173,11 @@ export function PaneView({ pane }: { pane: SessionPane }) {
 }
 
 /** The full composer dock for the focused pane: the same NoticeBanner and
- * InputBar the single view floats, in flow at the pane's bottom. Its height
- * is published as this pane's `--composer-dock-height` (overriding the pane
- * default of 0) so the transcript reserves exactly the dock and fades out
- * behind it — the same contract ComposerDock serves for the single view. */
-function PaneDock({ bodyRef }: { bodyRef: RefObject<HTMLDivElement | null> }) {
-  const ref = useRef<HTMLDivElement | null>(null)
-
-  useLayoutEffect(() => {
-    const dock = ref.current
-    const body = bodyRef.current
-    if (dock === null || body === null) return
-    const publish = () => {
-      const height = Math.round(dock.getBoundingClientRect().height)
-      if (height > 0) {
-        body.style.setProperty('--composer-dock-height', `${height}px`)
-      }
-    }
-    publish()
-    const observer = new ResizeObserver(publish)
-    observer.observe(dock)
-    return () => {
-      observer.disconnect()
-      body.style.removeProperty('--composer-dock-height')
-    }
-  }, [bodyRef])
-
+ * InputBar the single view floats — but in flow at the pane's bottom, not
+ * floating over the transcript, so nothing needs to reserve its height. */
+function PaneDock() {
   return (
-    <div ref={ref} className={css.paneDock} data-pane-dock>
+    <div className={css.paneDock} data-pane-dock>
       <NoticeBanner />
       <InputBar />
     </div>
