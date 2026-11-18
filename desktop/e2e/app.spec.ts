@@ -485,7 +485,7 @@ test('the ask card collects answers and resolves the blocked tool call', async (
   )
 })
 
-test('the work panel opens on files and renders review hunks', async ({ page }) => {
+test('the work panel opens on files and the git tab renders diff hunks', async ({ page }) => {
   await boot(
     page,
     initialState({
@@ -525,12 +525,19 @@ test('the work panel opens on files and renders review hunks', async ({ page }) 
   await page.getByRole('button', { name: '打开工作面板' }).click()
   const panel = page.locator('[data-work-panel]')
   await expect(panel.getByRole('tab', { name: '文件' })).toHaveAttribute('aria-selected', 'true')
-  await panel.getByRole('tab', { name: '审核' }).click()
-  await expect(panel.getByRole('tab', { name: '审核' })).toHaveAttribute('aria-selected', 'true')
-  await expect(panel).toContainText('a.ts')
-  await expect(panel).toContainText('@@ -1,2 +1,2 @@')
-  await expect(panel.locator('[data-kind="add"]')).toContainText('new')
-  await expect(panel.locator('[data-kind="del"]')).toContainText('old')
+  await page.getByRole('button', { name: '打开工作面板标签' }).click()
+  await panel.getByRole('menuitem', { name: 'Git' }).click()
+  await expect(panel.getByRole('tab', { name: 'Git' })).toHaveAttribute('aria-selected', 'true')
+  // The review and worktree tabs folded into the git tab in the merge.
+  await expect(panel.getByRole('tab', { name: '审核' })).toHaveCount(0)
+  await expect(panel.getByRole('tab', { name: '工作树' })).toHaveCount(0)
+  // The bridge's default git_changes serves one file per group; opening the
+  // unstaged row renders the default git_diff hunks.
+  await panel.getByRole('button', { name: /ReviewPanel/ }).click()
+  await expect(panel).toContainText('@@ -1,2 +1,3 @@')
+  await expect(panel.locator('[data-kind="add"]').first()).toContainText('new line')
+  await expect(panel.locator('[data-kind="del"]').first()).toContainText('old line')
+  await page.getByRole('button', { name: '返回变更列表' }).click()
 
   await page.getByRole('button', { name: '打开工作面板标签' }).click()
   await panel.getByRole('menuitem', { name: '文件' }).click()
@@ -544,17 +551,17 @@ test('the work panel opens on files and renders review hunks', async ({ page }) 
 
   await page.getByRole('button', { name: '关闭 文件' }).click()
   await expect(panel.getByRole('tab', { name: '文件' })).toHaveCount(0)
-  await expect(panel.getByRole('tab', { name: '审核' })).toHaveAttribute('aria-selected', 'true')
+  await expect(panel.getByRole('tab', { name: 'Git' })).toHaveAttribute('aria-selected', 'true')
 
-  // Review is a plain tab: closing it retires the last tab and the dock with it.
-  await page.getByRole('button', { name: '关闭 审核' }).click()
+  // Git is a plain tab: closing it retires the last tab and the dock with it.
+  await page.getByRole('button', { name: '关闭 Git' }).click()
   await expect(panel).toHaveCount(0)
 
   // Reopening always lands on files, never on the surface the user just shut.
   await page.getByRole('button', { name: '打开工作面板' }).click()
   await expect(panel.getByRole('tab', { name: '文件' })).toHaveAttribute('aria-selected', 'true')
   await expect(panel.getByRole('button', { name: 'README.md' })).toBeVisible()
-  await expect(panel.getByRole('tab', { name: '审核' })).toHaveCount(0)
+  await expect(panel.getByRole('tab', { name: 'Git' })).toHaveCount(0)
 })
 
 test('a file mentioned in the reply opens in the work panel', async ({ page }) => {
@@ -788,7 +795,7 @@ test('the file tree paints type badges and the viewer shows a breadcrumb', async
   await expect(crumbs.locator('[data-crumb-last]')).toHaveText('a.ts')
 })
 
-test('the worktree tab lists worktrees and marks the current one', async ({ page }) => {
+test('the git tab lists worktrees and marks the current one', async ({ page }) => {
   await boot(
     page,
     initialState({
@@ -823,12 +830,11 @@ test('the worktree tab lists worktrees and marks the current one', async ({ page
   await page.getByRole('button', { name: '打开工作面板' }).click()
   const panel = page.locator('[data-work-panel]')
   await page.getByRole('button', { name: '打开工作面板标签' }).click()
-  await panel.getByRole('menuitem', { name: '工作树' }).click()
-  await expect(panel.getByRole('tab', { name: '工作树' })).toHaveAttribute('aria-selected', 'true')
+  await panel.getByRole('menuitem', { name: 'Git' }).click()
+  await expect(panel.getByRole('tab', { name: 'Git' })).toHaveAttribute('aria-selected', 'true')
+  await expect(panel).toContainText('main')
   await expect(panel).toContainText('feature')
-  await expect(panel).toContainText('/work/p-feature')
   await expect(panel).toContainText('当前')
-  await expect(panel).toContainText('3 个未提交变更')
   await expect(panel.getByRole('button', { name: '切换' })).toHaveCount(1)
   await page.getByRole('button', { name: '关闭工作面板' }).click()
   await expect(page.locator('[data-work-panel]')).toHaveCount(0)

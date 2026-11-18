@@ -249,10 +249,6 @@ html[data-work-panel-resizing] * {
   background: var(--dsw-alias-state-business-primary);
 }
 
-.reviewWrap {
-  height: 100%;
-  min-height: 0;
-}
 
 /* Hidden-but-mounted terminal: display:none keeps the PTY and scrollback. */
 .terminalPane {

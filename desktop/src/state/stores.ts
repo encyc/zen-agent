@@ -206,10 +206,8 @@ export const usePaletteStore = create<PaletteState>((set) => ({
 // ---- work panel -------------------------------------------------------------
 
 export type WorkPanelTabKind =
-  | 'review'
-  | 'files'
   | 'git'
-  | 'worktree'
+  | 'files'
   | 'memory'
   | 'terminal'
   | 'subagent'
@@ -233,7 +231,7 @@ export interface FileOpenRequest {
   nonce: number
 }
 
-const REVIEW_TAB: WorkPanelTab = { id: 'review', kind: 'review' }
+const GIT_TAB: WorkPanelTab = { id: 'git', kind: 'git' }
 const FILES_TAB: WorkPanelTab = { id: 'files', kind: 'files' }
 
 let fileRequestSeq = 0
@@ -247,7 +245,7 @@ interface WorkPanelState {
   openPanel(): void
   closePanel(): void
   toggleFullscreen(): void
-  showTab(kind: 'review' | 'files' | 'git' | 'worktree' | 'memory' | 'terminal'): void
+  showTab(kind: 'git' | 'files' | 'memory' | 'terminal'): void
   openFile(path: string): void
   consumeFileRequest(): void
   activate(id: string): void
@@ -262,7 +260,7 @@ function withTab(tabs: WorkPanelTab[], tab: WorkPanelTab): WorkPanelTab[] {
 export const useWorkPanelStore = create<WorkPanelState>((set) => ({
   open: false,
   fullscreen: false,
-  tabs: [REVIEW_TAB, FILES_TAB],
+  tabs: [GIT_TAB, FILES_TAB],
   activeId: FILES_TAB.id,
   fileRequest: null,
   // Every fresh open lands on files: the rail is a browsing surface first, so

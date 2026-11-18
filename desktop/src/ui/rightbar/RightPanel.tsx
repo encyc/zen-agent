@@ -1,7 +1,7 @@
 /** Work panel — pi's docked right rail: a 46px tab strip with review, files,
- * worktree and per-subagent tabs, a terminal tab whose shell outlives tab
- * switches, a launcher for the tool tabs, a close control and a resizable
- * left edge. */
+ * and per-subagent tabs, a terminal tab whose shell outlives tab
+ * switches, a launcher for the tool tabs, a close control, a fullscreen
+ * toggle and a resizable left edge. */
 
 import {
   Suspense,
@@ -24,7 +24,6 @@ import {
   BotIcon,
   BranchIcon,
   ExpandIcon,
-  FileIcon,
   FolderIcon,
   PlusIcon,
   SparkIcon,
@@ -33,7 +32,7 @@ import {
 } from '../icons'
 import css from './RightPanel.module.css'
 
-// Only the active tab's panel ships in the rail chunk; the other five load on
+// Only the active tab's panel ships in the rail chunk; the other four load on
 // first activation, each as its own chunk.
 const FilesPanel = lazy(() =>
   import('./FilesPanel').then((module) => ({ default: module.FilesPanel })),
@@ -41,14 +40,8 @@ const FilesPanel = lazy(() =>
 const MemoryPanel = lazy(() =>
   import('./MemoryPanel').then((module) => ({ default: module.MemoryPanel })),
 )
-const ReviewPanel = lazy(() =>
-  import('./ReviewPanel').then((module) => ({ default: module.ReviewPanel })),
-)
 const SubagentTranscript = lazy(() =>
   import('./SubagentTranscript').then((module) => ({ default: module.SubagentTranscript })),
-)
-const WorktreePanel = lazy(() =>
-  import('./WorktreePanel').then((module) => ({ default: module.WorktreePanel })),
 )
 const TerminalPanel = lazy(() =>
   import('./TerminalPanel').then((module) => ({ default: module.TerminalPanel })),
@@ -71,10 +64,8 @@ interface DragState {
 }
 
 const TOOL_TABS = [
-  { kind: 'review', label: 'panel.review', Icon: FileIcon },
-  { kind: 'files', label: 'panel.files', Icon: FolderIcon },
   { kind: 'git', label: 'panel.git', Icon: BranchIcon },
-  { kind: 'worktree', label: 'panel.worktree', Icon: BranchIcon },
+  { kind: 'files', label: 'panel.files', Icon: FolderIcon },
   { kind: 'memory', label: 'panel.memory', Icon: SparkIcon },
   { kind: 'terminal', label: 'panel.terminal', Icon: TerminalIcon },
 ] as const
@@ -176,7 +167,7 @@ export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
       className={css.root}
       data-work-panel
       data-fullscreen={fullscreen || undefined}
-      data-tab={activeTab?.kind ?? 'review'}>
+      data-tab={activeTab?.kind ?? 'git'}>
       <div
         className={css.resize}
         role="separator"
@@ -315,14 +306,8 @@ export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
             <MemoryPanel />
           ) : activeTab.kind === 'files' ? (
             <FilesPanel />
-          ) : activeTab.kind === 'git' ? (
-            <GitPanel width={effectiveWidth} />
-          ) : activeTab.kind === 'worktree' ? (
-            <WorktreePanel />
           ) : (
-            <div className={css.reviewWrap}>
-              <ReviewPanel />
-            </div>
+            <GitPanel width={effectiveWidth} />
           )}
         </Suspense>
       </div>
