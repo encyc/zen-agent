@@ -439,3 +439,38 @@ async def test_git_ops_run_off_loop(runtime_factory, tmp_path, monkeypatch):
     assert json.loads(writes[-1])["ok"] is True
     assert "thread" in seen, "dispatch never reached git_review.changes"
     assert seen["thread"] is not threading.current_thread()
+
+
+async def test_git_log_roundtrip(runtime_factory, tmp_path):
+    from test_git_review import _history_repo
+
+    repo = _history_repo(tmp_path)
+    server, writes = await _git_rpc_pair(runtime_factory, root=repo)
+    assert await server._handle_line('{"type":"git_log","id":"g5","limit":2,"skip":0}')
+    frame = json.loads(writes[-1])
+    assert frame["type"] == "result" and frame["ok"] is True
+    commits = frame["log"]["commits"]
+    assert [c["subject"] for c in commits] == ["merge side", "c2"]
+    assert len(commits[0]["parents"]) == 2
+
+
+async def test_git_show_roundtrip(runtime_factory, tmp_path):
+    from test_git_review import _history_repo
+
+    repo = _history_repo(tmp_path)
+    server, writes = await _git_rpc_pair(runtime_factory, root=repo)
+    assert await server._handle_line('{"type":"git_show","id":"g6","commit":"HEAD"}')
+    frame = json.loads(writes[-1])
+    assert frame["type"] == "result" and frame["ok"] is True
+    assert frame["show"]["subject"] == "merge side"
+    assert [f["path"] for f in frame["show"]["files"]] == ["b.txt"]
+
+
+async def test_git_show_bad_commit_is_a_plain_error(runtime_factory, tmp_path):
+    server, writes = await _git_rpc_pair(runtime_factory, root=tmp_path)
+    assert await server._handle_line(
+        '{"type":"git_show","id":"g7","commit":"not-a-hash"}'
+    )
+    frame = json.loads(writes[-1])
+    assert frame["type"] == "error" and frame["id"] == "g7"
+    assert "commit" in frame["message"]

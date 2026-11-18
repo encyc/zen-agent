@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict
 from pathlib import Path
@@ -26,6 +27,10 @@ from zenagent.app.workspace import (
 )
 from zenagent.cli.rpc.codec import serialize_event
 from zenagent.cli.rpc.errors import failure_frame
+
+#: What `git_show` accepts: a hex object name or a symbolic ref the
+#: graph can produce (`HEAD`). Anything else is the caller's mistake.
+_GIT_COMMIT_RE = re.compile(r"^(?:[0-9a-fA-F]{4,40}|HEAD)$")
 from zenagent.cli.rpc.ops_config import ConfigOps
 from zenagent.cli.rpc.ops_files import FilesOps
 from zenagent.cli.rpc.ops_plugins import PluginsOps
@@ -551,6 +556,62 @@ class RpcServer(FilesOps, SessionOps, PluginsOps, ConfigOps, SecretsOps, SkillsO
             else:
                 self._send(
                     {"type": "result", "id": request_id, "ok": True, "changes": result}
+                )
+            return True
+        if kind == "git_log":
+            try:
+                limit = int(request.get("limit") or 100)
+                skip = int(request.get("skip") or 0)
+            except (TypeError, ValueError):
+                self._send(
+                    {"type": "error", "id": request_id, "message": "git_log needs numbers"}
+                )
+                return True
+            try:
+                result = await asyncio.to_thread(
+                    git_review.log, self.cwd, limit=limit, skip=skip
+                )
+            except Exception as exc:
+                self._send(
+                    failure_frame(
+                        request_id,
+                        code="git_failed",
+                        message="git op failed",
+                        exc=exc,
+                        op=kind,
+                    )
+                )
+            else:
+                self._send(
+                    {"type": "result", "id": request_id, "ok": True, "log": result}
+                )
+            return True
+        if kind == "git_show":
+            commit = request.get("commit")
+            if not isinstance(commit, str) or not _GIT_COMMIT_RE.match(commit):
+                self._send(
+                    {
+                        "type": "error",
+                        "id": request_id,
+                        "message": "git_show needs a commit hash",
+                    }
+                )
+                return True
+            try:
+                result = await asyncio.to_thread(git_review.show, self.cwd, commit)
+            except Exception as exc:
+                self._send(
+                    failure_frame(
+                        request_id,
+                        code="git_failed",
+                        message="git op failed",
+                        exc=exc,
+                        op=kind,
+                    )
+                )
+            else:
+                self._send(
+                    {"type": "result", "id": request_id, "ok": True, "show": result}
                 )
             return True
         if kind == "git_diff":

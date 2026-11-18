@@ -88,6 +88,8 @@ export const REQUEST_KINDS = [
   'fs_read',
   'git_changes',
   'git_diff',
+  'git_log',
+  'git_show',
   'git_worktrees',
   'hello',
   'limits',
