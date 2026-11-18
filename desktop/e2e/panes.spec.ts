@@ -20,7 +20,8 @@ test('two sessions sit side by side after open-in-split', async ({ page }) => {
 })
 
 test('focusing a pane resumes its session and its composer addresses it', async ({ page }) => {
-  const state: BridgeState = initialState()
+  // Idle, so Enter in the dock composer submits a prompt (busy steers).
+  const state: BridgeState = initialState({ running: false })
   await presetState(page, state)
   await page.goto('/')
   await expect(page.locator('[data-topbar-title]')).toHaveText(state.title)
@@ -41,8 +42,9 @@ test('focusing a pane resumes its session and its composer addresses it', async 
     )
     .toBe(true)
 
-  // Its composer addresses the pane's session, not the other one.
-  const composer = page.locator('[data-pane="/sessions/b.jsonl"] [data-pane-composer]')
+  // The focused pane carries the full dock composer; typing there addresses
+  // the pane's session (the current session), not the other one.
+  const composer = page.locator('[data-pane="/sessions/b.jsonl"] [data-composer-plate] textarea')
   await composer.fill('查看这条会话')
   await composer.press('Enter')
   await expect

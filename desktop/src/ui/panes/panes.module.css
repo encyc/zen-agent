@@ -115,6 +115,19 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  /* Panes reserve dock space only when a dock actually lives here: the
+     focused pane's dock overrides this with its measured height, so the
+     unfocused panes stop showing a blank block where the full composer
+     would be. */
+  --composer-dock-height: 0px;
+}
+
+.paneDock {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 10px 10px;
 }
 
 .empty {
