@@ -48,6 +48,10 @@ def _ts_type(ty: object) -> str:
             return f"Record<string, {_ts_type(ty.arg)}>"
         if ty.kind == "ref":
             return protocol.SHAPES[ty.arg]["ts"]  # validate_registry guards this
+        if ty.kind == "refs":
+            return " | ".join(
+                protocol.SHAPES[member]["ts"] for member in ty.arg
+            )
         if ty.kind == "enum":
             return " | ".join(f"'{value}'" for value in ty.arg)
     scalar = {

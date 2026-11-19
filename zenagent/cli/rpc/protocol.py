@@ -67,6 +67,7 @@ KIND_LIST = "list"
 KIND_RECORD = "record"
 KIND_REF = "ref"
 KIND_ENUM = "enum"
+KIND_REFS = "refs"
 
 
 def list_of(item: object) -> WireType:
@@ -81,6 +82,11 @@ def record(value: object) -> WireType:
 def one_of(*values: str) -> WireType:
     """A string restricted to a closed set; TS renders the literal union."""
     return WireType(KIND_ENUM, values)
+
+
+def refs(*names: str) -> WireType:
+    """A union of named shapes (a transcript row, say); TS renders ``A | B``."""
+    return WireType(KIND_REFS, names)
 
 
 def ref(name: str) -> WireType:
@@ -171,6 +177,10 @@ def _check(name: str, value: Any, ty: object) -> Any:
             allowed = ty.arg if isinstance(ty.arg, tuple) else ()
             if not isinstance(value, str) or value not in allowed:
                 raise WireError(f"{name} must be one of {', '.join(allowed)}", field=name)
+            return value
+        if ty.kind == KIND_REFS:
+            if not isinstance(value, dict):
+                raise WireError(f"{name} must be an object")
             return value
         raise WireError(f"{name}: unknown field type {ty.kind}")  # pragma: no cover
     if ty == BOOL_LAX:
@@ -305,6 +315,24 @@ class SessionDequeueRequest(WireRequest):
 
 class SessionScopeRequest(WireRequest):
     FIELDS: ClassVar[dict[str, Field]] = {"scope": Field(STRING_LAX)}
+
+
+class _TranscriptPaging(WireRequest):
+    """`limit`/`before` page the snapshot; a malformed cursor is ignored
+    (paging is an optimization — the handler's _optional_count), not an
+    error, so the model tolerates junk here."""
+
+    FIELDS: ClassVar[dict[str, Field]] = {
+        "limit": Field(INT),
+        "before": Field(INT),
+    }
+
+
+class _SubagentTranscriptRequest(WireRequest):
+    FIELDS: ClassVar[dict[str, Field]] = {
+        "call_id": Field(STRING, required=True),
+        "after": Field(INT),
+    }
 
 
 class MemoryCreateRequest(WireRequest):
@@ -475,6 +503,160 @@ SHAPES: dict[str, dict] = dict(
             "derived_from": Field(STRING),
             "workspace": Field(one_of("coding", "zen", "swarm")),
         }, doc="One session of a listing; timestamps are unix seconds."),
+        shape("CostBreakdown", {
+            "input": Field(FLOAT),
+            "output": Field(FLOAT),
+            "cache_read": Field(FLOAT),
+            "cache_write": Field(FLOAT),
+            "total": Field(FLOAT),
+        }, doc="One call's cost, priced per component; `total` is their sum."),
+        shape("MessageUsage", {
+            "input": Field(INT),
+            "output": Field(INT),
+            "cache_read": Field(INT),
+            "cache_write": Field(INT),
+            "reasoning": Field(INT, nullable=True),
+            "cost": Field(ref("CostBreakdown")),
+        }, doc="Token usage and cost of one model call, as message views nest it."),
+        shape("ContextSlice", {
+            "id": Field(STRING),
+            "label": Field(STRING),
+            "chars": Field(INT),
+            "tokens": Field(INT),
+            "pct": Field(FLOAT),
+        }, doc="One component of the context window (tokens estimated)."),
+        shape("ContextReport", {
+            "slices": Field(list_of(ref("ContextSlice"))),
+            "total_tokens": Field(INT),
+            "window": Field(INT),
+            "measured": Field(BOOL),
+            "prompt_tokens": Field(INT),
+            "free_tokens": Field(INT),
+        }, doc="The context window split into slices."),
+        shape("PendingMessage", {
+            "id": Field(INT),
+            "lane": Field(one_of("queue", "steer")),
+            "text": Field(STRING),
+            "images": Field(INT),
+            "created_at": Field(FLOAT),
+        }, doc="One user message waiting to be delivered."),
+        shape("JobView", {
+            "id": Field(STRING),
+            "command": Field(STRING),
+            "status": Field(one_of("running", "ok", "failed", "timed_out")),
+            "started_at": Field(FLOAT),
+            "duration_ms": Field(INT, nullable=True),
+            "exit_code": Field(INT, nullable=True),
+        }, doc="One background job as the sidebar renders it."),
+        shape("SubagentView", {
+            "call_id": Field(STRING),
+            "name": Field(STRING),
+            "status": Field(one_of("running", "ok", "error", "aborted", "truncated", "interrupted")),
+            "duration_ms": Field(INT),
+            "cost": Field(FLOAT),
+            "tokens": Field(INT),
+            "has_transcript": Field(BOOL),
+            "transcript_truncated": Field(BOOL),
+        }, doc="One task subagent: a live card or a persisted transcript's meta."),
+        shape("GoalView", {
+            "objective": Field(STRING),
+            "status": Field(STRING),
+            "check": Field(STRING, nullable=True),
+            "turns_used": Field(INT),
+            "max_turns": Field(INT),
+            "tokens_used": Field(INT),
+            "max_tokens": Field(INT),
+            "wall_seconds": Field(FLOAT),
+            "max_wall_seconds": Field(INT),
+            "last_verdict": Field(STRING, nullable=True),
+            "last_reason": Field(STRING),
+            "updated_at": Field(INT),
+        }, doc="Read-only goal snapshot for status bars and sidebars."),
+        shape("MessageView", {
+            "kind": Field(one_of("user", "assistant", "skill")),
+            "text": Field(STRING),
+            "skill_args": Field(STRING, nullable=True),
+            "skill_body": Field(STRING, nullable=True),
+            "thinking": Field(STRING, nullable=True),
+            "thinking_started_at": Field(FLOAT, nullable=True),
+            "thinking_seconds": Field(FLOAT, nullable=True),
+            "timestamp": Field(INT),
+            "steering": Field(BOOL),
+            "goal": Field(BOOL),
+            "id": Field(STRING),
+            "model": Field(STRING),
+            "provider": Field(STRING),
+            "usage": Field(ref("MessageUsage"), nullable=True),
+            "duration_ms": Field(INT, nullable=True),
+        }, doc="A rendered user/assistant/skill turn."),
+        shape("ToolCallView", {
+            "kind": Field(one_of("tool")),
+            "call_id": Field(STRING),
+            "name": Field(STRING),
+            "args_preview": Field(STRING),
+            "args": Field(record(ANY)),
+            "id": Field(STRING),
+            "details": Field(record(ANY)),
+            "status": Field(one_of("running", "ok", "error", "interrupted", "timed_out")),
+            "progress": Field(STRING),
+            "result_text": Field(STRING),
+            "is_error": Field(BOOL),
+            "duration_ms": Field(INT, nullable=True),
+            "diff": Field(STRING, nullable=True),
+            "started_at": Field(FLOAT, nullable=True),
+        }, doc="A tool call card; history lacks duration/diff, live events fill them."),
+        shape("DividerView", {
+            "kind": Field(one_of("divider")),
+            "tokens_before": Field(INT, nullable=True),
+            "reason": Field(STRING, nullable=True),
+            "id": Field(STRING),
+        }, doc="The compaction divider, positioned inside the transcript stream."),
+        shape("TranscriptNotice", {
+            "kind": Field(one_of("divider", "info")),
+            "text": Field(STRING),
+            "source": Field(STRING),
+        }, doc="An out-of-band line a controller wants rendered."),
+        shape("CompactionRecord", {
+            "type": Field(one_of("compaction")),
+            "tokensBefore": Field(INT),
+            "reason": Field(STRING),
+            "kept": Field(INT),
+        }, doc="A context compaction record: the replay boundary."),
+        shape("RunStatusWire", {
+            "model_id": Field(STRING),
+            "thinking": Field(STRING, nullable=True),
+            "running": Field(BOOL),
+            "input_tokens": Field(INT),
+            "output_tokens": Field(INT),
+            "cache_read": Field(INT),
+            "cache_write": Field(INT),
+            "cache_hit_ratio": Field(FLOAT, nullable=True),
+            "cost": Field(FLOAT),
+            "context_used": Field(INT),
+            "context_window": Field(INT),
+            "follow_ups": Field(INT),
+            "steering": Field(INT),
+            "continuing": Field(INT),
+            "turn_ms": Field(INT),
+            "turn_output_tokens": Field(INT),
+            "last_error": Field(STRING),
+            "session_name": Field(STRING),
+            "cwd": Field(STRING),
+            "mode": Field(STRING),
+            "git_branch": Field(STRING),
+            "git_staged": Field(INT),
+            "git_dirty": Field(INT),
+            "git_untracked": Field(INT),
+            "todos": Field(list_of(record(ANY))),
+            "subagent_cost": Field(FLOAT),
+            "subagent_tokens": Field(INT),
+            "pending": Field(list_of(ref("PendingMessage"))),
+            "jobs": Field(list_of(ref("JobView"))),
+            "subagents": Field(list_of(ref("SubagentView"))),
+            "active_subagent": Field(STRING, nullable=True),
+            "context": Field(ref("ContextReport"), nullable=True),
+            "goal": Field(ref("GoalView"), nullable=True),
+        }, doc="RunStatus.to_wire(): the complete snapshot under `status`."),
     ]
 )
 
@@ -528,6 +710,49 @@ OPS: dict[str, OpSpec] = {
         "delete": OpSpec("memory", MemoryDeleteRequest, {"deleted": Field(BOOL)}),
     }),
     "models": OpSpec("models", NoFields, {"models": Field(list_of(ref("ModelEntry")))}),
+    "status": OpSpec("status", NoFields, {
+        "running": Field(BOOL),
+        "messages": Field(INT),
+        "model": Field(STRING),
+        "usage": Field(ref("Usage")),
+        "termination": Field(STRING, nullable=True),
+        "session": Field(STRING, optional=True),
+        "mode": Field(one_of("plan", "ask", "auto"), optional=True),
+        "tools": Field(INT, optional=True),
+        "busy": Field(BOOL, optional=True),
+        "follow_ups": Field(INT, optional=True),
+        "steering": Field(INT, optional=True),
+        "continuing": Field(INT, optional=True),
+        "cost": Field(FLOAT, optional=True),
+        "thinking": Field(STRING, optional=True, nullable=True),
+        "context_used": Field(INT, optional=True, nullable=True),
+        "context_window": Field(INT, optional=True, nullable=True),
+        "context": Field(ref("ContextReport"), optional=True, nullable=True),
+        "cache_hit_ratio": Field(FLOAT, optional=True, nullable=True),
+        "turn_ms": Field(INT, optional=True, nullable=True),
+        "todos": Field(list_of(record(ANY)), optional=True),
+        "last_error": Field(STRING, optional=True),
+        "pending": Field(list_of(ref("PendingMessage")), optional=True),
+        "jobs": Field(list_of(ref("JobView")), optional=True),
+        "subagents": Field(list_of(ref("SubagentView")), optional=True),
+        "active_subagent": Field(STRING, optional=True, nullable=True),
+        "subagent_cost": Field(FLOAT, optional=True),
+        "subagent_tokens": Field(INT, optional=True),
+        "goal": Field(ref("GoalView"), optional=True, nullable=True),
+        "status": Field(ref("RunStatusWire"), optional=True),
+    }),
+    "transcript": OpSpec("transcript", _TranscriptPaging, {
+        "transcript": Field(list_of(refs("MessageView", "ToolCallView", "DividerView"))),
+        "notices": Field(list_of(ref("TranscriptNotice"))),
+        "compactions": Field(list_of(ref("CompactionRecord")), optional=True),
+        "hasMoreBefore": Field(BOOL, optional=True),
+        "total": Field(INT, optional=True),
+    }),
+    "subagent_transcript": OpSpec("subagent_transcript", _SubagentTranscriptRequest, {
+        "available": Field(BOOL),
+        "transcript": Field(list_of(refs("MessageView", "ToolCallView"))),
+        "total": Field(INT, optional=True),
+    }),
     "commands": OpSpec("commands", NoFields, {
         "commands": Field(list_of(ref("CommandSummary"))),
     }),
@@ -595,9 +820,6 @@ OPS: dict[str, OpSpec] = {
 #: lands in neither map, and the generator never emits stubs.
 
 PARTIAL: dict[str, str] = {
-    "status": "view-model catalog (context/todos/jobs/subagents/goal asdicts)",
-    "transcript": "view-model catalog (RunView/notices/compactions asdicts)",
-    "subagent_transcript": "view-model catalog + paging (after/limit)",
     "approval": "decision resolution (allow|always|deny; str() coercion quirks)",
     "ask": "answers resolution",
     "command": "dynamic slash-command execution",
@@ -663,6 +885,12 @@ def validate_registry() -> list[str]:
             ty = field.ty
             if isinstance(ty, WireType) and ty.kind == KIND_REF and ty.arg not in SHAPES:
                 problems.append(f"shape {name}.{field_name}: dangling ref {ty.arg}")
+            if isinstance(ty, WireType) and ty.kind == KIND_REFS:
+                for member in ty.arg:
+                    if member not in SHAPES:
+                        problems.append(
+                            f"shape {name}.{field_name}: dangling ref {member}"
+                        )
     envelope_only = ("shutdown", "follow_up", "steer")
     for kind, spec in OPS.items():
         if spec.subs is None and not spec.result and kind not in envelope_only:

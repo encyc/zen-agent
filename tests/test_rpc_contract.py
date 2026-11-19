@@ -182,14 +182,16 @@ def test_transcript_paging_fields_are_additive_and_camel_case():
     assert 'get("before")' in rpc
     assert 'get("after")' in rpc
 
-    ts = TS_PATH.read_text()
+    # The envelopes now live in the generated mirror (protocol.py is the
+    # source); types.ts re-exports them.
+    ts = TS_PATH.read_text() + (TS_PATH.parent / "wire.gen.ts").read_text()
     transcript = re.search(r"export interface TranscriptResult \{[^}]+\}", ts)
-    assert transcript, "types.ts lost TranscriptResult"
+    assert transcript, "the TS mirror lost TranscriptResult"
     assert "hasMoreBefore?: boolean" in transcript.group(0)
     assert "total?: number" in transcript.group(0)
 
     subagent = re.search(r"export interface SubagentTranscriptResult \{[^}]+\}", ts)
-    assert subagent, "types.ts lost SubagentTranscriptResult"
+    assert subagent, "the TS mirror lost SubagentTranscriptResult"
     assert "total?: number" in subagent.group(0)
 
 
@@ -545,3 +547,41 @@ async def test_git_show_bad_commit_is_a_plain_error(runtime_factory, tmp_path):
     frame = json.loads(writes[-1])
     assert frame["type"] == "error" and frame["id"] == "g7"
     assert "commit" in frame["message"]
+
+
+def _registry_shape(name: str) -> dict[str, set[str]]:
+    """(required, optional) field-name sets of a protocol.py shape."""
+    from zenagent.cli.rpc import protocol
+
+    fields = protocol.SHAPES[name]["fields"]
+    required = {key for key, field in fields.items() if not field.optional}
+    optional = {key for key, field in fields.items() if field.optional}
+    return {"required": required, "optional": optional}
+
+
+def _ts_interface(name: str) -> dict[str, set[str]]:
+    """(required, optional) field names of a types.ts interface, via regex —
+    the same grep surface the contract tests already use."""
+    source = TS_PATH.read_text()
+    match = re.search(rf"export interface {name} \{{(.*?)\n\}}", source, re.DOTALL)
+    assert match, f"types.ts lost interface {name}"
+    body = match.group(1)
+    fields = set(re.findall(r"^\s{2}(\w+)[?|:]", body, re.MULTILINE))
+    optional = set(re.findall(r"^\s{2}(\w+)\?:", body, re.MULTILINE))
+    return {"required": fields - optional, "optional": optional}
+
+
+def test_frontend_refined_view_shapes_stay_aligned():
+    """The transcript row views and notices keep handwritten TS mirrors with
+    frontend optionality refinements (older servers omit keys); the registry
+    declares the current server's wire truth. The two must never drift in
+    FIELD NAMES — optionality may differ, names may not."""
+    for shape, ts_name in (
+        ("MessageView", "MessageView"),
+        ("ToolCallView", "ToolCallView"),
+        ("DividerView", "DividerView"),
+        ("TranscriptNotice", "TranscriptNotice"),
+    ):
+        reg = _registry_shape(shape)["required"] | _registry_shape(shape)["optional"]
+        ts = _ts_interface(ts_name)["required"] | _ts_interface(ts_name)["optional"]
+        assert reg == ts, f"{shape}: registry={sorted(reg)} ts={sorted(ts)}"

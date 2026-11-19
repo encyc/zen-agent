@@ -184,6 +184,188 @@ export interface SessionSummary {
   workspace: 'coding' | 'zen' | 'swarm'
 }
 
+/** One call's cost, priced per component; `total` is their sum. */
+export interface CostBreakdown {
+  input: number
+  output: number
+  cache_read: number
+  cache_write: number
+  total: number
+}
+
+/** Token usage and cost of one model call, as message views nest it. */
+export interface MessageUsage {
+  input: number
+  output: number
+  cache_read: number
+  cache_write: number
+  reasoning: number | null
+  cost: CostBreakdown
+}
+
+/** One component of the context window (tokens estimated). */
+export interface ContextSlice {
+  id: string
+  label: string
+  chars: number
+  tokens: number
+  pct: number
+}
+
+/** The context window split into slices. */
+export interface ContextReport {
+  slices: Array<ContextSlice>
+  total_tokens: number
+  window: number
+  measured: boolean
+  prompt_tokens: number
+  free_tokens: number
+}
+
+/** One user message waiting to be delivered. */
+export interface PendingMessage {
+  id: number
+  lane: 'queue' | 'steer'
+  text: string
+  images: number
+  created_at: number
+}
+
+/** One background job as the sidebar renders it. */
+export interface JobView {
+  id: string
+  command: string
+  status: 'running' | 'ok' | 'failed' | 'timed_out'
+  started_at: number
+  duration_ms: number | null
+  exit_code: number | null
+}
+
+/** One task subagent: a live card or a persisted transcript's meta. */
+export interface SubagentView {
+  call_id: string
+  name: string
+  status: 'running' | 'ok' | 'error' | 'aborted' | 'truncated' | 'interrupted'
+  duration_ms: number
+  cost: number
+  tokens: number
+  has_transcript: boolean
+  transcript_truncated: boolean
+}
+
+/** Read-only goal snapshot for status bars and sidebars. */
+export interface GoalView {
+  objective: string
+  status: string
+  check: string | null
+  turns_used: number
+  max_turns: number
+  tokens_used: number
+  max_tokens: number
+  wall_seconds: number
+  max_wall_seconds: number
+  last_verdict: string | null
+  last_reason: string
+  updated_at: number
+}
+
+/** A rendered user/assistant/skill turn. */
+export interface MessageView {
+  kind: 'user' | 'assistant' | 'skill'
+  text: string
+  skill_args: string | null
+  skill_body: string | null
+  thinking: string | null
+  thinking_started_at: number | null
+  thinking_seconds: number | null
+  timestamp: number
+  steering: boolean
+  goal: boolean
+  id: string
+  model: string
+  provider: string
+  usage: MessageUsage | null
+  duration_ms: number | null
+}
+
+/** A tool call card; history lacks duration/diff, live events fill them. */
+export interface ToolCallView {
+  kind: 'tool'
+  call_id: string
+  name: string
+  args_preview: string
+  args: Record<string, unknown>
+  id: string
+  details: Record<string, unknown>
+  status: 'running' | 'ok' | 'error' | 'interrupted' | 'timed_out'
+  progress: string
+  result_text: string
+  is_error: boolean
+  duration_ms: number | null
+  diff: string | null
+  started_at: number | null
+}
+
+/** The compaction divider, positioned inside the transcript stream. */
+export interface DividerView {
+  kind: 'divider'
+  tokens_before: number | null
+  reason: string | null
+  id: string
+}
+
+/** An out-of-band line a controller wants rendered. */
+export interface TranscriptNotice {
+  kind: 'divider' | 'info'
+  text: string
+  source: string
+}
+
+/** A context compaction record: the replay boundary. */
+export interface CompactionRecord {
+  type: 'compaction'
+  tokensBefore: number
+  reason: string
+  kept: number
+}
+
+/** RunStatus.to_wire(): the complete snapshot under `status`. */
+export interface RunStatusWire {
+  model_id: string
+  thinking: string | null
+  running: boolean
+  input_tokens: number
+  output_tokens: number
+  cache_read: number
+  cache_write: number
+  cache_hit_ratio: number | null
+  cost: number
+  context_used: number
+  context_window: number
+  follow_ups: number
+  steering: number
+  continuing: number
+  turn_ms: number
+  turn_output_tokens: number
+  last_error: string
+  session_name: string
+  cwd: string
+  mode: string
+  git_branch: string
+  git_staged: number
+  git_dirty: number
+  git_untracked: number
+  todos: Array<Record<string, unknown>>
+  subagent_cost: number
+  subagent_tokens: number
+  pending: Array<PendingMessage>
+  jobs: Array<JobView>
+  subagents: Array<SubagentView>
+  active_subagent: string | null
+  context: ContextReport | null
+  goal: GoalView | null
+}
+
 
 // ---- op requests ---------------------------------------------------------
 
@@ -213,6 +395,16 @@ export interface GitDiffRequest {
   path: string
   staged?: boolean /** junk tolerated server-side (treated as false). */
   worktree?: string
+}
+
+export interface TranscriptRequest {
+  limit?: number
+  before?: number
+}
+
+export interface SubagentTranscriptRequest {
+  call_id: string
+  after?: number
 }
 
 export interface PromptRequest {
@@ -344,6 +536,61 @@ export interface ModelsResult {
   id: string
   ok: true
   models: Array<ModelEntry>
+}
+
+export interface StatusResult {
+  type: 'result'
+  id: string
+  ok: true
+  running: boolean
+  messages: number
+  model: string
+  usage: Usage
+  termination: string | null
+  session?: string
+  mode?: 'plan' | 'ask' | 'auto'
+  tools?: number
+  busy?: boolean
+  follow_ups?: number
+  steering?: number
+  continuing?: number
+  cost?: number
+  thinking?: string | null
+  context_used?: number | null
+  context_window?: number | null
+  context?: ContextReport | null
+  cache_hit_ratio?: number | null
+  turn_ms?: number | null
+  todos?: Array<Record<string, unknown>>
+  last_error?: string
+  pending?: Array<PendingMessage>
+  jobs?: Array<JobView>
+  subagents?: Array<SubagentView>
+  active_subagent?: string | null
+  subagent_cost?: number
+  subagent_tokens?: number
+  goal?: GoalView | null
+  status?: RunStatusWire
+}
+
+export interface TranscriptResult {
+  type: 'result'
+  id: string
+  ok: true
+  transcript: Array<MessageView | ToolCallView | DividerView>
+  notices: Array<TranscriptNotice>
+  compactions?: Array<CompactionRecord>
+  hasMoreBefore?: boolean
+  total?: number
+}
+
+export interface SubagentTranscriptResult {
+  type: 'result'
+  id: string
+  ok: true
+  available: boolean
+  transcript: Array<MessageView | ToolCallView>
+  total?: number
 }
 
 export interface CommandsResult {

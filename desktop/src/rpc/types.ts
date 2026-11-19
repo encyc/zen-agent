@@ -38,7 +38,6 @@ export type {
   SwarmWorkState,
 } from './types-swarm.ts'
 
-
 export type Mode = 'plan' | 'ask' | 'auto'
 
 // ---- server frames -------------------------------------------------------
@@ -115,9 +114,17 @@ export const REQUEST_KINDS = [
 // scripts/gen_rpc_ts.py (wire.gen.ts): edit the registry, not these. The
 // frontend refinements that stay handwritten (e.g. WorkspaceFile's
 // discriminated union) must remain assignable to the flat wire types.
-import type { MemoryCreateResult, SessionSummary, Usage } from './wire.gen.ts'
+import type {
+  MemoryCreateResult,
+  MessageUsage,
+  SessionSummary,
+  Usage,
+} from './wire.gen.ts'
 export type {
   CommandEntry,
+  CompactionRecord,
+  ContextReport,
+  ContextSlice,
   FsIndexResult,
   FsListResult,
   GitChangesPayload,
@@ -135,11 +142,18 @@ export type {
   MemoryDeleteResult,
   MemoryEntry,
   MemoryCreateResult,
+  GoalView,
   MemoryListResult,
+  MessageUsage,
   MemoryUpdateResult,
   ModelEntry,
+  PendingMessage,
   SessionSummary,
+  StatusResult,
+  SubagentTranscriptResult,
+  SubagentView,
   ToolRow,
+  TranscriptResult,
   ToolsResult,
   Usage,
   WorkspaceEntry,
@@ -152,7 +166,6 @@ export type {
 export type MemoryEntryResult = MemoryCreateResult
 
 export type RequestKind = (typeof REQUEST_KINDS)[number]
-
 
 // ---- prompt --------------------------------------------------------------
 
@@ -173,107 +186,7 @@ export interface TodoPhase {
   [key: string]: unknown
 }
 
-export interface PendingMessage {
-  id: number
-  lane: 'queue' | 'steer'
-  text: string
-  images: number
-  created_at: number
-}
-
-export interface JobView {
-  id: string
-  command: string
-  status: 'running' | 'ok' | 'failed' | 'timed_out'
-  started_at: number
-  duration_ms: number | null
-  exit_code: number | null
-}
-
-export interface SubagentView {
-  call_id: string
-  name: string
-  status: 'running' | 'ok' | 'error' | 'aborted' | 'truncated' | 'interrupted'
-  duration_ms: number
-  cost: number
-  tokens: number
-  has_transcript: boolean
-  transcript_truncated: boolean
-}
-
-/** One component of the context (chars exact, tokens estimated). */
-export interface ContextSlice {
-  id: string
-  label: string
-  chars: number
-  tokens: number
-  /** Share of the model window, 0-100. */
-  pct: number
-}
-
-/** Context composition from `build_context_report`; slices partition the
- * prompt, while the total is provider-measured when `measured` is true. */
-export interface ContextReport {
-  slices: ContextSlice[]
-  total_tokens: number
-  window: number
-  measured: boolean
-  prompt_tokens: number
-  free_tokens: number
-}
-
-export interface GoalView {
-  objective: string
-  status: string
-  check: string | null
-  turns_used: number
-  max_turns: number
-  tokens_used: number
-  max_tokens: number
-  wall_seconds: number
-  max_wall_seconds: number
-  last_verdict: string | null
-  last_reason: string
-  updated_at: number
-}
-
-export interface StatusResult {
-  type: 'result'
-  id: string
-  ok: true
-  running: boolean
-  messages: number
-  model: string
-  usage: Usage
-  termination: string | null
-  session?: string
-  mode?: Mode
-  tools?: number
-  busy?: boolean
-  follow_ups?: number
-  steering?: number
-  /** Follow-ups the kernel will inject when the running turn stops. */
-  continuing?: number
-  cost?: number
-  thinking?: string | null
-  context_used?: number | null
-  context_window?: number | null
-  context?: ContextReport | null
-  cache_hit_ratio?: number | null
-  turn_ms?: number | null
-  todos?: TodoPhase[]
-  last_error?: string
-  pending?: PendingMessage[]
-  jobs?: JobView[]
-  subagents?: SubagentView[]
-  active_subagent?: string | null
-  subagent_cost?: number
-  subagent_tokens?: number
-  goal?: GoalView | null
-}
-
 // ---- models / commands catalogs ------------------------------------------
-
 
 // ---- settings secrets ------------------------------------------------------
 
@@ -364,8 +277,6 @@ export interface SkillReadResult {
   body: string
   truncated: boolean
 }
-
-
 
 // ---- plugins -------------------------------------------------------------
 
@@ -459,23 +370,6 @@ export interface SessionListResult {
 
 // ---- transcript snapshot ---------------------------------------------------
 
-/** Per-message usage as dumped from the `Usage` dataclass (nested cost), as
- * opposed to the flat session totals the status/prompt results carry. */
-export interface MessageUsage {
-  input: number
-  output: number
-  cache_read: number
-  cache_write: number
-  reasoning?: number | null
-  cost: {
-    input: number
-    output: number
-    cache_read: number
-    cache_write: number
-    total: number
-  }
-}
-
 export interface MessageView {
   kind: 'user' | 'assistant' | 'skill'
   text: string
@@ -537,45 +431,6 @@ export interface DividerView {
   reason?: string | null
 }
 
-/** One compaction side-channel record, oldest first in the file. */
-export interface CompactionRecord {
-  type: 'compaction'
-  timestamp?: number
-  tokensBefore?: number
-  /** Legacy field: compaction no longer forks the session file. */
-  derivedFrom?: string
-  reason?: 'auto' | 'manual' | string
-}
-
-export interface TranscriptResult {
-  type: 'result'
-  id: string
-  ok: true
-  transcript: (MessageView | ToolCallView | DividerView)[]
-  notices: TranscriptNotice[]
-  /** Compaction records from the loaded session; dividers arrive in-stream
-   * (an older server without them is still tolerated). */
-  compactions?: CompactionRecord[]
-  /** The snapshot was paged (`limit`/`before`): older rows exist on the
-   * server. Absent on an old server, which sends the whole transcript. */
-  hasMoreBefore?: boolean
-  /** Full view count; the loaded page starts at `total - length`. Absent on
-   * an old server, where the page is the whole transcript. */
-  total?: number
-}
-
-/** One task child's conversation (`subagent_transcript`). `available` is false
- * when neither the live buffer nor a persisted sidecar exists. With `after`,
- * `transcript` holds only the new rows and `total` the full count. */
-export interface SubagentTranscriptResult {
-  type: 'result'
-  id: string
-  ok: true
-  available: boolean
-  transcript: (MessageView | ToolCallView)[]
-  total?: number
-}
-
 /** A task's run activity (`swarm transcript`), in the coding transcript's
  * own view shapes so the room replays it with the same row components.
  * `available` is false when the run is not in the assignee's current session
@@ -591,8 +446,6 @@ export interface SwarmTranscriptResult {
 
 // ---- workspace ---------------------------------------------------------------
 
-
-
 export type WorkspaceFile =
   | { path: string; kind: 'text'; size: number; text: string; total_lines: number; truncated: boolean }
   | { path: string; kind: 'binary'; size: number }
@@ -606,26 +459,7 @@ export interface FsReadResult {
   file: WorkspaceFile
 }
 
-
-
-
-
-
-
-
-
-
 // ---- git review panel --------------------------------------------------------
-
-
-
-
-
-
-
-
-
-
 
 // ---- ask -------------------------------------------------------------------
 
