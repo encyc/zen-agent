@@ -45,6 +45,8 @@ INT = "int"
 FLOAT = "float"
 BOOL = "bool"
 BOOL_LAX = "bool_lax"
+#: Declared-as-string, server-tolerates-junk (``str(value)``/``==`` guards).
+STRING_LAX = "string_lax"
 #: int | float | str — the handler's ``int(x)`` coercion surface; bool refused.
 NUMBER_LAX = "number_lax"
 ANY = "any"
@@ -104,7 +106,16 @@ class Field(NamedTuple):
 
 
 class WireError(ValueError):
-    """A request failed shape validation; the handler owns the wire message."""
+    """A request failed shape validation; the handler owns the wire message.
+
+    ``field`` names the offending key so a handler can render its canonical
+    refusal text (``f"{op} needs {exc.field}"``) instead of the model's
+    generic one.
+    """
+
+    def __init__(self, message: str, field: str | None = None) -> None:
+        super().__init__(message)
+        self.field = field
 
 
 class WireRequest:
@@ -132,7 +143,7 @@ class WireRequest:
             value = payload.get(name)
             if value is None:
                 if field.required:
-                    raise WireError(f"{name} is required")
+                    raise WireError(f"{name} is required", field=name)
                 values[name] = None
                 continue
             values[name] = _check(name, value, field.ty)
@@ -143,35 +154,37 @@ def _check(name: str, value: Any, ty: object) -> Any:
     if isinstance(ty, WireType):
         if ty.kind == KIND_LIST:
             if not isinstance(value, list):
-                raise WireError(f"{name} must be a list")
+                raise WireError(f"{name} must be a list", field=name)
             return [_check(f"{name}[]", item, ty.arg) for item in value]
         if ty.kind == KIND_RECORD:
             if not isinstance(value, dict):
-                raise WireError(f"{name} must be an object")
+                raise WireError(f"{name} must be an object", field=name)
             return {
                 key: _check(f"{name}.{key}", item, ty.arg)
                 for key, item in value.items()
             }
         if ty.kind == KIND_REF:
             if not isinstance(value, dict):
-                raise WireError(f"{name} must be an object")
+                raise WireError(f"{name} must be an object", field=name)
             return value
         if ty.kind == KIND_ENUM:
             allowed = ty.arg if isinstance(ty.arg, tuple) else ()
             if not isinstance(value, str) or value not in allowed:
-                raise WireError(f"{name} must be one of {', '.join(allowed)}")
+                raise WireError(f"{name} must be one of {', '.join(allowed)}", field=name)
             return value
         raise WireError(f"{name}: unknown field type {ty.kind}")  # pragma: no cover
     if ty == BOOL_LAX:
         return value  # handler semantics (`is True`); junk tolerated, as today
+    if ty == STRING_LAX:
+        return value  # handler semantics (`or default` / `==`); junk tolerated
     if ty == NUMBER_LAX:
         if isinstance(value, bool) or not isinstance(value, (int, float, str)):
-            raise WireError(f"{name} must be a number")
+            raise WireError(f"{name} must be a number", field=name)
         return value
     if ty == ANY:
         return value
     if not isinstance(ty, str):
-        raise WireError(f"{name}: unknown field type {ty!r}")  # pragma: no cover
+        raise WireError(f"{name}: unknown field type {ty!r}", field=name)  # pragma: no cover
     _scalars: dict[str, type | tuple[type, ...]] = {
         STRING: str,
         INT: int,
@@ -180,11 +193,11 @@ def _check(name: str, value: Any, ty: object) -> Any:
     }
     scalar = _scalars.get(ty)
     if scalar is None:
-        raise WireError(f"{name}: unknown field type {ty!r}")  # pragma: no cover
+        raise WireError(f"{name}: unknown field type {ty!r}", field=name)  # pragma: no cover
     if ty in (INT, FLOAT) and isinstance(value, bool):
-        raise WireError(f"{name} must be a number")
+        raise WireError(f"{name} must be a number", field=name)
     if not isinstance(value, scalar):
-        raise WireError(f"{name} has the wrong type")
+        raise WireError(f"{name} has the wrong type", field=name)
     return value
 
 
@@ -216,11 +229,11 @@ class GitLogRequest(WireRequest):
             value = payload.get(name)
             if value is None:
                 if field.required:
-                    raise WireError(f"{name} is required")
+                    raise WireError(f"{name} is required", field=name)
                 values[name] = None
                 continue
             if isinstance(value, bool) or not isinstance(value, (int, float, str)):
-                raise WireError(f"{name} must be a number")
+                raise WireError(f"{name} must be a number", field=name)
             values[name] = value
         return cls(values)
 
@@ -239,6 +252,59 @@ class GitDiffRequest(WireRequest):
 
 class FsPathRequest(WireRequest):
     FIELDS: ClassVar[dict[str, Field]] = {"path": Field(STRING)}
+
+
+class TextRequest(WireRequest):
+    """follow_up / steer: one non-empty (handler-checked) text."""
+
+    FIELDS: ClassVar[dict[str, Field]] = {"text": Field(STRING, required=True)}
+
+
+class PromptRequest(WireRequest):
+    FIELDS: ClassVar[dict[str, Field]] = {
+        "text": Field(STRING, required=True),
+        "images": Field(list_of(STRING)),
+    }
+
+
+class ModelSwitchRequest(WireRequest):
+    FIELDS: ClassVar[dict[str, Field]] = {"model_id": Field(STRING, required=True)}
+
+
+class ModeSwitchRequest(WireRequest):
+    FIELDS: ClassVar[dict[str, Field]] = {"mode": Field(STRING)}
+
+
+class SetPrefRequest(WireRequest):
+    FIELDS: ClassVar[dict[str, Field]] = {
+        "name": Field(STRING, required=True),
+        "value": Field(BOOL_LAX),  # handler semantics: bool(value)
+    }
+
+
+class SessionPathRequest(WireRequest):
+    """resume / delete / import: one non-empty (handler-checked) path."""
+
+    FIELDS: ClassVar[dict[str, Field]] = {"path": Field(STRING, required=True)}
+
+
+class SessionExportRequest(WireRequest):
+    FIELDS: ClassVar[dict[str, Field]] = {
+        "format": Field(STRING_LAX),  # junk falls into the handler's `or "md"`
+        "path": Field(STRING),
+    }
+
+
+class SessionPendingIdRequest(WireRequest):
+    FIELDS: ClassVar[dict[str, Field]] = {"pending_id": Field(INT, required=True)}
+
+
+class SessionDequeueRequest(WireRequest):
+    FIELDS: ClassVar[dict[str, Field]] = {"pending_id": Field(INT)}
+
+
+class SessionScopeRequest(WireRequest):
+    FIELDS: ClassVar[dict[str, Field]] = {"scope": Field(STRING_LAX)}
 
 
 class MemoryCreateRequest(WireRequest):
@@ -383,6 +449,32 @@ SHAPES: dict[str, dict] = dict(
             "worktrees": Field(list_of(ref("WorktreeRecord"))),
             "status": Field(ref("WorktreeStatus"), nullable=True),
         }, doc="The git_worktrees payload."),
+        shape("ModelEntry", {
+            "id": Field(STRING),
+            "provider": Field(STRING),
+            "context_window": Field(INT),
+            "max_tokens": Field(INT),
+            "reasoning": Field(BOOL),
+            "supports_vision": Field(BOOL),
+            "available": Field(BOOL),
+            "reason": Field(STRING, nullable=True),
+            "current": Field(BOOL),
+        }, doc="One catalog model, annotated with key availability."),
+        shape("SessionSummary", {
+            "path": Field(STRING),
+            "name": Field(STRING),
+            "title": Field(STRING),
+            "project": Field(STRING),
+            "project_path": Field(STRING),
+            "messages": Field(INT),
+            "current": Field(BOOL),
+            "pinned": Field(BOOL),
+            "created_at": Field(FLOAT),
+            "updated_at": Field(FLOAT),
+            "model": Field(STRING),
+            "derived_from": Field(STRING),
+            "workspace": Field(one_of("coding", "zen", "swarm")),
+        }, doc="One session of a listing; timestamps are unix seconds."),
     ]
 )
 
@@ -398,6 +490,10 @@ class OpSpec(NamedTuple):
     #: memory-style sub-operations: `op` value → its own spec. When present,
     #: the base spec's result is ignored and each sub carries its own.
     subs: dict[str, OpSpec] | None = None
+    #: True when the handler sends ``ok: false`` as a normal outcome (model
+    #: refusals, failed prompts); the generator then emits ``ok: boolean``
+    #: instead of the literal-true envelope.
+    ok_mutable: bool = False
 
 
 OPS: dict[str, OpSpec] = {
@@ -431,6 +527,65 @@ OPS: dict[str, OpSpec] = {
         "update": OpSpec("memory", MemoryUpdateRequest, {"entry": Field(ref("MemoryEntry"))}),
         "delete": OpSpec("memory", MemoryDeleteRequest, {"deleted": Field(BOOL)}),
     }),
+    "models": OpSpec("models", NoFields, {"models": Field(list_of(ref("ModelEntry")))}),
+    "commands": OpSpec("commands", NoFields, {
+        "commands": Field(list_of(ref("CommandSummary"))),
+    }),
+    "prompt": OpSpec("prompt", PromptRequest, {
+        "text": Field(STRING),
+        "usage": Field(ref("Usage")),
+        "termination": Field(STRING, nullable=True),
+        "error": Field(STRING, optional=True),
+        "session": Field(STRING, optional=True),
+    }, ok_mutable=True),
+    "follow_up": OpSpec("follow_up", TextRequest, {}),
+    "steer": OpSpec("steer", TextRequest, {}),
+    "model": OpSpec("model", ModelSwitchRequest, {
+        "model": Field(STRING),
+        "reason": Field(STRING, nullable=True),
+    }, ok_mutable=True),
+    "mode": OpSpec("mode", ModeSwitchRequest, {
+        "mode": Field(STRING, optional=True),
+        "reason": Field(STRING, optional=True),
+    }, ok_mutable=True),
+    "prefs": OpSpec("prefs", NoFields, {"prefs": Field(record(BOOL))}),
+    "set_pref": OpSpec("set_pref", SetPrefRequest, {"prefs": Field(record(BOOL))}),
+    "session": OpSpec("session", NoFields, {}, subs={
+        "current": OpSpec("session", NoFields, {"path": Field(STRING), "name": Field(STRING)}),
+        "list": OpSpec("session", SessionScopeRequest, {
+            "scope": Field(STRING),
+            "sessions": Field(list_of(ref("SessionSummary"))),
+        }),
+        "new": OpSpec("session", NoFields, {"path": Field(STRING)}),
+        "fork": OpSpec("session", NoFields, {"path": Field(STRING)}),
+        "resume": OpSpec("session", SessionPathRequest, {"path": Field(STRING)}),
+        "import": OpSpec("session", SessionPathRequest, {"path": Field(STRING)}),
+        "undo": OpSpec("session", NoFields, {
+            "dropped": Field(INT),
+            "path": Field(STRING, nullable=True),
+        }),
+        "delete": OpSpec("session", SessionPathRequest, {"path": Field(STRING)}),
+        "compact": OpSpec("session", NoFields, {
+            "compacted": Field(BOOL),
+            "path": Field(STRING, optional=True),
+        }),
+        "retry": OpSpec("session", NoFields, {
+            "retried": Field(BOOL),
+            "text": Field(STRING, optional=True),
+        }),
+        "export": OpSpec("session", SessionExportRequest, {"path": Field(STRING)}),
+        "promote": OpSpec("session", SessionPendingIdRequest, {
+            "outcome": Field(one_of("ok", "blocked_images", "not_running", "missing")),
+        }),
+        "dequeue": OpSpec("session", SessionDequeueRequest, {
+            "dequeued": Field(BOOL),
+            "text": Field(STRING, nullable=True),
+        }),
+        "interrupt_pending": OpSpec("session", SessionPendingIdRequest, {"sent": Field(BOOL)}),
+        "clear_continuations": OpSpec("session", NoFields, {"cleared": Field(INT)}),
+        "clear_pending": OpSpec("session", NoFields, {"cleared": Field(INT)}),
+        "clear_todos": OpSpec("session", NoFields, {"cleared": Field(INT)}),
+    }),
 }
 
 
@@ -440,28 +595,18 @@ OPS: dict[str, OpSpec] = {
 #: lands in neither map, and the generator never emits stubs.
 
 PARTIAL: dict[str, str] = {
-    "prompt": "images + busy flow; request {text, images?}",
-    "status": "conditional keys (session/mode/... only with a runtime)",
-    "steer": "queued-steer semantics",
-    "follow_up": "queued-follow-up semantics",
-    "models": "ModelEntry catalog (models.entries() asdict)",
-    "commands": "result is trivial ({commands: [{name, description}]}) — declare next",
+    "status": "view-model catalog (context/todos/jobs/subagents/goal asdicts)",
     "transcript": "view-model catalog (RunView/notices/compactions asdicts)",
     "subagent_transcript": "view-model catalog + paging (after/limit)",
-    "model": "model_id set + result snapshot",
-    "mode": "mode set + result snapshot",
-    "approval": "decision resolution (allow|always|deny)",
+    "approval": "decision resolution (allow|always|deny; str() coercion quirks)",
     "ask": "answers resolution",
-    "session": "sub-op family (list/open/new/fork/export/import/pin/...)",
     "command": "dynamic slash-command execution",
     "secrets": "sub-op family (set/clear/probe)",
     "skills": "sub-op family (list/toggle/install/...)",
-    "prefs": "pref get/set (name, value)",
-    "set_pref": "pref set (name, value)",
     "limits": "sub-op family (get/set + refused-write reporting)",
     "plugins": "sub-op family (list/install/uninstall/credentials)",
     "mcp": "sub-op family (probe/add/remove)",
-    "project": "sub-op family (get/list/set/rename/forget)",
+    "project": "sub-op family (relocate; from/to roots)",
 }
 
 # --- events (flat wire truth) ----------------------------------------------
@@ -518,8 +663,9 @@ def validate_registry() -> list[str]:
             ty = field.ty
             if isinstance(ty, WireType) and ty.kind == KIND_REF and ty.arg not in SHAPES:
                 problems.append(f"shape {name}.{field_name}: dangling ref {ty.arg}")
+    envelope_only = ("shutdown", "follow_up", "steer")
     for kind, spec in OPS.items():
-        if spec.subs is None and not spec.result and kind != "shutdown":
+        if spec.subs is None and not spec.result and kind not in envelope_only:
             problems.append(f"op {kind}: declares no result keys")
         for sub_name, sub in (spec.subs or {}).items():
             if not sub.result:

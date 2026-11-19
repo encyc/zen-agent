@@ -56,6 +56,7 @@ def _ts_type(ty: object) -> str:
         protocol.FLOAT: "number",
         protocol.BOOL: "boolean",
         protocol.BOOL_LAX: "boolean",
+        protocol.STRING_LAX: "string",
         protocol.NUMBER_LAX: "number | string",
         protocol.ANY: "unknown",
     }.get(ty)
@@ -73,6 +74,8 @@ def _render_fields(fields: dict[str, protocol.Field], *, request: bool) -> list[
         note = ""
         if field.ty == protocol.BOOL_LAX:
             note = " /** junk tolerated server-side (treated as false). */"
+        if field.ty == protocol.STRING_LAX:
+            note = " /** junk tolerated server-side (default applied). */"
         if request:
             suffix = "" if field.required else "?"
             lines.append(f"  {name}{suffix}: {ts}{note}")
@@ -108,13 +111,15 @@ def _result_block(kind: str, spec: protocol.OpSpec) -> str:
     body = "\n".join(
         _render_fields(spec.result, request=False)
     )
-    return f"export interface {_camel(kind, 'Result')} {{\n  type: 'result'\n  id: string\n  ok: true\n{body}\n}}"
+    ok = "boolean" if spec.ok_mutable else "true"
+    return f"export interface {_camel(kind, 'Result')} {{\n  type: 'result'\n  id: string\n  ok: {ok}\n{body}\n}}"
 
 
-def _memory_blocks() -> list[str]:
-    """memory's sub-ops: one request per `op`, a discriminated request union,
-    and one result envelope per sub (each named for its own consumers)."""
-    spec = protocol.OPS["memory"]
+def _sub_op_blocks(kind: str) -> list[str]:
+    """A sub-op family (memory, session): one request per `op`, a
+    discriminated request union, and one result envelope per sub (each named
+    for its own consumers)."""
+    spec = protocol.OPS[kind]
     subs = spec.subs or {}
     blocks: list[str] = []
     members: list[str] = []
@@ -122,15 +127,16 @@ def _memory_blocks() -> list[str]:
         fields = {"op": protocol.Field(protocol.STRING, required=True), **sub.request.FIELDS}
         body = "\n".join(_render_fields(fields, request=True))
         blocks.append(
-            f"export interface {_camel('memory', sub_name, 'Request')} {{\n{body}\n}}"
+            f"export interface {_camel(kind, sub_name, 'Request')} {{\n{body}\n}}"
         )
-        members.append(_camel("memory", sub_name, "Request"))
+        members.append(_camel(kind, sub_name, "Request"))
         payload = "\n".join(_render_fields(sub.result, request=False))
+        ok = "boolean" if sub.ok_mutable else "true"
         blocks.append(
-            f"export interface {_camel('memory', sub_name, 'Result')} {{\n"
-            f"  type: 'result'\n  id: string\n  ok: true\n{payload}\n}}"
+            f"export interface {_camel(kind, sub_name, 'Result')} {{\n"
+            f"  type: 'result'\n  id: string\n  ok: {ok}\n{payload}\n}}"
         )
-    blocks.append("export type MemoryRequest =\n  | " + "\n  | ".join(members))
+    blocks.append(f"export type {_camel(kind, 'Request')} =\n  | " + "\n  | ".join(members))
     return blocks
 
 
@@ -172,8 +178,9 @@ def generate() -> str:
         if spec.subs is not None:
             continue
         sections.append(_result_block(kind, spec))
-    sections.append("\n// ---- memory (sub-op family) ----------------------------------------------\n")
-    sections.extend(_memory_blocks())
+    for sub_kind in (name for name, spec in protocol.OPS.items() if spec.subs):
+        sections.append(f"\n// ---- {sub_kind} (sub-op family) ---------------------------------------------\n")
+        sections.extend(_sub_op_blocks(sub_kind))
     sections.append("\n// ---- events (flat wire truth) ---------------------------------------------\n")
     sections.extend(_event_blocks())
     return "\n\n".join(sections) + "\n"

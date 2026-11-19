@@ -20,6 +20,7 @@ from zenagent.app.approval_router import (
     register_approval,
 )
 from zenagent.app.views import usage_total
+from zenagent.cli.rpc import protocol
 from zenagent.cli.rpc.codec import serialize_event
 from zenagent.cli.rpc.errors import failure_frame
 from zenagent.cli.rpc.ops_config import ConfigOps
@@ -409,15 +410,23 @@ class RpcServer(
                 self.chat.on_frontend_ready()
             return True
         if kind == "prompt":
-            text = request.get("text")
+            try:
+                req = protocol.PromptRequest.from_payload(request)
+                text = req.text
+            except protocol.WireError as exc:
+                message = (
+                    "prompt needs text"
+                    if exc.field == "text"
+                    else "images must be a list of file paths"
+                )
+                self._send({"type": "error", "id": request_id, "message": message})
+                return True
             if not isinstance(text, str) or not text.strip():
                 self._send(
                     {"type": "error", "id": request_id, "message": "prompt needs text"}
                 )
                 return True
-            images, image_error = self._read_prompt_images(
-                request.get("images"), request_id
-            )
+            images, image_error = self._read_prompt_images(req.images, request_id)
             if image_error is not None:
                 self._send(image_error)
                 return True
@@ -622,7 +631,10 @@ class RpcServer(
 
     def _follow_up(self, request: dict, request_id) -> bool:
         """Queue text that extends the live run when it would otherwise stop."""
-        text = request.get("text")
+        try:
+            text = protocol.TextRequest.from_payload(request).text
+        except protocol.WireError:
+            text = None
         if not isinstance(text, str) or not text.strip():
             self._send(
                 {"type": "error", "id": request_id, "message": "follow_up needs text"}
@@ -636,7 +648,10 @@ class RpcServer(
         return True
 
     def _steer(self, request: dict, request_id) -> bool:
-        text = request.get("text")
+        try:
+            text = protocol.TextRequest.from_payload(request).text
+        except protocol.WireError:
+            text = None
         if not isinstance(text, str) or not text.strip():
             self._send(
                 {"type": "error", "id": request_id, "message": "steer needs text"}

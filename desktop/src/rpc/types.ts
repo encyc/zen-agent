@@ -115,7 +115,7 @@ export const REQUEST_KINDS = [
 // scripts/gen_rpc_ts.py (wire.gen.ts): edit the registry, not these. The
 // frontend refinements that stay handwritten (e.g. WorkspaceFile's
 // discriminated union) must remain assignable to the flat wire types.
-import type { MemoryCreateResult, Usage } from './wire.gen.ts'
+import type { MemoryCreateResult, SessionSummary, Usage } from './wire.gen.ts'
 export type {
   CommandEntry,
   FsIndexResult,
@@ -137,6 +137,8 @@ export type {
   MemoryCreateResult,
   MemoryListResult,
   MemoryUpdateResult,
+  ModelEntry,
+  SessionSummary,
   ToolRow,
   ToolsResult,
   Usage,
@@ -271,18 +273,6 @@ export interface StatusResult {
 }
 
 // ---- models / commands catalogs ------------------------------------------
-
-export interface ModelEntry {
-  id: string
-  provider: string
-  context_window: number
-  max_tokens: number
-  reasoning: boolean
-  supports_vision: boolean
-  available: boolean
-  reason: string | null
-  current: boolean
-}
 
 
 // ---- settings secrets ------------------------------------------------------
@@ -459,27 +449,6 @@ export interface McpTestResult {
 
 // ---- sessions -------------------------------------------------------------
 
-export interface SessionSummary {
-  path: string
-  name: string
-  title: string
-  project: string
-  /** Canonical project root recorded in the project meta; empty for legacy
-   * sessions kept outside a project directory. */
-  project_path?: string
-  messages: number
-  current: boolean
-  pinned: boolean
-  /** Header createdAt, falling back to mtime for legacy files. */
-  created_at?: number
-  /** File mtime: last activity. */
-  updated_at?: number
-  /** Provider model id of the last assistant message; empty when none. */
-  model?: string
-  /** Parent session stem after fork; empty when original. */
-  derived_from?: string
-  workspace?: 'coding' | 'zen' | 'swarm' // absent means coding
-}
 export interface SessionListResult {
   type: 'result'
   id: string

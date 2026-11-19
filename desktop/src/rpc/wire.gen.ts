@@ -154,6 +154,36 @@ export interface WorktreeOverview {
   status: GitStatusPayload | null
 }
 
+/** One catalog model, annotated with key availability. */
+export interface ModelEntry {
+  id: string
+  provider: string
+  context_window: number
+  max_tokens: number
+  reasoning: boolean
+  supports_vision: boolean
+  available: boolean
+  reason: string | null
+  current: boolean
+}
+
+/** One session of a listing; timestamps are unix seconds. */
+export interface SessionSummary {
+  path: string
+  name: string
+  title: string
+  project: string
+  project_path: string
+  messages: number
+  current: boolean
+  pinned: boolean
+  created_at: number
+  updated_at: number
+  model: string
+  derived_from: string
+  workspace: 'coding' | 'zen' | 'swarm'
+}
+
 
 // ---- op requests ---------------------------------------------------------
 
@@ -183,6 +213,32 @@ export interface GitDiffRequest {
   path: string
   staged?: boolean /** junk tolerated server-side (treated as false). */
   worktree?: string
+}
+
+export interface PromptRequest {
+  text: string
+  images?: Array<string>
+}
+
+export interface FollowUpRequest {
+  text: string
+}
+
+export interface SteerRequest {
+  text: string
+}
+
+export interface ModelRequest {
+  model_id: string
+}
+
+export interface ModeRequest {
+  mode?: string
+}
+
+export interface SetPrefRequest {
+  name: string
+  value?: boolean /** junk tolerated server-side (treated as false). */
 }
 
 
@@ -283,8 +339,77 @@ export interface GitDiffResult {
   diff: GitDiffPayload
 }
 
+export interface ModelsResult {
+  type: 'result'
+  id: string
+  ok: true
+  models: Array<ModelEntry>
+}
 
-// ---- memory (sub-op family) ----------------------------------------------
+export interface CommandsResult {
+  type: 'result'
+  id: string
+  ok: true
+  commands: Array<CommandEntry>
+}
+
+export interface PromptResult {
+  type: 'result'
+  id: string
+  ok: boolean
+  text: string
+  usage: Usage
+  termination: string | null
+  error?: string
+  session?: string
+}
+
+export interface FollowUpResult {
+  type: 'result'
+  id: string
+  ok: true
+
+}
+
+export interface SteerResult {
+  type: 'result'
+  id: string
+  ok: true
+
+}
+
+export interface ModelResult {
+  type: 'result'
+  id: string
+  ok: boolean
+  model: string
+  reason: string | null
+}
+
+export interface ModeResult {
+  type: 'result'
+  id: string
+  ok: boolean
+  mode?: string
+  reason?: string
+}
+
+export interface PrefsResult {
+  type: 'result'
+  id: string
+  ok: true
+  prefs: Record<string, boolean>
+}
+
+export interface SetPrefResult {
+  type: 'result'
+  id: string
+  ok: true
+  prefs: Record<string, boolean>
+}
+
+
+// ---- memory (sub-op family) ---------------------------------------------
 
 
 export interface MemoryListRequest {
@@ -342,6 +467,231 @@ export type MemoryRequest =
   | MemoryCreateRequest
   | MemoryUpdateRequest
   | MemoryDeleteRequest
+
+
+// ---- session (sub-op family) ---------------------------------------------
+
+
+export interface SessionCurrentRequest {
+  op: string
+}
+
+export interface SessionCurrentResult {
+  type: 'result'
+  id: string
+  ok: true
+  path: string
+  name: string
+}
+
+export interface SessionListRequest {
+  op: string
+  scope?: string /** junk tolerated server-side (default applied). */
+}
+
+export interface SessionListResult {
+  type: 'result'
+  id: string
+  ok: true
+  scope: string
+  sessions: Array<SessionSummary>
+}
+
+export interface SessionNewRequest {
+  op: string
+}
+
+export interface SessionNewResult {
+  type: 'result'
+  id: string
+  ok: true
+  path: string
+}
+
+export interface SessionForkRequest {
+  op: string
+}
+
+export interface SessionForkResult {
+  type: 'result'
+  id: string
+  ok: true
+  path: string
+}
+
+export interface SessionResumeRequest {
+  op: string
+  path: string
+}
+
+export interface SessionResumeResult {
+  type: 'result'
+  id: string
+  ok: true
+  path: string
+}
+
+export interface SessionImportRequest {
+  op: string
+  path: string
+}
+
+export interface SessionImportResult {
+  type: 'result'
+  id: string
+  ok: true
+  path: string
+}
+
+export interface SessionUndoRequest {
+  op: string
+}
+
+export interface SessionUndoResult {
+  type: 'result'
+  id: string
+  ok: true
+  dropped: number
+  path: string | null
+}
+
+export interface SessionDeleteRequest {
+  op: string
+  path: string
+}
+
+export interface SessionDeleteResult {
+  type: 'result'
+  id: string
+  ok: true
+  path: string
+}
+
+export interface SessionCompactRequest {
+  op: string
+}
+
+export interface SessionCompactResult {
+  type: 'result'
+  id: string
+  ok: true
+  compacted: boolean
+  path?: string
+}
+
+export interface SessionRetryRequest {
+  op: string
+}
+
+export interface SessionRetryResult {
+  type: 'result'
+  id: string
+  ok: true
+  retried: boolean
+  text?: string
+}
+
+export interface SessionExportRequest {
+  op: string
+  format?: string /** junk tolerated server-side (default applied). */
+  path?: string
+}
+
+export interface SessionExportResult {
+  type: 'result'
+  id: string
+  ok: true
+  path: string
+}
+
+export interface SessionPromoteRequest {
+  op: string
+  pending_id: number
+}
+
+export interface SessionPromoteResult {
+  type: 'result'
+  id: string
+  ok: true
+  outcome: 'ok' | 'blocked_images' | 'not_running' | 'missing'
+}
+
+export interface SessionDequeueRequest {
+  op: string
+  pending_id?: number
+}
+
+export interface SessionDequeueResult {
+  type: 'result'
+  id: string
+  ok: true
+  dequeued: boolean
+  text: string | null
+}
+
+export interface SessionInterruptPendingRequest {
+  op: string
+  pending_id: number
+}
+
+export interface SessionInterruptPendingResult {
+  type: 'result'
+  id: string
+  ok: true
+  sent: boolean
+}
+
+export interface SessionClearContinuationsRequest {
+  op: string
+}
+
+export interface SessionClearContinuationsResult {
+  type: 'result'
+  id: string
+  ok: true
+  cleared: number
+}
+
+export interface SessionClearPendingRequest {
+  op: string
+}
+
+export interface SessionClearPendingResult {
+  type: 'result'
+  id: string
+  ok: true
+  cleared: number
+}
+
+export interface SessionClearTodosRequest {
+  op: string
+}
+
+export interface SessionClearTodosResult {
+  type: 'result'
+  id: string
+  ok: true
+  cleared: number
+}
+
+export type SessionRequest =
+  | SessionCurrentRequest
+  | SessionListRequest
+  | SessionNewRequest
+  | SessionForkRequest
+  | SessionResumeRequest
+  | SessionImportRequest
+  | SessionUndoRequest
+  | SessionDeleteRequest
+  | SessionCompactRequest
+  | SessionRetryRequest
+  | SessionExportRequest
+  | SessionPromoteRequest
+  | SessionDequeueRequest
+  | SessionInterruptPendingRequest
+  | SessionClearContinuationsRequest
+  | SessionClearPendingRequest
+  | SessionClearTodosRequest
 
 
 // ---- events (flat wire truth) ---------------------------------------------

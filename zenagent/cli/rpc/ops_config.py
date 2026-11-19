@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 
 from zenagent.app.skill_commands import SKILL_COMMAND_PREFIX, build_skill_submission
+from zenagent.cli.rpc import protocol
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
 from zenagent.project import (
     project_key,
@@ -47,7 +48,10 @@ class ConfigOps:
         return {"type": "result", "id": request_id, "ok": True, "commands": catalog}
 
     def _model(self, request: dict, request_id) -> bool:
-        model_id = request.get("model_id")
+        try:
+            model_id = protocol.ModelSwitchRequest.from_payload(request).model_id
+        except protocol.WireError:
+            model_id = None
         if not isinstance(model_id, str) or not model_id.strip():
             self._send(
                 {"type": "error", "id": request_id, "message": "model needs model_id"}
@@ -75,7 +79,10 @@ class ConfigOps:
         return True
 
     def _mode(self, request: dict, request_id) -> bool:
-        mode = request.get("mode")
+        try:
+            mode = protocol.ModeSwitchRequest.from_payload(request).mode
+        except protocol.WireError:
+            mode = None
         if self.runtime is None:
             self._send(
                 {
@@ -171,7 +178,10 @@ class ConfigOps:
 
         allowed = ("goal_pause_on_session_switch",)
         if request.get("type") == "set_pref":
-            name = request.get("name")
+            try:
+                name = protocol.SetPrefRequest.from_payload(request).name
+            except protocol.WireError:
+                name = request.get("name")
             if name not in allowed:
                 self._send(
                     {
