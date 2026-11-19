@@ -29,5 +29,8 @@ uv run mypy zenagent
 echo "==> architecture budget"
 python3 scripts/check_architecture.py
 
+echo "==> worktree hygiene"
+python3 scripts/check_worktrees.py
+
 echo "==> tests"
 uv run pytest -q
