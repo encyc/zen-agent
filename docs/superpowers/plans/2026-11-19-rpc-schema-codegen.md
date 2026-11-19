@@ -121,3 +121,22 @@ mock 形状从此被编译期检查。每完成一域更新 allowlist（844 行�
   保持"声明 ≠ 运行时接线"的区分（与 memory 同待遇）。inline 检查仍是执法者。
 - **TS 迁移**：ModelEntry、SessionSummary 转 wire.gen.ts re-export（675 行）；
   SessionListResult 信封保留手写（scope 的字面量 union 是前端精化）。
+
+### 落地记录 · 批次 3–5（2026-11-19 完结）
+
+- **view-model 三件套**：status（含完整 RunStatusWire 内嵌快照）/transcript/
+  subagent_transcript 全量声明；`refs()` 判别联合渲染 transcript 行联合；
+  MessageView/ToolCallView/DividerView/TranscriptNotice 保持 TS 手写精化
+  （老服务器省键的可选性是前端契约），对齐锁测试双向冻结字段名。
+- **子 op 九族**：secrets/limits/skills/plugins/mcp/project/approval/ask 全量
+  声明（providers/skills/knobs/MCP/plugins 行形状 + 各自 live state 枚举）；
+  `command` 是唯一诚实 stub（结果逐命令动态）。PARTIAL：21 → 1。
+- **RpcHost 第二 registry**：HOST_OPS/HOST_SHAPES/HOST_PARTIAL 落地
+  （hello/project/runs/supervisor/workspace 全声明：RunView、ResidentSlot、
+  SupervisorAgentRow、WorkspaceStateWire）；swarm/zen_fleet/session/terminal/
+  approval/ask 带 stub 原因；frontier 测试扫描 host.py 双向冻结。
+- **protocol 包拆分**：1482 行单文件 → `_core`（机械）/`_views`（形状）/
+  `_chat`（chat ops）/`_host`（host ops）/`__init__`（装配 + 完整性检查），
+  五模块全部 <800 cap；`zenagent.cli.rpc.protocol` 消费方导入不变。
+- **gate 演进**：check_architecture 跳过 `*.gen.ts`（生成派生物在源头度量）；
+  types.ts 迁移收官（854 → 372）。

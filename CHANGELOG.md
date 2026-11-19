@@ -7,6 +7,30 @@ matches the release tag; older history is in the repository tags and commits.
 
 ### Added
 
+- **Nine more families join the registry; the host gets its own.** secrets,
+  limits, skills, plugins, mcp, project, approval and ask are fully declared
+  (row shapes for providers, skills, knobs, MCP servers, plugins and their
+  live states), leaving `command` — whose result genuinely varies per
+  invocation — as the single honest stub. The view trio (status with the
+  complete RunStatusWire snapshot under `status`, transcript and its
+  subagent variant) is declared too: a `refs()` union type renders the
+  transcript row union, and a contract test locks the declared view shapes'
+  field names against the handwritten TS mirrors, whose optionality stays a
+  frontend refinement for older servers. RpcHost's multiplexed surface gets
+  a second registry: hello, project, runs, supervisor and workspace are
+  fully declared (RunView, ResidentSlot, SupervisorAgentRow,
+  WorkspaceStateWire); swarm, zen_fleet, host-side session/terminal and the
+  approval/ask routing carry explicit stub reasons. The declared-but-stubbed
+  frontier drops to one kind on the chat surface, six on the host.
+- **protocol.py becomes a package.** The registry outgrew the 800-line
+  coupling cap because it is 90% declarations; the split (_core machinery,
+  _views shapes, _chat chat ops, _host host ops, __init__ assembly with the
+  integrity check) keeps every consumer import working unchanged and puts
+  every module under the cap honestly instead of growing the allowlist.
+  types.ts finishes its migration at 372 lines — re-exports of the
+  generated mirrors plus the frontend refinements — down from 854. The
+  architecture budget now skips `*.gen.ts`: generated derivatives are
+  measured at their source, like every catalog.
 - **Nine more ops join the wire registry, and the session family is fully
   declared.** follow_up, steer, prompt (with its images list and
   run-outcome envelope), model, mode, prefs/set_pref, models and commands
