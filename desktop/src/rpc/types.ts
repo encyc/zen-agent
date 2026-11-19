@@ -115,14 +115,21 @@ export const REQUEST_KINDS = [
 // frontend refinements that stay handwritten (e.g. WorkspaceFile's
 // discriminated union) must remain assignable to the flat wire types.
 import type {
+  LimitsGetResult,
   MemoryCreateResult,
   MessageUsage,
+  PluginsListResult,
+  SecretsListResult,
+  SecretsTestResult,
   SessionSummary,
+  SkillsListResult,
+  SkillsReadResult,
   Usage,
 } from './wire.gen.ts'
 export type {
   CommandEntry,
   CompactionRecord,
+  LimitKnob,
   ContextReport,
   ContextSlice,
   FsIndexResult,
@@ -139,6 +146,9 @@ export type {
   GitShowResult,
   GitWorktreesResult,
   HelloResult,
+  McpListResult,
+  McpServerRow,
+  McpTestResult,
   MemoryDeleteResult,
   MemoryEntry,
   MemoryCreateResult,
@@ -148,7 +158,13 @@ export type {
   MemoryUpdateResult,
   ModelEntry,
   PendingMessage,
+  PluginCatalogRow,
+  PluginCredentialRow,
+  PluginRow,
+  PluginServerRow,
+  SecretProviderRow,
   SessionSummary,
+  SkillRow,
   StatusResult,
   SubagentTranscriptResult,
   SubagentView,
@@ -164,6 +180,15 @@ export type {
 /** create and update return the same entry envelope; consumers knew this
  * shape by one name (used for both ops), so keep it importable as such. */
 export type MemoryEntryResult = MemoryCreateResult
+
+/** Sub-op envelopes are generated per-op (SecretsListResult, ...); the
+ * frontend knew these unified names, so keep them importable as such. */
+export type SecretsResult = SecretsListResult
+export type SecretTestResult = SecretsTestResult
+export type SkillsResult = SkillsListResult
+export type SkillReadResult = SkillsReadResult
+export type LimitsResult = LimitsGetResult
+export type PluginsResult = PluginsListResult
 
 export type RequestKind = (typeof REQUEST_KINDS)[number]
 
@@ -190,173 +215,11 @@ export interface TodoPhase {
 
 // ---- settings secrets ------------------------------------------------------
 
-export interface SecretProviderRow {
-  id: string
-  name: string
-  env: string
-  /** Catalog model count; absent for search providers. */
-  models?: number
-  configured: boolean
-  source: 'stored' | 'env' | null
-  current?: boolean
-}
-
-export interface SecretsResult {
-  type: 'result'
-  id: string
-  ok: true
-  model_providers: SecretProviderRow[]
-  search_providers: SecretProviderRow[]
-}
-
-export interface SecretTestResult {
-  type: 'result'
-  id: string
-  ok: true
-  connected: boolean
-  message: string
-}
-
 // ---- skills --------------------------------------------------------------
-
-export interface SkillRow {
-  name: string
-  description: string
-  path: string
-  source: 'project' | 'global'
-  enabled: boolean
-}
-
-export interface LimitKnob {
-  key: string
-  section: string
-  table: string
-  name: string
-  kind: 'int' | 'float' | 'str'
-  nullable: boolean
-  min: number
-  max: number
-  default: number | string | null
-  unit: string
-  /** Allowed values when `kind` is `'str'`. */
-  choices: string[]
-  apply: 'immediate' | 'session'
-  value: number | string | null
-  explicit: boolean
-  override: string | null
-}
-
-export interface LimitsResult {
-  type: 'result'
-  id: string
-  /** A refusal still carries the snapshot (ok:false) so the page can render
-   * the values it could not change. */
-  ok: boolean
-  path: string
-  project_path: string
-  groups: string[]
-  knobs: LimitKnob[]
-  error?: string
-}
-
-export interface SkillsResult {
-  type: 'result'
-  id: string
-  ok: true
-  skills: SkillRow[]
-  warnings: string[]
-  notes: string[]
-}
-
-export interface SkillReadResult {
-  type: 'result'
-  id: string
-  ok: true
-  name: string
-  path: string
-  body: string
-  truncated: boolean
-}
 
 // ---- plugins -------------------------------------------------------------
 
-export interface PluginCredentialRow {
-  key: string
-  label: string
-  secret: boolean
-  help: string | null
-  url: string | null
-  set: boolean
-}
-
-export interface PluginServerRow {
-  name: string
-  state: 'connected' | 'failed' | 'off'
-  tools: string[]
-  error: string | null
-}
-
-export interface PluginRow {
-  id: string
-  name: string
-  version: string
-  description: string
-  enabled: boolean
-  status: 'disabled' | 'needs_credentials' | 'failed' | 'connected' | 'ready'
-  credentials: PluginCredentialRow[]
-  servers: PluginServerRow[]
-}
-
-export interface PluginCatalogRow {
-  id: string
-  name: string
-  description: string
-  requires_runtime: string | null
-  installed: boolean
-}
-
-export interface PluginsResult {
-  type: 'result'
-  id: string
-  ok: true
-  plugins: PluginRow[]
-  catalog: PluginCatalogRow[]
-  problem: string | null
-  apply_pending: boolean
-}
-
 // ---- mcp -----------------------------------------------------------------
-
-export interface McpServerRow {
-  name: string
-  transport: 'stdio' | 'http'
-  command: string | null
-  url: string | null
-  env_keys: string[]
-  header_keys: string[]
-  source: 'global' | 'project'
-  overrides_global: boolean
-  state: 'connected' | 'failed' | 'off'
-  tools: string[]
-  error: string | null
-}
-
-export interface McpListResult {
-  type: 'result'
-  id: string
-  ok: true
-  servers: McpServerRow[]
-  problem: string | null
-}
-
-export interface McpTestResult {
-  type: 'result'
-  id: string
-  ok: true
-  connected: boolean
-  tools: string[]
-  message: string
-}
 
 // ---- sessions -------------------------------------------------------------
 

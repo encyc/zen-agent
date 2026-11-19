@@ -366,6 +366,99 @@ export interface RunStatusWire {
   goal: GoalView | null
 }
 
+/** One provider row of the settings screen; key values never cross. */
+export interface SecretProviderRow {
+  id: string
+  name: string
+  env: string
+  models?: number
+  configured: boolean
+  source: 'stored' | 'env' | null
+  current?: boolean
+}
+
+/** One discovered skill of the settings list. */
+export interface SkillRow {
+  name: string
+  description: string
+  path: string
+  source: 'project' | 'global'
+  enabled: boolean
+}
+
+/** One budget knob of the settings page. */
+export interface LimitKnob {
+  key: string
+  section: string
+  table: string
+  name: string
+  kind: 'int' | 'float' | 'str'
+  nullable: boolean
+  min: number
+  max: number
+  default: number | string | null
+  unit: string
+  choices: Array<string>
+  apply: 'immediate' | 'session'
+  value: number | string | null
+  explicit: boolean
+  override: string | null
+}
+
+/** One MCP server of the settings list, with its live state. */
+export interface McpServerRow {
+  name: string
+  transport: 'stdio' | 'http'
+  command: string | null
+  url: string | null
+  env_keys: Array<string>
+  header_keys: Array<string>
+  source: 'global' | 'project'
+  overrides_global: boolean
+  state: 'connected' | 'failed' | 'off'
+  tools: Array<string>
+  error: string | null
+}
+
+/** One credential spec of a plugin. */
+export interface PluginCredentialRow {
+  key: string
+  label: string
+  secret: boolean
+  help: string | null
+  url: string | null
+  set: boolean
+}
+
+/** One MCP server a plugin carries. */
+export interface PluginServerRow {
+  name: string
+  state: 'connected' | 'failed' | 'off'
+  tools: Array<string>
+  error: string | null
+}
+
+/** One installed plugin with its live state. */
+export interface PluginRow {
+  id: string
+  name: string
+  version: string
+  description: string
+  enabled: boolean
+  status: 'disabled' | 'needs_credentials' | 'failed' | 'connected' | 'ready'
+  credentials: Array<PluginCredentialRow>
+  servers: Array<PluginServerRow>
+}
+
+/** One catalog entry available for install. */
+export interface PluginCatalogRow {
+  id: string
+  name: string
+  description: string
+  requires_runtime: string | null
+  installed: boolean
+}
+
 
 // ---- op requests ---------------------------------------------------------
 
@@ -431,6 +524,16 @@ export interface ModeRequest {
 export interface SetPrefRequest {
   name: string
   value?: boolean /** junk tolerated server-side (treated as false). */
+}
+
+export interface ApprovalRequest {
+  request_id?: string /** junk tolerated server-side (default applied). */
+  decision?: 'allow' | 'always' | 'deny'
+}
+
+export interface AskRequest {
+  request_id?: string /** junk tolerated server-side (default applied). */
+  answers?: unknown
 }
 
 
@@ -655,6 +758,20 @@ export interface SetPrefResult {
   prefs: Record<string, boolean>
 }
 
+export interface ApprovalResult {
+  type: 'result'
+  id: string
+  ok: true
+
+}
+
+export interface AskResult {
+  type: 'result'
+  id: string
+  ok: true
+
+}
+
 
 // ---- memory (sub-op family) ---------------------------------------------
 
@@ -714,6 +831,430 @@ export type MemoryRequest =
   | MemoryCreateRequest
   | MemoryUpdateRequest
   | MemoryDeleteRequest
+
+
+// ---- secrets (sub-op family) ---------------------------------------------
+
+
+export interface SecretsListRequest {
+  op: string
+}
+
+export interface SecretsListResult {
+  type: 'result'
+  id: string
+  ok: true
+  model_providers: Array<SecretProviderRow>
+  search_providers: Array<SecretProviderRow>
+}
+
+export interface SecretsSetRequest {
+  op: string
+  name: string
+  value: string
+}
+
+export interface SecretsSetResult {
+  type: 'result'
+  id: string
+  ok: true
+
+}
+
+export interface SecretsClearRequest {
+  op: string
+  name: string
+}
+
+export interface SecretsClearResult {
+  type: 'result'
+  id: string
+  ok: true
+
+}
+
+export interface SecretsTestRequest {
+  op: string
+  scope?: 'model' | 'search'
+  target: string
+}
+
+export interface SecretsTestResult {
+  type: 'result'
+  id: string
+  ok: true
+  connected: boolean
+  message: string
+}
+
+export type SecretsRequest =
+  | SecretsListRequest
+  | SecretsSetRequest
+  | SecretsClearRequest
+  | SecretsTestRequest
+
+
+// ---- limits (sub-op family) ---------------------------------------------
+
+
+export interface LimitsGetRequest {
+  op: string
+}
+
+export interface LimitsGetResult {
+  type: 'result'
+  id: string
+  ok: boolean
+  path: string
+  project_path: string
+  groups: Array<string>
+  knobs: Array<LimitKnob>
+  error?: string
+}
+
+export interface LimitsSetRequest {
+  op: string
+  key: string
+  value?: unknown
+}
+
+export interface LimitsSetResult {
+  type: 'result'
+  id: string
+  ok: true
+
+}
+
+export interface LimitsResetRequest {
+  op: string
+  key: string
+}
+
+export interface LimitsResetResult {
+  type: 'result'
+  id: string
+  ok: true
+
+}
+
+export type LimitsRequest =
+  | LimitsGetRequest
+  | LimitsSetRequest
+  | LimitsResetRequest
+
+
+// ---- skills (sub-op family) ---------------------------------------------
+
+
+export interface SkillsListRequest {
+  op: string
+}
+
+export interface SkillsListResult {
+  type: 'result'
+  id: string
+  ok: true
+  skills: Array<SkillRow>
+  warnings: Array<string>
+  notes: Array<string>
+}
+
+export interface SkillsRescanRequest {
+  op: string
+}
+
+export interface SkillsRescanResult {
+  type: 'result'
+  id: string
+  ok: true
+  skills: Array<SkillRow>
+  warnings: Array<string>
+  notes: Array<string>
+}
+
+export interface SkillsReadRequest {
+  op: string
+  name: string
+}
+
+export interface SkillsReadResult {
+  type: 'result'
+  id: string
+  ok: true
+  name: string
+  path: string
+  body: string
+  truncated: boolean
+}
+
+export interface SkillsToggleRequest {
+  op: string
+  name: string
+  enabled: boolean
+}
+
+export interface SkillsToggleResult {
+  type: 'result'
+  id: string
+  ok: true
+  name: string
+  enabled: boolean
+  notes: Array<string>
+}
+
+export type SkillsRequest =
+  | SkillsListRequest
+  | SkillsRescanRequest
+  | SkillsReadRequest
+  | SkillsToggleRequest
+
+
+// ---- plugins (sub-op family) ---------------------------------------------
+
+
+export interface PluginsListRequest {
+  op: string
+}
+
+export interface PluginsListResult {
+  type: 'result'
+  id: string
+  ok: true
+  plugins: Array<PluginRow>
+  catalog: Array<PluginCatalogRow>
+  problem: string | null
+  apply_pending: boolean
+}
+
+export interface PluginsInstallRequest {
+  op: string
+  path?: string
+  plugin?: string
+}
+
+export interface PluginsInstallResult {
+  type: 'result'
+  id: string
+  ok: true
+  plugins: Array<PluginRow>
+  catalog: Array<PluginCatalogRow>
+  problem: string | null
+  apply_pending: boolean
+}
+
+export interface PluginsUninstallRequest {
+  op: string
+  plugin: string
+}
+
+export interface PluginsUninstallResult {
+  type: 'result'
+  id: string
+  ok: true
+  plugins: Array<PluginRow>
+  catalog: Array<PluginCatalogRow>
+  problem: string | null
+  apply_pending: boolean
+}
+
+export interface PluginsEnableRequest {
+  op: string
+  plugin: string
+}
+
+export interface PluginsEnableResult {
+  type: 'result'
+  id: string
+  ok: true
+  plugins: Array<PluginRow>
+  catalog: Array<PluginCatalogRow>
+  problem: string | null
+  apply_pending: boolean
+}
+
+export interface PluginsDisableRequest {
+  op: string
+  plugin: string
+}
+
+export interface PluginsDisableResult {
+  type: 'result'
+  id: string
+  ok: true
+  plugins: Array<PluginRow>
+  catalog: Array<PluginCatalogRow>
+  problem: string | null
+  apply_pending: boolean
+}
+
+export interface PluginsConfigureRequest {
+  op: string
+  plugin: string
+  values?: Record<string, string>
+}
+
+export interface PluginsConfigureResult {
+  type: 'result'
+  id: string
+  ok: true
+  plugins: Array<PluginRow>
+  catalog: Array<PluginCatalogRow>
+  problem: string | null
+  apply_pending: boolean
+}
+
+export type PluginsRequest =
+  | PluginsListRequest
+  | PluginsInstallRequest
+  | PluginsUninstallRequest
+  | PluginsEnableRequest
+  | PluginsDisableRequest
+  | PluginsConfigureRequest
+
+
+// ---- mcp (sub-op family) ---------------------------------------------
+
+
+export interface McpListRequest {
+  op: string
+}
+
+export interface McpListResult {
+  type: 'result'
+  id: string
+  ok: true
+  servers: Array<McpServerRow>
+  problem: string | null
+}
+
+export interface McpAddRequest {
+  op: string
+  name: string
+  layer?: 'global' | 'project'
+  command?: string
+  url?: string
+  transport?: 'stdio' | 'http'
+  env?: Record<string, string>
+  headers?: Record<string, string>
+}
+
+export interface McpAddResult {
+  type: 'result'
+  id: string
+  ok: true
+  servers: Array<McpServerRow>
+  problem: string | null
+}
+
+export interface McpRemoveRequest {
+  op: string
+  name: string
+  layer?: 'global' | 'project'
+}
+
+export interface McpRemoveResult {
+  type: 'result'
+  id: string
+  ok: true
+  servers: Array<McpServerRow>
+  problem: string | null
+}
+
+export interface McpTestRequest {
+  op: string
+  name: string
+  layer?: string /** junk tolerated server-side (default applied). */
+}
+
+export interface McpTestResult {
+  type: 'result'
+  id: string
+  ok: true
+  connected: boolean
+  tools: Array<string>
+  message: string
+}
+
+export type McpRequest =
+  | McpListRequest
+  | McpAddRequest
+  | McpRemoveRequest
+  | McpTestRequest
+
+
+// ---- project (sub-op family) ---------------------------------------------
+
+
+export interface ProjectOpenRequest {
+  op: string
+  root: string
+  resume?: string /** junk tolerated server-side (default applied). */
+  background?: boolean /** junk tolerated server-side (treated as false). */
+}
+
+export interface ProjectOpenResult {
+  type: 'result'
+  id: string
+  ok: true
+  root: string
+  key: string
+  session: string
+  active: string
+  resident: Array<Record<string, unknown>>
+}
+
+export interface ProjectCloseRequest {
+  op: string
+  project?: string /** junk tolerated server-side (default applied). */
+}
+
+export interface ProjectCloseResult {
+  type: 'result'
+  id: string
+  ok: true
+  project: string
+  resident: Array<Record<string, unknown>>
+}
+
+export interface ProjectSwitchRequest {
+  op: string
+  root: string
+  resume?: string /** junk tolerated server-side (default applied). */
+  background?: boolean /** junk tolerated server-side (treated as false). */
+}
+
+export interface ProjectSwitchResult {
+  type: 'result'
+  id: string
+  ok: true
+  root: string
+  key: string
+  session: string
+  active: string
+  resident: Array<Record<string, unknown>>
+}
+
+export interface ProjectRelocateRequest {
+  op: string
+}
+
+export interface ProjectRelocateResult {
+  type: 'result'
+  id: string
+  ok: true
+  old_root: string
+  new_root: string
+  old_key: string
+  new_key: string
+  sessions: number
+  moved: number
+}
+
+export type ProjectRequest =
+  | ProjectOpenRequest
+  | ProjectCloseRequest
+  | ProjectSwitchRequest
+  | ProjectRelocateRequest
 
 
 // ---- session (sub-op family) ---------------------------------------------
@@ -969,3 +1510,267 @@ export interface AgentEventWire {
   partial_result?: string
   duration_ms?: number
 }
+
+
+// ---- host surface (RpcHost) -----------------------------------------------
+
+
+/** Host ops the registry fully declares; the stubbed families (see protocol.HOST_PARTIAL) never appear here. */
+
+/** One ledger run (RunRecord.to_json minus the storage envelope). */
+export interface RunView {
+  id: string
+  kind: string
+  status: string
+  startedAt: number
+  updatedAt: number
+  endedAt: number | null
+  durationMs: number | null
+  agentId: string
+  session: string
+  workItemId: string | null
+  parentRunId: string | null
+  taskId: string | null
+  label: string
+  termination: string | null
+  turns: number | null
+  cost: number
+  error: string | null
+}
+
+/** One resident session slot of the host's hello/project answers. */
+export interface ResidentSlot {
+  project: string
+  key: string
+  session: string
+  active: boolean
+}
+
+/** One live agent of the project supervisor (plus the swarm scope keys the handle carries). */
+export interface SupervisorAgentRow {
+  key: string
+  agent: string
+  kind: string
+  label: string
+  state: 'running' | 'idle'
+  session: string
+  runId: string | null
+}
+
+/** The project's backend-mode fact (result and push frame). */
+export interface WorkspaceStateWire {
+  project: string
+  mode: 'coding' | 'zen' | 'swarm'
+  updatedAt: number
+  routerSession: string | null
+}
+
+export interface HostHelloResult {
+  type: 'result'
+  id: string
+  ok: true
+  protocol_version: number
+  active: string
+  projects: Array<ResidentSlot>
+}
+
+export interface HostShutdownResult {
+  type: 'result'
+  id: string
+  ok: true
+
+}
+
+export interface HostProjectOpenRequest {
+  op: string
+  root: string
+  resume?: string /** junk tolerated server-side (default applied). */
+  background?: boolean /** junk tolerated server-side (treated as false). */
+}
+
+export interface HostProjectOpenResult {
+  type: 'result'
+  id: string
+  ok: true
+  root: string
+  key: string
+  session: string
+  active: string
+  resident: Array<Record<string, unknown>>
+}
+
+export interface HostProjectCloseRequest {
+  op: string
+  project?: string /** junk tolerated server-side (default applied). */
+}
+
+export interface HostProjectCloseResult {
+  type: 'result'
+  id: string
+  ok: true
+  project: string
+  resident: Array<Record<string, unknown>>
+}
+
+export interface HostProjectSwitchRequest {
+  op: string
+  root: string
+  resume?: string /** junk tolerated server-side (default applied). */
+  background?: boolean /** junk tolerated server-side (treated as false). */
+}
+
+export interface HostProjectSwitchResult {
+  type: 'result'
+  id: string
+  ok: true
+  root: string
+  key: string
+  session: string
+  active: string
+  resident: Array<Record<string, unknown>>
+}
+
+export interface HostProjectRelocateRequest {
+  op: string
+}
+
+export interface HostProjectRelocateResult {
+  type: 'result'
+  id: string
+  ok: true
+  old_root: string
+  new_root: string
+  old_key: string
+  new_key: string
+  sessions: number
+  moved: number
+}
+
+export type HostProjectRequest =
+  | HostProjectOpenRequest
+  | HostProjectCloseRequest
+  | HostProjectSwitchRequest
+  | HostProjectRelocateRequest
+
+export interface HostRunsListRequest {
+  op: string
+  project?: string /** junk tolerated server-side (default applied). */
+  kind?: string /** junk tolerated server-side (default applied). */
+  agent?: string /** junk tolerated server-side (default applied). */
+  workItem?: string /** junk tolerated server-side (default applied). */
+  session?: string /** junk tolerated server-side (default applied). */
+  status?: string /** junk tolerated server-side (default applied). */
+  since?: number
+  limit?: number
+}
+
+export interface HostRunsListResult {
+  type: 'result'
+  id: string
+  ok: true
+  runs: Array<RunView>
+  total: number
+}
+
+export interface HostRunsGetRequest {
+  op: string
+  project?: string /** junk tolerated server-side (default applied). */
+  runId: string
+}
+
+export interface HostRunsGetResult {
+  type: 'result'
+  id: string
+  ok: true
+  run: RunView | null
+}
+
+export type HostRunsRequest =
+  | HostRunsListRequest
+  | HostRunsGetRequest
+
+export interface HostSupervisorStatusRequest {
+  op: string
+  project?: string /** junk tolerated server-side (default applied). */
+}
+
+export interface HostSupervisorStatusResult {
+  type: 'result'
+  id: string
+  ok: true
+  project: string
+  mode: 'coding' | 'zen' | 'swarm'
+  agents: Array<SupervisorAgentRow>
+  counts: Record<string, number>
+  approvals: Array<Record<string, unknown>>
+}
+
+export interface HostSupervisorCancelRequest {
+  op: string
+  project?: string /** junk tolerated server-side (default applied). */
+  key?: string
+  agentId?: string
+}
+
+export interface HostSupervisorCancelResult {
+  type: 'result'
+  id: string
+  ok: true
+  key: string
+  cancelled: boolean
+}
+
+export interface HostSupervisorApproveRequest {
+  op: string
+  project?: string /** junk tolerated server-side (default applied). */
+  requestId: string
+  decision?: 'allow' | 'always' | 'deny'
+}
+
+export interface HostSupervisorApproveResult {
+  type: 'result'
+  id: string
+  ok: true
+
+}
+
+export type HostSupervisorRequest =
+  | HostSupervisorStatusRequest
+  | HostSupervisorCancelRequest
+  | HostSupervisorApproveRequest
+
+export interface HostWorkspaceGetRequest {
+  op: string
+  project?: string /** junk tolerated server-side (default applied). */
+}
+
+export interface HostWorkspaceGetResult {
+  type: 'result'
+  id: string
+  ok: true
+  project: string
+  mode: 'coding' | 'zen' | 'swarm'
+  updatedAt: number
+  routerSession: string | null
+}
+
+export interface HostWorkspaceSetRequest {
+  op: string
+  project?: string /** junk tolerated server-side (default applied). */
+  mode?: 'coding' | 'zen' | 'swarm'
+  routerSession?: string
+}
+
+export interface HostWorkspaceSetResult {
+  type: 'result'
+  id: string
+  ok: true
+  project: string
+  mode: 'coding' | 'zen' | 'swarm'
+  updatedAt: number
+  routerSession: string | null
+}
+
+export type HostWorkspaceRequest =
+  | HostWorkspaceGetRequest
+  | HostWorkspaceSetRequest

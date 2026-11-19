@@ -47,11 +47,21 @@ def _ts_type(ty: object) -> str:
         if ty.kind == "record":
             return f"Record<string, {_ts_type(ty.arg)}>"
         if ty.kind == "ref":
-            return protocol.SHAPES[ty.arg]["ts"]  # validate_registry guards this
+            # validate_registry guards both tables for dangling refs
+            tables = (protocol.SHAPES, protocol.HOST_SHAPES)
+            for source in tables:
+                if ty.arg in source:
+                    return source[ty.arg]["ts"]
+            raise KeyError(ty.arg)
         if ty.kind == "refs":
-            return " | ".join(
-                protocol.SHAPES[member]["ts"] for member in ty.arg
-            )
+            names = []
+            for member in ty.arg:
+                tables = (protocol.SHAPES, protocol.HOST_SHAPES)
+                for source in tables:
+                    if member in source:
+                        names.append(source[member]["ts"])
+                        break
+            return " | ".join(names)
         if ty.kind == "enum":
             return " | ".join(f"'{value}'" for value in ty.arg)
     scalar = {
@@ -119,28 +129,29 @@ def _result_block(kind: str, spec: protocol.OpSpec) -> str:
     return f"export interface {_camel(kind, 'Result')} {{\n  type: 'result'\n  id: string\n  ok: {ok}\n{body}\n}}"
 
 
-def _sub_op_blocks(kind: str) -> list[str]:
-    """A sub-op family (memory, session): one request per `op`, a
-    discriminated request union, and one result envelope per sub (each named
-    for its own consumers)."""
-    spec = protocol.OPS[kind]
+def _sub_op_blocks(kind: str, *, host: bool = False) -> list[str]:
+    """A sub-op family (memory, session, host families): one request per
+    `op`, a discriminated request union, and one result envelope per sub
+    (each named for its own consumers)."""
+    spec = protocol.HOST_OPS.get(kind) or protocol.OPS[kind]
     subs = spec.subs or {}
     blocks: list[str] = []
     members: list[str] = []
+    parts = ("host", kind) if host else (kind,)
     for sub_name, sub in subs.items():
         fields = {"op": protocol.Field(protocol.STRING, required=True), **sub.request.FIELDS}
         body = "\n".join(_render_fields(fields, request=True))
         blocks.append(
-            f"export interface {_camel(kind, sub_name, 'Request')} {{\n{body}\n}}"
+            f"export interface {_camel(*parts, sub_name, 'Request')} {{\n{body}\n}}"
         )
-        members.append(_camel(kind, sub_name, "Request"))
+        members.append(_camel(*parts, sub_name, "Request"))
         payload = "\n".join(_render_fields(sub.result, request=False))
         ok = "boolean" if sub.ok_mutable else "true"
         blocks.append(
-            f"export interface {_camel(kind, sub_name, 'Result')} {{\n"
+            f"export interface {_camel(*parts, sub_name, 'Result')} {{\n"
             f"  type: 'result'\n  id: string\n  ok: {ok}\n{payload}\n}}"
         )
-    blocks.append(f"export type {_camel(kind, 'Request')} =\n  | " + "\n  | ".join(members))
+    blocks.append(f"export type {_camel(*parts, 'Request')} =\n  | " + "\n  | ".join(members))
     return blocks
 
 
@@ -187,6 +198,24 @@ def generate() -> str:
         sections.extend(_sub_op_blocks(sub_kind))
     sections.append("\n// ---- events (flat wire truth) ---------------------------------------------\n")
     sections.extend(_event_blocks())
+    sections.append("\n// ---- host surface (RpcHost) -----------------------------------------------\n")
+    sections.append(
+        "/** Host ops the registry fully declares; the stubbed families (see"
+        " protocol.HOST_PARTIAL) never appear here. */"
+    )
+    for entry in protocol.HOST_SHAPES.values():
+        body = "\n".join(_render_fields(entry["fields"], request=False))
+        doc = entry["doc"]
+        header = f"export interface {entry['ts']} {{"
+        sections.append((f"/** {doc} */\n" if doc else "") + f"{header}\n{body}\n}}")
+    for kind, spec in protocol.HOST_OPS.items():
+        if spec.subs is not None:
+            sections.extend(_sub_op_blocks(kind, host=True))
+            continue
+        block = _request_block(f"host_{kind}", spec)
+        if block:
+            sections.append(block)
+        sections.append(_result_block(f"host_{kind}", spec))
     return "\n\n".join(sections) + "\n"
 
 

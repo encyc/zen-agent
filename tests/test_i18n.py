@@ -123,7 +123,6 @@ def _literal_call_site_keys() -> set[str]:
     ships the raw key to a user — `t()` falls back to the key itself.
     """
     import ast
-
     from pathlib import Path
 
     keys: set[str] = set()

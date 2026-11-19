@@ -27,7 +27,7 @@ REPO = Path(__file__).resolve().parents[1]
 
 def _tui_catalog_keys() -> set[str]:
     sys.path.insert(0, str(REPO))
-    from zenagent.i18n import _catalogs  # noqa: PLC0415 - report-only script
+    from zenagent.i18n import _catalogs
 
     return set(_catalogs()["en"])
 

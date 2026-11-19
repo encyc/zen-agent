@@ -10,6 +10,7 @@ from zenagent.cli.rpc import protocol
 
 REPO = Path(__file__).resolve().parents[1]
 SERVER = REPO / "zenagent" / "cli" / "rpc" / "server.py"
+HOST = REPO / "zenagent" / "cli" / "rpc" / "host.py"
 
 
 def _dispatch_kinds() -> set[str]:
@@ -36,6 +37,25 @@ def test_dispatch_surface_is_frozen():
 
 def test_partial_stubs_carry_reasons():
     assert all(reason.strip() for reason in protocol.PARTIAL.values())
+
+
+def _host_kinds() -> set[str]:
+    """Every kind literal the host dispatch compares against."""
+    source = HOST.read_text(encoding="utf-8")
+    kinds = set(re.findall(r'kind == "([a-z_.]+)"', source))
+    for group in re.findall(r"kind in \(([^)]+)\)", source):
+        kinds |= set(re.findall(r'"([a-z_.]+)"', group))
+    # the host also routes the chat kinds it forwards to resident slots —
+    # those live in the chat frontier, not here.
+    return kinds
+
+
+def test_host_surface_is_frozen():
+    dispatched = _host_kinds()
+    declared = set(protocol.HOST_OPS) | set(protocol.HOST_PARTIAL)
+    assert dispatched - declared == set(), "new host kinds must register"
+    assert declared - dispatched == set(), "dead host registry entries must go"
+    assert all(reason.strip() for reason in protocol.HOST_PARTIAL.values())
 
 
 def test_ops_never_shrink_silently():

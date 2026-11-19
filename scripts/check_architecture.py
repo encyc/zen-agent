@@ -33,8 +33,10 @@ territory, lands back under the line cap, and fails — so "hide the logic in th
 dictionary" is not a way out.
 
 Scope: ``zenagent/**.py`` (the shipped package), ``desktop/src`` +
-``desktop/e2e`` + ``desktop/tests`` (TS/TSX). Stdlib only; exits 1 with the
-offending files listed.
+``desktop/e2e`` + ``desktop/tests`` (TS/TSX). ``*.gen.ts`` files are skipped:
+they are generated derivatives of the wire registry (see protocol.py and
+scripts/gen_rpc_ts.py), measured at their source like every catalog.
+Stdlib only; exits 1 with the offending files listed.
 """
 
 from __future__ import annotations
@@ -105,7 +107,11 @@ def _scan(roots: list[str], suffixes: tuple[str, ...]) -> dict[str, Measure]:
             continue
         for path in base.rglob("*"):
             if path.suffix in suffixes and path.is_file():
-                if "__pycache__" in path.parts or "node_modules" in path.parts:
+                if (
+                    "__pycache__" in path.parts
+                    or "node_modules" in path.parts
+                    or path.name.endswith(".gen.ts")
+                ):
                     continue
                 sizes[str(path.relative_to(REPO))] = _measure(path)
     return sizes
