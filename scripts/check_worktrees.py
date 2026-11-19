@@ -92,7 +92,7 @@ def _worktrees() -> list[dict]:
 def _is_merged(commit: str, primary: str) -> bool:
     return subprocess.run(
         ["git", "merge-base", "--is-ancestor", commit, primary],
-        cwd=REPO, capture_output=True, text=True,
+        cwd=REPO, capture_output=True, text=True, check=False,
     ).returncode == 0
 
 
