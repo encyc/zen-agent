@@ -5,6 +5,40 @@ matches the release tag; older history is in the repository tags and commits.
 
 ## Unreleased
 
+### Added
+
+- **The RPC wire contract has a single source of truth.** `zenagent/cli/rpc/
+  protocol.py` declares every chat-server op — request fields with types and
+  the payload keys each result carries — and `scripts/gen_rpc_ts.py` renders
+  those declarations as `desktop/src/rpc/wire.gen.ts` (envelope interfaces,
+  request payloads, the memory sub-op union, and the flat event-wire truth).
+  A freshness gate (`gen_rpc_ts.py --check`, wired into check.sh) fails when
+  the registry changes without a regeneration, so the four-hand-copy drift
+  the protocol carried is now mechanically impossible to extend. The
+  git/fs/memory/hello/cancel/tools/usage families are declared and their
+  handlers parse through the registry's request models (message-for-message
+  identical wire behavior; tests/test_rpc_v2.py's 85 cases still pass), and
+  types.ts re-exports the migrated shapes instead of hand-mirroring them —
+  dropping it under the 800-line cap and paying back its allowlist entry.
+  server.py's git family moved to the ops_git.py mixin (the file's split the
+  architecture audit planned), taking server.py to 747 lines and paying back
+  its allowlist entry too. A frontier test freezes the dispatch surface:
+  every kind must be fully declared or carry an explicit PARTIAL stub reason,
+  so the registry can only grow honestly.
+- **i18n call-site guards.** `t()` falls back to the key itself, so a
+  renamed or typo'd message key passed every existing parity test and still
+  shipped raw key strings to users. tests/test_i18n.py now walks every
+  `t`/`tn` call site in the package (AST-level, `tn` expanded to its
+  `.one`/`.other` pair) and fails if a hand-written key misses the catalog;
+  desktop/tests/i18nKeys.test.ts pins the GUI the same way (738 literal call
+  sites). Both guards carry a surface floor so a silently-broken scan cannot
+  pretend to protect anything. scripts/check_i18n.py reports the other
+  direction — orphan catalog keys no call site names (TUI 265, GUI 206 at
+  introduction) — as a report-only baseline, since dynamic and test-only
+  keys make a hard gate lie.
+
+
+
 ### Changed
 
 - **The desktop e2e monolith is split by flow.** `app.spec.ts` had grown to
