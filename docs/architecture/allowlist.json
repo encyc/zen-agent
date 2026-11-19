@@ -11,7 +11,6 @@
   "ts": {
     "desktop/src/state/appStore.ts": 1195,
     "desktop/src/dev/bridge.ts": 1040,
-    "desktop/e2e/app.spec.ts": 3317,
     "desktop/src/rpc/types.ts": 854
   },
   "_notes": {
@@ -26,7 +25,6 @@
       "zenagent/cli/rpc/server.py": "payback 2026-12-31 (git review ops dispatch + worktree preview scope; split the op families next)"
     },
     "ts": {
-      "desktop/e2e/app.spec.ts": "payback 2026-12-31 (split by flow; git review panel flows landed here)",
       "desktop/src/dev/bridge.ts": "payback 2026-12-31 (mirrors follow-up/continuation/interrupt frames, now git review mocks)",
       "desktop/src/state/appStore.ts": "payback 2026-12-31 (slice stores; follow-up + interrupt lane actions)",
       "desktop/src/rpc/types.ts": "payback 2026-12-31 (mirror modules per domain; git review types next)"

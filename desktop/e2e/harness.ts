@@ -6,10 +6,10 @@
  * Playwright-only navigation helper. */
 
 import { expect, type Page } from '@playwright/test'
-import { type BridgeState } from '../src/dev/bridge'
+import { type BridgeState, type PendingItemMock } from '../src/dev/bridge'
 
 export { initialState } from '../src/dev/bridge'
-export type { BridgeState, MemoryEntryMock } from '../src/dev/bridge'
+export type { BridgeState, MemoryEntryMock, PendingItemMock } from '../src/dev/bridge'
 
 /** Hand the page its scripted state before the app boots; the dev bootstrap
  * in `main.tsx` then installs the module-resolved bridge itself, so the
@@ -25,3 +25,26 @@ export async function boot(page: Page, state: BridgeState) {
   await page.goto('/')
   await expect(page.locator('[data-topbar-title]')).toHaveText(state.title)
 }
+
+/** Push an app event through the scripted bridge, as a real backend frame
+ * would; specs use it to fake turns, notices and other async flow. */
+export async function emitEvent(page: Page, event: Record<string, unknown>) {
+  await page.evaluate((payload) => {
+    window.__ZEN_E2E_EMIT__('rpc:frame', {
+      event: 'rpc:frame',
+      id: 1,
+      payload: { frame: { type: 'event', event: payload } },
+    })
+  }, event)
+}
+
+/** Replace the queued-message lane contents before boot. */
+export async function setPending(page: Page, items: PendingItemMock[]) {
+  await page.evaluate((pending) => {
+    window.__ZEN_E2E__.pending = pending
+  }, items)
+}
+
+/** Platform-true modifiers: ⌘ on macOS, Ctrl elsewhere. */
+export const paletteKey = process.platform === 'darwin' ? 'Meta+k' : 'Control+k'
+export const sidebarKey = process.platform === 'darwin' ? 'Meta+b' : 'Control+b'

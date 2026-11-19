@@ -10,7 +10,7 @@ import { handleSupervisor, handleSwarm, type SwarmMockState } from './swarmMock.
 import { handleZenFleet, type ZenMockState } from './zenMock.ts'
 type Lane = 'queue' | 'steer'
 
-interface PendingItemMock {
+export interface PendingItemMock {
   id: number
   lane: Lane
   text: string
