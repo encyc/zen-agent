@@ -3,6 +3,31 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+### Changed
+
+- **The desktop e2e monolith is split by flow.** `app.spec.ts` had grown to
+  3,317 lines and 104 tests — the highest-churn file in the repo, touched 68
+  times — so every feature merged into one shared bottleneck. The tests now
+  live in nine per-flow specs (home, composer, work-panel, layout, transcript,
+  settings, memory, session, git-panel), each far under the 800-line gate cap,
+  with the bridge helpers (`emitEvent`, `setPending`, the platform key consts)
+  promoted to `harness.ts` and `PendingItemMock` properly exported from the
+  bridge. The `app.spec.ts` allowlist entry is paid back and removed; the full
+  suite passes unchanged.
+
+### Added
+
+- **Worktree hygiene joins the gate.** Parallel feature work left merged,
+  clean worktrees behind — invisible in review, so they accumulated silently
+  (27 retirable at introduction). `scripts/check_worktrees.py` classifies
+  every registered worktree (retire / keep-active / keep-dirty / stray /
+  locked), and `check.sh` now fails while anything is retirable; `--apply`
+  removes those worktrees and `git branch -d`s their merged branches, and
+  `--report` lists everything harmlessly. Merged branches holding no worktree
+  are reported for a human naming decision, never auto-deleted.
+
 ## v0.14.0 — 2026-11-18
 
 **The desktop learns to review.** Review and Worktree are now one Git tab: a
