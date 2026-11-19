@@ -145,9 +145,11 @@ def test_view_kinds_agree_between_python_and_ts():
 
 def test_hello_result_shape_matches_ts():
     """The reviewer found hello answering without ``ok`` while TS required it —
-    three sources, three shapes, every suite green. Pin the result frame."""
+    three sources, three shapes, every suite green. Pin the result frame. The
+    TS mirror now lives in the generated wire.gen.ts (protocol.py is the
+    source); types.ts re-exports it."""
     rpc = RPC_PATH
-    ts = TS_PATH.read_text()
+    ts = TS_PATH.read_text() + (TS_PATH.parent / "wire.gen.ts").read_text()
     hello = re.search(r'if kind == "hello":.*?return True', rpc, re.DOTALL)
     assert hello, "hello branch moved"
     assert '"ok": True' in hello.group(0), "hello result must carry ok like every result frame"

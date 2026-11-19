@@ -10,46 +10,21 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import re
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict
 from pathlib import Path
 
 from zenagent.agent import Agent
-from zenagent.app import git_review
 from zenagent.app.approval_router import (
     approval_event_for,
     register_approval,
 )
 from zenagent.app.views import usage_total
-from zenagent.app.workspace import (
-    worktree_overview,
-    worktree_paths,
-)
 from zenagent.cli.rpc.codec import serialize_event
 from zenagent.cli.rpc.errors import failure_frame
-
-#: What `git_show` accepts: a hex object name or a symbolic ref the
-#: graph can produce (`HEAD`). Anything else is the caller's mistake.
-_GIT_COMMIT_RE = re.compile(r"^(?:[0-9a-fA-F]{4,40}|HEAD)$")
-
-
-def _git_scope(cwd: Path, requested: object) -> Path | None:
-    """Resolve the review scope: the project root by default, or one of its
-    known worktrees for a read-only preview. A forged/unknown path is refused
-    — the panel may only read a worktree git itself listed, never an arbitrary
-    directory the caller names."""
-    if requested is None:
-        return cwd
-    if not isinstance(requested, str) or requested == "":
-        return None
-    try:
-        root = Path(requested).expanduser().resolve()
-    except (OSError, RuntimeError):
-        return None
-    return root if root in worktree_paths(cwd) else None
 from zenagent.cli.rpc.ops_config import ConfigOps
 from zenagent.cli.rpc.ops_files import FilesOps
+from zenagent.cli.rpc.ops_git import GitOps
 from zenagent.cli.rpc.ops_plugins import PluginsOps
 from zenagent.cli.rpc.ops_secrets import SecretsOps
 from zenagent.cli.rpc.ops_session import SessionOps
@@ -132,7 +107,9 @@ def _usage(agent: Agent) -> dict:
     }
 
 
-class RpcServer(FilesOps, SessionOps, PluginsOps, ConfigOps, SecretsOps, SkillsOps):
+class RpcServer(
+    FilesOps, SessionOps, PluginsOps, ConfigOps, SecretsOps, SkillsOps, GitOps
+):
     """Reads requests, streams agent events, writes one result per request."""
 
     def __init__(
@@ -546,143 +523,15 @@ class RpcServer(FilesOps, SessionOps, PluginsOps, ConfigOps, SecretsOps, SkillsO
             self._memory_request(request, request_id)
             return True
         if kind == "git_worktrees":
-            self._send(
-                {
-                    "type": "result",
-                    "id": request_id,
-                    "ok": True,
-                    "worktree": worktree_overview(self.cwd),
-                }
-            )
-            return True
+            return self._git_worktrees(request_id)
         if kind == "git_changes":
-            # The panel polls this while a run streams; the shell-out must
-            # leave the event loop free (see test_git_ops_run_off_loop). The
-            # optional worktree is a read-only preview of a linked checkout.
-            scope = _git_scope(self.cwd, request.get("worktree"))
-            if scope is None:
-                self._send(
-                    {
-                        "type": "error",
-                        "id": request_id,
-                        "message": "git_changes needs a known worktree",
-                    }
-                )
-                return True
-            try:
-                result = await asyncio.to_thread(git_review.changes, scope)
-            except Exception as exc:  # noqa: BLE001 - the frame is the failure surface
-                self._send(
-                    failure_frame(
-                        request_id,
-                        code="git_failed",
-                        message="git op failed",
-                        exc=exc,
-                        op=kind,
-                    )
-                )
-            else:
-                self._send(
-                    {"type": "result", "id": request_id, "ok": True, "changes": result}
-                )
-            return True
+            return await self._git_changes(request, request_id, kind)
         if kind == "git_log":
-            try:
-                limit = int(request.get("limit") or 100)
-                skip = int(request.get("skip") or 0)
-            except (TypeError, ValueError):
-                self._send(
-                    {"type": "error", "id": request_id, "message": "git_log needs numbers"}
-                )
-                return True
-            try:
-                result = await asyncio.to_thread(
-                    git_review.log, self.cwd, limit=limit, skip=skip
-                )
-            except Exception as exc:  # noqa: BLE001 - the frame is the failure surface
-                self._send(
-                    failure_frame(
-                        request_id,
-                        code="git_failed",
-                        message="git op failed",
-                        exc=exc,
-                        op=kind,
-                    )
-                )
-            else:
-                self._send(
-                    {"type": "result", "id": request_id, "ok": True, "log": result}
-                )
-            return True
+            return await self._git_log(request, request_id, kind)
         if kind == "git_show":
-            commit = request.get("commit")
-            if not isinstance(commit, str) or not _GIT_COMMIT_RE.match(commit):
-                self._send(
-                    {
-                        "type": "error",
-                        "id": request_id,
-                        "message": "git_show needs a commit hash",
-                    }
-                )
-                return True
-            try:
-                result = await asyncio.to_thread(git_review.show, self.cwd, commit)
-            except Exception as exc:  # noqa: BLE001 - the frame is the failure surface
-                self._send(
-                    failure_frame(
-                        request_id,
-                        code="git_failed",
-                        message="git op failed",
-                        exc=exc,
-                        op=kind,
-                    )
-                )
-            else:
-                self._send(
-                    {"type": "result", "id": request_id, "ok": True, "show": result}
-                )
-            return True
+            return await self._git_show(request, request_id, kind)
         if kind == "git_diff":
-            path = request.get("path")
-            if not isinstance(path, str) or not path:
-                self._send(
-                    {
-                        "type": "error",
-                        "id": request_id,
-                        "message": "git_diff needs a path",
-                    }
-                )
-                return True
-            staged = request.get("staged") is True
-            scope = _git_scope(self.cwd, request.get("worktree"))
-            if scope is None:
-                self._send(
-                    {
-                        "type": "error",
-                        "id": request_id,
-                        "message": "git_diff needs a known worktree",
-                    }
-                )
-                return True
-            try:
-                result = await asyncio.to_thread(
-                    git_review.diff, scope, path, staged=staged
-                )
-            except Exception as exc:  # noqa: BLE001 - the frame is the failure surface
-                self._send(
-                    failure_frame(
-                        request_id,
-                        code="git_failed",
-                        message="git op failed",
-                        exc=exc,
-                        op=kind,
-                    )
-                )
-            else:
-                self._send(
-                    {"type": "result", "id": request_id, "ok": True, "diff": result}
-                )
-            return True
+            return await self._git_diff(request, request_id, kind)
         if kind == "secrets":
             await self._secrets(request, request_id)
             return True

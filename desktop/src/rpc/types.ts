@@ -38,13 +38,6 @@ export type {
   SwarmWorkState,
 } from './types-swarm.ts'
 
-export interface Usage {
-  input: number
-  output: number
-  cache_read: number
-  cache_write: number
-  cost: number
-}
 
 export type Mode = 'plan' | 'ask' | 'auto'
 
@@ -117,14 +110,47 @@ export const REQUEST_KINDS = [
   'usage',
   'workspace', 'zen_fleet',
 ] as const
+// ---- wire registry mirrors (generated) ------------------------------------
+// Shapes below come from zenagent/cli/rpc/protocol.py via
+// scripts/gen_rpc_ts.py (wire.gen.ts): edit the registry, not these. The
+// frontend refinements that stay handwritten (e.g. WorkspaceFile's
+// discriminated union) must remain assignable to the flat wire types.
+import type { MemoryCreateResult, Usage } from './wire.gen.ts'
+export type {
+  CommandEntry,
+  FsIndexResult,
+  FsListResult,
+  GitChangesPayload,
+  GitChangesResult,
+  GitCommit,
+  GitDiffPayload,
+  GitDiffResult,
+  GitFileChange,
+  GitLogResult,
+  GitShowFile,
+  GitShowPayload,
+  GitShowResult,
+  GitWorktreesResult,
+  HelloResult,
+  MemoryDeleteResult,
+  MemoryEntry,
+  MemoryCreateResult,
+  MemoryListResult,
+  MemoryUpdateResult,
+  ToolRow,
+  ToolsResult,
+  Usage,
+  WorkspaceEntry,
+  WorktreeEntry,
+  WorktreeOverview,
+} from './wire.gen.ts'
+
+/** create and update return the same entry envelope; consumers knew this
+ * shape by one name (used for both ops), so keep it importable as such. */
+export type MemoryEntryResult = MemoryCreateResult
+
 export type RequestKind = (typeof REQUEST_KINDS)[number]
 
-export interface HelloResult {
-  type: 'result'
-  id: string
-  ok: true
-  protocol_version: number
-}
 
 // ---- prompt --------------------------------------------------------------
 
@@ -258,10 +284,6 @@ export interface ModelEntry {
   current: boolean
 }
 
-export interface CommandEntry {
-  name: string
-  description: string
-}
 
 // ---- settings secrets ------------------------------------------------------
 
@@ -353,19 +375,7 @@ export interface SkillReadResult {
   truncated: boolean
 }
 
-/** One tool the connected agent exposes (Tools page, read-only). */
-export interface ToolRow {
-  name: string
-  description: string
-  approval: string
-}
 
-export interface ToolsResult {
-  type: 'result'
-  id: string
-  ok: true
-  tools: ToolRow[]
-}
 
 // ---- plugins -------------------------------------------------------------
 
@@ -612,23 +622,7 @@ export interface SwarmTranscriptResult {
 
 // ---- workspace ---------------------------------------------------------------
 
-export interface WorkspaceEntry {
-  name: string
-  /** Slash path relative to the project root. */
-  path: string
-  kind: 'dir' | 'file'
-  size: number
-  hidden: boolean
-}
 
-export interface FsListResult {
-  type: 'result'
-  id: string
-  ok: true
-  path: string
-  entries: WorkspaceEntry[]
-  truncated: boolean
-}
 
 export type WorkspaceFile =
   | { path: string; kind: 'text'; size: number; text: string; total_lines: number; truncated: boolean }
@@ -643,158 +637,26 @@ export interface FsReadResult {
   file: WorkspaceFile
 }
 
-export interface FsIndexEntry {
-  path: string
-  kind: 'dir' | 'file'
-}
 
-export interface FsIndexResult {
-  type: 'result'
-  id: string
-  ok: true
-  entries: FsIndexEntry[]
-  truncated: boolean
-}
 
-export interface MemoryEntry {
-  id: string
-  title: string
-  body: string
-  created: string
-  updated: string
-  source: string
-}
 
-export interface MemoryListResult {
-  type: 'result'
-  id: string
-  ok: true
-  entries: MemoryEntry[]
-}
 
-export interface MemoryEntryResult {
-  type: 'result'
-  id: string
-  ok: true
-  entry: MemoryEntry
-}
 
-export interface MemoryDeleteResult {
-  type: 'result'
-  id: string
-  ok: true
-  deleted: boolean
-}
 
-export interface WorktreeEntry {
-  path: string
-  head: string
-  branch: string
-  /** The branch tip's commit time (unix seconds); 0 when unknown/unborn.
-   * The panel sorts worktrees newest-first on this. */
-  timestamp: number
-  bare: boolean
-  detached: boolean
-  current: boolean
-}
 
-export interface WorktreeOverview {
-  root: string
-  is_repo: boolean
-  is_worktree: boolean
-  main: string
-  branch: string
-  worktrees: WorktreeEntry[]
-  status: { branch: string; staged: number; dirty: number; untracked: number; clean: boolean } | null
-}
 
-export interface GitWorktreesResult {
-  type: 'result'
-  id: string
-  ok: true
-  worktree: WorktreeOverview
-}
 
 // ---- git review panel --------------------------------------------------------
 
-/** One file of the changes list; counts are null for untracked (numstat
- * has nothing to say about them). */
-export interface GitFileChange {
-  path: string
-  state: 'staged' | 'unstaged' | 'untracked'
-  plus: number | null
-  minus: number | null
-}
 
-export interface GitChangesPayload {
-  is_repo: boolean
-  branch: string
-  files: GitFileChange[]
-  untracked_more: number
-}
 
-export interface GitChangesResult {
-  type: 'result'
-  id: string
-  ok: true
-  changes: GitChangesPayload
-}
 
-/** One file's unified diff: synthetic all-additions for untracked paths,
- * `missing` for a clean file, `binary`/`truncated` flags otherwise. */
-export interface GitDiffPayload {
-  text: string
-  binary: boolean
-  truncated: boolean
-  missing: boolean
-}
 
-export interface GitDiffResult {
-  type: 'result'
-  id: string
-  ok: true
-  diff: GitDiffPayload
-}
 
-/** One commit of the graph page: full hashes and parents (lane layout needs
- * them), plus the display fields. */
-export interface GitCommit {
-  hash: string
-  short: string
-  parents: string[]
-  subject: string
-  author: string
-  timestamp: number
-  refs: string[]
-}
 
-export interface GitLogResult {
-  type: 'result'
-  id: string
-  ok: true
-  log: { commits: GitCommit[] }
-}
 
-export interface GitShowFile {
-  path: string
-  additions: number
-  removals: number
-  diff: string
-}
 
-export interface GitShowPayload {
-  found: boolean
-  short: string
-  subject: string
-  files: GitShowFile[]
-}
 
-export interface GitShowResult {
-  type: 'result'
-  id: string
-  ok: true
-  show: GitShowPayload
-}
 
 // ---- ask -------------------------------------------------------------------
 

@@ -5,13 +5,11 @@
     "zenagent/app/swarm/manager.py": 911,
     "zenagent/agent/session.py": 896,
     "zenagent/limits.py": 963,
-    "zenagent/cli/tui/app.py": 822,
-    "zenagent/cli/rpc/server.py": 908
+    "zenagent/cli/tui/app.py": 822
   },
   "ts": {
     "desktop/src/state/appStore.ts": 1195,
-    "desktop/src/dev/bridge.ts": 1040,
-    "desktop/src/rpc/types.ts": 854
+    "desktop/src/dev/bridge.ts": 1040
   },
   "_notes": {
     "_readme": "Entries beyond the 800-line default cap, each recorded at real size +10. Catalog files (message dictionaries) are measured in entries against an 800-entry cap instead, so they no longer appear here — see scripts/check_architecture.py. The entries below must be paid back by 2026-12-31 (audit §6.4 follow-up plan: runtime assembly slice, swarm manager split, commands split, desktop store/spec splits).",
@@ -21,13 +19,11 @@
       "zenagent/app/swarm/manager.py": "payback 2026-12-31 (§6.4: room/manager split)",
       "zenagent/agent/session.py": "payback 2026-12-31 (title/pin sidecar split; session-activity rule keeps a live listing; +10 from session-hardening merge)",
       "zenagent/limits.py": "payback 2026-12-31 (goal knob registry split; config field refusals)",
-      "zenagent/cli/tui/app.py": "payback 2026-12-31 (surface launchers; split pickers/panels next)",
-      "zenagent/cli/rpc/server.py": "payback 2026-12-31 (git review ops dispatch + worktree preview scope; split the op families next)"
+      "zenagent/cli/tui/app.py": "payback 2026-12-31 (surface launchers; split pickers/panels next)"
     },
     "ts": {
       "desktop/src/dev/bridge.ts": "payback 2026-12-31 (mirrors follow-up/continuation/interrupt frames, now git review mocks)",
-      "desktop/src/state/appStore.ts": "payback 2026-12-31 (slice stores; follow-up + interrupt lane actions)",
-      "desktop/src/rpc/types.ts": "payback 2026-12-31 (mirror modules per domain; git review types next)"
+      "desktop/src/state/appStore.ts": "payback 2026-12-31 (slice stores; follow-up + interrupt lane actions)"
     }
   }
 }

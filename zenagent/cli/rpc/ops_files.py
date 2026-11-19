@@ -11,6 +11,7 @@ from zenagent.app.workspace import (
     read_file,
     workspace_files,
 )
+from zenagent.cli.rpc import protocol
 from zenagent.cli.rpc.errors import failure_frame
 
 
@@ -30,10 +31,20 @@ class FilesOps:
     """Mixin: see server.py for the composed RpcServer."""
 
     def _fs_request(self, request: dict, request_id, op: str) -> bool:
-        path = request.get("path", "")
-        if not isinstance(path, str):
+        try:
+            req = protocol.FsPathRequest.from_payload(request)
+        except protocol.WireError:
             # Same refusal shape as an OS error, so the client can localize
             # it (`fs_error`) instead of printing a one-off server string.
+            self._send(
+                _fs_error(request_id, op, ValueError("path must be a string"), "")
+            )
+            return True
+        # `.get("path", "")` semantics: absent → "", JSON null → refused.
+        path = req.path if req.path is not None else ""
+        if path == "" and request.get("path", "") is None:
+            path = None
+        if not isinstance(path, str):
             self._send(
                 _fs_error(request_id, op, ValueError("path must be a string"), "")
             )
