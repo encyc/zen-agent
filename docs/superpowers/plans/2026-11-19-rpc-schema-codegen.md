@@ -106,3 +106,18 @@ mock 形状从此被编译期检查。每完成一域更新 allowlist（844 行�
   `AgentEventWire`；types-events.ts 的判别 union 保留为前端精化，后续域迁移再收。
 - **负范围维持**：rust 侧不动；RpcHost（swarm/zen/runs/supervisor/workspace）是
   独立协议面，留待第二批 registry。
+
+### 落地记录 · 批次 2（2026-11-19 续）
+
+- **PARTIAL 21 → 12**：follow_up/steer/prompt/model/mode/prefs/set_pref/models/
+  commands 全部声明并在 server.py / ops_config.py 完成接线；session 17 个子 op
+  全量声明（判别式请求 union + 逐子结果信封，生成器对任意 subs 族泛化）。
+- **`ok_mutable`**：model/mode/prompt 的拒绝是正常结局，信封 `ok` 生成
+  `boolean` 而非字面 true。
+- **`STRING_LAX`** 词汇：scope/format 等 handler 容忍垃圾字段的声明（服务端
+  `or` 默认/`==` 语义），生成 `string` + 容忍注记。
+- **一次诚实的回退**：session 曾加运行时预解析钩子，test_rpc_v2 的
+  busy-次序测试立刻抓红（busy 时应答 `session_busy` 而非形状抱怨）——撤销钩子，
+  保持"声明 ≠ 运行时接线"的区分（与 memory 同待遇）。inline 检查仍是执法者。
+- **TS 迁移**：ModelEntry、SessionSummary 转 wire.gen.ts re-export（675 行）；
+  SessionListResult 信封保留手写（scope 的字面量 union 是前端精化）。

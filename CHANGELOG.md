@@ -7,6 +7,20 @@ matches the release tag; older history is in the repository tags and commits.
 
 ### Added
 
+- **Nine more ops join the wire registry, and the session family is fully
+  declared.** follow_up, steer, prompt (with its images list and
+  run-outcome envelope), model, mode, prefs/set_pref, models and commands
+  now carry request models the handlers parse through — `ok` correctly
+  emits as `boolean` on the three ops whose refusals are normal outcomes.
+  All 17 session sub-operations (list through clear_todos) are declared
+  with their discriminated request union and per-sub result envelopes in
+  the generated types; the handlers keep their inline checks because the
+  busy-refusal precedence (a busy session answers `session_busy` before any
+  shape complaint) is behavior the registry must not reorder. The frontier
+  of declared-but-stubbed kinds drops from 21 to 12.
+- **ModelEntry and SessionSummary migrate to the generated types.** Both
+  were hand-mirrors of py dataclasses; they are now re-exports of
+  wire.gen.ts, keeping types.ts (675 lines) well under the gate cap.
 - **The RPC wire contract has a single source of truth.** `zenagent/cli/rpc/
   protocol.py` declares every chat-server op — request fields with types and
   the payload keys each result carries — and `scripts/gen_rpc_ts.py` renders
