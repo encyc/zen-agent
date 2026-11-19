@@ -26,10 +26,6 @@ def isolate_config(monkeypatch):
     monkeypatch.setattr(
         "zenagent.app.bootstrap.load_user_config", lambda *a, **k: UserConfig()
     )
-    monkeypatch.setattr(
-        "zenagent.app.bootstrap.load_user_config",
-        lambda *args, **kwargs: UserConfig(),
-    )
 
 
 @pytest.fixture(autouse=True)

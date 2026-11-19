@@ -1,4 +1,4 @@
-"""Sidebar work panel: six sections, keyed rows and live work rows.
+"""Sidebar work panel: eight sections, keyed rows and live work rows.
 
 The sidebar is the "what is happening right now" surface: session/model/runtime
 info, the todo summary (when the side panel owns it), live subagents and
@@ -73,7 +73,7 @@ async def open_sidebar(app: ZenAgentApp, pilot) -> None:
     await pilot.pause()
 
 
-async def test_sidebar_mounts_the_six_sections_in_order(fake_runtime):
+async def test_sidebar_mounts_the_eight_sections_in_order(fake_runtime):
     app = ZenAgentApp(fake_runtime)
     async with app.run_test(size=(140, 40)) as pilot:
         await pilot.pause()

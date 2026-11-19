@@ -43,6 +43,8 @@ jobs:
           cache: pnpm
           cache-dependency-path: desktop/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      # The style-token guard runs nowhere else; without this step it can rot.
+      - run: pnpm lint:tokens
       - run: pnpm test
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium

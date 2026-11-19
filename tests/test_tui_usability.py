@@ -303,7 +303,7 @@ async def test_enter_on_a_value_hint_accepts_and_submits(fake_runtime):
             await pilot.press(char)
         await pilot.press("space")
         await pilot.pause()
-        await pilot.press("down", "down")  # plan -> ask -> zen
+        await pilot.press("down", "down")  # plan -> ask -> auto
         await pilot.press("enter")
         await pilot.pause()
         await pilot.pause()

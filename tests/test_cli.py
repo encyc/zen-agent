@@ -25,10 +25,6 @@ def isolate_user_config(monkeypatch):
     monkeypatch.setattr(
         "zenagent.app.bootstrap.load_user_config", lambda *a, **k: UserConfig()
     )
-    # Assembly moved into the Runtime, so that is where the config is read.
-    monkeypatch.setattr(
-        "zenagent.app.bootstrap.load_user_config", lambda *a, **k: UserConfig()
-    )
 
 
 def fake_stream(text: str = "Hello from fake"):

@@ -32,10 +32,6 @@ def isolate_user_config(monkeypatch):
     monkeypatch.setattr(
         "zenagent.app.bootstrap.load_user_config", lambda *a, **k: UserConfig()
     )
-    monkeypatch.setattr(
-        "zenagent.app.bootstrap.load_user_config",
-        lambda *args, **kwargs: UserConfig(),
-    )
 
 
 def model() -> Model:
