@@ -407,9 +407,7 @@ async def test_bootstrap_wires_the_task_budget_from_config(
         "zenagent.app.bootstrap.load_user_config",
         lambda *args, **kwargs: UserConfig(
             default_model="deepseek-flash",
-            task_max_turns=5,
             task_timeout_s=120,
-            task_max_cost=1.5,
             task_max_transcript_bytes=4096,
             task_max_transcript_file_bytes=2048,
         ),
@@ -418,9 +416,8 @@ async def test_bootstrap_wires_the_task_budget_from_config(
 
     await runtime_factory()
 
-    assert captured["max_turns"] == 5
+    assert "max_turns" not in captured and "max_cost" not in captured
     assert captured["timeout_s"] == 120
-    assert captured["max_cost"] == 1.5  # [task].max_cost wins over the session cap
     assert callable(captured["live_tools"]) and callable(captured["mode"])
     assert callable(captured["resolve_model"])
     assert captured["limits"] == SubagentLimits(

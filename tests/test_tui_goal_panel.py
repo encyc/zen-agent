@@ -18,11 +18,8 @@ def _view(status="active") -> GoalView:
         status=status,
         check="pytest -x",
         turns_used=3,
-        max_turns=40,
         tokens_used=1200,
-        max_tokens=0,
         wall_seconds=95.0,
-        max_wall_seconds=0,
         last_verdict="pass",
         last_reason="tests green",
         updated_at=1,
@@ -47,7 +44,7 @@ async def test_hud_click_opens_panel_with_full_fields(fake_runtime, monkeypatch)
         text = app.screen._body()
         assert "fix the flaky tests" in text
         assert "pytest -x" in text
-        assert "3/40" in text
+        assert "3 turns" in text
         assert "pass" in text
 
 

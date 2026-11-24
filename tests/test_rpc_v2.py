@@ -1531,8 +1531,8 @@ async def test_a_limit_write_whose_config_no_longer_parses_is_config_failed(
                 "type": "limits",
                 "id": "l",
                 "op": "set",
-                "key": "limits.agent.max_turns",
-                "value": 40,
+                "key": "limits.agent.loop_guard_threshold",
+                "value": 4,
             }
         ],
     )

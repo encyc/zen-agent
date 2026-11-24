@@ -105,16 +105,12 @@ class AgentConfig:
     get_followup_messages: Callable[[], Awaitable[list[Message]]] | None = None
     transform_context: Callable[[list[Message]], Awaitable[list[Message]]] | None = None
     stream_fn: StreamFn | None = None  # None -> stream_fn_for(model)
-    #: Hard cap on provider requests in one run (None -> module default).
-    max_turns: int | None = None
     #: Identical tool-call batches in a row before the run is interrupted
     #: (``[limits.agent].loop_guard_threshold``).
     loop_guard_threshold: int = LOOP_GUARD_THRESHOLD
     #: Per-result byte budget before head+tail truncation
     #: (``[limits.agent].max_result_bytes``).
     max_result_bytes: int = MAX_RESULT_BYTES
-    #: Hard cap on accumulated spend in USD for one run (None -> unlimited).
-    max_cost: float | None = None
     #: Extra attempts for transient assistant-call failures (0 -> no retry).
     retries: int = 0
     #: Observer for swallowed retry attempts:
@@ -132,31 +128,17 @@ class AgentState:
 
     ``termination`` records *why* the last run ended. It is deliberately not a
     ``StopReason``: that type describes one provider response, while this
-    describes the run (e.g. ``"max_turns"``), and the session JSON stays
+    describes the run (e.g. ``"loop_detected"``), and the session JSON stays
     unchanged.
     """
 
     messages: list[Message] = field(default_factory=list)
     termination: str | None = None
-    #: Spend attributed to subagents this run (counted by the cost guard but
-    #: not by the parent transcript's own usage).
-    subagent_spend: float = 0.0
 
-
-#: Safety net: a model that keeps requesting tools can never spin forever.
-_MAX_TURNS = 100
 
 #: How many consecutive length-truncated turns we re-issue before giving up.
 _MAX_LENGTH_FAILURES = 2
 
-
-def _run_cost(messages: list[Message]) -> float:
-    """Total spend of the assistant turns produced by this run so far."""
-    return sum(
-        message.usage.cost.total
-        for message in messages
-        if isinstance(message, AssistantMessage)
-    )
 
 
 async def agent_loop(
@@ -205,19 +187,6 @@ async def agent_loop(
         while True:
             if abort is not None and abort.aborted:
                 termination = "aborted"
-                break
-            turn_limit = (
-                config.max_turns if config.max_turns is not None else _MAX_TURNS
-            )
-            if turns >= turn_limit:
-                # A pathological model loop, or the caller's explicit cap.
-                termination = "max_turns"
-                break
-            run_spend = _run_cost(new_messages) + state.subagent_spend
-            if config.max_cost is not None and run_spend > config.max_cost:
-                # Budget already spent: finish here rather than open a new turn,
-                # so the transcript keeps every tool call paired with a result.
-                termination = "max_cost"
                 break
             turns += 1
 
@@ -383,12 +352,6 @@ async def agent_loop(
                 stats["calls"] += 1
                 stats["errors"] += int(bool(outcome.result.is_error))
                 stats["ms"] += outcome.duration_ms
-                try:
-                    state.subagent_spend += float(
-                        (outcome.result.details or {}).get("subagent_cost") or 0.0
-                    )
-                except (TypeError, ValueError):  # pragma: no cover - defensive
-                    pass
                 yield AgentEvent(
                     type="tool_execution_end",
                     tool_call_id=outcome.call.id,
@@ -405,12 +368,16 @@ async def agent_loop(
                 termination = "tool_terminate"
                 break
             if length_failures >= _MAX_LENGTH_FAILURES:
-                break  # truncation is not resolving: stop instead of re-asking forever
+                # Truncation is not resolving: re-asking cannot help, so the run
+                # ends as what it is (output that never fit) rather than as a
+                # success the caller cannot distinguish from a real answer.
+                termination = "length"
+                break
 
             # A batch identical to the previous one asks the world for the same
             # thing again: a streak of them is a run that cannot make progress.
-            # The detector reports; the loop stops here rather than nudging the
-            # model and spending the rest of the budget watching it repeat.
+            # The detector reports it and the loop stops; nothing is written
+            # into the transcript to say so.
             runaway = detector.observe(calls)
             if runaway is not None:
                 termination = "loop_detected"

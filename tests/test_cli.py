@@ -355,23 +355,23 @@ def looping_tool_stream(tool_name: str = "ghost"):
     return stream
 
 
-def test_guardrail_flags_reach_the_agent(monkeypatch):
+def test_removed_guardrail_flags_are_rejected(monkeypatch):
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
-    captured: dict = {}
-    _patch_bootstrap(monkeypatch, fake_stream(), captured)
+    _patch_bootstrap(monkeypatch, fake_stream(), {})
 
-    assert cli_main.main(["-p", "hi", "--max-turns", "3", "--max-cost", "0.25"]) == 0
-    agent = captured["agent"]
-    assert (agent.max_turns, agent.max_cost) == (3, 0.25)
+    with pytest.raises(SystemExit):
+        cli_main.main(["-p", "hi", "--max-turns", "3"])
+    with pytest.raises(SystemExit):
+        cli_main.main(["-p", "hi", "--max-cost", "0.25"])
 
 
-def test_max_turns_exhaustion_exits_one(monkeypatch, capsys):
+def test_a_runaway_exits_one(monkeypatch, capsys):
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
     _patch_bootstrap(monkeypatch, looping_tool_stream(), {})
 
-    assert cli_main.main(["-p", "hi", "--max-turns", "1"]) == 1
+    assert cli_main.main(["-p", "hi"]) == 1
     err = capsys.readouterr().err
-    assert "stopped early (max_turns)" in err
+    assert "loop_detected" in err
 
 
 def test_json_reports_termination(monkeypatch, capsys):
@@ -511,16 +511,17 @@ def test_trace_flag_writes_jsonl(monkeypatch, tmp_path):
     _patch_bootstrap(monkeypatch, looping_tool_stream(), {})
     trace_path = tmp_path / "run.jsonl"
 
-    assert cli_main.main(["-p", "hi", "--max-turns", "1", "--trace", str(trace_path),
+    assert cli_main.main(["-p", "hi", "--trace", str(trace_path),
                           "--cwd", str(tmp_path)]) == 1
     lines = trace_path.read_text(encoding="utf-8").splitlines()
     assert lines
     payloads = [json.loads(line) for line in lines]
     assert any(p["type"] == "turn_start" for p in payloads)
-    assert [p["type"] for p in payloads if p["type"].startswith("tool_")] == [
-        "tool_start",
-        "tool_end",
-    ]
+    tool_events = [p["type"] for p in payloads if p["type"].startswith("tool_")]
+    # The looping stream replays until the runaway guard stops it: every round
+    # pairs one start with one end, and the first round is in order.
+    assert tool_events[:2] == ["tool_start", "tool_end"]
+    assert len(tool_events) % 2 == 0 and len(tool_events) >= 2
 
 
 # ---------------------------------------------------------------------------
@@ -848,7 +849,7 @@ def test_repl_launch_forwards_thinking_metrics_and_images(monkeypatch, tmp_path)
 
 
 def test_repl_launch_forwards_budget_flags(monkeypatch):
-    """--max-turns/--max-cost/--retries must reach the REPL like the TUI."""
+    """--retries must reach the REPL like the TUI; the turn/spend caps are gone."""
     import zenagent.cli.repl as repl_module
 
     captured: dict = {}
@@ -859,12 +860,9 @@ def test_repl_launch_forwards_budget_flags(monkeypatch):
 
     monkeypatch.setattr(repl_module, "repl", fake_repl)
 
-    assert cli_main.main(
-        ["--no-tui", "--max-turns", "3", "--max-cost", "0.5", "--retries", "2"]
-    ) == 0
+    assert cli_main.main(["--no-tui", "--retries", "2"]) == 0
 
-    assert captured["max_turns"] == 3
-    assert captured["max_cost"] == 0.5
+    assert "max_turns" not in captured and "max_cost" not in captured
     assert captured["retries"] == 2
 
 

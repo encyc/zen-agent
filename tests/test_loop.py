@@ -939,71 +939,28 @@ async def test_steering_queued_before_the_run_is_injected_at_start():
 # ---------------------------------------------------------------------------
 
 
-class LoopingToolStream:
-    """Always asks for another tool call; records request count and spend."""
-
-    def __init__(self, cost_per_turn: float = 0.0) -> None:
-        self.cost_per_turn = cost_per_turn
-        self.calls = 0
-
-    async def __call__(self, model, messages, tools, options):
-        self.calls += 1
-        partial = AssistantMessage(
-            content=[],
-            provider=model.provider,
-            model=model.id,
-            usage=Usage(cost=Cost(total=self.cost_per_turn)),
-            stop_reason="pending",
-            timestamp=0,
-        )
-        yield AssistantEvent(type="start", partial=partial)
-        call = ToolCall(id=f"c{self.calls}", name="echo", arguments={})
-        partial.content.append(call)
-        yield AssistantEvent(type="toolcall_end", partial=partial, tool_call=call)
-        partial.stop_reason = "tool_use"
-        yield AssistantEvent(type="done", partial=partial, reason="tool_use")
-
-
-async def test_max_turns_stops_before_the_next_request():
-    stream = LoopingToolStream()
-
+async def test_a_long_run_reaches_its_own_stop():
+    """120 rounds used to hit the kernel's 100-request ceiling; now the model
+    decides when the run is over."""
     async def echo(name, args, abort, on_update=None):
         return ToolResultAgent(content=[TextContent(text="ok")])
 
+    # distinct arguments per round: a legitimately long run, not a runaway
+    script = [
+        [call_tool(f"c{i}", "echo", {"i": i}), finish("tool_use")] for i in range(120)
+    ]
+    script.append([say("done"), finish("stop")])
+    stream = ScriptedStream(script)
     state = AgentState()
-    await run(
-        "go",
-        state,
-        make_config(
-            stream,
-            tools=[make_tool("echo", echo)],
-            max_turns=2,
-        ),
-    )
-    assert stream.calls == 2
-    assert state.termination == "max_turns"
-    calls = [b.id for m in state.messages if isinstance(m, AssistantMessage) for b in m.content if isinstance(b, ToolCall)]
-    results = [m.tool_call_id for m in state.messages if isinstance(m, ToolResultMessage)]
-    assert calls == results == ["c1", "c2"]
+    await run("go", state, make_config(stream, tools=[make_tool("echo", echo)]))
+
+    assert state.termination == "stop"
+    assert len(stream.calls) == 121
 
 
-async def test_max_cost_stops_after_the_turn_that_crosses_it():
-    stream = LoopingToolStream(cost_per_turn=0.01)
-
-    async def echo(name, args, abort, on_update=None):
-        return ToolResultAgent(content=[TextContent(text="ok")])
-
-    state = AgentState()
-    await run(
-        "go",
-        state,
-        make_config(stream, tools=[make_tool("echo", echo)], max_cost=0.005),
-    )
-    assert stream.calls == 1  # budget check happens before the next request
-    assert state.termination == "max_cost"
-    calls = [b.id for m in state.messages if isinstance(m, AssistantMessage) for b in m.content if isinstance(b, ToolCall)]
-    results = [m.tool_call_id for m in state.messages if isinstance(m, ToolResultMessage)]
-    assert calls == results == ["c1"]  # transcript still paired
+async def test_no_spend_ceiling_exists():
+    assert "max_cost" not in AgentConfig.__dataclass_fields__
+    assert "max_turns" not in AgentConfig.__dataclass_fields__
 
 
 async def test_default_guardrails_do_not_change_normal_runs():
@@ -1404,7 +1361,7 @@ async def test_async_bash_and_wait_in_the_same_batch():
     assert "same-batch" in ends[1].result.content[0].text
 
 
-async def test_subagent_spend_counts_toward_max_cost():
+async def test_subagent_spend_is_reported_but_never_ends_the_run():
     async def taskish(name, args, abort, on_update=None):
         return ToolResultAgent(
             content=[TextContent(text="<task-result …>")],
@@ -1418,14 +1375,11 @@ async def test_subagent_spend_counts_toward_max_cost():
         ]
     )
     state = AgentState()
-    await run(
-        "go",
-        state,
-        make_config(stream, tools=[make_tool("taskish", taskish)], max_cost=0.01),
-    )
-    assert state.termination == "max_cost"
-    assert state.subagent_spend == 0.05
-    assert len(stream.calls) == 1, "the guard stops before the next provider call"
+    await run("go", state, make_config(stream, tools=[make_tool("taskish", taskish)]))
+
+    assert state.termination == "stop"
+    assert len(stream.calls) == 2, "spend is a report, not a ceiling"
+
 
 
 # ---------------------------------------------------------------------------

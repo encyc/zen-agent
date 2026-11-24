@@ -133,8 +133,6 @@ class ZenFleet:
         report_limit: int = REPORT_LIMIT,
         worker_mode: str = "inherit",
         supervisor: Supervisor | None = None,
-        max_cost: float | None = None,
-        max_turns: int | None = None,
         ask: Callable | None = None,
     ) -> None:
         self.chat = chat
@@ -165,8 +163,6 @@ class ZenFleet:
         self.supervisor = supervisor
         #: ``[task]`` budgets: a worker is a spawned agent, so it takes the same
         #: caps the task tool gives its children. None leaves the runtime default.
-        self.max_cost = max_cost
-        self.max_turns = max_turns
         #: The slot's ask channel. A downgraded worker (auto → ask) must be able
         #: to reach a human; without it the ask tool is a dead end.
         self.ask = ask
@@ -414,8 +410,6 @@ class ZenFleet:
                 profile=profile,
                 model_id=self._router_model_id(),
                 thinking=self._router_thinking(),
-                max_cost=self.max_cost,
-                max_turns=self.max_turns,
             ),
             views=False,
         )

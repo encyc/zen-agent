@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from zenagent.app.goal import GoalController, parse_goal_args
-from zenagent.app.views import GoalView, goal_limit_text
+from zenagent.app.views import GoalView
 from zenagent.i18n import t
 
 __all__ = ["run_goal_command"]
@@ -46,7 +46,7 @@ def run_goal_command(
 
     assert args.objective is not None
     return start_goal(
-        args.objective, check=args.check, max_turns=args.max_turns
+        args.objective, check=args.check
     )
 
 
@@ -59,10 +59,7 @@ def _goal_status(view: GoalView | None) -> str:
         status=view.status,
         check=view.check or "-",
         turns=view.turns_used,
-        max_turns=goal_limit_text(view.max_turns),
         tokens=view.tokens_used,
-        max_tokens=goal_limit_text(view.max_tokens),
         wall=int(view.wall_seconds),
-        max_wall=goal_limit_text(view.max_wall_seconds),
         last=f"{view.last_verdict or 'none'} — {view.last_reason or 'no verdict yet'}",
     )

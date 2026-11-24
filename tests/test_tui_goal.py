@@ -20,11 +20,8 @@ def _view() -> GoalView:
         status="active",
         check="pytest -q",
         turns_used=3,
-        max_turns=40,
         tokens_used=100,
-        max_tokens=2000,
         wall_seconds=10.0,
-        max_wall_seconds=3600,
         last_verdict="not_met",
         last_reason="2 failed",
         updated_at=1,
@@ -44,12 +41,11 @@ def test_goal_hud_shows_status_and_budget():
     assert "fix tests" in hud.render_text()
 
 
-def test_goal_hud_shows_unlimited_budget():
-    from dataclasses import replace
-
+def test_goal_hud_reports_usage_without_a_ceiling():
     hud = GoalHud()
-    hud.set_goal(replace(_view(), max_turns=0, max_tokens=0))
-    assert "∞" in hud.render_text()
+    hud.set_goal(_view())
+    text = hud.render_text()
+    assert "turns" in text and "∞" not in text
 
 
 def test_goal_message_renders_compactly():

@@ -63,8 +63,8 @@ async def test_get_lists_every_knob_with_defaults(runtime_factory, config_file):
         "goal",
     ]
     knobs = knobs_by_key(result)
-    # 21 budget/task/zen knobs + the ten [swarm] room-policy knobs.
-    assert len(knobs) == 33
+    # The retired turn/spend knobs are gone from the registry the UI lists.
+    assert len(knobs) == 27
     assert knobs["swarm.max_chain_tasks"]["value"] == 24
     assert knobs["swarm.max_chain_tasks"]["section"] == "swarm"
     index = knobs["limits.skills.max_index_bytes"]
@@ -74,9 +74,9 @@ async def test_get_lists_every_knob_with_defaults(runtime_factory, config_file):
     assert index["apply"] == "immediate"
     assert index["unit"] == "bytes"
     # The already-shipped subagent budgets are part of the same page.
-    assert knobs["task.max_turns"]["section"] == "subagents"
-    assert knobs["task.max_cost"]["value"] is None
-    assert knobs["task.max_cost"]["nullable"] is True
+    assert knobs["task.timeout_s"]["section"] == "subagents"
+    assert knobs["task.timeout_s"]["value"] == 900
+    assert knobs["task.timeout_s"]["nullable"] is False
     # Zen/Swarm own their own pages but share the same snapshot.
     assert knobs["zen.worker_mode"]["kind"] == "str"
     assert knobs["zen.worker_mode"]["choices"] == ["inherit", "ask", "plan", "auto"]
@@ -118,18 +118,18 @@ async def test_reset_deletes_the_key(runtime_factory, config_file):
     await call(
         server,
         writes,
-        {"type": "limits", "op": "set", "key": "limits.agent.max_turns", "value": 40},
+        {"type": "limits", "op": "set", "key": "limits.agent.loop_guard_threshold", "value": 40},
     )
 
     result = await call(
         server,
         writes,
-        {"type": "limits", "op": "reset", "key": "limits.agent.max_turns"},
+        {"type": "limits", "op": "reset", "key": "limits.agent.loop_guard_threshold"},
     )
 
     assert result["ok"] is True
-    assert knobs_by_key(result)["limits.agent.max_turns"]["explicit"] is False
-    assert "max_turns = 40" not in config_file.read_text(encoding="utf-8")
+    assert knobs_by_key(result)["limits.agent.loop_guard_threshold"]["explicit"] is False
+    assert "loop_guard_threshold = 40" not in config_file.read_text(encoding="utf-8")
 
 
 async def test_set_rejects_out_of_range_and_leaves_the_file(
@@ -193,35 +193,29 @@ async def test_subagent_knob_writes_into_task_table(runtime_factory, config_file
     assert runtime.user_config.task_timeout_s == 60
 
 
-async def test_clearing_the_unbounded_cost_knob(runtime_factory, config_file):
+async def test_a_retired_knob_cannot_be_set_through_the_wire(runtime_factory, config_file):
+    """The settings page must not resurrect a knob the kernel ignores."""
     runtime = await runtime_factory()
     writes: list[str] = []
     server = build_server(runtime, writes)
-    await call(
+
+    result = await call(
         server,
         writes,
         {"type": "limits", "op": "set", "key": "task.max_cost", "value": 2.5},
     )
-    assert load_user_config(config_file).task_max_cost == 2.5
 
-    result = await call(
-        server, writes, {"type": "limits", "op": "reset", "key": "task.max_cost"}
-    )
-
-    assert result["ok"] is True
-    assert load_user_config(config_file).task_max_cost is None
+    assert result.get("ok") is not True
 
 
-async def test_session_overrides_are_reported(runtime_factory, config_file):
-    runtime = await runtime_factory(max_turns=20)
+async def test_removed_switches_report_no_override(runtime_factory, config_file):
+    runtime = await runtime_factory()
     writes: list[str] = []
     server = build_server(runtime, writes)
 
     result = await call(server, writes, {"type": "limits", "op": "get"})
 
-    assert (
-        knobs_by_key(result)["limits.agent.max_turns"]["override"] == "--max-turns 20"
-    )
+    assert knobs_by_key(result)["limits.agent.loop_guard_threshold"]["override"] is None
 
 
 async def test_write_refuses_unknown_managed_keys(runtime_factory, config_file):
@@ -237,7 +231,7 @@ async def test_write_refuses_unknown_managed_keys(runtime_factory, config_file):
     result = await call(
         server,
         writes,
-        {"type": "limits", "op": "set", "key": "limits.agent.max_turns", "value": 30},
+        {"type": "limits", "op": "set", "key": "limits.agent.loop_guard_threshold", "value": 30},
     )
 
     assert result["type"] == "error"
@@ -255,18 +249,18 @@ async def test_reading_task_values_from_the_file(runtime_factory, config_file):
     file's value as the source of truth for the next session.
     """
     tables = read_managed(config_file)
-    tables["task"] = {"max_turns": 123, "keep_transcripts": 7}
+    tables["task"] = {"timeout_s": 123, "keep_transcripts": 7}
     write_managed(config_file, tables)
     runtime = await runtime_factory()
     # Pretend the session booted before that edit: the runtime copy is stale.
-    runtime.user_config.task_max_turns = 300
+    runtime.user_config.task_timeout_s = 300
     writes: list[str] = []
     server = build_server(runtime, writes)
 
     result = await call(server, writes, {"type": "limits", "op": "get"})
 
     knobs = knobs_by_key(result)
-    assert knobs["task.max_turns"]["value"] == 123
-    assert knobs["task.max_turns"]["explicit"] is True
+    assert knobs["task.timeout_s"]["value"] == 123
+    assert knobs["task.timeout_s"]["explicit"] is True
     assert knobs["task.keep_transcripts"]["value"] == 7
-    assert Limits().max_turns == 100
+    assert Limits().loop_guard_threshold == 5

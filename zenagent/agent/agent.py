@@ -90,8 +90,6 @@ class Agent:
         before_tool_call: Callable | None = None,
         after_tool_call: Callable | None = None,
         transform_context: Callable | None = None,
-        max_turns: int | None = None,
-        max_cost: float | None = None,
         loop_guard_threshold: int = LOOP_GUARD_THRESHOLD,
         max_result_bytes: int = MAX_RESULT_BYTES,
         retries: int = 0,
@@ -108,8 +106,6 @@ class Agent:
         self.before_tool_call = before_tool_call
         self.after_tool_call = after_tool_call
         self.transform_context = transform_context
-        self.max_turns = max_turns
-        self.max_cost = max_cost
         #: ``[limits.agent]`` knobs, read when the next run starts.
         self.loop_guard_threshold = loop_guard_threshold
         self.max_result_bytes = max_result_bytes
@@ -126,6 +122,7 @@ class Agent:
         self._follow_up: list[str] = []
         self._run: _Run | None = None
         self._error_message: str | None = None
+        self._termination_detail: str | None = None
 
     # -- observability ------------------------------------------------------
 
@@ -144,8 +141,13 @@ class Agent:
 
     @property
     def termination(self) -> str | None:
-        """Why the most recent run ended (``"stop"``, ``"max_cost"``, ...)."""
+        """Why the most recent run ended (``"stop"``, ``"loop_detected"``, ...)."""
         return self._state.termination
+
+    @property
+    def termination_detail(self) -> str | None:
+        """The reason behind ``termination`` when it has one (a runaway batch)."""
+        return self._termination_detail
 
     @property
     def error_message(self) -> str | None:
@@ -284,8 +286,6 @@ class Agent:
             get_followup_messages=self._drain_follow_up,
             transform_context=self.transform_context,
             stream_fn=self.stream_fn,
-            max_turns=self.max_turns,
-            max_cost=self.max_cost,
             loop_guard_threshold=self.loop_guard_threshold,
             max_result_bytes=self.max_result_bytes,
             retries=self.retries,
@@ -345,6 +345,7 @@ class Agent:
         run = _Run(abort=AbortToken())
         self._run = run
         self._error_message = None
+        self._termination_detail = None
         try:
             async for event in agent_loop(
                 prompt, self._state, self._config(), run.abort, user_goal=goal
@@ -352,6 +353,7 @@ class Agent:
                 await self._dispatch(event)
                 if event.type == "agent_end":
                     run.error_message = _terminal_error(self._state.messages)
+                    self._termination_detail = event.detail
         except BaseException:
             # Task cancellation propagates, but the run must still become idle.
             self._error_message = run.error_message or "run cancelled"

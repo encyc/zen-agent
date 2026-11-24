@@ -31,9 +31,7 @@ def copy_onto(runtime: Runtime, fresh) -> None:
     live = runtime.user_config
     live.limits = fresh.limits
     for name in (
-        "task_max_turns",
         "task_timeout_s",
-        "task_max_cost",
         "task_keep_transcripts",
         "task_max_transcript_bytes",
         "task_max_transcript_file_bytes",
@@ -57,13 +55,10 @@ def overrides(runtime: Runtime) -> dict[str, str]:
     """Knobs this session overrides, mapped to the switch that did it.
 
     The settings page shows effective values, so it has to know that
-    ``--max-turns 20`` (or ``--no-skills``) beats the file for this run.
+    ``--no-skills`` beats the file for this run.
     Keys are :class:`~zenagent.limits.Limit` attrs.
     """
     active: dict[str, str] = {}
-    options = runtime._options
-    if options is not None and options.max_turns is not None:
-        active["max_turns"] = f"--max-turns {options.max_turns}"
     if not runtime.skills_enabled:
         active["max_index_bytes"] = "--no-skills"
         active["max_body_bytes"] = "--no-skills"

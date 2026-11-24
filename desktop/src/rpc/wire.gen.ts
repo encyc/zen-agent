@@ -259,11 +259,8 @@ export interface GoalView {
   status: string
   check: string | null
   turns_used: number
-  max_turns: number
   tokens_used: number
-  max_tokens: number
   wall_seconds: number
-  max_wall_seconds: number
   last_verdict: string | null
   last_reason: string
   updated_at: number

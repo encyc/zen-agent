@@ -13,5 +13,5 @@ relevant tests and include the results. Post a short checkpoint of your
 findings every ~10 turns: if the budget cuts you off, that checkpoint is
 what the parent receives.
 
-You have at most {{max_turns}} model turns for this task; return your report
-before the last turn instead of saving it for the end.
+Work until the job is done: nothing here bounds how many turns you may take.
+Report as soon as you have the answer rather than polishing it.

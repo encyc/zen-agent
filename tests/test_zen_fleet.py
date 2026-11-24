@@ -118,8 +118,6 @@ class FakeWorkerFactory:
                 "resume": options.resume,
                 "model_id": options.model_id,
                 "thinking": options.thinking,
-                "max_cost": options.max_cost,
-                "max_turns": options.max_turns,
             }
         )
         path = Path(options.resume)
@@ -666,20 +664,20 @@ async def test_report_arriving_mid_delivery_batches_into_the_next_flush(env) -> 
     assert len(batch) == 1 and "[zen:worker w3]" in batch[0]
 
 
-async def test_worker_inherits_router_model_and_task_budgets(env) -> None:
+async def test_worker_inherits_the_router_model_and_thinking(env) -> None:
     env["chat"].runtime = SimpleNamespace(
         agent=SimpleNamespace(
             model=SimpleNamespace(id="router-model"), thinking="high"
         )
     )
-    fleet = _fleet_with(env, max_cost=2.5, max_turns=12)
+    fleet = _fleet_with(env)
     await fleet.dispatch(str(env["paths"]["w1"]), "a")
     await fleet.wait_all()
     call = env["factory"].calls[-1]
     assert call["model_id"] == "router-model"
     assert call["thinking"] == "high"
-    assert call["max_cost"] == 2.5
-    assert call["max_turns"] == 12
+    # A worker carries no turn or spend budget of its own.
+    assert "max_cost" not in call and "max_turns" not in call
 
 
 async def test_worker_without_router_falls_back_to_the_default_model(env) -> None:

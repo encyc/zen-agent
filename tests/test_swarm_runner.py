@@ -3,7 +3,7 @@ import base64
 import time
 
 import pytest
-from conftest import text_stream, tool_then_text_stream
+from conftest import text_stream
 
 from zenagent.app.swarm.roles import RoleManifest
 from zenagent.app.swarm.room import (
@@ -20,7 +20,6 @@ from zenagent.types import (
     Cost,
     ImageContent,
     TextContent,
-    ToolCall,
     Usage,
     UserMessage,
 )
@@ -133,27 +132,6 @@ async def test_mentions_in_result_create_tasks(tmp_path, runtime_factory):
     assert coder_tasks[0].source_message_id == record.result_message_id
     assert coder_tasks[0].chain_depth == 1
     assert coder_tasks[0].chain_id == task.chain_id
-
-
-async def test_max_turns_marks_failed(tmp_path, runtime_factory):
-    runtime = await runtime_factory(
-        stream_fn=tool_then_text_stream(), max_turns=1
-    )
-    store, _router, current, post, admit = _bind(tmp_path)
-    task = _task(store)
-    current["task"] = task
-
-    record = await _runner(runtime, store, post, admit).run(
-        task, _message(store)
-    )
-
-    assert record.state == "failed"
-    assert record.reason == "max_turns"
-    assert store.tasks[task.id].state == "failed"
-    assert any(
-        message.author_kind == "system" and task.id in message.text
-        for message in store.messages
-    )
 
 
 async def test_abort_marks_cancelled(tmp_path, runtime_factory):
@@ -309,47 +287,6 @@ async def test_result_mentions_are_gated_by_this_runs_cost(tmp_path, runtime_fac
     assert record.state == "done"
     assert record.chain_cost == pytest.approx(0.4)
     assert [entry for entry in store.tasks.values() if entry.assignee == "coder"] == []
-
-
-async def test_max_cost_marks_failed(tmp_path, runtime_factory):
-    async def streaming_tool_loop(model, messages, tools, options):
-        partial = AssistantMessage(
-            content=[],
-            provider="p",
-            model="m",
-            usage=Usage(cost=Cost(total=0.01)),
-            stop_reason="pending",
-            timestamp=0,
-        )
-        yield AssistantEvent(type="start", partial=partial)
-        call = ToolCall(
-            id=f"c{len(messages)}", name="read_file", arguments={"path": "README.md"}
-        )
-        partial.content = [call]
-        yield AssistantEvent(
-            type="toolcall_start", partial=partial, content_index=0, tool_call=call
-        )
-        yield AssistantEvent(
-            type="toolcall_end", partial=partial, content_index=0, tool_call=call
-        )
-        partial.stop_reason = "tool_use"
-        yield AssistantEvent(type="done", partial=partial, reason="tool_use")
-
-    runtime = await runtime_factory(stream_fn=streaming_tool_loop, max_cost=0.005)
-    store, _router, current, post, admit = _bind(tmp_path)
-    task = _task(store)
-    current["task"] = task
-
-    record = await _runner(runtime, store, post, admit).run(
-        task, _message(store)
-    )
-
-    assert record.state == "failed"
-    assert record.reason == "max_cost"
-    assert any(
-        message.author_kind == "system" and "max_cost" in message.text
-        for message in store.messages
-    )
 
 
 PNG_1PX = base64.b64decode(

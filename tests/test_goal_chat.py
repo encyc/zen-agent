@@ -28,8 +28,8 @@ class GatedVerifier:
         return self.verdict
 
 
-def _bind_goal(runtime, verifier, **limits):
-    runtime.goal = GoalController(limits=GoalLimits(**limits), verifier=verifier)
+def _bind_goal(runtime, verifier):
+    runtime.goal = GoalController(limits=GoalLimits(), verifier=verifier)
     runtime.goal.bind_session(runtime.session)
     return runtime.goal
 
@@ -57,7 +57,6 @@ async def test_goal_continues_until_met(runtime_factory):
     _bind_goal(
         runtime,
         FakeVerifier(GoalVerdict("not_met", "step 1"), GoalVerdict("met", "done")),
-        max_turns=3,
     )
     chat = ChatController(runtime)
     chat.start_goal("fix tests")
@@ -92,7 +91,7 @@ async def test_user_message_wins_over_goal_continuation(runtime_factory):
 
     runtime = await runtime_factory(stream_fn=stream)
     _bind_goal(
-        runtime, FakeVerifier(GoalVerdict("not_met", "more")), max_turns=5
+        runtime, FakeVerifier(GoalVerdict("not_met", "more"))
     )
     chat = ChatController(runtime)
     chat.start_goal("fix tests")
@@ -105,7 +104,7 @@ async def test_user_message_wins_over_goal_continuation(runtime_factory):
     assert "fix tests" in calls[2]
 
 
-async def test_budget_watchdog_aborts(runtime_factory):
+async def test_usage_never_pauses_a_goal(runtime_factory):
     async def stream(model, messages, tools, options):
         from zenagent.events import AssistantEvent
         from zenagent.types import AssistantMessage, TextContent, Usage
@@ -123,13 +122,15 @@ async def test_budget_watchdog_aborts(runtime_factory):
 
     runtime = await runtime_factory(stream_fn=stream)
     _bind_goal(
-        runtime, FakeVerifier(GoalVerdict("not_met", "more")), max_tokens=10
+        runtime, FakeVerifier(GoalVerdict("not_met", "more"))
     )
     chat = ChatController(runtime)
     chat.start_goal("fix tests")
     await chat.wait_for_idle()
 
-    assert runtime.goal.snapshot().status == "budget_limited"
+    # 200 tokens of usage is reported, never enforced: the goal keeps going
+    # until the verifier says otherwise.
+    assert runtime.goal.snapshot().status in ("active", "blocked")
 
 
 async def test_user_message_during_verification_wins(runtime_factory):
@@ -150,7 +151,7 @@ async def test_user_message_during_verification_wins(runtime_factory):
 
     runtime = await runtime_factory(stream_fn=stream)
     verifier = GatedVerifier()
-    _bind_goal(runtime, verifier, max_turns=4)
+    _bind_goal(runtime, verifier)
     chat = ChatController(runtime)
     chat.start_goal("fix tests")
     await verifier.started.wait()
@@ -181,7 +182,7 @@ async def test_pause_during_verification_stops_continuation(runtime_factory):
 
     runtime = await runtime_factory(stream_fn=stream)
     verifier = GatedVerifier()
-    _bind_goal(runtime, verifier, max_turns=4)
+    _bind_goal(runtime, verifier)
     chat = ChatController(runtime)
     chat.start_goal("fix tests")
     await verifier.started.wait()
@@ -214,7 +215,7 @@ async def test_session_switch_during_verification_keeps_new_session_clean(
 
     runtime = await runtime_factory(stream_fn=stream)
     verifier = GatedVerifier()
-    _bind_goal(runtime, verifier, max_turns=4)
+    _bind_goal(runtime, verifier)
     chat = ChatController(runtime)
     chat.start_goal("fix tests")
     await verifier.started.wait()

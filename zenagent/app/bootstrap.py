@@ -234,13 +234,7 @@ async def assemble(
             live_tools=lambda: runtime.tool_registry.active(),
             mode=lambda: runtime.mode,
             resolve_model=lambda raw: resolve_task_model(runtime.catalog, raw),
-            max_cost=(
-                runtime.user_config.task_max_cost
-                if runtime.user_config.task_max_cost is not None
-                else options.max_cost
-            ),
-            # [task]: the child's budgets and transcript retention caps.
-            max_turns=runtime.user_config.task_max_turns,
+            # [task]: the child's watchdog and transcript retention caps.
             timeout_s=runtime.user_config.task_timeout_s,
             limits=SubagentLimits.from_user_config(runtime.user_config),
             session_path=runtime.session.path,
@@ -267,12 +261,6 @@ async def assemble(
             stream_fn=stream_fn,
             before_tool_call=gate.before_tool_call,
             transform_context=runtime._transform_context,
-            max_turns=(
-                options.max_turns
-                if options.max_turns is not None
-                else runtime.limits.max_turns
-            ),
-            max_cost=options.max_cost,
             loop_guard_threshold=runtime.limits.loop_guard_threshold,
             max_result_bytes=runtime.limits.max_result_bytes,
             retries=options.retries,

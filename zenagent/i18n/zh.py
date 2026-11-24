@@ -74,7 +74,7 @@ CATALOG: dict[str, str] = {
     "tui.goal.status.blocked": "已阻塞",
     "tui.goal.status.budget_limited": "预算耗尽",
     "tui.goal.status.complete": "已完成",
-    "tui.goal.budget": "{turns}/{max_turns} · {tokens}/{max_tokens} tok",
+    "tui.goal.budget": "{turns} 轮 · {tokens} tok",
     "tui.goal.last": "{verdict}: {reason}",
     # TUI：goal 面板（GoalHud 点击）
     "tui.goal.panel_title": "目标",
@@ -492,7 +492,7 @@ CATALOG: dict[str, str] = {
     "cmdmsg.goal_start_deferred": "目标已设置；当前回合结束后开始",
     "cmdmsg.goal_usage": "用法：/goal [--check \"<命令>\"] [--budget N] <目标>（无效：{error}）",
     "cmdmsg.goal_none": "当前会话没有目标",
-    "cmdmsg.goal_status": "目标：{objective}\n状态：{status}\n检查：{check}\n轮次：{turns}/{max_turns} · tokens：{tokens}/{max_tokens} · 时长：{wall}/{max_wall}s\n最近：{last}",
+    "cmdmsg.goal_status": "目标：{objective}\n状态：{status}\n检查：{check}\n已用：{turns} 轮 · {tokens} tokens · {wall}s\n最近：{last}",
     "cmdmsg.goal_no_active": "没有可暂停的 active 目标",
     "cmdmsg.goal_paused": "目标已暂停",
     "cmdmsg.goal_no_resume": "没有可恢复的 paused/blocked 目标",

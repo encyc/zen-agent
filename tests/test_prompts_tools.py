@@ -74,7 +74,7 @@ def test_task_child_system_prompt_comes_from_block() -> None:
 
     rendered = render(
         read_block("task_child_system"),
-        {"max_turns": "30", "child_tools": "read_file, grep"},
+        {"child_tools": "read_file, grep"},
     )
 
     assert rendered.startswith("You are a delegated subagent inside a coding agent")
@@ -82,5 +82,5 @@ def test_task_child_system_prompt_comes_from_block() -> None:
     assert "file scope" in rendered  # parallel siblings share the tree
     assert "list the files you created or changed" in rendered
     assert "checkpoint" in rendered  # budget-cut runs must still return output
-    assert "at most 30 model turns" in rendered
-    assert "{{max_turns}}" not in rendered and "{{child_tools}}" not in rendered
+    assert "nothing here bounds how many turns you may take" in rendered
+    assert "{{child_tools}}" not in rendered

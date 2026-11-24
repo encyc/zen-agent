@@ -153,7 +153,7 @@ async def _wait_task(task_id: str, timeout_s: float, abort) -> ToolResultAgent:
     # The full envelope text plus the run's details: subagent_cost/tokens ride
     # along on the FIRST collection so spend accounting and telemetry see
     # background children; a re-wait re-reads the envelope text but must not
-    # double-count the run into the HUD or the parent's max_cost guard.
+    # double-count the run into the HUD.
     details = dict(run.details)
     if run.spend_reported:
         details.pop("subagent_cost", None)

@@ -36,6 +36,7 @@ counts from model metadata.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import tempfile
@@ -57,6 +58,9 @@ from zenagent.swarm_settings import (
     DEFAULT_SWARM_STORM_BURST,
     DEFAULT_SWARM_STORM_WINDOW_S,
 )
+
+_log = logging.getLogger(__name__)
+
 
 __all__ = [
     "ALL_KNOBS",
@@ -121,6 +125,32 @@ class Limit:
         return f"{self.table}.{self.name}"
 
 
+#: Knobs this release removed. They stay *known* so a published ``config.toml``
+#: keeps starting, are never read or written, and warn once per key per process
+#: so the user learns the key is dead without a startup failure.
+RETIRED: dict[str, frozenset[str]] = {
+    "agent": frozenset({"max_turns"}),
+    "goal": frozenset({"max_turns", "max_tokens", "max_wall_minutes"}),
+    "subagents": frozenset({"max_turns", "max_cost"}),
+}
+
+_warned_retired: set[tuple[str, str]] = set()
+
+
+def warn_retired(section: str, name: str) -> None:
+    """Report a retired key once, naming what replaced it."""
+    if (section, name) in _warned_retired:
+        return
+    _warned_retired.add((section, name))
+    _log.warning(
+        "[limits.%s].%s is retired and ignored: a run now ends when the model "
+        "stops, a tool terminates it, or a repeated batch proves it is stuck; "
+        "goals end on a verdict, and subagents on their watchdog",
+        section,
+        name,
+    )
+
+
 #: The ``[limits]`` registry: one row per knob, in presentation order.
 LIMITS: tuple[Limit, ...] = (
     Limit(
@@ -173,18 +203,6 @@ LIMITS: tuple[Limit, ...] = (
     ),
     Limit(
         table="limits.agent",
-        name="max_turns",
-        section="agent",
-        attr="max_turns",
-        default=100,
-        kind="int",
-        minimum=1,
-        maximum=10000,
-        apply="session",
-        unit="provider requests per run",
-    ),
-    Limit(
-        table="limits.agent",
         name="loop_guard_threshold",
         section="agent",
         attr="loop_guard_threshold",
@@ -221,42 +239,6 @@ LIMITS: tuple[Limit, ...] = (
     ),
     Limit(
         table="limits.goal",
-        name="max_turns",
-        section="goal",
-        attr="goal_max_turns",
-        default=40,
-        kind="int",
-        minimum=0,
-        maximum=10000,
-        apply="session",
-        unit="turns per goal (0 = no limit)",
-    ),
-    Limit(
-        table="limits.goal",
-        name="max_wall_minutes",
-        section="goal",
-        attr="goal_max_wall_minutes",
-        default=240,
-        kind="int",
-        minimum=0,
-        maximum=10080,
-        apply="session",
-        unit="minutes of active goal work (0 = no limit)",
-    ),
-    Limit(
-        table="limits.goal",
-        name="max_tokens",
-        section="goal",
-        attr="goal_max_tokens",
-        default=2_000_000,
-        kind="int",
-        minimum=0,
-        maximum=100000000,
-        apply="session",
-        unit="provider tokens per goal (0 = no limit)",
-    ),
-    Limit(
-        table="limits.goal",
         name="check_timeout_s",
         section="goal",
         attr="goal_check_timeout_s",
@@ -285,18 +267,6 @@ LIMITS: tuple[Limit, ...] = (
 TASK_KNOBS: tuple[Limit, ...] = (
     Limit(
         table="task",
-        name="max_turns",
-        section="subagents",
-        attr="task_max_turns",
-        default=300,
-        kind="int",
-        minimum=1,
-        maximum=100000,
-        apply="session",
-        unit="provider requests per subagent",
-    ),
-    Limit(
-        table="task",
         name="timeout_s",
         section="subagents",
         attr="task_timeout_s",
@@ -306,19 +276,6 @@ TASK_KNOBS: tuple[Limit, ...] = (
         maximum=86400,
         apply="session",
         unit="seconds (0 = no watchdog)",
-    ),
-    Limit(
-        table="task",
-        name="max_cost",
-        section="subagents",
-        attr="task_max_cost",
-        default=None,
-        kind="float",
-        minimum=0.000001,
-        maximum=1000000.0,
-        apply="session",
-        unit="USD per subagent",
-        nullable=True,
     ),
     Limit(
         table="task",
@@ -579,13 +536,9 @@ class Limits:
     max_body_bytes: int = 32768
     max_context_bytes: int = 32768
     compact_threshold: float = 0.85
-    max_turns: int = 100
     loop_guard_threshold: int = 5
     max_result_bytes: int = 40000
     shell_max_output_bytes: int = 30000
-    goal_max_turns: int = 40
-    goal_max_wall_minutes: int = 240
-    goal_max_tokens: int = 2_000_000
     goal_check_timeout_s: int = 300
     goal_verifier_max_tokens: int = 512
     explicit: frozenset[str] = frozenset()
@@ -664,13 +617,17 @@ def parse_limits(raw: object, target: Path) -> Limits:
             raise ValueError(  # noqa: TRY004 - config errors are ValueError by contract
                 f"config {target}: [limits.{section}] must be a table"
             )
-        known = {knob.name for knob in LIMITS if knob.section == section}
+        known = {knob.name for knob in LIMITS if knob.section == section} | RETIRED.get(
+            section, frozenset()
+        )
         unknown = set(table) - known
         if unknown:
             raise UnknownConfigField.keys(
                 target=target, prefix=f"[limits.{section}]",
                 unknown=unknown, allowed=known,
             )
+        for name in sorted(RETIRED.get(section, frozenset()) & set(table)):
+            warn_retired(section, name)
         for knob in LIMITS:
             if knob.section != section or knob.name not in table:
                 continue
@@ -833,6 +790,21 @@ def _scan_owned(lines: list[str]) -> tuple[int, set[int]]:
     return first, drop
 
 
+#: Managed table path -> the ``RETIRED`` section that owns its tombstone names.
+_RETIRED_TABLES = {
+    "limits.agent": "agent",
+    "limits.goal": "goal",
+    "task": "subagents",
+}
+
+
+def _retired_path(full: str) -> bool:
+    """Whether a ``table.key`` path is a knob this release retired."""
+    table, _, name = full.rpartition(".")
+    section = _RETIRED_TABLES.get(table)
+    return section is not None and name in RETIRED.get(section, frozenset())
+
+
 def _unknown_managed_keys(original: str) -> list[str]:
     """Managed paths that are not registered knobs (the writer refuses those)."""
     unknown: list[str] = []
@@ -848,7 +820,7 @@ def _unknown_managed_keys(original: str) -> list[str]:
         if not assignment:
             continue
         full = _full_path(table, assignment.group("key"))
-        if _owned(full) and full not in KNOB_BY_KEY:
+        if _owned(full) and full not in KNOB_BY_KEY and not _retired_path(full):
             unknown.append(full)
     return unknown
 

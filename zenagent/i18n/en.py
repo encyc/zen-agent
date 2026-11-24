@@ -75,7 +75,7 @@ CATALOG: dict[str, str] = {
     "tui.goal.status.blocked": "blocked",
     "tui.goal.status.budget_limited": "budget reached",
     "tui.goal.status.complete": "complete",
-    "tui.goal.budget": "{turns}/{max_turns} · {tokens}/{max_tokens} tok",
+    "tui.goal.budget": "{turns} turns · {tokens} tok",
     "tui.goal.last": "{verdict}: {reason}",
     # TUI: goal panel (GoalHud click)
     "tui.goal.panel_title": "Goal",
@@ -493,7 +493,7 @@ CATALOG: dict[str, str] = {
     "cmdmsg.goal_start_deferred": "goal set; will start when the current turn finishes",
     "cmdmsg.goal_usage": "usage: /goal [--check \"<cmd>\"] [--budget N] <objective> (invalid: {error})",
     "cmdmsg.goal_none": "no goal for this session",
-    "cmdmsg.goal_status": "goal: {objective}\nstatus: {status}\ncheck: {check}\nturns: {turns}/{max_turns} · tokens: {tokens}/{max_tokens} · wall: {wall}/{max_wall}s\nlast: {last}",
+    "cmdmsg.goal_status": "goal: {objective}\nstatus: {status}\ncheck: {check}\nused: {turns} turns · {tokens} tokens · {wall}s\nlast: {last}",
     "cmdmsg.goal_no_active": "no active goal to pause",
     "cmdmsg.goal_paused": "goal paused",
     "cmdmsg.goal_no_resume": "no paused or blocked goal to resume",

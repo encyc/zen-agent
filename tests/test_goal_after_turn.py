@@ -53,25 +53,14 @@ async def test_met_completes(tmp_path):
     assert decision.status == "complete"
 
 
-async def test_unlimited_budgets_never_stop_the_goal(tmp_path):
-    # 0 turns the ceiling off: only a verdict, a blocker or the user stops it.
-    ctl = _ctl(
-        tmp_path,
-        FakeVerifier(GoalVerdict("not_met", "still failing")),
-        max_turns=0,
-        max_tokens=0,
-        max_wall_seconds=0,
-    )
-    decision = await ctl.after_turn(
-        _ctx(tokens_delta=10**9, elapsed_s=10**9)
-    )
+async def test_no_usage_ever_stops_the_goal(tmp_path):
+    """Only a verdict, a blocker or the user stops a goal now."""
+    ctl = _ctl(tmp_path, FakeVerifier(GoalVerdict("not_met", "still failing")))
+    decision = await ctl.after_turn(_ctx(tokens_delta=10**9, elapsed_s=10**9))
 
     assert decision.action == "continue"
-    assert decision.wrap_up is False
     assert ctl.state is not None and ctl.state.status == "active"
-    assert (
-        ctl.budget_exceeded(tokens_delta=10**9, elapsed_s=10**9) is False
-    )
+    assert ctl.state.tokens_used >= 10**9
 
 
 async def test_not_met_continues_with_budget_and_reason(tmp_path):
@@ -82,24 +71,12 @@ async def test_not_met_continues_with_budget_and_reason(tmp_path):
     assert "3 tests failed" in decision.prompt
 
 
-async def test_turn_budget_wraps_up_once(tmp_path):
-    ctl = _ctl(tmp_path, FakeVerifier(GoalVerdict("not_met", "nope")), max_turns=1)
-    first = await ctl.after_turn(_ctx())
-    assert first.action == "continue" and first.wrap_up is True
-    second = await ctl.after_turn(_ctx())
-    assert second.action == "stop" and second.status == "budget_limited"
-
-
-async def test_token_budget_hard_stops_without_wrap_up(tmp_path):
-    ctl = _ctl(
-        tmp_path,
-        FakeVerifier(GoalVerdict("not_met", "nope")),
-        max_tokens=5,
-    )
-    decision = await ctl.after_turn(_ctx(tokens_delta=6))
+async def test_a_runaway_interrupt_pauses_the_goal(tmp_path):
+    """A guard kill is recoverable: the goal pauses, it does not get blocked."""
+    ctl = _ctl(tmp_path, FakeVerifier(GoalVerdict("not_met", "nope")))
+    decision = await ctl.after_turn(_ctx(termination="loop_detected"))
     assert decision.action == "stop"
-    assert decision.status == "budget_limited"
-    assert decision.wrap_up is False
+    assert decision.status == "paused"
 
 
 async def test_three_idle_turns_block(tmp_path):
@@ -140,11 +117,8 @@ async def test_verifier_tokens_count_against_budget(tmp_path):
     assert ctl.state.tokens_used == 8
 
 
-async def test_budget_counts_subagents(tmp_path):
-    ctl = _ctl(
-        tmp_path,
-        FakeVerifier(GoalVerdict("not_met", "nope")),
-        max_tokens=5,
-    )
+async def test_subagent_tokens_are_counted_but_never_stop_the_goal(tmp_path):
+    ctl = _ctl(tmp_path, FakeVerifier(GoalVerdict("not_met", "nope")))
     decision = await ctl.after_turn(_ctx(tokens_delta=1, subagent_tokens_delta=6))
-    assert decision.status == "budget_limited"
+    assert decision.action == "continue"
+    assert ctl.state is not None and ctl.state.tokens_used == 7
