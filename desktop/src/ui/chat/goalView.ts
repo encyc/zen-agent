@@ -19,13 +19,8 @@ export function goalStatusIcon(status: string): string {
   }
 }
 
-/** A goal ceiling for display; zero means the ceiling is off. */
-export function goalLimit(value: number): string {
-  return value <= 0 ? '∞' : String(value)
-}
-
 export function goalSummary(view: GoalView): string {
-  return `${view.objective} · ${view.turns_used}/${goalLimit(view.max_turns)}`
+  return `${view.objective} · ${view.turns_used}`
 }
 
 /** The objective inside a controller continuation prompt, for compact rows. */

@@ -137,9 +137,7 @@ deny = ["git_push"]                           # 追加到全局 deny；不能移
 
 ```toml
 [task]
-max_turns = 300                   # 子代理的模型轮次上限，超了就被截断
-timeout_s = 900                   # 子代理的墙钟预算（秒），0 = 关闭看门狗
-max_cost = 2.5                    # 子代理的花费上限（美元）；省略 = 不单独设限
+timeout_s = 900                   # 子代理的墙钟看门狗（秒），0 = 关闭
 keep_transcripts = 64             # 每个会话保留的 sidecar 转录条数
 max_transcript_bytes = 33554432   # 保留转录的总字节数（32 MiB）
 max_transcript_file_bytes = 8388608  # 单条转录超过 8 MiB 就截断并标记
@@ -147,13 +145,10 @@ max_transcript_file_bytes = 8388608  # 单条转录超过 8 MiB 就截断并标�
 
 - **仅全局层**：和 `[safety]` / `[backup]` 同规则，项目层出现 `[task]` 启动即报错——被检出的仓库
   不能给自己调大预算。
-- `max_turns` 是**子代理**的轮次上限，与主循环的 `AgentConfig.max_turns`（`--max-turns`，内建兜底
-  100 轮）是两套。超限不是错误：父模型收到的是
-  `status="truncated" reason="max_turns" turns="N"`，看到的是一个被截断的结果。
-- `timeout_s` 是墙钟保险丝：到点后子代理被温和中止（wind down），信封报
-  `status="truncated" reason="timeout"`。默认 900 秒是防失控的宽松值，不是工作上限；`0` 关闭。
-- `max_cost` 是单个子代理运行的花费上限，独立于会话级 `--max-cost`；设置了就**优先于**会话级值，
-  省略则透传会话级值（也没有时即不设限）。超限的信封 `reason="max_cost"`。
+- **子代理没有轮次或花费上限。** 它跑到自己停下、被看门狗掐掉，或被原地打转的守卫打断为止。
+- `timeout_s` 是墙钟看门狗：到点后子代理被温和中止（wind down），信封报
+  `status="truncated" reason="timeout"`。默认 900 秒是防挂死的宽松值，不是工作上限；`0` 关闭。
+- `max_turns` / `max_cost` 已在 0.15 移除：写在文件里不会报错，只忽略并警告一次。
 - 各键都会在加载时校验：负数、布尔值、类型不符都会报错并指出 `task.<key>`；`timeout_s` 接受 0
   （关闭），其余必须是正数。
 - 子代理的工具面跟随会话权限模式：auto 模式继承主 Agent 的激活工具集（黑名单除外），其他模式只拿
@@ -173,8 +168,7 @@ max_context_bytes = 32768      # AGENTS.md / CLAUDE.md 注入上下文的总大�
 compact_threshold = 0.85       # 上下文用到窗口这一比例时触发自动压缩
 
 [limits.agent]
-max_turns = 100                # 主循环一次 run 的模型请求上限（--max-turns 覆盖它）
-loop_guard_threshold = 5       # 连续完全相同的工具调用几次后注入"别再重复"提示
+loop_guard_threshold = 5       # 连续几批完全相同的工具调用后打断这次 run
 max_result_bytes = 40000       # 单个工具结果超过即只留头尾（全文可溢出到 artifact）
 
 [limits.tools]
@@ -184,10 +178,13 @@ shell_max_output_bytes = 30000 # bash 输出保留量，超出只留头尾并标
 - **仅全局层**：项目层出现 `[limits]` 启动即报错——被检出的仓库不能放大它所跑机器的提示词预算。
 - 每个键加载时校验范围，越界/类型错误启动即报错（不会静默 clamp）。
 - 生效时机分两档，参数页会逐项标注：**立即**（技能索引/正文、loop 护栏、bash 输出，
-  `apply_limits()` 热替换）与**新会话**（上下文注入、压缩阈值、`max_turns`、工具结果预算）。
+  `apply_limits()` 热替换）与**新会话**（上下文注入、压缩阈值、工具结果预算）。
 - 「恢复默认」= 从文件里删掉这个键，上游改默认值时会跟着走。
-- `--max-turns` / `--no-skills` / `--no-context-files` / `--no-auto-compact` 仍然只覆盖本会话，
+- `--no-skills` / `--no-context-files` / `--no-auto-compact` 仍然只覆盖本会话，
   参数页会以"本会话被 … 覆盖"如实标注。
+- **主循环没有轮次或花费上限**（`max_turns` / `max_cost` 在 0.15 移除，旧键忽略并警告一次）：
+  一次 run 只在模型自己停下、provider 失败、工具要求结束、输出被反复截断，或
+  `loop_guard_threshold` 判定原地打转时结束。
 
 ### [safety] 与 [backup]（仅全局层）
 

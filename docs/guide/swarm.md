@@ -126,7 +126,7 @@ live runtime，它也会以 `空闲` 状态出现（配置了三个角色就显�
 |---|---|
 | `queued` / `running` | 排队 / 执行中 |
 | `done` | 正常结束，结果已发回房间 |
-| `failed` | `error` / `aborted` / `max_turns` / `max_cost` / `interrupted`，原因写入房间系统消息 |
+| `failed` | `error` / `aborted` / `loop_detected` / `interrupted`，原因写入房间系统消息 |
 | `cancelled` | 用户取消，或角色被删除（`role_removed`） |
 
 链的可追溯性由 `sourceMessageId` + 消息里的 mentions 派生：任务由哪条消息产生、
@@ -177,7 +177,6 @@ Enter/⌘Enter、附件栏、菜单、审批/提问卡片和通知条都是同�
 | 链任务数 | 24 / 链 | 精确计数，超出即拒（`chain_tasks`）；与模型写什么无关 |
 | 风暴熔断 | 60 秒 12 条 | 一个链在窗口内已建 12 条即拒（`chain_burst`） |
 | 链深 | 8 | 超限的派活拒投，房间系统消息说明，任务不创建 |
-| 每 run 预算 | 角色 `limits` | 超限以 `max_cost` / `max_turns` 结束 → failed |
 | 链级预算 | $5 / 链 | 累计超限后拒绝新派活，防链式烧钱 |
 | 每角色 inbox | 16 | 满则拒绝新派活并提醒，不静默堆积 |
 | 全局并发 | 3 | 超出排队 |

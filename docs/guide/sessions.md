@@ -46,7 +46,7 @@ runtime / 进程，再恢复。两个终端不能同时 `--resume` 同一个会�
   `cwd`、`app`/`appVersion`；`/fork`、`/undo`、`/compact`、`/shake` 产生的新文件还带
   `derivedFrom`（来源会话 stem）。续接（resume）或 legacy 文件**不补写**头记录，字节不动。
 - `run_start` / `run_end`：每次 run（一次 prompt 到落定，含 `continue_` 这类无用户消息的 run）
-  的边界；`run_end` 记录 `termination`（stop/max_turns/max_cost/aborted/error/no_stream/
+  的边界；`run_end` 记录 `termination`（stop/loop_detected/aborted/error/no_stream/
   tool_terminate）、`turns`（本次 run 的请求数）、`duration_ms`，run 以 error 收尾时另有
   `detail`（终止 assistant 消息的 error_message）。
 - `retry`：被消息级重试吞掉的瞬态失败（每次退避前一条）——`attempt`、`max_retries`、

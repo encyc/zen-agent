@@ -126,8 +126,6 @@ export const swarmZh: Dict = {
   'swarm.roleRoot': '工作目录',
   'swarm.roleRootHint': '留空使用 ~/.zenagent-workspaces/<id>。',
   'swarm.roleMode': '自治模式',
-  'swarm.roleMaxTurns': '最大轮数',
-  'swarm.roleMaxCost': '最大成本（美元）',
   'swarm.roleSave': '保存',
   'swarm.roleSaveFailed': '保存失败：{message}',
   'swarm.settings.desc': 'Swarm 房间按项目隔离：每个项目拥有自己的房间、角色与会话；全局角色库里的角色可以复制进项目。房间数据落在 ~/.zenagent/projects/<项目>/swarm/。',
@@ -145,7 +143,6 @@ export const swarmZh: Dict = {
   'swarm.copyExists': '已在这个项目里',
   'swarm.copy': '复制',
   'swarm.roleInvalidId': '角色 ID 只能包含小写字母、数字、点、下划线和连字符。',
-  'swarm.roleInvalidNumber': '最大轮数需为正整数，最大成本需为正数。',
   'swarm.roleInvalidMcp': 'MCP 服务器需要是 JSON 对象。',
 }
 
@@ -273,8 +270,6 @@ export const swarmEn: Dict = {
   'swarm.roleRoot': 'Workspace root',
   'swarm.roleRootHint': 'Empty uses ~/.zenagent-workspaces/<id>.',
   'swarm.roleMode': 'Autonomy mode',
-  'swarm.roleMaxTurns': 'Max turns',
-  'swarm.roleMaxCost': 'Max cost (USD)',
   'swarm.roleSave': 'Save',
   'swarm.roleSaveFailed': 'Save failed: {message}',
   'swarm.settings.desc': 'Swarm rooms are project-scoped: each project owns its room, roles and sessions, and roles from the global library can be copied in. Room data lives under ~/.zenagent/projects/<project>/swarm/.',
@@ -292,6 +287,5 @@ export const swarmEn: Dict = {
   'swarm.copyExists': 'Already in this project',
   'swarm.copy': 'Copy',
   'swarm.roleInvalidId': 'The role ID allows lowercase letters, digits, dot, underscore and hyphen.',
-  'swarm.roleInvalidNumber': 'Max turns must be a positive integer and max cost a positive number.',
   'swarm.roleInvalidMcp': 'MCP servers must be a JSON object.',
 }

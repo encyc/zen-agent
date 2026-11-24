@@ -114,7 +114,7 @@ TUI 与 REPL **共用同一个** `CommandRegistry`（`zenagent/app/commands.py`�
 ## 执行中插话（steering）
 
 agent 正在跑的时候，输入框里的内容**不是**新的一轮：它作为插话排队，在当前轮结束时交给模型，所以不会
-并发跑两个 run。Ctrl+C 才是协作式中止。若一轮因为 `max_turns`/`max_cost` 结束，没送达的插话降级为下一条
+并发跑两个 run。Ctrl+C 才是协作式中止。若一轮因为原地打转被打断（`loop_detected`），没送达的插话降级为下一条
 排队输入，不自动重试。
 
 斜杠命令是个例外，但它们**分两类**：改写转录、会话文件或工具集的命令（`/compact`、`/reload`、`/retry`、

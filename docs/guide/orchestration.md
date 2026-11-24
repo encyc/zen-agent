@@ -192,8 +192,8 @@ worker 与 run unit 都走 `prepare()` 装配，与 coding 同一个入口。
 | 生命周期 | 每次 dispatch 结束即 `close()` | 空闲保留，`runtime_idle_s` 后回收 | worker 按需造；房间成员要能复用 |
 | 并发 | 信号量 + `queued` 状态 | 轮次调度 + 收件箱 gate | 前者限流，后者排程 |
 
-已经拉齐的两处：zen worker 继承 router 的模型与 thinking，预算取 `[task]` 的
-`task_max_turns` / `task_max_cost`；`auto` 仍降级成 `ask`，但降级后的 worker 通过
+已经拉齐的两处：zen worker 继承 router 的模型与 thinking，且和 router 一样**没有轮次或花费上限**
+（0.15 起 `[task]` 不再有 `max_turns` / `max_cost`）；`auto` 仍降级成 `ask`，但降级后的 worker 通过
 `slot.server.ask` 能问到人，不再走进「既不自动放行也问不了」的死角。
 
 ## 边界

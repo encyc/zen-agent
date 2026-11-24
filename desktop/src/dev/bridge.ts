@@ -429,13 +429,10 @@ export function installBridge(state: BridgeState) {
           ['limits.skills', 'max_body_bytes', 32768, 'int', 'immediate', 1024, 1048576, []],
           ['limits.context', 'max_context_bytes', 32768, 'int', 'session', 0, 1048576, []],
           ['limits.context', 'compact_threshold', 0.85, 'float', 'session', 0.3, 0.99, []],
-          ['limits.agent', 'max_turns', 100, 'int', 'session', 1, 10000, []],
           ['limits.agent', 'loop_guard_threshold', 5, 'int', 'immediate', 2, 100, []],
           ['limits.agent', 'max_result_bytes', 40000, 'int', 'session', 4096, 1048576, []],
           ['limits.tools', 'shell_max_output_bytes', 30000, 'int', 'immediate', 1024, 1048576, []],
-          ['task', 'max_turns', 300, 'int', 'session', 1, 100000, []],
           ['task', 'timeout_s', 900, 'int', 'session', 0, 86400, []],
-          ['task', 'max_cost', null, 'float', 'session', 0.000001, 1000000, []],
           ['task', 'keep_transcripts', 64, 'int', 'session', 1, 10000, []],
           ['task', 'max_transcript_bytes', 33554432, 'int', 'session', 1048576, 2147483648, []],
           ['task', 'max_transcript_file_bytes', 8388608, 'int', 'session', 1048576, 2147483648, []],
@@ -464,7 +461,7 @@ export function installBridge(state: BridgeState) {
         }
         const explicitOf = (table: string, name: string) =>
           (state2.limitExplicit ?? []).includes(`${table}.${name}`)
-        const overrides: Record<string, string> = { 'limits.agent.max_turns': '--max-turns 20' }
+        const overrides: Record<string, string> = {}
         const rows = () =>
           knobs.map(([table, name, fallback, kind, apply, min, max, choices]) => ({
             key: `${table}.${name}`,
@@ -473,7 +470,7 @@ export function installBridge(state: BridgeState) {
             name,
             kind,
             choices: [...choices],
-            nullable: name === 'max_cost',
+            nullable: false,
             min,
             max,
             default: fallback,

@@ -91,7 +91,6 @@ export const NAV_ITEMS: NavItem[] = [
     keywords: [
       'settings.limitFile',
       'settings.limit.skills.max_index_bytes',
-      'settings.limit.task.max_turns',
       'settings.limitGroup.subagents',
       'settings.limitGroup.tools',
     ],

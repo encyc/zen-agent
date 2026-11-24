@@ -140,7 +140,7 @@ print(agent.messages[-1].content[0].text)
 | `await agent.wait_for_idle()` | 等 run 结束 |
 | `agent.messages` | 只读历史 |
 | `agent.replace_messages(...)` / `agent.reset()` | 恢复/清空会话 |
-| `agent.termination` | `None`/`stop`/`length`/`error`/`aborted`/`max_turns`/`max_cost` |
+| `agent.termination` | `None`/`stop`/`length`/`error`/`aborted`/`loop_detected`（`max_turns`/`max_cost` 为历史值，不再产生） |
 
 需要会话、MCP、skills、审批与命令时用 app 层：`Runtime.bootstrap(RuntimeOptions(...))`
 + `ChatController`，见 `examples/embed.py`；RPC 就是这套对象之上的 JSONL 协议。
