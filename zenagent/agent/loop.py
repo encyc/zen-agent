@@ -17,7 +17,9 @@ Runtime contract highlights:
 * Degraded tool calls (unknown tool, broken arguments, schema-invalid
   arguments, tool exceptions, hooks blocking) become ``is_error`` tool results;
   the loop keeps running. Only an assistant ``error``/``aborted`` stop reason, a
-  non-``tool_use`` stop, or every result asking to ``terminate`` ends the run.
+  non-``tool_use`` stop, every result asking to ``terminate``, or a tool batch
+  that repeats identically (``loop_detected``, see
+  :class:`zenagent.agent.guard.RunawayDetector`) ends the run.
 * A ``length`` stop with tool calls never executes anything: truncated
   arguments are unsafe, and leaving the assistant turn's ``tool_calls``
   unresolved would poison the *next* request, so every call fails as is_error
@@ -35,26 +37,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-__all__ = [
-    "LOOP_GUARD_PREFIX",
-    "STALL_GUARD_PREFIX",
-    "is_loop_guard_message",
-    "is_stall_guard_message",
-]
-
-from zenagent.agent.guard import (
-    LOOP_GUARD_PREFIX,
-    LOOP_GUARD_TEXT,
-    LOOP_GUARD_THRESHOLD,
-    STALL_GUARD_BATCHES,
-    STALL_GUARD_PREFIX,
-    STALL_GUARD_TEXT,
-    EvidenceLedger,
-    calls_signature,
-    is_loop_guard_message,
-    is_poll_call,
-    is_stall_guard_message,
-)
+from zenagent.agent.guard import LOOP_GUARD_THRESHOLD, RunawayDetector
 from zenagent.agent.protocol import AgentTool, ToolContext, ToolResultAgent
 from zenagent.agent.result_budget import MAX_RESULT_BYTES
 from zenagent.agent.tool_exec import run_tool_batch, truncated_call_outcome
@@ -76,16 +59,12 @@ from zenagent.types import (
 )
 
 __all__ = [
-    "LOOP_GUARD_PREFIX",
-    "STALL_GUARD_PREFIX",
     "AgentConfig",
     "AgentState",
     "AgentTool",
     "ToolContext",
     "ToolResultAgent",
     "agent_loop",
-    "is_loop_guard_message",
-    "is_stall_guard_message",
 ]
 
 
@@ -128,12 +107,9 @@ class AgentConfig:
     stream_fn: StreamFn | None = None  # None -> stream_fn_for(model)
     #: Hard cap on provider requests in one run (None -> module default).
     max_turns: int | None = None
-    #: Identical tool-call streak before the loop guard intervenes
+    #: Identical tool-call batches in a row before the run is interrupted
     #: (``[limits.agent].loop_guard_threshold``).
     loop_guard_threshold: int = LOOP_GUARD_THRESHOLD
-    #: Consecutive rounds of already-seen evidence before the stall guard
-    #: intervenes (see :class:`zenagent.agent.guard.EvidenceLedger`).
-    stall_guard_batches: int = STALL_GUARD_BATCHES
     #: Per-result byte budget before head+tail truncation
     #: (``[limits.agent].max_result_bytes``).
     max_result_bytes: int = MAX_RESULT_BYTES
@@ -213,12 +189,8 @@ async def agent_loop(
     turns = 0
     length_failures = 0
     termination = "stop"
-    last_signature: tuple | None = None
-    repeat_streak = 0
-    guard_injected = False
-    evidence = EvidenceLedger()
-    stall_streak = 0
-    stall_injected = False
+    detail: str | None = None
+    detector = RunawayDetector(config.loop_guard_threshold)
     tool_stats: dict[str, dict] = {}
     try:
         # Input typed while the previous run was finishing is still queued: pick
@@ -435,63 +407,18 @@ async def agent_loop(
             if length_failures >= _MAX_LENGTH_FAILURES:
                 break  # truncation is not resolving: stop instead of re-asking forever
 
-            # Cross-turn loop guard: a model repeating the same call(s) with
-            # identical arguments is stuck. Inject one corrective message per
-            # run (as a user-role notice) instead of burning max_turns.
-            signature = calls_signature(calls)
-            poll_like = all(is_poll_call(call) for call in calls)
-            if poll_like:
-                repeat_streak = 0
-            elif signature == last_signature:
-                repeat_streak += 1
-            else:
-                last_signature = signature
-                repeat_streak = 1
-            if repeat_streak >= config.loop_guard_threshold and not guard_injected:
-                guard_injected = True
-                notice = UserMessage(
-                    content=LOOP_GUARD_TEXT.format(n=repeat_streak),
-                    timestamp=int(time.time()),
-                )
-                # Model-facing only: appended to the request context but NOT to
-                # new_messages and with no message events, so it is never
-                # persisted, rendered as a user turn, or counted by fork/retry.
-                state.messages.append(notice)
-
-            # Evidence stall guard: comparing *what was read* rather than the
-            # exact call catches the model that re-asks the same question with
-            # new flags. A poll or an edit never counts; only a run of rounds
-            # whose every read is already covered does.
-            # A call that failed taught the model nothing; only results that
-            # actually came back count as evidence (a policy denial may be
-            # retried legitimately once the user approves).
-            answered = {
-                outcome.call.id
-                for outcome in outcomes
-                if not outcome.result.is_error
-            }
-            stalled, repeated = evidence.observe(
-                [call for call in calls if call.id in answered]
-            )
-            stall_streak = stall_streak + 1 if stalled else 0
-            if stall_streak >= config.stall_guard_batches and not stall_injected:
-                stall_injected = True
-                sample = ", ".join(repeated[:2])[:120]
-                state.messages.append(
-                    UserMessage(
-                        content=STALL_GUARD_TEXT.format(n=stall_streak, sample=sample),
-                        timestamp=int(time.time()),
-                    )
-                )
+            # A batch identical to the previous one asks the world for the same
+            # thing again: a streak of them is a run that cannot make progress.
+            # The detector reports; the loop stops here rather than nudging the
+            # model and spending the rest of the budget watching it repeat.
+            runaway = detector.observe(calls)
+            if runaway is not None:
+                termination = "loop_detected"
+                detail = runaway
+                break
 
             if config.get_steering_messages is not None:
                 steered = await config.get_steering_messages()
-                if steered:
-                    # A fresh instruction may legitimately ask for the same
-                    # bytes the run already read.
-                    evidence = EvidenceLedger()
-                    stall_streak = 0
-                    stall_injected = False
                 for message in steered:
                     state.messages.append(message)
                     new_messages.append(message)
@@ -499,15 +426,6 @@ async def agent_loop(
                     yield AgentEvent(type="message_end", message=message)
             # else / loop continues: another round with the tool results in context
     finally:
-        # The correctives exist only for the turns after they fired: drop them
-        # from the durable transcript so resume/retry/fork never see synthetic
-        # text.
-        state.messages[:] = [
-            message
-            for message in state.messages
-            if not is_loop_guard_message(message)
-            and not is_stall_guard_message(message)
-        ]
         state.termination = termination
         yield AgentEvent(
             type="agent_end",
@@ -515,4 +433,5 @@ async def agent_loop(
             tool_stats={"tools": tool_stats} if tool_stats else None,
             turns=turns,
             termination=termination,
+            detail=detail,
         )

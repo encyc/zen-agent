@@ -1260,150 +1260,44 @@ async def test_tool_exceptions_and_policy_blocks_have_distinct_kinds():
     assert end2.result.error_kind == "policy"
 
 
-async def test_repeated_identical_tool_calls_get_one_corrective_notice():
+async def test_a_repeated_tool_batch_interrupts_the_run():
     async def echo(name, args, abort, on_update=None):
         return ToolResultAgent(content=[TextContent(text="again")])
 
     script = [
-        [call_tool("t1", "echo", {"x": 1}), finish("tool_use")]
-        for _ in range(5)
+        [call_tool(f"t{i}", "echo", {"x": 1}), finish("tool_use")] for i in range(5)
     ]
     script.append([say("done"), finish("stop")])
     stream = ScriptedStream(script)
     state = AgentState()
-    events = await run(
-        "go", state, make_config(stream, tools=[make_tool("echo", echo)])
-    )
+    events = await run("go", state, make_config(stream, tools=[make_tool("echo", echo)]))
 
-    # The corrective reached the model (the last request carries it)...
-    last_request = stream.calls[-1]["messages"]
-    assert any(
-        "tool-loop guard" in str(getattr(message, "content", ""))
-        for message in last_request
-    )
-    # ...but not the UI/persistence/durable transcript.
+    # Five identical batches: the fifth ends the run instead of opening a sixth.
+    assert state.termination == "loop_detected"
+    assert len(stream.calls) == 5
     end = next(event for event in events if event.type == "agent_end")
+    assert end.detail is not None and "echo" in end.detail
+    # The harness wrote nothing into the transcript to say so.
     assert not any(
-        "tool-loop guard" in str(getattr(message, "content", ""))
-        for message in end.new_messages
+        "guard" in str(getattr(message, "content", "")) for message in state.messages
     )
-    assert not any(
-        "tool-loop guard" in str(getattr(message, "content", ""))
-        for message in state.messages
-    )
-    assert not [
-        event
-        for event in events
-        if event.type == "message_start"
-        and "tool-loop guard" in str(getattr(event.message, "content", ""))
-    ]
 
 
-async def test_poll_like_commands_are_exempt_from_the_loop_guard():
-    async def echo(name, args, abort, on_update=None):
-        return ToolResultAgent(content=[TextContent(text="still running")])
+async def test_a_repeated_poll_is_not_a_runaway():
+    async def poll(name, args, abort, on_update=None):
+        return ToolResultAgent(content=[TextContent(text="ok")])
 
     script = [
-        [call_tool("t1", "bash", {"command": "sleep 1"}), finish("tool_use")]
-        for _ in range(6)
-    ]
-    script.append([say("done"), finish("stop")])
-    state = AgentState()
-    await run(
-        "go", state, make_config(ScriptedStream(script), tools=[make_tool("bash", echo)])
-    )
-    assert not any(
-        "tool-loop guard" in str(getattr(message, "content", ""))
-        for message in state.messages
-    )
-
-
-async def test_repeated_reads_get_one_stall_corrective_notice():
-    """Re-asking for the same page is not progress; the loop says so once."""
-
-    async def page(name, args, abort, on_update=None):
-        return ToolResultAgent(content=[TextContent(text="page")])
-
-    call = call_tool(
-        "t1", "read_file", {"path": "a.py", "offset": 0, "limit": 100}
-    )
-    script = [[call, finish("tool_use")] for _ in range(3)]
-    script.append([say("done"), finish("stop")])
-    stream = ScriptedStream(script)
-    state = AgentState()
-    events = await run(
-        "go", state, make_config(stream, tools=[make_tool("read_file", page)])
-    )
-
-    # The corrective reached the model...
-    last_request = stream.calls[-1]["messages"]
-    assert any(
-        "evidence-loop guard" in str(getattr(message, "content", ""))
-        for message in last_request
-    )
-    # ...but not the UI/persistence/durable transcript.
-    end = next(event for event in events if event.type == "agent_end")
-    assert not any(
-        "evidence-loop guard" in str(getattr(message, "content", ""))
-        for message in end.new_messages
-    )
-    assert not any(
-        "evidence-loop guard" in str(getattr(message, "content", ""))
-        for message in state.messages
-    )
-
-
-async def test_reading_the_next_page_is_not_a_stall():
-    """Paging forward is exactly the long investigation the guard must keep."""
-
-    async def page(name, args, abort, on_update=None):
-        return ToolResultAgent(content=[TextContent(text="page")])
-
-    script = [
-        [
-            call_tool(
-                "t1", "read_file", {"path": "a.py", "offset": offset, "limit": 100}
-            ),
-            finish("tool_use"),
-        ]
-        for offset in (0, 100, 200)
+        [call_tool(f"p{i}", "bash", {"command": "ps aux"}), finish("tool_use")]
+        for i in range(20)
     ]
     script.append([say("done"), finish("stop")])
     stream = ScriptedStream(script)
     state = AgentState()
-    await run(
-        "go", state, make_config(stream, tools=[make_tool("read_file", page)])
-    )
+    await run("go", state, make_config(stream, tools=[make_tool("bash", poll)]))
 
-    assert not any(
-        "evidence-loop guard" in str(getattr(message, "content", ""))
-        for call in stream.calls
-        for message in call["messages"]
-    )
-
-
-async def test_failed_reads_do_not_count_as_evidence():
-    """A denied or failing read taught the model nothing; retrying it is not a stall."""
-
-    async def denied(name, args, abort, on_update=None):
-        return ToolResultAgent(content=[TextContent(text="denied")], is_error=True)
-
-    call = call_tool(
-        "t1", "read_file", {"path": "a.py", "offset": 0, "limit": 100}
-    )
-    script = [[call, finish("tool_use")] for _ in range(3)]
-    script.append([say("done"), finish("stop")])
-    stream = ScriptedStream(script)
-    state = AgentState()
-    await run(
-        "go", state, make_config(stream, tools=[make_tool("read_file", denied)])
-    )
-
-    assert not any(
-        "evidence-loop guard" in str(getattr(message, "content", ""))
-        for call in stream.calls
-        for message in call["messages"]
-    )
+    assert state.termination == "stop"
+    assert len(stream.calls) == 21
 
 
 async def test_agent_end_carries_per_tool_stats():
@@ -1444,8 +1338,8 @@ async def test_agent_end_has_no_tool_stats_without_tool_calls():
     assert end.tool_stats is None
 
 
-async def test_repeated_wait_calls_are_exempt_from_the_loop_guard():
-    """Waiting for one long job is legitimate progress, not a loop."""
+async def test_repeated_wait_calls_are_exempt_from_the_runaway_detector():
+    """Waiting for one long job is legitimate progress, not a runaway."""
     async def fake_wait(name, args, abort, on_update=None):
         return ToolResultAgent(content=[TextContent(text="job still running")])
 
@@ -1461,12 +1355,8 @@ async def test_repeated_wait_calls_are_exempt_from_the_loop_guard():
         state,
         make_config(stream, tools=[make_tool("wait", fake_wait, approval="read")]),
     )
-    # The guard (if any) would have been injected into a later request.
-    assert not any(
-        "tool-loop guard" in str(getattr(message, "content", ""))
-        for call in stream.calls
-        for message in call["messages"]
-    )
+    assert state.termination == "stop"
+    assert len(stream.calls) == 7
 
 
 async def test_async_bash_then_wait_through_the_loop():

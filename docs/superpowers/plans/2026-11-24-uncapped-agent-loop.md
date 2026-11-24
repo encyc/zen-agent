@@ -36,12 +36,13 @@
 **Files:**
 - Modify: `zenagent/agent/guard.py` (rewrite: delete evidence machinery, add detector)
 - Modify: `zenagent/agent/loop.py` (guard block, imports, `finally`)
+- Modify: `zenagent/events.py:70-107` (`AgentEvent.detail`)
 - Modify: `zenagent/app/views.py:11,428` (drop prefix imports and the filter branch)
 - Test: `tests/test_evidence_guard.py` (delete), `tests/test_loop.py`
 
 **Interfaces:**
 - Produces: `RunawayDetector(threshold: int = LOOP_GUARD_THRESHOLD)` with `observe(calls: list[ToolCall]) -> str | None`; module keepers `calls_signature(calls) -> tuple`, `is_poll_call(call) -> bool`, `POLL_COMMAND`, `LOOP_GUARD_THRESHOLD = 5`.
-- Produces: `agent_loop` sets `termination="loop_detected"` and carries `detail` to `agent_end` (field added in Task 3; until then store it in a local and pass nothing).
+- Produces: `AgentEvent.detail: str | None = None`, set only on `agent_end`; `agent_loop` sets `termination="loop_detected"` and passes the detector's string.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -189,8 +190,7 @@ git add -A && git commit -m "feat(agent)!: remove the turn and spend ceilings fr
 ### Task 3: Carry the reason, and classify the new termination
 
 **Files:**
-- Modify: `zenagent/events.py:70-107` (`AgentEvent.detail`)
-- Modify: `zenagent/agent/loop.py` (`agent_end` yield)
+- Modify: `zenagent/agent/loop.py` (`agent_end` yield already carries `detail`; no change if Task 1 landed it)
 - Modify: `zenagent/app/runs.py:104` (`status_for_termination`)
 - Modify: `zenagent/agent/subagents_runtime.py:190` (`_status_for`)
 - Modify: `zenagent/app/goal.py:491` (`loop_detected` → paused)
@@ -198,7 +198,6 @@ git add -A && git commit -m "feat(agent)!: remove the turn and spend ceilings fr
 - Test: `tests/test_events.py`, `tests/test_runs.py`, `tests/test_goal.py`, `tests/test_rpc_contract.py`
 
 **Interfaces:**
-- Produces: `AgentEvent.detail: str | None = None`, set only on `agent_end`.
 - Produces: `status_for_termination("loop_detected") == "interrupted"`; `_status_for(child)` returns `"truncated"`; goal finishes `paused`.
 
 - [ ] **Step 1: Write the failing tests**
