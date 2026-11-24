@@ -81,7 +81,10 @@ export function UsageRow({
     parts.push(turnMs < 1000 ? `${turnMs}ms` : `${(turnMs / 1000).toFixed(1)}s`)
   }
   if (termination !== null && termination !== 'stop') {
-    parts.push(termination)
+    // A guard kill is not a token the reader should decode alone.
+    parts.push(
+      termination === 'loop_detected' ? t('usage.termination.loop_detected') : termination,
+    )
   }
   return (
     <div className={css.usageRow}>
