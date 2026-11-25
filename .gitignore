@@ -11,6 +11,7 @@ __pycache__/
 # Tooling caches
 .pytest_cache/
 .ruff_cache/
+.npm-cache/
 .env
 
 dist/
