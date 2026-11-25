@@ -29,6 +29,7 @@ import {
   shrinkTranscriptWindow,
   tailWindow,
 } from '../../state/transcriptWindow'
+import { useTranscriptScroll } from './useTranscriptScroll'
 import { useAppStore } from '../../state/appStore'
 import { useProjectStore, useSessionStore, useSettingsStore } from '../../state/stores'
 import { useT } from '../../i18n/locale'
@@ -90,8 +91,6 @@ export function ChatView(props: ChatViewProps) {
   const setChatWidth = useSettingsStore((state) => state.setChatWidth)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const tailRef = useRef<HTMLDivElement | null>(null)
-  const [follow, setFollow] = useState(true)
-  const [showJump, setShowJump] = useState(false)
   const [activeId, setActiveId] = useState<string | null>(null)
 
   // Mounted history is a trailing window over the loaded nodes (D261 parity):
@@ -139,7 +138,7 @@ export function ChatView(props: ChatViewProps) {
   const scrollToRow = (row: HTMLElement) => {
     const scroller = scrollerRef.current
     if (scroller === null) return
-    setFollow(false)
+    markProgrammatic()
     scroller.scrollTo({
       top:
         scroller.scrollTop +
@@ -202,6 +201,19 @@ export function ChatView(props: ChatViewProps) {
     }
   }, [transcriptWindow.bounded, hasMoreBefore, growWindow, loadOlder])
 
+  // Scroll ownership (mode, jump pill, unseen count) lives in the hook; its
+  // callbacks are the two window moves this view owns.
+  const { snap, snapRef, markProgrammatic, publish } = useTranscriptScroll({
+    scrollerRef,
+    nodes,
+    onAtTop: revealTop,
+    onFollowing: () => {
+      const shrunk = shrinkTranscriptWindow(windowSize)
+      if (shrunk !== windowSize) setWindowSize(shrunk)
+    },
+    onActiveChange: setActiveId,
+  })
+
   const pendingJumpRef = useRef<string | null>(null)
   const mountedRef = useRef(0)
   useLayoutEffect(() => {
@@ -229,43 +241,17 @@ export function ChatView(props: ChatViewProps) {
       anchorRef.current = null
       return
     }
-    if (follow) scroller.scrollTop = scroller.scrollHeight
-  }, [transcriptWindow.mounted, follow])
-
-  // Follow the tail while the user is at (or near) the bottom; any upward
-  // scroll detaches until they return. Reaching the top of the mounted window
-  // mounts the next slice of loaded history instead of letting it strand; at
-  // the top of everything loaded it fetches an older page. Returning to the
-  // tail releases the rows mounted while browsing (D261 windowing).
-  useEffect(() => {
-    const scroller = scrollerRef.current
-    if (scroller === null) return
-    const onScroll = () => {
-      const distance = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
-      const following = distance < 48
-      setFollow(following)
-      setShowJump(distance > 160)
-      const anchor = scroller.getBoundingClientRect().top + scroller.clientHeight * 0.3
-      let next: string | null = null
-      scroller.querySelectorAll<HTMLElement>('[data-minimap-kind="user"]').forEach((row) => {
-        if (row.getBoundingClientRect().top <= anchor) next = row.dataset.minimapId ?? null
-      })
-      setActiveId(next)
-      if (scroller.scrollTop <= 8) revealTop()
-      if (following) {
-        const shrunk = shrinkTranscriptWindow(windowSize)
-        if (shrunk !== windowSize) setWindowSize(shrunk)
-      }
+    if (snapRef.current.mode === 'following') {
+      markProgrammatic()
+      scroller.scrollTop = scroller.scrollHeight
     }
-    scroller.addEventListener('scroll', onScroll, { passive: true })
-    return () => scroller.removeEventListener('scroll', onScroll)
-  }, [revealTop, windowSize])
+  }, [transcriptWindow.mounted])
 
-  // New content keeps the view pinned when following; else reveal the jump pill.
+  // New content keeps the view pinned while following. The unseen count that
+  // the pill shows is the hook's business.
   useEffect(() => {
-    if (!follow) return
-    tailRef.current?.scrollIntoView({ block: 'end' })
-  }, [revision, follow])
+    if (snapRef.current.mode === 'following') tailRef.current?.scrollIntoView({ block: 'end' })
+  }, [revision, snapRef])
 
   const switchProject = async (path: string) => {
     if (!window.confirm(t('home.switchConfirm', { path }))) return
@@ -307,7 +293,8 @@ export function ChatView(props: ChatViewProps) {
       revealTop()
       return
     }
-    setFollow(false)
+    markProgrammatic()
+    publish({ ...snapRef.current, mode: 'free', showJump: true })
     scroller.scrollTo({ top: 0, behavior: 'smooth' })
   }
   // The row also covers server-side history the snapshot never loaded: once
@@ -362,17 +349,23 @@ export function ChatView(props: ChatViewProps) {
       {props.chat === undefined && (
         <ChatWidthHandles width={clampChatWidth(chatWidth)} onChange={setChatWidth} />
       )}
-      {showJump && (
+      {snap.showJump && (
         <button
           type="button"
           className={css.jump}
+          data-jump
+          data-unseen={snap.unseen > 0 || undefined}
           onClick={() => {
+            markProgrammatic()
+            publish({ mode: 'following', showJump: false, atTop: false, unseen: 0 })
             tailRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' })
-            setFollow(true)
           }}
-          aria-label="scroll to bottom"
+          aria-label={snap.unseen > 0 ? t('chat.jumpUnseen', { count: snap.unseen }) : 'scroll to bottom'}
         >
           <ArrowDownIcon size={13} />
+          {snap.unseen > 0 && (
+            <span className={css.jumpBadge}>{snap.unseen > 9 ? '9+' : snap.unseen}</span>
+          )}
         </button>
       )}
     </div>

@@ -73,10 +73,15 @@
   position: absolute;
   right: 24px;
   bottom: calc(var(--composer-dock-height, 168px) + 12px);
-  display: grid;
-  place-items: center;
-  width: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  /* A pill, not a fixed circle: with the unseen badge it grows sideways, and
+   * the min-width keeps the bare icon case round. */
+  min-width: 32px;
   height: 32px;
+  padding: 0;
   border: 1px solid var(--ds-hairline);
   border-radius: 999px;
   background: var(--ds-surface-raised);
@@ -84,6 +89,18 @@
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
   transition: background-color var(--ds-motion-fast) var(--ds-ease-out), color var(--ds-motion-fast) var(--ds-ease-out), transform var(--ds-motion-fast) var(--ds-ease-out);
+}
+
+.jump[data-unseen] {
+  padding: 0 10px 0 8px;
+}
+
+.jumpBadge {
+  font-size: var(--ds-font-11);
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-state-business-primary);
 }
 
 .jump:hover {
