@@ -30,7 +30,7 @@ echo "==> architecture budget"
 python3 scripts/check_architecture.py
 
 echo "==> wire types freshness (rpc registry vs generated TS)"
-python3 scripts/gen_rpc_ts.py --check
+uv run python scripts/gen_rpc_ts.py --check
 
 echo "==> worktree hygiene"
 python3 scripts/check_worktrees.py
