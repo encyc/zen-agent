@@ -747,6 +747,52 @@ async def test_prompt_failure_is_reported_with_its_error_text(runtime_factory):
     assert "provider exploded" in payload["error"]
 
 
+async def test_a_guard_kill_reports_its_reason_and_detail(runtime_factory):
+    """The wire explains a repeated batch instead of sending a bare token."""
+    from zenagent.agent.protocol import AgentTool
+    from zenagent.types import ToolCall
+
+    async def echo(call_id, args, abort, on_update=None):
+        from zenagent.agent.protocol import ToolResultAgent
+
+        return ToolResultAgent(content=[TextContent(text="again")])
+
+    tool = AgentTool(
+        name="echo",
+        description="echo",
+        parameters={"type": "object", "properties": {}},
+        execute=echo,
+        approval="read",
+    )
+
+    async def repeating_stream(model, messages, tools, options):
+        partial = AssistantMessage(
+            content=[ToolCall(id=f"t{len(messages)}", name="echo", arguments={"x": 1})],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="pending",
+            timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        partial.stop_reason = "tool_use"
+        yield AssistantEvent(type="done", partial=partial, reason="tool_use")
+
+    _runtime, server, writes, _queue = await build(
+        runtime_factory,
+        stream_fn=repeating_stream,
+        extra_tools=[tool],
+    )
+    await server._handle_line(json.dumps({"type": "prompt", "id": "p", "text": "go"}))
+    await server._task
+
+    payload = next(message for message in decode(writes) if message.get("id") == "p")
+    assert payload["ok"] is False
+    assert payload["termination"] == "loop_detected"
+    assert "echo" in payload["detail"]
+    assert payload["error"] == "run stopped early (loop_detected)"
+
+
 async def test_prompt_text_falls_back_to_the_final_message(runtime_factory):
     """Providers that skip text_delta still yield the canonical answer."""
     from zenagent.events import AssistantEvent

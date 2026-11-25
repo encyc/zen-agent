@@ -597,6 +597,7 @@ CATALOG: dict[str, str] = {
     "swarm.locked": "This project's swarm room is open in another zenagent process; close it there first.",
     "notice.auto_compaction_failed": "auto-compaction failed: {error}",
     "notice.pending_dropped": "dropped {n} pending messages (session changed)",
+    "notice.loop_detected": "interrupted: the run kept repeating the same tool calls — change the approach or add information, then retry",
     "perm.risk_outside": "⚠ outside workspace: {target}",
     "perm.risk_protected": "⚠ protected path: {target}",
     "perm.risk_destructive": "⚠ destructive command: {reason}",

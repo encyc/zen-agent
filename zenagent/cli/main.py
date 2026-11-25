@@ -248,6 +248,7 @@ async def run_headless(
                     "messages": count,
                     "error": agent.error_message,
                     "termination": agent.termination,
+                    "detail": agent.termination_detail,
                 },
                 ensure_ascii=False,
             )
@@ -255,8 +256,12 @@ async def run_headless(
     elif agent.error_message is not None:
         print(f"zenagent: {agent.error_message}", file=sys.stderr)
     elif not ok:
+        # The reason behind the stop (a guard kill names the repeated batch)
+        # rides along — the bare termination token is not self-explanatory.
+        detail = agent.termination_detail
+        suffix = f": {detail}" if detail else ""
         print(
-            f"zenagent: run stopped early ({agent.termination})",
+            f"zenagent: run stopped early ({agent.termination}{suffix})",
             file=sys.stderr,
         )
     return 0 if ok else 1

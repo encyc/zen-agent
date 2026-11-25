@@ -592,6 +592,8 @@ class RpcServer(
             "usage": _usage(self.agent),
             "termination": self.agent.termination,
         }
+        if self.agent.termination_detail is not None:
+            payload["detail"] = self.agent.termination_detail
         if self.runtime is not None:
             payload["session"] = str(self.runtime.session.path)
             payload["mode"] = self.runtime.mode
@@ -732,6 +734,8 @@ class RpcServer(
             "usage": _usage(self.agent),
             "termination": termination,
         }
+        if self.agent.termination_detail is not None:
+            payload["detail"] = self.agent.termination_detail
         if error is not None:
             payload["error"] = error
         elif not ok:

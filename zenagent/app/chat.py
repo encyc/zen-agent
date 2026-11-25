@@ -741,6 +741,14 @@ class ChatController:
                 self._last_error = failure or run_error_notice(
                     self.runtime.agent.error_message
                 )
+            if termination == "loop_detected":
+                # A guard kill is not a token the reader should have to decode:
+                # the transcript line names the batch the model kept repeating.
+                detail = self.runtime.agent.termination_detail
+                text = t("notice.loop_detected")
+                self._notices.append(
+                    TranscriptNotice("info", f"{text} ({detail})" if detail else text)
+                )
             self._notify()
             # A steer typed after the last step boundary never reached the
             # model. A normal finish continues the run so the model answers it

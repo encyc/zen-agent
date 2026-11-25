@@ -647,6 +647,7 @@ export interface StatusResult {
   model: string
   usage: Usage
   termination: string | null
+  detail?: string
   session?: string
   mode?: 'plan' | 'ask' | 'auto'
   tools?: number
@@ -707,6 +708,7 @@ export interface PromptResult {
   text: string
   usage: Usage
   termination: string | null
+  detail?: string
   error?: string
   session?: string
 }
@@ -1506,6 +1508,8 @@ export interface AgentEventWire {
   tool_stats?: Record<string, unknown>
   partial_result?: string
   duration_ms?: number
+  termination?: string
+  detail?: string
 }
 
 

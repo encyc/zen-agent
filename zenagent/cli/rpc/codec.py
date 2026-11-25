@@ -186,6 +186,15 @@ def serialize_event(event: AgentEvent) -> dict:
     tool_stats = getattr(event, "tool_stats", None)
     if tool_stats:
         payload["tool_stats"] = tool_stats
+    # ``agent_end`` alone knows why the run closed and, for a guard kill, what
+    # the model kept repeating: a live client that missed the prompt result
+    # (a reconnect, a background pane) can still explain the ending.
+    termination = getattr(event, "termination", None)
+    if termination:
+        payload["termination"] = termination
+    detail = getattr(event, "detail", None)
+    if detail:
+        payload["detail"] = detail[:_PARTIAL_RESULT_CHARS]
     partial = getattr(event, "partial_result", None)
     if partial is not None:
         # A running tool's streamed output (bash progress, subagent text). The

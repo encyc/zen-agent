@@ -304,6 +304,7 @@ OPS: dict[str, OpSpec] = {
 "model": Field(STRING),
 "usage": Field(ref("Usage")),
 "termination": Field(STRING, nullable=True),
+"detail": Field(STRING, optional=True),
 "session": Field(STRING, optional=True),
 "mode": Field(one_of("plan", "ask", "auto"), optional=True),
 "tools": Field(INT, optional=True),
@@ -348,6 +349,7 @@ OPS: dict[str, OpSpec] = {
 "text": Field(STRING),
 "usage": Field(ref("Usage")),
 "termination": Field(STRING, nullable=True),
+"detail": Field(STRING, optional=True),
 "error": Field(STRING, optional=True),
 "session": Field(STRING, optional=True),
     }, ok_mutable=True),
@@ -551,6 +553,9 @@ EVENT_FIELDS: dict[str, Field] = {
     "tool_stats": Field(record(ANY), optional=True),
     "partial_result": Field(STRING, optional=True),
     "duration_ms": Field(INT, optional=True),
+    # ``agent_end`` only: why the run closed and the reason behind it.
+    "termination": Field(STRING, optional=True),
+    "detail": Field(STRING, optional=True),
 }
 
 #: Event type literals (AgentEvent.type), for the generator's union.

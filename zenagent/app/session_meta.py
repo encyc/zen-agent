@@ -86,7 +86,9 @@ class SessionMetaRecorder:
                         if started is None
                         else round((time.monotonic() - started) * 1000)
                     ),
-                    detail=_terminal_detail(event.new_messages),
+                    # The run's own reason wins (a guard kill names the batch
+                    # it kept repeating); otherwise a provider error's text.
+                    detail=event.detail or _terminal_detail(event.new_messages),
                 )
             )
 

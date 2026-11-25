@@ -1314,3 +1314,43 @@ async def test_clear_pending_drops_undelivered_follow_ups(runtime_factory):
     await chat.wait_for_idle()
     texts = [str(getattr(m, "content", "")) for m in runtime.agent.messages]
     assert "extend" not in texts and "next" not in texts
+
+
+async def test_a_guard_kill_names_the_repeated_batch_in_the_transcript(runtime_factory):
+    """The harness explains an interruption; it never writes into the messages."""
+    from zenagent.agent.protocol import AgentTool, ToolResultAgent
+    from zenagent.types import ToolCall
+
+    async def echo(call_id, args, abort, on_update=None):
+        return ToolResultAgent(content=[TextContent(text="again")])
+
+    tool = AgentTool(
+        name="echo",
+        description="echo",
+        parameters={"type": "object", "properties": {}},
+        execute=echo,
+        approval="read",
+    )
+
+    async def repeating_stream(model, messages, tools, options):
+        partial = AssistantMessage(
+            content=[ToolCall(id=f"t{len(messages)}", name="echo", arguments={"x": 1})],
+            provider="p",
+            model="m",
+            usage=Usage(),
+            stop_reason="pending",
+            timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        partial.stop_reason = "tool_use"
+        yield AssistantEvent(type="done", partial=partial, reason="tool_use")
+
+    runtime = await runtime_factory(stream_fn=repeating_stream, extra_tools=[tool])
+    chat = ChatController(runtime)
+    await chat.submit("go")
+    await chat.wait_for_idle()
+
+    assert runtime.agent.termination == "loop_detected"
+    notices = chat.take_notices()
+    assert notices and "echo" in notices[-1].text
+    assert "again" not in notices[-1].text, "the notice names the call, not the output"

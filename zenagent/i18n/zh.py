@@ -596,6 +596,7 @@ CATALOG: dict[str, str] = {
     "swarm.locked": "该项目的 swarm 房间已在另一个 zenagent 进程中打开；请先在那边关闭。",
     "notice.auto_compaction_failed": "自动压缩失败：{error}",
     "notice.pending_dropped": "已丢弃 {n} 条待发消息（会话已切换）",
+    "notice.loop_detected": "已打断：连续重复同一批工具调用，换个做法或补充信息后再试",
     "perm.risk_outside": "⚠ 项目外路径：{target}",
     "perm.risk_protected": "⚠ 受保护路径：{target}",
     "perm.risk_destructive": "⚠ 破坏性命令：{reason}",

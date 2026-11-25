@@ -101,6 +101,24 @@ def test_recorder_run_end_carries_terminal_error_detail():
     assert end["detail"] == "quota exceeded"
 
 
+def test_recorder_run_end_carries_a_guard_kill_reason():
+    store = FakeStore()
+    recorder = SessionMetaRecorder(lambda: store)
+    recorder(AgentEvent(type="agent_start"))
+    recorder(
+        AgentEvent(
+            type="agent_end",
+            new_messages=[],
+            turns=5,
+            termination="loop_detected",
+            detail='5x echo({"x": 1})',
+        )
+    )
+    end = store.records[-1]
+    assert end["termination"] == "loop_detected"
+    assert end["detail"] == '5x echo({"x": 1})'
+
+
 def test_recorder_follows_session_switches():
     first, second = FakeStore(), FakeStore()
     holder = {"session": first}
