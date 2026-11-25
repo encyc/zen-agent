@@ -189,10 +189,8 @@ export function handleFrame(frame: ServerFrame, handling: FrameHandling): void {
     return
   }
   if (!frameBelongsTo(frame, handling.get().project)) return
-  // Swarm rooms are per project: only the active project's room frames and
-  // @you notices may reach the screen. Fleet frames carry a session tag of
-  // the router slot — both are consumed before pane routing could misread
-  // them as chat.
+  // A frame from a background project must not paint this transcript;
+  // session routing below decides which pane the rest belongs to.
   routeReply(frame as Record<string, unknown>, handling)
 }
 

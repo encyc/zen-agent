@@ -1,6 +1,9 @@
 # zen-agent 架构简报（Agent 首读）
 
 > 由 manifest.json 单源生成（`scaffold.py render`），勿手改。manifest v8 · 2026-11-14 · 42 节点 / 208 边。讨论架构：本文件 + nodes.md + deps.json 三件套为准。
+> 快照口径：本文件与 nodes.md / deps.json 描述的是 2026-11-14（manifest v8）的结构。
+> coding-only 删除 zen / swarm 后未重新生成，**截至 2026-11-25 的快照**；
+> 代码里已没有 `app/zen/`、`app/swarm/` 与 supervisor，读图时以代码为准。
 
 ## 1. 项目定位
 zen-agent 是零第三方依赖（仅 httpx）的终端 AI 编码代理。四个前端（REPL / headless -p / JSONL RPC / Textual TUI）共用 app 层唯一装配序列 bootstrap.prepare；agent 内核以「事件流 + 工具永远返回结果 + 取消是协议内状态」为契约；providers 适配多家 LLM；插件（声明式连接器包，经 MCP 单向外呼）与 MCP/skills/模板/扩展/桌面 GUI(经 RPC) 都在内核之上接线不改内核。

@@ -52,7 +52,7 @@ export function LimitSettings() {
       setError(messageOf(frame.error) || t('settings.limitLoadFailed'))
       return
     }
-    // Zen/Swarm own their knobs; this page only edits the kernel budgets.
+    // This page edits the kernel budgets; an unknown table stays out.
     setKnobs(
       frame.knobs.filter(
         (knob) => knob.table.startsWith('limits') || knob.table === 'task',

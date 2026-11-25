@@ -10,7 +10,7 @@ ledger. Two things make it survive a crash mid-write:
   concatenates onto the half line and one broken ``json.loads`` silently drops
   BOTH records on replay.
 
-``room.jsonl`` had this treatment first (deltas v6); this module is it, shared.
+Session transcripts had this treatment first (deltas v6); this module is it.
 """
 
 from __future__ import annotations

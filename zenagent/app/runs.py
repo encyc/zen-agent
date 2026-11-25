@@ -10,7 +10,7 @@ Storage is a JSONL file under the project's machine-local state directory::
     ~/.zenagent/projects/<key>/runs.jsonl
 
 One line per state transition, last line per ``runId`` wins. A torn tail is
-skipped with a warning, exactly like the room and session logs. Writes are
+skipped with a warning, exactly like the session logs. Writes are
 best-effort: losing a ledger line must never abort an agent run.
 """
 
@@ -153,7 +153,7 @@ class RunRecord:
     error: str | None = None
 
     def to_json(self) -> dict:
-        """The wire/disk shape (camelCase, like the room records)."""
+        """The wire/disk shape (camelCase, like the session records)."""
         return {
             "type": "run",
             "version": _RECORD_VERSION,

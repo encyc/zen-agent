@@ -15,6 +15,7 @@ from zenagent.limits import (
     ALL_KNOBS,
     KNOB_BY_KEY,
     KNOBS_BY_TABLE,
+    Limit,
     Limits,
     coerce_value,
     describe,
@@ -125,6 +126,28 @@ def test_coerce_rejects_booleans_and_floats_for_integer_knobs():
             coerce_value(knob, bad, Path("/tmp/config.toml"))
     assert coerce_value(knob, 4096, Path("/tmp/config.toml")) == 4096
     assert coerce_value(knob, 4096.0, Path("/tmp/config.toml")) == 4096
+
+
+def test_coerce_string_knob_only_accepts_its_choices():
+    """No live knob is ``kind="str"`` any more; the branch stays reachable for
+    the next one and must keep rejecting anything outside its choices."""
+    knob = Limit(
+        table="limits",
+        name="probe_mode",
+        section="probe",
+        attr="probe_mode",
+        default="a",
+        kind="str",
+        minimum=0.0,
+        maximum=0.0,
+        apply="immediate",
+        choices=("a", "b"),
+    )
+    assert coerce_value(knob, "a", Path("/tmp/config.toml")) == "a"
+    with pytest.raises(ValueError, match="must be one of"):
+        coerce_value(knob, "c", Path("/tmp/config.toml"))
+    with pytest.raises(ValueError):
+        coerce_value(knob, 1, Path("/tmp/config.toml"))
 
 
 def test_limits_knobs_are_never_nullable():

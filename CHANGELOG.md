@@ -17,6 +17,11 @@ matches the release tag; older history is in the repository tags and commits.
   `auto`; argparse now rejects `zen` with `unknown mode: zen` (exit 2). A
   desktop preference stored as `zen` no longer maps to `auto` — it loads as
   absent and falls back to the app default (`ask`), which is stricter.
+- **The architecture diagram dropped the deleted nodes.** `docs/architecture-full.html`
+  loses the `app/zen` and `app/swarm` nodes and the five edges that touched them;
+  the `cli/rpc` tooltip no longer lists `ops_zen` / `ops_swarm` and the protocol
+  line says v4. `docs/arch-gov/*` is a generated snapshot and was not
+  regenerated: `brief.md` is annotated as a snapshot of 2026-11-25.
 - **Old orchestration data is left on disk and never read.** `[zen]` /
   `[swarm]` tables are accepted, ignored, and warned about once per table;
   `~/.zenagent/agents/`, project `swarm/` rooms and `workspace.json` are
