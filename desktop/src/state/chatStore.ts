@@ -120,6 +120,8 @@ export interface UsageNode {
   usage: Usage | null
   turnMs: number | null
   termination: string | null
+  /** Why the run closed, when the termination has a reason. */
+  detail: string | null
 }
 
 export type ChatNode =
@@ -173,7 +175,12 @@ interface ChatState {
   prependOlder(result: TranscriptResult): void
   applyEvent(event: AgentEventFrame): void
   pushCommand(name: string, argument: string, message: string | null): void
-  pushUsage(usage: Usage | null, turnMs: number | null, termination: string | null): void
+  pushUsage(
+    usage: Usage | null,
+    turnMs: number | null,
+    termination: string | null,
+    detail?: string | null,
+  ): void
   /** Land the run-failure line inline (the banner is only for RPC failures). */
   pushFailure(text: string): void
   finalize(): void
@@ -613,7 +620,7 @@ export function createChatStore() {
     set({ nodes: [...state.nodes, node], revision: get().revision + 1 })
   },
 
-  pushUsage(usage, turnMs, termination) {
+  pushUsage(usage, turnMs, termination, detail = null) {
     const state = get()
     const nodes = [...state.nodes]
     // The run closed while a retry burst was still waiting: an error exhausts
@@ -625,7 +632,7 @@ export function createChatStore() {
         termination === 'error' ? 'failed' : termination === 'aborted' ? 'stopped' : 'recovered'
       nodes[retryIndex] = { ...(nodes[retryIndex] as RetryNode), state: settled }
     }
-    const node: UsageNode = { kind: 'usage', id: nid(), usage, turnMs, termination }
+    const node: UsageNode = { kind: 'usage', id: nid(), usage, turnMs, termination, detail }
     nodes.push(node)
     set({ nodes, revision: get().revision + 1 })
   },

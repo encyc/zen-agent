@@ -473,7 +473,14 @@ function NodeSeat({
     case 'command':
       return <CommandCard name={node.name} argument={node.argument} message={node.message} />
     case 'usage':
-      return <UsageRow usage={node.usage} turnMs={node.turnMs} termination={node.termination} />
+      return (
+        <UsageRow
+          usage={node.usage}
+          turnMs={node.turnMs}
+          termination={node.termination}
+          detail={node.detail}
+        />
+      )
     default:
       return null
   }

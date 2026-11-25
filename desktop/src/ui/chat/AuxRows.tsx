@@ -64,10 +64,12 @@ export function UsageRow({
   usage,
   turnMs,
   termination,
+  detail,
 }: {
   usage: Usage | null
   turnMs: number | null
   termination: string | null
+  detail?: string | null
 }) {
   const t = useT()
   if (usage === null && termination === null) return null
@@ -81,10 +83,11 @@ export function UsageRow({
     parts.push(turnMs < 1000 ? `${turnMs}ms` : `${(turnMs / 1000).toFixed(1)}s`)
   }
   if (termination !== null && termination !== 'stop') {
-    // A guard kill is not a token the reader should decode alone.
-    parts.push(
-      termination === 'loop_detected' ? t('usage.termination.loop_detected') : termination,
-    )
+    // A guard kill is not a token the reader should decode alone: the label
+    // says what happened, the detail says what the model kept repeating.
+    const label =
+      termination === 'loop_detected' ? t('usage.termination.loop_detected') : termination
+    parts.push(detail ? `${label} · ${detail}` : label)
   }
   return (
     <div className={css.usageRow}>

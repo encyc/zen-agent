@@ -476,6 +476,23 @@ test('an exhausted retry fails and the run failure lands above the usage row', (
   )
 })
 
+test('a guard-killed usage row keeps the reason it was killed for', () => {
+  const store = useChatStore.getState()
+  store.pushUsage(
+    { input: 10, output: 2, cache_read: 0, cache_write: 0, cost: 0.01 },
+    1200,
+    'loop_detected',
+    '5x echo({"x":1})',
+  )
+
+  const usage = useChatStore.getState().nodes.find((node) => node.kind === 'usage')
+  assert.equal(usage?.kind === 'usage' ? usage.termination : null, 'loop_detected')
+  assert.equal(
+    usage?.kind === 'usage' ? usage.detail : null,
+    '5x echo({"x":1})',
+  )
+})
+
 test('a failure without any retry still lands inline', () => {
   const store = useChatStore.getState()
   store.applyEvent({ type: 'message_start', message: { role: 'user', text: 'go' } })

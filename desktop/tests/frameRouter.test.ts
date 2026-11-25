@@ -23,7 +23,7 @@ const PROJECT = '/work/p'
 
 interface SinkLog {
   events: [string | null, { type: string }][]
-  usage: [string | null, unknown][]
+  usage: [string | null, unknown, string | null, string | null][]
   failures: [string | null, string][]
   ended: number
 }
@@ -32,7 +32,8 @@ function fakeSink(log: SinkLog, panes: string[] = [PANE_SESSION]): PaneSink {
   return {
     hasPane: (session) => session !== null && panes.includes(session),
     applyEvent: (session, event) => log.events.push([session, event]),
-    applyUsage: (session, usage) => log.usage.push([session, usage]),
+    applyUsage: (session, usage, _turnMs, termination, detail) =>
+      log.usage.push([session, usage, termination, detail]),
     paneFailure: (session, text) => log.failures.push([session, text]),
     sessionEnded: () => {
       log.ended += 1
@@ -145,6 +146,30 @@ test('a pane prompt result lands its usage delta in the pane, not the banner sto
   assert.equal(delta.input, 4)
   assert.equal(delta.cost > 0, true)
   assert.equal(useNoticeStore.getState().notice, null)
+})
+
+test('a guard kill settles a pane row even when ok is false', () => {
+  reset()
+  const log: SinkLog = { events: [], usage: [], failures: [], ended: 0 }
+  setPaneSink(fakeSink(log))
+
+  handleFrame(
+    {
+      type: 'result',
+      id: 'r3',
+      ok: false,
+      project: PROJECT,
+      session: PANE_SESSION,
+      termination: 'loop_detected',
+      detail: '5x echo({"x":1})',
+      usage: { input: 10, output: 5, cache_read: 0, cache_write: 0, cost: 0.1 },
+    },
+    handling(),
+  )
+
+  assert.equal(log.usage.length, 1, 'a failed turn still spent tokens')
+  assert.equal(log.usage[0]?.[2], 'loop_detected')
+  assert.equal(log.usage[0]?.[3], '5x echo({"x":1})')
 })
 
 test('a pane-addressed error frame becomes a pane failure row', () => {

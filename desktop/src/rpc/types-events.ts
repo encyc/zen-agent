@@ -70,6 +70,9 @@ export interface AgentEventFrame {
   details?: string
   is_error?: boolean
   duration_ms?: number
+  // agent_end extras: why the run closed, and the reason behind it
+  termination?: string
+  detail?: string
   // retry extras: the swallowed attempt, announced before its backoff
   attempt?: number
   max_retries?: number

@@ -54,6 +54,7 @@ export interface PaneSink {
     usage: Usage | null,
     turnMs: number | null,
     termination: string | null,
+    detail: string | null,
   ): void
   /** A refusal addressed to this pane (a busy slot, a dead session). */
   paneFailure(session: string | null, text: string): void
@@ -229,7 +230,9 @@ function handlePaneFrame(frame: ServerFrame, session: string | null): void {
     sink.paneFailure(session, message)
     return
   }
-  if (frame.type !== 'result' || !frame.ok) return
+  if (frame.type !== 'result') return
+  // A turn that ended badly (a provider error, a guard kill) still spent
+  // tokens: settle its row — the termination and its detail explain the ending.
   if ('termination' in frame && 'usage' in frame) {
     const delta = takeUsageDelta(session, frame.usage as Usage)
     sink.applyUsage(
@@ -237,6 +240,7 @@ function handlePaneFrame(frame: ServerFrame, session: string | null): void {
       delta,
       null,
       (frame.termination as string | null) ?? null,
+      (frame.detail as string | undefined) ?? null,
     )
   }
 }
@@ -249,12 +253,14 @@ export function handleResultFrame(frame: Record<string, unknown>, handling: Fram
     void handling.get().refreshStatus()
     return
   }
-  if (frame.type !== 'result' || !frame.ok) {
+  if (frame.type !== 'result') {
     void handling.get().refreshStatus()
     return
   }
   // A prompt result closes a turn: land its usage row (the delta since the
   // previous snapshot — the wire usage is session-cumulative) and refresh.
+  // ``ok`` is false for a failed or guard-killed turn, but it still spent
+  // tokens: the row is where its termination and detail become visible.
   if ('termination' in frame && 'usage' in frame) {
     const total = frame.usage as Usage
     const key = typeof frame.session === 'string' ? frame.session : ''
@@ -263,6 +269,7 @@ export function handleResultFrame(frame: Record<string, unknown>, handling: Fram
       delta,
       null,
       (frame.termination as string | null) ?? null,
+      (frame.detail as string | undefined) ?? null,
     )
     useChatStore.getState().finalize()
     void handling.get().refreshStatus()

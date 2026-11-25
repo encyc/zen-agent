@@ -265,7 +265,6 @@ function setAgent(rows: Room, id: string, state: SwarmAgentState['state'], task:
 /** A role view built the way the host builds one from a saved manifest. */
 function roleView(rows: Room, id: string, manifest: Record<string, unknown>): SwarmRole {
   const prior = rows.swarmRoles.find((role) => role.id === id)
-  const limits = (manifest.limits ?? {}) as Record<string, unknown>
   const tools = Array.isArray(manifest.tools) ? manifest.tools.map(String) : null
   const rawServers = manifest.mcpServers
   const mcpServers =

@@ -201,6 +201,9 @@ export interface PromptResult {
   text: string
   usage: Usage
   termination: string | null
+  /** Why the run closed, when the termination has a reason (a guard kill
+   *  names the batch the model kept repeating). */
+  detail?: string
   error?: string
   session?: string
 }
