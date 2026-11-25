@@ -103,10 +103,7 @@
   font-size: var(--ds-font-13);
   font-weight: 500;
   cursor: pointer;
-  transition:
-    background-color var(--ds-motion-fast) var(--ds-ease-out),
-    color var(--ds-motion-fast) var(--ds-ease-out),
-    transform 90ms ease;
+  transition: background-color var(--ds-motion-fast) var(--ds-ease-out), color var(--ds-motion-fast) var(--ds-ease-out), transform var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .actionRow button:active:not(:disabled) {

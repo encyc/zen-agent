@@ -1,7 +1,7 @@
 .mark {
   display: block;
   flex: none;
-  animation: running-spin 2.6s linear infinite;
+  animation: running-spin var(--ds-motion-loop-slow) linear infinite;
 }
 
 @keyframes running-spin {

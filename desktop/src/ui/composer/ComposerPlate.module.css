@@ -65,7 +65,7 @@
   background: color-mix(in oklab, var(--dsw-alias-label-primary) 18%, transparent);
   opacity: 0;
   transform: translateX(-50%);
-  transition: opacity 100ms ease, width 100ms ease, background 100ms ease;
+  transition: opacity var(--ds-motion-fast) var(--ds-ease-out), width var(--ds-motion-fast) var(--ds-ease-out), background var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .resizeHandle:hover::before,
@@ -226,10 +226,7 @@ html[data-composer-resizing] * {
   box-shadow: var(--ds-shadow-thumb);
   color: var(--dsw-alias-label-primary-foreground);
   cursor: pointer;
-  transition:
-    background-color 100ms ease,
-    opacity 100ms ease,
-    transform 90ms ease;
+  transition: background-color var(--ds-motion-fast) var(--ds-ease-out), opacity var(--ds-motion-fast) var(--ds-ease-out), transform var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .primary:hover:not(:disabled) {
@@ -258,10 +255,7 @@ html[data-composer-resizing] * {
   font-size: var(--ds-font-12);
   line-height: 1;
   cursor: pointer;
-  transition:
-    background-color 100ms ease,
-    border-color 100ms ease,
-    opacity 100ms ease;
+  transition: background-color var(--ds-motion-fast) var(--ds-ease-out), border-color var(--ds-motion-fast) var(--ds-ease-out), opacity var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .secondary:hover:not(:disabled) {

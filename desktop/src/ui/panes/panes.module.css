@@ -68,7 +68,7 @@
   flex: none;
   border-radius: var(--ds-radius-full);
   background: var(--dsw-alias-state-business-primary);
-  animation: panePulse 1.6s ease-in-out infinite;
+  animation: panePulse var(--ds-motion-loop) var(--ds-ease-out) infinite;
 }
 
 @keyframes panePulse {

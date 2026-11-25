@@ -33,7 +33,7 @@
   flex: none;
   width: 10px;
   color: var(--dsw-alias-label-caption);
-  transition: transform 120ms ease;
+  transition: transform var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .root[data-state='running'] .chevron {

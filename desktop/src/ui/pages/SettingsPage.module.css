@@ -241,12 +241,6 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .contentEnter {
-    animation-duration: 0.01ms;
-  }
-}
-
 .pageHeader {
   display: flex;
   align-items: center;

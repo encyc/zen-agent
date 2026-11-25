@@ -105,7 +105,7 @@ html[data-platform='darwin'] .brand {
 .sectionChevron {
   flex: none;
   color: var(--dsw-alias-label-tertiary);
-  transition: transform 120ms ease;
+  transition: transform var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .sectionChevron[data-collapsed] {
@@ -252,7 +252,7 @@ html[data-platform='darwin'] .brand {
 .projectChevron {
   flex: none;
   color: var(--dsw-alias-label-tertiary);
-  transition: transform 120ms ease;
+  transition: transform var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .projectChevron[data-collapsed] {
@@ -285,7 +285,7 @@ html[data-platform='darwin'] .brand {
   padding-right: 4px;
   flex: none;
   opacity: 0;
-  transition: opacity 120ms ease;
+  transition: opacity var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .projectHeader:hover .projectActions,

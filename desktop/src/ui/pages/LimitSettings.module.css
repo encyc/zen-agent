@@ -105,7 +105,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 9px 12px;
-  transition: opacity var(--ds-transition-duration-fast, 120ms) ease;
+  transition: opacity var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 /* Editing state: the copy recedes, the editors carry the row. */

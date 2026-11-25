@@ -5,7 +5,7 @@
   min-height: 24px;
   padding-top: 2px;
   opacity: 0;
-  transition: opacity 120ms ease;
+  transition: opacity var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .actions[data-align='end'] {
@@ -29,10 +29,7 @@
   background: none;
   color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
-  transition:
-    background-color var(--ds-motion-fast) var(--ds-ease-out),
-    color var(--ds-motion-fast) var(--ds-ease-out),
-    transform 90ms ease;
+  transition: background-color var(--ds-motion-fast) var(--ds-ease-out), color var(--ds-motion-fast) var(--ds-ease-out), transform var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .action:hover {

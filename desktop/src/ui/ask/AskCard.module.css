@@ -61,7 +61,7 @@
   border-radius: 999px;
   background: var(--dsw-alias-interactive-bg-hover-solid);
   cursor: pointer;
-  transition: background-color 120ms ease;
+  transition: background-color var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .indicator[data-status='answered'] {
@@ -149,9 +149,7 @@
   line-height: 20px;
   text-align: start;
   cursor: pointer;
-  transition:
-    background-color 110ms ease,
-    box-shadow 110ms ease;
+  transition: background-color var(--ds-motion-fast) var(--ds-ease-out), box-shadow var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .option:hover {
@@ -233,9 +231,7 @@
   font-size: var(--ds-font-11);
   font-weight: 700;
   line-height: 1;
-  transition:
-    background-color 110ms ease,
-    box-shadow 110ms ease;
+  transition: background-color var(--ds-motion-fast) var(--ds-ease-out), box-shadow var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .option[role='checkbox'] .optionMark {

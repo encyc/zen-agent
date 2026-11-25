@@ -268,7 +268,7 @@
   padding: 0;
   background: color-mix(in oklab, var(--dsw-alias-label-primary) 22%, transparent);
   cursor: pointer;
-  transition: background 120ms ease;
+  transition: background var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .switch[aria-checked='true'] {
@@ -288,7 +288,7 @@
   height: 14px;
   border-radius: 50%;
   background: var(--dsw-alias-bg-base);
-  transition: transform 120ms ease;
+  transition: transform var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .switch[aria-checked='true'] .switchThumb {

@@ -35,7 +35,7 @@
   background: color-mix(in oklab, var(--dsw-alias-label-primary) 18%, transparent);
   opacity: 0;
   transform: translate(-50%, -50%);
-  transition: opacity 100ms ease, height 100ms ease, background 100ms ease;
+  transition: opacity var(--ds-motion-fast) var(--ds-ease-out), height var(--ds-motion-fast) var(--ds-ease-out), background var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .handle:hover::before,

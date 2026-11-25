@@ -257,7 +257,7 @@
   background-repeat: no-repeat;
   -webkit-background-clip: text;
   background-clip: text;
-  animation: todoShimmerSweep 2.6s linear infinite;
+  animation: todoShimmerSweep var(--ds-motion-loop-slow) linear infinite;
 }
 
 @keyframes todoShimmerSweep {

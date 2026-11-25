@@ -48,7 +48,7 @@
   margin-inline-start: auto;
   color: var(--dsw-alias-label-tertiary);
   opacity: 0.65;
-  transition: transform 120ms ease;
+  transition: transform var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .chevron[data-open] {

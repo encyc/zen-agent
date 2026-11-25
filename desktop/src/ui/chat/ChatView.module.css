@@ -83,10 +83,7 @@
   box-shadow: var(--ds-shadow-raised);
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
-  transition:
-    background-color var(--ds-motion-fast) var(--ds-ease-out),
-    color var(--ds-motion-fast) var(--ds-ease-out),
-    transform 90ms ease;
+  transition: background-color var(--ds-motion-fast) var(--ds-ease-out), color var(--ds-motion-fast) var(--ds-ease-out), transform var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .jump:hover {

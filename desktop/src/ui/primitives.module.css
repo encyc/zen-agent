@@ -8,7 +8,7 @@
 .stateDot[data-state='running'],
 .stateDot[data-state='ongoing'] {
   background: var(--dsw-alias-state-business-primary);
-  animation: dot-pulse 1s ease-in-out infinite alternate;
+  animation: dot-pulse var(--ds-motion-loop) var(--ds-ease-out) infinite alternate;
 }
 
 .stateDot[data-state='ok'] {
@@ -34,7 +34,7 @@
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  animation: shimmer-slide 2.4s linear infinite;
+  animation: shimmer-slide var(--ds-motion-loop-slow) linear infinite;
 }
 
 @keyframes shimmer-slide {
@@ -63,10 +63,7 @@
   line-height: 20px;
   font-weight: 500;
   cursor: pointer;
-  transition:
-    background-color var(--ds-motion-fast) var(--ds-ease-out),
-    color var(--ds-motion-fast) var(--ds-ease-out),
-    transform 90ms ease;
+  transition: background-color var(--ds-motion-fast) var(--ds-ease-out), color var(--ds-motion-fast) var(--ds-ease-out), transform var(--ds-motion-fast) var(--ds-ease-out);
 }
 
 .button:active:not(:disabled) {
@@ -138,7 +135,7 @@
   white-space: nowrap;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 120ms ease 400ms;
+  transition: opacity var(--ds-motion-fast) var(--ds-ease-out) var(--ds-motion-delay-tooltip);
   z-index: 40;
 }
 
