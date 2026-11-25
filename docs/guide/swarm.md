@@ -124,7 +124,7 @@ live runtime，它也会以 `空闲` 状态出现（配置了三个角色就显�
 |---|---|
 | `queued` / `running` | 排队 / 执行中 |
 | `done` | 正常结束，结果已发回房间 |
-| `failed` | `error` / `length` / `no_stream` / `loop_detected` / `timeout` / `approval_timeout` / `interrupted`；原因写入房间系统消息。`loop_detected` 是守卫打断：角色连续重复同一批工具调用 |
+| `failed` | `error` / `length` / `no_stream` / `loop_detected` / `timeout` / `approval_timeout` / `role_unavailable` / `missing_source` / `interrupted`；原因写入房间系统消息。`loop_detected` 是守卫打断：角色连续重复同一批工具调用 |
 | `cancelled` | 用户取消（`aborted`），或角色被删除（`role_removed`） |
 
 链的可追溯性由 `sourceMessageId` + 消息里的 mentions 派生：任务由哪条消息产生、
