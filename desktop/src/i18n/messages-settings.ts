@@ -138,7 +138,7 @@ export const settingsZh: Record<string, string> = {
   'settings.limit.skills.max_body_bytes': '单次 read_skill / /skill: 注入正文的上限，超出截断并标注。',
   'settings.limit.context.max_context_bytes': 'AGENTS.md / CLAUDE.md 注入上下文的总大小上限。',
   'settings.limit.context.compact_threshold': '上下文用到窗口的这一比例时触发自动压缩。',
-  'settings.limit.agent.loop_guard_threshold': '连续多少次完全相同的工具调用后注入“别再重复”提示。',
+  'settings.limit.agent.loop_guard_threshold': '连续多少批完全相同的工具调用后结束这次 run（终止原因 loop_detected）。',
   'settings.limit.agent.max_result_bytes': '单个工具结果超过此大小时只保留头尾，全文可溢出到 artifact。',
   'settings.limit.tools.shell_max_output_bytes': 'bash 输出保留的字节数，超出部分以“截断 N 字节”标注。',
   'settings.limit.goal.max_wall_minutes': '一个 goal 累计的有效工作时间（分钟），到顶硬中断当前 run；0 = 不限。',
@@ -339,7 +339,7 @@ export const settingsEn: Record<string, string> = {
   'settings.limit.skills.max_body_bytes': 'Cap on one read_skill / /skill: injection; larger bodies are truncated and marked.',
   'settings.limit.context.max_context_bytes': 'Total size of injected AGENTS.md / CLAUDE.md context.',
   'settings.limit.context.compact_threshold': 'Fraction of the context window that triggers auto-compaction.',
-  'settings.limit.agent.loop_guard_threshold': 'Identical tool-call repeats before a “stop repeating” note is injected.',
+  'settings.limit.agent.loop_guard_threshold': 'Identical tool-call batches before the run ends with termination loop_detected.',
   'settings.limit.agent.max_result_bytes':
     'Tool results larger than this keep only head and tail; the full text can spill to an artifact.',
   'settings.limit.tools.shell_max_output_bytes': 'Bash output bytes to keep; the dropped middle is reported as a truncation notice.',
