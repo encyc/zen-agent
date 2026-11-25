@@ -748,11 +748,6 @@ def test_mode_flag_reaches_the_permission_gate(monkeypatch):
     assert gate.mode == "auto"
 
 
-def test_legacy_zen_mode_flag_still_reaches_auto(monkeypatch):
-    gate = _capture_gate_for(monkeypatch, ["-p", "hi", "--mode", "zen"])
-    assert gate.mode == "auto"
-
-
 def test_yes_maps_to_auto_mode(monkeypatch):
     gate = _capture_gate_for(monkeypatch, ["-p", "hi", "--yes"])
     assert gate.mode == "auto"
@@ -763,12 +758,13 @@ def test_default_mode_is_ask(monkeypatch):
     assert gate.mode == "ask"
 
 
-def test_unknown_mode_is_rejected(monkeypatch):
-    import pytest
-
+@pytest.mark.parametrize("raw", ["zen", "yolo"])
+def test_unknown_mode_is_rejected(monkeypatch, capsys, raw):
     monkeypatch.setenv("ZAI_CODING_CN_API_KEY", "test-key")
-    with pytest.raises(SystemExit):
-        cli_main.main(["-p", "hi", "--mode", "yolo"])
+    with pytest.raises(SystemExit) as exc:
+        cli_main.main(["-p", "hi", "--mode", raw])
+    assert exc.value.code == 2
+    assert f"unknown mode: {raw}" in capsys.readouterr().err
 
 
 def test_headless_exposes_the_task_tool(monkeypatch, capsys):

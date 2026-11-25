@@ -23,14 +23,19 @@ def test_normalize_mode_accepts_case_and_space(raw):
     assert normalize_mode(raw) in MODES
 
 
-@pytest.mark.parametrize("raw", ["yolo", "full", "", None])
+@pytest.mark.parametrize("raw", ["zen", "yolo", "full", "", None])
 def test_normalize_mode_rejects_unknown(raw):
     assert normalize_mode(raw) is None
 
 
-def test_legacy_zen_is_alias_for_auto():
-    assert normalize_mode("zen") == "auto"
-    assert resolve_mode(explicit="zen", assume_yes=False, read_only=False) == "auto"
+def test_zen_is_not_a_mode():
+    assert normalize_mode("zen") is None
+    with pytest.raises(ValueError):
+        resolve_mode(explicit="zen")
+
+
+def test_mode_names_stay_case_and_space_insensitive():
+    assert normalize_mode(" PLAN ") == "plan"
 
 
 def test_explicit_mode_wins_over_flags():

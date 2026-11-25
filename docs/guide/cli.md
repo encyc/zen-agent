@@ -48,7 +48,7 @@ zen -p "analyze" --read-only --trace run.jsonl --cwd /path/to/project
 | `-p/--prompt` | headless 单次运行 |
 | `-m/--model` | 模型 id（catalog 或配置里的自定义模型） |
 | `--thinking` | `off/low/medium/high/max` |
-| `--mode` | `plan` / `ask` / `auto`（默认 ask；`--yes`≈auto，`--read-only`≈plan；`zen` 是旧别名） |
+| `--mode` | `plan` / `ask` / `auto`（默认 ask；`--yes`≈auto，`--read-only`≈plan） |
 | `--yes` | 任何操作都不再确认（等价 `--mode auto`） |
 | `--read-only` | 拒绝所有非只读工具（含未声明 `readOnlyHint` 的 MCP；等价 `--mode plan`） |
 | `--allow-dangerous` | 允许 `rm -rf` 等危险命令（`--yes` 也不够） |

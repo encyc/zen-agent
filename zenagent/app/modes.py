@@ -14,9 +14,8 @@ REPL and TUI all resolve and display the same three words.
   headless runs included. Only policy stays: catastrophic shell commands still
   refuse (``--allow-dangerous`` lifts that too) and explicit deny patterns win.
 
-``zen`` is still accepted as a legacy alias and normalizes to ``auto`` so old
-scripts, configs and role manifests keep working; the workspace mode ``zen`` is
-a separate concept and is not touched here.
+Only ``plan`` / ``ask`` / ``auto`` are modes; the retired ``zen`` spelling is
+unknown.
 """
 
 from __future__ import annotations
@@ -26,7 +25,6 @@ from zenagent.prompts.registry import read_block
 
 __all__ = [
     "DEFAULT_MODE",
-    "LEGACY_MODES",
     "MODES",
     "describe_modes",
     "mode_prompt_note",
@@ -37,10 +35,6 @@ __all__ = [
 #: The three supported modes, in escalation order.
 MODES: tuple[str, str, str] = ("plan", "ask", "auto")
 
-#: Pre-rename spellings accepted at the edges (CLI, config, role manifests,
-#: old prefs) and normalized immediately. Never advertised.
-LEGACY_MODES: dict[str, str] = {"zen": "auto"}
-
 #: The default when neither a flag nor an explicit mode says otherwise.
 DEFAULT_MODE = "ask"
 
@@ -50,7 +44,6 @@ def normalize_mode(raw: str | None) -> str | None:
     if raw is None:
         return None
     candidate = raw.strip().lower()
-    candidate = LEGACY_MODES.get(candidate, candidate)
     return candidate if candidate in MODES else None
 
 
