@@ -8,6 +8,7 @@ import { useApprovalStore, useSessionStore } from '../../state/stores'
 import { pendingForProject } from '../../state/pendingProject'
 import { useT } from '../../i18n/locale'
 import { StateDot } from '../primitives'
+import { usePresence, PRESENCE_LEAVE_MS } from '../presence'
 import css from './ApprovalPanel.module.css'
 
 export function ApprovalPanel() {
@@ -19,8 +20,18 @@ export function ApprovalPanel() {
   const approval = pendingForProject(queue, project, session)[0]
   const answered = useRef(false)
   const [busy, setBusy] = useState(false)
+  const presence = usePresence(approval !== undefined, PRESENCE_LEAVE_MS)
+  // The queue drops the request the moment it is answered; the exit frame is
+  // painted from the last live one so the card does not blank out mid-fade.
+  const lastApproval = useRef(approval)
+  if (approval !== undefined) lastApproval.current = approval
+  const shown = approval ?? lastApproval.current
 
   useEffect(() => {
+    // Reset only when a NEW request arrives. The queue emptying means the
+    // answer was consumed, and the exit frame has to keep `busy` so the buttons
+    // stay disabled while the card fades out.
+    if (approval === undefined) return
     answered.current = false
     setBusy(false)
   }, [approval?.requestId])
@@ -44,7 +55,7 @@ export function ApprovalPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [approval?.requestId])
 
-  if (approval === undefined) return null
+  if (!presence.mounted || shown === undefined) return null
 
   const answer = (decision: 'allow' | 'always' | 'deny') => {
     if (answered.current || busy) return
@@ -52,12 +63,12 @@ export function ApprovalPanel() {
     setBusy(true)
     // Rejecting one request must not abort the run: the tool result comes
     // back as an error and the model reacts (same as the TUI's [n]).
-    void approve(approval.requestId, decision)
+    void approve(shown.requestId, decision)
   }
 
-  let argsPreview = approval.args
+  let argsPreview = shown.args
   try {
-    const parsed: unknown = JSON.parse(approval.args)
+    const parsed: unknown = JSON.parse(shown.args)
     if (parsed !== null && typeof parsed === 'object') {
       const record = parsed as Record<string, unknown>
       const first = record.command ?? record.path ?? record.query ?? record.pattern ?? record.url
@@ -68,7 +79,7 @@ export function ApprovalPanel() {
   }
 
   return (
-    <div className={css.root} data-approval>
+    <div className={css.root} data-approval data-state={presence.state}>
       <div className={css.card}>
         <div className={css.strip}>
           <StateDot state="warning" />
@@ -77,18 +88,18 @@ export function ApprovalPanel() {
         </div>
         <div className={css.body} data-selectable>
           <div className={css.headline}>
-            {approval.reason ??
-              t('approval.escalation', { toolName: approval.toolName })}
+            {shown.reason ??
+              t('approval.escalation', { toolName: shown.toolName })}
           </div>
           <div className={css.command}>
-            <span className={css.toolName}>{approval.toolName}</span>
+            <span className={css.toolName}>{shown.toolName}</span>
             <span className={css.toolArgs}>{argsPreview}</span>
           </div>
-          {approval.argsTruncated && (
+          {shown.argsTruncated && (
             <div className={css.risk}>{t('approval.truncated')}</div>
           )}
-          {approval.risk !== null && approval.risk !== '' && (
-            <div className={css.risk}>{approval.risk}{approval.target !== null ? ` · ${approval.target}` : ''}</div>
+          {shown.risk !== null && shown.risk !== '' && (
+            <div className={css.risk}>{shown.risk}{shown.target !== null ? ` · ${shown.target}` : ''}</div>
           )}
         </div>
         <div className={css.actionRow}>
@@ -100,7 +111,7 @@ export function ApprovalPanel() {
           >
             {t('approval.reject')}
           </button>
-          {approval.target !== null && approval.target !== '' && (
+          {shown.target !== null && shown.target !== '' && (
             <button
               type="button"
               className={css.always}

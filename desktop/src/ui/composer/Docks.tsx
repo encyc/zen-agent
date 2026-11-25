@@ -9,6 +9,7 @@ import { useSettingsStore, useStatusStore } from '../../state/stores'
 import type { PendingMessage } from '../../rpc/types'
 import { useT } from '../../i18n/locale'
 import { formatCompactTokens } from '../format'
+import { usePresence, PRESENCE_LEAVE_MS } from '../presence'
 import { CheckIcon, ChevronDownIcon, XIcon } from '../icons'
 import { contextMeterView } from './contextUsage'
 import { flattenTodos, todoProgress, type TodoStatus, type TodoTask } from './todos'
@@ -295,6 +296,7 @@ export function ContextMeter() {
   const usageDisplay = useSettingsStore((state) => state.contextUsageDisplay)
   const [open, setOpen] = useState(false)
   const closeTimer = useRef<number | null>(null)
+  const card = usePresence(open, PRESENCE_LEAVE_MS)
   const cardId = useId()
   const used = status?.context_used ?? null
   const window_ = status?.context_window ?? null
@@ -363,8 +365,14 @@ export function ContextMeter() {
         </svg>
         <span className={css.contextValue}>{display.percent}%</span>
       </span>
-      {open && report !== null && (
-        <div className={css.contextCard} id={cardId} role="tooltip" data-testid="context-card">
+      {card.mounted && report !== null && (
+        <div
+          className={css.contextCard}
+          id={cardId}
+          role="tooltip"
+          data-testid="context-card"
+          data-state={card.state}
+        >
           <div className={css.contextCardHead}>
             <strong className={css.contextCardHeadValue}>
               {t('context.spent', { tokens: totalLabel })}

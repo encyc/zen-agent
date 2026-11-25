@@ -477,20 +477,22 @@
   line-height: 1.5;
   text-align: left;
   white-space: normal;
+  transform: translateY(0);
+  transition:
+    opacity var(--ds-motion-fast) var(--ds-ease-out),
+    transform var(--ds-motion-fast) var(--ds-ease-out);
   font-variant-numeric: tabular-nums;
   cursor: default;
-  animation: contextCardIn var(--ds-transition-duration-fast) var(--ds-ease-in-out);
 }
 
-@keyframes contextCardIn {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+/* The entrance is the same transition, run in reverse: `entering` paints the
+ * closed target for one frame and the next commit moves to the open one. One
+ * mechanism for both directions, so an interrupted hover reverses instead of
+ * restarting. */
+.contextCard[data-state='closed'] {
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
 }
 
 .contextCardHead {
@@ -575,10 +577,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .contextCard {
-    animation: none;
-  }
-
   .contextRingProgress {
     transition: none;
   }

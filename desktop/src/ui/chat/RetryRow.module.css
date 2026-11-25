@@ -87,11 +87,33 @@
 
 /* ---- expanded attempt list ------------------------------------------------- */
 
+/* A 0fr→1fr grid row instead of max-height: the closed height is exactly zero
+ * whatever the attempt count, and the open height is the content's own. */
 .details {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 2px 8px 6px 27px;
+  display: grid;
+  grid-template-rows: 0fr;
+  padding: 2px 8px 0 27px;
+  opacity: 0;
+  overflow: hidden;
+  transition:
+    grid-template-rows var(--ds-motion) var(--ds-ease-out),
+    padding-bottom var(--ds-motion) var(--ds-ease-out),
+    opacity var(--ds-motion) var(--ds-ease-out);
+}
+
+.details > * {
+  min-height: 0;
+}
+
+.details[data-state='open'] {
+  grid-template-rows: 1fr;
+  padding-bottom: 6px;
+  opacity: 1;
+}
+
+/* The finite leave window ends here; the grid's row track collapses in step. */
+.details[data-state='closed'] > * {
+  overflow: hidden;
 }
 
 .attempt {

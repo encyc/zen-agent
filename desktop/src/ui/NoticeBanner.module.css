@@ -17,6 +17,18 @@
   color: var(--dsw-alias-label-secondary);
   font-size: var(--ds-font-12);
   pointer-events: auto;
+  transform: translateY(0);
+  transition:
+    opacity var(--ds-motion-fast) var(--ds-ease-out),
+    transform var(--ds-motion-fast) var(--ds-ease-out);
+}
+
+/* Leaving: fade down and drop out of the pointer chain. Transform, not height —
+ * the banner keeps its box so the plate underneath does not jump. */
+.root[data-state='closed'] {
+  opacity: 0;
+  transform: translateY(2px);
+  pointer-events: none;
 }
 
 .root[data-kind='error'] {

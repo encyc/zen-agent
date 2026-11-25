@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react'
 import type { FailureNode, RetryNode } from '../../state/chatStore'
 import { useT } from '../../i18n/locale'
 import { ChevronDownIcon, ChevronRightIcon, RefreshIcon } from '../icons'
+import { usePresence, PRESENCE_LEAVE_MS } from '../presence'
 import css from './RetryRow.module.css'
 
 /** `0.5s`, `3.5s`, `8s`: whole seconds stay bare, halves keep one decimal. */
@@ -43,6 +44,7 @@ function retryLabel(t: ReturnType<typeof useT>, state: RetryNode['state']): stri
 export function RetryRow({ node }: { node: RetryNode }) {
   const t = useT()
   const [open, setOpen] = useState(false)
+  const details = usePresence(open, PRESENCE_LEAVE_MS)
   const waited = useWaitedMs(node)
   const live = node.state === 'retrying'
   return (
@@ -74,8 +76,8 @@ export function RetryRow({ node }: { node: RetryNode }) {
           {open ? <ChevronDownIcon size={11} /> : <ChevronRightIcon size={11} />}
         </span>
       </button>
-      {open && (
-        <div className={css.details}>
+      {details.mounted && (
+        <div className={css.details} data-retry-details data-state={details.state}>
           {node.errors.length === 0 ? (
             <div className={css.attempt}>
               <span className={css.attemptError}>{t('chat.retryUnknown')}</span>

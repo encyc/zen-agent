@@ -2,7 +2,7 @@
  * the allowlisted slash commands. Resuming a session from another project
  * switches the runtime there first via the app store. */
 
-import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useState, type KeyboardEvent } from 'react'
 import { useAppStore } from '../../state/appStore'
 import { useCatalogStore, useComposerStore, usePaletteStore, useSessionStore } from '../../state/stores'
 import { nextPaletteIndex, paletteResults, type PaletteCommandHit, type PaletteSessionHit } from '../../state/palette'
@@ -44,6 +44,29 @@ export function CommandPalette() {
   useEffect(() => {
     if (open) setActive(nextPaletteIndex(flat, -1, 1))
   }, [open, flat])
+
+  // Escape closes from anywhere while the overlay is up. The panel's own
+  // keydown only fires when focus is already inside it, so an overlay with focus
+  // elsewhere would trap the user. App's global Escape returns early while this
+  // store says open, so only one of the two ever acts.
+  //
+  // Capture phase, deliberately: the panel's own keydown calls
+  // stopPropagation(), and React's synthetic event forwards that to the native
+  // one, so a bubble-phase listener on `document` never runs once the panel has
+  // focus — the exact case this handler exists to cover.
+  //
+  // Layout effect, not effect: the listener must exist as of the commit that
+  // paints the overlay. A passive effect runs after paint, leaving a window
+  // where the overlay is visible and Escape still belongs to the page.
+  useLayoutEffect(() => {
+    if (!open) return undefined
+    const onDocumentKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      close()
+    }
+    document.addEventListener('keydown', onDocumentKeyDown, true)
+    return () => document.removeEventListener('keydown', onDocumentKeyDown, true)
+  }, [open, close])
 
   const presence = usePresence(open, PRESENCE_LEAVE_MS)
   if (!presence.mounted) return null

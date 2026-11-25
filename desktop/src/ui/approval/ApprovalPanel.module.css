@@ -1,6 +1,20 @@
 .root {
   width: 100%;
   max-width: var(--dsh-composer-card-max-width);
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity var(--ds-motion-fast) var(--ds-ease-out),
+    transform var(--ds-motion-fast) var(--ds-ease-out);
+}
+
+/* Leaving: the answer is already on the wire (answered ref) and every button is
+ * disabled, so the fade cannot accept a second decision. It only stops the card
+ * from vanishing under the pointer. */
+.root[data-state='closed'] {
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
 }
 
 .card {

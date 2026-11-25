@@ -33,6 +33,17 @@ test('an exit interrupted by a reopen enters again instead of jumping open', () 
   assert.equal(nextPhase('entering', false), 'exiting') // 进入中被打断也能反向
 })
 
+test('a phase write re-derives from the live intent, never the literal phase', () => {
+  // The hook's rAF/timer callbacks both funnel through nextPhase(wantOpen).
+  // A close that lands in the same frame as the opener's rAF would otherwise
+  // overwrite `exiting` with `open` and strand the overlay visibly open.
+  // The pure function is where that invariant is pinned: whatever phase the
+  // callback finds, the intent wins.
+  assert.equal(nextPhase('entering', false), 'exiting')
+  assert.equal(nextPhase('exiting', false), 'exiting')
+  assert.equal(nextPhase('exiting', true), 'entering')
+})
+
 test('mounted and the data-state attribute disagree exactly in the exiting phase', () => {
   for (const phase of ['entering', 'open'] as const) {
     assert.equal(isMounted(phase), true)

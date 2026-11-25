@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { useAppStore } from '../../state/appStore'
-import { useApprovalStore, useAskStore, useComposerStore, useSettingsStore, useStatusStore, useCatalogStore, useSkillsStore } from '../../state/stores'
+import { useAskStore, useComposerStore, useSettingsStore, useStatusStore, useCatalogStore, useSkillsStore } from '../../state/stores'
 import { slashEntries } from '../../state/slashMenu'
 import { detectMention, formatMentionInsert, recognizedTokens } from '../../state/mentions'
 import type { IndexedPath } from '../../state/mentions'
@@ -64,7 +64,6 @@ export function InputBar() {
   const skills = useSkillsStore((state) => state.skills)
   const refreshSkills = useAppStore((state) => state.refreshSkills)
   const enterToSend = useSettingsStore((state) => state.enterToSend)
-  const approvalCount = useApprovalStore((state) => state.queue.length)
   const askCount = useAskStore((state) => state.queue.length)
 
   const [menu, setMenu] = useState<MenuState>({ kind: null })
@@ -266,7 +265,10 @@ export function InputBar() {
 
   return (
     <ComposerRoot>
-      {approvalCount > 0 && <ApprovalPanel />}
+      {/* Always mounted: the panel decides its own visibility so an answered
+          request can still play its exit (see ui/presence.ts). Gating the mount
+          here would unmount the card on the same commit that closes it. */}
+      <ApprovalPanel />
       {askCount > 0 && <AskCard />}
       <PendingDock />
       <ContinuingDock />

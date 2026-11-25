@@ -72,15 +72,25 @@ export function usePresence(
 
   // `entering` is one frame long: it exists so the first commit paints the
   // closed target state and the next commit can transition away from it.
+  //
+  // Both callbacks below re-derive from `wantRef` instead of writing the literal
+  // phase: a close that lands in the same frame the opener's rAF was scheduled
+  // for would otherwise overwrite `exiting` with `open` and strand the overlay
+  // visibly open forever. Re-deriving from the live intent is what makes the
+  // machine idempotent under a same-frame open/close race.
   useEffect(() => {
     if (phase !== 'entering') return undefined
-    const frame = window.requestAnimationFrame(() => setPhase('open'))
+    const frame = window.requestAnimationFrame(() => {
+      setPhase((current) => nextPhase(current, wantRef.current))
+    })
     return () => window.cancelAnimationFrame(frame)
   }, [phase])
 
   useEffect(() => {
     if (phase !== 'exiting') return undefined
-    const timer = window.setTimeout(() => setPhase('closed'), leavingMs)
+    const timer = window.setTimeout(() => {
+      setPhase((current) => (wantRef.current ? nextPhase(current, true) : 'closed'))
+    }, leavingMs)
     return () => window.clearTimeout(timer)
   }, [phase, leavingMs])
 
