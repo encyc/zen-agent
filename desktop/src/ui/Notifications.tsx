@@ -15,6 +15,7 @@ import { useUpdateStore } from '../state/updateStore'
 import { useT } from '../i18n/locale'
 import { formatAge } from './format'
 import { BellIcon, XIcon } from './icons'
+import { usePresence, PRESENCE_LEAVE_MS } from './presence'
 import css from './Notifications.module.css'
 
 const RELEASES = 'https://github.com/encyc/zen-agent/releases/latest'
@@ -36,6 +37,7 @@ export function Notifications() {
   const busy = useAppStore((state) => state.busy)
   const pendingApprovals = useApprovalStore((state) => state.queue.length)
   const [open, setOpen] = useState(false)
+  const presence = usePresence(open, PRESENCE_LEAVE_MS)
   const anchorRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -100,8 +102,15 @@ export function Notifications() {
         <BellIcon size={14} />
         {showDot && <span className={css.dot} data-tone={dotTone} data-testid="notification-dot" />}
       </button>
-      {open && (
-        <div className={css.popover} role="dialog" aria-label={t('notifications.title')}>
+      {presence.mounted && (
+        <div
+          className={css.popover}
+          data-notifications-popover
+          data-state={presence.state}
+          role="dialog"
+          aria-label={t('notifications.title')}
+          aria-hidden={presence.state === 'closed' || undefined}
+        >
           <div className={css.header}>
             <span>{t('notifications.title')}</span>
             {items.length > 0 && (

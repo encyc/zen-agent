@@ -48,6 +48,18 @@
   border-radius: var(--ds-radius-12);
   background: var(--dsw-alias-bg-layer-2);
   box-shadow: var(--dsw-elevation-panel);
+  transform: translateY(0);
+  transition:
+    opacity var(--ds-motion-fast) var(--ds-ease-out),
+    transform var(--ds-motion-fast) var(--ds-ease-out);
+}
+
+/* One leaving window of faded-out, non-interactive node; ui/presence.ts keeps
+ * it mounted so the transition has somewhere to run. */
+.popover[data-state='closed'] {
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
 }
 
 .header {

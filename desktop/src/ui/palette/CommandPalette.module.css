@@ -7,6 +7,15 @@
   justify-content: center;
   padding: 12vh 16px 16px;
   background: var(--dsw-alias-bg-mask-1);
+  transition: opacity var(--ds-motion-fast) var(--ds-ease-out);
+}
+
+/* Leaving: fade the mask out and stop it swallowing clicks. The node stays
+ * mounted for one leaving window (see ui/presence.ts) so this transition has
+ * somewhere to run. */
+.backdrop[data-state='closed'] {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .panel {
@@ -22,6 +31,15 @@
   box-shadow: var(--dsw-elevation-prominent);
   backdrop-filter: var(--dsw-menu-backdrop-filter);
   color: var(--dsw-alias-label-primary);
+  transform: translateY(0);
+  transition:
+    opacity var(--ds-motion-fast) var(--ds-ease-out),
+    transform var(--ds-motion-fast) var(--ds-ease-out);
+}
+
+.backdrop[data-state='closed'] .panel {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
 .searchRow {
