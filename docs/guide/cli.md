@@ -31,7 +31,8 @@ zen -p "analyze" --read-only --trace run.jsonl --cwd /path/to/project
 
 - 默认是 `ask` 模式：写文件/bash 需要确认；headless 下没有交互，所以要么 `--mode auto`/`--yes`，
   要么用 `[tools] allow` 放行，要么 `--read-only`/`--mode plan` 只读。
-- `--json` 时 stdout 只有一段 JSON：`ok`、`text`、`usage`、`messages`、`error`、`termination`，
+- `--json` 时 stdout 只有一段 JSON：`ok`、`text`、`usage`、`messages`、`error`、`termination`、
+  `detail`（终止有原因时的说明，如守卫打断重复的调用批次），
   没有工具调用列表（要看逐次工具调用用 `--trace`），适合被脚本消费。
 - 会话仍然会写盘（`~/.zenagent/projects/<slug>-<hash8>/sessions/`，项目作用域见
   [项目作用域](projects.md)），除非你另有 HOME。
@@ -51,7 +52,6 @@ zen -p "analyze" --read-only --trace run.jsonl --cwd /path/to/project
 | `--yes` | 任何操作都不再确认（等价 `--mode auto`） |
 | `--read-only` | 拒绝所有非只读工具（含未声明 `readOnlyHint` 的 MCP；等价 `--mode plan`） |
 | `--allow-dangerous` | 允许 `rm -rf` 等危险命令（`--yes` 也不够） |
-| `--max-turns` / `--max-cost` | 硬上限；超限终止并记录在 termination |
 | `--retries` | provider 瞬时错误的额外重试次数（默认 0）。启用后每次尝试先缓冲，**关闭 token 流式**（文本在调用结束时出现） |
 | `--resume [SESSION]` | 继续会话（缺省 `latest`，只续当前项目） |
 | `--list-sessions` | 列出当前项目的会话（不能与 `-p` 同用） |
@@ -124,7 +124,7 @@ zen evals [--model ...] [--filter ...] [--report ...] [--baseline ...]
 
 TUI 与 REPL 的启动 flag 现在都真实生效：`--thinking`、`--trace`、`--metrics`、
 `--no-auto-compact`、`--image` 由 `RuntimeOptions` 统一承载；REPL 也会转发
-`--max-turns`/`--max-cost`/`--retries`。RPC 有对应的一组（thinking/trace/metrics/
+`--retries`。RPC 有对应的一组（thinking/trace/metrics/
 no-auto-compact/no-templates/extension），但没有 `--theme`/`--image`——图片走
 `prompt.images`（见 [RPC 与 SDK](rpc-sdk.md)）。headless `-p` 不走 `RuntimeOptions`
 ——它自己装配 Agent，这些 flag 由 `run_headless` 的参数直接承载。

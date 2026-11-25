@@ -59,7 +59,6 @@ manifest（`root` 指向库工作区、`inheritProject: false`），复制时会
   "tools": ["bash", "read_file", "write_file", "edit_file", "web_fetch"],
   "root": "/Users/mac/work/notes",
   "inheritProject": false,
-  "limits": { "maxTurns": 30, "maxCost": 1.5 },
   "mode": "ask"
 }
 ```
@@ -76,7 +75,6 @@ manifest（`root` 指向库工作区、`inheritProject: false`），复制时会
 | `tools` | 标准工具集 + swarm 工具 | 显式列表即白名单裁剪，在 Runtime 装配时执行，不靠提示词 |
 | `root` | 项目角色缺省为项目根；全局库角色为 `~/.zenagent-workspaces/<id>/` | 角色工具的 cwd 边界；缺省目录自动创建，在 `~/.zenagent` 保护栅栏之外 |
 | `inheritProject` | 项目角色 `true`，全局库角色 `false` | `false` 是隔离 profile：不继承项目层配置、记忆、skills、AGENTS.md |
-| `limits` | 无 | `maxTurns` / `maxCost`，映射到既有 `AgentConfig` |
 | `mode` | `ask` | `plan` 只读；`ask` 变更操作弹审批；`auto` 无人值守自动通过（灾难性命令仍拒绝；旧值 `zen` 仍兼容） |
 
 角色 session 落在 `~/.zenagent/projects/<项目>/swarm/agents/<id>/sessions/`，
@@ -88,7 +86,7 @@ manifest（`root` 指向库工作区、`inheritProject: false`），复制时会
 房间运行护栏（并发 / 链路深度 / 链路花销 / 空闲实例回收，写 `[swarm]`）以及全局库复制。侧边栏的
 「配置」与「新建角色」打开完整表单：id、人设、
 模型/思考、skills、plugins、MCP 服务器、工具白名单、root、inheritProject、mode、
-轮数/成本上限。MCP 编辑框回显 manifest 里的 `${KEY}` 占位符，解析后的凭据不会回传给
+MCP 编辑框回显 manifest 里的 `${KEY}` 占位符，解析后的凭据不会回传给
 界面；JSON 不合法时停留在表单并提示。项目角色手工编辑上面的文件与 GUI 管理完全等价；
 全局库在 GUI 中只读（可手工编辑，作为模板）。
 
@@ -126,8 +124,8 @@ live runtime，它也会以 `空闲` 状态出现（配置了三个角色就显�
 |---|---|
 | `queued` / `running` | 排队 / 执行中 |
 | `done` | 正常结束，结果已发回房间 |
-| `failed` | `error` / `aborted` / `loop_detected` / `interrupted`，原因写入房间系统消息 |
-| `cancelled` | 用户取消，或角色被删除（`role_removed`） |
+| `failed` | `error` / `length` / `no_stream` / `loop_detected` / `timeout` / `approval_timeout` / `interrupted`；原因写入房间系统消息。`loop_detected` 是守卫打断：角色连续重复同一批工具调用 |
+| `cancelled` | 用户取消（`aborted`），或角色被删除（`role_removed`） |
 
 链的可追溯性由 `sourceMessageId` + 消息里的 mentions 派生：任务由哪条消息产生、
 产出哪条结果都能从日志还原。`chainId` 在链的第一跳生成，后续继承；`chainCost`

@@ -29,6 +29,18 @@ matches the release tag; older history is in the repository tags and commits.
   of failing the load, so a published `config.toml` keeps starting. The limits
   registry and the settings page no longer list them.
 
+### Fixed
+
+- **A guard kill now explains itself on every surface.** `agent_end` carries
+  `termination` and `detail`; the `prompt` and `status` results carry `detail`
+  too. The one-shot CLI prints it, TUI/REPL leave a transcript notice, the
+  session's `run_end` record keeps it, and the desktop usage row names the
+  repeated call instead of showing a bare token.
+- **A turn that ended with `ok: false` still lands its usage row.** A provider
+  failure or a guard kill spent tokens, but the desktop dropped the row before
+  reading the termination — the reason was invisible, and the retry row it
+  should have settled stayed pending. Both are fixed.
+
 ## v0.14.1 — 2026-11-19
 
 ### Added

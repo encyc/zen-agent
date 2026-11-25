@@ -105,7 +105,7 @@ class ToolResultAgent:
   **父会话的 permission gate**（`Runtime` 把 `gate.before_tool_call` 传进 `build_task_tool`），
   所以 deny 模式与灾难命令策略在子代理里同样生效。
 - `async: true` 直接把 run 交给进程级 `TaskManager`（`task_N` id），用 `wait` 收集；
-  前台收集前 spend 不计入父 run 的 `max_cost`。
+  child 的 spend 单独记账，父 run 没有花费上限可超。
 - 递归深度 1（child 看不到 `task`）；`execution_mode="sequential"`。
 - child 失败/abort 不产生 is_error：envelope 的 `status=error|aborted|truncated` 描述原因；
   `details` 带 `subagent_cost/subagent_tokens`，父的状态带与 telemetry 单独累计。

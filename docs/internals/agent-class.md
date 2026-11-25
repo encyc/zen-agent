@@ -37,7 +37,7 @@ idle ──prompt/continue_──▶ running ──完成/取消──▶ idle
 | `reset()` | 清空历史 |
 | `messages` | 只读视图 |
 | `is_streaming` / `is_idle` | 状态 |
-| `termination` / `error_message` | 结果 |
+| `termination` / `termination_detail` / `error_message` | 结果（`termination_detail` 是终止有原因时的说明，如 `loop_detected` 重复的调用批次） |
 
 ## 事件分发
 

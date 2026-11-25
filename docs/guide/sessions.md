@@ -47,8 +47,9 @@ runtime / 进程，再恢复。两个终端不能同时 `--resume` 同一个会�
   `derivedFrom`（来源会话 stem）。续接（resume）或 legacy 文件**不补写**头记录，字节不动。
 - `run_start` / `run_end`：每次 run（一次 prompt 到落定，含 `continue_` 这类无用户消息的 run）
   的边界；`run_end` 记录 `termination`（stop/loop_detected/aborted/error/no_stream/
-  tool_terminate）、`turns`（本次 run 的请求数）、`duration_ms`，run 以 error 收尾时另有
-  `detail`（终止 assistant 消息的 error_message）。
+  tool_terminate）、`turns`（本次 run 的请求数）、`duration_ms`，以及 `detail`：run 以
+  `error` 收尾时是终止 assistant 消息的 error_message，守卫打断时是重复的那批调用
+  （如 `5x echo({"x": 1})`）。
 - `retry`：被消息级重试吞掉的瞬态失败（每次退避前一条）——`attempt`、`max_retries`、
   `delay_ms`、`error`、`model`。不开启 `--retries` 时没有这类记录。
 - `mode`：bootstrap 时的初始权限模式，以及每次 `/mode` 切换——`mode`（auto/plan/ask；旧记录可能仍是 `zen`，读取时按 `auto` 理解）。

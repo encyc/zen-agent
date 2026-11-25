@@ -244,10 +244,6 @@ def parse_role(
     except OSError as exc:
         warnings.append(f"role {role_id}: cannot create workspace {root}: {exc}")
 
-    limits = raw.get("limits")
-    if not isinstance(limits, dict):
-        limits = {}
-
     raw_mode = str(raw.get("mode") or DEFAULT_MODE)
     mode = normalize_mode(raw_mode)
     if mode is None:

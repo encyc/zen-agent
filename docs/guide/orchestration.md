@@ -92,8 +92,9 @@ coding run，想知道“整个项目现在在跑什么”时才看 Supervisor�
 
 `kind` 取 `coding` / `zen_router` / `zen_worker` / `swarm` / `subagent`；`status` 取
 `running` / `done` / `failed` / `aborted` / `cancelled` / `interrupted`。终止原因与状态
-的映射是保守的：只有 `stop` 和 `tool_terminate` 算 `done`，预算/错误类终止算
-`failed`，协作中止算 `aborted`。
+的映射是保守的：只有 `stop` 和 `tool_terminate` 算 `done`；`error` / `length` /
+`no_stream` 算 `failed`；协作中止算 `aborted`；守卫打断（`loop_detected`，连续重复同一批
+工具调用）算 `interrupted`——它与崩溃残留的 `interrupted` 一样，是“没跑完”而不是“跑错了”。
 
 查询走宿主级 RPC（跨模式、只读）：
 
