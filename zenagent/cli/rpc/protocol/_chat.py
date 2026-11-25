@@ -336,6 +336,7 @@ OPS: dict[str, OpSpec] = {
 "compactions": Field(list_of(ref("CompactionRecord")), optional=True),
 "hasMoreBefore": Field(BOOL, optional=True),
 "total": Field(INT, optional=True),
+"resident": Field(BOOL, optional=True),
     }),
     "subagent_transcript": OpSpec("subagent_transcript", _SubagentTranscriptRequest, {
 "available": Field(BOOL),

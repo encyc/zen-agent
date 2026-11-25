@@ -682,6 +682,7 @@ export interface TranscriptResult {
   compactions?: Array<CompactionRecord>
   hasMoreBefore?: boolean
   total?: number
+  resident?: boolean
 }
 
 export interface SubagentTranscriptResult {

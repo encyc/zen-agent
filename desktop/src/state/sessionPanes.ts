@@ -97,8 +97,9 @@ export const usePanesStore = create<PanesState>((set, get) => {
 
   /** The session snapshot: the slot's own transcript when it is resident
    * (validated by its session tag — an older runtime that ignored the tag
-   * counts as the refusal path), else the disk read any session file allows.
-   * A static pane still shows full content; only streaming needs the slot. */
+   * counts as the refusal path), else the disk snapshot the host serves for
+   * any session file. A static pane still shows full content; only streaming
+   * and direct submits need the slot. */
   async function loadSnapshot(path: string): Promise<void> {
     const rpc = useAppStore.getState().client()
     try {
@@ -109,11 +110,11 @@ export const usePanesStore = create<PanesState>((set, get) => {
       })
       if (frame.type === 'result' && frame.ok && frame.session === path) {
         withChat(path, (chat) => chat.getState().loadSnapshot(frame))
-        patchPane(path, { loaded: true, live: true })
+        patchPane(path, { loaded: true, live: frame.resident !== false })
         return
       }
     } catch {
-      // not resident — fall through to the disk read
+      // no snapshot available; the pane stays empty with a load affordance
     }
     patchPane(path, { loaded: false, live: false })
   }
@@ -283,7 +284,7 @@ export const usePanesStore = create<PanesState>((set, get) => {
           return true
         }
       } catch {
-        // fall through to the disk read
+        // the pane keeps what it already shows
       }
       return false
     },

@@ -150,6 +150,9 @@ HOST_PARTIAL: dict[str, str] = {
     "terminal": "PTY lifecycle + streamed frames (start/stop/resize)",
     "approval": "host-side approval routing for resident-slot pendings",
     "ask": "host-side ask routing",
+    "transcript": "a session no slot holds is answered from its file (a side "
+                  "pane shows a background session without switching); a "
+                  "resident one is served by the slot",
 }
 
 

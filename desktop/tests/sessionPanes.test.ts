@@ -30,6 +30,8 @@ interface WireLog {
  * pane's session. */
 function scripted(options: {
   transcriptRefuses?: boolean
+  /** The host answered a session no slot holds, from its file. */
+  transcriptStatic?: boolean
   running?: boolean
 } = {}): Bridge & { log: WireLog } {
   const log: WireLog = { requests: [] }
@@ -51,7 +53,24 @@ function scripted(options: {
         if (options.transcriptRefuses) {
           return { type: 'error', id, message: 'no resident slot for session' } as T
         }
-        return tag({ transcript: [], notices: [], compactions: [], hasMoreBefore: false, total: 0 }) as T
+        if (options.transcriptStatic) {
+          return tag({
+            transcript: [{ kind: 'user', text: 'from the file', timestamp: 1 }],
+            notices: [],
+            compactions: [],
+            hasMoreBefore: false,
+            total: 1,
+            resident: false,
+          }) as T
+        }
+        return tag({
+          transcript: [],
+          notices: [],
+          compactions: [],
+          hasMoreBefore: false,
+          total: 0,
+          resident: true,
+        }) as T
       }
       if (payload.type === 'session' && payload.op === 'resume') {
         return { type: 'result', id, ok: true, path: payload.path } as T
@@ -105,7 +124,22 @@ test('open paints the pane from the session-tagged transcript and marks it live'
   assert.equal(asked[0]?.session, A)
 })
 
-test('a refusal paints an empty static pane with no disk read', async () => {
+test('a disk snapshot paints the pane from the file without making it live', async () => {
+  const bridge = scripted({ transcriptStatic: true })
+  reset(bridge)
+
+  await usePanesStore.getState().open(A)
+
+  const pane = usePanesStore.getState().panes[1]
+  assert.equal(pane?.live, false, 'only a resident slot streams frames')
+  assert.equal(pane?.loaded, true, 'the file still paints')
+  assert.equal(pane?.chat.getState().nodes[0]?.kind, 'user')
+  const asked = bridge.log.requests.filter((request) => request.type === 'transcript')
+  assert.equal(asked.length, 1)
+  assert.equal(asked[0]?.session, A)
+})
+
+test('a refusal leaves an empty pane with a load affordance', async () => {
   const bridge = scripted({ transcriptRefuses: true })
   reset(bridge)
 
@@ -114,7 +148,6 @@ test('a refusal paints an empty static pane with no disk read', async () => {
   const pane = usePanesStore.getState().panes[1]
   assert.equal(pane?.live, false)
   assert.equal(pane?.loaded, false)
-  assert.equal(bridge.log.requests.filter((request) => request.type === 'zen_fleet').length, 0)
 })
 
 test('a mismatched transcript tag (an older runtime) counts as the refusal path', async () => {

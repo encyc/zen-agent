@@ -10,12 +10,14 @@ from pathlib import Path
 import pytest
 
 from zenagent import project
+from zenagent.agent.session import Session
 from zenagent.app.agent_profile import AgentProfile
 from zenagent.app.bootstrap import prepare
 from zenagent.app.runtime import RuntimeOptions
 from zenagent.cli.rpc.host import RpcHost
 from zenagent.cli.rpc.slot import RuntimeSlot
 from zenagent.config import UserConfig
+from zenagent.types import UserMessage
 
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None, reason="git is not installed"
@@ -180,3 +182,55 @@ async def test_lru_caps_residents(host):
     assert project.project_key(alpha) not in instance._slots
     assert project.project_key(beta) in instance._slots
     assert project.project_key(gamma) in instance._slots
+
+
+async def test_transcript_of_an_unserved_session_reads_its_file(host):
+    """A side pane shows any session of the project; only the slot streams."""
+    instance, writes, alpha, _, _, _ = host
+    sessions_dir = project.project_sessions_dir(root=alpha)
+    sessions_dir.mkdir(parents=True, exist_ok=True)
+    other = sessions_dir / "beside.jsonl"
+    session = Session(other)
+    session._append_sync(UserMessage(content="beside you", timestamp=1))
+    session._append_sync(UserMessage(content="and again", timestamp=2))
+
+    tail = await call(
+        instance,
+        writes,
+        {"type": "transcript", "id": "tr", "session": str(other), "limit": 1},
+    )
+    assert tail["ok"] is True
+    assert tail["session"] == str(other)
+    assert tail["resident"] is False
+    assert tail["total"] == 2
+    assert tail["hasMoreBefore"] is True
+    assert len(tail["transcript"]) == 1
+
+    older = await call(
+        instance,
+        writes,
+        {
+            "type": "transcript",
+            "id": "tr2",
+            "session": str(other),
+            "limit": 1,
+            "before": 1,
+        },
+    )
+    assert older["hasMoreBefore"] is False
+    assert older["transcript"][0]["kind"] == "user"
+    assert older["transcript"][0]["text"] == "beside you"
+
+    resident = instance._slots[project.project_key(alpha)].runtime.session.path
+    live = await call(
+        instance, writes, {"type": "transcript", "id": "tr3", "session": str(resident)}
+    )
+    assert live["resident"] is True
+
+    gone = await call(
+        instance,
+        writes,
+        {"type": "transcript", "id": "tr4", "session": str(sessions_dir / "gone.jsonl")},
+    )
+    assert gone["type"] == "error"
+    assert gone["code"] == "session_invalid"

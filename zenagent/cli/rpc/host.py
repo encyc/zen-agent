@@ -24,6 +24,7 @@ from zenagent.app.session_lease import SessionLeaseBusy
 from zenagent.cli.rpc.codec import PROTOCOL_VERSION
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
 from zenagent.cli.rpc.ops_runs import RunsOps
+from zenagent.cli.rpc.ops_session import _optional_count, disk_transcript
 from zenagent.cli.rpc.slot import RuntimeSlot
 from zenagent.cli.rpc.terminal import TerminalError, TerminalSession, clamp_dim
 from zenagent.project import find_project_root, project_key
@@ -162,6 +163,9 @@ class RpcHost(RunsOps):
             ):
                 self._send({"type": "result", "id": request.get("id"), "ok": True})
                 return True
+        if kind == "transcript" and self._session_unserved(request, kind):
+            self._disk_transcript(request, request_id)
+            return True
         if self._session_unserved(request, kind):
             self._send(
                 error_frame(
@@ -299,6 +303,50 @@ class RpcHost(RunsOps):
         if isinstance(project, str) and project.strip():
             return project.strip()
         return None
+
+    def _disk_transcript(self, request: dict, request_id) -> None:
+        """Answer ``transcript`` for a session no slot holds, from its file.
+
+        A side pane may show any session of the project without making it the
+        foreground one. Only a resident slot can stream frames and take
+        submits, which the ``resident: false`` flag tells the client.
+        """
+        raw = request.get("session")
+        path = Path(str(raw or "")).expanduser()
+        if not path.exists():
+            self._send(
+                error_frame(
+                    request_id,
+                    f"no such session: {path.name}",
+                    "session_invalid",
+                )
+            )
+            return
+        try:
+            payload = disk_transcript(
+                path,
+                limit=_optional_count(request.get("limit"), minimum=1),
+                before=_optional_count(request.get("before"), minimum=0),
+            )
+        except Exception as exc:  # noqa: BLE001 - a bad file is a result
+            self._send(
+                failure_frame(
+                    request_id,
+                    code="session_invalid",
+                    message="could not read the session",
+                    exc=exc,
+                )
+            )
+            return
+        self._send(
+            {
+                "type": "result",
+                "id": request_id,
+                "ok": True,
+                "session": str(path),
+                **payload,
+            }
+        )
 
     def _session_unserved(self, request: dict, kind: object) -> bool:
         """True when a session-addressed kind names a session nobody holds.
