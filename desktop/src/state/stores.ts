@@ -16,7 +16,6 @@ import type {
   SessionSummary,
   SkillRow,
   StatusResult,
-  SwarmRef,
 } from '../rpc/types'
 import type { AskDraft } from './askDraft.ts'
 
@@ -482,26 +481,10 @@ export interface AttachmentImage {
   name: string
 }
 
-export interface RoomComposerState {
-  draft: string
-  quote: SwarmRef | null
-  images: AttachmentImage[]
-}
-
-const EMPTY_ROOM: RoomComposerState = { draft: '', quote: null, images: [] }
-
 interface ComposerState {
   draft: string
-  /** The room's composer state by project: a quote taken in room A must never
-   * ride into room B, where its id would be refused. */
-  room: Record<string, RoomComposerState>
   images: AttachmentImage[]
   setDraft(draft: string): void
-  setRoomDraft(project: string, draft: string): void
-  setRoomQuote(project: string, quote: SwarmRef | null): void
-  addRoomImages(project: string, paths: string[]): void
-  removeRoomImage(project: string, id: string): void
-  clearRoomImages(project: string): void
   addImages(paths: string[]): void
   removeImage(id: string): void
   clearImages(): void
@@ -517,41 +500,10 @@ function makeImages(paths: string[]): AttachmentImage[] {
   }))
 }
 
-const patchRoom = (
-  state: { room: Record<string, RoomComposerState> },
-  project: string,
-  next: Partial<RoomComposerState>,
-) => ({
-  room: {
-    ...state.room,
-    [project]: { ...(state.room[project] ?? EMPTY_ROOM), ...next },
-  },
-})
-
-/** The room's stored composer state, or a frozen empty one. */
-export function roomComposerState(project: string): RoomComposerState {
-  return useComposerStore.getState().room[project] ?? EMPTY_ROOM
-}
-
 export const useComposerStore = create<ComposerState>((set) => ({
   draft: '',
-  room: {},
   images: [],
   setDraft: (draft) => set({ draft }),
-  setRoomDraft: (project, draft) => set((state) => patchRoom(state, project, { draft })),
-  setRoomQuote: (project, quote) => set((state) => patchRoom(state, project, { quote })),
-  addRoomImages: (project, paths) =>
-    set((state) => {
-      const current = state.room[project] ?? EMPTY_ROOM
-      return patchRoom(state, project, { images: [...current.images, ...makeImages(paths)] })
-    }),
-  removeRoomImage: (project, id) =>
-    set((state) =>
-      patchRoom(state, project, {
-        images: (state.room[project] ?? EMPTY_ROOM).images.filter((image) => image.id !== id),
-      }),
-    ),
-  clearRoomImages: (project) => set((state) => patchRoom(state, project, { images: [] })),
   addImages: (paths) =>
     set((state) => ({ images: [...state.images, ...makeImages(paths)] })),
   removeImage: (id) =>
@@ -567,12 +519,6 @@ export type ThemeId = 'zen' | 'vscode' | 'github' | 'tokyonight'
 export const THEME_IDS: readonly ThemeId[] = ['zen', 'vscode', 'github', 'tokyonight']
 export type Locale = 'en' | 'zh'
 export type AppView = 'chat' | 'settings'
-/** Top-level surfaces: the coding chat, the swarm room, the zen placeholder.
- * The switcher stays mounted across all three. */
-export type WorkspaceMode = 'coding' | 'zen' | 'swarm'
-
-export const WORKSPACE_MODES: readonly WorkspaceMode[] = ['coding', 'zen', 'swarm']
-
 export const FONT_SCALE_MIN = 0.9
 export const FONT_SCALE_MAX = 1.2
 export const FONT_SCALE_DEFAULT = 1
@@ -599,7 +545,6 @@ interface SettingsState {
   contextUsageDisplay: ContextUsageDisplay
   enterToSend: boolean
   view: AppView
-  workspaceMode: WorkspaceMode
   setTheme(theme: ThemeMode): void
   setThemeId(themeId: ThemeId): void
   setLocale(locale: Locale): void
@@ -613,7 +558,6 @@ interface SettingsState {
   setContextUsageDisplay(display: ContextUsageDisplay): void
   setEnterToSend(enabled: boolean): void
   setView(view: AppView): void
-  setWorkspaceMode(mode: WorkspaceMode): void
 }
 
 function load<T>(key: string, fallback: T): T {
@@ -640,21 +584,6 @@ function loadThemeId(): ThemeId {
   return (THEME_IDS as readonly string[]).includes(value) ? (value as ThemeId) : 'zen'
 }
 
-/** A foreign persisted mode (a build without that surface) falls back to the
- * coding chat instead of rendering an unnameable surface. */
-function loadWorkspaceMode(): WorkspaceMode {
-  const stored = load<string | null>('zen.workspaceMode', null)
-  if (stored === null && load<string | null>('zen.ui.mode', null) === 'zen') {
-    // One-time migration from the zen branch's own key; the old key is left
-    // in place but never read again.
-    persist('zen.workspaceMode', 'zen')
-    return 'zen'
-  }
-  return (WORKSPACE_MODES as readonly string[]).includes(stored as WorkspaceMode)
-    ? (stored as WorkspaceMode)
-    : 'coding'
-}
-
 export const useSettingsStore = create<SettingsState>((set) => ({
   theme: load('zen.theme', 'auto' as ThemeMode),
   themeId: loadThemeId(),
@@ -671,7 +600,6 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     : 'remaining',
   enterToSend: load('zen.composer.enterToSend', true),
   view: 'chat',
-  workspaceMode: loadWorkspaceMode(),
   setTheme: (theme) => {
     persist('zen.theme', theme)
     set({ theme })
@@ -722,10 +650,6 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     set({ enterToSend })
   },
   setView: (view) => set({ view }),
-  setWorkspaceMode: (workspaceMode) => {
-    persist('zen.workspaceMode', workspaceMode)
-    set({ workspaceMode })
-  },
 }))
 
 export function currentPending(status: StatusResult | null): PendingMessage[] {

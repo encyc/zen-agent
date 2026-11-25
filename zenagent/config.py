@@ -25,15 +25,13 @@ transcript never has a dangling ``tool_call``.
 from __future__ import annotations
 
 import json
+import logging
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from zenagent import project
 from zenagent.config_errors import UnknownConfigField
-from zenagent.config_fields import (
-    non_negative_float as _non_negative_float,
-)
 from zenagent.config_fields import (
     positive_int as _positive_int,
 )
@@ -42,7 +40,6 @@ from zenagent.config_fields import (
 )
 from zenagent.limits import Limits, parse_limits
 from zenagent.providers.catalog import ProviderConfig, model_from_mapping
-from zenagent.swarm_settings import SWARM_FIELDS, SwarmPolicy, parse_swarm_table
 from zenagent.types import AssistantMessage, Message, Usage
 
 __all__ = [
@@ -104,21 +101,23 @@ DEFAULT_TASK_MAX_TRANSCRIPT_BYTES = 32 * 1024 * 1024
 #: Default per-transcript cap; a larger transcript is cut and marked.
 DEFAULT_TASK_MAX_TRANSCRIPT_FILE_BYTES = 8 * 1024 * 1024
 
-#: Keys accepted inside ``[zen]`` (fleet behaviour, global-only).
-_ZEN_KEYS = frozenset({"max_concurrent", "batch_window_s", "report_limit", "worker_mode"})
-#: Default number of zen workers running at once.
-DEFAULT_ZEN_MAX_CONCURRENT = 3
-#: Default report batching window: reports finishing inside it become one message.
-DEFAULT_ZEN_BATCH_WINDOW_S = 0.5
-#: Default cap on one worker report injected into the router conversation.
-DEFAULT_ZEN_REPORT_LIMIT = 800
-#: How a worker's permission mode is chosen. ``inherit`` keeps the router's
-#: mode but downgrades auto to ask (the historical behaviour); the other values
-#: pin it, and ``auto`` means workers may mutate without approvals.
-DEFAULT_ZEN_WORKER_MODE = "inherit"
-ZEN_WORKER_MODES = ("inherit", "ask", "plan", "auto")
-#: Pre-rename worker-mode spellings; normalized before validation.
-LEGACY_ZEN_WORKER_MODES = {"zen": "auto"}
+_log = logging.getLogger(__name__)
+
+#: Whole config tables this release retired: accepted, ignored, warned once.
+_RETIRED_SECTIONS = frozenset({"zen", "swarm"})
+_warned_sections: set[str] = set()
+
+
+def _warn_retired_section(name: str) -> None:
+    """Report a retired table once, naming what replaced it."""
+    if name in _warned_sections:
+        return
+    _warned_sections.add(name)
+    _log.warning(
+        "[%s] is retired and ignored: the zen and swarm orchestration modes "
+        "were removed; coding is the only workspace mode",
+        name,
+    )
 
 def _absolute_path(raw: str, target: Path) -> str:
     """Normalize one config path: ``~`` expands, relatives resolve next to the file."""
@@ -307,12 +306,8 @@ def _parse_custom_providers(raw: object, target: Path) -> dict[str, ProviderConf
 
 
 @dataclass
-class UserConfig(SwarmPolicy):
-    """Parsed user configuration.
-
-    Inherits the ten ``[swarm]`` fields from :class:`SwarmPolicy` so the room
-    policy's defaults, parser and registry stay in one module.
-    """
+class UserConfig:
+    """Parsed user configuration."""
 
     default_model: str | None = None
     #: provider id -> {"base_url": ..., "api_key_env": ...}
@@ -349,14 +344,6 @@ class UserConfig(SwarmPolicy):
     task_max_transcript_file_bytes: int = DEFAULT_TASK_MAX_TRANSCRIPT_FILE_BYTES
     #: ``[limits]``: prompt/loop budgets (global-only; see zenagent.limits)
     limits: Limits = field(default_factory=Limits)
-    #: ``[zen]``: workers running at once (global-only)
-    zen_max_concurrent: int = DEFAULT_ZEN_MAX_CONCURRENT
-    #: ``[zen]``: report batching window in seconds
-    zen_batch_window_s: float = DEFAULT_ZEN_BATCH_WINDOW_S
-    #: ``[zen]``: one worker report is cut to this many characters
-    zen_report_limit: int = DEFAULT_ZEN_REPORT_LIMIT
-    #: ``[zen]``: worker permission mode (inherit|ask|plan|auto)
-    zen_worker_mode: str = DEFAULT_ZEN_WORKER_MODE
 
 
 def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfig:
@@ -364,10 +351,9 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
 
     ``project_layer=True`` marks the committable ``<root>/.zenagent/config.toml``
     layer: it may not set the global-only ``[safety]``/``[backup]``/``[task]``/
-    ``[limits]``/``[zen]``/``[swarm]`` sections, so a repository can never grant
-    itself permissions, raise its own subagent budgets, resize the prompt
-    budgets of the machine it was cloned onto, or widen multi-agent
-    concurrency.
+    ``[limits]`` sections, so a repository can never grant itself permissions,
+    raise its own subagent budgets, or resize the prompt budgets of the machine
+    it was cloned onto.
     """
     if not target.is_file():
         return UserConfig()
@@ -376,10 +362,11 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
     except (tomllib.TOMLDecodeError, OSError) as exc:
         raise ValueError(f"cannot read config {target}: {exc}") from exc
 
+    for name in sorted(_RETIRED_SECTIONS & set(data)):
+        _warn_retired_section(name)
+
     global_only = [
-        name
-        for name in ("safety", "backup", "task", "limits", "zen", "swarm")
-        if name in data
+        name for name in ("safety", "backup", "task", "limits") if name in data
     ]
     if project_layer and global_only:
         listed = ", ".join(f"[{name}]" for name in global_only)
@@ -461,31 +448,6 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
         task_max_transcript_file_bytes,
     ) = _parse_task(_section_table(data, "task", target), target)
     limits = parse_limits(data.get("limits"), target)
-    zen_table = _section_table(data, "zen", target)
-    _unknown_section_keys(zen_table, _ZEN_KEYS, "zen", target)
-    zen_max_concurrent = _positive_int(
-        zen_table, "max_concurrent", DEFAULT_ZEN_MAX_CONCURRENT, "zen", target
-    )
-    zen_batch_window_s = _non_negative_float(
-        zen_table, "batch_window_s", DEFAULT_ZEN_BATCH_WINDOW_S, "zen", target
-    )
-    zen_report_limit = _positive_int(
-        zen_table, "report_limit", DEFAULT_ZEN_REPORT_LIMIT, "zen", target
-    )
-    raw_worker_mode = zen_table.get("worker_mode")
-    if isinstance(raw_worker_mode, str):
-        zen_table["worker_mode"] = LEGACY_ZEN_WORKER_MODES.get(
-            raw_worker_mode, raw_worker_mode
-        )
-    zen_worker_mode = _choice(
-        zen_table,
-        "worker_mode",
-        DEFAULT_ZEN_WORKER_MODE,
-        ZEN_WORKER_MODES,
-        "zen",
-        target,
-    )
-    swarm_values = parse_swarm_table(_section_table(data, "swarm", target), target)
     return UserConfig(
         default_model=default_model,
         provider_overrides=overrides,
@@ -504,11 +466,6 @@ def _load_config_file(target: Path, *, project_layer: bool = False) -> UserConfi
         task_max_transcript_bytes=task_max_transcript_bytes,
         task_max_transcript_file_bytes=task_max_transcript_file_bytes,
         limits=limits,
-        zen_max_concurrent=zen_max_concurrent,
-        zen_batch_window_s=zen_batch_window_s,
-        zen_report_limit=zen_report_limit,
-        zen_worker_mode=zen_worker_mode,
-        **swarm_values,
     )
 
 
@@ -552,13 +509,6 @@ def _merge_user_configs(base: UserConfig, override: UserConfig) -> UserConfig:
         task_max_transcript_bytes=base.task_max_transcript_bytes,
         task_max_transcript_file_bytes=base.task_max_transcript_file_bytes,
         limits=base.limits,
-        zen_max_concurrent=base.zen_max_concurrent,
-        zen_batch_window_s=base.zen_batch_window_s,
-        zen_report_limit=base.zen_report_limit,
-        zen_worker_mode=base.zen_worker_mode,
-        # The room policy is global-only, so the project layer never widens it:
-        # the global file's values win even when a project file is present.
-        **{name: getattr(base, name) for name in SWARM_FIELDS},
     )
 
 

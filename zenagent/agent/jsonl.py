@@ -1,7 +1,7 @@
 """The one JSONL discipline: fsync every append, repair torn tails before writing.
 
 Append-only JSONL is the durability contract for session transcripts, the run
-ledger and swarm rooms. Two things make it survive a crash mid-write:
+ledger. Two things make it survive a crash mid-write:
 
 * every append is flushed **and fsynced** before ``append_line`` returns, so a
   power cut loses at most the line being written;
@@ -10,7 +10,7 @@ ledger and swarm rooms. Two things make it survive a crash mid-write:
   concatenates onto the half line and one broken ``json.loads`` silently drops
   BOTH records on replay.
 
-``room.jsonl`` had this treatment first (deltas v6); this module is it, shared.
+Session transcripts had this treatment first (deltas v6); this module is it.
 """
 
 from __future__ import annotations

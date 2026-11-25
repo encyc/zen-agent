@@ -1,50 +1,27 @@
-"""Agent identity and the project's live-agent registry.
+"""Agent identity for runtime assembly.
 
 An ``AgentProfile`` is the role-side half of runtime assembly: who the agent
 is (id, kind, label) and which capabilities it gets (tool policy, persona
 fragment, plugins/skills/MCP/templates, session ownership). ``RuntimeOptions``
-keeps the generic run knobs; the profile carries the orchestration policy that
-used to leak into ``Runtime`` as a pile of role flags.
-
-``Supervisor`` is the project-scoped registry of live handles. Zen workers and
-swarm role instances register here, so one query answers "which agents are
-alive in this project" without knowing which orchestrator built them. It also
-mounts the mode's dispatcher, so ``supervisor dispatch`` is one entry while the
-scheduling policy stays in zen or swarm.
+keeps the generic run knobs; the profile carries the assembly policy that used
+to leak into ``Runtime`` as a pile of flags.
 """
 
 from __future__ import annotations
 
-import logging
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass
+from typing import Any
 
-from zenagent.app.dispatch import Dispatcher, DispatchUnavailable
-
-if TYPE_CHECKING:
-    from zenagent.agent.session import Session
-    from zenagent.app.runtime import Runtime
-
-__all__ = [
-    "AgentHandle",
-    "AgentProfile",
-    "Supervisor",
-    "register_swarm_agent",
-    "swarm_handle_key",
-]
-
-_log = logging.getLogger(__name__)
+__all__ = ["AgentProfile"]
 
 
 @dataclass(frozen=True)
 class AgentProfile:
     """Who an agent is and what its runtime may assemble.
 
-    ``id`` is stable within a project (``main``, ``router``, a worker stem, a
-    swarm role id); ``kind`` is the ledger/orchestration vocabulary. The
-    ``work_item``/``task`` correlation stays in the run scope because it
-    changes per run, not per profile.
+    ``id`` is stable within a project (``main``, a task child); ``kind`` is the
+    ledger vocabulary. The ``work_item``/``task`` correlation stays in the run
+    scope because it changes per run, not per profile.
     """
 
     id: str = "main"
@@ -58,7 +35,6 @@ class AgentProfile:
     templates: bool = True
     mcp: bool = True
     context_files: bool = True
-    project_sessions: bool = True
 
     def run_scope(self, **extra) -> dict:
         """The scope a run recorder stamps on this agent's runs."""
@@ -67,129 +43,3 @@ class AgentProfile:
             scope["label"] = self.label
         scope.update(extra)
         return scope
-
-
-@dataclass
-class AgentHandle:
-    """One live runtime plus the identity the supervisor knows it by."""
-
-    key: str
-    profile: AgentProfile
-    runtime: Runtime
-    session: Session
-    scope: dict = field(default_factory=dict)
-
-    def snapshot(self) -> dict:
-        return {
-            "key": self.key,
-            "agent": self.profile.id,
-            "kind": self.profile.kind,
-            "label": self.profile.label,
-            "state": "running" if getattr(self.runtime.agent, "is_streaming", False) else "idle",
-            "session": str(self.session.path),
-            "runId": getattr(self.runtime, "current_run_id", None),
-            **self.scope,
-        }
-
-
-class Supervisor:
-    """Project-scoped registry of live agent runtimes.
-
-    It owns the one shared answer to "what is alive in this project", the close
-    path that releases every runtime and its session lease, and the dispatcher
-    the current orchestrator mounts. It does not schedule: the dispatcher does,
-    with that mode's own policy.
-    """
-
-    def __init__(self, root: Path | str) -> None:
-        self.root = Path(root)
-        self._agents: dict[str, AgentHandle] = {}
-        self._dispatchers: dict[str, Dispatcher] = {}
-
-    def register(
-        self,
-        key: str,
-        *,
-        profile: AgentProfile,
-        runtime: Runtime,
-        session: Session,
-        **scope,
-    ) -> AgentHandle:
-        handle = AgentHandle(
-            key=key,
-            profile=profile,
-            runtime=runtime,
-            session=session,
-            scope=dict(scope),
-        )
-        runtime.run_scope = profile.run_scope(**scope)
-        self._agents[key] = handle
-        return handle
-
-    def unregister(self, key: str) -> AgentHandle | None:
-        return self._agents.pop(key, None)
-
-    def get(self, key: str) -> AgentHandle | None:
-        return self._agents.get(key)
-
-    def handles(self) -> list[AgentHandle]:
-        return list(self._agents.values())
-
-    def snapshots(self) -> list[dict]:
-        return [handle.snapshot() for handle in self._agents.values()]
-
-    # -- dispatch -----------------------------------------------------------
-
-    def attach_dispatcher(self, dispatcher: Dispatcher) -> None:
-        """Mount the mode's live dispatch strategy (replacing a stale one)."""
-        self._dispatchers[dispatcher.mode] = dispatcher
-
-    def detach_dispatcher(self, mode: str) -> Dispatcher | None:
-        return self._dispatchers.pop(mode, None)
-
-    async def dispatch(self, mode: str, **payload: Any) -> dict:
-        dispatcher = self._dispatchers.get(mode)
-        if dispatcher is None:
-            raise DispatchUnavailable(f"no live {mode} orchestrator")
-        return await dispatcher.dispatch(**payload)
-
-    async def close(self) -> None:
-        handles = list(self._agents.values())
-        self._agents.clear()
-        self._dispatchers.clear()
-        for handle in handles:
-            try:
-                await handle.runtime.close()
-            except Exception:  # noqa: BLE001 - teardown must not raise
-                _log.debug("closing %s failed", handle.key, exc_info=True)
-
-
-def swarm_handle_key(role_id: str, work_item_id: str | None) -> str:
-    """Stable supervisor key for one swarm run unit."""
-    return f"{role_id}@{work_item_id or 'adhoc'}"
-
-
-def register_swarm_agent(
-    supervisor: Supervisor,
-    profile: AgentProfile,
-    runtime: Runtime,
-    work_item_id: str | None,
-) -> AgentHandle:
-    """Register a role runtime under its ``(role, work item)`` key."""
-    return supervisor.register(
-        swarm_handle_key(profile.id, work_item_id),
-        profile=profile,
-        runtime=runtime,
-        session=runtime.session,
-        workItemId=work_item_id,
-    )
-
-
-def effective_worker_mode(configured: str) -> str:
-    """The mode an orchestrator-run agent actually runs with.
-
-    Shared by zen workers and swarm run units (fleet.py / manager.py): a
-    worker may keep the parent's mode but never inherits the ``auto`` bypass —
-    auto approves mutations, and a worker's approvals must surface to a human.
-    """
-    return "ask" if configured == "auto" else configured

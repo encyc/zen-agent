@@ -13,9 +13,9 @@ from zenagent import __version__
 from zenagent.config import UserConfig, load_user_config
 from zenagent.limits import (
     ALL_KNOBS,
-    KNOB_BY_ATTR,
     KNOB_BY_KEY,
     KNOBS_BY_TABLE,
+    Limit,
     Limits,
     coerce_value,
     describe,
@@ -49,8 +49,6 @@ def test_knobs_are_grouped_by_the_sections_the_pages_show():
         "subagents",
         "tools",
         "goal",
-        "zen",
-        "swarm",
     }
     # Every table the writer manages has at least one knob and vice versa.
     assert set(KNOBS_BY_TABLE) == {knob.table for knob in ALL_KNOBS}
@@ -128,6 +126,28 @@ def test_coerce_rejects_booleans_and_floats_for_integer_knobs():
             coerce_value(knob, bad, Path("/tmp/config.toml"))
     assert coerce_value(knob, 4096, Path("/tmp/config.toml")) == 4096
     assert coerce_value(knob, 4096.0, Path("/tmp/config.toml")) == 4096
+
+
+def test_coerce_string_knob_only_accepts_its_choices():
+    """No live knob is ``kind="str"`` any more; the branch stays reachable for
+    the next one and must keep rejecting anything outside its choices."""
+    knob = Limit(
+        table="limits",
+        name="probe_mode",
+        section="probe",
+        attr="probe_mode",
+        default="a",
+        kind="str",
+        minimum=0.0,
+        maximum=0.0,
+        apply="immediate",
+        choices=("a", "b"),
+    )
+    assert coerce_value(knob, "a", Path("/tmp/config.toml")) == "a"
+    with pytest.raises(ValueError, match="must be one of"):
+        coerce_value(knob, "c", Path("/tmp/config.toml"))
+    with pytest.raises(ValueError):
+        coerce_value(knob, 1, Path("/tmp/config.toml"))
 
 
 def test_limits_knobs_are_never_nullable():
@@ -250,55 +270,6 @@ def test_writer_preserves_mode(tmp_path):
     path.chmod(0o600)
     write_limits(path, Limits().with_value("loop_guard_threshold", 7))
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
-
-
-def test_string_knob_only_accepts_its_choices():
-    knob = KNOB_BY_KEY["zen.worker_mode"]
-    assert coerce_value(knob, "auto", Path("/tmp/config.toml")) == "auto"
-    for bad in ("nope", True, 1, None):
-        with pytest.raises(ValueError, match="zen.worker_mode"):
-            coerce_value(knob, bad, Path("/tmp/config.toml"))
-
-
-def test_zen_and_swarm_tables_round_trip_through_the_writer(tmp_path):
-    path = write_config(tmp_path, "# keep me\ndefault_model = \"x\"\n")
-    tables = read_managed(path)
-    tables["zen"] = {
-        "max_concurrent": 5,
-        "batch_window_s": 1.25,
-        "report_limit": 1200,
-        "worker_mode": "ask",
-    }
-    tables["swarm"] = {"max_concurrent": 4, "max_chain_depth": 12, "max_chain_cost": 2.5}
-    write_managed(path, tables)
-
-    text = path.read_text(encoding="utf-8")
-    assert "# keep me" in text
-    assert 'worker_mode = "ask"' in text
-    config = load_user_config(path)
-    assert config.zen_max_concurrent == 5
-    assert config.zen_batch_window_s == 1.25
-    assert config.zen_report_limit == 1200
-    assert config.zen_worker_mode == "ask"
-    assert config.swarm_max_concurrent == 4
-    assert config.swarm_max_chain_depth == 12
-    assert config.swarm_max_chain_cost == 2.5
-
-
-def test_registry_defaults_match_the_config_defaults():
-    from zenagent import config as user_config
-    from zenagent.swarm_settings import SWARM_FIELDS, SwarmPolicy
-
-    assert KNOB_BY_KEY["zen.max_concurrent"].default == user_config.DEFAULT_ZEN_MAX_CONCURRENT
-    assert KNOB_BY_KEY["zen.batch_window_s"].default == user_config.DEFAULT_ZEN_BATCH_WINDOW_S
-    assert KNOB_BY_KEY["zen.report_limit"].default == user_config.DEFAULT_ZEN_REPORT_LIMIT
-    assert KNOB_BY_KEY["zen.worker_mode"].default == user_config.DEFAULT_ZEN_WORKER_MODE
-    # Every [swarm] knob's registry default is the dataclass default, so the
-    # settings page, the parser and the gate cannot drift apart.
-    policy = SwarmPolicy()
-    for name in SWARM_FIELDS:
-        assert KNOB_BY_ATTR[name].default == getattr(policy, name), name
-    assert len([knob for knob in ALL_KNOBS if knob.table == "swarm"]) == len(SWARM_FIELDS)
 
 
 def test_user_config_defaults_do_not_share_the_limits_object():

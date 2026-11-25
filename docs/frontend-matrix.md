@@ -16,9 +16,8 @@
 headless ──┐                                 one-shot，非交互 PermissionGate
 REPL ──────┼── app/bootstrap.prepare() ──► app 层（Runtime/ChatController/CommandRegistry）
 TUI ───────┘        （进程内直连，无 RPC）        │
-                                                  │ SwarmManager / ZenFleet 目前仅在 RPC 侧装配
 GUI(Tauri) ── zen rpc sidecar(JSONL) ──► RpcHost(多项目) ──► RpcServer(slot 级)
-                                           两层 dispatch，协议 v3
+                                           协议 v4
 ```
 
 - **headless**：`cli/main.py::run_headless`，一次 prompt 进、流式文本出、退出码出。`--json`
@@ -29,7 +28,7 @@ GUI(Tauri) ── zen rpc sidecar(JSONL) ──► RpcHost(多项目) ──► 
   `runtime.ask_handler`。
 - **GUI**：`desktop/`，后端是 `zen rpc` 子进程（`desktop/src-tauri/src/rpc.rs`）。RPC 服务端两层：
   slot 级 `cli/rpc/server.py::RpcServer`（单会话协议），宿主级 `cli/rpc/host.py::RpcHost`
-  （多项目路由 + swarm/zen/runs/terminal/supervisor/workspace）。
+  （多项目路由 + runs/terminal）。
 
 ## 能力矩阵
 
@@ -48,9 +47,6 @@ GUI(Tauri) ── zen rpc sidecar(JSONL) ──► RpcHost(多项目) ──► 
 | retry（回合级） | ● | ◐ | ● | — | GUI 有 `session.retry` op 未接 UI |
 | 模型/mode/thinking 切换 | ● | ● | ● | ◐ | headless 启动 flag 固定 |
 | usage / cost | ● | ◐ | ● | ◐ | GUI 从 status 附带读 |
-| **swarm（房间/roster/works/roles）** | **—** | ● | **—** | — | GUI 独有 |
-| **swarm gate/storm/budget 可视** | **—** | ◐ | — | — | 旋钮经 limits 可改；实时 gate 状态四端皆无结构化面 |
-| **zen fleet** | **—** | ● | **—** | — | GUI 独有 |
 | goal | ● | ● | ● | — | TUI 另有 GoalHud 点击的详情面板 |
 | todo | ● | ● | ◐ | — | REPL 只读列表 |
 | memory 管理 | ● | ● | ● | ◐ | headless 只读入上下文 |
@@ -71,20 +67,14 @@ slot 级 kind（`RpcServer`）：`hello` `prompt` `cancel` `status` `shutdown` `
 `ask` `session` `command` `fs_list` `fs_read` `fs_index` `memory` `git_worktrees` `secrets`
 `skills` `prefs`/`set_pref` `limits` `plugins` `mcp` `project`
 
-宿主级 kind（`RpcHost`）：`project` `terminal` `supervisor` `workspace` `swarm` `zen_fleet` `runs`
+宿主级 kind（`RpcHost`）：`project` `terminal` `runs`
 
 二级 action（按域）：
 
 | 域 | actions |
 |---|---|
 | `session` | current · list · new · fork · resume · import · undo · delete · compact · retry · export · promote · dequeue · interrupt_pending · clear_continuations · clear_pending · clear_todos |
-| `swarm` | list · post · cancel · retry · reset · transcript · reload |
-| `swarm.works` | list · detail · score · close · reopen · merge · rename |
-| `swarm.roles` | list · library · create · update · delete · copy |
-| `zen_fleet` | enable · disable · state · transcript |
 | `runs` | list · get |
-| `supervisor` | status · cancel · approve · dispatch |
-| `workspace` | get · set |
 | `project`(host) | open/switch · close · relocate |
 | `terminal` | start · write · resize · close |
 | `memory` | list · create · update · delete |
@@ -98,19 +88,15 @@ slot 级 kind（`RpcServer`）：`hello` `prompt` `cancel` `status` `shutdown` `
 
 ### P0 · 服务端硬缺口（任何端想做都没有 wire 面）
 
-1. **swarm gate 实时状态无结构化 op**——GateDecision/ChainFacts（storm 冻结、chain/fanout 余量）
-   只能从房间消息文本反推。建议 `swarm.gate` op 或 `swarm list` 附 gate 摘要。
-2. **`app/metrics.py::MetricsSession` 零暴露**——只写本地文件，无读取 op。
-3. **`app/rewind.py` checkpoint 无 wire 面**——纯模型侧工具。
-4. **`app/slash_args.py` 的 argument_values 未暴露**——GUI/REPL 命令参数补全只能硬编码。
+1. **`app/metrics.py::MetricsSession` 零暴露**——只写本地文件，无读取 op。
+2. **`app/rewind.py` checkpoint 无 wire 面**——纯模型侧工具。
+3. **`app/slash_args.py` 的 argument_values 未暴露**——GUI/REPL 命令参数补全只能硬编码。
 
 ### P1 · 端级缺口（app 层/RPC 已就绪，端没接）
 
-1. **裁决排除（2026-11-17）**：swarm/zen 不进 TUI/REPL（暂缓非永久，见
-   [TUI 对齐计划](superpowers/specs/2026-11-17-tui-gui-parity-design.md) 的范围裁决）。
-2. runs 视图：TUI 已做（`/runs`，四端第一个）；GUI 待接同一 `runs` op。
-3. GUI 未接的现成 op：`session.retry`、`usage`、`tools`、`swarm.works` 的 detail/merge/rename。
-4. REPL：follow_up、队列管理、session picker 只列不切、todo 只读、mcp 向导无渲染、settings 只读
+1. runs 视图：TUI 已做（`/runs`，四端第一个）；GUI 待接同一 `runs` op。
+2. GUI 未接的现成 op：`session.retry`、`usage`、`tools`。
+3. REPL：follow_up、队列管理、session picker 只列不切、todo 只读、mcp 向导无渲染、settings 只读
    （`/secrets` `/plugins` `/limits` `/runs` `/worktrees` 已有文本形式）。
 
 ### P2 · by design 不补
@@ -125,7 +111,7 @@ terminal 面板对 TUI/REPL 无意义。
   work strip、状态带 segment/preset 系统、可拖宽侧栏（8 section）、context breakdown 屏、
   命令/skill/参数三合一 hint 条、ctrl+g 外部编辑器、剪贴板路径附图、`/shake` `/btw` `/handoff`
   `/urls` `/copy` `/open` `/add-dir`（命令本身 REPL 共享，呈现是 TUI 独有）。
-- **GUI**：swarm/zen 全套 UI、terminal/files/review 面板、minimap、应用内更新、多项目驻留、
+- **GUI**：terminal/files/review 面板、minimap、应用内更新、多项目驻留、
   ⌘K 命令面板、transcript 挂载窗口分页。
 - **REPL**：legacy 主题名兼容、`mcp retry` 特判（小件）。
 - **headless**：`--json` 单对象契约与退出码语义（CI/evals 入口，`scripts/eval.py` 镜像此契约）。

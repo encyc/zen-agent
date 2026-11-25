@@ -71,22 +71,13 @@ test('kinds whose session field means something else are never tagged', async ()
   await client.send({ type: 'terminal', op: 'write', session: 'tok123', data: 'ls' })
   await client.send({ type: 'hello' })
   await client.send({ type: 'runs', op: 'list' })
-  await client.send({ type: 'zen_fleet', op: 'state' })
-  await client.send({ type: 'supervisor', op: 'dispatch' })
   await client.send({ type: 'project', op: 'open', root: '/x' })
 
   const sessions = recorder.invokes.map(
     (call) => (call.args?.payload as Record<string, unknown> | undefined)?.session,
   )
   // The terminal token survives untouched; the host-level kinds stay clean.
-  assert.deepEqual(sessions, [
-    'tok123',
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-  ])
+  assert.deepEqual(sessions, ['tok123', undefined, undefined, undefined])
 })
 
 test('a null provider (no session on screen) sends nothing extra', async () => {

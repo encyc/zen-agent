@@ -22,7 +22,7 @@ import { translate } from '../i18n/messages.ts'
 import type { AgentEventFrame, TranscriptResult, Usage } from '../rpc/types.ts'
 
 /** Strip cap: the focused session plus up to two side panes — the host keeps
- * at most four resident slots, and a zen router or another project may hold
+ * at most four resident slots, and another project may hold
  * one of them. */
 export const PANE_CAP = 3
 
@@ -97,8 +97,9 @@ export const usePanesStore = create<PanesState>((set, get) => {
 
   /** The session snapshot: the slot's own transcript when it is resident
    * (validated by its session tag — an older runtime that ignored the tag
-   * counts as the refusal path), else the disk read any session file allows.
-   * A static pane still shows full content; only streaming needs the slot. */
+   * counts as the refusal path), else the disk snapshot the host serves for
+   * any session file. A static pane still shows full content; only streaming
+   * and direct submits need the slot. */
   async function loadSnapshot(path: string): Promise<void> {
     const rpc = useAppStore.getState().client()
     try {
@@ -109,26 +110,7 @@ export const usePanesStore = create<PanesState>((set, get) => {
       })
       if (frame.type === 'result' && frame.ok && frame.session === path) {
         withChat(path, (chat) => chat.getState().loadSnapshot(frame))
-        patchPane(path, { loaded: true, live: true })
-        return
-      }
-    } catch {
-      // not resident — fall through to the disk read
-    }
-    try {
-      const project = useAppStore.getState().project
-      const frame = await rpc.send({
-        type: 'zen_fleet',
-        op: 'transcript',
-        path,
-        limit: TRANSCRIPT_PAGE_SIZE,
-        ...(project !== null ? { project } : {}),
-      })
-      if (frame.type === 'result' && frame.ok) {
-        withChat(path, (chat) =>
-          chat.getState().loadSnapshot(frame as unknown as TranscriptResult),
-        )
-        patchPane(path, { loaded: true, live: false })
+        patchPane(path, { loaded: true, live: frame.resident !== false })
         return
       }
     } catch {
@@ -302,23 +284,7 @@ export const usePanesStore = create<PanesState>((set, get) => {
           return true
         }
       } catch {
-        // fall through to the disk read
-      }
-      try {
-        const project = useAppStore.getState().project
-        const frame = await rpc.send({
-          type: 'zen_fleet',
-          op: 'transcript',
-          path,
-          before,
-          ...(project !== null ? { project } : {}),
-        })
-        if (frame.type === 'result' && frame.ok) {
-          pane.chat.getState().prependOlder(frame as unknown as TranscriptResult)
-          return true
-        }
-      } catch {
-        // nothing older is reachable right now
+        // the pane keeps what it already shows
       }
       return false
     },

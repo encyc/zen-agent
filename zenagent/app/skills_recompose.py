@@ -122,8 +122,6 @@ def recompose(runtime: Runtime) -> None:
         tools.append(runtime.todo_tool)
     if runtime.task_tool is not None:
         tools.append(runtime.task_tool)
-    for provider in runtime.tool_providers:
-        tools.extend(provider(runtime))
     if runtime.mcp is not None:
         tools.extend(runtime.mcp.tool_defs())
     if runtime.skills:

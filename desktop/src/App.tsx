@@ -16,8 +16,6 @@ import { AppFrame } from './ui/AppFrame'
 import { Sidebar } from './ui/Sidebar'
 import { ChatView } from './ui/chat/ChatView'
 import { InputBar } from './ui/composer/InputBar'
-import { RoomPage } from './ui/pages/RoomPage'
-import { WorkerConversation } from './ui/WorkerConversation'
 import { restoreChatState } from './ui/pages/navigation'
 import { isRuntimeMissing, type RuntimeProbe } from './state/startFailure.ts'
 import { shouldShowWindow } from './state/shellWindow.ts'
@@ -25,14 +23,13 @@ import { runtimeProbe } from './rpc/client.ts'
 import { ConversationTopbar } from './ui/ConversationTopbar'
 import { NoticeBanner } from './ui/NoticeBanner'
 import { useUpdateStore } from './state/updateStore'
-import { useZenStore } from './state/zenStore'
 import { usePanesStore } from './state/sessionPanes'
 import { bootSessionWindow } from './state/sessionBoot'
 import { listenSessionDetached } from './state/detachWindow'
 import { parseBootOverride } from './state/bootMode'
 import { SessionPanes } from './ui/panes/SessionPanes'
 import { SIDEBAR_DEFAULT, RIGHTBAR_DEFAULT, clampChatWidth } from './ui/columns'
-import { PanelLeftIcon, PanelRightIcon } from './ui/icons'
+import { PanelRightIcon } from './ui/icons'
 import css from './App.module.css'
 
 const SIDEBAR_KEY = 'zen.sidebar.width'
@@ -78,8 +75,6 @@ export function App() {
   const chatWidth = useSettingsStore((state) => state.chatWidth)
   const fontScale = useSettingsStore((state) => state.fontScale)
   const view = useSettingsStore((state) => state.view)
-  const workspaceMode = useSettingsStore((state) => state.workspaceMode)
-  const workerPath = useZenStore((state) => state.workerPath)
   const openPanes = usePanesStore((state) => state.panes)
   const previousView = useRef(view)
   const updateChecked = useRef(false)
@@ -96,13 +91,6 @@ export function App() {
   const rightbarOpen = useWorkPanelStore((state) => state.open)
   const rightbarFullscreen = useWorkPanelStore((state) => state.open && state.fullscreen)
   const [rightbarWidth, setRightbarWidth] = useState(() => loadWidth(RIGHTBAR_KEY, RIGHTBAR_DEFAULT))
-
-  // A worker transcript only belongs to the zen surface; leaving it (or
-  // switching to another worker) must not leave the old one armed when zen
-  // comes back.
-  useEffect(() => {
-    if (workspaceMode !== 'zen') useZenStore.getState().closeWorker()
-  }, [workspaceMode])
 
   // Theme presenter: write the snapshot to the DOM, outside React (dsh pattern).
   // The palette rides a separate attribute so both sides of every palette
@@ -304,18 +292,6 @@ export function App() {
         </Suspense>
       }
     >
-      {workspaceMode === 'swarm' ? (
-        <>
-          {collapsed && <ExpandSidebar onExpand={() => setCollapsed(false)} />}
-          <RoomPage />
-        </>
-      ) : workspaceMode === 'zen' && workerPath !== null ? (
-        <WorkerConversation />
-      ) : (
-        // coding and zen share the conversation: in zen the sidebar swaps to
-        // the fleet roster, but the router session is the chat itself. With
-        // two or more panes open the strip replaces the single conversation;
-        // the docked composer returns with it.
         <>
           <ConversationTopbar
             collapsed={collapsed}
@@ -345,7 +321,6 @@ export function App() {
             <PanelRightIcon size={15} />
           </button>
         </>
-      )}
       {switching !== null && (
         <div
           className={css.switchingBar}
@@ -403,23 +378,6 @@ function ComposerDock() {
       <NoticeBanner />
       <InputBar />
     </div>
-  )
-}
-
-/** Coding mode's topbar owns its expand seat; every other surface has no
- * topbar, so the collapsed sidebar would otherwise leave no way back. */
-function ExpandSidebar({ onExpand }: { onExpand(): void }) {
-  const t = useT()
-  return (
-    <button
-      type="button"
-      className={css.sidebarExpand}
-      aria-label={t('topbar.expandSidebar')}
-      data-shell-expand
-      onClick={onExpand}
-    >
-      <PanelLeftIcon size={15} />
-    </button>
   )
 }
 

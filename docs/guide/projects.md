@@ -26,7 +26,6 @@ ZenAgent 区分两类数据（对齐 omp/pi 的做法）：
   locks/                       # 会话单写者锁（advisory lock）
   projects/<key>/
     meta.json                  # 项目根、名称、最后使用时间
-    workspace.json             # 后端模式：coding | zen | swarm
     runs.jsonl                 # run 账本（append-only）
     sessions/*.jsonl           # 会话 transcript
     sessions/.titles.json      # 会话显示名 sidecar
@@ -55,18 +54,12 @@ zen sessions adopt ~/.zenagent/sessions/20260101-000000.jsonl
 
 ## 项目运行态
 
-会话文件只记录**消息**；项目的运行状态另有两份后端事实：
+会话文件只记录**消息**；项目的运行状态另有一份后端事实：
 
-- `workspace.json`——项目期望处于哪个模式（`coding` / `zen` / `swarm`），以及 Zen 的
-  Router 会话。桌面启动、切项目、切模式时通过 `workspace op=get/set` 读写它；`localStorage`
-  只是离线缓存。它记录期望值，不负责启动/停止 fleet 或房间。
 - `runs.jsonl`——每次 agent run 以稳定 `runId` 聚合（开始与结束各追加一行，同一 id
-  最后一条胜出），带模式（`coding` / `zen_router` / `zen_worker` / `swarm` /
-  `subagent`）、agent、session、work item、父 run、状态、终止原因、轮数和花费。
-  宿主级 `runs op=list/get` 可以跨模式查询；文件只追加，坏行跳过，写入失败不会中断运行。
-
-两者与[控制面](orchestration.md)一起工作：`workspace` 是模式事实，run 账本是运行
-投影，真正的任务状态仍以 Swarm 的 `tasks.jsonl` 和 Zen 的名册为准。
+  最后一条胜出），带 kind（`coding` / `subagent`；旧账本里的 `zen_router` / `zen_worker` / `swarm`
+  是历史值）、agent、session、work item、父 run、状态、终止原因、轮数和花费。
+  宿主级 `runs op=list/get` 可以跨 session 查询；文件只追加，坏行跳过，写入失败不会中断运行。
 
 ## 跨项目恢复的边界
 

@@ -56,12 +56,6 @@ const McpSettings = lazy(() =>
 const PluginSettings = lazy(() =>
   import('./PluginSettings').then((module) => ({ default: module.PluginSettings })),
 )
-const ZenSettings = lazy(() =>
-  import('./WorkspaceSettings').then((module) => ({ default: module.ZenSettings })),
-)
-const SwarmSettings = lazy(() =>
-  import('./WorkspaceSettings').then((module) => ({ default: module.SwarmSettings })),
-)
 const ProjectSettings = lazy(() =>
   import('./ProjectSettings').then((module) => ({ default: module.ProjectSettings })),
 )
@@ -630,18 +624,6 @@ export function SettingsPage() {
           {tab === 'plugins' && (
             <Suspense fallback={null}>
               <PluginSettings />
-            </Suspense>
-          )}
-
-          {tab === 'zen' && (
-            <Suspense fallback={null}>
-              <ZenSettings />
-            </Suspense>
-          )}
-
-          {tab === 'swarm' && (
-            <Suspense fallback={null}>
-              <SwarmSettings onNavigate={setTab} />
             </Suspense>
           )}
 

@@ -77,10 +77,6 @@ const SESSION_TAG_EXEMPT = new Set([
   'project',
   'terminal',
   'runs',
-  'supervisor',
-  'swarm',
-  'zen_fleet',
-  'workspace',
   'shutdown',
 ])
 

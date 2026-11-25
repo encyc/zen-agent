@@ -89,7 +89,7 @@ ignore_missing_imports = true
 # fix the module and delete its override instead.
 
 [[tool.mypy.overrides]]
-# Ratchet baseline (audit P1-10): these 77 modules carry 691 existing
+# Ratchet baseline (audit P1-10): these 67 modules carry 691 existing
 # type errors, frozen here so the gate fails only on NEW errors in modules
 # NOT listed below. Do NOT add modules to this list — fix the module and
 # delete its entry instead.
@@ -107,13 +107,7 @@ module = [
     "zenagent.app.runtime",
     "zenagent.app.skills_recompose",
     "zenagent.app.subagent_tracker",
-    "zenagent.app.swarm.events_tap",
-    "zenagent.app.swarm.manager",
-    "zenagent.app.swarm.schedule",
-    "zenagent.app.swarm.workflow",
     "zenagent.app.views",
-    "zenagent.app.zen.fleet",
-    "zenagent.app.zen.tools",
     "zenagent.cli.completion",
     "zenagent.cli.interaction",
     "zenagent.cli.main",
@@ -126,10 +120,6 @@ module = [
     "zenagent.cli.rpc.ops_secrets",
     "zenagent.cli.rpc.ops_session",
     "zenagent.cli.rpc.ops_skills",
-    "zenagent.cli.rpc.ops_supervisor",
-    "zenagent.cli.rpc.ops_swarm",
-    "zenagent.cli.rpc.ops_workspace",
-    "zenagent.cli.rpc.ops_zen",
     "zenagent.cli.rpc.server",
     "zenagent.cli.tui.app",
     "zenagent.cli.tui.app_parts.appearance",

@@ -12,7 +12,7 @@ runs commands, searches the web, delegates to read-only subagents and keeps a
 project todo list — from a terminal, a headless one-shot, or your own program.
 Repo <https://github.com/encyc/zen-agent> · PyPI `zenagent-py` (imports as `zenagent`)
 
-![ZenAgent desktop in Coding mode: a session with tool rows and an inline diff](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-chat.png)
+![ZenAgent desktop: a session with tool rows and an inline diff](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-chat.png)
 
 ## Install
 
@@ -76,7 +76,7 @@ in an evening, embed in an afternoon, and change without permission.
 - **Embed it in 30 lines.** `Agent(model=..., tools=..., api_key=...)` plus one subscribe callback: your tools, your storage, your event loop.
 - **Extend without restarting.** Skills, prompt templates, extensions, MCP servers and custom providers are all files; `/reload` picks them up mid-session.
 - **No vendor lock-in.** Two protocol adapters (`openai-completions`, including the zai/deepseek dialects, and `anthropic-messages`) plus a packaged catalog carrying prices and context windows.
-- **Costs you can see.** `zen usage`, `/usage`, per-request cost in the transcript, and `--max-cost` as a hard stop.
+- **Costs you can see.** `zen usage`, `/usage`, and per-request cost in the transcript.
 
 ## Features
 
@@ -95,20 +95,8 @@ in an evening, embed in an afternoon, and change without permission.
 The same kernel behind a Tauri shell: streaming tool cards, inline diffs, and a
 review and files work panel. Diffs and files stay beside the conversation.
 
-The switcher above the session list decides how a project is run — the shot at
-the top of this page is **Coding**:
-
-- **Coding** — one session, one agent. You talk to it directly; it reads, edits
-  and runs, and the work panel keeps diffs and files beside the conversation.
-- **Zen** — one router session per project. The router dispatches to background
-  worker sessions, each with a focus and a status; their reports wake the
-  router, which folds them into a single conversation.
-- **Swarm** — one room per project, one member per role. You and the roles post
-  into the same feed: `@role` hands out a task, the report returns as a
-  message, and the task index keeps the chain.
-
-![Zen mode: a router session with the worker roster in the sidebar](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-zen.png)
-![Swarm mode: a project room with role agents, a task index and reports](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-swarm.png)
+One session, one agent: you talk to it directly; it reads, edits and runs, and
+the work panel keeps diffs and files beside the conversation.
 
 ![Review panel with an inline diff](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-review.png)
 

@@ -9,8 +9,6 @@ fresh file into the running session.
 
 from __future__ import annotations
 
-import contextlib
-
 from zenagent import settings
 from zenagent.app import limits_apply
 from zenagent.cli.rpc.errors import failure_frame
@@ -210,10 +208,9 @@ class SecretsOps:
     def _knob_value(runtime, knob) -> object:
         """The value this build of the session is actually running with.
 
-        ``[limits]`` knobs come from the live runtime's config; ``[task]``,
-        ``[zen]`` and ``[swarm]`` budgets are read when a subagent, fleet or
-        room starts, so the *file* is what the next one will see — a stale
-        in-memory copy must not win.
+        ``[limits]`` knobs come from the live runtime's config; ``[task]``
+        budgets are read when a subagent starts, so the *file* is what the next
+        one will see — a stale in-memory copy must not win.
         """
         config = getattr(runtime, "user_config", None) or load_user_config()
         if knob.table.startswith("limits"):
@@ -265,28 +262,9 @@ class SecretsOps:
         """Push the rewritten file into the running session."""
         runtime = self.runtime
         if runtime is None:
-            await self._drop_idle_swarm_rooms()
             return
         limits_apply.copy_onto(runtime, load_user_config(global_config_path()))
         runtime.apply_limits()
-        await self._drop_idle_swarm_rooms()
-
-    async def _drop_idle_swarm_rooms(self) -> None:
-        """Close idle rooms so the next request rebuilds with the new policy.
-
-        A room with a run in flight keeps its manager (its semaphore and router
-        cannot be resized safely mid-run); the change reaches it on the next
-        rebuild, same as the settings page explains.
-        """
-        rooms = getattr(self, "_swarm", None)
-        if not rooms:
-            return
-        for key, manager in list(rooms.items()):
-            if manager.has_active():
-                continue
-            rooms.pop(key, None)
-            with contextlib.suppress(Exception):
-                await manager.close()
 
     async def _limits(self, request: dict, request_id) -> None:
         op = request.get("op")

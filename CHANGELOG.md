@@ -7,6 +7,29 @@ matches the release tag; older history is in the repository tags and commits.
 
 ### Breaking
 
+- **Coding is the only workspace mode.** The zen and swarm modes are gone:
+  their orchestrators (`app/zen/`, `app/swarm/`), the supervisor registry and
+  dispatch layer, the `workspace` / `supervisor` / `swarm` / `zen_fleet` RPC
+  families, the desktop mode switcher, room/role pages and worker views, the
+  `[zen]` / `[swarm]` config tables, and the `swarm_protocol` prompt block are
+  all deleted. The wire protocol is **v4**; a v3 client is refused explicitly.
+- **`--mode zen` is not a mode.** The permission vocabulary is `plan` / `ask` /
+  `auto`; argparse now rejects `zen` with `unknown mode: zen` (exit 2). A
+  desktop preference stored as `zen` no longer maps to `auto` — it loads as
+  absent and falls back to the app default (`ask`), which is stricter.
+- **The architecture diagram dropped the deleted nodes.** `docs/architecture-full.html`
+  loses the `app/zen` and `app/swarm` nodes and the five edges that touched them;
+  the `cli/rpc` tooltip no longer lists `ops_zen` / `ops_swarm` and the protocol
+  line says v4. `docs/arch-gov/*` is a generated snapshot and was not
+  regenerated: `brief.md` is annotated as a snapshot of 2026-11-25.
+- **Old orchestration data is left on disk and never read.** `[zen]` /
+  `[swarm]` tables are accepted, ignored, and warned about once per table;
+  `~/.zenagent/agents/`, project `swarm/` rooms and `workspace.json` are
+  ignored; old `.zen.json`-marked sessions list as ordinary coding sessions;
+  ledger rows with `zen_router` / `zen_worker` / `swarm` kinds stay readable
+  and filterable (`RUN_KINDS` marks them historical). Nothing is migrated or
+  deleted.
+
 - **No run has a turn or spend ceiling any more.** `[limits.agent].max_turns`,
   `--max-turns`, `AgentConfig.max_turns`, `AgentConfig.max_cost`, `--max-cost`,
   `[task].max_turns`, `[task].max_cost`, `[limits.goal].max_turns` /

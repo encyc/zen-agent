@@ -33,7 +33,7 @@ async def _run(args) -> int:
     from zenagent.cli.rpc.slot import RuntimeSlot
 
     # Resolve the mode exactly like the other frontends: an explicit --mode
-    # wins, then --read-only (plan), then --yes (zen). Passing the raw
+    # wins, then --read-only (plan), then --yes (auto). Passing the raw
     # ``args.mode`` (None when the flag is omitted) into the gate used to
     # raise "unknown mode: None" for every documented ``zen rpc`` invocation.
     mode = resolve_mode(

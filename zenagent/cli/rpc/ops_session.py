@@ -46,6 +46,36 @@ def _page_views(
     return views[start:end], start > 0
 
 
+def disk_transcript(
+    path: Path, *, limit: int | None, before: int | None
+) -> dict:
+    """One session file's transcript, read straight from disk.
+
+    A session nobody holds a slot for still has a file, and a GUI showing it in
+    a side pane must not switch the foreground conversation just to read it.
+    Same view models and paging as the resident snapshot; ``resident`` is false
+    so the client knows frames will not stream and only a resume makes it live.
+    """
+
+    from zenagent.agent.session import Session
+    from zenagent.app.views import TranscriptBuilder
+
+    session = Session(path)
+    messages = session.load()
+    builder = TranscriptBuilder()
+    builder.load(messages, list(session.records))
+    views = [asdict(view) for view in builder.views]
+    page, has_more_before = _page_views(views, limit=limit, before=before)
+    return {
+        "transcript": page,
+        "notices": [],
+        "compactions": [],
+        "hasMoreBefore": has_more_before,
+        "total": len(views),
+        "resident": False,
+    }
+
+
 class SessionOps:
     """Mixin: see server.py for the composed RpcServer."""
 
@@ -97,6 +127,9 @@ class SessionOps:
             # The absolute row count: a tail page starts at ``total - len(page)``
             # and that index — not the page length — is the next ``before``.
             "total": total,
+            # This slot holds the session, so frames stream and submits go
+            # direct; the disk snapshot in ``disk_transcript`` says false.
+            "resident": True,
         }
 
 
@@ -218,7 +251,6 @@ class SessionOps:
                         "updated_at": entry.updated_at,
                         "model": entry.model,
                         "derived_from": entry.derived_from,
-                        "workspace": entry.workspace,
                     }
                     for entry in entries
                 ],

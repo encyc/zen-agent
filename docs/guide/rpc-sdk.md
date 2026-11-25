@@ -95,23 +95,15 @@ p.stdin.write(json.dumps({"type":"shutdown","id":"2"}) + "\n"); p.stdin.flush()
 |---|---|---|
 | `hello` | — | 协议版本握手：返回 `protocol_version`、当前 `active` 项目和全部常驻 `projects` |
 | `project` | `op`, `root?`, `resume?`, `background?` | `open` / `switch` / `close` / `relocate`；打开项目或并行会话 slot |
-| `workspace` | `op`, `mode?`, `routerSession?` | `get` / `set` 项目模式（`coding` / `zen` / `swarm`） |
-| `supervisor` | `op`, `key?`, `mode?`, `prompt?`, `session?`, `agent?`, `role?`, `ref?`, `images?`, `requestId?`, `decision?` | `status` / `dispatch` / `approve` / `cancel`；live agent 注册表与统一派工入口 |
 | `runs` | `op`, `runId?`, `kind?`, `agent?`, `workItem?`, `session?`, `status?`, `since?`, `limit?` | `list` / `get` 项目 run 账本（只读） |
-| `zen_fleet` | `op` | `enable` / `disable` / `state` / `transcript`；Zen 名册与 worker 只读转录 |
-| `swarm` | `op` | 房间与任务：`list` / `post` / `cancel` / `retry` / `reset` / `roles` / `reload` |
 | `terminal` | `op` | 桌面终端会话 |
 
 ```json
-{"type":"workspace","id":"w1","op":"get","project":"/repo"}
-{"type":"supervisor","id":"s1","op":"status","project":"/repo"}
-{"type":"supervisor","id":"s2","op":"dispatch","project":"/repo","mode":"swarm","prompt":"@research 对比这两个方案"}
-{"type":"runs","id":"r1","op":"list","project":"/repo","kind":"swarm","limit":20}
+{"type":"runs","id":"r1","op":"list","project":"/repo","kind":"subagent","limit":20}
 ```
 
-`supervisor op=dispatch` 的 `mode` 省略时读 `workspace.json`；coding 不派工（直接
-`prompt`），zen 需要 `session` 或 live `agent`，swarm 可带 `role` / `ref` / `images`。
-回执只确认“已交给编排器”，不会伪造 `runId`；用 `runs` 查真正的 run。
+宿主级不再有 `supervisor` / `workspace` / `swarm` / `zen_fleet` 四个族：0.15 删除了
+zen 与 swarm 两个工作区模式，coding 是唯一形态，交互直接走 `prompt`。
 
 ## Python SDK（同进程嵌入）
 

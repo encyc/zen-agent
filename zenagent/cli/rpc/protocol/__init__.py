@@ -194,7 +194,6 @@ from zenagent.cli.rpc.protocol._views import (
 
 _ENVELOPE_ONLY = ("shutdown", "follow_up", "steer", "approval", "ask")
 _ENVELOPE_ONLY_SUBS = {
-    ("supervisor", "approve"),
     ("secrets", "set"),
     ("secrets", "clear"),
     ("limits", "set"),

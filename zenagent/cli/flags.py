@@ -14,7 +14,7 @@ THINKING_CHOICES = ("off", "low", "medium", "high", "max")
 
 
 def _permission_mode(raw: str) -> str:
-    """argparse type: normalize the legacy ``zen`` alias before choices run."""
+    """argparse type: normalize case/whitespace before choices run."""
     mode = normalize_mode(raw)
     if mode is None:
         raise argparse.ArgumentTypeError(f"unknown mode: {raw}")
@@ -70,7 +70,7 @@ def add_runtime_flags(parser: argparse.ArgumentParser) -> None:
         choices=MODES,
         default=None,
         help="runtime permission mode: plan (read-only) | ask (confirm) | "
-        "auto (fully automatic, no confirmations; legacy alias: zen)",
+        "auto (fully automatic, no confirmations)",
     )
     parser.add_argument(
         "--allow-dangerous",

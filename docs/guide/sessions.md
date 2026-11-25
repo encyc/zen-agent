@@ -17,14 +17,6 @@
 - 升级前的扁平 `~/.zenagent/sessions/*.jsonl` 保留为 legacy，只在 all 视图出现；`zen sessions adopt PATH` 可归入当前项目。
 - 旧文件不会被重写：压缩、`/undo`、`/fork` 都**写新文件**，保证历史可审计。
 
-## 会话归属
-
-每个项目会话在列表里带一个 `workspace` 归属：`coding` 或 `zen`（Swarm 角色的
-session 在 `swarm/agents/` 下，不进普通项目会话列表）。归属由 sessions 目录里的
-`.zen.json` 名册决定：Router 和已登记的 Worker 属于 `zen`，其余属于 `coding`；
-没有该字段的旧会话按 `coding` 处理。桌面端 coding 侧边栏只显示 `coding`，Zen
-名册只显示 `zen`，因此离开 Zen 后不会把 worker 会话混进普通会话列表。
-
 ## 单写者租约
 
 一个会话同一时间只允许一个写者。`Runtime` 绑定 session 时取得 `SessionLease`：
@@ -52,7 +44,7 @@ runtime / 进程，再恢复。两个终端不能同时 `--resume` 同一个会�
   （如 `5x echo({"x": 1})`）。
 - `retry`：被消息级重试吞掉的瞬态失败（每次退避前一条）——`attempt`、`max_retries`、
   `delay_ms`、`error`、`model`。不开启 `--retries` 时没有这类记录。
-- `mode`：bootstrap 时的初始权限模式，以及每次 `/mode` 切换——`mode`（auto/plan/ask；旧记录可能仍是 `zen`，读取时按 `auto` 理解）。
+- `mode`：bootstrap 时的初始权限模式，以及每次 `/mode` 切换——`mode`（auto/plan/ask）。旧记录里可能残留已删除的 `zen` 值，它只是历史数据，不再对应任何模式。
 - `tool_end`：每次工具调用结束写一条——`call_id`、`tool_name`、`duration_ms`、
   `is_error`、`details`（`details` 序列化上限 16 KiB；`diff` 先按 400 行截断，
   仍超限则先丢 `diff`，再逐个丢最大字段，并置 `diff_truncated`/`details_truncated`）。

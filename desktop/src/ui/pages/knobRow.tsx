@@ -1,5 +1,5 @@
-/** One config knob: copy on the left, an editor on the right. Shared by the
- * Parameters page and the Zen/Swarm pages so every knob edits the same way. */
+/** One config knob: copy on the left, an editor on the right. One component
+ * so every knob on the Parameters page edits the same way. */
 
 import { useEffect, useState } from 'react'
 import { useT } from '../../i18n/locale'

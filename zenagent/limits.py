@@ -46,18 +46,6 @@ from pathlib import Path
 from typing import Literal
 
 from zenagent.config_errors import UnknownConfigField
-from zenagent.swarm_settings import (
-    DEFAULT_SWARM_MAX_CHAIN_COST,
-    DEFAULT_SWARM_MAX_CHAIN_DEPTH,
-    DEFAULT_SWARM_MAX_CHAIN_TASKS,
-    DEFAULT_SWARM_MAX_CONCURRENT,
-    DEFAULT_SWARM_MAX_EDGE_REPEATS,
-    DEFAULT_SWARM_MAX_REPLY_FANOUT,
-    DEFAULT_SWARM_MAX_REQUEST_FANOUT,
-    DEFAULT_SWARM_RUNTIME_IDLE_S,
-    DEFAULT_SWARM_STORM_BURST,
-    DEFAULT_SWARM_STORM_WINDOW_S,
-)
 
 _log = logging.getLogger(__name__)
 
@@ -70,9 +58,7 @@ __all__ = [
     "KNOB_BY_KEY",
     "LIMITS",
     "MANAGED_TABLES",
-    "SWARM_KNOBS",
     "TASK_KNOBS",
-    "ZEN_KNOBS",
     "Limit",
     "Limits",
     "LimitsWriteError",
@@ -315,185 +301,7 @@ TASK_KNOBS: tuple[Limit, ...] = (
     ),
 )
 
-#: The ``[zen]`` registry: fleet behaviour. Defaults mirror
-#: ``zenagent.config``; both are global-only.
-ZEN_KNOBS: tuple[Limit, ...] = (
-    Limit(
-        table="zen",
-        name="max_concurrent",
-        section="zen",
-        attr="zen_max_concurrent",
-        default=DEFAULT_SWARM_MAX_CONCURRENT,
-        kind="int",
-        minimum=1,
-        maximum=16,
-        apply="session",
-        unit="workers running at once",
-    ),
-    Limit(
-        table="zen",
-        name="batch_window_s",
-        section="zen",
-        attr="zen_batch_window_s",
-        default=0.5,
-        kind="float",
-        minimum=0.0,
-        maximum=10.0,
-        apply="session",
-        unit="seconds; 0 disables batching",
-    ),
-    Limit(
-        table="zen",
-        name="report_limit",
-        section="zen",
-        attr="zen_report_limit",
-        default=800,
-        kind="int",
-        minimum=200,
-        maximum=20000,
-        apply="session",
-        unit="characters per worker report",
-    ),
-    Limit(
-        table="zen",
-        name="worker_mode",
-        section="zen",
-        attr="zen_worker_mode",
-        default="inherit",
-        kind="str",
-        minimum=0,
-        maximum=0,
-        apply="session",
-        unit="inherit|ask|plan|auto",
-        choices=("inherit", "ask", "plan", "auto"),
-    ),
-)
-
-#: The ``[swarm]`` registry: per-room policy. Defaults mirror ``zenagent.config``.
-SWARM_KNOBS: tuple[Limit, ...] = (
-    Limit(
-        table="swarm",
-        name="max_concurrent",
-        section="swarm",
-        attr="swarm_max_concurrent",
-        default=3,
-        kind="int",
-        minimum=1,
-        maximum=16,
-        apply="session",
-        unit="role runs in flight",
-    ),
-    Limit(
-        table="swarm",
-        name="max_chain_depth",
-        section="swarm",
-        attr="swarm_max_chain_depth",
-        default=DEFAULT_SWARM_MAX_CHAIN_DEPTH,
-        kind="int",
-        minimum=1,
-        maximum=32,
-        apply="session",
-        unit="delegations per chain",
-    ),
-    Limit(
-        table="swarm",
-        name="max_chain_cost",
-        section="swarm",
-        attr="swarm_max_chain_cost",
-        default=DEFAULT_SWARM_MAX_CHAIN_COST,
-        kind="float",
-        minimum=0.01,
-        maximum=1000.0,
-        apply="session",
-        unit="USD per chain",
-    ),
-    Limit(
-        table="swarm",
-        name="runtime_idle_s",
-        section="swarm",
-        attr="swarm_runtime_idle_s",
-        default=DEFAULT_SWARM_RUNTIME_IDLE_S,
-        kind="float",
-        minimum=0.0,
-        maximum=86400.0,
-        apply="session",
-        unit="seconds idle before a run unit is reclaimed; 0 disables",
-    ),
-    Limit(
-        table="swarm",
-        name="max_request_fanout",
-        section="swarm",
-        attr="swarm_max_request_fanout",
-        default=DEFAULT_SWARM_MAX_REQUEST_FANOUT,
-        kind="int",
-        minimum=1,
-        maximum=16,
-        apply="session",
-        unit="roles one request may hand work to",
-    ),
-    Limit(
-        table="swarm",
-        name="max_reply_fanout",
-        section="swarm",
-        attr="swarm_max_reply_fanout",
-        default=DEFAULT_SWARM_MAX_REPLY_FANOUT,
-        kind="int",
-        minimum=1,
-        maximum=16,
-        apply="session",
-        unit="roles one result (reply) may hand work to",
-    ),
-    Limit(
-        table="swarm",
-        name="max_edge_repeats",
-        section="swarm",
-        attr="swarm_max_edge_repeats",
-        default=DEFAULT_SWARM_MAX_EDGE_REPEATS,
-        kind="int",
-        minimum=1,
-        maximum=32,
-        apply="session",
-        unit="rounds between the same two roles inside one chain",
-    ),
-    Limit(
-        table="swarm",
-        name="max_chain_tasks",
-        section="swarm",
-        attr="swarm_max_chain_tasks",
-        default=DEFAULT_SWARM_MAX_CHAIN_TASKS,
-        kind="int",
-        minimum=1,
-        maximum=512,
-        apply="session",
-        unit="tasks one chain may create",
-    ),
-    Limit(
-        table="swarm",
-        name="storm_window_s",
-        section="swarm",
-        attr="swarm_storm_window_s",
-        default=DEFAULT_SWARM_STORM_WINDOW_S,
-        kind="float",
-        minimum=0.0,
-        maximum=86400.0,
-        apply="session",
-        unit="burst-breaker window in seconds; 0 disables the breaker",
-    ),
-    Limit(
-        table="swarm",
-        name="storm_burst",
-        section="swarm",
-        attr="swarm_storm_burst",
-        default=DEFAULT_SWARM_STORM_BURST,
-        kind="int",
-        minimum=1,
-        maximum=512,
-        apply="session",
-        unit="tasks per chain inside the window before it freezes",
-    ),
-)
-
-ALL_KNOBS: tuple[Limit, ...] = LIMITS + TASK_KNOBS + ZEN_KNOBS + SWARM_KNOBS
+ALL_KNOBS: tuple[Limit, ...] = LIMITS + TASK_KNOBS
 KNOB_BY_KEY: dict[str, Limit] = {knob.key: knob for knob in ALL_KNOBS}
 KNOB_BY_ATTR: dict[str, Limit] = {knob.attr: knob for knob in ALL_KNOBS}
 KNOBS_BY_TABLE: dict[str, tuple[Limit, ...]] = {
@@ -508,8 +316,6 @@ MANAGED_TABLES: tuple[str, ...] = (
     "limits.tools",
     "limits.goal",
     "task",
-    "zen",
-    "swarm",
 )
 
 #: Presentation order of the groups, shared by the page and the docs.
@@ -652,14 +458,6 @@ MANAGED_NOTES: dict[str, str] = {
     "task": (
         "# Managed by zen's settings page (Parameters · Subagents). Global-only: "
         "subagent budgets are a machine-level guard."
-    ),
-    "zen": (
-        "# Managed by zen's settings page (Zen). Global-only: fleet limits are a "
-        "machine-level guard."
-    ),
-    "swarm": (
-        "# Managed by zen's settings page (Swarm). Global-only: room policy is a "
-        "machine-level guard."
     ),
 }
 

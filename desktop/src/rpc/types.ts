@@ -2,7 +2,6 @@
  * live server; the frontend mirrors the TUI reducer (zenagent/app/views.py)
  * when assembling them. */
 
-import type { SwarmServerFrame } from './types-swarm.ts'
 import type { EventFrame } from './types-events.ts'
 
 export type {
@@ -12,31 +11,6 @@ export type {
   MessageProjection,
 } from './types-events.ts'
 
-export type {
-  SwarmAgentFrame,
-  SwarmAgentState,
-  SwarmEventFrame,
-  SwarmAgentStatus,
-  SwarmAuthor,
-  SwarmListResult,
-  SwarmMessage,
-  SwarmMessageFrame,
-  SwarmNoticeFrame,
-  SwarmOkResult,
-  SwarmPostResult,
-  SwarmRef,
-  SwarmReloadResult,
-  SwarmRole,
-  SwarmRolesResult,
-  SwarmTask,
-  SwarmTaskFrame,
-  SwarmTaskState,
-  SwarmWork,
-  SwarmWorkFrame,
-  SwarmWorkResult,
-  SwarmWorksResult,
-  SwarmWorkState,
-} from './types-swarm.ts'
 
 export type Mode = 'plan' | 'ask' | 'auto'
 
@@ -66,7 +40,7 @@ export type ResultFrame =
 // kinds; this list mirrors it and is pinned by tests/test_rpc_contract.py so
 // a one-sided change goes red instead of failing at runtime.
 
-export const PROTOCOL_VERSION = 3
+export const PROTOCOL_VERSION = 4
 
 export const REQUEST_KINDS = [
   'approval',
@@ -100,14 +74,11 @@ export const REQUEST_KINDS = [
   'status',
   'steer',
   'subagent_transcript',
-  'supervisor',
-  'swarm',
   'runs',
   'terminal',
   'tools',
   'transcript',
   'usage',
-  'workspace', 'zen_fleet',
 ] as const
 // ---- wire registry mirrors (generated) ------------------------------------
 // Shapes below come from zenagent/cli/rpc/protocol.py via
@@ -297,19 +268,6 @@ export interface DividerView {
   reason?: string | null
 }
 
-/** A task's run activity (`swarm transcript`), in the coding transcript's
- * own view shapes so the room replays it with the same row components.
- * `available` is false when the run is not in the assignee's current session
- * (reset or compacted). */
-export interface SwarmTranscriptResult {
-  type: 'result'
-  id: string
-  ok: true
-  taskId: string
-  available: boolean
-  transcript: (MessageView | ToolCallView)[]
-}
-
 // ---- workspace ---------------------------------------------------------------
 
 export type WorkspaceFile =
@@ -344,31 +302,7 @@ export interface AskQuestion {
   recommended?: string
 }
 
-export type ZenUiMode = 'coding' | 'zen'
-
-/** One row of the project's zen fleet roster (zenagent/app/zen/fleet.py). */
-export interface RosterItem {
-  path: string
-  title: string
-  focus: string
-  role: string
-  status: string
-  last_report: string
-}
-
-/** Server-initiated: the fleet roster changed (or enable/disable happened). */
-export interface ZenFleetFrame {
-  type: 'zen_fleet'
-  enabled: boolean
-  roster: RosterItem[]
-  project?: string
-  session?: string
-}
-export type ServerFrame =
-  | ResultFrame
-  | EventFrame
-  | ZenFleetFrame
-  | SwarmServerFrame
+export type ServerFrame = ResultFrame | EventFrame
 
 export function isEventFrame(frame: ServerFrame): frame is EventFrame {
   return frame.type === 'event'

@@ -4,6 +4,13 @@ Every content change bumps `PROMPT_VERSION` (`zenagent/prompts/spec.py`) and get
 one entry here: what changed, why, and the experiment/report that justified it.
 P0 extracted the v0.4.1 text verbatim — no behavior change.
 
+## 2026-11-25.1 — the swarm protocol block is removed
+
+- Deleted `swarm_protocol` (and its `BlockSpec`) with the swarm orchestration
+  mode: only a room role ever rendered it, and there is no room any more. No
+  surviving prompt changes, so `PROMPT_VERSION` stays `2026-11-17.1` — a
+  content change would bump it, a deletion of unrendered text does not.
+
 ## 2026-11-17.1 — the swarm room protocol becomes a block
 
 - New `swarm_protocol` block. It was inline in `zenagent/app/swarm/protocol.py`,

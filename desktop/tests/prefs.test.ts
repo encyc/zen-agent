@@ -46,10 +46,10 @@ test('savePref writes and loadPrefs reads back', () => {
   })
 })
 
-test('a legacy zen mode pref loads as auto', () => {
+test('a retired zen mode pref is not a mode and loads as null', () => {
   withStorage((store) => {
     store.set(MODE_KEY, 'zen')
-    assert.equal(loadPrefs().mode, 'auto')
+    assert.equal(loadPrefs().mode, null)
   })
 })
 

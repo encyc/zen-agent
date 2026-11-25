@@ -1,7 +1,7 @@
 /** The session pane registry: open/close/focus/submit against a scripted
  * fake bridge. A pane paints its session's transcript (session-tagged when
- * the slot is resident, the zen disk read otherwise), streams live through
- * the frame-router sink, and submits prompts to its own session. */
+ * the slot is resident, a static pane otherwise), streams live through the
+ * frame-router sink, and submits prompts to its own session. */
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
@@ -27,9 +27,11 @@ interface WireLog {
 }
 
 /** A scripted host: session-tagged transcript/prompt/status replies carry the
- * pane's session; the `zen_fleet` disk read never does. */
+ * pane's session. */
 function scripted(options: {
   transcriptRefuses?: boolean
+  /** The host answered a session no slot holds, from its file. */
+  transcriptStatic?: boolean
   running?: boolean
 } = {}): Bridge & { log: WireLog } {
   const log: WireLog = { requests: [] }
@@ -51,19 +53,24 @@ function scripted(options: {
         if (options.transcriptRefuses) {
           return { type: 'error', id, message: 'no resident slot for session' } as T
         }
-        return tag({ transcript: [], notices: [], compactions: [], hasMoreBefore: false, total: 0 }) as T
-      }
-      if (payload.type === 'zen_fleet' && payload.op === 'transcript') {
-        return {
-          type: 'result',
-          id,
-          ok: true,
+        if (options.transcriptStatic) {
+          return tag({
+            transcript: [{ kind: 'user', text: 'from the file', timestamp: 1 }],
+            notices: [],
+            compactions: [],
+            hasMoreBefore: false,
+            total: 1,
+            resident: false,
+          }) as T
+        }
+        return tag({
           transcript: [],
           notices: [],
           compactions: [],
           hasMoreBefore: false,
           total: 0,
-        } as T
+          resident: true,
+        }) as T
       }
       if (payload.type === 'session' && payload.op === 'resume') {
         return { type: 'result', id, ok: true, path: payload.path } as T
@@ -117,7 +124,22 @@ test('open paints the pane from the session-tagged transcript and marks it live'
   assert.equal(asked[0]?.session, A)
 })
 
-test('a refusal falls back to the zen disk read and paints a static pane', async () => {
+test('a disk snapshot paints the pane from the file without making it live', async () => {
+  const bridge = scripted({ transcriptStatic: true })
+  reset(bridge)
+
+  await usePanesStore.getState().open(A)
+
+  const pane = usePanesStore.getState().panes[1]
+  assert.equal(pane?.live, false, 'only a resident slot streams frames')
+  assert.equal(pane?.loaded, true, 'the file still paints')
+  assert.equal(pane?.chat.getState().nodes[0]?.kind, 'user')
+  const asked = bridge.log.requests.filter((request) => request.type === 'transcript')
+  assert.equal(asked.length, 1)
+  assert.equal(asked[0]?.session, A)
+})
+
+test('a refusal leaves an empty pane with a load affordance', async () => {
   const bridge = scripted({ transcriptRefuses: true })
   reset(bridge)
 
@@ -125,12 +147,7 @@ test('a refusal falls back to the zen disk read and paints a static pane', async
 
   const pane = usePanesStore.getState().panes[1]
   assert.equal(pane?.live, false)
-  assert.equal(pane?.loaded, true)
-  const zenReads = bridge.log.requests.filter(
-    (request) => request.type === 'zen_fleet' && request.op === 'transcript',
-  )
-  assert.equal(zenReads.length, 1)
-  assert.equal(zenReads[0]?.path, A)
+  assert.equal(pane?.loaded, false)
 })
 
 test('a mismatched transcript tag (an older runtime) counts as the refusal path', async () => {
@@ -166,7 +183,7 @@ test('a mismatched transcript tag (an older runtime) counts as the refusal path'
 
   const pane = usePanesStore.getState().panes[1]
   assert.equal(pane?.live, false)
-  assert.equal(pane?.loaded, true)
+  assert.equal(pane?.loaded, false)
 })
 
 test('open caps the strip at three panes with a notice', async () => {

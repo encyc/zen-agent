@@ -1,7 +1,4 @@
-/** The sidebar shell: a brand header, the workspace mode switcher, the body
- * for the active mode, and the footer. The coding body lives in SidebarCoding;
- * the zen and swarm bodies (ZenSidebar / SwarmSidebar) each open with the
- * compact project switcher. */
+/** The sidebar shell: a brand header, the conversation body, and the footer. */
 
 import { useSettingsStore } from '../state/stores'
 import { useT } from '../i18n/locale'
@@ -14,18 +11,13 @@ import {
   SunIcon,
 } from './icons'
 import { Notifications } from './Notifications'
-import { ModeSwitcher } from './ModeSwitcher'
 import { captureChatState } from './pages/navigation'
 import { AppMark } from './AppMark'
 import { ZenWordmark } from './ZenWordmark'
 import { SidebarCoding } from './SidebarCoding'
-import { ZenSidebar } from './ZenSidebar'
-import { SwarmSidebar } from './SwarmSidebar'
 import css from './Sidebar.module.css'
 
 export function Sidebar(props: { onCollapse(): void }) {
-  const workspaceMode = useSettingsStore((state) => state.workspaceMode)
-
   return (
     <div className={css.root} data-shell-sidebar>
       <div className={css.header} data-tauri-drag-region>
@@ -47,9 +39,7 @@ export function Sidebar(props: { onCollapse(): void }) {
         </Tooltip>
       </div>
 
-      <ModeSwitcher />
-
-      {workspaceMode === 'zen' ? <ZenSidebar /> : workspaceMode === 'swarm' ? <SwarmSidebar /> : <SidebarCoding />}
+      <SidebarCoding />
 
       <Footer />
     </div>

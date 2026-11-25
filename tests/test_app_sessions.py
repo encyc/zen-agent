@@ -316,21 +316,6 @@ async def test_entries_all_view_labels_each_project(
     assert roots[legacy_session.name] == ""
 
 
-def test_entries_tag_zen_roster_sessions_as_zen(session_runtime):
-    from zenagent.app.zen.roster import set_focus
-
-    manager = SessionManager(session_runtime)
-    sessions_dir = manager.current().parent
-    coding = _write_session(sessions_dir, "coding.jsonl", ["coding work"])
-    worker = _write_session(sessions_dir, "zen-worker.jsonl", ["worker work"])
-    set_focus(sessions_dir, "zen-worker", "review")
-
-    by_name = {entry.path.name: entry.workspace for entry in manager.entries()}
-
-    assert by_name[coding.name] == "coding"
-    assert by_name[worker.name] == "zen"
-
-
 async def test_pinned_sessions_sort_first(session_runtime):
     runtime = session_runtime
     manager = SessionManager(runtime)
@@ -468,3 +453,28 @@ async def test_entries_expose_creation_update_model_and_lineage(session_runtime)
     forked = await manager.fork()
     forked_entry = next(item for item in manager.entries() if item.path == forked)
     assert forked_entry.derived_from == entry.path.stem
+
+
+async def test_an_old_zen_session_lists_as_a_normal_coding_session(session_runtime):
+    import json
+
+    runtime = session_runtime
+    manager = SessionManager(runtime)
+    await runtime.agent.prompt("hello")
+    path = manager.current()
+    (path.parent / ".zen.json").write_text(
+        json.dumps(
+            {
+                path.stem: {
+                    "role": "router",
+                    "focus": "",
+                    "set_at": "2026-01-01T00:00:00.000Z",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    entry = next(entry for entry in manager.entries() if entry.path == path)
+    assert not hasattr(entry, "workspace")
+    assert entry.messages == 2

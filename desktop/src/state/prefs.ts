@@ -30,7 +30,6 @@ export interface LiveChoices {
 }
 
 const MODES: readonly string[] = ['plan', 'ask', 'auto']
-const LEGACY_MODES: Record<string, string> = { zen: 'auto' }
 
 function storage(): Storage | null {
   try {
@@ -60,7 +59,7 @@ function write(key: string, value: string | null): void {
 
 export function loadPrefs(): SessionPrefs {
   const stored = read(MODE_KEY)
-  const mode = stored === null ? null : (LEGACY_MODES[stored] ?? stored)
+  const mode = stored
   const thinking = read(THINKING_KEY)
   return {
     mode: mode !== null && MODES.includes(mode) ? (mode as Mode) : null,

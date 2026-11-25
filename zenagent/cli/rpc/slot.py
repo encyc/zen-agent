@@ -90,19 +90,11 @@ class RuntimeSlot:
 
     @property
     def pinned(self) -> bool:
-        """True while the slot must not be evicted.
-
-        A zen fleet with live workers keeps its slot: the router conversation
-        (and the workers' injection channel) must not be dropped under it.
-        """
-        fleet = getattr(self.runtime, "zen_fleet", None)
-        return self.busy or (fleet is not None and fleet.has_active())
+        """True while the slot must not be evicted (a run owns it)."""
+        return self.busy
 
     async def close(self) -> None:
-        """Deny pending prompts, stop the zen fleet, close the runtime."""
-        fleet = getattr(self.runtime, "zen_fleet", None)
-        if fleet is not None:
-            await fleet.close()
+        """Deny pending prompts and close the runtime."""
         await self.server._shutdown()
         self.runtime.ask_handler = None
         await self.runtime.close()
