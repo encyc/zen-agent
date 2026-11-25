@@ -26,9 +26,9 @@ async def test_tools_allow_filters_assembled_tools(runtime_factory):
 @pytest.mark.asyncio
 async def test_extra_tools_are_appended_after_allowlist(runtime_factory):
     runtime = await runtime_factory(
-        tools_allow=["read_file"], extra_tools=[_stub_tool("swarm_post")]
+        tools_allow=["read_file"], extra_tools=[_stub_tool("stub_tool")]
     )
-    assert [t.name for t in runtime.agent.tools] == ["read_file", "swarm_post"]
+    assert [t.name for t in runtime.agent.tools] == ["read_file", "stub_tool"]
 
 
 @pytest.mark.asyncio

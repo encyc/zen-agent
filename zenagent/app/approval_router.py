@@ -1,10 +1,10 @@
-"""One typed registry for pending approvals across slots and swarm rooms.
+"""One typed registry for pending approvals across resident slots.
 
 Historically the host routed an approval reply by parsing the request-id
-prefix (``<project>:swarm:`` vs a slot key). That made correlation a string
-convention. The router keeps the same wire ids for compatibility but stores
-the owner and the run/agent/work-item facts explicitly, so the host resolves a
-reply by lookup rather than by prefix arithmetic.
+prefix, which made correlation a string convention. The router keeps the same
+wire ids for compatibility but stores the owner and the run/agent/work-item
+facts explicitly, so the host resolves a reply by lookup rather than by prefix
+arithmetic.
 """
 
 from __future__ import annotations

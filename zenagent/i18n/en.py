@@ -594,7 +594,6 @@ CATALOG: dict[str, str] = {
     "notice.error.outage": "The model provider is temporarily unavailable: try again shortly.",
     "notice.error.provider": "The model provider returned an error: see the details; if it keeps happening, please file an issue with the session log.",
     "notice.error.bug": "zenagent hit an unexpected error (likely a bug): please file a GitHub issue with the session log; session progress is saved — send again to continue.",
-    "swarm.locked": "This project's swarm room is open in another zenagent process; close it there first.",
     "notice.auto_compaction_failed": "auto-compaction failed: {error}",
     "notice.pending_dropped": "dropped {n} pending messages (session changed)",
     "notice.loop_detected": "interrupted: the run kept repeating the same tool calls — change the approach or add information, then retry",

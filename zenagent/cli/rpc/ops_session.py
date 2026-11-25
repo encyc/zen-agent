@@ -218,7 +218,6 @@ class SessionOps:
                         "updated_at": entry.updated_at,
                         "model": entry.model,
                         "derived_from": entry.derived_from,
-                        "workspace": entry.workspace,
                     }
                     for entry in entries
                 ],

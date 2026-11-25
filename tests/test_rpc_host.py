@@ -141,7 +141,7 @@ async def call(host: RpcHost, writes: list[dict], request: dict) -> dict:
 async def test_hello_lists_the_active_project_and_residents(host_env):
     host = host_env.build()
     frame = await call(host, host_env.writes, {"type": "hello", "id": "h"})
-    assert frame["protocol_version"] == 3
+    assert frame["protocol_version"] == 4
     assert frame["active"] == str(host_env.alpha.resolve())
     assert [item["key"] for item in frame["projects"]] == [
         project_key(host_env.alpha)
@@ -578,3 +578,11 @@ async def test_closing_a_project_closes_every_one_of_its_slots(host_env):
     assert project_key(host_env.alpha) not in host._active_by_project
     assert original.runtime.closed is True
     assert sibling.runtime.closed is True
+
+
+async def test_removed_orchestration_kinds_are_unknown(host_env):
+    host = host_env.build()
+    for kind in ("swarm", "zen_fleet", "supervisor", "workspace"):
+        frame = await call(host, host_env.writes, {"type": kind, "id": kind})
+        assert frame["type"] == "error"
+        assert "unknown type" in frame["message"]

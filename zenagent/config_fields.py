@@ -1,7 +1,7 @@
 """Value checks shared by the config parser and the section parsers.
 
-These live outside :mod:`zenagent.config` so a section parser (the swarm policy
-in :mod:`zenagent.swarm_settings`) can validate its own table without importing
+These live outside :mod:`zenagent.config` so a section parser
+can validate its own table without importing
 the config module that imports it. Same error contract throughout: a bad value
 is a ``ValueError`` naming the file and ``section.key``, never a silent clamp.
 """

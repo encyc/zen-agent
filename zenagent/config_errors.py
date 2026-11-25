@@ -5,7 +5,7 @@ not know. The strict parser (deliberately: a typo must fail loudly) refuses the
 whole file, so the one message a user sees has to carry everything they need:
 which file, which field, what this build is, and the two ways out. The same
 refusal class serves every table -- ``[limits]``, ``[task]``, ``[zen]``,
-``[swarm]``, ``[tools]`` and the provider tables -- so a future knob cannot
+``[task]``, ``[tools]`` and the provider tables -- so a future knob cannot
 reintroduce a dead-end error in just one of them.
 """
 

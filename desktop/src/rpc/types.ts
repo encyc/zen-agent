@@ -66,7 +66,7 @@ export type ResultFrame =
 // kinds; this list mirrors it and is pinned by tests/test_rpc_contract.py so
 // a one-sided change goes red instead of failing at runtime.
 
-export const PROTOCOL_VERSION = 3
+export const PROTOCOL_VERSION = 4
 
 export const REQUEST_KINDS = [
   'approval',
@@ -100,14 +100,11 @@ export const REQUEST_KINDS = [
   'status',
   'steer',
   'subagent_transcript',
-  'supervisor',
-  'swarm',
   'runs',
   'terminal',
   'tools',
   'transcript',
   'usage',
-  'workspace', 'zen_fleet',
 ] as const
 // ---- wire registry mirrors (generated) ------------------------------------
 // Shapes below come from zenagent/cli/rpc/protocol.py via

@@ -299,3 +299,13 @@ def test_append_failure_counts_and_warns(tmp_path, monkeypatch):
     ledger.start(kind="coding", session=str(tmp_path / "s.jsonl"))
     assert ledger.write_failures == 1
     assert any("write failed" in w for w in ledger.warnings)
+
+
+def test_historical_orchestration_kinds_still_list(tmp_path):
+    ledger = _ledger(tmp_path)
+    for kind in ("swarm", "zen_router", "zen_worker"):
+        record = ledger.start(kind=kind, agent_id="old", session="/p/s.jsonl", label=kind)
+        ledger.finish(record, status="done", termination="stop", turns=1, cost=0.0)
+
+    assert [row.kind for row in ledger.list(kind="swarm")] == ["swarm"]
+    assert len(ledger.list()) == 3

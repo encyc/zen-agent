@@ -196,19 +196,6 @@ class Runtime:
         self._base_tools: list = []
         #: Desired set + activation policy for the model-visible tool list.
         self.tool_registry = ToolRegistry()
-        #: Zen mode fleet when enabled; None in coding mode. The kernel never
-        #: names the zen package (that cycle ran through bootstrap, audit P0-3):
-        #: the orchestrator registers its surface via the two provider slots
-        #: below when it attaches, and unregisters nothing (providers read the
-        #: live attribute and go inert when it clears).
-        self.zen_fleet = None
-        #: Orchestrator tool sources: Callable[[Runtime], list[AgentTool]],
-        #: consulted on every recompose. Registered by zen wiring; empty in
-        #: coding mode.
-        self.tool_providers: list[Callable[[Runtime], list]] = []
-        #: Extra system-prompt notes sourced the same way (e.g. the zen router
-        #: note); each returns the note text or None when inactive.
-        self.prompt_note_providers: list[Callable[[], str | None]] = []
         #: Transcript write failures (audit P1-8): the in-memory transcript and
         #: the JSONL must not diverge silently. Listeners (chat) surface it.
         self.persist_failures = 0
@@ -307,10 +294,6 @@ class Runtime:
 
     def _prompt_with_mode(self) -> str:
         note = mode_prompt_note(self._mode)
-        for provider in self.prompt_note_providers:
-            extra = provider()
-            if extra:
-                note = f"{note}\n\n{extra}" if note else extra
         report = self._base_prompt_report
         if report is not None:
             blocks = report.blocks
@@ -420,13 +403,7 @@ class Runtime:
         This slice deliberately keeps the tools' cwd unchanged; omp switches
         project directories on cross-project resume, which we will layer on with
         config/context re-discovery rather than chdir'ing mid-run.
-
-        Embedders that own their sessions (swarm roles) set
-        ``project_sessions=False``: their transcripts live outside the project
-        tree, so there is no owner to compare and no warning to raise.
         """
-        if not self.profile.project_sessions:
-            return
         owner = project.project_key_for_session(path)
         current = project.project_key(self.root)
         if owner is not None and owner != current:

@@ -87,18 +87,3 @@ def test_run_ledger_append_survives_a_torn_tail(tmp_path):
     # The torn tail was never a complete record: it is repaired away, r3 lands.
     lines = path.read_text().splitlines()
     assert [json.loads(line)["id"] for line in lines] == ["r1", "r3"]
-
-
-def test_room_append_line_survives_a_torn_tail(tmp_path):
-    """Covers work_items.jsonl too: it writes through the same store path."""
-    from zenagent.app.swarm.room import SwarmStore
-
-    path = tmp_path / "work_items.jsonl"
-    store = SwarmStore(tmp_path)
-    store._append_line(path, {"id": "w1", "state": "open"})
-    with path.open("ab") as handle:
-        handle.write(b'{"id": "w2", "sta')
-    store._append_line(path, {"id": "w3", "state": "open"})
-
-    lines = path.read_text().splitlines()
-    assert [json.loads(line)["id"] for line in lines] == ["w1", "w3"]

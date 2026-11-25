@@ -78,11 +78,11 @@ def test_unknown_provider_key_is_rejected(tmp_path):
 def test_unknown_key_error_names_field_version_and_way_out(tmp_path):
     # A config written by a newer zen must produce a message the user can act
     # on (and quote in an issue), not just a parser complaint.
-    path = write_config(tmp_path, "[zen]\nfuture_knob = 1\n")
+    path = write_config(tmp_path, "[task]\nfuture_knob = 1\n")
     with pytest.raises(ValueError) as excinfo:
         load_user_config(path)
     message = str(excinfo.value)
-    assert "[zen].future_knob" in message
+    assert "[task].future_knob" in message
     assert str(path) in message
     assert __version__ in message
     assert "upgrade zen" in message
@@ -764,142 +764,30 @@ def test_task_total_budget_must_cover_one_transcript(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_zen_max_concurrent_parsed(tmp_path):
-    config = load_user_config(write_config(tmp_path, "[zen]\nmax_concurrent = 5\n"))
-    assert config.zen_max_concurrent == 5
+def test_retired_zen_and_swarm_tables_are_ignored_with_one_warning(tmp_path, caplog):
+    import logging
 
+    import zenagent.config as config_module
 
-def test_zen_max_concurrent_default(tmp_path):
-    config = load_user_config(tmp_path / "absent.toml")
-    assert config.zen_max_concurrent == 3
-
-
-def test_zen_max_concurrent_must_be_positive(tmp_path):
-    with pytest.raises(ValueError, match="zen.max_concurrent"):
-        load_user_config(write_config(tmp_path, "[zen]\nmax_concurrent = 0\n"))
-
-
-def test_zen_unknown_key_is_rejected(tmp_path):
-    with pytest.raises(ValueError, match="unknown keys"):
-        load_user_config(write_config(tmp_path, "[zen]\nnope = 1\n"))
-
-
-def test_project_layer_may_not_set_zen(tmp_path, monkeypatch):
-    home = tmp_path / "home"
-    home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
-    project_cfg = tmp_path / "proj" / ".zenagent" / "config.toml"
-    project_cfg.parent.mkdir(parents=True)
-    project_cfg.write_text("[zen]\nmax_concurrent = 9\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="global-only"):
-        load_user_config(cwd=tmp_path / "proj")
-
-
-def test_zen_fleet_behaviour_parsed(tmp_path):
-    config = load_user_config(
-        write_config(
-            tmp_path,
-            "[zen]\nbatch_window_s = 1.5\nreport_limit = 1200\nworker_mode = \"plan\"\n",
-        )
+    config_module._warned_sections.clear()
+    path = tmp_path / "config.toml"
+    path.write_text(
+        'default_model = "m"\n\n[zen]\nmax_concurrent = 9\n\n[swarm]\nmax_chain_depth = 9\n',
+        encoding="utf-8",
     )
-    assert config.zen_batch_window_s == 1.5
-    assert config.zen_report_limit == 1200
-    assert config.zen_worker_mode == "plan"
+    with caplog.at_level(logging.WARNING, logger="zenagent.config"):
+        first = config_module.load_user_config(path=path)
+        config_module.load_user_config(path=path)
 
-
-def test_zen_fleet_behaviour_defaults(tmp_path):
-    config = load_user_config(tmp_path / "absent.toml")
-    assert config.zen_batch_window_s == 0.5
-    assert config.zen_report_limit == 800
-    assert config.zen_worker_mode == "inherit"
-
-
-def test_zen_worker_mode_accepts_the_legacy_zen_alias(tmp_path):
-    config = load_user_config(
-        write_config(tmp_path, "[zen]\nworker_mode = \"zen\"\n")
-    )
-    assert config.zen_worker_mode == "auto"
-
-
-def test_zen_worker_mode_rejects_unknown_choice(tmp_path):
-    with pytest.raises(ValueError, match="zen.worker_mode"):
-        load_user_config(write_config(tmp_path, "[zen]\nworker_mode = \"yolo\"\n"))
-
-
-def test_zen_batch_window_and_report_limit_validate(tmp_path):
-    with pytest.raises(ValueError, match="zen.batch_window_s"):
-        load_user_config(write_config(tmp_path, "[zen]\nbatch_window_s = -1\n"))
-    with pytest.raises(ValueError, match="zen.report_limit"):
-        load_user_config(write_config(tmp_path, "[zen]\nreport_limit = 0\n"))
-
-
-# ---------------------------------------------------------------------------
-# [swarm] section (global-only): per-room policy
-# ---------------------------------------------------------------------------
-
-
-def test_swarm_policy_parsed(tmp_path):
-    config = load_user_config(
-        write_config(
-            tmp_path,
-            "[swarm]\n"
-            "max_concurrent = 6\n"
-            "max_chain_depth = 12\n"
-            "max_chain_cost = 2.5\n"
-            "runtime_idle_s = 30\n"
-            "max_request_fanout = 3\n"
-            "max_reply_fanout = 2\n"
-            "max_edge_repeats = 4\n"
-            "max_chain_tasks = 40\n"
-            "storm_window_s = 15\n"
-            "storm_burst = 6\n",
-        )
-    )
-    assert config.swarm_max_concurrent == 6
-    assert config.swarm_max_chain_depth == 12
-    assert config.swarm_max_chain_cost == 2.5
-    assert config.swarm_runtime_idle_s == 30.0
-    assert config.swarm_max_request_fanout == 3
-    assert config.swarm_max_reply_fanout == 2
-    assert config.swarm_max_edge_repeats == 4
-    assert config.swarm_max_chain_tasks == 40
-    assert config.swarm_storm_window_s == 15.0
-    assert config.swarm_storm_burst == 6
-
-
-def test_swarm_policy_defaults(tmp_path):
-    config = load_user_config(tmp_path / "absent.toml")
-    assert config.swarm_max_concurrent == 3
-    assert config.swarm_max_chain_depth == 8
-    assert config.swarm_max_chain_cost == 5.0
-    assert config.swarm_runtime_idle_s == 600.0
-    assert config.swarm_max_request_fanout == 4
-    assert config.swarm_max_reply_fanout == 1
-    assert config.swarm_max_edge_repeats == 2
-    assert config.swarm_max_chain_tasks == 24
-    assert config.swarm_storm_window_s == 60.0
-    assert config.swarm_storm_burst == 12
-
-
-def test_swarm_policy_must_be_positive(tmp_path):
-    with pytest.raises(ValueError, match="swarm.max_concurrent"):
-        load_user_config(write_config(tmp_path, "[swarm]\nmax_concurrent = 0\n"))
-    with pytest.raises(ValueError, match="swarm.max_chain_cost"):
-        load_user_config(write_config(tmp_path, "[swarm]\nmax_chain_cost = 0\n"))
-    with pytest.raises(ValueError, match="swarm.runtime_idle_s"):
-        load_user_config(write_config(tmp_path, "[swarm]\nruntime_idle_s = -1\n"))
-    with pytest.raises(ValueError, match="swarm.max_reply_fanout"):
-        load_user_config(write_config(tmp_path, "[swarm]\nmax_reply_fanout = 0\n"))
-    with pytest.raises(ValueError, match="swarm.storm_window_s"):
-        load_user_config(write_config(tmp_path, "[swarm]\nstorm_window_s = -5\n"))
-
-
-def test_project_layer_may_not_set_swarm(tmp_path, monkeypatch):
-    home = tmp_path / "home"
-    home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
-    project_cfg = tmp_path / "proj" / ".zenagent" / "config.toml"
-    project_cfg.parent.mkdir(parents=True)
-    project_cfg.write_text("[swarm]\nmax_concurrent = 9\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="global-only"):
-        load_user_config(cwd=tmp_path / "proj")
+    retired = [
+        record.getMessage()
+        for record in caplog.records
+        if "retired" in record.getMessage()
+    ]
+    assert len(retired) == 2
+    assert any("[zen]" in message for message in retired)
+    assert any("[swarm]" in message for message in retired)
+    assert first.default_model == "m"
+    # The project layer used to reject these tables as global-only; retired
+    # tables are ignored there too instead of failing the load.
+    config_module._load_config_file(path, project_layer=True)

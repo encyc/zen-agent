@@ -18,25 +18,18 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from zenagent.app.agent_profile import AgentProfile, Supervisor
 from zenagent.app.approval_router import ApprovalRouter
 from zenagent.app.bootstrap import prepare
 from zenagent.app.session_lease import SessionLeaseBusy
-from zenagent.app.workspace_state import set_workspace_mode
 from zenagent.cli.rpc.codec import PROTOCOL_VERSION
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
 from zenagent.cli.rpc.ops_runs import RunsOps
-from zenagent.cli.rpc.ops_supervisor import SupervisorOps
-from zenagent.cli.rpc.ops_swarm import SwarmOps, _is_swarm_request_id
-from zenagent.cli.rpc.ops_workspace import WorkspaceOps
-from zenagent.cli.rpc.ops_zen import ZenOps
 from zenagent.cli.rpc.slot import RuntimeSlot
 from zenagent.cli.rpc.terminal import TerminalError, TerminalSession, clamp_dim
 from zenagent.project import find_project_root, project_key
 
 if TYPE_CHECKING:
     from zenagent.app.runtime import RuntimeOptions
-    from zenagent.app.swarm.manager import SwarmManager
 
 #: Idle projects beyond this are evicted LRU (audit: cap, never unbounded).
 MAX_RESIDENT_SLOTS = 4
@@ -51,7 +44,7 @@ SESSION_ADDRESSED_KINDS = frozenset(
 )
 
 
-class RpcHost(WorkspaceOps, RunsOps, SupervisorOps, SwarmOps, ZenOps):
+class RpcHost(RunsOps):
     """Reads requests, routes them to a project slot, and owns slot lifetime."""
 
     def __init__(
@@ -81,29 +74,13 @@ class RpcHost(WorkspaceOps, RunsOps, SupervisorOps, SwarmOps, ZenOps):
         #: Per project, the slot its own requests land on.
         self._active_by_project: dict[str, RuntimeSlot] = {}
         self._closed = False
-        #: One swarm room per project key, created on that project's first
-        #: swarm request: a session that never enters swarm mode never pays
-        #: for resident role runtimes.
-        self._swarm: OrderedDict[str, SwarmManager] = OrderedDict()
-        #: Project-scoped live-agent registries shared by slots/zen/swarm.
-        self._supervisors: OrderedDict[str, Supervisor] = OrderedDict()
-        #: Typed approval correlation for every slot and swarm room.
+        #: Typed approval correlation for every resident slot.
         self._approvals = ApprovalRouter()
-        #: Per project key, the session zen took the foreground from.
-        self._zen_pre: dict[str, str] = {}
         self._terminal = TerminalSession(self._send)
         if initial is not None:
             self._slots[initial.key] = initial
             self._active = initial
             self._active_by_project[initial.project_key] = initial
-            self._supervisor(initial.root).register(
-                initial.key,
-                profile=AgentProfile(
-                    id=initial.key, kind="coding", label=initial.key
-                ),
-                runtime=initial.runtime,
-                session=initial.runtime.session,
-            )
 
     # -- introspection ------------------------------------------------------
 
@@ -178,18 +155,6 @@ class RpcHost(WorkspaceOps, RunsOps, SupervisorOps, SwarmOps, ZenOps):
         if kind == "runs":
             await self._runs_op(request, request_id)
             return True
-        if kind == "supervisor":
-            await self._supervisor_op(request, request_id)
-            return True
-        if kind == "workspace":
-            await self._workspace_op(request, request_id)
-            return True
-        if kind == "swarm":
-            await self._swarm_op(request, request_id)
-            return True
-        if kind == "zen_fleet":
-            await self._zen_op(request, request_id)
-            return True
         if kind == "approval":
             decision = request.get("decision")
             if decision in ("allow", "always", "deny") and self._approvals.resolve(
@@ -197,12 +162,6 @@ class RpcHost(WorkspaceOps, RunsOps, SupervisorOps, SwarmOps, ZenOps):
             ):
                 self._send({"type": "result", "id": request.get("id"), "ok": True})
                 return True
-        if kind in ("approval", "ask") and _is_swarm_request_id(
-            str(request.get("request_id") or "")
-        ):
-            self._resolve_swarm_prompt(request, kind)
-            return True
-
         if self._session_unserved(request, kind):
             self._send(
                 error_frame(
@@ -296,14 +255,6 @@ class RpcHost(WorkspaceOps, RunsOps, SupervisorOps, SwarmOps, ZenOps):
             )
 
     # -- slot registry ------------------------------------------------------
-
-    def _supervisor(self, root: Path) -> Supervisor:
-        key = project_key(find_project_root(root))
-        supervisor = self._supervisors.get(key)
-        if supervisor is None:
-            supervisor = Supervisor(root)
-            self._supervisors[key] = supervisor
-        return supervisor
 
     def _slot_for(
         self, request: dict, *, prefer_id: bool = False
@@ -469,7 +420,7 @@ class RpcHost(WorkspaceOps, RunsOps, SupervisorOps, SwarmOps, ZenOps):
                     }
                 )
                 return
-            if slot.busy or getattr(slot.runtime, "zen_fleet", None) is not None:
+            if slot.busy:
                 slot = await self._spawn(
                     root, resume=resume_path, base=slot.project_key
                 )
@@ -589,12 +540,6 @@ class RpcHost(WorkspaceOps, RunsOps, SupervisorOps, SwarmOps, ZenOps):
         )
         self._slots[key] = slot
         slot.server.approval_router = self._approvals
-        self._supervisor(root).register(
-            key,
-            profile=AgentProfile(id=key, kind="coding", label=key),
-            runtime=slot.runtime,
-            session=slot.runtime.session,
-        )
         return slot
 
     def _free_key(self, base: str) -> str:
@@ -642,18 +587,7 @@ class RpcHost(WorkspaceOps, RunsOps, SupervisorOps, SwarmOps, ZenOps):
                 self._active_by_project[slot.project_key] = sibling
             else:
                 self._active_by_project.pop(slot.project_key, None)
-        was_zen = getattr(slot.runtime, "zen_fleet", None) is not None
-        supervisor = self._supervisor(slot.root)
-        supervisor.unregister(key)
-        if was_zen:
-            supervisor.detach_dispatcher("zen")
         await slot.close()
-        if was_zen:
-            # An evicted router slot takes the project's zen with it; say so,
-            # or the GUI would keep showing a fleet that no longer exists.
-            self._zen_pre.pop(slot.project_key, None)
-            set_workspace_mode(Path(slot.runtime.root), "coding")
-            self._send_fleet_roster(Path(slot.runtime.root), None)
 
     # -- project ops --------------------------------------------------------
 
@@ -723,14 +657,6 @@ class RpcHost(WorkspaceOps, RunsOps, SupervisorOps, SwarmOps, ZenOps):
             raise Refusal("project is busy", code="project_busy")
         for slot in targets:
             await self._drop(slot.key)
-        # The room is independent of interactive slots, so it must be torn
-        # down explicitly: otherwise its role runtimes outlive the project.
-        manager = self._swarm.pop(project_key(find_project_root(root)), None)
-        if manager is not None:
-            await manager.close()
-        supervisor = self._supervisors.pop(project_key(find_project_root(root)), None)
-        if supervisor is not None:
-            await supervisor.close()
         self._send(
             {
                 "type": "result",
@@ -768,21 +694,12 @@ class RpcHost(WorkspaceOps, RunsOps, SupervisorOps, SwarmOps, ZenOps):
             return
         self._closed = True
         self._terminal.close()
-        managers = list(self._swarm.values())
-        self._swarm.clear()
-        for manager in managers:
-            await manager.close()
         slots = list(self._slots.values())
         self._slots.clear()
         self._active = None
         self._active_by_project.clear()
         for slot in slots:
-            self._supervisor(slot.root).unregister(slot.key)
             await slot.close()
-        supervisors = list(self._supervisors.values())
-        self._supervisors.clear()
-        for supervisor in supervisors:
-            await supervisor.close()
         self._approvals.clear()
 
     def _send(self, payload: dict) -> None:

@@ -35,7 +35,6 @@ def test_secrets_ops_owns_secrets_and_limits_handlers():
         "_limits",
         "_limits_result",
         "_adopt_limits",
-        "_drop_idle_swarm_rooms",
     } <= body
 
 

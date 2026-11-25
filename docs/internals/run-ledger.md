@@ -71,14 +71,12 @@ worker 状态的权威；账本负责把它们放到同一张时间线上。
 | 模式 | kind | agentId | 额外字段 |
 |---|---|---|---|
 | coding | `coding` | `main` | `label` 缺省取 session stem |
-| zen router | `zen_router` | `router` | — |
-| zen worker | `zen_worker` | worker 标题/stem | `parentRunId` = 派工时 router 的 `current_run_id`，`label` = focus |
-| swarm | `swarm` | role id | `workItemId`、`taskId`（每轮写入） |
+| ~~zen router~~ | `zen_router` | 历史值 | 0.15 起不再产生，旧账本仍可读 |
+| ~~zen worker~~ | `zen_worker` | 历史值 | 同上 |
+| ~~swarm~~ | `swarm` | 历史值 | 同上 |
 | subagent | `subagent` | task name | `session` = 父 session，`parentRunId` = 派发时的父 run |
 
-`app/zen/fleet.py::_build_worker`、`app/swarm/manager.py::_build_agent`、
-`app/swarm/schedule.py::_execute` 分别填这些字段；`cli/rpc/ops_zen.py` 在 fleet
-attach/detach 时切换 router/coding。
+`app/run_wiring.py` 的 recorder 填这些字段；历史 kind 只作读取兼容。
 
 ## 查询
 
@@ -125,7 +123,5 @@ Python 侧可直接用 `RunLedger(path).list(...)` / `.get(...)`；`RunLedger.lo
 | Runtime 接线 / scope 更新 / 成本汇总 / 崩溃对账 | `zenagent/app/run_wiring.py` |
 | writer lease / liveness 探针 | `zenagent/app/session_lease.py` |
 | coding 接线 | `zenagent/app/bootstrap.py::prepare` |
-| zen scope | `zenagent/app/zen/fleet.py::_build_worker`、`zenagent/cli/rpc/ops_zen.py` |
-| swarm scope | `zenagent/app/swarm/manager.py::_build_agent`、`zenagent/app/swarm/schedule.py::_execute` |
 | RPC | `zenagent/cli/rpc/ops_runs.py`、`zenagent/cli/rpc/host.py` |
 | 测试 | `tests/test_run_ledger.py`、`tests/test_subagent_runs.py`、`tests/test_run_scopes.py`、`tests/test_rpc_runs.py` |

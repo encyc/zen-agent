@@ -158,7 +158,6 @@ SHAPES: dict[str, dict] = dict(
             "updated_at": Field(FLOAT),
             "model": Field(STRING),
             "derived_from": Field(STRING),
-            "workspace": Field(one_of("coding", "zen", "swarm")),
         }, doc="One session of a listing; timestamps are unix seconds."),
         shape("CostBreakdown", {
             "input": Field(FLOAT),

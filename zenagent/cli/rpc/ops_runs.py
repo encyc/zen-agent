@@ -1,7 +1,7 @@
 """The ``runs`` wire handlers: the project's run ledger.
 
 Runs are host-level because they span every mode: a project may have coding
-runs, a zen router and its workers, and swarm rounds in the same ledger. The
+runs and subagent runs in the same ledger. The
 handlers are read-only; the writers are the runtimes themselves.
 """
 

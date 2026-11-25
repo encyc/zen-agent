@@ -1,18 +1,15 @@
 """Wire a Runtime to the project's run ledger.
 
 The recorder is attached by :func:`~zenagent.app.bootstrap.prepare` for every
-frontend and for every orchestrator's run times. Nothing here changes agent
-behaviour: an
+frontend. Nothing here changes agent behaviour: an
 ``agent_start`` opens a ledger record and an ``agent_end`` closes it, both
 best-effort.
 
-The scope is a plain dict on the Runtime, set by the orchestration layer before
-it prompts the agent::
+The scope is a plain dict on the Runtime, set by the owning layer before it
+prompts the agent::
 
     {"kind": "coding", "agentId": "main", "label": "..."}
-    {"kind": "zen_router", "agentId": "router"}
-    {"kind": "zen_worker", "agentId": "worker-a", "parentRunId": "r_...", "label": "..."}
-    {"kind": "swarm", "agentId": "research", "workItemId": "w_...", "taskId": "t_..."}
+    {"kind": "subagent", "agentId": "task-1", "taskId": "t_..."}
 
 A missing/unknown kind is recorded as ``coding`` so an embedder that never sets
 a scope still gets a useful row.
@@ -34,7 +31,6 @@ from zenagent.types import AssistantMessage
 __all__ = [
     "RunRecorder",
     "attach_run_recorder",
-    "attach_swarm_run",
     "update_run_scope",
 ]
 
@@ -184,23 +180,3 @@ class RunRecorder:
             duration_ms=duration_ms,
         )
         self._runtime.current_run_id = None
-
-
-def attach_swarm_run(
-    runtime, role_id: str, work_item_id: str | None, label: str
-) -> RunLedger | None:
-    """Wire a role runtime and stamp its first scope in one call.
-
-    ``prepare`` already attached the recorder (swarm builds through it like
-    every frontend); this call is idempotent and only stamps the swarm scope,
-    keeping the manager's line budget flat and the scope shape in one place.
-    """
-    ledger = attach_run_recorder(runtime)
-    update_run_scope(
-        runtime,
-        kind="swarm",
-        agentId=role_id,
-        workItemId=work_item_id,
-        label=label,
-    )
-    return ledger

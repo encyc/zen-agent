@@ -49,8 +49,8 @@ def test_request_kinds_match_ts_contract_list():
 
 
 def test_protocol_version_pinned_both_sides():
-    assert "PROTOCOL_VERSION = 3" in RPC_PATH
-    assert "PROTOCOL_VERSION = 3" in TS_PATH.read_text()
+    assert "PROTOCOL_VERSION = 4" in RPC_PATH
+    assert "PROTOCOL_VERSION = 4" in TS_PATH.read_text()
 
 
 def _ok_stream():
@@ -199,31 +199,17 @@ def ts_codes_ok(py_codes: set[str], ts_keys: set[str]) -> bool:
     return py_codes <= set(ts_keys)
 
 
-SERVER_FRAME_TYPES = {
-    "result", "error", "event", "zen_fleet",
-    "swarm_message", "swarm_task", "swarm_agent", "swarm_notice", "swarm_event",
-    "swarm_work",
-}
+SERVER_FRAME_TYPES = {"result", "error", "event"}
 
 
 def _backend_source() -> str:
-    """The wire package plus the swarm/zen frame emitters: every server-initiated
-    frame literal the desktop's ServerFrame union must cover."""
-    pkg = Path(__file__).resolve().parents[1] / "zenagent"
-    parts = [RPC_PATH]
-    for rel in ("app/swarm/manager.py", "app/swarm/frames.py", "app/zen/fleet.py"):
-        parts.append((pkg / rel).read_text())
-    return "\n".join(parts)
+    """The wire package: every server-initiated frame literal the desktop's
+    ServerFrame union must cover."""
+    return RPC_PATH
 
 
 def test_server_frame_union_matches_backend_literals():
-    # The ServerFrame union spans types.ts and types-swarm.ts (the swarm frame
-    # interfaces are re-exported from the latter).
-    src = (
-        TS_PATH.read_text()
-        + (TS_PATH.parent / "types-swarm.ts").read_text()
-        + TS_EVENT_TYPES_PATH.read_text()
-    )
+    src = TS_PATH.read_text() + TS_EVENT_TYPES_PATH.read_text()
     ts = set(re.findall(r"type:\s*'([a-z_]+)'", src))
     assert SERVER_FRAME_TYPES <= ts, f"TS union missing {sorted(SERVER_FRAME_TYPES - ts)}"
     backend = _backend_source()
@@ -231,95 +217,6 @@ def test_server_frame_union_matches_backend_literals():
         assert f'"type": "{lit}"' in backend or f'type="{lit}"' in backend, (
             f"backend never emits {lit}"
         )
-
-
-def test_swarm_frames_carry_swarm_flag():
-    """Every swarm_* emission sets swarm=True so the desktop diverts it ahead of
-    the session filter. Match both spellings: a dict literal (``"type": "x"``)
-    and the frame-helper keyword form (``record.update(type="x", swarm=True)``)."""
-    backend = _backend_source()
-    for lit in ("swarm_message", "swarm_task", "swarm_agent", "swarm_notice", "swarm_event"):
-        sites = list(re.finditer(rf'(?:"type":\s*"{lit}"|type="{lit}")', backend))
-        assert sites, f"no emission site found for {lit}"
-        for m in sites:
-            window = backend[m.start(): m.start() + 240]
-            assert "swarm=True" in window or '"swarm": True' in window, f"{lit} missing swarm flag"
-
-
-async def test_every_swarm_frame_names_the_project_of_its_room(tmp_path, monkeypatch):
-    """A post drives every frame kind the desktop routes: each one must carry
-    ``project`` (the room it belongs to), not just the hand-made ones."""
-    from conftest import text_stream
-
-    from zenagent.app.runtime import RuntimeOptions
-    from zenagent.app.swarm.manager import SwarmManager as RealSwarmManager
-    from zenagent.cli.rpc.host import RpcHost
-    from zenagent.project import find_project_root
-
-    role_dir = tmp_path / ".zenagent" / "agents" / "research"
-    role_dir.mkdir(parents=True)
-    (role_dir / "manifest.json").write_text(
-        json.dumps({"id": "research", "name": "Research"}), encoding="utf-8"
-    )
-    (role_dir / "prompt.md").write_text("You research.", encoding="utf-8")
-
-    class ScriptedSwarmManager(RealSwarmManager):
-        def __init__(self, **kwargs):
-            kwargs["stream_fn_factory"] = lambda role: text_stream("@you done")
-            super().__init__(**kwargs)
-
-    monkeypatch.setattr(
-        "zenagent.cli.rpc.ops_swarm.SwarmManager", ScriptedSwarmManager
-    )
-
-    writes: list[dict] = []
-    host = RpcHost(
-        initial=None,
-        options=RuntimeOptions(root=tmp_path),
-        read_line=None,
-        write_line=lambda line: writes.append(json.loads(line)),
-    )
-    project = str(find_project_root(tmp_path))
-    try:
-        await host._handle_line(
-            json.dumps(
-                {
-                    "type": "swarm",
-                    "op": "post",
-                    "text": "@research hi",
-                    "id": "s1",
-                    "project": str(tmp_path),
-                }
-            )
-        )
-        deadline = time.monotonic() + 20
-        while time.monotonic() < deadline:
-            if any(
-                frame.get("type") == "swarm_task" and frame.get("state") == "done"
-                for frame in writes
-            ):
-                break
-            await asyncio.sleep(0.01)
-
-        frames = [
-            frame
-            for frame in writes
-            if str(frame.get("type", "")).startswith("swarm_")
-        ]
-        assert {frame["type"] for frame in frames} == SERVER_FRAME_TYPES & {
-            "swarm_message",
-            "swarm_task",
-            "swarm_agent",
-            "swarm_notice",
-            "swarm_event",
-            "swarm_work",
-        }
-        assert all(frame.get("swarm") is True for frame in frames)
-        assert all(frame.get("project") == project for frame in frames), [
-            (frame.get("type"), frame.get("project")) for frame in frames
-        ]
-    finally:
-        await host.close()
 
 
 def test_approval_event_truncation_flag_matches_the_ts_contract():

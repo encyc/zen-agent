@@ -2,7 +2,7 @@
 
 The session file records *messages*; the ledger records *runs*. That is the
 difference the orchestration layers kept re-inventing: coding kept run state in
-``ChatController``, zen in ``WorkerHandle`` and swarm in ``TaskRecord``. This
+``ChatController`` and in the task child's scope. This
 module owns the shared vocabulary and the durable side table they can all write.
 
 Storage is a JSONL file under the project's machine-local state directory::
@@ -40,11 +40,18 @@ __all__ = [
 
 _log = logging.getLogger(__name__)
 
-#: What produced the run. ``subagent`` is reserved for the task tool's children.
-RUN_KINDS = ("coding", "zen_router", "zen_worker", "swarm", "subagent")
+#: What produced the run. The last three are historical: no code produces them
+#: any more, but old ledgers still carry them and must stay listable.
+RUN_KINDS = (
+    "coding",
+    "subagent",
+    "zen_router",  # HISTORICAL:
+    "zen_worker",  # HISTORICAL:
+    "swarm",  # HISTORICAL:
+)
 
 #: Terminal and in-flight states. ``aborted`` is a cooperative stop; a layer
-#: that knows the user cancelled (swarm) may record ``cancelled`` instead.
+#: that knows the user cancelled may record ``cancelled`` instead.
 RUN_STATUSES = ("running", "done", "failed", "aborted", "cancelled", "interrupted")
 
 #: One glyph per status, for every frontend that lists runs (TUI/REPL now,

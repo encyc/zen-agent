@@ -63,10 +63,8 @@ async def test_get_lists_every_knob_with_defaults(runtime_factory, config_file):
         "goal",
     ]
     knobs = knobs_by_key(result)
-    # The retired turn/spend knobs are gone from the registry the UI lists.
-    assert len(knobs) == 27
-    assert knobs["swarm.max_chain_tasks"]["value"] == 24
-    assert knobs["swarm.max_chain_tasks"]["section"] == "swarm"
+    # The retired turn/spend and orchestration knobs are gone from the registry.
+    assert len(knobs) == 13
     index = knobs["limits.skills.max_index_bytes"]
     assert index["value"] == 12288
     assert index["default"] == 12288
@@ -77,10 +75,6 @@ async def test_get_lists_every_knob_with_defaults(runtime_factory, config_file):
     assert knobs["task.timeout_s"]["section"] == "subagents"
     assert knobs["task.timeout_s"]["value"] == 900
     assert knobs["task.timeout_s"]["nullable"] is False
-    # Zen/Swarm own their own pages but share the same snapshot.
-    assert knobs["zen.worker_mode"]["kind"] == "str"
-    assert knobs["zen.worker_mode"]["choices"] == ["inherit", "ask", "plan", "auto"]
-    assert knobs["swarm.max_chain_depth"]["section"] == "swarm"
 
 
 async def test_set_writes_the_file_and_adopts_the_value(runtime_factory, config_file):

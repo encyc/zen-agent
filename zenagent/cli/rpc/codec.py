@@ -20,7 +20,7 @@ from zenagent.types import (
     UserMessage,
 )
 
-PROTOCOL_VERSION = 3
+PROTOCOL_VERSION = 4
 
 _PARTIAL_RESULT_CHARS = 4000
 #: Bound for one JSON-encoded tool argument blob in an event.

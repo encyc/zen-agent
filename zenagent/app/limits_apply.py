@@ -20,14 +20,12 @@ def copy_onto(runtime: Runtime, fresh) -> None:
 
     The field list is the whole adopt contract shared by the wire ``limits``
     op and the TUI ``/limits`` panel, so every settings surface lands a saved
-    file identically. ``[task]``/``[zen]``/``[swarm]`` budgets are read when a
-    subagent, fleet or room starts — copying them onto ``user_config`` only
-    fixes what a *new* one sees; :func:`apply` carries the immediate knobs.
+    file identically. ``[task]`` budgets are read when a subagent starts —
+    copying them onto ``user_config`` only fixes what a *new* one sees;
+    :func:`apply` carries the immediate knobs.
     Callers own the load (and its error mapping): the wire resolves it through
     its own module so a mangled file reports ``config_failed``.
     """
-    from zenagent.swarm_settings import SWARM_FIELDS
-
     live = runtime.user_config
     live.limits = fresh.limits
     for name in (
@@ -35,11 +33,6 @@ def copy_onto(runtime: Runtime, fresh) -> None:
         "task_keep_transcripts",
         "task_max_transcript_bytes",
         "task_max_transcript_file_bytes",
-        "zen_max_concurrent",
-        "zen_batch_window_s",
-        "zen_report_limit",
-        "zen_worker_mode",
-        *SWARM_FIELDS,
     ):
         setattr(live, name, getattr(fresh, name))
 

@@ -181,7 +181,6 @@ export interface SessionSummary {
   updated_at: number
   model: string
   derived_from: string
-  workspace: 'coding' | 'zen' | 'swarm'
 }
 
 /** One call's cost, priced per component; `total` is their sum. */
@@ -1547,25 +1546,6 @@ export interface ResidentSlot {
   active: boolean
 }
 
-/** One live agent of the project supervisor (plus the swarm scope keys the handle carries). */
-export interface SupervisorAgentRow {
-  key: string
-  agent: string
-  kind: string
-  label: string
-  state: 'running' | 'idle'
-  session: string
-  runId: string | null
-}
-
-/** The project's backend-mode fact (result and push frame). */
-export interface WorkspaceStateWire {
-  project: string
-  mode: 'coding' | 'zen' | 'swarm'
-  updatedAt: number
-  routerSession: string | null
-}
-
 export interface HostHelloResult {
   type: 'result'
   id: string
@@ -1689,89 +1669,3 @@ export interface HostRunsGetResult {
 export type HostRunsRequest =
   | HostRunsListRequest
   | HostRunsGetRequest
-
-export interface HostSupervisorStatusRequest {
-  op: string
-  project?: string /** junk tolerated server-side (default applied). */
-}
-
-export interface HostSupervisorStatusResult {
-  type: 'result'
-  id: string
-  ok: true
-  project: string
-  mode: 'coding' | 'zen' | 'swarm'
-  agents: Array<SupervisorAgentRow>
-  counts: Record<string, number>
-  approvals: Array<Record<string, unknown>>
-}
-
-export interface HostSupervisorCancelRequest {
-  op: string
-  project?: string /** junk tolerated server-side (default applied). */
-  key?: string
-  agentId?: string
-}
-
-export interface HostSupervisorCancelResult {
-  type: 'result'
-  id: string
-  ok: true
-  key: string
-  cancelled: boolean
-}
-
-export interface HostSupervisorApproveRequest {
-  op: string
-  project?: string /** junk tolerated server-side (default applied). */
-  requestId: string
-  decision?: 'allow' | 'always' | 'deny'
-}
-
-export interface HostSupervisorApproveResult {
-  type: 'result'
-  id: string
-  ok: true
-
-}
-
-export type HostSupervisorRequest =
-  | HostSupervisorStatusRequest
-  | HostSupervisorCancelRequest
-  | HostSupervisorApproveRequest
-
-export interface HostWorkspaceGetRequest {
-  op: string
-  project?: string /** junk tolerated server-side (default applied). */
-}
-
-export interface HostWorkspaceGetResult {
-  type: 'result'
-  id: string
-  ok: true
-  project: string
-  mode: 'coding' | 'zen' | 'swarm'
-  updatedAt: number
-  routerSession: string | null
-}
-
-export interface HostWorkspaceSetRequest {
-  op: string
-  project?: string /** junk tolerated server-side (default applied). */
-  mode?: 'coding' | 'zen' | 'swarm'
-  routerSession?: string
-}
-
-export interface HostWorkspaceSetResult {
-  type: 'result'
-  id: string
-  ok: true
-  project: string
-  mode: 'coding' | 'zen' | 'swarm'
-  updatedAt: number
-  routerSession: string | null
-}
-
-export type HostWorkspaceRequest =
-  | HostWorkspaceGetRequest
-  | HostWorkspaceSetRequest

@@ -1,7 +1,7 @@
 """The one JSONL discipline: fsync every append, repair torn tails before writing.
 
 Append-only JSONL is the durability contract for session transcripts, the run
-ledger and swarm rooms. Two things make it survive a crash mid-write:
+ledger. Two things make it survive a crash mid-write:
 
 * every append is flushed **and fsynced** before ``append_line`` returns, so a
   power cut loses at most the line being written;

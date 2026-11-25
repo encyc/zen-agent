@@ -1,7 +1,7 @@
 """Host-surface (RpcHost) declarations: shapes, HOST_OPS, HOST_PARTIAL.
 
-Request-id routing (prefixes) and the host-initiated push frames (workspace
-updates, swarm role events) are transport facts, not op declarations.
+Request-id routing (prefixes) and the host-initiated push frames are
+transport facts, not op declarations.
 """
 
 from __future__ import annotations
@@ -21,7 +21,6 @@ from zenagent.cli.rpc.protocol._core import (
     OpSpec,
     WireRequest,
     list_of,
-    one_of,
     record,
     ref,
     shape,
@@ -31,8 +30,7 @@ from zenagent.cli.rpc.protocol._core import (
 #: The host multiplexes every session slot of one checkout. Its families are
 #: declared here with the same machinery as the chat surface; the frontier
 #: test scans host.py the same way. Request-id routing (prefixes) and the
-#: host-initiated push frames (workspace updates, swarm role events) are
-#: transport facts, not op declarations.
+#: host-initiated push frames are transport facts, not op declarations.
 
 class HostRunsListRequest(WireRequest):
     FIELDS: ClassVar[dict[str, Field]] = {
@@ -66,34 +64,6 @@ class HostProjectOpenRequest(WireRequest):
     }
 
 
-class HostSupervisorRoot(WireRequest):
-    FIELDS: ClassVar[dict[str, Field]] = {"project": Field(STRING_LAX)}
-
-
-class HostSupervisorCancelRequest(WireRequest):
-    FIELDS: ClassVar[dict[str, Field]] = {
-        "project": Field(STRING_LAX),
-        "key": Field(STRING),  # `key` or `agentId`; the handler or-s them
-        "agentId": Field(STRING),
-    }
-
-
-class HostSupervisorApproveRequest(WireRequest):
-    FIELDS: ClassVar[dict[str, Field]] = {
-        "project": Field(STRING_LAX),
-        "requestId": Field(STRING, required=True),
-        "decision": Field(one_of("allow", "always", "deny")),
-    }
-
-
-class HostWorkspaceSetRequest(WireRequest):
-    FIELDS: ClassVar[dict[str, Field]] = {
-        "project": Field(STRING_LAX),
-        "mode": Field(one_of("coding", "zen", "swarm")),
-        "routerSession": Field(STRING),
-    }
-
-
 def _host_shapes() -> list[tuple[str, dict]]:
     return [
         shape("RunView", {
@@ -121,22 +91,6 @@ def _host_shapes() -> list[tuple[str, dict]]:
             "session": Field(STRING),
             "active": Field(BOOL),
         }, doc="One resident session slot of the host's hello/project answers."),
-        shape("SupervisorAgentRow", {
-            "key": Field(STRING),
-            "agent": Field(STRING),
-            "kind": Field(STRING),
-            "label": Field(STRING),
-            "state": Field(one_of("running", "idle")),
-            "session": Field(STRING),
-            "runId": Field(STRING, nullable=True),
-        }, doc="One live agent of the project supervisor (plus the swarm "
-               "scope keys the handle carries)."),
-        shape("WorkspaceStateWire", {
-            "project": Field(STRING),
-            "mode": Field(one_of("coding", "zen", "swarm")),
-            "updatedAt": Field(FLOAT),
-            "routerSession": Field(STRING, nullable=True),
-        }, doc="The project's backend-mode fact (result and push frame)."),
     ]
 
 
@@ -186,47 +140,15 @@ HOST_OPS: dict[str, OpSpec] = {
             "run": Field(ref("RunView"), nullable=True),
         }),
     }),
-    "supervisor": OpSpec("supervisor", NoFields, {}, subs={
-        "status": OpSpec("supervisor", HostSupervisorRoot, {
-            "project": Field(STRING),
-            "mode": Field(one_of("coding", "zen", "swarm")),
-            "agents": Field(list_of(ref("SupervisorAgentRow"))),
-            "counts": Field(record(INT)),
-            "approvals": Field(list_of(record(ANY))),
-        }),
-        "cancel": OpSpec("supervisor", HostSupervisorCancelRequest, {
-            "key": Field(STRING),
-            "cancelled": Field(BOOL),
-        }),
-        "approve": OpSpec("supervisor", HostSupervisorApproveRequest, {}),
-    }),
-    "workspace": OpSpec("workspace", NoFields, {}, subs={
-        "get": OpSpec("workspace", HostProjectField, {
-            "project": Field(STRING),
-            "mode": Field(one_of("coding", "zen", "swarm")),
-            "updatedAt": Field(FLOAT),
-            "routerSession": Field(STRING, nullable=True),
-        }),
-        "set": OpSpec("workspace", HostWorkspaceSetRequest, {
-            "project": Field(STRING),
-            "mode": Field(one_of("coding", "zen", "swarm")),
-            "updatedAt": Field(FLOAT),
-            "routerSession": Field(STRING, nullable=True),
-        }),
-    }),
 }
 
 #: Host kinds the dispatch handles that are not fully declared yet — the
 #: shrink-me frontier of the second surface.
 HOST_PARTIAL: dict[str, str] = {
-    "swarm": "sub-op family nesting SwarmManager views (roles/tasks/messages/"
-             "works/transcript); declare against manager view builders next",
-    "zen_fleet": "fleet enable/disable/state/transcript over the zen roster "
-                 "sidecar and slot states",
     "session": "host-side resume with sibling-slot semantics (frames vary by "
                "slot state)",
     "terminal": "PTY lifecycle + streamed frames (start/stop/resize)",
-    "approval": "host-side approval routing for supervisor/swarm pendings",
+    "approval": "host-side approval routing for resident-slot pendings",
     "ask": "host-side ask routing",
 }
 

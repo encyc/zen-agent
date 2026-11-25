@@ -41,7 +41,7 @@ WriteLine = Callable[[str], None]
 #: Server-side diagnostics; raw exception detail never crosses the wire.
 logger = logging.getLogger(__name__)
 
-PROTOCOL_VERSION = 3
+PROTOCOL_VERSION = 4
 
 #: Bound for one JSON-encoded tool argument blob in an event.
 _ARGS_CHARS = 4000
