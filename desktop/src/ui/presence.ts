@@ -24,6 +24,28 @@ export type PresencePhase = 'closed' | 'entering' | 'open' | 'exiting'
 /** Default leaving window for popovers and inline cards. */
 export const PRESENCE_LEAVE_MS = 120
 
+/** The leaving window to actually use.
+ *
+ * `styles/base.css` collapses every transition to 0.01ms under
+ * `prefers-reduced-motion: reduce`, but a timer is not a transition: leaving it
+ * at 120ms would strand an invisible, inert node in the DOM for the full window
+ * on every close. Collapsing the window to 0 unmounts on the next commit, which
+ * is what "no motion" means. */
+export function effectiveLeaveMs(leavingMs: number, reducedMotion: boolean): number {
+  return reducedMotion ? 0 : leavingMs
+}
+
+/** Props that take an exiting surface out of focus, AT and pointer input.
+ *
+ * `aria-hidden` alone would be wrong here: the node still holds focus while it
+ * fades, and `aria-hidden` on a subtree containing the focused element is an
+ * accessibility violation (and leaves it reachable by Tab). `inert` covers
+ * focus, AT and pointer at once, which is exactly the claim the exit phase
+ * makes. */
+export function inertProps(closed: boolean): { inert?: '' } {
+  return closed ? { inert: '' } : {}
+}
+
 /** The one transition table, literal to the design doc:
 
  *   closed   + open  → entering   (mount on this commit, paint closed target)
@@ -57,6 +79,21 @@ export function presenceState(phase: PresencePhase): 'open' | 'closed' {
  *
  * `leavingMs` is the exit window; pass 0 (or any value the caller computed from
  * `prefers-reduced-motion`) to unmount on the next commit. */
+/** The reader's motion preference, tracked live (it can change mid-session from
+ * the OS settings panel). */
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(
+    () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  )
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const onChange = () => setReduced(media.matches)
+    media.addEventListener('change', onChange)
+    return () => media.removeEventListener('change', onChange)
+  }, [])
+  return reduced
+}
+
 export function usePresence(
   open: boolean,
   leavingMs: number,
@@ -95,4 +132,15 @@ export function usePresence(
   }, [phase, leavingMs])
 
   return { mounted: isMounted(phase), state: presenceState(phase) }
+}
+
+/** `usePresence` with the reduced-motion collapse applied, for callers that do
+ * not care to make the choice themselves. */
+export function useSurfacePresence(
+  open: boolean,
+  leavingMs: number = PRESENCE_LEAVE_MS,
+): { mounted: boolean; state: 'open' | 'closed'; inert: { inert?: '' } } {
+  const reduced = usePrefersReducedMotion()
+  const presence = usePresence(open, effectiveLeaveMs(leavingMs, reduced))
+  return { ...presence, inert: inertProps(presence.state === 'closed') }
 }

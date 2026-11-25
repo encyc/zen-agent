@@ -9,7 +9,7 @@ import { nextPaletteIndex, paletteResults, type PaletteCommandHit, type PaletteS
 import { nextDraft } from '../../state/pending'
 import { useT } from '../../i18n/locale'
 import { SearchIcon } from '../icons'
-import { usePresence, PRESENCE_LEAVE_MS } from '../presence'
+import { inertProps, usePresence, PRESENCE_LEAVE_MS } from '../presence'
 import css from './CommandPalette.module.css'
 
 type Option =
@@ -161,6 +161,7 @@ export function CommandPalette() {
       className={css.backdrop}
       data-palette
       data-state={presence.state}
+      {...inertProps(presence.state === 'closed')}
       onPointerDown={(event) => {
         // Leaving: the backdrop is already fading and must not eat a click that
         // belongs to the page underneath.
@@ -183,7 +184,6 @@ export function CommandPalette() {
             aria-autocomplete="list"
             aria-expanded
             aria-controls="zen-palette-list"
-            aria-hidden={presence.state === 'closed' || undefined}
             placeholder={t('palette.placeholder')}
             value={query}
             autoFocus

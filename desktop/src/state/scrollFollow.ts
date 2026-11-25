@@ -88,3 +88,36 @@ export function countUnseen(
   }
   return unseen
 }
+
+/** How long a programmatic scroll is allowed to keep the user-gesture reader
+ * off. A smooth scroll animates for a few hundred ms; this is the ceiling that
+ * stops a cancelled or clamped one from leaving the reader deaf for good. */
+export const PROGRAMMATIC_FLIGHT_MS = 600
+
+/** A programmatic scroll in flight.
+ *
+ * `until` is the wall clock at which the flag expires; `target` is where the
+ * scroll was asked to land, or null for an instantaneous jump (one frame). */
+export interface ProgrammaticFlight {
+  target: number | null
+  until: number
+}
+
+/** Whether a scroll event at `now` belongs to the programmatic scroll rather
+ * than to the reader.
+ *
+ * A single-frame flag is not enough: `scrollTo({behavior:'smooth'})` emits
+ * events across many frames, and the ones in the middle would read as the reader
+ * scrolling up — flashing the jump pill on every minimap click. Landing on the
+ * target ends the flight early; the deadline ends it either way. */
+export function programmaticActive(
+  flight: ProgrammaticFlight | null,
+  now: number,
+  scrollTop: number,
+): boolean {
+  if (flight === null) return false
+  if (now >= flight.until) return false
+  // An instantaneous jump has no target to watch for; its window is one frame.
+  if (flight.target === null) return true
+  return Math.abs(scrollTop - flight.target) > SCROLL_POSITION_EPSILON
+}

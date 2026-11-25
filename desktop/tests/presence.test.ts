@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { isMounted, nextPhase, presenceState } from '../src/ui/presence.ts'
+import { effectiveLeaveMs, inertProps, isMounted, nextPhase, presenceState } from '../src/ui/presence.ts'
 
 test('opening mounts on the first commit and settles a phase later', () => {
   assert.equal(nextPhase('closed', true), 'entering')
@@ -51,4 +51,19 @@ test('mounted and the data-state attribute disagree exactly in the exiting phase
   }
   assert.equal(isMounted('closed'), false)
   assert.equal(presenceState('closed'), 'closed')
+})
+
+test('a reduced-motion reader unmounts on the next commit instead of waiting', () => {
+  // base.css collapses the transition to 0.01ms but cannot shorten the leaving
+  // timer: an invisible, inert node would linger for the full window. The window
+  // itself has to collapse when the reader asked for no motion.
+  assert.equal(effectiveLeaveMs(120, false), 120)
+  assert.equal(effectiveLeaveMs(120, true), 0)
+})
+
+test('an exiting surface is inert, not merely aria-hidden', () => {
+  // aria-hidden on a subtree that still holds focus is an a11y violation and
+  // leaves the node focusable by Tab. inert covers focus, AT and pointer at once.
+  assert.deepEqual(inertProps(true), { inert: '' })
+  assert.deepEqual(inertProps(false), {})
 })

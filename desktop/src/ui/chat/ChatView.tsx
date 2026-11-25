@@ -85,6 +85,10 @@ export function ChatView(props: ChatViewProps) {
   const project = useSessionStore(
     (state) => state.sessions.find((session) => session.path === state.currentPath)?.project ?? null,
   )
+  // The transcript identity the scroll hook resets against. A pane passes its
+  // own chat store and is keyed by path upstream, so only the focused view needs
+  // this; for a pane the mount itself is the reset.
+  const currentPath = useSessionStore((state) => state.currentPath)
   const t = useT()
   const recents = useProjectStore((state) => state.projects)
   const chatWidth = useSettingsStore((state) => state.chatWidth)
@@ -138,15 +142,13 @@ export function ChatView(props: ChatViewProps) {
   const scrollToRow = (row: HTMLElement) => {
     const scroller = scrollerRef.current
     if (scroller === null) return
-    markProgrammatic()
-    scroller.scrollTo({
-      top:
-        scroller.scrollTop +
-        row.getBoundingClientRect().top -
-        scroller.getBoundingClientRect().top -
-        12,
-      behavior: 'smooth',
-    })
+    const top =
+      scroller.scrollTop +
+      row.getBoundingClientRect().top -
+      scroller.getBoundingClientRect().top -
+      12
+    markProgrammatic(top)
+    scroller.scrollTo({ top, behavior: 'smooth' })
   }
 
   // One step per window budget. Scrolling the earlier row into view fires the
@@ -203,9 +205,10 @@ export function ChatView(props: ChatViewProps) {
 
   // Scroll ownership (mode, jump pill, unseen count) lives in the hook; its
   // callbacks are the two window moves this view owns.
-  const { snap, snapRef, markProgrammatic, publish } = useTranscriptScroll({
+  const { snap, snapRef, markProgrammatic, publish, attach } = useTranscriptScroll({
     scrollerRef,
     nodes,
+    transcriptKey: props.chat === undefined ? currentPath : null,
     onAtTop: revealTop,
     onFollowing: () => {
       const shrunk = shrinkTranscriptWindow(windowSize)
@@ -293,7 +296,7 @@ export function ChatView(props: ChatViewProps) {
       revealTop()
       return
     }
-    markProgrammatic()
+    markProgrammatic(0)
     publish({ ...snapRef.current, mode: 'free', showJump: true })
     scroller.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -303,7 +306,7 @@ export function ChatView(props: ChatViewProps) {
 
   return (
     <div className={css.root}>
-      <div className={css.scroll} ref={scrollerRef} data-chat-scroll>
+      <div className={css.scroll} ref={attach} data-chat-scroll>
         {isEmpty ? (
           <div className={css.emptyHost}>
             {props.emptyState ?? (
@@ -356,7 +359,8 @@ export function ChatView(props: ChatViewProps) {
           data-jump
           data-unseen={snap.unseen > 0 || undefined}
           onClick={() => {
-            markProgrammatic()
+            const scroller = scrollerRef.current
+            markProgrammatic(scroller === null ? 0 : scroller.scrollHeight - scroller.clientHeight)
             publish({ mode: 'following', showJump: false, atTop: false, unseen: 0 })
             tailRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' })
           }}

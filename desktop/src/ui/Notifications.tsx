@@ -15,7 +15,7 @@ import { useUpdateStore } from '../state/updateStore'
 import { useT } from '../i18n/locale'
 import { formatAge } from './format'
 import { BellIcon, XIcon } from './icons'
-import { usePresence, PRESENCE_LEAVE_MS } from './presence'
+import { inertProps, usePresence, PRESENCE_LEAVE_MS } from './presence'
 import css from './Notifications.module.css'
 
 const RELEASES = 'https://github.com/encyc/zen-agent/releases/latest'
@@ -109,7 +109,7 @@ export function Notifications() {
           data-state={presence.state}
           role="dialog"
           aria-label={t('notifications.title')}
-          aria-hidden={presence.state === 'closed' || undefined}
+          {...inertProps(presence.state === 'closed')}
         >
           <div className={css.header}>
             <span>{t('notifications.title')}</span>

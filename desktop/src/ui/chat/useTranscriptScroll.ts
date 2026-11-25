@@ -10,8 +10,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  PROGRAMMATIC_FLIGHT_MS,
   countUnseen,
   nextScrollSnapshot,
+  programmaticActive,
+  type ProgrammaticFlight,
   type ScrollSnapshot,
 } from '../../state/scrollFollow'
 import type { ChatNode } from '../../state/chatStore'
@@ -23,24 +26,33 @@ export interface TranscriptScroll {
    * re-bind on every sample. */
   snap: ScrollSnapshot
   snapRef: React.MutableRefObject<ScrollSnapshot>
-  /** Flag the scroll this component is about to issue as programmatic. */
-  markProgrammatic(): void
+  /** Flag the scroll this component is about to issue as programmatic.
+   * `target` is where it should land (null: an instantaneous jump). */
+  markProgrammatic(target?: number | null): void
   /** Fold one observation in (the listener calls this; effects may too). */
   observe(): void
   /** Show `next` immediately (a jump the view already decided on). */
   publish(next: ScrollSnapshot): void
+  /** Attach to the scrolling element. A callback ref, not a plain one: the
+   * listener has to bind when the node appears, and a `useEffect` reading
+   * `ref.current` would run once while it is still null and never again. */
+  attach(node: HTMLDivElement | null): void
 }
 
 export function useTranscriptScroll({
   scrollerRef,
   nodes,
+  transcriptKey,
   onAtTop,
   onFollowing,
   onActiveChange,
 }: {
-  scrollerRef: React.RefObject<HTMLDivElement | null>
+  scrollerRef: React.MutableRefObject<HTMLDivElement | null>
   /** The loaded nodes, for the unseen count. */
   nodes: ReadonlyArray<ChatNode>
+  /** Identity of the transcript being shown (the session path). A reused
+   * component instance must not carry one session's seen set into the next. */
+  transcriptKey: string | null
   /** The reader reached the top of the mounted window. */
   onAtTop(): void
   /** The reader is (back) at the tail: the caller shrinks its window. */
@@ -49,13 +61,24 @@ export function useTranscriptScroll({
   onActiveChange(id: string | null): void
 }): TranscriptScroll {
   const [snap, setSnap] = useState<ScrollSnapshot>(START)
+  /** The scrolling element, in state so the listener effect re-runs when it
+   * mounts (a ref assignment alone is invisible to React). */
+  const [scroller, setScroller] = useState<HTMLDivElement | null>(null)
+  const attach = useCallback(
+    (node: HTMLDivElement | null) => {
+      scrollerRef.current = node
+      setScroller(node)
+    },
+    [scrollerRef],
+  )
   const snapRef = useRef<ScrollSnapshot>(snap)
   /** scrollTop of the previous observation, to tell a real upward scroll from a
    * taller document. Mutable: the listener is passive and must not re-bind. */
   const lastTop = useRef(0)
   /** Set while this component moves the scroll itself (jump, minimap, anchor
-   * restore): that event must not read as a user gesture. */
-  const programmatic = useRef(false)
+   * restore): those events must not read as a user gesture. Spans a whole
+   * smooth flight, not one frame — see PROGRAMMATIC_FLIGHT_MS. */
+  const programmatic = useRef<ProgrammaticFlight | null>(null)
   /** User turns already seen at the tail, by id — a shrinking mounted window
    * would make an index-based count re-count old rows as new. */
   const seenIds = useRef<Set<string>>(new Set())
@@ -71,23 +94,37 @@ export function useTranscriptScroll({
     setSnap(next)
   }, [])
 
-  const markProgrammatic = useCallback(() => {
-    programmatic.current = true
-    lastTop.current = scrollerRef.current?.scrollTop ?? lastTop.current
-    window.requestAnimationFrame(() => {
-      programmatic.current = false
-    })
-  }, [scrollerRef])
+  const markProgrammatic = useCallback(
+    (target?: number | null) => {
+      // The sample the flight starts from must not count as a move either.
+      lastTop.current = scrollerRef.current?.scrollTop ?? lastTop.current
+      if (target === undefined) {
+        // An instantaneous assignment moves scrollTop for one frame. Giving it
+        // the smooth deadline instead would swallow the reader's own next
+        // gesture — and the tail pin on mount runs through here on every session.
+        programmatic.current = { target: null, until: Date.now() + 16 }
+        window.requestAnimationFrame(() => {
+          programmatic.current = null
+        })
+        return
+      }
+      programmatic.current = { target, until: Date.now() + PROGRAMMATIC_FLIGHT_MS }
+    },
+    [scrollerRef],
+  )
 
   const observe = useCallback(() => {
     const scroller = scrollerRef.current
     if (scroller === null) return
+    const isProgrammatic = programmaticActive(programmatic.current, Date.now(), scroller.scrollTop)
+    // Landing ends the flight; the deadline is only the backstop.
+    if (isProgrammatic && programmatic.current?.target !== null) programmatic.current = null
     const nextSnap = nextScrollSnapshot(snapRef.current, {
       scrollTop: scroller.scrollTop,
       scrollHeight: scroller.scrollHeight,
       clientHeight: scroller.clientHeight,
       lastScrollTop: lastTop.current,
-      programmatic: programmatic.current,
+      programmatic: isProgrammatic,
     })
     lastTop.current = scroller.scrollTop
 
@@ -109,11 +146,20 @@ export function useTranscriptScroll({
   }, [publish, scrollerRef])
 
   useEffect(() => {
-    const scroller = scrollerRef.current
     if (scroller === null) return undefined
     scroller.addEventListener('scroll', observe, { passive: true })
     return () => scroller.removeEventListener('scroll', observe)
-  }, [observe, scrollerRef])
+  }, [observe, scroller])
+
+  // A transcript swap resets everything the previous one established: its seen
+  // ids are meaningless here and its unseen count belongs to its session.
+  useEffect(() => {
+    seenIds.current = new Set()
+    activeRef.current = null
+    lastTop.current = 0
+    programmatic.current = null
+    publish(START)
+  }, [transcriptKey, publish])
 
   // Arriving content: at the tail it is pinned (and everything is seen); away
   // from it, only USER turns that landed below the fold are news — the
@@ -129,5 +175,5 @@ export function useTranscriptScroll({
     if (unseen !== current.unseen) publish({ ...current, unseen })
   }, [nodes, publish])
 
-  return { snap, snapRef, markProgrammatic, observe, publish }
+  return { snap, snapRef, markProgrammatic, observe, publish, attach }
 }

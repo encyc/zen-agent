@@ -8,7 +8,7 @@ import { useApprovalStore, useSessionStore } from '../../state/stores'
 import { pendingForProject } from '../../state/pendingProject'
 import { useT } from '../../i18n/locale'
 import { StateDot } from '../primitives'
-import { usePresence, PRESENCE_LEAVE_MS } from '../presence'
+import { inertProps, usePresence, PRESENCE_LEAVE_MS } from '../presence'
 import css from './ApprovalPanel.module.css'
 
 export function ApprovalPanel() {
@@ -79,7 +79,12 @@ export function ApprovalPanel() {
   }
 
   return (
-    <div className={css.root} data-approval data-state={presence.state}>
+    <div
+      className={css.root}
+      data-approval
+      data-state={presence.state}
+      {...inertProps(presence.state === 'closed')}
+    >
       <div className={css.card}>
         <div className={css.strip}>
           <StateDot state="warning" />
