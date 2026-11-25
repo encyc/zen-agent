@@ -1,5 +1,5 @@
 /** Settings surfaces: the command palette, font size, and the model,
- * skill, limit, zen, mcp, project and thinking panels, plus the
+ * skill, limit, mcp, project and thinking panels, plus the
  * Enter-to-send switch and the context ring's used-share lead. */
 
 import assert from 'node:assert/strict'
@@ -273,33 +273,6 @@ test('limit settings surfaces a refused write instead of pretending', async ({ p
   await expect(page.locator('[data-page="settings"] .error, [data-page="settings"] [class*="error"]').last()).toContainText(
     'unknown keys',
   )
-})
-test('zen settings own the fleet knobs and Parameters leaves them out', async ({ page }) => {
-  await boot(page, initialState({ running: false }))
-  await page.getByRole('button', { name: '设置' }).click()
-
-  // Zen/Swarm tables belong to their own pages; Parameters stays kernel-only.
-  await page.getByRole('button', { name: '参数与预算' }).click()
-  await expect(page.locator('[data-knob="zen.max_concurrent"]')).toHaveCount(0)
-
-  await page.getByRole('button', { name: 'Zen', exact: true }).click()
-  const panel = page.locator('[data-knob-table="zen"]')
-  await expect(panel).toBeVisible()
-  await expect(page.locator('[data-knob="zen.max_concurrent"]')).toContainText('3')
-  // The per-run watchdog lives in `[task]` but is presented with the fleet.
-  await expect(page.locator('[data-knob="task.timeout_s"]')).toContainText('900')
-
-  await panel.getByRole('button', { name: '修改' }).click()
-  const mode = page.locator('[data-knob="zen.worker_mode"]').getByRole('combobox')
-  await expect(mode).toHaveValue('inherit')
-  await mode.selectOption('auto')
-  await panel.getByRole('button', { name: '保存（1 项改动）' }).click()
-
-  const sets = (await page.evaluate(() => window.__ZEN_E2E__.calls))
-    .filter((call) => call.type === 'limits' && call.op === 'set')
-    .map(({ key, value }) => ({ key, value }))
-  assert.deepEqual(sets, [{ key: 'zen.worker_mode', value: 'auto' }])
-  await expect(page.locator('[data-knob="zen.worker_mode"]')).toContainText('auto')
 })
 test('mcp settings probes a server and reports its tools', async ({ page }) => {
   await boot(page, initialState({ running: false }))

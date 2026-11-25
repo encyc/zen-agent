@@ -42,7 +42,7 @@ function scripted(options: { alive?: boolean } = {}): Scripted {
         ok: true,
         ...extra,
       })
-      if (payload.type === 'hello') return ok({ protocol_version: 3, active: '/other/q' }) as T
+      if (payload.type === 'hello') return ok({ protocol_version: 4, active: '/other/q' }) as T
       if (payload.type === 'project' && payload.op === 'open') {
         return ok({
           root: PROJECT,

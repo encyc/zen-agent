@@ -27,8 +27,6 @@ import {
   useSessionStore,
   useSettingsStore,
 } from './stores.ts'
-import { applyFleetFrame } from './zenActions.ts'
-import { applySwarmFrame } from './swarmWiring.ts'
 
 /** The slice of the app store the router needs — appStore supplies it from
  * its own state; frameRouter never imports appStore (that would close a
@@ -195,8 +193,6 @@ export function handleFrame(frame: ServerFrame, handling: FrameHandling): void {
   // @you notices may reach the screen. Fleet frames carry a session tag of
   // the router slot — both are consumed before pane routing could misread
   // them as chat.
-  if (applySwarmFrame(frame, handling.get().project)) return
-  if (applyFleetFrame(frame)) return
   routeReply(frame as Record<string, unknown>, handling)
 }
 

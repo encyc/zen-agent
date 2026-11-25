@@ -22,8 +22,6 @@ export type Tab =
   | 'limits'
   | 'mcp'
   | 'plugins'
-  | 'zen'
-  | 'swarm'
   | 'projects'
   | 'about'
 export type NavGroup = 'preferences' | 'resources' | 'system'
@@ -113,32 +111,6 @@ export const NAV_ITEMS: NavItem[] = [
       'settings.pluginsCatalog',
       'settings.pluginsInstalledSection',
       'settings.pluginsApplyPending',
-    ],
-  },
-  {
-    id: 'zen',
-    labelKey: 'settings.zen',
-    hintKey: 'settings.zenHint',
-    icon: <SparkIcon size={14} />,
-    group: 'resources',
-    keywords: ['zen.stopFleet', 'zen.stopFleetTitle', 'zen.workers'],
-  },
-  {
-    id: 'swarm',
-    labelKey: 'settings.swarm',
-    hintKey: 'settings.swarmHint',
-    icon: <BotIcon size={14} />,
-    group: 'resources',
-    keywords: [
-      'swarm.settings.desc',
-      'swarm.settings.projectTitle',
-      'swarm.settings.credentialsOk',
-      'swarm.settings.policy',
-      'swarm.settings.library',
-      'swarm.rolesList',
-      'swarm.roleNew',
-      'swarm.rolePrompt',
-      'swarm.roleRoot',
     ],
   },
   {

@@ -32,11 +32,8 @@ import {
   useSkillsStore,
   useStatusStore,
   useWorkPanelStore,
-  type WorkspaceMode,
 } from './stores.ts'
 import { useChatStore } from './chatStore.ts'
-import { stopFleet, switchWorkspaceMode, syncProjectState, zenTranscript } from './zenActions.ts'
-import { registerSwarmSender } from './swarmWiring.ts'
 import { nextDraft } from './pending.ts'
 import { latestSessionForProject } from './latestSession.ts'
 import { savePref, spawnArgs } from './prefs.ts'
@@ -159,10 +156,6 @@ interface AppState {
   clearTodos(): Promise<void>
   compactNow(): Promise<void>
   undoLast(): Promise<void>
-  switchWorkspaceMode(mode: WorkspaceMode): void
-  stopFleet(): Promise<void>
-  /** A worker's read-only transcript (zen_fleet op=transcript). */
-  zenTranscript(path: string, before?: number): Promise<Record<string, unknown> | null>
 }
 
 let client: RpcClient | null = null
@@ -232,8 +225,6 @@ async function bootChild(
   const fellBack =
     resumed !== undefined && useStatusStore.getState().status?.session !== resumed
   if ((!loaded || fellBack) && opts.fromSwitch) useChatStore.getState().reset()
-  // Per-project state (fleet, swarm room) replays on every boot.
-  void syncProjectState(get)
 }
 
 /** Test seam: drop the client singleton so a new bridge (and fresh wiring)
@@ -595,8 +586,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       const loaded = await get().refreshTranscript()
       await Promise.all([restorePrefs(get), get().refreshSessions()])
       if (!loaded) useChatStore.getState().reset()
-      // Both stores belong to the project we left; follow the switch.
-      void syncProjectState(get)
       paneCache.set(root, {
         session: effective,
         pane: useChatStore.getState().pane(),
@@ -1013,24 +1002,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     )
   },
 
-  switchWorkspaceMode(mode) {
-    switchWorkspaceMode(get, mode)
-  },
-
-  async stopFleet() {
-    await stopFleet(get)
-  },
-
-  async zenTranscript(path, before) {
-    return zenTranscript(get, path, before)
-    },
 }))
-
-// The swarm store sends through this module's client seam instead of importing
-// `appStore`, which keeps its module graph loadable under `node --test`.
-registerSwarmSender({
-  send: (request) => useAppStore.getState().client().send(request),
-})
 
 /** Run a session op whose only follow-up is a status refresh. */
 function statusOp(get: () => AppState, payload: Record<string, unknown>) {

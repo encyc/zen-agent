@@ -1,7 +1,7 @@
 /** The session pane registry: open/close/focus/submit against a scripted
  * fake bridge. A pane paints its session's transcript (session-tagged when
- * the slot is resident, the zen disk read otherwise), streams live through
- * the frame-router sink, and submits prompts to its own session. */
+ * the slot is resident, a static pane otherwise), streams live through the
+ * frame-router sink, and submits prompts to its own session. */
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
@@ -27,7 +27,7 @@ interface WireLog {
 }
 
 /** A scripted host: session-tagged transcript/prompt/status replies carry the
- * pane's session; the `zen_fleet` disk read never does. */
+ * pane's session. */
 function scripted(options: {
   transcriptRefuses?: boolean
   running?: boolean
@@ -52,18 +52,6 @@ function scripted(options: {
           return { type: 'error', id, message: 'no resident slot for session' } as T
         }
         return tag({ transcript: [], notices: [], compactions: [], hasMoreBefore: false, total: 0 }) as T
-      }
-      if (payload.type === 'zen_fleet' && payload.op === 'transcript') {
-        return {
-          type: 'result',
-          id,
-          ok: true,
-          transcript: [],
-          notices: [],
-          compactions: [],
-          hasMoreBefore: false,
-          total: 0,
-        } as T
       }
       if (payload.type === 'session' && payload.op === 'resume') {
         return { type: 'result', id, ok: true, path: payload.path } as T
@@ -117,7 +105,7 @@ test('open paints the pane from the session-tagged transcript and marks it live'
   assert.equal(asked[0]?.session, A)
 })
 
-test('a refusal falls back to the zen disk read and paints a static pane', async () => {
+test('a refusal paints an empty static pane with no disk read', async () => {
   const bridge = scripted({ transcriptRefuses: true })
   reset(bridge)
 
@@ -125,12 +113,8 @@ test('a refusal falls back to the zen disk read and paints a static pane', async
 
   const pane = usePanesStore.getState().panes[1]
   assert.equal(pane?.live, false)
-  assert.equal(pane?.loaded, true)
-  const zenReads = bridge.log.requests.filter(
-    (request) => request.type === 'zen_fleet' && request.op === 'transcript',
-  )
-  assert.equal(zenReads.length, 1)
-  assert.equal(zenReads[0]?.path, A)
+  assert.equal(pane?.loaded, false)
+  assert.equal(bridge.log.requests.filter((request) => request.type === 'zen_fleet').length, 0)
 })
 
 test('a mismatched transcript tag (an older runtime) counts as the refusal path', async () => {
@@ -166,7 +150,7 @@ test('a mismatched transcript tag (an older runtime) counts as the refusal path'
 
   const pane = usePanesStore.getState().panes[1]
   assert.equal(pane?.live, false)
-  assert.equal(pane?.loaded, true)
+  assert.equal(pane?.loaded, false)
 })
 
 test('open caps the strip at three panes with a notice', async () => {

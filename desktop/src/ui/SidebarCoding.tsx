@@ -21,7 +21,6 @@ import {
   mergeProjects,
   projectRowCount,
   sessionSections,
-  sessionsForWorkspace,
   type SidebarProjectGroup,
 } from '../state/sessionGroups'
 import { armDelete, deleteArmed } from '../state/armedDelete'
@@ -65,11 +64,7 @@ function readClosedSections(): string[] {
 
 export function SidebarCoding() {
   const t = useT()
-  const allSessions = useSessionStore((state) => state.sessions)
-  const sessions = useMemo(
-    () => sessionsForWorkspace(allSessions, 'coding'),
-    [allSessions],
-  )
+  const sessions = useSessionStore((state) => state.sessions)
   const currentPath = useSessionStore((state) => state.currentPath)
   const collapsedProjects = useSessionStore((state) => state.collapsedProjects)
   const toggleProject = useSessionStore((state) => state.toggleProject)

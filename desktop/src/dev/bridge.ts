@@ -6,8 +6,6 @@
 
 import { PROTOCOL_VERSION } from '../rpc/types.ts'
 import { handlePlugins, type PluginMockState } from './pluginsMock.ts'
-import { handleSupervisor, handleSwarm, type SwarmMockState } from './swarmMock.ts'
-import { handleZenFleet, type ZenMockState } from './zenMock.ts'
 type Lane = 'queue' | 'steer'
 
 export interface PendingItemMock {
@@ -27,7 +25,7 @@ export interface MemoryEntryMock {
   source: string
 }
 
-export interface BridgeState extends PluginMockState, SwarmMockState, ZenMockState {
+export interface BridgeState extends PluginMockState {
   running: boolean
   continuing?: number
   pending: PendingItemMock[]
@@ -436,13 +434,6 @@ export function installBridge(state: BridgeState) {
           ['task', 'keep_transcripts', 64, 'int', 'session', 1, 10000, []],
           ['task', 'max_transcript_bytes', 33554432, 'int', 'session', 1048576, 2147483648, []],
           ['task', 'max_transcript_file_bytes', 8388608, 'int', 'session', 1048576, 2147483648, []],
-          ['zen', 'max_concurrent', 3, 'int', 'session', 1, 16, []],
-          ['zen', 'batch_window_s', 0.5, 'float', 'session', 0, 10, []],
-          ['zen', 'report_limit', 800, 'int', 'session', 200, 20000, []],
-          ['zen', 'worker_mode', 'inherit', 'str', 'session', 0, 0, ['inherit', 'ask', 'plan', 'auto']],
-          ['swarm', 'max_concurrent', 3, 'int', 'session', 1, 16, []],
-          ['swarm', 'max_chain_depth', 8, 'int', 'session', 1, 32, []],
-          ['swarm', 'max_chain_cost', 5, 'float', 'session', 0.01, 1000, []],
         ] as const
         const sections: Record<string, string> = {
           'limits.skills': 'skills',
@@ -450,8 +441,6 @@ export function installBridge(state: BridgeState) {
           'limits.agent': 'agent',
           'limits.tools': 'tools',
           task: 'subagents',
-          zen: 'zen',
-          swarm: 'swarm',
         }
         const state2 = state
         const valueOf = (table: string, name: string, fallback: number | string | null) => {
@@ -486,7 +475,7 @@ export function installBridge(state: BridgeState) {
           ok,
           path: '/Users/e2e/.zenagent/config.toml',
           project_path: '/work/p/.zenagent/config.toml',
-          groups: ['skills', 'context', 'agent', 'subagents', 'tools', 'zen', 'swarm'],
+          groups: ['skills', 'context', 'agent', 'subagents', 'tools'],
           knobs: rows(),
           ...(error ? { error } : {}),
         })
@@ -507,9 +496,6 @@ export function installBridge(state: BridgeState) {
         return result()
       }
       case 'plugins': return handlePlugins(state, payload)
-      case 'swarm': return handleSwarm(state, payload)
-      case 'supervisor': return handleSupervisor(state, payload)
-      case 'zen_fleet': return handleZenFleet(state, payload)
       case 'mcp': {
         const rows = () =>
           state.mcpServers ?? [

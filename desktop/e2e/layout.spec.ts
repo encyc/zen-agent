@@ -78,8 +78,8 @@ test('collapsing the sidebar gives the conversation the full width', async ({ pa
   await page.keyboard.press(sidebarKey)
   await expect.poll(async () => (await center.boundingBox())?.x ?? -1).toBe(Math.round(open.x))
 })
-test('the coding sidebar hides sessions owned by the zen workspace', async ({ page }) => {
-  const row = (path: string, title: string, workspace: 'coding' | 'zen', current: boolean) => ({
+test('the sidebar lists old zen-owned sessions as ordinary coding rows', async ({ page }) => {
+  const row = (path: string, title: string, current: boolean) => ({
     path,
     name: title,
     title,
@@ -92,7 +92,6 @@ test('the coding sidebar hides sessions owned by the zen workspace', async ({ pa
     updated_at: current ? 2 : 1,
     model: 'deepseek-flash',
     derived_from: '',
-    workspace,
   })
   await boot(
     page,
@@ -100,14 +99,14 @@ test('the coding sidebar hides sessions owned by the zen workspace', async ({ pa
       title: 'coding chat',
       statusSession: '/sessions/coding.jsonl',
       sessionRows: [
-        row('/sessions/coding.jsonl', 'coding chat', 'coding', true),
-        row('/sessions/zen.jsonl', 'zen chat', 'zen', false),
+        row('/sessions/coding.jsonl', 'coding chat', true),
+        row('/sessions/zen.jsonl', 'zen chat', false),
       ],
     }),
   )
 
   await expect(page.locator('[data-session-path="/sessions/coding.jsonl"]')).toBeVisible()
-  await expect(page.locator('[data-session-path="/sessions/zen.jsonl"]')).toHaveCount(0)
+  await expect(page.locator('[data-session-path="/sessions/zen.jsonl"]')).toBeVisible()
 })
 test('the sidebar renders pinned, sessions and collapsible project groups', async ({ page }) => {
   await boot(page, initialState())
