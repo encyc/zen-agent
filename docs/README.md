@@ -9,7 +9,7 @@
    - 架构图资产：[简化版](architecture-simplify.html)（模块级）· [完整版](architecture-full.html)（逐文件，悬停看细节）— 设计讨论与 CHANGELOG 增删改的工作底图，见架构总览末尾的治理规则
 2. 使用指南（先知道它怎么工作）：
    - [CLI](guide/cli.md) · [斜杠命令](guide/commands.md) · [项目与全局作用域](guide/projects.md) · [配置与目录](guide/config.md) · [工具与权限](guide/tools-permissions.md)
-   - [MCP](guide/mcp.md) · [插件与连接器](guide/plugins.md) · [Zen 模式](guide/zen-mode.md) · [多角色 Swarm](guide/swarm.md) · [控制面](guide/orchestration.md) · [Skills 与模板](guide/skills-templates.md) · [扩展](guide/extensions.md)
+   - [MCP](guide/mcp.md) · [插件与连接器](guide/plugins.md) · [Skills 与模板](guide/skills-templates.md) · [扩展](guide/extensions.md)
    - [会话/导出/用量](guide/sessions.md) · [RPC 与 Python SDK](guide/rpc-sdk.md)
    - [TUI](guide/tui.md) · [界面语言（i18n）](guide/i18n.md)
 3. 内核导读（重点，按执行顺序）：
@@ -17,7 +17,7 @@
    - [Agent Loop](internals/agent-loop.md) → [Agent 类](internals/agent-class.md)
    - [工具内核](internals/tools-internals.md) → [Web 搜索链](internals/web-search.md) → [上下文与压缩](internals/context-compaction.md)
    - [配置持久化对照（codex/omp/dsh）](research/config-persistence.md)
-   - [护栏与校验](internals/guardrails.md) → [持久化/重试/崩溃](internals/persistence.md) → [Run 账本](internals/run-ledger.md) → [Supervisor](internals/supervisor.md)
+   - [护栏与校验](internals/guardrails.md) → [持久化/重试/崩溃](internals/persistence.md) → [Run 账本](internals/run-ledger.md)
    - [MCP 内核](internals/mcp-internals.md) · [扩展内核](internals/extensions-internals.md)
 4. 速查：[核心契约](reference/contracts.md) · [事件全表](reference/events.md) · [文件地图](reference/file-map.md)
 5. [功能地图](feature-map.md)（功能 → 源码 → 测试）· [四端能力矩阵](frontend-matrix.md)（tui / gui / repl / headless 各有什么）· [测试策略](testing.md) · [开发与发版](development.md)

@@ -3,14 +3,12 @@
 ## 为什么需要它
 
 会话文件记录的是**消息**：谁说了什么、工具返回了什么。它不记录**一次运行**的边界与归属。
-于是每个编排层都自己补了一本账：coding 用 `ChatController.RunStatus`，zen 用
-`WorkerHandle.status`，swarm 用 `TaskRecord` + `SwarmAgent.state`。同一件事——谁在跑、
-跑到哪、花了多少、为什么停——有三个答案，且不能跨模式查询。
+`ChatController.RunStatus` 给出当前会话的一次运行；`RunLedger` 把它放进项目级的时间线：
+一次 `Agent.prompt` 就是一条 run，带稳定 `runId`、归属（kind / agent / session /
+work item）和终态（termination / turns / cost / error）。
 
-`RunLedger` 是这本共同账：一次 `Agent.prompt` 就是一条 run，带稳定 `runId`、归属
-（模式 / agent / session / work item）和终态（termination / turns / cost / error）。
-它是**投影**，不是替代：swarm 的 `tasks.jsonl` 仍是任务状态的权威，zen 的 roster 仍是
-worker 状态的权威；账本负责把它们放到同一张时间线上。
+它是**投影**，不是替代：会话文件仍是消息的唯一权威，账本只回答「哪些 run 跑过、
+各自怎么结束」。
 
 ## 存储
 
@@ -59,21 +57,18 @@ worker 状态的权威；账本负责把它们放到同一张时间线上。
 
 接线点：
 
-- `app/bootstrap.py::prepare`：coding、REPL、TUI、RPC slot、zen worker 都走这里；
-- `app/swarm/manager.py::_build_agent`：swarm 绕过 `prepare`，单独接；
+- `app/bootstrap.py::prepare`：coding、REPL、TUI、RPC slot 都走这里；
 - `app/subagent_runs.py::SubagentRunSink`：`task` 工具的每次 child dispatch 由
   `build_task_tool(run_sink=...)` 观察，记 `kind=subagent`。
 
 ## scope
 
-`runtime.run_scope` 是编排层在 prompt 前写入的普通 dict：
+`runtime.run_scope` 是拥有者在 prompt 前写入的普通 dict：
 
-| 模式 | kind | agentId | 额外字段 |
+| 来源 | kind | agentId | 额外字段 |
 |---|---|---|---|
 | coding | `coding` | `main` | `label` 缺省取 session stem |
-| ~~zen router~~ | `zen_router` | 历史值 | 0.15 起不再产生，旧账本仍可读 |
-| ~~zen worker~~ | `zen_worker` | 历史值 | 同上 |
-| ~~swarm~~ | `swarm` | 历史值 | 同上 |
+| 历史值 | `zen_router` / `zen_worker` / `swarm` | — | 0.15 起不再产生，旧账本仍可读 |
 | subagent | `subagent` | task name | `session` = 父 session，`parentRunId` = 派发时的父 run |
 
 `app/run_wiring.py` 的 recorder 填这些字段；历史 kind 只作读取兼容。
@@ -83,7 +78,7 @@ worker 状态的权威；账本负责把它们放到同一张时间线上。
 RPC（host 级，跨模式）：
 
 ```json
-{"type": "runs", "op": "list", "project": "/repo", "kind": "swarm", "limit": 50}
+{"type": "runs", "op": "list", "project": "/repo", "kind": "subagent", "limit": 50}
 {"type": "runs", "op": "get", "project": "/repo", "runId": "r_..."}
 ```
 
@@ -108,9 +103,6 @@ Python 侧可直接用 `RunLedger(path).list(...)` / `.get(...)`；`RunLedger.lo
 
 - **subagent 用父 session 归属**：孩子没有独立 session，账本行记录父 run 和父
   session；父 session 恢复时由 `reconcile_session` 一并收口。
-- **swarm 的终态仍以 task 为准**：账本记的是 agent run 的终止原因；用户取消的任务在
-  `tasks.jsonl` 里是 `cancelled`，账本里可能仍是 `aborted`。房间启动时
-  `SwarmStore.reconcile` 会把未终态 task 标 `failed`，账本再独立收口 run。
 - **没有 retention/compaction**：`runs.jsonl` 只追加。
 - **对账是 best-effort**：文件系统不支持 advisory lock 时 lease 本身已降级，探针按
   进程内 registry 判断。

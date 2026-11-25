@@ -114,7 +114,7 @@ turn_end
 ## 成本累计
 
 loop 不记账、也不因花费停止：usage 就在每条 assistant 消息里，调用方自己汇总
-（`usage_total`、telemetry 的 run 行、swarm 的链级预算都是消费者侧的实现）。
+（`usage_total`、telemetry 的 run 行都是消费者侧的实现）。
 
 ## 源码对照
 
