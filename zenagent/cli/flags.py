@@ -28,8 +28,6 @@ SHARED_FLAGS = (
     "--mode",
     "--read-only",
     "--thinking",
-    "--max-turns",
-    "--max-cost",
     "--retries",
     "--resume",
     "--no-mcp",
@@ -115,9 +113,6 @@ def add_runtime_flags(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
-        "--max-turns", type=int, help="stop after this many provider requests"
-    )
-    parser.add_argument(
         "--extension",
         action="append",
         dest="extension_paths",
@@ -170,9 +165,6 @@ def add_runtime_flags(parser: argparse.ArgumentParser) -> None:
         "--no-context-files",
         action="store_true",
         help="do not load AGENTS.md / CLAUDE.md into the system prompt",
-    )
-    parser.add_argument(
-        "--max-cost", type=float, help="stop when the run has spent this many USD"
     )
 
 

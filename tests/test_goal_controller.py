@@ -10,13 +10,12 @@ def _session(tmp_path):
 
 def test_set_persists_and_replays(tmp_path):
     session = _session(tmp_path)
-    ctl = GoalController(limits=GoalLimits(max_turns=5), now=lambda: 100.0)
+    ctl = GoalController(limits=GoalLimits(), now=lambda: 100.0)
     ctl.bind_session(session)
     state = ctl.set("fix tests", check="pytest -q")
     assert state.status == "active"
-    assert state.max_turns == 5
 
-    again = GoalController(limits=GoalLimits(max_turns=5))
+    again = GoalController(limits=GoalLimits())
     again.bind_session(Session(session.path))
     view = again.snapshot()
     assert view is not None

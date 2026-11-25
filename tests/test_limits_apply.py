@@ -19,9 +19,9 @@ def test_runtime_methods_delegate():
 
 
 async def test_overrides_maps_the_cli_switches(runtime_factory):
-    runtime = await runtime_factory(max_turns=20, skills=False, stream_fn=None)
+    runtime = await runtime_factory(skills=False, stream_fn=None)
     active = limits_apply.overrides(runtime)
-    assert active["max_turns"] == "--max-turns 20"
+    assert "max_turns" not in active
     assert active["max_index_bytes"] == "--no-skills"
     assert active["max_body_bytes"] == "--no-skills"
     await runtime.close()

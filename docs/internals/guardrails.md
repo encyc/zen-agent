@@ -1,6 +1,6 @@
 # 护栏与校验
 
-「护栏」在这里指五类机制：**参数校验**、**权限门**、**风险判定**、**预算/循环上限**、
+「护栏」在这里指五类机制：**参数校验**、**权限门**、**风险判定**、**循环边界与超时**、
 **写入快照**。它们都不改写模型语义。
 
 ## 1. 参数校验（进工具之前）
@@ -56,19 +56,24 @@ allow:  zen 模式 > 只读工具 > 目标授权 > --yes > 交互确认 > 拒绝
 - `[tools] allow` 与工具级 always 不能绕过风险判定；只有目标精确的会话级 always 或显式 flag 可以。
 - 风险判定是启发式（尤其 bash），不构成隔离；它防的是手滑，不防恶意内容。
 
-## 3. 预算与循环上限
+## 3. 循环边界与超时
+
+内核**没有轮次上限，也没有花费上限**：`agent_loop` 是 `while True`，只在模型正常结束、
+provider 失败、用户中止、工具要求结束、截断一直不收敛、或守卫判定原地打转时退出。
 
 | 机制 | 位置 | 行为 |
 |---|---|---|
-| `max_turns` | `AgentConfig.max_turns` / `--max-turns` | 在**开下一轮前**检查；`termination="max_turns"` |
-| `max_cost` | `AgentConfig.max_cost` / `--max-cost` | 本 run 累计 cost 超限即停；`termination="max_cost"`；不开新请求，保证消息配对 |
-| `_MAX_TURNS=100` | loop 默认 | 没显式配置时的兜底 |
-| `_MAX_LENGTH_FAILURES=2` | loop | 连续 length 截断工具调用的重试上限 |
+| 原地打转守卫 | `agent/guard.py::RunawayDetector` + loop | 同一批调用（name + 规范化 args）连续 5 轮重复 → `termination="loop_detected"`，`detail` 写明重复批次；纯轮询命令豁免 |
+| `_MAX_LENGTH_FAILURES=2` | loop | 连续 2 次 length 截断的工具调用 → `termination="length"`，不伪装成 `stop` |
 | `--retries` | retry | 只对瞬时错误重试，不对确定性错误重试 |
 | bash 超时 | 工具 | 默认 120s，可传 `timeout_s`；超时杀进程组 |
+| 子代理超时 | `task` 工具 | `timeout_s` 是 child 的墙钟上限，超时按失败收口 |
+| goal 检查超时 | `app/goal.py` | `check_timeout_s=300` 只约束 verifier 调用，不约束 agent 的轮数 |
 
-`termination` 与 `stop_reason` 分离：历史里保留 provider 的原始 stop_reason，策略终止记录在
-`AgentState.termination`。
+不设上限是有意的：一个任务的合理轮数事先不可知，砍掉一个还没做完的 run 比多跑几轮更糟。
+真正需要停的时候，守卫给的是“这次 run 原地打转”的证据（重复的同一批调用），而不是
+一个猜出来的数字。`termination` 与 `stop_reason` 分离：历史里保留 provider 的原始
+stop_reason，策略终止（含守卫打断）记录在 `AgentState.termination`。
 
 ## 4. 上下文的护栏
 
@@ -117,7 +122,7 @@ allow:  zen 模式 > 只读工具 > 目标授权 > --yes > 交互确认 > 拒绝
   `READ_ONLY_TOOLS`、`dangerous_command_reason`
 - 风险与快照：`zenagent/app/safety.py`、`zenagent/app/journal.py::SnapshotJournal`、
   `zenagent/app/restore.py::run_restore_command`
-- 循环上限：`zenagent/agent/loop.py`（`_MAX_TURNS`、`_MAX_LENGTH_FAILURES`、终止分支）
-- 预算：`AgentConfig.max_turns/max_cost`、`--max-turns/--max-cost`
+- 循环边界：`zenagent/agent/loop.py`（终止分支、`_MAX_LENGTH_FAILURES`）、
+  `zenagent/agent/guard.py::RunawayDetector`
 - 测试：`tests/test_validate.py`、`tests/test_permissions.py`、`tests/test_loop.py`、
   `tests/test_safety.py`、`tests/test_journal.py`、`tests/test_restore.py`

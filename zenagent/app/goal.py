@@ -69,22 +69,16 @@ _NO_LIMIT = 0
 class GoalLimits:
     """Defaults applied when a new goal is created.
 
-    Each budget may be zero, which turns that ceiling off for the goal: the
-    controller then only stops on a verdict, a blocker or the user.
+    A goal has no turn, token or wall-clock ceiling: it stops on a verdict, a
+    blocker, the user, or a run the harness had to interrupt.
     """
 
-    max_turns: int = 40
-    max_tokens: int = 2_000_000
-    max_wall_seconds: int = 14_400
     check_timeout_s: int = 300
     verifier_max_tokens: int = 512
 
     @classmethod
     def from_limits(cls, limits: Limits) -> GoalLimits:
         return cls(
-            max_turns=limits.goal_max_turns,
-            max_tokens=limits.goal_max_tokens,
-            max_wall_seconds=limits.goal_max_wall_minutes * 60,
             check_timeout_s=limits.goal_check_timeout_s,
             verifier_max_tokens=limits.goal_verifier_max_tokens,
         )
@@ -97,7 +91,6 @@ class GoalArgs:
     action: GoalAction
     objective: str | None = None
     check: str | None = None
-    max_turns: int | None = None
 
 
 @dataclass
@@ -108,10 +101,7 @@ class GoalState:
     objective: str
     status: GoalStatus
     check: str | None
-    #: Ceilings captured when the goal was created; 0 means "no ceiling".
-    max_turns: int
-    max_tokens: int
-    max_wall_seconds: int
+    #: Usage counters. They are reported, never enforced.
     turns_used: int = 0
     tokens_used: int = 0
     wall_seconds_used: float = 0.0
@@ -131,7 +121,6 @@ class GoalState:
         *,
         check: str | None = None,
         limits: GoalLimits | None = None,
-        max_turns: int | None = None,
     ) -> GoalState:
         cleaned = objective.strip()
         if not cleaned:
@@ -142,8 +131,6 @@ class GoalState:
             check = check.strip()
             if not check:
                 raise ValueError("goal check is empty")
-        if max_turns is not None and max_turns < 0:
-            raise ValueError("goal max_turns must be zero or positive")
         limits = limits or GoalLimits()
         now = time.time()
         return cls(
@@ -151,9 +138,6 @@ class GoalState:
             objective=cleaned,
             status="active",
             check=check,
-            max_turns=max_turns if max_turns is not None else limits.max_turns,
-            max_tokens=limits.max_tokens,
-            max_wall_seconds=limits.max_wall_seconds,
             created_at=now,
             updated_at=now,
         )
@@ -166,17 +150,11 @@ class GoalState:
         status = data.get("status")
         if not isinstance(status, str) or status not in GOAL_STATUSES:
             raise ValueError(f"unknown goal status: {status!r}")
-        defaults = GoalLimits()
         return cls(
             goal_id=_as_str(data.get("goal_id"), ""),
             objective=_as_str(data.get("objective"), ""),
             status=cast(GoalStatus, status),
             check=_as_optional_str(data.get("check")),
-            max_turns=_as_int(data.get("max_turns"), defaults.max_turns),
-            max_tokens=_as_int(data.get("max_tokens"), defaults.max_tokens),
-            max_wall_seconds=_as_int(
-                data.get("max_wall_seconds"), defaults.max_wall_seconds
-            ),
             turns_used=_as_int(data.get("turns_used"), 0),
             tokens_used=_as_int(data.get("tokens_used"), 0),
             wall_seconds_used=_as_float(data.get("wall_seconds_used"), 0.0),
@@ -216,6 +194,8 @@ class GoalTurnContext:
     subagent_tokens_delta: int
     elapsed_s: float
     user_queued: bool
+    #: The reason behind ``termination`` when the kernel gave one.
+    detail: str | None = None
 
 
 class GoalVerifierError(RuntimeError):
@@ -230,7 +210,6 @@ class GoalDecision:
     status: GoalStatus
     prompt: str | None = None
     reason: str = ""
-    wrap_up: bool = False
 
 
 class GoalVerifier(Protocol):
@@ -262,7 +241,6 @@ class GoalController:
         self._now = now
         self._state: GoalState | None = None
         self._session: Session | None = None
-        self._budget_abort = False
         self._turn_auto = True
         self._turn_started_at = 0.0
         #: Check goals created/resumed in this process are trusted; a goal
@@ -284,7 +262,7 @@ class GoalController:
         verifier: GoalVerifier | None,
         check_verifier: GoalVerifier | None = None,
     ) -> None:
-        """Update defaults for future goals; the current goal keeps its budget."""
+        """Update the defaults applied when a new goal is created."""
 
         self._limits = limits
         self._verifier = verifier
@@ -364,14 +342,12 @@ class GoalController:
         objective: str,
         *,
         check: str | None = None,
-        max_turns: int | None = None,
     ) -> GoalState:
         self._invalidate()
         state = GoalState.new(
             objective,
             check=check,
             limits=self._limits,
-            max_turns=max_turns,
         )
         stamp = self._now()
         state.created_at = stamp
@@ -424,11 +400,8 @@ class GoalController:
             status=state.status,
             check=state.check,
             turns_used=state.turns_used,
-            max_turns=state.max_turns,
             tokens_used=state.tokens_used,
-            max_tokens=state.max_tokens,
             wall_seconds=state.wall_seconds_used,
-            max_wall_seconds=state.max_wall_seconds,
             last_verdict=state.last_verdict,
             last_reason=state.last_reason,
             updated_at=int(state.updated_at),
@@ -437,27 +410,6 @@ class GoalController:
     def note_turn_start(self, *, auto: bool) -> None:
         self._turn_auto = auto
         self._turn_started_at = self._now()
-        self._budget_abort = False
-
-    def note_budget_abort(self) -> None:
-        self._budget_abort = True
-
-    def budget_exceeded(
-        self, *, tokens_delta: int = 0, elapsed_s: float = 0.0
-    ) -> bool:
-        state = self._state
-        if state is None or state.status != "active":
-            return False
-        tokens_hit = (
-            state.max_tokens > _NO_LIMIT
-            and state.tokens_used + max(tokens_delta, 0) >= state.max_tokens
-        )
-        wall_hit = (
-            state.max_wall_seconds > _NO_LIMIT
-            and state.wall_seconds_used + max(elapsed_s, 0.0)
-            >= state.max_wall_seconds
-        )
-        return tokens_hit or wall_hit
 
     def settle_turn(self, ctx: GoalTurnContext) -> bool:
         """Charge one finished turn to the goal budget, even if it will stop."""
@@ -490,42 +442,14 @@ class GoalController:
 
         if ctx.termination != "stop":
             if ctx.termination == "aborted":
-                if self._budget_abort:
-                    self._budget_abort = False
-                    return self._finish(
-                        "budget_limited", "goal budget reached while running"
-                    )
                 return self._finish("paused", "run aborted")
+            if ctx.termination == "loop_detected":
+                # Recoverable by design: the user can resume once they see why.
+                return self._finish(
+                    "paused", f"run interrupted: {ctx.detail or 'a repeated batch'}"
+                )
             return self._finish("blocked", f"run ended: {ctx.termination}")
 
-        if state.max_tokens > _NO_LIMIT and state.tokens_used >= state.max_tokens:
-            return self._finish(
-                "budget_limited",
-                f"token budget reached ({state.tokens_used}/{state.max_tokens})",
-            )
-        if (
-            state.max_wall_seconds > _NO_LIMIT
-            and state.wall_seconds_used >= state.max_wall_seconds
-        ):
-            return self._finish(
-                "budget_limited",
-                "wall-clock budget reached "
-                f"({state.wall_seconds_used:.0f}/{state.max_wall_seconds}s)",
-            )
-        if state.max_turns > _NO_LIMIT and state.turns_used > state.max_turns:
-            return self._finish(
-                "budget_limited",
-                f"turn budget reached ({state.turns_used}/{state.max_turns})",
-            )
-        if state.max_turns > _NO_LIMIT and state.turns_used >= state.max_turns:
-            self._persist()
-            return GoalDecision(
-                "continue",
-                "active",
-                prompt=render_goal_prompt(state, wrap_up=True),
-                reason="turn budget reached; wrapping up",
-                wrap_up=True,
-            )
 
         if ctx.auto and ctx.tool_calls == 0:
             state.no_progress_turns += 1
@@ -586,20 +510,6 @@ class GoalController:
         state.wall_seconds_used += max(0.0, self._now() - verify_started)
         state.tokens_used += max(0, verdict.tokens)
         state.updated_at = self._now()
-        if state.max_tokens > _NO_LIMIT and state.tokens_used >= state.max_tokens:
-            return self._finish(
-                "budget_limited",
-                f"token budget reached ({state.tokens_used}/{state.max_tokens})",
-            )
-        if (
-            state.max_wall_seconds > _NO_LIMIT
-            and state.wall_seconds_used >= state.max_wall_seconds
-        ):
-            return self._finish(
-                "budget_limited",
-                "wall-clock budget reached "
-                f"({state.wall_seconds_used:.0f}/{state.max_wall_seconds}s)",
-            )
 
         state.verifier_failures = 0
         state.last_verdict = verdict.verdict
@@ -667,7 +577,6 @@ def parse_goal_args(argument: str) -> GoalArgs:
         return GoalArgs(action=_LIFECYCLE[rest])
 
     check: str | None = None
-    max_turns: int | None = None
     while True:
         if rest == "--check" or rest.startswith("--check "):
             value, rest = _take_flag_value(rest[len("--check") :].lstrip())
@@ -676,19 +585,9 @@ def parse_goal_args(argument: str) -> GoalArgs:
             check = value
             continue
         if rest == "--budget" or rest.startswith("--budget "):
-            value, rest = _take_flag_value(rest[len("--budget") :].lstrip())
-            try:
-                parsed = int(value)
-            except ValueError as exc:
-                raise ValueError(
-                    "--budget needs zero or a positive integer (0 = no limit)"
-                ) from exc
-            if parsed < 0:
-                raise ValueError(
-                    "--budget needs zero or a positive integer (0 = no limit)"
-                )
-            max_turns = parsed
-            continue
+            raise ValueError(
+                "--budget is gone: a goal has no turn ceiling and stops on a verdict"
+            )
         break
 
     objective = rest.strip()
@@ -697,7 +596,7 @@ def parse_goal_args(argument: str) -> GoalArgs:
     if len(objective) > _OBJECTIVE_LIMIT:
         raise ValueError(f"goal objective is longer than {_OBJECTIVE_LIMIT} characters")
     return GoalArgs(
-        action="set", objective=objective, check=check, max_turns=max_turns
+        action="set", objective=objective, check=check
     )
 
 
@@ -715,28 +614,20 @@ def goal_tokens(usage: Usage, api: str) -> int:
     return prompt + usage.output
 
 
-def render_goal_prompt(state: GoalState, *, wrap_up: bool = False) -> str:
+def render_goal_prompt(state: GoalState) -> str:
     """The user-visible continuation directive; objective is untrusted data."""
 
-    if wrap_up:
-        instruction = (
-            "The turn budget is reached. Do not start new work. Summarize useful "
-            "progress, remaining work, blockers and the next step."
-        )
-    else:
-        instruction = (
-            "Take the next concrete step. Do not restate the plan. Do not ask the "
-            "user a question unless the goal is blocked. The controller runs the "
-            "configured check; use the last verification reason below to decide "
-            "the next step. Do not start work outside the objective."
-        )
+    instruction = (
+        "Take the next concrete step. Do not restate the plan. Do not ask the "
+        "user a question unless the goal is blocked. The controller runs the "
+        "configured check; use the last verification reason below to decide "
+        "the next step. Do not start work outside the objective."
+    )
     return (
         "[goal] Continue working toward the objective below.\n\n"
         f"<objective>\n{_escape(state.objective)}\n</objective>\n\n"
-        f"Budget: turn {state.turns_used}/{_budget_text(state.max_turns)}, "
-        f"tokens {state.tokens_used}/{_budget_text(state.max_tokens)}, "
-        f"elapsed {state.wall_seconds_used:.0f}/"
-        f"{_budget_text(state.max_wall_seconds)}s.\n"
+        f"Usage so far: {state.turns_used} turns, {state.tokens_used} tokens, "
+        f"{state.wall_seconds_used:.0f}s. Nothing bounds this but the objective.\n"
         f"Last verification: {state.last_verdict or 'none'} — "
         f"{state.last_reason or 'no verdict yet'}\n\n"
         f"{instruction}"
@@ -751,11 +642,6 @@ def _check_key(verdict: GoalVerdict) -> str:
 
 def _escape(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-
-def _budget_text(value: int) -> str:
-    """A ceiling as the continuation prompt names it; zero means it is off."""
-    return "unlimited" if value <= _NO_LIMIT else str(value)
 
 
 def _take_flag_value(text: str) -> tuple[str, str]:

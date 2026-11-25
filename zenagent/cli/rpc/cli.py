@@ -61,8 +61,6 @@ async def _run(args) -> int:
         allow_protected=args.allow_protected,
         mode=mode,
         retries=args.retries,
-        max_turns=args.max_turns,
-        max_cost=args.max_cost,
         trace=args.trace,
         metrics=args.metrics,
     )

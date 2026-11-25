@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -106,7 +105,6 @@ class ChatController:
         self._goal_usage_at_start = Usage()
         self._goal_subagent_tokens_at_start = 0
         self._goal_started_at: float | None = None
-        self._goal_watchdog: asyncio.Task | None = None
         runtime.agent.subscribe(self._on_event)
 
     # -- snapshots ----------------------------------------------------------
@@ -286,12 +284,11 @@ class ChatController:
         objective: str,
         *,
         check: str | None = None,
-        max_turns: int | None = None,
     ) -> str:
         """Set a goal and start its first turn (or defer while busy)."""
 
         return goal_chat.start_goal(
-            self, objective, check=check, max_turns=max_turns
+            self, objective, check=check
         )
 
     def maybe_continue_goal(self) -> None:
@@ -730,11 +727,6 @@ class ChatController:
             failure = bug_notice(repr(exc))
         finally:
             termination = "error" if failure else self.runtime.agent.termination
-            if self._goal_watchdog is not None:
-                self._goal_watchdog.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await self._goal_watchdog
-                self._goal_watchdog = None
             # Aborts and provider errors skip message_end; do not leave a row
             # ticking after the run is over.
             self._builder.finalize()
@@ -748,6 +740,14 @@ class ChatController:
                 # evidence (app/error_notice.py).
                 self._last_error = failure or run_error_notice(
                     self.runtime.agent.error_message
+                )
+            if termination == "loop_detected":
+                # A guard kill is not a token the reader should have to decode:
+                # the transcript line names the batch the model kept repeating.
+                detail = self.runtime.agent.termination_detail
+                text = t("notice.loop_detected")
+                self._notices.append(
+                    TranscriptNotice("info", f"{text} ({detail})" if detail else text)
                 )
             self._notify()
             # A steer typed after the last step boundary never reached the
@@ -833,7 +833,9 @@ class ChatController:
         if event.type == "tool_execution_end":
             self._turn_tool_calls += 1
         elif event.type == "message_end":
-            goal_chat.check_goal_budget(self)
+            # Usage is charged after the turn (settle_goal_turn); nothing here
+            # needs to watch a budget any more.
+            pass
         changed = self._builder.apply(event)
         if (
             event.type in ("tool_execution_start", "tool_execution_end")

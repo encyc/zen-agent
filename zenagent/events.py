@@ -102,9 +102,13 @@ class AgentEvent:
     #: Provider requests made this run, attached to ``agent_end`` (also 0 when
     #: the run ended before the first request, e.g. an early abort).
     turns: int | None = None
-    #: Why the run ended (``"stop"``, ``"max_turns"``, ``"aborted"``, ...),
+    #: Why the run ended (``"stop"``, ``"loop_detected"``, ``"aborted"``, ...),
     #: attached to ``agent_end``; mirrors ``AgentState.termination``.
     termination: str | None = None
+    #: The reason behind a termination that has one, attached to ``agent_end``.
+    #: ``loop_detected`` carries the repeated batch here ("5x bash({...})") so a
+    #: frontend can explain the stop instead of showing a bare token.
+    detail: str | None = None
 
 
 class Aborted(Exception):

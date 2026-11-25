@@ -52,8 +52,6 @@ const ROLES: SwarmRole[] = [
     root: '/Users/e2e/.zenagent-workspaces/research',
     tools: null,
     inheritProject: false,
-    maxTurns: 30,
-    maxCost: 1.5,
     missingCredentials: [],
     supportsVision: true,
   },
@@ -71,8 +69,6 @@ const ROLES: SwarmRole[] = [
     root: '/Users/e2e/.zenagent-workspaces/builder',
     tools: null,
     inheritProject: false,
-    maxTurns: 30,
-    maxCost: 1.5,
     missingCredentials: [],
     supportsVision: false,
   },
@@ -269,7 +265,6 @@ function setAgent(rows: Room, id: string, state: SwarmAgentState['state'], task:
 /** A role view built the way the host builds one from a saved manifest. */
 function roleView(rows: Room, id: string, manifest: Record<string, unknown>): SwarmRole {
   const prior = rows.swarmRoles.find((role) => role.id === id)
-  const limits = (manifest.limits ?? {}) as Record<string, unknown>
   const tools = Array.isArray(manifest.tools) ? manifest.tools.map(String) : null
   const rawServers = manifest.mcpServers
   const mcpServers =
@@ -292,8 +287,6 @@ function roleView(rows: Room, id: string, manifest: Record<string, unknown>): Sw
     root: String(manifest.root ?? `/Users/e2e/.zenagent-workspaces/${id}`),
     tools,
     inheritProject: manifest.inheritProject === true,
-    maxTurns: typeof limits.maxTurns === 'number' ? limits.maxTurns : null,
-    maxCost: typeof limits.maxCost === 'number' ? limits.maxCost : null,
     missingCredentials: prior?.missingCredentials ?? [],
     supportsVision: prior?.supportsVision ?? false,
   }

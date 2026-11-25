@@ -102,7 +102,8 @@ agent_loop(prompt, state, config)      agent/loop.py
    │
    ├─ AssistantEvent 流 → 更新 partial → 发出 AgentEvent 给订阅者
    │
-   ├─ 终止？ stop / length / tool_use / error / aborted / max_turns / max_cost
+   ├─ 终止？ stop / tool_terminate / length / tool_use（继续）/ error / aborted /
+   │        loop_detected（连续重复同一批调用，守卫打断）/ no_stream
    │
    ├─ tool_use：校验参数 → before_tool_call 权限门 → 并行/串行执行
    │     └─ 每个结果都写回 state（顺序、id 一一对应）

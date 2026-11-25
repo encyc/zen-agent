@@ -187,7 +187,8 @@ def _status_for(child: Agent) -> str:
         return "aborted"
     if child.error_message or termination in ("error", "no_stream"):
         return "error"
-    if termination in ("max_turns", "max_cost"):
+    if termination in ("max_turns", "max_cost", "loop_detected"):
+        # max_turns/max_cost are historical: no child produces them any more.
         return "truncated"
     return "ok"
 
@@ -260,7 +261,7 @@ class TaskRun:
     details: dict = field(default_factory=dict)
     #: Spend keys (subagent_cost/subagent_tokens) are forwarded to the hooks
     #: on the FIRST collection only; a re-wait re-reads the envelope text but
-    #: must not double-count the run into the HUD or the parent's max_cost.
+    #: must not double-count the run into the HUD.
     spend_reported: bool = False
     _done: asyncio.Event = field(default_factory=asyncio.Event)
     _task: asyncio.Task | None = None
@@ -629,8 +630,6 @@ def construct_child(
     stream_fn: StreamFn | None,
     system_prompt: str,
     child_tools: list[AgentTool],
-    max_turns: int,
-    max_cost: float | None,
     artifact_sink: ArtifactSink | None,
     before_tool_call: Callable | None,
 ) -> Agent:
@@ -643,8 +642,6 @@ def construct_child(
                 thinking=thinking,
                 stream_fn=stream_fn,
                 transform_context=guard.transform,
-                max_turns=max_turns,
-                max_cost=max_cost,
                 artifact_sink=artifact_sink,
                 before_tool_call=before_tool_call,
             )

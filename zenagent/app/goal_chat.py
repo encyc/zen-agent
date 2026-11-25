@@ -30,12 +30,11 @@ def start_goal(
     objective: str,
     *,
     check: str | None = None,
-    max_turns: int | None = None,
 ) -> str:
     goal = _goal_controller(chat)
     if goal is None:
         raise RuntimeError("goal controller is not wired")
-    state = goal.set(objective, check=check, max_turns=max_turns)
+    state = goal.set(objective, check=check)
     if chat.busy:
         chat._notify()
         return t("cmdmsg.goal_start_deferred")
@@ -86,8 +85,6 @@ def begin_goal_turn(chat: ChatController, goal: bool) -> None:
     if controller is None or state is None:
         return
     controller.note_turn_start(auto=goal)
-    if goal:
-        chat._goal_watchdog = asyncio.create_task(_watch(chat))
 
 
 def settle_goal_turn(
@@ -166,30 +163,6 @@ def _context(chat: ChatController, termination: str | None) -> GoalTurnContext:
         ),
         user_queued=False,
     )
-
-
-def check_goal_budget(chat: ChatController) -> None:
-    if not chat._goal_turn:
-        return
-    goal = _goal_controller(chat)
-    if goal is None or chat._goal_started_at is None:
-        return
-    if goal.state is None or goal.state.status != "active":
-        return
-    tokens = _goal_tokens_delta(chat) + _goal_subagent_tokens_delta(chat)
-    elapsed = time.monotonic() - chat._goal_started_at
-    if goal.budget_exceeded(tokens_delta=tokens, elapsed_s=elapsed):
-        goal.note_budget_abort()
-        chat.runtime.agent.abort()
-
-
-async def _watch(chat: ChatController) -> None:
-    try:
-        while True:
-            await asyncio.sleep(5)
-            check_goal_budget(chat)
-    except asyncio.CancelledError:
-        return
 
 
 def _goal_tokens_delta(chat: ChatController) -> int:

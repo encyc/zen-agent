@@ -4,7 +4,7 @@
 
 ```bash
 zen rpc [--model ID] [--yes] [--mode plan|ask|auto] [--read-only]
-        [--thinking LEVEL] [--max-turns N] [--max-cost X] [--retries N]
+        [--thinking LEVEL] [--retries N]
         [--resume [SESSION]] [--no-mcp] [--mcp-file PATH] [--mcp-server NAME]
         [--no-skills] [--no-templates] [--no-auto-compact] [--extension PATH]
         [--no-context-files] [--trace PATH] [--metrics PATH]
@@ -30,7 +30,7 @@ TUI/REPL 是同一套实现（headless `-p` 例外，它自己装配 Agent，见
 |---|---|---|
 | `prompt` | `text`, `images?` | 跑一轮；`images` 是图片路径列表（同 `--image` 的校验：非 vision 模型/坏文件报 `error`）。运行中再发返回 `error`（`message: "busy"`） |
 | `cancel` | — | abort 当前 run |
-| `status` | — | running / busy / messages / model / session / mode / tools / usage / termination / follow_ups / steering / continuing / cost，以及 TUI reducer 字段：thinking / context_used / context_window / cache_hit_ratio / turn_ms / todos / last_error / pending / jobs / subagents / active_subagent / subagent_cost / subagent_tokens |
+| `status` | — | running / busy / messages / model / session / mode / tools / usage / termination / detail / follow_ups / steering / continuing / cost，以及 TUI reducer 字段：thinking / context_used / context_window / cache_hit_ratio / turn_ms / todos / last_error / pending / jobs / subagents / active_subagent / subagent_cost / subagent_tokens |
 | `shutdown` | — | 等运行中的 run abort 后退出 |
 | `steer` | `text` | 插话（下一个工具轮边界注入）；空闲时进入 follow-up 排队 |
 | `follow_up` | `text` | 接续：让运行中的本轮在该停时继续（同一 run 的普通 user 回合）；空闲时进入下一次 run 的排队 |
@@ -48,10 +48,12 @@ TUI/REPL 是同一套实现（headless `-p` 例外，它自己装配 Agent，见
 - `result` / `error` 的既有键与 v1 形状一致；v2 只做**增量字段**，v1 客户端忽略未知键即可。
 - `prompt` 的 `result`：`ok`（provider 失败或提前终止时为 `false`）、`text`（流式 delta；
   provider 只发终止消息时回退到该条 assistant 消息）、`usage`、`termination`、`error`
-  （`ok:false` 时的原因），有 Runtime 时再带 `session`。
+  （`ok:false` 时的原因）、`detail`（终止有原因时的说明，如 `loop_detected` 重复的调用批次），
+  有 Runtime 时再带 `session`。`ok:false` 的轮次照样带 `usage`——它花掉的 token 仍然计入。
 - `event`：`serialize_event` 的投影，带 `message` / `new_messages`（最多 20 条的
   bounded 投影）、`args`（JSON 文本）、`result_text`、工具 `details`（diff/exit_code/
-  task_id/todo phases/子代理花费等结构化字段）、`duration_ms`、`tool_stats`，以及
+  task_id/todo phases/子代理花费等结构化字段）、`duration_ms`、`tool_stats`；`agent_end`
+  另带 `termination` 与 `detail`，以及
   assistant 失败时的 `assistant_event.error`；`partial_result` 仍是有界尾段。所有文本
   字段上限 4000 字符。
 - `approval_request`（服务器发起的事件）：
@@ -140,7 +142,8 @@ print(agent.messages[-1].content[0].text)
 | `await agent.wait_for_idle()` | 等 run 结束 |
 | `agent.messages` | 只读历史 |
 | `agent.replace_messages(...)` / `agent.reset()` | 恢复/清空会话 |
-| `agent.termination` | `None`/`stop`/`length`/`error`/`aborted`/`max_turns`/`max_cost` |
+| `agent.termination` | `None`/`stop`/`length`/`error`/`aborted`/`loop_detected`（`max_turns`/`max_cost` 为历史值，不再产生） |
+| `agent.termination_detail` | 终止有原因时的说明（`loop_detected` 时形如 `5x bash({...})`），否则 `None` |
 
 需要会话、MCP、skills、审批与命令时用 app 层：`Runtime.bootstrap(RuntimeOptions(...))`
 + `ChatController`，见 `examples/embed.py`；RPC 就是这套对象之上的 JSONL 协议。

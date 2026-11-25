@@ -143,6 +143,26 @@ def test_serialize_event_carries_bounded_partial_tool_output():
     assert "partial_result" not in serialize_event(AgentEvent(type="turn_start"))
 
 
+def test_serialize_event_carries_the_end_reason_and_its_detail():
+    from zenagent.cli.rpc import serialize_event
+    from zenagent.events import AgentEvent
+
+    end = serialize_event(
+        AgentEvent(
+            type="agent_end",
+            termination="loop_detected",
+            detail='5x echo({"x": 1})',
+        )
+    )
+    assert end["termination"] == "loop_detected"
+    assert end["detail"] == '5x echo({"x": 1})'
+
+    # A normal finish has no detail to explain: the key stays off the wire.
+    plain = serialize_event(AgentEvent(type="agent_end", termination="stop"))
+    assert plain["termination"] == "stop"
+    assert "detail" not in plain
+
+
 def test_serialize_event_carries_tool_args_result_and_duration():
     from zenagent.agent.loop import ToolResultAgent
     from zenagent.cli.rpc import serialize_event

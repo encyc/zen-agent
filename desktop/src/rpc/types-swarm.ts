@@ -21,8 +21,6 @@ export interface SwarmRole {
   root: string
   tools: string[] | null
   inheritProject: boolean
-  maxTurns: number | null
-  maxCost: number | null
   missingCredentials: string[]
   /** The built role's model takes image input; the library view omits it. */
   supportsVision?: boolean

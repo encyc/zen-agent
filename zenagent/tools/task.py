@@ -38,7 +38,7 @@ from zenagent.agent.subagents_runtime import (
     get_task_manager,
     run_child,
 )
-from zenagent.config import DEFAULT_TASK_MAX_TURNS, DEFAULT_TASK_TIMEOUT_S
+from zenagent.config import DEFAULT_TASK_TIMEOUT_S
 from zenagent.prompts import render, tool_description
 from zenagent.prompts.registry import read_block
 from zenagent.providers.catalog import Model
@@ -46,13 +46,9 @@ from zenagent.providers.registry import StreamFn
 from zenagent.types import TextContent
 
 __all__ = [
-    "DEFAULT_TASK_MAX_TURNS",
     "TaskTool",
     "build_task_tool",
 ]
-
-#: ``DEFAULT_TASK_MAX_TURNS`` is re-exported from ``zenagent.config`` and can be
-#: overridden per run by ``[task].max_turns``.
 
 _SAFE_NAME = re.compile(r"[^A-Za-z0-9_.-]")
 
@@ -75,8 +71,6 @@ def build_task_tool(
     api_key: str | Callable[[], str] = "",
     stream_fn: StreamFn | None = None,
     thinking: str | Callable[[], str | None] | None = None,
-    max_turns: int = DEFAULT_TASK_MAX_TURNS,
-    max_cost: float | None = None,
     timeout_s: int = DEFAULT_TASK_TIMEOUT_S,
     live_tools: Callable[[], Sequence[AgentTool]] | None = None,
     mode: str | Callable[[], str | None] | None = None,
@@ -98,8 +92,8 @@ def build_task_tool(
     MCP refreshes and ``/mode`` switches apply to the next spawn. A ``model``
     argument resolves through ``resolve_model`` (catalog + api key) and, when
     present, overrides the parent's model for that child — thinking follows
-    the resolved model's ``reasoning`` flag. ``max_turns``,
-    ``timeout_s`` and ``limits`` come from ``[task]`` in config.toml
+    the resolved model's ``reasoning`` flag. ``timeout_s`` and ``limits`` come
+    from ``[task]`` in config.toml
     (``zenagent.config``); ``timeout_s <= 0`` disables the wall-clock watchdog.
     ``before_tool_call`` is the parent's harness gate: every child tool call
     consults it, so deny patterns and command policy reach subagents too
@@ -185,7 +179,6 @@ def build_task_tool(
         child_system_prompt = render(
             read_block("task_child_system"),
             {
-                "max_turns": str(max_turns),
                 "child_tools": ", ".join(tool.name for tool in child_tools) or "(none)",
             },
         )
@@ -215,8 +208,6 @@ def build_task_tool(
                 stream_fn=stream_fn,
                 system_prompt=child_system_prompt,
                 child_tools=child_tools,
-                max_turns=max_turns,
-                max_cost=max_cost,
                 artifact_sink=artifact_sink,
                 before_tool_call=before_tool_call,
             )
@@ -257,8 +248,6 @@ def build_task_tool(
             stream_fn=stream_fn,
             system_prompt=child_system_prompt,
             child_tools=child_tools,
-            max_turns=max_turns,
-            max_cost=max_cost,
             artifact_sink=artifact_sink,
             before_tool_call=before_tool_call,
         )

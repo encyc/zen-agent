@@ -105,13 +105,20 @@ def test_limits_are_global_only(tmp_path, monkeypatch):
 
 
 def test_task_knobs_share_the_same_registry(tmp_path):
+    path = write_config(tmp_path, "[task]\ntimeout_s = 12\n")
+    config = load_user_config(path)
+    assert config.task_timeout_s == 12
+    knob = KNOB_BY_KEY["task.timeout_s"]
+    assert knob.attr == "task_timeout_s"
+    assert getattr(config, knob.attr) == 12
+
+
+def test_retired_task_keys_are_accepted_and_ignored(tmp_path, caplog):
     path = write_config(tmp_path, "[task]\nmax_turns = 12\nmax_cost = 0.5\n")
     config = load_user_config(path)
-    assert config.task_max_turns == 12
-    assert config.task_max_cost == 0.5
-    knob = KNOB_BY_KEY["task.max_turns"]
-    assert knob.attr == "task_max_turns"
-    assert getattr(config, knob.attr) == 12
+    assert not hasattr(config, "task_max_turns")
+    assert not hasattr(config, "task_max_cost")
+    assert "max_turns" in caplog.text and "retired" in caplog.text
 
 
 def test_coerce_rejects_booleans_and_floats_for_integer_knobs():
@@ -123,10 +130,11 @@ def test_coerce_rejects_booleans_and_floats_for_integer_knobs():
     assert coerce_value(knob, 4096.0, Path("/tmp/config.toml")) == 4096
 
 
-def test_nullable_knob_accepts_none():
-    knob = KNOB_BY_KEY["task.max_cost"]
-    assert coerce_value(knob, None, Path("/tmp/config.toml")) is None
-    assert coerce_value(knob, 2.5, Path("/tmp/config.toml")) == 2.5
+def test_limits_knobs_are_never_nullable():
+    """Every surviving [limits] knob has a concrete value (no "unset" state)."""
+    from zenagent.limits import LIMITS
+
+    assert all(knob.nullable is False for knob in LIMITS)
 
 
 def test_parse_limits_unknown_field_error_is_actionable(tmp_path):
@@ -161,8 +169,8 @@ def test_describe_lists_only_explicit_knobs():
 
 def test_render_block_is_empty_without_explicit_values():
     assert render_limits_block(Limits()) == ""
-    block = render_limits_block(Limits().with_value("max_turns", 40))
-    assert "[limits.agent]" in block and "max_turns = 40" in block
+    block = render_limits_block(Limits().with_value("loop_guard_threshold", 40))
+    assert "[limits.agent]" in block and "loop_guard_threshold = 40" in block
 
 
 def test_write_limits_leaves_the_rest_of_the_file_alone(tmp_path):
@@ -187,27 +195,27 @@ def test_write_limits_leaves_the_rest_of_the_file_alone(tmp_path):
 def test_reset_deletes_the_key_so_defaults_are_inherited(tmp_path):
     path = write_config(tmp_path, "[limits.agent]\nmax_turns = 40\n")
     write_limits(path, Limits())
-    assert "max_turns" not in path.read_text(encoding="utf-8")
-    assert load_user_config(path).limits.max_turns == Limits().max_turns
+    assert "loop_guard_threshold" not in path.read_text(encoding="utf-8")
+    assert load_user_config(path).limits.loop_guard_threshold == Limits().loop_guard_threshold
 
 
 def test_rewrite_replaces_in_place_and_keeps_one_block(tmp_path):
     path = write_config(tmp_path, 'default_model = "x"\n')
-    write_limits(path, Limits().with_value("max_turns", 40))
-    write_limits(path, Limits().with_value("max_turns", 41))
+    write_limits(path, Limits().with_value("loop_guard_threshold", 40))
+    write_limits(path, Limits().with_value("loop_guard_threshold", 41))
     text = path.read_text(encoding="utf-8")
     assert text.count("[limits.agent]") == 1
-    assert "max_turns = 41" in text
+    assert "loop_guard_threshold = 41" in text
     assert text.count("Managed by zen") == 1
 
 
 def test_managed_write_keeps_task_and_limits_apart(tmp_path):
-    path = write_config(tmp_path, "[task]\nmax_turns = 250\nkeep_transcripts = 5\n")
+    path = write_config(tmp_path, "[task]\ntimeout_s = 250\nkeep_transcripts = 5\n")
     tables = read_managed(path)
     tables.setdefault("limits.skills", {})["max_index_bytes"] = 16384
     write_managed(path, tables)
     config = load_user_config(path)
-    assert config.task_max_turns == 250
+    assert config.task_timeout_s == 250
     assert config.task_keep_transcripts == 5
     assert config.limits.max_index_bytes == 16384
 
@@ -215,7 +223,7 @@ def test_managed_write_keeps_task_and_limits_apart(tmp_path):
     tables.pop("limits.skills")
     write_managed(path, tables)
     config = load_user_config(path)
-    assert config.task_max_turns == 250
+    assert config.task_timeout_s == 250
     assert config.limits.explicit == frozenset()
 
 
@@ -224,7 +232,7 @@ def test_writer_refuses_unknown_keys_instead_of_deleting_them(tmp_path):
     from zenagent.limits import LimitsWriteError
 
     with pytest.raises(LimitsWriteError, match="unknown keys"):
-        write_limits(path, Limits().with_value("max_turns", 10))
+        write_limits(path, Limits().with_value("loop_guard_threshold", 10))
     assert "future_knob = 3" in path.read_text(encoding="utf-8")
 
 
@@ -240,7 +248,7 @@ def test_writer_preserves_mode(tmp_path):
 
     path = write_config(tmp_path, 'default_model = "x"\n')
     path.chmod(0o600)
-    write_limits(path, Limits().with_value("max_turns", 7))
+    write_limits(path, Limits().with_value("loop_guard_threshold", 7))
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
@@ -296,5 +304,5 @@ def test_registry_defaults_match_the_config_defaults():
 def test_user_config_defaults_do_not_share_the_limits_object():
     """A mutable default would leak one runtime's edit into the next."""
     first, second = UserConfig(), UserConfig()
-    first.limits = Limits().with_value("max_turns", 3)
+    first.limits = Limits().with_value("loop_guard_threshold", 3)
     assert second.limits == Limits()

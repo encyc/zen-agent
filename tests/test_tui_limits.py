@@ -43,7 +43,7 @@ async def test_dispatch_limits_lists_the_registry(fake_runtime, config_file):
         assert len(manager._rows) == len(ALL_KNOBS)
         options = list(manager.query_one("#limits-list", OptionList).options)
         assert any(
-            "limits.agent.max_turns" in str(option.prompt) for option in options
+            "limits.agent.loop_guard_threshold" in str(option.prompt) for option in options
         )
 
 
@@ -53,7 +53,7 @@ async def test_edit_writes_managed_table_and_adopts_live(fake_runtime, config_fi
         await app._dispatch_command("limits", "")
         await pilot.pause()
         manager = app.screen
-        _select(manager, "limits.agent.max_turns")
+        _select(manager, "limits.agent.loop_guard_threshold")
         await pilot.press("enter")
         await pilot.pause()
         editor = app.screen
@@ -61,11 +61,11 @@ async def test_edit_writes_managed_table_and_adopts_live(fake_runtime, config_fi
         await pilot.press("enter")
         await pilot.pause()
         managed = read_managed(config_file)
-        assert managed["limits.agent"]["max_turns"] == 42
+        assert managed["limits.agent"]["loop_guard_threshold"] == 42
         # reload_into pushed the file into the live session's config.
-        assert app.runtime.user_config.limits.value("max_turns") == 42
+        assert app.runtime.user_config.limits.value("loop_guard_threshold") == 42
         row = next(
-            r for r in manager._rows if r.key == "limits.agent.max_turns"
+            r for r in manager._rows if r.key == "limits.agent.loop_guard_threshold"
         )
         assert row.explicit is True and row.value == 42
 
@@ -73,40 +73,18 @@ async def test_edit_writes_managed_table_and_adopts_live(fake_runtime, config_fi
 async def test_reset_removes_the_managed_key(fake_runtime, config_file):
     from zenagent.limits import write_managed
 
-    write_managed(config_file, {"limits.agent": {"max_turns": 7}})
+    write_managed(config_file, {"limits.agent": {"loop_guard_threshold": 7}})
     app = ZenAgentApp(fake_runtime)
     async with app.run_test(size=(120, 40)) as pilot:
         await app._dispatch_command("limits", "")
         await pilot.pause()
         manager = app.screen
-        _select(manager, "limits.agent.max_turns")
+        _select(manager, "limits.agent.loop_guard_threshold")
         await pilot.press("r")
         await pilot.pause()
         await pilot.press("y")  # Confirm
         await pilot.pause()
-        assert "max_turns" not in read_managed(config_file).get("limits.agent", {})
-
-
-async def test_nullable_empty_means_off(fake_runtime, config_file):
-    """An empty value on a nullable knob clears the key: uncapped is the default."""
-    from zenagent.limits import KNOB_BY_KEY, write_managed
-
-    nullable = next(knob for knob in KNOB_BY_KEY.values() if knob.nullable)
-    write_managed(config_file, {nullable.table: {nullable.name: 5}})
-    app = ZenAgentApp(fake_runtime)
-    async with app.run_test(size=(120, 40)) as pilot:
-        await app._dispatch_command("limits", "")
-        await pilot.pause()
-        manager = app.screen
-        _select(manager, nullable.key)
-        await pilot.press("enter")
-        await pilot.pause()
-        editor = app.screen
-        editor.query_one("#value-input", Input).value = ""
-        await pilot.press("enter")
-        await pilot.pause()
-        # TOML cannot hold None: "off" renders as the key being absent.
-        assert nullable.name not in read_managed(config_file).get(nullable.table, {})
+        assert "loop_guard_threshold" not in read_managed(config_file).get("limits.agent", {})
 
 
 async def test_edit_rejects_out_of_range(fake_runtime, config_file):
@@ -115,7 +93,7 @@ async def test_edit_rejects_out_of_range(fake_runtime, config_file):
         await app._dispatch_command("limits", "")
         await pilot.pause()
         manager = app.screen
-        _select(manager, "limits.agent.max_turns")
+        _select(manager, "limits.agent.loop_guard_threshold")
         await pilot.press("enter")
         await pilot.pause()
         editor = app.screen
@@ -138,5 +116,5 @@ def test_repl_renders_limits_grouped_by_table(config_file):
     )
     text = "\n".join(lines)
     assert "limits.agent:" in text
-    assert "limits.agent.max_turns" in text
+    assert "limits.agent.loop_guard_threshold" in text
     assert str(config_file) in text

@@ -120,8 +120,6 @@ class RuntimeOptions:
     allow_protected: bool = False
     mode: str | None = None
     retries: int = 0
-    max_turns: int | None = None
-    max_cost: float | None = None
     #: Explicit key override (REPL/SDK embedders); skips the catalog lookup.
     api_key: str | None = None
     #: JSONL trace of turns/tool calls (``--trace``).

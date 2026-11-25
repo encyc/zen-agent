@@ -79,8 +79,6 @@ class RoleManifest:
     tools: list[str] | None = None
     root: Path = field(default_factory=Path)
     inherit_project: bool = False
-    max_turns: int | None = None
-    max_cost: float | None = None
     mode: str = DEFAULT_MODE
     missing_credentials: list[str] = field(default_factory=list)
 
@@ -246,10 +244,6 @@ def parse_role(
     except OSError as exc:
         warnings.append(f"role {role_id}: cannot create workspace {root}: {exc}")
 
-    limits = raw.get("limits")
-    if not isinstance(limits, dict):
-        limits = {}
-
     raw_mode = str(raw.get("mode") or DEFAULT_MODE)
     mode = normalize_mode(raw_mode)
     if mode is None:
@@ -278,8 +272,6 @@ def parse_role(
         tools=tools,
         root=root,
         inherit_project=bool(inherit),
-        max_turns=_as_int(limits.get("maxTurns")),
-        max_cost=_as_float(limits.get("maxCost")),
         mode=mode,
         missing_credentials=_dedupe(missing_credentials),
     )

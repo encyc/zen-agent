@@ -22,24 +22,24 @@ async def test_goal_set_status_pause_resume_clear(services, monkeypatch):
     assert "cleared" in cleared.message
 
 
-async def test_goal_check_and_budget_flags(services, monkeypatch):
+async def test_goal_check_flag(services, monkeypatch):
     captured = {}
 
-    def fake_start(objective, *, check=None, max_turns=None):
-        captured.update(objective=objective, check=check, max_turns=max_turns)
+    def fake_start(objective, *, check=None):
+        captured.update(objective=objective, check=check)
         return "goal started"
 
     monkeypatch.setattr(services.chat, "start_goal", fake_start)
     registry = build_default_commands(services)
-    result = await registry.dispatch(
-        "goal", '--check "pytest -q" --budget 3 fix tests'
-    )
+    result = await registry.dispatch("goal", '--check "pytest -q" fix tests')
     assert result.message == "goal started"
-    assert captured == {
-        "objective": "fix tests",
-        "check": "pytest -q",
-        "max_turns": 3,
-    }
+    assert captured == {"objective": "fix tests", "check": "pytest -q"}
+
+
+async def test_goal_budget_flag_is_rejected(services):
+    registry = build_default_commands(services)
+    result = await registry.dispatch("goal", "--budget 3 fix tests")
+    assert "--budget" in result.message
 
 
 async def test_goal_rejects_bad_arguments(services):

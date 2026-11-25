@@ -431,11 +431,11 @@ setPaneSink({
       }))
     }
   },
-  applyUsage: (session, usage: Usage | null, turnMs, termination) => {
+  applyUsage: (session, usage: Usage | null, turnMs, termination, detail) => {
     if (session === null) return
     const pane = usePanesStore.getState().panes.find((entry) => entry.path === session)
     if (pane === undefined) return
-    pane.chat.getState().pushUsage(usage, turnMs, termination)
+    pane.chat.getState().pushUsage(usage, turnMs, termination, detail)
     pane.chat.getState().finalize()
     usePanesStore.setState((state) => ({
       panes: state.panes.map((entry) =>

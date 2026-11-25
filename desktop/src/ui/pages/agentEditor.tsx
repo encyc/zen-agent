@@ -62,8 +62,6 @@ export function AgentEditor(props: {
   const [tools, setTools] = useState(row?.tools?.join(', ') ?? '')
   const [root, setRoot] = useState(row?.root ?? '')
   const [mode, setMode] = useState<string>(row?.mode ?? 'ask')
-  const [maxTurns, setMaxTurns] = useState(row?.maxTurns === null ? '' : String(row?.maxTurns ?? ''))
-  const [maxCost, setMaxCost] = useState(row?.maxCost === null ? '' : String(row?.maxCost ?? ''))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -75,16 +73,6 @@ export function AgentEditor(props: {
       setError(t('swarm.roleInvalidId'))
       return
     }
-    const turns = maxTurns.trim() === '' ? null : Number(maxTurns)
-    const cost = maxCost.trim() === '' ? null : Number(maxCost)
-    if (
-      (turns !== null && (!Number.isInteger(turns) || turns <= 0)) ||
-      (cost !== null && (!Number.isFinite(cost) || cost < 0))
-    ) {
-      setError(t('swarm.roleInvalidNumber'))
-      return
-    }
-
     let mcpServers: Record<string, unknown> | null = null
     if (mcpText.trim() !== '') {
       try {
@@ -99,9 +87,6 @@ export function AgentEditor(props: {
       }
     }
 
-    const limits: Record<string, number> = {}
-    if (turns !== null) limits.maxTurns = turns
-    if (cost !== null) limits.maxCost = cost
     const toolList = splitList(tools)
     // Nulls delete a field; omitted keys keep whatever the file already has.
     const manifest: Record<string, unknown> = {
@@ -118,7 +103,6 @@ export function AgentEditor(props: {
       inheritProject,
       root: root.trim() === '' ? null : root.trim(),
       tools: toolList.length > 0 ? toolList : null,
-      limits: Object.keys(limits).length > 0 ? limits : null,
     }
 
     setSaving(true)
@@ -328,33 +312,6 @@ export function AgentEditor(props: {
               {t(`mode.${entry}`)}
             </button>
           ))}
-        </div>
-      </div>
-
-      <div className={css.grid2}>
-        <div className={css.field}>
-          <label className={css.label} htmlFor="agent-max-turns">
-            {t('swarm.roleMaxTurns')}
-          </label>
-          <input
-            id="agent-max-turns"
-            className={css.input}
-            inputMode="numeric"
-            value={maxTurns}
-            onChange={(event) => setMaxTurns(event.target.value)}
-          />
-        </div>
-        <div className={css.field}>
-          <label className={css.label} htmlFor="agent-max-cost">
-            {t('swarm.roleMaxCost')}
-          </label>
-          <input
-            id="agent-max-cost"
-            className={css.input}
-            inputMode="decimal"
-            value={maxCost}
-            onChange={(event) => setMaxCost(event.target.value)}
-          />
         </div>
       </div>
 

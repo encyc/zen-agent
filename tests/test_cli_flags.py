@@ -12,8 +12,6 @@ SHARED_FLAGS = [
     "--mode",
     "--read-only",
     "--thinking",
-    "--max-turns",
-    "--max-cost",
     "--retries",
     "--resume",
     "--no-mcp",

@@ -290,15 +290,15 @@ async def test_follow_up_not_consumed_when_run_ends_in_error():
     assert agent.pending_follow_up == 1
 
 
-async def test_follow_up_drained_before_a_max_turns_stop():
+async def test_follow_up_drained_at_a_plain_stop():
     # A follow-up drained at the plain stop behaves like post-round steering:
-    # it enters the transcript, and the guard applies on the next iteration.
-    stream = scripted([("text", "one"), end()])
-    agent = make_agent(stream, max_turns=1)
+    # it enters the transcript and another turn runs with it in context.
+    stream = scripted([("text", "one"), end()], [("text", "two"), end()])
+    agent = make_agent(stream)
     agent.follow_up("queued")
     await agent.prompt("go")
 
-    assert agent.termination == "max_turns"
+    assert agent.termination == "stop"
     assert agent.pending_follow_up == 0
     assert any(
         isinstance(message, UserMessage) and message.content == "queued"

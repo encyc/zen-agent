@@ -10,7 +10,7 @@ async def agent_loop(prompt: str | None, state: AgentState, config: AgentConfig)
 
 class AgentState:
     messages: list[Message]
-    termination: str | None   # max_turns / max_cost / aborted / ...
+    termination: str | None   # stop / loop_detected / aborted / error / ...
 ```
 
 - `state.messages` 是唯一可变状态；`system_prompt` 不存进去，每次请求时临时拼在最前面。
@@ -43,12 +43,16 @@ turn_end
 | 条件 | termination | 说明 |
 |---|---|---|
 | abort token 触发 | `aborted` | 立即停止，不给模型下一轮 |
-| `turns >= max_turns` | `max_turns` | 默认上限 100（`_MAX_TURNS`） |
-| 已花费 > `max_cost` | `max_cost` | 在开下一轮**之前**检查，保证 transcript 配对完整 |
 | assistant `stop_reason="error"` | `error` | 错误信息在消息里 |
+| 连续 5 批完全相同的工具调用 | `loop_detected` | 守卫打断；`detail` 写明重复的那批（如 `5x echo({...})`），纯轮询命令豁免 |
+| 本批工具结果全部 `terminate=True` | `tool_terminate` | 工具主动要求结束 |
+| `stop_reason="length"` 且带工具调用，连续 2 次 | `length` | 截断一直不收敛，按失败结束而不是伪装成 `stop` |
 | 无工具调用的正常结束 | `stop` / `length` | 原始 stop reason |
-| 本批工具结果全部 `terminate=True` | `stop` | 工具主动要求结束 |
 | 流没有 terminal 事件 | `no_stream` | 防御性分支 |
+
+**没有轮次上限，也没有花费上限**：`while True` 只在上面这些条件下退出。`loop_detected`
+只是守卫打断——它证明的是“连续给出同一批调用”，不证明“这次 run 会永远重复”，所以
+模型换个做法继续跑是正常的；判断错了也只是少跑一轮。
 
 `agent_end.new_messages` 是本 run 追加的所有消息（便于持久化/回放）；`agent_end.tool_stats` 是按工具名聚合的 `{calls, errors, ms}`（仅本 run，无工具调用时为 None），供 telemetry/evals 使用。
 
@@ -72,10 +76,11 @@ turn_end
   超时变成 `error_kind="timeout"` 的 is_error 结果，loop 继续。
 - 降级结果带 `error_kind`：`unknown_tool` / `invalid_arguments` / `policy` /
   `tool_error` / `timeout`。
-- **循环守卫**：同一批工具（name + 规范化 args 完全相同）连续 5 轮重复时，追加一条
-  `[tool-loop guard] …` 的 user 消息到**模型上下文**（每 run 最多一次）。它不写入
-  `new_messages`、不发 message 事件、不进 session JSONL：UI/回放会过滤它（`messages_to_views`），
-  它只用于纠正模型。`sleep/tail/ps/pgrep/top/jobs/wait` 等纯轮询命令豁免。
+- **原地打转守卫**：同一批工具（name + 规范化 args 完全相同，只看批内调用集合）连续
+  5 轮重复时，run 以 `loop_detected` 结束，`detail` 写明重复的那批调用；模型没有下一次
+  请求的机会。守卫**不往 transcript 里写任何东西**——没有纠正消息、没有过滤分支；
+  纯轮询命令（`sleep/tail/ps/pgrep/top/jobs/wait`）豁免。同一批里参数不同（如每轮
+  `{"i": i}`）不算重复。
 - 结果**按请求顺序**写回 state，`tool_call_id` 一一对应，与完成顺序无关。
 
 ### 错误隔离
@@ -108,8 +113,8 @@ turn_end
 
 ## 成本累计
 
-`_run_cost(new_messages)` 只统计本 run 新增的 assistant usage，所以 `max_cost` 是**本 run**
-的预算，不是会话总预算（需要总预算由调用方控制）。
+loop 不记账、也不因花费停止：usage 就在每条 assistant 消息里，调用方自己汇总
+（`usage_total`、telemetry 的 run 行、swarm 的链级预算都是消费者侧的实现）。
 
 ## 源码对照
 
@@ -118,4 +123,5 @@ turn_end
 - 工具执行：同文件 `_execute_tool_calls` 相关分支
 - 校验：`zenagent/agent/validate.py`
 - 重试：`zenagent/retry.py::stream_with_retry`
-- 测试：`tests/test_loop.py`（终止、并行、length、steering、错误隔离）、`tests/test_validate.py`
+- 守卫：`zenagent/agent/guard.py::RunawayDetector`
+- 测试：`tests/test_loop.py`（终止、并行、length、steering、错误隔离、守卫）、`tests/test_validate.py`

@@ -13,7 +13,7 @@ from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.widgets import Static
 
-from zenagent.app.views import GoalView, goal_limit_text
+from zenagent.app.views import GoalView
 from zenagent.cli.tui.screens.dialogs import DialogScreen
 from zenagent.i18n import t
 
@@ -71,9 +71,9 @@ class GoalPanel(DialogScreen[None]):
         lines.append(
             t(
                 "tui.goal.panel_budget",
-                turns=f"{view.turns_used}/{goal_limit_text(view.max_turns)}",
-                tokens=f"{view.tokens_used}/{goal_limit_text(view.max_tokens)}",
-                wall=f"{int(view.wall_seconds)}s/{goal_limit_text(view.max_wall_seconds)}s",
+                turns=str(view.turns_used),
+                tokens=str(view.tokens_used),
+                wall=f"{int(view.wall_seconds)}s",
             )
         )
         if view.last_verdict:

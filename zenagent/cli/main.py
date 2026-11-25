@@ -136,8 +136,6 @@ async def run_headless(
     allow_destructive: bool = False,
     allow_protected: bool = False,
     json_output: bool = False,
-    max_turns: int | None = None,
-    max_cost: float | None = None,
     retries: int = 0,
     context_files: bool = True,
     metrics: Path | None = None,
@@ -195,8 +193,6 @@ async def run_headless(
         allow_protected=allow_protected,
         mode=mode,
         retries=retries,
-        max_turns=max_turns,
-        max_cost=max_cost,
         trace=trace,
         metrics=Path(metrics) if metrics else None,
         auto_compact=auto_compact,
@@ -252,6 +248,7 @@ async def run_headless(
                     "messages": count,
                     "error": agent.error_message,
                     "termination": agent.termination,
+                    "detail": agent.termination_detail,
                 },
                 ensure_ascii=False,
             )
@@ -259,8 +256,12 @@ async def run_headless(
     elif agent.error_message is not None:
         print(f"zenagent: {agent.error_message}", file=sys.stderr)
     elif not ok:
+        # The reason behind the stop (a guard kill names the repeated batch)
+        # rides along — the bare termination token is not self-explanatory.
+        detail = agent.termination_detail
+        suffix = f": {detail}" if detail else ""
         print(
-            f"zenagent: run stopped early ({agent.termination})",
+            f"zenagent: run stopped early ({agent.termination}{suffix})",
             file=sys.stderr,
         )
     return 0 if ok else 1
@@ -514,8 +515,6 @@ def main(argv: list[str] | None = None) -> int:
                 allow_protected=args.allow_protected,
                 mode=mode,
                 retries=args.retries,
-                max_turns=args.max_turns,
-                max_cost=args.max_cost,
                 thinking=args.thinking,
                 trace=args.trace,
                 metrics=args.metrics,
@@ -582,8 +581,6 @@ def main(argv: list[str] | None = None) -> int:
                     thinking=args.thinking,
                     metrics=args.metrics,
                     images=args.images,
-                    max_turns=args.max_turns,
-                    max_cost=args.max_cost,
                     retries=args.retries,
                 )
             )
@@ -603,8 +600,6 @@ def main(argv: list[str] | None = None) -> int:
                 allow_protected=args.allow_protected,
                 json_output=args.json,
                 resume=args.resume,
-                max_turns=args.max_turns,
-                max_cost=args.max_cost,
                 retries=args.retries,
                 metrics=args.metrics,
                 context_files=not args.no_context_files,

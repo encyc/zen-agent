@@ -682,9 +682,9 @@ def test_bad_safety_and_backup_values_are_rejected(tmp_path, snippet, message):
 
 def test_task_section_defaults(tmp_path):
     config = load_user_config(write_config(tmp_path, ""))
-    assert config.task_max_turns == 300
     assert config.task_timeout_s == 900
-    assert config.task_max_cost is None
+    assert not hasattr(config, "task_max_turns")
+    assert not hasattr(config, "task_max_cost")
     assert config.task_keep_transcripts == 64
     assert config.task_max_transcript_bytes == 32 * 1024 * 1024
     assert config.task_max_transcript_file_bytes == 8 * 1024 * 1024
@@ -694,12 +694,10 @@ def test_task_section_parses_overrides_and_keeps_the_rest(tmp_path):
     config = load_user_config(
         write_config(
             tmp_path,
-            "[task]\nmax_turns = 7\ntimeout_s = 0\nmax_cost = 2.5\nkeep_transcripts = 3\n",
+            "[task]\ntimeout_s = 0\nkeep_transcripts = 3\n",
         )
     )
-    assert config.task_max_turns == 7
     assert config.task_timeout_s == 0  # 0 disables the wall-clock watchdog
-    assert config.task_max_cost == 2.5
     assert config.task_keep_transcripts == 3
     assert config.task_max_transcript_bytes == 32 * 1024 * 1024
 
@@ -707,11 +705,8 @@ def test_task_section_parses_overrides_and_keeps_the_rest(tmp_path):
 @pytest.mark.parametrize(
     "snippet, message",
     [
-        ("[task]\nmax_turns = 0\n", "task.max_turns"),
         ("[task]\ntimeout_s = -1\n", "task.timeout_s"),
         ("[task]\ntimeout_s = 1.5\n", "task.timeout_s"),
-        ("[task]\nmax_cost = 0\n", "task.max_cost"),
-        ("[task]\nmax_cost = true\n", "task.max_cost"),
         ("[task]\nkeep_transcripts = -1\n", "task.keep_transcripts"),
         ("[task]\nmax_transcript_bytes = true\n", "task.max_transcript_bytes"),
         ("[task]\nmax_transcript_file_bytes = 1.5\n", "task.max_transcript_file_bytes"),
@@ -742,13 +737,13 @@ def test_project_layer_inherits_global_task_values(tmp_path, monkeypatch):
     repo, _ = stacked_config(
         tmp_path,
         monkeypatch,
-        global_text="[task]\nmax_turns = 5\nkeep_transcripts = 2\n",
+        global_text="[task]\ntimeout_s = 5\nkeep_transcripts = 2\n",
         project_text="default_model = 'project-model'\n",
     )
 
     config = load_user_config(cwd=repo)
 
-    assert (config.task_max_turns, config.task_keep_transcripts) == (5, 2)
+    assert (config.task_timeout_s, config.task_keep_transcripts) == (5, 2)
     assert config.task_max_transcript_bytes == 32 * 1024 * 1024
 
 

@@ -52,8 +52,10 @@ worker 状态的权威；账本负责把它们放到同一张时间线上。
 
 - `agent_start`：读 `runtime.run_scope` 与当前 `runtime.session.path`，写 `running`；
 - `agent_end`：从 `event.new_messages` 汇总 `cost`，读 `event.turns` / `event.termination`，
-  写终态；`max_turns` / `max_cost` / `error` / `no_stream` / `length` 记为 `failed`，
-  `aborted` 记为 `aborted`，其余正常结束记为 `done`。
+  写终态；`max_turns` / `max_cost`（历史值）/ `error` / `no_stream` / `length` 记为
+  `failed`，`aborted` 记为 `aborted`，`loop_detected`（守卫打断，连续重复同一批调用）
+  记为 `interrupted`，其余正常结束记为 `done`。`event.detail` 只随 `agent_end` 存在，
+  不进账本——账本记状态，说明在会话的 `run_end` 记录里。
 
 接线点：
 

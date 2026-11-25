@@ -100,14 +100,15 @@ def test_cache_hit_ratio_is_none_without_cache_reads():
     assert cache_hit_ratio(Usage(input=1000), "openai-completions") is None
 
 
-def test_messages_to_views_hides_the_loop_guard_notice():
+def test_messages_to_views_keeps_every_user_turn():
+    """The loop no longer writes synthetic notice messages, so nothing is hidden."""
     from zenagent.app.views import messages_to_views
     from zenagent.types import UserMessage
 
-    guard = UserMessage(content="[tool-loop guard] stop repeating", timestamp=0)
-    real = UserMessage(content="hello", timestamp=1)
-    views = messages_to_views([guard, real])
-    assert [view.text for view in views] == ["hello"]
+    first = UserMessage(content="hello", timestamp=0)
+    second = UserMessage(content="again", timestamp=1)
+    views = messages_to_views([first, second])
+    assert [view.text for view in views] == ["hello", "again"]
 
 
 def test_user_view_recognises_an_injected_skill_message():

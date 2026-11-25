@@ -3,6 +3,44 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+### Breaking
+
+- **No run has a turn or spend ceiling any more.** `[limits.agent].max_turns`,
+  `--max-turns`, `AgentConfig.max_turns`, `AgentConfig.max_cost`, `--max-cost`,
+  `[task].max_turns`, `[task].max_cost`, `[limits.goal].max_turns` /
+  `max_tokens` / `max_wall_minutes`, and the swarm role's `maxTurns` / `maxCost`
+  are gone. A run ends when the model stops, the provider fails, a tool asks to
+  terminate, output truncation stops resolving, or a repeated batch proves it
+  cannot make progress. Watchdogs stay: tool and subagent `timeout_s`.
+- **The two loop guards became one interrupt.** A batch identical to the
+  previous one, N times in a row (poll-shaped calls exempt), now ends the run
+  with `termination="loop_detected"` and a `detail` naming the repeated call.
+  Nothing is written into the transcript — the synthetic correctives, their
+  `finally` cleanup, and the view-side prefix filter are all deleted. The
+  evidence-stall guard is removed outright: its judgement was not provable, and
+  an interrupt on a false positive kills a healthy run.
+- **A goal stops only on a verdict, a blocker, the user, or an interrupted
+  run** (`loop_detected` pauses it, so a resume is one command). The turn
+  budget and its wrap-up turn are gone; so are the token and wall-clock budgets.
+  `/goal --budget` now reports that it no longer exists.
+- **Retired config keys are accepted, ignored, and warned about once** instead
+  of failing the load, so a published `config.toml` keeps starting. The limits
+  registry and the settings page no longer list them.
+
+### Fixed
+
+- **A guard kill now explains itself on every surface.** `agent_end` carries
+  `termination` and `detail`; the `prompt` and `status` results carry `detail`
+  too. The one-shot CLI prints it, TUI/REPL leave a transcript notice, the
+  session's `run_end` record keeps it, and the desktop usage row names the
+  repeated call instead of showing a bare token.
+- **A turn that ended with `ok: false` still lands its usage row.** A provider
+  failure or a guard kill spent tokens, but the desktop dropped the row before
+  reading the termination — the reason was invisible, and the retry row it
+  should have settled stayed pending. Both are fixed.
+
 ## v0.14.1 — 2026-11-19
 
 ### Added

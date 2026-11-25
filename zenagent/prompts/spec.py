@@ -153,7 +153,7 @@ BLOCKS: dict[str, BlockSpec] = {
         version=PROMPT_VERSION,
         cache_class="stable",
         budget_chars=1100,
-        required_vars=("max_turns", "child_tools"),
+        required_vars=("child_tools",),
     ),
     #: The swarm room's conventions. Not part of ``compose_system``: the swarm
     #: manager appends it per role and the runner injects it per round, so it

@@ -259,11 +259,8 @@ export interface GoalView {
   status: string
   check: string | null
   turns_used: number
-  max_turns: number
   tokens_used: number
-  max_tokens: number
   wall_seconds: number
-  max_wall_seconds: number
   last_verdict: string | null
   last_reason: string
   updated_at: number
@@ -650,6 +647,7 @@ export interface StatusResult {
   model: string
   usage: Usage
   termination: string | null
+  detail?: string
   session?: string
   mode?: 'plan' | 'ask' | 'auto'
   tools?: number
@@ -710,6 +708,7 @@ export interface PromptResult {
   text: string
   usage: Usage
   termination: string | null
+  detail?: string
   error?: string
   session?: string
 }
@@ -1509,6 +1508,8 @@ export interface AgentEventWire {
   tool_stats?: Record<string, unknown>
   partial_result?: string
   duration_ms?: number
+  termination?: string
+  detail?: string
 }
 
 

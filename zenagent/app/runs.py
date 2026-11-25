@@ -76,6 +76,8 @@ def duration_text(ms: int | None) -> str:
 #: Terminations the kernel treats as a normal finish.
 _DONE_TERMINATIONS = frozenset({"stop", "tool_terminate"})
 #: Terminations that mean the run ended without delivering its answer.
+#: ``max_turns``/``max_cost`` are historical: no run produces them any more,
+#: but old session files and ledger rows still carry them.
 _FAILED_TERMINATIONS = frozenset(
     {"max_turns", "max_cost", "error", "no_stream", "length"}
 )
@@ -96,9 +98,14 @@ def status_for_termination(termination: str | None) -> str:
     """Map the kernel's termination vocabulary to a ledger status.
 
     The mapping is deliberately conservative: only the two normal endings are
-    ``done``; provider failures and budget stops are ``failed``; a cooperative
-    abort is ``aborted`` and can be re-labelled by the owning layer.
+    ``done``; provider failures are ``failed``; a cooperative abort is
+    ``aborted`` and can be re-labelled by the owning layer; a killed runaway is
+    ``interrupted``.
     """
+    if termination == "loop_detected":
+        # The run was cut because it could not make progress: neither a normal
+        # finish nor a provider failure.
+        return "interrupted"
     if termination in _DONE_TERMINATIONS:
         return "done"
     if termination == "aborted":

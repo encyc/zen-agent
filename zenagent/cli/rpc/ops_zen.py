@@ -209,8 +209,6 @@ class ZenOps:
             supervisor=supervisor,
             # Workers are spawned agents: they take the same [task] budgets as
             # the task tool's children.
-            max_cost=config.task_max_cost,
-            max_turns=config.task_max_turns,
         )
         runtime.zen_fleet = fleet
         register_router_surface(runtime)

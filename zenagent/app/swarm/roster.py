@@ -149,8 +149,6 @@ def role_signature(role: RoleManifest) -> tuple:
         tuple(role.tools or ()),
         str(role.root),
         role.inherit_project,
-        role.max_turns,
-        role.max_cost,
         role.mode,
     )
 
@@ -170,7 +168,5 @@ def role_view(role: RoleManifest) -> dict:
         "root": str(role.root),
         "tools": list(role.tools) if role.tools is not None else None,
         "inheritProject": role.inherit_project,
-        "maxTurns": role.max_turns,
-        "maxCost": role.max_cost,
         "missingCredentials": list(role.missing_credentials),
     }
