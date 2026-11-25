@@ -10,6 +10,7 @@ import { copyText } from '../clipboard'
 import { ChevronRightIcon, SparkIcon } from '../icons'
 import { TextShimmer } from '../primitives'
 import { formatDuration } from '../format'
+import { thinkingPreview } from './thinkingPreview'
 import { useMarkdown } from './markdown'
 import { externalLinkAction } from './markdownLinks'
 import { openExternal } from '../../rpc/client'
@@ -102,6 +103,8 @@ export function AssistantNodeView({
           text={node.thinking ?? ''}
           running={node.thinkingRunning}
           autoCollapse={autoCollapseThinking}
+          onBodyClick={onMarkdownClick}
+          onBodyKeyDown={onMarkdownKeyDown}
         />
       ) : node.thinkingRunning ? (
         <ThinkingLive />
@@ -129,14 +132,25 @@ function ThinkingRow({
   text,
   running,
   autoCollapse,
+  onBodyClick,
+  onBodyKeyDown,
 }: {
   text: string
   running: boolean
   autoCollapse: boolean
+  onBodyClick: (event: MouseEvent<HTMLDivElement>) => void
+  onBodyKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void
 }) {
   const t = useT()
   const [open, setOpen] = useState(running || !autoCollapse)
-  const summary = useMemo(() => firstLine(text) || t('thinking.label'), [text, t])
+  // Reasoning is model markdown like the body: it renders through the same
+  // sanitizer, so code fences, lists and file references behave identically.
+  const html = useMarkdown(
+    text,
+    { copy: t('chat.copy'), copied: t('chat.copied') },
+    { fileLinks: true },
+  )
+  const summary = useMemo(() => thinkingPreview(text) || t('thinking.label'), [text, t])
   // A live row stays open; a settled row follows the preference.
   useEffect(() => {
     setOpen(running || !autoCollapse)
@@ -163,9 +177,14 @@ function ThinkingRow({
         </span>
       </button>
       {open && (
-        <div className={css.thinkingBody} data-selectable data-testid="thinking-body">
-          {text}
-        </div>
+        <div
+          className={clsx(css.thinkingBody, css.markdown)}
+          data-selectable
+          data-testid="thinking-body"
+          onClick={onBodyClick}
+          onKeyDown={onBodyKeyDown}
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
       )}
     </div>
   )
@@ -186,9 +205,4 @@ function ThinkingLive() {
       </span>
     </div>
   )
-}
-
-function firstLine(text: string): string {
-  const line = text.split('\n', 1)[0] ?? ''
-  return line.length > 96 ? `${line.slice(0, 93)}…` : line
 }

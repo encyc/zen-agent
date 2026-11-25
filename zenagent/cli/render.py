@@ -93,9 +93,11 @@ class AssistantLiveRenderer:
             tokens = self.reasoning_tokens
             if tokens is None:
                 tokens = max(1, len(self.thinking) // 4)  # cheap estimate
+            # Same renderer as the answer below: reasoning is model markdown
+            # too, so fenced code and lists must not show their syntax.
             parts.append(
                 Panel(
-                    Text(self.thinking, style="grey62"),
+                    Markdown(self.thinking, style="grey62"),
                     title=f"thinking · ~{tokens} tokens",
                     border_style="grey35",
                     padding=(0, 1),

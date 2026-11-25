@@ -150,3 +150,28 @@ test('the current row menu runs undo and compact through the session op', async 
     )
     .toBe(true)
 })
+test('reasoning renders as markdown inside the thinking card', async ({ page }) => {
+  await boot(
+    page,
+    initialState({
+      running: false,
+      transcript: [
+        { kind: 'user', id: 'u1', text: 'go', timestamp: 1 },
+        {
+          kind: 'assistant',
+          id: 'a1',
+          text: 'done',
+          thinking: '## Plan\n\n- read **views.py**\n- run `npm test`',
+          timestamp: 2,
+        },
+      ],
+    }),
+  )
+  await page.getByTestId('thinking-row').getByRole('button').click()
+  const body = page.getByTestId('thinking-body')
+  await expect(body.locator('strong')).toHaveText('views.py')
+  await expect(body.locator('li')).toHaveCount(2)
+  await expect(body.locator('code')).toContainText('npm test')
+  // The collapsed summary keeps the text, not the markers.
+  await expect(page.getByTestId('thinking-row')).not.toContainText('##')
+})

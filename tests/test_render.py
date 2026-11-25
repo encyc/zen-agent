@@ -203,3 +203,24 @@ def test_context_percent_uses_real_prompt_tokens():
 
     assert context_percent(Usage(input=500, cache_read=500), 10_000) == 10
     assert context_percent(Usage(), 0) is None
+
+
+def test_the_thinking_panel_renders_markdown():
+    """Reasoning is model markdown: the panel renders it, never echoes it."""
+    from io import StringIO
+
+    from rich.console import Console
+
+    renderer = AssistantLiveRenderer()
+    message = partial()
+    thinking = ThinkingContent(thinking="## Plan\n\n- read `views.py`\n")
+    message.content.append(thinking)
+    renderer.feed(event("thinking_start", message))
+    update = renderer.feed(event("thinking_delta", message, delta="## Plan"))
+
+    console = Console(record=True, width=60, file=StringIO())
+    console.print(update.renderable)
+    rendered = console.export_text()
+
+    assert "##" not in rendered and "`" not in rendered
+    assert "Plan" in rendered and "read views.py" in rendered

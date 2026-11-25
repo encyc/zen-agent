@@ -6,8 +6,10 @@ answer (or the run) ends. History replay has no timing, so those rows stay bare.
 
 import asyncio
 import re
+from io import StringIO
 
 import pytest
+from rich.console import Console
 
 from zenagent.cli.tui.app import ZenAgentApp
 from zenagent.cli.tui.widgets.rows import ThinkingRow, format_thinking_duration
@@ -91,6 +93,38 @@ async def test_the_row_ticks_while_reasoning_then_freezes(gated_thinking_app):
         view = app.chat.transcript[-1]
         assert view.thinking_started_at is None
         assert view.thinking_seconds is not None and view.thinking_seconds >= 0
+
+
+def test_the_collapsed_preview_drops_markdown_markers():
+    row = ThinkingRow("**Step 1**: read `views.py`\nsecond line", seconds=3.2)
+
+    assert row.plain.startswith("✻ thinking")
+    assert "**" not in row.plain and "`" not in row.plain
+    assert "Step 1: read views.py" in row.plain, "the summary keeps the text only"
+
+
+def test_the_open_row_renders_markdown_instead_of_echoing_it():
+    row = ThinkingRow(
+        "## Plan\n\n- `views.py` joins **thinking**\n\n```python\nx = 1\n```",
+        seconds=3.2,
+    )
+    row.collapsed = False
+
+    console = Console(record=True, width=60, file=StringIO())
+    console.print(row._renderable())
+    rendered = console.export_text()
+
+    assert "##" not in rendered and "**" not in rendered and "`" not in rendered
+    assert "Plan" in rendered
+    assert "views.py joins thinking" in rendered
+    assert "x = 1" in rendered, "fenced code keeps its body"
+
+
+def test_the_open_row_still_reports_its_body_as_plain_text():
+    row = ThinkingRow("first\nsecond", seconds=1.0)
+    row.collapsed = False
+
+    assert "first" in row.plain and "second" in row.plain
 
 
 def test_history_replay_has_no_timer():

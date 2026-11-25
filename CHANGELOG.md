@@ -3,6 +3,23 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+### Changed
+
+- **Reasoning renders as markdown.** The thinking card used to echo the
+  model's raw reasoning text, so `**Step 1**`, `- bullets` and fenced code
+  showed up as syntax in every frontend. The open body now goes through the
+  same renderer as the answer: the desktop reuses `useMarkdown` (sanitized
+  GFM, fenced code with its copy affordance, workspace file references wired
+  to the rail), the TUI renders a Rich `Markdown` in the expanded row with a
+  code theme that follows the active appearance (`palette.is_dark()`), and the
+  REPL's live panel renders `Markdown` instead of `Text`. The one-line summary
+  drops the markers instead of echoing them, so a collapsed row reads
+  `✻ thinking  Step 1: read views.py`. Collapsed rows parse nothing, so
+  streaming stays as cheap as before: markdown is only built for a row
+  someone opened.
+
 ## v0.15.0 — 2026-11-25
 
 ### Breaking

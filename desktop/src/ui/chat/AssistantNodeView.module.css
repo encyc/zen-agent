@@ -98,10 +98,47 @@
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--ds-font-13);
   line-height: 20px;
-  white-space: pre-wrap;
   word-break: break-word;
   max-height: 320px;
   overflow-y: auto;
+}
+
+/* Reasoning renders through the body's markdown pipeline, one tier quieter and
+ * one step smaller: it is context, not the answer. The compound selectors are
+ * what out-rank the plain ``.markdown`` rules below. */
+.thinkingBody.markdown {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--ds-font-13);
+  line-height: 20px;
+}
+
+.thinkingBody.markdown h1,
+.thinkingBody.markdown h2,
+.thinkingBody.markdown h3,
+.thinkingBody.markdown h4 {
+  margin: 8px 0 4px;
+  font-size: var(--ds-font-13);
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.thinkingBody.markdown p {
+  margin: 0 0 6px;
+}
+
+.thinkingBody.markdown ul,
+.thinkingBody.markdown ol {
+  margin: 0 0 6px;
+  padding-left: 18px;
+}
+
+.thinkingBody.markdown pre,
+.thinkingBody.markdown :global(.md-code-block) {
+  margin: 6px 0;
+}
+
+.thinkingBody.markdown pre code {
+  line-height: 17px;
 }
 
 /* ---- markdown ------------------------------------------------------------- */

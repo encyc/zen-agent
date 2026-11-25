@@ -8,8 +8,12 @@ style them independently and keeps the container dumb.
 
 from __future__ import annotations
 
+import re
 import time
 
+from rich.console import Group
+from rich.markdown import Markdown
+from rich.padding import Padding
 from rich.text import Text
 from textual.containers import Vertical
 from textual.timer import Timer
@@ -76,11 +80,30 @@ class UserBlock(Static):
 
 
 def _preview_line(thinking: str) -> str:
-    """The first line with content: the collapsed row's one-line summary."""
+    """The first line with content, its markdown markers dropped.
+
+    The open body *renders* the markdown; the one-line summary must not echo
+    the syntax (``**Step 1**`` reads as noise at 96 columns).
+    """
     for line in thinking.splitlines():
         if line.strip():
-            return line.strip()
+            return _strip_markdown(line.strip())
     return ""
+
+
+_MD_LEAD = re.compile(r"^(?:#{1,6}\s+|>\s?|[-*+]\s+|\d+[.)]\s+)")
+_MD_LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+_MD_INLINE = re.compile(r"\*\*|__|~~|`")
+_MD_EMPHASIS_OPEN = re.compile(r"(?:^|(?<=[\s(]))[*_](?=\S)")
+_MD_EMPHASIS_CLOSE = re.compile(r"(?<=\S)[*_](?=[\s).,;:!?]|$)")
+
+
+def _strip_markdown(line: str) -> str:
+    text = _MD_LEAD.sub("", line)
+    text = _MD_LINK.sub(r"\1", text)
+    text = _MD_INLINE.sub("", text)
+    text = _MD_EMPHASIS_OPEN.sub("", text)
+    return _MD_EMPHASIS_CLOSE.sub("", text).strip()
 
 
 def format_thinking_duration(seconds: float) -> str:
@@ -125,7 +148,13 @@ class ThinkingRow(Static):
 
     @property
     def plain(self) -> str:
-        return self._renderable().plain
+        """The row as text: the header, plus the raw body once it is open.
+
+        ``Group`` (the open row) carries no ``plain`` of its own, so this reads
+        the pieces rather than the renderable.
+        """
+        head = self._head().plain
+        return head if self.collapsed else f"{head}\n{self.thinking}"
 
     @property
     def active(self) -> bool:
@@ -184,7 +213,23 @@ class ThinkingRow(Static):
             return
         self.update(self._renderable())
 
-    def _renderable(self) -> Text:
+    def _renderable(self) -> Text | Group:
+        head = self._head()
+        if self.collapsed:
+            return head
+        # The open body is the model's own markdown, rendered rather than
+        # echoed: fenced code, lists and emphasis read the way they were
+        # written. It keeps the reasoning tier's colour (``style``) so the card
+        # still reads as context, one indent step in like the tool bodies.
+        body = Markdown(
+            self.thinking,
+            code_theme="ansi_dark" if palette.is_dark() else "ansi_light",
+            style=palette.MUTED,
+        )
+        return Group(head, Padding(body, (0, 0, 0, 2)))
+
+    def _head(self) -> Text:
+        """The one-line header: glyph, label, then the preview or the duration."""
         active = self.active
         text = Text()
         text.append("✻ ", style=f"bold {palette.ACCENT}" if active else palette.DIM)
@@ -195,11 +240,6 @@ class ThinkingRow(Static):
         if not self.collapsed:
             if suffix:
                 text.append(suffix, style=palette.DIM)
-            text.append("\n")
-            for line in self.thinking.splitlines():
-                text.append("  ")
-                text.append(line, style=f"italic {palette.MUTED}")
-                text.append("\n")
             return text
         preview = _preview_line(self.thinking)
         if preview:

@@ -21,6 +21,7 @@ __all__ = [
     "SECTION_ACCENTS",
     "STATE_COLORS",
     "bind",
+    "is_dark",
 ]
 
 #: Accessor name → token name in the appearance.
@@ -39,12 +40,23 @@ _BASE = {
 
 #: Bound appearance tokens; dark is the default so a bare import still works.
 _active: Mapping[str, str] = APPEARANCES["dark"].tokens
+_active_dark: bool = True
 
 
 def bind(appearance: Appearance) -> None:
     """Make ``appearance`` the source for every token read from now on."""
-    global _active
+    global _active, _active_dark
     _active = appearance.tokens
+    _active_dark = appearance.dark
+
+
+def is_dark() -> bool:
+    """True when the bound appearance is the dark one.
+
+    Callers that must pick their own colours rather than read a token (a
+    Pygments code theme, say) ask here so both appearances stay in step.
+    """
+    return _active_dark
 
 
 def __getattr__(name: str) -> str:
