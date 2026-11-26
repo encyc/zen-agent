@@ -167,6 +167,23 @@ BLOCKS: dict[str, BlockSpec] = {
         budget_chars=40,
         required_vars=("summary",),
     ),
+    # Session naming: its own second provider call, never part of the system
+    # prompt, so the cache class only records provenance.
+    "title.system": BlockSpec(
+        id="title.system",
+        path="title_system.md",
+        version=PROMPT_VERSION,
+        cache_class="stable",
+        budget_chars=400,
+    ),
+    "title.user": BlockSpec(
+        id="title.user",
+        path="title_user.md",
+        version=PROMPT_VERSION,
+        cache_class="stable",
+        budget_chars=200,
+        required_vars=("prompt",),
+    ),
     "memory_index": BlockSpec(
         id="memory_index",
         path="memory_index.md",

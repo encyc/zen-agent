@@ -32,6 +32,7 @@ __all__ = [
     "compact_result",
     "compose_compact",
     "compose_system",
+    "compose_title",
     "render",
     "template_vars",
     "tool_description",
@@ -240,6 +241,17 @@ def compose_compact(
     else:
         user = render(read_block("compact.summary", root), {"transcript": transcript})
     return system, user
+
+
+def compose_title(prompt: str) -> tuple[str, str]:
+    """Render the session-title request as ``(system, user)``.
+
+    A second provider call, like compaction: the blocks live next to the other
+    prompt prose and ``AutoTitler`` sends them with the session's model.
+    """
+    return read_block("title.system"), render(
+        read_block("title.user"), {"prompt": prompt}
+    )
 
 
 def compact_result(summary: str, *, root: Path | None = None) -> str:
