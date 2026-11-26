@@ -269,9 +269,14 @@ git commit -m "feat(agent): session_text extractor for cross-session search"
 
 **Interfaces:**
 - Produces:
-  - `def list_sessions(limit: int = 20, *, scope: str = "project", root: Path | str | None = None) -> list[SessionInfo]`
+  - `def list_sessions(limit: int = 20, *, scope: str = "project", root: Path | str | None = None, cache: bool = True) -> list[SessionInfo]` —— `cache` 透传给内部的 `SessionIndex(directory, cache=cache)`
   - `class SessionIndex: def __init__(self, directory: Path, *, cache: bool = True) -> None`；`cache=False` 时 `read()` 不记录条目、`flush()` 是 no-op
 - Consumes: 无
+
+> **为什么 `list_sessions` 也要带 `cache`（Task 2 复核发现的缺口）**：它内部
+> `index = SessionIndex(directory)` 是硬编码的，末尾无条件 `index.flush()`。只读工具
+> 走 `list_sessions` 就一定会写 `_index.json`——Task 6 的"永不写盘"测试会直接抓到。
+> 一个关键字透传即可，默认 `True` 让既有调用点一字不变。
 
 - [ ] **Step 1: 写失败测试**
 
@@ -330,7 +335,7 @@ Expected: FAIL — 第一条 `TypeError: list_sessions() got an unexpected keywo
 
 - [ ] **Step 3: 实现**
 
-`zenagent/agent/session.py`：`list_sessions` 加 `root` 关键字参数，`.py:845` 那行 `sessions_dir()` 改成 `sessions_dir(root=root)`。docstring 补一句 `root` 的语义（`None` 沿用进程 cwd 的历史行为）。
+`zenagent/agent/session.py`：`list_sessions` 加 `root` 与 `cache` 两个关键字参数；`sessions_dir()` 改成 `sessions_dir(root=root)`，`index = SessionIndex(directory)` 改成 `SessionIndex(directory, cache=cache)`。docstring 补两句：`root` 的语义（`None` 沿用进程 cwd 的历史行为）、`cache=False` 时不写 sidecar。
 
 `zenagent/agent/session_index.py`：`__init__` 接 `cache: bool = True` 存成 `self.cache`；`read()` 里写 `entries[path.name] = {...}` 那段包在 `if self.cache:` 里（缓存关闭时每次都是真读，返回的 `info` 不变）；`flush()` 开头加 `if not self.cache: return`。docstring 在类说明里加一条 bullet：`cache=False` 是"只读消费者"模式，给那些声明 `approval="read"` 的工具用。
 
