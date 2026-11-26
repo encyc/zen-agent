@@ -330,7 +330,7 @@ async def test_relabel_rewrites_the_terminal_row(app_env, monkeypatch):
 
     monkeypatch.setattr(
         "zenagent.app.bootstrap.load_user_config",
-        lambda *args, **kwargs: UserConfig(default_model="deepseek-flash"),
+        lambda *args, **kwargs: UserConfig(default_model="deepseek/deepseek-flash"),
     )
     prepared = await prepare(
         RuntimeOptions(
@@ -390,7 +390,7 @@ async def test_relabel_preserves_cost_and_turns(app_env, monkeypatch):
 
     monkeypatch.setattr(
         "zenagent.app.bootstrap.load_user_config",
-        lambda *args, **kwargs: UserConfig(default_model="deepseek-flash"),
+        lambda *args, **kwargs: UserConfig(default_model="deepseek/deepseek-flash"),
     )
     prepared = await prepare(
         RuntimeOptions(
@@ -437,7 +437,7 @@ async def test_relabel_preserves_the_error_message(app_env, monkeypatch):
 
     monkeypatch.setattr(
         "zenagent.app.bootstrap.load_user_config",
-        lambda *args, **kwargs: UserConfig(default_model="deepseek-flash"),
+        lambda *args, **kwargs: UserConfig(default_model="deepseek/deepseek-flash"),
     )
     prepared = await prepare(
         RuntimeOptions(
