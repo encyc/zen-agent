@@ -1,6 +1,6 @@
 # 斜杠命令
 
-TUI 与 REPL **共用同一个** `CommandRegistry`（`zenagent/app/commands.py`，49 条内置命令）：
+TUI 与 REPL **共用同一个** `CommandRegistry`（`zenagent/app/commands.py`，54 条内置命令）：
 `/help` 列出全部命令，裸命令（如 `/model`）在 TUI 打开选择器、在 REPL 打印文本。
 不认识的 `/xxx` 会得到**未知命令**提示（REPL 打印 `未知命令：/xxx（试 /help）`，TUI 在转录区
 给一条 notice），**不会**被当作普通提问发给模型；如果名字匹配 prompt 模板

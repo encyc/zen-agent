@@ -1,4 +1,4 @@
-"""The README is the landing page: short, four parts, no dead links on PyPI."""
+"""The README is the landing page: short, five parts, no dead links on PyPI."""
 
 from __future__ import annotations
 
@@ -9,14 +9,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 README = ROOT / "README.md"
 TEXT = README.read_text(encoding="utf-8")
-SECTIONS = ["## Install", "## What this is, and why", "## Features", "## Contributing"]
+SECTIONS = [
+    "## One session, one agent",
+    "## Install",
+    "## What this is, and why",
+    "## Features",
+    "## Contributing",
+]
 BLOB = "https://github.com/encyc/zen-agent/blob/main/"
-# The desktop section carries the three-mode introduction and its shots; both
-# landing pages stay well under this without turning into a manual.
-MAX_LINES = 140
+# The one-session statement, the desktop section and its shot are what keep
+# both landing pages useful; the cap still stops them becoming a manual.
+MAX_LINES = 160
 
 
-def test_readme_is_a_landing_page_with_four_parts():
+def test_readme_is_a_landing_page_with_five_parts():
     assert len(TEXT.splitlines()) <= MAX_LINES
     headings = re.findall(r"^## .+$", TEXT, re.MULTILINE)
     assert headings == SECTIONS

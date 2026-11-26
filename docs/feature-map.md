@@ -94,8 +94,8 @@
 | 主题 / 键位 | `cli/theme.py`、`cli/keybindings.py` | `test_theme.py` | — |
 | 会话链接（`/urls`、`/copy <n>`、`/open <n>`） | `app/links.py`、`app/commands.py` | `test_app_links.py`、`test_app_commands.py`、`test_tui_links.py` | — |
 
-REPL/TUI 共用同一份命令表（`app/commands.py`，49 条），REPL 额外支持 legacy 主题名：
-`/help /exit /quit /clear /model /thinking /mode /session /sessions /rename /fork /import /undo /restore /retry /tools /compact /image /images /skills /mcp /reload /theme /lang /hotkeys /pin /new /settings /search /doctor /jobs /copy /urls /open /btw /shake /handoff /add-dir /remove-dir /dirs /fresh /trace /export /usage /context /plan-review /todo /memory`。
+REPL/TUI 共用同一份命令表（`app/commands.py`，54 条），REPL 额外支持 legacy 主题名：
+`/help /exit /quit /clear /model /thinking /mode /session /sessions /rename /fork /import /undo /restore /retry /tools /compact /image /images /skills /mcp /reload /theme /lang /hotkeys /pin /new /settings /search /doctor /jobs /copy /urls /open /btw /shake /handoff /add-dir /remove-dir /dirs /fresh /trace /export /usage /context /plan-review /todo /goal /runs /worktrees /limits /secrets /plugins /memory`。
 
 REPL 的 screen 类命令（picker/浮层）由 `render_command_result` 渲染成文本，不再静默无输出。
 
@@ -122,7 +122,7 @@ RPC 在前三者之上再共享 `ChatController`。
 | steering / 排队 | ✅ 双 lane | ✅ 插话 | ❌ | ✅ `steer` |
 | 异步子代理（`task` + `async` / `wait`） | ✅ 工具 + 侧栏实时状态 | ✅ 工具（文本） | ✅ 工具（无 UI） | ✅ 工具（事件 `details`） |
 | 用量 / context / trace / metrics | ✅ 面板 + flag | ✅ 文本 + flag | ✅ `--json` / flag | ✅ `usage` / flag |
-| 斜杠命令 | ✅ 49 | ✅ 49（文本降级） | ❌ | ✅ 49 内置（`command` 请求） |
+| 斜杠命令 | ✅ 54 | ✅ 54（文本降级） | ❌ | ✅ 54 内置（`command` 请求） |
 
 RPC 的事件与状态数据最全：`event` 带 `message`/`new_messages`/工具 `details`/assistant `error`，
 `status` 直接携带 TUI 同源 reducer 的 thinking、context 占用、todos、pending、jobs、subagents

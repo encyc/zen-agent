@@ -7,12 +7,22 @@
 简体中文 · [English](https://github.com/encyc/zen-agent/blob/main/README.md)
 
 一个**能读完、能嵌进自己程序、能改**的编码代理：纯 Python 内核，运行时只依赖 `httpx`，
-四种驱动它的方式。它读写文件、跑命令、联网搜索、把子任务交给只读子代理，还维护一份项目待办
-——从终端、从一次性的 headless 调用，或从你自己的程序里都行。
+四个入口（TUI、REPL、headless、RPC），外加一个桌面端——它只是同一个运行时的另一个客户端。
+它读写文件、跑命令、联网搜索、把自成一体的任务交给子代理、维护任务清单——从桌面端、终端、
+一次性的 headless 调用，或你自己的程序里都行。
 
 仓库 <https://github.com/encyc/zen-agent> · PyPI 包名 `zenagent-py`（import 名 `zenagent`）
 
-![ZenAgent 桌面端：带工具行与内联 diff 的会话](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-chat.png)
+![ZenAgent 桌面端：带工具行、内联 diff 和任务清单的会话](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-chat.png)
+
+## 一个会话，一个 agent
+
+ZenAgent 是编码代理，不是一个要在模式之间切换的工作区。一个会话就是：一个项目里、一段对话、
+一个 agent。桌面端按项目组织会话，四个入口驱动同一个运行时；没有第二个需要盯着看的编排器。
+定时轮次、找回旧会话、子代理，都是 agent 在这个会话里能用的工具。
+
+唯一的「模式」是权限：`plan`（只读）、`ask`（写操作与命令要确认）、`auto`（不打断）。
+`zen` 默认 `ask`，`--mode` 改它。
 
 ## 安装
 
@@ -56,6 +66,7 @@ API key 从环境变量读，变量名按 provider 定义在
 
 ```bash
 zen                                     # TUI：转录、工具卡、侧栏
+zen --no-tui                            # 行式 REPL，共用同一套命令
 zen -p "explain this repo" --json       # headless：一个 JSON 对象，适合脚本/CI
 ```
 
@@ -64,12 +75,12 @@ TUI 每小时最多查一次 PyPI，有新版本时安静打一行；`-p`/`--jso
 
 ## 这是什么，为什么
 
-编码代理要么闭源、锁死厂商，要么大到"改一层要先读十层"。ZenAgent 是那个小的：一个晚上能读完、
+编码代理要么闭源、锁死厂商，要么大到「改一层要先读十层」。ZenAgent 是那个小的：一个晚上能读完、
 一个下午能嵌进项目、不需要谁批准就能改的 Python 内核。
 
 - **只有一个依赖。** `types`、`events`、`providers`、`agent`、`tools` 只 import `httpx`，
-  没有别的。wheel ~440 KB，`zen --version` 约 0.1 s。
-- **纯 Python。** 没有 node runtime、没有编译步骤、中间没有 daemon —— `pip install` 就跑。
+  没有别的；wheel 不到 1 MB，你和模型之间没有 daemon。
+- **纯 Python。** 没有 node runtime、没有编译步骤 —— `pip install` 就跑。
 - **一套内核，四个入口。** TUI、REPL、headless（`-p`/`--json`）和 `zen rpc`（JSONL 协议）
   驱动的是同一个运行时，行为一致。
 - **做 GUI 是写客户端，不是重写。** RPC 面已经存在，所以 Tauri 桌面端复用它，
@@ -78,30 +89,36 @@ TUI 每小时最多查一次 PyPI，有新版本时安静打一行；`-p`/`--jso
   你的工具、你的存储、你的事件循环。
 - **扩展不用重启。** skills、提示词模板、扩展、MCP server、自定义 provider 全是文件，
   `/reload` 当场生效。
-- **不锁厂商。** 两个协议适配器（`openai-completions`，含 zai/deepseek 方言；`anthropic-messages`）
-  加一份内置 catalog（带单价和上下文窗口）。
-- **花费看得见。** `zen usage`、`/usage`、转录里逐轮成本。
+- **不锁厂商。** 四个协议适配器（`openai-completions`，含 zai/deepseek 方言；`openai-responses`、
+  `anthropic-messages`、`google-generative-ai`）加一份内置 catalog（带单价和上下文窗口）。
+- **花费看得见。** `zen usage`、`/usage`、转录里逐轮成本，以及 `[limits]` 里的预算。
+- **历史也是工具。** `list_sessions`、`search_sessions`、`read_session` 让 agent 自己去找
+  早先会话里已经定下的结论，而不是让你再贴一遍。
+- **定时任务就是一个文件。** 一条自动化 = 一段保存的 prompt + `daily HH:MM` 或 `every N<m|h>`；
+  每个项目一个 daemon 在固定会话里跑一轮，报告留在那里。
 
 ## 特性
 
 | | 你能拿到什么 | 去哪看 |
 |---|---|---|
-| **一个小的内核** | 五层依赖严格向下；每一层都能单独换掉 | [架构](https://github.com/encyc/zen-agent/blob/main/docs/architecture.md) |
+| **一个小的内核** | 六层依赖严格向下；每一层都能单独换掉 | [架构](https://github.com/encyc/zen-agent/blob/main/docs/architecture.md) |
 | **四个入口** | TUI（转录、工具卡、侧栏）、REPL、headless 一次性调用、RPC/SDK | [CLI](https://github.com/encyc/zen-agent/blob/main/docs/guide/cli.md) · [TUI](https://github.com/encyc/zen-agent/blob/main/docs/guide/tui.md) |
-| **内置工具** | 文件读写、带后台作业的 bash、grep/glob、联网搜索 + 抓取、子代理、待办、项目记忆、LSP、GitHub、checkpoint/rewind（`github` 只在装了 `gh` 时注册） | [工具与权限](https://github.com/encyc/zen-agent/blob/main/docs/guide/tools-permissions.md) |
-| **49 条命令** | TUI 与 REPL 共用同一套斜杠命令，支持 Tab 补全 | [斜杠命令](https://github.com/encyc/zen-agent/blob/main/docs/guide/commands.md) |
+| **内置工具** | 文件读写、带后台作业的 bash、grep/glob、联网搜索 + 抓取、子代理、任务清单、项目记忆、LSP、GitHub（装了 `gh` 才有）、checkpoint/rewind、跨会话检索 | [工具与权限](https://github.com/encyc/zen-agent/blob/main/docs/guide/tools-permissions.md) |
+| **54 条命令** | TUI 与 REPL 共用同一套斜杠命令，支持 Tab 补全 | [斜杠命令](https://github.com/encyc/zen-agent/blob/main/docs/guide/commands.md) |
 | **可扩展** | skills、模板、扩展、MCP server、自定义 provider —— 全是文件驱动 | [扩展](https://github.com/encyc/zen-agent/blob/main/docs/guide/extensions.md) · [MCP](https://github.com/encyc/zen-agent/blob/main/docs/guide/mcp.md) |
+| **自动化任务** | 每个项目一个 daemon，按计划跑一轮；定义是纯文件，CLI 与桌面端共用 | [自动化任务](https://github.com/encyc/zen-agent/blob/main/docs/guide/automations.md) |
 | **可嵌入** | Python 里用 `Agent` + `subscribe`；其它语言用 `zen rpc` | [RPC 与 SDK](https://github.com/encyc/zen-agent/blob/main/docs/guide/rpc-sdk.md) |
-| **桌面端** | 同一个 `zen rpc` 之上的 Tauri 外壳：会话、工作面板、审批、自动更新 | [desktop](https://github.com/encyc/zen-agent/blob/main/desktop/README.md) |
+| **桌面端** | 同一个 `zen rpc` 之上的 Tauri 外壳：会话与项目、分屏、文件、Git 审查、终端、记忆、自动化、审批、自动更新 | [desktop](https://github.com/encyc/zen-agent/blob/main/desktop/README.md) |
 
 ### 桌面端
 
-同一个内核，套一层 Tauri 外壳：流式工具卡、内联 diff，以及审查与文件工作面板。
-diff 和文件留在对话旁边。
+桌面端是同一个内核套一层 Tauri 外壳，也是一个会话最完整的视图：左侧会话与项目，中间是这一轮，
+右侧工作面板放着文件、Git 审查栏、终端、项目记忆和自动化。一个会话可以分屏到另一个会话旁边，
+也可以拖成独立窗口；打开着的项目由宿主保持常驻。
 
-一个会话、一个 agent：你直接和它对话，它读、改、跑；工作面板把 diff 和文件留在对话旁边。
+审查栏把工作区改动分组，点开任何文件都是内联 diff，下面还有提交图——不用离开对话就能读完一次改动。
 
-![审查面板与内联 diff](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-review.png)
+![工作面板的 Git 审查栏：分组变更、内联 diff 与提交图](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-review.png)
 
 ## 参与贡献
 
@@ -117,9 +134,10 @@ bash scripts/check.sh    # 唯一门禁：sync + ruff + pytest（CI 跑的完全
 
 | | |
 |---|---|
-| [架构总览](https://github.com/encyc/zen-agent/blob/main/docs/architecture.md) | 五层依赖，以及一次请求会碰到什么 |
-| [斜杠命令](https://github.com/encyc/zen-agent/blob/main/docs/guide/commands.md) | 全部 49 条命令 |
+| [架构总览](https://github.com/encyc/zen-agent/blob/main/docs/architecture.md) | 分层，以及一次请求会碰到什么 |
+| [斜杠命令](https://github.com/encyc/zen-agent/blob/main/docs/guide/commands.md) | 全部 54 条命令 |
 | [配置与目录](https://github.com/encyc/zen-agent/blob/main/docs/guide/config.md) | `config.toml`、provider、预算 |
+| [自动化任务](https://github.com/encyc/zen-agent/blob/main/docs/guide/automations.md) | 定时轮次与项目级 daemon |
 | [核心契约](https://github.com/encyc/zen-agent/blob/main/docs/reference/contracts.md) | 内核赖以成立的不变量 |
 | [开发与发版](https://github.com/encyc/zen-agent/blob/main/docs/development.md) | 门禁、打包检查、发版流程 |
 | [文档索引](https://github.com/encyc/zen-agent/blob/main/docs/README.md) | 其余全部，按阅读顺序 |

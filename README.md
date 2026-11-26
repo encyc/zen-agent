@@ -7,12 +7,26 @@
 English · [简体中文](https://github.com/encyc/zen-agent/blob/main/README.zh-CN.md)
 
 A coding agent you can read, embed and change: one pure-Python kernel, one
-runtime dependency (`httpx`), four ways to drive it. It reads and edits files,
-runs commands, searches the web, delegates to read-only subagents and keeps a
-project todo list — from a terminal, a headless one-shot, or your own program.
+runtime dependency (`httpx`), four surfaces — TUI, REPL, headless and RPC — plus
+a desktop app that is just another client of the same runtime. It reads and edits
+files, runs commands, searches the web, hands a self-contained job to a child
+agent and keeps a task list — from the desktop app, a terminal, a headless
+one-shot, or your own program.
+
 Repo <https://github.com/encyc/zen-agent> · PyPI `zenagent-py` (imports as `zenagent`)
 
-![ZenAgent desktop: a session with tool rows and an inline diff](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-chat.png)
+![ZenAgent desktop: a session with tool rows, an inline diff and a task list](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-chat.png)
+
+## One session, one agent
+
+ZenAgent is a coding agent, not a workspace with modes to switch between. A
+session is one conversation with one agent in one project. The desktop keeps a
+session list per project, and every surface drives the same runtime; there is no
+second orchestrator to supervise. Scheduled rounds, recall of earlier sessions
+and child agents are tools the agent can use inside that session.
+
+Permissions are the only mode: `plan` (read-only), `ask` (confirm writes and
+commands) and `auto` (no prompts). `zen` starts in `ask`; `--mode` sets it.
 
 ## Install
 
@@ -57,6 +71,7 @@ endpoint, a local server included — see
 
 ```bash
 zen                                     # TUI: transcript, tool cards, sidebar
+zen --no-tui                            # line-based REPL over the same commands
 zen -p "explain this repo" --json       # headless: one JSON object, CI-friendly
 ```
 
@@ -69,36 +84,44 @@ Coding agents are either closed and vendor-tied, or large enough that changing o
 layer means reading ten. ZenAgent is the small one: a Python kernel you can read
 in an evening, embed in an afternoon, and change without permission.
 
-- **One dependency.** `types`, `events`, `providers`, `agent` and `tools` import `httpx` and nothing else; the wheel is ~440 KB and `zen --version` takes ~0.1 s.
-- **Pure Python.** No node runtime, no build step, no daemon in the middle — `pip install`, then run it.
+- **One dependency.** `types`, `events`, `providers`, `agent` and `tools` import `httpx` and nothing else; the wheel stays under 1 MB and there is no daemon between you and the model.
+- **Pure Python.** No node runtime, no build step — `pip install`, then run it.
 - **One kernel, four surfaces.** TUI, REPL, headless (`-p`/`--json`) and `zen rpc` (a JSONL protocol) all drive the same runtime the same way.
 - **A GUI is a client, not a rewrite.** The RPC surface already existed, so the Tauri desktop app reuses the same kernel instead of forking one — installers for macOS, Windows and Linux.
 - **Embed it in 30 lines.** `Agent(model=..., tools=..., api_key=...)` plus one subscribe callback: your tools, your storage, your event loop.
 - **Extend without restarting.** Skills, prompt templates, extensions, MCP servers and custom providers are all files; `/reload` picks them up mid-session.
-- **No vendor lock-in.** Two protocol adapters (`openai-completions`, including the zai/deepseek dialects, and `anthropic-messages`) plus a packaged catalog carrying prices and context windows.
-- **Costs you can see.** `zen usage`, `/usage`, and per-request cost in the transcript.
+- **No vendor lock-in.** Four protocol adapters (`openai-completions` — including the zai/deepseek dialects — `openai-responses`, `anthropic-messages`, `google-generative-ai`) plus a packaged catalog carrying prices and context windows.
+- **Costs you can see.** `zen usage`, `/usage`, per-request cost in the transcript, and budget knobs in `[limits]`.
+- **History is a tool.** `list_sessions`, `search_sessions` and `read_session` let the agent find what an earlier conversation settled instead of asking you to paste it.
+- **A schedule is a file.** An automation is a saved prompt plus `daily HH:MM` or `every N<m|h>`; a per-project daemon runs it in a fixed session and leaves the report there.
 
 ## Features
 
 | | What you get | Where |
 |---|---|---|
-| **A small kernel** | Five layers whose dependencies point strictly down; each layer is replaceable on its own | [architecture](https://github.com/encyc/zen-agent/blob/main/docs/architecture.md) |
+| **A small kernel** | Six layers whose dependencies point strictly down; each layer is replaceable on its own | [architecture](https://github.com/encyc/zen-agent/blob/main/docs/architecture.md) |
 | **Four surfaces** | TUI (transcript, tool cards, sidebar), REPL, headless one-shot, RPC/SDK | [CLI](https://github.com/encyc/zen-agent/blob/main/docs/guide/cli.md) · [TUI](https://github.com/encyc/zen-agent/blob/main/docs/guide/tui.md) |
-| **Built-in tools** | files, bash with background jobs, grep/glob, web search + fetch, subagents, todo, project memory, LSP, GitHub, checkpoint/rewind (`github` registers only when `gh` is installed) | [tools](https://github.com/encyc/zen-agent/blob/main/docs/guide/tools-permissions.md) |
+| **Built-in tools** | files, bash with background jobs, grep/glob, web search + fetch, child agents, task list, project memory, LSP, GitHub (when `gh` is installed), checkpoint/rewind, cross-session search | [tools](https://github.com/encyc/zen-agent/blob/main/docs/guide/tools-permissions.md) |
 | **54 commands** | one slash-command surface shared by the TUI and the REPL, with Tab completion | [commands](https://github.com/encyc/zen-agent/blob/main/docs/guide/commands.md) |
 | **Extend it** | skills, templates, extensions, MCP servers, custom providers — all file-driven | [extensions](https://github.com/encyc/zen-agent/blob/main/docs/guide/extensions.md) · [MCP](https://github.com/encyc/zen-agent/blob/main/docs/guide/mcp.md) |
+| **Automations** | a per-project daemon runs one round on a schedule; definitions are plain files the CLI and desktop share | [automations](https://github.com/encyc/zen-agent/blob/main/docs/guide/automations.md) |
 | **Embed it** | `Agent` + `subscribe` in Python; `zen rpc` for every other language | [RPC & SDK](https://github.com/encyc/zen-agent/blob/main/docs/guide/rpc-sdk.md) |
-| **Desktop app** | A Tauri shell over the same `zen rpc`: sessions, work panel, approvals, self-update | [desktop](https://github.com/encyc/zen-agent/blob/main/desktop/README.md) |
+| **Desktop app** | a Tauri shell over the same `zen rpc`: sessions and projects, split panes, files, Git review, terminal, memory, automations, approvals, self-update | [desktop](https://github.com/encyc/zen-agent/blob/main/desktop/README.md) |
 
 ### Desktop
 
-The same kernel behind a Tauri shell: streaming tool cards, inline diffs, and a
-review and files work panel. Diffs and files stay beside the conversation.
+The desktop is the same kernel behind a Tauri shell, and the fullest view of a
+session: sessions and projects on the left, the turn in the middle, and a work
+panel that keeps files, the Git review rail, a terminal, project memory and
+automations beside the conversation. A session can be split beside another one
+or popped out into its own window, and the host keeps the projects you have open
+warm.
 
-One session, one agent: you talk to it directly; it reads, edits and runs, and
-the work panel keeps diffs and files beside the conversation.
+The review rail groups the working tree, opens an inline diff for any changed
+file and draws the commit graph, so a change can be read without leaving the
+conversation.
 
-![Review panel with an inline diff](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-review.png)
+![The work panel's Git review rail: grouped changes, an inline diff and the commit graph](https://raw.githubusercontent.com/encyc/zen-agent/main/assets/screenshots/desktop-review.png)
 
 ## Contributing
 
@@ -114,9 +137,10 @@ Where to read next:
 
 | | |
 |---|---|
-| [Architecture](https://github.com/encyc/zen-agent/blob/main/docs/architecture.md) | The five layers and what one request touches |
+| [Architecture](https://github.com/encyc/zen-agent/blob/main/docs/architecture.md) | The layers and what one request touches |
 | [Slash commands](https://github.com/encyc/zen-agent/blob/main/docs/guide/commands.md) | All 54 commands |
 | [Configuration](https://github.com/encyc/zen-agent/blob/main/docs/guide/config.md) | `config.toml`, providers, budgets |
+| [Automations](https://github.com/encyc/zen-agent/blob/main/docs/guide/automations.md) | Scheduled rounds and the per-project daemon |
 | [Contracts](https://github.com/encyc/zen-agent/blob/main/docs/reference/contracts.md) | The invariants the kernel is built on |
 | [Development](https://github.com/encyc/zen-agent/blob/main/docs/development.md) | Gates, packaging check, releasing |
 | [Docs index](https://github.com/encyc/zen-agent/blob/main/docs/README.md) | Everything else, in reading order |
