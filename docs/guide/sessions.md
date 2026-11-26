@@ -80,6 +80,9 @@ REPL 里：`/session` 看当前、`/sessions` 列出、`/fork` 复制、`/import
   取首行，超过 40 字符截断并加 `…`；没有可读内容（空会话、只有 assistant 消息）时显示 `(empty)`。
 - 改名：REPL `/rename <name>`（TUI 会话选择器里按 `r`）。标题会压空白、去首尾空白，上限 80 字符；
   空标题报错。`SessionManager.rename(path, title)` 是同一操作的 app 层入口。
+- 自动命名：新会话的第一条用户消息之后，后台调一次 LLM 把这条消息归纳成短名（约 10 个
+  汉字 / 5–6 个英文词），写进同一个 sidecar。失败静默，回退到首行 `brief()`；`/rename`
+  永远优先——写库前会复核，手改的名字不会被覆盖。已恢复的会话不会再命名。
 - 标题存在 sidecar `<项目 sessions 目录>/.titles.json`，内容是 `{会话文件名: 标题}`，**不写进 JSONL**：
   会话文件仍是 append-only 的 `Message.to_json()`，`zen export` 和任何其他消费方照旧解析。
 - sidecar 缺失、损坏或不是 dict 时读取回退到派生 brief，绝不报错；写入先写临时文件再 `os.replace`，

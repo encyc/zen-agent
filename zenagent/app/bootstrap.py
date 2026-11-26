@@ -57,6 +57,7 @@ from zenagent.app.support import (
     resolve_task_model,
     session_id_for,
 )
+from zenagent.app.title import AutoTitler
 from zenagent.app.views import last_request_usage
 from zenagent.config import (
     ContextGuard,
@@ -330,6 +331,13 @@ async def assemble(
         meta_recorder = SessionMetaRecorder(lambda: runtime.session)
         agent.subscribe(meta_recorder)
         agent.on_retry = make_retry_recorder(lambda: runtime.session)
+        if stream_fn is None:
+            # Auto-naming rides the runtime's own provider. A caller-injected
+            # stream_fn (tests, SDK embedding) owns its provider calls, so the
+            # second call stays off there instead of surprising the caller.
+            titler = AutoTitler(runtime)
+            runtime.auto_titler = titler
+            agent.subscribe(titler)
         runtime.session.append_meta(mode_record(runtime._mode))
         if runtime.journal is not None:
             attach_journal(agent, runtime.journal)

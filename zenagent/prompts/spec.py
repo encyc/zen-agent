@@ -24,7 +24,7 @@ __all__ = [
 
 #: Bumped whenever block content changes; recorded in eval reports and the
 #: prompt CHANGELOG.
-PROMPT_VERSION = "2026-11-26.2"
+PROMPT_VERSION = "2026-11-26.3"
 
 CacheClass = Literal["stable", "session", "volatile"]
 
@@ -166,6 +166,23 @@ BLOCKS: dict[str, BlockSpec] = {
         cache_class="volatile",
         budget_chars=40,
         required_vars=("summary",),
+    ),
+    # Session naming: its own second provider call, never part of the system
+    # prompt, so the cache class only records provenance.
+    "title.system": BlockSpec(
+        id="title.system",
+        path="title_system.md",
+        version=PROMPT_VERSION,
+        cache_class="stable",
+        budget_chars=400,
+    ),
+    "title.user": BlockSpec(
+        id="title.user",
+        path="title_user.md",
+        version=PROMPT_VERSION,
+        cache_class="stable",
+        budget_chars=200,
+        required_vars=("prompt",),
     ),
     "memory_index": BlockSpec(
         id="memory_index",

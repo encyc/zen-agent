@@ -44,6 +44,7 @@ from zenagent.app.session_meta import (
 from zenagent.app.support import (
     api_key_for,
 )
+from zenagent.app.title import AutoTitler
 from zenagent.app.views import last_request_usage
 from zenagent.config import (
     ContextGuard,
@@ -207,6 +208,8 @@ class Runtime:
         self.goal = GoalController()
         #: ChatController installs this to resume an active goal after a switch.
         self.goal_resume: Callable[[], None] | None = None
+        #: Background namer for a new conversation; prepare() installs it.
+        self.auto_titler: AutoTitler | None = None
         #: Extra workspace roots tracked by /add-dir (display only for now).
         self.extra_dirs: list[Path] = []
         #: JSONL trace path when the frontend started with --trace.
@@ -651,6 +654,9 @@ class Runtime:
         if self._unpersisted_messages:
             with contextlib.suppress(OSError):
                 await self._flush_unpersisted(self.session)
+        if self.auto_titler is not None:
+            titler, self.auto_titler = self.auto_titler, None
+            await titler.finish()
         self._drop_unused_session()
         leases.release_session_lease(self)
         # A mid-switch close (abort during session switch) may have left the
