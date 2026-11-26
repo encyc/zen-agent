@@ -22,11 +22,11 @@
 - 展示面：`SessionInfo.title` → `SessionEntry.as_wire()["title"]` → RPC `session list`
   → 桌面 `session.title || session.name`（`SidebarCoding.tsx`、`ConversationTopbar.tsx`）；
   TUI 选择器与 `/rename` 走同一个 `SessionManager.rename`。
-- 装配点：`bootstrap.prepare`——REPL、TUI、headless、RPC/桌面的**唯一** app 装配点
-  （它内部再调 `Runtime.bootstrap`）；`agent.subscribe` 的 listener 在 loop 里**串行
-  await**，所以 LLM 调用必须 `create_task` 出去，否则会挡住宅的流式输出。挂在
-  `prepare` 而不是 `Runtime.bootstrap`，是因为测试与嵌入方会直接构造 Runtime，产品默认
-  行为不该改变它们的 provider 调用序列。
+- 装配点：`Runtime.bootstrap`（实体在 `bootstrap.assemble`），REPL、TUI、headless、
+  RPC/桌面都经过它。`agent.subscribe` 的 listener 在 loop 里**串行 await**，所以 LLM
+  调用必须 `create_task` 出去，否则会挡住宅的流式输出。**注入 `stream_fn` 时关闭**：
+  调用方自己接管 provider（测试、SDK 嵌入、自定义 provider），第二个调用不该悄悄出现；
+  生产入口（`zen`、`zen -p`、`zen rpc`、daemon）传的都是 `None`。
 - 先例：`app/compact.py` 是第二个调用 provider 的地方——复用 `agent.model` /
   `agent.api_key`，`StreamOptions(thinking=None, session_id=agent.session_id)`。
   session id 必须带：网关按它路由（opencode-go），丢了会 400。
@@ -51,7 +51,7 @@
 
 ## 方案
 
-A. **app 层 `AutoTitler`**，`bootstrap.prepare` 订阅第一个用户消息 → 后台任务 →
+A. **app 层 `AutoTitler`**，`Runtime.bootstrap` 订阅第一个用户消息 → 后台任务 →
    写 sidecar。**选它。** 一处覆盖 `zen -p`、REPL、TUI、RPC/桌面。
 B. 前端层（`ChatController` 或桌面 RPC `session rename`）。✗ headless 没有
    `ChatController`，TUI/RPC/桌面要各写一遍；而且改名发生在 UI 层会让 kernel 的
@@ -71,8 +71,8 @@ C. 纯启发式（首行截 10 字）。✗ 用户要"归纳"，截断只会得�
 
 流程：
 
-1. `bootstrap.prepare` 在 Runtime 建好后实例化 `AutoTitler(runtime)` 并
-   `agent.subscribe(autotitler)`，存到 `runtime.auto_titler`。
+1. `bootstrap.assemble` 在 agent 建好后实例化 `AutoTitler(runtime)` 并
+   `agent.subscribe(autotitler)`，存到 `runtime.auto_titler`；`stream_fn is None` 才接。
 2. `message_end` 且消息是 `UserMessage`，且满足全部条件才触发：
    该 session 还没跑过、该 session 没有存储标题、`agent.messages` 里正好一条用户
    消息、文本非空（纯图片跳过）。
@@ -111,6 +111,8 @@ C. 纯启发式（首行截 10 字）。✗ 用户要"归纳"，截断只会得�
 - 这次调用不进 usage 行（compaction 的摘要调用同样不计）；它是一次真实但极小的开销。
 - `zen -p` 也会多这一次调用——它就是一个会话。若以后要跳过 headless，加一个
   `RuntimeOptions` 字段即可，现在不加。
+- 注入了 `stream_fn` 的调用方不会自动命名（调用方自持 provider）。这是显式契约，不是
+  漏配：生产入口全部走 runtime 自己的 provider。
 
 ## 测试
 

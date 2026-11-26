@@ -190,3 +190,41 @@ async def test_finish_gives_up_on_a_hung_call(runtime_factory) -> None:
     await runtime.agent.prompt("帮我改一下")
     await titler.finish(timeout_s=0.05)  # returns; the hung call is cancelled
     assert read_session_titles(runtime.session.path.parent) == {}
+
+
+from zenagent.app.agent_profile import AgentProfile
+from zenagent.app.bootstrap import prepare
+from zenagent.app.runtime import RuntimeOptions
+
+
+def _offline_options(root) -> RuntimeOptions:
+    return RuntimeOptions(
+        root=root,
+        profile=AgentProfile(mcp=False, skills=False, templates=False),
+    )
+
+
+async def test_prepare_attaches_the_titler(app_env, tmp_path) -> None:
+    # No injected stream_fn: naming rides the runtime's own provider, and the
+    # fake is installed afterwards so the assembly path stays the production one.
+    prepared = await prepare(_offline_options(app_env), views=False)
+    runtime = prepared.runtime
+    runtime.agent.stream_fn = text_stream("登录重试修复")
+    titler = runtime.auto_titler
+    assert titler is not None
+    try:
+        await runtime.agent.prompt("帮我修一下登录重试的 bug")
+        await titler.finish()
+        assert session_title(runtime.session.path) == "登录重试修复"
+    finally:
+        await runtime.close()
+
+
+async def test_close_lands_an_inflight_title(app_env, tmp_path) -> None:
+    prepared = await prepare(_offline_options(app_env), views=False)
+    runtime = prepared.runtime
+    runtime.agent.stream_fn = text_stream("登录重试修复")
+    await runtime.agent.prompt("帮我修一下")
+    await runtime.close()
+    assert session_title(runtime.session.path) == "登录重试修复"
+    assert runtime.auto_titler is None
