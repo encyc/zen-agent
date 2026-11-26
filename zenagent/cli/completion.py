@@ -131,7 +131,9 @@ def argument_matches(models, commands, name: str, needle: str) -> list[tuple[str
         )
         values = [
             (
-                entry.id,
+                # The provider is part of the value: the same id can exist
+                # under several providers, and Enter must land on this row.
+                f"{entry.provider}/{entry.id}",
                 f"{entry.provider} · "
                 + (
                     t("tui.app.model_ready")

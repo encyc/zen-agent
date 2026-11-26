@@ -43,7 +43,7 @@ TUI 与 REPL **共用同一个** `CommandRegistry`（`zenagent/app/commands.py`�
 
 | 命令 | 作用 |
 |---|---|
-| `/model` | 浏览并切换模型（下一轮生效） |
+| `/model` | 浏览并切换模型（下一轮生效）；参数用 `provider/模型名`（如 `opencode-go/deepseek-v4-pro`），裸模型名只在目录里唯一时可用 |
 | `/thinking` | 查看或设置推理等级：`off`｜`low`｜`medium`｜`high`｜`max` |
 | `/mode` | 设置运行模式：`plan`｜`ask`｜`auto` |
 | `/plan-review` | 复核 plan 模式下产出的计划，批准后切到 `auto` |

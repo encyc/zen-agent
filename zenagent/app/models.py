@@ -6,7 +6,11 @@ from dataclasses import dataclass
 
 from zenagent.app.runtime import Runtime
 from zenagent.app.support import api_key_for, session_id_for
-from zenagent.providers.catalog import find_model
+from zenagent.providers.catalog import (
+    AmbiguousModelError,
+    model_ref,
+    resolve_model_ref,
+)
 
 __all__ = ["ModelEntry", "ModelManager", "SwitchResult"]
 
@@ -37,7 +41,7 @@ class ModelManager:
         self.runtime = runtime
 
     def entries(self) -> list[ModelEntry]:
-        current = self.runtime.agent.model.id
+        current = self.runtime.agent.model
         entries: list[ModelEntry] = []
         for provider in self.runtime.catalog.values():
             for model in provider.models:
@@ -57,7 +61,12 @@ class ModelManager:
                         supports_vision=model.supports_vision,
                         available=available,
                         reason=reason,
-                        current=model.id == current,
+                        # Both rows of a duplicated id must not look current:
+                        # the provider is part of the identity now.
+                        current=(
+                            model.provider == current.provider
+                            and model.id == current.id
+                        ),
                     )
                 )
         return entries
@@ -65,16 +74,32 @@ class ModelManager:
     def current(self) -> str:
         return self.runtime.agent.model.id
 
+    def current_ref(self) -> str:
+        """The live model as ``provider/model-id`` (what a selection stores)."""
+        return model_ref(self.runtime.agent.model)
+
     def switch(self, model_id: str) -> SwitchResult:
-        return apply_model_switch(
+        result = apply_model_switch(
             self.runtime.agent, self.runtime.catalog, self.runtime.guard, model_id
         )
+        if result.ok:
+            # runtime.model is what reload_api_key() and the settings' "current
+            # provider" read; leaving it at the bootstrap model re-authenticated
+            # the wrong provider after a switch.
+            self.runtime.model = self.runtime.agent.model
+        return result
 
 
 def apply_model_switch(
     agent, catalog, guard, model_id: str
 ) -> SwitchResult:
     """Switch one agent to ``model_id`` with every side effect, frontend-agnostic.
+
+    ``model_id`` is a ``provider/model-id`` reference (or a bare id that is
+    unique in the catalog). Resolution goes through
+    :func:`resolve_model_ref`, so a duplicated bare id is refused with the
+    qualified choices instead of silently landing on the first provider —
+    which is how "I picked opencode-go" used to become ``api.deepseek.com``.
 
     The REPL used to assign ``agent.model`` alone, which left the old provider's
     API key in place (a cross-provider switch then authenticated with the wrong
@@ -83,9 +108,10 @@ def apply_model_switch(
     through here so a switch cannot mean two different things.
     """
     try:
-        model = find_model(catalog, model_id)
-    except KeyError:
-        return SwitchResult(False, f"unknown model: {model_id}")
+        model = resolve_model_ref(catalog, model_id)
+    except (AmbiguousModelError, KeyError) as exc:
+        detail = exc.args[0] if exc.args else exc
+        return SwitchResult(False, str(detail))
     api_key = api_key_for(catalog, model)
     if not api_key:
         return SwitchResult(

@@ -345,7 +345,7 @@ class SettingsPanel(ModalScreen[None]):
                 getattr(self._app.runtime.agent, "thinking", None) or "off"
             )
         if row_value == "model":
-            return self._app.models.current()
+            return self._app.models.current_ref()
         if row_value == "search-provider":
             return settings_module.get_pref("search_provider", None) or "auto"
         if row_value == "goal-pause":
@@ -370,7 +370,11 @@ class SettingsPanel(ModalScreen[None]):
             return [(c, "", c) for c in THINKING_LEVELS]
         if row_value == "model":
             return [
-                (entry.id, entry.reason or "", entry.id)
+                (
+                    f"{entry.provider}/{entry.id}",
+                    entry.reason or "",
+                    f"{entry.provider}/{entry.id}",
+                )
                 for entry in self._app.models.entries()
                 if entry.available
             ]

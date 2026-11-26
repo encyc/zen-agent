@@ -532,7 +532,7 @@ def render_command_result(
     if result.model:
         switch = services.models.switch(result.model)
         if switch.ok:
-            print_fn(t("repl.model_switch", model=services.models.current()))
+            print_fn(t("repl.model_switch", model=services.models.current_ref()))
         else:
             print_fn(switch.reason or t("repl.unknown_model", model=result.model))
     if result.appearance:
@@ -544,7 +544,7 @@ def render_command_result(
 
     screen = result.screen
     if screen == "model-picker":
-        print_fn(t("repl.current_model", model=services.models.current()))
+        print_fn(t("repl.current_model", model=services.models.current_ref()))
     elif screen == "mode-picker":
         print_fn(
             t("cmdmsg.mode_set", mode=services.runtime.mode, modes=describe_modes())

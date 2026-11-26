@@ -103,7 +103,10 @@ export function spawnArgs(resume?: string | null): string[] {
 /** The frames that bring a fresh child onto the user's last choices.
  *
  * Order matters: a model switch may reset the thinking level, so thinking is
- * replayed last. Mode is a pure runtime flag and goes first. */
+ * replayed last. Mode is a pure runtime flag and goes first. The stored model
+ * is a ``provider/model`` ref — a bare id can exist under several providers
+ * (opencode-go mirrors deepseek's ids), and replaying it would silently pick
+ * the catalog's first provider. */
 export function replayFrames(
   prefs: SessionPrefs,
   live: LiveChoices,

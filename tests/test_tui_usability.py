@@ -329,8 +329,8 @@ async def test_enter_on_a_model_value_hint_switches_without_a_picker(fake_runtim
         await pilot.pause()
 
         hints = app.query_one(CommandHints)
-        assert hints.matches[0][0] == app.runtime.agent.model.id, "current model leads"
-        assert hints.matches[1][0] == "deepseek-v4-pro", "usable models before keyless ones"
+        assert hints.matches[0][0] == app.models.current_ref(), "current model leads"
+        assert hints.matches[1][0] == "deepseek/deepseek-v4-pro", "usable models before keyless ones"
 
         await pilot.press("down")  # current -> deepseek-v4-pro
         await pilot.press("enter")
@@ -352,7 +352,7 @@ async def test_model_command_with_an_id_switches_directly(fake_runtime):
         await pilot.pause()
         prompt = app.query_one(PromptInput)
         prompt.focus()
-        for char in "/model deepseek-v4-pro":
+        for char in "/model deepseek/deepseek-v4-pro":
             await pilot.press(char)
         await pilot.press("enter")
         await pilot.pause()

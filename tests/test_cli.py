@@ -439,7 +439,7 @@ def test_image_on_a_non_vision_model_fails_before_any_request(monkeypatch, tmp_p
     stream = recording_stream()
     _patch_bootstrap(monkeypatch, stream, {})
 
-    assert cli_main.main(["-p", "hi", "-m", "deepseek-v4-pro",
+    assert cli_main.main(["-p", "hi", "-m", "deepseek/deepseek-v4-pro",
                           "--image", str(_png(tmp_path))]) == 1
     assert stream.requests == []  # no round trip wasted
     assert "does not accept images" in capsys.readouterr().err

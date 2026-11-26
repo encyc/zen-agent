@@ -37,11 +37,15 @@ test('loadPrefs returns nulls when storage is empty', () => {
 test('savePref writes and loadPrefs reads back', () => {
   withStorage((store) => {
     savePref('mode', 'auto')
-    savePref('model', 'glm-5.3')
+    savePref('model', 'opencode-go/glm-5.3')
     savePref('thinking', 'high')
-    assert.deepEqual(loadPrefs(), { mode: 'auto', model: 'glm-5.3', thinking: 'high' })
+    assert.deepEqual(loadPrefs(), {
+      mode: 'auto',
+      model: 'opencode-go/glm-5.3',
+      thinking: 'high',
+    })
     assert.equal(store.get(MODE_KEY), 'auto')
-    assert.equal(store.get(MODEL_KEY), 'glm-5.3')
+    assert.equal(store.get(MODEL_KEY), 'opencode-go/glm-5.3')
     assert.equal(store.get(THINKING_KEY), 'high')
   })
 })
@@ -63,7 +67,7 @@ test('garbage values fall back to null instead of failing the spawn', () => {
 
 test('savePref null clears the stored value', () => {
   withStorage((store) => {
-    savePref('model', 'glm-5.3')
+    savePref('model', 'opencode-go/glm-5.3')
     savePref('model', null)
     assert.equal(store.has(MODEL_KEY), false)
     assert.equal(loadPrefs().model, null)
@@ -89,17 +93,21 @@ test('spawnArgs resumes a session on the child that replaces another project', (
 
 test('replayFrames order: mode, then model, thinking last', () => {
   const frames = replayFrames(
-    { mode: 'auto', model: 'glm-5.3', thinking: 'high' },
+    { mode: 'auto', model: 'opencode-go/glm-5.3', thinking: 'high' },
     { mode: 'ask', model: null, thinking: 'off' },
   )
   assert.deepEqual(frames.map((frame) => frame.type), ['mode', 'model', 'command'])
+  assert.deepEqual(frames[1], {
+    type: 'model',
+    model_id: 'opencode-go/glm-5.3',
+  })
   assert.deepEqual(frames[2], { type: 'command', name: 'thinking', argument: 'high' })
 })
 
 test('replayFrames skips choices the child already carries', () => {
   const frames = replayFrames(
-    { mode: 'ask', model: 'glm-5.3', thinking: 'off' },
-    { mode: 'ask', model: 'glm-5.3', thinking: 'off' },
+    { mode: 'ask', model: 'opencode-go/glm-5.3', thinking: 'off' },
+    { mode: 'ask', model: 'opencode-go/glm-5.3', thinking: 'off' },
   )
   assert.deepEqual(frames, [])
 })

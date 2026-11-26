@@ -586,3 +586,48 @@ async def test_removed_orchestration_kinds_are_unknown(host_env):
         frame = await call(host, host_env.writes, {"type": kind, "id": kind})
         assert frame["type"] == "error"
         assert "unknown type" in frame["message"]
+
+
+# -- the sidebar's session list --------------------------------------------
+
+
+def _live_session(runtime, name: str) -> Path:
+    """A lazy session path in the runtime's project (no transcript on disk)."""
+    from zenagent import project
+
+    project.write_project_meta(root=runtime.root)
+    path = project.project_sessions_dir(root=runtime.root) / name
+    runtime.session = SimpleNamespace(path=path)
+    return path
+
+
+async def test_session_list_keeps_a_sibling_slots_live_session(host_env):
+    # A run streaming in a background slot has no transcript yet, so the
+    # active slot's own listing cannot see it: switching away from it used to
+    # drop the conversation from the sidebar until the turn ended.
+    from zenagent.app.sessions import SessionManager
+
+    host = host_env.build()
+    alpha_live = _live_session(host_env.slot.runtime, "alpha-live.jsonl")
+    host_env.slot.server.sessions = SessionManager(host_env.slot.runtime)
+
+    await call(
+        host,
+        host_env.writes,
+        {"type": "project", "op": "open", "root": str(host_env.beta), "id": "o"},
+    )
+    beta_live = _live_session(host.active.runtime, "beta-live.jsonl")
+    host.active.server.sessions = SessionManager(host.active.runtime)
+
+    frame = await call(
+        host,
+        host_env.writes,
+        {"type": "session", "op": "list", "scope": "all", "id": "l"},
+    )
+
+    rows = {row["path"]: row for row in frame["sessions"]}
+    assert rows[str(alpha_live)]["current"] is False
+    assert rows[str(alpha_live)]["project"] == "alpha"
+    assert rows[str(alpha_live)]["project_path"] == str(host_env.alpha.resolve())
+    assert rows[str(beta_live)]["current"] is True
+    assert not alpha_live.exists() and not beta_live.exists()

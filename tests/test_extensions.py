@@ -114,7 +114,7 @@ async def test_extension_command_runs_via_repl(tmp_path, monkeypatch):
 
     lines: list[str] = []
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=stream,
         api_key="k",
         input_fn=read,

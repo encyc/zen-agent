@@ -30,6 +30,44 @@ matches the release tag; older history is in the repository tags and commits.
   `failed/timeout` without teaching the shared termination mapping a private
   word.
 
+### Fixed
+
+- **Picking a model now carries its provider, so "opencode-go" no longer
+  becomes DeepSeek.** Model ids are not unique in the catalog — `deepseek-v4-pro`
+  and `glm-5.3` exist both under a vendor and under the opencode-go gateway —
+  but every selection path resolved a bare id with "first provider in file order
+  wins": the desktop picker sent `model.id`, the TUI pickers sent `entry.id`, and
+  `/model`, `--model` and `default_model` all went through `find_model`. Clicking
+  the opencode-go row therefore switched the base URL to `api.deepseek.com` and
+  the key to `DEEPSEEK_API_KEY`, and the next `task` child inherited that model —
+  a subagent that looked like it "defaulted to DeepSeek". Selection now resolves
+  through `resolve_model_ref`: `provider/model-id` picks exactly that provider, a
+  bare id is accepted only when one provider defines it, and an ambiguous one is
+  refused with the qualified choices instead of guessed. The desktop picker and
+  its stored pref, the TUI picker/cycle/settings rows and the `/model` value
+  hints now all send `provider/model-id`; status and model-switch results expose
+  `model_ref` so clients replay the qualified reference; and a successful switch
+  updates `runtime.model`, which is what `reload_api_key()` and the settings'
+  "current provider" read. Upgrade note: an ambiguous bare
+  `--model`/`default_model`/`/model` value is now an error naming the
+  `provider/model-id` forms; unique bare ids keep working.
+
+- **A session stops disappearing from the sidebar after you switch away.** Two
+  separate causes, both silent. The list was capped at 100 sessions globally
+  (`SessionManager.entries` called `list_sessions(limit=100)`) while the
+  sidebar pages each project ten rows at a time — so on a 130-session home the
+  30 oldest rows, all in one project, simply did not exist, and a session just
+  below the cut was visible only while it was current (the placeholder row) and
+  vanished the moment you switched away from it. The cap is gone:
+  `list_sessions(limit=None)` means every session, and the sidebar's list asks
+  for all of them. Separately, a run streaming in a background slot has no
+  transcript on disk yet (messages land at `agent_end`), and the listing only
+  knew the active slot's own current session, so switching to another session
+  or project hid the conversation that was still being written until its turn
+  ended. The host now merges every resident slot's live session into the one
+  `session list` answer (`entries(live=…)`): a placeholder row that never
+  writes to disk and gives way to the real transcript when it lands.
+
 ## v0.15.2 — 2026-11-26
 
 ### Added

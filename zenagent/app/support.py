@@ -9,7 +9,12 @@ from pathlib import Path
 
 from zenagent import settings
 from zenagent.prompts import PromptContext, compose_system
-from zenagent.providers.catalog import Model, ProviderConfig, find_model
+from zenagent.providers.catalog import (
+    AmbiguousModelError,
+    Model,
+    ProviderConfig,
+    resolve_model_ref,
+)
 from zenagent.types import Usage
 
 __all__ = [
@@ -49,9 +54,10 @@ def system_prompt(tool_names: list[str]) -> str:
 
 
 def resolve_model(catalog: dict[str, ProviderConfig], model_id: str | None) -> Model:
-    """Pick the model to run: explicit id, else the catalog's ``default: true``."""
+    """Pick the model to run: explicit ``provider/id`` (or unique bare id), else
+    the catalog's ``default: true``."""
     if model_id:
-        return find_model(catalog, model_id)
+        return resolve_model_ref(catalog, model_id)
     for provider in catalog.values():
         for model in provider.models:
             if model.default:
@@ -75,37 +81,19 @@ def resolve_task_model(
     """Resolve a ``task`` ``model`` argument to ``(model, api_key)``.
 
     Accepts ``provider/model-id`` or a bare model id — the same lookup
-    ``/model`` uses (the first provider defining the id wins, so a bare id
-    is never ambiguous, and ``provider/id`` is the escape hatch). Raises
-    ``ValueError`` with a hint naming the missing environment variable when
-    the model, provider or its API key is absent — the task tool turns that
-    into a fail-fast error envelope before any child runs.
+    ``/model`` uses, through :func:`resolve_model_ref`: a bare id is accepted
+    only when one provider defines it, and the qualified form is required for
+    an id that exists under several providers. Raises ``ValueError`` with a
+    hint naming the missing environment variable when the model, provider or
+    its API key is absent — the task tool turns that into a fail-fast error
+    envelope before any child runs.
     """
-    raw = raw.strip()
-    if "/" in raw:
-        provider_id, _, model_id = raw.partition("/")
-        provider = catalog.get(provider_id)
-        if provider is None:
-            raise ValueError(
-                f"unknown provider {provider_id!r}; "
-                f"catalog has: {', '.join(sorted(catalog))}"
-            )
-        model = next((m for m in provider.models if m.id == model_id), None)
-        if model is None:
-            raise ValueError(f"provider {provider_id!r} has no model {model_id!r}")
-    else:
-        matches = [m for c in catalog.values() for m in c.models if m.id == raw]
-        if not matches:
-            raise ValueError(
-                f"model {raw!r} is not in the catalog; "
-                "use provider/model form (see /models)"
-            )
-        if len(matches) > 1:
-            options = ", ".join(f"{m.provider}/{m.id}" for m in matches)
-            raise ValueError(
-                f"model id {raw!r} is ambiguous ({options}); use provider/model form"
-            )
-        model = matches[0]
+    try:
+        model = resolve_model_ref(catalog, raw)
+    except (AmbiguousModelError, KeyError) as exc:
+        # ValueError is the task tool's fail-fast contract.
+        detail = exc.args[0] if exc.args else exc
+        raise ValueError(str(detail)) from None
     key = api_key_for(catalog, model)
     if not key:
         provider = catalog.get(model.provider)

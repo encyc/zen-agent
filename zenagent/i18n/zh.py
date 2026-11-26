@@ -415,7 +415,7 @@ CATALOG: dict[str, str] = {
     "mode.describe": "模式：plan = 只读规划 · ask = 写操作/命令需确认 · auto = 全部放行，不再确认（仅灾难命令仍拒绝）",
     # 共享：命令描述
     "cmd.help.description": "列出全部命令",
-    "cmd.model.description": "浏览并切换模型",
+    "cmd.model.description": "浏览并切换模型（provider/模型名）",
     "cmd.mode.description": "设置运行模式：plan|ask|auto",
     "cmd.lang.description": "设置界面语言：auto|en|zh",
     "cmd.theme.description": "设置配色主题：auto|dark|light",

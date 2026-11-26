@@ -25,7 +25,11 @@ from zenagent.cli.rpc.codec import PROTOCOL_VERSION
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
 from zenagent.cli.rpc.ops_automations import AutomationsOps
 from zenagent.cli.rpc.ops_runs import RunsOps
-from zenagent.cli.rpc.ops_session import _optional_count, disk_transcript
+from zenagent.cli.rpc.ops_session import (
+    _optional_count,
+    disk_transcript,
+    session_list_frame,
+)
 from zenagent.cli.rpc.slot import RuntimeSlot
 from zenagent.cli.rpc.terminal import TerminalError, TerminalSession, clamp_dim
 from zenagent.project import find_project_root, project_key
@@ -154,6 +158,11 @@ class RpcHost(RunsOps, AutomationsOps):
         if kind == "session" and request.get("op") == "resume":
             await self._session_resume(request, request_id)
             return True
+        if kind == "session" and request.get("op") == "list":
+            holder = self._slot_for(request)
+            if holder is not None and holder.server.sessions is not None:
+                await self._session_list(holder, request, request_id)
+                return True
         if kind == "runs":
             await self._runs_op(request, request_id)
             return True
@@ -434,6 +443,34 @@ class RpcHost(RunsOps, AutomationsOps):
         slot = await self._spawn(target, resume=resume_path, base=base)
         self._activate(slot, background=background)
         return slot
+
+    async def _session_list(self, slot, request: dict, request_id) -> None:
+        """Answer the list with every resident slot's live session.
+
+        A transcript lands only when the turn ends, so a run streaming in a
+        sibling slot is in no file the slot's own listing reads: switch away
+        and the sidebar loses it. The host owns the slots; merge them here.
+        """
+        scope = "all" if request.get("scope") == "all" else "project"
+        live = [
+            other.runtime.session.path
+            for other in self._slots.values()
+            if other is not slot and (scope == "all" or other.root == slot.root)
+        ]
+        try:
+            frame = await session_list_frame(slot.server.sessions, scope=scope, live=live)
+        except Exception as exc:  # noqa: BLE001 - a bad listing is a result
+            self._send(
+                failure_frame(
+                    request_id,
+                    code="session_failed",
+                    message="session failed",
+                    exc=exc,
+                    op="list",
+                )
+            )
+            return
+        self._send({"type": "result", "id": request_id, "ok": True, **frame})
 
     async def _session_resume(self, request: dict, request_id) -> None:
         """Resume without ever aborting a run that belongs to another session.

@@ -118,7 +118,7 @@ def test_split_input_prompt_and_commands():
 async def test_repl_smoke_two_turns_then_exit(isolated_sessions):
     stream = scripted_stream(0.0, "first answer", "second answer")
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=stream,
         input_fn=scripted_input("one", "two", "/exit", settle=0.02),
         print_fn=lambda *a, **k: None,
@@ -137,7 +137,7 @@ async def test_repl_smoke_two_turns_then_exit(isolated_sessions):
 
 async def test_repl_eof_exits_cleanly(isolated_sessions):
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=scripted_stream(0.0, "hi"),
         input_fn=scripted_input(),
         print_fn=lambda *a, **k: None,
@@ -164,7 +164,7 @@ async def test_typing_while_running_steers_instead_of_stacking(isolated_sessions
         return line
 
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=stream,
         input_fn=input_fn,
         print_fn=lambda *a, **k: None,
@@ -199,7 +199,7 @@ async def test_unknown_model_returns_one():
 async def test_missing_key_returns_one(monkeypatch):
     for name in ("ZAI_CODING_CN_API_KEY", "DEEPSEEK_API_KEY", "OPENCODE_API_KEY"):
         monkeypatch.delenv(name, raising=False)
-    code = await repl("glm-5.3", stream_fn=scripted_stream(), input_fn=scripted_input(), mcp=False)
+    code = await repl("zai-coding-cn/glm-5.3", stream_fn=scripted_stream(), input_fn=scripted_input(), mcp=False)
     assert code == 1
 
 
@@ -226,7 +226,7 @@ async def test_repl_prints_a_status_line_after_each_run(isolated_sessions):
         return "/exit"
 
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=scripted_stream(0.0, "hello"),
         input_fn=input_fn,
         print_fn=lambda *a, **k: lines.append("".join(str(x) for x in a)),
@@ -272,7 +272,7 @@ async def test_repl_reconnects_a_late_mcp_server(tmp_path, isolated_sessions):
 
     lines: list[str] = []
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=scripted_stream(0.0, "hello"),
         input_fn=input_fn,
         print_fn=lambda *a, **k: lines.append("".join(str(x) for x in a)),
@@ -327,7 +327,7 @@ async def test_mcp_retry_typed_mid_run_waits_for_the_turn(tmp_path, isolated_ses
 
     lines: list[str] = []
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         # Slow enough that /mcp retry is read while the turn is still live.
         stream_fn=scripted_stream(0.3, "slow hello"),
         input_fn=input_fn,
@@ -346,7 +346,7 @@ async def test_shake_typed_mid_run_waits_for_the_turn(isolated_sessions):
     """/shake rewrites the transcript; mid-run it must queue, not raise."""
     lines: list[str] = []
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=scripted_stream(0.3, "slow hello"),
         input_fn=scripted_input("hi", "/shake images", "/exit", settle=0.02),
         print_fn=lambda *a, **k: lines.append("".join(str(x) for x in a)),
@@ -386,7 +386,7 @@ async def test_reload_discovers_skills_added_mid_session(tmp_path, monkeypatch):
         return "/exit"
 
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=scripted_stream(0.0, "hello"),
         input_fn=input_fn,
         print_fn=lambda *a, **k: lines.append("".join(str(x) for x in a)),
@@ -403,7 +403,7 @@ async def test_a_command_typed_mid_run_acts_on_the_finished_turn(isolated_sessio
     """/compact typed while the model streams waits, then compacts for real."""
     lines: list[str] = []
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=scripted_stream(0.4, "slow answer", "summary of it"),
         input_fn=scripted_input("hello", "/compact", "/exit", settle=0.02),
         print_fn=lambda *a, **k: lines.append("".join(str(x) for x in a)),
@@ -428,7 +428,7 @@ async def test_slash_theme_switches_and_reports(isolated_sessions):
         return "/theme mono" if len(lines) == 0 else "/exit"
 
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=scripted_stream(0.0, "hi"),
         input_fn=input_fn,
         print_fn=lambda *a, **k: lines.append("".join(str(x) for x in a)),
@@ -441,7 +441,7 @@ async def test_slash_theme_switches_and_reports(isolated_sessions):
 
 async def test_slash_tools_lists_the_tool_set(isolated_sessions, capsys):
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=scripted_stream(),
         api_key="k",
         input_fn=scripted_input("/tools", "/exit"),
@@ -455,7 +455,7 @@ async def test_slash_tools_lists_the_tool_set(isolated_sessions, capsys):
 async def test_slash_retry_reruns_the_last_prompt(isolated_sessions, capsys):
     stream = scripted_stream(0, "first answer", "retry answer")
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=stream,
         api_key="k",
         input_fn=scripted_input("hello", "/retry", "/exit", settle=0.05),
@@ -497,7 +497,7 @@ async def test_repl_injects_the_skill_body(
     printed: list[str] = []
 
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=stream,
         input_fn=scripted_input("/skill:pdf-report summarize this", "/exit", settle=0.02),
         print_fn=printed.append,
@@ -528,7 +528,7 @@ async def test_repl_reports_an_unknown_skill_without_running(
     printed: list[str] = []
 
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=stream,
         input_fn=scripted_input("/skill:nope go", "/exit", settle=0.02),
         print_fn=printed.append,
@@ -553,7 +553,7 @@ async def test_repl_injects_an_embedded_skill_token(
     stream = scripted_stream(0.0, "done")
 
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=stream,
         input_fn=scripted_input("please /skill:pdf-report check it", "/exit", settle=0.02),
         print_fn=lambda *a, **k: None,
@@ -634,7 +634,7 @@ async def test_repl_forwards_the_thinking_flag(isolated_sessions):
         yield AssistantEvent(type="done", partial=partial, reason="stop")
 
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=stream,
         input_fn=scripted_input("hi", "/exit"),
         print_fn=lambda *a, **k: None,
@@ -683,7 +683,7 @@ async def test_repl_rejects_startup_images_for_a_non_vision_model(isolated_sessi
     image.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8)
 
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=scripted_stream(),
         input_fn=scripted_input(),
         print_fn=lambda *a, **k: None,
@@ -723,7 +723,7 @@ async def test_repl_exposes_the_tools_the_tui_has(
         yield AssistantEvent(type="done", partial=partial, reason="stop")
 
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=stream,
         input_fn=scripted_input("hi", "/exit"),
         print_fn=lambda *a, **k: None,
@@ -753,7 +753,7 @@ async def test_repl_resume_loads_the_runtime_session(isolated_sessions):
         yield AssistantEvent(type="done", partial=partial, reason="stop")
 
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         resume=prior.path,
         stream_fn=stream,
         input_fn=scripted_input("follow-up", "/exit"),
@@ -796,7 +796,7 @@ async def test_repl_prints_the_provider_error_after_a_failed_run(isolated_sessio
         printed.append(" ".join(str(arg) for arg in args))
 
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=erroring_stream(),
         input_fn=scripted_input("hi", "", "/exit", settle=0.2),
         print_fn=print_fn,
@@ -878,7 +878,7 @@ async def _drive(tmp_path, printed, reader, stream, mode="ask"):
         printed.append(" ".join(str(arg) for arg in args))
 
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=counting_stream,
         input_fn=reader,
         print_fn=print_fn,

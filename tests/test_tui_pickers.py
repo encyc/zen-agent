@@ -44,7 +44,7 @@ async def test_switching_from_the_composer_heals_the_missing_key_banner(picker_a
 
         prompt = app.query_one(PromptInput)
         prompt.focus()
-        for char in "/model deepseek-v4-pro":
+        for char in "/model deepseek/deepseek-v4-pro":
             await pilot.press(char)
         await pilot.press("enter")
         await pilot.pause()

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import shutil
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -116,6 +117,23 @@ class SessionEntry:
     project_path: str = ""
     pinned: bool = False
 
+    def as_wire(self) -> dict:
+        """The JSON shape ``session list`` answers with (paths as strings)."""
+        return {
+            "path": str(self.path),
+            "name": self.path.stem,
+            "title": self.title,
+            "project": self.project,
+            "project_path": self.project_path,
+            "messages": self.messages,
+            "current": self.current,
+            "pinned": self.pinned,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "model": self.model,
+            "derived_from": self.derived_from,
+        }
+
 
 class SessionManager:
     """Lists sessions and switches the runtime between them."""
@@ -144,12 +162,26 @@ class SessionManager:
         if target == self.runtime.session.path and not target.exists():
             self.runtime.session.materialize()
 
-    def entries(self, *, scope: str = "project") -> list[SessionEntry]:
+    def entries(
+        self,
+        *,
+        scope: str = "project",
+        limit: int | None = None,
+        live: Iterable[Path] = (),
+    ) -> list[SessionEntry]:
+        """Rows for the session list, newest first with pinned rows on top.
+
+        ``limit`` caps the saved transcripts read from disk; ``None`` reads
+        every one, because the sidebar pages each project itself and a silent
+        global cap only loses the tail. ``live`` names sessions other runtimes
+        hold right now — a run streaming in a sibling slot has no transcript
+        yet — so they keep a row instead of vanishing from the list.
+        """
         current = self.current()
         entries: list[SessionEntry] = []
         pins_by_dir: dict[Path, set[str]] = {}
         roots_by_dir: dict[Path, str] = {}
-        for info in list_sessions(limit=100, scope=scope):
+        for info in list_sessions(limit=limit, scope=scope):
             try:
                 size = info.path.stat().st_size
             except OSError:
@@ -180,7 +212,18 @@ class SessionManager:
         # (sorted() is stable, so no time order is lost inside each group).
         entries.sort(key=lambda entry: not entry.pinned)
         if not any(entry.current for entry in entries):
-            entries.insert(self._unsaved_position(entries), self._unsaved_entry())
+            entries.insert(
+                self._unsaved_position(entries),
+                self._placeholder(current, current=True),
+            )
+        rows = self._live_rows(entries, current, live)
+        if rows:
+            # Just after the pinned block, and after the on-screen session's
+            # own placeholder: a background conversation never outranks it.
+            position = self._unsaved_position(entries)
+            if position < len(entries) and entries[position].current:
+                position += 1
+            entries[position:position] = rows
         return entries
 
     @staticmethod
@@ -191,15 +234,35 @@ class SessionManager:
                 return position
         return len(entries)
 
-    def _unsaved_entry(self) -> SessionEntry:
-        """A row for the lazy current session, which has no file yet.
+    def _live_rows(
+        self, entries: list[SessionEntry], current: Path, live: Iterable[Path]
+    ) -> list[SessionEntry]:
+        """Rows for live sessions this listing would otherwise drop.
 
-        A new conversation only materializes on its first message, but the
-        person is already talking in it: without this row the session they are
-        looking at cannot be found or re-selected in a session list. Nothing
-        is written to disk -- this row lives for the duration of the list call.
+        A run streaming in a sibling slot has no transcript on disk yet (the
+        file lands at ``agent_end``), so a listing that reads only files — plus
+        this runtime's own current session — loses it the moment the person
+        switches away: the run keeps going, but the sidebar cannot find it.
+        Never writes; the row gives way to the real transcript when it lands.
         """
-        path = self.current()
+        listed = {entry.path for entry in entries}
+        rows: list[SessionEntry] = []
+        for path in live:
+            candidate = Path(path)
+            if candidate == current or candidate in listed:
+                continue
+            rows.append(self._placeholder(candidate, current=False))
+        return rows
+
+    def _placeholder(self, path: Path, *, current: bool) -> SessionEntry:
+        """A row for a session with no transcript on disk yet.
+
+        A new conversation only materializes on its first message, and a run
+        in progress is written at ``agent_end``: without this row the session
+        someone is talking in cannot be found or re-selected in a session list.
+        Nothing is written to disk -- this row lives for the duration of the
+        list call.
+        """
         directory = path.parent
         root = project.project_root_for_sessions_dir(directory)
         meta = project.load_project_meta(root=root) if root else None
@@ -215,7 +278,7 @@ class SessionManager:
             project=meta.name if meta is not None else "",
             project_path=root,
             pinned=False,
-            current=True,
+            current=current,
         )
 
     def set_pin(self, path: Path, pinned: bool) -> bool:

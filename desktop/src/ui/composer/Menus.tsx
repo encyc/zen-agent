@@ -119,7 +119,9 @@ export function ModelMenu({
           type="button"
           className={css.item}
           onClick={() => {
-            void setModel(model.id)
+            // Send the row's provider too: the same id can exist under
+            // several providers, and a bare id resolves to the wrong one.
+            void setModel(`${model.provider}/${model.id}`)
             onClose()
           }}
         >

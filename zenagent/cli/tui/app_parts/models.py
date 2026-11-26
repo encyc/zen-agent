@@ -101,20 +101,22 @@ class ModelsMixin:
             # Picking a model that already has a key heals the banner.
             self.runtime.missing_api_key = None
             self.chat.clear_last_error()
-        self.notify(t("tui.app.model_set", model=self.models.current()), timeout=3)
+        self.notify(
+            t("tui.app.model_set", model=self.models.current_ref()), timeout=3
+        )
         self._refresh_status()
 
     def _cycle_model(self, step: int) -> None:
         entries = [entry for entry in self.models.entries() if entry.available]
         if not entries:
             return
-        ids = [entry.id for entry in entries]
-        current = self.chat.status.model_id
+        refs = [f"{entry.provider}/{entry.id}" for entry in entries]
+        current = self.models.current_ref()
         try:
-            index = (ids.index(current) + step) % len(ids)
+            index = (refs.index(current) + step) % len(refs)
         except ValueError:
             index = 0
-        self._apply_model(ids[index])
+        self._apply_model(refs[index])
 
     def action_cycle_model(self) -> None:
         self._cycle_model(1)

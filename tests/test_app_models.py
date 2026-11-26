@@ -13,7 +13,7 @@ async def test_switch_reports_missing_key_and_syncs_context(
     assert entry.available is False
     assert "no API key" in (entry.reason or "")
 
-    result = models.switch(entry.id)
+    result = models.switch(f"{entry.provider}/{entry.id}")
     assert result.ok is False and "no API key" in (result.reason or "")
 
     ok = models.switch("deepseek-flash")
@@ -47,3 +47,39 @@ def test_apply_model_switch_updates_every_side_effect(monkeypatch):
     assert agent.api_key == "deep-key"
     assert agent.session_id == session_id_for(custom)
     assert guard.context_window == 4242
+
+
+async def test_switch_qualified_id_lands_on_that_provider(runtime_factory, monkeypatch):
+    """The picker's row provider is part of the switch, not display only."""
+    monkeypatch.setenv("OPENCODE_API_KEY", "oc-key")
+    runtime = await runtime_factory()
+    models = ModelManager(runtime)
+
+    result = models.switch("opencode-go/deepseek-v4-pro")
+
+    assert result.ok is True, result.reason
+    assert runtime.agent.model.provider == "opencode-go"
+    assert runtime.agent.model.base_url.startswith("https://opencode.ai/")
+    assert runtime.agent.api_key == "oc-key"
+    # runtime.model drives reload_api_key()/settings: a switch must adopt it.
+    assert runtime.model is runtime.agent.model
+    # Only the picked provider's row is current; the mirrored id is not.
+    current = [(e.provider, e.id) for e in models.entries() if e.current]
+    assert current == [("opencode-go", "deepseek-v4-pro")]
+
+
+async def test_ambiguous_bare_id_is_refused_not_guessed(runtime_factory, monkeypatch):
+    monkeypatch.setenv("OPENCODE_API_KEY", "oc-key")
+    runtime = await runtime_factory()
+    models = ModelManager(runtime)
+    before = runtime.agent.model
+
+    result = models.switch("deepseek-v4-pro")
+
+    assert result.ok is False
+    reason = result.reason or ""
+    assert "ambiguous" in reason
+    assert "deepseek/deepseek-v4-pro" in reason
+    assert "opencode-go/deepseek-v4-pro" in reason
+    assert runtime.agent.model is before
+    assert runtime.model is before

@@ -3,11 +3,28 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterable
 from dataclasses import asdict
 from pathlib import Path
 
 from zenagent.app.session_lease import SessionLeaseBusy
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
+
+
+async def session_list_frame(
+    sessions, *, scope: str, live: Iterable[Path] = ()
+) -> dict:
+    """The ``session list`` answer, shared by a slot's server and the host.
+
+    ``live`` names sessions other runtimes hold right now: a run streaming in
+    a sibling slot has no transcript yet, so a listing that reads only files
+    would drop it the moment the person switches away. The host knows its
+    slots; a lone runtime passes nothing.
+    """
+    # Listing parses every transcript in every project; off the loop it
+    # cannot stall streaming events or the next request behind it.
+    entries = await asyncio.to_thread(sessions.entries, scope=scope, live=live)
+    return {"scope": scope, "sessions": [entry.as_wire() for entry in entries]}
 
 
 class MissingSessionFile(Refusal):
@@ -232,29 +249,7 @@ class SessionOps:
             return {"path": str(path), "name": path.stem}
         if op == "list":
             scope = "all" if request.get("scope") == "all" else "project"
-            # Listing parses every transcript in every project; off the loop it
-            # cannot stall streaming events or the next request behind it.
-            entries = await asyncio.to_thread(self.sessions.entries, scope=scope)
-            return {
-                "scope": scope,
-                "sessions": [
-                    {
-                        "path": str(entry.path),
-                        "name": entry.path.stem,
-                        "title": entry.title,
-                        "project": entry.project,
-                        "project_path": entry.project_path,
-                        "messages": entry.messages,
-                        "current": entry.current,
-                        "pinned": entry.pinned,
-                        "created_at": entry.created_at,
-                        "updated_at": entry.updated_at,
-                        "model": entry.model,
-                        "derived_from": entry.derived_from,
-                    }
-                    for entry in entries
-                ],
-            }
+            return await session_list_frame(self.sessions, scope=scope)
         if op == "new":
             path = await self.sessions.new()
             if self.chat is not None:

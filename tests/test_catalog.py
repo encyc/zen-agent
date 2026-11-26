@@ -2,7 +2,14 @@
 
 import pytest
 
-from zenagent.providers.catalog import _build_catalog, find_model, load_catalog
+from zenagent.providers.catalog import (
+    AmbiguousModelError,
+    _build_catalog,
+    find_model,
+    load_catalog,
+    model_ref,
+    resolve_model_ref,
+)
 from zenagent.providers.compat import CompatFlags, sniff_compat
 from zenagent.types import Cost
 
@@ -107,6 +114,46 @@ def test_find_model_unknown_id_raises_key_error_naming_model():
     with pytest.raises(KeyError) as excinfo:
         find_model(load_catalog(), "gpt-99")
     assert "gpt-99" in str(excinfo.value)
+
+
+# ------------------------------------------------- resolve_model_ref()
+
+
+def test_resolve_model_ref_qualified_picks_the_mirror_provider():
+    catalog = load_catalog()
+
+    mirror = resolve_model_ref(catalog, "opencode-go/deepseek-v4-pro")
+
+    assert mirror.provider == "opencode-go"
+    assert mirror.base_url == "https://opencode.ai/inference/go/v1"
+    assert model_ref(mirror) == "opencode-go/deepseek-v4-pro"
+    # The same id under the vendor is a different entry, not what was selected.
+    vendor = resolve_model_ref(catalog, "deepseek/deepseek-v4-pro")
+    assert vendor.base_url == "https://api.deepseek.com"
+
+
+def test_resolve_model_ref_unique_bare_id_still_resolves():
+    model = resolve_model_ref(load_catalog(), "deepseek-flash")
+    assert (model.provider, model.id) == ("deepseek", "deepseek-flash")
+
+
+def test_resolve_model_ref_refuses_an_ambiguous_bare_id():
+    with pytest.raises(AmbiguousModelError) as excinfo:
+        resolve_model_ref(load_catalog(), "deepseek-v4-pro")
+    message = str(excinfo.value)
+    assert "ambiguous" in message
+    assert "deepseek/deepseek-v4-pro" in message
+    assert "opencode-go/deepseek-v4-pro" in message
+
+
+def test_resolve_model_ref_unknown_provider_and_model_are_named():
+    catalog = load_catalog()
+    with pytest.raises(KeyError, match="unknown provider 'nope'"):
+        resolve_model_ref(catalog, "nope/deepseek-v4-pro")
+    with pytest.raises(KeyError, match="has no model"):
+        resolve_model_ref(catalog, "deepseek/nope")
+    with pytest.raises(KeyError, match="provider/model form"):
+        resolve_model_ref(catalog, "nope")
 
 
 # ---------------------------------------------------------------- deepseek

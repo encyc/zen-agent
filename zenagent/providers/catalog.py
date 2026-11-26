@@ -391,13 +391,69 @@ def load_catalog() -> dict[str, ProviderConfig]:
 
 
 def find_model(catalog: dict[str, ProviderConfig], model_id: str) -> Model:
-    """Find a model by id across all providers, in file order.
+    """Find a model by bare id across all providers, in file order.
 
-    The first provider defining a duplicated id wins. Raises KeyError
-    naming the model id when no provider defines it.
+    The first provider defining a duplicated id wins. This is the catalog's
+    lookup, not a user selection: an id such as ``deepseek-v4-pro`` exists under
+    both ``deepseek`` and ``opencode-go``, so picking a provider needs
+    :func:`resolve_model_ref` (a bare id is only accepted there when unique).
+
+    Raises KeyError naming the model id when no provider defines it.
     """
     for provider in catalog.values():
         for model in provider.models:
             if model.id == model_id:
                 return model
     raise KeyError(f"model {model_id!r} is not in the catalog")
+
+
+def model_ref(model: Model) -> str:
+    """The provider-qualified reference a selection stores and sends."""
+    return f"{model.provider}/{model.id}"
+
+
+class AmbiguousModelError(LookupError):
+    """A bare model id matches more than one provider."""
+
+    def __init__(self, model_id: str, matches: list[Model]) -> None:
+        self.model_id = model_id
+        self.matches = matches
+        options = ", ".join(model_ref(model) for model in matches)
+        super().__init__(
+            f"model id {model_id!r} is ambiguous ({options}); use provider/model"
+        )
+
+
+def resolve_model_ref(catalog: dict[str, ProviderConfig], ref: str) -> Model:
+    """Resolve ``provider/model-id`` or a bare id to exactly one model.
+
+    Selection paths (``/model``, the TUI/desktop pickers, ``--model`` and
+    ``default_model``) must use this, never :func:`find_model`: the catalog can
+    define the same id under several providers (a gateway mirroring an upstream
+    model), and silently taking the first one switches the base URL and API key
+    behind the user's back. A bare id is therefore accepted only when unique;
+    an ambiguous one raises :class:`AmbiguousModelError` listing the qualified
+    forms instead of guessing.
+    """
+    ref = ref.strip()
+    if "/" in ref:
+        provider_id, _, model_id = ref.partition("/")
+        provider = catalog.get(provider_id)
+        if provider is None:
+            known = ", ".join(sorted(catalog)) or "(none)"
+            raise KeyError(f"unknown provider {provider_id!r}; catalog has: {known}")
+        for model in provider.models:
+            if model.id == model_id:
+                return model
+        raise KeyError(f"provider {provider_id!r} has no model {model_id!r}")
+    matches = [
+        model for provider in catalog.values() for model in provider.models
+        if model.id == ref
+    ]
+    if not matches:
+        raise KeyError(
+            f"model {ref!r} is not in the catalog; use provider/model form (see /models)"
+        )
+    if len(matches) > 1:
+        raise AmbiguousModelError(ref, matches)
+    return matches[0]

@@ -111,7 +111,7 @@ def test_repl_slash_command_expands_a_template(tmp_path, monkeypatch):
 
     code = asyncio.run(
         repl(
-            "glm-5.3",
+            "zai-coding-cn/glm-5.3",
             stream_fn=stream,
             input_fn=input_fn,
             print_fn=lambda *a, **k: None,
