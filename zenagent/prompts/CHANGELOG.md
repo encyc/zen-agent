@@ -4,6 +4,24 @@ Every content change bumps `PROMPT_VERSION` (`zenagent/prompts/spec.py`) and get
 one entry here: what changed, why, and the experiment/report that justified it.
 P0 extracted the v0.4.1 text verbatim — no behavior change.
 
+## 2026-11-26.1 — bash stops being the default reader
+
+- `tool.bash` now names the prohibition and the reason: never read files
+  through it (`cat`/`head`/`tail`/`sed`), because `read_file` is the tool that
+  pages by offset, refuses binaries, and records the read `edit_file` requires.
+  Measured on 66 transcripts of this repo: 333 bash calls `cat` a file, and 18
+  `edit_file`/`write_file` calls were refused with "the file has not been read
+  yet" right after the model had read the file through bash.
+- `system.tool_policy` Specialized bullet: `prefer … over shell equivalents` ->
+  `must use … instead of shell equivalents`. The omp original this line was
+  distilled from says `MUST`; the softened verb is what loses to the habit.
+  Same length class, so the block stays inside its 700-char budget.
+- `system.environment` states that bash and the file tools already run in the
+  working directory. 5,633 of 6,078 bash calls (93%) re-opened with
+  `cd /Users/mac/zen-agent &&`, which states a fact the tool already knows.
+- No budget constants changed: tool descriptions 5,827 -> 5,991 of 6,400.
+  The two additions were paid for by rewording, not by a new allocation.
+
 ## 2026-11-25.1 — the swarm protocol block is removed
 
 - Deleted `swarm_protocol` (and its `BlockSpec`) with the swarm orchestration
