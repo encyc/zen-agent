@@ -17,7 +17,7 @@
 - **`approval="read"`**，且必须通过 `tests/test_permissions.py::test_plan_mode_gates_real_builtin_tools_by_their_declaration`（plan 模式放行）。
 - **thinking 永不出现在任何 `include` 档位**，也不出现在 `read_session` 输出里。
 - **项目根必须来自 Runtime，不得依赖进程 cwd。** `agent/session.list_sessions()` 目前没有 `root` 参数，跟着进程 cwd 走——本计划补上该参数并全程传它。
-- **工具单描述 ≤ 900 字符**（`TOOL_BUDGET_CHARS`），三块合计 ≤ 1135 字符，`TOOL_TOTAL_BUDGET_CHARS` 提到 **6200**。
+- **工具单描述 ≤ 900 字符**（`TOOL_BUDGET_CHARS`），三块合计 ≤ 1135 字符，`TOOL_TOTAL_BUDGET_CHARS` 提到 **6400**（实测下限 6209，见 Task 3）。
 - **单文件 ≤ 800 行**（`scripts/check_architecture.py`）。
 - 每个任务结束的绿灯命令（仓库根）：`bash scripts/check.sh`。
 - 文案与文档：新增中文文案进 `zenagent/i18n/`（若新增用户可见串）；工具描述走 `zenagent/prompts/blocks/tools/*.md`，不放 Python 字符串。
@@ -357,7 +357,7 @@ git commit -m "feat(agent): list_sessions(root=...) and a read-only SessionIndex
 - Create: `zenagent/prompts/blocks/tools/list_sessions.md`
 - Create: `zenagent/prompts/blocks/tools/search_sessions.md`（先占位正文，Task 4 定稿）
 - Create: `zenagent/prompts/blocks/tools/read_session.md`（同上，Task 5 定稿）
-- Modify: `zenagent/tools/__init__.py:36-50`（`ALL_TOOLS`）、`:69`（`base_tools`）
+- Modify: `zenagent/tools/__init__.py:69`（`base_tools`；**`ALL_TOOLS` 不动**）
 - Modify: `zenagent/prompts/spec.py:203`（`TOOL_BLOCK_NAMES`）、`:233`（`TOOL_TOTAL_BUDGET_CHARS`）
 - Modify: `zenagent/app/skills_recompose.py:100`（注入 `runtime.root`）
 - Modify: `zenagent/app/bootstrap.py:228`（子代理 base_tools 传同一个 root）
@@ -468,6 +468,12 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'zenagent.tools.session
 
 `tools/__init__.py`：`base_tools()` 增可选 `session_root: Path | None = None`；为 `None` 时不加会话工具（保持既有调用点与 `prompt_fixtures.golden_tools()` 的行数量不变），非 None 时 `*build_session_tools(session_root)` 插在 `grep` 之后。
 
+**不要动 `ALL_TOOLS`。** 它是"静态内置工具"的花名册，`tests/test_todo.py:507` 与
+`zenagent/app/runtime.py` 都按它对齐；会话工具是**按 Runtime 构造**的（根来自 runtime），
+和 `todo`/`memory` 同类，不进 `ALL_TOOLS`。`TOOL_GOLDEN_NAMES` 也只是"描述被检查的集合"，
+不是 `ALL_TOOLS` 的镜像——所以 `tests/prompt_fixtures.py` 里 `ALL_TOOL_NAMES` 保持不变，
+只把三个名字追加到 `TOOL_GOLDEN_NAMES`。
+
 `app/skills_recompose.py` 的 `base_tools(...)` 调用加 `session_root=runtime.root`（`recompose` 里同处已有 `runtime.memory_store = MemoryStore(runtime.root)`，语义一致）。`app/bootstrap.py:228` 那个给子代理的 `base_tools(runtime.ask_tool, cwd=runtime.cwd)` 也加 `session_root=runtime.root`。
 
 - [ ] **Step 5: 三个 prompt 块 + 预算**
@@ -480,7 +486,11 @@ List saved sessions, newest first: id, title, message count, updated date, proje
 
 `search_sessions.md` / `read_session.md` 此刻先写一句 `Search saved sessions by content.` / `Read one saved session by id.`，Task 4/5 替换为定稿正文（这样 Task 3 就能把 golden 定下来并在后续任务里只改正文）。
 
-`prompts/spec.py`：`TOOL_BLOCK_NAMES` 末尾加 `"list_sessions", "search_sessions", "read_session"`；`TOOL_TOTAL_BUDGET_CHARS` 改 6200，并加注释 `# 5200 -> 6200: three cross-session tools (2026-11-26 session search)。`
+`prompts/spec.py`：`TOOL_BLOCK_NAMES` 末尾加 `"list_sessions", "search_sessions", "read_session"`；`TOOL_TOTAL_BUDGET_CHARS` 改 **6400**，注释 `# 5200 -> 6400: three cross-session tools (2026-11-26 session search)`。
+
+> 为什么是 6400 而不是 6200：三段定稿描述实测 **1135** 字符（240 + 483 + 412），
+> 既有 14 个工具合计 **5074**，和是 **6209**——6200 会刚好差 9 个字符而红。
+> 留 ~190 字符余量给后续微调，同时 `TOOL_BUDGET_CHARS = 900` 不动。
 
 **golden 基线怎么变，想清楚再动手**：`base_tools()` 的默认 `session_root=None` 不注册会话工具，所以 `tests/prompt_fixtures.py` 的 `ALL_TOOL_NAMES` 与四个 `CONFIGS` 的 roster **一个字都不用改**（它们钉的是 v0.4.1 的 roster 快照）。要改的是"被检查的工具描述集合"：
 
@@ -488,7 +498,7 @@ List saved sessions, newest first: id, title, message count, updated date, proje
 - `scripts/prompt_goldens.py::tool_descriptions()`：在 `tools.append(build_skill_tool(list(SKILLS)))` 之后加 `tools.extend(build_session_tools(Path("/repo")))`
 - `tests/test_prompts_tools.py::test_tool_descriptions_match_golden()`：同样加 `tools.extend(build_session_tools(Path("/repo")))`，否则新描述永远不会被比对
 
-`tests/test_prompts_budget.py::test_tool_budgets_hold()` 也要加同一行（否则 6200 的新预算没人用，也不会被证明够用）。
+`tests/test_prompts_budget.py::test_tool_budgets_hold()` 也要加同一行（否则新预算没人用，也不会被证明够用）。
 
 - [ ] **Step 6: 重生成 golden 并跑门禁**
 
@@ -684,7 +694,7 @@ Expected: PASS
 - [ ] **Step 6: 重生成 golden 并跑预算**
 
 Run: `uv run python scripts/prompt_goldens.py && uv run pytest tests/test_prompts_budget.py tests/test_prompts_tools.py -q`
-Expected: PASS（`search_sessions` 描述 ≤ 900，合计 ≤ 6200）
+Expected: PASS（`search_sessions` 描述 ≤ 900，合计 ≤ 6400）
 
 - [ ] **Step 7: Commit**
 
@@ -894,7 +904,12 @@ git commit -m "test(tools): a real runtime offers session tools and they never w
 
 - [ ] **Step 1: 加 tool policy 一条**
 
-`tool_policy.md` 在 `- Exploration:` 之后插入：
+**先抬预算再写文本。** `system.tool_policy` 的 `budget_chars` 是 **700**，当前正文 681 字符
+（实测），新规则 216 字符装不下。`zenagent/prompts/spec.py:61` 的 BlockSpec 改成
+`budget_chars=900`，并在 `TOOL_TOTAL_BUDGET_CHARS` 那条注释旁边记一行
+`# system.tool_policy 700 -> 900: cross-session search rule (2026-11-26)`。
+
+`tool_policy.md` 在 `- Exploration:` 之后插入（216 字符，勿展开）：
 
 ```
 - History: when the user refers to an earlier session ("last time", "that session where"), reach for search_sessions before guessing a path; escalate include only when the first level misses, then read_session the message numbers it reports.
