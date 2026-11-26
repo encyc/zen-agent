@@ -1,0 +1,1 @@
+Read one saved session by id.

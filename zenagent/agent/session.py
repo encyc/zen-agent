@@ -821,7 +821,11 @@ def _session_mtime(path: Path) -> float:
 
 
 def list_sessions(
-    limit: int = 20, *, scope: str = "project", root: Path | str | None = None
+    limit: int = 20,
+    *,
+    scope: str = "project",
+    root: Path | str | None = None,
+    cache: bool = True,
 ) -> list[SessionInfo]:
     """Saved sessions, newest first, skipping files that cannot be read.
 
@@ -833,7 +837,9 @@ def list_sessions(
     ignores it): ``None`` keeps the historical behaviour of resolving the
     project from the process cwd, which is wrong for any runtime whose root
     lives elsewhere (an RPC host serving slots for arbitrary roots).
-    Each directory's title sidecar is read once and shared by its sessions.
+    ``cache=False`` lists through a read-only index, so the ``_index.json``
+    sidecar is never written (an ``approval="read"`` caller must not touch the
+    disk); each directory's title sidecar is read once and shared.
     """
     if scope not in _SCOPES:
         raise ValueError(f"unknown session scope: {scope!r} (choose project|all)")
@@ -850,7 +856,7 @@ def list_sessions(
         titles = read_session_titles(directory)
         pins = read_session_pins(directory)
         label = _project_label(directory)
-        index = SessionIndex(directory)
+        index = SessionIndex(directory, cache=cache)
         for path in directory.glob("*.jsonl"):
             try:
                 info = index.read(path, titles)

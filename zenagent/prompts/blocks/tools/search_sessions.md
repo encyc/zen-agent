@@ -1,0 +1,1 @@
+Search saved sessions by content.

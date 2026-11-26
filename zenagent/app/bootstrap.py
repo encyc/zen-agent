@@ -225,7 +225,9 @@ async def assemble(
         # parent's live tool set and permission mode at each dispatch.
         runtime.task_tool = build_task_tool(
             model=lambda: runtime.agent.model,
-            base_tools=base_tools(runtime.ask_tool, cwd=runtime.cwd),
+            base_tools=base_tools(
+                runtime.ask_tool, cwd=runtime.cwd, session_root=runtime.root
+            ),
             get_observer=lambda: runtime.subagent_observer,
             run_sink=subagent_runs.SubagentRunSink(runtime),
             api_key=lambda: runtime.agent.api_key,

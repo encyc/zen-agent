@@ -1,0 +1,1 @@
+List saved sessions, newest first: id, title, message count, updated date, project, and the source session for forks and rewrites. Scoped to this project unless all=true. Listing does not look inside: for a content clue use search_sessions.

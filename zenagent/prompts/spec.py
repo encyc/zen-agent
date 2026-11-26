@@ -202,6 +202,9 @@ TOOL_BLOCK_NAMES: tuple[str, ...] = (
     "todo",
     "task",
     "read_skill",
+    "list_sessions",
+    "search_sessions",
+    "read_session",
 )
 
 #: Variables a tool block declares; the tool module supplies the values so the
@@ -230,5 +233,8 @@ TOTAL_BUDGET_CHARS = 9000
 # 4800 -> 5200: the read-before-write gate adds its contract to read_file,
 # write_file and edit_file (prompt CHANGELOG 2026-11-07.1); single-tool caps
 # are untouched.
-TOOL_TOTAL_BUDGET_CHARS = 5200
+# 5200 -> 6400: three cross-session tools (2026-11-26 session search). Their
+# final descriptions measure 1135 chars, so the 5200 ceiling fails and 6200
+# would land 9 chars short; 6400 leaves room for small edits.
+TOOL_TOTAL_BUDGET_CHARS = 6400
 TOOL_BUDGET_CHARS = 900

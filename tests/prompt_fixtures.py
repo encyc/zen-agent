@@ -107,4 +107,13 @@ CONFIGS: dict[str, Config] = {
 }
 
 #: Tool names whose description is captured in ``tools.json``.
-TOOL_GOLDEN_NAMES = ALL_TOOL_NAMES + ("todo", "task", "read_skill")
+#:
+#: A superset of ``ALL_TOOL_NAMES``: ``todo``/``task``/``read_skill`` and the
+#: three cross-session tools are per-Runtime (``base_tools`` constructs them
+#: from the runtime's root), so they are not in ``ALL_TOOLS`` -- but their
+#: descriptions are under golden and budget test, which is what this roster is.
+TOOL_GOLDEN_NAMES = (
+    ALL_TOOL_NAMES
+    + ("todo", "task", "read_skill")
+    + ("list_sessions", "search_sessions", "read_session")
+)

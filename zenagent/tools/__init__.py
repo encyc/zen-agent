@@ -14,6 +14,7 @@ from zenagent.agent.protocol import AgentTool
 from zenagent.tools.bash import BASH, build_bash_tool
 from zenagent.tools.fs import EDIT_FILE, LIST_DIR, READ_FILE, WRITE_FILE
 from zenagent.tools.search import GLOB, GREP
+from zenagent.tools.sessions import build_session_tools
 from zenagent.tools.wait import WAIT
 from zenagent.tools.web import FETCH, WEB_SEARCH
 
@@ -71,6 +72,7 @@ def base_tools(
     *,
     shell_max_output_bytes: int | None = None,
     cwd: Path | None = None,
+    session_root: Path | None = None,
 ) -> list[AgentTool]:
     """The full prompt-ordered set, with the per-Runtime ask instance slotted
     in where ``ASK`` used to sit (between WAIT and GLOB).
@@ -79,6 +81,12 @@ def base_tools(
     (``[limits.tools].shell_max_output_bytes``); ``cwd`` additionally binds
     relative paths (and bash's default directory) to one working directory.
     ``None`` keeps the module default instances and process-cwd semantics.
+
+    ``session_root`` adds the three cross-session tools right after ``grep``,
+    pinned to that project root. They are per-Runtime (the root is the data
+    source), like ``todo``/``memory``, so they are *not* in ``ALL_TOOLS``; the
+    default ``None`` keeps the static roster -- and the v0.4.1 prompt golden
+    snapshots -- unchanged.
     """
     if cwd is None:
         bash = (
@@ -100,6 +108,7 @@ def base_tools(
         list_dir = _bound(LIST_DIR, cwd)
         glob = _bound(GLOB, cwd, default_path=True)
         grep = _bound(GREP, cwd, default_path=True)
+    session_tools = [] if session_root is None else build_session_tools(session_root)
     return [
         read_file,
         write_file,
@@ -110,6 +119,7 @@ def base_tools(
         ask_tool,
         glob,
         grep,
+        *session_tools,
         WEB_SEARCH,
         FETCH,
     ]

@@ -105,6 +105,9 @@ def recompose(runtime: Runtime) -> None:
         runtime.ask_tool,
         shell_max_output_bytes=runtime.limits.shell_max_output_bytes,
         cwd=runtime.cwd,
+        # The session tools read only this project's transcripts: pin them to
+        # the runtime root rather than whatever cwd the process happens to have.
+        session_root=runtime.root,
     )
     tools.extend(
         build_checkpoint_tools(lambda: getattr(runtime, "agent", None), runtime.rewind)

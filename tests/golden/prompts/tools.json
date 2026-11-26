@@ -27,13 +27,25 @@
     "chars": 61,
     "text": "List one directory level, marking directories and file sizes."
   },
+  "list_sessions": {
+    "chars": 240,
+    "text": "List saved sessions, newest first: id, title, message count, updated date, project, and the source session for forks and rewrites. Scoped to this project unless all=true. Listing does not look inside: for a content clue use search_sessions."
+  },
   "read_file": {
     "chars": 433,
     "text": "Read a UTF-8 text file. Binary files are refused. Returns whole small files; at most 1000 lines per call by default (hard cap 5000). A truncated result reports the exact offset for the next page. A successful read marks the file fresh for edit_file and write_file; re-read after changes made outside those tools. Set line_numbers=true to prefix each line with its 1-based number (for inspection only; never write numbered text back)."
   },
+  "read_session": {
+    "chars": 29,
+    "text": "Read one saved session by id."
+  },
   "read_skill": {
     "chars": 86,
     "text": "Load a skill's instructions by name before following it. Available skills: alpha, beta"
+  },
+  "search_sessions": {
+    "chars": 33,
+    "text": "Search saved sessions by content."
   },
   "task": {
     "chars": 697,

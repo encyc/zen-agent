@@ -22,6 +22,7 @@ from prompt_fixtures import CONFIGS, SKILLS, TOOL_GOLDEN_NAMES, TRANSCRIPT, gold
 
 from zenagent.prompts import PromptContext, compose_compact, compose_system
 from zenagent.skills import build_skill_tool, format_skill_entries
+from zenagent.tools.sessions import build_session_tools
 from zenagent.tools.task import build_task_tool
 from zenagent.tools.todo import build_todo_tool
 
@@ -62,11 +63,12 @@ def render_config(cfg) -> tuple[str, str]:
 
 
 def tool_descriptions() -> dict[str, dict]:
-    """Capture the 14 tool descriptions exactly as the model sees them."""
+    """Capture every golden-tested tool description as the model sees it."""
     tools = golden_tools()
     tools.append(build_todo_tool(None))
     tools.append(build_task_tool(model=None, base_tools=[]))
     tools.append(build_skill_tool(list(SKILLS)))
+    tools.extend(build_session_tools(Path("/repo")))
     captured = {
         tool.name: {"chars": len(tool.description), "text": tool.description}
         for tool in tools
