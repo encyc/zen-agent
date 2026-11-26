@@ -3,6 +3,18 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## v0.15.5 — 2026-11-26
+
+### Fixed
+
+- **Compaction no longer fails on a gateway that routes by session id.** The
+  summarizer is a second caller of the provider, but it built its
+  `StreamOptions` from scratch and dropped the session id every normal turn
+  carries — so `opencode-go` answered the compaction request with a 400 while
+  the conversation itself kept working. It now sends `agent.session_id` the
+  way the loop does, and inherits no abort token (`_Run` mints one per run, and
+  compaction is not a run).
+
 ## v0.15.4 — 2026-11-26
 
 ### Fixed
