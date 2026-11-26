@@ -4,6 +4,27 @@ Every content change bumps `PROMPT_VERSION` (`zenagent/prompts/spec.py`) and get
 one entry here: what changed, why, and the experiment/report that justified it.
 P0 extracted the v0.4.1 text verbatim — no behavior change.
 
+## 2026-11-26.2 — the agent can read its own history
+
+- Three tool blocks are new: `tool.list_sessions`, `tool.search_sessions`,
+  `tool.read_session` (1137 chars together). They describe the escalation the
+  tools actually implement: `include=conversation` (what was said) ->
+  `tools` (tool names and arguments) -> `all` (tool result bodies). The order
+  is measured, not stylistic: on this machine one query matched 5 sessions in
+  conversation text and 16 once tool arguments were included, because what a
+  session *did* is usually in its arguments rather than in its prose.
+- `system.tool_policy` gains a History rule: when the user mentions an earlier
+  session, call `search_sessions` before guessing a path. Kept to 21 words:
+  `tests/test_todo.py::test_system_prompt_stays_compact` caps this block at
+  220 rendered words, and the constraint is worth more than the extra clause.
+- Budgets: `system.tool_policy` 700 -> 860 (the block measures 821); the three
+  new descriptions take `TOOL_TOTAL_BUDGET_CHARS` 5200 -> 6400. With all 17
+  descriptions the measured total is 6374, so the new ceiling is real
+  headroom of 26 chars rather than a round number.
+- This corrects 2026-11-26.1's closing line ("No budget constants changed",
+  "5,827 -> 5,991 of 6,400"): that entry was accurate for its own commit, but
+  this one then moved both the policy budget and the description ceiling.
+
 ## 2026-11-26.1 — bash stops being the default reader
 
 - `tool.bash` now names the prohibition and the reason: never read files

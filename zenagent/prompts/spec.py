@@ -24,7 +24,7 @@ __all__ = [
 
 #: Bumped whenever block content changes; recorded in eval reports and the
 #: prompt CHANGELOG.
-PROMPT_VERSION = "2026-11-26.1"
+PROMPT_VERSION = "2026-11-26.2"
 
 CacheClass = Literal["stable", "session", "volatile"]
 
@@ -237,10 +237,11 @@ TOTAL_BUDGET_CHARS = 9000
 # 4800 -> 5200: the read-before-write gate adds its contract to read_file,
 # write_file and edit_file (prompt CHANGELOG 2026-11-07.1); single-tool caps
 # are untouched.
-# 5200 -> 6400: three cross-session tools (2026-11-26 session search). Their
-# final descriptions measure 1137, and the bash/read_file rewording of
-# 2026-11-26.1 spends part of what 6200 would have covered. With all 17
-# descriptions the measured total is 6374: 26 chars of real headroom, so a
-# description that must grow needs this constant raised deliberately.
-TOOL_TOTAL_BUDGET_CHARS = 6400
+# 5200 -> 6400 -> 6600: three cross-session tools (2026-11-26 session search).
+# Their descriptions measure 1442, because two facts earn their chars: the
+# regex is case-sensitive (a model that assumes otherwise burns a round trip on
+# "no matches") and the search is project-scoped unless all=true (a worktree
+# has its own project key, so its history looks empty). With all 17
+# descriptions the measured total is 6450: 150 chars of real headroom.
+TOOL_TOTAL_BUDGET_CHARS = 6600
 TOOL_BUDGET_CHARS = 900

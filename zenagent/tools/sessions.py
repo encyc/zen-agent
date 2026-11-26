@@ -1,9 +1,9 @@
 """Cross-session search: three read-only tools over the saved transcripts.
 
-``list_sessions`` lists, ``search_sessions`` scans; ``read_session`` is declared
-(name, schema, block, ``approval="read"``) and lands in the next task, so the
-registration surface, the prompt budget and the permission gate are proven
-before its body exists.
+``list_sessions`` lists, ``search_sessions`` scans, ``read_session`` pages one
+session by message number. All three share one design constraint (below) and one
+extractor (``agent.session_text``), so the message numbers a search reports are
+the numbers a read accepts.
 
 ``search_sessions`` scans the JSONL directly (``agent.session_text``) instead of
 shelling out to ``rg``: ripgrep matches raw *lines*, so a 59 KB single-line tool
@@ -309,7 +309,7 @@ def _header(hits: _SessionHits, every_project: bool) -> str:
 
 def _excerpt_line(index: int, role: str, text: str) -> str:
     """An excerpt line, indented: column 0 is a session line, column 2 a hit."""
-    return f"  #{index} {role:<9} {text}"
+    return f"  #{index} {role:<10} {text}"
 
 
 async def _no_matches(
@@ -397,8 +397,10 @@ async def _search_sessions(
             return text_result("max_hits must be at least 1", is_error=True)
         max_hits = min(max_hits, MAX_HITS_PER_SESSION)
     every_project = bool(args.get("all", False))
+    # Ask for one more than the walk cap: the listing truncates at ``limit``,
+    # so only an over-sized answer proves there was something beyond it.
     infos = list_saved_sessions(
-        limit=MAX_SEARCH_SESSIONS,
+        limit=MAX_SEARCH_SESSIONS + 1,
         scope="all" if every_project else "project",
         root=root,
         cache=False,  # read-only tool: never write _index.json
@@ -411,10 +413,10 @@ async def _search_sessions(
             next_skip=None,
             include=include,
         )
-    candidates = _newest_first(infos)
     # A store bigger than the walk cap would otherwise read as "this is
-    # everything": say which slice was searched when the cap bites.
-    capped = len(infos) >= MAX_SEARCH_SESSIONS
+    # everything": remember whether the extra probe row came back, then drop it.
+    capped = len(infos) > MAX_SEARCH_SESSIONS
+    candidates = _newest_first(infos[:MAX_SEARCH_SESSIONS])
     try:
         matching = await asyncio.to_thread(
             _scan, pattern, include, candidates, max_hits, abort
@@ -443,17 +445,19 @@ async def _search_sessions(
     for entry in page:
         lines.append(_header(entry, every_project))
         lines.extend(_excerpt_line(*item) for item in entry.excerpts)
+    # Indented like an excerpt on purpose: column 0 is reserved for a session
+    # line, which is what the model reads there to page. Both notes go in the
+    # tail so truncation cannot eat the only pointer to the next page.
+    tail: list[str] = []
     if next_skip is not None:
-        # Indented like an excerpt on purpose: column 0 is reserved for a
-        # session line, which is what the model reads there to page.
-        lines.append(
+        tail.append(
             f"  … {len(matching) - next_skip} more session(s); skip={next_skip}"
         )
     if capped:
-        lines.append(
+        tail.append(
             f"  … only the newest {MAX_SEARCH_SESSIONS} saved sessions were searched"
         )
-    body = clip("\n".join(lines), MAX_SEARCH_BODY)[0]
+    body = _clip_keeping_tail(lines, tail, MAX_SEARCH_BODY)
     return text_result(
         body,
         sessions=len(matching),  # every match, not just this page
@@ -461,6 +465,22 @@ async def _search_sessions(
         next_skip=next_skip,
         include=include,
     )
+
+
+def _clip_keeping_tail(lines: list[str], tail: list[str], limit: int) -> str:
+    """Clip the body to ``limit`` but always keep ``tail`` intact.
+
+    The continuation pointer ("next_offset=…", "skip=…") is the only in-band way
+    to page, and ``clip`` cuts from the head — so a tail appended to the body
+    would be the first thing lost on exactly the big pages that need it. The
+    tail's width is reserved first and the body is clipped into what is left.
+    """
+    hint = "\n".join(tail)
+    if not hint:
+        return clip("\n".join(lines), limit)[0]
+    room = max(0, limit - len(hint) - 1)
+    body = clip("\n".join(lines), room)[0]
+    return f"{body}\n{hint}"
 
 
 def _int_arg(args: dict, name: str, default: int, *, minimum: int | None = None):
@@ -591,10 +611,9 @@ async def _read_session(
             next_offset=page_end,
         )
     lines = [f"{info.path.stem}  {window} of {total}  (include={include})"]
-    lines.extend(f"  #{index} {role:<9} {text}" for index, role, text in page)
-    if page_end is not None:
-        lines.append(f"  … next_offset={page_end}")
-    body = clip("\n".join(lines), MAX_READ_BODY)[0]
+    lines.extend(f"  #{index} {role:<10} {text}" for index, role, text in page)
+    tail = [f"  … next_offset={page_end}"] if page_end is not None else []
+    body = _clip_keeping_tail(lines, tail, MAX_READ_BODY)
     return text_result(
         body,
         session=info.path.stem,

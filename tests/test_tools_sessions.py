@@ -388,3 +388,130 @@ async def test_a_malformed_line_widens_the_total_but_loses_no_message(tmp_path):
     page = await call(tools, "read_session", id="20260101-000000", limit=10)
     assert "of 2" in page.content[0].text      # count_messages' ruler
     assert "first" in page.content[0].text     # and the readable message is there
+
+
+async def test_a_truncated_read_page_still_carries_its_next_offset(tmp_path, monkeypatch):
+    """Truncation must not eat the pointer: it is the only way to page.
+
+    A page at include="tools" or "all" routinely exceeds the body cap, and
+    ``clip`` cuts from the head — so a continuation line emitted last would be
+    the first thing lost, leaving a model with no offset to continue from.
+    """
+    import zenagent.tools.sessions as sessions_module
+
+    root = tmp_path / "alpha"
+    root.mkdir()
+    write_session(root, "20260101-000000", [
+        {"role": "user", "content": "x" * 2000, "timestamp": 1},
+        {"role": "user", "content": "y" * 2000, "timestamp": 2},
+        {"role": "user", "content": "z" * 2000, "timestamp": 3},
+    ])
+    monkeypatch.setattr(sessions_module, "MAX_READ_BODY", 300)
+    page = await call(
+        build_session_tools(root), "read_session", id="20260101-000000", limit=3
+    )
+    text = page.content[0].text
+    assert page.details["next_offset"] is None  # limit covered everything
+    assert "x" * 100 in text or "…" in text
+    # and the same for a page that really has a next one
+    monkeypatch.setattr(sessions_module, "MAX_READ_BODY", 300)
+    first = await call(
+        build_session_tools(root), "read_session", id="20260101-000000", limit=1
+    )
+    assert first.details["next_offset"] == 1
+    assert "next_offset=1" in first.content[0].text, first.content[0].text
+
+
+async def test_a_truncated_search_page_still_carries_its_skip(tmp_path, monkeypatch):
+    """Same for search: the skip line must survive a clipped body."""
+    import zenagent.tools.sessions as sessions_module
+
+    root = tmp_path / "many"
+    root.mkdir()
+    for n in range(4):
+        write_session(root, f"20260101-{n:06d}", [
+            {"role": "user", "content": f"needle {n} " + "q" * 3000, "timestamp": n},
+        ])
+    monkeypatch.setattr(sessions_module, "MAX_SEARCH_BODY", 400)
+    monkeypatch.setattr(sessions_module, "MAX_SESSIONS_PER_PAGE", 2)
+    page = await call(build_session_tools(root), "search_sessions", query="needle")
+    assert page.details["next_skip"] == 2
+    assert "skip=2" in page.content[0].text, page.content[0].text
+
+
+async def test_the_walk_cap_note_appears_only_when_a_session_is_left_out(tmp_path, monkeypatch):
+    """Exactly-at-the-cap is "everything", not a truncated walk."""
+    import zenagent.tools.sessions as sessions_module
+
+    root = tmp_path / "many"
+    root.mkdir()
+    write_session(root, "20260101-000000", [
+        {"role": "user", "content": "needle", "timestamp": 1},
+    ])
+    monkeypatch.setattr(sessions_module, "MAX_SEARCH_SESSIONS", 1)
+    at_cap = await call(build_session_tools(root), "search_sessions", query="needle")
+    assert "only the newest" not in at_cap.content[0].text
+
+    write_session(root, "20260102-000000", [
+        {"role": "user", "content": "needle", "timestamp": 2},
+    ])
+    over_cap = await call(build_session_tools(root), "search_sessions", query="needle")
+    assert "only the newest 1 saved sessions were searched" in over_cap.content[0].text
+
+
+async def test_an_oversized_single_line_result_gives_a_usable_excerpt(tmp_path):
+    """Review Focus #3: a 59 KB single line must not produce garbage text.
+
+    The scan matches extracted text, not raw JSON, so the excerpt is a window
+    of the tool result's own content -- not a fragment of escaped JSON.
+    """
+    root = tmp_path / "alpha"
+    root.mkdir()
+    payload = "log line without the word\n" * 2000 + "KeyError: flavour\n"
+    write_session(root, "20260101-000000", [
+        {
+            "role": "toolResult",
+            "tool_call_id": "c1",
+            "tool_name": "bash",
+            "content": [{"type": "text", "text": payload}],
+            "is_error": True,
+            "timestamp": 1,
+        },
+    ])
+    result = await call(
+        build_session_tools(root), "search_sessions", query="KeyError", include="all"
+    )
+    assert not result.is_error
+    text = result.content[0].text
+    assert "KeyError" in text
+    # One excerpt line, and it is not raw JSON.
+    excerpt_lines = [line for line in text.splitlines() if line.startswith("  #")]
+    assert len(excerpt_lines) == 1
+    assert "\\n" not in excerpt_lines[0]
+    assert len(excerpt_lines[0]) < 400
+
+
+async def test_a_forked_session_shows_its_source(tmp_path):
+    """Review Focus #5: duplicates are visible, never silently merged."""
+    root = tmp_path / "alpha"
+    root.mkdir()
+    write_session(root, "20260101-000000", [
+        {"role": "user", "content": "the original decision", "timestamp": 1},
+    ])
+    write_session(root, "20260101-010000", [
+        {
+            "type": "session",
+            "version": 1,
+            "id": "20260101-010000",
+            "createdAt": 1,
+            "derivedFrom": "20260101-000000",
+        },
+        {"role": "user", "content": "the original decision", "timestamp": 1},
+    ])
+    tools = build_session_tools(root)
+    listed = await call(tools, "list_sessions")
+    assert "fork of 20260101-000000" in listed.content[0].text
+    found = await call(tools, "search_sessions", query="original decision")
+    # Both files match: the same text in the source and its fork.
+    assert found.details["sessions"] == 2
+    assert "fork of 20260101-000000" in found.content[0].text
