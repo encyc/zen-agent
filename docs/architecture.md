@@ -154,7 +154,7 @@ agent_end 事件
 | `zenagent/agent/validate.py` | 参数 schema 校验 | `validate_arguments` |
 | `zenagent/agent/session.py` | JSONL 会话持久化 | `Session`、`latest_session`、`truncate_last_turn` |
 | `zenagent/tools/` | 内置工具 | `base_tools(ask_tool)` = `read_file`/`write_file`/`edit_file`/`list_dir`/`bash`/`wait`/`ask`/`glob`/`grep`/`web_search`/`fetch`（ask 每 Runtime 一份，handler 挂在 `runtime.ask_handler`）；`Runtime` 另外注入 `todo`/`task`/`memory`/`checkpoint`/`lsp`/`github`/skills/MCP，以及按项目根构造的三个跨会话检索工具 `list_sessions`/`search_sessions`/`read_session`（`base_tools(session_root=runtime.root)`） |
-| `zenagent/app/` | UI 无关的应用层 | `Runtime`、`ChatController`、`CommandRegistry`、`SessionManager`、`PermissionGate`/`PermissionBroker`、`RunStatus`、`records`、`RunLedger`/`run_wiring`（运行账本）、`SessionLease`（单 writer 租约）、`AgentProfile`（运行时装配身份）、`ApprovalRouter`（审批关联）、`bootstrap.prepare`（四前端唯一装配序列） |
+| `zenagent/app/` | UI 无关的应用层 | `Runtime`、`ChatController`、`CommandRegistry`、`SessionManager`、`PermissionGate`/`PermissionBroker`、`RunStatus`、`records`、`RunLedger`/`run_wiring`（运行账本）、`SessionLease`（单 writer 租约）、`AgentProfile`（运行时装配身份）、`ApprovalRouter`（审批关联）、`automations`/`automation_runner`（定时任务的定义、到期判定与单轮执行）、`bootstrap.prepare`（四前端唯一装配序列） |
 | `zenagent/cli/` | 所有交互面 | `main`、`repl`、`rpc`、`tui` |
 | `zenagent/mcp/` | MCP 客户端与生命周期 | `McpClient`、`StdioTransport`、`HttpTransport`、`McpManager` |
 | `zenagent/skills.py` / `templates.py` | 文件即扩展 | `discover_skills`、`build_skill_tool`、`expand` |

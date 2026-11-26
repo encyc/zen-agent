@@ -180,7 +180,6 @@ from zenagent.cli.rpc.protocol._core import (
     shape as shape,
 )
 from zenagent.cli.rpc.protocol._host import (
-    AutomationsRequest as AutomationsRequest,
     HOST_OPS as HOST_OPS,
 )
 from zenagent.cli.rpc.protocol._host import (
@@ -188,6 +187,9 @@ from zenagent.cli.rpc.protocol._host import (
 )
 from zenagent.cli.rpc.protocol._host import (
     HOST_SHAPES as HOST_SHAPES,
+)
+from zenagent.cli.rpc.protocol._host import (
+    AutomationsRequest as AutomationsRequest,
 )
 from zenagent.cli.rpc.protocol._views import (
     SHAPES as SHAPES,

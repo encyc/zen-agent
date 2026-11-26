@@ -3,6 +3,33 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+### Added
+
+- **Automations.** A per-project resident daemon (`zen daemon`) that starts one
+  agent round in a fixed session on a schedule — `daily HH:MM` or `every N<m|h>`
+  — and leaves the report in that session. `zen automations add|list|show|rm|
+  enable|disable|run` manages the definitions; the desktop's work panel lists
+  every project's automations, toggles them, creates them and asks for a run now.
+  One daemon per project (none for a project without automations), and the
+  control plane is plain files, so the UI needs no connection per daemon:
+  `automations.json` is written by the CLI/desktop and re-read by the daemon on
+  mtime change, `automations.state.json` is the daemon's single-writer
+  bookkeeping, and `automations.request.json` is the "run now" mailbox. A round
+  is a `ChatController.submit` into the job's session, so permissions, event
+  flow, persistence, aborts and the run ledger behave exactly as an interactive
+  turn would; the session's write lease is taken for the round and released in
+  `finally`, so the user can open that session at any time. A round that finds
+  the session busy is skipped, not queued, and a wall-clock timeout aborts the
+  round cooperatively (a watchdog calling `abort()`, never
+  `asyncio.wait_for`, which would cancel the run task and wedge the controller).
+  Unattended rounds run in `auto` mode: no prompts, but `[tools] deny`,
+  catastrophic commands and reads of protected credential paths are still
+  refused. `RunRecorder.relabel` lets the runner restate a timeout as
+  `failed/timeout` without teaching the shared termination mapping a private
+  word.
+
 ## v0.15.2 — 2026-11-26
 
 ### Added
