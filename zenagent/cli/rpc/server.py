@@ -33,6 +33,7 @@ from zenagent.cli.rpc.ops_skills import SkillsOps
 from zenagent.events import AgentEvent
 from zenagent.limits import LimitsWriteError
 from zenagent.project import project_key
+from zenagent.providers.catalog import model_ref
 from zenagent.types import AssistantMessage, TextContent
 
 ReadLine = Callable[[], Awaitable[str | None]]
@@ -589,6 +590,9 @@ class RpcServer(
             "running": self.busy,
             "messages": len(self.agent.messages),
             "model": self.agent.model.id,
+            # The provider-qualified reference is what a client stores and
+            # replays; a bare id is ambiguous across mirroring providers.
+            "model_ref": model_ref(self.agent.model),
             "usage": _usage(self.agent),
             "termination": self.agent.termination,
         }

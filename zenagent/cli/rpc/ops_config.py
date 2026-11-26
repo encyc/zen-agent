@@ -18,6 +18,7 @@ from zenagent.project import (
     project_key_for_session,
     relocate_project,
 )
+from zenagent.providers.catalog import model_ref
 
 #: Server-side diagnostics; raw exception detail never crosses the wire.
 logger = logging.getLogger(__name__)
@@ -73,6 +74,7 @@ class ConfigOps:
                 "id": request_id,
                 "ok": result.ok,
                 "model": self.agent.model.id,
+                "model_ref": model_ref(self.agent.model),
                 "reason": result.reason,
             }
         )
@@ -252,9 +254,17 @@ class ConfigOps:
             )
             return True
         applied_model = None
+        applied_model_ref = None
+        switch_error = None
         if result.model and self.models is not None:
             switch = self.models.switch(result.model)
-            applied_model = self.agent.model.id if switch.ok else None
+            if switch.ok:
+                applied_model = self.agent.model.id
+                applied_model_ref = model_ref(self.agent.model)
+            else:
+                # `/model <id>`: the refusal (ambiguous id, missing key) is the
+                # only feedback this frame can carry — never drop it silently.
+                switch_error = switch.reason
         if result.language:
             # Mirror TUI/REPL: the server's own subsequent messages (command
             # results, approval reasons, notices) follow the requested locale.
@@ -267,7 +277,7 @@ class ConfigOps:
                 "id": request_id,
                 "ok": True,
                 "command": name,
-                "message": result.message,
+                "message": switch_error or result.message,
                 "screen": result.screen,
                 "target": result.target,
                 "show_help": result.show_help,
@@ -276,6 +286,7 @@ class ConfigOps:
                 "appearance": result.appearance,
                 "language": result.language,
                 "model": applied_model,
+                "model_ref": applied_model_ref,
             }
         )
         if result.quit:

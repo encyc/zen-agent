@@ -416,7 +416,7 @@ CATALOG: dict[str, str] = {
     "mode.describe": "modes: plan = read-only planning · ask = confirm writes/commands · auto = run everything without asking (only catastrophic commands still refuse)",
     # shared: command descriptions
     "cmd.help.description": "list every command",
-    "cmd.model.description": "browse and switch models",
+    "cmd.model.description": "browse and switch models (provider/model-id)",
     "cmd.mode.description": "set runtime mode: plan|ask|auto",
     "cmd.lang.description": "set the interface language: auto|en|zh",
     "cmd.theme.description": "set the colour theme: auto|dark|light",

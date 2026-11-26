@@ -6,7 +6,7 @@
  * the server rejects (a renamed model, say) costs that pref, never the
  * connection. */
 
-import { useStatusStore } from './stores.ts'
+import { useNoticeStore, useStatusStore } from './stores.ts'
 import { loadPrefs, replayFrames } from './prefs.ts'
 
 interface AppGetterLike {
@@ -24,13 +24,21 @@ async function restore(get: AppGetterLike): Promise<void> {
   const live = useStatusStore.getState().status
   const frames = replayFrames(prefs, {
     mode: live?.mode ?? null,
-    model: live?.model ?? null,
+    // The qualified ref, so the replay cannot land on a mirror provider.
+    model: live?.model_ref ?? live?.model ?? null,
     thinking: live?.thinking ?? null,
   })
   if (frames.length === 0) return
   for (const payload of frames) {
     try {
-      await get.client().send(payload)
+      const frame = await get.client().send(payload)
+      // A refused pref (an ambiguous legacy bare id, a model whose key was
+      // removed) must say why instead of silently leaving the default.
+      const reason = typeof frame.reason === 'string' ? frame.reason.trim() : ''
+      if (frame.ok === false && reason !== '') {
+        useNoticeStore.getState().show({ kind: 'error', text: reason })
+        return
+      }
     } catch {
       // A dead child ends here; the caller's own error path reports it.
       return

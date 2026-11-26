@@ -812,8 +812,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     if (typeof frame.model === 'string' && frame.model) {
       // The server is the authority on which model is live; remember it so the
-      // next child starts there.
-      savePref('model', frame.model)
+      // next child starts there. Prefer the qualified ref: a bare id can exist
+      // under more than one provider.
+      savePref(
+        'model',
+        typeof frame.model_ref === 'string' && frame.model_ref
+          ? frame.model_ref
+          : frame.model,
+      )
       void get().refreshStatus()
       void get().refreshCatalog()
     }
@@ -836,7 +842,21 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch {
       return
     }
-    if (frame.type === 'result' && frame.ok !== false) savePref('model', modelId)
+    if (frame.type === 'result' && frame.ok === false) {
+      // A refused switch (ambiguous bare id, missing key) must not close the
+      // menu silently: say why, keep the old model.
+      const reason = typeof frame.reason === 'string' ? frame.reason.trim() : ''
+      if (reason !== '') useNoticeStore.getState().show({ kind: 'error', text: reason })
+      return
+    }
+    if (frame.type === 'result' && frame.ok !== false) {
+      savePref(
+        'model',
+        typeof frame.model_ref === 'string' && frame.model_ref
+          ? frame.model_ref
+          : modelId,
+      )
+    }
     void get().refreshStatus()
     void get().refreshCatalog()
   },

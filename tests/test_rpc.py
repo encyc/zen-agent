@@ -86,6 +86,8 @@ async def test_status_reports_model_and_message_count():
     ])
     status = next(m for m in messages if m.get("id") == "s")
     assert status["model"] == "m" and status["running"] is False
+    # The qualified ref is the client's model identity (prefs replay).
+    assert status["model_ref"] == "p/m"
 
 
 async def test_bad_json_is_reported_and_the_server_keeps_going():

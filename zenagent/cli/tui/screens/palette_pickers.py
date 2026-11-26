@@ -26,7 +26,10 @@ class ModelPicker(PaletteScreen[str]):
         items = [
             PaletteItem(
                 label=f"{'●' if entry.current else ' '} {entry.provider}/{entry.id}",
-                value=entry.id,
+                # Selection carries the provider: a bare id exists under more
+                # than one provider (opencode-go mirrors deepseek's ids), and
+                # the switch must land on the row the user picked.
+                value=f"{entry.provider}/{entry.id}",
                 note=t(
                     "tui.picker.model_note",
                     context=entry.context_window // 1000,

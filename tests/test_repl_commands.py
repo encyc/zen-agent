@@ -221,7 +221,7 @@ def test_help_lists_every_registry_command(services):
 async def test_repl_sessions_usage_context_and_hotkeys_render(isolated_sessions):
     lines: list[str] = []
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=scripted_stream(),
         api_key="k",
         input_fn=scripted_input(
@@ -239,7 +239,7 @@ async def test_repl_sessions_usage_context_and_hotkeys_render(isolated_sessions)
 async def test_repl_export_writes_a_markdown_file(isolated_sessions):
     lines: list[str] = []
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=scripted_stream("hello"),
         api_key="k",
         input_fn=scripted_input("hi", "/export", "/exit"),
@@ -252,7 +252,7 @@ async def test_repl_export_writes_a_markdown_file(isolated_sessions):
 async def test_repl_todo_and_settings_print(isolated_sessions):
     lines: list[str] = []
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=scripted_stream(),
         api_key="k",
         input_fn=scripted_input("/todo", "/settings", "/exit"),
@@ -266,7 +266,7 @@ async def test_repl_todo_and_settings_print(isolated_sessions):
 async def test_repl_plan_review_prints_the_plan(isolated_sessions):
     lines: list[str] = []
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=scripted_stream("1. inspect the repo"),
         api_key="k",
         input_fn=scripted_input("make a plan", "/plan-review", "/exit"),
@@ -283,7 +283,7 @@ async def test_repl_compact_continues_in_the_same_session(isolated_sessions):
 
     lines: list[str] = []
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=scripted_stream("first", "summary", "after"),
         api_key="k",
         input_fn=scripted_input("hi", "/compact", "next", "/exit"),
@@ -315,7 +315,7 @@ async def test_repl_retry_reruns_without_duplicating_the_prompt(isolated_session
     stream = scripted_stream("first", "second")
     lines: list[str] = []
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=stream,
         api_key="k",
         input_fn=scripted_input("hello", "/retry", "/exit"),
@@ -365,7 +365,7 @@ async def test_repl_trace_flag_reports_the_path(isolated_sessions, tmp_path):
     trace = tmp_path / "trace.jsonl"
     lines: list[str] = []
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=scripted_stream(),
         api_key="k",
         trace=trace,
@@ -381,7 +381,7 @@ async def test_repl_undo_continues_in_a_new_session(isolated_sessions):
 
     lines: list[str] = []
     code = await repl(
-        "glm-5.3",
+        "zai-coding-cn/glm-5.3",
         stream_fn=scripted_stream("first", "second"),
         api_key="k",
         input_fn=scripted_input("hello", "/undo", "again", "/exit"),

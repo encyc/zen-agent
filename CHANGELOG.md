@@ -7,6 +7,26 @@ matches the release tag; older history is in the repository tags and commits.
 
 ### Fixed
 
+- **Picking a model now carries its provider, so "opencode-go" no longer
+  becomes DeepSeek.** Model ids are not unique in the catalog — `deepseek-v4-pro`
+  and `glm-5.3` exist both under a vendor and under the opencode-go gateway —
+  but every selection path resolved a bare id with "first provider in file order
+  wins": the desktop picker sent `model.id`, the TUI pickers sent `entry.id`, and
+  `/model`, `--model` and `default_model` all went through `find_model`. Clicking
+  the opencode-go row therefore switched the base URL to `api.deepseek.com` and
+  the key to `DEEPSEEK_API_KEY`, and the next `task` child inherited that model —
+  a subagent that looked like it "defaulted to DeepSeek". Selection now resolves
+  through `resolve_model_ref`: `provider/model-id` picks exactly that provider, a
+  bare id is accepted only when one provider defines it, and an ambiguous one is
+  refused with the qualified choices instead of guessed. The desktop picker and
+  its stored pref, the TUI picker/cycle/settings rows and the `/model` value
+  hints now all send `provider/model-id`; status and model-switch results expose
+  `model_ref` so clients replay the qualified reference; and a successful switch
+  updates `runtime.model`, which is what `reload_api_key()` and the settings'
+  "current provider" read. Upgrade note: an ambiguous bare
+  `--model`/`default_model`/`/model` value is now an error naming the
+  `provider/model-id` forms; unique bare ids keep working.
+
 - **A session stops disappearing from the sidebar after you switch away.** Two
   separate causes, both silent. The list was capped at 100 sessions globally
   (`SessionManager.entries` called `list_sessions(limit=100)`) while the

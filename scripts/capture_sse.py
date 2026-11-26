@@ -31,7 +31,7 @@ from pathlib import Path
 
 import httpx
 
-from zenagent.providers.catalog import Model, find_model, load_catalog
+from zenagent.providers.catalog import Model, load_catalog, resolve_model_ref
 from zenagent.providers.openai_completions import (
     StreamOptions,
     build_params,
@@ -154,7 +154,11 @@ async def capture(model: Model, scenario: str, thinking: str | None, out: Path) 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--model", required=True, help="catalog model id, e.g. deepseek-reasoner")
+    parser.add_argument(
+        "--model",
+        required=True,
+        help="model ref: provider/model-id (or a unique bare id)",
+    )
     parser.add_argument(
         "--scenario", choices=sorted(SCENARIOS), default="text", help="what to ask for"
     )
@@ -166,9 +170,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.env_file:
         load_env_file(args.env_file)
     try:
-        model = find_model(load_catalog(), args.model)
-    except KeyError as exc:
-        print(f"unknown model: {exc}", file=sys.stderr)
+        model = resolve_model_ref(load_catalog(), args.model)
+    except LookupError as exc:
+        print(f"unknown model: {exc.args[0] if exc.args else exc}", file=sys.stderr)
         return 2
 
     out = args.out or FIXTURE_DIR / f"{model.id}-live-{args.scenario}.txt"

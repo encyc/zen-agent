@@ -64,7 +64,7 @@ from zenagent.prompts import (
     RenderedPrompt,
     compose_system,
 )
-from zenagent.providers.catalog import ProviderConfig
+from zenagent.providers.catalog import Model, ProviderConfig
 from zenagent.providers.limits import estimate_text_tokens
 from zenagent.providers.registry import StreamFn
 from zenagent.templates import (
@@ -140,7 +140,7 @@ class Runtime:
     def __init__(self) -> None:
         self.agent: Agent
         self._session: Session
-        self.model = None
+        self.model: Model | None = None
         #: Directory tools resolve relative paths against and status reports.
         self.cwd: Path = Path.cwd()
         #: Project identity root (nearest ``.git``): sessions, config, MCP,

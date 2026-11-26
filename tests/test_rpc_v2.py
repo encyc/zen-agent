@@ -129,7 +129,10 @@ async def test_snapshot_verbs_match_the_in_process_catalogs(runtime_factory):
     assert results["t"]["notices"] == []
 
 
-async def test_mode_and_model_requests_switch_the_runtime(runtime_factory, app_env):
+async def test_mode_and_model_requests_switch_the_runtime(
+    runtime_factory, app_env, monkeypatch
+):
+    monkeypatch.setenv("OPENCODE_API_KEY", "oc-key")
     _runtime, server, writes, queue = await build(runtime_factory)
     await run_lines(
         server,
@@ -138,7 +141,10 @@ async def test_mode_and_model_requests_switch_the_runtime(runtime_factory, app_e
             {"type": "mode", "id": "m1", "mode": "plan"},
             {"type": "mode", "id": "m2", "mode": "yolo"},
             {"type": "model", "id": "m3", "model_id": "deepseek-flash"},
-            {"type": "model", "id": "m4", "model_id": "nope"},
+            # A mirrored id without its provider is refused, not guessed.
+            {"type": "model", "id": "m4", "model_id": "deepseek-v4-pro"},
+            {"type": "model", "id": "m5", "model_id": "opencode-go/deepseek-v4-pro"},
+            {"type": "model", "id": "m6", "model_id": "nope"},
         ],
     )
     results = {message["id"]: message for message in decode(writes)}
@@ -147,7 +153,38 @@ async def test_mode_and_model_requests_switch_the_runtime(runtime_factory, app_e
     assert results["m2"]["ok"] is False
     assert "unknown mode" in results["m2"]["reason"]
     assert results["m3"]["ok"] is True
+    assert results["m3"]["model_ref"] == "deepseek/deepseek-flash"
     assert results["m4"]["ok"] is False
+    assert "ambiguous" in results["m4"]["reason"]
+    assert results["m5"]["ok"] is True
+    assert results["m5"]["model_ref"] == "opencode-go/deepseek-v4-pro"
+    assert results["m6"]["ok"] is False
+
+
+async def test_model_command_reports_a_refused_switch(
+    runtime_factory, app_env, monkeypatch
+):
+    monkeypatch.setenv("OPENCODE_API_KEY", "oc-key")
+    _runtime, server, writes, queue = await build(runtime_factory)
+    await run_lines(
+        server,
+        queue,
+        [
+            {"type": "command", "id": "c1", "name": "model", "argument": "deepseek-v4-pro"},
+            {
+                "type": "command",
+                "id": "c2",
+                "name": "model",
+                "argument": "opencode-go/deepseek-v4-pro",
+            },
+        ],
+    )
+    results = {message["id"]: message for message in decode(writes)}
+    # The refusal reaches the command card instead of vanishing.
+    assert results["c1"]["ok"] is True
+    assert "ambiguous" in results["c1"]["message"]
+    assert results["c2"]["ok"] is True
+    assert results["c2"]["model_ref"] == "opencode-go/deepseek-v4-pro"
 
 
 async def test_steer_while_idle_queues_a_follow_up(runtime_factory):

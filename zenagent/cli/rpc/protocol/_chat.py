@@ -86,6 +86,8 @@ class PromptRequest(WireRequest):
 
 
 class ModelSwitchRequest(WireRequest):
+    """A model selection: ``provider/model-id`` (a bare id only when unique)."""
+
     FIELDS: ClassVar[dict[str, Field]] = {"model_id": Field(STRING, required=True)}
 
 
@@ -302,6 +304,7 @@ OPS: dict[str, OpSpec] = {
 "running": Field(BOOL),
 "messages": Field(INT),
 "model": Field(STRING),
+"model_ref": Field(STRING, optional=True),
 "usage": Field(ref("Usage")),
 "termination": Field(STRING, nullable=True),
 "detail": Field(STRING, optional=True),
@@ -358,6 +361,7 @@ OPS: dict[str, OpSpec] = {
     "steer": OpSpec("steer", TextRequest, {}),
     "model": OpSpec("model", ModelSwitchRequest, {
 "model": Field(STRING),
+"model_ref": Field(STRING, optional=True),
 "reason": Field(STRING, nullable=True),
     }, ok_mutable=True),
     "mode": OpSpec("mode", ModeSwitchRequest, {

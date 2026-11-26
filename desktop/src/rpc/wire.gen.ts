@@ -644,6 +644,7 @@ export interface StatusResult {
   running: boolean
   messages: number
   model: string
+  model_ref?: string
   usage: Usage
   termination: string | null
   detail?: string
@@ -732,6 +733,7 @@ export interface ModelResult {
   id: string
   ok: boolean
   model: string
+  model_ref?: string
   reason: string | null
 }
 

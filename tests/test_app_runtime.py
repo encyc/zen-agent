@@ -425,6 +425,40 @@ async def test_bootstrap_wires_the_task_budget_from_config(
     )
 
 
+async def test_subagent_follows_the_switched_provider(runtime_factory, monkeypatch):
+    """A /model switch must reach the next child, not just the parent."""
+    from zenagent.app.models import ModelManager
+    from zenagent.events import AssistantEvent
+    from zenagent.types import AssistantMessage, TextContent, Usage
+
+    monkeypatch.setenv("OPENCODE_API_KEY", "oc-key")
+    seen: list[tuple[str, str]] = []
+
+    async def stream(model, messages, tools, options):
+        seen.append((model.provider, model.id))
+        partial = AssistantMessage(
+            content=[],
+            provider=model.provider,
+            model=model.id,
+            usage=Usage(),
+            stop_reason="pending",
+            timestamp=0,
+        )
+        yield AssistantEvent(type="start", partial=partial)
+        partial.content = [TextContent("done")]
+        partial.stop_reason = "stop"
+        yield AssistantEvent(type="done", partial=partial, reason="stop")
+
+    runtime = await runtime_factory(stream_fn=stream)
+    switched = ModelManager(runtime).switch("opencode-go/deepseek-v4-pro")
+    assert switched.ok, switched.reason
+
+    result = await runtime.task_tool.execute("c1", {"prompt": "probe", "name": "Probe"})
+
+    assert result.details["model"] == "deepseek-v4-pro"
+    assert seen[-1] == ("opencode-go", "deepseek-v4-pro")
+
+
 async def test_bootstrap_hands_the_permission_gate_to_the_task_tool(
     runtime_factory, app_env, monkeypatch
 ):

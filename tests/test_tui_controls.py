@@ -242,8 +242,12 @@ async def test_shift_ctrl_p_cycles_models_backward(picker_app, monkeypatch):
 
     app = picker_app
     app.runtime.agent.model = replace(app.runtime.agent.model, id="b")
-    entries = [SimpleNamespace(id=name, available=True) for name in ("a", "b", "c")]
+    entries = [
+        SimpleNamespace(id=name, provider="p", available=True)
+        for name in ("a", "b", "c")
+    ]
     monkeypatch.setattr(app.models, "entries", lambda: entries)
+    monkeypatch.setattr(app.models, "current_ref", lambda: "p/b")
     applied: list[str] = []
     monkeypatch.setattr(app, "_apply_model", applied.append)
 
@@ -251,11 +255,11 @@ async def test_shift_ctrl_p_cycles_models_backward(picker_app, monkeypatch):
         await pilot.pause()
         await pilot.press("shift+ctrl+p")
         await pilot.pause()
-        assert applied == ["a"], "backward cycle must pick the previous model"
+        assert applied == ["p/a"], "backward cycle must pick the previous model"
 
         await pilot.press("ctrl+p")
         await pilot.pause()
-        assert applied == ["a", "c"], "forward cycle keeps working"
+        assert applied == ["p/a", "p/c"], "forward cycle keeps working"
 
 
 async def test_f5_and_alt_r_dispatch_the_shared_retry_command(picker_app, monkeypatch):
