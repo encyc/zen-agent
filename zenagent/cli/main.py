@@ -434,6 +434,10 @@ def main(argv: list[str] | None = None) -> int:
         from zenagent.cli.daemon import main as daemon_main
 
         return daemon_main(raw[1:])
+    if raw and raw[0] == "automations":
+        from zenagent.cli.automationscmd import main as automations_main
+
+        return automations_main(raw[1:])
     args = build_parser().parse_args(argv)
     mode = resolve_mode(
         explicit=args.mode, assume_yes=args.yes, read_only=args.read_only
