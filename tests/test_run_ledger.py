@@ -417,3 +417,48 @@ async def test_relabel_preserves_cost_and_turns(app_env, monkeypatch):
         assert updated.turns == 7             # not dropped
     finally:
         await prepared.runtime.close()
+
+
+async def test_relabel_preserves_the_error_message(app_env, monkeypatch):
+    """A corrective relabel must not erase why the run failed.
+
+    The runner restates a failed round as `failed/<termination>` without
+    carrying an error string; the recorder had already written the provider's
+    message, and losing it leaves the ledger silent about the cause.
+    """
+    from conftest import text_stream
+
+    from zenagent.app.agent_profile import AgentProfile
+    from zenagent.app.bootstrap import prepare
+    from zenagent.app.run_wiring import RunRecorder
+    from zenagent.app.runtime import RuntimeOptions
+    from zenagent.config import UserConfig
+    from zenagent.project import project_dir
+
+    monkeypatch.setattr(
+        "zenagent.app.bootstrap.load_user_config",
+        lambda *args, **kwargs: UserConfig(default_model="deepseek-flash"),
+    )
+    prepared = await prepare(
+        RuntimeOptions(
+            root=app_env,
+            profile=AgentProfile(mcp=False, skills=False, templates=False),
+        ),
+        stream_fn=text_stream("ok"),
+        views=False,
+    )
+    try:
+        await prepared.runtime.agent.prompt("hello")
+        ledger = RunLedger(project_dir(root=app_env) / "runs.jsonl")
+        [row] = ledger.list(kind="coding")
+        ledger.finish(
+            row, status="failed", termination="error", error="HTTPStatusError: 401"
+        )
+
+        RunRecorder(prepared.runtime).relabel(
+            status="failed", termination="error", run_id=row.id
+        )
+
+        assert ledger.get(row.id).error == "HTTPStatusError: 401"
+    finally:
+        await prepared.runtime.close()

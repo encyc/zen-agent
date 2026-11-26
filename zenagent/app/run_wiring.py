@@ -212,7 +212,10 @@ class RunRecorder:
                 row,
                 status=status,
                 termination=termination,
-                error=error,
+                # A caller that restates *how* the run ended usually has no new
+                # diagnosis; dropping the recorder's message would leave the
+                # ledger silent about a provider failure.
+                error=error if error is not None else row.error,
                 # Carry the measurements forward: `finish` defaults cost to 0.0
                 # and turns to None, and the rounds that get relabelled are the
                 # runaway ones — the expensive case must not look free.
