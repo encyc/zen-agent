@@ -248,3 +248,104 @@ async def test_an_unknown_include_is_an_error(search_home):
     )
     assert result.is_error
     assert "unknown include" in result.content[0].text
+
+
+async def test_read_session_returns_the_numbered_messages(search_home):
+    result = await call(
+        build_session_tools(search_home), "read_session", id="20260101-000000"
+    )
+    text = result.content[0].text
+    assert "#0 user" in text
+    assert "#1 assistant" in text
+    assert "blue was chosen" in text
+
+
+async def test_read_session_offset_matches_the_search_message_number(search_home):
+    """The `#N` a search reports must resolve to the same message here."""
+    tools = build_session_tools(search_home)
+    found = await call(tools, "search_sessions", query="blue was chosen")
+    assert "#1" in found.content[0].text
+    page = await call(tools, "read_session", id="20260101-000000", offset=1)
+    assert "#1 assistant" in page.content[0].text
+    assert "#0 user" not in page.content[0].text
+
+
+async def test_read_session_pages_with_next_offset(tmp_path):
+    root = tmp_path / "alpha"
+    root.mkdir()
+    write_session(root, "20260101-000000", [
+        {"role": "user", "content": f"line {n}", "timestamp": n} for n in range(5)
+    ])
+    tools = build_session_tools(root)
+    first = await call(tools, "read_session", id="20260101-000000", limit=2)
+    assert first.details["next_offset"] == 2
+    last = await call(tools, "read_session", id="20260101-000000", offset=4, limit=2)
+    assert last.details["next_offset"] is None
+    assert "line 4" in last.content[0].text
+
+
+async def test_read_session_omits_tool_results_by_default(search_home):
+    tools = build_session_tools(search_home)
+    page = await call(tools, "read_session", id="20260102-000000")
+    assert "theme/blue.css" not in page.content[0].text
+    expanded = await call(tools, "read_session", id="20260102-000000", include="tools")
+    assert "theme/blue.css" in expanded.content[0].text
+
+
+async def test_an_unknown_session_id_is_an_error_naming_the_known_ones(search_home):
+    result = await call(build_session_tools(search_home), "read_session", id="nope")
+    assert result.is_error
+    assert "20260101-000000" in result.content[0].text
+
+
+async def test_an_offset_past_the_end_is_an_error_not_an_empty_page(search_home):
+    result = await call(
+        build_session_tools(search_home), "read_session", id="20260101-000000", offset=99
+    )
+    assert result.is_error
+    assert "past the end" in result.content[0].text
+
+
+async def test_read_session_never_returns_thinking(tmp_path):
+    """A session whose only content is reasoning renders nothing readable."""
+    root = tmp_path / "alpha"
+    root.mkdir()
+    write_session(root, "20260101-000000", [
+        {"role": "user", "content": "say something", "timestamp": 1},
+        assistant({"type": "thinking", "thinking": "SECRET-REASONING"}, timestamp=2),
+    ])
+    tools = build_session_tools(root)
+    for level in ("conversation", "tools", "all"):
+        page = await call(tools, "read_session", id="20260101-000000", include=level)
+        assert "SECRET-REASONING" not in page.content[0].text, level
+
+
+async def test_a_textless_page_still_advances_next_offset(tmp_path):
+    """Paging is by message line, so an all-toolCall page must not stall."""
+    root = tmp_path / "alpha"
+    root.mkdir()
+    write_session(root, "20260101-000000", [
+        assistant({"type": "toolCall", "id": "c1", "name": "bash",
+                   "arguments": {"command": "ls"}}, timestamp=1),
+        assistant({"type": "toolCall", "id": "c2", "name": "bash",
+                   "arguments": {"command": "pwd"}}, timestamp=2),
+        {"role": "user", "content": "after the calls", "timestamp": 3},
+    ])
+    tools = build_session_tools(root)
+    page = await call(tools, "read_session", id="20260101-000000", limit=2)
+    assert page.details["next_offset"] == 2
+    assert "after the calls" not in page.content[0].text
+    rest = await call(tools, "read_session", id="20260101-000000", offset=2)
+    assert "after the calls" in rest.content[0].text
+
+
+async def test_a_traversing_id_is_refused_not_resolved(sessions_home):
+    """`id` is a stem, never a path: nothing may be joined onto the store root."""
+    _, root_a, _ = sessions_home
+    tools = build_session_tools(root_a)
+    for bogus in ("../../secrets", "/etc/passwd", "20260101-000000.jsonl"):
+        result = await call(tools, "read_session", id=bogus)
+        assert result.is_error, bogus
+        assert "no session" in result.content[0].text.lower() or "not found" in (
+            result.content[0].text.lower()
+        ), bogus

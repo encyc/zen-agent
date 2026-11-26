@@ -43,13 +43,20 @@ from pathlib import Path
 from zenagent.agent.protocol import AgentTool, ToolResultAgent
 from zenagent.agent.session import SessionInfo
 from zenagent.agent.session import list_sessions as list_saved_sessions
-from zenagent.agent.session_text import LEVELS, excerpt, iter_turns
+from zenagent.agent.session_text import (
+    LEVELS,
+    count_messages,
+    excerpt,
+    iter_turns,
+)
 from zenagent.prompts import tool_description
 from zenagent.tools._result import clip, text_result
 
 __all__ = [
     "DEFAULT_LIST_LIMIT",
+    "DEFAULT_READ_LIMIT",
     "MAX_LIST_LIMIT",
+    "MAX_READ_LIMIT",
     "MAX_SESSIONS_PER_PAGE",
     "SEARCH_TIMEOUT_S",
     "build_session_tools",
@@ -74,6 +81,12 @@ MAX_HITS_PER_SESSION = 20
 MAX_SEARCH_BODY = 20_000
 #: Wall-clock budget for one search. See the note on the declaration below.
 SEARCH_TIMEOUT_S = 60.0
+#: Messages returned by one ``read_session`` when the model does not say.
+DEFAULT_READ_LIMIT = 60
+#: Ceiling on one ``read_session`` page; a bigger value is clamped.
+MAX_READ_LIMIT = 400
+#: Characters of rendered page one read may spend (shared clip notice).
+MAX_READ_BODY = 20_000
 
 _NO_SESSIONS_PROJECT = (
     "no saved sessions in this project (all=true lists every project)"
@@ -137,6 +150,39 @@ _SEARCH_PARAMETERS = {
         },
     },
     "required": ["query"],
+}
+
+
+_READ_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "id": {
+            "type": "string",
+            "description": (
+                "Session id (a bare stem), as listed by list_sessions or "
+                "search_sessions."
+            ),
+        },
+        "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Message number to start at (default 0).",
+        },
+        "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": MAX_READ_LIMIT,
+            "description": f"Messages to return (default {DEFAULT_READ_LIMIT}).",
+        },
+        "include": {
+            "type": "string",
+            "enum": list(LEVELS),
+            "description": (
+                "How much to read: conversation (default), tools, or all."
+            ),
+        },
+    },
+    "required": ["id"],
 }
 
 
@@ -417,11 +463,144 @@ async def _search_sessions(
     )
 
 
-async def _stub(
-    name: str, tool_call_id: str, args: dict, abort, on_update=None
+def _int_arg(args: dict, name: str, default: int, *, minimum: int | None = None):
+    """``(value, problem)`` for one integer argument; ``problem`` is ""."""
+    raw = args.get(name)
+    if raw is None:
+        return default, ""
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None, f"{name} must be a whole number, got {raw!r}"
+    if minimum is not None and value < minimum:
+        return None, f"{name} must be at least {minimum}"
+    return value, ""
+
+
+def _resolve_session(
+    root: Path, session_id: str
+) -> tuple[SessionInfo | None, str, list[SessionInfo]]:
+    """``(session, problem, candidates)`` for one ``id``.
+
+    ``id`` is a *stem*, never a path: it is compared against the ids a listing
+    produces, so nothing a caller sends is ever joined onto the store
+    directory. ``../../secrets`` or an absolute path therefore matches no
+    session -- there is no code path in which that string reaches the
+    filesystem.
+
+    Every project is searched regardless of how the caller found the id: a
+    search may legitimately point at another project's session, and an id that
+    cannot then be read is a false address.
+    """
+    wanted = session_id.strip()
+    infos = list_saved_sessions(
+        limit=MAX_SEARCH_SESSIONS,
+        scope="all",
+        root=root,
+        cache=False,  # read-only tool: never write _index.json
+    )
+    matches = [info for info in infos if info.path.stem == wanted]
+    if len(matches) == 1:
+        return matches[0], "", infos
+    if len(matches) > 1:
+        # Two projects holding the same stem. Refuse rather than guess:
+        # reading the wrong transcript silently is worse than naming them.
+        labelled = ", ".join(
+            f"{info.path.stem} [{info.project or 'legacy'}]" for info in matches
+        )
+        return None, f"session {wanted!r} is ambiguous: {labelled}", infos
+    return None, f"no session {wanted!r} in any project", infos
+
+
+def _read_page(
+    path: Path, include: str, offset: int, limit: int
+) -> list[tuple[int, str, str]]:
+    """``(index, role, text)`` for message numbers ``[offset, offset + limit)``.
+
+    The window is over *message line numbers*, not over rendered turns: a page
+    whose messages render nothing at this ``include`` still consumes its
+    messages, so ``next_offset`` cannot stall on a tool-call-only stretch.
+    Each turn is flattened to one line so a transcript line always starts with
+    its own ``#N`` marker.
+    """
+    end = offset + limit
+    page: list[tuple[int, str, str]] = []
+    for turn in iter_turns(path, include):
+        if turn.index < offset:
+            continue
+        if turn.index >= end:
+            break
+        page.append((turn.index, turn.role, " ".join(turn.text.split())))
+    return page
+
+
+async def _read_session(
+    root: Path, tool_call_id: str, args: dict, abort, on_update=None
 ) -> ToolResultAgent:
-    """Placeholder body for the tool the final task fills in."""
-    return text_result("not implemented", is_error=True, tool=name)
+    raw_id = args.get("id")
+    if not isinstance(raw_id, str) or not raw_id.strip():
+        return text_result("id must be a non-empty session id", is_error=True)
+    include = str(args.get("include") or "conversation")
+    if include not in LEVELS:
+        return text_result(
+            f"unknown include {include!r}; choose one of {', '.join(LEVELS)}",
+            is_error=True,
+        )
+    offset, problem = _int_arg(args, "offset", 0, minimum=0)
+    if problem:
+        return text_result(problem, is_error=True)
+    limit, problem = _int_arg(args, "limit", DEFAULT_READ_LIMIT, minimum=1)
+    if problem:
+        return text_result(problem, is_error=True)
+    limit = min(limit, MAX_READ_LIMIT)
+
+    info, problem, infos = _resolve_session(root, raw_id)
+    if info is None:
+        known = ", ".join(sorted(item.path.stem for item in infos)[-10:]) or "(none)"
+        return text_result(
+            f"{problem}; known ids: {known}", is_error=True, session=raw_id
+        )
+    total = count_messages(info.path)
+    if total == 0:
+        return text_result(
+            f"session {info.path.stem} has no messages",
+            session=info.path.stem,
+            messages=0,
+            next_offset=None,
+        )
+    if offset >= total:
+        return text_result(
+            f"offset {offset} is past the end: {info.path.stem} has {total} "
+            f"message(s) (use offset 0..{total - 1})",
+            is_error=True,
+            session=info.path.stem,
+        )
+    page = _read_page(info.path, include, offset, limit)
+    next_offset = min(offset + limit, total)
+    page_end = next_offset if next_offset < total else None
+    window = f"#{offset}..#{next_offset - 1}"
+    if not page:
+        # Every message in the window rendered nothing at this level (a stretch
+        # of tool calls read as conversation text). Not an error, and not a dead
+        # end: name where the content is and how to continue.
+        hint = "" if include == "all" else ', the same messages at include="all"'
+        return text_result(
+            f"no text at include={include!r} in {window} of {info.path.stem}{hint}",
+            session=info.path.stem,
+            messages=0,
+            next_offset=page_end,
+        )
+    lines = [f"{info.path.stem}  {window} of {total}  (include={include})"]
+    lines.extend(f"  #{index} {role:<9} {text}" for index, role, text in page)
+    if page_end is not None:
+        lines.append(f"  … next_offset={page_end}")
+    body = clip("\n".join(lines), MAX_READ_BODY)[0]
+    return text_result(
+        body,
+        session=info.path.stem,
+        messages=len(page),
+        next_offset=page_end,
+    )
 
 
 def build_session_tools(root: Path) -> list[AgentTool]:
@@ -460,17 +639,8 @@ def build_session_tools(root: Path) -> list[AgentTool]:
         AgentTool(
             name="read_session",
             description=tool_description("read_session"),
-            parameters={
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "type": "string",
-                        "description": "Session id, as listed by list_sessions.",
-                    },
-                },
-                "required": ["id"],
-            },
-            execute=partial(_stub, "read_session"),
+            parameters=_READ_PARAMETERS,
+            execute=partial(_read_session, pinned),
             approval="read",
         ),
     ]

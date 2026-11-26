@@ -234,7 +234,9 @@ TOTAL_BUDGET_CHARS = 9000
 # write_file and edit_file (prompt CHANGELOG 2026-11-07.1); single-tool caps
 # are untouched.
 # 5200 -> 6400: three cross-session tools (2026-11-26 session search). Their
-# final descriptions measure 1135 chars, so the 5200 ceiling fails and 6200
-# would land 9 chars short; 6400 leaves room for small edits.
+# final descriptions measure 1137, and the bash/read_file rewording of
+# 2026-11-26.1 spends part of what 6200 would have covered. With all 17
+# descriptions the measured total is 6374: 26 chars of real headroom, so a
+# description that must grow needs this constant raised deliberately.
 TOOL_TOTAL_BUDGET_CHARS = 6400
 TOOL_BUDGET_CHARS = 900
