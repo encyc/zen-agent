@@ -23,6 +23,7 @@ from zenagent.app.bootstrap import prepare
 from zenagent.app.session_lease import SessionLeaseBusy
 from zenagent.cli.rpc.codec import PROTOCOL_VERSION
 from zenagent.cli.rpc.errors import Refusal, error_frame, failure_frame
+from zenagent.cli.rpc.ops_automations import AutomationsOps
 from zenagent.cli.rpc.ops_runs import RunsOps
 from zenagent.cli.rpc.ops_session import (
     _optional_count,
@@ -49,7 +50,7 @@ SESSION_ADDRESSED_KINDS = frozenset(
 )
 
 
-class RpcHost(RunsOps):
+class RpcHost(RunsOps, AutomationsOps):
     """Reads requests, routes them to a project slot, and owns slot lifetime."""
 
     def __init__(
@@ -164,6 +165,9 @@ class RpcHost(RunsOps):
                 return True
         if kind == "runs":
             await self._runs_op(request, request_id)
+            return True
+        if kind == "automations":
+            await self._automations_op(request, request_id)
             return True
         if kind == "approval":
             decision = request.get("decision")

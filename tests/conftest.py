@@ -382,3 +382,80 @@ def _reset_i18n_locale():
     i18n.set_locale("en")
     yield
     i18n.set_locale("en")
+
+
+@pytest.fixture
+def prepared_runtime(runtime_factory):
+    """A Runtime + ChatController pair for the automation runner tests.
+
+    ``hang=True`` replaces the stream with one that never finishes, so a round's
+    watchdog is what ends it. The runtime is closed by ``runtime_factory``'s
+    teardown; the hanging stream is cancelled with the run task.
+    """
+    import asyncio
+
+    from zenagent.app.chat import ChatController
+
+    async def make(*, hang: bool = False, fail: bool = False, root=None):
+        if fail:
+
+            async def stream(model, messages, tools, options):
+                from zenagent.events import AssistantEvent
+                from zenagent.types import AssistantMessage, TextContent, Usage
+
+                partial = AssistantMessage(
+                    content=[TextContent(text="")],
+                    provider="p",
+                    model="m",
+                    usage=Usage(),
+                    stop_reason="error",
+                    timestamp=0,
+                    error_message="provider exploded",
+                )
+                yield AssistantEvent(type="start", partial=partial)
+                yield AssistantEvent(type="done", partial=partial, reason="error")
+
+            return await runtime_factory(stream_fn=stream, root=root)
+        if hang:
+
+            async def stream(model, messages, tools, options):
+                """A stream that only ends when the abort token fires.
+
+                A real provider watches ``options.abort`` and raises ``Aborted``;
+                a fake that merely sleeps would make ``chat.abort()`` look
+                broken, so this one polls the same token the transport uses.
+                """
+                from zenagent.events import Aborted, AssistantEvent
+                from zenagent.types import AssistantMessage, TextContent, Usage
+
+                partial = AssistantMessage(
+                    content=[TextContent(text="working")],
+                    provider="p",
+                    model="m",
+                    usage=Usage(),
+                    stop_reason="pending",
+                    timestamp=0,
+                )
+                yield AssistantEvent(type="start", partial=partial)
+                token = options.abort
+                for _ in range(3600):
+                    if token is not None and token.aborted:
+                        raise Aborted("aborted by the test fake stream")
+                    await asyncio.sleep(0.01)
+                raise AssertionError("the run was never aborted")
+
+            stream_fn = stream
+        else:
+            stream_fn = text_stream()
+        return await runtime_factory(stream_fn=stream_fn, root=root)
+
+    async def build(*, hang: bool = False, fail: bool = False, root=None):
+        runtime = await make(hang=hang, fail=fail, root=root)
+        # The automation daemon relies on the project run ledger, which the app
+        # assembly attaches — `Runtime.bootstrap` alone does not.
+        from zenagent.app.run_wiring import attach_run_recorder
+
+        attach_run_recorder(runtime)
+        return runtime, ChatController(runtime)
+
+    return build

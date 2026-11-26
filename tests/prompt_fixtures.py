@@ -116,4 +116,5 @@ TOOL_GOLDEN_NAMES = (
     ALL_TOOL_NAMES
     + ("todo", "task", "read_skill")
     + ("list_sessions", "search_sessions", "read_session")
+    + ("automations", "automation_edit")
 )

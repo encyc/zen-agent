@@ -1,0 +1,1 @@
+List this project's scheduled agent runs: name, schedule, enabled/paused, last result, next due time, and the last round's cost. action=show adds the full prompt, the session its results land in, and the last error. Use it before creating an automation so you do not duplicate one, and after a run to report what happened.

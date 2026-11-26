@@ -180,3 +180,48 @@ class RunRecorder:
             duration_ms=duration_ms,
         )
         self._runtime.current_run_id = None
+
+    def relabel(
+        self,
+        *,
+        status: str,
+        termination: str | None = None,
+        error: str | None = None,
+        run_id: str | None = None,
+    ) -> None:
+        """Re-state how a run ended, for a layer that knows better than the kernel.
+
+        ``status_for_termination`` maps the kernel's vocabulary only; a value it
+        does not recognize — a wall-clock timeout the harness imposed — becomes
+        ``done``. The owning layer appends one corrective terminal row for the
+        same run id instead of teaching the shared mapping a private word, and
+        the ledger's "last row per id wins" rule makes it stick.
+
+        Best-effort by contract: an observability failure must never break the
+        run that produced it.
+        """
+        try:
+            ledger = getattr(self._runtime, "run_ledger", None)
+            target = run_id or getattr(self._runtime, "current_run_id", None)
+            if ledger is None or not target:
+                return
+            row = ledger.get(target)
+            if row is None:
+                return
+            ledger.finish(
+                row,
+                status=status,
+                termination=termination,
+                # A caller that restates *how* the run ended usually has no new
+                # diagnosis; dropping the recorder's message would leave the
+                # ledger silent about a provider failure.
+                error=error if error is not None else row.error,
+                # Carry the measurements forward: `finish` defaults cost to 0.0
+                # and turns to None, and the rounds that get relabelled are the
+                # runaway ones — the expensive case must not look free.
+                turns=row.turns,
+                cost=row.cost,
+                duration_ms=row.duration_ms,
+            )
+        except Exception:  # noqa: BLE001 - observability never breaks a run
+            _log.debug("run relabel failed", exc_info=True)

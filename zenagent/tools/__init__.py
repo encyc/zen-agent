@@ -11,6 +11,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from zenagent.agent.protocol import AgentTool
+from zenagent.tools.automations import build_automation_tools
 from zenagent.tools.bash import BASH, build_bash_tool
 from zenagent.tools.fs import EDIT_FILE, LIST_DIR, READ_FILE, WRITE_FILE
 from zenagent.tools.search import GLOB, GREP
@@ -109,6 +110,12 @@ def base_tools(
         glob = _bound(GLOB, cwd, default_path=True)
         grep = _bound(GREP, cwd, default_path=True)
     session_tools = [] if session_root is None else build_session_tools(session_root)
+    # Same rule as the session tools: per-Runtime (the project root is the data
+    # source), so they stay out of ALL_TOOLS and a subagent -- which never passes
+    # session_root -- cannot create schedules that outlive it.
+    automation_tools = (
+        [] if session_root is None else build_automation_tools(session_root)
+    )
     return [
         read_file,
         write_file,
@@ -120,6 +127,7 @@ def base_tools(
         glob,
         grep,
         *session_tools,
+        *automation_tools,
         WEB_SEARCH,
         FETCH,
     ]

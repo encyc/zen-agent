@@ -10,7 +10,7 @@
 2. 使用指南（先知道它怎么工作）：
    - [CLI](guide/cli.md) · [斜杠命令](guide/commands.md) · [项目与全局作用域](guide/projects.md) · [配置与目录](guide/config.md) · [工具与权限](guide/tools-permissions.md)
    - [MCP](guide/mcp.md) · [插件与连接器](guide/plugins.md) · [Skills 与模板](guide/skills-templates.md) · [扩展](guide/extensions.md)
-   - [会话/导出/用量](guide/sessions.md) · [RPC 与 Python SDK](guide/rpc-sdk.md)
+   - [会话/导出/用量](guide/sessions.md) · [RPC 与 Python SDK](guide/rpc-sdk.md) · [自动化任务](guide/automations.md)
    - [TUI](guide/tui.md) · [界面语言（i18n）](guide/i18n.md)
 3. 内核导读（重点，按执行顺序）：
    - [类型与事件](internals/types-events.md) → [Provider 层](internals/providers.md)

@@ -1636,6 +1636,128 @@ export type HostProjectRequest =
   | HostProjectSwitchRequest
   | HostProjectRelocateRequest
 
+export interface HostAutomationsListAllRequest {
+  op: string
+  project?: string /** junk tolerated server-side (default applied). */
+  name?: string /** junk tolerated server-side (default applied). */
+  prompt?: string /** junk tolerated server-side (default applied). */
+  schedule?: string /** junk tolerated server-side (default applied). */
+  session?: string /** junk tolerated server-side (default applied). */
+  enabled?: boolean /** junk tolerated server-side (treated as false). */
+  timeout_s?: number
+}
+
+export interface HostAutomationsListAllResult {
+  type: 'result'
+  id: string
+  ok: true
+  jobs: Array<Record<string, unknown>>
+  warnings: Array<string>
+}
+
+export interface HostAutomationsListRequest {
+  op: string
+  project?: string /** junk tolerated server-side (default applied). */
+  name?: string /** junk tolerated server-side (default applied). */
+  prompt?: string /** junk tolerated server-side (default applied). */
+  schedule?: string /** junk tolerated server-side (default applied). */
+  session?: string /** junk tolerated server-side (default applied). */
+  enabled?: boolean /** junk tolerated server-side (treated as false). */
+  timeout_s?: number
+}
+
+export interface HostAutomationsListResult {
+  type: 'result'
+  id: string
+  ok: true
+  jobs: Array<Record<string, unknown>>
+  warnings: Array<string>
+}
+
+export interface HostAutomationsAddRequest {
+  op: string
+  project?: string /** junk tolerated server-side (default applied). */
+  name?: string /** junk tolerated server-side (default applied). */
+  prompt?: string /** junk tolerated server-side (default applied). */
+  schedule?: string /** junk tolerated server-side (default applied). */
+  session?: string /** junk tolerated server-side (default applied). */
+  enabled?: boolean /** junk tolerated server-side (treated as false). */
+  timeout_s?: number
+}
+
+export interface HostAutomationsAddResult {
+  type: 'result'
+  id: string
+  ok: true
+  jobs: Array<Record<string, unknown>>
+  warnings: Array<string>
+}
+
+export interface HostAutomationsUpdateRequest {
+  op: string
+  project?: string /** junk tolerated server-side (default applied). */
+  name?: string /** junk tolerated server-side (default applied). */
+  prompt?: string /** junk tolerated server-side (default applied). */
+  schedule?: string /** junk tolerated server-side (default applied). */
+  session?: string /** junk tolerated server-side (default applied). */
+  enabled?: boolean /** junk tolerated server-side (treated as false). */
+  timeout_s?: number
+}
+
+export interface HostAutomationsUpdateResult {
+  type: 'result'
+  id: string
+  ok: true
+  jobs: Array<Record<string, unknown>>
+  warnings: Array<string>
+}
+
+export interface HostAutomationsRmRequest {
+  op: string
+  project?: string /** junk tolerated server-side (default applied). */
+  name?: string /** junk tolerated server-side (default applied). */
+  prompt?: string /** junk tolerated server-side (default applied). */
+  schedule?: string /** junk tolerated server-side (default applied). */
+  session?: string /** junk tolerated server-side (default applied). */
+  enabled?: boolean /** junk tolerated server-side (treated as false). */
+  timeout_s?: number
+}
+
+export interface HostAutomationsRmResult {
+  type: 'result'
+  id: string
+  ok: true
+  jobs: Array<Record<string, unknown>>
+  warnings: Array<string>
+}
+
+export interface HostAutomationsRunRequest {
+  op: string
+  project?: string /** junk tolerated server-side (default applied). */
+  name?: string /** junk tolerated server-side (default applied). */
+  prompt?: string /** junk tolerated server-side (default applied). */
+  schedule?: string /** junk tolerated server-side (default applied). */
+  session?: string /** junk tolerated server-side (default applied). */
+  enabled?: boolean /** junk tolerated server-side (treated as false). */
+  timeout_s?: number
+}
+
+export interface HostAutomationsRunResult {
+  type: 'result'
+  id: string
+  ok: true
+  jobs: Array<Record<string, unknown>>
+  warnings: Array<string>
+}
+
+export type HostAutomationsRequest =
+  | HostAutomationsListAllRequest
+  | HostAutomationsListRequest
+  | HostAutomationsAddRequest
+  | HostAutomationsUpdateRequest
+  | HostAutomationsRmRequest
+  | HostAutomationsRunRequest
+
 export interface HostRunsListRequest {
   op: string
   project?: string /** junk tolerated server-side (default applied). */

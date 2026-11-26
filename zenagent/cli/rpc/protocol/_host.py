@@ -45,6 +45,24 @@ class HostRunsListRequest(WireRequest):
     }
 
 
+class AutomationsRequest(WireRequest):
+    """One ``automations`` op: the project it targets plus the fields it needs.
+
+    Deliberately loose: the six sub-ops share one frame shape, and a required
+    field per op would need six classes for no gain on the wire.
+    """
+
+    FIELDS: ClassVar[dict[str, Field]] = {
+        "project": Field(STRING_LAX),
+        "name": Field(STRING_LAX),
+        "prompt": Field(STRING_LAX),
+        "schedule": Field(STRING_LAX),
+        "session": Field(STRING_LAX),
+        "enabled": Field(BOOL_LAX),
+        "timeout_s": Field(INT, required=False),
+    }
+
+
 class HostRunsGetRequest(WireRequest):
     FIELDS: ClassVar[dict[str, Field]] = {
         "project": Field(STRING_LAX),
@@ -129,6 +147,32 @@ HOST_OPS: dict[str, OpSpec] = {
             "new_key": Field(STRING),
             "sessions": Field(INT),
             "moved": Field(INT),
+        }),
+    }),
+    "automations": OpSpec("automations", AutomationsRequest, {}, subs={
+        "list_all": OpSpec("automations", AutomationsRequest, {
+            "jobs": Field(list_of(record(ANY))),
+            "warnings": Field(list_of(STRING)),
+        }),
+        "list": OpSpec("automations", AutomationsRequest, {
+            "jobs": Field(list_of(record(ANY))),
+            "warnings": Field(list_of(STRING)),
+        }),
+        "add": OpSpec("automations", AutomationsRequest, {
+            "jobs": Field(list_of(record(ANY))),
+            "warnings": Field(list_of(STRING)),
+        }),
+        "update": OpSpec("automations", AutomationsRequest, {
+            "jobs": Field(list_of(record(ANY))),
+            "warnings": Field(list_of(STRING)),
+        }),
+        "rm": OpSpec("automations", AutomationsRequest, {
+            "jobs": Field(list_of(record(ANY))),
+            "warnings": Field(list_of(STRING)),
+        }),
+        "run": OpSpec("automations", AutomationsRequest, {
+            "jobs": Field(list_of(record(ANY))),
+            "warnings": Field(list_of(STRING)),
         }),
     }),
     "runs": OpSpec("runs", NoFields, {}, subs={

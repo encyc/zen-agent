@@ -27,6 +27,7 @@ import {
   FolderIcon,
   PlusIcon,
   SparkIcon,
+  ActivityIcon,
   TerminalIcon,
   XIcon,
 } from '../icons'
@@ -36,6 +37,9 @@ import css from './RightPanel.module.css'
 // first activation, each as its own chunk.
 const FilesPanel = lazy(() =>
   import('./FilesPanel').then((module) => ({ default: module.FilesPanel })),
+)
+const AutomationsPanel = lazy(() =>
+  import('../AutomationsPanel').then((module) => ({ default: module.AutomationsPanel })),
 )
 const MemoryPanel = lazy(() =>
   import('./MemoryPanel').then((module) => ({ default: module.MemoryPanel })),
@@ -68,6 +72,7 @@ const TOOL_TABS = [
   { kind: 'files', label: 'panel.files', Icon: FolderIcon },
   { kind: 'memory', label: 'panel.memory', Icon: SparkIcon },
   { kind: 'terminal', label: 'panel.terminal', Icon: TerminalIcon },
+  { kind: 'automations', label: 'panel.automations', Icon: ActivityIcon },
 ] as const
 
 function clampPanel(px: number): number {
@@ -306,6 +311,8 @@ export function RightPanel({ width, onWidth, onClose }: RightPanelProps) {
             <MemoryPanel />
           ) : activeTab.kind === 'files' ? (
             <FilesPanel />
+          ) : activeTab.kind === 'automations' ? (
+            <AutomationsPanel />
           ) : (
             <GitPanel width={effectiveWidth} />
           )}
