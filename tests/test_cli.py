@@ -474,6 +474,27 @@ def test_missing_image_file_fails_before_the_session_is_created(
     assert list(tmp_path.glob("*.jsonl")) == []
 
 
+def test_bare_model_flag_is_refused_before_bootstrap(monkeypatch, capsys):
+    """`-m` is an explicit selection: the legacy config fallback must not apply."""
+    from zenagent.config import UserConfig
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setattr(
+        "zenagent.app.bootstrap.load_user_config",
+        lambda *a, **k: UserConfig(default_model="deepseek-flash"),
+    )
+    captured: dict = {}
+    _patch_bootstrap(monkeypatch, fake_stream(), captured)
+
+    code = cli_main.main(["-p", "hi", "-m", "deepseek-flash"])
+
+    assert code == 1
+    err = capsys.readouterr().err
+    assert "names no provider" in err
+    assert "deepseek/deepseek-flash" in err
+    assert "runtime" not in captured
+
+
 # ---------------------------------------------------------------------------
 # S2-T1: --cwd and --trace
 # ---------------------------------------------------------------------------

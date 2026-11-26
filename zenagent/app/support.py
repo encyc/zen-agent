@@ -13,6 +13,8 @@ from zenagent.providers.catalog import (
     Model,
     ModelRefError,
     ProviderConfig,
+    find_unique_model,
+    model_ref,
     resolve_model_ref,
 )
 from zenagent.types import Usage
@@ -74,6 +76,30 @@ def api_key_for(catalog: dict[str, ProviderConfig], model: Model) -> str | None:
         return None
     # Settings (set inside the app) win over the environment; see zenagent.settings.
     return settings.get_api_key(provider.api_key_env)
+
+def resolve_configured_model(
+    catalog: dict[str, ProviderConfig], raw: str, warnings: list[str]
+) -> Model:
+    """Resolve a persisted ``default_model``, migrating a legacy bare id once.
+
+    This is the only place a bare id is still read, and only because the config
+    file is shared with older binaries that write it that way: the value is
+    resolved by unique match, recorded as a warning naming the pinned form, and
+    never stored back (rewriting it would break a 0.15.2 client on the same
+    machine). An ambiguous bare id is refused. Selection inputs — ``--model``,
+    ``/model``, the pickers, ``task(model=...)`` and client prefs — never come
+    through here and stay strictly ``provider/model-id``.
+    """
+    raw = raw.strip()
+    if "/" in raw:
+        return resolve_model_ref(catalog, raw)
+    model = find_unique_model(catalog, raw)
+    warnings.append(
+        f"default_model {raw!r} has no provider; using {model_ref(model)} "
+        "(write provider/model-id in the config to pin it)"
+    )
+    return model
+
 
 def resolve_task_model(
     catalog: dict[str, ProviderConfig], raw: str

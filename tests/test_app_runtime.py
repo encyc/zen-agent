@@ -425,6 +425,24 @@ async def test_bootstrap_wires_the_task_budget_from_config(
     )
 
 
+async def test_legacy_default_model_boots_with_a_warning(
+    runtime_factory, app_env, monkeypatch
+):
+    """A 0.15.2 config keeps booting: the bare default is migrated once."""
+    from zenagent.config import UserConfig
+
+    monkeypatch.setattr(
+        "zenagent.app.bootstrap.load_user_config",
+        lambda *args, **kwargs: UserConfig(default_model="deepseek-flash"),
+    )
+
+    runtime = await runtime_factory()
+
+    assert runtime.agent.model.provider == "deepseek"
+    assert runtime.agent.model.id == "deepseek-flash"
+    assert any("default_model" in warning for warning in runtime.warnings)
+
+
 async def test_subagent_follows_the_switched_provider(runtime_factory, monkeypatch):
     """A /model switch must reach the next child, not just the parent."""
     from zenagent.app.models import ModelManager

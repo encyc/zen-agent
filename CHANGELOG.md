@@ -3,6 +3,20 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+### Fixed
+
+- **A config written by 0.15.2 still boots.** 0.15.3's provider-qualified rule
+  refused `default_model = "deepseek-flash"`, so upgrading from 0.15.2 failed at
+  startup with `names no provider`. The config file is shared with binaries that
+  cannot read a `provider/model-id`, so a bare `default_model` is now migrated
+  once on read: resolved to its one catalog match, reported as a warning naming
+  the pinned form, and never written back. An ambiguous bare value is still
+  refused, and every selection input (`--model`, `/model`, the pickers, task's
+  `model`) stays strict. The desktop applies the same rule to a stored bare pref
+  from its own catalog before replaying it.
+
 ## v0.15.3 — 2026-11-27
 
 ### Added

@@ -6,12 +6,13 @@
  * the server rejects (a renamed model, say) costs that pref, never the
  * connection. */
 
-import { useNoticeStore, useStatusStore } from './stores.ts'
+import { useCatalogStore, useNoticeStore, useStatusStore } from './stores.ts'
 import { loadPrefs, replayFrames, savePref } from './prefs.ts'
 
 interface AppGetterLike {
   client(): { send(payload: Record<string, unknown>): Promise<Record<string, unknown>> }
   refreshStatus(): Promise<void>
+  refreshCatalog?(): Promise<void>
 }
 
 export function restorePrefs(getApp: () => AppGetterLike): Promise<void> {
@@ -20,7 +21,20 @@ export function restorePrefs(getApp: () => AppGetterLike): Promise<void> {
 
 async function restore(get: AppGetterLike): Promise<void> {
   await get.refreshStatus()
+  await get.refreshCatalog?.()
   const prefs = loadPrefs()
+  // A pref written by 0.15.2 is a bare id; the server refuses those now, so
+  // pin the one catalog match before replaying. A duplicate stays bare and is
+  // refused with the qualified choices (then dropped, see below).
+  if (prefs.model !== null && !prefs.model.includes('/')) {
+    const matches = useCatalogStore
+      .getState()
+      .models.filter((model) => model.id === prefs.model)
+    if (matches.length === 1) {
+      prefs.model = `${matches[0].provider}/${matches[0].id}`
+      savePref('model', prefs.model)
+    }
+  }
   const live = useStatusStore.getState().status
   const frames = replayFrames(prefs, {
     mode: live?.mode ?? null,

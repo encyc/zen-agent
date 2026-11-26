@@ -416,6 +416,31 @@ class ModelRefError(LookupError):
     """A model reference does not name exactly one provider/model."""
 
 
+def find_unique_model(catalog: dict[str, ProviderConfig], model_id: str) -> Model:
+    """The one provider defining ``model_id`` (legacy-config migration only).
+
+    Persisted state written before provider-qualified refs — a ``default_model``
+    line in ``~/.zenagent/config.toml`` from 0.15.2 and earlier — cannot be
+    rewritten by the new binary without breaking an older client that shares
+    the same file. Such a value is migrated here, by unique match only; an
+    unknown or duplicated id raises :class:`ModelRefError` naming the qualified
+    forms. Selection paths must not call this: they use
+    :func:`resolve_model_ref` and never accept a bare id.
+    """
+    matches = [
+        model for provider in catalog.values() for model in provider.models
+        if model.id == model_id
+    ]
+    if not matches:
+        raise ModelRefError(f"model {model_id!r} is not in the catalog")
+    if len(matches) > 1:
+        options = " or ".join(model_ref(model) for model in matches)
+        raise ModelRefError(
+            f"model id {model_id!r} is ambiguous ({options}); use provider/model-id"
+        )
+    return matches[0]
+
+
 def resolve_model_ref(catalog: dict[str, ProviderConfig], ref: str) -> Model:
     """Resolve a ``provider/model-id`` reference (or raise ModelRefError).
 

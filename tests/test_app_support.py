@@ -2,8 +2,8 @@
 
 import pytest
 
-from zenagent.app.support import resolve_task_model
-from zenagent.providers.catalog import ProviderConfig
+from zenagent.app.support import resolve_configured_model, resolve_task_model
+from zenagent.providers.catalog import ModelRefError, ProviderConfig
 
 
 def _catalog() -> dict[str, ProviderConfig]:
@@ -86,3 +86,35 @@ def test_bare_duplicate_errors_listing_qualified_forms(monkeypatch):
         resolve_task_model(_catalog(), "glm-5.3")
     message = str(exc_info.value)
     assert "zai/glm-5.3" in message and "deepseek/glm-5.3" in message
+
+
+def test_configured_model_migrates_a_unique_legacy_id(monkeypatch):
+    monkeypatch.setenv("ZAI_API_KEY", "k")
+    warnings: list[str] = []
+
+    model = resolve_configured_model(_catalog(), "glm-5.3-flash", warnings)
+
+    assert model.provider == "zai"
+    assert warnings and "default_model" in warnings[0]
+    assert "zai/glm-5.3-flash" in warnings[0]
+
+
+def test_configured_model_keeps_a_qualified_ref_verbatim():
+    warnings: list[str] = []
+
+    model = resolve_configured_model(_catalog(), "deepseek/glm-5.3", warnings)
+
+    assert model.provider == "deepseek"
+    assert warnings == []
+
+
+def test_configured_model_refuses_a_legacy_duplicate():
+    warnings: list[str] = []
+
+    with pytest.raises(ModelRefError) as exc_info:
+        resolve_configured_model(_catalog(), "glm-5.3", warnings)
+
+    message = str(exc_info.value)
+    assert "ambiguous" in message
+    assert "zai/glm-5.3" in message and "deepseek/glm-5.3" in message
+    assert warnings == []

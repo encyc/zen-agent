@@ -52,6 +52,7 @@ from zenagent.app.session_meta import (
 from zenagent.app.sessions import SessionManager
 from zenagent.app.support import (
     api_key_for,
+    resolve_configured_model,
     resolve_model,
     resolve_task_model,
     session_id_for,
@@ -109,9 +110,18 @@ async def assemble(
     runtime.catalog = apply_user_config(
         load_catalog(), runtime.user_config, runtime.warnings
     )
-    model = resolve_model(
-        runtime.catalog, options.model_id or runtime.user_config.default_model
-    )
+    # --model is an explicit selection (strict provider/model-id); a value that
+    # came from config.toml may predate qualified refs, so it is migrated once.
+    if options.model_id:
+        model = resolve_model(runtime.catalog, options.model_id)
+    elif runtime.user_config.default_model:
+        model = resolve_configured_model(
+            runtime.catalog,
+            runtime.user_config.default_model,
+            runtime.warnings,
+        )
+    else:
+        model = resolve_model(runtime.catalog, None)
     runtime.model = model
     api_key = options.api_key or api_key_for(runtime.catalog, model)
     if not api_key:
