@@ -223,3 +223,109 @@ async def test_bad_schedule_is_refused_not_a_crash(rpc):
         },
     )
     assert reply.get("ok") is False or reply.get("type") == "error"
+
+
+async def test_list_all_does_not_duplicate_warnings(rpc):
+    a = _repo(rpc.tmp_path, "aut-w")
+    host = await _host(rpc)
+    await call(
+        host,
+        rpc.writes,
+        {
+            "type": "automations",
+            "op": "add",
+            "id": "1",
+            "project": str(a),
+            "name": "r",
+            "prompt": "go",
+            "schedule": "daily 09:00",
+        },
+    )
+    from zenagent.app.automations import AutomationStore
+
+    store = AutomationStore(a)
+    store.path.write_text("{torn")
+    reply = await call(
+        host, rpc.writes, {"type": "automations", "op": "list_all", "id": "2"}
+    )
+    assert len(reply["warnings"]) == len(set(reply["warnings"]))
+
+
+async def test_run_without_a_daemon_says_so_instead_of_silently_doing_nothing(rpc):
+    root = _repo(rpc.tmp_path, "aut-r")
+    host = await _host(rpc)
+    await call(
+        host,
+        rpc.writes,
+        {
+            "type": "automations",
+            "op": "add",
+            "id": "1",
+            "project": str(root),
+            "name": "r",
+            "prompt": "go",
+            "schedule": "daily 09:00",
+        },
+    )
+    reply = await call(
+        host,
+        rpc.writes,
+        {"type": "automations", "op": "run", "id": "2", "project": str(root), "name": "r"},
+    )
+    assert reply.get("skipped") == "no-daemon"
+
+
+async def test_update_refuses_an_impossible_timeout(rpc):
+    root = _repo(rpc.tmp_path, "aut-t")
+    host = await _host(rpc)
+    base = {"type": "automations", "project": str(root), "name": "r"}
+    await call(
+        host,
+        rpc.writes,
+        {**base, "op": "add", "id": "1", "prompt": "go", "schedule": "daily 09:00"},
+    )
+    reply = await call(host, rpc.writes, {**base, "op": "update", "id": "2", "timeout_s": 0})
+    assert reply.get("ok") is False or reply.get("type") == "error"
+    from zenagent.app.automations import AutomationStore
+
+    # The file still parses: one bad value must not disable every job.
+    assert [j.name for j in AutomationStore(root).load()] == ["r"]
+
+
+async def test_the_request_mailbox_is_written_atomically(rpc):
+    """No partial file may be visible to a concurrently reading daemon."""
+    root = _repo(rpc.tmp_path, "aut-m")
+    host = await _host(rpc)
+    await call(
+        host,
+        rpc.writes,
+        {
+            "type": "automations",
+            "op": "add",
+            "id": "1",
+            "project": str(root),
+            "name": "r",
+            "prompt": "go",
+            "schedule": "daily 09:00",
+        },
+    )
+    from zenagent import project as project_module
+
+    request = project_module.project_dir(root=root) / "automations.request.json"
+    # A daemon that is "running" for the purposes of this op.
+    import zenagent.cli.rpc.ops_automations as ops
+
+    original = ops.daemon_running
+    ops.daemon_running = lambda _root: True
+    try:
+        await call(
+            host,
+            rpc.writes,
+            {"type": "automations", "op": "run", "id": "2", "project": str(root), "name": "r"},
+        )
+    finally:
+        ops.daemon_running = original
+    assert request.exists()
+    assert json.loads(request.read_text())["jobs"][0]["name"] == "r"
+    # No leftover temp files next to it.
+    assert sorted(p.name for p in request.parent.glob(".automations.request*")) == []

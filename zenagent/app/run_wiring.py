@@ -213,6 +213,11 @@ class RunRecorder:
                 status=status,
                 termination=termination,
                 error=error,
+                # Carry the measurements forward: `finish` defaults cost to 0.0
+                # and turns to None, and the rounds that get relabelled are the
+                # runaway ones — the expensive case must not look free.
+                turns=row.turns,
+                cost=row.cost,
                 duration_ms=row.duration_ms,
             )
         except Exception:  # noqa: BLE001 - observability never breaks a run

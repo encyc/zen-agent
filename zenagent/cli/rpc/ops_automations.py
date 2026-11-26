@@ -29,6 +29,7 @@ from zenagent.app.automations import (
     Job,
     Schedule,
     StateStore,
+    _atomic_write_json,
     state_for,
 )
 from zenagent.app.runs import RunLedger
@@ -76,6 +77,10 @@ def _schedule_text(schedule: Schedule) -> str:
 
 
 class AutomationsOps:
+    #: Set by an op that deliberately did nothing (currently only "run" with no
+    #: daemon); cleared at the top of every request.
+    _last_skip: str = ""
+
     """Mixin: see :class:`~.host.RpcHost` for the composed dispatcher.
 
     ``_send``/``_active``/``_options`` come from the composed host; they are
@@ -89,6 +94,7 @@ class AutomationsOps:
 
     async def _automations_op(self, request: dict, request_id) -> None:
         op = str(request.get("op") or "")
+        self._last_skip = ""
         try:
             rows, warnings = self._automations_rows(request, op)
         except Refusal as exc:
@@ -114,15 +120,18 @@ class AutomationsOps:
                 )
             )
             return
-        self._send(
-            {
-                "type": "result",
-                "id": request_id,
-                "ok": True,
-                "jobs": rows,
-                "warnings": warnings,
-            }
-        )
+        frame: dict = {
+            "type": "result",
+            "id": request_id,
+            "ok": True,
+            "jobs": rows,
+            "warnings": warnings,
+        }
+        if self._last_skip:
+            # "run now" that queued nothing: a client must be able to tell this
+            # from success without parsing the warning text.
+            frame["skipped"] = self._last_skip
+        self._send(frame)
 
     # -- the work ------------------------------------------------------------
 
@@ -151,14 +160,22 @@ class AutomationsOps:
         elif op == "rm":
             self._remove(root, request)
         elif op == "run":
-            self._request_run(root, request)
+            if self._request_run(root, request) == "no-daemon":
+                rows, own = self._rows_for(root, warnings)
+                self._last_skip = "no-daemon"
+                return rows, [
+                    *warnings,
+                    *own,
+                    f"no daemon is running for {root}; start it with `zen daemon`",
+                ]
         else:
             raise Refusal(f"unknown automations op: {op!r}")
-        if op != "run" and not daemon_running(root):
+        if not daemon_running(root):
             warnings.append(
                 f"no daemon is running for {root}; schedules are saved but idle"
             )
-        return self._rows_for(root, warnings)
+        rows, own = self._rows_for(root, warnings)
+        return rows, [*warnings, *own]
 
     def _known_projects(self) -> list[Path]:
         """Every project that has an automations file, plus the foreground one."""
@@ -180,11 +197,17 @@ class AutomationsOps:
         return roots
 
     def _rows_for(self, root: Path, warnings: list[str]) -> tuple[list[dict], list[str]]:
+        """This project's rows plus its own warnings (never mutating ``warnings``).
+
+        Returns the warnings instead of appending to the caller's list: mutating
+        it made `list_all` extend a list with itself, doubling every warning per
+        project.
+        """
         store = AutomationStore(root)
         jobs = store.load()
-        warnings.extend(f"{root}: {warning}" for warning in store.warnings)
+        mine = [f"{root}: {warning}" for warning in store.warnings]
         if not jobs:
-            return [], warnings
+            return [], mine
         states = StateStore(root).load()
         ledger = RunLedger(project.project_dir(root=root) / "runs.jsonl")
         runs = ledger.list(kind="automation")
@@ -192,7 +215,7 @@ class AutomationsOps:
         rows: list[dict] = []
         for job in jobs:
             state = state_for(states, job)
-            mine = [row for row in runs if row.label == job.name]
+            labelled = [row for row in runs if row.label == job.name]
             rows.append(
                 {
                     "project": str(root),
@@ -209,10 +232,11 @@ class AutomationsOps:
                     "last_run_at": state.last_run_at or 0,
                     "missed": state.missed,
                     "run_count": state.run_count,
-                    "cost": mine[-1].cost if mine else 0.0,
+                    # `list()` is newest-first: the newest cost is the first row.
+                    "cost": labelled[0].cost if labelled else 0.0,
                 }
             )
-        return rows, warnings
+        return rows, mine
 
     def _remember_project(self, root: Path) -> None:
         """Make sure ``meta.json`` exists.
@@ -233,6 +257,10 @@ class AutomationsOps:
         if not isinstance(timeout, int) or isinstance(timeout, bool) or timeout <= 0:
             raise Refusal("timeout_s must be a positive integer")
         session = _text(request, "session", required=False)
+        if session and Path(session).name != session:
+            # The transcript lives in the project's sessions dir; a path here
+            # would write outside it and break the move-the-project rule.
+            raise Refusal("session must be a bare file name, not a path")
         store = AutomationStore(root)
         store.load()
         self._remember_project(root)
@@ -257,7 +285,10 @@ class AutomationsOps:
         if "schedule" in request:
             changes["schedule"] = Schedule.parse(_text(request, "schedule"))
         if "timeout_s" in request:
-            changes["timeout_s"] = int(request.get("timeout_s") or 0)
+            timeout = request.get("timeout_s")
+            if not isinstance(timeout, int) or isinstance(timeout, bool) or timeout <= 0:
+                raise Refusal("timeout_s must be a positive integer")
+            changes["timeout_s"] = timeout
         if not changes:
             raise Refusal("nothing to update")
         store = AutomationStore(root)
@@ -274,19 +305,17 @@ class AutomationsOps:
         if not store.remove(name):
             raise Refusal(f"no automation named {name!r}")
 
-    def _request_run(self, root: Path, request: dict) -> None:
+    def _request_run(self, root: Path, request: dict) -> str:
         name = _text(request, "name")
         store = AutomationStore(root)
         store.load()
         if store.get(name) is None:
             raise Refusal(f"no automation named {name!r}")
         if not daemon_running(root):
-            # Not an error: the definition is fine, the scheduler is asleep.
-            # The UI surfaces the warning; `zen daemon` starts it.
-            return
+            # Not an error — the definition is fine, the scheduler is asleep —
+            # but never a silent no-op either: the caller turns this into a
+            # visible "start the daemon" warning.
+            return "no-daemon"
         path = project.project_dir(root=root) / _REQUEST
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            json.dumps({"jobs": [{"name": name, "at": time.time()}]}),
-            encoding="utf-8",
-        )
+        _atomic_write_json(path, {"jobs": [{"name": name, "at": time.time()}]})
+        return "requested"

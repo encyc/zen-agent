@@ -396,7 +396,26 @@ def prepared_runtime(runtime_factory):
 
     from zenagent.app.chat import ChatController
 
-    async def make(*, hang: bool = False, root=None):
+    async def make(*, hang: bool = False, fail: bool = False, root=None):
+        if fail:
+
+            async def stream(model, messages, tools, options):
+                from zenagent.events import AssistantEvent
+                from zenagent.types import AssistantMessage, TextContent, Usage
+
+                partial = AssistantMessage(
+                    content=[TextContent(text="")],
+                    provider="p",
+                    model="m",
+                    usage=Usage(),
+                    stop_reason="error",
+                    timestamp=0,
+                    error_message="provider exploded",
+                )
+                yield AssistantEvent(type="start", partial=partial)
+                yield AssistantEvent(type="done", partial=partial, reason="error")
+
+            return await runtime_factory(stream_fn=stream, root=root)
         if hang:
 
             async def stream(model, messages, tools, options):
@@ -430,8 +449,8 @@ def prepared_runtime(runtime_factory):
             stream_fn = text_stream()
         return await runtime_factory(stream_fn=stream_fn, root=root)
 
-    async def build(*, hang: bool = False, root=None):
-        runtime = await make(hang=hang, root=root)
+    async def build(*, hang: bool = False, fail: bool = False, root=None):
+        runtime = await make(hang=hang, fail=fail, root=root)
         # The automation daemon relies on the project run ledger, which the app
         # assembly attaches — `Runtime.bootstrap` alone does not.
         from zenagent.app.run_wiring import attach_run_recorder

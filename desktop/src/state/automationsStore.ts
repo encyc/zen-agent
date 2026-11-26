@@ -18,6 +18,8 @@ export interface AutomationsResult {
   ok?: boolean
   jobs: AutomationRow[]
   warnings: string[]
+  /** Set when an op deliberately did nothing — currently "run" with no daemon. */
+  skipped?: string
 }
 
 interface AutomationsState {
@@ -66,13 +68,17 @@ export const useAutomationsStore = create<AutomationsState>((set, get) => ({
   },
 
   runNow: async (project, name) => {
-    await useAppStore
+    const result = await useAppStore
       .getState()
       .client()
       .send<AutomationsResult>(
         { type: 'automations', op: 'run', project, name },
         REQUEST_TIMEOUT_MS,
       )
+    // The server says `skipped: "no-daemon"` when it queued nothing; surfacing
+    // its warnings is what turns a click on a stopped scheduler into a message
+    // instead of a silent no-op.
+    set({ warnings: result.warnings ?? [], failed: result.ok === false })
     await get().refresh()
   },
 

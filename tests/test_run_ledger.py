@@ -371,3 +371,49 @@ def test_relabel_of_an_unknown_run_is_a_no_op(tmp_path):
         current_run_id=None,
     )
     RunRecorder(runtime).relabel(status="failed", run_id="r_nope")
+
+
+async def test_relabel_preserves_cost_and_turns(app_env, monkeypatch):
+    """A corrective row must not discard what the recorder already measured.
+
+    The runaway rounds are exactly the ones relabelled, so zeroing their cost
+    would make the expensive case look free — the spec's anti-goal.
+    """
+    from conftest import text_stream
+
+    from zenagent.app.agent_profile import AgentProfile
+    from zenagent.app.bootstrap import prepare
+    from zenagent.app.run_wiring import RunRecorder
+    from zenagent.app.runtime import RuntimeOptions
+    from zenagent.config import UserConfig
+    from zenagent.project import project_dir
+
+    monkeypatch.setattr(
+        "zenagent.app.bootstrap.load_user_config",
+        lambda *args, **kwargs: UserConfig(default_model="deepseek-flash"),
+    )
+    prepared = await prepare(
+        RuntimeOptions(
+            root=app_env,
+            profile=AgentProfile(mcp=False, skills=False, templates=False),
+        ),
+        stream_fn=text_stream("ok"),
+        views=False,
+    )
+    try:
+        await prepared.runtime.agent.prompt("hello")
+        ledger = RunLedger(project_dir(root=app_env) / "runs.jsonl")
+        [row] = ledger.list(kind="coding")
+        ledger.finish(row, status="done", termination="stop", turns=7, cost=1.5)
+        assert ledger.get(row.id).turns == 7
+
+        RunRecorder(prepared.runtime).relabel(
+            status="failed", termination="timeout", run_id=row.id
+        )
+
+        updated = ledger.get(row.id)
+        assert (updated.status, updated.termination) == ("failed", "timeout")
+        assert updated.cost == 1.5            # not zeroed
+        assert updated.turns == 7             # not dropped
+    finally:
+        await prepared.runtime.close()

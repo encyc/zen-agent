@@ -108,3 +108,50 @@ async def test_the_lease_is_released_after_the_round(prepared_runtime, app_env):
     # A fresh owner can take the session: nothing is holding it.
     lease = acquire_session(runtime.session.path, object())
     release_session(lease)
+
+
+async def test_a_failing_switch_still_releases_the_lease(prepared_runtime, app_env):
+    """A switch that adopts the lease and then raises must not strand it.
+
+    ``switch_session`` binds the target's lease before ``_recompose`` runs, so an
+    exception there leaves the runtime holding a session the user cannot open.
+    """
+    from zenagent.app.session_lease import session_is_live
+
+    runtime, chat = await prepared_runtime(root=app_env)
+    target = runtime.session.path.parent / "switch-raises.jsonl"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("", encoding="utf-8")
+
+    original = runtime.switch_session
+
+    async def boom(path, **kwargs):
+        await original(path, **kwargs)
+        raise RuntimeError("recompose blew up")
+
+    runtime.switch_session = boom
+    result = await run_round(
+        runtime,
+        chat,
+        job(session=target.name),
+        run_number=1,
+        now=time.time(),
+        session_root=runtime.root,
+    )
+    assert result.status == "error"
+    assert session_is_live(target) is False
+
+
+async def test_a_run_that_fails_reports_failed_not_done(prepared_runtime, app_env):
+    """The agent's own termination is what state and the UI must show."""
+    runtime, chat = await prepared_runtime(root=app_env, fail=True)
+    result = await run_round(
+        runtime,
+        chat,
+        job(),
+        run_number=1,
+        now=time.time(),
+        session_root=runtime.root,
+    )
+    assert result.status == "failed"
+    assert runtime.run_ledger.load()[-1].status == "failed"

@@ -96,3 +96,36 @@ def test_resolve_session_under_project_dir(root):
     path = resolve_session(root, "s1.jsonl")
     assert path.name == "s1.jsonl"
     assert path.parent.name == "sessions"
+
+
+def test_one_bad_entry_does_not_disable_every_job(root):
+    """A single malformed job must be skipped, not take the file down.
+
+    The daemon builds a fresh store every tick, so "keep the last good
+    snapshot" cannot help there; per-entry degradation is the only rule that
+    survives a restart.
+    """
+    store = AutomationStore(root)
+    store.add(job("keep"))
+    raw = json.loads(store.path.read_text())
+    raw["jobs"].append({"name": "broken", "prompt": "p", "session": "s.jsonl",
+                        "schedule": {"kind": "nope"}})
+    store.path.write_text(json.dumps(raw))
+    fresh = AutomationStore(root)
+    assert [j.name for j in fresh.load()] == ["keep"]
+    assert any("broken" in warning for warning in fresh.warnings)
+
+
+def test_state_store_warns_on_a_corrupt_file(root):
+    store = StateStore(root)
+    store.path.parent.mkdir(parents=True, exist_ok=True)
+    store.path.write_text("{torn")
+    assert store.load() == {}
+    assert store.warnings
+
+
+def test_timeout_must_be_positive(root):
+    store = AutomationStore(root)
+    store.load()
+    with pytest.raises(ValueError):
+        store.add(job(timeout_s=0))

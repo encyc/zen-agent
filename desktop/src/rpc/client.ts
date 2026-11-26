@@ -72,13 +72,20 @@ type EventHandler = (frame: ServerFrame) => void
 /** Kinds whose request must stay session-free: host-level ops that route by
  * other fields, and `terminal`, whose `session` is a shell token — tagging it
  * would break every terminal op. Caller-set `session` fields always win. */
-const SESSION_TAG_EXEMPT = new Set([
+export const SESSION_TAG_EXEMPT = new Set([
   'hello',
   'project',
   'terminal',
   'runs',
   'shutdown',
+  // `automations` names the project it targets and mints its own session: a
+  // session tag would pin a new job to the transcript on screen, and the
+  // project override below would retarget a row from another project.
+  'automations',
 ])
+
+/** Kinds that name their own project, so the active slot must not overwrite it. */
+export const PROJECT_OVERRIDE_EXEMPT = new Set(['automations'])
 
 /** Per-process salt + shared counter: two windows share one sidecar pending
  * map, and both used to mint `r1, r2, …` — a collision handed one window's
@@ -243,8 +250,13 @@ export class RpcClient {
     const id = nextId()
     // `hello` and `project` are host-level ops; everything else is served by
     // a slot and must name it.
+    // A kind that names its own project keeps it: overwriting here silently
+    // retargeted cross-project requests at the active slot.
     const routed =
-      payload.type !== 'hello' && payload.type !== 'project' && this.project !== null
+      payload.type !== 'hello' &&
+      payload.type !== 'project' &&
+      !PROJECT_OVERRIDE_EXEMPT.has(String(payload.type)) &&
+      this.project !== null
     // Session-scoped requests name the on-screen session so the host serves
     // this session's slot even when another one is active. A caller that
     // already set `session` (a pane, a specific transcript) wins; kinds whose

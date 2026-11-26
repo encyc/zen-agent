@@ -79,9 +79,9 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _root_or_fail() -> Path | None:
+def _root_or_fail(*, require_root: bool = False) -> Path | None:
     root = project.find_project_root()
-    if Path.cwd().resolve() != root:
+    if require_root and Path.cwd().resolve() != root:
         print(
             f"zen automations: run this from the project root ({root})",
             file=sys.stderr,
@@ -109,7 +109,8 @@ def _row(root: Path, job: Job, states, now: float) -> dict:
         "last_run_at": state.last_run_at or 0,
         "missed": state.missed,
         "run_count": state.run_count,
-        "cost": runs[-1].cost if runs else 0.0,
+        # `list()` is newest-first, so the most recent run is the first row.
+        "cost": runs[0].cost if runs else 0.0,
     }
 
 
@@ -136,18 +137,38 @@ def main(argv: list[str] | None = None) -> int:
         args = build_parser().parse_args(argv)
     except SystemExit as exc:          # argparse already printed usage
         return int(exc.code or 0)
-    root = _root_or_fail()
+    root = _root_or_fail(require_root=args.action == "add")
     if root is None:
         return 1
     now = time.time()
 
     if args.action == "add":
-        schedule = Schedule.parse(
-            f"daily {args.daily}" if args.daily else f"every {args.every}"
-        )
+        try:
+            schedule = Schedule.parse(
+                f"daily {args.daily}" if args.daily else f"every {args.every}"
+            )
+        except (TypeError, ValueError) as exc:
+            # The user's primary free-text input: answer with the accepted
+            # forms, not a Python traceback and a crash log.
+            print(
+                f"zen automations: {exc}\n"
+                "  expected: --daily HH:MM  or  --every N[m|h]",
+                file=sys.stderr,
+            )
+            return 2
+        if args.timeout <= 0:
+            print("zen automations: --timeout must be a positive integer", file=sys.stderr)
+            return 1
         session = args.session or unique_session_path(root=root).name
         store = AutomationStore(root)
         store.load()
+        if any(job.session == session for job in store.load()):
+            print(
+                f"zen automations: session {session!r} already belongs to another "
+                "automation; each job needs its own transcript",
+                file=sys.stderr,
+            )
+            return 1
         try:
             saved = store.add(
                 Job(
@@ -165,6 +186,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"added {saved.name} ({_schedule_text(saved.schedule)})")
         print(f"session: {saved.session} (created on its first run)")
         print(PERMISSION_NOTICE)
+        if not daemon_running(root):
+            print(
+                "\nthis project has no scheduler running: start it with `zen daemon`\n"
+                "or install it to start at login with `zen daemon install`"
+            )
         return 0
 
     if args.action == "list":

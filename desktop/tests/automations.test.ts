@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { formatNextDue, groupByProject } from '../src/state/automations.ts'
+import { PROJECT_OVERRIDE_EXEMPT, SESSION_TAG_EXEMPT } from '../src/rpc/client.ts'
 
 test('groupByProject keeps projects together, most urgent first', () => {
   const rows = [
@@ -35,4 +36,14 @@ test('formatNextDue says "now" for due-or-past and a short delta otherwise', () 
   assert.equal(formatNextDue(900, 1000), 'now')
   assert.equal(formatNextDue(1000 + 90, 1000), '2m')
   assert.equal(formatNextDue(1000 + 7200, 1000), '2h')
+})
+
+test('automations requests are session-free and keep their own project', () => {
+  // The client tags every non-exempt request with the on-screen session and
+  // overwrites `project` with the active slot. Both would silently retarget a
+  // panel request: the job would be pinned to the transcript the user happens
+  // to have open, and a row from another project would be edited in the current
+  // one. This test pins the two exemptions that prevent it.
+  assert.equal(SESSION_TAG_EXEMPT.has('automations'), true)
+  assert.equal(PROJECT_OVERRIDE_EXEMPT.has('automations'), true)
 })

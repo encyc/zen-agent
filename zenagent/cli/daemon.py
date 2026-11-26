@@ -26,6 +26,7 @@ import logging
 import os
 import sys
 import time
+from dataclasses import replace
 from pathlib import Path
 
 from zenagent import __version__, project
@@ -65,15 +66,20 @@ def daemon_lock(root: Path) -> Path:
     return project.project_dir(root=root) / "daemon.lock"
 
 
-def _take_daemon_lock(root: Path) -> int | None:
+def _take_daemon_lock(root: Path, *, create: bool = True) -> int | None:
     """Open and flock the lock file; ``None`` when the filesystem cannot lock.
 
     Raises :class:`BlockingIOError` when another process holds it — that case is
-    "a daemon is already running", not a degraded filesystem.
+    "a daemon is already running", not a degraded filesystem. ``create=False``
+    is the probe path: it reports "no daemon" rather than minting the file every
+    read-only command would otherwise leave behind.
     """
     path = daemon_lock(root)
+    if not create and not path.exists():
+        raise FileNotFoundError(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+    flags = os.O_RDWR | (os.O_CREAT if create else 0)
+    fd = os.open(path, flags, 0o600)
     try:
         import fcntl
     except ImportError:  # pragma: no cover - Windows
@@ -103,17 +109,26 @@ def _drop_daemon_lock(fd: int | None) -> None:
 
 
 def daemon_running(root: Path) -> bool:
-    """Whether some process currently holds this project's daemon lock."""
+    """Whether some process currently holds this project's daemon lock.
+
+    A read-only probe: it must not create the lock file (``zen automations
+    list`` and every rpc op call it), and "cannot lock" must never be reported
+    as "a daemon is running" — nor as "definitely not running".
+    """
+    path = daemon_lock(root)
+    if not path.exists():
+        return False
     try:
-        fd = _take_daemon_lock(root)
+        fd = _take_daemon_lock(root, create=False)
     except BlockingIOError:
         return True
     except OSError:
         return False
     if fd is None:
-        # The filesystem cannot lock: report "not running" rather than inventing
-        # a daemon that may not exist.
-        return False
+        # The filesystem cannot lock. Report "running" — the pessimistic side:
+        # refusing a manual run is recoverable, letting two daemons write one
+        # state file is not.
+        return True
     _drop_daemon_lock(fd)
     return False
 
@@ -127,7 +142,12 @@ def next_wake(jobs: list[Job], states: dict[str, JobState], now: float) -> float
         when = job.schedule.next_due(now, state_for(states, job).last_run_at)
         if soonest is None or when < soonest:
             soonest = when
-    return now + 60.0 if soonest is None else soonest
+    if soonest is None:
+        return now + 60.0
+    # A due-but-not-run job (skipped, or a round that raised) keeps its past
+    # slot; returning that would make the loop sleep zero and spin, fsyncing
+    # state every iteration. One second is the floor.
+    return max(soonest, now + 1.0)
 
 
 def _consume_requests(path: Path, jobs: list[Job], states: dict[str, JobState]) -> list[Due]:
@@ -186,12 +206,22 @@ async def tick(
     state_store = StateStore(root)
     states = state_store.load()
 
+    # Where this runtime writes transcripts, captured before any round switches
+    # the runtime's current session.
+    sessions_dir = Path(runtime.session.path).parent
+
     forced = _consume_requests(request_path, jobs, states)
-    due = forced + due_list(jobs, states, now)
+    # A requested job that also happens to be due must run once, not twice:
+    # the forced entry wins and keeps the due entry from being added again.
+    forced_ids = {item.job.id for item in forced}
+    due = forced + [item for item in due_list(jobs, states, now) if item.job.id not in forced_ids]
     results: list[RoundResult] = []
     for item in due:
-        job = item.job
-        state = state_for(states, job)
+        state = state_for(states, item.job)
+        # Feed the recorded transcript back in: a job that has never run has no
+        # session file yet (the spec makes sessions lazy), and without this the
+        # runner would mint a fresh transcript on every single round.
+        job = replace(item.job, session=state.session or item.job.session)
         result = await run_round(
             runtime,
             chat,
@@ -199,6 +229,10 @@ async def tick(
             run_number=item.run_number,
             now=now,
             session_root=root,
+            # Where this runtime writes transcripts. Equal to the project-scoped
+            # path in production; passing it explicitly keeps a re-minted name
+            # resolvable on the next round.
+            sessions_dir=sessions_dir,
         )
         results.append(result)
         if result.session:

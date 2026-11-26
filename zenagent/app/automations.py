@@ -370,7 +370,17 @@ class AutomationStore:
         entries = raw.get("jobs", [])
         if not isinstance(entries, list):
             raise TypeError("'jobs' must be a list")
-        return [Job.from_json(entry) for entry in entries]
+        jobs: list[Job] = []
+        for index, entry in enumerate(entries):
+            try:
+                jobs.append(Job.from_json(entry))
+            except (TypeError, ValueError) as exc:
+                # One hand-edit typo must cost one automation, not all of them:
+                # the daemon builds a fresh store every tick, so there is no
+                # "last good snapshot" to fall back on there.
+                name = entry.get("name") if isinstance(entry, dict) else index
+                self.warnings.append(f"{self.path}: job {name!r}: {exc}")
+        return jobs
 
     def _stamp_of(self) -> int | None:
         try:
@@ -407,6 +417,13 @@ class AutomationStore:
     def add(self, job: Job) -> Job:
         if self.get(job.name) is not None:
             raise ValueError(f"a job named {job.name!r} already exists")
+        if job.timeout_s <= 0:
+            raise ValueError("timeout_s must be a positive integer")
+        if not job.session or Path(job.session).name != job.session:
+            # The transcript lives in the project's sessions dir; a path here
+            # would let a definition write outside it (and break the
+            # move-the-project rule the bare name exists for).
+            raise ValueError("session must be a bare file name")
         saved = replace(
             job,
             id=job.id or _new_id(),
@@ -443,11 +460,17 @@ class StateStore:
     def __init__(self, root: Path) -> None:
         self.root = Path(root)
         self.path = project.project_dir(root=self.root) / "automations.state.json"
+        self.warnings: list[str] = []
 
     def load(self) -> dict[str, JobState]:
         try:
             raw = json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+        except FileNotFoundError:
+            return {}
+        except (OSError, ValueError) as exc:
+            # Never silent: losing this file resets `missed`, `run_count` and
+            # `last_run_at`, which looks like "nothing ever ran".
+            self.warnings.append(f"{self.path}: {exc}")
             return {}
         if not isinstance(raw, dict):
             return {}
