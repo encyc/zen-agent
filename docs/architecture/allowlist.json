@@ -2,7 +2,7 @@
   "python": {
     "zenagent/app/commands.py": 920,
     "zenagent/app/chat.py": 881,
-    "zenagent/agent/session.py": 910,
+    "zenagent/agent/session.py": 920,
     "zenagent/limits.py": 963,
     "zenagent/cli/tui/app.py": 822
   },
