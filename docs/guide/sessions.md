@@ -131,6 +131,27 @@ zen -p "..." --metrics ~/.zenagent/metrics.jsonl
   以及 `tools`：按工具名的 `{calls, errors, ms}` 汇总），
   **不含 prompt 或模型输出文本**。
 
+## 跨会话检索（给 Agent）
+
+Agent 能自己翻历史会话，不需要用户复制粘贴"上次我们在那个 session 里定的东西"：
+
+- `list_sessions` 列会话（id = 文件名 stem），`search_sessions` 按正则搜正文，
+  `read_session` 按消息号读。三个都只读、都没有文件路径参数、都不写盘。
+- 搜索分三档，由模型自己升级：`conversation`（默认，user + assistant 正文）→
+  `tools`（加工具名与参数）→ `all`（加工具结果正文）。同一句话，只搜正文在本机命中
+  5 个会话，加上工具参数命中 16 个——真实信息大量藏在工具调用的参数里（"我改过
+  permissions.py"这话模型常不说，但它 `edit_file` 过）。
+- `conversation` 零命中时，工具会**直接报出**"同一 query 在 tools 档能命中 N 个会话"，
+  模型不用猜该升哪一档。从 `tools` 再往上是 `all`，`all` 零命中就只报一次。
+- 零索引：现扫 JSONL（本机 103 会话 / 35MB，全量 56–145 ms），不预生成摘要、不跑后台任务。
+- `thinking` 一律不搜不读（在提取器里就被丢掉，不是靠每个工具自己过滤）。
+- `#N` 是**消息行号**（旁路记录不占号），搜到的 `#N` 可以直接传给 `read_session` 的
+  `offset`；分页也按消息行推进，所以一段只有工具调用的页面不会卡住翻页。
+- fork / rewrite 出来的重复内容不去重：结果里带 `derived_from`，让模型自己合并。
+- 已知不一致：列表的 `N msgs` 用 `Session.load` 的口径（消息必须能反序列化），
+  `read_session` 的 total 用消息行数。一条能解析但不能反序列化的行会让后者更大——
+  只会更大，所以不会让尾部内容读不到。
+
 ## 崩溃日志与诊断
 
 - 未捕获异常 → `~/.zenagent/logs/crash-<ts>.log`（traceback、版本、平台、argv、cwd）。

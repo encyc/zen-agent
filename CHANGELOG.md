@@ -3,6 +3,30 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
+## Unreleased
+
+### Added
+
+- **Cross-session search.** Three read-only tools let the agent find what an
+  earlier conversation settled instead of asking the user to paste it:
+  `list_sessions`, `search_sessions` and `read_session`. The search has three
+  escalating levels — conversation text, plus tool names and arguments, plus
+  tool result bodies — because what a session *did* usually lives in its tool
+  arguments: on this machine one query matched 5 sessions in conversation text
+  and 16 once tool arguments were included. A miss at one level names the level
+  that would match, so the model escalates instead of guessing. No index is
+  pre-built: a full scan of 103 sessions / 35 MB measures 56-145 ms. Thinking is
+  never searched or returned (dropped in the extractor, once), the tools take no
+  filesystem path (the session directory is a `protected` path in the permission
+  gate, and `id` is matched as a stem rather than joined onto one), and they
+  never write — the listing goes through `SessionIndex(cache=False)`.
+  `agent.session.list_sessions` gained `root=` (the project, instead of the
+  process cwd) and `cache=` (read-only) for this.
+
+- **A tool-policy rule for history.** The policy block now says to reach for
+  `search_sessions` before guessing a path when the user refers to an earlier
+  session, and to escalate `include` only when the first level misses.
+
 ## v0.15.1 — 2026-11-26
 
 ### Changed

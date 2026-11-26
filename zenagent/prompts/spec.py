@@ -63,7 +63,11 @@ BLOCKS: dict[str, BlockSpec] = {
         path="system/tool_policy.md",
         version=PROMPT_VERSION,
         cache_class="stable",
-        budget_chars=700,
+        # 700 -> 860: the history rule (2026-11-26 session search) adds 132
+        # chars to a block already at 689. `test_system_prompt_stays_compact`
+        # caps the rendered policy at 220 words, so the rule is deliberately
+        # terse (21 words) rather than raising that ceiling.
+        budget_chars=860,
         optional=True,
     ),
     "system.tool_policy_todo": BlockSpec(

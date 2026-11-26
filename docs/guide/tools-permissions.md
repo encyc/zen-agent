@@ -14,6 +14,9 @@
 | `ask` | 向用户发起结构化提问（1–5 题、每题 2–6 个选项，`header`/`multi`/`recommended` 可选）；只有当前端注册了交互 handler 时才弹对话框，否则降级为「按最保守选项继续」 | 只读，免确认 |
 | `glob` | 按模式找文件；`limit`（默认 500）、`include_hidden`（.git 永远跳过）、默认跳过根 `.gitignore` 命中的路径（`include_ignored` 可关）、`sort=path|mtime` | 只读 |
 | `grep` | 正则搜内容（忽略二进制/大文件）；按文件分页：每页 20 个文件 × 每文件 20 条，`skip` 续页 | 只读 |
+| `list_sessions` | 列历史会话（id 是文件名 stem、标题、消息数、日期、项目、fork 来源）；默认本项目，`all` 跨项目 | 只读 |
+| `search_sessions` | 正则搜会话正文；按**会话**聚合并分页（`skip` 数会话，每页 20 个）；`include=conversation/tools/all` 逐级升级，某档零命中时直接报出能命中的下一档 | 只读 |
+| `read_session` | 按 id 读一个会话，按消息号分页（`offset` 就是列表/搜索里的 `#N`，页尾给 `next_offset`）；thinking 永不返回 | 只读 |
 | `web_search` | 联网搜索，返回标题/URL/摘要（DeepSeek → Tavily → Brave → Bing → DuckDuckGo） | 只读，免确认 |
 | `fetch` | 抓取 URL 并转成可读文本（优先 article/main、去页面 chrome，12k 字符上限；可选 `timeout_s` 1–45s；`details.method` 报告抽取方式） | 只读，免确认 |
 | `read_skill` | 读本地 SKILL.md 正文 | 只读 |
@@ -24,6 +27,12 @@
 | `todo` | 会话级任务清单（phases / 按内容寻址 / 9 个 op）；状态写 `<session>.todo.json`，不碰工作区（plan/`--read-only` 下也会写这个会话 sidecar） | 只读 |
 | `memory` | 读一条项目记忆（4-hex id）或按关键字检索，内容来自 `<项目根>/.zenagent/memory/` | 只读，免确认 |
 | `memory_write` | 新增/更新/删除项目记忆（决策与原因、约定、反复踩的坑）；每次改动追加进 journal | 需确认 |
+
+三个会话工具的**数据源是 Runtime 的项目根**，不接受任何文件路径参数：会话文件在
+`~/.zenagent/projects/<key>/sessions/`，那是权限门里的 `protected` 类，带路径参数会在第一次
+调用就被拦。`id` 只作为 stem 和列表输出比对，永远不会被拼进路径（`../../secrets` 之类只是
+匹配不到任何会话）。三个工具都**永不写盘**：列表走 `SessionIndex(cache=False)`，不落
+`_index.json`。
 
 每个工具还声明一个能力级（`AgentTool.approval = "read" | "write" | "exec"`）：
 权限门读声明决定「plan 是否放行 / 是否需要确认」，而不是维护一份硬编码工具名表；
