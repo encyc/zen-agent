@@ -148,13 +148,33 @@ async def test_repl_eof_exits_cleanly(isolated_sessions):
 
 
 async def test_typing_while_running_steers_instead_of_stacking(isolated_sessions):
-    """A line typed during a run is queued; the next run sees it as history."""
-    stream = scripted_stream(0.15, "slow answer", "second answer")
+    """A line typed during a run is queued; a later request sees it as history.
+
+    The request count is deliberately not pinned: whether the line lands at a
+    step boundary or arrives after the last one (which makes ChatController
+    continue the turn to deliver it, covered deterministically by
+    ``test_stranded_steering_continues_the_run``) depends on when the reader
+    hands it over, and a slow CI runner shifts that. The guarantees asserted
+    here are the ones that must hold either way: a run never overlaps another,
+    and the line is never dropped.
+    """
+    inner = scripted_stream(0.15, "slow answer", "second answer")
+    inflight = {"now": 0}
+
+    async def stream(model_, messages, tools, options):
+        assert inflight["now"] == 0, "a run started while another was streaming"
+        inflight["now"] += 1
+        try:
+            async for event in inner(model_, messages, tools, options):
+                yield event
+        finally:
+            inflight["now"] -= 1
+
     schedule = [
         (0.0, "first"),
         (0.02, "please also check logs"),  # typed while the first run streams
         (0.30, "second"),  # typed after it settled → a real second prompt
-        (0.0, "/exit"),
+        (1.0, "/exit"),  # after the delivery chain settles, so nothing is cut
     ]
 
     async def input_fn() -> str:
@@ -172,13 +192,10 @@ async def test_typing_while_running_steers_instead_of_stacking(isolated_sessions
     mcp=False,
     )
     assert code == 0
-    # Steering is delivered at the next step boundary; because the first run
-    # ended before it landed, ChatController continues the turn to deliver it,
-    # then the next typed prompt starts a third request.
-    assert len(stream.requests) == 3
+    assert len(inner.requests) >= 2
     request_texts = [
         m.content
-        for request in stream.requests
+        for request in inner.requests
         for m in request
         if hasattr(m, "content") and isinstance(m.content, str)
     ]
