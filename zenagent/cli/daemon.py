@@ -39,7 +39,7 @@ from zenagent.app.automations import (
     due_list,
     state_for,
 )
-from zenagent.cli.daemon_service import unit_path
+from zenagent.cli.daemon_service import VERSION_MARKER, unit_path
 
 __all__ = [
     "WAKE_CAP_S",
@@ -56,9 +56,6 @@ _log = logging.getLogger(__name__)
 #: Upper bound on one sleep. Short enough that an edited schedule or a request
 #: file is honoured promptly, long enough to cost nothing while idle.
 WAKE_CAP_S = 30.0
-
-#: The comment line `install` writes so `status` can spot a stale daemon.
-VERSION_MARKER = "ZENAGENT_DAEMON_VERSION="
 
 _REQUEST = "automations.request.json"
 
