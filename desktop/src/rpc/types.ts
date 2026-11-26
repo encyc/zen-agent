@@ -45,6 +45,7 @@ export const PROTOCOL_VERSION = 4
 export const REQUEST_KINDS = [
   'approval',
   'ask',
+  'automations',
   'cancel',
   'command',
   'commands',
