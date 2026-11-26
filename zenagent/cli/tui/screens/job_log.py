@@ -66,6 +66,10 @@ class JobLogScreen(DialogScreen[None]):
     def set_view(self, view: JobLogView) -> None:
         """Swap the snapshot (the 1s poll calls this while the job runs)."""
         self.view = view
+        # The poll can land between push_screen and the first compose: the
+        # widgets do not exist yet, and compose() renders this view anyway.
+        if not self.is_mounted:
+            return
         self.query_one("#dialog-body", Static).update(self._header())
         self.query_one("#job-log-output", Static).update(self._output())
 

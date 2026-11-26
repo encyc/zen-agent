@@ -143,3 +143,32 @@ async def test_a_retired_job_shows_a_notice_instead_of_a_screen(fake_runtime, mo
 
         assert not isinstance(app.screen, JobLogScreen)
         assert app.query_one(TranscriptView).display is True
+
+
+async def test_a_poll_before_the_screen_composes_does_not_crash(
+    fake_runtime, monkeypatch
+):
+    """The 1s status poll can land between ``push_screen`` and the first compose.
+
+    The screen is on the stack the moment it is pushed, but its widgets only
+    exist once Textual mounts it: a poll that swapped the snapshot in that
+    window used to raise ``NoMatches`` on ``#dialog-body`` (a macos/py3.14 CI
+    failure). The view is stored either way; compose renders the latest one.
+    """
+    manager = FakeManager(FakeJob())
+    monkeypatch.setattr("zenagent.app.chat.get_job_manager", lambda: manager)
+
+    app = ZenAgentApp(fake_runtime)
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        app._refresh_status()
+        await pilot.pause()
+
+        app.show_job_log("bg_1")  # pushed, not composed yet
+        app._refresh_status()  # the poll must survive that window
+
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, JobLogScreen)
+        text = " ".join(str(widget.content) for widget in screen.query(".job-log-text"))
+        assert "collecting" in text
