@@ -128,3 +128,18 @@ def test_titles_override_applied_fresh(sessions_root, monkeypatch):
 
     assert len(calls) == 1, "a rename must not force a re-read"
     assert infos[0].title == "renamed"
+
+
+def test_cache_false_reads_without_writing_the_sidecar(sessions_root):
+    from zenagent.agent.session_index import INDEX_FILENAME, SessionIndex
+
+    path = sessions_root / "20260101-000000.jsonl"
+    path.write_text(
+        json.dumps({"role": "user", "content": "hi", "timestamp": 1}) + "\n",
+        encoding="utf-8",
+    )
+    index = SessionIndex(sessions_root, cache=False)
+    info = index.read(path, {})
+    index.flush()
+    assert info.messages == 1
+    assert not (sessions_root / INDEX_FILENAME).exists()

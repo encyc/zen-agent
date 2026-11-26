@@ -23,7 +23,12 @@ Design:
   revalidated by stat anyway);
 * **known limit** — a rewrite that lands in the same nanosecond with the
   same byte size is indistinguishable from no change; accepted, the next
-  real change re-reads.
+  real change re-reads;
+* **read-only mode** — ``cache=False`` (the read-only consumer) records no
+  entries and makes :meth:`SessionIndex.flush` a no-op, so the sidecar is
+  never written (an existing one is still honoured: a stat-validated hit is
+  read-only and yields the same facts). Tools that declare
+  ``approval="read"`` must not write to disk, so they take this mode.
 """
 
 from __future__ import annotations
@@ -49,8 +54,9 @@ _TEMP_PREFIX = ".tmp-index-"
 class SessionIndex:
     """A per-directory cache of :meth:`Session.read_info` facts."""
 
-    def __init__(self, directory: Path) -> None:
+    def __init__(self, directory: Path, *, cache: bool = True) -> None:
         self.directory = Path(directory)
+        self.cache = cache
         self._entries: dict | None = None  # lazy: read the sidecar once
 
     def _load(self) -> dict:
@@ -71,6 +77,10 @@ class SessionIndex:
         current stat. A miss reads the transcript with no title override (so
         the cached brief is the derived one) and applies the override on the
         returned info only.
+
+        With ``cache=False`` no entry is ever recorded, so a read is a hit
+        only against a sidecar this process did not write; either way the
+        returned ``SessionInfo`` is identical and nothing new is remembered.
         """
         stat = path.stat()  # OSError propagates: a vanished file is a miss
         entries = self._load()
@@ -92,16 +102,17 @@ class SessionIndex:
             )
         else:
             info = Session(path).read_info(titles={})
-            entries[path.name] = {
-                "size": stat.st_size,
-                "mtime_ns": stat.st_mtime_ns,
-                "messages": info.messages,
-                "title": info.title,
-                "created_at": info.created_at,
-                "model": info.model,
-                "derived_from": info.derived_from,
-                "started": info.started,
-            }
+            if self.cache:
+                entries[path.name] = {
+                    "size": stat.st_size,
+                    "mtime_ns": stat.st_mtime_ns,
+                    "messages": info.messages,
+                    "title": info.title,
+                    "created_at": info.created_at,
+                    "model": info.model,
+                    "derived_from": info.derived_from,
+                    "started": info.started,
+                }
         override = titles.get(path.name)
         if override:
             info.title = override
@@ -112,9 +123,10 @@ class SessionIndex:
 
         A read that loaded the sidecar but recorded nothing (every file
         already cached) still rewrites the merge — harmless, and simpler
-        than tracking dirtiness.
+        than tracking dirtiness. In ``cache=False`` mode this is a no-op: a
+        read-only consumer must not write the sidecar at all.
         """
-        if self._entries is None:
+        if not self.cache or self._entries is None:
             return
         on_disk: dict = {}
         try:

@@ -1311,3 +1311,23 @@ def test_window_selector_rescopes_the_replay(tmp_path):
     # an out-of-range record is ignored: the earlier rescope still holds
     session.append_meta({"type": "branch", "cut": 99, "skip": 1})
     assert [m.content for m in Session(path, window=window).load()] == ["a", "after"]
+
+
+def test_list_sessions_root_pins_the_project_not_the_process_cwd(tmp_path):
+    from zenagent import project
+
+    here = tmp_path / "here"
+    there = tmp_path / "there"
+    for root, text in ((here, "in here"), (there, "in there")):
+        root.mkdir()
+        target = project.project_sessions_dir(root=root)
+        target.mkdir(parents=True)
+        (target / "20260101-000000.jsonl").write_text(
+            json.dumps({"role": "user", "content": text, "timestamp": 1}) + "\n",
+            encoding="utf-8",
+        )
+
+    from_here = list_sessions(limit=10, root=here)
+    from_there = list_sessions(limit=10, root=there)
+    assert [info.title for info in from_here] == ["in here"]
+    assert [info.title for info in from_there] == ["in there"]

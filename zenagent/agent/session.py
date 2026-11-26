@@ -820,18 +820,26 @@ def _session_mtime(path: Path) -> float:
         return float("-inf")
 
 
-def list_sessions(limit: int = 20, *, scope: str = "project") -> list[SessionInfo]:
+def list_sessions(
+    limit: int = 20, *, scope: str = "project", root: Path | str | None = None
+) -> list[SessionInfo]:
     """Saved sessions, newest first, skipping files that cannot be read.
 
     ``scope="project"`` lists only the current project's sessions (the default,
     so another project or the read-only legacy directory never leaks in).
     ``scope="all"`` merges every known project plus legacy, newest first, and
     labels each entry with its project's display name (empty for legacy).
+    ``root`` names the project ``scope="project"`` lists (``scope="all"``
+    ignores it): ``None`` keeps the historical behaviour of resolving the
+    project from the process cwd, which is wrong for any runtime whose root
+    lives elsewhere (an RPC host serving slots for arbitrary roots).
     Each directory's title sidecar is read once and shared by its sessions.
     """
     if scope not in _SCOPES:
         raise ValueError(f"unknown session scope: {scope!r} (choose project|all)")
-    directories = [sessions_dir()] if scope == "project" else all_session_dirs()
+    directories = (
+        [sessions_dir(root=root)] if scope == "project" else all_session_dirs()
+    )
     # Function-level import: session_index derives from this module's types.
     from zenagent.agent.session_index import SessionIndex
 
