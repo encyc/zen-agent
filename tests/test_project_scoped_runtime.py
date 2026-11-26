@@ -21,7 +21,7 @@ async def _bootstrap(monkeypatch, root):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
     monkeypatch.setattr(
         "zenagent.app.bootstrap.load_user_config",
-        lambda *args, **kwargs: UserConfig(default_model="deepseek-flash"),
+        lambda *args, **kwargs: UserConfig(default_model="deepseek/deepseek-flash"),
     )
     return await Runtime.bootstrap(
         RuntimeOptions(

@@ -66,7 +66,7 @@ async def host(monkeypatch, tmp_path):
     ):
         monkeypatch.setattr(
             target,
-            lambda *args, **kwargs: UserConfig(default_model="deepseek-flash"),
+            lambda *args, **kwargs: UserConfig(default_model="deepseek/deepseek-flash"),
         )
     alpha = _repo(tmp_path, "alpha")
     beta = _repo(tmp_path, "beta")

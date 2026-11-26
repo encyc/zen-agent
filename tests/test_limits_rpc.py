@@ -33,7 +33,7 @@ def config_file(tmp_path, monkeypatch):
     """Point the RPC at a scratch config.toml (never the developer's own)."""
     path = tmp_path / "config.toml"
     path.write_text(
-        '# hand-written\n\ndefault_model = "deepseek-flash"\n\n[tools]\nallow = ["read_*"]\n',
+        '# hand-written\n\ndefault_model = "deepseek/deepseek-flash"\n\n[tools]\nallow = ["read_*"]\n',
         encoding="utf-8",
     )
     monkeypatch.setattr("zenagent.cli.rpc.ops_secrets.global_config_path", lambda: path)

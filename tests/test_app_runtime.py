@@ -277,7 +277,7 @@ async def test_bootstrap_respects_disabled_backups(monkeypatch, app_env):
 
     monkeypatch.setattr(
         "zenagent.app.bootstrap.load_user_config",
-        lambda *args, **kwargs: UserConfig(default_model="deepseek-flash", backup_enabled=False),
+        lambda *args, **kwargs: UserConfig(default_model="deepseek/deepseek-flash", backup_enabled=False),
     )
     runtime = await Runtime.bootstrap(_options(), stream_fn=None)
     try:
@@ -406,7 +406,7 @@ async def test_bootstrap_wires_the_task_budget_from_config(
     monkeypatch.setattr(
         "zenagent.app.bootstrap.load_user_config",
         lambda *args, **kwargs: UserConfig(
-            default_model="deepseek-flash",
+            default_model="deepseek/deepseek-flash",
             task_timeout_s=120,
             task_max_transcript_bytes=4096,
             task_max_transcript_file_bytes=2048,

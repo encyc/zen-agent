@@ -58,11 +58,11 @@ def test_missing_file_gives_defaults(tmp_path):
 def test_parses_default_model_and_provider_overrides(tmp_path):
     path = write_config(
         tmp_path,
-        'default_model = "deepseek-flash"\n\n[providers.deepseek]\n'
+        'default_model = "deepseek/deepseek-flash"\n\n[providers.deepseek]\n'
         'base_url = "https://mirror.example/v1"\napi_key_env = "MY_KEY"\n',
     )
     config = load_user_config(path)
-    assert config.default_model == "deepseek-flash"
+    assert config.default_model == "deepseek/deepseek-flash"
     assert config.provider_overrides["deepseek"] == {
         "base_url": "https://mirror.example/v1",
         "api_key_env": "MY_KEY",

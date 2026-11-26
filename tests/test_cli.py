@@ -75,14 +75,14 @@ def failing_stream(message: str = "boom"):
 
 def test_resolve_model_by_id_and_default():
     catalog = load_catalog()
-    assert cli_main.resolve_model(catalog, "deepseek-flash").id == "deepseek-flash"
+    assert cli_main.resolve_model(catalog, "deepseek/deepseek-flash").id == "deepseek-flash"
     default = cli_main.resolve_model(catalog, None)
     assert default.default is True
     assert default.id == "glm-5.3"
 
 
 def test_resolve_model_rejects_unknown_id():
-    with pytest.raises(KeyError):
+    with pytest.raises(LookupError):
         cli_main.resolve_model(load_catalog(), "no-such-model")
 
 
@@ -283,7 +283,7 @@ def test_config_default_model_is_used(monkeypatch):
 
     monkeypatch.setattr(
         "zenagent.app.bootstrap.load_user_config",
-        lambda *a, **k: UserConfig(default_model="deepseek-flash"),
+        lambda *a, **k: UserConfig(default_model="deepseek/deepseek-flash"),
     )
     captured: dict = {}
     _patch_bootstrap(monkeypatch, fake_stream(), captured)
@@ -424,7 +424,7 @@ def test_image_flag_attaches_blocks_to_the_user_message(monkeypatch, tmp_path):
     captured: dict = {}
     _patch_bootstrap(monkeypatch, stream, captured)
 
-    assert cli_main.main(["-p", "what is this?", "-m", "deepseek-flash",
+    assert cli_main.main(["-p", "what is this?", "-m", "deepseek/deepseek-flash",
                           "--image", str(_png(tmp_path))]) == 0
 
     assert captured["model"].id == "deepseek-flash"
@@ -450,7 +450,7 @@ def test_invalid_image_file_is_reported(monkeypatch, tmp_path, capsys):
     bad = tmp_path / "not-an-image.png"
     bad.write_text("hello")
     _patch_bootstrap(monkeypatch, fake_stream(), {})
-    assert cli_main.main(["-p", "hi", "-m", "deepseek-flash", "--image", str(bad)]) == 1
+    assert cli_main.main(["-p", "hi", "-m", "deepseek/deepseek-flash", "--image", str(bad)]) == 1
     assert "does not look like" in capsys.readouterr().err
 
 
@@ -466,7 +466,7 @@ def test_missing_image_file_fails_before_the_session_is_created(
     _patch_bootstrap(monkeypatch, fake_stream(), captured)
 
     missing = tmp_path / "absent.png"
-    code = cli_main.main(["-p", "hi", "-m", "deepseek-flash", "--image", str(missing)])
+    code = cli_main.main(["-p", "hi", "-m", "deepseek/deepseek-flash", "--image", str(missing)])
 
     assert code == 1
     assert "no such file" in capsys.readouterr().err
@@ -669,7 +669,7 @@ def test_custom_provider_from_config_is_used(monkeypatch, tmp_path):
     monkeypatch.setenv("LOCAL_API_KEY", "test-key")
     monkeypatch.setattr(
         "zenagent.app.bootstrap.load_user_config",
-        lambda *a, **k: UserConfig(default_model="my-model", custom_providers={"local": provider}),
+        lambda *a, **k: UserConfig(default_model="local/my-model", custom_providers={"local": provider}),
     )
     captured: dict = {}
     _patch_bootstrap(monkeypatch, fake_stream(), captured)

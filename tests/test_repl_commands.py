@@ -190,10 +190,10 @@ def test_render_applies_model_appearance_and_language(services, monkeypatch):
     lines: list[str] = []
     _render(
         services,
-        CommandResult(model="deepseek-flash", appearance="dark", language="zh"),
+        CommandResult(model="deepseek/deepseek-flash", appearance="dark", language="zh"),
         lines,
     )
-    assert switched == ["deepseek-flash"]
+    assert switched == ["deepseek/deepseek-flash"]
     assert "theme:dark" in lines
     assert "lang:zh" in lines
 

@@ -102,7 +102,7 @@ def test_secrets_check_passes_on_a_clean_config(tmp_path, monkeypatch):
     from zenagent.cli import doctor
 
     config = tmp_path / "config.toml"
-    config.write_text('default_model = "deepseek-flash"\n')
+    config.write_text('default_model = "deepseek/deepseek-flash"\n')
     store = tmp_path / "settings.json"
     monkeypatch.setenv("ZENAGENT_SETTINGS_PATH", str(store))
     monkeypatch.setattr(doctor, "config_path", lambda: config)
@@ -156,7 +156,7 @@ def test_provider_key_checks_read_the_settings_store(tmp_path, monkeypatch):
 
     monkeypatch.setenv("ZENAGENT_SETTINGS_PATH", str(tmp_path / "settings.json"))
     monkeypatch.setattr(doctor, "config_path", lambda: tmp_path / "config.toml")
-    (tmp_path / "config.toml").write_text('default_model = "deepseek-flash"\n')
+    (tmp_path / "config.toml").write_text('default_model = "deepseek/deepseek-flash"\n')
     settings.clear_cache()
     settings.set_api_key("DEEPSEEK_API_KEY", "sk-test")
 

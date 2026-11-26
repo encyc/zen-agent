@@ -396,7 +396,7 @@ def find_model(catalog: dict[str, ProviderConfig], model_id: str) -> Model:
     The first provider defining a duplicated id wins. This is the catalog's
     lookup, not a user selection: an id such as ``deepseek-v4-pro`` exists under
     both ``deepseek`` and ``opencode-go``, so picking a provider needs
-    :func:`resolve_model_ref` (a bare id is only accepted there when unique).
+    :func:`resolve_model_ref`, which refuses a bare id outright.
 
     Raises KeyError naming the model id when no provider defines it.
     """
@@ -412,48 +412,45 @@ def model_ref(model: Model) -> str:
     return f"{model.provider}/{model.id}"
 
 
-class AmbiguousModelError(LookupError):
-    """A bare model id matches more than one provider."""
-
-    def __init__(self, model_id: str, matches: list[Model]) -> None:
-        self.model_id = model_id
-        self.matches = matches
-        options = ", ".join(model_ref(model) for model in matches)
-        super().__init__(
-            f"model id {model_id!r} is ambiguous ({options}); use provider/model"
-        )
+class ModelRefError(LookupError):
+    """A model reference does not name exactly one provider/model."""
 
 
 def resolve_model_ref(catalog: dict[str, ProviderConfig], ref: str) -> Model:
-    """Resolve ``provider/model-id`` or a bare id to exactly one model.
+    """Resolve a ``provider/model-id`` reference (or raise ModelRefError).
 
     Selection paths (``/model``, the TUI/desktop pickers, ``--model`` and
-    ``default_model``) must use this, never :func:`find_model`: the catalog can
-    define the same id under several providers (a gateway mirroring an upstream
-    model), and silently taking the first one switches the base URL and API key
-    behind the user's back. A bare id is therefore accepted only when unique;
-    an ambiguous one raises :class:`AmbiguousModelError` listing the qualified
-    forms instead of guessing.
+    ``default_model``) must use this, never :func:`find_model`, and must carry
+    the provider: a model id is not an identity — the catalog can define the
+    same id under several providers (a gateway mirroring an upstream model), so
+    a bare id would let catalog contents and file order pick the base URL and
+    API key. A bare value is therefore refused, with the qualified forms the
+    catalog does know as the hint, never silently resolved.
     """
     ref = ref.strip()
-    if "/" in ref:
-        provider_id, _, model_id = ref.partition("/")
-        provider = catalog.get(provider_id)
-        if provider is None:
-            known = ", ".join(sorted(catalog)) or "(none)"
-            raise KeyError(f"unknown provider {provider_id!r}; catalog has: {known}")
-        for model in provider.models:
-            if model.id == model_id:
-                return model
-        raise KeyError(f"provider {provider_id!r} has no model {model_id!r}")
-    matches = [
-        model for provider in catalog.values() for model in provider.models
-        if model.id == ref
-    ]
-    if not matches:
-        raise KeyError(
-            f"model {ref!r} is not in the catalog; use provider/model form (see /models)"
+    provider_id, sep, model_id = ref.partition("/")
+    if not sep:
+        matches = [
+            model for provider in catalog.values() for model in provider.models
+            if model.id == ref
+        ]
+        hint = (
+            " (did you mean "
+            + " or ".join(model_ref(model) for model in matches)
+            + "?)"
+            if matches
+            else ""
         )
-    if len(matches) > 1:
-        raise AmbiguousModelError(ref, matches)
-    return matches[0]
+        raise ModelRefError(
+            f"model ref {ref!r} names no provider; use provider/model-id{hint}"
+        )
+    provider = catalog.get(provider_id)
+    if provider is None:
+        known = ", ".join(sorted(catalog)) or "(none)"
+        raise ModelRefError(
+            f"unknown provider {provider_id!r}; catalog has: {known}"
+        )
+    for model in provider.models:
+        if model.id == model_id:
+            return model
+    raise ModelRefError(f"provider {provider_id!r} has no model {model_id!r}")

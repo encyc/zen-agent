@@ -197,7 +197,7 @@ def test_write_limits_leaves_the_rest_of_the_file_alone(tmp_path):
     path = write_config(
         tmp_path,
         "# my own comments\n"
-        'default_model = "deepseek-flash"\n'
+        'default_model = "deepseek/deepseek-flash"\n'
         "\n"
         "[tools]\n"
         'allow = ["read_*"]  # trailing note\n',

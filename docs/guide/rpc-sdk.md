@@ -83,7 +83,7 @@ p.stdin.write(json.dumps({"type":"shutdown","id":"2"}) + "\n"); p.stdin.flush()
 {"type":"command","id":"c1","name":"mode","argument":"plan"}
 {"type":"command","id":"c2","name":"lang","argument":"zh"}
 {"type":"tools","id":"t1"}
-{"type":"model","id":"m1","model_id":"deepseek-flash"}
+{"type":"model","id":"m1","model_id":"deepseek/deepseek-flash"}
 ```
 
 ### 宿主级请求

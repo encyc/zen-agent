@@ -78,7 +78,7 @@ def test_corrupt_file_is_reported_not_silently_reset(isolated_store, monkeypatch
 def test_legacy_config_toml_keys_are_imported(isolated_store, tmp_path):
     config = tmp_path / "config.toml"
     config.write_text(
-        'default_model = "deepseek-flash"\n\nDEEPSEEK_API_KEY="sk-legacy"\n'
+        'default_model = "deepseek/deepseek-flash"\n\nDEEPSEEK_API_KEY="sk-legacy"\n'
     )
     settings.clear_cache()
     assert settings.get_api_key("DEEPSEEK_API_KEY") == "sk-legacy"

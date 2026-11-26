@@ -15,17 +15,19 @@ matches the release tag; older history is in the repository tags and commits.
   `/model`, `--model` and `default_model` all went through `find_model`. Clicking
   the opencode-go row therefore switched the base URL to `api.deepseek.com` and
   the key to `DEEPSEEK_API_KEY`, and the next `task` child inherited that model —
-  a subagent that looked like it "defaulted to DeepSeek". Selection now resolves
-  through `resolve_model_ref`: `provider/model-id` picks exactly that provider, a
-  bare id is accepted only when one provider defines it, and an ambiguous one is
-  refused with the qualified choices instead of guessed. The desktop picker and
-  its stored pref, the TUI picker/cycle/settings rows and the `/model` value
-  hints now all send `provider/model-id`; status and model-switch results expose
-  `model_ref` so clients replay the qualified reference; and a successful switch
-  updates `runtime.model`, which is what `reload_api_key()` and the settings'
-  "current provider" read. Upgrade note: an ambiguous bare
-  `--model`/`default_model`/`/model` value is now an error naming the
-  `provider/model-id` forms; unique bare ids keep working.
+  a subagent that looked like it "defaulted to DeepSeek". Selection now requires
+  a `provider/model-id` reference: `resolve_model_ref` refuses a bare id
+  outright — even one that happens to be unique today — and names the qualified
+  candidates as the hint, so the provider can never be decided by catalog
+  contents or file order. The desktop picker and its stored pref, the TUI
+  picker/cycle/settings rows and the `/model` value hints all send the qualified
+  form; status and model-switch results expose `model_ref` so clients replay it;
+  and a successful switch updates `runtime.model`, which is what
+  `reload_api_key()` and the settings' "current provider" read. **Breaking:**
+  `--model`, `default_model`, `/model` and stored prefs must now carry
+  `provider/model-id` (e.g. `default_model = "deepseek/deepseek-flash"`); a bare
+  value fails with the exact qualified form in the message, and the desktop
+  shows that message instead of silently keeping the old model.
 
 - **A session stops disappearing from the sidebar after you switch away.** Two
   separate causes, both silent. The list was capped at 100 sessions globally

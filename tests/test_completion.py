@@ -144,9 +144,9 @@ def test_commands_without_argument_values_complete_nothing():
 def test_extra_values_supply_dynamic_model_ids():
     completer = ReplCompleter(
         base_dir=Path("/tmp"),
-        extra_values={"/model": [("deepseek-flash", "ready")]},
+        extra_values={"/model": [("deepseek/deepseek-flash", "ready")]},
     )
-    assert complete(completer, "/model ") == ["deepseek-flash"]
+    assert complete(completer, "/model ") == ["deepseek/deepseek-flash"]
 
 
 # ---------------------------------------------------------------------------

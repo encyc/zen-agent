@@ -140,7 +140,7 @@ async def test_mode_and_model_requests_switch_the_runtime(
         [
             {"type": "mode", "id": "m1", "mode": "plan"},
             {"type": "mode", "id": "m2", "mode": "yolo"},
-            {"type": "model", "id": "m3", "model_id": "deepseek-flash"},
+            {"type": "model", "id": "m3", "model_id": "deepseek/deepseek-flash"},
             # A mirrored id without its provider is refused, not guessed.
             {"type": "model", "id": "m4", "model_id": "deepseek-v4-pro"},
             {"type": "model", "id": "m5", "model_id": "opencode-go/deepseek-v4-pro"},
@@ -155,7 +155,7 @@ async def test_mode_and_model_requests_switch_the_runtime(
     assert results["m3"]["ok"] is True
     assert results["m3"]["model_ref"] == "deepseek/deepseek-flash"
     assert results["m4"]["ok"] is False
-    assert "ambiguous" in results["m4"]["reason"]
+    assert "names no provider" in results["m4"]["reason"]
     assert results["m5"]["ok"] is True
     assert results["m5"]["model_ref"] == "opencode-go/deepseek-v4-pro"
     assert results["m6"]["ok"] is False
@@ -182,7 +182,7 @@ async def test_model_command_reports_a_refused_switch(
     results = {message["id"]: message for message in decode(writes)}
     # The refusal reaches the command card instead of vanishing.
     assert results["c1"]["ok"] is True
-    assert "ambiguous" in results["c1"]["message"]
+    assert "names no provider" in results["c1"]["message"]
     assert results["c2"]["ok"] is True
     assert results["c2"]["model_ref"] == "opencode-go/deepseek-v4-pro"
 

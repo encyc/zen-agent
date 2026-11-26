@@ -137,7 +137,7 @@ async def test_prepare_records_a_coding_run(app_env, monkeypatch):
 
     monkeypatch.setattr(
         "zenagent.app.bootstrap.load_user_config",
-        lambda *args, **kwargs: UserConfig(default_model="deepseek-flash"),
+        lambda *args, **kwargs: UserConfig(default_model="deepseek/deepseek-flash"),
     )
     prepared = await prepare(
         RuntimeOptions(

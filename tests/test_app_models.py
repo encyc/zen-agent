@@ -16,7 +16,7 @@ async def test_switch_reports_missing_key_and_syncs_context(
     result = models.switch(f"{entry.provider}/{entry.id}")
     assert result.ok is False and "no API key" in (result.reason or "")
 
-    ok = models.switch("deepseek-flash")
+    ok = models.switch("deepseek/deepseek-flash")
     assert ok.ok is True
     assert runtime.agent.model.id == "deepseek-flash"
     assert runtime.guard.context_window == runtime.agent.model.context_window
@@ -40,7 +40,7 @@ def test_apply_model_switch_updates_every_side_effect(monkeypatch):
     agent = Agent(catalog["zai-coding-cn"].models[0], "s", api_key="glm-key")
     guard = type("Guard", (), {"context_window": agent.model.context_window})()
 
-    result = apply_model_switch(agent, catalog, guard, "custom-x")
+    result = apply_model_switch(agent, catalog, guard, "deepseek/custom-x")
 
     assert result.ok is True
     assert agent.model.id == "custom-x"
@@ -68,7 +68,7 @@ async def test_switch_qualified_id_lands_on_that_provider(runtime_factory, monke
     assert current == [("opencode-go", "deepseek-v4-pro")]
 
 
-async def test_ambiguous_bare_id_is_refused_not_guessed(runtime_factory, monkeypatch):
+async def test_bare_duplicate_is_refused_with_candidates(runtime_factory, monkeypatch):
     monkeypatch.setenv("OPENCODE_API_KEY", "oc-key")
     runtime = await runtime_factory()
     models = ModelManager(runtime)
@@ -78,8 +78,21 @@ async def test_ambiguous_bare_id_is_refused_not_guessed(runtime_factory, monkeyp
 
     assert result.ok is False
     reason = result.reason or ""
-    assert "ambiguous" in reason
+    assert "names no provider" in reason
     assert "deepseek/deepseek-v4-pro" in reason
     assert "opencode-go/deepseek-v4-pro" in reason
     assert runtime.agent.model is before
     assert runtime.model is before
+
+
+async def test_bare_unique_id_is_refused_too(runtime_factory):
+    runtime = await runtime_factory()
+    models = ModelManager(runtime)
+    before = runtime.agent.model
+
+    result = models.switch("deepseek-flash")
+
+    assert result.ok is False
+    assert "names no provider" in (result.reason or "")
+    assert "deepseek/deepseek-flash" in (result.reason or "")
+    assert runtime.agent.model is before

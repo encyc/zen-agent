@@ -7,7 +7,7 @@
  * connection. */
 
 import { useNoticeStore, useStatusStore } from './stores.ts'
-import { loadPrefs, replayFrames } from './prefs.ts'
+import { loadPrefs, replayFrames, savePref } from './prefs.ts'
 
 interface AppGetterLike {
   client(): { send(payload: Record<string, unknown>): Promise<Record<string, unknown>> }
@@ -36,6 +36,15 @@ async function restore(get: AppGetterLike): Promise<void> {
       // removed) must say why instead of silently leaving the default.
       const reason = typeof frame.reason === 'string' ? frame.reason.trim() : ''
       if (frame.ok === false && reason !== '') {
+        // A legacy bare pref cannot be replayed under the provider-qualified
+        // rule; drop it so every further spawn does not repeat the notice.
+        if (
+          payload.type === 'model' &&
+          typeof prefs.model === 'string' &&
+          !prefs.model.includes('/')
+        ) {
+          savePref('model', null)
+        }
         useNoticeStore.getState().show({ kind: 'error', text: reason })
         return
       }

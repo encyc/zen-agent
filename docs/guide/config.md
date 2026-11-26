@@ -61,7 +61,7 @@
 
 ```toml
 # ~/.zenagent/config.toml（全局层）
-default_model = "deepseek-flash"
+default_model = "deepseek/deepseek-flash"   # 必须写 provider/模型名
 
 # 1) 只覆盖内置 provider 的地址/密钥来源
 [providers.deepseek]
@@ -96,7 +96,7 @@ deny = ["write_file"]                # fnmatch：永远拒绝
 项目层最小示例（`<项目根>/.zenagent/config.toml`，随仓库提交）：
 
 ```toml
-default_model = "deepseek-flash"
+default_model = "deepseek/deepseek-flash"   # 必须写 provider/模型名
 
 [providers.deepseek]
 base_url = "https://team-mirror.example/v1"   # 同 id 整条覆盖全局定义（内层不合并）

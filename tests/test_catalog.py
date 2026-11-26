@@ -3,7 +3,7 @@
 import pytest
 
 from zenagent.providers.catalog import (
-    AmbiguousModelError,
+    ModelRefError,
     _build_catalog,
     find_model,
     load_catalog,
@@ -132,27 +132,33 @@ def test_resolve_model_ref_qualified_picks_the_mirror_provider():
     assert vendor.base_url == "https://api.deepseek.com"
 
 
-def test_resolve_model_ref_unique_bare_id_still_resolves():
-    model = resolve_model_ref(load_catalog(), "deepseek-flash")
-    assert (model.provider, model.id) == ("deepseek", "deepseek-flash")
+def test_resolve_model_ref_refuses_even_a_unique_bare_id():
+    # A model id is not an identity: accepting a bare one would make the
+    # provider depend on catalog contents/order. The refusal carries the
+    # qualified form so the fix is one copy-paste.
+    with pytest.raises(ModelRefError) as excinfo:
+        resolve_model_ref(load_catalog(), "deepseek-flash")
+    message = str(excinfo.value)
+    assert "names no provider" in message
+    assert "deepseek/deepseek-flash" in message
 
 
-def test_resolve_model_ref_refuses_an_ambiguous_bare_id():
-    with pytest.raises(AmbiguousModelError) as excinfo:
+def test_resolve_model_ref_bare_duplicate_lists_every_candidate():
+    with pytest.raises(ModelRefError) as excinfo:
         resolve_model_ref(load_catalog(), "deepseek-v4-pro")
     message = str(excinfo.value)
-    assert "ambiguous" in message
+    assert "names no provider" in message
     assert "deepseek/deepseek-v4-pro" in message
     assert "opencode-go/deepseek-v4-pro" in message
 
 
 def test_resolve_model_ref_unknown_provider_and_model_are_named():
     catalog = load_catalog()
-    with pytest.raises(KeyError, match="unknown provider 'nope'"):
+    with pytest.raises(ModelRefError, match="unknown provider 'nope'"):
         resolve_model_ref(catalog, "nope/deepseek-v4-pro")
-    with pytest.raises(KeyError, match="has no model"):
+    with pytest.raises(ModelRefError, match="has no model"):
         resolve_model_ref(catalog, "deepseek/nope")
-    with pytest.raises(KeyError, match="provider/model form"):
+    with pytest.raises(ModelRefError, match="names no provider"):
         resolve_model_ref(catalog, "nope")
 
 

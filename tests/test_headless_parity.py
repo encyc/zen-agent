@@ -95,7 +95,7 @@ async def _run_headless(**overrides):
     """A trivial offline one-shot run of the default assembly."""
 
     kwargs = {
-        "model_id": "deepseek-flash",
+        "model_id": "deepseek/deepseek-flash",
         "stream_fn": fake_stream(),
         "mcp": False,
         "skills": False,

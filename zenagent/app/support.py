@@ -10,8 +10,8 @@ from pathlib import Path
 from zenagent import settings
 from zenagent.prompts import PromptContext, compose_system
 from zenagent.providers.catalog import (
-    AmbiguousModelError,
     Model,
+    ModelRefError,
     ProviderConfig,
     resolve_model_ref,
 )
@@ -54,8 +54,8 @@ def system_prompt(tool_names: list[str]) -> str:
 
 
 def resolve_model(catalog: dict[str, ProviderConfig], model_id: str | None) -> Model:
-    """Pick the model to run: explicit ``provider/id`` (or unique bare id), else
-    the catalog's ``default: true``."""
+    """Pick the model to run: explicit ``provider/id``, else the catalog's
+    ``default: true``."""
     if model_id:
         return resolve_model_ref(catalog, model_id)
     for provider in catalog.values():
@@ -80,20 +80,18 @@ def resolve_task_model(
 ) -> tuple[Model, str]:
     """Resolve a ``task`` ``model`` argument to ``(model, api_key)``.
 
-    Accepts ``provider/model-id`` or a bare model id — the same lookup
-    ``/model`` uses, through :func:`resolve_model_ref`: a bare id is accepted
-    only when one provider defines it, and the qualified form is required for
-    an id that exists under several providers. Raises ``ValueError`` with a
-    hint naming the missing environment variable when the model, provider or
-    its API key is absent — the task tool turns that into a fail-fast error
+    Requires ``provider/model-id`` — the same strict lookup ``/model`` uses,
+    through :func:`resolve_model_ref`; a bare id is refused because a model id
+    is not an identity across providers. Raises ``ValueError`` with a hint
+    naming the missing environment variable when the model, provider or its
+    API key is absent — the task tool turns that into a fail-fast error
     envelope before any child runs.
     """
     try:
         model = resolve_model_ref(catalog, raw)
-    except (AmbiguousModelError, KeyError) as exc:
+    except ModelRefError as exc:
         # ValueError is the task tool's fail-fast contract.
-        detail = exc.args[0] if exc.args else exc
-        raise ValueError(str(detail)) from None
+        raise ValueError(str(exc)) from None
     key = api_key_for(catalog, model)
     if not key:
         provider = catalog.get(model.provider)

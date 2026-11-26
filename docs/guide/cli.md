@@ -21,7 +21,7 @@ printf '%s\n' '{"type":"status","id":"1"}' '{"type":"shutdown","id":"2"}' | zen 
 ## headless（`-p`）
 
 ```bash
-zen -p "create /tmp/x/hello.txt, then read it back" -m deepseek-flash --yes --thinking high
+zen -p "create /tmp/x/hello.txt, then read it back" -m deepseek/deepseek-flash --yes --thinking high
 zen -p "what is in this picture?" --image shot.png
 zen -p "say hi" --json
 zen -p "analyze" --read-only --trace run.jsonl --cwd /path/to/project

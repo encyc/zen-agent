@@ -664,7 +664,7 @@ async def test_repl_attaches_startup_images_to_the_first_prompt(
         yield AssistantEvent(type="done", partial=partial, reason="stop")
 
     code = await repl(
-        "deepseek-flash",
+        "deepseek/deepseek-flash",
         stream_fn=stream,
         input_fn=scripted_input("describe", "/exit"),
         print_fn=lambda *a, **k: None,

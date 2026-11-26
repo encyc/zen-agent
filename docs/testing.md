@@ -70,7 +70,7 @@ fake stream 的最小形态见 `examples/custom_tool.py`。
 ## 行为评测（`evals/`）
 
 - 位置：`evals/cases/*.json`，格式见 `evals/README.md`。
-- 运行：`./scripts/eval.sh --model deepseek-flash [--filter NAME] [--repeats 3]`。
+- 运行：`./scripts/eval.sh --model deepseek/deepseek-flash [--filter NAME] [--repeats 3]`。
 - 每条 case 在独立临时目录运行，断言**结果**（文件内容、输出、工具名），不断言具体调用路径。
 - 选项支持 S2 能力：`skills` / `extensions` / `mcp` / `tool_deny` / `read_only`。
 - 断言：`tools`、`output_contains`、`files`、`files_absent`、`tool_errors_contain`、`termination`。

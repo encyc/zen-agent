@@ -86,7 +86,7 @@ Princeton 的 HAL（ICLR 2026）把评测基础设施化，核心结论值得抄
 - 位置：`evals/` 目录 + `scripts/eval.sh`；
 - 形态：YAML/JSON 任务文件 `{id, prompt, setup, assert}`，断言输出子串/正则、工具调用序列、`termination`、`usage.cost` 上限；
 - 规模：先 15–25 个用例，覆盖：纯问答、读文件+回答、改文件后验证、grep/glob、bash 失败恢复、拒绝危险命令、图片、上下文压缩、会话 resume；
-- 运行：`uv run python scripts/eval.py --model deepseek-flash`，每用例 3 次；
+- 运行：`uv run python scripts/eval.py --model deepseek/deepseek-flash`，每用例 3 次；
 - 成本量级：25 用例 × 3 次 × ~30k tokens ≈ 2.3M tokens ≈ **$1–3/轮**；
 - 产出：通过率、平均 token、平均耗时、失败分类（工具误用/循环/提前宣布完成）。
 

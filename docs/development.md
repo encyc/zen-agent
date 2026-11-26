@@ -25,7 +25,7 @@ uv run zen doctor          # 环境自检：python、key、catalog、config、se
 
 ```bash
 ./scripts/eval.sh --list                                  # 用例 id
-./scripts/eval.sh --model deepseek-flash --repeats 3       # 指定模型、重复次数
+./scripts/eval.sh --model deepseek/deepseek-flash --repeats 3       # 指定模型、重复次数
 ./scripts/eval.sh --baseline BASELINE.json                 # 与基线对比，有回归 exit 1
 ```
 

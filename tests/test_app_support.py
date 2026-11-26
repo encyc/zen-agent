@@ -47,11 +47,12 @@ def _catalog() -> dict[str, ProviderConfig]:
     }
 
 
-def test_unique_bare_id_resolves(monkeypatch):
+def test_unique_bare_id_is_refused(monkeypatch):
     monkeypatch.setenv("ZAI_API_KEY", "k")
-    model, key = resolve_task_model(_catalog(), "glm-5.3-flash")
-    assert model.provider == "zai"
-    assert key == "k"
+    with pytest.raises(ValueError) as exc_info:
+        resolve_task_model(_catalog(), "glm-5.3-flash")
+    assert "names no provider" in str(exc_info.value)
+    assert "zai/glm-5.3-flash" in str(exc_info.value)
 
 
 def test_qualified_form_resolves_within_the_provider(monkeypatch):
@@ -67,7 +68,7 @@ def test_unknown_provider_names_the_catalog():
 
 
 def test_unknown_model_hints_at_the_qualified_form():
-    with pytest.raises(ValueError, match="provider/model form"):
+    with pytest.raises(ValueError, match="provider/model-id"):
         resolve_task_model(_catalog(), "nope")
 
 
@@ -78,7 +79,7 @@ def test_missing_api_key_names_the_env_var(monkeypatch):
         resolve_task_model(_catalog(), "zai/glm-5.3")
 
 
-def test_ambiguous_bare_id_errors_listing_qualified_forms(monkeypatch):
+def test_bare_duplicate_errors_listing_qualified_forms(monkeypatch):
     monkeypatch.setenv("ZAI_API_KEY", "k")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "d")
     with pytest.raises(ValueError) as exc_info:

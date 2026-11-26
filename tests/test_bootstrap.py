@@ -113,7 +113,7 @@ async def test_bootstrap_failure_releases_lease_and_refs(monkeypatch, tmp_path):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
     monkeypatch.setattr(
         "zenagent.app.bootstrap.load_user_config",
-        lambda *args, **kwargs: UserConfig(default_model="deepseek-flash"),
+        lambda *args, **kwargs: UserConfig(default_model="deepseek/deepseek-flash"),
     )
     refs_before = jobs_mod._refs
 

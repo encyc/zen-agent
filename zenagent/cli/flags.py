@@ -50,7 +50,9 @@ SHARED_FLAGS = (
 
 def add_runtime_flags(parser: argparse.ArgumentParser) -> None:
     """Declare every flag both frontends share."""
-    parser.add_argument("-m", "--model", help="model id from the catalog")
+    parser.add_argument(
+        "-m", "--model", help="provider/model-id from the catalog (e.g. opencode-go/deepseek-v4-pro)"
+    )
     parser.add_argument(
         "--thinking",
         choices=THINKING_CHOICES,

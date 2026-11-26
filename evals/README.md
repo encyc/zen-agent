@@ -11,8 +11,8 @@ stays offline and key-free).
 ```bash
 set -a && . ./.env && set +a
 ./scripts/eval.sh --list                              # case ids + prompts
-./scripts/eval.sh --model deepseek-flash --filter read --repeats 1
-./scripts/eval.sh --model deepseek-flash --repeats 3 --min-pass-rate 0.8
+./scripts/eval.sh --model deepseek/deepseek-flash --filter read --repeats 1
+./scripts/eval.sh --model deepseek/deepseek-flash --repeats 3 --min-pass-rate 0.8
 ./scripts/eval.sh --json > /tmp/eval.json             # machine-readable report
 ```
 

@@ -6,11 +6,7 @@ from dataclasses import dataclass
 
 from zenagent.app.runtime import Runtime
 from zenagent.app.support import api_key_for, session_id_for
-from zenagent.providers.catalog import (
-    AmbiguousModelError,
-    model_ref,
-    resolve_model_ref,
-)
+from zenagent.providers.catalog import ModelRefError, model_ref, resolve_model_ref
 
 __all__ = ["ModelEntry", "ModelManager", "SwitchResult"]
 
@@ -95,11 +91,11 @@ def apply_model_switch(
 ) -> SwitchResult:
     """Switch one agent to ``model_id`` with every side effect, frontend-agnostic.
 
-    ``model_id`` is a ``provider/model-id`` reference (or a bare id that is
-    unique in the catalog). Resolution goes through
-    :func:`resolve_model_ref`, so a duplicated bare id is refused with the
-    qualified choices instead of silently landing on the first provider —
-    which is how "I picked opencode-go" used to become ``api.deepseek.com``.
+    ``model_id`` must be a ``provider/model-id`` reference. Resolution goes
+    through :func:`resolve_model_ref`, which refuses a bare id outright (with
+    the qualified candidates as a hint) instead of letting catalog order decide
+    the provider — which is how "I picked opencode-go" used to become
+    ``api.deepseek.com``.
 
     The REPL used to assign ``agent.model`` alone, which left the old provider's
     API key in place (a cross-provider switch then authenticated with the wrong
@@ -109,9 +105,8 @@ def apply_model_switch(
     """
     try:
         model = resolve_model_ref(catalog, model_id)
-    except (AmbiguousModelError, KeyError) as exc:
-        detail = exc.args[0] if exc.args else exc
-        return SwitchResult(False, str(detail))
+    except ModelRefError as exc:
+        return SwitchResult(False, str(exc))
     api_key = api_key_for(catalog, model)
     if not api_key:
         return SwitchResult(

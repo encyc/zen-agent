@@ -8,7 +8,7 @@ unit tests: they prove the code is correct, this proves the agent is useful.
 
     uv run python scripts/eval.py --list
     uv run python scripts/eval.py --filter read --repeats 1
-    uv run python scripts/eval.py --model deepseek-flash --repeats 3
+    uv run python scripts/eval.py --model deepseek/deepseek-flash --repeats 3
 
 Case format (JSON, one file per case under ``evals/cases``):
 
