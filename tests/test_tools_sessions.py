@@ -349,3 +349,42 @@ async def test_a_traversing_id_is_refused_not_resolved(sessions_home):
         assert "no session" in result.content[0].text.lower() or "not found" in (
             result.content[0].text.lower()
         ), bogus
+
+
+async def test_the_tools_never_write_anything(sessions_home):
+    """Read-only means the directory is byte-identical after all three ran."""
+    _, root_a, _ = sessions_home
+    tools = build_session_tools(root_a)
+    directory = project.project_sessions_dir(root=root_a)
+    before = {p.name: p.read_bytes() for p in directory.iterdir()}
+    await call(tools, "list_sessions")
+    await call(tools, "search_sessions", query="lease")
+    await call(tools, "read_session", id="20260101-000000")
+    after = {p.name: p.read_bytes() for p in directory.iterdir()}
+    assert after == before
+
+
+async def test_a_malformed_line_widens_the_total_but_loses_no_message(tmp_path):
+    """The two rulers disagree on a line that parses but will not deserialize.
+
+    ``Session.load`` needs a message to deserialize (so a ``{"role": "user"}``
+    with no content is skipped); ``count_messages`` counts message *lines*.
+    The listing therefore says 1 msg where ``read_session`` says 2. That is
+    accepted, not fixed: the total is only ever *larger*, so it cannot make a
+    message unreachable -- the failure mode this pins is the opposite one, a
+    total smaller than the content, which would hide the tail.
+    """
+    root = tmp_path / "alpha"
+    root.mkdir()
+    write_session(root, "20260101-000000", [
+        {"role": "user", "content": "first", "timestamp": 1},
+    ])
+    path = project.project_sessions_dir(root=root) / "20260101-000000.jsonl"
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write('{"role": "user", "timestamp": 3}\n')
+    tools = build_session_tools(root)
+    listed = await call(tools, "list_sessions")
+    assert "1 msgs" in listed.content[0].text
+    page = await call(tools, "read_session", id="20260101-000000", limit=10)
+    assert "of 2" in page.content[0].text      # count_messages' ruler
+    assert "first" in page.content[0].text     # and the readable message is there

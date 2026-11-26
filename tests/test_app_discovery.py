@@ -388,3 +388,45 @@ async def test_reload_does_not_duplicate_extension_tools_or_hooks(
 
     assert extension_tools() == 1
     assert len(runtime._hook_unsubscribes) == 1
+
+
+async def test_a_real_runtime_offers_the_session_tools(isolated_project_home, runtime_factory):
+    """The three cross-session tools reach the model through real assembly."""
+    runtime = await runtime_factory(mode="plan")
+    names = {tool.name for tool in runtime.tool_registry.active()}
+    assert {"list_sessions", "search_sessions", "read_session"} <= names
+
+
+async def test_the_session_tools_are_pinned_to_the_runtime_root(
+    isolated_project_home, runtime_factory, tmp_path, monkeypatch
+):
+    """The bound root is the Runtime's, not the process cwd (Review Focus #1).
+
+    ``session.sessions_dir`` is stubbed here to record its ``root`` argument:
+    that assertion is what proves the injection, and it cannot be satisfied by
+    a runtime that happened to be started in the right directory. The listing
+    itself is served from the stub's directory so the tool also has to work.
+    """
+    other = tmp_path / "elsewhere"
+    other.mkdir()
+    served = tmp_path / "sessions"
+    served.mkdir()
+    (served / "20260101-000000.jsonl").write_text(
+        '{"role": "user", "content": "only in the other project", "timestamp": 1}\n',
+        encoding="utf-8",
+    )
+    asked: list[object] = []
+
+    def recording_sessions_dir(*, root=None):
+        asked.append(root)
+        return served
+
+    monkeypatch.setattr(
+        "zenagent.agent.session.sessions_dir", recording_sessions_dir
+    )
+    runtime = await runtime_factory(root=other, mode="plan")
+    tool = next(t for t in runtime.tool_registry.active() if t.name == "list_sessions")
+    result = await tool.execute("call_1", {}, None)
+    assert "only in the other project" in result.content[0].text
+    # The listing asked for the runtime's root, resolved -- not the process cwd.
+    assert asked and asked[-1] == runtime.root
