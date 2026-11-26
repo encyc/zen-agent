@@ -1,1 +1,1 @@
-Search saved sessions by content.
+Search saved sessions' transcripts by regular expression. Grouped and paged by session (skip counts sessions): each shows its id, matched message count, and excerpts with the message number read_session wants. include=conversation (default) is user and assistant text; tools adds tool names and arguments; all adds tool result bodies. Escalate when a level comes up empty: what a session did usually lives in its tool arguments, and a no-match reply names the level that would match.

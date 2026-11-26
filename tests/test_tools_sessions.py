@@ -92,3 +92,159 @@ async def test_listing_never_writes_the_index_sidecar(sessions_home):
     await call(build_session_tools(root_a), "list_sessions")
     assert not (sessions_dir / "_index.json").exists()
     assert not list(sessions_dir.glob(".tmp-index-*"))
+
+
+def write_session(root, name, lines):
+    target = project.project_sessions_dir(root=root)
+    target.mkdir(parents=True, exist_ok=True)
+    (target / f"{name}.jsonl").write_text(
+        "".join(json.dumps(o, ensure_ascii=False) + "\n" for o in lines),
+        encoding="utf-8",
+    )
+    return target
+
+
+def assistant(*blocks, timestamp):
+    """A complete assistant record.
+
+    ``Session.load`` requires provider/model/usage/stop_reason and silently
+    skips a line without them; a skipped line means zero messages, and
+    ``list_sessions`` (the candidate source of a search) drops such a session
+    as an empty leftover. The minimal shape would therefore make the
+    tool-call-only session invisible to the very search that must find it.
+    """
+    return {
+        "role": "assistant",
+        "provider": "deepseek",
+        "model": "deepseek-chat",
+        "usage": {},
+        "stop_reason": "stop",
+        "content": list(blocks),
+        "timestamp": timestamp,
+    }
+
+
+@pytest.fixture
+def search_home(tmp_path):
+    root = tmp_path / "alpha"
+    root.mkdir()
+    write_session(
+        root,
+        "20260101-000000",
+        [
+            {"role": "user", "content": "we talked about the colour blue", "timestamp": 1},
+            assistant({"type": "text", "text": "yes, blue was chosen"}, timestamp=2),
+        ],
+    )
+    write_session(
+        root,
+        "20260102-000000",
+        [
+            assistant(
+                {"type": "toolCall", "id": "c1", "name": "edit_file",
+                 "arguments": {"path": "theme/blue.css"}},
+                timestamp=3,
+            ),
+        ],
+    )
+    return root
+
+
+async def test_search_defaults_to_conversation_text(search_home):
+    result = await call(build_session_tools(search_home), "search_sessions", query="blue")
+    text = result.content[0].text
+    assert "20260101-000000" in text
+    assert "20260102-000000" not in text  # only its tool arguments mention blue
+    assert result.details["sessions"] == 1
+
+
+async def test_search_tools_level_finds_tool_arguments(search_home):
+    result = await call(
+        build_session_tools(search_home), "search_sessions", query="blue", include="tools"
+    )
+    assert "20260102-000000" in result.content[0].text
+    assert result.details["sessions"] == 2
+
+
+async def test_empty_level_names_the_level_that_would_match(search_home):
+    result = await call(build_session_tools(search_home), "search_sessions", query="theme/blue")
+    text = result.content[0].text
+    assert "no matches" in text
+    assert 'include="tools"' in text
+
+
+async def test_skip_pages_by_session_not_by_hit(tmp_path):
+    """One page holds MAX_SESSIONS_PER_PAGE sessions, and skip counts those.
+
+    Built past one full page on purpose: with fewer sessions than the page
+    size, next_skip would be None and the test would pass without ever
+    exercising pagination.
+    """
+    from zenagent.tools.sessions import MAX_SESSIONS_PER_PAGE
+
+    root = tmp_path / "many"
+    root.mkdir()
+    total = MAX_SESSIONS_PER_PAGE + 5
+    for n in range(total):
+        write_session(root, f"20260101-{n:06d}", [
+            {"role": "user", "content": f"deepseek note {n}", "timestamp": n},
+            {"role": "user", "content": f"deepseek again {n}", "timestamp": n},
+        ])
+    tools = build_session_tools(root)
+    first = await call(tools, "search_sessions", query="deepseek")
+    assert first.details["sessions"] == total          # every session counted
+    assert first.details["next_skip"] == MAX_SESSIONS_PER_PAGE  # but one page shown
+    second = await call(
+        tools, "search_sessions", query="deepseek", skip=MAX_SESSIONS_PER_PAGE
+    )
+    # Page membership, not a specific id: sessions written in the same second
+    # share an mtime, so which id lands on page 1 is not deterministic. What is
+    # deterministic is that the two pages are the same size and do not overlap.
+    def ids(result):
+        return {
+            line.split()[0]
+            for line in result.content[0].text.splitlines()
+            if line and not line.startswith(" ")
+        }
+
+    page_one, page_two = ids(first), ids(second)
+    assert len(page_one) == MAX_SESSIONS_PER_PAGE
+    assert len(page_two) == 5
+    assert not page_one & page_two
+
+
+async def test_max_hits_caps_excerpts_per_session(search_home):
+    """max_hits caps excerpts, not the header: the hit count stays true."""
+    result = await call(
+        build_session_tools(search_home), "search_sessions", query="blue", max_hits=1
+    )
+    text = result.content[0].text
+    assert text.count("#") == 1          # max_hits=1 shows one excerpt line
+    assert result.details["hits"] == 2   # both matches still counted in the header
+
+
+async def test_an_invalid_regex_is_an_error_not_a_crash(search_home):
+    result = await call(build_session_tools(search_home), "search_sessions", query="[unclosed")
+    assert result.is_error
+    assert "invalid regular expression" in result.content[0].text
+
+
+async def test_search_all_reaches_other_projects(sessions_home):
+    _, root_a, _ = sessions_home
+    tools = build_session_tools(root_a)
+    scoped = await call(tools, "search_sessions", query="beta only")
+    assert scoped.details["sessions"] == 0
+    everywhere = await call(tools, "search_sessions", query="beta only", all=True)
+    assert everywhere.details["sessions"] == 1
+    assert "beta only" in everywhere.content[0].text
+
+
+async def test_an_unknown_include_is_an_error(search_home):
+    result = await call(
+        build_session_tools(search_home),
+        "search_sessions",
+        query="blue",
+        include="everything",
+    )
+    assert result.is_error
+    assert "unknown include" in result.content[0].text
