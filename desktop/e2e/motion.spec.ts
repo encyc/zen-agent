@@ -124,3 +124,30 @@ test('the notice banner animates out instead of vanishing', async ({ page }) => 
   await expect(banner).toHaveCount(1)
   await expect(banner).toHaveCount(0, { timeout: 2000 })
 })
+
+test('a session held by another runtime explains itself instead of pointing at a log', async ({ page }) => {
+  // The server's frame carries the concrete cause; the notice must say so.
+  // Before, `session_lease_busy` fell through to the generic "see the server
+  // log" copy and sent the reader somewhere with nothing in it.
+  await boot(page, initialState())
+  // A refusal must arrive as a REPLY (`type: 'error'`), not as an event: the
+  // router's error branch is on handleResultFrame. The event wrapper used by
+  // the other specs nests it under `frame.event`, which routes elsewhere.
+  await page.evaluate(() => {
+    window.__ZEN_E2E_EMIT__('rpc:frame', {
+      event: 'rpc:frame',
+      id: 1,
+      payload: {
+        frame: {
+          type: 'error',
+          code: 'session_lease_busy',
+          message: 'session is already open by another runtime',
+          params: { op: 'resume' },
+        },
+      },
+    })
+  })
+  const banner = page.getByRole('alert')
+  await expect(banner).toContainText('另一个 ZenAgent 实例')
+  await expect(banner).not.toContainText('日志')
+})

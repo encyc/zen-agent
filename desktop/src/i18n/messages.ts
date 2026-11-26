@@ -81,6 +81,7 @@ export const zh: Dict = {
   'rpc.error.sessionFailed': '会话操作失败，详情见服务端日志',
   'rpc.error.sessionImportMissing': '找不到要导入的会话文件',
   'rpc.error.sessionBusy': '会话正忙：请先取消当前运行再重试',
+  'rpc.error.sessionLeaseBusy': '这个会话正被另一个 ZenAgent 实例打开：关掉那个窗口后再试',
   'rpc.error.sessionInvalid': '会话请求不完整或不受支持',
   'rpc.error.limitsFailed': '设置未能保存，请检查配置文件',
   'rpc.error.configFailed': '配置读取失败，请检查配置文件',
@@ -445,6 +446,8 @@ export const en: Dict = {
   'rpc.error.sessionFailed': 'The session operation failed; see the server log',
   'rpc.error.sessionImportMissing': 'The session file could not be found',
   'rpc.error.sessionBusy': 'The session is busy: cancel the current run first',
+  'rpc.error.sessionLeaseBusy':
+    'This session is open in another ZenAgent window: close it there and try again',
   'rpc.error.sessionInvalid': 'The session request is incomplete or unsupported',
   'rpc.error.limitsFailed': 'The setting could not be saved; check the config file',
   'rpc.error.configFailed': 'The config file could not be read; check it',

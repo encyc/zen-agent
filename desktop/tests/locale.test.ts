@@ -80,6 +80,7 @@ test('every sanitized RPC code renders localized copy in both locales', () => {
     'session_failed',
     'session_import_missing',
     'session_busy',
+    'session_lease_busy',
     'session_invalid',
     'limits_failed',
     'config_failed',
@@ -131,4 +132,26 @@ test('the sanitized server error codes render localized copy', () => {
     localizeError({ message: 'read failed', code: 'fs_error' }, 'zh'),
     '文件操作失败',
   )
+})
+
+test('a lease held by another runtime says so, and never sends the reader to a log', () => {
+  // The server has already told us the concrete reason: another live runtime
+  // holds this session file. Mapping it onto the generic "see the server log"
+  // copy hides an actionable cause behind a dead end — the reader's fix is
+  // "close the other window", not "go read a log".
+  for (const locale of ['zh', 'en'] as const) {
+    const text = localizeError({ code: 'session_lease_busy', params: { op: 'resume' } }, locale)
+    assert.doesNotMatch(text, /log|日志/i, `${locale}: ${text}`)
+  }
+  assert.match(localizeError({ code: 'session_lease_busy' }, 'zh'), /另一个/)
+  assert.match(localizeError({ code: 'session_lease_busy' }, 'en'), /another/i)
+})
+
+test('the lease copy stays distinct from the busy-run copy', () => {
+  // `session_busy` means "this runtime is mid-run"; `session_lease_busy` means
+  // "a different process owns the file". Same advice would be wrong: cancelling
+  // the run here changes nothing.
+  const lease = localizeError({ code: 'session_lease_busy' }, 'en')
+  const busy = localizeError({ code: 'session_busy' }, 'en')
+  assert.notEqual(lease, busy)
 })
