@@ -3,7 +3,7 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased
+## v0.15.1 — 2026-11-26
 
 ### Changed
 
@@ -19,6 +19,71 @@ matches the release tag; older history is in the repository tags and commits.
   `✻ thinking  Step 1: read views.py`. Collapsed rows parse nothing, so
   streaming stays as cheap as before: markdown is only built for a row
   someone opened.
+
+- **One motion token ladder.** The desktop carried three pre-ladder duration
+  names (`--ds-transition-duration{,-fast,-slow}`) beside a separate
+  `--ds-motion*` pair, so a spinner either borrowed the 200ms interaction beat
+  or invented a number of its own. `styles/tokens.css` now has a single ladder:
+  interaction beats at 140 / 200 / 320ms, loops at 1100 / 2600ms, and a
+  separate 400ms rung for hover intent, which is neither a beat nor a loop. The
+  old names stay as aliases pointing into the ladder, so ~40 call sites moved
+  without a flag day. `scripts/check-style-motion.mjs` (`pnpm lint:motion`, in
+  CI) refuses a raw duration or easing in a project stylesheet, so the ladder
+  cannot erode one hand-written value at a time.
+
+### Added
+
+- **Follow-tail scroll ownership.** The transcript now decides for itself
+  whether it follows the tail, and the rules live in `state/scrollFollow.ts`
+  instead of the view: `following` until the reader scrolls up, `free` after, a
+  two-threshold jump pill (`SCROLL_EDGE` 8px to re-attach, `SCROLL_JUMP_THRESHOLD`
+  160px to appear — the gap is what keeps it from strobing near the tail), and
+  an unseen count of user turns that landed while the reader was away. A
+  programmatic scroll (pill, minimap, anchor restore) is flagged for a whole
+  smooth flight (`PROGRAMMATIC_FLIGHT_MS`) rather than one frame, content
+  growth is told apart from a real upward scroll by comparing two `scrollTop`
+  samples, and the seen set is keyed by message id *and* by transcript, so
+  neither a shrinking mounted window nor a reused component instance can
+  re-count old rows as new. The pill reads `9+` past nine;
+  `tests/scrollFollow.test.ts` holds the table and `e2e/follow.spec.ts` the
+  round trip.
+- **Exit phases for the surfaces that animate.** The command palette, the
+  notification popover, the notice banner, the approval card, the context card,
+  retry details and the composer docks used to vanish on the commit that closed
+  them, because React removes the node in the same commit that would start the
+  transition. `ui/presence.ts` keeps "mounted" and "open" apart —
+  `closed` / `entering` / `open` / `exiting` — with the leaving window a timer
+  rather than `animationend`: `styles/base.css` collapses transitions to 0.01ms
+  under `prefers-reduced-motion`, and an event fired on that frame is not
+  something a caller can predict. Reduced motion passes `0` and unmounts on the
+  next commit instead. An exiting surface is `inert`, not merely `aria-hidden`:
+  the node can still hold focus while it fades, and `aria-hidden` over the
+  focused element is an accessibility violation. An interrupted exit reverses
+  mid-flight instead of jumping back to its first frame. `e2e/motion.spec.ts`
+  drives the sequences.
+
+### Fixed
+
+- **A session held by another live runtime says so.** `session_lease_busy` fell
+  through to the generic `session_failed` copy — "The session operation failed;
+  see the server log" — sending the reader to a log that cannot explain it: the
+  server had already named the cause, another `zen` or desktop instance owning
+  that session file. It has its own string now ("This session is open in
+  another ZenAgent window: close it there and try again"), kept distinct from
+  `session_busy` (mid-run in *this* runtime, where cancelling the run is the
+  advice), and `tests/locale.test.ts` asserts the lease copy names the lease
+  and never mentions a log, in both languages.
+- **The wire gate runs inside the project env.** `scripts/check.sh` asked the
+  system `python3` for `scripts/gen_rpc_ts.py --check`; since the wire registry
+  landed that script imports `zenagent`, which imports `httpx`, and a runner's
+  stock interpreter does not have it — every `check` leg died at the wire step,
+  including the 0.14.1 and 0.15.0 release runs. It is `uv run python` now, the
+  same venv the rest of the gate already synced.
+- **The desktop settings e2e follows the retired agent knobs.** Three specs
+  still looked up `limits.agent.max_turns` and `task.max_cost`, retired with the
+  run ceiling, so the `desktop` CI job failed on element-not-found. They use
+  `loop_guard_threshold` and `keep_transcripts`; the guard's description says
+  the run ends instead of promising the removed corrective note.
 
 ## v0.15.0 — 2026-11-25
 
