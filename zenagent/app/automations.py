@@ -17,15 +17,33 @@ Three shapes live here:
 
 from __future__ import annotations
 
+import contextlib
+import json
+import os
 import re
+import secrets
+import tempfile
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from pathlib import Path
+
+from zenagent import project
 
 __all__ = [
     "SCHEDULE_DAILY",
     "SCHEDULE_EVERY",
+    "AutomationStore",
+    "Job",
+    "JobState",
     "Schedule",
+    "StateStore",
+    "resolve_session",
+    "state_for",
 ]
+
+#: Bumped when the on-disk shape changes incompatibly. Readers refuse what they
+#: do not recognize rather than silently reinterpreting a newer file.
+_STORE_VERSION = 1
 
 SCHEDULE_DAILY = "daily"
 SCHEDULE_EVERY = "every"
@@ -150,3 +168,317 @@ class Schedule:
             parsed = cls.parse(f"{SCHEDULE_DAILY} {at}")
             return parsed
         raise ValueError(f"unknown schedule kind: {kind!r}")
+
+
+# -- job definitions -------------------------------------------------------
+
+#: Fields ``AutomationStore.update`` will change. Everything else in a job is
+#: settled at creation: moving a job to another session or another project
+#: would silently split its history, so that is a remove-and-add, not an edit.
+_UPDATABLE = frozenset({"enabled", "schedule", "prompt", "timeout_s"})
+
+
+@dataclass(frozen=True)
+class Job:
+    """One automation: what to run, where, how often, and in which session.
+
+    ``session`` is a bare file name, not a path: the project's session
+    directory plus this name is the transcript, so moving the project
+    directory keeps the definition valid.
+    """
+
+    id: str
+    name: str
+    prompt: str
+    schedule: Schedule
+    session: str
+    timeout_s: int = 1800
+    enabled: bool = True
+    created_at: int = 0
+
+    def to_json(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "prompt": self.prompt,
+            "schedule": self.schedule.to_json(),
+            "session": self.session,
+            "timeout_s": self.timeout_s,
+            "enabled": self.enabled,
+            "created_at": self.created_at,
+        }
+
+    @classmethod
+    def from_json(cls, raw: object) -> Job:
+        if not isinstance(raw, dict):
+            raise TypeError("job must be an object")
+        name = raw.get("name")
+        prompt = raw.get("prompt")
+        session = raw.get("session")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("job needs a name")
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise ValueError("job needs a prompt")
+        if not isinstance(session, str) or not session.strip():
+            raise ValueError("job needs a session")
+        timeout = raw.get("timeout_s", 1800)
+        if not isinstance(timeout, int) or isinstance(timeout, bool) or timeout <= 0:
+            raise ValueError("timeout_s must be a positive integer")
+        created = raw.get("created_at", 0)
+        return cls(
+            id=str(raw.get("id") or ""),
+            name=name,
+            prompt=prompt,
+            schedule=Schedule.from_json(raw.get("schedule")),
+            session=session,
+            timeout_s=timeout,
+            enabled=bool(raw.get("enabled", True)),
+            created_at=int(created) if isinstance(created, int) else 0,
+        )
+
+
+@dataclass
+class JobState:
+    """The scheduler's view of one job: when it last ran, and how it ended.
+
+    Separate from :class:`Job` on purpose — the definition is user data that
+    any frontend may rewrite, while this is the daemon's own bookkeeping with a
+    single writer, so a mangled definition never costs the run history.
+    """
+
+    session: str = ""
+    last_run_at: float | None = None
+    last_status: str = ""
+    last_skip: str = ""
+    last_error: str = ""
+    last_run_id: str = ""
+    missed: int = 0
+    run_count: int = 0
+
+    def to_json(self) -> dict:
+        return {
+            "session": self.session,
+            "last_run_at": self.last_run_at,
+            "last_status": self.last_status,
+            "last_skip": self.last_skip,
+            "last_error": self.last_error,
+            "last_run_id": self.last_run_id,
+            "missed": self.missed,
+            "run_count": self.run_count,
+        }
+
+    @classmethod
+    def from_json(cls, raw: object) -> JobState:
+        if not isinstance(raw, dict):
+            raise TypeError("state must be an object")
+        last_run = raw.get("last_run_at")
+        state = cls(
+            session=str(raw.get("session") or ""),
+            last_run_at=(
+                float(last_run)
+                if isinstance(last_run, (int, float)) and not isinstance(last_run, bool)
+                else None
+            ),
+            last_status=str(raw.get("last_status") or ""),
+            last_skip=str(raw.get("last_skip") or ""),
+            last_error=str(raw.get("last_error") or ""),
+            last_run_id=str(raw.get("last_run_id") or ""),
+        )
+        for field_name in ("missed", "run_count"):
+            value = raw.get(field_name, 0)
+            setattr(
+                state,
+                field_name,
+                int(value)
+                if isinstance(value, int) and not isinstance(value, bool)
+                else 0,
+            )
+        return state
+
+
+def _atomic_write_json(path: Path, payload: dict) -> None:
+    """Write ``payload`` so a reader never sees a half-written file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(temp)
+        raise
+
+
+def resolve_session(root: Path, name: str) -> Path:
+    """The transcript path for one job: project sessions dir + bare name."""
+    return project.project_sessions_dir(root=root) / name
+
+
+def _new_id() -> str:
+    return f"a_{secrets.token_hex(4)}"
+
+
+class AutomationStore:
+    """The project's ``automations.json``: definitions, read by the daemon.
+
+    Any frontend may rewrite this file (CLI, rpc/desktop); the daemon only
+    reads it and notices changes by mtime. Writes are atomic, and a corrupt
+    file leaves the last good snapshot serving rather than taking the
+    scheduler down with it.
+    """
+
+    def __init__(self, root: Path) -> None:
+        self.root = Path(root)
+        self.path = project.project_dir(root=self.root) / "automations.json"
+        self.warnings: list[str] = []
+        self._jobs: list[Job] = []
+        self._stamp: int | None = None
+        self._loaded = False
+
+    # -- reads --------------------------------------------------------------
+
+    def load(self) -> list[Job]:
+        """Parse the file; a bad file keeps the last good snapshot + warns."""
+        try:
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+            jobs = self._parse(raw)
+        except FileNotFoundError:
+            self._jobs = []
+            self._stamp = None
+            self._loaded = True
+            return list(self._jobs)
+        except (OSError, ValueError, TypeError) as exc:
+            self.warnings.append(f"{self.path}: {exc}")
+            self._stamp = self._stamp_of()
+            self._loaded = True
+            return list(self._jobs)
+        self._jobs = jobs
+        self._stamp = self._stamp_of()
+        self._loaded = True
+        return list(self._jobs)
+
+    def _parse(self, raw: object) -> list[Job]:
+        if not isinstance(raw, dict):
+            raise TypeError("automations file must be an object")
+        entries = raw.get("jobs", [])
+        if not isinstance(entries, list):
+            raise TypeError("'jobs' must be a list")
+        return [Job.from_json(entry) for entry in entries]
+
+    def _stamp_of(self) -> int | None:
+        try:
+            return self.path.stat().st_mtime_ns
+        except OSError:
+            return None
+
+    def reload_if_changed(self) -> bool:
+        """Reload when the file changed (or vanished); ``True`` when it did."""
+        if not self._loaded:
+            self.load()
+            return True
+        if self._stamp_of() == self._stamp:
+            return False
+        self.load()
+        return True
+
+    def get(self, name: str) -> Job | None:
+        for entry in self._jobs:
+            if entry.name == name:
+                return entry
+        return None
+
+    # -- writes (CLI / rpc only; never the daemon) ---------------------------
+
+    def _save(self) -> None:
+        _atomic_write_json(
+            self.path,
+            {"version": _STORE_VERSION, "jobs": [job.to_json() for job in self._jobs]},
+        )
+        self._stamp = self._stamp_of()
+        self._loaded = True
+
+    def add(self, job: Job) -> Job:
+        if self.get(job.name) is not None:
+            raise ValueError(f"a job named {job.name!r} already exists")
+        saved = replace(
+            job,
+            id=job.id or _new_id(),
+            created_at=job.created_at or int(time.time()),
+        )
+        self._jobs = [*self._jobs, saved]
+        self._save()
+        return saved
+
+    def update(self, name: str, **changes) -> Job:
+        unknown = set(changes) - _UPDATABLE
+        if unknown:
+            raise ValueError(f"cannot change {', '.join(sorted(unknown))}")
+        current = self.get(name)
+        if current is None:
+            raise KeyError(name)
+        updated = replace(current, **changes)
+        self._jobs = [updated if job.name == name else job for job in self._jobs]
+        self._save()
+        return updated
+
+    def remove(self, name: str) -> bool:
+        kept = [job for job in self._jobs if job.name != name]
+        if len(kept) == len(self._jobs):
+            return False
+        self._jobs = kept
+        self._save()
+        return True
+
+
+class StateStore:
+    """The project's ``automations.state.json``: the daemon's single-writer file."""
+
+    def __init__(self, root: Path) -> None:
+        self.root = Path(root)
+        self.path = project.project_dir(root=self.root) / "automations.state.json"
+
+    def load(self) -> dict[str, JobState]:
+        try:
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        if not isinstance(raw, dict):
+            return {}
+        entries = raw.get("jobs", {})
+        if not isinstance(entries, dict):
+            return {}
+        states: dict[str, JobState] = {}
+        for job_id, entry in entries.items():
+            try:
+                states[str(job_id)] = JobState.from_json(entry)
+            except (TypeError, ValueError):
+                continue
+        return states
+
+    def save(self, states: dict[str, JobState]) -> None:
+        _atomic_write_json(
+            self.path,
+            {
+                "version": _STORE_VERSION,
+                "jobs": {job_id: state.to_json() for job_id, state in states.items()},
+            },
+        )
+
+
+def state_for(states: dict[str, JobState], job: Job) -> JobState:
+    """The state for ``job``, defaulted, with its session preferred from disk.
+
+    The on-disk ``session`` wins when present: it is where the daemon actually
+    wrote, which can differ from the definition after a transcript was lost and
+    re-minted.
+    """
+    found = states.get(job.id)
+    if found is None:
+        return JobState(session=job.session)
+    if not found.session:
+        found.session = job.session
+    return found
