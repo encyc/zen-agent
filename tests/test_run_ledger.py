@@ -309,3 +309,65 @@ def test_historical_orchestration_kinds_still_list(tmp_path):
 
     assert [row.kind for row in ledger.list(kind="swarm")] == ["swarm"]
     assert len(ledger.list()) == 3
+
+
+async def test_relabel_rewrites_the_terminal_row(app_env, monkeypatch):
+    """The owner of a run can re-label how it ended.
+
+    `RunRecorder` only knows the kernel's termination vocabulary, where an
+    unknown value becomes "done". A layer that knows better (the automation
+    daemon: it aborted a run because the wall-clock budget ran out) restates the
+    terminal row for the same run id.
+    """
+    from conftest import text_stream
+
+    from zenagent.app.agent_profile import AgentProfile
+    from zenagent.app.bootstrap import prepare
+    from zenagent.app.run_wiring import RunRecorder
+    from zenagent.app.runtime import RuntimeOptions
+    from zenagent.config import UserConfig
+    from zenagent.project import project_dir
+
+    monkeypatch.setattr(
+        "zenagent.app.bootstrap.load_user_config",
+        lambda *args, **kwargs: UserConfig(default_model="deepseek-flash"),
+    )
+    prepared = await prepare(
+        RuntimeOptions(
+            root=app_env,
+            profile=AgentProfile(mcp=False, skills=False, templates=False),
+        ),
+        stream_fn=text_stream("ok"),
+        views=False,
+    )
+    try:
+        await prepared.runtime.agent.prompt("hello")
+        ledger = RunLedger(project_dir(root=app_env) / "runs.jsonl")
+        [row] = ledger.list(kind="coding")
+        assert row.status == "done"
+
+        recorder = RunRecorder(prepared.runtime)
+        recorder.relabel(status="failed", termination="timeout", run_id=row.id)
+
+        updated = ledger.get(row.id)
+        assert (updated.status, updated.termination) == ("failed", "timeout")
+        assert updated.ended_at is not None
+        # The relabel corrected the row in place: still one row for this run.
+        assert [r.id for r in ledger.load()] == [row.id]
+    finally:
+        await prepared.runtime.close()
+
+
+def test_relabel_of_an_unknown_run_is_a_no_op(tmp_path):
+    from types import SimpleNamespace
+
+    from zenagent.app.run_wiring import RunRecorder
+
+    runtime = SimpleNamespace(
+        root=tmp_path,
+        session=SimpleNamespace(path=tmp_path / "s.jsonl"),
+        agent=SimpleNamespace(),
+        run_ledger=RunLedger(tmp_path / "runs.jsonl"),
+        current_run_id=None,
+    )
+    RunRecorder(runtime).relabel(status="failed", run_id="r_nope")
