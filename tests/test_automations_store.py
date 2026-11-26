@@ -129,3 +129,18 @@ def test_timeout_must_be_positive(root):
     store.load()
     with pytest.raises(ValueError):
         store.add(job(timeout_s=0))
+
+
+def test_get_and_add_load_lazily(root):
+    """A fresh store must not silently see an empty file (and then overwrite it).
+
+    The automations tool builds a store per call, so requiring a prior `load()`
+    would make `add` wipe every other job and `get` report nothing.
+    """
+    seeded = AutomationStore(root)
+    seeded.add(job("existing"))
+
+    fresh = AutomationStore(root)
+    assert fresh.get("existing") is not None          # no explicit load() first
+    fresh.add(job("second"))
+    assert sorted(j.name for j in AutomationStore(root).load()) == ["existing", "second"]

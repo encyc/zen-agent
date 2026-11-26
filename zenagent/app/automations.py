@@ -18,6 +18,7 @@ Three shapes live here:
 from __future__ import annotations
 
 import contextlib
+import errno
 import json
 import os
 import re
@@ -38,6 +39,8 @@ __all__ = [
     "JobState",
     "Schedule",
     "StateStore",
+    "daemon_lock",
+    "daemon_running",
     "due_list",
     "resolve_session",
     "state_for",
@@ -171,6 +174,88 @@ class Schedule:
             parsed = cls.parse(f"{SCHEDULE_DAILY} {at}")
             return parsed
         raise ValueError(f"unknown schedule kind: {kind!r}")
+
+
+# -- the one-daemon lock ---------------------------------------------------
+#
+# These four live here rather than in `cli/daemon.py` because the automations
+# tool must ask "is a scheduler running for this project" without importing the
+# CLI layer (app/ is above tools/, and tools/ must not reach up into a frontend).
+# They are plain file + flock, so nothing about them is CLI-specific.
+
+
+def daemon_lock(root: Path) -> Path:
+    """The per-project advisory lock that keeps one daemon per project."""
+    return project.project_dir(root=root) / "daemon.lock"
+
+
+def _take_daemon_lock(root: Path, *, create: bool = True) -> int | None:
+    """Open and flock the lock file; ``None`` when the filesystem cannot lock.
+
+    Raises :class:`BlockingIOError` when another process holds it \u2014 that case is
+    "a daemon is already running", not a degraded filesystem. ``create=False``
+    is the probe path: it reports "no daemon" rather than minting the file every
+    read-only caller would otherwise leave behind.
+    """
+    path = daemon_lock(root)
+    if not create and not path.exists():
+        raise FileNotFoundError(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    flags = os.O_RDWR | (os.O_CREAT if create else 0)
+    fd = os.open(path, flags, 0o600)
+    try:
+        import fcntl
+    except ImportError:  # pragma: no cover - Windows
+        return fd
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as exc:
+        os.close(fd)
+        if exc.errno in (
+            errno.EACCES,
+            errno.EAGAIN,
+            errno.EWOULDBLOCK,
+            errno.ENOLCK,
+        ):
+            raise BlockingIOError("daemon lock is held") from exc
+        return None
+    return fd
+
+
+def _drop_daemon_lock(fd: int | None) -> None:
+    if fd is None:
+        return
+    try:
+        import fcntl
+
+        fcntl.flock(fd, fcntl.LOCK_UN)
+    except (ImportError, OSError):  # pragma: no cover - best effort
+        pass
+    finally:
+        with contextlib.suppress(OSError):
+            os.close(fd)
+
+
+def daemon_running(root: Path) -> bool:
+    """Whether some process currently holds this project's daemon lock.
+
+    A read-only probe: it must not create the lock file, and "cannot lock" must
+    never be reported as "definitely not running" \u2014 the pessimistic answer
+    keeps a second scheduler from writing the same state file.
+    """
+    path = daemon_lock(root)
+    if not path.exists():
+        return False
+    try:
+        fd = _take_daemon_lock(root, create=False)
+    except BlockingIOError:
+        return True
+    except OSError:
+        return False
+    if fd is None:
+        return True
+    _drop_daemon_lock(fd)
+    return False
 
 
 # -- job definitions -------------------------------------------------------
@@ -398,7 +483,18 @@ class AutomationStore:
         self.load()
         return True
 
+    def _ensure_loaded(self) -> None:
+        """Read the file on first use.
+
+        Callers that build a store per operation (the automations tool, the rpc
+        ops) must not have to remember a `load()`: `add` writes `_jobs` back
+        wholesale, so an unloaded store would replace every job with one.
+        """
+        if not self._loaded:
+            self.load()
+
     def get(self, name: str) -> Job | None:
+        self._ensure_loaded()
         for entry in self._jobs:
             if entry.name == name:
                 return entry
@@ -415,6 +511,7 @@ class AutomationStore:
         self._loaded = True
 
     def add(self, job: Job) -> Job:
+        self._ensure_loaded()
         if self.get(job.name) is not None:
             raise ValueError(f"a job named {job.name!r} already exists")
         if job.timeout_s <= 0:
@@ -434,6 +531,7 @@ class AutomationStore:
         return saved
 
     def update(self, name: str, **changes) -> Job:
+        self._ensure_loaded()
         unknown = set(changes) - _UPDATABLE
         if unknown:
             raise ValueError(f"cannot change {', '.join(sorted(unknown))}")
@@ -446,6 +544,7 @@ class AutomationStore:
         return updated
 
     def remove(self, name: str) -> bool:
+        self._ensure_loaded()
         kept = [job for job in self._jobs if job.name != name]
         if len(kept) == len(self._jobs):
             return False

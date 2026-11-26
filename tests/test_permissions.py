@@ -625,3 +625,27 @@ async def test_fetch_requires_approval():
     allowed, reason = await gate.check("fetch", {"url": "https://example.com"}, FETCH)
     assert allowed is False
     assert reason
+
+
+async def test_plan_mode_gates_the_automation_tools(tmp_path):
+    """The write half must be refused in plan mode, the read half allowed.
+
+    This is the whole reason they are two tools rather than one action-switched
+    tool: a single `approval` tier would either gate `list` or let `create`
+    skip the plan-mode refusal.
+    """
+    from zenagent.tools.automations import build_automation_tools
+
+    root = tmp_path / "proj"
+    root.mkdir()
+    read_tool, edit_tool = build_automation_tools(root)
+    gate = PermissionGate(interactive=False, mode="plan")
+
+    allowed, _reason = await gate.check(read_tool.name, {"action": "list"}, read_tool)
+    assert allowed is True
+
+    allowed, reason = await gate.check(
+        edit_tool.name, {"action": "create"}, edit_tool
+    )
+    assert allowed is False
+    assert "plan mode" in reason

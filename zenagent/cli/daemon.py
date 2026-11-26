@@ -20,10 +20,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
-import errno
 import json
 import logging
-import os
 import sys
 import time
 from dataclasses import replace
@@ -31,12 +29,20 @@ from pathlib import Path
 
 from zenagent import __version__, project
 from zenagent.app.automation_runner import RoundResult, run_round
+
+# The lock primitives live in `app/` so the automations tool (which must not
+# import `cli/`) can ask "is a daemon running" without duplicating them. They are
+# re-exported here for the existing callers and tests.
 from zenagent.app.automations import (
     AutomationStore,
     Due,
     Job,
     JobState,
     StateStore,
+    _drop_daemon_lock,
+    _take_daemon_lock,
+    daemon_lock,
+    daemon_running,
     due_list,
     state_for,
 )
@@ -59,78 +65,6 @@ _log = logging.getLogger(__name__)
 WAKE_CAP_S = 30.0
 
 _REQUEST = "automations.request.json"
-
-
-def daemon_lock(root: Path) -> Path:
-    """The per-project advisory lock that keeps one daemon per project."""
-    return project.project_dir(root=root) / "daemon.lock"
-
-
-def _take_daemon_lock(root: Path, *, create: bool = True) -> int | None:
-    """Open and flock the lock file; ``None`` when the filesystem cannot lock.
-
-    Raises :class:`BlockingIOError` when another process holds it — that case is
-    "a daemon is already running", not a degraded filesystem. ``create=False``
-    is the probe path: it reports "no daemon" rather than minting the file every
-    read-only command would otherwise leave behind.
-    """
-    path = daemon_lock(root)
-    if not create and not path.exists():
-        raise FileNotFoundError(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    flags = os.O_RDWR | (os.O_CREAT if create else 0)
-    fd = os.open(path, flags, 0o600)
-    try:
-        import fcntl
-    except ImportError:  # pragma: no cover - Windows
-        return fd
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError as exc:
-        os.close(fd)
-        if exc.errno in (errno.EACCES, errno.EAGAIN, errno.EWOULDBLOCK):
-            raise BlockingIOError("daemon lock is held") from exc
-        return None
-    return fd
-
-
-def _drop_daemon_lock(fd: int | None) -> None:
-    if fd is None:
-        return
-    try:
-        import fcntl
-
-        fcntl.flock(fd, fcntl.LOCK_UN)
-    except (ImportError, OSError):  # pragma: no cover - best effort
-        pass
-    finally:
-        with contextlib.suppress(OSError):
-            os.close(fd)
-
-
-def daemon_running(root: Path) -> bool:
-    """Whether some process currently holds this project's daemon lock.
-
-    A read-only probe: it must not create the lock file (``zen automations
-    list`` and every rpc op call it), and "cannot lock" must never be reported
-    as "a daemon is running" — nor as "definitely not running".
-    """
-    path = daemon_lock(root)
-    if not path.exists():
-        return False
-    try:
-        fd = _take_daemon_lock(root, create=False)
-    except BlockingIOError:
-        return True
-    except OSError:
-        return False
-    if fd is None:
-        # The filesystem cannot lock. Report "running" — the pessimistic side:
-        # refusing a manual run is recoverable, letting two daemons write one
-        # state file is not.
-        return True
-    _drop_daemon_lock(fd)
-    return False
 
 
 def next_wake(jobs: list[Job], states: dict[str, JobState], now: float) -> float:

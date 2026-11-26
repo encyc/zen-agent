@@ -209,6 +209,8 @@ TOOL_BLOCK_NAMES: tuple[str, ...] = (
     "list_sessions",
     "search_sessions",
     "read_session",
+    "automations",
+    "automation_edit",
 )
 
 #: Variables a tool block declares; the tool module supplies the values so the
