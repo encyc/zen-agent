@@ -33,12 +33,15 @@ __all__ = [
     "SCHEDULE_DAILY",
     "SCHEDULE_EVERY",
     "AutomationStore",
+    "Due",
     "Job",
     "JobState",
     "Schedule",
     "StateStore",
+    "due_list",
     "resolve_session",
     "state_for",
+    "wrap_prompt",
 ]
 
 #: Bumped when the on-disk shape changes incompatibly. Readers refuse what they
@@ -482,3 +485,85 @@ def state_for(states: dict[str, JobState], job: Job) -> JobState:
     if not found.session:
         found.session = job.session
     return found
+
+
+# -- due detection ---------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Due:
+    """One job that should run now, with the bookkeeping the runner needs."""
+
+    job: Job
+    missed: int
+    run_number: int
+
+
+def _missed_rounds(schedule: Schedule, now: float, last_run_at: float | None) -> int:
+    """How many whole periods were skipped since the last run (0 when none).
+
+    "Missed" counts the slots the scheduler slept through, so the first overdue
+    round reports ``missed == 0`` and the user only sees a number when something
+    was genuinely dropped.
+    """
+    if last_run_at is None:
+        return 0
+    if schedule.kind == SCHEDULE_EVERY:
+        behind = int((now - last_run_at) // schedule.seconds) - 1
+        return max(behind, 0)
+    local_now = time.localtime(now)
+    local_then = time.localtime(last_run_at)
+    days = time.mktime(
+        (local_now.tm_year, local_now.tm_mon, local_now.tm_mday, 0, 0, 0, 0, 0, -1)
+    ) - time.mktime(
+        (local_then.tm_year, local_then.tm_mon, local_then.tm_mday, 0, 0, 0, 0, 0, -1)
+    )
+    return max(int(days // 86400) - 1, 0)
+
+
+def due_list(
+    jobs: list[Job], states: dict[str, JobState], now: float
+) -> list[Due]:
+    """Every enabled job whose next scheduled instant has passed, soonest first.
+
+    A job with no history never appears: its first slot is in the future by
+    construction, so adding a job is not the same as asking to run it.
+    """
+    due: list[tuple[float, Due]] = []
+    for job in jobs:
+        if not job.enabled:
+            continue
+        state = state_for(states, job)
+        when = job.schedule.next_due(now, state.last_run_at)
+        if when > now:
+            continue
+        due.append(
+            (
+                when,
+                Due(
+                    job=job,
+                    missed=_missed_rounds(job.schedule, now, state.last_run_at),
+                    run_number=state.run_count + 1,
+                ),
+            )
+        )
+    due.sort(key=lambda pair: pair[0])
+    return [item for _, item in due]
+
+
+def wrap_prompt(job: Job, run_number: int, now: float) -> str:
+    """The user's prompt, prefixed with the fact that nobody is watching.
+
+    The original instruction is appended verbatim: this wrapper adds context,
+    never rewrites what the user asked for.
+    """
+    stamp = time.strftime("%Y-%m-%d %H:%M", time.localtime(now))
+    return (
+        f"[automation] {job.name} · 第 {run_number} 次运行 · {stamp}\n"
+        "\n"
+        "这个 session 由定时器写入。现在没有人在看，也没有人能回答你的提问（ask 会直接\n"
+        '返回"无交互 UI"）。做完把结论写成一段可以直接读的汇报：先一句话结论，再列异常\n'
+        "（按严重程度排序）；没有异常也要用一句话说明。\n"
+        "\n"
+        f"{job.prompt}\n"
+    )
