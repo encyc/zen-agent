@@ -209,6 +209,7 @@ export type WorkPanelTabKind =
   | 'files'
   | 'memory'
   | 'terminal'
+  | 'automations'
   | 'subagent'
 
 export interface WorkPanelTab {
@@ -244,7 +245,7 @@ interface WorkPanelState {
   openPanel(): void
   closePanel(): void
   toggleFullscreen(): void
-  showTab(kind: 'git' | 'files' | 'memory' | 'terminal'): void
+  showTab(kind: 'git' | 'files' | 'memory' | 'terminal' | 'automations'): void
   openFile(path: string): void
   consumeFileRequest(): void
   activate(id: string): void

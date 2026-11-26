@@ -1,0 +1,151 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  overflow-y: auto;
+  color: var(--dsw-alias-label-primary);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.groupTitle {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) 90px 48px 64px auto auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--dsw-radius-sm);
+  font-size: 12px;
+}
+
+.row:hover {
+  background: var(--dsw-specific-sidebar-nav-item-hover);
+}
+
+.status[data-status='done'] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.status[data-status='failed'],
+.status[data-status='timeout'] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.status[data-status='skipped'] {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schedule,
+.due,
+.cost {
+  color: var(--dsw-alias-label-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.action {
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--dsw-radius-sm);
+}
+
+.action:hover:not(:disabled) {
+  background: var(--dsw-specific-sidebar-nav-item-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.action:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.primary {
+  align-self: start;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-button-primary-fill);
+  color: var(--dsw-alias-button-contrast-fill);
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.form {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+}
+
+.field {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.field input,
+.field select,
+.field textarea {
+  font: inherit;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-overlay);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+  padding: 4px 6px;
+}
+
+.empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.warning {
+  margin: 0;
+  font-size: 11px;
+  color: var(--dsw-alias-state-warn-primary);
+}
