@@ -32,6 +32,22 @@ def isolated_project_home(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def restore_process_cwd():
+    """A test that drives the CLI in-process must not move the suite's cwd.
+
+    ``zenagent.cli.main`` chdirs on ``--cwd`` on purpose (the process is about
+    to exit), so a test calling it leaves every later test — and every project
+    root resolved from the cwd — inside that test's tmp directory.
+    """
+    import os
+
+    original = os.getcwd()
+    yield
+    if os.getcwd() != original:
+        os.chdir(original)
+
+
+@pytest.fixture(autouse=True)
 def isolated_settings(tmp_path, monkeypatch):
     """Never read or write the developer's real ~/.zenagent/settings.json."""
     from zenagent import settings
