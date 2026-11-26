@@ -3,7 +3,7 @@
 All notable changes to ZenAgent (`zenagent-py`). The version in this file
 matches the release tag; older history is in the repository tags and commits.
 
-## Unreleased
+## v0.15.3 — 2026-11-27
 
 ### Added
 
@@ -29,6 +29,23 @@ matches the release tag; older history is in the repository tags and commits.
   refused. `RunRecorder.relabel` lets the runner restate a timeout as
   `failed/timeout` without teaching the shared termination mapping a private
   word.
+
+- **The agent creates automations from the conversation.** The realistic shape
+  of the request is a conversation — "watch the daily report, tell me when
+  approval drops", then "do that every morning at nine" — so making the user
+  leave it to retype the same thing as CLI arguments lost the context the
+  conversation had just built. Two tools close that gap: `automations`
+  (`list`/`show`, read tier) and `automation_edit` (`create`/`update`/`delete`/
+  `run`, write tier, so an interactive session confirms once and a plan-mode or
+  unattended session is gated by the tier it already had). Two tools rather than
+  one action-switched tool because the approval tier is declared per tool: a
+  single tier would either gate `list` or let `create` skip a refusal. No new
+  storage or scheduler — the tools are another caller of `AutomationStore` — and
+  `run` never executes a round itself: it drops a request in the daemon's
+  mailbox, because `automations.state.json` has exactly one writer. With no
+  daemon running they say nothing was run instead of pretending. `create` reports
+  the unattended permission boundary in the CLI's own words, so a model cannot
+  paraphrase it into "you have full permission".
 
 ### Fixed
 
